@@ -32,6 +32,14 @@ o estilo.
 | `bebas-neue-400.woff2` | Bebas Neue | 400 |
 | `source-serif-4-600.woff2`, `source-serif-4-600-italic.woff2` | Source Serif 4 | 600 normal e itálica |
 | `plus-jakarta-sans-latin-var.woff2` | Plus Jakarta Sans | variable, 400–800 |
+| `instrument-sans-latin-var.woff2` | Instrument Sans | variable, 400–700 (menú de dos niveles) |
+| `material-symbols-rounded-menu.woff2` | Material Symbols Rounded | peso 400, relleno 0–1, **solo los íconos del menú de dos niveles** |
+
+Los dos últimos los usa solo el menú de dos niveles (`menu.ts`), que se enciende por
+clínica; por eso se declaran **sin precarga**. El de íconos no es un subconjunto
+`latin`: es un recorte por nombre de ícono (`icon_names=` de la API CSS2). La lista y
+la URL exacta para volver a pedirlo viven en
+`src/components/dashboard/menu-dos-niveles/iconos.ts`.
 
 ## Un módulo por configuración, y no un solo `fonts.ts`
 

@@ -91,9 +91,13 @@ export function ChangePasswordClient() {
           // declaran aquí (ámbito local, sin tocar globals.css) para que el
           // input se vea igual en el panel, en claro y en oscuro: la caja es
           // blanca, así que el texto va oscuro en ambos temas.
-          ["--ld-fg" as string]:       "#0f172a",
-          ["--ld-fg-muted" as string]: "#64748b",
-          ["--ld-border" as string]:   "#cbd5e1",
+          //
+          // Con el rediseño encendido (la página envuelve esto en <RaizCuenta>,
+          // que trae los tokens --m2-* del menú) toman los del menú; apagado,
+          // --m2-* no existe y el respaldo deja EXACTAMENTE los valores de hoy.
+          ["--ld-fg" as string]:       "var(--m2-texto, #0f172a)",
+          ["--ld-fg-muted" as string]: "var(--m2-texto-3, #64748b)",
+          ["--ld-border" as string]:   "var(--m2-tarjeta-borde, #cbd5e1)",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8 }}>

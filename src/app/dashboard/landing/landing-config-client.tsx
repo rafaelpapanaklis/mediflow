@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2, Monitor, Smartphone, Zap, Lock, Layers } from "lucide-react";
+import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2, Monitor, Smartphone, Zap, Lock, Layers, Info, type LucideIcon } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { ManifestEditor } from "./manifest-editor";
 import type { SectionState } from "@/app/[slug]/_shared/landing-data";
@@ -11,6 +11,14 @@ import { prepararImagen } from "@/lib/image-client";
 import { LandingUpgradeBanner } from "@/components/dashboard/landing-upgrade-banner";
 import type { AccountManagerCardData } from "@/lib/account-manager/get-for-clinic";
 import styles from "./landing.module.css";
+// REDISEÑO DE PÁGINA WEB (ws1-t3) — el lenguaje visual del menú de dos
+// niveles. Solo se monta con `rediseno` encendido (interruptor por clínica);
+// apagado, esta pantalla no importa ni una clase de ahí y se pinta como hoy.
+import { RaizPaginaWeb } from "@/components/dashboard/pagina-web-rediseno/raiz";
+import rd from "@/components/dashboard/pagina-web-rediseno/pagina-web.module.css";
+// AUTOCOMPLETAR (ws1-t6) — propone, no publica. Solo se monta en la rama
+// `if (rediseno)`; el camino de siempre no lo conoce.
+import { PanelAutocompletar } from "@/components/dashboard/pagina-web-autocompletar/panel-autocompletar";
 
 /** Cuánto se espera antes de mandar al iframe. Escribir un párrafo manda un
     puñado de mensajes, no uno por tecla. */
@@ -32,6 +40,9 @@ interface Clinic {
      tiene en null y el manifiesto rellena los valores por defecto. */
   landingSections?: unknown; landingPhotos?: unknown;
   landingUrgentText?: string|null; landingMsiPlazos?: number[];
+  /** Marca de la fila al cargar. Viaja en cada PATCH como `esperadoUpdatedAt`
+      para que el servidor detecte si otra pestaña guardó antes (ver save()). */
+  updatedAt: string;
 }
 
 /**
@@ -49,6 +60,8 @@ interface Props {
   puedeEditar: boolean;
   accountManager: AccountManagerCardData | null;
   clinicName: string;
+  /** Interruptor `menu-dos-niveles` (ws1-t3). Sin él, esta pantalla es la de siempre. */
+  rediseno?: boolean;
 }
 
 const TABS = [
@@ -127,7 +140,7 @@ function TemplateThumb({ variant }: { variant: string }) {
   );
 }
 
-export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, accountManager, clinicName }: Props) {
+export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, accountManager, clinicName, rediseno = false }: Props) {
   const t = useT();
   const [clinic, setClinic] = useState(initial);
   const [tab, setTab]       = useState("plantilla");
@@ -166,19 +179,44 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
     return "No pudimos guardar. Vuelve a intentarlo.";
   }
 
-  async function save(data: Record<string, any>, successMsg = t("pages.landing.saved")) {
+  /* ── Control de concurrencia (ver @/lib/landing-concurrency) ──────────
+     `updatedAtRef` es la marca con la que cargó esta pantalla; se manda como
+     `esperadoUpdatedAt` en cada PATCH y se refresca con lo que devuelve el
+     servidor tras cada guardado. `clinicConfirmadoRef` es lo último que ESTA
+     pantalla sabe que está publicado, campo por campo — no `clinic` (que
+     lleva el borrador optimista de `updateLocal`, ver más abajo), sino lo que
+     confirmó el servidor. Es la `base` que deja al servidor distinguir "otra
+     pestaña me pisó" de "la fila se movió por Stripe/tokens/etc". Sin esto
+     dos personas editando a la vez se pisan sin que nadie se entere. */
+  const updatedAtRef = useRef(initial.updatedAt);
+  const clinicConfirmadoRef = useRef<Record<string, any>>(initial);
+
+  /**
+   * `revertirSiFalla`: los campos que este guardado tocó de forma OPTIMISTA
+   * (un interruptor, "Aplicar", una foto) con su valor ANTERIOR. Si el PATCH
+   * falla (403/409/500), se restauran: sin esto la insignia se queda
+   * anunciando "Publicada" aunque el servidor nunca guardó el cambio. Los
+   * formularios con botón "Guardar" propio no lo mandan: ahí el campo ya era
+   * un borrador local desde antes de pulsar, y perderlo en un fallo de red
+   * sería peor que dejarlo con el aviso de "sin guardar".
+   */
+  async function save(data: Record<string, any>, successMsg = t("pages.landing.saved"), revertirSiFalla?: Record<string, any>) {
     setSaving(true);
+    const base: Record<string, unknown> = {};
+    for (const campo of Object.keys(data)) base[campo] = campo in clinicConfirmadoRef.current ? clinicConfirmadoRef.current[campo] : null;
     try {
       const res = await fetch("/api/clinic-landing", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, esperadoUpdatedAt: updatedAtRef.current, base }),
       });
       if (!res.ok) throw new Error(await motivoDelFallo(res));
-      await res.json();
+      const json = await res.json();
+      if (typeof json?.updatedAt === "string") updatedAtRef.current = json.updatedAt;
       // El servidor ya no devuelve la fila de la clínica (traía RFC, ids de
       // Stripe y el SID de Twilio): lo que se acaba de guardar es exactamente
       // lo que se mandó, y de ahí sale el estado local.
+      clinicConfirmadoRef.current = { ...clinicConfirmadoRef.current, ...data };
       setClinic(c => ({ ...c, ...data }));
       // El sitio público ya se revalidó en el servidor; aquí se refresca la
       // vista previa para que la clínica vea el cambio sin recargar nada.
@@ -192,7 +230,12 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
         return next;
       });
       toast.success(successMsg);
-    } catch(e: any) { toast.error(e.message); }
+      return true;
+    } catch(e: any) {
+      toast.error(e.message);
+      if (revertirSiFalla) setClinic(c => ({ ...c, ...revertirSiFalla }));
+      return false;
+    }
     finally { setSaving(false); }
   }
 
@@ -214,19 +257,24 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
     return url;
   }
 
-  // ── Plantilla: previsualizar (sin publicar) y aplicar (publica)
+  // ── Plantilla: previsualizar y aplicar. NINGUNA de las dos publica.
   function previewTemplate(id: string = templateSel) {
     // /landing-preview es la ruta DINÁMICA de vista previa; /[slug] es ISR y
     // no puede leer ?preview= (DYNAMIC_SERVER_USAGE al regenerar).
-    window.open(`/landing-preview/${clinic.slug}?preview=${id}`, "_blank", "noopener");
+    // ?borrador=1 (solo camino NUEVO): sin publicar, /landing-preview enseñaba
+    // el cartel de «disponible pronto» en vez de la plantilla. El servidor lo
+    // comprueba contra la sesión; solo deja VER, no publica nada.
+    window.open(`/landing-preview/${clinic.slug}?preview=${id}${rediseno ? "&borrador=1" : ""}`, "_blank", "noopener");
   }
 
   async function applyTemplate() {
     const tpl = TEMPLATES.find(item => item.id === templateSel);
     const name = tpl ? t(tpl.nameKey) : templateSel;
+    const previo = { landingTemplate: clinic.landingTemplate };
     updateLocal("landingTemplate", templateSel);
-    if (!clinic.landingActive) updateLocal("landingActive", true);
-    await save({ landingTemplate: templateSel, landingActive: true }, t("pages.landing.templateApplied", { name }));
+    // Aplicar NO publica: `landingActive` solo lo cambia el interruptor de
+    // arriba. Si el sitio está oculto, se dice que sigue oculto y cómo publicarlo.
+    await save({ landingTemplate: templateSel }, t(clinic.landingActive ? "pages.landing.templateApplied" : "pages.landing.templateAppliedHidden", { name }), previo);
   }
 
   // ── Secciones y fotos guardadas (landing v2) — el editor por manifiesto
@@ -376,18 +424,787 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
     return () => window.removeEventListener("message", onMessage);
   }, [clinic.slug]);
 
-  // ── Galería: reordenar (intercambia i con su vecino) y elegir portada
+  /* ── Galería: alta, reemplazo, borrado y reordenar ──────────────────
+     Las cuatro mandan el arreglo ENTERO de fotos. Dos que se solapen (dos
+     altas casi juntas, o una alta mientras se reordena) partían las dos de
+     `clinic.landingGallery` del render en que se dispararon: la que
+     ATERRIZA último manda y la otra desaparece sin aviso — se pierde una
+     foto en silencio. `galeriaRef` guarda el último arreglo conocido
+     (actualizado ANTES de llamar a save(), no cuando React vuelve a
+     renderizar) y `galeriaColaRef` encola las mutaciones para que cada una
+     parta de la anterior, nunca de un `clinic` que puede haber quedado
+     atrás. */
+  const galeriaRef = useRef<string[]>(clinic.landingGallery);
+  useEffect(() => { galeriaRef.current = clinic.landingGallery; }, [clinic.landingGallery]);
+  const galeriaColaRef = useRef<Promise<void>>(Promise.resolve());
+  function encolarGaleria(construir: (actual: string[]) => string[], successMsg?: string) {
+    const correr = async () => {
+      const anterior = galeriaRef.current;
+      const nuevo = construir(anterior);
+      if (nuevo === anterior) return;
+      galeriaRef.current = nuevo;
+      updateLocal("landingGallery", nuevo);
+      await save({ landingGallery: nuevo }, successMsg, { landingGallery: anterior });
+    };
+    const siguiente = galeriaColaRef.current.then(correr, correr);
+    galeriaColaRef.current = siguiente;
+    return siguiente;
+  }
   async function moveGalleryPhoto(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= clinic.landingGallery.length) return;
-    const nuevo = [...clinic.landingGallery];
-    [nuevo[i], nuevo[j]] = [nuevo[j], nuevo[i]];
-    updateLocal("landingGallery", nuevo);
-    await save({ landingGallery: nuevo }, t("pages.landing.orderUpdated"));
+    await encolarGaleria(actual => {
+      const j = i + dir;
+      if (j < 0 || j >= actual.length) return actual;
+      const nuevo = [...actual];
+      [nuevo[i], nuevo[j]] = [nuevo[j], nuevo[i]];
+      return nuevo;
+    }, t("pages.landing.orderUpdated"));
   }
   async function setGalleryCover(url: string) {
+    const previo = clinic.landingCoverUrl;
     updateLocal("landingCoverUrl", url);
-    await save({ landingCoverUrl: url }, t("pages.landing.coverUpdated"));
+    await save({ landingCoverUrl: url }, t("pages.landing.coverUpdated"), { landingCoverUrl: previo });
+  }
+  async function addGalleryPhoto(file: File) {
+    if (galeriaRef.current.length >= 12) { toast.error(t("pages.landing.maxPhotos")); return; }
+    try {
+      const url = await uploadImage(file, "gallery");
+      await encolarGaleria(actual => actual.length >= 12 ? actual : [...actual, url]);
+    } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+  }
+  async function replaceGalleryPhoto(i: number, file: File) {
+    try {
+      const newUrl = await uploadImage(file, "gallery");
+      await encolarGaleria(actual => actual.map((u, j) => (j === i ? newUrl : u)));
+    } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+  }
+  async function deleteGalleryPhoto(i: number) {
+    await encolarGaleria(actual => actual.filter((_, j) => j !== i));
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // REDISEÑO (ws1-t3) — mismo estado, mismos handlers de arriba, otra piel.
+  // El camino de siempre (abajo) no se toca ni un carácter.
+  // ════════════════════════════════════════════════════════════════════
+  if (rediseno) {
+    const TABS_ICON: Record<string, LucideIcon> = {
+      plantilla: Sparkles, diseno: Layers, general: Info, servicios: Stethoscope,
+      testimonios: Star, faqs: HelpCircle, galeria: ImagePlus, redes: Share2,
+    };
+    return (
+      /* `.shell` va en un <div> DESCENDIENTE de `.raiz` (el que pone
+         RaizPaginaWeb), no en el propio nodo de `.raiz`: un `@container`
+         nunca estila a su propio contenedor, así que `.shell{flex-direction:
+         column}` no se aplicaba nunca en angosto y la vista previa aplastaba
+         el formulario a ~100 px en un iPad horizontal. */
+      <RaizPaginaWeb>
+        <div className={rd.shell}>
+        <div className={rd.columna}>
+
+          {/* ── Cabecera ── */}
+          <div className={rd.cabecera}>
+            <div>
+              <h1 className={rd.titulo}>{t("pages.landing.title")}</h1>
+              <p className={rd.subtitulo}>{t("pages.landing.subtitle")}</p>
+            </div>
+            <div className={rd.acciones}>
+              <div className={`${rd.boton} ${rd.botonSuave}`} style={{ gap: 10, cursor: "default" }}>
+                <span className={clinic.landingActive ? `${rd.insignia} ${rd.insigniaExito}` : `${rd.insignia} ${rd.insigniaNeutra}`}>
+                  {clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}
+                </span>
+                <button role="switch" aria-checked={clinic.landingActive} disabled={!puedeEditar || saving}
+                  aria-label={clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}
+                  onClick={async () => {
+                    const previo = clinic.landingActive;
+                    const newVal = !previo;
+                    updateLocal("landingActive", newVal);
+                    await save({ landingActive: newVal }, undefined, { landingActive: previo });
+                  }}
+                  className={clinic.landingActive ? `${rd.interruptor} ${rd.interruptorActivo}` : rd.interruptor}>
+                  <span className={rd.interruptorBola} />
+                </button>
+              </div>
+              <a href={landingUrl} target="_blank" rel="noreferrer" className={rd.boton}>
+                <ExternalLink size={16} strokeWidth={1.75}/> {t("pages.landing.viewPage")}
+              </a>
+              <button onClick={() => { navigator.clipboard.writeText(landingUrl); toast.success(t("pages.landing.linkCopied")); }} className={rd.boton}>
+                <Copy size={16} strokeWidth={1.75}/> {t("pages.landing.copyLink")}
+              </button>
+            </div>
+          </div>
+
+          {/* ── Editar haciendo clic encima ── */}
+          {puedeEditar && plantillaInstrumentada(clinic.landingTemplate) && (
+            <a href="/dashboard/landing/editor" className={rd.bannerClic}>
+              <span className={rd.bannerClicIcono}><Zap size={17} strokeWidth={1.9} /></span>
+              <span style={{ minWidth: 0 }}>
+                <span className={rd.bannerClicTitulo}>Editar haciendo clic encima</span>
+                <span className={rd.bannerClicSub}>Abre tu sitio y cambia los textos y las fotos donde los ves. Desde el celular, usa el formulario de abajo.</span>
+              </span>
+              <ChevronRight size={18} className="ml-auto shrink-0" style={{ color: "var(--m2-texto-3)" }} />
+            </a>
+          )}
+
+          {/* ── Autocompletar con lo que la clínica ya tiene (ws1-t6) ──
+              Cada «Aprobar y guardar» pasa por el save() de arriba: el mismo
+              PATCH, los mismos validadores. El panel no escribe por su cuenta. */}
+          <PanelAutocompletar
+            puedeEditar={puedeEditar}
+            publicada={!!clinic.landingActive}
+            guardando={saving}
+            actual={{
+              eslogan: clinic.landingTagline ?? "",
+              presentacion: clinic.description ?? "",
+              preguntas: Array.isArray(clinic.landingFaqs) ? clinic.landingFaqs : [],
+            }}
+            onAprobar={async (data, mensaje) => {
+              const ok = await save(data, mensaje);
+              // Las pestañas Servicios y Preguntas llevan su propia copia en
+              // estado: sin esto, su «Guardar» pisaría lo recién aprobado.
+              if (ok && Array.isArray(data.landingServices)) setServices(data.landingServices);
+              if (ok && Array.isArray(data.landingFaqs)) setFaqs(data.landingFaqs);
+              return ok;
+            }}
+          />
+
+          {/* ── Enlace público ── */}
+          <div className={rd.franjaEnlace}>
+            <div style={{ minWidth: 0 }}>
+              <div className={rd.franjaEnlaceEtiqueta}>{t("pages.landing.publicLink")}</div>
+              <div className={rd.franjaEnlaceUrl}>{landingUrl}</div>
+            </div>
+            <button onClick={() => { navigator.clipboard.writeText(landingUrl); toast.success(t("pages.landing.linkCopied")); }}
+              className={`${rd.boton} ${rd.botonPeq} ${rd.botonSuave}`} style={{ color: "var(--m2-activo)", flexShrink: 0 }}>
+              <Copy size={15} strokeWidth={1.75}/> {t("pages.landing.copy")}
+            </button>
+          </div>
+
+          {/* ── Pestañas ── */}
+          <div className={rd.segmentadoWrap}>
+            <div className={rd.segmentado} role="tablist" aria-label={t("pages.landing.title")}>
+              {TABS.map(tb => {
+                const Icon = TABS_ICON[tb.id];
+                return (
+                  <button key={tb.id} role="tab" aria-selected={tab === tb.id} onClick={() => setTab(tb.id)}
+                    className={tab === tb.id ? `${rd.segmento} ${rd.segmentoActivo}` : rd.segmento}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <Icon size={13} strokeWidth={1.9} /> {t(tb.labelKey)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {!puedeEditar && (
+            <div className={rd.avisoLectura}>
+              <Lock size={16} strokeWidth={1.75} />
+              <div>
+                <b>Estás viendo tu sitio en solo lectura.</b>{" "}
+                Puedes recorrerlo y copiar el enlace, pero para cambiarlo o publicarlo hace falta el
+                permiso <b>landing.edit</b>, que da el dueño de la clínica desde Equipo.
+              </div>
+            </div>
+          )}
+
+          {/* ── PLANTILLA ── vive FUERA del <fieldset>: "Ver" y "Previsualizar"
+              solo miran, nunca deben quedar deshabilitados sin permiso — un
+              <fieldset disabled> apaga TODO lo que hay dentro, sin excepción,
+              así que la única forma de dejarlos activos es no meterlos ahí.
+              Solo "Aplicar" (que sí publica) se encierra en su propio
+              fieldset, con `display:contents` para no mover ni un píxel. */}
+          {tab === "plantilla" && (
+            <div className={rd.tarjeta}>
+              <div className={rd.tarjetaCabeza} style={{ display: "block" }}>
+                <h3 className={rd.tarjetaTitulo}><Sparkles size={16} strokeWidth={1.75}/> {t("pages.landing.templateHeading")}</h3>
+                <p className={rd.tarjetaSub}>{t("pages.landing.templateHelp")}</p>
+              </div>
+              <div className={rd.plantillaGrid}>
+                {TEMPLATES.map(tpl => {
+                  const selected = templateSel === tpl.id;
+                  return (
+                    <div key={tpl.id} role="button" tabIndex={0} aria-pressed={selected}
+                      onClick={() => setTemplateSel(tpl.id)}
+                      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTemplateSel(tpl.id); } }}
+                      className={selected ? `${rd.plantillaTarjeta} ${rd.plantillaTarjetaActiva}` : rd.plantillaTarjeta}>
+                      <div style={{ position: "relative" }}>
+                        <TemplateThumb variant={tpl.id} />
+                        {selected && <div className={rd.plantillaMarca}><Check size={12} strokeWidth={2}/></div>}
+                      </div>
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span className={rd.plantillaNombre}>{t(tpl.nameKey)}</span>
+                        {clinic.landingTemplate === tpl.id && <span className={rd.plantillaBadgeActiva}>{t("pages.landing.templateActive")}</span>}
+                      </div>
+                      <p className={rd.plantillaDesc}>{t(tpl.descKey)}</p>
+                      <button type="button" onClick={e => { e.stopPropagation(); previewTemplate(tpl.id); }} className={rd.plantillaVer}>
+                        <Eye size={14} strokeWidth={1.75}/> {t("pages.landing.preview")}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 14 }}>
+                <button type="button" onClick={() => previewTemplate()} className={rd.boton}>
+                  <Eye size={16} strokeWidth={1.75}/> {t("pages.landing.previewSelection")}
+                </button>
+                <fieldset disabled={!puedeEditar} style={{ display: "contents", border: 0, padding: 0, margin: 0 }}>
+                  <button type="button" onClick={applyTemplate} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal}`}>
+                    <Check size={16} strokeWidth={1.75}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
+                  </button>
+                </fieldset>
+                {!clinic.landingActive && <span className={rd.insignia} style={{ color: "var(--warning-strong, #a85a05)" }}>{t("pages.landing.applyKeepsHidden")}</span>}
+              </div>
+            </div>
+          )}
+
+          <fieldset disabled={!puedeEditar} className={rd.fieldsetSoloLectura} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* ── DISEÑO ──
+              Lee `templateSel` (la que pinta el iframe de al lado), no
+              `clinic.landingTemplate` (la ACTIVA/publicada): tras elegir una
+              tarjeta en Plantilla sin pulsar «Aplicar», Diseño editaba el
+              manifiesto de la plantilla vieja mientras la vista previa ya
+              enseñaba la nueva — dos plantillas distintas a la vez. */}
+          {tab === "diseno" && !plantillaLeeManifiesto(templateSel) && (
+            <div className={rd.tarjeta}>
+              <h3 className={rd.tarjetaTitulo}><Layers size={16} strokeWidth={1.75}/> Esta plantilla no se arma por secciones</h3>
+              <p style={{ fontSize: 13, color: "var(--m2-texto-2)", lineHeight: 1.5, marginTop: 8 }}>
+                &ldquo;{manifestOf(templateSel).nombre}&rdquo; trae su estructura fija: el orden de los bloques y sus títulos vienen de fábrica y
+                se llenan solos con lo que escribes en las demás pestañas. Aquí no hay interruptores porque no habría nada que encender.
+              </p>
+              <p className={rd.ayuda} style={{ marginTop: 6 }}>
+                Si quieres decidir qué secciones aparecen, cambia a{" "}
+                <span style={{ fontWeight: 650, color: "var(--m2-texto-2)" }}>{plantillasQueLeenManifiesto().map(mm => mm.nombre).join(", ")}</span>.
+              </p>
+              <button type="button" onClick={() => setTab("plantilla")} className={rd.boton} style={{ marginTop: 10 }}>
+                <Sparkles size={16} strokeWidth={1.75}/> Ver las plantillas
+              </button>
+            </div>
+          )}
+
+          {tab === "diseno" && plantillaLeeManifiesto(templateSel) && (
+            <ManifestEditor
+              rediseno
+              templateId={templateSel}
+              sections={draftSections ?? savedSections}
+              photos={savedPhotos}
+              saving={saving}
+              onDraftSections={setDraftSections}
+              onSaveSections={async (secs) => {
+                updateLocal("landingSections", secs);
+                setDraftSections(secs);
+                await save({ landingSections: secs });
+              }}
+              onSavePhotos={async (fotos) => {
+                updateLocal("landingPhotos", fotos);
+                await save({ landingPhotos: fotos });
+              }}
+              onUpload={uploadImage}
+            />
+          )}
+
+          {/* ── GENERAL ── */}
+          {tab === "general" && (
+            <div className={`${rd.tarjeta} ${rd.filas}`}>
+              <div>
+                <label className={rd.etiqueta}>Nombre de la clínica</label>
+                <p className={rd.ayuda}>Como aparece arriba del todo en tu sitio y en los mensajes a tus pacientes.</p>
+                <input value={clinic.name ?? ""} onChange={e => updateLocal("name", e.target.value)} placeholder="Clínica Dental Sonrisa" className={rd.input} />
+                <div className={rd.gridDos} style={{ marginTop: 10 }}>
+                  <div>
+                    <label className={rd.etiqueta}>Teléfono</label>
+                    <input value={clinic.phone ?? ""} inputMode="tel" onChange={e => updateLocal("phone", e.target.value)} placeholder="999 123 4567" className={rd.input} />
+                  </div>
+                  <div>
+                    <label className={rd.etiqueta}>Correo</label>
+                    <input value={clinic.email ?? ""} inputMode="email" onChange={e => updateLocal("email", e.target.value)} placeholder="hola@tuclinica.com" className={rd.input} />
+                  </div>
+                </div>
+                <div className={rd.campo}>
+                  <label className={rd.etiqueta}>Dirección</label>
+                  <input value={clinic.address ?? ""} onChange={e => updateLocal("address", e.target.value)} placeholder="Calle 20 #123, Col. Centro" className={rd.input} />
+                </div>
+                <button onClick={() => save({ name: clinic.name, phone: clinic.phone, email: clinic.email, address: clinic.address })}
+                  disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 10 }}>
+                  <Check size={16} strokeWidth={1.75}/> Guardar contacto
+                </button>
+              </div>
+
+              <div>
+                <label className={rd.etiqueta}>{t("pages.landing.primaryColor")}</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <input type="color" value={clinic.landingThemeColor ?? "#2563eb"} onChange={e => updateLocal("landingThemeColor", e.target.value)}
+                    aria-label={t("pages.landing.primaryColor")}
+                    style={{ height: 38, width: 60, borderRadius: 9, cursor: "pointer", border: "1px solid var(--m2-tarjeta-borde)", background: "transparent", padding: 3 }} />
+                  <span style={{ fontSize: 13, color: "var(--m2-texto-3)" }}>{clinic.landingThemeColor ?? "#2563eb"}</span>
+                  <button onClick={() => save({ landingThemeColor: clinic.landingThemeColor })} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`}>
+                    <Check size={16} strokeWidth={1.75}/> {t("common.save")}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className={rd.etiqueta}>{t("pages.landing.taglineLabel")}</label>
+                <p className={rd.ayuda}>{t("pages.landing.taglineHelp")}</p>
+                <input value={clinic.landingTagline ?? ""} onChange={e => updateLocal("landingTagline", e.target.value)} placeholder={t("pages.landing.taglinePlaceholder")} className={rd.input} />
+                <button onClick={() => save({ landingTagline: clinic.landingTagline })} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 8 }}>
+                  <Check size={16} strokeWidth={1.75}/> {t("common.save")}
+                </button>
+              </div>
+
+              <div>
+                <label className={rd.etiqueta}>{t("pages.landing.aboutClinic")}</label>
+                <p className={rd.ayuda}>{t("pages.landing.aboutClinicHelp")}</p>
+                <textarea value={clinic.description ?? ""} onChange={e => updateLocal("description", e.target.value)} placeholder={t("pages.landing.aboutClinicPlaceholder")} rows={3} className={rd.textarea} />
+                <div className={rd.gridDos} style={{ marginTop: 10 }}>
+                  <div>
+                    <label className={rd.etiqueta}>{t("pages.landing.yearsExperience")}</label>
+                    <input type="number" min={0} value={clinic.landingYearsExperience ?? ""}
+                      onChange={e => updateLocal("landingYearsExperience", e.target.value === "" ? null : Math.trunc(Number(e.target.value)))}
+                      placeholder="12" className={rd.input} />
+                  </div>
+                  <div>
+                    <label className={rd.etiqueta}>{t("pages.landing.patientsServed")}</label>
+                    <input value={clinic.landingPatients ?? ""} onChange={e => updateLocal("landingPatients", e.target.value)} placeholder="8,500+" className={rd.input} />
+                  </div>
+                </div>
+                <button onClick={() => save({ description: clinic.description, landingYearsExperience: clinic.landingYearsExperience, landingPatients: clinic.landingPatients })}
+                  disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 10 }}>
+                  <Check size={16} strokeWidth={1.75}/> {t("pages.landing.saveInfo")}
+                </button>
+              </div>
+
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <div>
+                    <label className={rd.etiqueta} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <Zap size={14} strokeWidth={1.75} style={{ color: "var(--warning-strong, #a85a05)" }} /> Aviso de urgencias
+                    </label>
+                    <p className={rd.ayuda} style={{ marginBottom: 0 }}>Qué haces con quien llega con dolor. Vacío = el bloque no aparece.</p>
+                    {!plantillaPinta(clinic.landingTemplate, "urgencias") && (
+                      <p style={{ fontSize: 11.5, color: "var(--warning-strong, #a85a05)", marginTop: 4 }}>
+                        &ldquo;{manifestOf(clinic.landingTemplate).nombre}&rdquo; no pinta este aviso. Se guarda y aparece en cuanto cambies a una plantilla que sí lo tenga.
+                      </p>
+                    )}
+                  </div>
+                  {/* El interruptor sigue si el bloque está ENCENDIDO (texto !== null),
+                      no si tiene contenido: si solo mirara `!!texto`, borrar el texto a ""
+                      (el bloque sigue visible para poder volver a escribir) apagaba el
+                      interruptor solo, y volver a pulsarlo lo reencendía con el texto por
+                      defecto en vez de simplemente apagar el bloque. */}
+                  <button role="switch" aria-checked={clinic.landingUrgentText != null} aria-label="Mostrar el aviso de urgencias"
+                    onClick={() => {
+                      const previo = clinic.landingUrgentText;
+                      const nuevo = previo != null ? null : "Guardamos espacios al día para urgencias. Llámanos y te acomodamos hoy.";
+                      updateLocal("landingUrgentText", nuevo);
+                      save({ landingUrgentText: nuevo }, undefined, { landingUrgentText: previo });
+                    }}
+                    className={clinic.landingUrgentText != null ? `${rd.interruptor} ${rd.interruptorActivo}` : rd.interruptor}>
+                    <span className={rd.interruptorBola} />
+                  </button>
+                </div>
+                {clinic.landingUrgentText != null && (
+                  <>
+                    <textarea value={clinic.landingUrgentText ?? ""} onChange={e => updateLocal("landingUrgentText", e.target.value)}
+                      placeholder="Guardamos dos espacios al día para dolor agudo." rows={2} className={rd.textarea} style={{ marginTop: 8 }} />
+                    <button onClick={() => save({ landingUrgentText: clinic.landingUrgentText })} disabled={saving}
+                      className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 10 }}>
+                      <Check size={16} strokeWidth={1.75}/> Guardar urgencias
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <label className={rd.etiqueta}>Meses sin intereses</label>
+                <p className={rd.ayuda}>Marca los plazos que aceptas. Sin ninguno marcado, la plantilla no menciona mensualidades.</p>
+                {!plantillaPinta(clinic.landingTemplate, "msi") && (
+                  <p style={{ fontSize: 11.5, color: "var(--warning-strong, #a85a05)", marginTop: -4, marginBottom: 8 }}>
+                    &ldquo;{manifestOf(clinic.landingTemplate).nombre}&rdquo; no tiene bloque de mensualidades. Se guarda y aparece en cuanto cambies a una plantilla que sí lo tenga.
+                  </p>
+                )}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {[3, 6, 9, 12, 18, 24].map(mes => {
+                    const actuales: number[] = Array.isArray(clinic.landingMsiPlazos) ? clinic.landingMsiPlazos : [];
+                    const on = actuales.includes(mes);
+                    return (
+                      <button key={mes} type="button" aria-pressed={on}
+                        onClick={() => {
+                          const nuevos = on ? actuales.filter(x => x !== mes) : [...actuales, mes].sort((a, b) => a - b);
+                          updateLocal("landingMsiPlazos", nuevos);
+                        }}
+                        className={on ? `${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}` : `${rd.boton} ${rd.botonPeq}`}>
+                        {mes} meses
+                      </button>
+                    );
+                  })}
+                </div>
+                <button onClick={() => save({ landingMsiPlazos: Array.isArray(clinic.landingMsiPlazos) ? clinic.landingMsiPlazos : [] })}
+                  disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 10 }}>
+                  <Check size={16} strokeWidth={1.75}/> Guardar plazos
+                </button>
+              </div>
+
+              <div>
+                <label className={rd.etiqueta}>{t("pages.landing.coverPhoto")}</label>
+                <p className={rd.ayuda}>{t("pages.landing.coverPhotoHelp")}</p>
+                {clinic.landingCoverUrl && (
+                  <div style={{ position: "relative", marginBottom: 10 }}>
+                    <img src={clinic.landingCoverUrl} alt={t("pages.landing.coverAlt")} style={{ width: "100%", height: 128, objectFit: "cover", borderRadius: 10, border: "1px solid var(--m2-tarjeta-borde)" }} />
+                    <button aria-label={t("common.delete")} onClick={() => { const previo = clinic.landingCoverUrl; updateLocal("landingCoverUrl", null); save({ landingCoverUrl: null }, undefined, { landingCoverUrl: previo }); }}
+                      className={rd.botonIcono} style={{ position: "absolute", top: 8, right: 8, background: "var(--danger, #dc2626)", color: "var(--m2-activo-texto, #fff)" }}>
+                      <Trash2 size={16} strokeWidth={1.75}/>
+                    </button>
+                  </div>
+                )}
+                <label className={rd.dropzone}>
+                  <ImagePlus size={20} strokeWidth={1.75}/>
+                  <span style={{ fontSize: 13, fontWeight: 650 }}>{clinic.landingCoverUrl ? t("pages.landing.replacePhoto") : t("pages.landing.uploadCoverPhoto")}</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                    const file = e.target.files?.[0]; if (!file) return;
+                    try {
+                      const url = await uploadImage(file, "cover");
+                      updateLocal("landingCoverUrl", url);
+                      await save({ landingCoverUrl: url });
+                    } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+                  }} />
+                </label>
+              </div>
+
+              <div>
+                <label className={rd.etiqueta}>{t("pages.landing.mapEmbedLabel")}</label>
+                <p className={rd.ayuda}>{t("pages.landing.mapEmbedHelp")}</p>
+                <input value={clinic.landingMapEmbed ?? ""} onChange={e => updateLocal("landingMapEmbed", e.target.value)} placeholder="https://www.google.com/maps/embed?pb=..." className={rd.input} />
+                <button onClick={() => save({ landingMapEmbed: clinic.landingMapEmbed })} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 8 }}>
+                  <Check size={16} strokeWidth={1.75}/> {t("common.save")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── SERVICIOS ── */}
+          {tab === "servicios" && (
+            <div className={rd.tarjeta} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 className={rd.tarjetaTitulo}><Stethoscope size={16} strokeWidth={1.75}/> {t("pages.landing.servicesHeading")}</h3>
+                  <p className={rd.tarjetaSub}>{t("pages.landing.servicesHelp")}</p>
+                </div>
+                <button onClick={addService} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ flexShrink: 0 }}>
+                  <Plus size={16} strokeWidth={1.75}/> {t("common.add")}
+                </button>
+              </div>
+              {services.length === 0 && (
+                <div className={rd.vacio}>
+                  <Stethoscope size={24} strokeWidth={1.5} className={rd.vacioIcono}/>
+                  <p className={rd.vacioTexto}>{t("pages.landing.servicesEmpty")}</p>
+                </div>
+              )}
+              {services.map((svc, i) => (
+                <div key={i} className={rd.item}>
+                  <div className={rd.itemCabeza}>
+                    <span className={rd.itemEtiqueta}>{t("pages.landing.serviceN", { n: i+1 })}</span>
+                    <button aria-label={t("common.delete")} onClick={() => removeService(i)} className={`${rd.botonIcono} ${rd.botonIconoPeligro}`}><Trash2 size={16} strokeWidth={1.75}/></button>
+                  </div>
+                  <div className={rd.gridAuto}>
+                    <div>
+                      <label className={rd.etiqueta}>{t("pages.landing.emojiIcon")}</label>
+                      <input value={svc.icon} onChange={e => updateService(i,"icon",e.target.value)} placeholder="🦷" className={rd.input} />
+                    </div>
+                    <div>
+                      <label className={rd.etiqueta}>{t("pages.landing.priceOptional")}</label>
+                      <input value={svc.price} onChange={e => updateService(i,"price",e.target.value)} placeholder={t("pages.landing.priceFromPlaceholder")} className={rd.input} />
+                    </div>
+                    <div>
+                      <label className={rd.etiqueta}>Duración (min)</label>
+                      {/* El rango (5-600, hueco real en la agenda) se aplica al SALIR del
+                          campo, no en cada tecla: aplicarlo en el onChange convertía «30»
+                          en «50» al escribir el primer «3» (max(5,min(600,3)) = 5). */}
+                      <input type="number" min={5} max={600} step={5} value={svc.durationMin ?? ""}
+                        onChange={e => updateService(i,"durationMin", e.target.value)}
+                        onBlur={e => {
+                          if (e.target.value === "") return;
+                          const acotado = String(Math.max(5, Math.min(600, Number(e.target.value))));
+                          if (acotado !== e.target.value) updateService(i,"durationMin", acotado);
+                        }}
+                        placeholder="30" className={rd.input} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={rd.etiqueta}>{t("pages.landing.serviceName")}</label>
+                    <input value={svc.name} onChange={e => updateService(i,"name",e.target.value)} placeholder={t("pages.landing.serviceNamePlaceholder")} className={rd.input} />
+                  </div>
+                  <div>
+                    <label className={rd.etiqueta}>{t("common.description")}</label>
+                    <textarea value={svc.desc} onChange={e => updateService(i,"desc",e.target.value)} placeholder={t("pages.landing.serviceDescPlaceholder")} rows={2} className={rd.textarea} />
+                  </div>
+                </div>
+              ))}
+              {services.length > 0 && (
+                <button onClick={() => save({ landingServices: services.map(s => ({ ...s, durationMin: s.durationMin === "" || s.durationMin == null ? null : Number(s.durationMin) })) })}
+                  disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonAncho}`}>
+                  {saving ? t("common.saving") : t("pages.landing.saveServices")}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── TESTIMONIOS ── */}
+          {tab === "testimonios" && (
+            <div className={rd.tarjeta} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 className={rd.tarjetaTitulo}><Star size={16} strokeWidth={1.75}/> {t("pages.landing.testimonialsHeading")}</h3>
+                  <p className={rd.tarjetaSub}>{t("pages.landing.testimonialsHelp")}</p>
+                </div>
+                <button onClick={addTestimonial} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ flexShrink: 0 }}>
+                  <Plus size={16} strokeWidth={1.75}/> {t("common.add")}
+                </button>
+              </div>
+              {testimonials.length === 0 && (
+                <div className={rd.vacio}>
+                  <Star size={24} strokeWidth={1.5} className={rd.vacioIcono}/>
+                  <p className={rd.vacioTexto}>{t("pages.landing.testimonialsEmpty")}</p>
+                </div>
+              )}
+              {testimonials.map((item, i) => (
+                <div key={i} className={rd.item}>
+                  <div className={rd.itemCabeza}>
+                    <span className={rd.itemEtiqueta}>{t("pages.landing.testimonialN", { n: i+1 })}</span>
+                    <button aria-label={t("common.delete")} onClick={() => removeTestimonial(i)} className={`${rd.botonIcono} ${rd.botonIconoPeligro}`}><Trash2 size={16} strokeWidth={1.75}/></button>
+                  </div>
+                  <div className={rd.gridDos}>
+                    <div>
+                      <label className={rd.etiqueta}>{t("pages.landing.testimonialPatientName")}</label>
+                      <input value={item.name} onChange={e => updateTestimonial(i,"name",e.target.value)} placeholder="María García" className={rd.input} />
+                    </div>
+                    <div>
+                      <label className={rd.etiqueta}>{t("pages.landing.rating")}</label>
+                      <select value={item.rating} onChange={e => updateTestimonial(i,"rating",parseInt(e.target.value))} className={rd.select}>
+                        {[5,4,3,2,1].map(n => <option key={n} value={n}>{"⭐".repeat(n)}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className={rd.etiqueta}>{t("pages.landing.comment")}</label>
+                    <textarea value={item.text} onChange={e => updateTestimonial(i,"text",e.target.value)} placeholder={t("pages.landing.commentPlaceholder")} rows={2} className={rd.textarea} />
+                  </div>
+                  <div>
+                    <label className={rd.etiqueta}>{t("pages.landing.dateOptional")}</label>
+                    <input value={item.date ?? ""} onChange={e => updateTestimonial(i,"date",e.target.value)} placeholder={t("pages.landing.datePlaceholder")} className={rd.input} />
+                  </div>
+                </div>
+              ))}
+              {testimonials.length > 0 && (
+                <button onClick={() => save({ landingTestimonials: testimonials })} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonAncho}`}>
+                  {saving ? t("common.saving") : t("pages.landing.saveTestimonials")}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── FAQs ── */}
+          {tab === "faqs" && (
+            <div className={rd.tarjeta} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 className={rd.tarjetaTitulo}><HelpCircle size={16} strokeWidth={1.75}/> {t("pages.landing.faqsHeading")}</h3>
+                  <p className={rd.tarjetaSub}>{t("pages.landing.faqsHelp")}</p>
+                </div>
+                <button onClick={addFaq} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ flexShrink: 0 }}>
+                  <Plus size={16} strokeWidth={1.75}/> {t("common.add")}
+                </button>
+              </div>
+              {faqs.length === 0 && (
+                <div className={rd.vacio}>
+                  <HelpCircle size={24} strokeWidth={1.5} className={rd.vacioIcono}/>
+                  <p className={rd.vacioTexto}>{t("pages.landing.faqsEmpty")}</p>
+                </div>
+              )}
+              {faqs.map((faq, i) => (
+                <div key={i} className={rd.item}>
+                  <div className={rd.itemCabeza}>
+                    <span className={rd.itemEtiqueta}>{t("pages.landing.questionN", { n: i+1 })}</span>
+                    <button aria-label={t("common.delete")} onClick={() => removeFaq(i)} className={`${rd.botonIcono} ${rd.botonIconoPeligro}`}><Trash2 size={16} strokeWidth={1.75}/></button>
+                  </div>
+                  <div>
+                    <label className={rd.etiqueta}>{t("pages.landing.question")}</label>
+                    <input value={faq.question} onChange={e => updateFaq(i,"question",e.target.value)} placeholder={t("pages.landing.questionPlaceholder")} className={rd.input} />
+                  </div>
+                  <div>
+                    <label className={rd.etiqueta}>{t("pages.landing.answer")}</label>
+                    <textarea value={faq.answer} onChange={e => updateFaq(i,"answer",e.target.value)} placeholder={t("pages.landing.answerPlaceholder")} rows={2} className={rd.textarea} />
+                  </div>
+                </div>
+              ))}
+              {faqs.length > 0 && (
+                <button onClick={() => save({ landingFaqs: faqs })} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonAncho}`}>
+                  {saving ? t("common.saving") : t("pages.landing.saveFaqs")}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── GALERÍA ── */}
+          {tab === "galeria" && (
+            <div className={rd.tarjeta} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 className={rd.tarjetaTitulo}><ImagePlus size={16} strokeWidth={1.75}/> {t("pages.landing.galleryHeading")}</h3>
+                  <p className={rd.tarjetaSub}>{t("pages.landing.galleryHelp")}</p>
+                </div>
+                <label className={clinic.landingGallery.length >= 12 ? `${rd.galeriaSubir} ${rd.galeriaSubirLlena}` : rd.galeriaSubir}>
+                  <ImagePlus size={16} strokeWidth={1.75}/> {t("pages.landing.addPhoto")}
+                  <input type="file" accept="image/*" className="hidden" disabled={clinic.landingGallery.length >= 12}
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      await addGalleryPhoto(file);
+                    }} />
+                </label>
+              </div>
+
+              <div className={rd.galeriaAviso}>
+                <Users size={16} strokeWidth={1.75}/>
+                <span>{t("pages.landing.doctorPhotosNote")} <a href="/dashboard/team">{t("pages.landing.teamLink")}</a>.</span>
+              </div>
+
+              {clinic.landingGallery.length > 0 && <p className={rd.ayuda} style={{ margin: 0 }}>{t("pages.landing.galleryOrderHelp")}</p>}
+
+              {clinic.landingGallery.length > 0 ? (
+                <div className={rd.galeriaGrid}>
+                  {clinic.landingGallery.map((url, i) => {
+                    const isCover = url === clinic.landingCoverUrl;
+                    const isFirst = i === 0;
+                    const isLast  = i === clinic.landingGallery.length - 1;
+                    return (
+                      <div key={i} className={isCover ? `${rd.galeriaItem} ${rd.galeriaItemPortada}` : rd.galeriaItem}>
+                        <img src={url} alt={t("pages.landing.photoN", { n: i+1 })} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <span className={rd.galeriaBadgePos}>#{i+1}</span>
+                        {isCover ? (
+                          <span className={rd.galeriaBadgePortada}><Star size={10} strokeWidth={1.75}/> {t("pages.landing.cover")}</span>
+                        ) : (
+                          <button type="button" onClick={() => setGalleryCover(url)} disabled={saving}
+                            aria-label={t("pages.landing.useAsCover")} title={t("pages.landing.useAsCover")} className={rd.galeriaBotonPortada}>
+                            <Star size={10} strokeWidth={1.75}/> {t("pages.landing.cover")}
+                          </button>
+                        )}
+                        <div className={rd.galeriaFlechas}>
+                          <button type="button" onClick={() => moveGalleryPhoto(i, -1)} disabled={saving || isFirst}
+                            aria-label={t("pages.landing.moveLeftAria")} title={t("pages.landing.moveLeft")} className={rd.galeriaFlecha}>
+                            <ChevronLeft size={16} strokeWidth={1.75}/>
+                          </button>
+                          <button type="button" onClick={() => moveGalleryPhoto(i, 1)} disabled={saving || isLast}
+                            aria-label={t("pages.landing.moveRightAria")} title={t("pages.landing.moveRight")} className={rd.galeriaFlecha}>
+                            <ChevronRight size={16} strokeWidth={1.75}/>
+                          </button>
+                        </div>
+                        <div className={rd.galeriaAcciones}>
+                          <label aria-label={t("pages.landing.replacePhotoAria")} title={t("pages.landing.replace")} className={rd.galeriaAccion}>
+                            <RefreshCw size={14} strokeWidth={1.75}/> <span>{t("pages.landing.replace")}</span>
+                            <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                              const file = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!file) return;
+                              await replaceGalleryPhoto(i, file);
+                            }} />
+                          </label>
+                          <button type="button" aria-label={t("pages.landing.deletePhotoAria")} title={t("common.delete")}
+                            onClick={() => deleteGalleryPhoto(i)}
+                            className={`${rd.galeriaAccion} ${rd.galeriaAccionPeligro}`}>
+                            <Trash2 size={14} strokeWidth={1.75}/> <span>{t("common.delete")}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className={rd.vacio}>
+                  <ImagePlus size={24} strokeWidth={1.5} className={rd.vacioIcono}/>
+                  <p className={rd.vacioTexto}>{t("pages.landing.galleryEmpty")}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── REDES ── */}
+          {tab === "redes" && (
+            <div className={rd.tarjeta} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <h3 className={rd.tarjetaTitulo}><Share2 size={16} strokeWidth={1.75}/> {t("pages.landing.socialHeading")}</h3>
+              {[
+                { key:"landingWhatsapp",  label:"WhatsApp",  placeholder:"+52 999 123 4567", descKey:"pages.landing.whatsappDesc" },
+                { key:"landingInstagram", label:"Instagram",  placeholder:"@tuclinica",      descKey:"pages.landing.handleDesc" },
+                { key:"landingFacebook",  label:"Facebook",   placeholder:"https://facebook.com/tuclinica", descKey:"pages.landing.facebookDesc" },
+                { key:"landingTiktok",    label:"TikTok",     placeholder:"@tuclinica",      descKey:"pages.landing.handleDesc" },
+              ].map(field => (
+                <div key={field.key}>
+                  <label className={rd.etiqueta}>{field.label}</label>
+                  <p className={rd.ayuda}>{t(field.descKey)}</p>
+                  <input value={(clinic as any)[field.key] ?? ""} onChange={e => updateLocal(field.key, e.target.value)} placeholder={field.placeholder} className={rd.input} />
+                </div>
+              ))}
+              <button onClick={() => save({ landingWhatsapp: clinic.landingWhatsapp, landingInstagram: clinic.landingInstagram, landingFacebook: clinic.landingFacebook, landingTiktok: clinic.landingTiktok })}
+                disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonAncho}`}>
+                {saving ? t("common.saving") : t("pages.landing.saveSocial")}
+              </button>
+            </div>
+          )}
+          </fieldset>
+
+          <LandingUpgradeBanner manager={accountManager} clinicName={clinicName} />
+        </div>
+
+        {/* ── Vista previa en vivo ── */}
+        <aside className={rd.previa}>
+          <div className={rd.previaCabecera}>
+            <span className={rd.previaTitulo}>Vista previa</span>
+            {sinGuardar && (
+              <span className={`${rd.insignia} ${rd.insigniaAlerta}`}>
+                <span className={rd.puntoAlerta} /> Sin guardar
+              </span>
+            )}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
+              <button type="button" onClick={() => setPreviewAncho("escritorio")} aria-pressed={previewAncho === "escritorio"} aria-label="Ver en escritorio"
+                className={previewAncho === "escritorio" ? `${rd.botonIcono} ${rd.botonIconoActivo}` : rd.botonIcono}>
+                <Monitor size={14} />
+              </button>
+              <button type="button" onClick={() => setPreviewAncho("movil")} aria-pressed={previewAncho === "movil"} aria-label="Ver en móvil"
+                className={previewAncho === "movil" ? `${rd.botonIcono} ${rd.botonIconoActivo}` : rd.botonIcono}>
+                <Smartphone size={14} />
+              </button>
+              <button type="button" onClick={() => setPreviewNonce(n => n + 1)} aria-label="Recargar la vista previa" className={rd.botonIcono}>
+                <RefreshCw size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className={sinGuardar ? `${rd.previaMarco} ${rd.previaMarcoSinGuardar}` : rd.previaMarco}>
+            {/* El alto y el `transform:scale` viven en CSS (previaIframeEscritorio/
+                Movil), leyendo `--previa-alto` de .previaMarco por herencia: en
+                angosto ese token baja a 70vh (ver el @container de arriba) y antes
+                el iframe seguía pidiendo el alto de escritorio completo, así que el
+                marco apilado lo recortaba de más. */}
+            <iframe
+              ref={iframeRef}
+              key={`${templateSel}-${previewNonce}`}
+              src={`/landing-preview/${clinic.slug}?preview=${templateSel}&borrador=1`}
+              title="Vista previa de tu sitio"
+              className={`border-0 bg-white origin-top-left ${previewAncho === "movil" ? rd.previaIframeMovil : rd.previaIframeEscritorio}`}
+            />
+          </div>
+
+          <p className={rd.previaPista}>
+            {sinGuardar
+              ? "Esto es un borrador: se ve aquí, pero tu sitio público sigue como estaba. Guarda para publicarlo."
+              : templateSel !== (clinic.landingTemplate ?? "classic")
+                ? "Estás viendo la plantilla que elegiste, sin aplicar. Tu sitio público sigue en la de antes: pulsa «Aplicar» para publicarla."
+                : "Lo que ves aquí es tu sitio público, tal cual. Al escribir se actualiza al momento."}
+          </p>
+        </aside>
+        </div>
+      </RaizPaginaWeb>
+    );
   }
 
   return (
@@ -413,9 +1230,10 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             <button role="switch" aria-checked={clinic.landingActive} disabled={!puedeEditar || saving}
               aria-label={clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}
               onClick={async () => {
-              const newVal = !clinic.landingActive;
+              const previo = clinic.landingActive;
+              const newVal = !previo;
               updateLocal("landingActive", newVal);
-              await save({ landingActive: newVal });
+              await save({ landingActive: newVal }, undefined, { landingActive: previo });
             }} className={`w-10 h-5 rounded-full relative transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${clinic.landingActive ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
               <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-[var(--shadow-1)] transition-all duration-150 ${clinic.landingActive ? "left-[22px]" : "left-0.5"}`} />
             </button>
@@ -494,14 +1312,10 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
         </div>
       )}
 
-      {/* Todo lo editable vive dentro del <fieldset>: deshabilitarlo apaga de
-          una vez inputs, botones y selectores de archivo, sin depender de que
-          cada control nuevo se acuerde de preguntar por el permiso. `min-w-0`
-          es obligatorio: un fieldset trae min-width:min-content y sin eso
-          rompe el flex de la columna. */}
-      <fieldset disabled={!puedeEditar} className="min-w-0 border-0 p-0 m-0 space-y-5 disabled:opacity-70">
-
-      {/* ── PLANTILLA ── */}
+      {/* ── PLANTILLA ── vive FUERA del <fieldset> de abajo: "Ver" y
+          "Previsualizar" solo miran, nunca deben quedar deshabilitados sin
+          permiso — ver el comentario gemelo en el camino nuevo. Solo
+          "Aplicar" se encierra en su propio fieldset con `display:contents`. */}
       {tab === "plantilla" && (
         <div className={`${CARD_CLS} p-5 space-y-4`}>
           <div>
@@ -545,15 +1359,24 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             <button type="button" onClick={() => previewTemplate()} className={BTN_SECONDARY}>
               <Eye size={16} strokeWidth={1.75}/> {t("pages.landing.previewSelection")}
             </button>
-            <button type="button" onClick={applyTemplate} disabled={saving} className={BTN_PRIMARY}>
-              <Check size={16} strokeWidth={1.75}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
-            </button>
+            <fieldset disabled={!puedeEditar} style={{ display: "contents" }}>
+              <button type="button" onClick={applyTemplate} disabled={saving} className={BTN_PRIMARY}>
+                <Check size={16} strokeWidth={1.75}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
+              </button>
+            </fieldset>
             {!clinic.landingActive && (
-              <span className="text-xs text-[color:var(--warning-strong)]">{t("pages.landing.applyWillPublish")}</span>
+              <span className="text-xs text-[color:var(--warning-strong)]">{t("pages.landing.applyKeepsHidden")}</span>
             )}
           </div>
         </div>
       )}
+
+      {/* Todo lo editable vive dentro del <fieldset>: deshabilitarlo apaga de
+          una vez inputs, botones y selectores de archivo, sin depender de que
+          cada control nuevo se acuerde de preguntar por el permiso. `min-w-0`
+          es obligatorio: un fieldset trae min-width:min-content y sin eso
+          rompe el flex de la columna. */}
+      <fieldset disabled={!puedeEditar} className="min-w-0 border-0 p-0 m-0 space-y-5 disabled:opacity-70">
 
       {/* ── DISEÑO: se dibuja solo desde el manifiesto de la plantilla ──
           Solo si la plantilla activa LEE el manifiesto. Las cuatro primeras
@@ -561,13 +1384,16 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
           lista de secciones escrita en el JSX: enseñarles estos interruptores
           era prometer algo que no pasaba. Quién sí y quién no sale del propio
           manifiesto, no de una lista escrita aquí. */}
-      {tab === "diseno" && !plantillaLeeManifiesto(clinic.landingTemplate) && (
+      {/* Lee `templateSel` (la que pinta el iframe de al lado), no
+          `clinic.landingTemplate` (la ACTIVA/publicada): ver el comentario
+          gemelo en el camino nuevo. */}
+      {tab === "diseno" && !plantillaLeeManifiesto(templateSel) && (
         <div className={`${CARD_CLS} p-5 space-y-3`}>
           <h3 className={`${H_SECTION} flex items-center gap-1.5`}>
             <Layers size={16} strokeWidth={1.75} className="text-[color:var(--brand)]"/> Esta plantilla no se arma por secciones
           </h3>
           <p className="text-sm text-[color:var(--text-2)] leading-relaxed">
-            “{manifestOf(clinic.landingTemplate).nombre}”
+            “{manifestOf(templateSel).nombre}”
             {" "}trae su estructura fija: el orden de los bloques y sus títulos vienen de fábrica y
             se llenan solos con lo que escribes en las demás pestañas. Aquí no hay interruptores
             porque no habría nada que encender.
@@ -584,9 +1410,9 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
         </div>
       )}
 
-      {tab === "diseno" && plantillaLeeManifiesto(clinic.landingTemplate) && (
+      {tab === "diseno" && plantillaLeeManifiesto(templateSel) && (
         <ManifestEditor
-          templateId={clinic.landingTemplate ?? "classic"}
+          templateId={templateSel}
           /* El borrador manda: así cambiar de pestaña y volver no pierde lo
              que la clínica llevaba escrito (ni descuadra la vista previa). */
           sections={draftSections ?? savedSections}
@@ -664,7 +1490,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                 aria-label={t("pages.landing.primaryColor")}
                 className="h-10 w-16 rounded-[var(--radius)] cursor-pointer border border-[color:var(--border-soft)] bg-transparent p-1" />
               <span className="text-sm font-mono text-[color:var(--text-3)]">{clinic.landingThemeColor ?? "#2563eb"}</span>
-              <button onClick={() => save({ landingThemeColor: clinic.landingThemeColor })} className={BTN_PRIMARY_SM}>
+              <button onClick={() => save({ landingThemeColor: clinic.landingThemeColor })} disabled={saving} className={BTN_PRIMARY_SM}>
                 <Check size={16} strokeWidth={1.75}/> {t("common.save")}
               </button>
             </div>
@@ -678,7 +1504,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
               onChange={e => updateLocal("landingTagline", e.target.value)}
               placeholder={t("pages.landing.taglinePlaceholder")}
               className={INPUT_CLS} />
-            <button onClick={() => save({ landingTagline: clinic.landingTagline })} className={`${BTN_PRIMARY_SM} mt-2`}>
+            <button onClick={() => save({ landingTagline: clinic.landingTagline })} disabled={saving} className={`${BTN_PRIMARY_SM} mt-2`}>
               <Check size={16} strokeWidth={1.75}/> {t("common.save")}
             </button>
           </div>
@@ -736,15 +1562,18 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                   </p>
                 )}
               </div>
-              <button role="switch" aria-checked={!!clinic.landingUrgentText}
+              {/* El interruptor sigue si el bloque está ENCENDIDO (texto !== null), no
+                  si tiene contenido: ver el comentario gemelo en el camino nuevo. */}
+              <button role="switch" aria-checked={clinic.landingUrgentText != null}
                 aria-label="Mostrar el aviso de urgencias"
                 onClick={() => {
-                  const nuevo = clinic.landingUrgentText ? null : "Guardamos espacios al día para urgencias. Llámanos y te acomodamos hoy.";
+                  const previo = clinic.landingUrgentText;
+                  const nuevo = previo != null ? null : "Guardamos espacios al día para urgencias. Llámanos y te acomodamos hoy.";
                   updateLocal("landingUrgentText", nuevo);
-                  save({ landingUrgentText: nuevo });
+                  save({ landingUrgentText: nuevo }, undefined, { landingUrgentText: previo });
                 }}
-                className={`w-10 h-5 rounded-full relative transition-colors duration-150 shrink-0 ${clinic.landingUrgentText ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-[var(--shadow-1)] transition-all duration-150 ${clinic.landingUrgentText ? "left-[22px]" : "left-0.5"}`} />
+                className={`w-10 h-5 rounded-full relative transition-colors duration-150 shrink-0 ${clinic.landingUrgentText != null ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-[var(--shadow-1)] transition-all duration-150 ${clinic.landingUrgentText != null ? "left-[22px]" : "left-0.5"}`} />
               </button>
             </div>
             {clinic.landingUrgentText != null && (
@@ -831,7 +1660,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
               onChange={e => updateLocal("landingMapEmbed", e.target.value)}
               placeholder="https://www.google.com/maps/embed?pb=..."
               className={INPUT_CLS} />
-            <button onClick={() => save({ landingMapEmbed: clinic.landingMapEmbed })} className={`${BTN_PRIMARY_SM} mt-2`}>
+            <button onClick={() => save({ landingMapEmbed: clinic.landingMapEmbed })} disabled={saving} className={`${BTN_PRIMARY_SM} mt-2`}>
               <Check size={16} strokeWidth={1.75}/> {t("common.save")}
             </button>
           </div>
@@ -877,9 +1706,17 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                   {/* La duración manda en la reserva: es el hueco que se aparta
                       en la agenda cuando el paciente elige este procedimiento. */}
                   <label className={LABEL_CLS}>Duración (min)</label>
+                  {/* El rango (5-600) se aplica al SALIR del campo, no en cada tecla:
+                      aplicarlo en el onChange convertía «30» en «50» al escribir el
+                      primer «3» (max(5,min(600,3)) = 5). */}
                   <input type="number" min={5} max={600} step={5}
                     value={svc.durationMin ?? ""}
-                    onChange={e => updateService(i,"durationMin", e.target.value === "" ? "" : String(Math.max(5, Math.min(600, Number(e.target.value)))))}
+                    onChange={e => updateService(i,"durationMin", e.target.value)}
+                    onBlur={e => {
+                      if (e.target.value === "") return;
+                      const acotado = String(Math.max(5, Math.min(600, Number(e.target.value))));
+                      if (acotado !== e.target.value) updateService(i,"durationMin", acotado);
+                    }}
                     placeholder="30" className={INPUT_CLS} />
                 </div>
               </div>
@@ -1030,13 +1867,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                   const file = e.target.files?.[0];
                   e.target.value = "";
                   if (!file) return;
-                  if (clinic.landingGallery.length >= 12) { toast.error(t("pages.landing.maxPhotos")); return; }
-                  try {
-                    const url = await uploadImage(file, "gallery");
-                    const newGallery = [...clinic.landingGallery, url];
-                    updateLocal("landingGallery", newGallery);
-                    await save({ landingGallery: newGallery });
-                  } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+                  await addGalleryPhoto(file);
                 }} />
             </label>
           </div>
@@ -1109,20 +1940,11 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                           const file = e.target.files?.[0];
                           e.target.value = "";
                           if (!file) return;
-                          try {
-                            const newUrl = await uploadImage(file, "gallery");
-                            const newGallery = clinic.landingGallery.map((u,j) => j===i ? newUrl : u);
-                            updateLocal("landingGallery", newGallery);
-                            await save({ landingGallery: newGallery });
-                          } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+                          await replaceGalleryPhoto(i, file);
                         }} />
                       </label>
                       <button type="button" aria-label={t("pages.landing.deletePhotoAria")} title={t("common.delete")}
-                        onClick={async () => {
-                          const newGallery = clinic.landingGallery.filter((_,j) => j !== i);
-                          updateLocal("landingGallery", newGallery);
-                          await save({ landingGallery: newGallery });
-                        }}
+                        onClick={() => deleteGalleryPhoto(i)}
                         className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 hover:bg-[color:var(--danger)] transition-colors">
                         <Trash2 size={14} strokeWidth={1.75}/> <span className="hidden sm:inline">{t("common.delete")}</span>
                       </button>
@@ -1224,7 +2046,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             <iframe
               ref={iframeRef}
               key={`${templateSel}-${previewNonce}`}
-              src={`/landing-preview/${clinic.slug}?preview=${templateSel}`}
+              src={`/landing-preview/${clinic.slug}?preview=${templateSel}&borrador=1`}
               title="Vista previa de tu sitio"
               className="border-0 bg-white origin-top-left"
               style={previewAncho === "movil"
@@ -1236,7 +2058,9 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
           <p className="text-[11px] text-[color:var(--text-3)] leading-snug">
             {sinGuardar
               ? "Esto es un borrador: se ve aquí, pero tu sitio público sigue como estaba. Guarda para publicarlo."
-              : "Lo que ves aquí es tu sitio público, tal cual. Al escribir se actualiza al momento."}
+              : templateSel !== (clinic.landingTemplate ?? "classic")
+                ? "Estás viendo la plantilla que elegiste, sin aplicar. Tu sitio público sigue en la de antes: pulsa «Aplicar» para publicarla."
+                : "Lo que ves aquí es tu sitio público, tal cual. Al escribir se actualiza al momento."}
           </p>
         </div>
       </aside>

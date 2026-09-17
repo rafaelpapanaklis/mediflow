@@ -13,6 +13,7 @@ import { logAudit } from "@/lib/audit";
 import { PatientDetailClient } from "./patient-detail-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
+import { fetchActiveDoctors, fetchResources } from "@/lib/agenda/server";
 import { hasPermission } from "@/lib/auth/permissions";
 import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
@@ -36,6 +37,7 @@ import {
   type PatientActivityCounts,
 } from "@/lib/clinical-shared/get-patient-activity-counts";
 import { questionnaireFreshness } from "@/lib/health-questionnaire";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { resolveReminderOutcome } from "@/lib/reminders/promise";
@@ -206,6 +208,48 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       orderBy: { createdAt: "asc" },
     }).catch(() => null),
   ]);
+
+  // REDISEÑO DE PACIENTES — el MISMO interruptor por clínica que enciende el
+  // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`).
+  // A propósito, y no uno propio: Rafael está probando «el diseño nuevo» como
+  // una sola cosa, y dos interruptores serían dos cosas que recordar apagar.
+  // Falla cerrado — sin la tabla, sin fila o con error devuelve false y la
+  // pantalla se pinta exactamente como hoy. El clinicId sale de la sesión.
+  //
+  // FUERA del Promise.all de arriba, y no por gusto: ese lote ya iba en siete
+  // consultas y la regla de la casa es «menos de 7 por Promise.all, que el
+  // pooler se satura». Además, en frío este interruptor son DOS viajes (el
+  // to_regclass y la fila), así que el lote habría llegado a nueve. No depende
+  // de nada de arriba, y su respuesta vive 60 s en memoria por clínica: la
+  // inmensa mayoría de las cargas no llegan ni a tocar la base.
+  // Es el ÚNICO interruptor de la ficha: lo miran tanto el rediseño de la
+  // cabecera, el Resumen, la Historia clínica, el Cuestionario y Nueva consulta
+  // (WS1-T4) como los apartados clínicos y de documentos —Historial, Recetas,
+  // Consentimientos, Referencias, Modelos 3D— y el encaje del odontograma
+  // (WS1-T5). Los dos trabajos lo leían por su cuenta; al juntarlos, una sola
+  // lectura y un solo `rediseno` hacia el cliente.
+  const rediseno = await menuDosNivelesEncendido(user.clinicId);
+
+  // CITAS EDITABLES DESDE EL EXPEDIENTE (ws1-t3) — solo con la bandera. La
+  // pestaña Citas abre «Editar cita», la MISMA ventana de la agenda, y esa
+  // ventana necesita lo que en /dashboard/agenda baja el servidor: doctores,
+  // unidades, zona horaria y los mismos dos permisos. Se cargan con las mismas
+  // funciones que usa la agenda. Con la bandera apagada no hay ni consulta ni
+  // prop: la página queda como estaba.
+  const agendaCitas = rediseno
+    ? await Promise.all([
+        fetchActiveDoctors(user.clinicId, user.clinic.category),
+        fetchResources(user.clinicId),
+      ]).then(([agendaDoctors, agendaResources]) => ({
+        timezone: tz,
+        doctors: agendaDoctors,
+        resources: agendaResources,
+        permisos: {
+          canEdit: hasPermission(permsUser, "agenda.edit"),
+          canCancel: hasPermission(permsUser, "agenda.delete"),
+        },
+      }))
+    : null;
   // Estado del portal con cuenta real: "none" sin cuenta ligada; "invited" ligada
   // pero sin contraseña (invitación pendiente); "active" ya con contraseña.
   const linkedPortalAccount = portalAccountLink?.account ?? null;
@@ -516,6 +560,8 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           questionnaireRiskFlags={questionnaireRiskFlags}
           creditBalance={creditBalance}
           fotosCount={fotosCount}
+          rediseno={rediseno}
+          {...(agendaCitas ? { agendaCitas } : {})}
         />
       </ErrorBoundary>
     </div>

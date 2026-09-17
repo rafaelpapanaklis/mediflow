@@ -4,6 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
+import {
+  Boton, Columna, Encabezado, Insignia, Seccion, Vacio, type Tono,
+} from "@/components/dashboard/configuracion-rediseno/piezas";
+import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 
 interface ArcoRow {
   id: string;
@@ -22,6 +27,9 @@ interface Props {
   clinicRequests: ArcoRow[];
   anonymousRequests: ArcoRow[];
   isSuperAdmin: boolean;
+  /** REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
+   *  resuelto en el servidor. false = la pantalla de siempre, tal cual. */
+  rediseno?: boolean;
 }
 
 const TYPE_LABEL_KEY: Record<ArcoRow["type"], string> = {
@@ -47,10 +55,44 @@ const STATUS_TONE: Record<ArcoRow["status"], string> = {
   REJECTED:    "danger",
 };
 
-export function ArcoRequestsClient({ clinicRequests, anonymousRequests, isSuperAdmin }: Props) {
+// El mismo tono, con el nombre que usan las piezas del rediseño.
+const STATUS_TONO_REDISENO: Record<ArcoRow["status"], Tono> = {
+  PENDING:     "alerta",
+  IN_PROGRESS: "info",
+  RESOLVED:    "exito",
+  REJECTED:    "peligro",
+};
+
+export function ArcoRequestsClient({ clinicRequests, anonymousRequests, isSuperAdmin, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [editing, setEditing] = useState<ArcoRow | null>(null);
+
+  // ── REDISEÑO (ws1-t2): mismas tablas, mismo modal, mismos textos. ──
+  if (rediseno) {
+    return (
+      <RaizConfiguracion>
+        <Encabezado titulo={t("settings.arco.title")} subtitulo={t("settings.arco.subtitle")} />
+        <Columna>
+          <Seccion titulo={t("settings.arco.sectionClinic", { count: clinicRequests.length })} sinRelleno={clinicRequests.length > 0}>
+            <TablaRediseno rows={clinicRequests} onEdit={setEditing} />
+          </Seccion>
+          {isSuperAdmin && (
+            <Seccion titulo={t("settings.arco.sectionAnonymous", { count: anonymousRequests.length })} sinRelleno={anonymousRequests.length > 0}>
+              <TablaRediseno rows={anonymousRequests} onEdit={setEditing} />
+            </Seccion>
+          )}
+        </Columna>
+        {editing && (
+          <EditModal
+            request={editing}
+            onClose={() => setEditing(null)}
+            onSaved={() => { setEditing(null); router.refresh(); toast.success(t("settings.arco.toastUpdated")); }}
+          />
+        )}
+      </RaizConfiguracion>
+    );
+  }
 
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1200, margin: "0 auto" }}>
@@ -147,6 +189,48 @@ function Table({ rows, onEdit }: { rows: ArcoRow[]; onEdit: (r: ArcoRow) => void
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/** La tabla del rediseño: mismas columnas, mismo botón «Gestionar». */
+function TablaRediseno({ rows, onEdit }: { rows: ArcoRow[]; onEdit: (r: ArcoRow) => void }) {
+  const t = useT();
+  if (rows.length === 0) {
+    return <Vacio>{t("settings.arco.emptyTable")}</Vacio>;
+  }
+  return (
+    <div className={cr.tablaCaja}>
+      <table className={cr.tabla}>
+        <thead>
+          <tr>
+            <th>{t("common.date")}</th>
+            <th>{t("settings.arco.colType")}</th>
+            <th>{t("settings.arco.colEmail")}</th>
+            <th>{t("settings.arco.colReason")}</th>
+            <th>{t("settings.arco.colStatus")}</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td className={cr.tablaApagado}>
+                {new Date(r.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+              </td>
+              <td><strong style={{ fontWeight: 600 }}>{t(TYPE_LABEL_KEY[r.type])}</strong></td>
+              <td style={{ color: "var(--m2-texto-2)" }}>{r.email}</td>
+              <td><div className={cr.tablaRecorte}>{r.reason}</div></td>
+              <td>
+                <Insignia tono={STATUS_TONO_REDISENO[r.status]} punto>{t(STATUS_LABEL_KEY[r.status])}</Insignia>
+              </td>
+              <td>
+                <Boton corto onClick={() => onEdit(r)}>{t("settings.arco.manage")}</Boton>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

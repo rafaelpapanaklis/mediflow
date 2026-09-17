@@ -17,6 +17,7 @@ import type { TFunction } from "@/i18n/t";
 import { EmbeddedSignupButton } from "./embedded-signup-button";
 import type { RecentReminderDTO } from "@/lib/whatsapp/recent-reminders";
 import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
+import { ConexionRediseno } from "@/components/dashboard/whatsapp-rediseno/conexion";
 import s from "./whatsapp.module.css";
 
 // Dónde agrega la clínica su método de pago para las plantillas de Meta.
@@ -41,6 +42,9 @@ interface Props {
   recentReminders:       RecentReminderDTO[];
   recentRemindersFailed: boolean;
   clinicName:    string;
+  /** Rediseño (ws1-t5): el MISMO interruptor por clínica que enciende el
+   *  menú de dos niveles. Apagado, esta pantalla se pinta tal cual. */
+  rediseno?:     boolean;
 }
 
 /** Tono del chip por estado. "Enviado" = aceptado por WhatsApp, no entregado. */
@@ -101,6 +105,7 @@ export function WhatsAppClient({
   connMethod: initConnMethod,
   reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h,
   remindersEnabled, recentReminders, recentRemindersFailed, clinicName,
+  rediseno = false,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -261,6 +266,30 @@ export function WhatsAppClient({
     { titleKey: "inbox.whatsapp.needAppTitle",      descKey: "inbox.whatsapp.needAppDesc"      },
     { titleKey: "inbox.whatsapp.needFacebookTitle", descKey: "inbox.whatsapp.needFacebookDesc" },
   ];
+
+  // REDISEÑO (ws1-t5): con el interruptor encendido se pinta la vista nueva
+  // con ESTE mismo estado y ESTOS mismos manejadores; el JSX de siempre, de
+  // aquí para abajo, no cambia ni un nodo.
+  if (rediseno) {
+    return (
+      <ConexionRediseno
+        vm={{
+          t, connected, step, setStep, loading, showToken, setShowToken, form, setForm,
+          msg, setMsg, defaultMsg, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
+          connect, disconnect, saveSettings, saveToggle, connChip, remindersOn,
+          esAvailable: ES_AVAILABLE,
+          onEmbeddedConnected: () => {
+            setConnected(true);
+            setConnMethod("embedded");
+            setStep("done");
+            router.refresh();
+          },
+          refrescar: () => router.refresh(),
+          recentReminders, recentRemindersFailed,
+        }}
+      />
+    );
+  }
 
   return (
     <div className={s.page}>
@@ -572,7 +601,10 @@ export function WhatsAppClient({
                 <div className={s.statusRow}>
                   <CheckCircle size={14} className={s.statusIcon} />
                   <span className={s.statusValue}>
-                    Phone Number ID: <span className="mono">{form.phoneNumberId || "—"}</span>
+                    {/* Identificador técnico de la integración con la API de Meta —
+                        letra de máquina real incluso con Instrument Sans en el resto
+                        del panel (WS1-T6), igual que Integraciones. */}
+                    Phone Number ID: <span className="mono-tecnico">{form.phoneNumberId || "—"}</span>
                   </span>
                 </div>
                 {connChip && (

@@ -494,7 +494,8 @@ test("crear factura desde presupuesto: total de invoiceFieldsFromQuote, pendient
   assert.ok(r.tarjeta.avisos.some((a: string) => /Nace pendiente de cobro/.test(a)));
   assert.ok(r.tarjeta.avisos.some((a: string) => /no se puede borrar, solo anular/.test(a)));
   assert.ok(!r.tarjeta.avisos.some((a: string) => /borrador/i.test(a)), JSON.stringify(r.tarjeta.avisos));
-  assert.ok(r.tarjeta.avisos.some((a: string) => /IVA 16 % incluido aunque la clínica sea exenta/.test(a)));
+  // La factura del presupuesto ya nace con el IVA de la clínica: la tarjeta no avisa de un 16 % que no existe.
+  assert.ok(!r.tarjeta.avisos.some((a: string) => /IVA 16 %/.test(a)), JSON.stringify(r.tarjeta.avisos));
 
   const conFactura = await accionCrearFactura.preparar(recepcion(db), { presupuesto: "P-0002" });
   assert.match((conFactura as any).frase, /ya tiene su factura, la MF-0012 \(borrador\)/);

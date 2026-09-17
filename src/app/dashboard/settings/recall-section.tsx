@@ -16,6 +16,10 @@ import {
   type RecallSettings,
   type ReminderChannel,
 } from "@/lib/reminders/config";
+import {
+  Area, Aviso, Bloque, BotonGuardar, Burbuja, Campo, Chip, Chips, Enlace, FilaInterruptor, Seccion,
+  Selector, SubtituloGrupo,
+} from "@/components/dashboard/configuracion-rediseno/piezas";
 
 const INTERVAL_OPTIONS: Array<{ days: number; label: string }> = [
   { days: 90, label: "3 meses" },
@@ -23,7 +27,9 @@ const INTERVAL_OPTIONS: Array<{ days: number; label: string }> = [
   { days: 365, label: "12 meses" },
 ];
 
-export function RecallSection({ clinic }: { clinic: any }) {
+/** `rediseno`: el MISMO interruptor `menu-dos-niveles` que baja SettingsClient
+ *  (ws1-t2). Apagado, la sección es la de siempre, tal cual. */
+export function RecallSection({ clinic, rediseno = false }: { clinic: any; rediseno?: boolean }) {
   const [form, setForm] = useState<RecallSettings>(() => getRecallSettings(clinic ?? {}));
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
@@ -78,6 +84,74 @@ export function RecallSection({ clinic }: { clinic: any }) {
     } finally {
       setRunning(false);
     }
+  }
+
+  // ── REDISEÑO (ws1-t2): mismo estado, mismo guardado, mismos textos. ──
+  if (rediseno) {
+    return (
+      <Seccion
+        titulo="Reactivación de pacientes (recall)"
+        subtitulo="Avísale automáticamente a los pacientes que llevan tiempo sin venir que les toca su limpieza o revisión. Sólo se contacta a quienes ya tuvieron una consulta y no tienen cita futura agendada."
+        pieIzquierda={
+          <Enlace
+            onClick={runNow}
+            disabled={running || !form.enabled}
+            title={form.enabled ? "Ejecuta el barrido ahora para esta clínica" : "Activa la reactivación primero"}
+          >
+            {running ? "Ejecutando…" : "Ejecutar barrido ahora"}
+          </Enlace>
+        }
+        pie={<BotonGuardar onClick={save} guardando={saving} texto="Guardar cambios" textoGuardando="Guardando…" />}
+      >
+        <FilaInterruptor
+          titulo="Reactivación automática"
+          descripcion="Un barrido diario busca pacientes por reactivar y les envía el recordatorio."
+          activo={form.enabled}
+          onCambiar={() => setForm((f) => ({ ...f, enabled: !f.enabled }))}
+        />
+
+        <Campo etiqueta={<>¿Cada cuánto se considera &quot;por reactivar&quot;?</>} ayuda="Tiempo sin venir desde la última consulta completada.">
+          <Chips>
+            {INTERVAL_OPTIONS.map((opt) => (
+              <Chip key={opt.days} activo={form.intervalDays === opt.days} onClick={() => setForm((f) => ({ ...f, intervalDays: opt.days }))}>
+                {opt.label}
+              </Chip>
+            ))}
+          </Chips>
+        </Campo>
+
+        <Campo etiqueta="Canal" ayuda={includesEmail ? "El email requiere tener configurado el proveedor de correo (Resend)." : undefined}>
+          <Selector value={form.channel} onChange={(e) => setForm((f) => ({ ...f, channel: e.target.value as ReminderChannel }))}>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="email">Email</option>
+            <option value="both">WhatsApp y email</option>
+          </Selector>
+          {includesWhatsApp && !waConnected && (
+            <Aviso tono="alerta">
+              WhatsApp no está conectado en esta clínica.{" "}
+              <a href="/dashboard/whatsapp">Conectar WhatsApp</a>
+            </Aviso>
+          )}
+        </Campo>
+
+        <Campo
+          etiqueta="Mensaje"
+          ayuda={<>Variables disponibles: {"{nombre}"} y {"{clinica}"}.</>}
+          derecha={
+            <Enlace suave onClick={() => setForm((f) => ({ ...f, message: DEFAULT_RECALL_MESSAGE }))}>
+              Restaurar predeterminado
+            </Enlace>
+          }
+        >
+          <Area rows={5} value={form.message} onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))} />
+        </Campo>
+
+        <Bloque>
+          <SubtituloGrupo>Vista previa</SubtituloGrupo>
+          <Burbuja>{preview}</Burbuja>
+        </Bloque>
+      </Seccion>
+    );
   }
 
   return (

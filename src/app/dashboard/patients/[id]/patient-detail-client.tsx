@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock, CreditCard, FileImage } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
@@ -32,6 +32,28 @@ import type { ConsentDTO } from "@/lib/consent/types";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import { PatientAuditHistory } from "@/components/dashboard/patient-detail/patient-audit-history";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
+import redisenoStyles from "@/components/dashboard/pacientes-rediseno/rediseno.module.css";
+// REDISEÑO DE PACIENTES (WS1-T4) — se monta SOLO con el interruptor
+// `menu-dos-niveles` encendido para la clínica. Con la bandera apagada no se
+// evalúa ninguna de estas ramas y la ficha se pinta exactamente como hoy.
+import { CLASES_REDISENO } from "@/components/dashboard/pacientes-rediseno/raiz";
+import { FichaMenu } from "@/components/dashboard/pacientes-rediseno/ficha-menu";
+import { Resumen as ResumenRediseno } from "@/components/dashboard/pacientes-rediseno/resumen";
+import { Historia as HistoriaRediseno } from "@/components/dashboard/pacientes-rediseno/historia";
+import { Cuestionario as CuestionarioRediseno } from "@/components/dashboard/pacientes-rediseno/cuestionario";
+import { NuevaConsulta as NuevaConsultaRediseno } from "@/components/dashboard/pacientes-rediseno/nueva-consulta";
+// Segunda ola del rediseño (ws1-t4): los cuatro apartados que faltaban.
+import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashboard/expediente-rediseno/odontograma";
+import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
+import { VentanaNuevoPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
+import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventanas-plan";
+import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
+import { VentanaCita, citaAbrible, type AgendaDelExpediente } from "@/components/dashboard/citas-expediente/ventana-cita";
+import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
+import { AvisoPresupuestosMovidos, EnlaceAPresupuestos } from "@/components/dashboard/presupuestos-en-facturacion/aviso";
+// Hallazgo 21 (ws1-t5): el umbral hacia el módulo de Ortodoncia, que NO se
+// rediseña; solo la salida hacia él habla el idioma nuevo.
+import { SalidaOrtodoncia } from "@/components/dashboard/bloques-rediseno/salidas";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { HealthQuestionnaireTab } from "@/components/dashboard/patient-detail/health-questionnaire-tab";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
@@ -44,6 +66,7 @@ import { PrescriptionsTab } from "@/components/dashboard/patient-detail/prescrip
 import { PatientUploadsSection } from "@/components/patients/patient-uploads-section";
 import { PatientPhotosTab, RecentPhotosStrip } from "@/components/dashboard/patient-detail/patient-photos-tab";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
+import { borradorDesdeFactura, type BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -232,6 +255,31 @@ const APPT_STATUS: Record<string, { labelKey: string; cls: string }> = {
   NO_SHOW:   { labelKey: "patients.apptStatus.noShow",    cls: "bg-[var(--bg-elev-2)] text-[var(--text-2)]" },
 };
 
+/* N9 (MAPA-pacientes §9): AppointmentStatus tiene 9 valores vivos (PENDING es
+   legacy, ver schema.prisma); esta tabla solo conocía 5, así que SCHEDULED,
+   CHECKED_IN, IN_CHAIR, IN_PROGRESS y CHECKED_OUT caían en el `?? PENDING` de
+   abajo y se pintaban "Pendiente" en ámbar — una cita Agendada no es lo mismo
+   que una sin confirmar. Mismas claves de i18n y mismos tonos que
+   `pacientesRediseno.cita.*` en resumen.tsx (WS1-T4): Resumen y Citas tienen
+   que decir lo mismo con el mismo color. Solo se usa con la bandera
+   encendida: apagada, la tabla de siempre (APPT_STATUS, con Tailwind).
+   Y la agenda nueva también: mismo nombre por estado y mismo color donde la
+   agenda lo tiene (ámbar = en la sala, rojo = no vino). PENDING se llama
+   «Agendada» porque el servidor lo trata como SCHEDULED. Lo vigila un candado
+   en src/lib/agenda-nueva/__tests__/estados.test.ts. */
+const APPT_STATUS_FULL: Record<string, { labelKey: string; tono: string }> = {
+  PENDING:     { labelKey: "pacientesRediseno.cita.agendada",   tono: "etiquetaVioleta" },
+  SCHEDULED:   { labelKey: "pacientesRediseno.cita.agendada",   tono: "etiquetaVioleta" },
+  CONFIRMED:   { labelKey: "pacientesRediseno.cita.confirmada", tono: "etiquetaExito" },
+  CHECKED_IN:  { labelKey: "pacientesRediseno.cita.registrado", tono: "etiquetaAlerta" },
+  IN_CHAIR:    { labelKey: "pacientesRediseno.cita.enSillon",   tono: "etiquetaVioleta" },
+  IN_PROGRESS: { labelKey: "pacientesRediseno.cita.enConsulta", tono: "etiquetaVioleta" },
+  COMPLETED:   { labelKey: "pacientesRediseno.cita.completada", tono: "etiquetaNeutra" },
+  CHECKED_OUT: { labelKey: "pacientesRediseno.cita.salio",      tono: "etiquetaNeutra" },
+  CANCELLED:   { labelKey: "pacientesRediseno.cita.cancelada",  tono: "etiquetaNeutra" },
+  NO_SHOW:     { labelKey: "pacientesRediseno.cita.noAsistio",  tono: "etiquetaPeligro" },
+};
+
 /* El mapa de estados de factura (badge + label) y el helper isVoidedInvoice
    viven en la fuente única src/components/dashboard/billing/invoice-status.ts,
    compartida con Caja y el modal de detalle: la divergencia entre las copias
@@ -403,6 +451,28 @@ interface Props {
   /** Veredicto de recordatorios de ESTE paciente (ver SideCards). Solo el
    *  resultado derivado —nunca la fila Clinic ni la plantilla del mensaje. */
   reminderOutcome?: ReminderOutcome | null;
+  /**
+   * ¿La clínica tiene encendido el diseño nuevo? Es el MISMO interruptor del
+   * menú de dos niveles (`clinic_feature_flags` → `menu-dos-niveles`), resuelto
+   * en el server. En false, TODO lo de abajo se queda como está: la barra que
+   * mide el ancho, el Resumen de dos columnas, el cuestionario de hoy y el
+   * formulario de consulta que vuelve a pedir los antecedentes.
+   *
+   * Y también, desde la integración, los apartados clínicos y de documentos
+   * (Historial de consultas, Recetas, Consentimientos, Referencias, Modelos 3D)
+   * y el encaje del odontograma: llegaron en otra rama con un segundo prop
+   * (`pacientesRediseno`) que salía de este mismo interruptor. Dos nombres para
+   * una sola cosa es la manera de que un día se enciendan a medias, así que se
+   * unificaron en este. Los componentes de esos apartados conservan el suyo:
+   * este valor es el que les llega.
+   */
+  rediseno?: boolean;
+  /**
+   * Solo llega con la bandera encendida: lo que «Editar cita» (la ventana de la
+   * agenda) necesita para abrirse desde la pestaña Citas. Sin ella, la tabla
+   * de Citas solo lista, como siempre.
+   */
+  agendaCitas?: AgendaDelExpediente;
 }
 
 export function PatientDetailClient({
@@ -441,11 +511,15 @@ export function PatientDetailClient({
   canEditTreatments = false,
   facturApiEnabled = false,
   reminderOutcome = null,
+  rediseno = false,
+  agendaCitas,
 }: Props) {
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { open: openNewAppointment } = useNewAppointmentDialog();
+  // La cita abierta en «Editar cita» desde la pestaña Citas (solo rediseño).
+  const [citaAbiertaId, setCitaAbiertaId] = useState<string | null>(null);
   const pediatricsState = derivePediatricsTabState({
     hasData:      Boolean(pediatricsData),
     moduleActive: pediatricsModuleActive,
@@ -549,6 +623,8 @@ export function PatientDetailClient({
   const [invoiceDetailAction, setInvoiceDetailAction] = useState<"cfdi" | null>(null);
   const [invoices, setInvoices] = useState(initialInvoices);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
+  // «Duplicar» de la ficha de factura (solo diseño nuevo). Apagado, siempre null.
+  const [duplicarFactura, setDuplicarFactura] = useState<BorradorDeFactura | null>(null);
   // Cobro directo en 2 clicks: snapshot de la factura objetivo del
   // PaymentModal montado abajo ("Cobrar ahora" del rail/hero y "Cobrar" por
   // fila del tab Facturación).
@@ -1298,7 +1374,10 @@ export function PatientDetailClient({
   // Otros tabs usan 1760 para aprovechar monitores grandes sin estirar laptops
   // (que no llegan a ese ancho, así que ahí no cambia nada).
   const isOrthoTab = tab === "ortodoncia" && Boolean(orthoRedesignVM);
-  const outerMaxWidth = isOrthoTab ? 1920 : 1760;
+  // Con el rediseño, la ficha entera (menú pegajoso, migas) mide lo mismo en
+  // todas las pestañas: el salto a 1920 al entrar en Ortodoncia movía el menú
+  // de sitio. El módulo se acomoda por contenedor, así que nada se esconde.
+  const outerMaxWidth = isOrthoTab && !rediseno ? 1920 : 1760;
 
   // El rail derecho (Estado de cuenta + reglas automáticas + WhatsApp) solo
   // aporta en las vistas administrativas/financieras. En el resto (imagen,
@@ -1308,7 +1387,11 @@ export function PatientDetailClient({
   // `layoutWide`, así el contenido usa el ancho completo sin dejar el hueco de
   // 320px+gap del tercer track.
   const RAIL_TABS = ["resumen", "agenda", "presupuestos", "facturacion"];
-  const showRail = RAIL_TABS.includes(tab);
+  // Con el rediseño, RESUMEN se queda sin rail: «Estado de cuenta» es una de
+  // las cinco tarjetas que pidió Rafael, y tenerlo además en la columna de la
+  // derecha era la misma cifra dos veces en el mismo alto de pantalla. Los
+  // otros tres tabs con rail lo conservan igual.
+  const showRail = RAIL_TABS.includes(tab) && !(rediseno && tab === "resumen");
 
   // El contenedor de abajo fija el margen lateral de la ficha ENTERA (hero,
   // barra de secciones y contenido), así que es el único sitio donde hay que
@@ -1317,6 +1400,11 @@ export function PatientDetailClient({
   // borde del hero quedaban debajo. Sin recorte, env(...) vale 0 y manda el 28.
   return (
     <div
+      // Con el rediseño encendido, este contenedor es la RAÍZ: de aquí cuelgan
+      // la tipografía (Instrument Sans, la misma instancia que el menú nuevo) y
+      // los tokens `--pr-*`, que se heredan hacia las reglas del rediseño que
+      // viven en otros módulos CSS. Apagado, `undefined`: ni una clase de más.
+      className={rediseno ? CLASES_REDISENO : undefined}
       style={{
         padding: "20px 28px 28px",
         paddingLeft: "max(28px, env(safe-area-inset-left))",
@@ -1398,6 +1486,7 @@ export function PatientDetailClient({
           canEdit={canEditPatient}
           canDelete={canDeletePatient}
           onDelete={() => setShowDelete(true)}
+          rediseno={rediseno}
         />
       )}
 
@@ -1437,6 +1526,32 @@ export function PatientDetailClient({
           ficha su sticky vive hasta el final del scroll (dentro del grid,
           Chrome lo clampea al contenedor y se despegaba). Se oculta ≤1024px,
           donde manda la tab bar móvil de más abajo. */}
+      {rediseno ? (
+        <FichaMenu
+          activeTab={tab}
+          onSelect={setTab}
+          counts={{
+            historia: records.length,
+            historialConsultas: records.length,
+            radiografias: filesLoaded ? files.length : undefined,
+            fotos: fotosCount,
+            tratamiento: treatments.length,
+            agenda: appointments.length,
+            facturacion: invoices.length,
+            implantes: implants?.length ?? 0,
+          }}
+          hasBalance={totalBalance > 0}
+          pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
+          showPeriodontics={showPeriodontics}
+          showEndodontics={showEndodontics}
+          showImplants={showImplants}
+          showOrthodontics={showOrthodontics}
+          showBilling={canViewBilling}
+          showConsents={canViewConsents}
+          showXrays={canViewXrays}
+          showPrescriptions={canViewPrescriptions}
+        />
+      ) : (
       <PatientNavBar
         activeTab={tab}
         onSelect={setTab}
@@ -1467,6 +1582,7 @@ export function PatientDetailClient({
         showPrescriptions={canViewPrescriptions}
         activityCounts={activityCounts}
       />
+      )}
 
       {/* Layout 2 columnas — contenido + rail derecho.
           El grid colapsa a 1 columna (layoutWide) en todo tab SIN rail
@@ -1527,6 +1643,11 @@ export function PatientDetailClient({
             className={patientDetailStyles.mobileTabBar}
             role="tablist"
             aria-label={t("patients.tabs.sectionsAria")}
+            // Con el rediseño el menú de arriba es el MISMO en todas las
+            // pantallas —seis fijos y tres grupos, también en el teléfono—, así
+            // que esta tira plana de pastillas sobraría: serían dos menús con
+            // el mismo contenido, uno encima del otro.
+            hidden={rediseno || undefined}
           >
             {tabs.map((tabItem) => {
               const isActive = tab === tabItem.id;
@@ -1559,8 +1680,61 @@ export function PatientDetailClient({
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
+          {/* ===== TAB: RESUMEN (rediseño) =====
+              Las cinco tarjetas que pidió Rafael por su nombre: información
+              del paciente, cobros, citas, estado de cuenta y tratamiento
+              activo. La línea de tiempo pasa DEBAJO — sigue estando, pero ya
+              no es lo primero y lo más grande de la portada. */}
+          {tab === "resumen" && rediseno && (
+            <ResumenRediseno
+              patient={patient}
+              finanzas={{
+                total: totalPlan,
+                pagado: totalPaid,
+                saldo: totalBalance,
+                credito: creditBalance,
+              }}
+              citas={appointments}
+              facturas={invoices}
+              tratamientos={treatments}
+              canViewBilling={canViewBilling}
+              canEditPatient={canEditPatient}
+              onCobrar={openChargeShortcut}
+              onAgendar={openNewAppointmentForPatient}
+              onEditar={() => setShowEdit(true)}
+              onIrA={setTab}
+              movimientos={
+                <>
+                  {showQuestionnaireWarning && (
+                    <div style={{ marginBottom: 12 }}>{questionnaireBanner}</div>
+                  )}
+                  <HistoriaTimeline
+                    patientId={patient.id}
+                    compact
+                    limit={8}
+                    onOpenSoap={(recordId) => {
+                      const record = records.find((r) => r.id === recordId);
+                      if (record) setNoteDetailOpen(record as ClinicalNote);
+                    }}
+                    onOpenXray={(fileId) => router.push(`/dashboard/xrays/${patient.id}?fileId=${fileId}`)}
+                    onOpenAppointment={() => setTab("agenda")}
+                    onOpenTreatment={() => setTab("tratamiento")}
+                    onOpenReferral={() => setTab("referencias")}
+                  />
+                  <div style={{ marginTop: 14 }}>
+                    <RecentPhotosStrip
+                      patientId={patient.id}
+                      count={fotosCount}
+                      onOpenTab={() => setTab("fotos")}
+                    />
+                  </div>
+                </>
+              }
+            />
+          )}
+
           {/* ===== TAB: RESUMEN ===== */}
-          {tab === "resumen" && (
+          {tab === "resumen" && !rediseno && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {showQuestionnaireWarning && <div className="md:col-span-2">{questionnaireBanner}</div>}
               <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4 transition-all duration-200 hover:shadow-[var(--shadow-2)] hover:border-[var(--border-brand)] motion-safe:hover:-translate-y-0.5">
@@ -1703,13 +1877,43 @@ export function PatientDetailClient({
             </div>
           )}
 
-          {/* ===== TAB: CUESTIONARIO DE SALUD ===== */}
+          {/* ===== TAB: CUESTIONARIO DE SALUD =====
+              Las MISMAS preguntas y el mismo endpoint; cambia cómo se ven y
+              cómo se guardan (un «Sí» pinta la pregunta, el botón de guardar
+              deja de vivir al fondo de cuatro pantallas de scroll). */}
           {tab === "cuestionario" && (
-            <HealthQuestionnaireTab patientId={patient.id} onSaved={() => router.refresh()} />
+            rediseno ? (
+              <CuestionarioRediseno patientId={patient.id} onSaved={() => router.refresh()} />
+            ) : (
+              <HealthQuestionnaireTab patientId={patient.id} onSaved={() => router.refresh()} />
+            )
+          )}
+
+          {/* ===== TAB: HISTORIA CLINICA (rediseño) =====
+              El mismo contenido: la línea de tiempo entera y la bitácora de
+              accesos que exige la NOM-024. La bitácora pasa a estar PLEGADA:
+              es un requisito legal, no lectura diaria. */}
+          {tab === "historia" && rediseno && (
+            <HistoriaRediseno
+              timeline={
+                <HistoriaTimeline
+                  patientId={patient.id}
+                  onOpenSoap={(recordId) => {
+                    const record = records.find((r) => r.id === recordId);
+                    if (record) setNoteDetailOpen(record as ClinicalNote);
+                  }}
+                  onOpenXray={(fileId) => router.push(`/dashboard/xrays/${patient.id}?fileId=${fileId}`)}
+                  onOpenAppointment={() => setTab("agenda")}
+                  onOpenTreatment={() => setTab("tratamiento")}
+                  onOpenReferral={() => setTab("referencias")}
+                />
+              }
+              bitacora={<PatientAuditHistory patientId={patient.id} />}
+            />
           )}
 
           {/* ===== TAB: HISTORIA CLINICA ===== */}
-          {tab === "historia" && (
+          {tab === "historia" && !rediseno && (
             <div className="space-y-4">
             <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-5">
               <div className="flex items-baseline justify-between mb-4">
@@ -1766,6 +1970,12 @@ export function PatientDetailClient({
           )}
 
           {/* ===== TAB: ORTODONCIA ===== */}
+          {/* Hallazgo 21: con el rediseño, una banda en el idioma nuevo
+              presenta el módulo (que conserva su cabecera y su ropa). Con la
+              bandera apagada no se pinta nada aquí. */}
+          {tab === "ortodoncia" && orthoRedesignVM && rediseno && (
+            <SalidaOrtodoncia titulo={t("patients.tabs.ortodoncia")} paciente={fullName} />
+          )}
           {tab === "ortodoncia" && orthoRedesignVM && (
             <OrthodonticsRedesignClient
               vm={orthoRedesignVM}
@@ -2403,13 +2613,57 @@ export function PatientDetailClient({
             />
           )}
 
+          {/* ===== TAB: ODONTOGRAMA (rediseño) =====
+              El mismo OdontogramV2, con el MARCO vestido (cabecera, controles,
+              leyenda, paleta, panel del diente). El dibujo no se toca. */}
+          {tab === "odontograma" && rediseno && (
+            <OdontogramaRediseno patientId={patient.id} />
+          )}
+
           {/* ===== TAB: ODONTOGRAMA ===== */}
-          {tab === "odontograma" && (
-            <OdontogramV2 patientId={patient.id} />
+          {tab === "odontograma" && !rediseno && (
+            <OdontogramV2
+              patientId={patient.id}
+              dedupeLegend={rediseno}
+              edgeScrollHint={rediseno}
+            />
+          )}
+
+          {/* ===== TAB: NUEVA CONSULTA (rediseño) =====
+              Los antecedentes del paciente se ENSEÑAN arriba en vez de
+              volverse a pedir en un cuadro vacío. El formulario de
+              especialidad es exactamente el mismo de siempre. */}
+          {tab === "expediente" && rediseno && (
+            <NuevaConsultaRediseno
+              especialidad={currentSpecialty}
+              onCambiarEspecialidad={setOverrideSpecialty}
+              onRestablecerEspecialidad={
+                overrideSpecialty && overrideSpecialty !== detectedSpecialty
+                  ? () => setOverrideSpecialty(null)
+                  : undefined
+              }
+              antecedentes={{
+                riskFlags: questionnaireRiskFlags,
+                allergies: patient.allergies ?? [],
+                chronicConditions: patient.chronicConditions ?? [],
+                currentMedications: patient.currentMedications ?? [],
+                bloodType: patient.bloodType ?? null,
+              }}
+              aviso={showQuestionnaireWarning ? questionnaireBanner : undefined}
+              onIrACuestionario={() => setTab("cuestionario")}
+              formulario={
+                <>
+                  {currentSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} rediseno />}
+                  {currentSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
+                  {currentSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
+                  {currentSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
+                </>
+              }
+            />
           )}
 
           {/* ===== TAB: NUEVA CONSULTA (specialty form) ===== */}
-          {tab === "expediente" && (
+          {tab === "expediente" && !rediseno && (
             <div className="bg-card border border-border rounded-xl p-5 shadow-[var(--shadow-1)]">
               <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
                 <h2 className="text-[15px] font-semibold tracking-[-0.01em]">
@@ -2465,7 +2719,16 @@ export function PatientDetailClient({
 
               {records.length === 0 ? (
                 <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
-                  <div className="text-3xl mb-2">📋</div>
+                  {/* Sin emoji con el rediseño: la ficha usa íconos de línea
+                      en todo lo demás y estos se colaban dentro del texto.
+                      Las dos ramas cambiaron este mismo icono; queda el del
+                      rediseño de la ficha, que es el tamaño y el grosor que
+                      llevan los demás vacíos de esa pantalla. */}
+                  <div className="mb-2 flex justify-center">
+                    {rediseno
+                      ? <ClipboardList size={28} strokeWidth={1.5} aria-hidden className="text-[var(--text-3)]" />
+                      : <span className="text-3xl">📋</span>}
+                  </div>
                   <div className="text-sm font-semibold">{t("patients.consultHistory.empty")}</div>
                   <button
                     onClick={() => setTab("expediente")}
@@ -2526,6 +2789,10 @@ export function PatientDetailClient({
                           <DentalForm
                             patientId={patient.id}
                             isChild={!!patient.isChild}
+                            // También al EDITAR una consulta ya escrita: sin
+                            // esto, la clínica con el diseño nuevo volvía a ver
+                            // los emoji sueltos al abrir una nota vieja.
+                            rediseno={rediseno}
                             initialRecord={{
                               id: record.id,
                               subjective: record.subjective ?? null,
@@ -2571,9 +2838,17 @@ export function PatientDetailClient({
 
           {/* ===== TAB: PLAN DE TRATAMIENTO ===== */}
           {tab === "tratamiento" && (() => {
+            // N8 (MAPA-pacientes §9): las sesiones vienen TODAS las creadas —
+            // completedAt null = agendada, no hecha. Contar sessions.length a
+            // secas cuenta las creadas, no las hechas: un plan de 18 sesiones
+            // creadas de una vez con 4 hechas decía "18/18" y "0 pendientes".
+            // Detrás de la bandera para que una clínica sin el rediseño siga
+            // viendo el número de siempre hasta que Rafael lo encienda.
+            const sessionsDone = (s: any[] | undefined) =>
+              rediseno ? (s ?? []).filter((x: any) => x.completedAt).length : (s?.length ?? 0);
             const pendingSessionsTotal = treatments
               .filter((t: any) => t.status === "ACTIVE")
-              .reduce((acc: number, t: any) => acc + Math.max(0, (t.totalSessions || 0) - (t.sessions?.length || 0)), 0);
+              .reduce((acc: number, t: any) => acc + Math.max(0, (t.totalSessions || 0) - sessionsDone(t.sessions)), 0);
             const activeCount = treatments.filter((t: any) => t.status === "ACTIVE").length;
             const completedCount = treatments.filter((t: any) => t.status === "COMPLETED").length;
 
@@ -2590,125 +2865,162 @@ export function PatientDetailClient({
 
             return (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.treatment.title")}</h2>
-                  {canEditTreatments && (
-                    <button
-                      type="button"
-                      onClick={() => setShowNewTreatment(true)}
-                      className="inline-flex items-center text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg hover:bg-[var(--violet-700)] shadow-[var(--shadow-1)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
-                    >
-                      {t("patients.treatment.newTreatment")}
-                    </button>
-                  )}
-                </div>
-
-                {treatments.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-[var(--brand-softer)] border border-[var(--border-brand)] rounded-xl p-3 text-center">
-                      <div className="text-xl font-bold tabular-nums text-[var(--brand)]">{pendingSessionsTotal}</div>
-                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.pendingSessions")}</div>
+                {/* Rediseño: la misma lista con la ropa nueva. Las ventanas de
+                    Nuevo/Ver/Editar plan de abajo tienen también las dos ropas:
+                    con la bandera, las de `plan-tratamiento-rediseno`; sin ella,
+                    las de siempre, tal cual. Mismo estado y mismos handlers. */}
+                {rediseno && (
+                  <PlanTratamientoRediseno
+                    tratamientos={treatments}
+                    puedeEditar={canEditTreatments}
+                    onNuevo={() => setShowNewTreatment(true)}
+                    onVer={(plan) => setViewPlan(plan)}
+                    onEditar={(plan) => setEditPlan(plan)}
+                    onEliminar={(plan) => handleDeleteTreatment(plan)}
+                  />
+                )}
+                {!rediseno && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.treatment.title")}</h2>
+                      {canEditTreatments && (
+                        <button
+                          type="button"
+                          onClick={() => setShowNewTreatment(true)}
+                          className="inline-flex items-center text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg hover:bg-[var(--violet-700)] shadow-[var(--shadow-1)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
+                        >
+                          {t("patients.treatment.newTreatment")}
+                        </button>
+                      )}
                     </div>
-                    <div className="bg-[var(--success-soft)] border border-[var(--border-soft)] rounded-xl p-3 text-center">
-                      <div className="text-xl font-bold tabular-nums text-[var(--success-strong)]">{activeCount}</div>
-                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.active")}</div>
-                    </div>
-                    <div className="bg-muted border border-border rounded-xl p-3 text-center">
-                      <div className="text-xl font-bold tabular-nums text-muted-foreground">{completedCount}</div>
-                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.completed")}</div>
-                    </div>
-                  </div>
+    
+                    {treatments.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-[var(--brand-softer)] border border-[var(--border-brand)] rounded-xl p-3 text-center">
+                          <div className="text-xl font-bold tabular-nums text-[var(--brand)]">{pendingSessionsTotal}</div>
+                          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.pendingSessions")}</div>
+                        </div>
+                        <div className="bg-[var(--success-soft)] border border-[var(--border-soft)] rounded-xl p-3 text-center">
+                          <div className="text-xl font-bold tabular-nums text-[var(--success-strong)]">{activeCount}</div>
+                          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.active")}</div>
+                        </div>
+                        <div className="bg-muted border border-border rounded-xl p-3 text-center">
+                          <div className="text-xl font-bold tabular-nums text-muted-foreground">{completedCount}</div>
+                          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.completed")}</div>
+                        </div>
+                      </div>
+                    )}
+    
+                    {treatments.length === 0 ? (
+                      <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
+                        <Pill className="w-5 h-5 mx-auto mb-2 text-[var(--text-3)]" strokeWidth={1.75} aria-hidden="true" />
+                        <div className="text-sm font-semibold">{t("patients.treatment.empty")}</div>
+                        {canEditTreatments && (
+                          <button
+                            type="button"
+                            onClick={() => setShowNewTreatment(true)}
+                            className="text-xs text-[var(--brand)] hover:underline mt-2 inline-block rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                          >
+                            {t("patients.treatment.createFirst")}
+                          </button>
+                        )}
+                      </div>
+                    ) : treatments.map((plan: any) => {
+                      const completed = sessionsDone(plan.sessions);
+                      const pct = plan.totalSessions > 0 ? Math.round((completed / plan.totalSessions) * 100) : 0;
+                      const pendingThis = Math.max(0, (plan.totalSessions || 0) - completed);
+                      const STATUS_CFG: Record<string,{labelKey:string;cls:string}> = {
+                        ACTIVE:    { labelKey:"patients.treatmentStatus.active",    cls:"bg-[var(--success-soft)] text-[var(--success-strong)] border-transparent" },
+                        COMPLETED: { labelKey:"patients.treatmentStatus.completed", cls:"bg-muted text-muted-foreground border-transparent" },
+                        ABANDONED: { labelKey:"patients.treatmentStatus.abandoned", cls:"bg-[var(--danger-soft)] text-[var(--danger-strong)] border-transparent" },
+                        PAUSED:    { labelKey:"patients.treatmentStatus.paused",    cls:"bg-[var(--warning-soft)] text-[var(--warning-strong)] border-transparent" },
+                      };
+                      const cfg = STATUS_CFG[plan.status] ?? STATUS_CFG.ACTIVE;
+                      return (
+                        <div
+                          key={plan.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setViewPlan(plan)}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewPlan(plan); } }}
+                          className="bg-card border border-border rounded-xl p-4 cursor-pointer shadow-[var(--shadow-1)] hover:border-[var(--border-brand)] hover:shadow-[var(--shadow-2)] transition-all w-full text-left focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div>
+                              <div className="font-bold text-sm">{plan.name}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {t("patients.doctorPrefix")} {plan.doctor?.firstName} {plan.doctor?.lastName}
+                              </div>
+                              {plan.description && (
+                                <div className="text-xs text-muted-foreground mt-1">{plan.description}</div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${cfg.cls}`}>
+                                {t(cfg.labelKey)}
+                              </span>
+                              {canEditTreatments && (
+                                <>
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); setEditPlan(plan); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]" aria-label={t("patients.treatment.editAria", { name: plan.name })} title={t("patients.treatment.editBtn")}>
+                                    <Edit className="w-4 h-4" strokeWidth={1.75} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteTreatment(plan); }}
+                                    className="p-1.5 rounded-lg text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                                    aria-label={t("patients.treatment.deletePlanAria", { name: plan.name })}
+                                    title={t("patients.treatment.deletePlanTitle")}
+                                  >
+                                    <Trash2 className="w-4 h-4" strokeWidth={1.75} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                              <div className="h-full bg-[var(--brand)] rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-xs font-bold text-muted-foreground tabular-nums">
+                              {completed}/{plan.totalSessions}
+                            </span>
+                          </div>
+                          <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
+                            <span className="tabular-nums inline-flex items-center gap-1">
+                              {rediseno
+                                ? <CreditCard size={12} strokeWidth={1.75} aria-hidden />
+                                : "💰"} {formatCurrency(plan.totalCost)}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              {rediseno
+                                ? <Calendar size={12} strokeWidth={1.75} aria-hidden />
+                                : "📅"} {t("patients.treatment.everyDays", { days: plan.sessionIntervalDays })}
+                            </span>
+                            {pendingThis > 0 && plan.status === "ACTIVE" && (
+                              <span className="text-[var(--brand)] font-semibold">⏳ {t("patients.treatment.pendingCount", { count: pendingThis })}</span>
+                            )}
+                            {plan.nextExpectedDate && (
+                              <span>⏰ {t("patients.treatment.next", { date: new Date(plan.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"}) })}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
                 )}
 
-                {treatments.length === 0 ? (
-                  <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
-                    <Pill className="w-5 h-5 mx-auto mb-2 text-[var(--text-3)]" strokeWidth={1.75} aria-hidden="true" />
-                    <div className="text-sm font-semibold">{t("patients.treatment.empty")}</div>
-                    {canEditTreatments && (
-                      <button
-                        type="button"
-                        onClick={() => setShowNewTreatment(true)}
-                        className="text-xs text-[var(--brand)] hover:underline mt-2 inline-block rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-                      >
-                        {t("patients.treatment.createFirst")}
-                      </button>
-                    )}
-                  </div>
-                ) : treatments.map((plan: any) => {
-                  const completed = plan.sessions?.length ?? 0;
-                  const pct = plan.totalSessions > 0 ? Math.round((completed / plan.totalSessions) * 100) : 0;
-                  const pendingThis = Math.max(0, (plan.totalSessions || 0) - completed);
-                  const STATUS_CFG: Record<string,{labelKey:string;cls:string}> = {
-                    ACTIVE:    { labelKey:"patients.treatmentStatus.active",    cls:"bg-[var(--success-soft)] text-[var(--success-strong)] border-transparent" },
-                    COMPLETED: { labelKey:"patients.treatmentStatus.completed", cls:"bg-muted text-muted-foreground border-transparent" },
-                    ABANDONED: { labelKey:"patients.treatmentStatus.abandoned", cls:"bg-[var(--danger-soft)] text-[var(--danger-strong)] border-transparent" },
-                    PAUSED:    { labelKey:"patients.treatmentStatus.paused",    cls:"bg-[var(--warning-soft)] text-[var(--warning-strong)] border-transparent" },
-                  };
-                  const cfg = STATUS_CFG[plan.status] ?? STATUS_CFG.ACTIVE;
-                  return (
-                    <div
-                      key={plan.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setViewPlan(plan)}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewPlan(plan); } }}
-                      className="bg-card border border-border rounded-xl p-4 cursor-pointer shadow-[var(--shadow-1)] hover:border-[var(--border-brand)] hover:shadow-[var(--shadow-2)] transition-all w-full text-left focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-                    >
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                          <div className="font-bold text-sm">{plan.name}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {t("patients.doctorPrefix")} {plan.doctor?.firstName} {plan.doctor?.lastName}
-                          </div>
-                          {plan.description && (
-                            <div className="text-xs text-muted-foreground mt-1">{plan.description}</div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${cfg.cls}`}>
-                            {t(cfg.labelKey)}
-                          </span>
-                          {canEditTreatments && (
-                            <>
-                              <button type="button" onClick={(e) => { e.stopPropagation(); setEditPlan(plan); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]" aria-label={t("patients.treatment.editAria", { name: plan.name })} title={t("patients.treatment.editBtn")}>
-                                <Edit className="w-4 h-4" strokeWidth={1.75} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleDeleteTreatment(plan); }}
-                                className="p-1.5 rounded-lg text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-                                aria-label={t("patients.treatment.deletePlanAria", { name: plan.name })}
-                                title={t("patients.treatment.deletePlanTitle")}
-                              >
-                                <Trash2 className="w-4 h-4" strokeWidth={1.75} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-[var(--brand)] rounded-full" style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="text-xs font-bold text-muted-foreground tabular-nums">
-                          {completed}/{plan.totalSessions}
-                        </span>
-                      </div>
-                      <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
-                        <span className="tabular-nums">💰 {formatCurrency(plan.totalCost)}</span>
-                        <span>📅 {t("patients.treatment.everyDays", { days: plan.sessionIntervalDays })}</span>
-                        {pendingThis > 0 && plan.status === "ACTIVE" && (
-                          <span className="text-[var(--brand)] font-semibold">⏳ {t("patients.treatment.pendingCount", { count: pendingThis })}</span>
-                        )}
-                        {plan.nextExpectedDate && (
-                          <span>⏰ {t("patients.treatment.next", { date: new Date(plan.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"}) })}</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {showNewTreatment && (
+                {showNewTreatment && (rediseno ? (
+                  <VentanaNuevoPlan
+                    paciente={{ id: patient.id, nombre: `${patient.firstName} ${patient.lastName}`, esNino: !!patient.isChild }}
+                    doctores={doctors ?? []}
+                    form={treatmentForm}
+                    setForm={setTreatmentForm}
+                    sugerencias={COMMON_TREATMENTS.slice(0, 5)}
+                    guardando={savingTreatment}
+                    onCerrar={() => setShowNewTreatment(false)}
+                    onCrear={handleCreateTreatment}
+                  />
+                ) : (
                   <div
                     style={{ position:"fixed", inset:0, background:"rgba(15,10,30,0.55)", backdropFilter:"blur(4px)", zIndex:80, display:"grid", placeItems:"center" }}
                     onClick={() => !savingTreatment && setShowNewTreatment(false)}
@@ -2830,11 +3142,21 @@ export function PatientDetailClient({
                       </div>
                     </div>
                   </div>
-                )}
+                ))}
 
                 {viewPlan && (() => {
+                  if (rediseno) {
+                    return (
+                      <VentanaVerPlan
+                        plan={viewPlan}
+                        puedeEditar={canEditTreatments}
+                        onCerrar={() => setViewPlan(null)}
+                        onEditar={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }}
+                      />
+                    );
+                  }
                   const vp = viewPlan;
-                  const vCompleted = vp.sessions?.length ?? 0;
+                  const vCompleted = sessionsDone(vp.sessions);
                   const vPct = vp.totalSessions > 0 ? Math.round((vCompleted / vp.totalSessions) * 100) : 0;
                   const vCls: Record<string,string> = {
                     ACTIVE:"bg-[var(--success-soft)] text-[var(--success-strong)] border-transparent",
@@ -2899,7 +3221,15 @@ export function PatientDetailClient({
                   );
                 })()}
 
-                {editPlan && (
+                {editPlan && (rediseno ? (
+                  <VentanaEditarPlan
+                    form={editPlanForm}
+                    setForm={setEditPlanForm}
+                    guardando={savingEditPlan}
+                    onCerrar={() => setEditPlan(null)}
+                    onGuardar={handleUpdatePlan}
+                  />
+                ) : (
                   <div style={{ position:"fixed", inset:0, background:"rgba(15,10,30,0.55)", backdropFilter:"blur(4px)", zIndex:80, display:"grid", placeItems:"center" }} onClick={() => !savingEditPlan && setEditPlan(null)}>
                     <div onClick={(e)=>e.stopPropagation()} className="bg-card border border-border rounded-2xl w-[min(92vw,560px)] max-h-[90vh] overflow-auto">
                       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -2945,14 +3275,14 @@ export function PatientDetailClient({
                       </div>
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             );
           })()}
 
           {/* ===== TAB: RECETAS ===== */}
           {tab === "recetas" && canViewPrescriptions && (
-            <PrescriptionsTab patientId={patient.id} />
+            <PrescriptionsTab patientId={patient.id} pacientesRediseno={rediseno} />
           )}
 
           {/* ===== TAB: SUBIDOS POR EL PACIENTE ===== */}
@@ -2963,10 +3293,43 @@ export function PatientDetailClient({
           {/* ===== TAB: CITAS ===== */}
           {/* ===== TAB: REFERENCIAS ===== */}
           {tab === "referencias" && (
-            <ReferralsTab patientId={patient.id} />
+            <ReferralsTab patientId={patient.id} pacientesRediseno={rediseno} />
           )}
 
-          {tab === "agenda" && (
+          {/* Citas (rediseño): la misma tabla y los mismos botones, con la
+              ropa nueva. El estado sale del mismo APPT_STATUS_FULL de arriba. */}
+          {tab === "agenda" && rediseno && (
+            <CitasRediseno
+              citas={appointments}
+              estado={(st) => {
+                const full = APPT_STATUS_FULL[st] ?? APPT_STATUS_FULL.PENDING;
+                return { texto: t(full.labelKey), tono: full.tono };
+              }}
+              onAgendar={openNewAppointmentForPatient}
+              onCancelar={(a) => handleCancelAppointment(a)}
+              onAbrir={agendaCitas ? (a) => setCitaAbiertaId(a.id) : undefined}
+              abrible={agendaCitas ? (a) => citaAbrible(a.status, agendaCitas.permisos) : undefined}
+            />
+          )}
+          {/* «Editar cita», la MISMA ventana de la agenda. La cita se busca por
+              id en cada render: tras guardar, la tabla y la ventana leen la
+              fila fresca que trae `router.refresh()`. */}
+          {rediseno && agendaCitas && (
+            <VentanaCita
+              cita={citaAbiertaId ? appointments.find((a) => a.id === citaAbiertaId) ?? null : null}
+              pacienteId={patient.id}
+              pacienteNombre={`${patient.firstName} ${patient.lastName}`.trim()}
+              agenda={agendaCitas}
+              userRole={currentUser.role}
+              estado={(st) => {
+                const full = APPT_STATUS_FULL[st] ?? APPT_STATUS_FULL.PENDING;
+                return { texto: t(full.labelKey), tono: full.tono };
+              }}
+              onClose={() => setCitaAbiertaId(null)}
+            />
+          )}
+
+          {tab === "agenda" && !rediseno && (
             <div className="bg-card border border-border rounded-xl overflow-hidden shadow-[var(--shadow-1)]">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                 <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.agenda.title", { count: appointments.length })}</h2>
@@ -2993,14 +3356,25 @@ export function PatientDetailClient({
                   {appointments.length === 0 ? (
                     <tr><td colSpan={6} className={patientDetailStyles.tdEmptyB}>{t("patients.agenda.empty")}</td></tr>
                   ) : appointments.map(a => {
-                    const s = APPT_STATUS[a.status] ?? APPT_STATUS.PENDING;
                     return (
                       <tr key={a.id}>
                         <td className="font-medium">{formatDate(a.date)}</td>
                         <td className="text-muted-foreground font-mono tabular-nums">{a.startTime}</td>
                         <td>{a.type}</td>
                         <td className="text-muted-foreground">{a.doctor?.firstName} {a.doctor?.lastName}</td>
-                        <td><span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap ${s.cls}`}>{t(s.labelKey)}</span></td>
+                        <td>
+                          {rediseno ? (() => {
+                            const full = APPT_STATUS_FULL[a.status] ?? APPT_STATUS_FULL.PENDING;
+                            return (
+                              <span className={[redisenoStyles.etiqueta, (redisenoStyles as any)[full.tono]].filter(Boolean).join(" ")}>
+                                {t(full.labelKey)}
+                              </span>
+                            );
+                          })() : (() => {
+                            const s = APPT_STATUS[a.status] ?? APPT_STATUS.PENDING;
+                            return <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap ${s.cls}`}>{t(s.labelKey)}</span>;
+                          })()}
+                        </td>
                         <td className="text-right">
                           {a.status !== "CANCELLED" && a.status !== "COMPLETED" && (
                             <button
@@ -3033,7 +3407,15 @@ export function PatientDetailClient({
                 <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap shadow-[var(--shadow-1)]">
                   <div>
                     <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.xrays.title")}</h2>
-                    <p className="text-xs text-muted-foreground tabular-nums">{t("patients.xrays.fileCount", { count: files.length })}</p>
+                    {/* «0 archivos» mientras carga hacía creer que el paciente
+                        no tiene placas: los archivos tardan entre cuatro y ocho
+                        segundos en llegar. Hasta que llegan, se dice que se
+                        están cargando. */}
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {rediseno && !filesLoaded
+                        ? t("pacientesRediseno.archivos.cargando")
+                        : t("patients.xrays.fileCount", { count: files.length })}
+                    </p>
                   </div>
                   {canUploadXrays && (
                     <label className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg cursor-pointer hover:bg-[var(--violet-700)] transition-colors shadow-[var(--shadow-1)]">
@@ -3046,7 +3428,11 @@ export function PatientDetailClient({
 
                 {files.length === 0 && filesLoaded && (
                   <div className="bg-card border border-border rounded-xl p-10 text-center">
-                    <div className="text-3xl mb-2">🩻</div>
+                    <div className="mb-2 flex justify-center">
+                      {rediseno
+                        ? <FileImage size={28} strokeWidth={1.5} aria-hidden className="text-[var(--text-3)]" />
+                        : <span className="text-3xl">🩻</span>}
+                    </div>
                     <p className="text-sm font-semibold text-muted-foreground">{t("patients.xrays.empty")}</p>
                     <p className="text-xs text-muted-foreground mt-1">{t("patients.xrays.emptyHint")}</p>
                   </div>
@@ -3235,7 +3621,7 @@ export function PatientDetailClient({
           )}
 
           {tab === "modelos-3d" && (
-            <Models3DTab patientId={patient.id} />
+            <Models3DTab patientId={patient.id} pacientesRediseno={rediseno} />
           )}
 
           {/* Pestaña gateada por "consents.view": sin el permiso el ítem no
@@ -3245,6 +3631,7 @@ export function PatientDetailClient({
           {tab === "consentimientos" && canViewConsents && (
             <ConsentsTab
               patientId={patient.id}
+              pacientesRediseno={rediseno}
               initialConsents={consents}
               doctors={doctors}
               currentUserId={currentUser.id}
@@ -3258,9 +3645,21 @@ export function PatientDetailClient({
             />
           )}
 
+          {/* Presupuestos ya no está en el menú NUEVO de la ficha (se unió con
+              Facturación), pero la pestaña sigue viva: se llega por
+              `?tab=presupuestos` y por el enlace de Facturación. Este aviso
+              dice dónde se hace ahora lo que se hacía aquí. Solo con la bandera. */}
+          {tab === "presupuestos" && rediseno && (
+            <AvisoPresupuestosMovidos onIrAFacturacion={canViewBilling ? openBillingTab : undefined} />
+          )}
+
           {tab === "presupuestos" && (
             <QuotesTab
               patientId={patient.id}
+              // Interruptor `menu-dos-niveles`: encendido, Presupuestos usa el
+              // rediseño de WS1-T8 (formas de pago incluidas); apagado, el de
+              // siempre, sin un píxel de diferencia.
+              rediseno={rediseno}
               onViewInvoice={(invoiceId) => {
                 const inv = (invoices as any[]).find((i) => i.id === invoiceId);
                 if (inv) setInvoiceDetailOpen(inv);
@@ -3280,12 +3679,39 @@ export function PatientDetailClient({
             />
           )}
 
+          {/* El camino de vuelta a los presupuestos que el paciente YA tenía:
+              solo sale si tiene alguno, y solo con la bandera (con ella,
+              Presupuestos no está en el menú). */}
+          {tab === "facturacion" && canViewBilling && rediseno && (
+            <EnlaceAPresupuestos patientId={patient.id} onVerPresupuestos={() => setTab("presupuestos")} />
+          )}
+
           {/* Pestaña gateada por "billing.view" (mismo permiso que Caja). El
               ítem del menú tampoco existe sin el permiso — ver buildPatientNavItems
               — y el server ni siquiera manda las facturas. El tab vive en
               billing-tab.tsx (design system, mismo molde que Caja); el resumen
               reusa los totales que ya alimentan el rail. */}
-          {tab === "facturacion" && canViewBilling && (
+          {/* Facturación (rediseño): la PESTAÑA con la ropa nueva, mismas
+              columnas y mismos callbacks. Los diálogos que abre (detalle,
+              pago, nueva factura) son de abajo y los viste otra pantalla. */}
+          {tab === "facturacion" && canViewBilling && rediseno && (
+            <FacturacionRediseno
+              facturas={invoices}
+              facturApiEnabled={facturApiEnabled}
+              onNueva={() => setShowNewInvoice(true)}
+              onAbrir={(inv) => setInvoiceDetailOpen(inv)}
+              onCobrar={(inv) => { void openDirectPayment(inv); }}
+              onTimbrar={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
+              // «Duplicar» de la ficha: Nueva factura abre con los mismos
+              // conceptos y el mismo trato (solo diseño nuevo).
+              onDuplicar={(inv, condiciones) => {
+                setDuplicarFactura(borradorDesdeFactura(inv, condiciones));
+                setShowNewInvoice(true);
+              }}
+            />
+          )}
+
+          {tab === "facturacion" && canViewBilling && !rediseno && (
             <BillingTab
               invoices={invoices}
               summary={{ total: totalPlan, paid: totalPaid, balance: totalBalance }}
@@ -3294,6 +3720,7 @@ export function PatientDetailClient({
               onOpenInvoice={(inv) => setInvoiceDetailOpen(inv)}
               onChargeInvoice={(inv) => { void openDirectPayment(inv); }}
               onStampInvoice={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
+              redesignOn={rediseno}
             />
           )}
 
@@ -3488,14 +3915,17 @@ export function PatientDetailClient({
 
       {/* Nueva factura para este paciente — editor completo (paridad con presupuestos) */}
       <InvoiceEditorModal
+        rediseno={rediseno}
         open={showNewInvoice}
         patientId={patient.id}
         patientName={fullName}
         clinicTaxMode={clinicTaxMode}
-        onClose={() => setShowNewInvoice(false)}
+        inicial={duplicarFactura}
+        onClose={() => { setShowNewInvoice(false); setDuplicarFactura(null); }}
         onCreated={(inv) => {
           setInvoices((prev: any[]) => (prev.some((i: any) => i.id === inv.id) ? prev : [inv, ...prev]));
           setShowNewInvoice(false);
+          setDuplicarFactura(null);
           router.refresh();
         }}
       />
@@ -3518,6 +3948,7 @@ export function PatientDetailClient({
        *  reembolsar. Tras una mutación, router.refresh() re-fetchea las
        *  facturas desde el servidor. */}
       <InvoiceDetailModal
+        rediseno={rediseno}
         open={invoiceDetailOpen !== null}
         invoice={invoiceDetailOpen}
         patientName={fullName}
@@ -3533,6 +3964,7 @@ export function PatientDetailClient({
        *  router.refresh() re-fetchea las facturas del server y el useEffect
        *  de sync propaga el estado fresco (mismo circuito que el detalle). */}
       <PaymentModal
+        rediseno={rediseno}
         open={directPayInvoice !== null}
         invoice={directPayInvoice ? {
           id: directPayInvoice.id,

@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import styles from "./xrays.module.css";
+import piel from "@/components/dashboard/sabina-rx-ia-rediseno/rediseno.module.css";
+import { CLASES_REDISENO_LOTE } from "@/components/dashboard/sabina-rx-ia-rediseno/raiz";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 
@@ -99,6 +101,8 @@ interface Props {
   canUpload?: boolean;
   canAnalyze?: boolean;
   canEditRecords?: boolean;
+  /** Interruptor `menu-dos-niveles` de la clínica: viste el visor con el rediseño. */
+  rediseno?: boolean;
 }
 
 const CATEGORIES = [
@@ -115,6 +119,112 @@ const SEV_COLOR: Record<AiFinding["severity"], string> = {
   media: "#f59e0b",
   baja: "#06b6d4",
   informativo: "#10b981",
+};
+/** Con el rediseño, la gravedad se pinta con los tokens semánticos del panel. */
+const SEV_COLOR_REDISENO: Record<AiFinding["severity"], string> = {
+  alta: "var(--danger)",
+  media: "var(--warning)",
+  baja: "var(--info)",
+  informativo: "var(--success)",
+};
+
+/**
+ * REDISEÑO (interruptor `menu-dos-niveles`) — «dos pieles, un esqueleto», como
+ * en sabina-client.tsx: el JSX del visor es uno y `c` elige las clases de
+ * siempre (`xrays.module.css`, sin tocar) o las piezas del rediseño que
+ * comparten Sabina, Radiografías y el Asistente IA. Nada de cómo se suben,
+ * analizan o guardan las placas cambia: solo la ropa.
+ */
+const CLASES_REDISENO: Record<string, string> = {
+  page: `${piel.pantalla} ${piel.visorPagina}`,
+  mobileBackdrop: piel.velo,
+  topbar: `${piel.cabecera} ${piel.visorBarra}`,
+  mobileMenuBtn: `${piel.botonIcono} ${piel.botonIconoMarco} ${piel.hamburguesa}`,
+  topbarTitle: piel.cabeceraTitulo,
+  topbarTitleIcon: piel.marcaIcono,
+  topbarBtn: piel.boton,
+  topbarBtnPrimary: piel.botonPrincipal,
+  topbarSpacer: piel.cabeceraEspacio,
+  topbarPatient: piel.visorPaciente,
+  topbarPatientAvatar: `${piel.iniciales} ${piel.inicialesChicas}`,
+  topbarPatientName: piel.visorPacienteNombre,
+  topbarPatientId: piel.visorPacienteFolio,
+  uploadInput: piel.entradaOculta,
+  timeline: piel.lineaTiempo,
+  timelineHeader: piel.lineaCabecera,
+  timelineLabel: piel.seccionTitulo,
+  timelineSearch: piel.entrada,
+  timelineUploadCta: `${piel.boton} ${piel.botonPrincipal} ${piel.lineaSubir}`,
+  timelineList: piel.lineaLista,
+  emptyState: piel.vacio,
+  xrayCard: piel.placa,
+  xrayCardActive: piel.placaActiva,
+  xrayCardCompare: piel.placaComparar,
+  xrayCardThumb: piel.placaMiniatura,
+  xrayCardAiBadge: piel.placaIA,
+  xrayCardInfo: piel.placaInfo,
+  xrayCardType: piel.placaTipo,
+  xrayCardDate: piel.placaFecha,
+  xrayCardFindings: piel.placaHallazgos,
+  xrayCardFindingsDot: piel.placaPunto,
+  viewer: piel.visor,
+  viewerToolbar: piel.visorHerramientas,
+  toolBtn: piel.herramienta,
+  toolBtnText: piel.herramientaTexto,
+  toolDivider: piel.herramientaSeparador,
+  toolSlider: piel.deslizador,
+  toolSpacer: piel.herramientaEspacio,
+  aiCount: piel.contador,
+  viewerStage: piel.escenario,
+  viewerImgWrap: piel.escenarioEnvoltura,
+  viewerImg: piel.escenarioImagen,
+  viewerImgInverted: piel.escenarioImagenInvertida,
+  annotationSvg: piel.anotaciones,
+  viewerEmpty: piel.escenarioVacio,
+  compareSlot: piel.compararRanura,
+  compareSlotLabel: `${piel.flotante} ${piel.compararEtiqueta}`,
+  aiOverlay: piel.capaIA,
+  findingRegion: piel.regionHallazgo,
+  findingRegionLabel: piel.regionEtiqueta,
+  viewerInfoCard: `${piel.flotante} ${piel.escenarioTarjeta}`,
+  viewerInfoCardTitle: piel.escenarioTarjetaTitulo,
+  viewerInfoCardMeta: piel.escenarioTarjetaMeta,
+  zoomControls: `${piel.flotante} ${piel.zoomControles}`,
+  zoomBtn: piel.zoomBoton,
+  statusBar: `${piel.flotante} ${piel.estado}`,
+  rightPanel: piel.panelDerecho,
+  rightTabs: piel.pestanas,
+  rightTab: piel.pestana,
+  rightTabActive: piel.pestanaActiva,
+  rightTabBadge: piel.contador,
+  rightBody: piel.panelCuerpo,
+  aiSummary: piel.resumenIA,
+  aiSummaryTitle: piel.resumenIATitulo,
+  aiSummaryVersion: piel.resumenIAVersion,
+  aiSummaryText: piel.resumenIATexto,
+  confidenceWrap: piel.confianza,
+  confidenceLabel: piel.confianzaEtiqueta,
+  confidenceBar: piel.confianzaBarra,
+  confidenceFill: piel.confianzaRelleno,
+  findingsHeader: piel.hallazgosCabeza,
+  findingsHeaderLabel: piel.seccionTitulo,
+  findingsHeaderSort: `${piel.boton} ${piel.botonChico}`,
+  findingsList: piel.hallazgos,
+  finding: piel.hallazgo,
+  findingIcon: piel.hallazgoIcono,
+  findingBody: piel.hallazgoCuerpo,
+  findingTitle: piel.hallazgoTitulo,
+  findingMeta: piel.hallazgoMeta,
+  findingMetaSev: piel.hallazgoSeveridad,
+  findingActions: piel.hallazgoAcciones,
+  findingActionBtn: piel.hallazgoAccion,
+  severityKey: piel.leyenda,
+  severityKeyItem: piel.leyendaItem,
+  severityKeyDot: piel.leyendaPunto,
+  actionsRow: piel.accionesPanel,
+  actionBtn: piel.boton,
+  actionBtnPrimary: piel.botonPrincipal,
+  notesArea: `${piel.entrada} ${piel.entradaArea}`,
 };
 /** Orden de gravedad para el interruptor "Por severidad" del panel de hallazgos. */
 const SEV_RANK: Record<AiFinding["severity"], number> = {
@@ -231,8 +341,15 @@ export function XraysClient({
   canUpload = true,
   canAnalyze = true,
   canEditRecords = true,
+  rediseno = false,
 }: Props) {
   const t = useT();
+  // Un solo juego de clases por render: el de siempre o el del rediseño. Lo
+  // mismo con los colores en línea que dependen del tema: el token viejo
+  // (`viejo`) o el del menú nuevo (`nuevo`).
+  const c: Record<string, string> = rediseno ? CLASES_REDISENO : styles;
+  const sev = rediseno ? SEV_COLOR_REDISENO : SEV_COLOR;
+  const tk = (viejo: string, nuevo: string) => (rediseno ? nuevo : viejo);
   const askConfirm = useConfirm();
   const [files, setFiles] = useState<PatientFile[]>(initialFiles);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
@@ -771,7 +888,7 @@ export function XraysClient({
 
   return (
     <div
-      className={styles.page}
+      className={rediseno ? `${CLASES_REDISENO_LOTE} ${c.page}` : c.page}
       data-active-mode="xrays"
       data-mobile-timeline-open={mobileTimelineOpen || undefined}
     >
@@ -780,29 +897,29 @@ export function XraysClient({
         <button
           type="button"
           aria-label={t("pages.xrays.closeHistory")}
-          className={styles.mobileBackdrop}
+          className={c.mobileBackdrop}
           onClick={() => setMobileTimelineOpen(false)}
         />
       )}
       {/* ── Topbar ── */}
-      <div className={styles.topbar}>
+      <div className={c.topbar}>
         {/* Hamburger sólo visible en mobile (oculto vía media query). */}
         <button
           type="button"
-          className={styles.mobileMenuBtn}
+          className={c.mobileMenuBtn}
           onClick={() => setMobileTimelineOpen(true)}
           aria-label={t("pages.xrays.openHistory")}
         >
           <Menu size={16} aria-hidden />
         </button>
-        <div className={styles.topbarTitle}>
-          <span className={styles.topbarTitleIcon}><Sparkles size={14} aria-hidden /></span>
+        <div className={c.topbarTitle}>
+          <span className={c.topbarTitleIcon}><Sparkles size={14} aria-hidden /></span>
           {t("pages.xrays.title")}
         </div>
         {lockedToPatient ? (
           <a
             href="/dashboard/xrays"
-            className={styles.topbarBtn}
+            className={c.topbarBtn}
             title={t("pages.xrays.backToPatientList")}
           >
             ← {t("pages.xrays.changePatient")}
@@ -816,7 +933,7 @@ export function XraysClient({
               const firstFile = files.find((f) => f.patient.id === id);
               if (firstFile) setActiveFileId(firstFile.id);
             }}
-            className={styles.topbarBtn}
+            className={c.topbarBtn}
             style={{ minWidth: 200, fontFamily: "inherit" }}
           >
             <option value="">{t("pages.xrays.allPatients")}</option>
@@ -827,17 +944,17 @@ export function XraysClient({
             ))}
           </select>
         )}
-        <div className={styles.topbarSpacer} />
+        <div className={c.topbarSpacer} />
         {selectedPatient && (
-          <div className={styles.topbarPatient} title={`${selectedPatient.firstName} ${selectedPatient.lastName}`}>
-            <span className={styles.topbarPatientAvatar}>{getInitials(selectedPatient)}</span>
-            <strong className={styles.topbarPatientName}>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
-            <span className={styles.topbarPatientId}>· {selectedPatient.patientNumber}</span>
+          <div className={c.topbarPatient} title={`${selectedPatient.firstName} ${selectedPatient.lastName}`}>
+            <span className={c.topbarPatientAvatar}>{getInitials(selectedPatient)}</span>
+            <strong className={c.topbarPatientName}>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
+            <span className={c.topbarPatientId}>· {selectedPatient.patientNumber}</span>
           </div>
         )}
         <button
           type="button"
-          className={styles.topbarBtn}
+          className={c.topbarBtn}
           onClick={() => activeFile && window.open(activeFile.url, "_blank")}
           disabled={!activeFile}
         >
@@ -846,7 +963,7 @@ export function XraysClient({
         {canUpload && (
           <button
             type="button"
-            className={`${styles.topbarBtn} ${styles.topbarBtnPrimary}`}
+            className={`${c.topbarBtn} ${c.topbarBtnPrimary}`}
             onClick={handleUploadClick}
             disabled={uploading}
           >
@@ -857,28 +974,28 @@ export function XraysClient({
           ref={fileInputRef}
           type="file"
           accept="image/*,.dcm"
-          className={styles.uploadInput}
+          className={c.uploadInput}
           onChange={handleFileChange}
         />
       </div>
 
       {/* ── Timeline lateral (drawer en mobile) ── */}
       <aside
-        className={styles.timeline}
+        className={rediseno && mobileTimelineOpen ? `${c.timeline} ${piel.lineaTiempoAbierta}` : c.timeline}
         role={mobileTimelineOpen ? "dialog" : undefined}
         aria-modal={mobileTimelineOpen ? "true" : undefined}
         aria-label={t("pages.xrays.xrayHistory")}
       >
-        <div className={styles.timelineHeader}>
-          <span className={styles.timelineLabel}>{t("pages.xrays.historyLabel")} · {filteredFiles.length}</span>
+        <div className={c.timelineHeader}>
+          <span className={c.timelineLabel}>{t("pages.xrays.historyLabel")} · {filteredFiles.length}</span>
           <div style={{ position: "relative" }}>
-            <Search size={11} aria-hidden style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} />
+            <Search size={11} aria-hidden style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: tk("var(--text-3)", "var(--m2-texto-3)") }} />
             <input
               type="text"
               placeholder={t("common.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className={styles.timelineSearch}
+              className={c.timelineSearch}
               style={{ paddingLeft: 26 }}
             />
           </div>
@@ -886,16 +1003,16 @@ export function XraysClient({
         {canUpload && (
           <button
             type="button"
-            className={styles.timelineUploadCta}
+            className={c.timelineUploadCta}
             onClick={handleUploadClick}
             disabled={uploading}
           >
             <Upload size={12} aria-hidden /> {t("pages.xrays.uploadXray")}
           </button>
         )}
-        <div className={styles.timelineList}>
+        <div className={c.timelineList}>
           {filteredFiles.length === 0 ? (
-            <div className={styles.emptyState}>
+            <div className={c.emptyState}>
               {selectedPatient
                 ? t("pages.xrays.timelineEmptyUploadFirst")
                 : t("pages.xrays.timelineEmptySelectPatient")}
@@ -910,9 +1027,9 @@ export function XraysClient({
                   key={f.id}
                   type="button"
                   className={[
-                    styles.xrayCard,
-                    isActive ? styles.xrayCardActive : "",
-                    isCompare ? styles.xrayCardCompare : "",
+                    c.xrayCard,
+                    isActive ? c.xrayCardActive : "",
+                    isCompare ? c.xrayCardCompare : "",
                   ].filter(Boolean).join(" ")}
                   onClick={() => {
                     if (compareMode && !isActive) {
@@ -925,25 +1042,25 @@ export function XraysClient({
                   }}
                   title={f.name}
                 >
-                  <div className={styles.xrayCardThumb}>
+                  <div className={c.xrayCardThumb}>
                     {isImage(f.mimeType) ? (
                       <img src={f.url} alt="" loading="lazy" />
                     ) : (
                       <Sparkles size={20} aria-hidden />
                     )}
-                    {f.xrayAnalysis && <span className={styles.xrayCardAiBadge}>IA</span>}
+                    {f.xrayAnalysis && <span className={c.xrayCardAiBadge}>IA</span>}
                   </div>
-                  <div className={styles.xrayCardInfo}>
-                    <span className={styles.xrayCardType}>
+                  <div className={c.xrayCardInfo}>
+                    <span className={c.xrayCardType}>
                       {(() => {
                         const cat = CATEGORIES.find((c) => c.id === f.category);
                         return cat ? t(cat.labelKey) : t("pages.xrays.catOther");
                       })()}
                     </span>
-                    <span className={styles.xrayCardDate}>{formatDate(f.takenAt ?? f.createdAt)}</span>
+                    <span className={c.xrayCardDate}>{formatDate(f.takenAt ?? f.createdAt)}</span>
                     {findingsCount > 0 && (
-                      <span className={styles.xrayCardFindings}>
-                        <span className={styles.xrayCardFindingsDot} aria-hidden />
+                      <span className={c.xrayCardFindings}>
+                        <span className={c.xrayCardFindingsDot} aria-hidden />
                         {t("pages.xrays.findingsCount", { count: findingsCount })}
                       </span>
                     )}
@@ -956,8 +1073,8 @@ export function XraysClient({
       </aside>
 
       {/* ── Visor central (DARK) ── */}
-      <main className={styles.viewer}>
-        <div className={styles.viewerToolbar} role="toolbar" aria-label={t("pages.xrays.viewerTools")}>
+      <main className={c.viewer}>
+        <div className={c.viewerToolbar} role="toolbar" aria-label={t("pages.xrays.viewerTools")}>
           {/* Mapa de etiquetas humanas para tools — title críptico
               ("pan", "zoom") + aria-label descriptivo. data-active y
               aria-pressed comunican estado al lector de pantalla. */}
@@ -974,7 +1091,7 @@ export function XraysClient({
               <button
                 key={ti.id}
                 type="button"
-                className={styles.toolBtn}
+                className={c.toolBtn}
                 data-active={isActive}
                 aria-pressed={isActive}
                 onClick={() => setTool(ti.id)}
@@ -985,7 +1102,7 @@ export function XraysClient({
               </button>
             );
           })}
-          {canEditRecords && <span className={styles.toolDivider} />}
+          {canEditRecords && <span className={c.toolDivider} />}
           {canEditRecords && (
             [
               { id: "measure", label: t("pages.xrays.toolRuler") },
@@ -999,7 +1116,7 @@ export function XraysClient({
               <button
                 key={ti.id}
                 type="button"
-                className={styles.toolBtn}
+                className={c.toolBtn}
                 data-active={isActive}
                 aria-pressed={isActive}
                 onClick={() => setTool(ti.id)}
@@ -1010,10 +1127,10 @@ export function XraysClient({
               </button>
             );
           })}
-          <span className={styles.toolDivider} />
+          <span className={c.toolDivider} />
           <button
             type="button"
-            className={styles.toolBtn}
+            className={c.toolBtn}
             data-active={inverted}
             aria-pressed={inverted}
             onClick={() => setInverted((v) => !v)}
@@ -1024,7 +1141,7 @@ export function XraysClient({
           </button>
           <button
             type="button"
-            className={styles.toolBtn}
+            className={c.toolBtn}
             data-active={flipped}
             aria-pressed={flipped}
             onClick={() => setFlipped((v) => !v)}
@@ -1033,11 +1150,11 @@ export function XraysClient({
           >
             <FlipHorizontal size={15} aria-hidden />
           </button>
-          <span className={styles.toolDivider} />
+          <span className={c.toolDivider} />
           {canEditRecords && (
             <button
               type="button"
-              className={styles.toolBtn}
+              className={c.toolBtn}
               onClick={handleClearAnnotations}
               disabled={annotations.length === 0}
               title={t("pages.xrays.clearAllAnnotations")}
@@ -1046,8 +1163,8 @@ export function XraysClient({
               <Eraser size={15} aria-hidden />
             </button>
           )}
-          <span className={styles.toolDivider} />
-          <label className={styles.toolSlider}>
+          <span className={c.toolDivider} />
+          <label className={c.toolSlider}>
             {t("pages.xrays.brightness")}
             <input
               type="range" min={50} max={150} value={brightness}
@@ -1057,9 +1174,9 @@ export function XraysClient({
               aria-valuemin={50}
               aria-valuemax={150}
             />
-            <strong style={{ fontFamily: "var(--font-mono, monospace)" }}>{brightness}%</strong>
+            <strong style={rediseno ? undefined : { fontFamily: "var(--font-mono, monospace)" }}>{brightness}%</strong>
           </label>
-          <label className={styles.toolSlider}>
+          <label className={c.toolSlider}>
             {t("pages.xrays.contrast")}
             <input
               type="range" min={50} max={200} value={contrast}
@@ -1069,12 +1186,12 @@ export function XraysClient({
               aria-valuemin={50}
               aria-valuemax={200}
             />
-            <strong style={{ fontFamily: "var(--font-mono, monospace)" }}>{contrast}%</strong>
+            <strong style={rediseno ? undefined : { fontFamily: "var(--font-mono, monospace)" }}>{contrast}%</strong>
           </label>
-          <span className={styles.toolSpacer} />
+          <span className={c.toolSpacer} />
           <button
             type="button"
-            className={`${styles.toolBtn} ${styles.toolBtnText}`}
+            className={`${c.toolBtn} ${c.toolBtnText}`}
             data-active={compareMode}
             aria-pressed={compareMode}
             onClick={toggleCompare}
@@ -1085,7 +1202,7 @@ export function XraysClient({
           </button>
           <button
             type="button"
-            className={`${styles.toolBtn} ${styles.toolBtnText}`}
+            className={`${c.toolBtn} ${c.toolBtnText}`}
             data-active={aiVisible}
             aria-pressed={aiVisible}
             onClick={() => setAiVisible((v) => !v)}
@@ -1094,13 +1211,13 @@ export function XraysClient({
           >
             {aiVisible ? <Eye size={13} aria-hidden /> : <EyeOff size={13} aria-hidden />}
             {t("pages.xrays.aiLabel")}
-            {findings.length > 0 && <span className={styles.aiCount}>{findings.length}</span>}
+            {findings.length > 0 && <span className={c.aiCount}>{findings.length}</span>}
           </button>
         </div>
 
         <div
           ref={stageRef}
-          className={styles.viewerStage}
+          className={c.viewerStage}
           data-compare={compareMode && compareFile ? "true" : "false"}
           data-tool={tool}
           style={{ ["--brightness" as never]: `${brightness}%`, ["--contrast" as never]: `${contrast}%` }}
@@ -1111,7 +1228,7 @@ export function XraysClient({
           onWheel={handleStageWheel}
         >
           {!activeFile ? (
-            <div className={styles.viewerEmpty}>
+            <div className={c.viewerEmpty}>
               <Sparkles size={40} aria-hidden style={{ opacity: 0.3, marginBottom: 12 }} />
               <div>
                 {selectedPatient
@@ -1121,32 +1238,32 @@ export function XraysClient({
             </div>
           ) : compareMode && compareFile ? (
             <>
-              <div className={styles.compareSlot}>
-                <span className={styles.compareSlotLabel}>
+              <div className={c.compareSlot}>
+                <span className={c.compareSlotLabel}>
                   A · {formatDate(activeFile.takenAt ?? activeFile.createdAt)}
                 </span>
                 {isImage(activeFile.mimeType) ? (
                   <img
                     src={activeFile.url}
                     alt=""
-                    className={inverted ? styles.viewerImgInverted : styles.viewerImg}
+                    className={inverted ? c.viewerImgInverted : c.viewerImg}
                   />
                 ) : (
-                  <div className={styles.viewerEmpty}>{t("pages.xrays.fileNotImage")}</div>
+                  <div className={c.viewerEmpty}>{t("pages.xrays.fileNotImage")}</div>
                 )}
               </div>
-              <div className={styles.compareSlot}>
-                <span className={styles.compareSlotLabel}>
+              <div className={c.compareSlot}>
+                <span className={c.compareSlotLabel}>
                   B · {formatDate(compareFile.takenAt ?? compareFile.createdAt)}
                 </span>
                 {isImage(compareFile.mimeType) ? (
                   <img
                     src={compareFile.url}
                     alt=""
-                    className={inverted ? styles.viewerImgInverted : styles.viewerImg}
+                    className={inverted ? c.viewerImgInverted : c.viewerImg}
                   />
                 ) : (
-                  <div className={styles.viewerEmpty}>{t("pages.xrays.fileNotImage")}</div>
+                  <div className={c.viewerEmpty}>{t("pages.xrays.fileNotImage")}</div>
                 )}
               </div>
             </>
@@ -1154,7 +1271,7 @@ export function XraysClient({
             <>
               {isImage(activeFile.mimeType) ? (
                 <div
-                  className={styles.viewerImgWrap}
+                  className={c.viewerImgWrap}
                   style={{
                     // scaleX(-1) al final: espeja imagen Y anotaciones juntas,
                     // así las marcas siguen pegadas al mismo diente.
@@ -1167,33 +1284,35 @@ export function XraysClient({
                     alt={activeFile.name}
                     onLoad={handleImageLoad}
                     draggable={false}
-                    className={inverted ? styles.viewerImgInverted : styles.viewerImg}
+                    className={inverted ? c.viewerImgInverted : c.viewerImg}
                   />
                   <AnnotationsOverlay
                     annotations={annotations}
                     drafting={drafting}
                     naturalSize={naturalSize}
+                    c={c}
+                    rediseno={rediseno}
                   />
                 </div>
               ) : (
-                <div className={styles.viewerEmpty}>
+                <div className={c.viewerEmpty}>
                   {t("pages.xrays.fileNotImageLong")} <br />
-                  <a href={activeFile.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>
+                  <a href={activeFile.url} target="_blank" rel="noopener noreferrer" className={rediseno ? piel.escenarioEnlace : undefined} style={rediseno ? undefined : { color: "var(--brand)" }}>
                     {t("pages.xrays.openInNewTab")} →
                   </a>
                 </div>
               )}
 
               {/* AI overlays */}
-              <div className={styles.aiOverlay} data-visible={aiVisible}>
+              <div className={c.aiOverlay} data-visible={aiVisible}>
                 {findings.map((f) => (
                   <button
                     type="button"
                     key={f.id}
-                    className={styles.findingRegion}
+                    className={c.findingRegion}
                     data-highlighted={highlightedFindingId === f.id}
                     style={{
-                      ["--mf-region-color" as never]: SEV_COLOR[f.severity],
+                      ["--mf-region-color" as never]: sev[f.severity],
                       left: `${f.region.x}%`,
                       top: `${f.region.y}%`,
                       width: `${f.region.w}%`,
@@ -1204,32 +1323,32 @@ export function XraysClient({
                     onClick={() => setHighlightedFindingId(f.id)}
                     title={f.title}
                   >
-                    <span className={styles.findingRegionLabel}>F{f.id}</span>
+                    <span className={c.findingRegionLabel}>F{f.id}</span>
                   </button>
                 ))}
               </div>
 
-              <div className={styles.viewerInfoCard}>
-                <span className={styles.viewerInfoCardTitle}>
+              <div className={c.viewerInfoCard}>
+                <span className={c.viewerInfoCardTitle}>
                   {(() => {
                     const cat = CATEGORIES.find((c) => c.id === activeFile.category);
                     return cat ? t(cat.labelKey) : t("pages.xrays.title");
                   })()}
                 </span>
-                <span className={styles.viewerInfoCardMeta}>
+                <span className={c.viewerInfoCardMeta}>
                   {formatDate(activeFile.takenAt ?? activeFile.createdAt)}
                 </span>
                 {activeFile.toothNumber && (
-                  <span className={styles.viewerInfoCardMeta}>
+                  <span className={c.viewerInfoCardMeta}>
                     {t("pages.xrays.tooth")}: {activeFile.toothNumber}
                   </span>
                 )}
               </div>
 
-              <div className={styles.zoomControls}>
+              <div className={c.zoomControls}>
                 <button
                   type="button"
-                  className={styles.zoomBtn}
+                  className={c.zoomBtn}
                   title={t("pages.xrays.zoomIn")}
                   onClick={() => handleZoomBtn("in")}
                 >
@@ -1237,7 +1356,7 @@ export function XraysClient({
                 </button>
                 <button
                   type="button"
-                  className={styles.zoomBtn}
+                  className={c.zoomBtn}
                   title={t("pages.xrays.zoomOut")}
                   onClick={() => handleZoomBtn("out")}
                 >
@@ -1245,14 +1364,14 @@ export function XraysClient({
                 </button>
                 <button
                   type="button"
-                  className={styles.zoomBtn}
+                  className={c.zoomBtn}
                   title={t("pages.xrays.fitToViewer")}
                   onClick={() => handleZoomBtn("fit")}
                 >
                   <Maximize2 size={13} aria-hidden />
                 </button>
               </div>
-              <div className={styles.statusBar}>
+              <div className={c.statusBar}>
                 {t("pages.xrays.statusZoom")}: {Math.round(zoom * 100)}% · {t("pages.xrays.statusRotation")}: {rotation}° · {t("pages.xrays.brightness")}: {brightness}% · {t("pages.xrays.contrast")}: {contrast}% · {t("pages.xrays.statusTool")}: {tool}
                 {savingAnn && <> · <em style={{ color: "#a78bfa" }}>{t("common.saving")}</em></>}
                 {drafting && <> · <em>{drafting.type === "ruler" ? t("pages.xrays.draftClickTwoPoints") : drafting.type === "angle" ? t("pages.xrays.draftAnglePoints", { count: drafting.points.length }) : t("pages.xrays.draftDrawing")}</em></>}
@@ -1263,52 +1382,52 @@ export function XraysClient({
       </main>
 
       {/* ── Panel derecho ── */}
-      <aside className={styles.rightPanel}>
-        <div className={styles.rightTabs}>
+      <aside className={c.rightPanel}>
+        <div className={c.rightTabs}>
           <button
             type="button"
-            className={`${styles.rightTab} ${tab === "ai" ? styles.rightTabActive : ""}`}
+            className={`${c.rightTab} ${tab === "ai" ? c.rightTabActive : ""}`}
             onClick={() => setTab("ai")}
           >
             {t("pages.xrays.tabAiFindings")}
-            {findings.length > 0 && <span className={styles.rightTabBadge}>{findings.length}</span>}
+            {findings.length > 0 && <span className={c.rightTabBadge}>{findings.length}</span>}
           </button>
           <button
             type="button"
-            className={`${styles.rightTab} ${tab === "measurements" ? styles.rightTabActive : ""}`}
+            className={`${c.rightTab} ${tab === "measurements" ? c.rightTabActive : ""}`}
             onClick={() => setTab("measurements")}
           >
             {t("pages.xrays.tabMeasurements")}
           </button>
           <button
             type="button"
-            className={`${styles.rightTab} ${tab === "notes" ? styles.rightTabActive : ""}`}
+            className={`${c.rightTab} ${tab === "notes" ? c.rightTabActive : ""}`}
             onClick={() => setTab("notes")}
           >
             {t("common.notes")}
           </button>
         </div>
 
-        <div className={styles.rightBody}>
+        <div className={c.rightBody}>
           {tab === "ai" && (
             <>
               {!activeFile ? (
-                <div className={styles.emptyState}>{t("pages.xrays.selectXrayForFindings")}</div>
+                <div className={c.emptyState}>{t("pages.xrays.selectXrayForFindings")}</div>
               ) : !aiAnalysis ? (
                 <>
-                  <div className={styles.aiSummary}>
-                    <div className={styles.aiSummaryTitle}>
+                  <div className={c.aiSummary}>
+                    <div className={c.aiSummaryTitle}>
                       <Sparkles size={13} aria-hidden /> {t("pages.xrays.aiAnalysisPending")}
                     </div>
-                    <div className={styles.aiSummaryText}>
+                    <div className={c.aiSummaryText}>
                       {t("pages.xrays.aiAnalysisPendingDesc")}
                     </div>
                   </div>
                   {canAnalyze && (
-                  <div className={styles.actionsRow} style={{ flexDirection: "column", gap: 6 }}>
+                  <div className={c.actionsRow} style={{ flexDirection: "column", gap: 6 }}>
                     <button
                       type="button"
-                      className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
+                      className={`${c.actionBtn} ${c.actionBtnPrimary}`}
                       onClick={() => handleAnalyze("GENERAL")}
                       disabled={analyzing || aiUsed >= aiLimit}
                     >
@@ -1318,7 +1437,7 @@ export function XraysClient({
                     <div style={{ display: "flex", gap: 6 }}>
                       <button
                         type="button"
-                        className={styles.actionBtn}
+                        className={c.actionBtn}
                         onClick={() => handleAnalyze("PERIODONTAL_BONE_LOSS")}
                         disabled={analyzing || aiUsed >= aiLimit}
                         title={t("pages.xrays.periodontalTooltip")}
@@ -1328,7 +1447,7 @@ export function XraysClient({
                       </button>
                       <button
                         type="button"
-                        className={styles.actionBtn}
+                        className={c.actionBtn}
                         onClick={() => handleAnalyze("PERIIMPLANT_BONE_LOSS")}
                         disabled={analyzing || aiUsed >= aiLimit}
                         title={t("pages.xrays.periimplantTooltip")}
@@ -1340,20 +1459,20 @@ export function XraysClient({
                   </div>
                   )}
                   {aiLimit > 0 && (
-                    <div style={{ fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
+                    <div className={rediseno ? piel.notaPie : undefined} style={rediseno ? undefined : { fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
                       {t("pages.xrays.aiUsage")}: {aiUsed.toLocaleString()} / {aiLimit.toLocaleString()} ({aiPercent}%)
                     </div>
                   )}
                 </>
               ) : (
                 <>
-                  <div className={styles.aiSummary}>
-                    <div className={styles.aiSummaryTitle}>
+                  <div className={c.aiSummary}>
+                    <div className={c.aiSummaryTitle}>
                       <Sparkles size={13} aria-hidden /> {t("pages.xrays.aiSummary")}
                       {aiAnalysis.mode && aiAnalysis.mode !== "GENERAL" && (
                         <span
-                          className={styles.aiSummaryVersion}
-                          style={{
+                          className={rediseno ? piel.resumenIAModo : c.aiSummaryVersion}
+                          style={rediseno ? undefined : {
                             background: "rgba(56, 189, 248, 0.18)",
                             padding: "1px 6px",
                             borderRadius: 4,
@@ -1366,19 +1485,19 @@ export function XraysClient({
                         </span>
                       )}
                       {aiAnalysis.modelVersion && (
-                        <span className={styles.aiSummaryVersion}>· {aiAnalysis.modelVersion}</span>
+                        <span className={c.aiSummaryVersion}>· {aiAnalysis.modelVersion}</span>
                       )}
                     </div>
-                    <div className={styles.aiSummaryText}>{aiAnalysis.summary}</div>
+                    <div className={c.aiSummaryText}>{aiAnalysis.summary}</div>
                     {avgConfidence > 0 && (
-                      <div className={styles.confidenceWrap}>
-                        <div className={styles.confidenceLabel}>
+                      <div className={c.confidenceWrap}>
+                        <div className={c.confidenceLabel}>
                           <span>{t("pages.xrays.globalConfidence")}</span>
                           <strong>{Math.round(avgConfidence * 100)}%</strong>
                         </div>
-                        <div className={styles.confidenceBar}>
+                        <div className={c.confidenceBar}>
                           <div
-                            className={styles.confidenceFill}
+                            className={c.confidenceFill}
                             style={{ width: `${avgConfidence * 100}%` }}
                           />
                         </div>
@@ -1386,22 +1505,22 @@ export function XraysClient({
                     )}
                   </div>
 
-                  <div className={styles.findingsHeader}>
-                    <span className={styles.findingsHeaderLabel}>
+                  <div className={c.findingsHeader}>
+                    <span className={c.findingsHeaderLabel}>
                       {t("pages.xrays.findingsDetected", { count: findings.length })}
                     </span>
                     <button
                       type="button"
-                      className={styles.findingsHeaderSort}
+                      className={c.findingsHeaderSort}
                       aria-pressed={sortBySeverity}
                       onClick={() => setSortBySeverity((v) => !v)}
-                      style={sortBySeverity ? { color: "var(--brand)", borderColor: "var(--brand)" } : undefined}
+                      style={sortBySeverity ? { color: tk("var(--brand)", "var(--m2-activo)"), borderColor: tk("var(--brand)", "var(--m2-activo)") } : undefined}
                     >
                       {t("pages.xrays.bySeverity")}
                     </button>
                   </div>
 
-                  <div className={styles.findingsList}>
+                  <div className={c.findingsList}>
                     {listedFindings.map((f) => (
                       // div + role="button" porque dentro hay sub-botones
                       // Aceptar/Rechazar y los buttons no se anidan en HTML
@@ -1411,9 +1530,9 @@ export function XraysClient({
                         key={f.id}
                         role="button"
                         tabIndex={0}
-                        className={styles.finding}
+                        className={c.finding}
                         data-highlighted={highlightedFindingId === f.id}
-                        style={{ ["--mf-region-color" as never]: SEV_COLOR[f.severity] }}
+                        style={{ ["--mf-region-color" as never]: sev[f.severity] }}
                         onMouseEnter={() => setHighlightedFindingId(f.id)}
                         onMouseLeave={() => setHighlightedFindingId(null)}
                         onClick={() => setHighlightedFindingId(f.id)}
@@ -1425,23 +1544,23 @@ export function XraysClient({
                         }}
                         aria-label={t("pages.xrays.findingAriaLabel", { id: f.id, title: f.title, severity: t(SEV_LABEL_KEY[f.severity]) })}
                       >
-                        <span className={styles.findingIcon}>F{f.id}</span>
-                        <div className={styles.findingBody}>
-                          <div className={styles.findingTitle}>
+                        <span className={c.findingIcon}>F{f.id}</span>
+                        <div className={c.findingBody}>
+                          <div className={c.findingTitle}>
                             {f.title}
-                            {f.tooth && <span style={{ color: "var(--text-3)", fontWeight: 500 }}> · {t("pages.xrays.toothInline", { tooth: f.tooth })}</span>}
+                            {f.tooth && <span style={{ color: tk("var(--text-3)", "var(--m2-texto-3)"), fontWeight: 500 }}> · {t("pages.xrays.toothInline", { tooth: f.tooth })}</span>}
                           </div>
-                          <div className={styles.findingMeta}>
-                            <span className={styles.findingMetaSev} style={{ color: SEV_COLOR[f.severity] }}>
+                          <div className={c.findingMeta}>
+                            <span className={c.findingMetaSev} style={{ color: sev[f.severity] }}>
                               {t(SEV_LABEL_KEY[f.severity])}
                             </span>
                             {f.confidence != null && <span>· {Math.round(f.confidence * 100)}%</span>}
                           </div>
                         </div>
-                        <div className={styles.findingActions}>
+                        <div className={c.findingActions}>
                           <button
                             type="button"
-                            className={styles.findingActionBtn}
+                            className={c.findingActionBtn}
                             title={t("pages.xrays.accept")}
                             aria-label={t("pages.xrays.acceptFinding", { title: f.title })}
                             onClick={(e) => { e.stopPropagation(); toast.success(t("pages.xrays.accepted", { title: f.title })); }}
@@ -1450,7 +1569,7 @@ export function XraysClient({
                           </button>
                           <button
                             type="button"
-                            className={styles.findingActionBtn}
+                            className={c.findingActionBtn}
                             title={t("pages.xrays.reject")}
                             aria-label={t("pages.xrays.rejectFinding", { title: f.title })}
                             onClick={(e) => { e.stopPropagation(); toast(t("pages.xrays.rejected", { title: f.title }), { icon: "✕" }); }}
@@ -1462,29 +1581,29 @@ export function XraysClient({
                     ))}
                   </div>
 
-                  <div className={styles.severityKey}>
-                    <span className={styles.severityKeyItem}>
-                      <span className={styles.severityKeyDot} style={{ background: SEV_COLOR.alta }} /> {t("pages.xrays.sevHigh")}
+                  <div className={c.severityKey}>
+                    <span className={c.severityKeyItem}>
+                      <span className={c.severityKeyDot} style={{ background: sev.alta }} /> {t("pages.xrays.sevHigh")}
                     </span>
-                    <span className={styles.severityKeyItem}>
-                      <span className={styles.severityKeyDot} style={{ background: SEV_COLOR.media }} /> {t("pages.xrays.sevMedium")}
+                    <span className={c.severityKeyItem}>
+                      <span className={c.severityKeyDot} style={{ background: sev.media }} /> {t("pages.xrays.sevMedium")}
                     </span>
-                    <span className={styles.severityKeyItem}>
-                      <span className={styles.severityKeyDot} style={{ background: SEV_COLOR.baja }} /> {t("pages.xrays.sevLow")}
+                    <span className={c.severityKeyItem}>
+                      <span className={c.severityKeyDot} style={{ background: sev.baja }} /> {t("pages.xrays.sevLow")}
                     </span>
                   </div>
 
-                  <div className={styles.actionsRow}>
+                  <div className={c.actionsRow}>
                     <button
                       type="button"
-                      className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
+                      className={`${c.actionBtn} ${c.actionBtnPrimary}`}
                       onClick={handleGeneratePlan}
                     >
                       <Sparkles size={13} aria-hidden /> {t("pages.xrays.generateTxPlan")}
                     </button>
                     <button
                       type="button"
-                      className={styles.actionBtn}
+                      className={c.actionBtn}
                       onClick={() => activeFile && window.open(activeFile.url, "_blank")}
                     >
                       <FileDown size={13} aria-hidden /> {t("common.export")}
@@ -1496,7 +1615,7 @@ export function XraysClient({
           )}
 
           {tab === "measurements" && (
-            <div className={styles.emptyState}>
+            <div className={c.emptyState}>
               {t("pages.xrays.measurementsEmpty")}
             </div>
           )}
@@ -1504,21 +1623,21 @@ export function XraysClient({
           {tab === "notes" && (
             <>
               {!activeFile ? (
-                <div className={styles.emptyState}>{t("pages.xrays.selectXray")}</div>
+                <div className={c.emptyState}>{t("pages.xrays.selectXray")}</div>
               ) : (
                 <>
                   <textarea
-                    className={styles.notesArea}
+                    className={c.notesArea}
                     value={notesDraft}
                     onChange={(e) => setNotesDraft(e.target.value)}
                     placeholder={t("pages.xrays.notesPlaceholder")}
                     readOnly={!canEditRecords}
                   />
                   {canEditRecords && (
-                    <div className={styles.actionsRow}>
+                    <div className={c.actionsRow}>
                       <button
                         type="button"
-                        className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
+                        className={`${c.actionBtn} ${c.actionBtnPrimary}`}
                         onClick={handleSaveNotes}
                         disabled={notesDraft === (activeFile.doctorNotes ?? "")}
                       >
@@ -1526,7 +1645,7 @@ export function XraysClient({
                       </button>
                       <button
                         type="button"
-                        className={styles.actionBtn}
+                        className={c.actionBtn}
                         onClick={handleDelete}
                         style={{ color: "#dc2626" }}
                       >
@@ -1535,7 +1654,7 @@ export function XraysClient({
                     </div>
                   )}
                   {activeFile.doctorNotesUpdatedAt && (
-                    <div style={{ fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
+                    <div className={rediseno ? piel.notaPie : undefined} style={rediseno ? undefined : { fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
                       {t("pages.xrays.updatedAt")}: {formatDate(activeFile.doctorNotesUpdatedAt)}
                     </div>
                   )}
@@ -1557,16 +1676,25 @@ function AnnotationsOverlay({
   annotations,
   drafting,
   naturalSize,
+  c = styles,
+  rediseno = false,
 }: {
   annotations: Annotation[];
   drafting: Annotation | null;
   naturalSize: { w: number; h: number };
+  c?: Record<string, string>;
+  rediseno?: boolean;
 }) {
   const all = drafting ? [...annotations, drafting] : annotations;
+  // Las medidas («12.4 mm», «38.0°») van en Instrument Sans con cifras
+  // tabulares cuando el rediseño está encendido; apagado, como siempre.
+  const letraMedida = rediseno
+    ? { fontFamily: "inherit", fontVariantNumeric: "tabular-nums" as const }
+    : { fontFamily: "monospace" };
 
   return (
     <svg
-      className={styles.annotationSvg}
+      className={c.annotationSvg}
       viewBox="0 0 1000 1000"
       preserveAspectRatio="none"
       pointerEvents="none"
@@ -1605,7 +1733,7 @@ function AnnotationsOverlay({
                 x={mx} y={my - 4}
                 fill="#fff" fontSize={13} fontWeight={700}
                 textAnchor="middle"
-                style={{ fontFamily: "monospace" }}
+                style={letraMedida}
               >
                 {mm.toFixed(1)} mm
               </text>
@@ -1653,7 +1781,7 @@ function AnnotationsOverlay({
                   x={lx} y={ly - 2}
                   fill="#fff" fontSize={13} fontWeight={700}
                   textAnchor="middle"
-                  style={{ fontFamily: "monospace" }}
+                  style={letraMedida}
                 >
                   {deg.toFixed(1)}°
                 </text>

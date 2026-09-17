@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { clearMustChangePassword, hasPasswordIdentity } from "@/lib/auth/must-change-password";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
 import { ChangePasswordClient } from "./change-password-client";
 
 export const dynamic = "force-dynamic";
@@ -27,10 +29,31 @@ export default async function ChangePasswordPage() {
   //
   // El coste (una llamada al Admin API) sólo se paga en esta página, que sólo se
   // renderiza cuando la marca está puesta — no en cada render del dashboard.
-  if (!(await hasPasswordIdentity(user.supabaseId))) {
+  //
+  // REDISEÑO — el MISMO interruptor por clínica que enciende el menú de dos
+  // niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno propio.
+  // Esta ruta sale por el layout mínimo, que no lee el interruptor, así que se
+  // lee aquí: en paralelo con la identidad para no añadir un viaje en serie, y
+  // con la caché de 60 s por clínica del interruptor (una consulta por clínica
+  // por minuto, no una por carga). Falla cerrado: apagado, sin tabla o con
+  // error → el formulario de siempre, tal cual.
+  const [tieneContrasena, rediseno] = await Promise.all([
+    hasPasswordIdentity(user.supabaseId),
+    menuDosNivelesEncendido(user.clinicId),
+  ]);
+  if (!tieneContrasena) {
     await clearMustChangePassword(user.supabaseId);
     redirect("/dashboard");
   }
 
+  // El formulario es el mismo con la bandera encendida o apagada: ni un flujo,
+  // ni una validación, ni un mensaje cambian. La raíz solo lo viste.
+  if (rediseno) {
+    return (
+      <RaizCuenta barrera>
+        <ChangePasswordClient />
+      </RaizCuenta>
+    );
+  }
   return <ChangePasswordClient />;
 }

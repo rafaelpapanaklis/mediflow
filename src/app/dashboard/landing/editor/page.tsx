@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { EditorVisual } from "./editor-client";
 
 /**
@@ -28,21 +29,29 @@ export default async function EditorVisualPage() {
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "landing.edit");
 
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: user.clinicId },
-    select: {
-      slug: true, name: true, updatedAt: true,
-      landingActive: true, landingTemplate: true, landingThemeColor: true,
-      phone: true, address: true, description: true,
-      landingTagline: true, landingPatients: true, landingUrgentText: true,
-      landingSections: true, landingServices: true, landingFaqs: true,
-      landingTestimonials: true, landingPhotos: true, landingCopy: true,
-    },
-  });
+  // REDISEÑO DE PÁGINA WEB — el mismo interruptor que /dashboard/landing,
+  // agrupado en el mismo Promise.all que la consulta de la clínica (ver el
+  // comentario largo en ../page.tsx: no es una consulta nueva, es la misma
+  // que ya pagan Pacientes/Agenda/Hoy, cacheada 60 s por clínica).
+  const [clinic, rediseno] = await Promise.all([
+    prisma.clinic.findUnique({
+      where: { id: user.clinicId },
+      select: {
+        slug: true, name: true, updatedAt: true,
+        landingActive: true, landingTemplate: true, landingThemeColor: true,
+        phone: true, address: true, description: true,
+        landingTagline: true, landingPatients: true, landingUrgentText: true,
+        landingSections: true, landingServices: true, landingFaqs: true,
+        landingTestimonials: true, landingPhotos: true, landingCopy: true,
+      },
+    }),
+    menuDosNivelesEncendido(user.clinicId),
+  ]);
   if (!clinic) redirect("/dashboard/landing");
 
   return (
     <EditorVisual
+      rediseno={rediseno}
       inicial={{
         slug: clinic.slug,
         name: clinic.name,

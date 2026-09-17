@@ -1,0 +1,2291 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   AGENDA NUEVA (Claude Design) — barra de herramientas, cuadrícula,
+   tarjeta de cita y paneles laterales.
+
+   Todo cuelga de `.raiz`, que SOLO se monta con el interruptor
+   `menu-dos-niveles` encendido para la clínica. Con la bandera apagada no se
+   monta ni un nodo de aquí: la agenda de siempre se pinta exactamente como
+   hoy, píxel por píxel, porque ni siquiera comparten árbol.
+
+   Los valores son los del README del paquete de diseño (19 KB de medidas),
+   transcritos. Los mismos números viven en `src/lib/agenda-nueva/tokens.ts`
+   para lo que calcula el JS.
+
+   ws1-t2 (Semana y Mes) hereda estos `--ag-*` desde `.raiz` y pinta sus
+   clases en `vista-semana-mes.module.css`.
+
+   MODO OSCURO (ws1-t1, hallazgo 18 de la auditoría del rediseño): el panel
+   se oscurece con la clase `.dark` en <html> (theme-toggle.tsx), y esta hoja
+   no tenía variante. Ahora `.raiz` y `.tokensAgenda` llevan además
+   `CLASES_MENU` (`menu-dos-niveles/clases.ts`), que trae los `--m2-*` del
+   menú con su versión oscura, y el bloque `:global(.dark)` de abajo vuelve a
+   declarar cada `--ag-*` LEYENDO esos `--m2-*` para los neutros (tinta,
+   superficies, bordes, botón principal). Los acentos del diseño (morado,
+   verde, ámbar, rojo) no tienen pareja en el menú y llevan su tono oscuro
+   propio en `oklch`, la misma familia que la ventana «Nueva cita»
+   (`new-appointment/nueva-cita.module.css`). Con el interruptor apagado no
+   se monta ni un nodo de aquí, así que nada de esto alcanza a la agenda de
+   siempre.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Las variables van en `.raiz` y también en `.tokensAgenda`: la confirmación
+   de mover una cita se abre en un portal, fuera de la raíz, y sin su propia
+   copia se quedaría sin colores. */
+.raiz,
+.tokensAgenda {
+  /* ── Color ── */
+  --ag-tinta: #1a1826;
+  --ag-texto-2: #6e6b82;
+  --ag-texto-3: #3d3a4d;
+  --ag-superficie: #fff;
+  --ag-fondo-app: #f4f3f8;
+  --ag-fondo-cerrado: #faf9fc;
+  --ag-borde-divisor: rgba(26, 24, 38, 0.09);
+  --ag-borde-control: rgba(26, 24, 38, 0.12);
+  --ag-borde-media: rgba(26, 24, 38, 0.045);
+
+  --ag-morado: oklch(0.47 0.2 280);
+  --ag-morado-texto: oklch(0.4 0.19 280);
+  --ag-morado-tinte: oklch(0.94 0.035 280);
+  --ag-hoy: oklch(0.975 0.012 280);
+  --ag-borde-consulta: oklch(0.8 0.08 280);
+
+  --ag-verde: oklch(0.6 0.16 150);
+  --ag-verde-vivo: oklch(0.72 0.18 150);
+
+  --ag-ambar-icono: oklch(0.55 0.14 70);
+  --ag-ambar-texto: oklch(0.45 0.13 70);
+  --ag-ambar-fondo: oklch(0.95 0.07 80);
+  --ag-ambar-claro: oklch(0.975 0.03 80);
+  --ag-ambar-borde: oklch(0.85 0.1 80);
+
+  /* ── Escala vertical (el corazón de la cuadrícula) ── */
+  --ag-alto-hora: 112px;
+  --ag-alto-media: 56px;
+  --ag-ancho-eje: 64px;
+
+  /* ── Sombras ── */
+  --ag-sombra-desplegable: 0 16px 40px rgba(26, 24, 38, 0.16);
+  --ag-sombra-segmento: 0 1px 2px rgba(26, 24, 38, 0.1);
+  --ag-sombra-seleccion: 0 0 0 2px oklch(0.47 0.2 280);
+
+  /* ── Radios ── */
+  --ag-r-5: 5px;
+  --ag-r-7: 7px;
+  --ag-r-8: 8px;
+  --ag-r-9: 9px;
+  --ag-r-10: 10px;
+  --ag-r-12: 12px;
+
+  /* ── Rojo (no es del README; ver `tokens.ts`) ── */
+  --ag-rojo-texto: oklch(0.45 0.16 25);
+  --ag-rojo-fondo: oklch(0.96 0.03 25);
+  --ag-rojo-borde: oklch(0.62 0.16 25);
+
+  /* ── Lo que antes iba escrito a mano en las reglas (hallazgo 18) ──
+     Mismos valores que tenían, ahora con nombre para que el bloque oscuro
+     los pueda cambiar. */
+  --ag-borde-suave: rgba(26, 24, 38, 0.1);
+  --ag-borde-casilla: rgba(26, 24, 38, 0.3);
+  --ag-borde-punto: rgba(26, 24, 38, 0.18);
+  --ag-raya-cierre: rgba(26, 24, 38, 0.05);
+  --ag-sombra-fantasma: 0 8px 24px rgba(26, 24, 38, 0.14);
+  --ag-sombra-modal: 0 24px 64px rgba(26, 24, 38, 0.22);
+  --ag-velo: rgba(26, 24, 38, 0.38);
+  /* El botón principal (Nueva cita, la acción del panel, el chip activo):
+     tinta con letra blanca. Se LEE del menú (`--m2-cta-*`), que en claro es
+     exactamente la tinta y el blanco de aquí; en oscuro el menú lo invierte. */
+  --ag-cta-fondo: var(--m2-cta-fondo, var(--ag-tinta));
+  --ag-cta-texto: var(--m2-cta-texto, white);
+  --ag-cta-hover: rgb(43 40 64); /* el 2b2840 del README */
+
+  /* ── Las pintas que calcula el JS (`tokens.ts` → `estados.ts`) ──
+     La tarjeta de cita recibe su fondo, su borde y su chip como `style`
+     inline desde `AGENDA_TOKENS`; esas constantes ahora son `var(--ag-…)`
+     y caen aquí, para que también se oscurezcan. */
+  --ag-chip-verde-fondo: oklch(0.95 0.05 150);
+  --ag-chip-verde-tinta: oklch(0.4 0.13 150);
+  --ag-ambar-texto-2: oklch(0.4 0.12 70);
+  --ag-ambar-badge: oklch(0.86 0.13 80);
+  --ag-tarjeta-rojo-borde: oklch(0.86 0.08 25);
+  --ag-chip-rojo-fondo: oklch(0.94 0.055 25);
+}
+
+/* ═══ Oscuro ════════════════════════════════════════════════════════════
+   `:global(.dark)` es la clase que pone theme-toggle.tsx en <html>; la
+   regla sigue anclada a `.raiz`/`.tokensAgenda` (clases con hash de este
+   módulo), así que no puede pintar nada fuera de la agenda nueva. */
+:global(.dark) .raiz,
+:global(.dark) .tokensAgenda {
+  --ag-tinta: var(--m2-texto);
+  --ag-texto-2: var(--m2-texto-2);
+  --ag-texto-3: color-mix(in srgb, var(--m2-texto) 80%, var(--m2-texto-2));
+  --ag-superficie: var(--m2-n2-fondo);
+  --ag-fondo-app: var(--m2-hover);
+  --ag-fondo-cerrado: rgba(255, 255, 255, 0.025);
+  --ag-borde-divisor: var(--m2-borde);
+  --ag-borde-control: rgba(255, 255, 255, 0.12);
+  --ag-borde-media: rgba(255, 255, 255, 0.04);
+  --ag-borde-suave: rgba(255, 255, 255, 0.1);
+  --ag-borde-casilla: rgba(255, 255, 255, 0.3);
+  --ag-borde-punto: rgba(255, 255, 255, 0.18);
+  --ag-raya-cierre: rgba(255, 255, 255, 0.04);
+
+  --ag-morado: oklch(0.66 0.16 280);
+  --ag-morado-texto: oklch(0.82 0.09 280);
+  --ag-morado-tinte: oklch(0.66 0.16 280 / 0.2);
+  --ag-hoy: oklch(0.66 0.16 280 / 0.08);
+  --ag-borde-consulta: oklch(0.66 0.16 280 / 0.45);
+
+  --ag-verde: oklch(0.72 0.15 150);
+  --ag-verde-vivo: oklch(0.8 0.17 150);
+  --ag-chip-verde-fondo: oklch(0.72 0.15 150 / 0.18);
+  --ag-chip-verde-tinta: oklch(0.85 0.1 150);
+
+  --ag-ambar-icono: oklch(0.8 0.13 80);
+  --ag-ambar-texto: oklch(0.82 0.12 80);
+  --ag-ambar-texto-2: oklch(0.88 0.1 80);
+  --ag-ambar-fondo: oklch(0.8 0.13 80 / 0.18);
+  --ag-ambar-claro: oklch(0.8 0.13 80 / 0.1);
+  --ag-ambar-borde: oklch(0.8 0.13 80 / 0.45);
+  --ag-ambar-badge: oklch(0.8 0.13 80 / 0.5);
+
+  --ag-rojo-texto: oklch(0.78 0.12 25);
+  --ag-rojo-fondo: oklch(0.68 0.17 25 / 0.14);
+  --ag-rojo-borde: oklch(0.68 0.17 25);
+  --ag-tarjeta-rojo-borde: oklch(0.68 0.17 25 / 0.45);
+  --ag-chip-rojo-fondo: oklch(0.68 0.17 25 / 0.22);
+
+  --ag-sombra-desplegable: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --ag-sombra-segmento: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ag-sombra-seleccion: 0 0 0 2px oklch(0.66 0.16 280);
+  --ag-sombra-fantasma: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --ag-sombra-modal: 0 24px 64px rgba(0, 0, 0, 0.5);
+  --ag-velo: rgba(0, 0, 0, 0.6);
+  --ag-cta-hover: color-mix(in srgb, var(--m2-cta-fondo) 90%, var(--m2-n1-fondo));
+}
+
+.tokensAgenda {
+  color: var(--ag-tinta);
+  font-family: var(--font-menu), system-ui, sans-serif;
+}
+
+.raiz {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  font-family: var(--font-menu), system-ui, sans-serif;
+  font-feature-settings: normal;
+}
+
+.raiz *,
+.raiz *::before,
+.raiz *::after {
+  box-sizing: border-box;
+}
+
+/* Cifras de ancho fijo en TODO lo que cuelga de aquí. Va sobre los HIJOS y
+   no sobre la raíz a propósito: la raíz lleva ahora `.tokens` del menú, y
+   `tipografia-panel.tsx` le pone a esa clase `font-variant-numeric: normal`
+   con más peso; sus hijos heredan de aquí (igual que hoy-rediseno). */
+.raiz > *,
+.tokensAgenda > * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══ Barra de herramientas (64 px, común a las tres vistas) ════════════ */
+
+.barra {
+  height: 64px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--ag-borde-divisor);
+  position: relative;
+  z-index: 6;
+}
+
+.espaciador {
+  flex: 1;
+}
+
+/* ── Segmented control Día / Semana / Mes ── */
+
+.segmentado {
+  display: flex;
+  padding: 3px;
+  border-radius: var(--ag-r-9);
+  background: var(--ag-fondo-app);
+  gap: 2px;
+  font-size: 13px;
+  flex: none;
+}
+
+.segmento {
+  height: 30px;
+  padding: 0 12px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--ag-r-7);
+  background: transparent;
+  color: var(--ag-texto-2);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+
+.segmento:hover {
+  color: var(--ag-tinta);
+}
+
+.segmentoActivo,
+.segmentoActivo:hover {
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  font-weight: 600;
+  box-shadow: var(--ag-sombra-segmento);
+}
+
+/* ── Navegación de fecha ── */
+
+.navFecha {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.navBoton {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ag-r-8);
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 120ms ease-out;
+}
+
+.navBoton:hover {
+  background: var(--ag-fondo-app);
+}
+
+.navHoy {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--ag-r-8);
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  display: grid;
+  place-items: center;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease-out;
+}
+
+.navHoy:hover {
+  background: var(--ag-fondo-app);
+}
+
+/* ── Título del periodo ── */
+
+.titulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 4px;
+  min-width: 0;
+  /* El día que se mira manda: cuando la barra no cabe, se encoge antes el
+     filtro (su etiqueta tiene puntos suspensivos). Por debajo de 1280 sí
+     cede, ver «Pantallas estrechas». */
+  flex-shrink: 0;
+}
+
+.tituloTexto {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chipHoy {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--ag-r-5);
+  background: var(--ag-morado);
+  color: #fff;
+  flex: none;
+  white-space: nowrap;
+}
+
+/* ── Filtro doctores + unidades ── */
+
+.filtroCaja {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.filtroBoton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 12px;
+  border-radius: var(--ag-r-8);
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  max-width: min(320px, 100%);
+}
+
+.filtroBotonActivo {
+  border-color: var(--ag-morado);
+  background: var(--ag-morado-tinte);
+}
+
+.filtroEtiqueta {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filtroIcono {
+  color: var(--ag-texto-2);
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.filtroContador {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.filtroMenu {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  width: 300px;
+  background: var(--ag-superficie);
+  border: 1px solid var(--ag-borde-suave);
+  border-radius: var(--ag-r-12);
+  box-shadow: var(--ag-sombra-desplegable);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 30;
+  max-height: min(70vh, 520px);
+  overflow: auto;
+}
+
+.filtroSeccion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 4px;
+}
+
+.rotuloSeccion {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ag-texto-2);
+}
+
+.filtroVerTodos {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ag-morado-texto);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.filtroVerTodos:hover {
+  text-decoration: underline;
+}
+
+.filtroFila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: var(--ag-r-8);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 0;
+  background: none;
+  color: var(--ag-tinta);
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+}
+
+.filtroFila:hover {
+  background: var(--ag-fondo-app);
+}
+
+.casilla {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: var(--ag-r-5);
+  border: 1.5px solid var(--ag-borde-casilla);
+  background: var(--ag-superficie);
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+
+.casillaMarcada {
+  background: var(--ag-morado);
+  border-color: var(--ag-morado);
+}
+
+.cuadritoColor {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 2px;
+}
+
+.filtroNombre {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filtroSub {
+  font-size: 12px;
+  color: var(--ag-texto-2);
+  flex: none;
+  white-space: nowrap;
+}
+
+.filtroSeparador {
+  height: 1px;
+  background: var(--ag-borde-divisor);
+  margin: 6px 4px;
+}
+
+.filtroVacio {
+  padding: 10px;
+  font-size: 12.5px;
+  color: var(--ag-texto-2);
+}
+
+/* Capa que cierra el desplegable al pulsar fuera. */
+.capaCierre {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+}
+
+/* ── Botón «Buscar hueco» ── */
+
+.botonHuecos {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-morado-tinte);
+  color: var(--ag-morado-texto);
+  border: 1px solid var(--ag-morado-tinte);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  flex: none;
+  white-space: nowrap;
+}
+
+.botonHuecosAbierto {
+  background: var(--ag-cta-fondo);
+  border-color: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+}
+
+/* ── Botón «Nueva cita» ── La acción principal de la pantalla: tinta, como el
+   «Nueva cita» del menú del diseño, a la altura de los demás controles (34). */
+.botonNuevaCita {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px 0 10px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+  border: 1px solid var(--ag-cta-fondo);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  flex: none;
+  white-space: nowrap;
+  transition: background 120ms ease-out;
+}
+
+.botonNuevaCita:hover {
+  background: var(--ag-cta-hover);
+}
+
+.botonNuevaCita:focus-visible,
+.botonHuecos:focus-visible {
+  outline: 2px solid var(--ag-morado);
+  outline-offset: 2px;
+}
+
+.etiquetaBoton {
+  display: inline;
+}
+
+/* «N por validar»: las citas del portal que esperan a la clínica. No es del
+   diseño; es la puerta a la cola de validación de la agenda de siempre, que
+   sin esto se perdía con la bandera encendida. Ámbar, la familia de «espera». */
+.botonValidar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-ambar-claro);
+  color: var(--ag-ambar-texto);
+  border: 1px solid var(--ag-ambar-borde);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  flex: none;
+  white-space: nowrap;
+}
+
+.botonValidarAbierto {
+  background: var(--ag-ambar-fondo);
+}
+
+/* Las dos colas del portal (validar y solicitudes de cambio) van arriba de la
+   vista y no le quitan su alto: la cuadrícula sigue desplazándose sola. */
+.colasPortal {
+  flex: none;
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+/* ═══ Cuerpo: agenda + panel lateral ════════════════════════════════════ */
+
+.cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.zonaAgenda {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  /* El README pide 200 ms ease-out al abrir/cerrar los paneles. */
+  transition: flex-basis 200ms ease-out;
+}
+
+/* ═══ Cuadrícula (Día y Semana comparten esta) ══════════════════════════ */
+
+.rejilla {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Caja de la cabecera y el cuerpo. No desplaza nada: el único scroller es el
+   cuerpo (`.rejillaScroll`), en los dos ejes, y la cabecera copia su
+   desplazamiento horizontal desde JS. */
+.rejillaScrollH {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* El marco de la cabecera: sin barras, se desplaza en horizontal a la par del
+   cuerpo. Reserva el mismo hueco de barra vertical que el cuerpo
+   (`scrollbar-gutter`), para que con barras clásicas (Windows) cada cabecera
+   quede exactamente sobre su columna. */
+.rejillaEncabezadoMarco {
+  flex: none;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+.rejillaEncabezado {
+  display: flex;
+  flex: none;
+  border-bottom: 1px solid var(--ag-borde-divisor);
+}
+
+.rejillaEsquina {
+  width: var(--ag-ancho-eje);
+  flex: none;
+}
+
+.rejillaEncabezadoCol {
+  flex: 1;
+  min-width: 0;
+  border-left: 1px solid var(--ag-borde-divisor);
+}
+
+/* El cuerpo: el ÚNICO scroller, vertical y horizontal. Cuando las columnas no
+   caben (Semana con varios doctores en pantallas estrechas) se desplaza en
+   horizontal y la cabecera lo sigue. */
+.rejillaScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  position: relative;
+}
+
+.rejillaLienzo {
+  display: flex;
+  position: relative;
+}
+
+/* ── Eje de horas ── */
+
+.eje {
+  position: relative;
+  width: var(--ag-ancho-eje);
+  flex: none;
+  font-size: 11px;
+  color: var(--ag-texto-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ejeHora {
+  position: absolute;
+  right: 10px;
+}
+
+.ejeCierre {
+  position: absolute;
+  right: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ejeAhora {
+  position: absolute;
+  right: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--ag-morado);
+  padding: 1px 5px;
+  border-radius: 4px;
+  z-index: 3;
+}
+
+/* ── Columna ── */
+
+.columna {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  border-left: 1px solid var(--ag-borde-divisor);
+  /* Las líneas de hora y media hora son un gradiente repetido, no nodos. */
+  background-image:
+    linear-gradient(var(--ag-borde-divisor) 1px, transparent 1px),
+    linear-gradient(var(--ag-borde-media) 1px, transparent 1px);
+  background-size:
+    100% var(--ag-alto-hora),
+    100% var(--ag-alto-media);
+}
+
+/* Franja de cierre / de antes de abrir: rayas diagonales, no captura clics. */
+.franjaCierre {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--ag-raya-cierre) 0 6px,
+    transparent 6px 14px
+  );
+  pointer-events: none;
+}
+
+.columnaCerrada {
+  background-color: var(--ag-fondo-cerrado);
+}
+
+/* ── Agendar con un clic: el hueco bajo el cursor ──
+   Marca el hueco que crearía el clic, con su hora, del alto de un hueco de la
+   clínica. Va debajo de las tarjetas y no captura el ratón. */
+.columnaConGuia {
+  cursor: pointer;
+}
+
+.guiaHueco {
+  position: absolute;
+  z-index: 0;
+  border-radius: var(--ag-r-7);
+  background: var(--ag-morado-tinte);
+  box-shadow: inset 0 0 0 1px var(--ag-borde-consulta);
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  padding: 3px 8px;
+  overflow: hidden;
+}
+
+.guiaHuecoHora {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--ag-morado-texto);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.guiaHuecoHora::before {
+  content: "+ ";
+}
+
+/* ── Mover arrastrando: la sombra de destino ──
+   Dónde caería la cita, con la hora escrita. Por encima de las tarjetas y sin
+   capturar el ratón: el soltar lo recibe la columna. */
+.fantasma {
+  position: absolute;
+  z-index: 4;
+  border-radius: var(--ag-r-8);
+  border: 2px dashed var(--ag-morado);
+  background: color-mix(in oklch, var(--ag-morado-tinte) 88%, transparent);
+  box-shadow: var(--ag-sombra-fantasma);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 10px;
+  overflow: hidden;
+}
+
+.fantasmaChoca {
+  border-color: var(--ag-rojo-borde);
+  background: color-mix(in oklch, var(--ag-rojo-fondo) 92%, transparent);
+}
+
+.fantasmaCompacta {
+  padding: 3px 6px;
+}
+
+.fantasmaHora {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 17px;
+  color: var(--ag-morado-texto);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fantasmaCompacta .fantasmaHora {
+  font-size: 11.5px;
+  line-height: 15px;
+}
+
+.fantasmaChoca .fantasmaHora,
+.fantasmaChoca .fantasmaTexto {
+  color: var(--ag-rojo-texto);
+}
+
+.fantasmaTexto {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ag-texto-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rotuloCerrada {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ag-texto-2);
+  pointer-events: none;
+}
+
+.columnaVacia {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  color: var(--ag-texto-2);
+  pointer-events: none;
+}
+
+.sinColumnas {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: var(--ag-texto-2);
+}
+
+/* ── Línea de «ahora» ── */
+
+.lineaAhora {
+  position: absolute;
+  height: 2px;
+  background: var(--ag-morado);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.puntoAhora {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ag-morado);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ═══ Encabezado de columna de Día ══════════════════════════════════════ */
+
+.cabeceraDia {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  min-width: 0;
+}
+
+.avatarResponsable {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.cabeceraTextos {
+  min-width: 0;
+}
+
+.cabeceraNombre {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cabeceraSub {
+  font-size: 12px;
+  color: var(--ag-texto-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ═══ Tarjeta de cita ═══════════════════════════════════════════════════ */
+
+.tarjeta {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: var(--ag-r-8);
+  border-width: 1px;
+  border-style: solid;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: left;
+  font-family: inherit;
+  color: var(--ag-tinta);
+  padding: 7px 12px 6px 14px;
+  transition: box-shadow 120ms ease-out;
+}
+
+.tarjeta:focus-visible {
+  outline: 2px solid var(--ag-morado);
+  outline-offset: 1px;
+}
+
+/* Una cita que se puede mover: al arrastrarla no se selecciona su texto, y en
+   una tableta el dedo la arrastra en vez de desplazar la cuadrícula — igual
+   que la tarjeta de la agenda de siempre (`touchAction: "none"`). */
+.tarjetaArrastrable {
+  user-select: none;
+  touch-action: none;
+}
+
+/* La cita que se está arrastrando se queda en su sitio, atenuada: de ahí sale. */
+.tarjetaArrastrada {
+  opacity: 0.4 !important;
+  box-shadow: none !important;
+}
+
+/* Variante compacta: la cita dura menos de 30 min. */
+.tarjetaCorta {
+  padding: 3px 12px 3px 14px;
+}
+
+/* Variante de Semana (ws1-t2). */
+.tarjetaSemana {
+  border-radius: var(--ag-r-7);
+  padding: 5px 8px 4px 11px;
+}
+
+.tarjetaFila1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.tarjetaCorta .tarjetaFila1 {
+  line-height: 17px;
+}
+
+.tarjetaSemana .tarjetaFila1 {
+  font-size: 12.5px;
+  gap: 6px;
+  line-height: 16px;
+}
+
+.tarjetaNombre {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tarjetaNombreTachado {
+  text-decoration: line-through;
+}
+
+.tarjetaHora {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ag-texto-2);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.tarjetaChip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex: none;
+}
+
+.tarjetaFila2 {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ag-texto-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tarjetaSemana .tarjetaFila2 {
+  font-size: 11.5px;
+  line-height: 15px;
+}
+
+/* La fila 2 desaparece cuando la cita es demasiado corta para mostrarla. */
+.tarjetaSinFila2 .tarjetaFila2 {
+  display: none;
+}
+
+.tarjetaIconoEstado {
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+/* ═══ Paneles laterales ═════════════════════════════════════════════════ */
+
+.panel {
+  flex: none;
+  border-left: 1px solid var(--ag-borde-divisor);
+  background: var(--ag-superficie);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panelCita {
+  width: 420px;
+}
+
+.panelHuecos {
+  width: 400px;
+  gap: 14px;
+  padding: 16px 20px 20px;
+}
+
+.panelCabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px 0;
+}
+
+.panelRotulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ag-texto-2);
+  flex: 1;
+}
+
+.panelIconoBoton {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--ag-r-8);
+  border: 0;
+  background: none;
+  color: var(--ag-texto-2);
+  cursor: pointer;
+  padding: 0;
+}
+
+.panelIconoBoton:hover {
+  background: var(--ag-fondo-app);
+  color: var(--ag-tinta);
+}
+
+.panelCerrar {
+  background: var(--ag-fondo-app);
+  color: var(--ag-tinta);
+}
+
+.panelDesplaza {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ── Paciente ── */
+
+.panelPaciente {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px 0;
+}
+
+.panelAvatar {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.panelNombre {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.panelNombre:hover {
+  color: var(--ag-morado-texto);
+}
+
+.panelSub {
+  font-size: 12.5px;
+  color: var(--ag-texto-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Tres botones iguales ── */
+
+.panelAcciones3 {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px 0;
+}
+
+.panelAccion3 {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  border-radius: var(--ag-r-8);
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ag-tinta);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.panelAccion3:hover:not(:disabled) {
+  background: var(--ag-fondo-app);
+}
+
+.panelAccion3:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Tarjeta de datos ── */
+
+.panelDatos {
+  margin: 16px 20px 0;
+  padding: 12px 14px;
+  border-radius: var(--ag-r-10);
+  background: var(--ag-fondo-app);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+
+.datoRotulo {
+  font-size: 11px;
+  color: var(--ag-texto-2);
+}
+
+.datoValor {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ── Flujo de la cita ── */
+
+.panelSeccion {
+  padding: 18px 20px 0;
+}
+
+.flujo {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+
+.flujoPaso {
+  display: flex;
+  gap: 12px;
+  min-height: 38px;
+}
+
+.flujoCarril {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.flujoPunto {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--ag-borde-punto);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+
+.flujoPuntoHecho {
+  background: var(--ag-verde);
+  border-color: transparent;
+}
+
+.flujoPuntoActual {
+  background: var(--ag-morado);
+  border-color: transparent;
+  box-shadow: 0 0 0 4px var(--ag-morado-tinte);
+}
+
+.flujoPuntoInterior {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.flujoLinea {
+  flex: 1;
+  width: 2px;
+  background: var(--ag-borde-control);
+}
+
+.flujoLineaHecha {
+  background: var(--ag-verde);
+}
+
+.flujoTextos {
+  padding-bottom: 8px;
+}
+
+.flujoEtiqueta {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--ag-texto-2);
+}
+
+.flujoEtiquetaHecha {
+  color: var(--ag-tinta);
+}
+
+.flujoEtiquetaActual {
+  color: var(--ag-morado-texto);
+}
+
+.flujoSub {
+  font-size: 12px;
+  color: var(--ag-texto-2);
+}
+
+/* ── Notas ── */
+
+.nota {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--ag-r-10);
+  background: var(--ag-ambar-claro);
+  border: 1px solid var(--ag-ambar-borde);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.notaIcono {
+  color: var(--ag-ambar-icono);
+  flex: none;
+}
+
+/* ── Pie del panel de cita ── */
+
+.panelPie {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  flex: none;
+  border-top: 1px solid var(--ag-borde-divisor);
+  background: var(--ag-superficie);
+}
+
+.accionPrincipal {
+  height: 40px;
+  border-radius: var(--ag-r-10);
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.accionPrincipal:hover:not(:disabled) {
+  background: var(--ag-cta-hover);
+}
+
+.accionPrincipal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.accionesSecundarias {
+  display: flex;
+  gap: 8px;
+}
+
+.accionSecundaria {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  border-radius: var(--ag-r-9);
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ag-tinta);
+  cursor: pointer;
+}
+
+.accionSecundaria:hover:not(:disabled) {
+  background: var(--ag-fondo-app);
+}
+
+.accionSecundaria:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.accionCancelar {
+  color: var(--ag-texto-2);
+}
+
+.siguienteEnUnidad {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: var(--ag-r-10);
+  background: var(--ag-fondo-app);
+  font-size: 12.5px;
+}
+
+.siguienteTexto {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ═══ Panel «Buscar hueco» ══════════════════════════════════════════════ */
+
+.huecosCabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.huecosTitulo {
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.huecosGrupo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.chip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px;
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  border: 1px solid var(--ag-borde-control);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  font: inherit;
+  font-weight: 600;
+}
+
+.chip:hover {
+  background: var(--ag-fondo-app);
+}
+
+.chipActivo,
+.chipActivo:hover {
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+  border-color: var(--ag-cta-fondo);
+}
+
+.huecosSeparador {
+  height: 1px;
+  background: var(--ag-borde-divisor);
+  flex: none;
+}
+
+.huecosLista {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hueco {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--ag-r-10);
+  border: 1px solid var(--ag-borde-suave);
+  background: var(--ag-superficie);
+  flex: none;
+  text-align: left;
+  font-family: inherit;
+  color: var(--ag-tinta);
+  cursor: pointer;
+  width: 100%;
+}
+
+.hueco:hover {
+  background: var(--ag-fondo-app);
+}
+
+.huecoFecha {
+  width: 44px;
+  flex: none;
+  text-align: center;
+}
+
+.huecoDia {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ag-texto-2);
+}
+
+.huecoDiaHoy {
+  color: var(--ag-morado-texto);
+}
+
+.huecoNum {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.huecoCuerpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.huecoHora {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.huecoQuien {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ag-texto-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.huecoAgendar {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  border: 1px solid var(--ag-borde-control);
+  display: grid;
+  place-items: center;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+}
+
+.huecoAgendarPrimero {
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+  border-color: var(--ag-cta-fondo);
+}
+
+.huecoAgendar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.huecosVacio {
+  padding: 30px 10px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ag-texto-2);
+  line-height: 1.5;
+}
+
+.huecosPie {
+  font-size: 12px;
+  color: var(--ag-texto-2);
+  flex: none;
+}
+
+.huecosCargando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 10px;
+  font-size: 12.5px;
+  color: var(--ag-texto-2);
+}
+
+.girando {
+  animation: agendaNuevaGiro 900ms linear infinite;
+}
+
+@keyframes agendaNuevaGiro {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ═══ Confirmar el movimiento de una cita ════════════════════════════════
+   El mismo paso que la agenda de siempre, con la ropa del diseño: cabecera
+   como la del panel de cita, botones como los de su pie. */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--ag-velo);
+  backdrop-filter: blur(2px);
+}
+
+.modalMover {
+  position: fixed;
+  z-index: 81;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(calc(100vw - 32px), 460px);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: var(--ag-superficie);
+  border: 1px solid var(--ag-borde-suave);
+  border-radius: 14px;
+  box-shadow: var(--ag-sombra-modal);
+  padding: 0 0 16px;
+  outline: none;
+}
+
+.modalMover *,
+.modalMover *::before,
+.modalMover *::after {
+  box-sizing: border-box;
+}
+
+.modalCabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px 0;
+}
+
+.modalTitulo {
+  margin: 6px 20px 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 22px;
+  color: var(--ag-tinta);
+}
+
+.moverFilas {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: 10px;
+  margin: 16px 20px 0;
+}
+
+.moverFila {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: var(--ag-r-10);
+  min-width: 0;
+}
+
+.moverFilaAntes {
+  background: var(--ag-fondo-app);
+}
+
+.moverFilaAntes .moverHora {
+  color: var(--ag-texto-2);
+  text-decoration: line-through;
+}
+
+.moverFilaDespues {
+  background: var(--ag-morado-tinte);
+  box-shadow: inset 0 0 0 1px var(--ag-borde-consulta);
+}
+
+.moverFilaDespues .moverHora {
+  color: var(--ag-morado-texto);
+}
+
+.moverHora {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.moverDetalle {
+  font-size: 12.5px;
+  color: var(--ag-texto-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moverFlecha {
+  align-self: center;
+  color: var(--ag-texto-2);
+}
+
+.modalPie {
+  display: flex;
+  gap: 8px;
+  padding: 18px 20px 0;
+}
+
+.modalPie .accionSecundaria {
+  height: 40px;
+  border-radius: var(--ag-r-10);
+}
+
+.modalPie .accionPrincipal {
+  flex: 1;
+}
+
+@media (max-width: 479.98px) {
+  .moverFilas {
+    grid-template-columns: 1fr;
+  }
+
+  .moverFlecha {
+    transform: rotate(90deg);
+  }
+}
+
+/* ═══ Pantallas estrechas ═══════════════════════════════════════════════
+   El README lo deja dicho: «en pantallas pequeñas la cuadrícula se desplaza;
+   los paneles laterales pueden convertirse en hoja deslizable por debajo de
+   1280 px». Aquí la agenda mantiene un ancho mínimo y hace scroll horizontal,
+   y el panel pasa a hoja sobre la agenda en vez de comerse el ancho.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1279px) {
+  .cuerpo {
+    position: relative;
+  }
+
+  .panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    box-shadow: var(--ag-sombra-desplegable);
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 1023px) {
+  .barra {
+    gap: 8px;
+    padding: 0 12px;
+    overflow-x: auto;
+  }
+
+  .tituloTexto {
+    font-size: 16px;
+  }
+
+  /* El ancho mínimo lo decide cada vista con `anchoMinimoColumna` (Semana lo
+     necesita; Día no), y el desplazamiento horizontal ya lo da
+     `.rejillaScrollH`. Aquí solo se asegura un suelo para que tres columnas
+     de Día no se aplasten en una pantalla muy estrecha. */
+  .rejillaLienzo,
+  .rejillaEncabezado {
+    min-width: 720px;
+  }
+}
+
+/* La barra y el botón «Nueva cita». Medido con el menú del panel a la
+   izquierda (228–250 px): la barra entera, con todas las etiquetas, pide
+   ~1 200 px; sin las de los botones, ~1 020; sin la del filtro, ~830.
+     · ≥ 1380: todo con su etiqueta (el filtro recorta la suya si le falta).
+     · < 1380: «Buscar hueco» y «Nueva cita» se quedan en su ícono, con su
+       nombre en `aria-label`.
+     · < 1280: el filtro también, y el título del día ya puede recortarse.
+   Sin esto, a 1024 el título del día desaparecía. */
+@media (max-width: 1379.98px) {
+  .botonHuecos .etiquetaBoton,
+  .botonNuevaCita .etiquetaBoton {
+    display: none;
+  }
+
+  .botonHuecos,
+  .botonNuevaCita {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 1279.98px) {
+  .filtroEtiqueta {
+    display: none;
+  }
+
+  .titulo {
+    flex-shrink: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zonaAgenda,
+  .tarjeta,
+  .segmento,
+  .navBoton,
+  .navHoy,
+  .botonNuevaCita {
+    transition: none;
+  }
+
+  .girando {
+    animation: none;
+  }
+}
+
+/* ═══ Las ventanas secundarias (ws1-t1, hallazgo 9) ═════════════════════
+   «Editar cita» (`agenda/agenda-edit-appointment-modal.tsx`), el calendario
+   de su fecha (`ui/date-field.tsx`) y «Pendientes de validar»
+   (`agenda/agenda-validate-banner.tsx`) son componentes COMPARTIDOS con la
+   agenda de siempre. No se tocan sus reglas ni sus `style`: reciben una
+   `ropa` opcional con estas clases (ver `ropa.ts`) y solo la agenda nueva
+   se la pasa. Sin ropa se pintan exactamente como hoy. */
+
+/* ── «Editar cita»: velo + caja, misma pareja que «Mover cita» ── */
+
+.veloEditar {
+  position: fixed;
+  inset: 0;
+  z-index: 200; /* el plano que ya usaba la ventana de siempre */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--ag-velo);
+  backdrop-filter: blur(2px);
+}
+
+.modalEditar {
+  width: min(560px, 100%);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  border: 1px solid var(--ag-borde-suave);
+  border-radius: 14px;
+  box-shadow: var(--ag-sombra-modal);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.modalEditar *,
+.modalEditar *::before,
+.modalEditar *::after {
+  box-sizing: border-box;
+}
+
+.editarCabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--ag-borde-divisor);
+  flex: none;
+}
+
+.editarTitulos {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editarTitulo {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 22px;
+  color: var(--ag-tinta);
+}
+
+.editarFormulario {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editarCuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dosColumnas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.campoRotulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ag-texto-2);
+}
+
+/* El control (texto, hora, selector y el contenedor del `DateField`): 40 px,
+   radio 8, como en «Nueva cita». `DateField` pinta su interior con los
+   tokens del panel de siempre (`--text-*`, `--brand`…): aquí se redeclaran
+   leyendo los de la agenda, y su `style` inline los recoge por herencia. */
+.control {
+  --text-1: var(--ag-tinta);
+  --text-2: var(--ag-texto-2);
+  --text-3: var(--ag-texto-2);
+  --text-4: var(--ag-texto-2);
+  --brand: var(--ag-morado);
+  --bg-hover: var(--ag-fondo-app);
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--ag-borde-control);
+  border-radius: 8px;
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+.control:hover {
+  border-color: color-mix(in srgb, var(--ag-tinta) 24%, transparent);
+}
+
+.control:focus,
+.control:focus-within {
+  outline: none;
+  border-color: var(--ag-morado);
+  box-shadow: 0 0 0 3px var(--ag-morado-tinte);
+}
+
+select.control {
+  appearance: none;
+  padding-right: 34px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ag-texto-2) 50%),
+    linear-gradient(135deg, var(--ag-texto-2) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 17px, calc(100% - 12px) 17px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+.control::placeholder {
+  color: var(--ag-texto-2);
+}
+
+/* El aviso de choque (doctor o unidad ocupados) con su motivo para forzar. */
+.conflicto {
+  padding: 12px 14px;
+  border-radius: var(--ag-r-10);
+  background: var(--ag-ambar-claro);
+  border: 1px solid var(--ag-ambar-borde);
+  color: var(--ag-tinta);
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.conflictoRotulo {
+  color: var(--ag-ambar-texto);
+  font-weight: 700;
+}
+
+.editarPie {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--ag-borde-divisor);
+  flex: none;
+}
+
+.editarPie .accionSecundaria {
+  flex: none;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--ag-r-10);
+}
+
+.editarPie .accionPrincipal {
+  padding: 0 18px;
+}
+
+/* ── El calendario del `DateField` ──
+   Sale a <body> en su propio portal, fuera de la ventana: lleva CLASES_MENU +
+   `.tokensAgenda` + esto. Su interior lee los tokens del panel de siempre;
+   aquí se redeclaran con los de la agenda. */
+.calendario {
+  --text-1: var(--ag-tinta);
+  --text-2: var(--ag-texto-2);
+  --text-3: var(--ag-texto-2);
+  --text-4: var(--ag-texto-2);
+  --bg-elev: var(--ag-superficie);
+  --bg-elev-2: var(--ag-fondo-app);
+  --bg-hover: var(--ag-fondo-app);
+  --border-soft: var(--ag-borde-control);
+  --border-strong: var(--ag-borde-suave);
+  --brand: var(--ag-morado);
+  font-size: 13px;
+}
+
+/* ── «Pendientes de validar»: la cola de citas del portal ──
+   Mismo componente y mismos botones que en la agenda de siempre; aquí en
+   ámbar del diseño (es una espera), con cifras en tabular-nums y sin letra
+   de máquina. */
+
+.validar {
+  margin: 0;
+  padding: 12px 24px 14px;
+  background: var(--ag-ambar-claro);
+  border-bottom: 1px solid var(--ag-ambar-borde);
+  flex: none;
+  font-size: 13px;
+}
+
+.validarCabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.validarTitulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ag-ambar-texto);
+}
+
+.validarTitulo strong {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.validarAcciones {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.validarAvisar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ag-texto-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.validarAvisar input {
+  accent-color: var(--ag-verde);
+}
+
+.validarTodo {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-verde);
+  color: white;
+  border: 1px solid var(--ag-verde);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.validarTodo:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--ag-verde) 90%, black);
+}
+
+.validarTodo:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.validarPlegar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--ag-r-8);
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  color: var(--ag-texto-2);
+  cursor: pointer;
+  padding: 0;
+}
+
+.validarPlegar:hover {
+  color: var(--ag-tinta);
+}
+
+.validarLista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.validarFila {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--ag-superficie);
+  border: 1px solid var(--ag-borde-control);
+  border-radius: var(--ag-r-9);
+}
+
+.validarFilaPrincipal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.validarHora {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ag-texto-2);
+}
+
+.validarNombre {
+  font-weight: 600;
+  color: var(--ag-tinta);
+}
+
+.validarDoctor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ag-texto-2);
+  font-size: 12px;
+}
+
+.validarPunto {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+  font-size: 8px;
+  font-weight: 700;
+  flex: none;
+}
+
+.validarUnidad,
+.validarMotivo {
+  color: var(--ag-texto-2);
+  font-size: 12px;
+}
+
+.validarNota {
+  color: var(--ag-ambar-texto);
+  font-size: 12px;
+  font-style: italic;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.validarFilaAcciones {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.validarAccion {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--ag-r-8);
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  color: var(--ag-texto-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.validarAccion:hover:not(:disabled) {
+  border-color: var(--ag-borde-casilla);
+  color: var(--ag-tinta);
+}
+
+.validarAccionPrimaria,
+.validarAccionPrimaria:hover:not(:disabled) {
+  background: var(--ag-verde);
+  border-color: var(--ag-verde);
+  color: white;
+}
+
+.validarAccion:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

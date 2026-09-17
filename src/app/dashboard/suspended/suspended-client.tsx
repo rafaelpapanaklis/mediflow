@@ -6,6 +6,7 @@ import { CreditCard, Loader2, Lock, Check } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
 import { useT } from "@/i18n/i18n-provider";
+import { PlanesSuspendida } from "@/components/dashboard/cuenta-rediseno/planes-suspendida";
 
 export interface PlanCardData {
   id: PlanId;
@@ -28,6 +29,13 @@ interface Props {
   currentPlan?: PlanId | null;
   /** True si es la PRIMERA contratación de la clínica → promo 1er mes ($19/$29/$39, solo mensual con tarjeta). */
   firstMonthEligible?: boolean;
+  /**
+   * Rediseño (interruptor `menu-dos-niveles` de la clínica, lo decide la
+   * página): la MISMA lógica de aquí —estado, teclado, checkout— pintada con
+   * el lenguaje del menú por `cuenta-rediseno/planes-suspendida.tsx`.
+   * Apagado (por defecto), el marcado de siempre, sin un nodo de más.
+   */
+  rediseno?: boolean;
 }
 
 // Upsell: qué plan sugerir según el actual. CLINIC es el tope (sin sugerencia).
@@ -37,11 +45,11 @@ const NEXT_PLAN: Record<PlanId, PlanId | null> = {
   CLINIC: null,
 };
 
-function fmt(n: number): string {
+export function fmt(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-MX");
 }
 
-export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligible = false }: Props) {
+export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligible = false, rediseno = false }: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
   const [method, setMethod] = useState<PayMethod>("card");
@@ -176,6 +184,23 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
   // La promo de 1er mes SOLO aplica pagando con tarjeta en ciclo mensual
   // (misma regla que /api/billing/checkout) — el CTA la refleja tal cual.
   const ctaPromo = firstMonthEligible && billing === "monthly" && method === "card";
+
+  // Rediseño: todo lo de arriba, tal cual, a la vista nueva. Va DESPUÉS de
+  // todos los hooks para que el orden no cambie entre una vista y otra.
+  if (rediseno) {
+    return (
+      <PlanesSuspendida
+        v={{
+          t, fmt, plans, currentPlan, firstMonthEligible, recommendedPlan,
+          selectedPlan, selected, billing, method, methods, methodIndex,
+          isRedirecting, ctaPrice, ctaPromo, cardRefs, methodRefs,
+          priceOf, perMonth, annualSavings, upsellBenefit,
+          setSelectedPlan, setBilling, setMethod, onCardKeyDown, onMethodKeyDown,
+          handleStripeCheckout,
+        }}
+      />
+    );
+  }
 
   return (
     <div>

@@ -1,0 +1,1111 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Rediseño de Soporte Técnico (ws1-t4) — la lista de tickets y el hilo
+   de un ticket.
+
+   Habla el idioma visual del menú de dos niveles que Rafael aprobó:
+   NO declara tokens propios. La raíz (`raiz.tsx`) monta `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`), que trae los `--m2-*` del menú con su
+   versión oscura y las dos familias tipográficas; aquí solo hay clases que
+   los leen. Lo que el menú no tiene —éxito, alerta, peligro, info— sale de
+   los tokens semánticos de globals.css (`--success-*`, `--danger-*`…), que
+   son los mismos que el propio menú usa como respaldo (`--m2-soporte`).
+
+   Solo se monta con el interruptor `menu-dos-niveles` encendido para la
+   clínica. Apagado, la pantalla de siempre se pinta exactamente como hoy:
+   no comparten ni un nodo.
+
+   Anchos: se mide para computadoras de distintas resoluciones e iPads.
+   Nada se esconde por ancho: cuando una fila no cabe, se APILA; ninguna
+   columna, ningún botón y ningún texto desaparece.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+  /* Sin padding lateral: ese lo pone el <main> del layout. */
+  padding: clamp(6px, 0.8vw, 12px) 0 clamp(24px, 2.8vw, 32px);
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Cifras de ancho fijo en TODO lo que cuelga de aquí (folios, horas,
+   contadores). Va sobre los HIJOS y no sobre la raíz a propósito: la raíz
+   lleva `.tokens` del menú, y `tipografia-panel.tsx` le pone a esa clase
+   `font-variant-numeric: normal` con más peso; sus hijos heredan de aquí. */
+.raiz > * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Los portales (el modal de «Nuevo ticket» y el diálogo de cierre) también
+   cuelgan de la raíz, así que heredan tokens y letra sin hacer nada más. */
+
+/* ── Cabecera de la lista ────────────────────────────────────────── */
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.titulo {
+  margin: 0;
+  font-size: clamp(19px, 1.7vw, 23px);
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  color: var(--m2-texto);
+}
+
+.subtitulo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+/* ── Botones ─────────────────────────────────────────────────────── */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 15px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  box-shadow: var(--m2-sombra);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+@media (hover: hover) {
+  .boton:hover:not(:disabled) {
+    background: var(--m2-tarjeta-hover);
+    border-color: var(--m2-texto-3);
+  }
+}
+
+.boton:focus-visible,
+.botonIcono:focus-visible,
+.fila:focus-visible,
+.estrella:focus-visible,
+.enlace:focus-visible,
+.adjuntoQuitar:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* El principal es el mismo negro del «Nueva cita» del menú. */
+.botonPrincipal,
+.botonPrincipal:hover:not(:disabled) {
+  background: var(--m2-cta-fondo);
+  border-color: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+@media (hover: hover) {
+  .botonPrincipal:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+}
+
+.botonFantasma {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--m2-texto-2);
+}
+
+@media (hover: hover) {
+  .botonFantasma:hover:not(:disabled) {
+    background: var(--m2-hover);
+    border-color: transparent;
+    color: var(--m2-texto);
+  }
+}
+
+.botonChico {
+  height: 32px;
+  padding: 0 11px;
+  font-size: 12.5px;
+  border-radius: 9px;
+}
+
+.botonIcono {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .botonIcono:hover:not(:disabled) {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.botonIcono:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.girando {
+  animation: girar 0.9s linear infinite;
+}
+
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando { animation: none; }
+}
+
+/* ── Enlaces (volver, «Crear ticket nuevo») ──────────────────────── */
+
+.enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  color: var(--m2-texto-3);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .enlace:hover {
+    color: var(--m2-texto);
+    text-decoration: underline;
+  }
+}
+
+/* ── Tarjetas ────────────────────────────────────────────────────── */
+
+.tarjeta {
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: var(--m2-sombra);
+  min-width: 0;
+}
+
+.manager {
+  margin-bottom: 18px;
+}
+
+/* ── Lista de tickets (una tabla de filas enlazadas) ─────────────── */
+
+.lista {
+  overflow: hidden;
+}
+
+/* Seis columnas, SIEMPRE las seis: folio · asunto · categoría · estado ·
+   prioridad · actividad. Medido a 1024 (iPad apaisado con el menú abierto,
+   ~700px de fila): caben con el asunto cortado con puntos suspensivos.
+   Por debajo de 900px la rejilla se APILA en dos renglones (ver abajo);
+   no se quita ninguna. */
+.listaCabecera,
+.fila {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 118px 168px 92px 128px;
+  align-items: center;
+  column-gap: 12px;
+  padding: 0 18px;
+}
+
+.listaCabecera {
+  height: 40px;
+  border-bottom: 1px solid var(--m2-borde);
+  color: var(--m2-texto-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.fila {
+  width: 100%;
+  min-height: 58px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--m2-borde);
+  background: transparent;
+  color: var(--m2-texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.fila:last-child {
+  border-bottom: 0;
+}
+
+@media (hover: hover) {
+  .fila:hover {
+    background: var(--m2-tarjeta-hover);
+  }
+}
+
+.fila:focus-visible {
+  box-shadow: inset var(--m2-foco);
+}
+
+.celda {
+  min-width: 0;
+}
+
+/* Las tres etiquetas van en un envoltorio que en la rejilla ancha no pinta
+   caja (`display: contents`): sus hijas son celdas de la rejilla. En la
+   estrecha el envoltorio se vuelve una fila flexible con las tres. */
+.etiquetas {
+  display: contents;
+}
+
+.folio {
+  color: var(--m2-texto-3);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.asunto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.asuntoTexto {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--m2-texto);
+}
+
+.actividad {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  color: var(--m2-texto-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.calificacion {
+  color: var(--warning-strong, #a85a05);
+}
+
+.alineadoDerecha {
+  text-align: right;
+}
+
+/* Por debajo de 900px (iPad vertical con el menú abierto) la fila se parte
+   en dos renglones: folio + asunto + actividad arriba; las tres etiquetas
+   abajo. Todo sigue a la vista. La cabecera de columnas deja de tener
+   sentido en dos renglones y cada etiqueta ya dice lo que es. */
+@media (max-width: 899.98px) {
+  .listaCabecera {
+    display: none;
+  }
+  .fila {
+    grid-template-columns: 92px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "folio asunto actividad"
+      "etiquetas etiquetas etiquetas";
+    row-gap: 8px;
+  }
+  .celdaFolio { grid-area: folio; }
+  .celdaAsunto { grid-area: asunto; }
+  .celdaActividad { grid-area: actividad; }
+  .etiquetas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    grid-area: etiquetas;
+  }
+}
+
+/* ── Etiquetas (estado, prioridad, categoría) ────────────────────── */
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 99px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.etiquetaPunto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.etiquetaExito {
+  border-color: transparent;
+  background: var(--success-soft, rgba(5, 150, 105, 0.1));
+  color: var(--success-strong, #047857);
+}
+
+.etiquetaAlerta {
+  border-color: transparent;
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  color: var(--warning-strong, #a85a05);
+}
+
+.etiquetaPeligro {
+  border-color: transparent;
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--danger, #dc2626);
+}
+
+.etiquetaInfo {
+  border-color: transparent;
+  background: var(--info-soft, rgba(37, 99, 235, 0.1));
+  color: var(--info-strong, #1d4ed8);
+}
+
+.etiquetaMarca {
+  border-color: transparent;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+/* ── Esqueleto y vacío ───────────────────────────────────────────── */
+
+.esqueletoFila {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.esqueletoFila:last-child {
+  border-bottom: 0;
+}
+
+.esqueleto {
+  display: block;
+  border-radius: 6px;
+  background: var(--m2-hover);
+}
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 56px 24px;
+}
+
+.vacioIcono {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.vacioTitulo {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--m2-texto);
+}
+
+.vacioTexto {
+  max-width: 420px;
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+.vacioAccion {
+  margin-top: 18px;
+}
+
+/* ── Velo y diálogo (portal) ─────────────────────────────────────── */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 5, 10, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.dialogo {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow: hidden;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px -10px rgba(15, 10, 30, 0.25), 0 8px 20px -8px rgba(15, 10, 30, 0.15);
+  color: var(--m2-texto);
+}
+
+.dialogoChico {
+  max-width: 400px;
+}
+
+.dialogoCabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.dialogoTitulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
+  color: var(--m2-texto);
+}
+
+.dialogoCuerpo {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.dialogoPie {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--m2-borde);
+  background: var(--m2-n1-fondo);
+}
+
+.dialogoTexto {
+  margin: 0;
+  font-size: 13px;
+  color: var(--m2-texto-2);
+}
+
+/* ── Formulario ──────────────────────────────────────────────────── */
+
+.campoGrupo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.dosColumnas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.etiquetaCampo {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--m2-texto-2);
+}
+
+.obligatorio {
+  margin-left: 2px;
+  color: var(--m2-activo);
+}
+
+.campo {
+  width: 100%;
+  height: 38px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--m2-buscador-fondo);
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: box-shadow 0.12s, border-color 0.12s;
+}
+
+.campo::placeholder {
+  color: var(--m2-texto-3);
+}
+
+.campo:focus {
+  border-color: transparent;
+  box-shadow: var(--m2-foco);
+}
+
+.campoArea {
+  height: auto;
+  min-height: 120px;
+  padding: 9px 11px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+select.campo {
+  cursor: pointer;
+}
+
+/* globals.css pinta TODO input/textarea/select en oscuro con !important;
+   estos van sobre su caja, igual que hace el buscador del menú. */
+:global(.dark) .campo {
+  background-color: var(--m2-buscador-fondo) !important;
+  border-color: transparent !important;
+  color: var(--m2-texto) !important;
+}
+
+:global(.dark) .campo::placeholder {
+  color: var(--m2-texto-3) !important;
+}
+
+.contador {
+  margin-top: 4px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--m2-texto-3);
+}
+
+.adjuntos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adjunto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 9px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto-3);
+}
+
+.adjuntoNombre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--m2-texto);
+}
+
+.adjuntoTamano {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+}
+
+.adjuntoQuitar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .adjuntoQuitar:hover:not(:disabled) {
+    background: var(--m2-hover);
+    color: var(--danger, #dc2626);
+  }
+}
+
+.subiendo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+.ocultoInput {
+  display: none;
+}
+
+/* ── Ticket: cabecera ────────────────────────────────────────────── */
+
+.ticket {
+  max-width: 980px;
+}
+
+.ticketCabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+}
+
+.ticketCabeceraTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.ticketFolioFila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ticketAsunto {
+  margin: 6px 0 0;
+  font-size: clamp(17px, 1.5vw, 21px);
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  color: var(--m2-texto);
+}
+
+.ticketMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.ticketFecha {
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+/* ── Ticket: hilo ────────────────────────────────────────────────── */
+
+.hilo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 0;
+}
+
+.hiloVacio {
+  margin: 0;
+  padding: 24px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+.mensaje {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mensajeClinica {
+  justify-content: flex-end;
+}
+
+.mensajeSistema {
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.mensajeSistemaTexto {
+  max-width: 65%;
+  text-align: center;
+}
+
+.mensajeSistemaTexto p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--m2-texto-3);
+}
+
+.burbuja {
+  max-width: 68%;
+  padding: 10px 14px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  background: var(--m2-tarjeta);
+  box-shadow: var(--m2-sombra);
+}
+
+.mensajeClinica .burbuja {
+  border-color: transparent;
+  border-bottom-right-radius: 6px;
+  background: var(--m2-iniciales-fondo);
+}
+
+.mensajeSoporte .burbuja {
+  border-bottom-left-radius: 6px;
+}
+
+.burbujaAutor {
+  margin: 0 0 3px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--m2-texto-2);
+}
+
+.mensajeClinica .burbujaAutor {
+  color: var(--m2-iniciales-texto);
+}
+
+.burbujaTexto {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--m2-texto);
+}
+
+.burbujaHora {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--m2-texto-3);
+}
+
+.mensajeClinica .burbujaHora {
+  text-align: right;
+}
+
+.burbujaAdjuntos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Avatares: el de soporte con las iniciales del menú, el de la clínica con
+   el violeta del avatar del usuario. */
+.avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  margin-top: 2px;
+  border-radius: 8px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.avatarClinica {
+  border-radius: 50%;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+/* Adjuntos dentro de un mensaje */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 8px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+a.chip:hover {
+  text-decoration: underline;
+}
+
+.chipApagado {
+  color: var(--m2-texto-3);
+}
+
+.chipNombre {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imagenAdjunta {
+  display: block;
+  max-width: 160px;
+  max-height: 160px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+/* ── Ticket: aviso de resuelto, cerrado y redactor ──────────────── */
+
+.aviso {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--success-soft, rgba(5, 150, 105, 0.1));
+  color: var(--success-strong, #047857);
+}
+
+.avisoTexto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.cerrado {
+  padding: 20px 20px 22px;
+  text-align: center;
+}
+
+.cerradoTitulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--m2-texto);
+}
+
+.cerradoTexto {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.cerradoAccion {
+  margin-top: 14px;
+}
+
+.redactorPegajoso {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  padding: 4px 0 2px;
+  background: var(--bg, var(--m2-n1-fondo));
+}
+
+.pendientes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.redactor {
+  padding: 10px 12px;
+}
+
+.redactorArea {
+  width: 100%;
+  min-height: 56px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}
+
+.redactorArea::placeholder {
+  color: var(--m2-texto-3);
+}
+
+:global(.dark) .redactorArea {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: var(--m2-texto) !important;
+}
+
+:global(.dark) .redactorArea::placeholder {
+  color: var(--m2-texto-3) !important;
+}
+
+.redactorBarra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.redactorIzquierda,
+.redactorDerecha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cifra {
+  font-size: 11px;
+  color: var(--m2-texto-3);
+  white-space: nowrap;
+}
+
+.pista {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--m2-texto-3);
+}
+
+/* ── Estrellas del cierre ────────────────────────────────────────── */
+
+.estrellas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 14px;
+}
+
+.estrella {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+  transition: transform 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .estrella:hover {
+    transform: scale(1.1);
+    background: var(--m2-hover);
+  }
+}
+
+.estrellaLlena {
+  color: var(--warning-strong, #a85a05);
+}
+
+.estrellasTexto {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+/* ── Estados de página del ticket (cargando, no encontrado, error) ─ */
+
+.estado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 50vh;
+  padding: 24px;
+  text-align: center;
+  color: var(--m2-texto-3);
+}
+
+.estadoTitulo {
+  margin: 4px 0 0;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--m2-texto);
+}
+
+.estadoTexto {
+  max-width: 400px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+.estadoAcciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}

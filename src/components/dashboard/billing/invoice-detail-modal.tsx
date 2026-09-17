@@ -20,6 +20,15 @@ import { formatDate } from "@/lib/utils";
 import { fmtMXNdec } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
+// Ropa del diseño nuevo (solo con `rediseno`): tokens del menú de dos niveles
+// y las clases que visten este modal y su familia. Ver factura-rediseno/.
+import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
+import { ConfirmacionFactura } from "@/components/dashboard/factura-rediseno/confirmacion";
+// Una sola ventana (solo con `rediseno`): el cobro y el descuento viven DENTRO
+// del detalle en vez de abrir otro diálogo. Ver factura-un-popup/.
+import { CLASES_UN_POPUP, CLASE_CUERPO_CON_COBRO } from "@/components/dashboard/factura-un-popup/raiz";
+import { useCobro } from "@/components/dashboard/factura-un-popup/use-cobro";
+import { SeccionCobro, DescuentoEnLinea, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
@@ -93,17 +102,35 @@ interface InvoiceDetailModalProps {
    * valor undefined, que sin strictNullChecks compila igual.
    */
   clinicTaxMode: string | null;
+  /**
+   * Interruptor `menu-dos-niveles` de la clínica, leído en el servidor por
+   * quien monta el modal (Caja, la Agenda nueva, el expediente). Con `true`
+   * el detalle y todos sus diálogos van vestidos con el diseño nuevo; con
+   * `false` (el valor por defecto) cada nodo lleva la cadena de clases de
+   * siempre, byte por byte. La LÓGICA no cambia con él: cada botón hace
+   * exactamente lo mismo.
+   */
+  rediseno?: boolean;
 }
 
 type SubAction = null | "refund" | "edit-price" | "discount" | "cancel" | "cfdi";
 
-export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated, initialAction = null, clinicTaxMode }: InvoiceDetailModalProps) {
+export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated, initialAction = null, clinicTaxMode, rediseno = false }: InvoiceDetailModalProps) {
   const t = useT();
   const router = useRouter();
   const confirmDialog = useConfirm();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [sub, setSub] = useState<SubAction>(null);
   const [busy, setBusy] = useState(false);
+  // `cx(vieja, nueva)`: con el interruptor encendido, la clase del diseño
+  // nuevo; apagado, la cadena de siempre tal cual.
+  // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
+  // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
+  const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
+  // «¿Marcar pagada?» y «¿Eliminar borrador?» del diseño nuevo
+  // (factura-rediseno/confirmacion.tsx). Con el interruptor apagado nunca
+  // deja de ser null: sigue el useConfirm global, como siempre.
+  const [confirmacion, setConfirmacion] = useState<null | "mark-paid" | "delete-draft">(null);
 
   // Sub-form state — se resetea al abrir cada sub-modal.
   const [refundAmount, setRefundAmount] = useState("");
@@ -136,6 +163,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // El modal no se desmonta entre facturas: al cambiar de factura limpia el
   // estado de timbrado para no arrastrarlo a otra factura.
   useEffect(() => { setStampedUuid(null); setCfdiId(null); setPueOk(false); setCfdiMismatch(null); }, [invoice?.id]);
+  // La pregunta del diseño nuevo no sobrevive ni a un cambio de factura ni a
+  // un cierre del modal desde fuera: si no, la siguiente apertura saldría con
+  // «¿Marcar pagada?» ya abierto sobre otra factura. Con el interruptor apagado
+  // el estado ya es null y esto no cambia nada.
+  useEffect(() => { setConfirmacion(null); }, [invoice?.id, open]);
 
   // initialAction="cfdi" → abre el sub-form de timbrado al montar. Corre después
   // del reset de arriba (mismo orden de declaración) y se auto-descarta si la
@@ -147,6 +179,28 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     openCfdiForm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialAction, invoice?.id]);
+
+  // UNA SOLA VENTANA (diseño nuevo). Con el interruptor y una factura que se
+  // puede cobrar —las mismas que hoy enseñan «Cobrar ahora» / «Cobrar pago»—
+  // el formulario de la segunda ventana va dentro del detalle, ya desplegado, y
+  // el botón del pie pasa a ser «Registrar pago»: un clic en vez de dos.
+  // `useCobro` hace el MISMO POST que PaymentModal, con el mismo cuerpo, y al
+  // terminar corre el mismo handlePaymentSuccess. Con el interruptor apagado
+  // `cobrable` es false: el hook no hace nada y sigue saliendo PaymentModal.
+  const cobrable = rediseno && !!invoice && ["DRAFT", "PENDING", "PARTIAL", "OVERDUE"].includes(invoice.status);
+  const cobro = useCobro({
+    abierta: open,
+    factura: cobrable && invoice ? { id: invoice.id, balance: invoice.balance } : null,
+    confirmarAntes: invoice?.status === "DRAFT",
+    alOcupar: setBusy,
+    alCobrar: handlePaymentSuccess,
+  });
+  // El descuento en línea arranca con el de la factura, igual que openSub()
+  // al abrir su diálogo. Solo en el diseño nuevo.
+  useEffect(() => {
+    if (cobrable && open) setDiscountAmt(String(invoice?.discount ?? 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cobrable, open, invoice?.id, invoice?.discount]);
 
   if (!invoice) return null;
 
@@ -164,6 +218,20 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // CFDI: uuid efectivo (prop o timbrado optimista) y si aplica facturar.
   const effectiveUuid  = stampedUuid ?? invoice.cfdiUuid ?? null;
   const canInvoiceCfdi = !isDraft && !isCancelled;
+
+  // Una sola ventana: la ropa extra del detalle y el botón que cobra.
+  const ropaUnPopup = cobrable ? CLASES_UN_POPUP : "";
+  const ropaCuerpo  = cobrable ? CLASE_CUERPO_CON_COBRO : "";
+  // El descuento se ofrece donde hoy sale su botón: borrador, o pendiente sin pagos.
+  const admiteDescuento = cobrable && (isDraft || canEditPrice);
+  // Escrito pero sin aplicar: cobrar así lo ignoraría, así que «Registrar
+  // pago» espera a que se aplique (o se deje como estaba).
+  const descuentoPendiente = admiteDescuento && Number(discountAmt || 0) !== (invoice.discount ?? 0);
+  const botonRegistrarPago = (
+    <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={cobro.submit} disabled={busy || cobro.saving || cobro.isInvalid || descuentoPendiente}>
+      {cobro.saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: cobro.amountNum ? " · " + fmtMXNdec(cobro.amountNum) : "" })}
+    </ButtonNew>
+  );
 
   function openSub(which: Exclude<SubAction, null>) {
     setRefundAmount(String(invoice?.paid ?? 0));
@@ -351,14 +419,22 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     }
   }
 
+  // La llamada al servidor de «Marcar pagada»: la MISMA con y sin interruptor.
+  function ejecutarMarkPaid() {
+    return callApi("/mark-paid", "POST", {}, t("clinical.invoiceDetail.markPaidSuccess"));
+  }
+
   async function handleMarkPaid() {
+    // Diseño nuevo: pregunta ConfirmacionFactura (abajo) y su botón corre
+    // ejecutarMarkPaid, lo mismo que aquí tras el confirm de siempre.
+    if (rediseno) { setConfirmacion("mark-paid"); return; }
     if (!(await confirmDialog({
       title: t("clinical.invoiceDetail.markPaid"),
       description: t("clinical.invoiceDetail.markPaidConfirm", { balance: fmtMXNdec(invoice!.balance) }),
       confirmText: t("clinical.invoiceDetail.markPaid"),
       cancelText: t("common.cancel"),
     }))) return;
-    await callApi("/mark-paid", "POST", {}, t("clinical.invoiceDetail.markPaidSuccess"));
+    await ejecutarMarkPaid();
   }
 
   // Aviso de saldo por WhatsApp. No muta la factura: no se llama onMutated ni
@@ -433,8 +509,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     }
   }
 
+  // La llamada al servidor de «Eliminar borrador»: la MISMA con y sin interruptor.
+  function ejecutarDeleteDraft() {
+    return callApi("", "DELETE", undefined, t("clinical.invoiceDetail.draftDeleted"));
+  }
+
   async function handleDeleteDraft() {
     if (!invoice) return;
+    if (rediseno) { setConfirmacion("delete-draft"); return; }
     if (!(await confirmDialog({
       title: t("clinical.invoiceDetail.deleteDraft"),
       description: t("clinical.invoiceDetail.deleteDraftConfirm", { number: invoice.invoiceNumber }),
@@ -442,7 +524,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       cancelText: t("common.cancel"),
       variant: "danger",
     }))) return;
-    await callApi("", "DELETE", undefined, t("clinical.invoiceDetail.draftDeleted"));
+    await ejecutarDeleteDraft();
   }
 
   function handlePaymentSuccess() {
@@ -455,10 +537,10 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-        <DialogContent className="max-w-lg bg-card text-foreground border border-border">
-          <DialogHeader>
-            <DialogTitle className="text-foreground font-bold flex items-center gap-3 flex-wrap">
-              <span className="font-mono">{invoice.invoiceNumber}</span>
+        <DialogContent onOpenAutoFocus={cobrable ? enfocarMontoAlAbrir : undefined} className={cx("max-w-lg bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${ropaUnPopup}`)}>
+          <DialogHeader className={rediseno ? c.cabecera : undefined}>
+            <DialogTitle className={cx("text-foreground font-bold flex items-center gap-3 flex-wrap", c.titulo)}>
+              <span className={cx("font-mono", c.folio)}>{invoice.invoiceNumber}</span>
               <BadgeNew tone={s.tone} dot>{t(s.labelKey)}</BadgeNew>
               {/* Timbrada: el mismo badge de la lista (Caja y ficha) para que el
                   estado fiscal se lea de inmediato al abrir la factura. */}
@@ -466,49 +548,49 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             </DialogTitle>
           </DialogHeader>
 
-          <div className="px-6 py-4 space-y-4 flex-1 overflow-y-auto min-h-0">
+          <div className={cx("px-6 py-4 space-y-4 flex-1 overflow-y-auto min-h-0", `${c.cuerpo} ${ropaCuerpo}`)}>
             {/* Resumen — usa tokens de tema (bg-muted/40, border-border, text-muted-foreground) */}
-            <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1.5 text-foreground">
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.patient")}</span><span className="font-medium">{patientName}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("common.date")}</span><span>{formatDate(invoice.createdAt)}</span></div>
+            <div className={cx("bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1.5 text-foreground", c.resumen)}>
+              <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.patient")}</span><span className={cx("font-medium", c.valor)}>{patientName}</span></div>
+              <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("common.date")}</span><span className={rediseno ? c.valor : undefined}>{formatDate(invoice.createdAt)}</span></div>
               {(invoice.discount ?? 0) > 0 && (
                 <>
-                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.subtotal")}</span><span>{fmtMXNdec(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.discount")}</span><span style={{ color: "var(--warning)" }}>−{fmtMXNdec(invoice.discount ?? 0)}</span></div>
+                  <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.subtotal")}</span><span className={rediseno ? c.cifra : undefined}>{fmtMXNdec(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></div>
+                  <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.discount")}</span><span className={rediseno ? `${c.cifra} ${c.cifraAlerta}` : undefined} style={rediseno ? undefined : { color: "var(--warning)" }}>−{fmtMXNdec(invoice.discount ?? 0)}</span></div>
                 </>
               )}
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("common.total")}</span><span className="font-bold">{fmtMXNdec(invoice.total)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.paid")}</span><span className="font-bold" style={{ color: "var(--success)" }}>{fmtMXNdec(invoice.paid)}</span></div>
+              <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("common.total")}</span><span className={cx("font-bold", `${c.cifra} ${c.cifraTotal}`)}>{fmtMXNdec(invoice.total)}</span></div>
+              <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.paid")}</span><span className={cx("font-bold", `${c.cifra} ${c.cifraExito}`)} style={rediseno ? undefined : { color: "var(--success)" }}>{fmtMXNdec(invoice.paid)}</span></div>
               {/* Saldo. Cancelar NO pone `balance` a 0 en BD (solo cambia el
                   status y exige paid == 0), así que una factura anulada llega
                   aquí con balance == total y se pintaba en rojo como si se
                   debiera. En cancelada el saldo exigible es 0: se muestra $0 en
                   neutro. El Total de arriba sigue diciendo lo que se facturó. */}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t("clinical.invoiceDetail.balance")}</span>
+              <div className={cx("flex justify-between", c.resumenFila)}>
+                <span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.balance")}</span>
                 <span
-                  className={isCancelled ? "font-bold text-muted-foreground" : "font-bold"}
-                  style={isCancelled ? undefined : { color: "var(--danger)" }}
+                  className={isCancelled ? cx("font-bold text-muted-foreground", `${c.cifra} ${c.cifraApagada}`) : cx("font-bold", `${c.cifra} ${c.cifraPeligro}`)}
+                  style={isCancelled || rediseno ? undefined : { color: "var(--danger)" }}
                 >
                   {fmtMXNdec(isCancelled ? 0 : invoice.balance)}
                 </span>
               </div>
               {invoice.paymentMethod && (
-                <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.method")}</span><span className="capitalize">{METHOD_LABEL_KEYS[invoice.paymentMethod] ? t(METHOD_LABEL_KEYS[invoice.paymentMethod]) : invoice.paymentMethod}</span></div>
+                <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.method")}</span><span className={cx("capitalize", `capitalize ${c.valor}`)}>{METHOD_LABEL_KEYS[invoice.paymentMethod] ? t(METHOD_LABEL_KEYS[invoice.paymentMethod]) : invoice.paymentMethod}</span></div>
               )}
               {effectiveUuid && (
-                <div className="flex justify-between gap-2 items-center">
-                  <span className="text-muted-foreground">CFDI UUID</span>
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-[10px] truncate">{effectiveUuid}</span>
+                <div className={cx("flex justify-between gap-2 items-center", c.resumenFila)}>
+                  <span className={cx("text-muted-foreground", c.rotulo)}>CFDI UUID</span>
+                  <span className={cx("flex items-center gap-2 min-w-0", c.uuid)}>
+                    <span className={cx("font-mono text-[10px] truncate", c.uuidTexto)}>{effectiveUuid}</span>
                     {/* Enlace directo: el CFDI se ve sin tener que buscar los
                         botones de descarga del pie del modal. */}
                     <button
                       type="button"
                       onClick={() => downloadCfdi("pdf")}
                       disabled={busy}
-                      className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-bold underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
-                      style={{ color: "var(--info, var(--brand))" }}
+                      className={cx("flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-bold underline underline-offset-2 hover:opacity-80 disabled:opacity-50", c.enlace)}
+                      style={rediseno ? undefined : { color: "var(--info, var(--brand))" }}
                     >
                       <Download size={11} aria-hidden /> {t("clinical.invoiceDetail.viewCfdi")}
                     </button>
@@ -516,9 +598,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 </div>
               )}
               {isCancelled && invoice.notes && (
-                <div className="pt-2 border-t border-border mt-2">
-                  <span className="text-muted-foreground text-[10px] uppercase tracking-wide">{t("common.notes")}</span>
-                  <p className="text-[11px] mt-1 whitespace-pre-line">{invoice.notes}</p>
+                <div className={cx("pt-2 border-t border-border mt-2", c.resumenNotas)}>
+                  <span className={cx("text-muted-foreground text-[10px] uppercase tracking-wide", c.seccionTitulo)}>{t("common.notes")}</span>
+                  <p className={cx("text-[11px] mt-1 whitespace-pre-line", c.notasTexto)}>{invoice.notes}</p>
                 </div>
               )}
             </div>
@@ -526,17 +608,17 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {/* Conceptos */}
             {Array.isArray(invoice.items) && invoice.items.length > 0 && (
               <div>
-                <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">{t("clinical.invoiceDetail.lineItems")}</h3>
-                <div className="bg-card border border-border rounded-lg divide-y divide-border">
+                <h3 className={cx("text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5", c.seccionTitulo)}>{t("clinical.invoiceDetail.lineItems")}</h3>
+                <div className={cx("bg-card border border-border rounded-lg divide-y divide-border", c.lista)}>
                   {invoice.items.map((it: any, i: number) => (
-                    <div key={i} className="px-3 py-2 flex items-center justify-between text-xs">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate text-foreground">{it.description ?? it.name ?? t("clinical.invoiceDetail.lineItemFallback", { n: i + 1 })}</div>
+                    <div key={i} className={cx("px-3 py-2 flex items-center justify-between text-xs", c.fila)}>
+                      <div className={cx("min-w-0", c.filaTextos)}>
+                        <div className={cx("font-medium truncate text-foreground", c.filaTitulo)}>{it.description ?? it.name ?? t("clinical.invoiceDetail.lineItemFallback", { n: i + 1 })}</div>
                         {(it.quantity ?? 1) !== 1 && (
-                          <div className="text-[10px] text-muted-foreground">{it.quantity} × {fmtMXNdec(it.unitPrice ?? 0)}</div>
+                          <div className={cx("text-[10px] text-muted-foreground", c.filaDetalle)}>{it.quantity} × {fmtMXNdec(it.unitPrice ?? 0)}</div>
                         )}
                       </div>
-                      <div className="font-mono font-bold text-foreground">{fmtMXNdec(it.total ?? 0)}</div>
+                      <div className={cx("font-mono font-bold text-foreground", c.cifra)}>{fmtMXNdec(it.total ?? 0)}</div>
                     </div>
                   ))}
                 </div>
@@ -546,23 +628,23 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {/* Pagos registrados — refunds aparecen con method="refund" en rojo */}
             {Array.isArray(invoice.payments) && invoice.payments.length > 0 && (
               <div>
-                <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">{t("clinical.invoiceDetail.movements")}</h3>
-                <div className="bg-card border border-border rounded-lg divide-y divide-border">
+                <h3 className={cx("text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5", c.seccionTitulo)}>{t("clinical.invoiceDetail.movements")}</h3>
+                <div className={cx("bg-card border border-border rounded-lg divide-y divide-border", c.lista)}>
                   {invoice.payments.map((p: any) => {
                     const isRefund = p.method === "refund";
                     return (
-                      <div key={p.id} className="px-3 py-2 flex items-center justify-between text-xs">
-                        <div className="min-w-0">
-                          <div className={`font-medium ${isRefund ? "" : "text-foreground"}`} style={isRefund ? { color: "var(--danger)" } : undefined}>
+                      <div key={p.id} className={cx("px-3 py-2 flex items-center justify-between text-xs", c.fila)}>
+                        <div className={cx("min-w-0", c.filaTextos)}>
+                          <div className={rediseno ? `${c.filaTitulo} ${isRefund ? c.cifraPeligro : ""}` : `font-medium ${isRefund ? "" : "text-foreground"}`} style={isRefund && !rediseno ? { color: "var(--danger)" } : undefined}>
                             {METHOD_LABEL_KEYS[p.method] ? t(METHOD_LABEL_KEYS[p.method]) : (p.method ?? "—")}
                           </div>
-                          <div className="text-[10px] text-muted-foreground">
+                          <div className={cx("text-[10px] text-muted-foreground", c.filaDetalle)}>
                             {formatDate(p.paidAt)}
                             {p.reference ? ` · ${p.reference}` : ""}
                             {p.notes ? ` · ${p.notes}` : ""}
                           </div>
                         </div>
-                        <div className="font-mono font-bold" style={{ color: isRefund ? "var(--danger)" : "var(--success)" }}>
+                        <div className={cx("font-mono font-bold", `${c.cifra} ${isRefund ? c.cifraPeligro : c.cifraExito}`)} style={rediseno ? undefined : { color: isRefund ? "var(--danger)" : "var(--success)" }}>
                           {isRefund ? "−" : ""}{fmtMXNdec(p.amount)}
                         </div>
                       </div>
@@ -571,22 +653,48 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 </div>
               </div>
             )}
+
+            {/* Una sola ventana: el cobro (y el descuento) aquí dentro, ya
+                desplegado. Solo con el interruptor; sin él esto no pinta nada. */}
+            {cobrable && (
+              <SeccionCobro
+                cobro={cobro}
+                bloqueado={busy}
+                descuento={admiteDescuento ? (
+                  <DescuentoEnLinea
+                    subtotal={invoice.subtotal ?? invoice.total + (invoice.discount ?? 0)}
+                    valor={discountAmt}
+                    alCambiar={setDiscountAmt}
+                    alAplicar={handleDiscount}
+                    ocupado={busy}
+                    pendiente={descuentoPendiente}
+                  />
+                ) : undefined}
+              />
+            )}
           </div>
 
-          <DialogFooter className="flex flex-wrap gap-2">
+          <DialogFooter className={cx("flex flex-wrap gap-2", c.pie)}>
             {/* BORRADOR — antes de cobrar requiere "Confirmar". Cobrar ahora
                 hace ambos pasos (confirm + payment) en un click. */}
             {isDraft && (
               <>
+                {/* Diseño nuevo: el formulario ya está arriba, así que este
+                    botón registra el pago (confirmando antes el borrador). */}
+                {rediseno ? botonRegistrarPago : (
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={handleConfirmAndPay} disabled={busy}>
                   {t("clinical.invoiceDetail.chargeNow", { amount: fmtMXNdec(invoice.total) })}
                 </ButtonNew>
+                )}
                 <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => openSub("edit-price")} disabled={busy}>
                   {t("clinical.invoiceDetail.editPrice")}
                 </ButtonNew>
+                {/* Diseño nuevo: el descuento es una fila de la sección de cobro. */}
+                {!rediseno && (
                 <ButtonNew variant="secondary" icon={<Tag size={14} aria-hidden />} onClick={() => openSub("discount")} disabled={busy}>
                   {t("clinical.invoiceDetail.applyDiscount")}
                 </ButtonNew>
+                )}
                 <ButtonNew variant="danger" icon={<Trash2 size={14} aria-hidden />} onClick={handleDeleteDraft} disabled={busy}>
                   {t("clinical.invoiceDetail.deleteDraft")}
                 </ButtonNew>
@@ -596,9 +704,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {/* PENDIENTE / PARCIAL */}
             {isPending && (
               <>
+                {rediseno ? botonRegistrarPago : (
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={() => setPaymentOpen(true)} disabled={busy}>
                   {t("clinical.invoiceDetail.collectPayment", { amount: fmtMXNdec(invoice.balance) })}
                 </ButtonNew>
+                )}
                 <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
                   {t("clinical.invoiceDetail.markPaid")}
                 </ButtonNew>
@@ -610,9 +720,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                     <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => openSub("edit-price")} disabled={busy}>
                       {t("clinical.invoiceDetail.editPrice")}
                     </ButtonNew>
+                    {!rediseno && (
                     <ButtonNew variant="secondary" icon={<Tag size={14} aria-hidden />} onClick={() => openSub("discount")} disabled={busy}>
                       {t("clinical.invoiceDetail.applyDiscount")}
                     </ButtonNew>
+                    )}
                   </>
                 )}
                 {invoice.paid === 0 && (
@@ -670,17 +782,17 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
       {/* Sub-modal: Reembolsar */}
       <Dialog open={sub === "refund"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
-        <DialogContent className="max-w-md bg-card text-foreground border border-border">
-          <DialogHeader>
-            <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.refundInvoiceTitle", { number: invoice.invoiceNumber })}</DialogTitle>
+        <DialogContent className={cx("max-w-md bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalEstrecho}`)}>
+          <DialogHeader className={rediseno ? c.cabecera : undefined}>
+            <DialogTitle className={cx("text-foreground font-bold", c.titulo)}>{t("clinical.invoiceDetail.refundInvoiceTitle", { number: invoice.invoiceNumber })}</DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
-            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.totalPaidLabel")} <span className="font-mono font-bold text-foreground">{fmtMXNdec(invoice.paid)}</span></p>
-            <div className="space-y-1.5">
+          <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
+            <p className={cx("text-xs text-muted-foreground", c.texto)}>{t("clinical.invoiceDetail.totalPaidLabel")} <span className={cx("font-mono font-bold text-foreground", c.cifra)}>{fmtMXNdec(invoice.paid)}</span></p>
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.refundAmountLabel")}</Label>
               <Input type="number" step="0.01" min={0} value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} autoFocus />
             </div>
-            <div className="space-y-1.5">
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.reason")}</Label>
               <textarea
                 className="input-new"
@@ -690,7 +802,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
             <ButtonNew variant="danger" onClick={handleRefund} disabled={busy}>
               {busy ? t("clinical.invoiceDetail.processing") : t("clinical.invoiceDetail.refundAmountBtn", { amount: fmtMXNdec(Number(refundAmount) || 0) })}
@@ -701,19 +813,19 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
       {/* Sub-modal: Editar precio */}
       <Dialog open={sub === "edit-price"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
-        <DialogContent className="max-w-md bg-card text-foreground border border-border">
-          <DialogHeader>
-            <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.editPrice")}</DialogTitle>
+        <DialogContent className={cx("max-w-md bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalEstrecho}`)}>
+          <DialogHeader className={rediseno ? c.cabecera : undefined}>
+            <DialogTitle className={cx("text-foreground font-bold", c.titulo)}>{t("clinical.invoiceDetail.editPrice")}</DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
-            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentTotalLabel")} <span className="font-mono font-bold text-foreground">{fmtMXNdec(invoice.total)}</span></p>
-            <div className="space-y-1.5">
+          <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
+            <p className={cx("text-xs text-muted-foreground", c.texto)}>{t("clinical.invoiceDetail.currentTotalLabel")} <span className={cx("font-mono font-bold text-foreground", c.cifra)}>{fmtMXNdec(invoice.total)}</span></p>
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.newTotalLabel")}</Label>
               <Input type="number" step="0.01" min={0} value={editTotal} onChange={(e) => setEditTotal(e.target.value)} autoFocus />
             </div>
-            <p className="text-[11px] text-muted-foreground">{t("clinical.invoiceDetail.editPriceHelper")}</p>
+            <p className={cx("text-[11px] text-muted-foreground", c.ayuda)}>{t("clinical.invoiceDetail.editPriceHelper")}</p>
           </div>
-          <DialogFooter>
+          <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
             <ButtonNew variant="primary" onClick={handleEditPrice} disabled={busy}>{busy ? t("common.saving") : t("clinical.invoiceDetail.savePrice")}</ButtonNew>
           </DialogFooter>
@@ -722,19 +834,19 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
       {/* Sub-modal: Aplicar descuento */}
       <Dialog open={sub === "discount"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
-        <DialogContent className="max-w-md bg-card text-foreground border border-border">
-          <DialogHeader>
-            <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.applyDiscount")}</DialogTitle>
+        <DialogContent className={cx("max-w-md bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalEstrecho}`)}>
+          <DialogHeader className={rediseno ? c.cabecera : undefined}>
+            <DialogTitle className={cx("text-foreground font-bold", c.titulo)}>{t("clinical.invoiceDetail.applyDiscount")}</DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
-            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentSubtotalLabel")} <span className="font-mono font-bold text-foreground">{fmtMXNdec(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></p>
-            <div className="space-y-1.5">
+          <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
+            <p className={cx("text-xs text-muted-foreground", c.texto)}>{t("clinical.invoiceDetail.currentSubtotalLabel")} <span className={cx("font-mono font-bold text-foreground", c.cifra)}>{fmtMXNdec(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></p>
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.discountMxnLabel")}</Label>
               <Input type="number" step="0.01" min={0} value={discountAmt} onChange={(e) => setDiscountAmt(e.target.value)} autoFocus />
             </div>
-            <p className="text-[11px] text-muted-foreground">{t("clinical.invoiceDetail.discountHelper")}</p>
+            <p className={cx("text-[11px] text-muted-foreground", c.ayuda)}>{t("clinical.invoiceDetail.discountHelper")}</p>
           </div>
-          <DialogFooter>
+          <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
             <ButtonNew variant="primary" onClick={handleDiscount} disabled={busy}>{busy ? t("clinical.invoiceDetail.applying") : t("clinical.invoiceDetail.applyDiscount")}</ButtonNew>
           </DialogFooter>
@@ -743,13 +855,13 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
       {/* Sub-modal: Cancelar factura */}
       <Dialog open={sub === "cancel"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
-        <DialogContent className="max-w-md bg-card text-foreground border border-border">
-          <DialogHeader>
-            <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.cancelInvoiceTitle", { number: invoice.invoiceNumber })}</DialogTitle>
+        <DialogContent className={cx("max-w-md bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalEstrecho}`)}>
+          <DialogHeader className={rediseno ? c.cabecera : undefined}>
+            <DialogTitle className={cx("text-foreground font-bold", c.titulo)}>{t("clinical.invoiceDetail.cancelInvoiceTitle", { number: invoice.invoiceNumber })}</DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
-            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.cancelWarning")}</p>
-            <div className="space-y-1.5">
+          <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
+            <p className={cx("text-xs text-muted-foreground", c.texto)}>{t("clinical.invoiceDetail.cancelWarning")}</p>
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.reasonOptional")}</Label>
               <textarea
                 className="input-new"
@@ -759,7 +871,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.back")}</ButtonNew>
             <ButtonNew variant="danger" onClick={handleCancel} disabled={busy}>
               {busy ? t("clinical.invoiceDetail.cancelling") : t("clinical.invoiceDetail.confirmCancellation")}
@@ -770,13 +882,13 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
       {/* Sub-modal: Facturar CFDI — datos fiscales del receptor */}
       <Dialog open={sub === "cfdi"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
-        <DialogContent className="max-w-md bg-card text-foreground border border-border">
-          <DialogHeader>
-            <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.cfdiFormTitle")}</DialogTitle>
+        <DialogContent className={cx("max-w-md bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalEstrecho}`)}>
+          <DialogHeader className={rediseno ? c.cabecera : undefined}>
+            <DialogTitle className={cx("text-foreground font-bold", c.titulo)}>{t("clinical.invoiceDetail.cfdiFormTitle")}</DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
+          <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
+            <div className={cx("flex items-center justify-between gap-2", c.entreDos)}>
+              <p className={cx("text-xs text-muted-foreground", c.texto)}>
                 {cfdiLive === null
                   ? t("clinical.invoiceDetail.cfdiFormHelpNeutral")
                   : cfdiLive
@@ -784,15 +896,15 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                     : t("clinical.invoiceDetail.cfdiFormHelp")}
               </p>
               {cfdiQuota && (
-                <span className="text-[11px] whitespace-nowrap" style={{ color: "var(--text-3)" }}>
+                <span className={cx("text-[11px] whitespace-nowrap", c.contador)} style={rediseno ? undefined : { color: "var(--text-3)" }}>
                   {t("clinical.invoiceDetail.cfdiMonthCounter", { used: cfdiQuota.used, included: cfdiQuota.included })}
                 </span>
               )}
             </div>
             {cfdiMismatch && (
               <div
-                className="rounded-lg px-3 py-2 text-[11px] space-y-2"
-                style={{
+                className={cx("rounded-lg px-3 py-2 text-[11px] space-y-2", `${c.aviso} ${c.avisoPeligro}`)}
+                style={rediseno ? undefined : {
                   background: "var(--danger-soft, rgba(225,29,72,0.08))",
                   border: "1px solid var(--danger)",
                   color: "var(--danger)",
@@ -808,8 +920,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             )}
             {invoice.balance > 0 && (
               <div
-                className="rounded-lg px-3 py-2 text-[11px] space-y-2"
-                style={{
+                className={cx("rounded-lg px-3 py-2 text-[11px] space-y-2", `${c.aviso} ${c.avisoAlerta}`)}
+                style={rediseno ? undefined : {
                   background: "var(--warning-soft)",
                   border: "1px solid var(--warning-border-strong)",
                   color: "var(--warning-strong)",
@@ -818,51 +930,51 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 <p>{t("clinical.invoiceDetail.cfdiBalanceWarning")}</p>
                 {/* Bloqueo suave: sin esta confirmación explícita el server
                     rechaza el timbrado de facturas con saldo (409 CFDI_UNPAID_PUE). */}
-                <label className="flex items-start gap-2 cursor-pointer font-medium">
-                  <input type="checkbox" className="mt-0.5" checked={pueOk} onChange={(e) => setPueOk(e.target.checked)} />
+                <label className={cx("flex items-start gap-2 cursor-pointer font-medium", c.casilla)}>
+                  <input type="checkbox" className={rediseno ? undefined : "mt-0.5"} checked={pueOk} onChange={(e) => setPueOk(e.target.checked)} />
                   <span>{t("clinical.invoiceDetail.cfdiUnpaidConfirm")}</span>
                 </label>
               </div>
             )}
-            <div className="space-y-1.5">
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalRfc")}</Label>
               <Input value={fiscal.rfc} onChange={(e) => setFiscal(f => ({ ...f, rfc: e.target.value.toUpperCase() }))}
-                className="font-mono uppercase" maxLength={13} autoFocus />
+                className={cx("font-mono uppercase", "uppercase")} maxLength={13} autoFocus />
             </div>
-            <div className="space-y-1.5">
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalName")}</Label>
               <Input value={fiscal.nombre} onChange={(e) => setFiscal(f => ({ ...f, nombre: e.target.value }))} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            <div className={cx("grid grid-cols-2 gap-3", c.rejilla2)}>
+              <div className={cx("space-y-1.5", c.campo)}>
                 <Label>{t("clinical.invoiceDetail.fiscalRegimen")}</Label>
                 <select className="input-new"
                   value={fiscal.regimen} onChange={(e) => setFiscal(f => ({ ...f, regimen: e.target.value }))}>
                   {REGIMENES_FISCALES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.descripcion}</option>)}
                 </select>
               </div>
-              <div className="space-y-1.5">
+              <div className={cx("space-y-1.5", c.campo)}>
                 <Label>{t("clinical.invoiceDetail.fiscalCp")}</Label>
                 <Input value={fiscal.cp} onChange={(e) => setFiscal(f => ({ ...f, cp: e.target.value.replace(/\D/g, "") }))}
-                  className="font-mono" maxLength={5} />
+                  className={rediseno ? undefined : "font-mono"} maxLength={5} />
               </div>
             </div>
-            <div className="space-y-1.5">
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalUso")}</Label>
               <select className="input-new"
                 value={fiscal.uso} onChange={(e) => setFiscal(f => ({ ...f, uso: e.target.value }))}>
                 {USOS_CFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} — {u.descripcion}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            <div className={cx("grid grid-cols-2 gap-3", c.rejilla2)}>
+              <div className={cx("space-y-1.5", c.campo)}>
                 <Label>{t("clinical.invoiceDetail.cfdiPaymentFormLabel")}</Label>
                 <select className="input-new"
                   value={fiscal.formaPago} onChange={(e) => setFiscal(f => ({ ...f, formaPago: e.target.value }))}>
                   {FORMAS_PAGO_SAT.map(fp => <option key={fp.clave} value={fp.clave}>{fp.clave} — {fp.descripcion}</option>)}
                 </select>
               </div>
-              <div className="space-y-1.5">
+              <div className={cx("space-y-1.5", c.campo)}>
                 <Label>{t("clinical.invoiceDetail.cfdiTaxesLabel")}</Label>
                 <select className="input-new"
                   value={fiscal.impuestos}
@@ -872,12 +984,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 </select>
               </div>
             </div>
-            <div className="space-y-1.5">
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalEmail")}</Label>
               <Input type="email" value={fiscal.email} onChange={(e) => setFiscal(f => ({ ...f, email: e.target.value }))} />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
             <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || (invoice.balance > 0 && !pueOk)}>
               {busy ? t("clinical.invoiceDetail.stamping") : t("clinical.invoiceDetail.stampCfdiBtn")}
@@ -886,8 +998,33 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
         </DialogContent>
       </Dialog>
 
+      {/* «¿Marcar pagada?» / «¿Eliminar borrador?» con el diseño nuevo. Solo se
+          monta con el interruptor; apagado, la pregunta la sigue haciendo el
+          useConfirm global. El botón de aceptar corre la MISMA llamada. */}
+      {rediseno && (
+        <ConfirmacionFactura
+          abierta={confirmacion !== null}
+          titulo={confirmacion === "delete-draft" ? t("clinical.invoiceDetail.deleteDraft") : t("clinical.invoiceDetail.markPaid")}
+          descripcion={confirmacion === "delete-draft"
+            ? t("clinical.invoiceDetail.deleteDraftConfirm", { number: invoice.invoiceNumber })
+            : t("clinical.invoiceDetail.markPaidConfirm", { balance: fmtMXNdec(invoice.balance) })}
+          textoConfirmar={confirmacion === "delete-draft" ? t("clinical.invoiceDetail.deleteDraft") : t("clinical.invoiceDetail.markPaid")}
+          textoCancelar={t("common.cancel")}
+          peligro={confirmacion === "delete-draft"}
+          ocupado={busy}
+          onCancelar={() => setConfirmacion(null)}
+          onConfirmar={() => {
+            const cual = confirmacion;
+            setConfirmacion(null);
+            if (cual === "mark-paid") void ejecutarMarkPaid();
+            if (cual === "delete-draft") void ejecutarDeleteDraft();
+          }}
+        />
+      )}
+
       {/* PaymentModal compartido — el de Commit 1 */}
       <PaymentModal
+        rediseno={rediseno}
         open={paymentOpen}
         invoice={paymentOpen ? {
           id: invoice.id,

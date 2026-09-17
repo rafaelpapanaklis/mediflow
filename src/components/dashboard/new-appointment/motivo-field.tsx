@@ -2,6 +2,8 @@
 
 import { Pen } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { useAparienciaNueva } from "./apariencia";
+import nc from "./nueva-cita.module.css";
 
 interface Props {
   value: string;
@@ -17,6 +19,39 @@ interface Props {
  */
 export function MotivoField({ value, onChange, presets, error }: Props) {
   const t = useT();
+  const nueva = useAparienciaNueva();
+  if (nueva) {
+    return (
+      <div>
+        <div className={`${nc.control} ${nc.controlConIcono} ${error ? nc.controlError : ""}`}>
+          <Pen size={15} aria-hidden className={nc.controlIcono} />
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={t("appointments.motivoField.placeholder")}
+            className={nc.controlInput}
+          />
+        </div>
+        <div className={nc.chips}>
+          {presets.map((preset) => {
+            const active = value === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => onChange(preset)}
+                className={`${nc.chip} ${active ? nc.chipActivo : ""}`}
+                aria-pressed={active}
+              >
+                {preset}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
   return (
     <div>
       <div

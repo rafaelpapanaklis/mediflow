@@ -1,3 +1,6 @@
+import { EsqueletoSegunBandera } from "@/components/dashboard/esqueletos-rediseno/segun-bandera";
+import { EsqueletoCuenta } from "@/components/dashboard/esqueletos-rediseno/esqueletos";
+
 /**
  * Skeleton PROPIO de la pantalla de pago/activación.
  *
@@ -17,7 +20,7 @@ function SkelLine({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded bg-muted/60 ${className}`} />;
 }
 
-export default function Loading() {
+function EsqueletoViejo() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-[1000px] px-6 pb-20 pt-12">
@@ -62,4 +65,8 @@ export default function Loading() {
       </div>
     </div>
   );
+}
+
+export default function Loading() {
+  return <EsqueletoSegunBandera viejo={<EsqueletoViejo />} nuevo={<EsqueletoCuenta />} />;
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { FileDown, Loader2, Mail, MessageCircle, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { FileDown, Loader2, Mail, MessageCircle, Pill, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
@@ -40,6 +40,13 @@ interface Rx {
 
 interface Props {
   patientId: string;
+  /**
+   * WS1-T5 · rediseño de Pacientes, mismo interruptor que patient-detail-client
+   * pasa a todos sus tabs clínicos. Con `false` (default) esta pestaña no
+   * cambia un píxel: las pastillas de estado siguen con los colores fijos de
+   * siempre y el vacío con el emoji de siempre.
+   */
+  pacientesRediseno?: boolean;
 }
 
 /**
@@ -49,7 +56,7 @@ interface Props {
  *
  * Multi-tenant: todos los endpoints validan clinicId en el backend.
  */
-export function PrescriptionsTab({ patientId }: Props) {
+export function PrescriptionsTab({ patientId, pacientesRediseno = false }: Props) {
   const t = useT();
   const [list, setList] = useState<Rx[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -118,6 +125,14 @@ export function PrescriptionsTab({ patientId }: Props) {
   const fmtDate = (iso?: string | null) =>
     iso ? new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
+  // Pastilla de estado — reusa las variables semánticas theme-aware del panel
+  // (las mismas que Plan de tratamiento / Citas) en vez de hex sueltos, que
+  // no se adaptaban a modo oscuro. `offStyle` es EXACTAMENTE el valor de
+  // siempre para esa pastilla puntual — con la bandera apagada no cambia
+  // ni un píxel, ni siquiera la opacidad relativa entre las tres.
+  const pillStyle = (tone: "success" | "danger", offStyle: CSSProperties): CSSProperties =>
+    pacientesRediseno ? { background: `var(--${tone}-soft)`, color: `var(--${tone}-strong)` } : offStyle;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -136,6 +151,7 @@ export function PrescriptionsTab({ patientId }: Props) {
       {list === null ? (
         <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-10 text-sm text-muted-foreground">
           <Loader2 size={16} className="animate-spin" aria-hidden />
+          {pacientesRediseno && <span>{t("patients.prescriptionsTab.loading")}</span>}
         </div>
       ) : loadError ? (
         <div className="rounded-xl border border-border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
@@ -143,7 +159,11 @@ export function PrescriptionsTab({ patientId }: Props) {
         </div>
       ) : list.length === 0 ? (
         <div className="rounded-xl border border-border bg-card px-5 py-10 text-center text-muted-foreground">
-          <div className="mb-2 text-3xl">💊</div>
+          {pacientesRediseno ? (
+            <Pill className="w-6 h-6 mx-auto mb-2 text-[var(--text-3)]" strokeWidth={1.75} aria-hidden="true" />
+          ) : (
+            <div className="mb-2 text-3xl">💊</div>
+          )}
           <div className="text-sm font-semibold">{t("patients.prescriptionsTab.empty")}</div>
           <div className="mt-1 text-xs">{t("patients.prescriptionsTab.emptyHint")}</div>
         </div>
@@ -162,7 +182,7 @@ export function PrescriptionsTab({ patientId }: Props) {
                   {voided ? (
                     <span
                       className="rounded-full px-2 py-0.5 text-[11px] font-bold"
-                      style={{ background: "rgba(220, 38, 38, 0.16)", color: "#b91c1c" }}
+                      style={pillStyle("danger", { background: "rgba(220, 38, 38, 0.16)", color: "#b91c1c" })}
                     >
                       {t("patients.prescriptionsTab.statusVoided")}
                     </span>
@@ -171,8 +191,8 @@ export function PrescriptionsTab({ patientId }: Props) {
                       className="rounded-full px-2 py-0.5 text-[11px] font-bold"
                       style={
                         expired
-                          ? { background: "rgba(220, 38, 38, 0.12)", color: "#b91c1c" }
-                          : { background: "rgba(16, 185, 129, 0.12)", color: "#059669" }
+                          ? pillStyle("danger", { background: "rgba(220, 38, 38, 0.12)", color: "#b91c1c" })
+                          : pillStyle("success", { background: "rgba(16, 185, 129, 0.12)", color: "#059669" })
                       }
                     >
                       {expired ? t("patients.prescriptionsTab.statusExpired") : t("patients.prescriptionsTab.statusValid")}
@@ -181,7 +201,7 @@ export function PrescriptionsTab({ patientId }: Props) {
                   {rx.cofeprisGroup && (
                     <span
                       className="rounded-full px-2 py-0.5 text-[11px] font-bold"
-                      style={{ background: "rgba(220, 38, 38, 0.08)", color: "#b91c1c" }}
+                      style={pillStyle("danger", { background: "rgba(220, 38, 38, 0.08)", color: "#b91c1c" })}
                     >
                       {t("patients.prescriptionsTab.cofepris", { group: rx.cofeprisGroup })}
                     </span>

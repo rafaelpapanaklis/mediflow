@@ -4,17 +4,74 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { X } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
-import { useAgenda } from "./agenda-provider";
+import { useAgendaOpcional } from "./agenda-provider";
 import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import { DateField } from "@/components/ui/date-field";
-import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
+import type { AgendaAppointmentDTO, DoctorColumnDTO, ResourceDTO } from "@/lib/agenda/types";
+
+/**
+ * La ROPA del rediseño (ws1-t1, hallazgo 9): clases para cada pieza de la
+ * ventana. Es OPCIONAL y aditiva: sin ella, todo se pinta con los `style`
+ * de siempre, nodo por nodo; con ella, cada nodo cambia sus `style` por la
+ * clase que le toca. Solo la agenda nueva la pasa (`agenda-nueva/ropa.ts`);
+ * el `AgendaShell` de siempre no la conoce.
+ *
+ * ⛔ No cambia ni una regla: ni la validación, ni el choque de horarios, ni
+ * el motivo para forzar, ni lo que se manda al servidor.
+ */
+export interface EditarCitaRopa {
+  velo: string;
+  caja: string;
+  cabecera: string;
+  titulos: string;
+  rotulo: string;
+  titulo: string;
+  cerrar: string;
+  formulario: string;
+  cuerpo: string;
+  dosColumnas: string;
+  campo: string;
+  campoRotulo: string;
+  control: string;
+  /** `popoverClassName` del `DateField`: el calendario sale a otro portal. */
+  calendario: string;
+  conflicto: string;
+  conflictoRotulo: string;
+  pie: string;
+  cancelar: string;
+  guardar: string;
+}
+
+/**
+ * Lo que la ventana leía de `useAgenda()`, PRESTADO por quien la abre desde
+ * fuera de la agenda (el expediente del paciente, que no monta
+ * `AgendaProvider`). Dentro de la agenda no se pasa y todo sale del contexto,
+ * como siempre.
+ *
+ * ⛔ Solo cambia de dónde salen las listas y a quién se avisa al guardar. La
+ * cita se guarda con el MISMO `rescheduleAppointment`, y los solapes, el
+ * horario y las vacaciones los valida el MISMO servidor.
+ */
+export interface EditarCitaPrestado {
+  timezone: string;
+  doctors: DoctorColumnDTO[];
+  resources: ResourceDTO[];
+  /** Sustituye al `REPLACE_APPOINTMENT` del store de la agenda. */
+  onGuardada: (appointment: AgendaAppointmentDTO) => void;
+}
 
 interface Props {
   appt: AgendaAppointmentDTO | null;
   isOpen: boolean;
   onClose: () => void;
+  ropa?: EditarCitaRopa;
+  prestado?: EditarCitaPrestado;
+  /** Hueco opcional al principio del cuerpo (el expediente pone ahí el estado). */
+  extra?: React.ReactNode;
+  /** Hueco opcional al principio del pie (el expediente pone ahí «Eliminar»). */
+  pieExtra?: React.ReactNode;
 }
 
 interface FormState {
@@ -66,9 +123,11 @@ function localToIso(date: string, time: string, timezone: string): string | null
   return new Date(naive.getTime() + offsetMs).toISOString();
 }
 
-export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
+export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, prestado, extra, pieExtra }: Props) {
   const t = useT();
-  const { state, dispatch } = useAgenda();
+  const agenda = useAgendaOpcional();
+  if (!agenda && !prestado) throw new Error("useAgenda must be used inside <AgendaProvider>");
+  const state = prestado ?? agenda!.state;
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
@@ -133,7 +192,8 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
         ...(form.overrideReason ? { overrideReason: form.overrideReason } : {}),
         ...(form.reason !== (appt.reason ?? "") ? { reason: form.reason } : {}),
       });
-      dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
+      if (prestado) prestado.onGuardada(updated);
+      else agenda!.dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
       toast.success(t("agenda.editApptModal.apptUpdated"));
       // P1-13: fuera-de-horario/día cerrado ya no bloquea — se avisa.
       if (scheduleWarning?.message) toast(scheduleWarning.message, { duration: 6000 });
@@ -169,12 +229,17 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
 
   const activeDoctors = state.doctors.filter((d) => d.activeInAgenda);
 
+  // Con ropa, cada nodo lleva su clase y NINGÚN `style`; sin ella, los
+  // `style` de siempre y ninguna clase. Nunca los dos.
+  const campo = ropa ? { campo: ropa.campo, campoRotulo: ropa.campoRotulo } : undefined;
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="edit-appt-title"
-      style={{
+      className={ropa?.velo}
+      style={ropa ? undefined : {
         position: "fixed", inset: 0, zIndex: 200,
         background: "rgba(15,10,30,0.45)",
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -184,7 +249,8 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
+        className={ropa?.caja}
+        style={ropa ? undefined : {
           background: "var(--bg-elev)",
           border: "1px solid var(--border-soft)",
           borderRadius: 10,
@@ -196,16 +262,18 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
           fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
-        <header style={{
+        <header className={ropa?.cabecera} style={ropa ? undefined : {
           display: "flex", justifyContent: "space-between", alignItems: "center",
           padding: "14px 18px",
           borderBottom: "1px solid var(--border-soft)", flexShrink: 0,
         }}>
-          <div>
-            <h2 id="edit-appt-title" style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>
+          <div className={ropa?.titulos}>
+            {/* Con ropa el título es el rótulo pequeño («EDITAR CITA») y el
+                nombre del paciente pasa a ser lo grande, como en «Mover cita». */}
+            <h2 id="edit-appt-title" className={ropa?.rotulo} style={ropa ? undefined : { margin: 0, fontSize: 14, fontWeight: 700 }}>
               {t("agenda.editApptModal.title")}
             </h2>
-            <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+            <div className={ropa?.titulo} style={ropa ? undefined : { fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
               {appt.patient.name}
             </div>
           </div>
@@ -213,42 +281,48 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
             type="button"
             onClick={onClose}
             aria-label={t("common.close")}
-            style={{
+            className={ropa?.cerrar}
+            style={ropa ? undefined : {
               width: 28, height: 28, display: "grid", placeItems: "center",
               background: "transparent", border: 0, borderRadius: 6,
               cursor: "pointer", color: "var(--text-3)",
             }}
           >
-            <X size={14} />
+            <X size={ropa ? 18 : 14} />
           </button>
         </header>
 
-        <form onSubmit={submit} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
-          <Field label={t("common.date")}>
+        <form onSubmit={submit} className={ropa?.formulario} style={ropa ? undefined : { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div className={ropa?.cuerpo} style={ropa ? undefined : { flex: 1, overflowY: "auto", minHeight: 0, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+          {extra}
+          <Field label={t("common.date")} ropa={campo}>
             <DateField
               required
               value={form.date}
               onChange={(e) => setForm({ ...form, date: e.target.value })}
-              style={inputStyle}
+              className={ropa?.control}
+              style={ropa ? undefined : inputStyle}
+              popoverClassName={ropa?.calendario}
             />
           </Field>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label={t("agenda.editApptModal.startTime")}>
+          <div className={ropa?.dosColumnas} style={ropa ? undefined : { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label={t("agenda.editApptModal.startTime")} ropa={campo}>
               <input
                 type="time"
                 required
                 value={form.startTime}
                 onChange={(e) => setForm({ ...form, startTime: e.target.value })}
-                style={inputStyle}
+                className={ropa?.control}
+                style={ropa ? undefined : inputStyle}
               />
             </Field>
-            <Field label={t("agenda.editApptModal.durationMin")}>
+            <Field label={t("agenda.editApptModal.durationMin")} ropa={campo}>
               <select
                 required
                 value={form.durationMin}
                 onChange={(e) => setForm({ ...form, durationMin: parseInt(e.target.value, 10) })}
-                style={inputStyle}
+                className={ropa?.control}
+                style={ropa ? undefined : inputStyle}
               >
                 {[15, 30, 45, 60, 75, 90, 105, 120, 150, 180].map((m) => (
                   <option key={m} value={m}>{t("agenda.editApptModal.minutesOption", { count: m })}</option>
@@ -256,12 +330,13 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
               </select>
             </Field>
           </div>
-          <Field label={t("agenda.editApptModal.doctor")}>
+          <Field label={t("agenda.editApptModal.doctor")} ropa={campo}>
             <select
               required
               value={form.doctorId}
               onChange={(e) => setForm({ ...form, doctorId: e.target.value })}
-              style={inputStyle}
+              className={ropa?.control}
+              style={ropa ? undefined : inputStyle}
             >
               <option value="">{t("agenda.editApptModal.selectOption")}</option>
               {activeDoctors.map((d) => (
@@ -269,11 +344,12 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
               ))}
             </select>
           </Field>
-          <Field label={t("agenda.editApptModal.careLocation")}>
+          <Field label={t("agenda.editApptModal.careLocation")} ropa={campo}>
             <select
               value={form.resourceId}
               onChange={(e) => setForm({ ...form, resourceId: e.target.value })}
-              style={inputStyle}
+              className={ropa?.control}
+              style={ropa ? undefined : inputStyle}
             >
               <option value="">{t("agenda.editApptModal.noLocationAssigned")}</option>
               {state.resources.map((r) => (
@@ -281,18 +357,19 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
               ))}
             </select>
           </Field>
-          <Field label={t("agenda.editApptModal.treatmentReason")}>
+          <Field label={t("agenda.editApptModal.treatmentReason")} ropa={campo}>
             <input
               type="text"
               value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
               placeholder={t("agenda.editApptModal.reasonPlaceholder")}
-              style={inputStyle}
+              className={ropa?.control}
+              style={ropa ? undefined : inputStyle}
             />
           </Field>
 
           {conflict && (
-            <div style={{
+            <div className={ropa?.conflicto} style={ropa ? undefined : {
               padding: 10,
               background: "color-mix(in srgb, var(--warning) 10%, transparent)",
               border: "1px solid var(--warning)",
@@ -300,15 +377,16 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
               fontSize: 12,
               color: "var(--text-1)",
             }}>
-              <strong style={{ color: "var(--warning)" }}>{t("agenda.editApptModal.conflictLabel")}</strong> {conflict}
-              <div style={{ marginTop: 8 }}>
-                <Field label={t("agenda.editApptModal.overrideReasonLabel")}>
+              <strong className={ropa?.conflictoRotulo} style={ropa ? undefined : { color: "var(--warning)" }}>{t("agenda.editApptModal.conflictLabel")}</strong> {conflict}
+              <div style={ropa ? undefined : { marginTop: 8 }}>
+                <Field label={t("agenda.editApptModal.overrideReasonLabel")} ropa={campo}>
                   <input
                     type="text"
                     value={form.overrideReason}
                     onChange={(e) => setForm({ ...form, overrideReason: e.target.value })}
                     placeholder={t("agenda.editApptModal.overrideReasonPlaceholder")}
-                    style={inputStyle}
+                    className={ropa?.control}
+                    style={ropa ? undefined : inputStyle}
                   />
                 </Field>
               </div>
@@ -316,21 +394,24 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
           )}
           </div>
 
-          <footer style={{
+          <footer className={ropa?.pie} style={ropa ? undefined : {
             display: "flex", justifyContent: "flex-end", gap: 8,
             padding: "12px 18px", borderTop: "1px solid var(--border-soft)", flexShrink: 0,
           }}>
+            {pieExtra}
             <button
               type="button"
               onClick={onClose}
-              style={btnGhostStyle}
+              className={ropa?.cancelar}
+              style={ropa ? undefined : btnGhostStyle}
               disabled={submitting}
             >
               {t("common.cancel")}
             </button>
             <button
               type="submit"
-              style={btnPrimaryStyle}
+              className={ropa?.guardar}
+              style={ropa ? undefined : btnPrimaryStyle}
               disabled={submitting}
             >
               {submitting ? t("common.saving") : conflict ? t("agenda.editApptModal.overrideAndSave") : t("common.saveChanges")}
@@ -373,10 +454,18 @@ const btnPrimaryStyle: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  ropa,
+}: {
+  label: string;
+  children: React.ReactNode;
+  ropa?: Pick<EditarCitaRopa, "campo" | "campoRotulo">;
+}) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: 0.4 }}>
+    <label className={ropa?.campo} style={ropa ? undefined : { display: "flex", flexDirection: "column", gap: 4 }}>
+      <span className={ropa?.campoRotulo} style={ropa ? undefined : { fontSize: 10, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: 0.4 }}>
         {label}
       </span>
       {children}

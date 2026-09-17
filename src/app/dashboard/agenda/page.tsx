@@ -20,6 +20,7 @@ import {
   scheduleDayOfISO,
 } from "@/lib/agenda/clinic-hours";
 import { prisma } from "@/lib/prisma";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { viewRangeUtc } from "@/lib/agenda/date-ranges";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
 import { AgendaPageClient } from "./agenda-page-client";
@@ -81,7 +82,13 @@ export default async function AgendaPage({ searchParams }: PageProps) {
   // desincronizaban (Bug B). Ahora ambos comparten el mismo helper.
   const range = viewRangeUtc("day", dayISO, clinic.timezone);
 
-  const [appointments, doctors, resources, pendingValidation, waitlistCount] =
+  // AGENDA NUEVA (Claude Design) — el MISMO interruptor por clínica que
+  // enciende el menú de dos niveles (`clinic_feature_flags`, bandera
+  // `menu-dos-niveles`), no uno propio: Rafael prueba «el diseño nuevo» como
+  // una sola cosa. Falla cerrado (sin tabla, sin fila o con error → false = la
+  // agenda de hoy, tal cual). Va en el mismo Promise.all para no añadir un
+  // viaje a la base; además la respuesta vive 60 s en memoria por clínica.
+  const [appointments, doctors, resources, pendingValidation, waitlistCount, agendaNueva] =
     await Promise.all([
       fetchAppointmentsForRange(range.fromUtc, range.toUtc, {
         clinicId: clinic.id,
@@ -100,6 +107,7 @@ export default async function AgendaPage({ searchParams }: PageProps) {
         clinicId: clinic.id,
       }),
       fetchWaitlistCount(clinic.id),
+      menuDosNivelesEncendido(clinic.id),
     ]);
 
   // Lo que el eje PINTA de arranque: el horario real de ESTE día, ensanchado
@@ -149,6 +157,12 @@ export default async function AgendaPage({ searchParams }: PageProps) {
       // resuelto, sin que un fetch en vuelo pueda decidir el régimen fiscal.
       clinicTaxMode={clinic.cfdiTaxMode ?? "exempt"}
       permissions={agendaPermissions}
+      agendaNueva={agendaNueva}
+      // El ROL, no solo los permisos: la máquina de estados de las citas
+      // decide por rol (confirmar es de recepción, iniciar consulta es
+      // clínico), y sin él el panel de la agenda nueva ofrecería botones que
+      // el servidor va a rechazar con un 403.
+      userRole={user.role}
     />
   );
 }

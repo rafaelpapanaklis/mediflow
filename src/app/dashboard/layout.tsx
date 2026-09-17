@@ -3,12 +3,21 @@ export const dynamic = "force-dynamic";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
-import { Sidebar } from "@/components/dashboard/sidebar";
+import { Sidebar, type SidebarProps } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
+import { MenuDosNivelesServidor } from "@/components/dashboard/menu-dos-niveles/menu-servidor";
+import { TopbarDosNiveles } from "@/components/dashboard/menu-dos-niveles/topbar-dos-niveles";
+import { modulosParaMenuNuevo } from "@/components/dashboard/presupuestos-en-facturacion/menu";
+import { modulosSinReportes } from "@/components/dashboard/reportes-en-analitica/menu";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { canUseCaja } from "@/lib/caja-pin";
+import { getResolvedPlan } from "@/lib/plans";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
 import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
+import { VestirDialogos } from "@/components/dashboard/dialogos-rediseno/vestir-dialogos";
+import { VestirAvisos } from "@/components/dashboard/layout-rediseno/avisos";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { TwoFactorFetchGuard } from "@/components/dashboard/two-factor-fetch-guard";
@@ -168,10 +177,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // camino de la clínica activa: ahí siguen siendo las mismas 3 en paralelo.
   // getUserClinics NO se salta: el switcher es la vía de escape del dueño con
   // varias sedes hacia una activa (y el propio menú reducido lo renderiza).
-  const [allClinics, clinicModuleKeys, onboardingCompleted] = await Promise.all([
+  //
+  // MENÚ DE DOS NIVELES — interruptor POR CLÍNICA (sql/menu-dos-niveles.sql).
+  // Este layout es el ÚNICO sitio que elige menú: toda pantalla de /dashboard
+  // cuelga de aquí (lo vigila menu-en-todas-las-pantallas.test.ts). Sin tope de
+  // tiempo: con la clínica encendida sale el nuevo en TODAS las pantallas.
+  // Falla cerrado: sin la tabla, sin fila o con error devuelve false y se pinta
+  // el menú de siempre. clinic.id sale de la sesión (getCurrentUser).
+  const [allClinics, clinicModuleKeys, onboardingCompleted, menuDosNiveles] = await Promise.all([
     getUserClinics(),
     isExpired ? Promise.resolve<string[]>([]) : getActiveClinicModuleKeys(clinic.id),
     isExpired ? Promise.resolve<string[]>([]) : getOnboardingCompleted(clinic.id, clinic.waConnected),
+    menuDosNivelesEncendido(clinic.id),
   ]);
 
   // Multi-Clínica Fase 1 — cupo de sucursales para el switcher del sidebar.
@@ -185,11 +202,61 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ownedCount: allClinics.filter((c) => c.role === "SUPER_ADMIN").length,
   });
 
+  // Las props del menú, UNA sola vez: el de siempre y el de dos niveles reciben
+  // exactamente lo mismo, así que ven a la persona igual.
+  const sidebarProps: SidebarProps = {
+    user: {
+      firstName: user.firstName,
+      lastName:  user.lastName,
+      email:     user.email,
+      role:      user.role,
+      color:     user.color ?? "#7c3aed",
+      // Prisma user.permissionsOverride es String[] @default([]) en
+      // schema; el tipo generado lo expone non-nullable. Sin cast, así
+      // el sidebar lo recibe correctamente y filtra los items.
+      permissionsOverride: user.permissionsOverride,
+    },
+    clinicName: clinic.name,
+    clinicId: clinic.id,
+    plan: clinic.plan,
+    clinicCategory: (clinic as any).category ?? "OTHER",
+    allClinics,
+    branches: {
+      quota: branchQuota,
+      defaults: {
+        category: (clinic as any).category ?? "OTHER",
+        city: clinic.city ?? "",
+        state: clinic.state ?? "",
+      },
+    },
+    onboardingCompleted,
+    trialEndsAt,
+    isInTrial,
+    clinicModuleKeys,
+    sidebarCollapsed: (user as { sidebarCollapsed?: string[] }).sidebarCollapsed ?? [],
+    isExpired,
+  };
+
+  // Solo el menú nuevo pinta el nombre del plan («Profesional · 2 sucursales»).
+  // getBranchQuota ya dejó plan_configs en la caché de 60 s: no hay otra consulta.
+  const planEtiqueta = menuDosNiveles
+    ? await getResolvedPlan(clinic.plan).then((p) => p.label).catch(() => null)
+    : null;
+
   return (
     <I18nProvider locale={locale} dict={dict}>
     <ActiveConsultProvider>
-    <NewPatientProvider>
-    <NewAppointmentProvider>
+    {/* Las ventanas «Nuevo paciente» y «Nueva cita», y las confirmaciones
+        «¿seguro?» del ConfirmProvider (que vive en el layout raíz y no sabe de
+        clínicas), se visten con el diseño nuevo solo con el interruptor
+        encendido. Es una prop, no un hijo más —y VestirDialogos es un
+        envoltorio de hijo único, no una ranura nueva—: el árbol del layout no
+        cambia, y apagado reciben "clasica", la de siempre. Los avisos (toasts)
+        del layout raíz, igual: VestirAvisos es otro envoltorio de hijo único. */}
+    <VestirAvisos activo={menuDosNiveles}>
+    <VestirDialogos activo={menuDosNiveles}>
+    <NewPatientProvider apariencia={menuDosNiveles ? "nueva" : "clasica"}>
+    <NewAppointmentProvider apariencia={menuDosNiveles ? "nueva" : "clasica"}>
     {/* Skip link — WCAG 2.4.1 Bypass Blocks. Oculto por defecto, visible
         al recibir focus por teclado para que usuarios de teclado/lectores
         salten la sidebar y la topbar. */}
@@ -199,38 +266,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
     {/* Fondo --bg plano (Variante A): inline y solo aquí — .dashboard-shell la
         comparten labs/proveedores/afiliados, que no entran en el piloto. */}
     <div className="dashboard-shell flex min-h-screen font-sans" style={{ background: "var(--bg)" }}>
-      <Sidebar
-        user={{
-          firstName: user.firstName,
-          lastName:  user.lastName,
-          email:     user.email,
-          role:      user.role,
-          color:     user.color ?? "#7c3aed",
-          // Prisma user.permissionsOverride es String[] @default([]) en
-          // schema; el tipo generado lo expone non-nullable. Sin cast, así
-          // el sidebar lo recibe correctamente y filtra los items.
-          permissionsOverride: user.permissionsOverride,
-        }}
-        clinicName={clinic.name}
-        clinicId={clinic.id}
-        plan={clinic.plan}
-        clinicCategory={(clinic as any).category ?? "OTHER"}
-        allClinics={allClinics}
-        branches={{
-          quota: branchQuota,
-          defaults: {
-            category: (clinic as any).category ?? "OTHER",
-            city: clinic.city ?? "",
-            state: clinic.state ?? "",
-          },
-        }}
-        onboardingCompleted={onboardingCompleted}
-        trialEndsAt={trialEndsAt}
-        isInTrial={isInTrial}
-        clinicModuleKeys={clinicModuleKeys}
-        sidebarCollapsed={(user as { sidebarCollapsed?: string[] }).sidebarCollapsed ?? []}
-        isExpired={isExpired}
-      />
+      {menuDosNiveles ? (
+        <MenuDosNivelesServidor
+          {...sidebarProps}
+          // Marketplace fuera del menú NUEVO (decisión de Rafael). Va después
+          // del spread para pisar solo esta prop; el <Sidebar> de abajo sigue
+          // recibiendo las llaves tal cual. Ver presupuestos-en-facturacion/menu.ts.
+          // Reportes también sale del menú NUEVO: ahora es una pestaña de
+          // Analítica. Solo para quien puede abrir Analítica; a los demás les
+          // sigue saliendo, como hoy. Ver reportes-en-analitica/menu.ts.
+          clinicModuleKeys={modulosSinReportes(
+            modulosParaMenuNuevo(clinicModuleKeys),
+            sidebarProps.user,
+            sidebarProps.clinicCategory,
+          )}
+          puedeUsarCaja={canUseCaja(user)}
+          planEtiqueta={planEtiqueta}
+        />
+      ) : (
+        <Sidebar {...sidebarProps} />
+      )}
       {/* min-w-0 — CAUSA RAÍZ del scroll horizontal del panel a 1280. Un hijo de
           flex trae `min-width: auto`, así que esta columna NO podía encogerse por
           debajo del min-content de la pantalla que renderiza: una tabla ancha o una
@@ -240,12 +295,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
           su propio ancho intrínseco (scroll dentro de su contenedor, o apilado). */}
       <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         <GlobalAnnouncementBanner />
-        <Topbar
-          clinicName={clinic.name}
-          plan={clinic.plan as any}
-          userRole={user.role}
-        />
-        <PatientContextBar />
+        {menuDosNiveles ? (
+          <TopbarDosNiveles clinicName={clinic.name} userRole={user.role} />
+        ) : (
+          <Topbar
+            clinicName={clinic.name}
+            plan={clinic.plan as any}
+            userRole={user.role}
+          />
+        )}
+        {/* La barra de consulta activa, con la ropa del interruptor (prop, no
+            hijo). Con la nueva, su `sticky top` sale de la altura REAL de la
+            barra superior, medida; con la clásica, de su `top: 52` de siempre. */}
+        <PatientContextBar apariencia={menuDosNiveles ? "nueva" : "clasica"} />
         <main
           id="main-content"
           tabIndex={-1}
@@ -269,10 +331,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
     {!HIDE_SUPPLY_MODULES && <ChatLauncher />}
     {/* Sabina, en TODAS las pantallas del panel: botón fijo abajo a la derecha
         y Alt+S. No consulta nada al montarse y abrirla no llama al modelo —
-        solo preguntar cobra. En /dashboard/sabina se apaga sola. */}
-    <SabinaLanzador clinicId={clinic.id} firstName={user.firstName} oculto={isExpired} />
+        solo preguntar cobra. En /dashboard/sabina se apaga sola. Con el
+        interruptor, el cajón se viste con la ropa del menú nuevo (prop). */}
+    <SabinaLanzador clinicId={clinic.id} firstName={user.firstName} oculto={isExpired} rediseno={menuDosNiveles} />
     </NewAppointmentProvider>
     </NewPatientProvider>
+    </VestirDialogos>
+    </VestirAvisos>
     </ActiveConsultProvider>
     </I18nProvider>
   );

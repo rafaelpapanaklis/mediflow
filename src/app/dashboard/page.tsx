@@ -6,10 +6,15 @@ import {
   fetchAdminData,
   fetchHybridRoleCheck,
 } from "@/lib/home/fetchers";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { HomeShell } from "@/components/dashboard/home/home-shell";
 import { HomeReceptionist } from "@/components/dashboard/home/home-receptionist";
 import { HomeDoctor } from "@/components/dashboard/home/home-doctor";
 import { HomeAdmin } from "@/components/dashboard/home/home-admin";
+import { RaizHoy } from "@/components/dashboard/hoy-rediseno/raiz";
+import { HoyRecepcion } from "@/components/dashboard/hoy-rediseno/hoy-recepcion";
+import { HoyDoctor } from "@/components/dashboard/hoy-rediseno/hoy-doctor";
+import { HoyAdmin } from "@/components/dashboard/hoy-rediseno/hoy-admin";
 import { HomeClientSwitch } from "./home-client-switch";
 import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist";
 import { AiQuotaBanner } from "@/components/dashboard/ai-quota-banner";
@@ -23,6 +28,16 @@ interface PageProps {
   searchParams?: { period?: string; mode?: string };
 }
 
+// REDISEÑO DE «HOY» — el MISMO interruptor por clínica que enciende el menú de
+// dos niveles, Pacientes y la Agenda (`clinic_feature_flags`, bandera
+// `menu-dos-niveles`), no uno propio: Rafael prueba «el diseño nuevo» como una
+// sola cosa. Falla cerrado (sin tabla, sin fila o con error → false = la home
+// de siempre, tal cual). No cuesta una consulta: el layout ya lo resolvió en
+// este mismo request y la respuesta vive 60 s en memoria por clínica; aquí va
+// en el mismo Promise.all que los datos de la vista para no esperar en serie.
+//
+// Con la bandera apagada, lo que se devuelve abajo es, rama por rama, el
+// árbol de siempre: HomeShell y los componentes de `components/dashboard/home/`.
 export default async function DashboardHomePage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   const clinic = user.clinic;
@@ -47,7 +62,17 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
   // periodo) seguía pintando la de la clínica ANTERIOR con los KPIs ya en $0.
   // Con la key, el árbol se re-monta al cambiar de clínica y el estado muere.
   if (role === "RECEPTIONIST") {
-    const data = await fetchReceptionistData();
+    const [data, rediseno] = await Promise.all([
+      fetchReceptionistData(),
+      menuDosNivelesEncendido(clinic.id),
+    ]);
+    if (rediseno) {
+      return (
+        <RaizHoy>
+          <HoyRecepcion key={clinic.id} user={homeUser} clinic={homeClinic} data={data} />
+        </RaizHoy>
+      );
+    }
     return (
       <HomeShell>
         <HomeReceptionist key={clinic.id} user={homeUser} clinic={homeClinic} data={data} />
@@ -56,7 +81,17 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
   }
 
   if (role === "DOCTOR") {
-    const data = await fetchDoctorData();
+    const [data, rediseno] = await Promise.all([
+      fetchDoctorData(),
+      menuDosNivelesEncendido(clinic.id),
+    ]);
+    if (rediseno) {
+      return (
+        <RaizHoy>
+          <HoyDoctor key={clinic.id} user={homeUser} clinic={homeClinic} data={data} />
+        </RaizHoy>
+      );
+    }
     return (
       <HomeShell>
         <HomeDoctor key={clinic.id} user={homeUser} clinic={homeClinic} data={data} />
@@ -72,41 +107,63 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
     // una sola ronda en paralelo; solo doctorData queda condicionado al check.
     // getOnboardingCompleted ya corrió en el layout (React.cache) ⇒ 0 queries
     // extra aquí: solo alimenta el checklist "Primeros pasos" del home (admins).
-    const [hybridCheck, adminData, onboardingCompleted] = await Promise.all([
+    const [hybridCheck, adminData, onboardingCompleted, rediseno] = await Promise.all([
       fetchHybridRoleCheck(),
       fetchAdminData(period),
       getOnboardingCompleted(clinic.id, clinic.waConnected),
+      menuDosNivelesEncendido(clinic.id),
     ]);
     const doctorData = hybridCheck.canBeDoctor ? await fetchDoctorData() : null;
 
-    return (
-      <HomeShell>
+    const contenido = (
+      <>
         {/* Aviso de cupo de IA — se pinta solo si la clínica pasó el 80% del
             cupo mensual. Se auto-gatea (admin + límite > 0) y se descarta por
             sesión; en planes sin IA (límite 0) no aparece nunca. */}
-        <AiQuotaBanner />
+        <AiQuotaBanner rediseno={rediseno} />
         {/* Checklist de primeros pasos — solo admins; se auto-oculta al 100%
             o si el usuario lo descartó (localStorage por clinicId). */}
-        <OnboardingChecklist completed={onboardingCompleted} clinicId={clinic.id} />
+        <OnboardingChecklist completed={onboardingCompleted} clinicId={clinic.id} rediseno={rediseno} />
         <HomeClientSwitch
           user={homeUser}
           clinic={homeClinic}
           adminContent={
-            <HomeAdmin key={clinic.id} user={homeUser} clinic={homeClinic} data={adminData} period={period} />
+            rediseno ? (
+              <HoyAdmin key={clinic.id} user={homeUser} clinic={homeClinic} data={adminData} period={period} />
+            ) : (
+              <HomeAdmin key={clinic.id} user={homeUser} clinic={homeClinic} data={adminData} period={period} />
+            )
           }
           doctorContent={
             doctorData ? (
-              <HomeDoctor key={clinic.id} user={homeUser} clinic={homeClinic} data={doctorData} />
+              rediseno ? (
+                <HoyDoctor key={clinic.id} user={homeUser} clinic={homeClinic} data={doctorData} />
+              ) : (
+                <HomeDoctor key={clinic.id} user={homeUser} clinic={homeClinic} data={doctorData} />
+              )
             ) : null
           }
           canBeDoctor={hybridCheck.canBeDoctor}
           initialMode={searchParams?.mode === "doctor" ? "doctor" : "admin"}
+          rediseno={rediseno}
         />
-      </HomeShell>
+      </>
     );
+
+    return rediseno ? <RaizHoy>{contenido}</RaizHoy> : <HomeShell>{contenido}</HomeShell>;
   }
 
-  const adminData = await fetchAdminData(period);
+  const [adminData, rediseno] = await Promise.all([
+    fetchAdminData(period),
+    menuDosNivelesEncendido(clinic.id),
+  ]);
+  if (rediseno) {
+    return (
+      <RaizHoy>
+        <HoyAdmin key={clinic.id} user={homeUser} clinic={homeClinic} data={adminData} period={period} />
+      </RaizHoy>
+    );
+  }
   return (
     <HomeShell>
       <HomeAdmin key={clinic.id} user={homeUser} clinic={homeClinic} data={adminData} period={period} />

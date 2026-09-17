@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Zap, Sun, Sunset, Moon } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { useAparienciaNueva } from "./apariencia";
+import nc from "./nueva-cita.module.css";
 import {
   buildOccupiedSlotSet,
 } from "@/lib/agenda/overlap-client";
@@ -54,6 +56,7 @@ export function SlotGridPicker({
   grouped = false,
 }: Props) {
   const t = useT();
+  const nueva = useAparienciaNueva();
   const [day, setDay] = useState<FetchedDay>({ appointments: [], loaded: false });
   const [loading, setLoading] = useState(false);
   const selectedRef = useRef<HTMLButtonElement | null>(null);
@@ -160,7 +163,7 @@ export function SlotGridPicker({
 
   if (!doctorId) {
     return (
-      <div style={emptyHintStyle}>
+      <div {...(nueva ? { className: nc.huecosVacio } : { style: emptyHintStyle })}>
         {t("appointments.slotGrid.selectProfessional")}
       </div>
     );
@@ -178,6 +181,27 @@ export function SlotGridPicker({
     const selected = idx === valueIdx;
     const slotUtc = slotIndexToUtc(idx, dateISO, config);
     const label = formatSlotTime(slotUtc.toISOString(), config.timezone);
+
+    if (nueva) {
+      // El mismo botón —mismo cálculo de libre/ocupado, mismo onChange—; el
+      // estado va en atributos y los pinta la hoja, sin estilos al pasar.
+      return (
+        <button
+          key={idx}
+          ref={selected ? selectedRef : undefined}
+          type="button"
+          role="gridcell"
+          aria-selected={selected}
+          aria-disabled={occupied}
+          disabled={occupied}
+          onClick={() => onChange(slotUtc.toISOString())}
+          className={nc.hueco}
+          data-seleccionado={selected ? "" : undefined}
+        >
+          {label}
+        </button>
+      );
+    }
 
     return (
       <button
@@ -223,8 +247,8 @@ export function SlotGridPicker({
   };
 
   const header = (
-    <div style={headerRowStyle}>
-      <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+    <div {...(nueva ? { className: nc.huecosCabecera } : { style: headerRowStyle })}>
+      <div {...(nueva ? { className: nc.huecosInfo } : { style: { fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em" } })}>
         {loading ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Loader2 size={11} className="animate-spin" />
@@ -238,8 +262,8 @@ export function SlotGridPicker({
         )}
       </div>
       {firstFreeIdx >= 0 && firstFreeIdx !== valueIdx && (
-        <button type="button" onClick={jumpToFirstFree} style={quickJumpStyle}>
-          <Zap size={11} aria-hidden />
+        <button type="button" onClick={jumpToFirstFree} {...(nueva ? { className: nc.saltoPrimerHueco } : { style: quickJumpStyle })}>
+          <Zap size={nueva ? 14 : 11} aria-hidden />
           {t("appointments.slotGrid.firstFreeSlot", {
             time: formatSlotTime(slotIndexToUtc(firstFreeIdx, dateISO, config).toISOString(), config.timezone),
           })}
@@ -266,20 +290,20 @@ export function SlotGridPicker({
     return (
       <div>
         {header}
-        <div style={groupedContainerStyle}>
+        <div {...(nueva ? { className: nc.huecosCaja } : { style: groupedContainerStyle })}>
           {groups.map((g) =>
             g.idxs.length === 0 ? null : (
-              <div key={g.key} style={{ marginBottom: 10 }}>
-                <div style={groupHeaderStyle}>
-                  <g.Icon size={11} aria-hidden />
+              <div key={g.key} {...(nueva ? { className: nc.huecosGrupo } : { style: { marginBottom: 10 } })}>
+                <div {...(nueva ? { className: nc.huecosGrupoCabecera } : { style: groupHeaderStyle })}>
+                  <g.Icon size={nueva ? 13 : 11} aria-hidden />
                   {t(g.labelKey)}
-                  <span style={groupCountStyle}>
+                  <span {...(nueva ? { className: nc.huecosCuenta } : { style: groupCountStyle })}>
                     {t("appointments.slotGrid.freeCount", {
                       count: g.idxs.filter((i) => isSlotFree(i)).length,
                     })}
                   </span>
                 </div>
-                <div style={groupGridStyle} role="grid" aria-label={t("appointments.slotGrid.slotsGroupAria", { group: t(g.labelKey) })}>
+                <div {...(nueva ? { className: nc.huecosRejilla } : { style: groupGridStyle })} role="grid" aria-label={t("appointments.slotGrid.slotsGroupAria", { group: t(g.labelKey) })}>
                   {g.idxs.map(renderSlot)}
                 </div>
               </div>
@@ -293,7 +317,7 @@ export function SlotGridPicker({
   return (
     <div>
       {header}
-      <div style={gridStyle} role="grid" aria-label={t("appointments.slotGrid.slotsAvailableAria")}>
+      <div {...(nueva ? { className: nc.huecosRejillaPlana } : { style: gridStyle })} role="grid" aria-label={t("appointments.slotGrid.slotsAvailableAria")}>
         {Array.from({ length: total }, (_, idx) => renderSlot(idx))}
       </div>
     </div>

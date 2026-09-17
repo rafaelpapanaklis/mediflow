@@ -1915,3 +1915,93 @@
   .tplPreview { margin: 4px 12px 6px; }
   .patientFilterText { font-size: 12px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   WS1-T8 — pulido detrás de `menu-dos-niveles` (clinic_feature_flags).
+   [data-pulido] solo lo pone InboxClient cuando esa clínica lo tiene
+   encendido: apagado, ninguna regla de este bloque aplica y la pantalla
+   sigue exactamente como está arriba. Tipografía = misma escala que
+   PATRON.md (rediseño de Pacientes): Instrument Sans, ya la trae el
+   layout vía src/fonts/menu.ts — no se importa ni se copia aquí.
+   ═══════════════════════════════════════════════════════════════════ */
+.page[data-pulido] {
+  font-family: var(--font-menu), system-ui, sans-serif;
+}
+
+/* Título de pantalla — 20px/700, ls -.017em */
+.page[data-pulido] .listTitle,
+.page[data-pulido] .greetTitle {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.017em;
+}
+
+/* Título de tarjeta — 13px/600 MAYÚSCULAS, ls .055em */
+.page[data-pulido] .groupLabel {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.055em;
+}
+
+/* Texto — 13.5px/400 (el peso propio de cada elemento, p.ej. nombres en
+   negrita, no se toca aquí: solo se alinea el tamaño a la escala). */
+.page[data-pulido] .navLabel,
+.page[data-pulido] .rowPreview,
+.page[data-pulido] .rowName,
+.page[data-pulido] .convName,
+.page[data-pulido] .needName,
+.page[data-pulido] .userName {
+  font-size: 13.5px;
+}
+
+/* Texto secundario — 12.5px/400, color ceniza (ya lo traen sus variables) */
+.page[data-pulido] .listSub,
+.page[data-pulido] .greetSub,
+.page[data-pulido] .userRole,
+.page[data-pulido] .navCount,
+.page[data-pulido] .statLabel,
+.page[data-pulido] .needMeta,
+.page[data-pulido] .rowTime,
+.page[data-pulido] .convSub {
+  font-size: 12.5px;
+}
+
+/* Cifras — tabular-nums SIEMPRE, sin excepción */
+.page[data-pulido] .statNumber,
+.page[data-pulido] .navBadge,
+.page[data-pulido] .navBadgeAmber,
+.page[data-pulido] .navCount,
+.page[data-pulido] .listSub,
+.page[data-pulido] .segment {
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Cargando…" de la lista: antes vivía pegado arriba con toda la columna en
+   blanco debajo — un texto suelto que parecía un fallo, no una carga. Se
+   centra en el alto disponible de la columna en vez de quedarse a 60px del
+   borde superior. */
+.page[data-pulido] .emptyList {
+  min-height: min(50vh, 420px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Panel derecho mientras `stats` todavía no llegó (ver inbox-client.tsx):
+   nada útil que decir todavía, así que se queda chico y arriba en vez de
+   ocupar la columna entera con solo el saludo. */
+.emptyPanelCompact {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px 32px;
+}
+.emptyInnerCompact {
+  max-width: 420px;
+}
+.greetTitleCompact {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ib-text-3);
+}

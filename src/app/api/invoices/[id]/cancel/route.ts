@@ -6,6 +6,7 @@ import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
 
 // Multi-tenant: clinicId siempre desde la sesión, nunca del body. Mismo
 // patrón que /api/invoices/[id]/route.ts.
@@ -46,6 +47,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (visDenied) return visDenied;
   }
   if (invoice.status === "CANCELLED") return NextResponse.json({ error: "La factura ya está cancelada" }, { status: 400 });
+  // Con CFDI, cancelar aquí lo dejaría vigente ante el SAT (N3).
+  const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "cancelar");
+  if (cfdiDenied) return cfdiDenied;
   if (invoice.status === "PAID") return NextResponse.json({ error: "No se puede cancelar una factura pagada — usa Reembolsar" }, { status: 400 });
   if (invoice.paid > 0) return NextResponse.json({ error: "Esta factura tiene pagos registrados — usa Reembolsar primero" }, { status: 400 });
 
@@ -56,10 +60,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     ? `${invoice.notes ? invoice.notes + "\n" : ""}[CANCELADA: ${reasonText}]`
     : invoice.notes;
 
-  await prisma.invoice.updateMany({
-    where: { id: params.id, clinicId },
+  // `cfdiUuid` igual al leído: si alguien la timbró desde la lectura, no se cancela.
+  const { count } = await prisma.invoice.updateMany({
+    where: { id: params.id, clinicId, cfdiUuid: invoice.cfdiUuid },
     data:  { status: "CANCELLED", notes: newNotes },
   });
+  if (count === 0) return cfdiVigenteResponse(null, "cancelar");
 
   await logMutation({
     req, clinicId, userId: ctx.userId,

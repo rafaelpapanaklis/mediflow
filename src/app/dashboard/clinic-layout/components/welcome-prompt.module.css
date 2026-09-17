@@ -132,3 +132,60 @@
   background: rgba(124, 58, 237, 0.10);
   color: #A0A0AB;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO — activo solo con `rediseno` (mismo interruptor `menu-dos-
+   niveles`). Solo LEE los tokens del menú (`--m2-*`); cero declaraciones
+   propias. La tarjeta y los botones pasan al lenguaje visual aprobado; la
+   composición (grid, tamaños, iconos) no cambia.
+   ═══════════════════════════════════════════════════════════════════════ */
+.wrapRediseno {
+  background: var(--m2-n1-fondo);
+}
+
+.wrapRediseno .card {
+  background: var(--m2-tarjeta);
+  border-color: var(--m2-tarjeta-borde);
+  box-shadow: var(--m2-sombra);
+}
+
+.wrapRediseno .icon {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  box-shadow: none;
+}
+
+.wrapRediseno .title {
+  color: var(--m2-texto);
+}
+
+.wrapRediseno .subtitle {
+  color: var(--m2-texto-3);
+}
+
+.wrapRediseno .btn {
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  border-color: var(--m2-tarjeta-borde);
+}
+.wrapRediseno .btn:hover:not(:disabled) {
+  background: var(--m2-hover);
+  border-color: var(--m2-tarjeta-borde);
+}
+
+.wrapRediseno .btnPrimary {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  border-color: var(--m2-cta-fondo);
+  box-shadow: none;
+}
+.wrapRediseno .btnPrimary:hover:not(:disabled) {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  transform: none;
+}
+
+.wrapRediseno .info {
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto-3);
+}

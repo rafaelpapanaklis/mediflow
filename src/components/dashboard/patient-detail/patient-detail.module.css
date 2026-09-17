@@ -673,7 +673,12 @@
 .treatmentsCreate:hover:not(:disabled) { background: var(--violet-700); }
 .treatmentsCreate:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 1024px) {
-  .mobileTabBar { display: flex; }
+  /* `:not([hidden])` y no `.mobileTabBar` a secas: el rediseño de Pacientes
+     apaga esta tira poniéndole `hidden`, y un `display: flex` de clase pura
+     le gana al `display: none` que el navegador aplica por el atributo. Sin
+     el atributo (todas las clínicas sin el interruptor) la regla se aplica
+     exactamente igual que antes. */
+  .mobileTabBar:not([hidden]) { display: flex; }
 }
 
 /* ─────── BARRA HORIZONTAL DE SECCIONES (escritorio ≥1025px) ─────── */
@@ -2091,4 +2096,336 @@
   .alertChip:hover {
     transform: none;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO DE PACIENTES (WS1-T4) — la cabecera del paciente.
+
+   Todo lo de aquí abajo cuelga de `.heroRediseno`, una clase que solo se
+   pone cuando la clínica tiene encendido el interruptor `menu-dos-niveles`.
+   Es ADITIVO: sin esa clase no cambia ni un píxel de la cabecera de hoy.
+
+   Los colores salen de los tokens `--pr-*` que declara la raíz del rediseño
+   (`pacientes-rediseno/rediseno.module.css`), heredados desde el contenedor
+   de la ficha. La tipografía también: Instrument Sans, la del menú nuevo.
+
+   Lo que NO se toca, porque es lo que la gente encuentra sin leer: los tres
+   botones y su orden (Iniciar consulta → Reagendar próxima → Cobrar $X), y
+   el sitio de los chips de alerta, arriba a la izquierda.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.heroRediseno {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio, 14px);
+  box-shadow: var(--pr-sombra);
+  /* La cabecera medía ~375px de alto antes de que empezara el contenido: en
+     el teléfono la barra de secciones caía FUERA de la primera pantalla. */
+  padding: 16px 18px 14px;
+  margin-bottom: 0;
+  font-family: var(--font-menu), system-ui, sans-serif;
+  color: var(--pr-texto);
+}
+
+/* Fuera la banda de degradado y el wash violeta de la esquina: el diseño
+   nuevo no lleva adornos, lleva aire. */
+.heroRediseno::before,
+.heroRediseno::after { content: none; }
+
+.heroRediseno .heroName {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+  color: var(--pr-texto);
+}
+
+.heroRediseno .heroMeta { color: var(--pr-texto-3); font-size: 12.5px; }
+.heroRediseno .heroMetaSep { color: var(--pr-borde); }
+
+.heroRediseno .heroAvatarRing {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.heroRediseno .heroAvatar {
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+  border: 0;
+  border-radius: 14px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+/* Métricas: sin cajas dentro de la caja. Tres datos separados por una línea. */
+.heroRediseno .heroMetrics { border-top-color: var(--pr-borde-suave); gap: 8px; }
+
+.heroRediseno .metric {
+  background: transparent;
+  border-color: transparent;
+  padding: 4px 10px 4px 0;
+}
+
+.heroRediseno .metric:hover { border-color: transparent; box-shadow: none; }
+
+.heroRediseno .metricIcon {
+  background: var(--pr-activo-suave);
+  border-color: transparent;
+  color: var(--pr-activo);
+  width: 28px;
+  height: 28px;
+}
+
+.heroRediseno .metricLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--pr-texto-3);
+}
+
+.heroRediseno .metricValue {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  color: var(--pr-texto);
+}
+
+.heroRediseno .metricValue.brand { color: var(--pr-activo); }
+.heroRediseno .metricSub { color: var(--pr-texto-3); font-size: 11px; }
+
+/* Los botones. Mismo orden, mismo sitio — pero «Iniciar consulta» MANDA:
+   es lo que se hace veinte veces al día y hasta ahora pesaba lo mismo que
+   «Reagendar próxima». */
+.heroRediseno .btn {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--pr-radio-s, 10px);
+  border-color: var(--pr-borde);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.heroRediseno .btn:hover:not(:disabled) {
+  background: var(--pr-tarjeta-2);
+  border-color: var(--pr-texto-3);
+  color: var(--pr-texto);
+}
+
+.heroRediseno .btnPrimary {
+  height: 42px;
+  padding: 0 20px;
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  font-size: 14px;
+  font-weight: 650;
+  box-shadow: none;
+}
+
+.heroRediseno .btnPrimary:hover:not(:disabled) {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  filter: brightness(1.08);
+}
+
+.heroRediseno .btnSuccess {
+  background: var(--pr-exito);
+  border-color: var(--pr-exito);
+  color: #fff;
+}
+
+.heroRediseno .btnSuccess:hover:not(:disabled) {
+  background: var(--pr-exito);
+  border-color: var(--pr-exito);
+  color: #fff;
+  filter: brightness(1.06);
+}
+
+.heroRediseno .btnIcon { width: 38px; padding: 0; }
+
+/* Chips de alerta — mismo sitio (arriba a la izquierda, antes que nada),
+   ya sin la duplicación de «Alergia a penicilina» + «Penicilina». */
+.heroRediseno .heroAlerts {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top-color: var(--pr-borde-suave);
+  gap: 5px;
+}
+
+.heroRediseno .alertChip {
+  padding: 3.5px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--pr-hover);
+  border-color: transparent;
+  color: var(--pr-texto-2);
+}
+
+.heroRediseno .alertChip:hover { transform: none; box-shadow: none; }
+.heroRediseno .alertChip.danger { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+.heroRediseno .alertChip.warning { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.heroRediseno .alertChip.brand { background: var(--pr-activo-suave); color: var(--pr-activo); }
+.heroRediseno .alertChip.success { background: var(--pr-exito-suave); color: var(--pr-exito); }
+
+/* Menú «…» de la cabecera: cuelga de un portal de Radix, así que no hereda
+   nada de la ficha. Aquí solo se afina lo que sí está dentro. */
+.heroRediseno .heroMenuPopover { border-radius: 12px; }
+
+/* ── La cabecera en el teléfono ───────────────────────────────────────
+   Medido a 390px: la cabecera de hoy mide 790px de alto y la pantalla del
+   teléfono tiene 844, así que la barra de secciones empieza pasada la
+   primera pantalla — quien abre una ficha en el móvil ve el nombre, las
+   métricas y los botones, y tiene que bajar para descubrir que existen
+   dieciocho apartados.
+   Aquí las tres métricas van en UNA fila (son tres datos cortos) y los dos
+   botones secundarios comparten renglón. Mismo contenido, mismo orden,
+   mismos tres botones: lo único que cambia es que dejan de apilarse. */
+@media (max-width: 640px) {
+  .heroRediseno { padding: 14px 14px 12px; }
+
+  .heroRediseno .heroMetrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding-top: 10px;
+  }
+
+  .heroRediseno .metric {
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 6px 4px 6px 0;
+  }
+
+  .heroRediseno .metricIcon { width: 22px; height: 22px; }
+  .heroRediseno .metricIcon svg { width: 12px; height: 12px; }
+  .heroRediseno .metricLabel { font-size: 9px; white-space: normal; }
+  .heroRediseno .metricValue { font-size: 14px; }
+  .heroRediseno .metricSub { font-size: 10px; }
+
+  /* Los tres botones y su orden NO se tocan (Iniciar consulta → Reagendar
+     próxima → Cobrar $X): solo se reparten. «Iniciar consulta» ocupa la
+     primera fila con el menú «…» al lado —es lo que se hace veinte veces al
+     día—, y los otros dos van a lo ancho cada uno en su renglón, enteros: a
+     390px compartir renglón les corta el texto a la mitad. */
+  .heroRediseno .heroActions { gap: 6px; }
+  .heroRediseno .btnPrimary { flex: 1 1 auto; height: 40px; order: 0; }
+  .heroRediseno .heroActions .btnIcon { order: 1; }
+  .heroRediseno .heroActions .btn:not(.btnPrimary):not(.btnIcon) {
+    flex: 1 0 100%;
+    order: 2;
+  }
+  .heroRediseno .heroName { font-size: 19px; }
+  .heroRediseno .heroAlerts { margin-top: 10px; padding-top: 8px; }
+}
+
+/* ── La cabecera de 1600 a 1024 px (segunda ola, segunda vuelta) ──────
+   La primera vuelta (PR #332) dejó una fila que envolvía sin desbordar… y que
+   se veía mal: «Próxima cita» era una píldora de CUATRO renglones al lado de
+   botones de UNO. Compartiendo fila, los botones flotaban a media altura, el
+   icono —centrado contra cuatro renglones— no quedaba junto a ninguno, y bajo
+   el avatar se abría una columna que no alineaba con nada.
+
+   Ahora la cita es una LÍNEA de texto, la tercera de la columna del nombre
+   (nombre → datos → cita): las tres miden lo que el avatar, y el icono va en
+   línea con su rótulo. Quedan dos piezas, y dos maquetaciones que se ven bien:
+     · ancha: [avatar + nombre] a la izquierda, botones a la derecha;
+     · estrecha: los botones bajan a una FILA PROPIA que llenan de lado a
+       lado — apilar bien antes que compartir fila mal, y sin hueco a la
+       derecha de los botones.
+   El corte lo decide el ancho de la PROPIA cabecera (@container, más abajo),
+   no el de la pantalla: depende de si el menú está abierto o encogido.
+
+   Va al FINAL del archivo a propósito: misma especificidad que las reglas de
+   arriba (incluidas las del teléfono), así que gana por orden. */
+.heroRediseno .heroMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+}
+
+/* `calc(100% - 88px)`: avatar (70px) + hueco. En la maquetación estrecha el
+   nombre ocupa todo lo que deja el avatar y los botones bajan enteros. */
+.heroRediseno .heroInfo {
+  flex: 1 1 calc(100% - 88px);
+  min-width: 0;
+}
+
+/* Fila propia: los tres botones se reparten el ancho; el «…» no crece. */
+.heroRediseno .heroActions {
+  flex: 1 1 100%;
+  gap: 8px;
+}
+.heroRediseno .heroActions .btn { height: 40px; }
+.heroRediseno .heroActions .btn:not(.btnIcon) { flex: 1 1 auto; justify-content: center; }
+.heroRediseno .heroActions .btnIcon { width: 40px; }
+
+/* «Próxima cita», en línea. Solo existe si hay cita (lo decide hero-card.tsx).
+   Si el tipo de cita o el doctor son largos, la línea envuelve por palabras
+   enteras; no se corta con «…». */
+.heroRediseno .heroCita {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 0;
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--pr-texto-3);
+}
+.heroRediseno .heroCitaRotulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+  white-space: nowrap;
+}
+.heroRediseno .heroCitaRotulo svg { color: var(--pr-activo); flex: none; }
+.heroRediseno .heroCitaFecha {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--pr-activo);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.heroRediseno .heroCitaDato { font-variant-numeric: tabular-nums; }
+
+/* Ancha: los botones caben a la derecha del nombre con su tamaño natural.
+   1160px de ancho ÚTIL (lo que mide @container) = avatar 88 + hueco 18 +
+   botones ~515 («Cobrar $31,500») + ~540 para el nombre: con menos, la línea
+   de datos (expediente · edad · teléfono · correo · sangre) partía y dejaba
+   un «O+» huérfano en su propio renglón. Aquí la
+   fila NO envuelve: el nombre se queda con lo que dejan los botones y, si es
+   muy largo, parte en dos renglones; con `wrap` un importe de seis cifras
+   tiraba los botones abajo, sueltos y con el hueco a la derecha.
+   Por debajo de 641px manda la maquetación del teléfono, que no se toca. */
+@container patientHero (min-width: 1160px) {
+  .heroRediseno .heroMain { flex-wrap: nowrap; }
+  .heroRediseno .heroInfo { flex: 1 1 0; }
+  .heroRediseno .heroActions { flex: 0 0 auto; flex-wrap: nowrap; }
+  .heroRediseno .heroActions .btn { height: 38px; }
+  .heroRediseno .heroActions .btnPrimary { height: 42px; }
+  .heroRediseno .heroActions .btn:not(.btnIcon) { flex: 0 0 auto; }
+  .heroRediseno .heroActions .btnIcon { width: 38px; }
+}
+
+/* Expediente, edad y tipo de sangre: cifras alineadas con tabular-nums sobre
+   Instrument Sans, como en todo el rediseño. La letra de máquina es del
+   camino de siempre. */
+.heroRediseno .mono {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
 }

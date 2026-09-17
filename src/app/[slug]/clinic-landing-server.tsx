@@ -44,17 +44,24 @@ const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
  * `edit` es el lienzo del editor visual. Lo decide /landing-preview DESPUÉS
  * de comprobar que quien mira tiene sesión de ESTA clínica y el permiso
  * landing.edit; aquí llega ya resuelto y nunca sale de la URL.
+ *
+ * `borrador` es la vista previa de Página web → Plantilla: deja VER el sitio
+ * sin publicar, sin encender el editor. Igual que `edit`, lo resuelve
+ * /landing-preview contra la sesión (landing.view de ESTA clínica). La ruta
+ * pública /[slug] nunca lo pasa.
  */
 export async function ClinicLandingServer({
   slug,
   previewTpl,
   live = false,
   edit = false,
+  borrador = false,
 }: {
   slug: string;
   previewTpl?: string;
   live?: boolean;
   edit?: boolean;
+  borrador?: boolean;
 }) {
   /**
    * SEGURIDAD — `select` EXPLÍCITO, jamás `include` a secas.
@@ -105,8 +112,10 @@ export async function ClinicLandingServer({
      más necesita ver su sitio para decidir si lo publica. Hasta ahora este
      return cortaba ANTES del switch de plantillas, así que el lienzo era un
      rectángulo negro y el puente ni se montaba. `edit` ya viene comprobado
-     contra la sesión (ver /landing-preview/[slug]/page.tsx). */
-  if (!c.landingActive && !edit) {
+     contra la sesión (ver /landing-preview/[slug]/page.tsx).
+     Lo mismo vale para `borrador`: la vista previa de Plantilla enseñaba este
+     cartel en vez de la plantilla elegida a toda clínica sin publicar. */
+  if (!c.landingActive && !edit && !borrador) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white text-center px-4">
         <div className="text-5xl mb-4">🏥</div>

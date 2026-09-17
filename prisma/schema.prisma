@@ -8108,6 +8108,53 @@ model ClinicPatientLink {
   @@map("clinic_patient_links")
 }
 
+// Interruptores POR CLÍNICA para encender una función nueva en una sola sede
+// antes de dársela a todas. Hoy la única clave es "menu-dos-niveles"
+// (src/lib/menu-dos-niveles/interruptor.ts). Una sede dental es su propia fila
+// de `clinics`: encenderlo aquí lo ve todo el equipo de esa sede y nadie más.
+//
+// SIN relación declarada con Clinic A PROPÓSITO: así el modelo Clinic no cambia
+// y ningún `include: { clinic: true }` (el del login incluido) depende de esta
+// tabla. La llave foránea con ON DELETE CASCADE vive en el SQL.
+// Si la tabla no existe, el lector devuelve `false`: el panel sigue como hoy.
+// Requiere sql/menu-dos-niveles.sql aplicado en Supabase.
+model ClinicFeatureFlag {
+  clinicId  String
+  flag      String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@id([clinicId, flag])
+  @@map("clinic_feature_flags")
+}
+
+// El menú que una PERSONA se armó a mano en el menú de dos niveles (opción
+// «Personalizar» de su tarjeta). Una fila por usuario; como cada persona tiene
+// una fila de `users` POR clínica (@@unique([supabaseId, clinicId])), quien
+// trabaja en dos sedes personaliza cada una por su lado.
+//
+// `layout` guarda SOLO EL SITIO de cada cosa (ids y contenedores), nunca qué
+// opciones ve esa persona: eso se recalcula en cada carga con el filtro de
+// permisos de siempre (src/lib/menu-personalizado/diseno.ts). `revision` cambia
+// en cada escritura y es la que evita que dos pestañas se pisen.
+//
+// SIN relación declarada con User ni Clinic A PROPÓSITO, igual que
+// ClinicFeatureFlag: así el modelo User no cambia y el login —que lee al
+// usuario entero— no depende de que esta tabla exista. Las llaves foráneas con
+// ON DELETE CASCADE viven en el SQL. Sin la tabla, todo el mundo ve el menú sin
+// personalizar. Requiere sql/menu-personalizado.sql aplicado en Supabase.
+model UserMenuLayout {
+  userId    String   @id
+  clinicId  String
+  layout    Json
+  revision  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  @@index([clinicId])
+  @@map("user_menu_layouts")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BLOG SEO PÚBLICO — contenido GLOBAL de marca (dalecontrol.com/blog).
 //

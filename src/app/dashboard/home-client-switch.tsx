@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Shield, Stethoscope } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import hoy from "@/components/dashboard/hoy-rediseno/hoy.module.css";
 
 type HomeMode = "admin" | "doctor";
 
@@ -14,6 +15,14 @@ interface Props {
   doctorContent: ReactNode | null;
   canBeDoctor: boolean;
   initialMode: HomeMode;
+  /**
+   * ¿La clínica ve el rediseño de «Hoy»? Lo decide `page.tsx` con el
+   * interruptor `menu-dos-niveles`. Solo cambia la pinta del conmutador
+   * Admin / Doctor (el control segmentado del diseño nuevo); el contenido de
+   * cada modo ya viene elegido desde la página. Sin la prop, o en false, este
+   * componente se pinta exactamente como siempre.
+   */
+  rediseno?: boolean;
 }
 
 export function HomeClientSwitch({
@@ -21,6 +30,7 @@ export function HomeClientSwitch({
   doctorContent,
   canBeDoctor,
   initialMode,
+  rediseno = false,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -61,6 +71,39 @@ export function HomeClientSwitch({
   };
 
   const showToggle = canBeDoctor && doctorContent !== null;
+
+  if (rediseno) {
+    return (
+      <>
+        {showToggle && (
+          <div role="tablist" aria-label={t("home.switch.ariaLabel")} className={`${hoy.segmentado} ${hoy.interruptor}`}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "admin"}
+              className={`${hoy.segmento} ${mode === "admin" ? hoy.segmentoActivo : ""}`}
+              onClick={() => switchMode("admin")}
+            >
+              <Shield size={12} aria-hidden style={{ marginRight: 6 }} />
+              {t("home.switch.admin")}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "doctor"}
+              className={`${hoy.segmento} ${mode === "doctor" ? hoy.segmentoActivo : ""}`}
+              onClick={() => switchMode("doctor")}
+            >
+              <Stethoscope size={12} aria-hidden style={{ marginRight: 6 }} />
+              {t("home.switch.doctor")}
+            </button>
+          </div>
+        )}
+
+        {mode === "doctor" && doctorContent ? doctorContent : adminContent}
+      </>
+    );
+  }
 
   return (
     <>

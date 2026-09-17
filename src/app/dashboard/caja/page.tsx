@@ -10,7 +10,11 @@ import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
 import type { Prisma } from "@prisma/client";
 import { canUseCaja } from "@/lib/caja-pin";
 import { ModuleLocked } from "@/components/dashboard/module-locked";
+import { CajaSinPermiso } from "@/components/dashboard/sin-permiso-rediseno/caja-sin-permiso";
+import { hasPermission } from "@/lib/auth/permissions";
+import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { isFacturapiLive } from "@/lib/facturapi-env";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { CajaClient } from "./caja-client";
 
 // Caja = corte de caja diario. Reemplaza la página general /dashboard/billing.
@@ -20,7 +24,23 @@ export default async function CajaPage() {
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   requirePermissionOrRedirect(user, "billing.view");
   // Gate de Caja por usuario (CONTRATO CAJA v2): sin permiso → módulo bloqueado.
-  if (!canUseCaja(user)) return <ModuleLocked name="Caja" />;
+  if (!canUseCaja(user)) {
+    // Hallazgo 16 del rediseño (ws1-t8): «Caja no está en tu plan → Ver planes»
+    // es falso aquí. La clínica SÍ tiene Caja (billing.view ya pasó arriba); lo
+    // que le falta a ESTE usuario es el interruptor `canAccessCaja` de Equipo.
+    // Con la bandera `menu-dos-niveles` encendida la pantalla dice eso y ofrece
+    // volver a Hoy (o abrir Equipo, si puede editarlo). Con la bandera apagada
+    // se queda el ModuleLocked de siempre, tal cual. La regla de quién entra
+    // (canUseCaja) no cambia.
+    const rediseno = await menuDosNivelesEncendido(user.clinicId);
+    if (!rediseno) return <ModuleLocked name="Caja" />;
+    const { t } = serverTForLocale(localeFromClinic(user.clinic));
+    const puedeEditarEquipo = hasPermission(
+      { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
+      "team.edit",
+    );
+    return <CajaSinPermiso t={t} equipoHref={puedeEditarEquipo ? "/dashboard/team" : undefined} />;
+  }
 
   const [caja, history, invoices, patients, clinic, creditTotal] = await Promise.all([
     getCajaState(user.clinicId),
@@ -69,12 +89,20 @@ export default async function CajaPage() {
   const todayStart = periodRangeUtc("day", tz).from;
   const monthStart = periodRangeUtc("month", tz).from;
   const issued: Prisma.InvoiceWhereInput = { clinicId: user.clinicId, status: { notIn: ["DRAFT", "CANCELLED"] } };
-  const [paidAgg, pendingAgg, overdueAgg, totalInvoices, monthInvoices] = await Promise.all([
+  // REDISEÑO DE CAJA — el MISMO interruptor por clínica que enciende el menú
+  // de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no
+  // uno propio. Falla cerrado (sin tabla, sin fila o con error → false = la
+  // Caja de hoy, tal cual). No añade un viaje a la base: el layout ya la
+  // preguntó en esta misma carga y la respuesta vive 60 s en memoria por
+  // clínica. Va en este Promise.all (6) y no en el de arriba (ya con 6): menos
+  // de 7 consultas por tanda.
+  const [paidAgg, pendingAgg, overdueAgg, totalInvoices, monthInvoices, rediseno] = await Promise.all([
     prisma.invoice.aggregate({ _sum: { paid: true },    where: issued }),
     prisma.invoice.aggregate({ _sum: { balance: true }, where: receivableInvoiceWhere(user.clinicId) }),
     prisma.invoice.aggregate({ _sum: { balance: true }, where: overdueInvoiceWhere(user.clinicId, todayStart) }),
     prisma.invoice.count({ where: { clinicId: user.clinicId } }),
     prisma.invoice.count({ where: { clinicId: user.clinicId, createdAt: { gte: monthStart } } }),
+    menuDosNivelesEncendido(user.clinicId),
   ]);
   const totalPaid    = money(paidAgg._sum.paid ?? 0);
   const totalPending = money(pendingAgg._sum.balance ?? 0);
@@ -86,6 +114,7 @@ export default async function CajaPage() {
       history={history}
       timezone={clinic?.timezone ?? "America/Mexico_City"}
       hasPin={!!user.cajaPinHash}
+      rediseno={rediseno}
       billing={{
         invoices: visibleInvoices as any,
         patients,

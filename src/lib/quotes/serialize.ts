@@ -1,6 +1,7 @@
 // Serialización Prisma → DTO. Convierte Decimal a number y Date a ISO antes de
 // cruzar a cualquier client component (Decimal/Date no son serializables).
 
+import type { CondicionesPago } from "./condiciones-pago";
 import type {
   QuoteDTO,
   QuoteItemDTO,
@@ -47,9 +48,20 @@ export function serializeQuoteItem(it: any): QuoteItemDTO {
   };
 }
 
-/** Convierte un Quote de Prisma (con items, y opcionalmente patient/createdBy). */
+/**
+ * Convierte un Quote de Prisma (con items, y opcionalmente patient/createdBy).
+ *
+ * `condiciones` viene aparte porque NO vive en la tabla `quotes`: la lee
+ * `condiciones-pago-db.ts` de `quote_payment_terms`, que puede no existir
+ * todavía. Sin ella, el DTO sale con `condicionesPago: null` — exactamente el
+ * mismo presupuesto que antes de WS1-T8.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function serializeQuote(q: any): QuoteDTO {
+export function serializeQuote(
+  q: any,
+  condiciones: CondicionesPago | null = null,
+  condicionesIlegibles = false,
+): QuoteDTO {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items = (q.items ?? [])
     .slice()
@@ -89,6 +101,8 @@ export function serializeQuote(q: any): QuoteDTO {
     createdByName,
     patientName,
     items,
+    condicionesPago: condiciones,
+    ...(condicionesIlegibles ? { condicionesPagoIlegible: true } : {}),
   };
 }
 
@@ -106,6 +120,8 @@ export function toPublicView(
     patientFirstName: string;
     signatureUrl: string | null;
     expired: boolean;
+    /** Formas de pago propuestas; null si no hay o si falta el SQL. */
+    condicionesPago?: CondicionesPago | null;
   },
 ): PublicQuoteView {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -136,6 +152,7 @@ export function toPublicView(
     total: num(q.total),
     notes: q.notes ?? null,
     acceptedAt: iso(q.acceptedAt),
+    condicionesPago: opts.condicionesPago ?? null,
     clinicName: opts.clinicName,
     clinicLogoUrl: opts.clinicLogoUrl,
     patientFirstName: opts.patientFirstName,

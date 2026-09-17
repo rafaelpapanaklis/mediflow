@@ -803,3 +803,188 @@
   .welcomeWrap { display: none; }
   .mobileBlock { display: flex; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO — activo solo con `rediseno` (mismo interruptor `menu-dos-
+   niveles`, encendido hoy únicamente para Local Altabrisa). Solo LEE los
+   tokens del menú (`--m2-*`); cero declaraciones propias. Viste el MARCO:
+   topbar, el encabezado/plegado de la paleta y el panel de propiedades.
+   El plano isométrico, el piso 3D (`.canvasWrap`, `.canvasStage`,
+   `.svgRoot`, `.stage3d`) y el contenido de la paleta compartida
+   (`FloorPalette`/`FloorPaletteItem`, de src/components/floor-plan, también
+   usada por Instituto) NO se tocan: son el lienzo, no el marco, y tocar la
+   paleta compartida movería un componente que otro vertical usa a la vez.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* `.pageRediseno` se aplica tanto a `.page` como a `.welcomeWrap` (la
+   bienvenida de una clínica sin layout previo): mismo fondo base para las
+   dos pantallas del editor. */
+.pageRediseno {
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto);
+}
+
+/* ── Topbar ── */
+.pageRediseno .topbar {
+  background: var(--m2-n2-fondo);
+  border-bottom-color: var(--m2-borde);
+  box-shadow: none;
+}
+.pageRediseno .brandText { color: var(--m2-texto); }
+.pageRediseno .brandIcon {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  box-shadow: none;
+}
+.pageRediseno .divider { background: var(--m2-borde); }
+.pageRediseno .clinicPill {
+  color: var(--m2-texto-2);
+  background: var(--m2-n1-fondo);
+  border-color: var(--m2-borde);
+}
+
+.pageRediseno .modeToggle {
+  background: var(--m2-n1-fondo);
+  border-color: var(--m2-borde);
+}
+.pageRediseno .modeBtn { color: var(--m2-texto-3); }
+.pageRediseno .modeBtn:hover:not(:disabled) { color: var(--m2-texto-2); }
+.pageRediseno .modeBtnActive {
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  box-shadow: var(--m2-sombra);
+}
+/* "En Vivo" activo se queda en rojo a propósito: es un semáforo de
+   grabación/transmisión, no un color de marca — igual que el foco rojo de
+   una cámara, no cambia con el tema. Se toma de --danger-strong si el
+   panel ya lo declara; si no, cae en el mismo rojo de siempre. */
+.pageRediseno .modeBtnActiveLive {
+  background: var(--danger-strong, #b3261e);
+}
+
+.pageRediseno .toolbarBtn {
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  border-color: var(--m2-tarjeta-borde);
+}
+.pageRediseno .toolbarBtn:hover:not(:disabled) {
+  background: var(--m2-hover);
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-activo);
+}
+.pageRediseno .optimizerBtn {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  box-shadow: none;
+}
+.pageRediseno .optimizerBtn:hover { filter: none; background: var(--m2-activo); }
+
+.pageRediseno .lightingPill {
+  background: var(--m2-n1-fondo);
+  border-color: var(--m2-borde);
+}
+.pageRediseno .lightingPill:hover {
+  background: var(--m2-hover);
+  border-color: var(--m2-tarjeta-borde);
+}
+.pageRediseno .lightingHourTxt { color: var(--m2-texto-3); }
+
+.pageRediseno .savedIndicator { color: var(--m2-texto-3); }
+.pageRediseno .zoomPercent { color: var(--m2-texto-2); }
+.pageRediseno .kbdHint { color: var(--m2-texto-3); }
+/* Las teclas de atajo (kbd/code) y el folio del elemento seleccionado
+   pasan de letra de máquina a Instrument Sans + tabular-nums. La
+   especificidad de `.pageRediseno …` le gana a la regla vieja sin tocarla,
+   así que el camino viejo (bandera apagada) no cambia ni un píxel. */
+.pageRediseno .kbdHint kbd,
+.pageRediseno .toolToggleBtn kbd,
+.pageRediseno .propKbdRow code {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  background: var(--m2-n1-fondo);
+  border-color: var(--m2-borde);
+  color: var(--m2-texto-2);
+}
+
+.pageRediseno .toolToggleGroup {
+  background: var(--m2-n1-fondo);
+  border-color: var(--m2-borde);
+}
+.pageRediseno .toolToggleBtn { color: var(--m2-texto-3); }
+.pageRediseno .toolToggleBtn:hover:not(:disabled) { color: var(--m2-texto); }
+.pageRediseno .toolToggleBtnActive {
+  background: var(--m2-tarjeta);
+  color: var(--m2-activo);
+  box-shadow: var(--m2-sombra);
+}
+.pageRediseno .toolToggleBtn kbd { color: var(--m2-texto-3); }
+.pageRediseno .toolToggleBtnActive kbd {
+  background: var(--m2-hover);
+  color: var(--m2-activo);
+}
+
+/* ── Sidebar (marco de la paleta; el contenido es floor-chrome compartido) ── */
+.pageRediseno .sidebar {
+  background: var(--m2-n2-fondo);
+  border-right-color: var(--m2-borde);
+}
+.pageRediseno .sidebarLockedOverlay { color: var(--m2-texto-2); }
+.pageRediseno .sidebarLockedOverlay strong { color: var(--m2-texto); }
+.pageRediseno .categoryHeader {
+  color: var(--m2-texto-3);
+  border-bottom-color: var(--m2-borde);
+}
+.pageRediseno .categoryHeader:hover { color: var(--m2-activo); }
+
+/* ── Panel de propiedades ── */
+.pageRediseno .propertiesPanel {
+  background: var(--m2-n2-fondo);
+  border-left-color: var(--m2-borde);
+}
+.pageRediseno .propEmpty { color: var(--m2-texto-3); }
+.pageRediseno .propTypePreview {
+  background: var(--m2-n1-fondo);
+  border-color: var(--m2-borde);
+}
+.pageRediseno .propTypePreviewName { color: var(--m2-texto); }
+.pageRediseno .propTypePreviewMeta {
+  color: var(--m2-texto-3);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.pageRediseno .propInput,
+.pageRediseno .propChairSelect {
+  color: var(--m2-texto);
+  background: var(--m2-n1-fondo);
+  border-color: var(--m2-borde);
+}
+.pageRediseno .propInput:focus,
+.pageRediseno .propChairSelect:focus {
+  border-color: var(--m2-activo);
+  box-shadow: var(--m2-foco);
+}
+.pageRediseno .propRotBtn {
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto-2);
+  border-color: var(--m2-borde);
+}
+.pageRediseno .propRotBtn:hover { border-color: var(--m2-activo); color: var(--m2-texto); }
+.pageRediseno .propRotBtnActive {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  border-color: var(--m2-activo);
+}
+/* El botón de borrar se queda semántico (peligro = rojo), no de marca. */
+.pageRediseno .propDeleteBtn {
+  background: color-mix(in srgb, var(--danger-strong, #dc2626) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger-strong, #dc2626) 35%, transparent);
+  color: var(--danger-strong, #dc2626);
+}
+.pageRediseno .propChairHint { color: var(--m2-texto-3); }
+.pageRediseno .propChairHint a { color: var(--m2-activo); }
+.pageRediseno .propKbdRow { color: var(--m2-texto-2); }
+
+/* `.mobileBlock` (el aviso "ábrelo en una computadora") queda FUERA a
+   propósito: es hermano de `.page` en el JSX, no su descendiente, y solo se
+   pinta por debajo de 1024px — un ancho en el que este rediseño (pensado
+   para computadoras e iPads, nunca para teléfono) no tiene nada que vestir. */

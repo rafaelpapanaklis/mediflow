@@ -5,6 +5,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { BUCKETS, signMaybeUrl } from "@/lib/storage";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { toPublicView } from "@/lib/quotes/serialize";
+import { leerCondiciones } from "@/lib/quotes/condiciones-pago-db";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,10 @@ export async function GET(req: NextRequest, { params }: Params) {
     patientFirstName: quote.patient.firstName,
     signatureUrl: signatureUrl || null,
     expired,
+    // El plan de pagos que se le propuso. Es justo lo que el paciente quiere
+    // ver antes de firmar; sin el SQL aplicado llega null y la página no
+    // pinta la sección, como antes.
+    condicionesPago: (await leerCondiciones(prisma, quote.id)).condiciones,
   });
 
   return NextResponse.json(view);

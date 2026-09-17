@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Lock, Stethoscope } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { formatCurrency } from "@/lib/utils";
@@ -44,6 +44,18 @@ interface SelectedProcedure { id: string; name: string; price: number; quantity:
 
 interface Props {
   patientId: string;
+  /**
+   * ¿Diseño nuevo? (interruptor `menu-dos-niveles` de la clínica). Cambia dos
+   * cosas de este formulario y ninguna más:
+   *  · «Antecedentes médicos relevantes» pasa a llamarse por lo que de verdad
+   *    es —la exploración— porque los antecedentes ya se ENSEÑAN arriba,
+   *    sacados del cuestionario de salud, en vez de pedirse otra vez a mano;
+   *  · los emoji sueltos dentro del texto (🔒 🩺 💰 💊) se van, que la ficha
+   *    usa íconos de línea en todo lo demás.
+   * Ningún campo se añade, se quita ni cambia de sitio: `objective` sigue
+   * siendo `objective` y se guarda igual.
+   */
+  rediseno?: boolean;
   onSaved: (record: any) => void;
   /** Sincroniza SOLO el aiAssist del record en el padre SIN colapsar el acordeón
    *  (a diferencia de onSaved/handleRecordUpdated, que además colapsa la fila). Así,
@@ -89,7 +101,7 @@ function readAddenda(spec: any): Addendum[] {
     }));
 }
 
-export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord }: Props) {
+export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
   // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004). Edición: en vivo contra el
@@ -182,11 +194,14 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
 
   const [treatmentPlans, setTreatmentPlans] = useState<any[]>([]);
   useEffect(() => {
+    // Con el rediseño activo ya no se pinta la línea de tiempo de ortodoncia
+    // (único consumidor de treatmentPlans aquí), así que esta consulta sobra.
+    if (rediseno) return;
     fetch(`/api/treatments?patientId=${patientId}`)
       .then(r => r.ok ? r.json() : [])
       .then(d => setTreatmentPlans(Array.isArray(d) ? d : []))
       .catch(() => {});
-  }, [patientId]);
+  }, [patientId, rediseno]);
 
   const orthoMilestones = useMemo(() => {
     const plan = treatmentPlans.find(p => {
@@ -623,7 +638,8 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       {isLocked && (
         <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
           <div className="font-semibold mb-0.5">
-            🔒 Consulta firmada{initialSpec.signedAt ? ` el ${new Date(initialSpec.signedAt).toLocaleString("es-MX")}` : ""}
+            {rediseno ? <Lock size={12} strokeWidth={1.75} aria-hidden className="inline -mt-0.5 mr-1" /> : "🔒 "}
+            Consulta firmada{initialSpec.signedAt ? ` el ${new Date(initialSpec.signedAt).toLocaleString("es-MX")}` : ""}
           </div>
           <div>
             Una nota firmada es inalterable (NOM-024), así que este formulario es solo de
@@ -656,7 +672,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           </button>
         </div>
       )}
-      {orthoMilestones && orthoMilestones.months.length > 0 && (
+      {/* Rafael: la línea de tiempo de ortodoncia no hace falta en Nueva consulta.
+          Solo se quita con el rediseño (menu-dos-niveles); con la bandera apagada
+          sigue exactamente igual que hoy. */}
+      {!rediseno && orthoMilestones && orthoMilestones.months.length > 0 && (
         <CardNew title={`${t("clinical.dentalForm.timelineTitle")} — ${orthoMilestones.plan.name}`} sub={t("clinical.dentalForm.orthoPlanMonthly")}>
           <TreatmentTimeline milestones={orthoMilestones.months} />
         </CardNew>
@@ -688,13 +707,21 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         </div>
         <div className="field-new">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <label className="field-new__label">{t("clinical.dentalForm.medicalHistoryLabel")}</label>
+            <label className="field-new__label">
+              {rediseno
+                ? t("pacientesRediseno.consulta.exploracionCampo")
+                : t("clinical.dentalForm.medicalHistoryLabel")}
+            </label>
             <DictationMic disabled={saving} onText={appendDictation("objective", "\n")} />
           </div>
           <textarea
             className="input-new"
             style={{ height: 80, paddingTop: 8, resize: "vertical" }}
-            placeholder={t("clinical.dentalForm.medicalHistoryPlaceholder")}
+            placeholder={
+              rediseno
+                ? t("pacientesRediseno.consulta.exploracionEjemplo")
+                : t("clinical.dentalForm.medicalHistoryPlaceholder")
+            }
             value={form.objective}
             onChange={e => set("objective", e.target.value)}
           />
@@ -709,7 +736,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
         >
           <span className="text-sm font-bold flex items-center gap-2">
-            🩺 Signos vitales
+            {rediseno ? <Stethoscope size={14} strokeWidth={1.75} aria-hidden /> : "🩺"} Signos vitales
             {hasVitals && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-full">capturados</span>}
           </span>
           <span className="text-muted-foreground text-xs">{vitalsOpen ? "▲" : "▼"}</span>
@@ -956,7 +983,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
 
       {/* PROCEDIMIENTOS Y FACTURACIÓN */}
       <CardNew
-        title={`💰 ${t("clinical.dentalForm.proceduresTitle")}`}
+        title={`${rediseno ? "" : "💰 "}${t("clinical.dentalForm.proceduresTitle")}`}
         action={selectedProcs.length > 0 ? (
           <div className="text-sm font-bold text-brand-700 dark:text-brand-400">
             {t("common.total")}: {formatCurrency(proceduresTotal)}
@@ -1050,7 +1077,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
 
       {/* PRESCRIPCIÓN — NOM-024 con CUMS + firma electrónica opcional */}
       <CardNew
-        title={`💊 ${t("clinical.dentalForm.prescriptionTitle")}`}
+        title={`${rediseno ? "" : "💊 "}${t("clinical.dentalForm.prescriptionTitle")}`}
         action={(
           <ButtonNew
             type="button"

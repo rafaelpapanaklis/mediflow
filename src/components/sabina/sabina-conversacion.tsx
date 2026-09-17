@@ -30,6 +30,7 @@ import { SabinaMessageContent } from "@/components/sabina/message-content";
 import { ToolTrace } from "@/components/sabina/tool-trace";
 import { SabinaErrorNotice } from "@/components/sabina/error-notice";
 import { PropuestaCard } from "@/app/dashboard/sabina/propuesta-card";
+import { CLASES_PIEZAS_SABINA } from "@/components/dashboard/layout-rediseno/sabina";
 import styles from "@/app/dashboard/sabina/sabina.module.css";
 import {
   actuar,
@@ -52,7 +53,7 @@ function formatTime(ts: number): string {
  * llamando de verdad — el contrato no manda ese dato hasta que la respuesta
  * llega entera (ver sabina-core.ts, comentario de SABINA_THINKING_HINTS).
  */
-function ThinkingIndicator({ startedAt }: { startedAt: number }) {
+function ThinkingIndicator({ startedAt, c = styles }: { startedAt: number; c?: Record<string, string> }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 2200);
@@ -61,12 +62,12 @@ function ThinkingIndicator({ startedAt }: { startedAt: number }) {
   const hint = SABINA_THINKING_HINTS[tick % SABINA_THINKING_HINTS.length];
   const lento = Date.now() - startedAt > SABINA_SLOW_HINT_MS;
   return (
-    <div className={styles.thinking} aria-live="polite">
-      <span className={styles.thinkingDots} aria-hidden>
+    <div className={c.thinking} aria-live="polite">
+      <span className={c.thinkingDots} aria-hidden>
         <i /><i /><i />
       </span>
       <span>{hint}</span>
-      {lento && <span className={styles.thinkingSlow}>Las preguntas abiertas tardan un poco más.</span>}
+      {lento && <span className={c.thinkingSlow}>Las preguntas abiertas tardan un poco más.</span>}
     </div>
   );
 }
@@ -89,6 +90,14 @@ export interface SabinaConversacionProps {
   compacto?: boolean;
   /** Se llama al enfocar la caja de texto (el cajón la enfoca al abrirse). */
   autoFocus?: boolean;
+  /**
+   * REDISEÑO (interruptor `menu-dos-niveles`): el juego de clases que eligió la
+   * pantalla de Sabina (`CLASES_REDISENO` o `styles`, en `sabina-client.tsx`).
+   * Sin él —el cajón lateral— se pintan las clases de siempre, tal cual.
+   */
+  clases?: Record<string, string>;
+  /** Lo mismo para las tarjetas de confirmación, que traen su propio mapa. */
+  rediseno?: boolean;
 }
 
 export function SabinaConversacion({
@@ -97,7 +106,15 @@ export function SabinaConversacion({
   puedeProponer = false,
   compacto = false,
   autoFocus = false,
+  clases,
+  rediseno = false,
 }: SabinaConversacionProps) {
+  // Un solo juego de clases por render: el que baja la pantalla o el de siempre.
+  const c: Record<string, string> = clases ?? styles;
+  // Las piezas del hilo (contenido, rastro de herramientas, avisos) traen su
+  // propia hoja: con la bandera se visten con `layout-rediseno/sabina.ts`;
+  // sin ella no reciben nada y pintan las suyas de siempre.
+  const piezas = rediseno ? CLASES_PIEZAS_SABINA : undefined;
   const estado = useSabinaEstado();
   const contextoDe = useContextoSabina();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -157,46 +174,46 @@ export function SabinaConversacion({
 
   return (
     <>
-      <div className={styles.scroll}>
-        <div className={styles.scrollInner}>
+      <div className={c.scroll}>
+        <div className={c.scrollInner}>
           {openingConv ? (
-            <div className={styles.centerNotice}>
-              <Loader2 size={16} aria-hidden className={styles.spin} /> Abriendo conversación…
+            <div className={c.centerNotice}>
+              <Loader2 size={16} aria-hidden className={c.spin} /> Abriendo conversación…
             </div>
           ) : activeFailed ? (
-            <div className={styles.centerNotice}>
+            <div className={c.centerNotice}>
               <CloudOff size={20} strokeWidth={1.75} aria-hidden />
               <span>No se pudo abrir esta conversación.</span>
-              <button type="button" className={styles.retryLink} onClick={nuevaConversacion}>
+              <button type="button" className={c.retryLink} onClick={nuevaConversacion}>
                 <RotateCcw size={12} aria-hidden /> Empezar una nueva
               </button>
             </div>
           ) : empty && apagada ? (
-            <div className={styles.systemRow}>
-              <SabinaErrorNotice kind="apagada" />
+            <div className={c.systemRow}>
+              <SabinaErrorNotice kind="apagada" clases={piezas} />
             </div>
           ) : empty ? (
-            <div className={styles.welcome}>
-              <div className={styles.welcomeIcon}><Sparkles size={compacto ? 20 : 24} aria-hidden /></div>
-              <h1 className={styles.welcomeTitle}>Pregúntale a Sabina</h1>
-              <p className={styles.welcomeText}>
+            <div className={c.welcome}>
+              <div className={c.welcomeIcon}><Sparkles size={compacto ? 20 : 24} aria-hidden /></div>
+              <h1 className={c.welcomeTitle}>Pregúntale a Sabina</h1>
+              <p className={c.welcomeText}>
                 {compacto
                   ? "Sabe en qué pantalla estás. Si tienes abierta la ficha de un paciente, no hace falta que le digas su nombre."
                   : "Sabina lee los datos de tu clínica y contesta con lo que encuentra — nunca inventa un número. Pregunta en lenguaje normal, como si le hablaras a tu recepcionista."}
               </p>
-              <div className={styles.suggestions}>
+              <div className={c.suggestions}>
                 {sugerencias.map((s) => (
                   <button
                     key={s.text}
                     type="button"
-                    className={styles.suggestion}
+                    className={c.suggestion}
                     onClick={() => {
                       escribir(s.text);
                       setTimeout(() => textareaRef.current?.focus(), 30);
                     }}
                   >
-                    <span className={styles.suggestionText}>{s.text}</span>
-                    <span className={styles.suggestionHint}>{s.hint}</span>
+                    <span className={c.suggestionText}>{s.text}</span>
+                    <span className={c.suggestionHint}>{s.hint}</span>
                   </button>
                 ))}
               </div>
@@ -204,26 +221,27 @@ export function SabinaConversacion({
           ) : (
             messages.map((m: SabinaMessage) =>
               m.role === "system" ? (
-                <div key={m.id} className={styles.systemRow}>
+                <div key={m.id} className={c.systemRow}>
                   <SabinaErrorNotice
                     kind={m.errorKind ?? "unknown"}
                     retrying={retryingId === m.id}
                     onRetry={() => reintentar(m.id, contextoDe())}
+                    clases={piezas}
                   />
                 </div>
               ) : (
-                <div key={m.id} className={`${styles.message} ${m.role === "user" ? styles.messageUser : ""}`}>
-                  <div className={m.role === "user" ? styles.avatarUser : styles.avatarSabina}>
+                <div key={m.id} className={`${c.message} ${m.role === "user" ? c.messageUser : ""}`}>
+                  <div className={m.role === "user" ? c.avatarUser : c.avatarSabina}>
                     {m.role === "user" ? (firstName ? firstName[0]?.toUpperCase() : "D") : <Sparkles size={13} aria-hidden />}
                   </div>
-                  <div className={`${styles.bubbleCol} ${m.propuestas?.length ? styles.bubbleColWide : ""}`}>
-                    <div className={styles.bubble}>
+                  <div className={`${c.bubbleCol} ${m.propuestas?.length ? c.bubbleColWide : ""}`}>
+                    <div className={c.bubble}>
                       {m.pending ? (
-                        <ThinkingIndicator startedAt={m.timestamp} />
+                        <ThinkingIndicator startedAt={m.timestamp} c={c} />
                       ) : m.role === "assistant" ? (
-                        <SabinaMessageContent content={m.content || "—"} />
+                        <SabinaMessageContent content={m.content || "—"} clases={piezas} />
                       ) : (
-                        <p className={styles.userText}>{m.content}</p>
+                        <p className={c.userText}>{m.content}</p>
                       )}
                     </div>
                     {!m.pending &&
@@ -240,10 +258,11 @@ export function SabinaConversacion({
                           onDescartar={() => void actuar(p.id, "descartar")}
                           onConsultar={() => void consultarPropuesta(p.id)}
                           onCaducar={() => void consultarPropuesta(p.id, true)}
+                          rediseno={rediseno}
                         />
                       ))}
-                    {!m.pending && m.role === "assistant" && <ToolTrace tools={m.herramientasUsadas} />}
-                    <span className={styles.timestamp}>{formatTime(m.timestamp)}</span>
+                    {!m.pending && m.role === "assistant" && <ToolTrace tools={m.herramientasUsadas} clases={piezas} />}
+                    <span className={c.timestamp}>{formatTime(m.timestamp)}</span>
                   </div>
                 </div>
               ),
@@ -253,12 +272,12 @@ export function SabinaConversacion({
         </div>
       </div>
 
-      <div className={styles.composerWrap}>
-        <div className={styles.composerInner}>
-          <div className={styles.composerBox}>
+      <div className={c.composerWrap}>
+        <div className={c.composerInner}>
+          <div className={c.composerBox}>
             <textarea
               ref={textareaRef}
-              className={styles.textarea}
+              className={c.textarea}
               placeholder="Pregúntale algo a Sabina…"
               value={input}
               maxLength={SABINA_QUESTION_MAX_CHARS}
@@ -269,7 +288,7 @@ export function SabinaConversacion({
             />
             <button
               type="button"
-              className={styles.sendBtn}
+              className={c.sendBtn}
               onClick={() => ask(input)}
               disabled={!input.trim() || sending || bloqueado}
               aria-label="Preguntar"
@@ -277,7 +296,7 @@ export function SabinaConversacion({
               <Send size={15} aria-hidden />
             </button>
           </div>
-          <div className={styles.composerHint}>
+          <div className={c.composerHint}>
             {apagada
               ? "Sabina está apagada para tu usuario."
               : puedeProponer

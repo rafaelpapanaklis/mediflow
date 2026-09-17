@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Plus, X, Send, Save, ArrowDownLeft, ArrowUpRight, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
@@ -35,6 +35,13 @@ interface Diagnosis {
 
 interface Props {
   patientId: string;
+  /**
+   * WS1-T5 · rediseño de Pacientes, mismo interruptor que patient-detail-client
+   * pasa a todos sus tabs clínicos. Con `false` (default) esta pestaña no
+   * cambia un píxel: la pastilla de estado sigue con su fondo sólido y el
+   * "cargando" sigue siendo texto plano.
+   */
+  pacientesRediseno?: boolean;
 }
 
 const STATUS_LABEL_KEY: Record<ReferralRow["status"], string> = {
@@ -52,7 +59,19 @@ const STATUS_COLOR: Record<ReferralRow["status"], string> = {
   CANCELLED: "#64748b",
 };
 
-export function ReferralsTab({ patientId }: Props) {
+// Pastilla suave (fondo tenue + texto fuerte, theme-aware) en vez del chip
+// sólido de siempre — el mismo idioma que ya usan Citas y Plan de tratamiento
+// en esta misma ficha. Con la bandera apagada el chip de arriba (STATUS_COLOR)
+// sigue exactamente igual.
+const STATUS_SOFT: Record<ReferralRow["status"], CSSProperties> = {
+  SENT: { background: "var(--info-soft)", color: "var(--info-strong)" },
+  ACCEPTED: { background: "var(--success-soft)", color: "var(--success-strong)" },
+  REJECTED: { background: "var(--danger-soft)", color: "var(--danger-strong)" },
+  RESPONDED: { background: "var(--brand-soft)", color: "var(--violet-700)" },
+  CANCELLED: { background: "var(--bg-elev-2)", color: "var(--text-3)" },
+};
+
+export function ReferralsTab({ patientId, pacientesRediseno = false }: Props) {
   const t = useT();
   const [showForm, setShowForm] = useState(false);
 
@@ -84,14 +103,25 @@ export function ReferralsTab({ patientId }: Props) {
       </div>
 
       {loading ? (
-        <div className="text-xs text-muted-foreground p-4">{t("common.loading")}</div>
+        // El gateo llegaba a medias: la ruedita sí miraba el interruptor, pero
+        // el `flex items-center gap-2` que la acompaña NO, así que el «Cargando…»
+        // de las clínicas SIN el diseño nuevo pasaba de bloque a caja flex. Las
+        // clases van con la ruedita o no van.
+        <div className={pacientesRediseno
+          ? "flex items-center gap-2 text-xs text-muted-foreground p-4"
+          : "text-xs text-muted-foreground p-4"}>
+          {pacientesRediseno && <Loader2 size={13} className="animate-spin" aria-hidden />}
+          {t("common.loading")}
+        </div>
       ) : list.length === 0 ? (
         <div className="text-xs text-muted-foreground p-4 bg-card border border-border rounded-xl">
           {t("patients.referralsTab.empty")}
         </div>
       ) : (
         <div className="space-y-2">
-          {list.map((r) => <ReferralCard key={r.id} referral={r} onChanged={reload} />)}
+          {list.map((r) => (
+            <ReferralCard key={r.id} referral={r} onChanged={reload} pacientesRediseno={pacientesRediseno} />
+          ))}
         </div>
       )}
 
@@ -109,7 +139,9 @@ export function ReferralsTab({ patientId }: Props) {
 // OJO: la prop NO puede llamarse `ref` — es una prop reservada de React. En
 // React 18 se elimina de props para los componentes función, así que el
 // componente recibiría `undefined` y reventaría al leer cualquier campo.
-function ReferralCard({ referral: r, onChanged }: { referral: ReferralRow; onChanged: () => void }) {
+function ReferralCard({
+  referral: r, onChanged, pacientesRediseno,
+}: { referral: ReferralRow; onChanged: () => void; pacientesRediseno: boolean }) {
   const t = useT();
   const [responding, setResponding] = useState(false);
   const [response, setResponse] = useState("");
@@ -123,11 +155,17 @@ function ReferralCard({ referral: r, onChanged }: { referral: ReferralRow; onCha
             {isOutgoing ? t("patients.referralsTab.outgoingArrow") : t("patients.referralsTab.incomingArrow")} {r.toClinicName}
           </span>
         </div>
-        <span style={{ padding: "2px 8px", fontSize: 10, fontWeight: 700, borderRadius: 99, color: "#fff", background: STATUS_COLOR[r.status] }}>
+        <span
+          style={
+            pacientesRediseno
+              ? { padding: "2px 8px", fontSize: 11, fontWeight: 700, borderRadius: 99, ...STATUS_SOFT[r.status] }
+              : { padding: "2px 8px", fontSize: 10, fontWeight: 700, borderRadius: 99, color: "#fff", background: STATUS_COLOR[r.status] }
+          }
+        >
           {t(STATUS_LABEL_KEY[r.status])}
         </span>
       </div>
-      <div className="text-xs text-muted-foreground mb-2">
+      <div className={"text-xs text-muted-foreground mb-2" + (pacientesRediseno ? " tabular-nums" : "")}>
         {new Date(r.sentAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
         {r.toClinicClues && <> · CLUES <code className="font-mono">{r.toClinicClues}</code></>}
         {r.toSpecialty && <> · {r.toSpecialty}</>}

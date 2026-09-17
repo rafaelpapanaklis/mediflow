@@ -1,0 +1,295 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   AGENDA NUEVA — vistas SEMANA y MES (WS1-T2).
+
+   Todo lee los `--ag-*` que declara `.raiz` en `agenda-nueva.module.css`
+   (WS1-T1) y que se heredan hasta aquí: no hay ni un color escrito a mano
+   en este archivo. Las medidas son las del README del paquete de diseño.
+
+   La cuadrícula, las líneas de hora, la franja de cierre, la línea de
+   «ahora» y la tarjeta de cita NO están aquí: son de WS1-T1 y la vista
+   Semana las usa tal cual. Aquí solo vive lo que es propio de estas dos
+   vistas: la cabecera de día de la Semana y la cuadrícula del Mes con su
+   barra de ocupación.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.espaciador {
+  flex: 1;
+}
+
+/* ═══ SEMANA — la cabecera de cada día ═══════════════════════════════════
+   Va dentro de la celda de cabecera que dibuja la cuadrícula (52 px de
+   alto, borde izquierdo). Este botón la rellena entera para que el clic
+   funcione en todo el ancho, no solo sobre el texto. */
+
+.cabeceraDia {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cabeceraDia:hover .cabeceraNumero:not(.cabeceraNumeroHoy) {
+  background: var(--ag-fondo-app);
+}
+
+.cabeceraDia:focus-visible {
+  outline: 2px solid var(--ag-morado);
+  outline-offset: -2px;
+}
+
+.cabeceraAbrev {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ag-texto-2);
+}
+
+.cabeceraAbrevHoy {
+  color: var(--ag-morado-texto);
+}
+
+.cabeceraNumero {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ag-tinta);
+}
+
+.cabeceraNumeroHoy {
+  background: var(--ag-morado);
+  color: #fff;
+}
+
+.cabeceraConteo {
+  font-size: 11.5px;
+  color: var(--ag-texto-2);
+  white-space: nowrap;
+}
+
+/* ═══ MES ════════════════════════════════════════════════════════════════ */
+
+.mes {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  padding: 16px 24px 24px;
+}
+
+/* Fila de ayuda + leyenda. La leyenda enseña SOLO los responsables
+   visibles: si el filtro apaga a un doctor, su color desaparece de la
+   leyenda igual que desaparece de las barras. */
+.ayuda {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  height: 28px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--ag-texto-2);
+}
+
+.leyenda {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.leyendaItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.leyendaColor {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 2px;
+}
+
+.cabeceraSemana {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  height: 32px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ag-texto-2);
+}
+
+.cabeceraSemanaCelda {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+
+.rejilla {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-top: 1px solid var(--ag-borde-divisor);
+  border-left: 1px solid var(--ag-borde-divisor);
+}
+
+.celda {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 12px;
+  border-right: 1px solid var(--ag-borde-divisor);
+  border-bottom: 1px solid var(--ag-borde-divisor);
+  background: var(--ag-superficie);
+  cursor: pointer;
+}
+
+.celda:focus-visible {
+  outline: 2px solid var(--ag-morado);
+  outline-offset: -2px;
+}
+
+/* Los días de la cola del mes vecino y los ya pasados se atenúan, pero
+   siguen siendo clicables: el diseño los enseña a propósito para que la
+   semana no se corte a mitad. */
+.celdaFuera {
+  opacity: 0.5;
+}
+
+.celdaPasada {
+  opacity: 0.65;
+}
+
+.celdaHoy {
+  background: var(--ag-hoy);
+}
+
+.celdaCerrada {
+  background: var(--ag-fondo-cerrado);
+}
+
+/* El día que está seleccionado en las otras vistas, cuando no es hoy. */
+.celdaSeleccionada {
+  box-shadow: inset 0 0 0 2px oklch(0.47 0.2 280 / 0.45);
+}
+
+.celdaCabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.numero {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ag-tinta);
+}
+
+.numeroHoy {
+  background: var(--ag-morado);
+  color: #fff;
+}
+
+.conteo {
+  font-size: 12px;
+  color: var(--ag-texto-2);
+  white-space: nowrap;
+}
+
+/* ── La barra de ocupación ───────────────────────────────────────────────
+   El hueco gris es la capacidad libre del día; cada segmento de color, los
+   minutos que ocupa ese responsable. De dónde sale la capacidad está
+   explicado en `src/lib/agenda-nueva/ocupacion.ts`: horario real de
+   `ClinicSchedule` por los responsables visibles, nunca el «30 citas» del
+   prototipo. Cuando no se puede calcular, esta barra no se pinta. */
+
+.barra {
+  display: flex;
+  height: 8px;
+  flex: none;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ag-tinta) 6%, transparent);
+  overflow: hidden;
+}
+
+.segmento {
+  height: 100%;
+  min-width: 0;
+}
+
+.porcentaje {
+  font-size: 12px;
+  color: var(--ag-texto-2);
+}
+
+.nota {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.notaAmbar {
+  color: var(--ag-ambar-texto);
+}
+
+.notaGris {
+  color: var(--ag-texto-2);
+}
+
+/* ── Pantallas estrechas ─────────────────────────────────────────────────
+   Por debajo de 1280 el mes se queda sin aire: se recorta el acolchado y
+   la leyenda pasa a la línea de abajo antes que encogerse hasta ser
+   ilegible. La cuadrícula NO cambia de forma: siete columnas siguen
+   siendo siete columnas, que es lo que hace que un mes se lea de un
+   vistazo. */
+
+@media (max-width: 1280px) {
+  .mes {
+    padding: 12px 16px 16px;
+  }
+
+  .celda {
+    padding: 8px 9px;
+    gap: 6px;
+  }
+
+  .cabeceraSemanaCelda {
+    padding: 0 9px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .ayuda {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
+
+  .conteo {
+    font-size: 11px;
+  }
+}

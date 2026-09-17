@@ -2,6 +2,8 @@
 // Lo consumen API, UI del panel, página pública y PDF. Money SIEMPRE en number
 // (ya serializado desde Decimal) para que el client component lo pinte directo.
 
+import type { CondicionesPago } from "./condiciones-pago";
+
 export type QuoteStatus =
   | "DRAFT"
   | "PRESENTED"
@@ -72,6 +74,20 @@ export interface QuoteDTO {
   createdByName: string | null;
   patientName: string | null;
   items: QuoteItemDTO[];
+  /**
+   * Formas de pago propuestas (tabla `quote_payment_terms`, WS1-T8).
+   * `null` = el presupuesto no tiene condiciones guardadas, O el SQL
+   * `sql/presupuesto-condiciones-pago.sql` todavía no está aplicado. Los dos
+   * casos se pintan igual: sin sección de formas de pago, como antes.
+   */
+  condicionesPago: CondicionesPago | null;
+  /**
+   * `true` si NO se pudieron leer las condiciones (la base falló), que NO es lo
+   * mismo que «no tiene». El editor lo usa para NO mandarlas de vuelta al
+   * guardar: sin esto, abrir un presupuesto justo cuando la base tropieza y
+   * corregirle una coma le borraría el plan de mensualidades ya firmado.
+   */
+  condicionesPagoIlegible?: boolean;
 }
 
 /** Ítem de factura tal como se guarda en el JSON `Invoice.items`. */
@@ -130,6 +146,8 @@ export interface PublicQuoteView {
   total: number;
   notes: string | null;
   acceptedAt: string | null;
+  /** Formas de pago propuestas, para que el paciente vea su plan. Ver QuoteDTO. */
+  condicionesPago: CondicionesPago | null;
   clinicName: string;
   clinicLogoUrl: string | null;
   patientFirstName: string;

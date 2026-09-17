@@ -7,6 +7,11 @@ import { formatCurrency } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./procedures.module.css";
+// Mismos tokens `--pr-*` e Instrument Sans del rediseño de Pacientes: es el
+// idioma visual ya aprobado por Rafael, no uno nuevo. Se heredan por CSS
+// (custom properties), así que reutilizarlos aquí no acopla este módulo al
+// de Pacientes más allá de leer las mismas variables.
+import { CLASES_REDISENO } from "@/components/dashboard/pacientes-rediseno/raiz";
 import {
   Plus,
   Search,
@@ -32,6 +37,12 @@ interface Procedure {
 
 interface Props {
   initialProcedures: Procedure[];
+  /**
+   * Interruptor `menu-dos-niveles` de la clínica activa. Aditivo: en `false`
+   * (o sin pasar) la pantalla se pinta exactamente igual que hoy — ni una
+   * clase nueva se aplica.
+   */
+  rediseno?: boolean;
 }
 
 const CATEGORY_OPTIONS: { value: string; labelKey: string }[] = [
@@ -66,7 +77,7 @@ const EMPTY_FORM: FormState = {
   isActive: true,
 };
 
-export function ProceduresClient({ initialProcedures }: Props) {
+export function ProceduresClient({ initialProcedures, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -234,7 +245,11 @@ export function ProceduresClient({ initialProcedures }: Props) {
   const activeCount = procedures.filter((p) => p.isActive).length;
 
   return (
-    <div className={styles.page}>
+    <div
+      className={[styles.page, rediseno ? `${CLASES_REDISENO} ${styles.pageRediseno}` : ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {/* Header */}
       <div className={styles.head}>
         <div>
@@ -289,59 +304,76 @@ export function ProceduresClient({ initialProcedures }: Props) {
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className={rediseno ? styles.groups : "space-y-6"}>
           {grouped.map(([category, items]) => (
             <div
               key={category}
-              className="bg-card border border-border rounded-2xl shadow-card overflow-hidden"
+              className={
+                rediseno
+                  ? styles.groupCard
+                  : "bg-card border border-border rounded-2xl shadow-card overflow-hidden"
+              }
             >
-              <div className="px-5 py-3 border-b border-border bg-muted/50">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className={rediseno ? styles.groupHead : "px-5 py-3 border-b border-border bg-muted/50"}>
+                <h2 className={rediseno ? styles.groupTitle : "text-xs font-bold uppercase tracking-wider text-muted-foreground"}>
                   {CATEGORY_LABEL_KEY[category] ? t(CATEGORY_LABEL_KEY[category]) : category}
-                  <span className="ml-2 text-muted-foreground font-semibold">
-                    ({items.length})
-                  </span>
+                  {rediseno ? (
+                    <span className={styles.groupCount} style={{ marginLeft: 8 }}>{items.length}</span>
+                  ) : (
+                    <span className="ml-2 text-muted-foreground font-semibold">
+                      ({items.length})
+                    </span>
+                  )}
                 </h2>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className={rediseno ? styles.tableScroll : "overflow-x-auto"}>
+                <table className={rediseno ? styles.table : "w-full text-sm"}>
                   <thead>
-                    <tr className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
-                      <th className="px-5 py-3">{t("common.name")}</th>
-                      <th className="px-3 py-3">{t("pages.procedures.colSatCode")}</th>
-                      <th className="px-3 py-3 text-right">{t("pages.procedures.colPrice")}</th>
-                      <th className="px-3 py-3">{t("pages.procedures.colDuration")}</th>
-                      <th className="px-3 py-3">{t("common.status")}</th>
-                      <th className="px-5 py-3 text-right">{t("common.actions")}</th>
+                    <tr className={rediseno ? undefined : "text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border"}>
+                      <th className={rediseno ? undefined : "px-5 py-3"}>{t("common.name")}</th>
+                      <th className={rediseno ? undefined : "px-3 py-3"}>{t("pages.procedures.colSatCode")}</th>
+                      <th className={rediseno ? styles.thNum : "px-3 py-3 text-right"}>{t("pages.procedures.colPrice")}</th>
+                      <th className={rediseno ? undefined : "px-3 py-3"}>{t("pages.procedures.colDuration")}</th>
+                      <th className={rediseno ? undefined : "px-3 py-3"}>{t("common.status")}</th>
+                      <th className={rediseno ? styles.thNum : "px-5 py-3 text-right"}>{t("common.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((p) => (
                       <tr
                         key={p.id}
-                        className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${
-                          !p.isActive ? "opacity-60" : ""
-                        }`}
+                        className={
+                          rediseno
+                            ? !p.isActive
+                              ? styles.rowInactive
+                              : undefined
+                            : `border-b border-border last:border-0 hover:bg-muted transition-colors ${
+                                !p.isActive ? "opacity-60" : ""
+                              }`
+                        }
                       >
-                        <td className="px-5 py-3">
-                          <div className="font-semibold text-foreground">
+                        <td className={rediseno ? undefined : "px-5 py-3"}>
+                          <div className={rediseno ? styles.procName : "font-semibold text-foreground"}>
                             {p.name}
                           </div>
                           {p.description && (
-                            <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                            <div className={rediseno ? styles.procDesc : "text-xs text-muted-foreground mt-0.5 line-clamp-1"}>
                               {p.description}
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-3 text-muted-foreground font-mono text-xs">
+                        {/* El código de catálogo (SAT) es alfanumérico: Instrument Sans en el
+                            100% del panel, alineado con tabular-nums en vez de una fuente de
+                            máquina (ver tipografia-panel.tsx). */}
+                        <td className={rediseno ? styles.codeCell : "px-3 py-3 text-muted-foreground text-xs tabular-nums"}>
                           {p.code ?? "—"}
                         </td>
-                        <td className="px-3 py-3 text-right font-bold text-foreground whitespace-nowrap">
+                        <td className={rediseno ? styles.priceCell : "px-3 py-3 text-right font-bold text-foreground whitespace-nowrap tabular-nums"}>
                           {formatCurrency(p.basePrice)}
                         </td>
-                        <td className="px-3 py-3 text-muted-foreground whitespace-nowrap">
+                        <td className={rediseno ? styles.durationCell : "px-3 py-3 text-muted-foreground whitespace-nowrap"}>
                           {p.duration ? (
-                            <span className="inline-flex items-center gap-1">
+                            <span className={rediseno ? styles.durationVal : "inline-flex items-center gap-1 tabular-nums"}>
                               <Clock className="w-3.5 h-3.5" />
                               {t("pages.procedures.minutes", { count: p.duration })}
                             </span>
@@ -349,41 +381,57 @@ export function ProceduresClient({ initialProcedures }: Props) {
                             "—"
                           )}
                         </td>
-                        <td className="px-3 py-3">
+                        <td className={rediseno ? undefined : "px-3 py-3"}>
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              p.isActive
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                                : "bg-muted text-muted-foreground"
-                            }`}
+                            className={
+                              rediseno
+                                ? `${styles.statusPill} ${p.isActive ? styles.statusActive : styles.statusInactive}`
+                                : `inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                    p.isActive
+                                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                      : "bg-muted text-muted-foreground"
+                                  }`
+                            }
                           >
                             {p.isActive ? t("pages.procedures.active") : t("pages.procedures.inactive")}
                           </span>
                         </td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className={rediseno ? undefined : "px-5 py-3"}>
+                          <div className={rediseno ? styles.actions : "flex items-center justify-end gap-1"}>
                             <button
                               onClick={() => openEdit(p)}
                               title={t("common.edit")}
-                              className="p-1.5 rounded-lg text-muted-foreground hover:text-brand-600 hover:bg-brand-600/15 dark:hover:bg-brand-900/20 transition-colors"
+                              className={
+                                rediseno
+                                  ? styles.actionBtn
+                                  : "p-1.5 rounded-lg text-muted-foreground hover:text-brand-600 hover:bg-brand-600/15 dark:hover:bg-brand-900/20 transition-colors"
+                              }
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => toggleActive(p)}
                               title={p.isActive ? t("pages.procedures.deactivate") : t("pages.procedures.activate")}
-                              className={`p-1.5 rounded-lg transition-colors ${
-                                p.isActive
-                                  ? "text-muted-foreground hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                                  : "text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                              }`}
+                              className={
+                                rediseno
+                                  ? `${styles.actionBtn} ${p.isActive ? styles.actionWarn : styles.actionOk}`
+                                  : `p-1.5 rounded-lg transition-colors ${
+                                      p.isActive
+                                        ? "text-muted-foreground hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                        : "text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                                    }`
+                              }
                             >
                               <Power className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(p)}
                               title={t("common.delete")}
-                              className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                              className={
+                                rediseno
+                                  ? `${styles.actionBtn} ${styles.actionDanger}`
+                                  : "p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                              }
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -401,28 +449,28 @@ export function ProceduresClient({ initialProcedures }: Props) {
 
       {/* Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className={rediseno ? styles.modalOverlay : "fixed inset-0 z-50 flex items-center justify-center p-4"}>
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className={rediseno ? styles.modalBackdrop : "absolute inset-0 bg-black/60 backdrop-blur-sm"}
             onClick={closeModal}
           />
-          <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-              <h2 className="text-lg font-bold text-foreground">
+          <div className={rediseno ? styles.modal : "relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"}>
+            <div className={rediseno ? styles.modalHead : "flex items-center justify-between px-6 py-4 border-b border-border shrink-0"}>
+              <h2 className={rediseno ? styles.modalTitle : "text-lg font-bold text-foreground"}>
                 {editing ? t("pages.procedures.editProcedure") : t("pages.procedures.newProcedure")}
               </h2>
               <button
                 onClick={closeModal}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-muted-foreground hover:bg-muted transition-colors"
+                className={rediseno ? styles.modalClose : "p-1.5 rounded-lg text-muted-foreground hover:text-muted-foreground hover:bg-muted transition-colors"}
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                  {t("common.name")} <span className="text-red-500">*</span>
+            <form onSubmit={handleSubmit} className={rediseno ? styles.modalForm : "flex-1 min-h-0 flex flex-col overflow-hidden"}>
+              <div className={rediseno ? styles.modalBody : "flex-1 overflow-y-auto min-h-0 p-6 space-y-4"}>
+              <div className={rediseno ? styles.field : undefined}>
+                <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
+                  {t("common.name")} <span className={rediseno ? styles.required : "text-red-500"}>*</span>
                 </label>
                 <input
                   type="text"
@@ -430,13 +478,13 @@ export function ProceduresClient({ initialProcedures }: Props) {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder={t("pages.procedures.namePlaceholder")}
-                  className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                  className={rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+              <div className={rediseno ? styles.formRow : "grid grid-cols-2 gap-4"}>
+                <div className={rediseno ? styles.field : undefined}>
+                  <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
                     {t("pages.procedures.colSatCode")}
                   </label>
                   <input
@@ -444,11 +492,11 @@ export function ProceduresClient({ initialProcedures }: Props) {
                     value={form.code}
                     onChange={(e) => setForm({ ...form, code: e.target.value })}
                     placeholder={t("pages.procedures.optional")}
-                    className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                    className={rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"}
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                <div className={rediseno ? styles.field : undefined}>
+                  <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
                     {t("pages.procedures.category")}
                   </label>
                   <select
@@ -456,7 +504,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
                     onChange={(e) =>
                       setForm({ ...form, category: e.target.value })
                     }
-                    className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                    className={rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"}
                   >
                     {CATEGORY_OPTIONS.map((c) => (
                       <option key={c.value} value={c.value}>
@@ -467,10 +515,10 @@ export function ProceduresClient({ initialProcedures }: Props) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                    {t("pages.procedures.basePriceMxn")} <span className="text-red-500">*</span>
+              <div className={rediseno ? styles.formRow : "grid grid-cols-2 gap-4"}>
+                <div className={rediseno ? styles.field : undefined}>
+                  <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
+                    {t("pages.procedures.basePriceMxn")} <span className={rediseno ? styles.required : "text-red-500"}>*</span>
                   </label>
                   <input
                     type="number"
@@ -482,11 +530,11 @@ export function ProceduresClient({ initialProcedures }: Props) {
                       setForm({ ...form, basePrice: e.target.value })
                     }
                     placeholder="0.00"
-                    className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                    className={rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"}
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                <div className={rediseno ? styles.field : undefined}>
+                  <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
                     {t("pages.procedures.durationMin")}
                   </label>
                   <input
@@ -497,13 +545,13 @@ export function ProceduresClient({ initialProcedures }: Props) {
                       setForm({ ...form, duration: e.target.value })
                     }
                     placeholder={t("pages.procedures.optional")}
-                    className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                    className={rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"}
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+              <div className={rediseno ? styles.field : undefined}>
+                <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
                   {t("common.description")}
                 </label>
                 <textarea
@@ -513,38 +561,38 @@ export function ProceduresClient({ initialProcedures }: Props) {
                   }
                   rows={3}
                   placeholder={t("pages.procedures.optional")}
-                  className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 resize-none"
+                  className={rediseno ? styles.textarea : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 resize-none"}
                 />
               </div>
 
-              <label className="flex items-center gap-2 cursor-pointer select-none">
+              <label className={rediseno ? styles.checkboxRow : "flex items-center gap-2 cursor-pointer select-none"}>
                 <input
                   type="checkbox"
                   checked={form.isActive}
                   onChange={(e) =>
                     setForm({ ...form, isActive: e.target.checked })
                   }
-                  className="w-4 h-4 rounded border-border text-brand-600 focus:ring-brand-500/40"
+                  className={rediseno ? styles.checkbox : "w-4 h-4 rounded border-border text-brand-600 focus:ring-brand-500/40"}
                 />
-                <span className="text-sm font-semibold text-muted-foreground">
+                <span className={rediseno ? undefined : "text-sm font-semibold text-muted-foreground"}>
                   {t("pages.procedures.active")}
                 </span>
               </label>
               </div>
 
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0">
+              <div className={rediseno ? styles.modalFoot : "flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0"}>
                 <button
                   type="button"
                   onClick={closeModal}
                   disabled={saving}
-                  className="px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50"
+                  className={rediseno ? styles.btnGhost : "px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50"}
                 >
                   {t("common.cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60"
+                  className={rediseno ? styles.btnPrimary : "px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60"}
                 >
                   {saving ? t("common.saving") : editing ? t("pages.procedures.saveChanges") : t("common.create")}
                 </button>

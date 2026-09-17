@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { InventoryClient } from "./inventory-client";
 
 export const metadata: Metadata = { title: "Inventario — DaleControl" };
@@ -132,10 +133,19 @@ export default async function InventoryPage() {
   const clinicId = user.clinicId;
 
   // Auto-seed dental inventory if empty
-  let items = await prisma.inventoryItem.findMany({
-    where: { clinicId },
-    orderBy: [{ category: "asc" }, { name: "asc" }],
-  });
+  // REDISEÑO DE INVENTARIO — el MISMO interruptor por clínica que enciende el
+  // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`),
+  // no uno propio. Va en el mismo Promise.all que la lista para no añadir un
+  // viaje a la base; falla cerrado (sin tabla, sin fila o con error → false =
+  // la pantalla de hoy, tal cual).
+  const [items0, rediseno] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      where: { clinicId },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+    }),
+    menuDosNivelesEncendido(clinicId),
+  ]);
+  let items = items0;
 
   if (items.length === 0 && ((user.clinic as any).category === "DENTAL" || user.clinic.specialty === "Odontología")) {
     const existing = new Set(items.map((i: any) => i.name));
@@ -161,5 +171,12 @@ export default async function InventoryPage() {
     }
   }
 
-  return <InventoryClient key={clinicId} initialItems={items as any} specialty={user.clinic.specialty} />;
+  return (
+    <InventoryClient
+      key={clinicId}
+      initialItems={items as any}
+      specialty={user.clinic.specialty}
+      rediseno={rediseno}
+    />
+  );
 }

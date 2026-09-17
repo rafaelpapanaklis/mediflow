@@ -28,6 +28,7 @@ import {
 import type { SupportAttachment, SupportTicketSummary } from "@/lib/support/types";
 import { AccountManagerCard } from "@/components/dashboard/account-manager-card";
 import type { AccountManagerCardData } from "@/lib/account-manager/get-for-clinic";
+import { ListaTicketsRediseno } from "@/components/dashboard/soporte-rediseno/lista-tickets";
 
 // Tono visual del badge de estado: ABIERTO azul/info, EN_PROGRESO violeta/brand,
 // ESPERANDO_RESPUESTA ámbar, RESUELTO verde, CERRADO gris.
@@ -69,9 +70,16 @@ interface SoporteClientProps {
   accountManager: AccountManagerCardData | null;
   /** Va en el mensaje pre-escrito de WhatsApp ("…soy de {clinicName}"). */
   clinicName: string;
+  /**
+   * Rediseño (ws1-t4): el MISMO interruptor por clínica que enciende el menú
+   * de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), leído
+   * en page.tsx. Apagado (o ausente), esta pantalla se pinta exactamente como
+   * siempre: el JSX de abajo no cambia.
+   */
+  rediseno?: boolean;
 }
 
-export function SoporteClient({ accountManager, clinicName }: SoporteClientProps) {
+export function SoporteClient({ accountManager, clinicName, rediseno = false }: SoporteClientProps) {
   const router = useRouter();
 
   // ── Lista ──────────────────────────────────────────────────────────────────
@@ -204,6 +212,41 @@ export function SoporteClient({ accountManager, clinicName }: SoporteClientProps
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Rediseño: la misma lista, el mismo modal, los mismos fetch y la misma
+  // navegación; solo cambia quién los pinta. Todo el estado y las acciones de
+  // arriba se le pasan tal cual, así que con la bandera encendida se mandan
+  // exactamente los mismos datos al mismo sitio.
+  if (rediseno) {
+    return (
+      <ListaTicketsRediseno
+        accountManager={accountManager}
+        clinicName={clinicName}
+        tickets={tickets}
+        loading={loading}
+        abrirTicket={(id) => router.push(`/dashboard/soporte/${id}`)}
+        showNew={showNew}
+        setShowNew={setShowNew}
+        subject={subject}
+        setSubject={setSubject}
+        category={category}
+        setCategory={setCategory}
+        priority={priority}
+        setPriority={setPriority}
+        body={body}
+        setBody={setBody}
+        attachments={attachments}
+        removeAttachment={removeAttachment}
+        uploading={uploading}
+        submitting={submitting}
+        fileInputRef={fileInputRef}
+        fileAccept={FILE_ACCEPT}
+        maxFileMb={MAX_FILE_MB}
+        handleFilesSelected={handleFilesSelected}
+        submitTicket={submitTicket}
+      />
+    );
   }
 
   return (

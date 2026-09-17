@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getOwnedBranches, listPatientLinks } from "@/lib/branches";
 import { SucursalesClient } from "./sucursales-client";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export const metadata: Metadata = { title: "Sucursales — DaleControl" };
 
@@ -23,7 +24,14 @@ export default async function SucursalesSettingsPage() {
   const user = await getCurrentUser();
   if (user.role !== "SUPER_ADMIN") redirect("/dashboard");
 
-  const branches = await getOwnedBranches(user.supabaseId);
+  // REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
+  // junto a las sedes (ni una consulta más; falla cerrado → false = la
+  // pantalla de siempre). Los vínculos siguen esperando a las sedes: dependen
+  // de ellas.
+  const [branches, rediseno] = await Promise.all([
+    getOwnedBranches(user.supabaseId),
+    menuDosNivelesEncendido(user.clinicId),
+  ]);
   const links = await listPatientLinks(branches.map((b) => b.clinicId));
 
   return (
@@ -34,6 +42,7 @@ export default async function SucursalesSettingsPage() {
       branches={branches}
       initialLinks={links}
       activeClinicId={user.clinicId}
+      rediseno={rediseno}
     />
   );
 }

@@ -1,0 +1,906 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Menú de dos niveles (diseño aprobado por Rafael, captura del 15-sep-2026).
+   Los colores del diseño viven aquí como tokens --m2-*, con su versión oscura.
+   Fuera de este archivo no hay hex: los componentes solo usan las clases.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.tokens {
+  --m2-n1-fondo: #f4f3f8;
+  --m2-n2-fondo: #ffffff;
+  --m2-borde: #ebeaf0;
+  --m2-texto: #1a1826;
+  --m2-texto-2: #464357;
+  --m2-texto-3: #858295;
+  --m2-hover: rgba(26, 24, 38, 0.05);
+  --m2-activo: #4d3fc6;
+  --m2-activo-texto: #ffffff;
+  --m2-tarjeta: #ffffff;
+  --m2-tarjeta-borde: #eae8f0;
+  --m2-tarjeta-hover: #fbfaff;
+  --m2-sombra: 0 1px 2px rgba(26, 24, 38, 0.05);
+  --m2-cta-fondo: #1a1826;
+  --m2-cta-texto: #ffffff;
+  --m2-iniciales-fondo: #e6e9ff;
+  --m2-iniciales-texto: #4d3fc6;
+  --m2-buscador-fondo: #f4f3f8;
+  --m2-contador-fondo: #fec766;
+  --m2-contador-texto: #5a3b00;
+  --m2-soporte: var(--success-strong, #059669);
+  --m2-foco: 0 0 0 2px var(--m2-activo);
+  font-family: var(--font-menu), system-ui, sans-serif;
+}
+
+:global(.dark) .tokens {
+  --m2-n1-fondo: #0d0a17;
+  --m2-n2-fondo: #121020;
+  --m2-borde: rgba(255, 255, 255, 0.07);
+  --m2-texto: #edecf3;
+  --m2-texto-2: #b6b3c4;
+  --m2-texto-3: #7f7c90;
+  --m2-hover: rgba(255, 255, 255, 0.05);
+  --m2-activo: #6252e2;
+  --m2-tarjeta: #19162a;
+  --m2-tarjeta-borde: rgba(255, 255, 255, 0.07);
+  --m2-tarjeta-hover: #1f1b33;
+  --m2-sombra: none;
+  --m2-cta-fondo: #edecf3;
+  --m2-cta-texto: #14101f;
+  --m2-iniciales-fondo: rgba(98, 82, 226, 0.22);
+  --m2-iniciales-texto: #cbc5ff;
+  --m2-buscador-fondo: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Íconos (Material Symbols Rounded, ligaduras) ─────────────────── */
+
+.icono {
+  font-family: var(--font-iconos-menu);
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  overflow: hidden;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  flex-shrink: 0;
+  user-select: none;
+  font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 20;
+}
+
+.iconoRelleno {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 20;
+}
+
+/* ── Contenedor de escritorio: barra estrecha + segundo nivel ─────── */
+
+.raiz {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-shrink: 0;
+  z-index: 30;
+}
+
+@media (max-width: 1023.98px) {
+  .raiz {
+    display: none;
+  }
+}
+
+.nivel1 {
+  width: clamp(228px, 13vw, 250px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 12px 12px;
+  background: var(--m2-n1-fondo);
+  border-right: 1px solid var(--m2-borde);
+  color: var(--m2-texto);
+  overflow: hidden;
+}
+
+.nivel1[data-encogido="true"] {
+  width: 68px;
+  padding-inline: 10px;
+}
+
+/* ── Marca ────────────────────────────────────────────────────────── */
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 0 14px 2px;
+  min-height: 44px;
+}
+
+.nivel1[data-encogido="true"] .marca {
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 0;
+}
+
+.logoCuadro {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--m2-activo);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.logoTexto {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--m2-texto);
+}
+
+.logoTexto b {
+  font-weight: 700;
+  color: var(--m2-activo);
+}
+
+.botonIcono {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .botonIcono:hover {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.botonIcono:focus-visible,
+.item:focus-visible,
+.filaAdmin:focus-visible,
+.tarjeta:focus-visible,
+.nuevaCita:focus-visible,
+.buscar:focus-visible,
+.hamburguesa:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+/* ── Tarjetas (clínica y usuario) ─────────────────────────────────── */
+
+.tarjeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px 9px 10px;
+  margin: 0;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: var(--m2-sombra);
+  color: var(--m2-texto);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  transition: background 0.12s;
+}
+
+button.tarjeta {
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  button.tarjeta:hover {
+    background: var(--m2-tarjeta-hover);
+  }
+}
+
+.tarjetaClinica {
+  margin-bottom: 12px;
+}
+
+.tarjetaCompacta {
+  justify-content: center;
+  padding: 6px 0;
+}
+
+.iniciales {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.tarjetaTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.tarjetaNombre {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--m2-texto);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tarjetaSub {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--m2-texto-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tarjetaFlecha {
+  color: var(--m2-texto-3);
+  font-size: 18px;
+}
+
+/* ── Nueva cita ───────────────────────────────────────────────────── */
+
+.nuevaCita {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 40px;
+  margin-bottom: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  transition: opacity 0.12s;
+}
+
+@media (hover: hover) {
+  .nuevaCita:hover {
+    opacity: 0.9;
+  }
+}
+
+.nuevaCita .icono {
+  font-size: 18px;
+}
+
+/* ── Opciones ─────────────────────────────────────────────────────── */
+
+.navegacion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  margin: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--m2-texto-2);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .item:hover {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.itemActivo,
+.itemActivo:hover {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  font-weight: 600;
+}
+
+.nivel1[data-encogido="true"] .item {
+  justify-content: center;
+  padding: 0;
+}
+
+.itemSegundo {
+  min-height: clamp(34px, 4vh, 44px);
+}
+
+.itemTexto {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.iconoSoporte {
+  color: var(--m2-soporte);
+}
+
+.contador {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 99px;
+  background: var(--m2-contador-fondo);
+  color: var(--m2-contador-texto);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.puntoConsulta {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success, #10b981);
+  box-shadow: 0 0 0 3px var(--success-soft, rgba(16, 185, 129, 0.18));
+  flex-shrink: 0;
+}
+
+.itemActivo .puntoConsulta {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.16);
+}
+
+.puntoEncogido {
+  position: absolute;
+  top: 7px;
+  right: 11px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--m2-contador-fondo);
+}
+
+.puntoEncogido[data-consulta="true"] {
+  background: var(--success, #10b981);
+}
+
+.candado {
+  font-size: 16px;
+  opacity: 0.75;
+}
+
+.proximamente {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (hover: hover) {
+  .proximamente:hover {
+    background: transparent;
+    color: var(--m2-texto-2);
+  }
+}
+
+.etiquetaProximamente {
+  flex-shrink: 0;
+  padding: 1.5px 6px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 99px;
+  color: var(--m2-texto-3);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Administración (fila del primer nivel) ───────────────────────── */
+
+.separador {
+  height: 1px;
+  margin: 12px 4px;
+  background: var(--m2-borde);
+  flex-shrink: 0;
+}
+
+.filaAdmin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  box-shadow: var(--m2-sombra);
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+
+@media (hover: hover) {
+  .filaAdmin:hover {
+    background: var(--m2-tarjeta-hover);
+  }
+}
+
+.filaAdmin .icono {
+  color: var(--m2-activo);
+}
+
+.filaAdminActiva,
+.filaAdminActiva:hover {
+  background: var(--m2-activo);
+  border-color: transparent;
+  color: var(--m2-activo-texto);
+}
+
+.filaAdminActiva .icono,
+.filaAdminActiva .tarjetaFlecha {
+  color: var(--m2-activo-texto);
+}
+
+.nivel1[data-encogido="true"] .filaAdmin {
+  justify-content: center;
+  padding: 0;
+}
+
+/* ── Pie ──────────────────────────────────────────────────────────── */
+
+.pie {
+  margin-top: auto;
+  padding-top: 12px;
+  flex-shrink: 0;
+}
+
+/* ── Segundo nivel ────────────────────────────────────────────────── */
+
+.nivel2 {
+  width: clamp(248px, 15.5vw, 300px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 12px 12px;
+  background: var(--m2-n2-fondo);
+  border-right: 1px solid var(--m2-borde);
+  color: var(--m2-texto);
+}
+
+/* Por debajo de 1280 px el segundo nivel no empuja la pantalla: se abre encima,
+   para no dejar el área de trabajo en 560 px. */
+@media (max-width: 1279.98px) {
+  .nivel2 {
+    position: absolute;
+    top: 0;
+    left: 100%;
+    height: 100vh;
+    box-shadow: 16px 0 36px -14px rgba(15, 10, 30, 0.24);
+  }
+}
+
+.n2Cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 0 12px 8px;
+}
+
+.n2Titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--m2-texto);
+}
+
+.buscador {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  margin-bottom: 4px;
+  border-radius: 9px;
+  background: var(--m2-buscador-fondo);
+  color: var(--m2-texto-3);
+  flex-shrink: 0;
+}
+
+.buscador:focus-within {
+  box-shadow: var(--m2-foco);
+}
+
+.buscador .icono {
+  font-size: 18px;
+}
+
+.buscador input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13px;
+}
+
+.buscador input::placeholder {
+  color: var(--m2-texto-3);
+}
+
+.buscador input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* globals.css pinta TODO input en oscuro con !important; este va sobre su caja. */
+:global(.dark) .buscador input {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: var(--m2-texto) !important;
+}
+
+:global(.dark) .buscador input::placeholder {
+  color: var(--m2-texto-3) !important;
+}
+
+.n2Nav {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 8px;
+}
+
+.grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.grupoTitulo {
+  margin: 0;
+  padding: 16px 10px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.grupo:first-child .grupoTitulo {
+  padding-top: 10px;
+}
+
+.sinResultados {
+  margin: 0;
+  padding: 16px 10px;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+/* ── Teléfono y tableta: cajón ────────────────────────────────────── */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: rgba(5, 5, 10, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.cajon {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  width: min(300px, 86vw);
+  display: flex;
+  flex-direction: column;
+  padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto);
+  box-shadow: 4px 0 24px -4px rgba(15, 10, 30, 0.2);
+  overflow: hidden;
+}
+
+.cajon[data-vista="admin"] {
+  background: var(--m2-n2-fondo);
+}
+
+.cajon .item,
+.cajon .filaAdmin {
+  min-height: 44px;
+}
+
+.cajon .botonIcono {
+  width: 40px;
+  height: 40px;
+}
+
+/* ── Desplegables (se abren en un portal, fuera del menú) ─────────── */
+
+.desplegable {
+  min-width: 210px;
+  padding: 4px;
+  outline: none;
+  z-index: 60;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px -10px rgba(15, 10, 30, 0.25), 0 8px 20px -8px rgba(15, 10, 30, 0.15);
+  color: var(--m2-texto);
+}
+
+/* Radix enfoca la caja del desplegable al abrirlo; el anillo de foco global
+   ([tabindex]:focus-visible) la rodeaba entera. El foco visible ya lo lleva la
+   opción resaltada. Clase doble para ganarle en especificidad, no en orden. */
+.desplegable.desplegable:focus-visible {
+  outline: none;
+  box-shadow: 0 20px 50px -10px rgba(15, 10, 30, 0.25), 0 8px 20px -8px rgba(15, 10, 30, 0.15);
+}
+
+.desplegableItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--m2-texto);
+  cursor: pointer;
+  outline: none;
+  text-decoration: none;
+}
+
+.desplegableItem[data-highlighted] {
+  background: var(--m2-hover);
+}
+
+.desplegableItem.desplegableItem:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--m2-activo);
+}
+
+.desplegableItem .icono {
+  font-size: 18px;
+  color: var(--m2-texto-3);
+}
+
+.desplegablePeligro,
+.desplegablePeligro .icono {
+  color: var(--danger, #dc2626);
+}
+
+.desplegableSeparador {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--m2-borde);
+}
+
+/* El desplegable de sedes es el de siempre (sidebar.tsx) y trae su fuente en
+   línea como var(--font-sans): aquí se la redirige a la del menú. */
+.clinicasDesplegable {
+  --font-sans: var(--font-menu);
+}
+
+.tooltip {
+  z-index: 60;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  box-shadow: 0 6px 20px -4px rgba(15, 10, 30, 0.18);
+  color: var(--m2-texto);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Barra superior ───────────────────────────────────────────────── */
+
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 clamp(12px, 1.6vw, 24px);
+  background: var(--m2-n2-fondo);
+  border-bottom: 1px solid var(--m2-borde);
+  color: var(--m2-texto);
+}
+
+.hamburguesa {
+  display: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  cursor: pointer;
+}
+
+.migas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.migas > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.migas .icono {
+  font-size: 16px;
+}
+
+.migaActual {
+  color: var(--m2-texto);
+  font-weight: 600;
+}
+
+.buscar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: clamp(240px, 22vw, 380px);
+  height: 34px;
+  margin-left: auto;
+  padding: 0 8px 0 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--m2-buscador-fondo);
+  color: var(--m2-texto-3);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+@media (hover: hover) {
+  .buscar:hover {
+    border-color: var(--m2-tarjeta-borde);
+  }
+}
+
+.buscar .icono {
+  font-size: 18px;
+}
+
+.buscarTexto {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kbd {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 5px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-3);
+  font-family: var(--font-mono, ui-monospace), monospace;
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
+.derecha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1023.98px) {
+  .hamburguesa {
+    display: grid;
+  }
+  .migas,
+  .derecha {
+    display: none;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .buscar {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+    border-color: var(--m2-tarjeta-borde);
+  }
+  .buscarTexto,
+  .kbd {
+    display: none;
+  }
+}

@@ -24,6 +24,14 @@ export interface OpenNewAppointmentParams {
 export interface NewAppointmentContextValue {
   open: (params?: OpenNewAppointmentParams) => void;
   close: () => void;
+  /**
+   * La ropa que el layout eligió para el panel con el interruptor por
+   * clínica `menu-dos-niveles` ("nueva") o sin él ("clasica"). Es la única
+   * señal del interruptor que llega al cliente sin añadir un proveedor al
+   * layout; la lee «Agendar siguiente» al cerrar consulta para abrir la
+   * Nueva cita nueva en vez de mandar a la agenda de siempre.
+   */
+  apariencia: "clasica" | "nueva";
 }
 
 export interface PatientSearchHit {

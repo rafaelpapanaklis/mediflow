@@ -14,7 +14,9 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import toast from "react-hot-toast";
+import type { Role } from "@prisma/client";
 import { AgendaProvider, type AgendaPermissions } from "@/components/dashboard/agenda/agenda-provider";
+import { AgendaNueva } from "@/components/dashboard/agenda-nueva/agenda-nueva";
 import { AgendaTopbar } from "@/components/dashboard/agenda/agenda-topbar";
 import { AgendaSubToolbar } from "@/components/dashboard/agenda/agenda-sub-toolbar";
 import { AgendaHoverGuide } from "@/components/dashboard/agenda/agenda-hover-guide";
@@ -35,17 +37,16 @@ import { AgendaWaitlistSidebar } from "@/components/dashboard/agenda/agenda-wait
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { slotIndexToUtc } from "@/lib/agenda/time-utils";
-import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import { updateWaitlist, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict } from "@/lib/agenda/conflict-copy";
 import { bookingRuleMessage } from "@/lib/agenda/booking-rules";
+import type { AppointmentDragData, DroppableData } from "@/lib/agenda/drag-utils";
 import {
-  detectOverlap,
-  recomputeTimes,
-  type AppointmentDragData,
-  type DroppableData,
-} from "@/lib/agenda/drag-utils";
-import { rescheduleAppointment } from "@/lib/agenda/mutations";
+  DRAG_ACTIVATION_DISTANCE_PX,
+  commitReschedule,
+  optimisticDoctorIdOf,
+  planReschedule,
+} from "@/lib/agenda/reschedule-flow";
 import {
   RESOURCE_KIND_LABELS,
   TREATMENT_KINDS,
@@ -66,6 +67,19 @@ interface Props {
   clinicTaxMode: string | null;
   /** Permisos granulares de agenda (P1-3), calculados server-side. */
   permissions: AgendaPermissions;
+  /**
+   * ¿Esta clínica ve la agenda nueva de Claude Design? Sale del interruptor
+   * por clínica `menu-dos-niveles` (`clinic_feature_flags`), resuelto en el
+   * server component. Apagado (el caso de todas las clínicas menos Altabrisa),
+   * abajo se monta el `AgendaShell` de SIEMPRE y no se toca ni un píxel.
+   */
+  agendaNueva?: boolean;
+  /**
+   * El rol de quien mira. Lo usa la agenda nueva para preguntar a la máquina
+   * de estados qué transiciones puede hacer ESTA persona, y no ofrecerle un
+   * botón que el servidor rechazará. El servidor revalida igual.
+   */
+  userRole?: Role;
 }
 
 export function AgendaPageClient(props: Props) {
@@ -76,7 +90,20 @@ export function AgendaPageClient(props: Props) {
       clinicCategory={props.clinicCategory}
       permissions={props.permissions}
     >
-      <AgendaShell highlightId={props.highlightId} clinicTaxMode={props.clinicTaxMode} />
+      {/* El interruptor elige UN armazón u otro, y los dos cuelgan del MISMO
+          proveedor de datos: las citas, los doctores, las unidades, el refetch
+          y las mutaciones son idénticos. Lo único que cambia es quién las
+          pinta. Con la bandera apagada esto es, literalmente, el árbol de
+          antes. */}
+      {props.agendaNueva ? (
+        <AgendaNueva
+          clinicTaxMode={props.clinicTaxMode}
+          userRole={props.userRole}
+          highlightId={props.highlightId}
+        />
+      ) : (
+        <AgendaShell highlightId={props.highlightId} clinicTaxMode={props.clinicTaxMode} />
+      )}
     </AgendaProvider>
   );
 }
@@ -263,7 +290,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
   const { open: openNewAppointment } = useNewAppointmentDialog();
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: DRAG_ACTIVATION_DISTANCE_PX } }),
   );
 
   const columns = computeColumns(state, t);
@@ -303,39 +330,23 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
       const original = state.appointments.find((a) => a.id === dragData.appointmentId);
       if (!original) return;
 
-      const currentDoctorId = original.doctor?.id ?? null;
-      const currentResourceId = original.resourceId;
-      let toDayISO = state.dayISO;
-      let newDoctorId = currentDoctorId;
-      let newResourceId = currentResourceId;
-      if (target.kind === "doctor-col") newDoctorId = target.doctorId;
-      else if (target.kind === "resource-col") newResourceId = target.resourceId;
-      else if (target.kind === "day-col") toDayISO = target.dayISO;
-
-      const result = recomputeTimes({
-        appt: original,
+      // La cuenta vive en reschedule-flow.ts: la comparte la agenda nueva.
+      const planned = planReschedule({
+        original,
+        target,
         deltaY: delta.y,
         slotHpx,
         slotMinutes: state.slotMinutes,
         dayStart: state.dayStart,
         dayEnd: state.dayEnd,
-        fromDayISO: calendarDayISO(original.startsAt, state.timezone),
-        toDayISO,
+        currentDayISO: state.dayISO,
         timezone: state.timezone,
+        appointments: state.appointments,
       });
-
-      const conflict = detectOverlap(
-        state.appointments,
-        original.id,
-        result.startsAt,
-        result.endsAt,
-        newDoctorId,
-        newResourceId,
-      );
 
       setDragOverlap({
         overId: String(over.id),
-        mode: conflict ? "conflict" : "ok",
+        mode: planned.overlap ? "conflict" : "ok",
       });
     },
     [state.appointments, state.dayISO, state.dayEnd, state.dayStart, state.slotMinutes, state.timezone, slotHpx],
@@ -419,64 +430,38 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
       const original = state.appointments.find((a) => a.id === dragData.appointmentId);
       if (!original) return;
 
-      const currentDoctorId = original.doctor?.id ?? null;
-      const currentResourceId = original.resourceId;
-
-      let toDayISO = state.dayISO;
-      let newDoctorId = currentDoctorId;
-      let newResourceId = currentResourceId;
-
-      if (target.kind === "doctor-col") {
-        newDoctorId = target.doctorId;
-      } else if (target.kind === "resource-col") {
-        newResourceId = target.resourceId;
-      } else if (target.kind === "day-col") {
-        toDayISO = target.dayISO;
-      }
-
-      const result = recomputeTimes({
-        appt: original,
+      const planned = planReschedule({
+        original,
+        target,
         deltaY: delta.y,
         slotHpx,
         slotMinutes: state.slotMinutes,
         dayStart: state.dayStart,
         dayEnd: state.dayEnd,
-        fromDayISO: calendarDayISO(original.startsAt, state.timezone),
-        toDayISO,
+        currentDayISO: state.dayISO,
         timezone: state.timezone,
+        appointments: state.appointments,
       });
 
-      const noChange =
-        original.startsAt === result.startsAt &&
-        (original.endsAt ?? "") === result.endsAt &&
-        newDoctorId === currentDoctorId &&
-        newResourceId === currentResourceId;
-      if (noChange) return;
+      if (planned.unchanged) return;
 
-      if (
-        detectOverlap(
-          state.appointments,
-          original.id,
-          result.startsAt,
-          result.endsAt,
-          newDoctorId,
-          newResourceId,
-        )
-      ) {
+      if (planned.overlap) {
         toast.error(t("agenda.pageClient.overlapConflict"));
         return;
       }
 
-      const doctor = state.doctors.find((d) => d.id === (newDoctorId ?? currentDoctorId));
+      const doctor = state.doctors.find(
+        (d) => d.id === (planned.newDoctorId ?? original.doctor?.id ?? null),
+      );
       const doctorName = doctor?.shortName ?? doctor?.displayName ?? t("agenda.pageClient.doctorFallback");
 
       setPendingReschedule({
         original,
-        newStartsAt: result.startsAt,
-        newEndsAt: result.endsAt,
-        newDoctorId,
-        newResourceId,
-        toDayISO,
+        newStartsAt: planned.newStartsAt,
+        newEndsAt: planned.newEndsAt,
+        newDoctorId: planned.newDoctorId,
+        newResourceId: planned.newResourceId,
+        toDayISO: planned.toDayISO,
         doctorName,
       });
     },
@@ -499,54 +484,36 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
 
   const handleConfirmReschedule = useCallback(async () => {
     if (!pendingReschedule || rescheduling) return;
-    const { original, newStartsAt, newEndsAt, newDoctorId, newResourceId, toDayISO } = pendingReschedule;
+    const plan = pendingReschedule;
     setRescheduling(true);
 
-    const currentDoctorId = original.doctor?.id ?? null;
-    const currentResourceId = original.resourceId;
-    const optimisticDoctorId = newDoctorId ?? currentDoctorId ?? "";
-
-    dispatch({
-      type: "OPTIMISTIC_RESCHEDULE",
-      id: original.id,
-      doctorId: optimisticDoctorId,
-      resourceId: newResourceId,
-      startsAt: newStartsAt,
-      endsAt: newEndsAt,
-    });
-
-    const apiPayload: { startsAt: string; endsAt: string; doctorId?: string; resourceId?: string | null } = {
-      startsAt: newStartsAt,
-      endsAt: newEndsAt,
-    };
-    if (newDoctorId !== currentDoctorId && newDoctorId) apiPayload.doctorId = newDoctorId;
-    if (newResourceId !== currentResourceId) apiPayload.resourceId = newResourceId;
-
     try {
-      const { appointment: updated, scheduleWarning } = await rescheduleAppointment(original.id, apiPayload);
-      dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
-      // P1-13: fuera-de-horario/día cerrado ya no bloquea — se avisa.
-      if (scheduleWarning?.message) toast(scheduleWarning.message, { duration: 6000 });
-      // Invalida el cache SWR del provider para que volver a este dia o
-      // cambiar de vista no restaure la version pre-mutacion del cacheRef.
-      // NO llamamos router.refresh() porque vuelve a hidratar initialPayload
-      // antes de que revalidatePath del endpoint haya completado, y termina
-      // sobrescribiendo el optimistic con datos viejos (bug observado).
-      invalidateRangeCache();
-      toast.success(t("agenda.pageClient.rescheduleSuccess"));
-      setPendingReschedule(null);
-      if (toDayISO !== state.dayISO) setDay(toDayISO);
-    } catch (err) {
-      dispatch({ type: "ROLLBACK_RESCHEDULE", original });
-      const apiErr = err as ApiError;
-      if (apiErr?.error === "appointment_overlap") {
-        toast.error(describeOverlapConflict(apiErr.conflictingAppointment, {
-          doctorId: optimisticDoctorId,
-          resourceId: newResourceId,
-        }));
+      // Optimista → PATCH → REPLACE, o ROLLBACK si el servidor dice que no.
+      // Vive en reschedule-flow.ts porque la agenda nueva hace lo MISMO.
+      const result = await commitReschedule(plan, { dispatch });
+      if (result.ok) {
+        // P1-13: fuera-de-horario/día cerrado ya no bloquea — se avisa.
+        if (result.scheduleWarning?.message) toast(result.scheduleWarning.message, { duration: 6000 });
+        // Invalida el cache SWR del provider para que volver a este dia o
+        // cambiar de vista no restaure la version pre-mutacion del cacheRef.
+        // NO llamamos router.refresh() porque vuelve a hidratar initialPayload
+        // antes de que revalidatePath del endpoint haya completado, y termina
+        // sobrescribiendo el optimistic con datos viejos (bug observado).
+        invalidateRangeCache();
+        toast.success(t("agenda.pageClient.rescheduleSuccess"));
+        setPendingReschedule(null);
+        if (plan.toDayISO !== state.dayISO) setDay(plan.toDayISO);
       } else {
-        // Reglas del servidor (mover al pasado, cita cerrada…): su frase, no el genérico.
-        toast.error(bookingRuleMessage(apiErr) ?? t("agenda.pageClient.rescheduleFailed"));
+        const apiErr = result.error as ApiError;
+        if (apiErr?.error === "appointment_overlap") {
+          toast.error(describeOverlapConflict(apiErr.conflictingAppointment, {
+            doctorId: optimisticDoctorIdOf(plan),
+            resourceId: plan.newResourceId,
+          }));
+        } else {
+          // Reglas del servidor (mover al pasado, cita cerrada…): su frase, no el genérico.
+          toast.error(bookingRuleMessage(apiErr) ?? t("agenda.pageClient.rescheduleFailed"));
+        }
       }
     } finally {
       setRescheduling(false);

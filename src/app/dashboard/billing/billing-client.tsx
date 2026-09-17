@@ -20,6 +20,10 @@ import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { isInvoiceOverdue } from "@/lib/invoices/due-date";
+// La ficha de factura del diseño nuevo (solo con `rediseno`): lo bueno de
+// Presupuestos. Ver components/dashboard/factura-ficha-rediseno/.
+import { FichasFactura } from "@/components/dashboard/factura-ficha-rediseno/fichas-factura";
+import { borradorDesdeFactura, type BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 
 // Mapa de estados de factura → fuente única invoice-status.ts, compartida con
 // la ficha del paciente y el modal de detalle (la divergencia entre copias
@@ -49,13 +53,16 @@ interface Props {
   clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null; cfdiTaxMode?: string | null };
   /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. */
   cfdiLive?:     boolean;
+  /** Interruptor `menu-dos-niveles` (lo pasa Caja): viste el detalle de factura,
+   *  Registrar pago y Nueva factura con el diseño nuevo. Apagado, todo igual. */
+  rediseno?:     boolean;
 }
 
 function patientNameOf(inv: any): string {
   return `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.trim() || "—";
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueBefore, creditTotal = 0, clinic, cfdiLive = false }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueBefore, creditTotal = 0, clinic, cfdiLive = false, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
@@ -113,6 +120,9 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   const [paymentInvoice, setPaymentInvoice]       = useState<(PaymentInvoice & { _patientName?: string }) | null>(null);
   const [detailInvoice, setDetailInvoice]         = useState<any | null>(null);
   const [cfdiFor, setCfdiFor]                     = useState<any | null>(null);
+  // «Duplicar» de la ficha (solo diseño nuevo): Nueva factura abre con el mismo
+  // paciente, los mismos conceptos y el mismo trato. Apagado, siempre null.
+  const [duplicar, setDuplicar] = useState<{ patientId: string; patientName: string; borrador: BorradorDeFactura } | null>(null);
 
   // CFDI form
   const [cfdiLoading, setCfdiLoading] = useState(false);
@@ -301,7 +311,37 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         </div>
       </div>
 
-      {/* Table */}
+      {/* Diseño nuevo: cada factura es una FICHA como la de presupuesto (folio,
+          chips, importe grande, la frase del trato y las acciones). Mismos
+          callbacks que la tabla de abajo, que sigue siendo la de siempre. */}
+      {rediseno ? (
+        <FichasFactura
+          facturas={filtered}
+          facturApiEnabled={clinic.facturApiEnabled}
+          conPaciente
+          estaVencida={isOverdue}
+          // Las dos reglas de la tabla de abajo, tal cual: `canPay` y «Timbrar».
+          puedeCobrar={(inv) => !["PAID", "CANCELLED"].includes(inv.status) && inv.status !== "DRAFT"}
+          puedeTimbrar={() => true}
+          textoCobrar={t("billing.billingClient.registerPayment")}
+          textoVacio={invoices.length === 0 ? t("billing.billingClient.emptyNoInvoices") : t("billing.billingClient.emptyNoResults")}
+          onAbrir={(inv) => setDetailInvoice(inv)}
+          onCobrar={(inv) => setPaymentInvoice({
+            id: inv.id, invoiceNumber: inv.invoiceNumber,
+            total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
+            patientName: patientNameOf(inv),
+          })}
+          onTimbrar={(inv) => openCfdiModal(inv)}
+          onDuplicar={(inv, condiciones) => {
+            setDuplicar({
+              patientId: inv.patientId ?? inv.patient?.id ?? "",
+              patientName: patientNameOf(inv),
+              borrador: borradorDesdeFactura(inv, condiciones),
+            });
+            setShowNew(true);
+          }}
+        />
+      ) : (
       <CardNew noPad>
         {filtered.length === 0 ? (
           <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
@@ -397,6 +437,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           </div>
         )}
       </CardNew>
+      )}
 
       {/* Paginación de la búsqueda en servidor (20 por página). */}
       {remote && remote.total > remote.limit && (
@@ -432,13 +473,19 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
        *  descuento por línea y global, doctor atribuido, IVA). Aquí además elige
        *  paciente porque Caja no parte de una ficha. */}
       <InvoiceEditorModal
+        rediseno={rediseno}
         open={showNew}
         patients={patients}
         clinicTaxMode={clinic.cfdiTaxMode}
-        onClose={() => setShowNew(false)}
+        // Solo al duplicar (diseño nuevo): paciente fijo y conceptos ya puestos.
+        patientId={duplicar?.patientId || undefined}
+        patientName={duplicar?.patientName}
+        inicial={duplicar?.borrador ?? null}
+        onClose={() => { setShowNew(false); setDuplicar(null); }}
         onCreated={(inv) => {
           setInvoices(prev => [inv, ...prev]);
           setShowNew(false);
+          setDuplicar(null);
           refresh();
         }}
       />
@@ -447,6 +494,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
        *  Acciones: Cobrar, Marcar pagada, Editar precio, Aplicar descuento,
        *  Cancelar, Reembolsar, Imprimir, Copiar UUID. */}
       <InvoiceDetailModal
+        rediseno={rediseno}
         open={detailInvoice !== null}
         invoice={detailInvoice}
         patientName={detailInvoice ? patientNameOf(detailInvoice) : ""}
@@ -457,6 +505,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
 
       {/* PaymentModal compartido — atajo "Registrar pago" inline en cada row. */}
       <PaymentModal
+        rediseno={rediseno}
         open={paymentInvoice !== null}
         invoice={paymentInvoice}
         onClose={() => setPaymentInvoice(null)}

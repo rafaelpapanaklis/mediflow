@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PermissionsModal } from "@/components/dashboard/team/permissions-modal";
 import { SabinaPermissionsModal } from "@/components/dashboard/team/sabina-permissions-modal";
+import { RaizRediseno } from "@/components/dashboard/equipo-rediseno/raiz";
 import { useT } from "@/i18n/i18n-provider";
 import { prepararImagen } from "@/lib/image-client";
 
@@ -84,7 +85,7 @@ interface TeamMember {
 // as a new component type on every render and unmounts/remounts the inputs,
 // causing focus loss on every keystroke. Defined outside, it is stable.
 function MemberForm({
-  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword,
+  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, rediseno,
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
@@ -97,9 +98,18 @@ function MemberForm({
   // current user es SUPER_ADMIN editando a un non-SUPER_ADMIN. La logica
   // de confirm + POST + display del tempPassword vive en TeamClient.
   onResetPassword?: () => void;
+  // Con la bandera apagada, la cédula sigue en `font-mono` tal cual hoy —
+  // "byte por byte igual" manda incluso sobre la regla de tipografía, que
+  // solo aplica dentro del rediseño (WS1-T5).
+  rediseno: boolean;
 }) {
   const t = useT();
   const [svcInput, setSvcInput] = useState("");
+  // Con el rediseño, el acento y los bordes se leen del menú de dos niveles
+  // (los `--m2-*` que monta la raíz); apagado, los tokens de siempre.
+  const acento = rediseno ? "var(--m2-activo)" : "var(--brand)";
+  const acentoSuave = rediseno ? "var(--m2-iniciales-fondo)" : "var(--brand-soft)";
+  const bordeSuave = rediseno ? "var(--m2-tarjeta-borde)" : "var(--border-soft)";
 
   function set(k: keyof FormState, v: any) {
     setForm(prev => ({ ...prev, [k]: v }));
@@ -164,11 +174,11 @@ function MemberForm({
               className="flex flex-col items-center p-3 text-center"
               style={{
                 borderRadius: "var(--radius)",
-                border: `2px solid ${form.role === r.value ? "var(--brand)" : "var(--border-soft)"}`,
-                background: form.role === r.value ? "var(--brand-soft)" : "transparent",
+                border: `2px solid ${form.role === r.value ? acento : bordeSuave}`,
+                background: form.role === r.value ? acentoSuave : "transparent",
                 transition: "border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease)",
               }}>
-              <r.icon size={18} strokeWidth={1.75} aria-hidden style={{ color: form.role === r.value ? "var(--brand)" : "var(--text-3)", marginBottom: 6 }} />
+              <r.icon size={18} strokeWidth={1.75} aria-hidden style={{ color: form.role === r.value ? acento : "var(--text-3)", marginBottom: 6 }} />
               <span className="text-sm font-bold">{t(r.labelKey)}</span>
               <span className="text-xs text-muted-foreground mt-0.5 leading-tight">{t(r.descKey)}</span>
             </button>
@@ -238,7 +248,8 @@ function MemberForm({
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">{t("settings.team.cedulaProfLabel")}</Label>
             <input
-              className="input-new font-mono" style={{ height: 42, fontSize: 13.5 }}
+              className={rediseno ? "input-new" : "input-new font-mono"}
+              style={{ height: 42, fontSize: 13.5, ...(rediseno ? { fontVariantNumeric: "tabular-nums" as const } : {}) }}
               placeholder="1234567"
               maxLength={15}
               value={form.cedulaProfesional}
@@ -248,7 +259,8 @@ function MemberForm({
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">{t("settings.team.cedulaEspLabel")}</Label>
             <input
-              className="input-new font-mono" style={{ height: 42, fontSize: 13.5 }}
+              className={rediseno ? "input-new" : "input-new font-mono"}
+              style={{ height: 42, fontSize: 13.5, ...(rediseno ? { fontVariantNumeric: "tabular-nums" as const } : {}) }}
               placeholder={t("settings.team.cedulaEspPlaceholder")}
               maxLength={15}
               value={form.cedulaEspecialidad}
@@ -296,7 +308,7 @@ function MemberForm({
        *  + el POST a TeamClient, que también maneja la visualización del
        *  tempPassword en el banner de arriba. */}
       {isEdit && onResetPassword && (
-        <div className="pt-4 mt-2" style={{ borderTop: "1px solid var(--border-soft)" }}>
+        <div className="pt-4 mt-2" style={{ borderTop: `1px solid ${bordeSuave}` }}>
           <div className="form-section__title" style={{ marginBottom: 0 }}>{t("settings.team.userAccessLabel")}<span className="form-section__rule" aria-hidden /></div>
           <p className="text-xs text-muted-foreground mt-1 mb-3">
             {t("settings.team.resetPasswordHint")}
@@ -356,13 +368,16 @@ function readableOn(hex: string): string {
 }
 
 function MemberPhoto({
-  member, onChange,
+  member, onChange, rediseno,
 }: {
   member: TeamMember;
   onChange: (avatarUrl: string | null) => void;
+  rediseno: boolean;
 }) {
   const t = useT();
   const [uploading, setUploading] = useState(false);
+  // Acento del menú de dos niveles con el rediseño; el de siempre, apagado.
+  const acento = rediseno ? "var(--m2-activo)" : "var(--brand)";
   const inputRef = useRef<HTMLInputElement>(null);
   const fullName = `${member.firstName} ${member.lastName}`;
 
@@ -435,7 +450,7 @@ function MemberPhoto({
           style={{
             width: 64, height: 64, borderRadius: "50%", overflow: "hidden",
             display: "flex", alignItems: "center", justifyContent: "center",
-            background: member.color || "var(--brand)",
+            background: member.color || acento,
             color: readableOn(member.color || "#7c3aed"), fontSize: 20, fontWeight: 700, letterSpacing: "0.02em",
           }}
         >
@@ -472,7 +487,7 @@ function MemberPhoto({
           style={{
             position: "absolute", right: -4, bottom: -4,
             width: 28, height: 28, borderRadius: "50%",
-            background: "var(--brand)", color: "#fff",
+            background: acento, color: "#fff",
             border: "2px solid var(--bg-elev)",
             display: "flex", alignItems: "center", justifyContent: "center",
             cursor: uploading ? "default" : "pointer",
@@ -510,9 +525,15 @@ function MemberPhoto({
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-interface Props { team: TeamMember[]; currentUserId: string; currentUserRole: string; clinicName: string }
+interface Props {
+  team: TeamMember[]; currentUserId: string; currentUserRole: string; clinicName: string;
+  // El mismo interruptor por clínica del menú de dos niveles y de Pacientes.
+  // false por defecto: sin la prop (o con la clínica apagada) la pantalla se
+  // pinta exactamente igual que hoy.
+  rediseno?: boolean;
+}
 
-export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -708,8 +729,10 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     setTimeout(() => setCopied(false), 2000);
   }
 
+  const Raiz = rediseno ? RaizRediseno : "div";
+
   return (
-    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
+    <Raiz style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
@@ -750,7 +773,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                   : t("settings.team.bannerCreateDesc")}
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <code className="mono" style={{
+                {/* Contraseña temporal, se copia-pega tal cual: letra de máquina real
+                    incluso con Instrument Sans en el resto del panel (WS1-T6). */}
+                <code className="mono-tecnico" style={{
                   fontSize: 13, fontWeight: 700,
                   background: "var(--warning-soft-strong)",
                   color: "var(--warning-strong)",
@@ -860,6 +885,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
                   <MemberPhoto
                     member={m}
+                    rediseno={rediseno}
                     onChange={url =>
                       setTeam(prev => prev.map(mem => (mem.id === m.id ? { ...mem, avatarUrl: url } : mem)))
                     }
@@ -899,7 +925,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                     gap: 10,
                     marginTop: 16,
                     paddingTop: 16,
-                    borderTop: "1px solid var(--border-soft)",
+                    borderTop: `1px solid ${rediseno ? "var(--m2-tarjeta-borde)" : "var(--border-soft)"}`,
                     width: "100%",
                   }}>
                     <div>
@@ -991,7 +1017,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             <MemberForm
               form={form} setForm={setForm}
               onSubmit={createDoctor} onCancel={() => setShowNew(false)}
-              loading={loading} isEdit={false}
+              loading={loading} isEdit={false} rediseno={rediseno}
             />
           </div>
         </div>
@@ -1011,7 +1037,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             <MemberForm
               form={form} setForm={setForm}
               onSubmit={updateDoctor} onCancel={() => setEditMember(null)}
-              loading={loading} isEdit={true}
+              loading={loading} isEdit={true} rediseno={rediseno}
               // Reset password solo aparece cuando el actor es SUPER_ADMIN
               // y el target NO es SUPER_ADMIN. El backend valida lo mismo.
               onResetPassword={
@@ -1044,6 +1070,6 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         member={sabinaMember}
         onClose={() => setSabinaMember(null)}
       />
-    </div>
+    </Raiz>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, AlertTriangle, Clock } from "lucide-react";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { useT } from "@/i18n/i18n-provider";
+import { JourneyRediseno } from "./journey-rediseno";
 
 interface FunnelStep { id: string; label: string; count: number }
 interface Stage {
@@ -14,7 +15,7 @@ interface Stage {
   avgMin: number;
   sample: number;
 }
-interface ApiResponse {
+export interface ApiResponse {
   totalAppts: number;
   funnel: FunnelStep[];
   dropOffs: { cancelled: number; noShow: number };
@@ -22,7 +23,7 @@ interface ApiResponse {
   bottleneck: Stage | null;
 }
 
-const PRESETS = [
+export const PRESETS = [
   { id: "30d", labelKey: "analytics.journeyClient.preset30d", days: 30 },
   { id: "90d", labelKey: "analytics.journeyClient.preset90d", days: 90 },
 ];
@@ -35,7 +36,7 @@ const PRESETS = [
  * Bajo el funnel, una grilla de "etapas con tiempo promedio" — cuello
  * de botella se highlightea en ámbar/rojo.
  */
-export function JourneyClient() {
+export function JourneyClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [preset, setPreset] = useState("30d");
   const [data, setData] = useState<ApiResponse | null>(null);
@@ -53,6 +54,8 @@ export function JourneyClient() {
       .catch(() => setLoading(false));
     return () => ctrl.abort();
   }, [preset]);
+
+  if (rediseno) return <JourneyRediseno preset={preset} setPreset={setPreset} data={data} loading={loading} />;
 
   return (
     <AnalyticsLayout

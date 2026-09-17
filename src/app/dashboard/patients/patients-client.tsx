@@ -50,6 +50,10 @@ import { ImportWizard } from "@/components/import/import-wizard";
 import { DateField } from "@/components/ui/date-field";
 import { patientQuotaLevel, type PatientQuota } from "@/lib/patient-quota-shared";
 import styles from "./patients.module.css";
+// REDISEÑO DE PACIENTES (WS1-T4) — la raíz que trae Instrument Sans y los
+// tokens `--pr-*`. Solo se monta con el interruptor `menu-dos-niveles`
+// encendido para la clínica; apagado, ni una clase de más.
+import { CLASES_REDISENO } from "@/components/dashboard/pacientes-rediseno/raiz";
 
 /* ─── Types ─── */
 
@@ -177,6 +181,13 @@ interface Props {
   /** patients.create + rol ADMIN/RECEPTIONIST (el POST /api/patients/import
    *  exige ambos, igual que su espejo de citas). */
   canImportPatients: boolean;
+  /**
+   * ¿La clínica tiene encendido el diseño nuevo? Es el MISMO interruptor del
+   * menú de dos niveles (`clinic_feature_flags` → `menu-dos-niveles`). En
+   * false la lista se pinta exactamente como hoy: las clases del rediseño no
+   * se ponen y ninguna regla nueva llega a aplicarse.
+   */
+  rediseno?: boolean;
 }
 
 /* ─── Constantes ─── */
@@ -295,7 +306,7 @@ function computePages(current: number, total: number): Array<number | "..."> {
 
 /* ─── Componente principal ─── */
 
-export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, canImportPatients }: Props) {
+export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, canImportPatients, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -689,7 +700,11 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
   };
 
   return (
-    <div className={styles.page}>
+    <div
+      className={[styles.page, rediseno ? `${CLASES_REDISENO} ${styles.pageRediseno}` : ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div className={styles.filtersRow}>
         <div className={styles.pillGroup}>
           {([
@@ -926,6 +941,7 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
           onToggleAll={toggleAll}
           onToggleOne={toggleOne}
           onToggleVip={handleToggleVip}
+          rediseno={rediseno}
         />
       ) : (
         <PatientsGrid
@@ -973,7 +989,11 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
         </div>
       )}
 
-      <div className={styles.kbdHints}>
+      {/* Los atajos NO se anuncian en el teléfono, donde no hay teclado que
+          pulsarlos: la clase se la pone el rediseño y el CSS los esconde por
+          debajo de 1024px. En computadora siguen exactamente igual, que es
+          donde quien los usa los usa todo el día. */}
+      <div className={`${styles.kbdHints} ${rediseno ? styles.kbdHintsSoloTeclado : ""}`}>
         <kbd>/</kbd>{t("patients.kbdHints.search")} · <kbd>J</kbd>/<kbd>K</kbd>{t("patients.kbdHints.navigate")} · <kbd>↵</kbd>{t("patients.kbdHints.open")} · <kbd>Esc</kbd>{t("patients.kbdHints.clear")} · <kbd>Space</kbd>{t("patients.kbdHints.select")} · <kbd>N</kbd>{t("patients.kbdHints.new")} · <kbd>G</kbd>{t("patients.kbdHints.view")} · <kbd>F</kbd>{t("patients.kbdHints.filters")}
       </div>
 
@@ -991,6 +1011,7 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
       {canCreatePatients && (
         <NewPatientModal
           open={newPatientOpen}
+          apariencia={rediseno ? "nueva" : "clasica"}
           onClose={() => setNewPatientOpen(false)}
           onCreated={() => {
             setNewPatientOpen(false);
@@ -1004,6 +1025,7 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
       {canImportPatients && (
         <ImportWizard
           open={importOpen}
+          apariencia={rediseno ? "nueva" : "clasica"}
           startInAssisted={importAssisted}
           onClose={() => setImportOpen(false)}
           onImported={() => {
@@ -1138,7 +1160,7 @@ function StatCard({
 
 function PatientsTable({
   patients, loading, search, columnsVisible, selected, allSelected,
-  focusedIdx, sortCol, sortDir, onSort, onToggleAll, onToggleOne, onToggleVip,
+  focusedIdx, sortCol, sortDir, onSort, onToggleAll, onToggleOne, onToggleVip, rediseno,
 }: {
   patients: PatientRow[];
   loading: boolean;
@@ -1153,6 +1175,7 @@ function PatientsTable({
   onToggleAll: () => void;
   onToggleOne: (id: string, idx: number, withShift: boolean) => void;
   onToggleVip: (id: string) => void;
+  rediseno: boolean;
 }) {
   const t = useT();
   if (loading && patients.length === 0) {
@@ -1212,6 +1235,7 @@ function PatientsTable({
               isFocused={focusedIdx === idx}
               onToggle={onToggleOne}
               onToggleVip={onToggleVip}
+              rediseno={rediseno}
             />
           ))}
         </tbody>
@@ -1247,7 +1271,7 @@ function SortHeader({
 }
 
 function PatientRowComp({
-  patient: p, idx, search, columnsVisible, isSelected, isFocused, onToggle, onToggleVip,
+  patient: p, idx, search, columnsVisible, isSelected, isFocused, onToggle, onToggleVip, rediseno,
 }: {
   patient: PatientRow;
   idx: number;
@@ -1257,6 +1281,7 @@ function PatientRowComp({
   isFocused: boolean;
   onToggle: (id: string, idx: number, withShift: boolean) => void;
   onToggleVip: (id: string) => void;
+  rediseno: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -1418,12 +1443,24 @@ function PatientRowComp({
           >
             <Star size={13} strokeWidth={1.75} fill={p.isVip ? "currentColor" : "none"} aria-hidden />
           </button>
+          {/* Con el rediseño el atajo se queda en la FLECHA sola: el texto
+              «Ver →» costaba ~85px de ancho en cada fila y era, junto con los
+              encabezados que no podían partirse, lo que empujaba la columna
+              «Estado» fuera de la pantalla a 1440 con el menú abierto.
+              Sigue siendo un enlace de verdad, y eso importa: la fila entera
+              es un `onClick` sin `href`, así que si esto desapareciera,
+              Ctrl/⌘+clic y el clic central dejarían de abrir el expediente en
+              una pestaña nueva —recepción abre varios a la vez— y un lector de
+              pantalla se quedaría sin nada que anunciar en la fila. */}
           <Link
             href={`/dashboard/patients/${p.id}`}
-            className={styles.actionView}
+            className={rediseno ? `${styles.actionBtn} ${styles.actionOpen}` : styles.actionView}
+            title={rediseno ? t("common.view") : undefined}
+            aria-label={rediseno ? t("patients.row.openRecord", { name: `${p.firstName} ${p.lastName}` }) : undefined}
             onClick={(e) => e.stopPropagation()}
           >
-            {t("common.view")} <ArrowRight size={11} strokeWidth={1.75} aria-hidden />
+            {!rediseno && t("common.view")}
+            <ArrowRight size={rediseno ? 14 : 11} strokeWidth={1.75} aria-hidden />
           </Link>
         </div>
       </td>

@@ -13,6 +13,7 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { fmtMXN, formatRelativeDate } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
+import { Tratamientos } from "@/components/dashboard/piezas-rediseno/tratamientos";
 
 type StatusTone = "success" | "warning" | "danger" | "neutral" | "info" | "brand";
 const STATUS_TONE: Record<string, { tone: StatusTone; labelKey: string }> = {
@@ -22,10 +23,10 @@ const STATUS_TONE: Record<string, { tone: StatusTone; labelKey: string }> = {
   PAUSED:    { tone: "warning", labelKey: "pages.treatments.statusPaused" },
 };
 
-interface Session { id: string; sessionNumber: number; completedAt: string | null; notes: string | null }
-interface InvItem  { id: string; name: string; category: string; emoji: string; quantity: number; unit: string }
-interface SelectedInv { id: string; name: string; unit: string; qty: number }
-interface Treatment {
+export interface Session { id: string; sessionNumber: number; completedAt: string | null; notes: string | null }
+export interface InvItem  { id: string; name: string; category: string; emoji: string; quantity: number; unit: string }
+export interface SelectedInv { id: string; name: string; unit: string; qty: number }
+export interface Treatment {
   id: string; name: string; description: string | null;
   totalSessions: number; sessionIntervalDays: number; totalCost: number;
   status: string; startDate: string; endDate: string | null;
@@ -56,9 +57,13 @@ interface Props {
   /** "treatments.edit" (EQ-07), resuelto en el server: crear planes,
    *  registrar sesiones y cambiar el estado. Los endpoints revalidan con 403. */
   canEdit?: boolean;
+  /** Interruptor `menu-dos-niveles` de la clínica (lo resuelve page.tsx):
+   *  encendido pinta la pantalla vestida con el lenguaje del menú nuevo;
+   *  apagado, todo lo de abajo, tal cual. La lógica es la misma en los dos. */
+  rediseno?: boolean;
 }
 
-export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug, canEdit = false }: Props) {
+export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug, canEdit = false, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -206,6 +211,34 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       toast.success(t("pages.treatments.statusUpdated"));
       router.refresh();
     } catch { toast.error(t("pages.treatments.updateError")); }
+  }
+
+  // Lo mismo que hace el InventoryPicker de siempre al abrirse, para que el
+  // rediseño no traiga su propio fetch.
+  async function loadInventory() {
+    if (invItems.length > 0) return;
+    setLoadingInv(true);
+    try {
+      const r = await fetch("/api/inventory");
+      const d = await r.json();
+      setInvItems(Array.isArray(d) ? d : []);
+    } catch {} finally { setLoadingInv(false); }
+  }
+
+  // REDISEÑO — mismo estado, mismos handlers, otra piel. Con la bandera
+  // apagada no se llega aquí y lo de abajo se pinta exactamente como hoy.
+  if (rediseno) {
+    return (
+      <Tratamientos
+        vm={{
+          treatments, filtered, filter, setFilter, showNew, setShowNew, selected, setSelected, saving,
+          addingSession, setAddingSession, sessionNote, setSessionNote, invItems, selInv, setSelInv,
+          loadingInv, loadInventory, form, setForm, createPlan, addSession, changeStatus, patients,
+          doctors, isAdmin, canEdit, active, overdue, completed, daysOverdue, progressPct,
+          commonTreatments: COMMON_TREATMENTS.slice(0, 5),
+        }}
+      />
+    );
   }
 
   return (

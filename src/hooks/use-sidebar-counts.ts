@@ -21,7 +21,10 @@ const REVALIDATE_MS = 60_000;
 /**
  * Hook que lee contadores agregados del sidebar.
  * - Fetch inicial al montar.
- * - Revalida cada 60s.
+ * - Revalida cada 60s, PERO solo mientras la pestaña está visible (mismo
+ *   patrón que InsightsPopover/NotificationsPopover/WaitingRoomAlert): una
+ *   pestaña de fondo no tiene por qué seguir preguntando cada minuto (ver
+ *   ~/gerentes/salidas/MAPA-conexiones.md §6.1).
  * - Revalida al recuperar foco de ventana.
  * - Degradación limpia: si falla, counts = {0,0,0}.
  */
@@ -31,6 +34,7 @@ export function useSidebarCounts(): SidebarCounts {
   useEffect(() => {
     let cancelled = false;
     let ac: AbortController | null = null;
+    let intervalId: number | null = null;
 
     const fetchCounts = () => {
       ac?.abort();
@@ -56,15 +60,28 @@ export function useSidebarCounts(): SidebarCounts {
         });
     };
 
-    fetchCounts();
-    const intervalId = window.setInterval(fetchCounts, REVALIDATE_MS);
+    const start = () => {
+      if (intervalId === null) intervalId = window.setInterval(fetchCounts, REVALIDATE_MS);
+    };
+    const stop = () => {
+      if (intervalId !== null) { window.clearInterval(intervalId); intervalId = null; }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") { fetchCounts(); start(); }
+      else stop();
+    };
     const onFocus = () => fetchCounts();
+
+    fetchCounts();
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onFocus);
 
     return () => {
       cancelled = true;
       ac?.abort();
-      window.clearInterval(intervalId);
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);
     };
   }, []);

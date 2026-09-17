@@ -5,6 +5,7 @@ import { Toaster } from "react-hot-toast";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
+import { AvisosVestibles } from "@/components/dashboard/layout-rediseno/avisos";
 import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import { GaPageview } from "@/components/analytics/ga-pageview";
 import { MetaPixelPageview } from "@/components/analytics/meta-pixel-pageview";
@@ -122,7 +123,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Toaster centralizado: única posición (top-right), duraciones
             consistentes (3s success/info, 5s error). Estilos globales
             via className para que dark mode funcione automáticamente
-            con CSS variables del proyecto. */}
+            con CSS variables del proyecto.
+            AvisosVestibles (envoltorio de hijo único, no un hijo más: no cambia
+            las ranuras ni los useId) lo devuelve TAL CUAL salvo que el layout de
+            /dashboard haya encendido la ropa del rediseño para la clínica. */}
+        <AvisosVestibles>
         <Toaster
           position="top-right"
           gutter={8}
@@ -144,6 +149,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             },
           }}
         />
+        </AvisosVestibles>
         {/* ConfirmProvider a nivel root para que /admin, /dashboard y
             cualquier otra ruta autenticada puedan usar useConfirm().
             Landing/auth pages no usan el hook → el provider está
