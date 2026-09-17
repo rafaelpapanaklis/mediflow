@@ -147,29 +147,41 @@ test("los apartados nuevos reciben los mismos callbacks que los de siempre", () 
 // ═══════════════════════════════════════════════════════════════════════════
 // La pestaña Facturación nueva pinta lo MISMO que billing-tab.tsx
 // ═══════════════════════════════════════════════════════════════════════════
-test("facturacion.tsx conserva las columnas, los estados y las reglas de billing-tab.tsx", () => {
-  const nueva = leer("components/dashboard/expediente-rediseno/facturacion.tsx");
+// Desde ws1-t1 cada factura es una FICHA como la de presupuesto (Rafael: «una
+// factura creada tiene que verse así») y no una fila de tabla. La ficha vive en
+// `factura-ficha-rediseno/fichas-factura.tsx` y la comparte Caja; aquí quedan la
+// tarjeta, el título, el vacío y «Nueva factura». Lo que se vigila es lo mismo:
+// que NADA de lo que la tabla enseñaba sin clic se haya perdido por el camino.
+// Los rótulos de columna que ya no existen en una ficha (Factura, Fecha, Monto,
+// Estado, CFDI) no se exigen: el DATO sigue ahí y se comprueba por su fuente.
+test("la pestaña nueva conserva los datos, los estados y las reglas de billing-tab.tsx", () => {
+  const pestana = leer("components/dashboard/expediente-rediseno/facturacion.tsx");
+  const ficha = leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx");
   const vieja = leer("components/dashboard/patient-detail/billing-tab.tsx");
-  const claves = [
-    "patients.billing.colInvoice", "common.date", "patients.billing.colAmount", "patients.billing.colPaid",
-    "patients.billing.colBalance", "common.status", "billing.billingClient.thCfdi", "patients.billing.rowCharge",
-    "patients.billing.title", "patients.billing.empty", "clinical.emptyStates.invoicesNewCta",
-  ];
-  for (const k of claves) {
+  assert.ok(pestana.includes("<FichasFactura"), "la pestaña ya no monta las fichas de factura");
+  for (const k of ["patients.billing.title", "patients.billing.empty", "clinical.emptyStates.invoicesNewCta", "patients.billing.rowCharge"]) {
     assert.ok(vieja.includes(`"${k}"`), `billing-tab.tsx ya no usa ${k}: actualiza este candado`);
-    assert.ok(nueva.includes(`"${k}"`), `la pestaña nueva perdió ${k}`);
+    assert.ok(pestana.includes(`"${k}"`), `la pestaña nueva perdió ${k}`);
+  }
+  for (const k of ["patients.billing.colPaid", "patients.billing.colBalance"]) {
+    assert.ok(vieja.includes(`"${k}"`), `billing-tab.tsx ya no usa ${k}: actualiza este candado`);
+    assert.ok(ficha.includes(`"${k}"`), `la ficha perdió ${k}`);
+  }
+  // Folio, fecha, total, pagado y saldo: el dato, de la misma fuente.
+  for (const dato of ["inv.invoiceNumber", "formatDate(inv.createdAt)", "fmtMXNdec(inv.total)", "fmtMXNdec(inv.paid)", "fmtMXNdec(inv.balance)"]) {
+    assert.ok(ficha.includes(dato), `la ficha no enseña ${dato}`);
   }
   // Los tres estados del CFDI, con las claves del indicador compartido.
   const cfdi = leer("components/dashboard/billing/invoice-cfdi-badge.tsx");
   for (const k of ["billing.billingClient.cfdiInvoiced", "billing.billingClient.cfdiStamp", "billing.billingClient.satNotConfigured"]) {
-    assert.ok(cfdi.includes(`"${k}"`) && nueva.includes(`"${k}"`), `estado CFDI ${k}`);
+    assert.ok(cfdi.includes(`"${k}"`) && ficha.includes(`"${k}"`), `estado CFDI ${k}`);
   }
   // Mismas reglas de negocio, de la misma fuente única.
   for (const fn of ["invoiceStatusBadge", "isVoidedInvoice", "isChargeableInvoice", "fmtMXNdec"]) {
-    assert.ok(vieja.includes(fn) && nueva.includes(fn), `la pestaña nueva no usa ${fn}`);
+    assert.ok(vieja.includes(fn) && ficha.includes(fn), `la ficha no usa ${fn}`);
   }
   // Y el mini-resumen sigue fuera (N6): el rail ya lo enseña.
-  assert.ok(!nueva.includes("KpiCard") && !nueva.includes("summary"), "sin mini-resumen duplicado");
+  assert.ok(!pestana.includes("KpiCard") && !pestana.includes("summary"), "sin mini-resumen duplicado");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

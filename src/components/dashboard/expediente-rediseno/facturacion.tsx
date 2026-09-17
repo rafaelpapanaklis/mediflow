@@ -1,25 +1,24 @@
 "use client";
 
-import { CheckCircle2, Plus, Receipt } from "lucide-react";
+import { Plus, Receipt } from "lucide-react";
 import type { PatientBillingInvoice } from "@/components/dashboard/patient-detail/billing-tab";
-import {
-  invoiceStatusBadge,
-  isVoidedInvoice,
-  isChargeableInvoice,
-  type InvoiceStatusTone,
-} from "@/components/dashboard/billing/invoice-status";
-import { fmtMXNdec } from "@/lib/format";
-import { formatDate } from "@/lib/utils";
+import { FichasFactura } from "@/components/dashboard/factura-ficha-rediseno/fichas-factura";
+import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { useT } from "@/i18n/i18n-provider";
 import { RaizExpediente } from "./raiz";
 import s from "./expediente.module.css";
 
 /**
- * La PESTAÑA Facturación del expediente, con el diseño nuevo. La MISMA tabla
- * que `patient-detail/billing-tab.tsx`: folio, fecha, total, pagado, saldo,
- * estado, CFDI y «Cobrar» por fila, con «Nueva factura» arriba; los mismos
- * callbacks al padre y el mismo objeto de factura de vuelta. Solo cambia la
- * ropa.
+ * La PESTAÑA Facturación del expediente, con el diseño nuevo. Enseña lo MISMO
+ * que `patient-detail/billing-tab.tsx` —folio, fecha, total, pagado, saldo,
+ * estado, CFDI y «Cobrar» por factura, con «Nueva factura» arriba—, con los
+ * mismos callbacks al padre y el mismo objeto de factura de vuelta.
+ *
+ * Desde ws1-t1 cada factura es una FICHA como la de presupuesto y no una fila
+ * de tabla: Rafael pidió que una factura creada se vea como un presupuesto
+ * creado, con la frase del trato a la vista. La ficha vive en
+ * `factura-ficha-rediseno/` (la comparte Caja); aquí quedan la tarjeta, la
+ * cabecera y «Nueva factura».
  *
  * Lo que se abre desde aquí —el detalle de factura, el pago, la factura
  * nueva— son diálogos del padre y NO son de esta pantalla: los viste otra
@@ -40,19 +39,11 @@ export interface FacturacionProps {
   onCobrar: (inv: PatientBillingInvoice) => void;
   /** «Timbrar» — abre el detalle con el formulario SAT desplegado. */
   onTimbrar: (inv: PatientBillingInvoice) => void;
+  /** «Duplicar» — abre Nueva factura con los mismos conceptos y el mismo trato. */
+  onDuplicar: (inv: PatientBillingInvoice, condiciones: CondicionesPago | null) => void;
 }
 
-/** Los seis tonos de `invoice-status.ts`, en las etiquetas del rediseño. */
-const TONO_ETIQUETA: Record<InvoiceStatusTone, string> = {
-  success: "etiquetaExito",
-  warning: "etiquetaAlerta",
-  danger: "etiquetaPeligro",
-  info: "etiquetaVioleta",
-  brand: "etiquetaVioleta",
-  neutral: "etiquetaNeutra",
-};
-
-export function Facturacion({ facturas, facturApiEnabled, onNueva, onAbrir, onCobrar, onTimbrar }: FacturacionProps) {
+export function Facturacion({ facturas, facturApiEnabled, onNueva, onAbrir, onCobrar, onTimbrar, onDuplicar }: FacturacionProps) {
   const t = useT();
 
   return (
@@ -71,79 +62,22 @@ export function Facturacion({ facturas, facturApiEnabled, onNueva, onAbrir, onCo
           </div>
         </header>
 
-        {facturas.length === 0 ? (
-          <div className={s.tablaVacia}>{t("patients.billing.empty")}</div>
-        ) : (
-          <div className={s.tablaCaja}>
-            <table className={s.tabla}>
-              <thead>
-                <tr>
-                  <th>{t("patients.billing.colInvoice")}</th>
-                  <th>{t("common.date")}</th>
-                  <th className={s.num}>{t("patients.billing.colAmount")}</th>
-                  <th className={s.num}>{t("patients.billing.colPaid")}</th>
-                  <th className={s.num}>{t("patients.billing.colBalance")}</th>
-                  <th>{t("common.status")}</th>
-                  <th>{t("billing.billingClient.thCfdi")}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {facturas.map((inv) => {
-                  const badge = invoiceStatusBadge(inv.status);
-                  // Cancelar NO pone balance a 0 en BD: la columna Saldo
-                  // mostraría deuda en una fila que dice «Cancelada» — se
-                  // muestra «—» porque no hay nada que cobrar.
-                  const anulada = isVoidedInvoice(inv);
-                  return (
-                    <tr key={inv.id} className={s.filaClic} onClick={() => onAbrir(inv)}>
-                      <td className={`${s.fuerte} ${s.suave}`}>{inv.invoiceNumber}</td>
-                      <td className={s.suave}>{formatDate(inv.createdAt)}</td>
-                      <td className={s.num}>{fmtMXNdec(inv.total)}</td>
-                      <td className={`${s.num} ${s.tonoExito}`}>{fmtMXNdec(inv.paid)}</td>
-                      <td className={`${s.num} ${!anulada && inv.balance > 0 ? s.tonoAlerta : s.tenue}`}>
-                        {anulada ? "—" : fmtMXNdec(inv.balance)}
-                      </td>
-                      <td>
-                        <span className={`${s.etiqueta} ${(s as Record<string, string>)[TONO_ETIQUETA[badge.tone]]}`}>
-                          <span className={s.etiquetaPunto} aria-hidden />
-                          {t(badge.labelKey)}
-                        </span>
-                      </td>
-                      {/* CFDI — los mismos tres estados que `invoice-cfdi-badge.tsx`:
-                          ✓ «Facturado (CFDI)» si ya se timbró, «Timbrar» si el SAT
-                          está configurado (y la factura no está anulada), o el
-                          texto neutro. */}
-                      <td onClick={(e) => e.stopPropagation()}>
-                        {inv.cfdiUuid ? (
-                          <span className={`${s.etiqueta} ${s.etiquetaExito}`}>
-                            <CheckCircle2 size={11} strokeWidth={2.5} aria-hidden />
-                            {t("billing.billingClient.cfdiInvoiced")}
-                          </span>
-                        ) : facturApiEnabled ? (
-                          anulada ? null : (
-                            <button type="button" className={`${s.boton} ${s.botonChico}`} onClick={() => onTimbrar(inv)}>
-                              {t("billing.billingClient.cfdiStamp")}
-                            </button>
-                          )
-                        ) : (
-                          <span className={s.apagado}>{t("billing.billingClient.satNotConfigured")}</span>
-                        )}
-                      </td>
-                      <td className={s.derecha} onClick={(e) => e.stopPropagation()}>
-                        {isChargeableInvoice(inv) && (
-                          <button type="button" className={`${s.boton} ${s.botonChico}`} onClick={() => onCobrar(inv)}>
-                            {t("patients.billing.rowCharge")}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {/* Cada factura es una FICHA como la de presupuesto (ws1-t1): folio,
+            chips de estado y CFDI, importe grande, pagado y saldo, la frase del
+            trato en violeta y las acciones. Todo lo que la tabla enseñaba sin
+            clic sigue a la vista, y tocar la ficha abre el detalle igual que
+            tocar la fila. Ver `factura-ficha-rediseno/fichas-factura.tsx`. */}
+        <FichasFactura
+          dentroDeTarjeta
+          facturas={facturas}
+          facturApiEnabled={facturApiEnabled}
+          textoCobrar={t("patients.billing.rowCharge")}
+          textoVacio={t("patients.billing.empty")}
+          onAbrir={onAbrir}
+          onCobrar={onCobrar}
+          onTimbrar={onTimbrar}
+          onDuplicar={onDuplicar}
+        />
       </section>
     </RaizExpediente>
   );

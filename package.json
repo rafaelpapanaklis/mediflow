@@ -41,6 +41,7 @@
     "test:expediente-rediseno": "tsx --test src/components/dashboard/expediente-rediseno/__tests__/expediente-rediseno.test.ts",
     "test:plan-tratamiento-rediseno": "tsx --test src/components/dashboard/plan-tratamiento-rediseno/__tests__/plan-tratamiento-rediseno.test.ts",
     "test:citas-expediente": "tsx --test src/components/dashboard/citas-expediente/__tests__/citas-expediente.test.ts",
+    "test:factura-ficha-rediseno": "tsx --test src/components/dashboard/factura-ficha-rediseno/__tests__/factura-ficha-rediseno.test.ts",
     "test:clinica-visual-rediseno": "tsx --test src/components/dashboard/clinica-visual-rediseno/__tests__/clinica-visual-rediseno.test.ts",
     "test:cuenta-rediseno": "tsx --test src/components/dashboard/cuenta-rediseno/__tests__/cuenta-rediseno.test.ts",
     "test:layout-rediseno": "tsx --tsconfig tsconfig.test.json --test src/components/dashboard/layout-rediseno/__tests__/layout-rediseno.test.tsx",

@@ -9003,6 +9003,29 @@
       "cargando": "Cargando archivos…"
     }
   },
+  "facturaFicha": {
+    "extrasFallo": "No se pudieron leer las formas de pago de estas facturas: la base no respondió. Recarga para verlas.",
+    "enviando": "Enviando…",
+    "enviarCorreo": "Enviar por correo",
+    "correoEnviado": "Correo enviado al paciente.",
+    "whatsAppEnviado": "WhatsApp enviado al paciente.",
+    "sinCorreo": "El paciente no tiene correo registrado: agrégalo en su expediente para poder enviarle la factura por correo.",
+    "sinTelefono": "El paciente no tiene teléfono registrado: agrégalo en su expediente para poder enviarle la factura por WhatsApp.",
+    "tratoTitulo": "Esto anota el trato, no cobra. ",
+    "tratoTexto": "La forma de pago queda escrita en la factura para que se entienda de un vistazo. Los pagos se siguen registrando como siempre, con «Registrar pago».",
+    "envioTitulo": "Enviar la factura al paciente",
+    "envioNo": "No enviar",
+    "envioNoPista": "Solo se crea la factura. Puedes enviarla después desde su ficha.",
+    "envioCorreo": "Por correo",
+    "envioCorreoPista": "Al correo registrado del paciente, al crear la factura.",
+    "envioWhatsApp": "Por WhatsApp",
+    "envioWhatsAppPista": "Al WhatsApp registrado del paciente, al crear la factura.",
+    "envioSinPaciente": "Elige primero al paciente para saber a dónde se le puede enviar.",
+    "errorCondiciones": "La factura se creó, pero la forma de pago no se guardó.",
+    "creadaSinEnviar": "La factura se creó, pero NO se le envió al paciente.",
+    "envioSinConfirmar": "No se pudo confirmar el envío: la conexión se cortó antes de recibir respuesta. Antes de reenviar, comprueba con el paciente o en el Inbox si ya le llegó.",
+    "creadaEnvioSinConfirmar": "La factura se creó, pero no se pudo confirmar si se le envió al paciente. Compruébalo antes de reenviarla desde su ficha."
+  },
   "presupuestoNuevo": {
     "listaTitulo": "Presupuestos",
     "listaSubtitulo": "Lo que se le cotizó al paciente y cómo lo va a pagar.",

@@ -9003,6 +9003,29 @@
       "cargando": "Loading files…"
     }
   },
+  "facturaFicha": {
+    "extrasFallo": "Could not read the payment terms of these invoices: the database did not respond. Reload to see them.",
+    "enviando": "Sending…",
+    "enviarCorreo": "Send by email",
+    "correoEnviado": "Email sent to the patient.",
+    "whatsAppEnviado": "WhatsApp sent to the patient.",
+    "sinCorreo": "The patient has no email on file: add it to their record to send them the invoice by email.",
+    "sinTelefono": "The patient has no phone on file: add it to their record to send them the invoice by WhatsApp.",
+    "tratoTitulo": "This records the agreement; it does not charge. ",
+    "tratoTexto": "The payment terms are written on the invoice so they can be understood at a glance. Payments are still recorded as always, with “Register payment”.",
+    "envioTitulo": "Send the invoice to the patient",
+    "envioNo": "Do not send",
+    "envioNoPista": "Only the invoice is created. You can send it later from its card.",
+    "envioCorreo": "By email",
+    "envioCorreoPista": "To the patient's email on file, when the invoice is created.",
+    "envioWhatsApp": "By WhatsApp",
+    "envioWhatsAppPista": "To the patient's WhatsApp on file, when the invoice is created.",
+    "envioSinPaciente": "Pick the patient first to know where it can be sent.",
+    "errorCondiciones": "The invoice was created, but the payment terms were not saved.",
+    "creadaSinEnviar": "The invoice was created, but it was NOT sent to the patient.",
+    "envioSinConfirmar": "The delivery could not be confirmed: the connection dropped before a response arrived. Before resending, check with the patient or in the Inbox whether it already arrived.",
+    "creadaEnvioSinConfirmar": "The invoice was created, but it could not be confirmed whether it was sent to the patient. Check before resending it from its card."
+  },
   "presupuestoNuevo": {
     "listaTitulo": "Quotes",
     "listaSubtitulo": "What the patient was quoted, and how they will pay for it.",

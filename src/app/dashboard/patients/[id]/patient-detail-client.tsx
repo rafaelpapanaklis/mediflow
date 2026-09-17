@@ -65,6 +65,7 @@ import { PrescriptionsTab } from "@/components/dashboard/patient-detail/prescrip
 import { PatientUploadsSection } from "@/components/patients/patient-uploads-section";
 import { PatientPhotosTab, RecentPhotosStrip } from "@/components/dashboard/patient-detail/patient-photos-tab";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
+import { borradorDesdeFactura, type BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -621,6 +622,8 @@ export function PatientDetailClient({
   const [invoiceDetailAction, setInvoiceDetailAction] = useState<"cfdi" | null>(null);
   const [invoices, setInvoices] = useState(initialInvoices);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
+  // «Duplicar» de la ficha de factura (solo diseño nuevo). Apagado, siempre null.
+  const [duplicarFactura, setDuplicarFactura] = useState<BorradorDeFactura | null>(null);
   // Cobro directo en 2 clicks: snapshot de la factura objetivo del
   // PaymentModal montado abajo ("Cobrar ahora" del rail/hero y "Cobrar" por
   // fila del tab Facturación).
@@ -3683,6 +3686,12 @@ export function PatientDetailClient({
               onAbrir={(inv) => setInvoiceDetailOpen(inv)}
               onCobrar={(inv) => { void openDirectPayment(inv); }}
               onTimbrar={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
+              // «Duplicar» de la ficha: Nueva factura abre con los mismos
+              // conceptos y el mismo trato (solo diseño nuevo).
+              onDuplicar={(inv, condiciones) => {
+                setDuplicarFactura(borradorDesdeFactura(inv, condiciones));
+                setShowNewInvoice(true);
+              }}
             />
           )}
 
@@ -3895,10 +3904,12 @@ export function PatientDetailClient({
         patientId={patient.id}
         patientName={fullName}
         clinicTaxMode={clinicTaxMode}
-        onClose={() => setShowNewInvoice(false)}
+        inicial={duplicarFactura}
+        onClose={() => { setShowNewInvoice(false); setDuplicarFactura(null); }}
         onCreated={(inv) => {
           setInvoices((prev: any[]) => (prev.some((i: any) => i.id === inv.id) ? prev : [inv, ...prev]));
           setShowNewInvoice(false);
+          setDuplicarFactura(null);
           router.refresh();
         }}
       />

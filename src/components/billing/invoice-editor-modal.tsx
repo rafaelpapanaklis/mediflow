@@ -12,7 +12,7 @@
 // El paciente puede venir FIJO (ficha) o elegirse aquí con el buscador (Caja):
 // ver `patientId` vs `patients` en las props.
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { Plus, Loader2, Trash2, Check, Search, User } from "lucide-react";
 import toast from "react-hot-toast";
 import { computeTotals, round2 } from "@/lib/quotes/compute";
@@ -21,6 +21,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useT } from "@/i18n/i18n-provider";
 // Ropa del diseño nuevo (solo con `rediseno`). Ver dashboard/factura-rediseno/.
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
+// Lo que Nueva factura toma de Presupuestos (solo con `rediseno`): forma de pago
+// y envío al paciente. Ver dashboard/factura-ficha-rediseno/.
+import { condicionesPorDefecto, hayCondiciones, type CondicionesPago } from "@/lib/quotes/condiciones-pago";
+import { FormaDePagoFactura, EnvioFactura, FraseDelTrato, type EnvioAlCrear } from "@/components/dashboard/factura-ficha-rediseno/forma-de-pago";
+import { enviarFactura, guardarCondiciones, useContactoDePaciente } from "@/components/dashboard/factura-ficha-rediseno/extras";
+import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 
 /**
  * Descuento de línea tal y como VIAJA en el payload: clampeado al importe de la
@@ -84,11 +90,22 @@ export interface InvoiceEditorModalProps {
    * siempre, byte por byte. Los cálculos y el payload no cambian con él.
    */
   rediseno?: boolean;
+  /**
+   * «Duplicar» de la ficha de factura (solo el diseño nuevo lo pasa): el popup
+   * abre con estos conceptos y este trato ya puestos. Sin él, abre vacío como
+   * siempre. La factura se crea igual, por el mismo POST.
+   */
+  inicial?: BorradorDeFactura | null;
 }
 
-export function InvoiceEditorModal({ open, patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno = false }: InvoiceEditorModalProps) {
+export function InvoiceEditorModal({ open, patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno = false, inicial = null }: InvoiceEditorModalProps) {
+  // Solo el diseño nuevo lo enciende, y solo mientras guarda el trato o envía al
+  // paciente DESPUÉS de crear: en ese rato el popup no se cierra (ni Esc, ni
+  // clic fuera, ni «Cancelar»). Si se cerrara, el `onCreated` que llega al
+  // terminar cerraría el popup que se hubiera abierto entre tanto.
+  const ocupado = useRef(false);
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !ocupado.current) onClose(); }}>
       <DialogContent className={rediseno ? `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalAncho}` : "max-w-2xl"}>
         {/* El cuerpo se monta de cero en cada apertura → el formulario nunca queda con estado viejo. */}
         <InvoiceEditorBody
@@ -99,6 +116,8 @@ export function InvoiceEditorModal({ open, patientId, patientName, patients, cli
           onClose={onClose}
           onCreated={onCreated}
           rediseno={rediseno}
+          inicial={inicial}
+          ocupado={ocupado}
         />
       </DialogContent>
     </Dialog>
@@ -106,7 +125,7 @@ export function InvoiceEditorModal({ open, patientId, patientName, patients, cli
 }
 
 function InvoiceEditorBody({
-  patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno,
+  patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno, inicial, ocupado,
 }: {
   patientId?: string;
   patientName?: string;
@@ -115,6 +134,8 @@ function InvoiceEditorBody({
   onClose: () => void;
   onCreated: (invoice: any) => void;
   rediseno: boolean;
+  inicial: BorradorDeFactura | null;
+  ocupado: MutableRefObject<boolean>;
 }) {
   const t = useT();
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de
@@ -123,10 +144,14 @@ function InvoiceEditorBody({
   // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
   // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
   const cx = (vieja: string, nueva?: string) => (rediseno ? nueva : vieja);
-  const [items, setItems] = useState<EditorItem[]>([]);
-  const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">("none");
-  const [discountValue, setDiscountValue] = useState<number>(0);
-  const [notes, setNotes] = useState("");
+  // Sin `inicial` (siempre, salvo «Duplicar» del diseño nuevo) cada estado nace
+  // con el valor de siempre.
+  const [items, setItems] = useState<EditorItem[]>(() => (inicial?.items ?? []).map((it) => ({
+    key: newKey(), procedureId: null, name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount,
+  })));
+  const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">(inicial && inicial.descuento > 0 ? "amount" : "none");
+  const [discountValue, setDiscountValue] = useState<number>(inicial?.descuento ?? 0);
+  const [notes, setNotes] = useState(inicial?.notes ?? "");
   // "Vence el" (Invoice.dueDate) — opcional. Viaja como "YYYY-MM-DD" y el
   // servidor lo ancla al día natural de la clínica. Es lo ÚNICO que hace que
   // una factura cuente como vencida (KPI, filtro "Vencidas", Caja, Finanzas).
@@ -144,15 +169,38 @@ function InvoiceEditorBody({
 
   // Doctor atribuido (Invoice.doctorId) — opcional, alimenta los reportes por médico de Caja.
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
-  const [doctorId, setDoctorId] = useState("");
+  const [doctorId, setDoctorId] = useState(inicial?.doctorId ?? "");
 
   // Impuestos (Invoice.taxRate / taxIncluded). Nacen según la preferencia fiscal
   // de la clínica: exenta (odontología, lo común) = 0% sin desglose; iva16 = 16%
   // ya incluido en el precio. Cambiable por factura.
   const initialTax = useMemo(() => clinicInvoiceTaxDefaults(clinicTaxMode), [clinicTaxMode]);
-  const [taxRate, setTaxRate] = useState<number>(initialTax.taxRate);
-  const [taxIncluded, setTaxIncluded] = useState<boolean>(initialTax.taxIncluded);
+  // Un duplicado conserva los impuestos de la original, pero solo los dos modos
+  // que el editor sabe producir (0 o IVA_RATE_PCT).
+  const [taxRate, setTaxRate] = useState<number>(
+    inicial?.taxRate === 0 || inicial?.taxRate === IVA_RATE_PCT ? inicial.taxRate : initialTax.taxRate,
+  );
+  const [taxIncluded, setTaxIncluded] = useState<boolean>(
+    inicial?.taxRate === IVA_RATE_PCT && inicial.taxIncluded !== null ? inicial.taxIncluded : initialTax.taxIncluded,
+  );
   const taxMode: CfdiTaxMode = taxRate > 0 ? "iva16" : "exento";
+
+  // Forma de pago y envío al paciente — SOLO el diseño nuevo los enseña y los
+  // usa. Con el interruptor apagado se quedan en su valor neutro y `save()` no
+  // hace ni una petición de más.
+  const [cond, setCond] = useState<CondicionesPago>(() => inicial?.condiciones ?? condicionesPorDefecto());
+  const [envioElegido, setEnvio] = useState<EnvioAlCrear>(null);
+  // La factura YA existe y se está guardando el trato o enviando: «Cancelar» se
+  // apaga. Con el interruptor apagado nunca deja de ser false.
+  const [despuesDeCrear, setDespuesDeCrear] = useState(false);
+  const contacto = useContactoDePaciente(effectivePatientId, rediseno);
+  // Si se cambia a un paciente sin correo (o sin teléfono), la opción elegida
+  // deja de valer: no se manda nada a quien no se le puede mandar.
+  const envio: EnvioAlCrear =
+    (envioElegido === "correo" && contacto?.correo === false) ||
+    (envioElegido === "whatsapp" && contacto?.telefono === false)
+      ? null
+      : envioElegido;
 
   // Tarifario para el autocomplete (mismo endpoint que presupuestos).
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
@@ -169,7 +217,13 @@ function InvoiceEditorBody({
   useEffect(() => {
     fetch("/api/agenda/doctors")
       .then((r) => (r.ok ? r.json() : { doctors: [] }))
-      .then((d) => setDoctors(Array.isArray(d?.doctors) ? d.doctors.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []))
+      .then((d) => {
+        const lista: DoctorOption[] = Array.isArray(d?.doctors) ? d.doctors.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : [];
+        setDoctors(lista);
+        // Duplicar: si el doctor de la original ya no está en la lista, se suelta.
+        // El select lo enseñaría en blanco y el POST lo rechazaría sin pista.
+        if (inicial) setDoctorId((prev) => (lista.some((x) => x.id === prev) ? prev : ""));
+      })
       .catch(() => setDoctors([]));
   }, []);
 
@@ -311,9 +365,27 @@ function InvoiceEditorBody({
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error || t("billing.invoiceEditor.errorCreate"));
       toast.success(t("billing.invoiceEditor.createdToast", { number: out.invoiceNumber ?? "" }));
-      onCreated(out);
+      // Diseño nuevo: el trato y el envío van DESPUÉS de crear y por rutas
+      // aparte — crear la factura no cambia. Si alguno falla se DICE, con el
+      // motivo del servidor y dejando claro que la factura sí existe.
+      let creada = out;
+      if (rediseno && out?.id && (hayCondiciones(cond) || envio)) { ocupado.current = true; setDespuesDeCrear(true); }
+      if (rediseno && out?.id && hayCondiciones(cond)) {
+        const r = await guardarCondiciones(out.id, cond);
+        if (r.ok) creada = { ...out, condicionesPago: r.condiciones };
+        else toast.error(r.error ?? t("facturaFicha.errorCondiciones"), { duration: 10000 });
+      }
+      if (rediseno && out?.id && envio) {
+        const r = await enviarFactura(out.id, envio);
+        if (r.ok) toast.success(t(envio === "correo" ? "facturaFicha.correoEnviado" : "facturaFicha.whatsAppEnviado"));
+        // Sin motivo del servidor no se sabe si salió: no se afirma que no.
+        else toast.error(r.error ? `${t("facturaFicha.creadaSinEnviar")} ${r.error}` : t("facturaFicha.creadaEnvioSinConfirmar"), { duration: 10000 });
+      }
+      ocupado.current = false;
+      onCreated(creada);
       // No reseteamos `saving`: el modal se cierra (open=false) y este cuerpo se desmonta.
     } catch (e) {
+      ocupado.current = false;
       toast.error((e as Error).message || t("billing.invoiceEditor.errorCreate"));
       setSaving(false);
     }
@@ -559,6 +631,17 @@ function InvoiceEditorBody({
             </div>
           </div>
         </div>
+
+        {/* Lo que viene de Presupuestos: forma de pago y envío al paciente. */}
+        {rediseno && <FormaDePagoFactura cond={cond} total={grandTotal} onChange={setCond} />}
+        {rediseno && (
+          <EnvioFactura
+            envio={envio}
+            contacto={contacto}
+            hayPaciente={Boolean(effectivePatientId)}
+            onChange={setEnvio}
+          />
+        )}
       </div>
 
       {/* Totales + acciones (footer fijo, siempre visible) */}
@@ -586,9 +669,11 @@ function InvoiceEditorBody({
           <div className={cx("flex justify-between w-full max-w-xs text-base font-bold text-brand-700 dark:text-brand-300 pt-1", `${c.totalFila} ${c.totalFinal}`)}>
             <span>{t("billing.invoiceEditor.total")}</span><span>{money(grandTotal)}</span>
           </div>
+          {/* La frase del trato, en el pie: la misma que saldrá en la ficha. */}
+          {rediseno && <FraseDelTrato cond={cond} total={grandTotal} />}
         </div>
         <div className={cx("flex items-center justify-end gap-2", c.pieBotones)}>
-          <button type="button" onClick={onClose} className={cx("text-xs font-semibold px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/50", c.boton)}>
+          <button type="button" onClick={onClose} disabled={despuesDeCrear} className={cx("text-xs font-semibold px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/50", c.boton)}>
             {t("billing.invoiceEditor.cancel")}
           </button>
           <button type="button" onClick={save} disabled={saving}
