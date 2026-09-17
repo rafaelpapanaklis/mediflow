@@ -8,6 +8,7 @@ import { Topbar } from "@/components/dashboard/topbar";
 import { MenuDosNivelesServidor } from "@/components/dashboard/menu-dos-niveles/menu-servidor";
 import { TopbarDosNiveles } from "@/components/dashboard/menu-dos-niveles/topbar-dos-niveles";
 import { modulosParaMenuNuevo } from "@/components/dashboard/presupuestos-en-facturacion/menu";
+import { modulosSinReportes } from "@/components/dashboard/reportes-en-analitica/menu";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { canUseCaja } from "@/lib/caja-pin";
 import { getResolvedPlan } from "@/lib/plans";
@@ -271,7 +272,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
           // Marketplace fuera del menú NUEVO (decisión de Rafael). Va después
           // del spread para pisar solo esta prop; el <Sidebar> de abajo sigue
           // recibiendo las llaves tal cual. Ver presupuestos-en-facturacion/menu.ts.
-          clinicModuleKeys={modulosParaMenuNuevo(clinicModuleKeys)}
+          // Reportes también sale del menú NUEVO: ahora es una pestaña de
+          // Analítica. Solo para quien puede abrir Analítica; a los demás les
+          // sigue saliendo, como hoy. Ver reportes-en-analitica/menu.ts.
+          clinicModuleKeys={modulosSinReportes(
+            modulosParaMenuNuevo(clinicModuleKeys),
+            sidebarProps.user,
+            sidebarProps.clinicCategory,
+          )}
           puedeUsarCaja={canUseCaja(user)}
           planEtiqueta={planEtiqueta}
         />
