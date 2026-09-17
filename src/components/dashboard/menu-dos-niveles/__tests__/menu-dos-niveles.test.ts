@@ -267,21 +267,27 @@ async function sinAvisos<T>(fn: (avisos: unknown[]) => Promise<T>): Promise<T> {
   try { return await fn(avisos); } finally { console.warn = warn; }
 }
 
-test("interruptor: solo enciende con una fila enabled=true de ESA clínica", async () => {
+// 17-sep-2026 — EL REDISEÑO PASÓ A SER EL PANEL POR DEFECTO, así que la fila ya
+// no enciende: APAGA. Lo que sigue midiendo lo mismo es el lado que no cambió —
+// la fila de una clínica solo afecta a esa clínica. Los cuatro casos del nuevo
+// contrato (sin fila · fila true · fila false · apagador global) viven en
+// src/lib/menu-dos-niveles/__tests__/rediseno-por-defecto.test.ts.
+test("interruptor: solo apaga una fila enabled=false de ESA clínica", async () => {
   const { encendido, cuenta } = interruptorDePrueba();
   assert.equal(await encendido("clinica-altabrisa"), true);
-  assert.equal(await encendido("otra-clinica"), false);
+  assert.equal(await encendido("otra-clinica"), false, "su fila dice enabled=false");
   assert.deepEqual(cuenta.filas, ["clinica-altabrisa", "otra-clinica"]);
 
   const apagado = interruptorDePrueba({ fila: async () => ({ enabled: false }) });
   assert.equal(await apagado.encendido("clinica-altabrisa"), false);
   const sinFila = interruptorDePrueba({ fila: async () => null });
-  assert.equal(await sinFila.encendido("clinica-altabrisa"), false);
+  assert.equal(await sinFila.encendido("clinica-altabrisa"), true, "sin fila, el panel por defecto");
 });
 
 test("interruptor: sin clínica no consulta nada (clinicId undefined no filtra en Prisma)", async () => {
   const { encendido, cuenta } = interruptorDePrueba();
-  for (const id of [undefined, null, "", "   "]) assert.equal(await encendido(id), false);
+  // Lo que vigila esto es que NO se consulte; la respuesta es la de por defecto.
+  for (const id of [undefined, null, "", "   "]) assert.equal(await encendido(id), true);
   assert.equal(cuenta.tabla, 0);
   assert.deepEqual(cuenta.filas, []);
 });
@@ -289,7 +295,7 @@ test("interruptor: sin clínica no consulta nada (clinicId undefined no filtra e
 test("interruptor: sin la tabla (SQL sin aplicar) nunca lee la fila, así Prisma no ensucia el log", async () => {
   const { encendido, cuenta, avanzar } = interruptorDePrueba({ tabla: false });
   await sinAvisos(async (avisos) => {
-    for (let i = 0; i < 5; i++) assert.equal(await encendido(`c${i}`), false);
+    for (let i = 0; i < 5; i++) assert.equal(await encendido(`c${i}`), true);
     assert.deepEqual(cuenta.filas, []);
     assert.equal(cuenta.tabla, 1, "se pregunta una vez y se recuerda un minuto");
     avanzar(60_000);
@@ -311,21 +317,23 @@ test("interruptor: una respuesta por clínica por minuto", async () => {
   assert.equal(cuenta.filas.length, 2, "apagarlo en la base se nota en menos de un minuto");
 });
 
-test("interruptor: base caída sin respuesta previa → menú de siempre, sin lanzar, y reintenta a los 10 s", async () => {
+test("interruptor: base caída sin respuesta previa → el panel por defecto, sin lanzar, y reintenta a los 10 s", async () => {
   await sinAvisos(async (avisos) => {
     let falla = true;
     const caida = interruptorDePrueba({
       fila: async () => { if (falla) throw Object.assign(new Error("x"), { code: "P1001" }); return { enabled: true }; },
     });
-    assert.equal(await caida.encendido("clinica-altabrisa"), false);
+    // Un fallo de la base no apaga a nadie: sin respuesta previa vale el defecto.
+    assert.equal(await caida.encendido("clinica-altabrisa"), true);
     falla = false;
-    assert.equal(await caida.encendido("clinica-altabrisa"), false, "durante la pausa no insiste contra la base");
+    assert.equal(await caida.encendido("clinica-altabrisa"), true, "durante la pausa no insiste contra la base");
     assert.equal(caida.cuenta.filas.length, 1);
     caida.avanzar(10_000);
-    assert.equal(await caida.encendido("clinica-altabrisa"), true, "pasada la pausa, reintenta y enciende");
+    assert.equal(await caida.encendido("clinica-altabrisa"), true, "pasada la pausa, reintenta");
+    assert.equal(caida.cuenta.filas.length, 2, "el reintento sí va a la base (la respuesta ya no lo delata)");
 
     const tablaRota = interruptorDePrueba({ tabla: async () => { throw new Error("pooler"); } });
-    assert.equal(await tablaRota.encendido("c1"), false);
+    assert.equal(await tablaRota.encendido("c1"), true);
     tablaRota.avanzar(10_000);
     await tablaRota.encendido("c1");
     assert.equal(tablaRota.cuenta.tabla, 2, "un fallo al mirar la tabla no se recuerda como «no hay tabla»");
