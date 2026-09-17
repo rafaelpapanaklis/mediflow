@@ -5,6 +5,12 @@
  * `home/home-receptionist.tsx` y con los mismos clics: agenda de hoy con sus
  * mandos, acción inmediata con la sala de espera, lista de espera y los
  * atajos del pie. Solo cambia la ropa.
+ *
+ * Lo ÚNICO que no es la misma ruta: la agenda. Esta pantalla solo se monta con
+ * la bandera `menu-dos-niveles` encendida, y con ella la agenda es
+ * `/dashboard/agenda` (la nueva), no la de siempre (`appointments-client.tsx`,
+ * que sigue viva para las clínicas sin bandera y a la que sigue mandando la
+ * home de siempre). Hallazgo 2 de la auditoría del rediseño (ws1-t8).
  */
 
 import { useRouter } from "next/navigation";
@@ -13,6 +19,7 @@ import Link from "next/link";
 import {
   CalendarDays, CalendarPlus, CheckCircle2, ChevronRight, Clock, ListChecks, Plus,
 } from "lucide-react";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useT } from "@/i18n/i18n-provider";
 import { formatRelative } from "@/lib/home/greet";
 import type { HomeActionItem, HomeReceptionistData } from "@/lib/home/types";
@@ -73,7 +80,7 @@ export function HoyRecepcion({ user, data }: Props) {
               : t("home.recep.todayCount", { count: data.todayAppointments.length })
           }
           accion={
-            <Link href="/dashboard/appointments" className={s.tarjetaEnlace}>
+            <Link href="/dashboard/agenda" className={s.tarjetaEnlace}>
               {t("home.recep.viewFullAgenda")}
               <ChevronRight size={13} strokeWidth={1.75} aria-hidden />
             </Link>
@@ -190,9 +197,16 @@ export function HoyRecepcion({ user, data }: Props) {
 /**
  * El vacío de «Agenda de hoy» con los DOS botones que ya ofrece la home de
  * siempre (`EmptyAppointmentsToday`): nueva cita y ver la semana.
+ *
+ * «Nueva cita» abre la MISMA ventana nueva que la cabecera y el pie
+ * (`NewAppointmentDialog` con `apariencia="nueva"`, que el layout ya elige
+ * con la bandera), sin pasar por ninguna agenda: un clic menos que el
+ * `?new=1` de la home de siempre, que primero cargaba la agenda vieja y luego
+ * abría su formulario. «Ver agenda semanal» abre la agenda nueva ya en Semana.
  */
 export function VacioCitasHoy() {
   const t = useT();
+  const { open: abrirCita } = useNewAppointmentDialog();
   return (
     <Vacio
       icono={CalendarDays}
@@ -200,11 +214,15 @@ export function VacioCitasHoy() {
       pista={t("clinical.emptyStates.apptsTodayDesc")}
       acciones={
         <>
-          <Link href="/dashboard/appointments?new=1" className={`${s.boton} ${s.botonPeq} ${s.botonPrincipal}`}>
+          <button
+            type="button"
+            className={`${s.boton} ${s.botonPeq} ${s.botonPrincipal}`}
+            onClick={() => abrirCita({ openAgendaAfter: true })}
+          >
             <CalendarPlus size={14} strokeWidth={1.75} aria-hidden />
             {t("clinical.emptyStates.apptsNewCta")}
-          </Link>
-          <Link href="/dashboard/appointments?view=week" className={`${s.boton} ${s.botonPeq}`}>
+          </button>
+          <Link href="/dashboard/agenda?view=week" className={`${s.boton} ${s.botonPeq}`}>
             <CalendarDays size={14} strokeWidth={1.75} aria-hidden />
             {t("clinical.emptyStates.apptsWeekCta")}
           </Link>
