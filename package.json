@@ -145,6 +145,7 @@
     "test:editor-iva": "tsx --test src/lib/billing/__tests__/invoice-editor-iva.test.ts",
     "test:quote-invoice": "tsx --test src/lib/quotes/__tests__/invoice-from-quote-core.test.ts",
     "test:quote-invoice-doctor": "tsx --test src/lib/quotes/__tests__/doctor-de-la-factura.test.ts",
+    "test:borradores-viejos-sql": "tsx --test src/lib/quotes/__tests__/borradores-viejos-sql.test.ts",
     "//test:cda-esquema": "Valida el CDA exportado contra el XSD OFICIAL de HL7 CDA R2 (vendorizado en src/lib/hl7/__tests__/xsd/cda-r2). Necesita python3 con lxml (apt install python3-lxml): si falta, la prueba FALLA en vez de saltarse.",
     "test:cda-esquema": "tsx --test src/lib/hl7/__tests__/cda-esquema.test.ts",
     "//test:receta-verify": "Necesita --experimental-test-module-mocks: el test ejecuta LOS DOS route handlers de la verificacion publica de recetas (el JSON y el PDF) con Prisma y el renderer sustituidos, para comprobar que enmascaran igual. Sin el flag, mock.module lanza y no corre nada. Y --tsconfig tsconfig.test.json porque el arbol del PDF es JSX (prescription-document.tsx) y el tsconfig de la app deja jsx en preserve.",
