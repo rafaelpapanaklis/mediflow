@@ -1216,6 +1216,93 @@
   box-shadow: var(--pr-sombra);
 }
 
+/* ── El cajón de filtros (hallazgo 13 de la auditoría del rediseño) ──
+   La caja del cajón ya llevaba la pintura nueva, pero lo de dentro —los
+   campos, las pastillas, el pie— seguía en `--bg-elev-2` y en la letra
+   vieja. Misma forma y mismos filtros; cambia la ropa. Los campos son
+   de 38 px y radio 8, como los del resto del panel nuevo.
+
+   El calendario que abren los dos campos de fecha es `ui/date-field.tsx`,
+   que lo está vistiendo otra pantalla: aquí solo se viste el campo. */
+
+.pageRediseno .drawer {
+  border-radius: 0;
+  border-left: 1px solid var(--pr-borde);
+}
+
+.pageRediseno .drawerBackdrop {
+  background: color-mix(in srgb, var(--pr-texto) 40%, transparent);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.pageRediseno .drawerHeader { border-bottom-color: var(--pr-borde); }
+
+.pageRediseno .drawerTitle {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--pr-texto);
+}
+
+.pageRediseno .drawerLabel {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--pr-texto-2);
+}
+
+.pageRediseno .drawerInput {
+  height: 38px;
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: 8px;
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+.pageRediseno .drawerInput:hover { border-color: var(--pr-texto-3); }
+
+.pageRediseno .drawerInput:focus,
+.pageRediseno .drawerInput:focus-within {
+  border-color: var(--pr-activo);
+  background: var(--pr-tarjeta);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+.pageRediseno .drawerInput::placeholder { color: var(--pr-texto-3); }
+
+.pageRediseno .checkPill {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.pageRediseno .checkPill:hover {
+  background: var(--pr-tarjeta-2);
+  color: var(--pr-texto);
+}
+
+.pageRediseno .checkPillActive,
+.pageRediseno .checkPillActive:hover {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  font-weight: 600;
+}
+
+.pageRediseno .checkPill:focus-visible { box-shadow: var(--pr-foco); }
+
+.pageRediseno .drawerFooter {
+  background: var(--pr-tarjeta);
+  border-top-color: var(--pr-borde);
+}
+
 /* ── La tabla ────────────────────────────────────────────────────────── */
 
 .pageRediseno .tableWrap {
