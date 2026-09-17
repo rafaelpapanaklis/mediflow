@@ -38,6 +38,7 @@ import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
+import { avisarCitaPorWhatsApp, type AvisoCitaResultado } from "@/lib/whatsapp/avisos-cita";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { syncCreateToGoogleCalendar } from "@/lib/agenda/google-sync";
 import type {
@@ -336,8 +337,22 @@ export async function POST(req: NextRequest) {
       return appt;
     });
 
-    // TODO(M3.b): notifyPatient via WhatsApp si body.notifyPatient
-    //             y session.clinic.waConnected.
+    // Confirmación al agendar (H-1). Aquí hubo cinco meses un TODO sin implementar que
+    // tiraba `notifyPatient`: el diálogo enseñaba «Enviar WhatsApp», la
+    // recepcionista lo encendía y no salía nada. Solo si quien agenda lo pidió
+    // (`=== true`: Sabina y el formulario viejo no lo mandan), y la clínica
+    // decide si el aviso existe (Dashboard → WhatsApp). No lanza: una cita ya
+    // creada no se pierde por un WhatsApp. El resultado VIAJA en la respuesta
+    // para que el diálogo diga la verdad, salga o no.
+    const whatsapp: AvisoCitaResultado | null =
+      body.notifyPatient === true
+        ? await avisarCitaPorWhatsApp({
+            evento: "agendada",
+            appointmentId: created.id,
+            clinicId: session.clinic.id,
+            sentById: session.user.id,
+          })
+        : null;
 
     await logMutation({
       req,
@@ -381,6 +396,8 @@ export async function POST(req: NextRequest) {
         appointment: appointmentToDTO(created, session.clinic.category),
         // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
         scheduleWarning: hoursWarning,
+        // null = nadie pidió avisar. Si se pidió: { enviado } o { enviado:false, motivo }.
+        whatsapp,
       },
       { status: 201 },
     );

@@ -511,7 +511,7 @@ test("🔴 reagendar: PATCH solo con la hora nueva, misma duración, y DICE que 
     metodo: "PATCH",
     ruta: "/api/appointments/a-juan-10",
     // Nunca motivo ni notas: `reason: null` borraría el motivo y `notes: null` las notas.
-    cuerpo: { startsAt: iso(DIA, "11:00"), endsAt: iso(DIA, "11:30") },
+    cuerpo: { startsAt: iso(DIA, "11:00"), endsAt: iso(DIA, "11:30"), notifyPatient: false },
   });
   assert.equal(p.permiso, "agenda.edit");
   assert.ok(p.antes && p.despues, "reagendar enseña antes → después");
@@ -572,7 +572,7 @@ test("cancelar: DELETE (el camino con rastro y Google), irreversible dicho ANTES
   const d = await datos("cancelar_cita", recepcion(db), { citaId: "a-juan-10", motivo: "Pidió cambio" });
   assert.equal(d.estado, "propuesta", JSON.stringify(d));
   const p = d.propuesta;
-  assert.deepEqual(p.peticion, { metodo: "DELETE", ruta: "/api/appointments/a-juan-10", cuerpo: { reason: "Pidió cambio" } });
+  assert.deepEqual(p.peticion, { metodo: "DELETE", ruta: "/api/appointments/a-juan-10", cuerpo: { reason: "Pidió cambio", notifyPatient: false } });
   assert.equal(p.permiso, "agenda.delete");
   assert.equal(p.deshacer.reversible, false);
   assert.ok(p.avisos.some((a: string) => /no recibirá (ningún )?aviso/i.test(a)), JSON.stringify(p.avisos));
@@ -582,7 +582,8 @@ test("cancelar: DELETE (el camino con rastro y Google), irreversible dicho ANTES
   // antes, `updateCalendarEvent` la dejó sin invitados y ese correo no sale.
   const conGoogle = baseAgenda({ google: true });
   const g = await datos("cancelar_cita", recepcion(conGoogle), { citaId: "a-juan-10" });
-  assert.equal(g.propuesta.peticion.cuerpo, null);
+  // Sin motivo el cuerpo ya no es null: lleva el «no avises» (ws1-t2).
+  assert.deepEqual(g.propuesta.peticion.cuerpo, { notifyPatient: false });
   const aviso = g.propuesta.avisos.find((a: string) => /Google/.test(a));
   assert.ok(aviso && /correo/i.test(aviso), JSON.stringify(g.propuesta.avisos));
   assert.match(aviso, /no está garantizado/);

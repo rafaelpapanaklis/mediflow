@@ -17,6 +17,7 @@ import type { TFunction } from "@/i18n/t";
 import { EmbeddedSignupButton } from "./embedded-signup-button";
 import type { RecentReminderDTO } from "@/lib/whatsapp/recent-reminders";
 import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
+import type { AppointmentEventSettings } from "@/lib/reminders/config";
 import { ConexionRediseno } from "@/components/dashboard/whatsapp-rediseno/conexion";
 import s from "./whatsapp.module.css";
 
@@ -39,6 +40,14 @@ interface Props {
   reminder1h:    boolean;
   /** Config efectiva del cron (reminderSettings o los toggles legacy). */
   remindersEnabled:      boolean;
+  /** Minutos antes de la cita que usa hoy el cron ([] = recordatorios apagados). */
+  reminderOffsets:       number[];
+  /** true = hay config propia en Ajustes → Recordatorios y ESA es la que manda. */
+  reminderFromSettings:  boolean;
+  /** Apagado general legacy (waReminderActive). */
+  reminderMasterOn:      boolean;
+  /** Avisos al agendar / reprogramar / cancelar (reminderSettings.eventos). */
+  eventos:               AppointmentEventSettings;
   recentReminders:       RecentReminderDTO[];
   recentRemindersFailed: boolean;
   clinicName:    string;
@@ -104,7 +113,8 @@ export function WhatsAppClient({
   connected: initConnected, phoneNumberId: initPhone, wabaId: initWabaId,
   connMethod: initConnMethod,
   reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h,
-  remindersEnabled, recentReminders, recentRemindersFailed, clinicName,
+  remindersEnabled, reminderOffsets, reminderFromSettings, reminderMasterOn, eventos: initEventos,
+  recentReminders, recentRemindersFailed, clinicName,
   rediseno = false,
 }: Props) {
   const t = useT();
@@ -121,6 +131,7 @@ export function WhatsAppClient({
   const [r24h,       setR24h]       = useState(init24h);
   const [r1h,        setR1h]        = useState(init1h);
   const [savingMsg,  setSavingMsg]  = useState(false);
+  const [eventos,    setEventos]    = useState(initEventos);
   // Switch con un PATCH en vuelo (por llave). Mientras vale true el propio
   // interruptor va deshabilitado, así dos clics rápidos no dejan respuestas
   // pisándose ni un revert contra un valor que ya cambió.
@@ -241,6 +252,71 @@ export function WhatsAppClient({
     }
   }
 
+  /**
+   * Autosave de un aviso por evento (al agendar / reprogramar / cancelar).
+   * Mismo contrato que saveToggle: se mueve al instante, y si el guardado falla
+   * REGRESA. Viaja el objeto `eventos` entero (el servidor lo mezcla dentro de
+   * reminderSettings sin pisar recordatorios ni recall); por eso los tres van
+   * deshabilitados mientras hay un PATCH en vuelo: dos guardados cruzados
+   * podrían dejar escrito un estado que la pantalla ya no enseña.
+   */
+  async function saveEvento(campo: keyof AppointmentEventSettings, next: boolean) {
+    const prev = eventos;
+    const nuevo = { ...eventos, [campo]: next };
+    setEventos(nuevo);
+    setToggleBusy(b => ({ ...b, eventos: true }));
+    try {
+      const res = await fetch(SETTINGS_URL, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventos: nuevo }),
+      });
+      if (!res.ok) {
+        setEventos(prev);
+        toast.error(t(res.status === 403
+          ? "inbox.whatsapp.reminderToggleForbidden"
+          : "inbox.whatsapp.reminderToggleError"));
+        return;
+      }
+      toast.success(t(next ? "inbox.whatsapp.eventOnToast" : "inbox.whatsapp.eventOffToast"));
+    } catch {
+      setEventos(prev);
+      toast.error(t("inbox.whatsapp.reminderToggleError"));
+    } finally {
+      setToggleBusy(b => ({ ...b, eventos: false }));
+    }
+  }
+
+  const avisosEvento = ([
+    { campo: "alAgendar",     labelKey: "inbox.whatsapp.eventCreateLabel",     descKey: "inbox.whatsapp.eventCreateDesc" },
+    { campo: "alReprogramar", labelKey: "inbox.whatsapp.eventRescheduleLabel", descKey: "inbox.whatsapp.eventRescheduleDesc" },
+    { campo: "alCancelar",    labelKey: "inbox.whatsapp.eventCancelLabel",     descKey: "inbox.whatsapp.eventCancelDesc" },
+  ] as const).map(a => ({
+    ...a,
+    val: eventos[a.campo],
+    busy: !!toggleBusy.eventos,
+    toggle: () => saveEvento(a.campo, !eventos[a.campo]),
+  }));
+
+  // «Qué está encendido», de un vistazo — con lo que usa el cron DE VERDAD:
+  //   · hay config propia en Ajustes → Recordatorios → mandan sus momentos
+  //     (vacío = apagados), y los dos interruptores de aquí no cuentan;
+  //   · si no, mandan los interruptores de esta pantalla (estado local, para
+  //     que el resumen se mueva al tocarlos) bajo el apagado general de siempre.
+  const horasRecordatorio = reminderFromSettings
+    ? reminderOffsets.map(m => (m >= 60 ? `${Math.round(m / 60)} h` : `${m} min`)).join(" · ")
+    : reminderMasterOn
+      ? [r24h ? "24 h" : "", r1h ? "1 h" : ""].filter(Boolean).join(" · ")
+      : "";
+  const resumenAvisos = [
+    { key: "agendar",      label: t("inbox.whatsapp.summaryCreate"),     on: eventos.alAgendar },
+    { key: "recordatorio", label: horasRecordatorio
+        ? t("inbox.whatsapp.summaryReminderAt", { when: horasRecordatorio })
+        : t("inbox.whatsapp.summaryReminder"),                           on: horasRecordatorio !== "" },
+    { key: "reprogramar",  label: t("inbox.whatsapp.summaryReschedule"), on: eventos.alReprogramar },
+    { key: "cancelar",     label: t("inbox.whatsapp.summaryCancel"),     on: eventos.alCancelar },
+  ];
+
   // "embedded" y "coexistence" son el mismo flujo real (el número se queda en el
   // celular de la clínica); "manual" es el fallback avanzado. null = clínica
   // conectada antes de que existiera la columna: no afirmamos nada.
@@ -277,6 +353,7 @@ export function WhatsAppClient({
           t, connected, step, setStep, loading, showToken, setShowToken, form, setForm,
           msg, setMsg, defaultMsg, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
           connect, disconnect, saveSettings, saveToggle, connChip, remindersOn,
+          avisosEvento, resumenAvisos,
           esAvailable: ES_AVAILABLE,
           onEmbeddedConnected: () => {
             setConnected(true);
@@ -473,6 +550,37 @@ export function WhatsAppClient({
       {step === "done" && (
         <div className={s.doneGrid}>
           <div className={s.col}>
+            <CardNew title={t("inbox.whatsapp.eventsTitle")} sub={t("inbox.whatsapp.eventsSub")}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                {resumenAvisos.map(r => (
+                  <BadgeNew key={r.key} tone={r.on ? "success" : "neutral"}>
+                    {r.label} · {t(r.on ? "inbox.whatsapp.summaryOn" : "inbox.whatsapp.summaryOff")}
+                  </BadgeNew>
+                ))}
+              </div>
+              <div className={s.toggles}>
+                {avisosEvento.map(opt => (
+                  <div key={opt.campo} className={[s.toggle, opt.val ? s.toggleOn : ""].filter(Boolean).join(" ")}>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-label={t(opt.labelKey)}
+                      aria-checked={opt.val}
+                      disabled={opt.busy}
+                      onClick={opt.toggle}
+                      className={`switch ${opt.val ? "switch--on" : ""}`}
+                    >
+                      <span className="switch__thumb" />
+                    </button>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>{t(opt.labelKey)}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{t(opt.descKey)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardNew>
+
             <CardNew title={t("inbox.whatsapp.whenToSendTitle")} sub={t("inbox.whatsapp.whenToSendSub")}>
               <div className={s.toggles}>
                 {([

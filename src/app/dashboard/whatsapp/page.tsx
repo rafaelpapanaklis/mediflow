@@ -3,7 +3,11 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
-import { getEffectiveReminderSettings } from "@/lib/reminders/config";
+import {
+  getAppointmentEventSettings,
+  getEffectiveReminderSettings,
+  sanitizeReminderSettings,
+} from "@/lib/reminders/config";
 import { getRecentReminders } from "@/lib/whatsapp/recent-reminders";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { WhatsAppClient } from "./whatsapp-client";
@@ -51,6 +55,15 @@ export default async function WhatsAppPage() {
       reminder24h={user.clinic.waReminder24h ?? true}
       reminder1h={user.clinic.waReminder1h ?? false}
       remindersEnabled={reminders.enabled && reminders.offsets.length > 0}
+      // Lo que el cron usa DE VERDAD (puede venir de Ajustes → Recordatorios y
+      // no de los dos interruptores de esta pantalla): alimenta el resumen.
+      reminderOffsets={reminders.enabled ? reminders.offsets : []}
+      // ¿Mandan los dos interruptores de esta pantalla, o una config propia de
+      // Ajustes → Recordatorios? Y el apagado general de siempre. Sin esto el
+      // resumen diría «encendido» con el cron apagado.
+      reminderFromSettings={sanitizeReminderSettings(user.clinic.reminderSettings) !== null}
+      reminderMasterOn={user.clinic.waReminderActive ?? true}
+      eventos={getAppointmentEventSettings(user.clinic)}
       recentReminders={recent.rows}
       recentRemindersFailed={recent.failed}
       clinicName={user.clinic.name}

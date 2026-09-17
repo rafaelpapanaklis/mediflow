@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
+import { avisarCitaPorWhatsApp, type AvisoCitaResultado } from "@/lib/whatsapp/avisos-cita";
 import {
   loadClinicSession,
   requireRole,
@@ -309,7 +310,19 @@ export async function PATCH(
       return row;
     });
 
-    // TODO(M3.b): if body.notifyPatient → trigger WA notification (waConnected).
+    // Aviso de reagendado (H-1). Solo si la cita CAMBIÓ DE HORA — cambiar de
+    // sillón o de motivo no es noticia para el paciente— y solo si la clínica
+    // lo encendió en Dashboard → WhatsApp (nace apagado). `notifyPatient:
+    // false` explícito lo calla para ese movimiento. No lanza.
+    const whatsapp: AvisoCitaResultado | null =
+      updated.startsAt.getTime() !== existing.startsAt.getTime() && body.notifyPatient !== false
+        ? await avisarCitaPorWhatsApp({
+            evento: "reprogramada",
+            appointmentId: params.id,
+            clinicId: session.clinic.id,
+            sentById: session.user.id,
+          })
+        : null;
 
     await logMutation({
       req,
@@ -356,6 +369,8 @@ export async function PATCH(
         }),
         // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
         scheduleWarning: hoursWarning,
+        // null = no tocaba avisar. Si tocaba: { enviado } o { enviado:false, motivo }.
+        whatsapp,
       },
     );
   } catch (err) {
@@ -470,7 +485,7 @@ export async function DELETE(
   // el panel de la agenda YA los muestra, pero ninguna cancelación del staff los
   // escribía y el bloque salía siempre vacío (hallazgo 42). DELETE puede llegar
   // sin cuerpo: eso no es un error, solo deja el motivo en null.
-  const cancelReason = await readCancelReason(req);
+  const { reason: cancelReason, notifyPatient } = await readCancelBody(req);
 
   // Cancelar la cita cancela sus recordatorios pendientes, en la MISMA
   // transacción. El worker ya se negaba a enviarlos (re-check al salir), pero la
@@ -511,9 +526,22 @@ export async function DELETE(
     console.error("GCal delete wrapper error:", err);
   }
 
+  // Aviso de cancelación: solo si la clínica lo encendió (nace apagado).
+  // `notifyPatient: false` en el cuerpo lo calla para ESTA cancelación (lo usa
+  // Sabina, que le promete a quien confirma que el sistema no escribe).
+  const whatsapp: AvisoCitaResultado | null =
+    notifyPatient === false
+      ? null
+      : await avisarCitaPorWhatsApp({
+          evento: "cancelada",
+          appointmentId: params.id,
+          clinicId: session.clinic.id,
+          sentById: session.user.id,
+        });
+
   revalidateAfter("appointments");
   revalidatePatientProfile(existing.patientId);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, whatsapp });
 }
 
 /**
@@ -521,16 +549,20 @@ export async function DELETE(
  * mandan los callers viejos), así que cualquier fallo de parseo se traduce a
  * "sin motivo", nunca a un 400. Se recorta a los 300 caracteres de la columna.
  */
-async function readCancelReason(req: NextRequest): Promise<string | null> {
+async function readCancelBody(
+  req: NextRequest,
+): Promise<{ reason: string | null; notifyPatient: boolean | undefined }> {
   try {
     const raw = await req.text();
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { reason?: unknown };
-    if (typeof parsed?.reason !== "string") return null;
-    const trimmed = parsed.reason.trim();
-    return trimmed ? trimmed.slice(0, 300) : null;
+    if (!raw) return { reason: null, notifyPatient: undefined };
+    const parsed = JSON.parse(raw) as { reason?: unknown; notifyPatient?: unknown };
+    const trimmed = typeof parsed?.reason === "string" ? parsed.reason.trim() : "";
+    return {
+      reason: trimmed ? trimmed.slice(0, 300) : null,
+      notifyPatient: typeof parsed?.notifyPatient === "boolean" ? parsed.notifyPatient : undefined,
+    };
   } catch {
-    return null;
+    return { reason: null, notifyPatient: undefined };
   }
 }
 

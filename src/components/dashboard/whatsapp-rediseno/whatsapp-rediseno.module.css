@@ -1491,3 +1491,12 @@
   font-size: 13px;
   color: var(--m2-texto-3);
 }
+
+/* Resumen «qué está encendido» de la tarjeta Avisos de citas: etiquetas en
+   fila que se parten en otro renglón (nada se esconde por ancho). */
+.resumenAvisos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}

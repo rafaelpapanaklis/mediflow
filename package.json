@@ -74,6 +74,8 @@
     "test:agenda-calendario": "tsx --test src/lib/agenda-nueva/__tests__/calendario.test.ts",
     "test:legacy-appt-input": "tsx --test src/lib/agenda/__tests__/legacy-appointment-input.test.ts",
     "test:close-appointment": "tsx --test src/lib/agenda/__tests__/close-appointment.test.ts",
+    "test:agenda-avisos-whatsapp": "tsx --test --experimental-test-module-mocks src/app/api/appointments/__tests__/avisos-whatsapp.test.ts",
+    "test:settings-avisos-whatsapp": "tsx --test --experimental-test-module-mocks src/app/api/settings/__tests__/eventos-whatsapp.test.ts",
     "test:agenda-reglas-servidor": "tsx --test --experimental-test-module-mocks src/app/api/appointments/__tests__/reglas-servidor.test.ts",
     "test:patient-deletion": "tsx --test src/lib/__tests__/patient-deletion-policy.test.ts",
     "test:patient-update": "tsx --test src/lib/patients/__tests__/patient-update-core.test.ts",
