@@ -9085,5 +9085,88 @@
     "errorFormaDePago": "The quote was saved, but its payment terms were not: the database did not respond. Press Save again to retry.",
     "ilegibleTitulo": "Payment terms could not be read. ",
     "ilegibleTexto": "The database did not respond when this quote was opened, so this screen does not know its payment terms and will not touch them: you can edit the items and save safely. To change the payment terms, reload the page and open it again."
+  },
+  "planTratamiento": {
+    "lista": {
+      "titulo": "Treatment plans",
+      "nuevo": "New treatment plan",
+      "vacio": "No treatment plans",
+      "crearPrimero": "Create the first treatment plan →"
+    },
+    "nuevo": {
+      "titulo": "New treatment plan",
+      "nombre": "Plan name *",
+      "nombrePista": "The patient reads this name in their follow-up WhatsApp: keep it short and plain.",
+      "diagnostico": "Diagnosis",
+      "diagnosticoRotulo": "Diagnosis and reason for the plan",
+      "diagnosticoEjemplo": "E.g. Multiple posterior caries, generalized gingivitis",
+      "hallazgos": "Odontogram findings to treat — tap one to add it to the plan",
+      "hallazgoAgregar": "Add to plan",
+      "procedimientos": "Procedures",
+      "procedimientosPista": "What is done, on which tooth and surface. The price comes from the fee schedule.",
+      "colFase": "Phase",
+      "colProcedimiento": "Procedure",
+      "colDientes": "Teeth",
+      "colCaras": "Surfaces",
+      "colCantidad": "Qty",
+      "colPrecio": "Price",
+      "colImporte": "Amount",
+      "procedimientoEjemplo": "E.g. 2-surface composite restoration",
+      "procedimientoPara": "Procedure for: {motivo}",
+      "elegirDientes": "Pick teeth",
+      "dienteInvalido": "Not an FDI tooth: {dientes}",
+      "quitar": "Remove procedure",
+      "agregar": "Add procedure",
+      "nProcedimientos": {
+        "one": "{count} procedure",
+        "other": "{count} procedures"
+      },
+      "seguimiento": "Sessions, follow-up and cost",
+      "seguimientoPista": "Sessions and the days between them set when the patient is due back; if they don't return, they get a WhatsApp.",
+      "calculado": "Calculated from the procedures",
+      "usarSesiones": {
+        "one": "Use {count} session (from the procedures)",
+        "other": "Use {count} sessions (from the procedures)"
+      },
+      "usarCosto": "Use {total} (sum of the procedures)",
+      "alternativa": "Alternative offered to the patient",
+      "alternativaEjemplo": "E.g. Fixed bridge instead of implant; patient chose implant",
+      "firmaPista": "The patient's signed acceptance is collected today in Quotes; the clinical plan is saved in the plan description, which the patient never sees.",
+      "crear": "Create treatment plan"
+    },
+    "fase": {
+      "urgencia": "Urgent care",
+      "sistemica": "Systemic phase",
+      "higienica": "Phase I · Hygienic",
+      "correctiva": "Phase II · Corrective",
+      "restauradora": "Phase III · Restorative",
+      "mantenimiento": "Phase IV · Maintenance"
+    },
+    "pronostico": {
+      "sinDefinir": "Not set",
+      "bueno": "Good",
+      "reservado": "Guarded",
+      "malo": "Poor"
+    },
+    "cara": {
+      "M": "Mesial",
+      "O": "Occlusal",
+      "I": "Incisal",
+      "D": "Distal",
+      "V": "Buccal",
+      "L": "Palatal / Lingual"
+    },
+    "aviso": {
+      "endoAntesDeCorona": "Tooth {diente}: the root canal goes before the post or crown. Check the phases.",
+      "cicatrizacionAntesDeImplante": "Tooth {diente}: healing is needed between extraction and implant. Unless immediate, put them in different phases."
+    },
+    "texto": {
+      "diagnostico": "Diagnosis",
+      "pronostico": "Prognosis",
+      "total": "Procedures total",
+      "alternativa": "Alternative offered",
+      "notas": "Notes",
+      "por": "for:"
+    }
   }
 }

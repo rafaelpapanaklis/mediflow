@@ -9085,5 +9085,88 @@
     "errorFormaDePago": "El presupuesto se guardó, pero la forma de pago no: la base no respondió. Vuelve a pulsar «Guardar» para intentarlo otra vez.",
     "ilegibleTitulo": "No se pudo leer la forma de pago. ",
     "ilegibleTexto": "La base de datos no respondió al abrir este presupuesto, así que esta pantalla no sabe qué forma de pago tiene y no la va a tocar: puedes editar los conceptos y guardar con tranquilidad. Para cambiar la forma de pago, recarga la página y vuelve a entrar."
+  },
+  "planTratamiento": {
+    "lista": {
+      "titulo": "Planes de tratamiento",
+      "nuevo": "Nuevo plan de tratamiento",
+      "vacio": "Sin planes de tratamiento",
+      "crearPrimero": "Crear el primer plan de tratamiento →"
+    },
+    "nuevo": {
+      "titulo": "Nuevo plan de tratamiento",
+      "nombre": "Nombre del plan *",
+      "nombrePista": "Este nombre es el que lee el paciente en su WhatsApp de seguimiento: corto y sin tecnicismos.",
+      "diagnostico": "Diagnóstico",
+      "diagnosticoRotulo": "Diagnóstico y motivo del plan",
+      "diagnosticoEjemplo": "Ej: Caries múltiple en sector posterior, gingivitis generalizada",
+      "hallazgos": "Hallazgos del odontograma por tratar — toca uno para agregarlo al plan",
+      "hallazgoAgregar": "Agregar al plan",
+      "procedimientos": "Procedimientos",
+      "procedimientosPista": "Qué se hace, en qué diente y en qué cara. El precio sale del tarifario.",
+      "colFase": "Fase",
+      "colProcedimiento": "Procedimiento",
+      "colDientes": "Dientes",
+      "colCaras": "Caras",
+      "colCantidad": "Cant.",
+      "colPrecio": "Precio",
+      "colImporte": "Importe",
+      "procedimientoEjemplo": "Ej: Restauración resina 2 caras",
+      "procedimientoPara": "Procedimiento para: {motivo}",
+      "elegirDientes": "Elegir dientes",
+      "dienteInvalido": "No es un diente FDI: {dientes}",
+      "quitar": "Quitar procedimiento",
+      "agregar": "Agregar procedimiento",
+      "nProcedimientos": {
+        "one": "{count} procedimiento",
+        "other": "{count} procedimientos"
+      },
+      "seguimiento": "Sesiones, seguimiento y costo",
+      "seguimientoPista": "Con las sesiones y los días entre ellas se calcula cuándo debe volver el paciente; si no vuelve, se le escribe por WhatsApp.",
+      "calculado": "Calculado de los procedimientos",
+      "usarSesiones": {
+        "one": "Usar {count} sesión (según los procedimientos)",
+        "other": "Usar {count} sesiones (según los procedimientos)"
+      },
+      "usarCosto": "Usar {total} (suma de los procedimientos)",
+      "alternativa": "Alternativa ofrecida al paciente",
+      "alternativaEjemplo": "Ej: Puente fijo en lugar de implante; el paciente eligió implante",
+      "firmaPista": "La aceptación firmada por el paciente se recoge hoy en Presupuestos; el plan clínico queda guardado en la descripción del plan, que el paciente no ve.",
+      "crear": "Crear plan de tratamiento"
+    },
+    "fase": {
+      "urgencia": "Urgencia",
+      "sistemica": "Fase sistémica",
+      "higienica": "Fase I · Higiénica",
+      "correctiva": "Fase II · Correctiva",
+      "restauradora": "Fase III · Restauradora",
+      "mantenimiento": "Fase IV · Mantenimiento"
+    },
+    "pronostico": {
+      "sinDefinir": "Sin definir",
+      "bueno": "Bueno",
+      "reservado": "Reservado",
+      "malo": "Malo"
+    },
+    "cara": {
+      "M": "Mesial",
+      "O": "Oclusal",
+      "I": "Incisal",
+      "D": "Distal",
+      "V": "Vestibular",
+      "L": "Palatino / Lingual"
+    },
+    "aviso": {
+      "endoAntesDeCorona": "Diente {diente}: la endodoncia va antes que el poste o la corona. Revisa las fases.",
+      "cicatrizacionAntesDeImplante": "Diente {diente}: entre la extracción y el implante hay cicatrización. Si no es implante inmediato, ponlos en fases distintas."
+    },
+    "texto": {
+      "diagnostico": "Diagnóstico",
+      "pronostico": "Pronóstico",
+      "total": "Total de procedimientos",
+      "alternativa": "Alternativa ofrecida",
+      "notas": "Notas",
+      "por": "por:"
+    }
   }
 }
