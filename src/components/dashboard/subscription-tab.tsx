@@ -10,8 +10,9 @@ import { daysUntil, isInTrial as inTrialNow, isPlanExpired, isSubscriptionActive
 import { PaymentMethodModal } from "./payment-method-modal";
 import { CfdiUsageCard } from "./cfdi-usage-card";
 import { useT } from "@/i18n/i18n-provider";
+import { ROPA_DESGLOSE, SuscripcionRediseno, type RopaDesglose } from "./bloques-rediseno/suscripcion";
 
-interface ClinicData {
+export interface ClinicData {
   id: string;
   plan: string;
   trialEndsAt?: string | Date | null;
@@ -27,9 +28,18 @@ interface ClinicData {
 
 interface Props {
   clinic: ClinicData;
+  /**
+   * ¿La clínica ve el rediseño de Configuración? Lo decide
+   * `settings-client.tsx` con el interruptor `menu-dos-niveles` y lo baja
+   * SOLO desde su camino nuevo. Encendido, la pestaña se pinta con la ropa
+   * nueva (`bloques-rediseno/suscripcion.tsx`): mismo estado, mismas
+   * funciones, mismos textos; solo cambia la caja. Sin la prop, o en false,
+   * la pestaña es exactamente la de siempre.
+   */
+  rediseno?: boolean;
 }
 
-interface BillingInvoiceRow {
+export interface BillingInvoiceRow {
   id: string;
   date: string;
   amount: number;
@@ -46,7 +56,7 @@ interface InvoicesResponse {
   stripeUnavailable: boolean;
 }
 
-interface ApiPlan {
+export interface ApiPlan {
   id: PlanId;
   name: string;
   priceMxn: number;
@@ -105,7 +115,7 @@ function paypalLinkFor(plan: PlanId): string | null {
   return url && url.length > 0 ? url : null;
 }
 
-export function SubscriptionTab({ clinic }: Props) {
+export function SubscriptionTab({ clinic, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -339,11 +349,18 @@ export function SubscriptionTab({ clinic }: Props) {
     ? t("shell.subscriptionTab.mxnPerYear")
     : t("shell.subscriptionTab.mxnPerMonth");
 
-  /** Cuerpo del modal de confirmación: el cobro exacto ANTES de confirmar. */
-  function renderConfirmBody() {
+  /**
+   * Cuerpo del modal de confirmación: el cobro exacto ANTES de confirmar.
+   * Con `ropa` (el rediseño) cada trozo lleva una clase en vez de su
+   * `style`; sin ella, los mismos `style` de siempre, literales.
+   */
+  function renderConfirmBody(ropa?: RopaDesglose) {
+    const vestir = (clasico: React.CSSProperties, pieza: keyof RopaDesglose) =>
+      ropa ? { className: ropa[pieza] } : { style: clasico };
+
     if (previewLoading) {
       return (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <span {...vestir({ display: "inline-flex", alignItems: "center", gap: 8 }, "cargando")}>
           <Loader2 size={14} className="animate-spin" aria-hidden />
           {t("shell.subscriptionTab.previewLoading")}
         </span>
@@ -395,30 +412,100 @@ export function SubscriptionTab({ clinic }: Props) {
           next: nextLabel,
         })}
         {preview.lines.length > 0 && (
-          <span style={{ display: "block", marginTop: 12 }}>
-            <span style={{ display: "block", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-3)", fontWeight: 600, marginBottom: 6 }}>
+          <span {...vestir({ display: "block", marginTop: 12 }, "desglose")}>
+            <span {...vestir({ display: "block", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-3)", fontWeight: 600, marginBottom: 6 }, "rotulo")}>
               {t("shell.subscriptionTab.previewBreakdown")}
             </span>
             {preview.lines.map((line, i) => (
               <span
                 key={`${line.description}-${i}`}
-                style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, padding: "3px 0", color: "var(--text-2)" }}
+                {...vestir({ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, padding: "3px 0", color: "var(--text-2)" }, "fila")}
               >
                 <span>{line.description}</span>
-                <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                <span style={ropa ? undefined : { fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                   {formatMoney(line.amount, preview.currency)}
                 </span>
               </span>
             ))}
-            <span style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12.5, fontWeight: 700, paddingTop: 6, marginTop: 4, borderTop: "1px solid var(--border-soft, hsl(var(--border)))", color: "var(--text-1)" }}>
+            <span {...vestir({ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12.5, fontWeight: 700, paddingTop: 6, marginTop: 4, borderTop: "1px solid var(--border-soft, hsl(var(--border)))", color: "var(--text-1)" }, "total")}>
               <span>{t("shell.subscriptionTab.previewTotalNow")}</span>
-              <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+              <span style={ropa ? undefined : { fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                 {formatMoney(preview.amountDueNow, preview.currency)}
               </span>
             </span>
           </span>
         )}
       </>
+    );
+  }
+
+  // ── REDISEÑO (ws1-t5, hallazgo 14) ─────────────────────────────────────
+  // Mismo estado, mismas funciones (openConfirm, applyPlanChange,
+  // handleRequestCancel…), mismos textos y mismos destinos que el camino de
+  // siempre (abajo): aquí solo se arma el modelo que viste la vista nueva.
+  // Se entra ÚNICAMENTE con el interruptor `menu-dos-niveles` encendido para
+  // la clínica; apagado, este bloque ni se evalúa y la pestaña es la de hoy.
+  if (rediseno) {
+    const beneficiosDe = (plan: ApiPlan) =>
+      plan.features.length < 2 ? [...plan.features, cfdiBullet(plan)] : [...plan.features.slice(0, 2), cfdiBullet(plan), ...plan.features.slice(2)];
+    return (
+      <SuscripcionRediseno
+        m={{
+          clinic,
+          estadoTexto: statusLabel,
+          estadoTono: subscriptionActive ? "exito" : isInTrial ? "violeta" : "peligro",
+          lineaPlan: t(
+            isAnnualBilling ? "shell.subscriptionTab.planLineAnnual" : "shell.subscriptionTab.planLine",
+            { name: currentPlan?.name ?? currentPlanId, price: (currentPlan ? planPrice(currentPlan) : 0) },
+          ),
+          enPrueba: isInTrial,
+          finPrueba: trialEndsAt,
+          diasRestantes: daysLeft,
+          totalDiasPrueba: TRIAL_DAYS_TOTAL,
+          porcentajePrueba: pct,
+          pruebaVencida: trialExpired,
+          mostrarActivar: !subscriptionActive || manualPeriodExpired,
+          onActivar: () => router.push("/dashboard/suspended"),
+          tieneSuscripcionStripe: hasStripeSubscription,
+          tieneClienteStripe: hasStripeCustomer,
+          planes: plans ?? [],
+          planActualId: currentPlanId,
+          planActual: currentPlan,
+          anual: isAnnualBilling,
+          precioDe: planPrice,
+          sufijoIntervalo: perIntervalSuffix,
+          beneficiosDe,
+          cambiando: changingPlan,
+          onElegirPlan: openConfirm,
+          onCambiarMetodo: () => setPaymentModalOpen(true),
+          cancelacionPedida: localCancelRequested,
+          onPedirCancelar: () => setCancelOpen(true),
+          facturas: invoices,
+          stripeNoDisponible: stripeUnavailable,
+          cancelarAbierto: cancelOpen,
+          onCerrarCancelar: () => setCancelOpen(false),
+          onConfirmarCancelar: handleRequestCancel,
+          cancelando: cancelling,
+          planAConfirmar: confirmPlan,
+          onCerrarConfirmar: () => setConfirmPlan(null),
+          onAplicarPlan: applyPlanChange,
+          previewCargando: previewLoading,
+          pagarYCambiar: preview?.mode === "manual" && preview.direction === "upgrade" && preview.amountDueNow > 0,
+          cuerpoConfirmar: renderConfirmBody(ROPA_DESGLOSE),
+          formatFecha,
+          formatMoney,
+          cfdi: <CfdiUsageCard rediseno />,
+          modalPago: (
+            <PaymentMethodModal
+              open={paymentModalOpen}
+              onClose={() => setPaymentModalOpen(false)}
+              currentPlan={currentPlanId}
+              hasStripeCustomer={hasStripeCustomer}
+              paypalUrl={paypalLinkFor(currentPlanId)}
+            />
+          ),
+        }}
+      />
     );
   }
 

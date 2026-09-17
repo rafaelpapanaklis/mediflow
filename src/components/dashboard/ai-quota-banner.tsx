@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, X } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { AvisoCupoIaRediseno } from "./bloques-rediseno/aviso-cupo-ia";
 
 /**
  * Respuesta de GET /api/ai/usage. Se exporta para que las pantallas que ya la
@@ -37,7 +38,20 @@ const STORAGE_PREFIX = "mf:ai-quota-banner:";
  *
  * Sin emails ni cron — eso queda como follow-up.
  */
-export function AiQuotaBanner({ usage: usageProp }: { usage?: AiUsageSnapshot | null }) {
+export function AiQuotaBanner({
+  usage: usageProp,
+  rediseno = false,
+}: {
+  usage?: AiUsageSnapshot | null;
+  /**
+   * ¿La clínica ve el rediseño de «Hoy»? Lo decide `app/dashboard/page.tsx`
+   * con el interruptor `menu-dos-niveles`. Encendido, el aviso se pinta con
+   * la ropa nueva (`bloques-rediseno/aviso-cupo-ia.tsx`); cuándo sale, el
+   * estado «agotado» y el descarte por sesión son los mismos. Sin la prop, o
+   * en false, se pinta exactamente como siempre.
+   */
+  rediseno?: boolean;
+}) {
   const t = useT();
   const [fetched, setFetched] = useState<AiUsageSnapshot | null>(null);
   // Solo sirve para re-renderizar tras descartar; el estado real vive en
@@ -109,6 +123,11 @@ export function AiQuotaBanner({ usage: usageProp }: { usage?: AiUsageSnapshot | 
   }
 
   const isFull = state === "full";
+
+  if (rediseno) {
+    return <AvisoCupoIaRediseno agotado={isFull} porcentaje={percent} onDescartar={dismiss} />;
+  }
+
   const accent = isFull ? "var(--danger)" : "var(--warning)";
   const accentStrong = isFull ? "var(--danger-strong)" : "var(--warning-strong)";
   const bg = isFull ? "var(--danger-soft)" : "var(--warning-soft)";

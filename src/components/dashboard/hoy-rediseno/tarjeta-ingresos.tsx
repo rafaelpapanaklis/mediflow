@@ -162,7 +162,7 @@ export function TarjetaIngresos({ period }: { period: AdminPeriod }) {
             />
           ) : hayGrafica ? (
             <div className={cargando ? s.graficaCargando : undefined}>
-              <GraficaIngresos data={datos.series} />
+              <GraficaIngresos data={datos.series} rediseno />
             </div>
           ) : (
             <Vacio
