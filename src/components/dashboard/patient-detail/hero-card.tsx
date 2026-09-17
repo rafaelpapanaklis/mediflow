@@ -30,6 +30,7 @@ import { ageFromDob } from "@/lib/format";
 import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
 import { construirAlertas, hayRiesgo } from "@/components/dashboard/pacientes-rediseno/alertas";
 import { fechaCorta } from "@/components/dashboard/pacientes-rediseno/fechas";
+import { ROPA_MENU_FICHA } from "@/components/dashboard/portales-rediseno/ropa";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
@@ -346,7 +347,15 @@ export function HeroCard({
               </button>
             </Popover.Trigger>
             <Popover.Portal>
-              <Popover.Content align="end" sideOffset={6} className={styles.heroMenuPopover}>
+              {/* Sale por un portal, fuera de la ficha: con el rediseño lleva
+                  los tokens del menú puestos a mano (ROPA_MENU_FICHA), como
+                  todo lo que el menú pinta en portales. Apagado, la clase de
+                  siempre y nada más. */}
+              <Popover.Content
+                align="end"
+                sideOffset={6}
+                className={rediseno ? `${styles.heroMenuPopover} ${ROPA_MENU_FICHA.caja}` : styles.heroMenuPopover}
+              >
                 {canEdit && (
                   <button
                     type="button"
@@ -386,7 +395,7 @@ export function HeroCard({
                   </button>
                 )}
                 {portalAccountStatus === "invited" && (
-                  <div className={styles.heroMenuHint}>{t("patients.heroCard.portalInvitedHint")}</div>
+                  <div className={styles.heroMenuHint} {...(rediseno ? { "data-nota": "" } : {})}>{t("patients.heroCard.portalInvitedHint")}</div>
                 )}
 
                 {/* Link LEGACY de SOLO LECTURA (portalToken) — opción aparte,
@@ -444,6 +453,7 @@ export function HeroCard({
                     <button
                       type="button"
                       className={`${styles.heroMenuItem} ${styles.heroMenuItemDanger}`}
+                      {...(rediseno ? { "data-tono": "peligro" } : {})}
                       onClick={() => {
                         setMoreOpen(false);
                         onDelete();

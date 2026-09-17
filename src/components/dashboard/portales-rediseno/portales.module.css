@@ -1,0 +1,730 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Portales y popovers del rediseño (ws1-t4, hallazgos 13 y 15): el
+   asistente «Importar mi clínica», el menú «…» de la cabecera del
+   expediente y el popover de alertas médicas (alergias, medicación,
+   padecimientos) que usan Hoy y el expediente.
+
+   Los tres salen por un PORTAL de Radix a <body>, fuera de la raíz de
+   cualquier pantalla: por eso les llegaba la letra nueva (va sobre
+   <body>) pero no los colores, que cuelgan del <div> raíz de cada
+   pantalla. Aquí cada caja monta `CLASES_MENU` (`menu-dos-niveles/
+   clases.ts`) ella misma, y con eso trae los `--m2-*` del menú —con su
+   versión oscura— y las dos familias tipográficas. Esta hoja NO declara
+   tokens propios: solo LEE los del menú y los semánticos de globals.css
+   (`--danger`, `--warning`, `--success`, `--info`), con el mismo respaldo
+   que usa el propio menú (`--m2-soporte`).
+
+   Es ADITIVO: sin estas clases puestas —la clínica sin el interruptor
+   `menu-dos-niveles`— no se aplica ni una regla, y los tres se pintan
+   con sus `style` y sus clases globales de siempre, píxel por píxel.
+
+   El asistente usa el sistema compartido de globals.css (.modal__*,
+   .imp-*, .btn-new, .input-new, .table-new…). No se toca globals.css:
+   cada clase compartida se sobreescribe DENTRO de la caja leyendo el
+   token del menú equivalente, igual que hace `dialogos-rediseno` con la
+   ventana «Nuevo paciente».
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Lo común a las tres cajas ───────────────────────────────────── */
+
+.caja {
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  border: 1px solid var(--m2-tarjeta-borde);
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.caja *,
+.caja *::before,
+.caja *::after {
+  box-sizing: border-box;
+}
+
+/* Cifras de ancho fijo (conteos, filas, porcentajes). Va sobre los HIJOS
+   y no sobre la caja a propósito: la caja lleva `.tokens` del menú, y
+   `tipografia-panel.tsx` le pone a esa clase `font-variant-numeric:
+   normal` con más peso; sus hijos heredan de aquí. */
+.caja > * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══ Asistente «Importar mi clínica» ══════════════════════════════
+   La caja conserva su esqueleto de siempre (cabecera, barra de pasos,
+   cuerpo con scroll, pie con Atrás · pista · Continuar): ni un paso se
+   mueve ni se esconde. Cambia la ropa. Los mismos planos que hoy: velo
+   90, caja 91. */
+
+.veloImportar {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: color-mix(in srgb, var(--m2-texto) 40%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: portalesFundido 180ms ease-out;
+}
+
+.importar {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 91;
+  width: min(920px, calc(100vw - 32px));
+  max-width: min(920px, calc(100vw - 32px));
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 14px;
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--m2-texto) 22%, transparent);
+  animation: portalesAparece 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes portalesFundido {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes portalesAparece {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .veloImportar,
+  .importar {
+    animation: none;
+  }
+}
+
+/* Cabecera */
+.importar :global(.modal__header) {
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.importar :global(.modal__title) {
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 22px;
+  color: var(--m2-texto);
+}
+
+.importar :global(.imp-head__sub) {
+  color: var(--m2-texto-3);
+}
+
+/* La X: el mismo cuadrado que en «Nuevo paciente» y las confirmaciones. */
+.importar :global(.icon-btn-new) {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto);
+}
+
+.importar :global(.icon-btn-new:hover) {
+  background: var(--m2-borde);
+  color: var(--m2-texto);
+  border-color: transparent;
+}
+
+.importar :global(.icon-btn-new:focus-visible) {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+/* Barra de pasos */
+.importar :global(.imp-stepbar) {
+  padding: 12px 20px;
+  background: var(--m2-tarjeta);
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.importar :global(.imp-step__num) {
+  border-color: var(--m2-borde);
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-3);
+}
+
+.importar :global(.imp-step__lbl) {
+  color: var(--m2-texto-3);
+}
+
+.importar :global(.imp-step.is-done .imp-step__num) {
+  background: var(--m2-iniciales-fondo);
+  border-color: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.importar :global(.imp-step.is-current .imp-step__num) {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+.importar :global(.imp-step.is-current .imp-step__lbl) {
+  color: var(--m2-texto);
+}
+
+.importar :global(.imp-step__line) {
+  background: var(--m2-borde);
+}
+
+/* Cuerpo */
+.importar :global(.imp-body) {
+  padding: 22px 20px 24px;
+}
+
+.importar :global(.imp-title),
+.importar :global(.imp-result__title),
+.importar :global(.imp-error__title),
+.importar :global(.imp-upprog__line) {
+  color: var(--m2-texto);
+}
+
+.importar :global(.imp-sub),
+.importar :global(.imp-result__lead),
+.importar :global(.imp-loading) {
+  color: var(--m2-texto-2);
+}
+
+.importar :global(.imp-sample),
+.importar :global(.imp-error__desc),
+.importar :global(.imp-upprog__ctx),
+.importar :global(.imp-progress-meta),
+.importar :global(.imp-dz__formats),
+.importar :global(.imp-map-status),
+.importar :global(.imp-src-card__meta),
+.importar :global(.imp-opt__meta),
+.importar :global(.imp-file-row__meta),
+.importar :global(.imp-summary-pill__k) {
+  color: var(--m2-texto-3);
+}
+
+/* Las tarjetas de origen (paso 1), las opciones (paso 3), la fila del
+   archivo (paso 4), las tarjetas de cifras (paso 6) y las pastillas del
+   resumen: tarjeta blanca de borde suave, como todo el panel nuevo. */
+.importar :global(.imp-src-card),
+.importar :global(.imp-opt),
+.importar :global(.imp-file-row),
+.importar :global(.imp-stat-card),
+.importar :global(.imp-summary-pill),
+.importar :global(.imp-dl-card),
+.importar :global(.imp-note),
+.importar :global(.imp-src-pill) {
+  border-color: var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  background: var(--m2-tarjeta);
+}
+
+.importar :global(.imp-src-pill) {
+  border-radius: 999px;
+  background: var(--m2-n1-fondo);
+}
+
+.importar :global(.imp-src-card:hover),
+.importar :global(.imp-opt:hover) {
+  border-color: var(--m2-texto-3);
+  background: var(--m2-tarjeta-hover);
+}
+
+.importar :global(.imp-src-card[aria-pressed="true"]),
+.importar :global(.imp-opt.is-on) {
+  border-color: var(--m2-activo);
+  background: var(--m2-iniciales-fondo);
+  box-shadow: none;
+}
+
+.importar :global(.imp-src-card:focus-visible),
+.importar :global(.imp-dropzone:focus-visible),
+.importar :global(.imp-tip:focus-visible) {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.importar :global(.imp-src-card__nm),
+.importar :global(.imp-opt__nm),
+.importar :global(.imp-file-row__nm),
+.importar :global(.imp-src-pill__nm),
+.importar :global(.imp-switch-lbl),
+.importar :global(.imp-summary-pill__v),
+.importar :global(.imp-callout__txt b),
+.importar :global(.imp-dl-card__body b),
+.importar :global(.imp-review-strip b),
+.importar :global(.imp-step-row__body h4),
+.importar :global(.imp-dropzone h4) {
+  color: var(--m2-texto);
+}
+
+.importar :global(.imp-callout__txt p),
+.importar :global(.imp-dl-card__body p),
+.importar :global(.imp-review-strip p),
+.importar :global(.imp-step-row__body p),
+.importar :global(.imp-note p),
+.importar :global(.imp-dropzone p),
+.importar :global(.imp-stat-card__lbl) {
+  color: var(--m2-texto-2);
+}
+
+.importar :global(.imp-src-card__check),
+.importar :global(.imp-opt.is-on .imp-opt__box) {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+.importar :global(.imp-opt__box) {
+  border-color: var(--m2-borde);
+  background: var(--m2-tarjeta);
+}
+
+.importar :global(.imp-opt__ic) {
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto-2);
+}
+
+/* Avisos violeta (asistida, exportar): el lila del menú. */
+.importar :global(.imp-callout),
+.importar :global(.imp-review-strip) {
+  border-color: var(--m2-iniciales-fondo);
+  border-radius: 12px;
+  background: var(--m2-iniciales-fondo);
+}
+
+.importar :global(.imp-callout__ic),
+.importar :global(.imp-review-strip__ic),
+.importar :global(.imp-step-row__idx),
+.importar :global(.imp-dz__ic),
+.importar :global(.imp-seal--brand) {
+  background: var(--m2-tarjeta);
+  color: var(--m2-activo);
+}
+
+.importar :global(.imp-callout--ok) {
+  border-color: color-mix(in srgb, var(--success, #059669) 30%, transparent);
+  background: var(--success-soft, rgba(5, 150, 105, 0.1));
+}
+
+.importar :global(.imp-callout--warn) {
+  border-color: color-mix(in srgb, var(--warning, #d97706) 30%, transparent);
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+}
+
+.importar :global(.imp-step-row) {
+  border-bottom-color: var(--m2-borde);
+}
+
+/* «Copia esto»: dato administrativo, en la letra del panel. */
+.importar :global(.imp-code) {
+  font-family: inherit;
+  background: var(--m2-n1-fondo);
+  border-color: var(--m2-borde);
+  color: var(--m2-texto);
+}
+
+/* Paso 4: la zona de soltar el archivo. */
+.importar :global(.imp-dropzone) {
+  border-color: var(--m2-borde);
+  border-radius: 14px;
+  background: var(--m2-n1-fondo);
+}
+
+.importar :global(.imp-dropzone:hover) {
+  border-color: var(--m2-activo);
+}
+
+.importar :global(.imp-dropzone.is-drag) {
+  border-color: var(--m2-activo);
+  background: var(--m2-iniciales-fondo);
+}
+
+.importar :global(.imp-dropzone.is-drag .imp-dz__ic) {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+.importar :global(.imp-file-row__bar),
+.importar :global(.imp-progress) {
+  background: var(--m2-n1-fondo);
+}
+
+.importar :global(.imp-progress > i),
+.importar :global(.imp-spin) {
+  color: var(--m2-activo);
+}
+
+.importar :global(.imp-progress > i) {
+  background: var(--m2-activo);
+}
+
+.importar :global(.imp-spin-sm) {
+  border-color: var(--m2-iniciales-fondo);
+  border-top-color: var(--m2-activo);
+}
+
+/* Paso 5 y 6: la tabla del mapeo y de la revisión. */
+.importar :global(.table-wrap) {
+  border-color: var(--m2-tarjeta-borde) !important;
+  border-radius: 12px !important;
+}
+
+.importar :global(.table-new) {
+  font-size: 12.5px;
+}
+
+.importar :global(.table-new th) {
+  background: var(--m2-n1-fondo);
+  border-bottom-color: var(--m2-borde);
+  color: var(--m2-texto-3);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.importar :global(.table-new td) {
+  border-bottom-color: var(--m2-borde);
+  color: var(--m2-texto);
+}
+
+.importar :global(.table-new tbody tr:hover) {
+  background: var(--m2-hover);
+}
+
+.importar :global(.table-new tr.imp-row-err > td),
+.importar :global(.table-new tr.imp-row-err:hover > td) {
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+}
+
+.importar :global(.table-new tr.imp-row-dup > td),
+.importar :global(.table-new tr.imp-row-dup:hover > td) {
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+}
+
+.importar :global(.imp-map-status.auto) {
+  color: var(--m2-soporte);
+}
+
+/* Etiquetas de estado de cada fila (Válida · Duplicada · Con error). */
+.importar :global(.badge-new) {
+  font-family: inherit;
+}
+
+.importar :global(.badge-new--success) {
+  background: var(--success-soft, rgba(5, 150, 105, 0.1));
+  color: var(--success-strong, #047857);
+  border-color: transparent;
+}
+
+.importar :global(.badge-new--warning) {
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  color: var(--warning-strong, #a85a05);
+  border-color: transparent;
+}
+
+.importar :global(.badge-new--danger) {
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--danger, #dc2626);
+  border-color: transparent;
+}
+
+.importar :global(.badge-new--brand) {
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  border-color: transparent;
+}
+
+/* La cifra grande de las tarjetas del paso 6 y del resumen lleva `.mono`
+   en el marcado: en el camino nuevo va en la letra del panel, con
+   tabular-nums (heredado de la caja). */
+.importar :global(.mono) {
+  font-family: inherit;
+}
+
+/* Controles de 40 px y radio 8, como en «Nuevo paciente». */
+.importar :global(.input-new) {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 8px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+.importar :global(.imp-select) {
+  height: 36px;
+}
+
+.importar :global(.imp-select[data-unmapped="true"]) {
+  border-color: color-mix(in srgb, var(--warning, #d97706) 45%, transparent);
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+}
+
+.importar :global(textarea.input-new) {
+  height: auto;
+  min-height: 84px;
+  padding: 10px 12px;
+}
+
+.importar :global(.input-new:hover) {
+  border-color: var(--m2-texto-3);
+}
+
+.importar :global(.input-new:focus) {
+  border-color: var(--m2-activo);
+  box-shadow: 0 0 0 3px var(--m2-iniciales-fondo);
+}
+
+.importar :global(.input-new::placeholder) {
+  color: var(--m2-texto-3);
+}
+
+.importar :global(.field-new__label) {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m2-texto-2);
+}
+
+/* El interruptor «Omitir duplicados». */
+.importar :global(.switch--on) {
+  background: var(--m2-activo);
+  box-shadow: none;
+}
+
+/* La burbuja de ayuda del paso 6. */
+.importar :global(.imp-tip__bubble) {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  font-family: inherit;
+  box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--m2-texto) 30%, transparent);
+}
+
+/* El aviso «hubo errores» del resultado. */
+.importar :global(.imp-report-line) {
+  border-radius: 12px;
+  color: var(--m2-texto);
+}
+
+.importar :global(.imp-report-line__link) {
+  color: var(--m2-activo);
+  font-family: inherit;
+}
+
+.importar :global(.imp-seal) {
+  background: var(--success-soft, rgba(5, 150, 105, 0.1));
+  color: var(--m2-soporte);
+}
+
+.importar :global(.imp-seal--brand) {
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-activo);
+}
+
+/* Pie */
+.importar :global(.modal__footer) {
+  padding: 14px 20px;
+  border-top: 1px solid var(--m2-borde);
+  background: var(--m2-tarjeta);
+}
+
+.importar :global(.imp-hint) {
+  color: var(--m2-texto-3);
+}
+
+/* Botones: 40 px, radio 10; el principal en tinta, como la Nueva cita. */
+.importar :global(.btn-new) {
+  height: 40px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.importar :global(.btn-new--sm) {
+  height: 32px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+:root .importar.importar :global(.btn-new--primary) {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+:root .importar.importar :global(.btn-new--primary:hover:not(:disabled)) {
+  background: var(--m2-cta-fondo);
+  opacity: 0.88;
+}
+
+.importar :global(.btn-new--secondary) {
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  border-color: var(--m2-borde);
+  box-shadow: none;
+}
+
+.importar :global(.btn-new--secondary:hover:not(:disabled)) {
+  background: var(--m2-hover);
+  color: var(--m2-texto);
+}
+
+.importar :global(.btn-new:focus-visible) {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+/* ═══ Menú «…» de la cabecera del expediente ═══════════════════════
+   Cuelga de un portal de Radix, así que la ficha no le presta los
+   `--pr-*`: la regla `.heroRediseno .heroMenuPopover` de la cabecera
+   nunca llegaba a él. Las acciones (`.heroMenuItem`, el separador y la
+   nota) son de `patient-detail.module.css` y aquí se visten por
+   elemento, con más peso que su clase. Mismo plano que hoy: 250. */
+
+.menuFicha {
+  z-index: 250;
+  min-width: 220px;
+  padding: 4px;
+  border-radius: 12px;
+  box-shadow: 0 20px 50px -10px color-mix(in srgb, var(--m2-texto) 25%, transparent),
+    0 8px 20px -8px color-mix(in srgb, var(--m2-texto) 15%, transparent);
+  font-family: inherit;
+}
+
+.menuFicha button,
+.menuFicha [aria-disabled] {
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--m2-texto);
+}
+
+.menuFicha button:hover {
+  background: var(--m2-hover);
+}
+
+.menuFicha button:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.menuFicha [role="separator"] {
+  background: var(--m2-borde);
+}
+
+/* La nota bajo «Reenviar invitación». */
+.menuFicha [data-nota] {
+  color: var(--m2-texto-3);
+}
+
+/* «Eliminar paciente». El atributo lo pone la cabecera solo con el
+   rediseño; con más peso que el hover de la base. */
+.menuFicha button[data-tono="peligro"] {
+  color: var(--danger, #dc2626);
+}
+
+.menuFicha button[data-tono="peligro"]:hover {
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+}
+
+/* ═══ Popover de alertas médicas (Hoy y el expediente) ═════════════
+   Alergias, medicación activa y padecimientos del próximo paciente.
+   Mismo plano que hoy: 50. */
+
+.alertas {
+  z-index: 50;
+  min-width: 280px;
+  max-width: 360px;
+  padding: 14px;
+  border-radius: 12px;
+  box-shadow: 0 20px 50px -10px color-mix(in srgb, var(--m2-texto) 25%, transparent),
+    0 8px 20px -8px color-mix(in srgb, var(--m2-texto) 15%, transparent);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.alertasTitulo {
+  margin-bottom: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m2-texto-2);
+}
+
+.alertasVacio {
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: var(--m2-texto-2);
+}
+
+.alertasSeccion {
+  margin-bottom: 8px;
+}
+
+.alertasSeccionTitulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--m2-texto);
+}
+
+.alertasPeligro { color: var(--danger, #dc2626); }
+.alertasAviso { color: var(--warning, #d97706); }
+.alertasInfo { color: var(--info, #2563eb); }
+
+.alertasLista {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 18px;
+}
+
+.alertasItem {
+  position: relative;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--m2-texto);
+}
+
+.alertasPunto {
+  position: absolute;
+  left: -12px;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--m2-texto-3);
+}
+
+.alertasFuente {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--m2-borde);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--m2-texto-3);
+}
+
+.alertasFlecha {
+  fill: var(--m2-tarjeta);
+}

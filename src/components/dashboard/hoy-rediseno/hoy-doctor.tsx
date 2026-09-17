@@ -196,6 +196,7 @@ function SiguientePaciente({ appt }: { appt: SiguienteCita }) {
             <div className={s.heroeChips}>
               {primeraAlergia && (
                 <AlergiesPopover
+                  apariencia="nueva"
                   alerts={appt.patientAlerts ?? {}}
                   trigger={
                     <button
@@ -212,6 +213,7 @@ function SiguientePaciente({ appt }: { appt: SiguienteCita }) {
               )}
               {primerMedicamento && !primeraAlergia && (
                 <AlergiesPopover
+                  apariencia="nueva"
                   alerts={appt.patientAlerts ?? {}}
                   trigger={
                     <button type="button" className={`${s.chip} ${s.chipAlerta}`}>
