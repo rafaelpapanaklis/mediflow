@@ -30,6 +30,7 @@ import {
   quoteInvoiceLockedMessage,
   type LinkedInvoiceLock,
 } from "./invoice-from-quote-core";
+import { doctorDeLaFactura } from "./doctor-de-la-factura";
 import type {
   BillingInvoiceItem,
   BillingInvoiceLite,
@@ -56,6 +57,8 @@ interface QuoteLike {
   folio: string;
   patientId: string;
   invoiceId: string | null;
+  /** Quién creó el presupuesto. Si es DOCTOR de la clínica, la factura nace a su nombre. */
+  createdById?: string | null;
   subtotal: Prisma.Decimal | number;
   discountAmount: Prisma.Decimal | number;
   total: Prisma.Decimal | number;
@@ -163,6 +166,22 @@ export async function createInvoiceFromQuote(
   });
   const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(clinicTax?.cfdiTaxMode);
 
+  // Doctor con el que NACE (regla y porqué en doctor-de-la-factura.ts, que
+  // explica también por qué el vencimiento sigue naciendo vacío). Solo se
+  // decide aquí, antes de crear: una factura que ya existe —los dos caminos
+  // idempotentes y el borrador viejo que se re-sincroniza— no se toca.
+  //
+  // Es quien creó el presupuesto, validado como POST /api/invoices valida el
+  // suyo (DOCTOR de ESTA clínica; clinicId de la sesión). Sin creador no se
+  // consulta: `id: undefined` no filtraría nada.
+  const creadorEsDoctor = quote.createdById
+    ? (await prisma.user.findFirst({
+        where: { id: quote.createdById, clinicId: ctx.clinicId, role: "DOCTOR" },
+        select: { id: true },
+      })) !== null
+    : false;
+  const doctor = doctorDeLaFactura(quote.createdById, creadorEsDoctor);
+
   // Folio por MÁXIMO emitido con reintento ante carrera (P0-2). El loop
   // anterior hacía count+1+attempt: con 8 o más huecos por debajo del máximo
   // (esta ruta los fabricaba mientras sus facturas nacían DRAFT y se borraban
@@ -215,6 +234,7 @@ export async function createInvoiceFromQuote(
             notes: `Generada desde presupuesto ${quote.folio}`,
             taxRate,
             taxIncluded,
+            doctorId: doctor,
           },
         });
         // Vincula la factura al presupuesto (cierra la idempotencia aguas abajo).
