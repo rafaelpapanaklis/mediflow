@@ -275,10 +275,17 @@ function Ficha({
         {mensaje && <p className={s.fichaMensaje} role="alert">{mensaje}</p>}
         {enviado === "whatsapp" && (
           <p className={s.fichaAviso} role="status">
-            {t("quotes.card.waSentToast")}{" "}
-            <a href={`/dashboard/inbox${patientId ? `?patientId=${patientId}` : ""}`}>
-              {t("quotes.card.waViewInbox")}
-            </a>
+            {t("quotes.card.waSentToast")}
+            {/* Sin patientId no hay a dónde llevar: se calla el enlace en vez
+                de mandar a la bandeja general sin decirlo (regla de ws1-t4). */}
+            {patientId && (
+              <>
+                {" "}
+                <a href={`/dashboard/inbox?patientId=${patientId}`}>
+                  {t("quotes.card.waViewInbox")}
+                </a>
+              </>
+            )}
           </p>
         )}
         {enviado === "correo" && <p className={s.fichaAviso} role="status">{t("facturaFicha.correoEnviado")}</p>}
