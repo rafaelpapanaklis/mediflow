@@ -2325,3 +2325,78 @@
   .heroRediseno .heroName { font-size: 19px; }
   .heroRediseno .heroAlerts { margin-top: 10px; padding-top: 8px; }
 }
+
+/* ── La cabecera de 1600 a 1024 px (ws1-t4, segunda ola) ──────────────
+   Lo que se rompía, medido en maqueta con este mismo CSS: la cabecera tenía
+   DOS maquetaciones y saltaba de una a otra a los 1380px de ancho propio.
+   Con el menú encogido a 1600px de pantalla ya entraba en «fila única», y
+   ahí métricas y botones —que con el rediseño son más grandes que cuando se
+   calibró ese umbral— aplastaban la columna del nombre: nombre en tres
+   renglones, correo partido por la mitad, y «Próxima cita / Iniciar
+   consulta» bailando de sitio al estrechar la ventana.
+
+   Ahora no hay umbral que calibrar: la cabecera es una fila que ENVUELVE.
+   A un lado, avatar + nombre; al otro, una caja (`heroLado`) con «Próxima
+   cita» y los botones. Si la caja cabe junto al nombre, va a su derecha; si
+   no, baja ENTERA al renglón siguiente; y si tampoco cabe ahí, la cita queda
+   encima de los botones. Decide el contenido (un «Cobrar $128,451» ocupa más
+   que un «Cobrar»), no un número puesto a mano. Nada se esconde ni se corta.
+
+   Va al FINAL del archivo a propósito: misma especificidad que las reglas de
+   arriba (incluidas las del teléfono), así que gana por orden. */
+.heroRediseno .heroMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+}
+
+/* El nombre pide 420px antes de compartir renglón con la caja: con eso un
+   nombre de cuatro apellidos ocupa dos líneas como mucho. El `min()` es para
+   que en una cabecera estrecha siga al lado del avatar (70px + hueco) en vez
+   de bajar él también. */
+.heroRediseno .heroInfo {
+  flex: 1 1 min(420px, calc(100% - 88px));
+  min-width: 0;
+}
+
+.heroRediseno .heroLado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 22px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* «Próxima cita», ya sola: sin la raya ni el aire de cuando era una fila de
+   tres. Solo existe si hay cita (lo decide hero-card.tsx). */
+.heroRediseno .heroMetrics {
+  display: flex;
+  border-top: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+/* El tipo de cita y el nombre del doctor pueden ser largos: envuelven dentro
+   de 300px en vez de ensanchar la caja y tirar los botones al renglón de
+   abajo. Envuelven, no se cortan con «…». */
+.heroRediseno .metric {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 300px;
+  padding: 0;
+}
+
+.heroRediseno .metricValue { font-variant-numeric: tabular-nums; }
+.heroRediseno .metricSub { overflow-wrap: anywhere; }
+
+/* Expediente, edad y tipo de sangre: cifras alineadas con tabular-nums sobre
+   Instrument Sans, como en todo el rediseño. La letra de máquina es del
+   camino de siempre. */
+.heroRediseno .mono {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}

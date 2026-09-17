@@ -42,6 +42,8 @@ const db = {
   payments: [] as Row[],
   /** Clinic.cfdiTaxMode por clínica ("exempt" es el default de la columna). */
   clinics: {} as Record<string, string>,
+  /** Usuarios: solo lo que mira el alta de la factura para atribuir doctor. */
+  users: [] as Array<{ id: string; clinicId: string; role: string }>,
   seq: 0,
 };
 const revalidados: string[] = [];
@@ -53,6 +55,12 @@ beforeEach(() => {
   db.invoices = [];
   db.payments = [];
   db.clinics = { c1: "exempt", c2: "exempt" };
+  // u1 (quien crea los presupuestos sembrados) es ADMIN, como la sesión.
+  db.users = [
+    { id: "u1", clinicId: "c1", role: "ADMIN" },
+    { id: "doc-1", clinicId: "c1", role: "DOCTOR" },
+    { id: "doc-de-c2", clinicId: "c2", role: "DOCTOR" },
+  ];
   db.seq = 0;
   revalidados.length = 0;
   ocultos.clear();
@@ -206,6 +214,17 @@ const prismaStub: any = {
       where?.id in db.clinics ? { id: where.id, cfdiTaxMode: db.clinics[where.id] } : null,
     findFirst: async ({ where }: any = {}) =>
       where?.id in db.clinics ? { id: where.id, cfdiTaxMode: db.clinics[where.id] } : null,
+  },
+  user: {
+    findFirst: async ({ where }: any = {}) => {
+      // Como Prisma: una clave `undefined` no filtra. Así, si el alta olvidara
+      // cortar antes de consultar, el doble devolvería a CUALQUIER doctor.
+      const u = db.users.find((x) =>
+        (where?.id === undefined || x.id === where.id) &&
+        (where?.clinicId === undefined || x.clinicId === where.clinicId) &&
+        (where?.role === undefined || x.role === where.role));
+      return u ? { id: u.id } : null;
+    },
   },
   payment: {
     create: async ({ data }: any) => {
@@ -579,4 +598,56 @@ test("una factura YA CREADA con 16 % en una clínica exenta no se toca al volver
   assert.equal(db.invoices.length, 1);
   assert.equal(db.invoices[0].taxRate, 16, "no se migra nada: la factura vieja conserva su desglose");
   assert.equal(db.invoices[0].total, 6800);
+});
+
+// ── Doctor de la factura (ws1-t3) ───────────────────────────────────────────
+
+test("la factura nace a nombre de quien creó el presupuesto, si es DOCTOR de la clínica", async () => {
+  const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
+  const q = sembrarPresupuesto({ createdById: "doc-1" });
+
+  const res = await leer(await POST(req(), { params: { id: q.id } }));
+
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  assert.equal(db.invoices[0].doctorId, "doc-1");
+  assert.ok(db.invoices[0].dueDate == null, "el vencimiento sigue naciendo vacío");
+});
+
+test("si lo creó recepción o un administrador, nace sin doctor — y nunca a nombre de quien factura", async () => {
+  const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
+  const q = sembrarPresupuesto(); // createdById u1 = ADMIN, que además es la sesión
+
+  const res = await leer(await POST(req(), { params: { id: q.id } }));
+
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  assert.equal(db.invoices[0].doctorId, null);
+});
+
+test("🔴 un doctor de OTRA clínica, un creador borrado o ninguno: sin doctor", async () => {
+  const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
+  for (const createdById of ["doc-de-c2", "ya-no-existe", null]) {
+    db.quotes = []; db.invoices = [];
+    const q = sembrarPresupuesto({ createdById });
+    const res = await leer(await POST(req(), { params: { id: q.id } }));
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(db.invoices[0].doctorId, null, `createdById=${createdById}`);
+  }
+});
+
+test("⛔ una factura que YA existe no recibe doctor al volver a pulsar «Generar factura»", async () => {
+  const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
+  db.invoices.push({
+    id: "inv-sin-doctor", clinicId: "c1", patientId: "p1", invoiceNumber: "MF-0009",
+    items: [], subtotal: 7000, discount: 200, total: 6800, paid: 0, balance: 6800,
+    status: "DRAFT", doctorId: null, notes: "Generada desde presupuesto P-0003",
+    createdAt: new Date(), updatedAt: new Date(),
+  });
+  const q = sembrarPresupuesto({ createdById: "doc-1", invoiceId: "inv-sin-doctor" });
+
+  const res = await leer(await POST(req(), { params: { id: q.id } }));
+
+  assert.equal(res.body.already, true);
+  assert.equal(db.invoices.length, 1);
+  assert.equal(db.invoices[0].doctorId, null, "no se toca");
+  assert.equal(db.invoices[0].status, "DRAFT", "y sigue siendo borrador");
 });

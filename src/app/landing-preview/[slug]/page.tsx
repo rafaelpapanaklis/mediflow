@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 interface Props {
   params: { slug: string };
-  searchParams?: { preview?: string; edit?: string };
+  searchParams?: { preview?: string; edit?: string; borrador?: string };
 }
 
 /**
@@ -34,16 +34,38 @@ interface Props {
  * Ocultar el botón no es un gate: el gate es este, y el del PATCH.
  */
 async function permitirEdicion(slug: string): Promise<boolean> {
+  return sesionDeEstaClinicaCon(slug, "landing.edit");
+}
+
+/**
+ * ¿Quien está mirando puede ver la mini-web AUNQUE NO ESTÉ PUBLICADA?
+ *
+ * Es la vista previa de Página web → Plantilla (?borrador=1). Sin esto, la
+ * clínica que todavía no publica veía el cartel de «disponible pronto» en vez
+ * de la plantilla que estaba eligiendo — justo la que más necesita verla.
+ *
+ * Mismas dos primeras condiciones que el lienzo (sesión, y de ESTA clínica),
+ * pero con "landing.view": es el permiso que ya abre /dashboard/landing, y
+ * aquí solo se MIRA. No enciende el editor y no publica nada: landingActive
+ * no se toca, y el visitante sin sesión sigue viendo el cartel.
+ */
+async function permitirBorrador(slug: string): Promise<boolean> {
+  return sesionDeEstaClinicaCon(slug, "landing.view");
+}
+
+async function sesionDeEstaClinicaCon(slug: string, permiso: "landing.edit" | "landing.view"): Promise<boolean> {
   const ctx = await getAuthContext();
   if (!ctx) return false;
   const clinica = await prisma.clinic.findUnique({ where: { slug }, select: { id: true } });
   if (!clinica || clinica.id !== ctx.clinicId) return false;
-  return hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, "landing.edit");
+  return hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, permiso);
 }
 
 export default async function LandingPreviewPage({ params, searchParams }: Props) {
   const pedido = searchParams?.edit === "1";
   const edit = pedido ? await permitirEdicion(params.slug) : false;
+  // Con edit ya concedido el cartel de «pronto» no sale: no se pregunta dos veces.
+  const borrador = !edit && searchParams?.borrador === "1" ? await permitirBorrador(params.slug) : false;
 
   return (
     // live: aquí (y solo aquí) se escucha al editor por postMessage para
@@ -53,6 +75,7 @@ export default async function LandingPreviewPage({ params, searchParams }: Props
       previewTpl={searchParams?.preview}
       live
       edit={edit}
+      borrador={borrador}
     />
   );
 }

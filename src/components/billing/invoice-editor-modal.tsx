@@ -12,13 +12,21 @@
 // El paciente puede venir FIJO (ficha) o elegirse aquí con el buscador (Caja):
 // ver `patientId` vs `patients` en las props.
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { Plus, Loader2, Trash2, Check, Search, User } from "lucide-react";
 import toast from "react-hot-toast";
 import { computeTotals, round2 } from "@/lib/quotes/compute";
 import { clinicInvoiceTaxDefaults, cfdiTotalBreakdown, IVA_RATE_PCT, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useT } from "@/i18n/i18n-provider";
+// Ropa del diseño nuevo (solo con `rediseno`). Ver dashboard/factura-rediseno/.
+import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
+// Lo que Nueva factura toma de Presupuestos (solo con `rediseno`): forma de pago
+// y envío al paciente. Ver dashboard/factura-ficha-rediseno/.
+import { condicionesPorDefecto, hayCondiciones, type CondicionesPago } from "@/lib/quotes/condiciones-pago";
+import { FormaDePagoFactura, EnvioFactura, FraseDelTrato, type EnvioAlCrear } from "@/components/dashboard/factura-ficha-rediseno/forma-de-pago";
+import { enviarFactura, guardarCondiciones, useContactoDePaciente } from "@/components/dashboard/factura-ficha-rediseno/extras";
+import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 
 /**
  * Descuento de línea tal y como VIAJA en el payload: clampeado al importe de la
@@ -76,12 +84,29 @@ export interface InvoiceEditorModalProps {
   onClose: () => void;
   /** Recibe la factura creada (shape de POST /api/invoices) para insertarla sin recargar. */
   onCreated: (invoice: any) => void;
+  /**
+   * Interruptor `menu-dos-niveles` (lo pasa quien monta el modal). `true` =
+   * vestido con el diseño nuevo; `false` (por defecto) = las clases de
+   * siempre, byte por byte. Los cálculos y el payload no cambian con él.
+   */
+  rediseno?: boolean;
+  /**
+   * «Duplicar» de la ficha de factura (solo el diseño nuevo lo pasa): el popup
+   * abre con estos conceptos y este trato ya puestos. Sin él, abre vacío como
+   * siempre. La factura se crea igual, por el mismo POST.
+   */
+  inicial?: BorradorDeFactura | null;
 }
 
-export function InvoiceEditorModal({ open, patientId, patientName, patients, clinicTaxMode, onClose, onCreated }: InvoiceEditorModalProps) {
+export function InvoiceEditorModal({ open, patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno = false, inicial = null }: InvoiceEditorModalProps) {
+  // Solo el diseño nuevo lo enciende, y solo mientras guarda el trato o envía al
+  // paciente DESPUÉS de crear: en ese rato el popup no se cierra (ni Esc, ni
+  // clic fuera, ni «Cancelar»). Si se cerrara, el `onCreated` que llega al
+  // terminar cerraría el popup que se hubiera abierto entre tanto.
+  const ocupado = useRef(false);
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl">
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !ocupado.current) onClose(); }}>
+      <DialogContent className={rediseno ? `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalAncho}` : "max-w-2xl"}>
         {/* El cuerpo se monta de cero en cada apertura → el formulario nunca queda con estado viejo. */}
         <InvoiceEditorBody
           patientId={patientId}
@@ -90,6 +115,9 @@ export function InvoiceEditorModal({ open, patientId, patientName, patients, cli
           clinicTaxMode={clinicTaxMode}
           onClose={onClose}
           onCreated={onCreated}
+          rediseno={rediseno}
+          inicial={inicial}
+          ocupado={ocupado}
         />
       </DialogContent>
     </Dialog>
@@ -97,7 +125,7 @@ export function InvoiceEditorModal({ open, patientId, patientName, patients, cli
 }
 
 function InvoiceEditorBody({
-  patientId, patientName, patients, clinicTaxMode, onClose, onCreated,
+  patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno, inicial, ocupado,
 }: {
   patientId?: string;
   patientName?: string;
@@ -105,12 +133,25 @@ function InvoiceEditorBody({
   clinicTaxMode?: string | null;
   onClose: () => void;
   onCreated: (invoice: any) => void;
+  rediseno: boolean;
+  inicial: BorradorDeFactura | null;
+  ocupado: MutableRefObject<boolean>;
 }) {
   const t = useT();
-  const [items, setItems] = useState<EditorItem[]>([]);
-  const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">("none");
-  const [discountValue, setDiscountValue] = useState<number>(0);
-  const [notes, setNotes] = useState("");
+  // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de
+  // siempre sin él. Sin `nueva`, el nodo queda sin clase en el diseño nuevo
+  // (lo viste la hoja por elemento: inputs, selects…).
+  // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
+  // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
+  const cx = (vieja: string, nueva?: string) => (rediseno ? nueva : vieja);
+  // Sin `inicial` (siempre, salvo «Duplicar» del diseño nuevo) cada estado nace
+  // con el valor de siempre.
+  const [items, setItems] = useState<EditorItem[]>(() => (inicial?.items ?? []).map((it) => ({
+    key: newKey(), procedureId: null, name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount,
+  })));
+  const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">(inicial && inicial.descuento > 0 ? "amount" : "none");
+  const [discountValue, setDiscountValue] = useState<number>(inicial?.descuento ?? 0);
+  const [notes, setNotes] = useState(inicial?.notes ?? "");
   // "Vence el" (Invoice.dueDate) — opcional. Viaja como "YYYY-MM-DD" y el
   // servidor lo ancla al día natural de la clínica. Es lo ÚNICO que hace que
   // una factura cuente como vencida (KPI, filtro "Vencidas", Caja, Finanzas).
@@ -128,15 +169,38 @@ function InvoiceEditorBody({
 
   // Doctor atribuido (Invoice.doctorId) — opcional, alimenta los reportes por médico de Caja.
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
-  const [doctorId, setDoctorId] = useState("");
+  const [doctorId, setDoctorId] = useState(inicial?.doctorId ?? "");
 
   // Impuestos (Invoice.taxRate / taxIncluded). Nacen según la preferencia fiscal
   // de la clínica: exenta (odontología, lo común) = 0% sin desglose; iva16 = 16%
   // ya incluido en el precio. Cambiable por factura.
   const initialTax = useMemo(() => clinicInvoiceTaxDefaults(clinicTaxMode), [clinicTaxMode]);
-  const [taxRate, setTaxRate] = useState<number>(initialTax.taxRate);
-  const [taxIncluded, setTaxIncluded] = useState<boolean>(initialTax.taxIncluded);
+  // Un duplicado conserva los impuestos de la original, pero solo los dos modos
+  // que el editor sabe producir (0 o IVA_RATE_PCT).
+  const [taxRate, setTaxRate] = useState<number>(
+    inicial?.taxRate === 0 || inicial?.taxRate === IVA_RATE_PCT ? inicial.taxRate : initialTax.taxRate,
+  );
+  const [taxIncluded, setTaxIncluded] = useState<boolean>(
+    inicial?.taxRate === IVA_RATE_PCT && inicial.taxIncluded !== null ? inicial.taxIncluded : initialTax.taxIncluded,
+  );
   const taxMode: CfdiTaxMode = taxRate > 0 ? "iva16" : "exento";
+
+  // Forma de pago y envío al paciente — SOLO el diseño nuevo los enseña y los
+  // usa. Con el interruptor apagado se quedan en su valor neutro y `save()` no
+  // hace ni una petición de más.
+  const [cond, setCond] = useState<CondicionesPago>(() => inicial?.condiciones ?? condicionesPorDefecto());
+  const [envioElegido, setEnvio] = useState<EnvioAlCrear>(null);
+  // La factura YA existe y se está guardando el trato o enviando: «Cancelar» se
+  // apaga. Con el interruptor apagado nunca deja de ser false.
+  const [despuesDeCrear, setDespuesDeCrear] = useState(false);
+  const contacto = useContactoDePaciente(effectivePatientId, rediseno);
+  // Si se cambia a un paciente sin correo (o sin teléfono), la opción elegida
+  // deja de valer: no se manda nada a quien no se le puede mandar.
+  const envio: EnvioAlCrear =
+    (envioElegido === "correo" && contacto?.correo === false) ||
+    (envioElegido === "whatsapp" && contacto?.telefono === false)
+      ? null
+      : envioElegido;
 
   // Tarifario para el autocomplete (mismo endpoint que presupuestos).
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
@@ -153,7 +217,13 @@ function InvoiceEditorBody({
   useEffect(() => {
     fetch("/api/agenda/doctors")
       .then((r) => (r.ok ? r.json() : { doctors: [] }))
-      .then((d) => setDoctors(Array.isArray(d?.doctors) ? d.doctors.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []))
+      .then((d) => {
+        const lista: DoctorOption[] = Array.isArray(d?.doctors) ? d.doctors.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : [];
+        setDoctors(lista);
+        // Duplicar: si el doctor de la original ya no está en la lista, se suelta.
+        // El select lo enseñaría en blanco y el POST lo rechazaría sin pista.
+        if (inicial) setDoctorId((prev) => (lista.some((x) => x.id === prev) ? prev : ""));
+      })
       .catch(() => setDoctors([]));
   }, []);
 
@@ -247,8 +317,8 @@ function InvoiceEditorBody({
   }
 
   const num = (v: string) => { const n = Number(v); return isFinite(n) ? n : 0; };
-  const inputCls = "w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm";
-  const selectCls = "mt-1 w-full bg-background border border-border rounded-lg px-2 py-2 text-sm";
+  const inputCls = cx("w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm");
+  const selectCls = cx("mt-1 w-full bg-background border border-border rounded-lg px-2 py-2 text-sm");
 
   async function save() {
     if (!effectivePatientId) { toast.error(t("billing.invoiceEditor.errorNoPatient")); return; }
@@ -295,9 +365,27 @@ function InvoiceEditorBody({
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error || t("billing.invoiceEditor.errorCreate"));
       toast.success(t("billing.invoiceEditor.createdToast", { number: out.invoiceNumber ?? "" }));
-      onCreated(out);
+      // Diseño nuevo: el trato y el envío van DESPUÉS de crear y por rutas
+      // aparte — crear la factura no cambia. Si alguno falla se DICE, con el
+      // motivo del servidor y dejando claro que la factura sí existe.
+      let creada = out;
+      if (rediseno && out?.id && (hayCondiciones(cond) || envio)) { ocupado.current = true; setDespuesDeCrear(true); }
+      if (rediseno && out?.id && hayCondiciones(cond)) {
+        const r = await guardarCondiciones(out.id, cond);
+        if (r.ok) creada = { ...out, condicionesPago: r.condiciones };
+        else toast.error(r.error ?? t("facturaFicha.errorCondiciones"), { duration: 10000 });
+      }
+      if (rediseno && out?.id && envio) {
+        const r = await enviarFactura(out.id, envio);
+        if (r.ok) toast.success(t(envio === "correo" ? "facturaFicha.correoEnviado" : "facturaFicha.whatsAppEnviado"));
+        // Sin motivo del servidor no se sabe si salió: no se afirma que no.
+        else toast.error(r.error ? `${t("facturaFicha.creadaSinEnviar")} ${r.error}` : t("facturaFicha.creadaEnvioSinConfirmar"), { duration: 10000 });
+      }
+      ocupado.current = false;
+      onCreated(creada);
       // No reseteamos `saving`: el modal se cierra (open=false) y este cuerpo se desmonta.
     } catch (e) {
+      ocupado.current = false;
       toast.error((e as Error).message || t("billing.invoiceEditor.errorCreate"));
       setSaving(false);
     }
@@ -305,32 +393,32 @@ function InvoiceEditorBody({
 
   return (
     <>
-      <DialogHeader>
-        <DialogTitle>
+      <DialogHeader className={rediseno ? c.cabecera : undefined}>
+        <DialogTitle className={rediseno ? c.titulo : undefined}>
           {effectivePatientName
             ? t("billing.invoiceEditor.titleWithPatient", { patient: effectivePatientName })
             : t("billing.invoiceEditor.title")}
         </DialogTitle>
       </DialogHeader>
 
-      <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-4 space-y-4">
+      <div className={cx("flex-1 overflow-y-auto min-h-0 px-6 pb-4 space-y-4", c.cuerpo)}>
         {/* Paciente — solo cuando NO viene fijo desde la ficha */}
         {!fixedPatient && (
-          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-xs font-bold">{t("billing.invoiceEditor.patient")}</h3>
+          <div className={cx("bg-card border border-border rounded-xl p-4 space-y-3", c.bloque)}>
+            <div className={cx("flex items-center justify-between gap-2", c.bloqueCabeza)}>
+              <h3 className={cx("text-xs font-bold", c.bloqueTitulo)}>{t("billing.invoiceEditor.patient")}</h3>
               {pickedPatient && (
                 <button type="button" onClick={() => { setPickedPatient(null); setPatientQuery(""); }}
-                  className="text-[11px] font-semibold text-brand-700 dark:text-brand-300">
+                  className={cx("text-[11px] font-semibold text-brand-700 dark:text-brand-300", c.enlace)}>
                   {t("billing.invoiceEditor.changePatient")}
                 </button>
               )}
             </div>
 
             {pickedPatient ? (
-              <div className="flex items-center gap-2 border border-border rounded-lg px-3 py-2 bg-background">
+              <div className={cx("flex items-center gap-2 border border-border rounded-lg px-3 py-2 bg-background", c.elegido)}>
                 <User size={14} className="text-muted-foreground flex-shrink-0" />
-                <span className="text-sm font-medium truncate">{patientLabel(pickedPatient)}</span>
+                <span className={cx("text-sm font-medium truncate")}>{patientLabel(pickedPatient)}</span>
               </div>
             ) : (
               <>
@@ -338,11 +426,11 @@ function InvoiceEditorBody({
                   value={patientQuery}
                   onChange={(e) => setPatientQuery(e.target.value)}
                   placeholder={t("billing.invoiceEditor.patientSearchPlaceholder")}
-                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm"
+                  className={cx("w-full bg-background border border-border rounded-lg px-3 py-2 text-sm")}
                 />
-                <div className="max-h-48 overflow-y-auto divide-y divide-border border border-border rounded-lg">
+                <div className={cx("max-h-48 overflow-y-auto divide-y divide-border border border-border rounded-lg", c.opciones)}>
                   {patientMatches.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-3 text-center">
+                    <p className={cx("text-xs text-muted-foreground py-3 text-center", c.vacio)}>
                       {(patients ?? []).length === 0
                         ? t("billing.invoiceEditor.noPatients")
                         : t("billing.invoiceEditor.noPatientMatches")}
@@ -352,7 +440,7 @@ function InvoiceEditorBody({
                       key={p.id}
                       type="button"
                       onClick={() => { setPickedPatient(p); setPatientQuery(""); }}
-                      className="w-full text-left px-3 py-2 hover:bg-muted/50 text-xs font-medium truncate"
+                      className={cx("w-full text-left px-3 py-2 hover:bg-muted/50 text-xs font-medium truncate", c.opcion)}
                     >
                       {patientLabel(p)}
                     </button>
@@ -364,42 +452,42 @@ function InvoiceEditorBody({
         )}
 
         {/* Conceptos */}
-        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold">{t("billing.invoiceEditor.items")}</h3>
-            <div className="flex items-center gap-2">
+        <div className={cx("bg-card border border-border rounded-xl p-4 space-y-3", c.bloque)}>
+          <div className={cx("flex items-center justify-between", c.bloqueCabeza)}>
+            <h3 className={cx("text-xs font-bold", c.bloqueTitulo)}>{t("billing.invoiceEditor.items")}</h3>
+            <div className={cx("flex items-center gap-2", c.bloqueAcciones)}>
               <button type="button" onClick={() => setShowSearch((s) => !s)}
-                className="text-[11px] font-semibold text-brand-700 dark:text-brand-300 inline-flex items-center gap-1">
+                className={cx("text-[11px] font-semibold text-brand-700 dark:text-brand-300 inline-flex items-center gap-1", c.enlace)}>
                 <Search size={13} aria-hidden /> {t("billing.invoiceEditor.fromCatalog")}
               </button>
               <button type="button" onClick={addBlank}
-                className="text-[11px] font-semibold text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+                className={cx("text-[11px] font-semibold text-muted-foreground hover:text-foreground inline-flex items-center gap-1", `${c.enlace} ${c.enlaceSuave}`)}>
                 <Plus size={13} aria-hidden /> {t("billing.invoiceEditor.freeLine")}
               </button>
             </div>
           </div>
 
           {showSearch && (
-            <div className="border border-border rounded-lg p-2 bg-muted/30">
+            <div className={cx("border border-border rounded-lg p-2 bg-muted/30", c.buscador)}>
               <input
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={t("billing.invoiceEditor.procedureSearchPlaceholder")}
-                className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-sm"
+                className={cx("w-full bg-background border border-border rounded-lg px-3 py-1.5 text-sm")}
               />
-              <div className="mt-2 max-h-56 overflow-y-auto divide-y divide-border">
+              <div className={cx("mt-2 max-h-56 overflow-y-auto divide-y divide-border", c.opciones)}>
                 {filtered.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-3 text-center">{t("billing.invoiceEditor.noCatalogMatches")}</p>
+                  <p className={cx("text-xs text-muted-foreground py-3 text-center", c.vacio)}>{t("billing.invoiceEditor.noCatalogMatches")}</p>
                 ) : filtered.map((p) => (
                   <button
                     key={p.id}
                     type="button"
                     onClick={() => addProcedure(p)}
-                    className="w-full text-left px-2 py-2 hover:bg-muted/50 flex items-center justify-between gap-2"
+                    className={cx("w-full text-left px-2 py-2 hover:bg-muted/50 flex items-center justify-between gap-2", c.opcion)}
                   >
-                    <span className="text-xs font-medium truncate">{p.name}</span>
-                    <span className="text-xs font-bold text-muted-foreground whitespace-nowrap">{money(p.basePrice)}</span>
+                    <span className={cx("text-xs font-medium truncate")}>{p.name}</span>
+                    <span className={cx("text-xs font-bold text-muted-foreground whitespace-nowrap", `${c.cifra} ${c.cifraApagada}`)}>{money(p.basePrice)}</span>
                   </button>
                 ))}
               </div>
@@ -407,50 +495,50 @@ function InvoiceEditorBody({
           )}
 
           {items.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-4 text-center">
+            <p className={cx("text-xs text-muted-foreground py-4 text-center", c.vacio)}>
               {t("billing.invoiceEditor.emptyItems")}
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className={cx("space-y-2", c.conceptos)}>
               {items.map((it) => {
                 const line = computeTotals([{
                   name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount,
                 }], {}).items[0];
                 return (
-                  <div key={it.key} className="border border-border rounded-lg p-2.5 bg-background">
-                    <div className="flex items-start gap-2">
+                  <div key={it.key} className={cx("border border-border rounded-lg p-2.5 bg-background", c.concepto)}>
+                    <div className={cx("flex items-start gap-2", c.conceptoCabeza)}>
                       <input
                         value={it.name}
                         onChange={(e) => patchItem(it.key, { name: e.target.value })}
                         placeholder={t("billing.invoiceEditor.itemPlaceholder")}
-                        className="flex-1 min-w-0 bg-transparent border-b border-border px-1 py-1 text-sm font-medium focus:border-brand-500 outline-none"
+                        className={cx("flex-1 min-w-0 bg-transparent border-b border-border px-1 py-1 text-sm font-medium focus:border-brand-500 outline-none", c.conceptoNombre)}
                       />
                       <button type="button" onClick={() => removeItem(it.key)}
                         aria-label={t("billing.invoiceEditor.removeItem")}
                         title={t("billing.invoiceEditor.removeItem")}
-                        className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex-shrink-0">
+                        className={cx("p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex-shrink-0", c.botonIcono)}>
                         <Trash2 size={14} aria-hidden />
                       </button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      <Field label={t("billing.invoiceEditor.qty")}>
+                    <div className={cx("grid grid-cols-3 gap-2 mt-2", c.rejilla3)}>
+                      <Field label={t("billing.invoiceEditor.qty")} rediseno={rediseno}>
                         <input type="number" min={1} value={it.quantity}
                           onChange={(e) => patchItem(it.key, { quantity: Math.max(1, Math.floor(num(e.target.value))) })}
                           className={inputCls} />
                       </Field>
-                      <Field label={t("billing.invoiceEditor.unitPrice")}>
+                      <Field label={t("billing.invoiceEditor.unitPrice")} rediseno={rediseno}>
                         <input type="number" min={0} step="0.01" value={it.unitPrice}
                           onChange={(e) => patchItem(it.key, { unitPrice: num(e.target.value) })}
                           className={inputCls} />
                       </Field>
-                      <Field label={t("billing.invoiceEditor.discount")}>
+                      <Field label={t("billing.invoiceEditor.discount")} rediseno={rediseno}>
                         <input type="number" min={0} step="0.01" value={it.discount}
                           onChange={(e) => patchItem(it.key, { discount: num(e.target.value) })}
                           className={inputCls} />
                       </Field>
                     </div>
-                    <div className="flex items-center justify-end mt-2">
-                      <span className="text-sm font-bold whitespace-nowrap">{money(line ? line.lineTotal : 0)}</span>
+                    <div className={cx("flex items-center justify-end mt-2", c.conceptoTotal)}>
+                      <span className={cx("text-sm font-bold whitespace-nowrap", c.cifra)}>{money(line ? line.lineTotal : 0)}</span>
                     </div>
                   </div>
                 );
@@ -460,10 +548,10 @@ function InvoiceEditorBody({
         </div>
 
         {/* Doctor + Descuento global + Impuestos + Notas */}
-        <div className="bg-card border border-border rounded-xl p-4 space-y-4">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.doctor")}</label>
+        <div className={cx("bg-card border border-border rounded-xl p-4 space-y-4", c.bloque)}>
+          <div className={cx("grid sm:grid-cols-2 gap-4", c.rejilla2)}>
+            <div className={rediseno ? c.campo : undefined}>
+              <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.doctor")}</label>
               <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className={selectCls}>
                 <option value="">{t("billing.invoiceEditor.doctorUnassigned")}</option>
                 {doctors.map((d) => (
@@ -471,11 +559,11 @@ function InvoiceEditorBody({
                 ))}
               </select>
             </div>
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.globalDiscount")}</label>
-              <div className="flex items-center gap-1.5 mt-1">
+            <div className={rediseno ? c.campo : undefined}>
+              <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.globalDiscount")}</label>
+              <div className={cx("flex items-center gap-1.5 mt-1", c.enLinea)}>
                 <select value={discountMode} onChange={(e) => setDiscountMode(e.target.value as "none" | "pct" | "amount")}
-                  className="min-w-0 flex-1 bg-background border border-border rounded-lg px-2 py-2 text-sm">
+                  className={cx("min-w-0 flex-1 bg-background border border-border rounded-lg px-2 py-2 text-sm")}>
                   <option value="none">{t("billing.invoiceEditor.discountNone")}</option>
                   <option value="pct">{t("billing.invoiceEditor.discountPct")}</option>
                   <option value="amount">{t("billing.invoiceEditor.discountAmount")}</option>
@@ -483,7 +571,7 @@ function InvoiceEditorBody({
                 {discountMode !== "none" && (
                   <input type="number" min={0} step="0.01" value={discountValue}
                     onChange={(e) => setDiscountValue(num(e.target.value))}
-                    className="w-24 flex-shrink-0 bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+                    className={cx("w-24 flex-shrink-0 bg-background border border-border rounded-lg px-3 py-2 text-sm")} />
                 )}
               </div>
             </div>
@@ -492,9 +580,9 @@ function InvoiceEditorBody({
           {/* Impuestos: solo los dos modos que el CFDI sabe timbrar (Facturapi
               desglosa 16% fijo). Una tasa intermedia se vería bien aquí y luego
               rebotaría al timbrar con el 409 de descuadre. */}
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.taxes")}</label>
+          <div className={cx("grid sm:grid-cols-2 gap-4", c.rejilla2)}>
+            <div className={rediseno ? c.campo : undefined}>
+              <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.taxes")}</label>
               <select
                 value={taxMode}
                 onChange={(e) => {
@@ -514,8 +602,8 @@ function InvoiceEditorBody({
               </select>
             </div>
             {taxMode === "iva16" && (
-              <div>
-                <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.taxMode")}</label>
+              <div className={rediseno ? c.campo : undefined}>
+                <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.taxMode")}</label>
                 <select
                   value={taxIncluded ? "included" : "added"}
                   onChange={(e) => setTaxIncluded(e.target.value === "included")}
@@ -528,35 +616,46 @@ function InvoiceEditorBody({
             )}
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.dueDate")}</label>
+          <div className={cx("grid sm:grid-cols-2 gap-4", c.rejilla2)}>
+            <div className={rediseno ? c.campo : undefined}>
+              <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.dueDate")}</label>
               <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-                className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-              <p className="mt-1 text-[11px] text-muted-foreground">{t("billing.invoiceEditor.dueDateHint")}</p>
+                className={cx("mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm")} />
+              <p className={cx("mt-1 text-[11px] text-muted-foreground", c.ayuda)}>{t("billing.invoiceEditor.dueDateHint")}</p>
             </div>
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.notes")}</label>
+            <div className={rediseno ? c.campo : undefined}>
+              <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.notes")}</label>
               <input value={notes} onChange={(e) => setNotes(e.target.value)}
                 placeholder={t("billing.invoiceEditor.notesPlaceholder")}
-                className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+                className={cx("mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm")} />
             </div>
           </div>
         </div>
+
+        {/* Lo que viene de Presupuestos: forma de pago y envío al paciente. */}
+        {rediseno && <FormaDePagoFactura cond={cond} total={grandTotal} onChange={setCond} />}
+        {rediseno && (
+          <EnvioFactura
+            envio={envio}
+            contacto={contacto}
+            hayPaciente={Boolean(effectivePatientId)}
+            onChange={setEnvio}
+          />
+        )}
       </div>
 
       {/* Totales + acciones (footer fijo, siempre visible) */}
-      <DialogFooter className="flex-col items-stretch gap-3">
-        <div className="flex flex-col items-end gap-0.5">
-          <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
+      <DialogFooter className={cx("flex-col items-stretch gap-3", `${c.pie} ${c.pieApilado}`)}>
+        <div className={cx("flex flex-col items-end gap-0.5", c.totales)}>
+          <div className={cx("flex justify-between w-full max-w-xs text-xs text-muted-foreground", c.totalFila)}>
             <span>{t("billing.invoiceEditor.subtotal")}</span><span>{money(totals.subtotal)}</span>
           </div>
           {totals.discountAmount > 0 && (
-            <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
+            <div className={cx("flex justify-between w-full max-w-xs text-xs text-muted-foreground", c.totalFila)}>
               <span>{t("billing.invoiceEditor.discount")}</span><span>-{money(totals.discountAmount)}</span>
             </div>
           )}
-          <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
+          <div className={cx("flex justify-between w-full max-w-xs text-xs text-muted-foreground", c.totalFila)}>
             {taxMode === "iva16" ? (
               <>
                 <span>{t(taxIncluded ? "billing.invoiceEditor.taxIvaIncluded" : "billing.invoiceEditor.taxIva", { rate: round2(taxRate) })}</span><span>{money(tax)}</span>
@@ -567,16 +666,18 @@ function InvoiceEditorBody({
               </>
             )}
           </div>
-          <div className="flex justify-between w-full max-w-xs text-base font-bold text-brand-700 dark:text-brand-300 pt-1">
+          <div className={cx("flex justify-between w-full max-w-xs text-base font-bold text-brand-700 dark:text-brand-300 pt-1", `${c.totalFila} ${c.totalFinal}`)}>
             <span>{t("billing.invoiceEditor.total")}</span><span>{money(grandTotal)}</span>
           </div>
+          {/* La frase del trato, en el pie: la misma que saldrá en la ficha. */}
+          {rediseno && <FraseDelTrato cond={cond} total={grandTotal} />}
         </div>
-        <div className="flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose} className="text-xs font-semibold px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/50">
+        <div className={cx("flex items-center justify-end gap-2", c.pieBotones)}>
+          <button type="button" onClick={onClose} disabled={despuesDeCrear} className={cx("text-xs font-semibold px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/50", c.boton)}>
             {t("billing.invoiceEditor.cancel")}
           </button>
           <button type="button" onClick={save} disabled={saving}
-            className="text-xs font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+            className={cx("text-xs font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 inline-flex items-center gap-1.5", `${c.boton} ${c.botonPrincipal}`)}>
             {saving ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Check size={14} aria-hidden />}
             {saving ? t("billing.invoiceEditor.creating") : t("billing.invoiceEditor.createInvoice")}
           </button>
@@ -586,10 +687,10 @@ function InvoiceEditorBody({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, rediseno = false }: { label: string; children: React.ReactNode; rediseno?: boolean }) {
   return (
-    <label className="block">
-      <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{label}</span>
+    <label className={rediseno ? c.campo : "block"}>
+      <span className={rediseno ? c.campoRotulo : "block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5"}>{label}</span>
       {children}
     </label>
   );
