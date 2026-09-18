@@ -311,32 +311,21 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Shortcuts de acción cuando el input está vacío — pattern Linear/Raycast
-      if (query.trim() === "" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-        const key = e.key.toLowerCase();
-        const shortcutMap: Record<string, string> = {
-          c: "create:appointment",
-          n: "create:patient",
-          i: "create:invoice",
-          t: "cmd:toggle-theme",
-        };
-        if (shortcutMap[key]) {
-          const target = items.find((it) => it.id === shortcutMap[key]);
-          if (target) {
-            e.preventDefault();
-            target.run(ctx);
-            return;
-          }
-        }
-        // S solo si hay consulta activa (active:soap)
-        if (key === "s") {
-          const soapAction = items.find((it) => it.id === "active:soap");
-          if (soapAction) {
-            e.preventDefault();
-            soapAction.run(ctx);
-            return;
-          }
-        }
+      // Con la paleta abierta, cualquier letra BUSCA. Aquí vivía un mapa que
+      // con el input vacío trataba C/N/I/T/S como atajos (Nueva cita, Nuevo
+      // paciente…): la PRIMERA letra que se tecleaba siempre caía con el
+      // input vacío, así que escribir «c» para buscar a Carlos abría «Nueva
+      // cita» y cerraba la paleta. Los atajos de una letra siguen vivos con
+      // la paleta CERRADA (useCreateShortcuts / useGoToShortcuts en el
+      // topbar, que ya se apagan mientras está abierta).
+      //
+      // Y si el foco se fue a la lista (un clic, un Tab), la tecla vuelve al
+      // input para que la letra se escriba en vez de perderse.
+      if (
+        e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey &&
+        e.target !== inputRef.current
+      ) {
+        inputRef.current?.focus();
       }
 
       if (e.key === "ArrowDown") {
@@ -357,7 +346,7 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
         if (total > 0) setHighlightedIndex(total - 1);
       }
     },
-    [total, highlightedIndex, grouped.flat, ctx, query, items],
+    [total, highlightedIndex, grouped.flat, ctx],
   );
 
   useEffect(() => {
@@ -558,15 +547,9 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
               <FooterHint keys={["↑", "↓"]} label={t("shell.commandPalette.hintNavigate")} nueva={nueva} />
               <FooterHint keys={["↵"]} label={t("shell.commandPalette.hintOpen")} nueva={nueva} />
               <FooterHint keys={["esc"]} label={t("shell.commandPalette.hintClose")} nueva={nueva} />
-              {query.trim() === "" && (
-                <span {...vestir({
-                  color: "var(--text-3)",
-                  fontSize: 10,
-                  fontStyle: "italic",
-                }, c.paletaPistaTexto)}>
-                  {t("shell.commandPalette.pressShortcuts")}
-                </span>
-              )}
+              {/* Aquí decía «o presiona C/N/I/T»: ya no es verdad con la
+                  paleta abierta (las letras buscan). Las teclas siguen a la
+                  vista en cada fila y en «¿Qué es esto?». */}
             </div>
             <button
               onClick={() => {
