@@ -22,6 +22,7 @@ export const REMINDER_REASON_KEY: Record<ReminderErrorKey, string> = {
   apptClosed:            "inbox.whatsapp.reasonApptClosed",
   renderFailed:          "inbox.whatsapp.reasonRenderFailed",
   rateLimited:           "inbox.whatsapp.reasonRateLimited",
+  noTemplateForKind:     "inbox.whatsapp.reasonNoTemplateForKind",
   templateNotConfigured: "inbox.whatsapp.reasonTemplateNotConfigured",
   templatePending:       "inbox.whatsapp.reasonTemplatePending",
   templateRejected:      "inbox.whatsapp.reasonTemplateRejected",

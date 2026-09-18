@@ -36,6 +36,11 @@ export type ReminderErrorKey =
   | "renderFailed"
   /** Meta rechazó por límite de frecuencia / capacidad. */
   | "rateLimited"
+  /**
+   * Cumpleaños, reactivación o seguimiento fuera de la ventana de 24 h: para
+   * ese tipo todavía NO existe plantilla (nuestro, ver sin-plantilla.ts).
+   */
+  | "noTemplateForKind"
   /** La clínica no ha registrado plantilla para ese tipo de mensaje (nuestro). */
   | "templateNotConfigured"
   /** La plantilla existe pero Meta sigue revisándola (nuestro, pre-envío). */
@@ -98,6 +103,11 @@ const PATTERNS: Array<{ key: ReminderErrorKey; re: RegExp }> = [
   { key: "renderFailed", re: /no se pudo construir el cuerpo/i },
   // Fase 3: fuera de ventana y sin plantilla registrada para ese tipo → NO se
   // envía. Va antes que el 131047 de Meta porque ni siquiera se llegó a llamar.
+  // Recordatorio SIN cita (cumpleaños, recall, seguimientos) fuera de ventana:
+  // no hay plantilla que lo cubra. Va ANTES que templateNotConfigured a
+  // propósito. El segundo patrón es el de las filas anteriores al arreglo H-7:
+  // «se prepararon 0» datos = no había cita de la que sacarlos.
+  { key: "noTemplateForKind", re: /todav[ií]a no tiene plantilla aprobada por meta|se prepararon 0\b/i },
   { key: "templateNotConfigured", re: /falta configurar la plantilla/i },
   // Creada dentro de la WABA pero aún en revisión / rechazada por Meta: el
   // bloqueo lo escribe send-mode antes de llamar, así que no hay código que

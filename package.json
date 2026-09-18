@@ -93,6 +93,8 @@
     "test:wa-delivery": "tsx --test src/lib/whatsapp/__tests__/delivery-status.test.ts",
     "test:wa-errors": "tsx --test src/lib/whatsapp/__tests__/wa-errors.test.ts",
     "test:wa-send-mode": "tsx --test src/lib/whatsapp/__tests__/send-mode.test.ts",
+    "test:wa-sin-plantilla": "tsx --test src/lib/whatsapp/__tests__/sin-plantilla.test.ts",
+    "test:cfdi-avisos": "tsx --test src/lib/__tests__/cfdi-avisos.test.ts",
     "test:wa-catalog": "tsx --test src/lib/whatsapp/__tests__/templates-catalog.test.ts",
     "test:consent-render": "tsx --test src/lib/consent/__tests__/render.test.ts",
     "test:consent-dates": "tsx --test src/lib/consent/__tests__/dates.test.ts",

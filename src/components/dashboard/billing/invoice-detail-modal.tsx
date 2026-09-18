@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { cfdiAvisoPersistente, cfdiImpideReintento } from "@/lib/cfdi-avisos";
 import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -162,7 +163,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
   // El modal no se desmonta entre facturas: al cambiar de factura limpia el
   // estado de timbrado para no arrastrarlo a otra factura.
-  useEffect(() => { setStampedUuid(null); setCfdiId(null); setPueOk(false); setCfdiMismatch(null); }, [invoice?.id]);
+  useEffect(() => { setStampedUuid(null); setCfdiId(null); setPueOk(false); setCfdiMismatch(null); setCfdiBlockCode(null); }, [invoice?.id]);
   // La pregunta del diseño nuevo no sobrevive ni a un cambio de factura ni a
   // un cierre del modal desde fuera: si no, la siguiente apertura saldría con
   // «¿Marcar pagada?» ya abierto sobre otra factura. Con el interruptor apagado
@@ -324,17 +325,16 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Total ≠ suma de conceptos: el server bloquea el timbrado. Se muestra
-        // el aviso con CTA para corregir la factura en vez de un toast fugaz.
-        if (data.code === "CFDI_TOTAL_MISMATCH") {
-          setCfdiBlockCode(data.code);
-          setCfdiMismatch(data.error ?? t("clinical.invoiceDetail.operationError"));
-          return;
-        }
-        // Live sin la organización lista (CSD / Carta Manifiesto / datos
-        // fiscales): el mensaje dice qué falta y es accionable, así que va en el
-        // aviso persistente y no en un toast que se va en 4 segundos.
-        if (data.code === "CFDI_LIVE_NOT_READY") {
+        // Avisos que NO pueden ir en un toast fugaz (lista en lib/cfdi-avisos):
+        //  · total ≠ suma de conceptos → CTA para corregir la factura;
+        //  · Live sin la organización lista → dice qué falta, es accionable;
+        //  · el CFDI SÍ se timbró pero no se pudo guardar → trae el UUID y pide
+        //    NO volver a timbrar. Es el más importante de los tres: se queda
+        //    hasta que lo cierren y, mientras, el botón de timbrar no responde.
+        if (cfdiAvisoPersistente(data.code)) {
+          // Ya timbrado: el UUID queda además en la ficha (insignia, UUID con
+          // copiar, y sin botón de timbrar), para volver a verlo tras cerrar.
+          if (cfdiImpideReintento(data.code) && typeof data.uuid === "string") setStampedUuid(data.uuid);
           setCfdiBlockCode(data.code);
           setCfdiMismatch(data.error ?? t("clinical.invoiceDetail.operationError"));
           return;
@@ -912,7 +912,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               >
                 <p>{cfdiMismatch}</p>
                 <ButtonNew variant="secondary" size="sm" onClick={() => { setCfdiMismatch(null); setCfdiBlockCode(null); setSub(null); }}>
-                  {cfdiBlockCode === "CFDI_LIVE_NOT_READY"
+                  {cfdiBlockCode === "CFDI_LIVE_NOT_READY" || cfdiImpideReintento(cfdiBlockCode)
                     ? t("clinical.invoiceDetail.cfdiNotReadyDismiss")
                     : t("clinical.invoiceDetail.cfdiMismatchReview")}
                 </ButtonNew>
@@ -991,7 +991,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
-            <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || (invoice.balance > 0 && !pueOk)}>
+            <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || (invoice.balance > 0 && !pueOk)}>
               {busy ? t("clinical.invoiceDetail.stamping") : t("clinical.invoiceDetail.stampCfdiBtn")}
             </ButtonNew>
           </DialogFooter>
