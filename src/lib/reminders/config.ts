@@ -268,14 +268,21 @@ export function renderRecallMessage(template: string, vars: { nombre: string; cl
 // `getEffectiveReminderSettings` sigue cayendo a los toggles legacy y el cron
 // se comporta exactamente como antes.
 //
-// DEFAULTS = lo de hoy, sin el botón mentiroso:
-//   · alAgendar: true  → el interruptor «Enviar WhatsApp» del diálogo de nueva
-//     cita se sigue enseñando, como hoy —y como hoy nace ENCENDIDO en clínicas
-//     conectadas—, y ahora SÍ manda. Quien agenda lo ve y puede apagarlo cita
-//     por cita; apagado aquí, el diálogo ni lo enseña.
-//   · alReprogramar / alCancelar: false → hoy no sale nada al mover o cancelar,
-//     y aquí no hay nadie pulsando un botón: que una clínica empiece a escribir
-//     a sus pacientes sin haberlo pedido no es un default aceptable.
+// DEFAULTS = los TRES apagados (ws1-t2):
+//   · Cada aviso fuera de la ventana de 24 h de Meta es una plantilla DE PAGO,
+//     y al agendar el paciente casi nunca acaba de escribir: casi todas las
+//     confirmaciones se cobrarían. Con `alAgendar: true` de fábrica, el día
+//     que esto llegara a producción TODAS las clínicas empezarían a pagar sin
+//     haberlo pedido — encenderlo tiene que ser una decisión de la clínica,
+//     no un accidente del código.
+//   · Sin nada guardado en `reminderSettings.eventos`, esta clase no manda
+//     nada — que es EXACTAMENTE lo que pasa hoy en producción (el TODO que
+//     tiraba `notifyPatient`), así que fusionar este arreglo no le cambia el
+//     comportamiento a ninguna clínica que no haya entrado a configurarlo.
+//   · Los tres se encienden por separado en Dashboard → WhatsApp → «Avisos de
+//     citas», por clínica (= por sucursal). El diálogo de nueva cita solo
+//     enseña «Enviar WhatsApp» si la clínica está conectada Y tiene
+//     `alAgendar` encendido (`waConfirmOnCreate`, en `/api/clinic/me`).
 // ════════════════════════════════════════════════════════════════════
 
 export interface AppointmentEventSettings {
@@ -288,7 +295,7 @@ export interface AppointmentEventSettings {
 }
 
 export const DEFAULT_APPOINTMENT_EVENT_SETTINGS: AppointmentEventSettings = {
-  alAgendar: true,
+  alAgendar: false,
   alReprogramar: false,
   alCancelar: false,
 };
