@@ -1,3 +1,6 @@
+-- ⛔ SUSTITUIDO (17-sep-2026, ws1-t4): NO corras éste. El bueno es
+--    sql/presupuesto-borradores-viejos-2-ARREGLO.sql
+--    (a éste, con COMMIT, nada le impide cancelar un número distinto del que se contó). Se deja por historia.
 -- ════════════════════════════════════════════════════════════════════════
 -- Borradores fantasma de presupuestos viejos — PROPUESTA: CANCELAR Y DESLIGAR
 -- Rama feat/factura-doctor-vencimiento (ws1-t3) · 17-sep-2026

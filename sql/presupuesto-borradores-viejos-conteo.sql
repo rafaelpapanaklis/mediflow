@@ -1,3 +1,6 @@
+-- ⛔ SUSTITUIDO (17-sep-2026, ws1-t4): NO corras éste. El bueno es
+--    sql/presupuesto-borradores-viejos-1-CONTEO.sql
+--    (éste cuenta como «tocables» borradores que la propuesta no toca). Se deja por historia.
 -- ════════════════════════════════════════════════════════════════════════
 -- Facturas BORRADOR fantasma de los presupuestos viejos — CONTEO · SOLO LECTURA
 -- Rama feat/factura-doctor-vencimiento (ws1-t3) · 17-sep-2026
