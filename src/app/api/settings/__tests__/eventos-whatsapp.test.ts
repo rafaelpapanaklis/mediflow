@@ -62,20 +62,33 @@ async function patch(body: unknown) {
 
 // ── El modelo ───────────────────────────────────────────────────────────────
 
-test("sin nada guardado valen los defaults: confirmación al agendar sí; reprogramar y cancelar no", () => {
+test("sin nada guardado valen los defaults: los TRES apagados (ws1-t2 — cada aviso fuera de ventana cuesta una plantilla)", () => {
   assert.deepEqual(getAppointmentEventSettings({ reminderSettings: null }), DEFAULT_APPOINTMENT_EVENT_SETTINGS);
-  assert.deepEqual(DEFAULT_APPOINTMENT_EVENT_SETTINGS, { alAgendar: true, alReprogramar: false, alCancelar: false });
+  assert.deepEqual(DEFAULT_APPOINTMENT_EVENT_SETTINGS, { alAgendar: false, alReprogramar: false, alCancelar: false });
 });
 
 test("un Json a medias no apaga ni enciende lo que la clínica no tocó", () => {
   assert.deepEqual(sanitizeAppointmentEventSettings({ alCancelar: true }), {
-    alAgendar: true,
+    alAgendar: false,
     alReprogramar: false,
     alCancelar: true,
   });
   assert.deepEqual(sanitizeAppointmentEventSettings({ alAgendar: "no" }), DEFAULT_APPOINTMENT_EVENT_SETTINGS);
   assert.equal(sanitizeAppointmentEventSettings([true]), null);
   assert.equal(sanitizeAppointmentEventSettings("x"), null);
+});
+
+test("encendiendo `alAgendar` a mano SÍ manda: no es un default que la clínica no pidió", () => {
+  assert.deepEqual(sanitizeAppointmentEventSettings({ alAgendar: true }), {
+    alAgendar: true,
+    alReprogramar: false,
+    alCancelar: false,
+  });
+  assert.deepEqual(getAppointmentEventSettings({ reminderSettings: { eventos: { alAgendar: true } } }), {
+    alAgendar: true,
+    alReprogramar: false,
+    alCancelar: false,
+  });
 });
 
 test("guardar SOLO `eventos` no convierte el Json en config de recordatorios: el cron sigue con los toggles de siempre", () => {
