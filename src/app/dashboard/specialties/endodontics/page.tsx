@@ -12,6 +12,7 @@ import {
   relatedPatientVisibilityAnd,
 } from "@/lib/patient-visibility";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import {
   PendingFollowUpsList,
@@ -35,7 +36,7 @@ export default async function EndodonticsIndexPage() {
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, ENDODONTICS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${ENDODONTICS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, ENDODONTICS_MODULE_KEY));
   }
 
   const now = new Date();

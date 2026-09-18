@@ -15,8 +15,14 @@
  * sigue viva: `?tab=presupuestos` la abre (la validación de enlaces profundos
  * usa `buildPatientNavItems`, que no cambia) y Facturación enlaza a ella cuando
  * el paciente tiene presupuestos guardados.
+ *
+ * «Referencias» salió en ws1-t3. Rafael: «el "Más" solo tiene referencias,
+ * elimina referencias no es necesario y por lo tanto "Más" también». Igual que
+ * Presupuestos: ni la pantalla, ni la ruta `/api/referrals`, ni la tabla se
+ * tocan; `?tab=referencias` la abre y «Referir» desde la consulta sigue
+ * llevando a ella. Con la bandera apagada el menú de siempre la enseña igual.
  */
-export const APARTADOS_FUERA_DEL_MENU: readonly string[] = ["presupuestos"];
+export const APARTADOS_FUERA_DEL_MENU: readonly string[] = ["presupuestos", "referencias"];
 
 /**
  * Llaves de módulo que NO se le pasan al menú lateral nuevo. La opción

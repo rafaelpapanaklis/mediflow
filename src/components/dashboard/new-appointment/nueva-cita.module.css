@@ -425,7 +425,7 @@ select.control {
   border-radius: 0 0 8px 8px;
 }
 
-/* ── Chips: motivo, duración, avisos ── (los del panel «Buscar hueco») */
+/* ── Chips: motivo, duración, avisos ── (los del panel «Buscar espacio») */
 
 .chips {
   display: flex;

@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { buildKanbanData } from "@/lib/orthodontics/build-kanban-data";
 import { loadOrthodonticPatients } from "@/lib/orthodontics/load-patients";
@@ -16,7 +17,7 @@ export default async function OrthodonticsIndexPage() {
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, ORTHODONTICS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${ORTHODONTICS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, ORTHODONTICS_MODULE_KEY));
   }
 
   // Visibilidad por paciente: viewer de sesión para filtrar los reads.

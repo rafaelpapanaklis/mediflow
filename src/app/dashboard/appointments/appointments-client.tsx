@@ -38,6 +38,8 @@ interface Appt {
 interface Props {
   appointments: Appt[]; patients: Patient[]; doctors: Doctor[];
   currentUserId: string; clinicId: string; waConnected: boolean;
+  /** Espejo de lo que exige POST /api/whatsapp/send: sin esto, el botón daba 403. */
+  canSendReminder: boolean;
 }
 
 // Día/mes: ids de traducción resueltos vía t() en tiempo de render (nunca t() a nivel módulo).
@@ -306,7 +308,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
   );
 }
 
-export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected }: Props) {
+export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected, canSendReminder }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -1198,7 +1200,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                         </button>
                       </div>
                     )}
-                    {waConnected && (
+                    {waConnected && canSendReminder && (
                       <button onClick={() => sendWA(appt.id)}
                         className="flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-emerald-300 hover:bg-emerald-50 text-emerald-700 text-sm font-bold transition-colors">
                         <MessageCircle className="w-4 h-4"/> {t("appointments.teleconsult.sendLinkWhatsapp")}
@@ -1239,7 +1241,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 </div>
               </div>
               <div className="px-6 pb-5 flex gap-2">
-                {waConnected && (
+                {waConnected && canSendReminder && (
                   <Button variant="outline" onClick={() => sendWA(appt.id)} disabled={appt.reminderSent}
                     className="flex-1 h-11 gap-2 text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50">
                     <MessageCircle className="w-4 h-4"/>{appt.reminderSent?t("appointments.detail.waSentCheck"):t("appointments.detail.sendWhatsapp")}

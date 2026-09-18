@@ -6,6 +6,8 @@ import { TvModesClient } from "./tv-modes-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 import { ModuleLocked } from "@/components/dashboard/module-locked";
+import { ModuloFueraDelPlan } from "@/components/dashboard/marketplace-oculto/modulo-fuera-del-plan";
+import { seOcultaMarketplace } from "@/components/dashboard/marketplace-oculto/destino";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export const metadata: Metadata = { title: "Pantallas TV — DaleControl" };
@@ -25,7 +27,12 @@ export default async function TvModesPage() {
     getActiveClinicModuleKeys(user.clinicId),
     menuDosNivelesEncendido(user.clinicId),
   ]);
-  if (!activeModules.includes("tv-modes")) return <ModuleLocked name="Pantallas TV" />;
+  if (!activeModules.includes("tv-modes")) {
+    // Marketplace oculto por ahora (ws1-t6): en el camino nuevo «Ver planes»
+    // lleva al plan de la clínica. Con la bandera apagada, el ModuleLocked de siempre.
+    if (seOcultaMarketplace(rediseno)) return <ModuloFueraDelPlan name="Pantallas TV" />;
+    return <ModuleLocked name="Pantallas TV" />;
+  }
 
   return <TvModesClient key={user.clinicId} rediseno={rediseno} />;
 }

@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * «Buscar hueco» — los primeros huecos libres de N minutos en los próximos
+ * «Buscar espacio» — los primeros huecos libres de N minutos en los próximos
  * días, por responsable.
  *
  * ⛔ Esta NO es una calculadora de huecos nueva. El repo ya tenía CUATRO que

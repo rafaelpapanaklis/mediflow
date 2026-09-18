@@ -174,3 +174,23 @@ test("page.tsx enciende el rediseño con el MISMO interruptor del menú, no uno 
   const bloquePromiseAll = page.slice(page.indexOf("Promise.all"), page.indexOf("]);") + 3);
   assert.match(bloquePromiseAll, /menuDosNivelesEncendido/, "el interruptor no viaja en el mismo Promise.all que el resto de datos");
 });
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Modo oscuro (ws1-t2): dentro del bloque de rediseño, ningún fondo, borde ni
+// color de letra va escrito a mano — si no sale de un token con versión oscura,
+// la caja nace encendida sobre el modal oscuro (le pasó a «Pensando», al
+// razonamiento, a «Regenerar» y al error del optimizador).
+// ═══════════════════════════════════════════════════════════════════════════
+test("el bloque de rediseño del optimizador viste sus cajas de estado con tokens", () => {
+  const hoja = leer("app/dashboard/clinic-layout/components/optimizer-modal.module.css");
+  const bloque = hoja.slice(hoja.indexOf(MARCADOR));
+  for (const clase of ["thinking", "reasoning", "btnRegen", "error", "laneTick"]) {
+    assert.match(bloque, new RegExp(`\\.overlayRediseno \\.${clase}\\b`), `falta vestir .${clase} en el rediseño`);
+  }
+  const aMano = bloque
+    .split("\n")
+    .filter((l) => /^\s*(background|color|border-color|border)\s*:/.test(l))
+    .filter((l) => !l.includes("var(--") && !/rgba\(0, 0, 0/.test(l) && !/:\s*(none|transparent|inherit)/.test(l));
+  assert.deepEqual(aMano, [], "color escrito a mano en el bloque de rediseño: no tendrá versión oscura");
+});

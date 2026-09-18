@@ -183,7 +183,10 @@ export const reagendarCita = definirHerramienta<ParamsReagendarCita, DatosAccion
         peticion: {
           metodo: "PATCH",
           ruta: `/api/appointments/${cita.id}`,
-          cuerpo: { startsAt: inicio.toISOString(), endsAt: fin.toISOString() },
+          // `notifyPatient: false`: la propuesta le dice a quien confirma que el
+          // paciente NO recibirá aviso. Desde ws1-t2 el PATCH avisa si la clínica
+          // encendió «Aviso al reprogramar»; sin esto, aquella frase sería mentira.
+          cuerpo: { startsAt: inicio.toISOString(), endsAt: fin.toISOString(), notifyPatient: false },
         },
         titulo: "Mover cita",
         frase: `Mover la cita de ${cita.paciente.nombre} con ${cita.doctor} del ${antes.texto} al ${despues.texto}.`,

@@ -7,6 +7,8 @@ import { OverviewClient } from "./overview-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 import { ModuleLocked } from "@/components/dashboard/module-locked";
+import { ModuloFueraDelPlan } from "@/components/dashboard/marketplace-oculto/modulo-fuera-del-plan";
+import { marketplaceOcultoPara } from "@/components/dashboard/marketplace-oculto/servidor";
 import { getServerT } from "@/i18n/server";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
@@ -22,7 +24,12 @@ export default async function AnalyticsOverviewPage() {
   // Analytics, no se puede abrir por URL. Mismo criterio que el sidebar
   // (getActiveClinicModuleKeys): fail-open en trial / error, oculta en BASIC.
   const activeModules = await getActiveClinicModuleKeys(user.clinicId);
-  if (!activeModules.includes("analytics")) return <ModuleLocked name="Analytics" />;
+  if (!activeModules.includes("analytics")) {
+    // Marketplace oculto por ahora (ws1-t6): en el camino nuevo «Ver planes»
+    // lleva al plan de la clínica. Con la bandera apagada, el ModuleLocked de siempre.
+    if (await marketplaceOcultoPara(user.clinicId)) return <ModuloFueraDelPlan name="Analytics" />;
+    return <ModuleLocked name="Analytics" />;
+  }
 
   const clinicId = user.clinicId;
   const { t } = await getServerT();

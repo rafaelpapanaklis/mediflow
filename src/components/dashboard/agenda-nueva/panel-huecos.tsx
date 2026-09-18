@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * El panel «Buscar hueco» (400 px). Se abre con el botón de la barra y es
+ * El panel «Buscar espacio» (400 px). Se abre con el botón de la barra y es
  * excluyente con el panel de cita.
  *
  * Tres grupos de chips (responsable, duración, cuándo) y hasta seis
@@ -148,10 +148,10 @@ export function PanelHuecos() {
   );
 
   return (
-    <aside className={`${s.panel} ${s.panelHuecos}`} aria-label="Buscar hueco">
+    <aside className={`${s.panel} ${s.panelHuecos}`} aria-label="Buscar espacio">
       <div className={s.huecosCabecera}>
         <Search size={22} strokeWidth={2.2} color="var(--ag-morado-texto)" />
-        <span className={s.huecosTitulo}>Buscar hueco</span>
+        <span className={s.huecosTitulo}>Buscar espacio</span>
         <button
           type="button"
           className={`${s.panelIconoBoton} ${s.panelCerrar}`}

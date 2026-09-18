@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadPeriodonticPatients } from "@/lib/periodontics/load-patients";
 import { PeriodonticsSpecialtyClient } from "@/components/specialties/periodontics/PeriodonticsSpecialtyClient";
@@ -14,7 +15,7 @@ export default async function PeriodonticsIndexPage() {
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, PERIODONTICS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${PERIODONTICS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, PERIODONTICS_MODULE_KEY));
   }
 
   // Visibilidad por paciente: viewer de sesión para filtrar los reads.

@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { EndodonticsTab } from "@/components/specialties/endodontics/EndodonticsTab";
 import {
@@ -28,7 +29,7 @@ export default async function EndodonticsPatientDetailPage({
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, ENDODONTICS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${ENDODONTICS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, ENDODONTICS_MODULE_KEY));
   }
 
   const patient = await prisma.patient.findFirst({

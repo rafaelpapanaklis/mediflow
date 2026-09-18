@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import { ImplantsTab } from "@/components/specialties/implants/ImplantsTab";
 import type { ImplantFull } from "@/lib/types/implants";
@@ -26,7 +27,7 @@ export default async function ImplantsPatientPage({ params }: PageProps) {
   }
   const access = await canAccessModule(user.clinicId, IMPLANTS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${IMPLANTS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, IMPLANTS_MODULE_KEY));
   }
 
   const patient = await prisma.patient.findFirst({

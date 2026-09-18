@@ -1,0 +1,90 @@
+/* «No está en tu plan» en el camino nuevo: solo LEE los tokens --m2-* del menú
+   (los monta CLASES_MENU en la raíz). Ni un color propio. */
+
+.raiz {
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+  padding: clamp(14px, 2vw, 24px) 0 clamp(24px, 2.8vw, 32px);
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.raiz > * {
+  font-variant-numeric: tabular-nums;
+}
+
+.aviso {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 260px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 26px 16px;
+  border: 1px dashed var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta-hover);
+  text-align: center;
+}
+
+.icono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.titulo {
+  margin: 4px 0 0;
+  font-size: clamp(17px, 1.5vw, 20px);
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  color: var(--m2-texto);
+}
+
+.texto {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--m2-texto-3);
+}
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  margin-top: 8px;
+  padding: 0 15px;
+  border: 1px solid var(--m2-activo);
+  border-radius: 10px;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  box-shadow: var(--m2-sombra);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: filter 0.12s;
+}
+
+@media (hover: hover) {
+  .boton:hover {
+    filter: brightness(1.08);
+  }
+}
+
+.boton:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}

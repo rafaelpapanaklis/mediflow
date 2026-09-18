@@ -54,6 +54,13 @@ export interface AgendaPermissions {
   canCreate: boolean;
   canEdit: boolean;
   canCancel: boolean;
+  /**
+   * ¿Se le enseña «WhatsApp» (recordatorio manual) en el panel de la cita?
+   * Espejo de lo que exige POST /api/whatsapp/send (ver
+   * lib/whatsapp/manual-reminder-access.ts). Opcional: quien no lo pasa
+   * conserva el botón como hasta ahora.
+   */
+  canSendReminder?: boolean;
 }
 
 const ALL_ALLOWED: AgendaPermissions = { canCreate: true, canEdit: true, canCancel: true };

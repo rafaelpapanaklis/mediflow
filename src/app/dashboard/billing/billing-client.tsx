@@ -5,6 +5,7 @@ import {
   Plus, CheckCircle2, Clock, AlertCircle, FileText, Search, X, Wallet,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { cfdiAvisoPersistente, cfdiImpideReintento } from "@/lib/cfdi-avisos";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
@@ -134,6 +135,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   // Saldo pendiente → confirmación explícita PUE; mismatch → aviso con CTA.
   const [cfdiPueOk, setCfdiPueOk] = useState(false);
   const [cfdiMismatch, setCfdiMismatch] = useState<string | null>(null);
+  const [cfdiBlockCode, setCfdiBlockCode] = useState<string | null>(null);
 
   // Abre el modal de timbrado pre-llenado: fiscales del paciente si existen,
   // forma de pago derivada de los pagos reales (editable) e impuestos según el
@@ -151,6 +153,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
     });
     setCfdiPueOk(false);
     setCfdiMismatch(null);
+    setCfdiBlockCode(null);
     setCfdiFor(inv);
   }
 
@@ -217,7 +220,16 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         // CFDI_LIVE_NOT_READY = en producción falta un paso de la organización
         // (CSD, Carta Manifiesto, datos fiscales). El mensaje es accionable, así
         // que va en el mismo aviso persistente y no en un toast fugaz.
-        if (data.code === "CFDI_TOTAL_MISMATCH" || data.code === "CFDI_LIVE_NOT_READY") {
+        // CFDI_TIMBRADO_SIN_GUARDAR = el CFDI SÍ se timbró pero no se pudo
+        // guardar: trae el UUID y pide no volver a timbrar. Se queda a la vista
+        // y apaga el botón; en un toast de 5 s se perdía (H-9).
+        if (cfdiAvisoPersistente(data.code)) {
+          // Ya timbrado: la fila pasa a timbrada con ese UUID, igual que en el
+          // camino feliz, para que no se ofrezca timbrarla otra vez.
+          if (cfdiImpideReintento(data.code) && typeof data.uuid === "string") {
+            setInvoices(prev => prev.map(inv => inv.id === cfdiFor.id ? { ...inv, cfdiUuid: data.uuid } : inv));
+          }
+          setCfdiBlockCode(data.code);
           setCfdiMismatch(data.error ?? t("billing.billingClient.toastCfdiStampError"));
           return;
         }
@@ -595,7 +607,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                     type="button"
                     className="btn-new btn-new--ghost btn-new--sm"
                     style={{ marginTop: 8 }}
-                    onClick={() => { const inv = cfdiFor; setCfdiFor(null); setDetailInvoice(inv); }}
+                    onClick={() => { const inv = invoices.find(i => i.id === cfdiFor.id) ?? cfdiFor; setCfdiFor(null); setDetailInvoice(inv); }}
                   >
                     {t("billing.billingClient.cfdiOpenInvoice")}
                   </button>
@@ -616,7 +628,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             </div>
             <div className="modal__footer">
               <ButtonNew variant="ghost" type="button" onClick={() => setCfdiFor(null)}>{t("common.cancel")}</ButtonNew>
-              <ButtonNew variant="primary" onClick={timbraCfdi} disabled={cfdiLoading || (cfdiFor.balance > 0 && !cfdiPueOk)}>
+              <ButtonNew variant="primary" onClick={timbraCfdi} disabled={cfdiLoading || cfdiImpideReintento(cfdiBlockCode) || (cfdiFor.balance > 0 && !cfdiPueOk)}>
                 {cfdiLoading ? t("billing.billingClient.stampingEllipsis") : t("billing.billingClient.stampAtSat")}
               </ButtonNew>
             </div>

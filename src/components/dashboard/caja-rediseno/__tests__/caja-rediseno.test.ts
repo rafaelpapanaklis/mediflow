@@ -34,6 +34,8 @@ const ARCHIVOS_CAJA = [
   "src/app/dashboard/caja/caja-client.tsx",
   "src/components/dashboard/caja-rediseno/raiz.ts",
   "src/components/dashboard/caja-rediseno/caja-rediseno.module.css",
+  "src/components/dashboard/caja-rediseno/caja-nueva.tsx",
+  "src/components/dashboard/caja-rediseno/caja-nueva.module.css",
 ];
 
 // Las dos palabras van partidas a propósito: el guardia de la tarea hace un
@@ -163,4 +165,76 @@ test("toda regla de la hoja cuelga de .pagina (o es el encabezado)", () => {
     const ok = sel.split(",").every(parte => /\.pagina\b/.test(parte) || /^\.(titulo|subtitulo)$/.test(parte.trim()));
     assert.ok(ok, `regla fuera de .pagina: «${sel}»`);
   }
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Caja reestructurada (ws1-t6): menos cuadros, nada escondido.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+test("con el interruptor encendido, Caja monta la pantalla reestructurada y con él apagado el árbol de siempre", () => {
+  const cliente = leer("src/app/dashboard/caja/caja-client.tsx");
+  assert.match(cliente, /from "@\/components\/dashboard\/caja-rediseno\/caja-nueva"/);
+  // Una sola bifurcación, y ANTES del árbol de siempre (el `else` es el de main).
+  const bifurcacion = cliente.indexOf("{rediseno ? (");
+  const cabeceraVieja = cliente.indexOf("{/* Header + tabs */}");
+  assert.ok(bifurcacion > 0 && cabeceraVieja > bifurcacion, "el camino nuevo va delante y la cabecera vieja queda en el else");
+  assert.match(cliente, /<CajaNueva\b/);
+  // El motor sigue aquí: los modales y los manejadores no se mudaron.
+  for (const fn of ["function startOpen", "async function openRegister", "async function recordWithdrawal", "async function closeRegister", "function downloadVentasCsv"]) {
+    assert.ok(cliente.includes(fn), `${fn} sigue en caja-client.tsx`);
+  }
+  const nueva = leer("src/components/dashboard/caja-rediseno/caja-nueva.tsx");
+  assert.doesNotMatch(nueva, /fetch\(|\/api\/caja/, "la pantalla nueva no llama a la red");
+  assert.doesNotMatch(nueva, /useState\(/, "la pantalla nueva no tiene estado propio: todo viene de CajaClient");
+});
+
+test("ley 1: cada cifra que hoy se ve sin clic sigue a la vista en la pantalla reestructurada", () => {
+  const nueva = leer("src/components/dashboard/caja-rediseno/caja-nueva.tsx");
+  const cifras: Array<[string, RegExp]> = [
+    ["facturado hoy",        /fmtMXNdec\(caja\.billedToday\)/],
+    ["cobrado hoy",          /fmtMXNdec\(p\.collectedToday\)/],
+    ["por cobrar",           /fmtMXNdec\(caja\.pendingToday\)/],
+    ["vencido",              /fmtMXNdec\(caja\.overdueToday\)/],
+    ["apertura",             /fmtMXNdec\(totals\.openingBalance\)/],
+    ["ingresos del turno",   /fmtMXNdec\(totals\.totalIncome\)/],
+    ["efectivo",             /fmtMXNdec\(totals\.cashIncome\)/],
+    ["débito",               /fmtMXNdec\(totals\.cardDebitIncome\)/],
+    ["crédito",              /fmtMXNdec\(totals\.cardCreditIncome\)/],
+    ["otros métodos (si >0)", /totals\.otherIncome > 0 &&[\s\S]{0,200}fmtMXNdec\(totals\.otherIncome\)/],
+    ["reembolsos (si >0)",   /totals\.refunds > 0 &&[\s\S]{0,200}−\$\{fmtMXNdec\(totals\.refunds\)\}/],
+    ["descuentos",           /fmtMXNdec\(totals\.discounts\)/],
+    ["IVA cobrado",          /fmtMXNdec\(totals\.tax\)/],
+    ["retiros",              /fmtMXNdec\(totals\.withdrawals\)/],
+    ["efectivo esperado",    /fmtMXNdec\(totals\.expectedCash\)/],
+    ["cada retiro: motivo, hora, quién e importe", /\{w\.reason\}[\s\S]{0,120}fmtTime\(w\.recordedAt\)[\s\S]{0,60}\{w\.recordedByName\}[\s\S]{0,120}−\{fmtMXNdec\(w\.amount\)\}/],
+    ["ventas: importe con signo", /p\.signedAmount\(r\)/],
+    ["ventas: descuento",    /−\$\{fmtMXNdec\(r\.discount\)\}/],
+    ["apertura sugerida (caja cerrada)", /fmtMXNdec\(caja\.suggestedOpening\)/],
+    ["historial: apertura",  /fmtMXNdec\(h\.openingBalance\)/],
+    ["historial: esperado",  /fmtMXNdec\(h\.expectedCash\)/],
+    ["historial: contado",   /fmtMXNdec\(h\.countedClosingBalance\)/],
+    ["historial: diferencia", /fmtMXNdec\(h\.variance\)/],
+  ];
+  for (const [que, ancla] of cifras) assert.match(nueva, ancla, `falta «${que}»`);
+});
+
+test("ley 2: las cuatro acciones y el historial cuestan los mismos clics que hoy", () => {
+  const nueva = leer("src/components/dashboard/caja-rediseno/caja-nueva.tsx");
+  for (const accion of ["onClick={p.onOpen}", "onClick={p.onWithdrawal}", "onClick={p.onClose}", "onClick={p.onDownloadCsv}", "onClick={p.onToggleHistory}"]) {
+    assert.ok(nueva.includes(accion), `${accion} directo, sin menú intermedio`);
+  }
+  // Historial: colapsado por defecto y con UN clic, como hoy (no dos, no cero).
+  const cliente = leer("src/app/dashboard/caja/caja-client.tsx");
+  assert.match(cliente, /useState\(false\);\s*$/m);
+  assert.match(cliente, /onToggleHistory=\{\(\) => setShowHistory\(s => !s\)\}/);
+});
+
+test("ley 3: nada se esconde por ancho — las rejillas se apilan por contenedor y no hay puntos suspensivos", () => {
+  const hoja = leer("src/components/dashboard/caja-rediseno/caja-nueva.module.css");
+  assert.match(hoja, /\.cuerpo\s*\{[^}]*container-type:\s*inline-size/s);
+  assert.ok((hoja.match(/@container caja \(max-width:/g) ?? []).length >= 3, "apila la tira, la rejilla y el arqueo");
+  assert.doesNotMatch(hoja, /text-overflow:\s*ellipsis/, "un motivo o un nombre largo salta de línea, no se corta");
+  assert.doesNotMatch(hoja, /#[0-9a-f]{3,8}\b/i, "sin hex: los colores se leen de los tokens");
+  assert.doesNotMatch(hoja, /--pr-[a-z0-9-]+\s*:/, "no declara tokens: los hereda de la raíz");
+  assert.ok((hoja.match(/var\(--pr-/g) ?? []).length >= 40, "consume los tokens --pr-*");
 });

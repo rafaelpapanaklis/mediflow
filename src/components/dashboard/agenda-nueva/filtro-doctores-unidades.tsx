@@ -15,7 +15,8 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Armchair, Check, ChevronDown, ChevronUp, ListFilter } from "lucide-react";
+import { Armchair, Check, ListFilter } from "lucide-react";
+import { textoDelFiltro } from "@/lib/agenda-nueva/filtro-etiqueta";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
 import s from "./agenda-nueva.module.css";
 
@@ -35,7 +36,17 @@ export function FiltroDoctoresUnidades() {
     return () => document.removeEventListener("keydown", alTeclear);
   }, [abierto]);
 
-  const etiqueta = etiquetaDelFiltro(ag);
+  // Sin filtro, el botón es SOLO el ícono (Rafael: «borra la letra y solo
+  // deja el icono de filtrar»). Con filtro, enseña la selección. El nombre
+  // completo va siempre en `title` y `aria-label`: ver `filtro-etiqueta.ts`.
+  const texto = textoDelFiltro({
+    hayUnidades: ag.unidadesTodas.length > 0,
+    todoMarcado: ag.todoMarcado,
+    nDocs: ag.docsVisibles.size,
+    nombreUnico: ag.docsVisibles.size === 1 ? ag.responsablesVisibles[0]?.nombreCorto : null,
+    nUnidades: ag.unidadesVisibles.size,
+    nUnidadesTotal: ag.unidadesTodas.length,
+  });
 
   return (
     <>
@@ -43,23 +54,26 @@ export function FiltroDoctoresUnidades() {
       <div className={s.filtroCaja} ref={cajaRef}>
         <button
           type="button"
-          className={`${s.filtroBoton} ${ag.todoMarcado ? "" : s.filtroBotonActivo}`}
+          className={[
+            s.filtroBoton,
+            ag.todoMarcado ? s.filtroBotonSoloIcono : s.filtroBotonActivo,
+            abierto ? s.filtroBotonAbierto : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           aria-expanded={abierto}
           aria-haspopup="true"
-          // En pantallas estrechas la etiqueta se esconde (CSS) y el botón se
-          // queda en su ícono: el nombre accesible y el globo no se pierden.
-          aria-label={etiqueta}
-          title={etiqueta}
+          aria-label={texto.accesible}
+          title={texto.accesible}
           onClick={() => setAbierto((v) => !v)}
         >
           <span className={s.filtroIcono}>
             <IconoFiltro />
           </span>
-          <span className={s.filtroEtiqueta}>{etiqueta}</span>
+          {/* En pantallas estrechas la selección se esconde (CSS) y queda el
+              ícono morado con el contador: el nombre accesible no se pierde. */}
+          {texto.visible !== null && <span className={s.filtroEtiqueta}>{texto.visible}</span>}
           {ag.desmarcados > 0 && <span className={s.filtroContador}>{ag.desmarcados}</span>}
-          <span className={s.filtroIcono}>
-            <ChevronFiltro abierto={abierto} />
-          </span>
         </button>
 
         {abierto && (
@@ -131,42 +145,6 @@ function Casilla({ marcada }: { marcada: boolean }) {
       {marcada && <Check size={14} strokeWidth={3} />}
     </span>
   );
-}
-
-/**
- * La etiqueta del botón.
- *
- * El diseño enseña «Todos los doctores y unidades» y, con filtro, algo como
- * «Dra. Díaz · 2 unidades». Se respeta, con una salvedad: si la clínica no
- * usa unidades, la parte de unidades desaparece en vez de decir «0 unidades».
- */
-function etiquetaDelFiltro(ag: ReturnType<typeof useAgendaNueva>): string {
-  const hayUnidades = ag.unidadesTodas.length > 0;
-  if (ag.todoMarcado) {
-    return hayUnidades ? "Todos los doctores y unidades" : "Todos los doctores";
-  }
-
-  const nDocs = ag.docsVisibles.size;
-  const nUnidades = ag.unidadesVisibles.size;
-
-  const parteDocs =
-    nDocs === 0
-      ? "Ningún doctor"
-      : nDocs === 1
-        ? (ag.responsablesVisibles[0]?.nombreCorto ?? "1 doctor")
-        : `${nDocs} doctores`;
-
-  if (!hayUnidades || nUnidades === ag.unidadesTodas.length) return parteDocs;
-
-  const parteUnidades =
-    nUnidades === 0 ? "ninguna unidad" : nUnidades === 1 ? "1 unidad" : `${nUnidades} unidades`;
-
-  return `${parteDocs} · ${parteUnidades}`;
-}
-
-/** El chevron del desplegable. */
-function ChevronFiltro({ abierto }: { abierto: boolean }) {
-  return abierto ? <ChevronUp size={18} strokeWidth={2} /> : <ChevronDown size={18} strokeWidth={2} />;
 }
 
 /** El ícono del propio filtro. */

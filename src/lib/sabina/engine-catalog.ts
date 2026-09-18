@@ -18,6 +18,9 @@ import { procedimientosYPrecios } from "./tools/procedimientos-y-precios";
 import { equipoClinica } from "./tools/equipo-clinica";
 import { oportunidadesPerdidas } from "./tools/oportunidades-perdidas";
 import { odontograma } from "./tools/odontograma";
+import { cumpleanos } from "./tools/cumpleanos";
+import { pacientesConEtiqueta } from "./tools/pacientes-con-etiqueta";
+import { proximasCitas } from "./tools/proximas-citas";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -46,9 +49,13 @@ import { odontograma } from "./tools/odontograma";
    que es lo que sí hace `GET /api/procedures` la primera vez—;
    `oportunidades_perdidas` (ws1-t8), que cruza facturas, presupuestos, planes y
    citas para decir qué dinero se está escapando —solo lee, y los pacientes
-   fríos los delega en `pacientes_inactivos`—; y `odontograma` (ws1-t1, «Sabina
+   fríos los delega en `pacientes_inactivos`—; `odontograma` (ws1-t1, «Sabina
    en todas partes»), que lee los hallazgos que el doctor ya marcó y NO
-   diagnostica. */
+   diagnostica; y las tres de LA LISTA DE PACIENTES (ws1-t5, «fuera los cuatro
+   filtros»): `cumpleanos`, `pacientes_con_etiqueta` y `proximas_citas`, que
+   contestan lo que contestaban las chips «Cumple esta semana», «VIP» y
+   «Próxima cita» de /dashboard/patients antes de quitarlas. Solo leen; sus
+   pruebas están en tools/__tests__/lista-pacientes.test.ts. */
 const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   ...CATALOGO_SABINA,
   proponerHorarios,
@@ -65,6 +72,9 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   equipoClinica,
   oportunidadesPerdidas,
   odontograma,
+  cumpleanos,
+  pacientesConEtiqueta,
+  proximasCitas,
 ];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────

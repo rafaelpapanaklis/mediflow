@@ -17,6 +17,7 @@ import { BillingClient } from "../billing/billing-client";
 import type { CajaState, CajaHistoryRow } from "@/lib/caja";
 import { dayKeyIn, staleShiftOf } from "@/lib/caja-turno";
 import { CLASES_CAJA_REDISENO, clasesCaja } from "@/components/dashboard/caja-rediseno/raiz";
+import { CajaNueva } from "@/components/dashboard/caja-rediseno/caja-nueva";
 
 interface BillingProps {
   invoices:      any[];
@@ -421,10 +422,63 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
 
   const varianceTone = (v: number) => (Math.abs(v) < 0.005 ? "success" : v > 0 ? "info" : "danger");
 
+  // La pestaña Facturas es la misma en los dos caminos (con `rediseno` la
+  // viste BillingClient por su cuenta): se monta una vez y se coloca donde toque.
+  const facturasNodo = (
+    <BillingClient
+      invoices={billing.invoices}
+      patients={billing.patients}
+      totalPaid={billing.totalPaid}
+      totalPending={billing.totalPending}
+      totalOverdue={billing.totalOverdue}
+      monthInvoices={billing.monthInvoices}
+      totalInvoices={billing.totalInvoices}
+      overdueBefore={billing.overdueBefore}
+      creditTotal={billing.creditTotal}
+      clinic={billing.clinic}
+      cfdiLive={billing.cfdiLive}
+      rediseno={rediseno}
+    />
+  );
+
   return (
     // Con el interruptor encendido la raíz lleva los tokens y las clases del
     // rediseño (caja-rediseno/); apagado, ni una clase: el árbol es el de hoy.
     <div className={rediseno ? CLASES_CAJA_REDISENO : undefined} style={{ maxWidth: 1400, margin: "0 auto", width: "100%" }}>
+      {rediseno ? (
+        /* CAJA REESTRUCTURADA (ws1-t6): la misma pantalla con cinco bloques en
+           vez de veintiséis. Ropa, no motor: recibe las cifras, los
+           formateadores y los manejadores de aquí; los modales de abajo son
+           los mismos. Con el interruptor apagado no se monta y el árbol de
+           `else` es el de siempre, tal cual. */
+        <CajaNueva
+          caja={caja}
+          history={history}
+          tab={tab}
+          onTab={setTab}
+          facturas={facturasNodo}
+          staleShift={staleShift}
+          collectedToday={collectedToday}
+          listMultiDay={listMultiDay}
+          dayKey={dayKey}
+          dayAgg={dayAgg}
+          fmtTime={fmtTime}
+          fmtDateTime={fmtDateTime}
+          fmtDayShort={fmtDayShort}
+          fmtDayLong={fmtDayLong}
+          methodLabel={methodLabel}
+          isRefundRow={isRefundRow}
+          signedAmount={signedAmount}
+          varianceTone={varianceTone}
+          showHistory={showHistory}
+          onToggleHistory={() => setShowHistory(s => !s)}
+          onOpen={startOpen}
+          onWithdrawal={() => { setWPin(""); setShowWithdrawal(true); }}
+          onClose={() => setShowClose(true)}
+          onDownloadCsv={downloadVentasCsv}
+        />
+      ) : (
+      <>
       {/* Header + tabs */}
       <div style={{ padding: "clamp(14px, 1.6vw, 28px) clamp(14px, 1.6vw, 28px) 0" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 16 }}>
@@ -457,22 +511,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
         </div>
       </div>
 
-      {tab === "facturas" ? (
-        <BillingClient
-          invoices={billing.invoices}
-          patients={billing.patients}
-          totalPaid={billing.totalPaid}
-          totalPending={billing.totalPending}
-          totalOverdue={billing.totalOverdue}
-          monthInvoices={billing.monthInvoices}
-          totalInvoices={billing.totalInvoices}
-          overdueBefore={billing.overdueBefore}
-          creditTotal={billing.creditTotal}
-          clinic={billing.clinic}
-          cfdiLive={billing.cfdiLive}
-          rediseno={rediseno}
-        />
-      ) : (
+      {tab === "facturas" ? facturasNodo : (
         <div style={{ padding: "clamp(14px, 1.6vw, 28px)" }}>
           {/* ── Facturación del día (siempre visible) ── */}
           <div style={{ marginBottom: 18 }}>
@@ -719,6 +758,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
             )}
           </div>
         </div>
+      )}
+      </>
       )}
 
       {/* ── Modal: Abrir caja (PIN + apertura sugerida + retiro inicial) ── */}

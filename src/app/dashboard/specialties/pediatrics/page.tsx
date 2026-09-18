@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { loadPediatricPatients } from "@/lib/pediatrics/load-patients";
 import { PediatricsSpecialtyClient } from "@/components/specialties/pediatrics/PediatricsSpecialtyClient";
@@ -18,7 +19,7 @@ export default async function PediatricsIndexPage() {
 
   const access = await canAccessModule(user.clinicId, PEDIATRICS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${PEDIATRICS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, PEDIATRICS_MODULE_KEY));
   }
 
   // Visibilidad por paciente: viewer de sesión para filtrar los reads.

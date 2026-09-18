@@ -9,6 +9,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { describeReminderError, type ReminderErrorKey } from "./reminder-error";
+import { FRAGMENTOS_SIN_PLANTILLA } from "./sin-plantilla";
 import {
   WA_REMINDER_STATUS,
   WA_REMINDER_CONFIRMABLE_TYPES,
@@ -46,6 +47,26 @@ export interface RecentRemindersResult {
   rows: RecentReminderDTO[];
   /** true = la consulta falló. La UI lo dice en vez de fingir "no hay nada". */
   failed: boolean;
+  /**
+   * Cuántos cumpleaños / reactivaciones / seguimientos NO salieron en los
+   * últimos 30 días por la ventana de 24 h (H-7). La lista de arriba solo trae
+   * los 20 más nuevos y los recordatorios de cita los entierran: este número
+   * es lo que hace que se vea sin buscar. 0 también si la cuenta falló.
+   */
+  sinPlantilla30d: number;
+}
+
+/** Ventana del resumen de «no salieron por la ventana de 24 h». */
+export const DIAS_RESUMEN_SIN_PLANTILLA = 30;
+
+/** Filtro de Prisma del resumen. Exportado para poder probarlo sin base. */
+export function whereSinPlantilla(clinicId: string, ahora: Date) {
+  return {
+    clinicId,
+    status: WA_REMINDER_STATUS.FAILED,
+    createdAt: { gte: new Date(ahora.getTime() - DIAS_RESUMEN_SIN_PLANTILLA * 86_400_000) },
+    OR: FRAGMENTOS_SIN_PLANTILLA.map((f) => ({ errorMsg: { contains: f } })),
+  };
 }
 
 const CLINICAL_TYPES = ["ENDO", "PERIO", "ORTHO", "IMPLANT"];
@@ -80,6 +101,10 @@ export async function getRecentReminders(
   take = 20,
 ): Promise<RecentRemindersResult> {
   try {
+    // Best-effort: si la cuenta falla, la lista sigue saliendo.
+    const sinPlantilla30d = await prisma.whatsAppReminder
+      .count({ where: whereSinPlantilla(clinicId, new Date()) })
+      .catch(() => 0);
     const rows = await prisma.whatsAppReminder.findMany({
       where: { clinicId },
       orderBy: { createdAt: "desc" },
@@ -106,6 +131,7 @@ export async function getRecentReminders(
 
     return {
       failed: false,
+      sinPlantilla30d,
       rows: rows.map((r) => {
         const status = statusOf(r.status);
         const patient = r.appointment?.patient;
@@ -134,7 +160,7 @@ export async function getRecentReminders(
     };
   } catch (err) {
     console.error("[whatsapp/recent-reminders] no se pudo leer la cola:", err);
-    return { rows: [], failed: true };
+    return { rows: [], failed: true, sinPlantilla30d: 0 };
   }
 }
 

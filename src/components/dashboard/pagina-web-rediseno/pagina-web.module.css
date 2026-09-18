@@ -111,6 +111,9 @@
   gap: 8px;
   flex-wrap: wrap;
   flex-shrink: 0;
+  /* Sin tope, `flex-shrink: 0` dejaba la fila más ancha que la columna y
+     «Copiar link» salía recortado a 1024 px: con él, los botones se parten. */
+  max-width: 100%;
 }
 
 /* ── Botones ─────────────────────────────────────────────────────── */
@@ -315,19 +318,25 @@
 
 /* ── Segmentado (tabs) ───────────────────────────────────────────── */
 
+/* Ley 3: ninguna pestaña se esconde por ancho. Antes la fila era una sola
+   línea con scroll horizontal SIN pista (a 1440 px «Redes y contacto» salía
+   partida y a 1024 solo se veían tres y media): quien usa ratón no sabía que
+   había más. Mismo patrón que las pestañas de Analítica
+   (`analitica-rediseno/analitica.module.css`, `.pestanas`): si no caben, se
+   parten en otro renglón; nunca scroll, nunca «Más». */
 .segmentadoWrap {
-  overflow-x: auto;
-  padding-bottom: 1px;
+  min-width: 0;
 }
 
 .segmentado {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: 3px;
   border-radius: 11px;
   background: var(--m2-buscador-fondo);
-  flex: none;
-  min-width: max-content;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .segmento {

@@ -21,6 +21,7 @@ import {
 } from "@/lib/agenda/clinic-hours";
 import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { canSendManualReminder } from "@/lib/whatsapp/manual-reminder-access";
 import { viewRangeUtc } from "@/lib/agenda/date-ranges";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
 import { AgendaPageClient } from "./agenda-page-client";
@@ -44,6 +45,7 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     canCreate: hasPermission(user, "agenda.create"),
     canEdit: hasPermission(user, "agenda.edit"),
     canCancel: hasPermission(user, "agenda.delete"),
+    canSendReminder: canSendManualReminder(user.role),
   };
 
   // getCurrentUser ya hace include: { clinic: true } — leemos la config

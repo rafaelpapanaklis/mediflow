@@ -12,6 +12,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 import type { StatusChangeInput } from "@/lib/agenda/types";
+import { avisarCitaPorWhatsApp } from "@/lib/whatsapp/avisos-cita";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -184,9 +185,22 @@ export async function PATCH(
     });
   }
 
+  // Aviso de cancelación al paciente: solo si la clínica lo encendió en
+  // Dashboard → WhatsApp (nace apagado). NO_SHOW no avisa: el paciente ya sabe
+  // que no fue. No lanza: el cambio de estado ya está hecho.
+  const whatsapp =
+    body.status === "CANCELLED"
+      ? await avisarCitaPorWhatsApp({
+          evento: "cancelada",
+          appointmentId: params.id,
+          clinicId: session.clinic.id,
+          sentById: session.user.id,
+        })
+      : null;
+
   revalidateAfter("appointments");
   revalidatePatientProfile(updated.patientId);
   return NextResponse.json(
-    { appointment: appointmentToDTO(updated, session.clinic.category) },
+    { appointment: appointmentToDTO(updated, session.clinic.category), whatsapp },
   );
 }

@@ -205,7 +205,9 @@ test("lo que no se toca no se tocó: editar precio, eliminar borrador, imprimir 
     "onClick={() => window.open(`/api/invoices/${invoice.id}/print`, \"_blank\")}>",
     'fetch("/api/cfdi", {',
     "onClick={openCfdiForm} disabled={busy}>",
-    "onClick={handleStampCfdi} disabled={busy || (invoice.balance > 0 && !pueOk)}>",
+    // H-9 (ws1-t6): el botón además se apaga cuando el CFDI YA se timbró pero
+    // no se pudo guardar; las dos condiciones de siempre siguen ahí.
+    "onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || (invoice.balance > 0 && !pueOk)}>",
   ]) {
     assert.ok(d.includes(pieza), `se perdió: ${pieza}`);
   }

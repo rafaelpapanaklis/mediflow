@@ -2005,3 +2005,12 @@
   font-weight: 600;
   color: var(--ib-text-3);
 }
+
+/* Ley 3: los chips de canal iban en una sola línea con scroll horizontal y la
+   barra escondida (`.chipsRow`, arriba): «Recordatorio» y «Portal» no se veían
+   ni a 1600 px y nada avisaba de que existían. Mismo patrón que las pestañas
+   de Analítica: si no caben, se parten en otro renglón. */
+.page[data-pulido] .chipsRow {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}

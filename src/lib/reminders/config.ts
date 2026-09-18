@@ -253,3 +253,74 @@ export function renderRecallMessage(template: string, vars: { nombre: string; cl
     .replaceAll("{clinicName}", vars.clinica)
     .trim();
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Avisos por EVENTO de la cita (ws1-t2, H-1/H-2).
+//
+// El cron de arriba solo habla de citas inminentes. Esto es lo otro: el mensaje
+// que sale EN EL MOMENTO en que alguien del equipo agenda, mueve o cancela una
+// cita desde el panel. Lo decide cada clínica (= cada sucursal: una fila de
+// `clinics` por sucursal) en Dashboard → WhatsApp.
+//
+// Vive en Clinic.reminderSettings.eventos —sub-objeto del MISMO Json, igual que
+// `recall`— → CERO cambio de schema. Como `eventos` no trae `offsets`, guardar
+// SOLO esto no convierte el Json en una config de recordatorios válida:
+// `getEffectiveReminderSettings` sigue cayendo a los toggles legacy y el cron
+// se comporta exactamente como antes.
+//
+// DEFAULTS = los TRES apagados (ws1-t2):
+//   · Cada aviso fuera de la ventana de 24 h de Meta es una plantilla DE PAGO,
+//     y al agendar el paciente casi nunca acaba de escribir: casi todas las
+//     confirmaciones se cobrarían. Con `alAgendar: true` de fábrica, el día
+//     que esto llegara a producción TODAS las clínicas empezarían a pagar sin
+//     haberlo pedido — encenderlo tiene que ser una decisión de la clínica,
+//     no un accidente del código.
+//   · Sin nada guardado en `reminderSettings.eventos`, esta clase no manda
+//     nada — que es EXACTAMENTE lo que pasa hoy en producción (el TODO que
+//     tiraba `notifyPatient`), así que fusionar este arreglo no le cambia el
+//     comportamiento a ninguna clínica que no haya entrado a configurarlo.
+//   · Los tres se encienden por separado en Dashboard → WhatsApp → «Avisos de
+//     citas», por clínica (= por sucursal). El diálogo de nueva cita solo
+//     enseña «Enviar WhatsApp» si la clínica está conectada Y tiene
+//     `alAgendar` encendido (`waConfirmOnCreate`, en `/api/clinic/me`).
+// ════════════════════════════════════════════════════════════════════
+
+export interface AppointmentEventSettings {
+  /** Ofrecer (y honrar) la confirmación por WhatsApp al agendar desde el panel. */
+  alAgendar: boolean;
+  /** Avisar al paciente cuando el equipo cambia la fecha u hora de su cita. */
+  alReprogramar: boolean;
+  /** Avisar al paciente cuando el equipo cancela su cita. */
+  alCancelar: boolean;
+}
+
+export const DEFAULT_APPOINTMENT_EVENT_SETTINGS: AppointmentEventSettings = {
+  alAgendar: false,
+  alReprogramar: false,
+  alCancelar: false,
+};
+
+/**
+ * Valida/normaliza un `eventos` crudo (Json de DB o body de PATCH). Devuelve
+ * null solo si la forma base no es un objeto (el caller responde 400). Un campo
+ * que falta o no es booleano cae a su default, no a `false`: un Json a medias no
+ * puede apagar (ni encender) un aviso que la clínica no tocó.
+ */
+export function sanitizeAppointmentEventSettings(raw: unknown): AppointmentEventSettings | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const d = DEFAULT_APPOINTMENT_EVENT_SETTINGS;
+  return {
+    alAgendar: typeof o.alAgendar === "boolean" ? o.alAgendar : d.alAgendar,
+    alReprogramar: typeof o.alReprogramar === "boolean" ? o.alReprogramar : d.alReprogramar,
+    alCancelar: typeof o.alCancelar === "boolean" ? o.alCancelar : d.alCancelar,
+  };
+}
+
+/** Avisos por evento efectivos de la clínica (lee reminderSettings.eventos). */
+export function getAppointmentEventSettings(clinic: { reminderSettings?: unknown }): AppointmentEventSettings {
+  const rs = clinic.reminderSettings;
+  const eventos =
+    rs && typeof rs === "object" && !Array.isArray(rs) ? (rs as Record<string, unknown>).eventos : null;
+  return sanitizeAppointmentEventSettings(eventos) ?? { ...DEFAULT_APPOINTMENT_EVENT_SETTINGS };
+}

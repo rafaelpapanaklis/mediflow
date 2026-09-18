@@ -46,7 +46,7 @@ export interface AgendaNuevaValor {
   citaAbiertaId: string | null;
   /** Abre el panel de cita (y cierra el de huecos: son excluyentes). */
   abrirCita: (id: string) => void;
-  /** Abre/cierra el panel «Buscar hueco» (y cierra el de cita). */
+  /** Abre/cierra el panel «Buscar espacio» (y cierra el de cita). */
   alternarHuecos: () => void;
   cerrarPanel: () => void;
 

@@ -9,6 +9,7 @@ import type {
   WaitlistPriority,
   WeekScheduleDTO,
 } from "./types";
+import { avisarResultadoWhatsApp, type ResultadoAvisoWhatsApp } from "./aviso-whatsapp";
 
 export interface ApiError {
   status: number;
@@ -56,7 +57,10 @@ export async function patchAppointmentStatus(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
-  const body = await jsonOrThrow<{ appointment: AgendaAppointmentDTO }>(res);
+  const body = await jsonOrThrow<{ appointment: AgendaAppointmentDTO; whatsapp?: ResultadoAvisoWhatsApp }>(res);
+  // Si tocaba avisar al paciente (cancelación con el aviso encendido), se dice
+  // si salió o por qué no.
+  avisarResultadoWhatsApp(body.whatsapp);
   return body.appointment;
 }
 
@@ -121,7 +125,9 @@ export async function rescheduleAppointment(
   const body = await jsonOrThrow<{
     appointment: AgendaAppointmentDTO;
     scheduleWarning?: ScheduleWarningDTO | null;
+    whatsapp?: ResultadoAvisoWhatsApp;
   }>(res);
+  avisarResultadoWhatsApp(body.whatsapp);
   return { appointment: body.appointment, scheduleWarning: body.scheduleWarning ?? null };
 }
 

@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, FileText } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { isPediatric } from "@/lib/pediatrics/age";
 import { PEDIATRICS_MODULE_KEY, DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
@@ -25,7 +26,7 @@ export default async function PediatricsPatientDetailPage({
 
   const access = await canAccessModule(user.clinicId, PEDIATRICS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${PEDIATRICS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, PEDIATRICS_MODULE_KEY));
   }
 
   const data = await loadPediatricsData({

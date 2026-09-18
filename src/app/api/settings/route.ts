@@ -6,7 +6,11 @@ import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { encryptField, isEnvelope } from "@/lib/crypto/envelope";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
-import { sanitizeReminderSettings, sanitizeRecallSettings } from "@/lib/reminders/config";
+import {
+  sanitizeReminderSettings,
+  sanitizeRecallSettings,
+  sanitizeAppointmentEventSettings,
+} from "@/lib/reminders/config";
 import { esUrlDeLogoValida } from "@/lib/clinic-logo";
 
 /**
@@ -76,7 +80,12 @@ export async function PATCH(req: NextRequest) {
   // el MISMO Json, así que al guardar una mitad LEEMOS la actual y mezclamos
   // para no pisar la otra. `reminderSettings: null` limpia la config de citas
   // (el recall se conserva); `recall: null` limpia sólo el recall.
-  if ("reminderSettings" in body || "recall" in body) {
+  //
+  // + reminderSettings.eventos = avisos al agendar / reprogramar / cancelar
+  // (ws1-t2). Tercera mitad del mismo Json y misma regla: `merged` se arma DE
+  // CERO con las partes conocidas, así que una parte que no se arrastre aquí se
+  // BORRA al guardar cualquiera de las otras.
+  if ("reminderSettings" in body || "recall" in body || "eventos" in body) {
     const current = await prisma.clinic.findUnique({
       where: { id: ctx.clinicId },
       select: { reminderSettings: true },
@@ -118,9 +127,25 @@ export async function PATCH(req: NextRequest) {
       recallPart = cur?.recall ? sanitizeRecallSettings(cur.recall) ?? undefined : undefined;
     }
 
+    // Parte de avisos por evento.
+    let eventosPart: ReturnType<typeof sanitizeAppointmentEventSettings> | undefined;
+    if ("eventos" in body) {
+      if (body.eventos === null) {
+        eventosPart = undefined;
+      } else {
+        eventosPart = sanitizeAppointmentEventSettings(body.eventos);
+        if (!eventosPart) {
+          return NextResponse.json({ error: "eventos inválido" }, { status: 400 });
+        }
+      }
+    } else {
+      eventosPart = cur?.eventos ? sanitizeAppointmentEventSettings(cur.eventos) ?? undefined : undefined;
+    }
+
     const merged: Record<string, any> = {};
     if (apptPart) Object.assign(merged, apptPart);
     if (recallPart) merged.recall = recallPart;
+    if (eventosPart) merged.eventos = eventosPart;
     data.reminderSettings = Object.keys(merged).length > 0 ? merged : Prisma.DbNull;
   }
 

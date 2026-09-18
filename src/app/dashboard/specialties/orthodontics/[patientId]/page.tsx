@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, FileText } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { ORTHODONTICS_MODULE_KEY, PEDIATRICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadOrthoData } from "@/lib/orthodontics/load-data";
 import { OrthodonticsClient } from "@/components/specialties/orthodontics/OrthodonticsClient";
@@ -20,7 +21,7 @@ export default async function OrthodonticsPatientDetailPage({
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, ORTHODONTICS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${ORTHODONTICS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, ORTHODONTICS_MODULE_KEY));
   }
   const pediAccess = await canAccessModule(user.clinicId, PEDIATRICS_MODULE_KEY);
 

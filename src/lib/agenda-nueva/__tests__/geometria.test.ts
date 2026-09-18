@@ -23,6 +23,11 @@ import {
   ventanaDeRejilla,
 } from "../geometria";
 import { ALTO_HORA } from "../tokens";
+import {
+  paintedAgendaWindow,
+  scheduleDayOfISO,
+  type ScheduleDay,
+} from "@/lib/agenda/clinic-hours";
 
 const MX = "America/Mexico_City";
 /** Una zona sin horario de verano y con media hora de desfase: rompe atajos. */
@@ -64,31 +69,139 @@ test("las cuentas respetan un inicio de rejilla distinto de las 8", () => {
 
 /* ── La ventana de la rejilla ──────────────────────────────────────────── */
 
-test("ventanaDeRejilla: con la clínica dentro de 8–18 sale el lienzo del diseño", () => {
-  const v = ventanaDeRejilla(8, 18);
-  assert.equal(v.horaInicio, 8);
-  assert.equal(v.horaFin, 20);
-  assert.equal(v.minutoInicio, 480);
-  // 12 h × 112 + 8 = 1352, el número exacto del README.
-  assert.equal(v.alto, 1352);
-  assert.equal(v.horas.length, 13);
+test("ventanaDeRejilla: pinta EXACTAMENTE el rango que recibe, sin estirarlo al 8–20 del diseño", () => {
+  // Clínica 9–18: la rejilla arranca a las 9 y acaba a las 18. Ni la hora
+  // vacía de 8 a 9 ni las dos de 18 a 20 (lo que pidió Rafael).
+  const v = ventanaDeRejilla(9, 18);
+  assert.equal(v.horaInicio, 9);
+  assert.equal(v.horaFin, 18);
+  assert.equal(v.minutoInicio, 540);
+  assert.equal(v.alto, 9 * ALTO_HORA + 8);
+  assert.deepEqual(v.horas, [9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+
+  // La clínica de ejemplo del diseño (8–20) sigue dando el lienzo del README:
+  // 12 h × 112 + 8 = 1352.
+  const diseno = ventanaDeRejilla(8, 20);
+  assert.equal(diseno.alto, 1352);
+  assert.equal(diseno.horas.length, 13);
 });
 
-test("ventanaDeRejilla: se ensancha antes de esconder una cita", () => {
-  // Abre a las 7 → la rejilla baja a las 7, no recorta.
+test("ventanaDeRejilla: se ensancha con lo que recibe y nunca se sale del día", () => {
+  // Abre a las 7 → la rejilla baja a las 7.
   const temprano = ventanaDeRejilla(7, 18);
   assert.equal(temprano.horaInicio, 7);
-  assert.equal(temprano.horaFin, 20);
+  assert.equal(temprano.horaFin, 18);
 
   // Cierra a las 22 → la rejilla sube a las 22.
-  const tarde = ventanaDeRejilla(8, 22);
-  assert.equal(tarde.horaInicio, 8);
+  const tarde = ventanaDeRejilla(9, 22);
+  assert.equal(tarde.horaInicio, 9);
   assert.equal(tarde.horaFin, 22);
 
-  // Nunca se sale del día.
-  const extremo = ventanaDeRejilla(0, 24);
+  // Horas con fracción: hacia abajo la de arriba, hacia arriba la de abajo.
+  const fraccion = ventanaDeRejilla(9.5, 17.25);
+  assert.equal(fraccion.horaInicio, 9);
+  assert.equal(fraccion.horaFin, 18);
+
+  // Nunca se sale del día ni queda con menos de una hora.
+  const extremo = ventanaDeRejilla(-3, 30);
   assert.equal(extremo.horaInicio, 0);
   assert.equal(extremo.horaFin, 24);
+  const degenerado = ventanaDeRejilla(12, 12);
+  assert.equal(degenerado.horaInicio, 12);
+  assert.equal(degenerado.horaFin, 13);
+
+  // Un número que no lo es cae al lienzo del diseño, no a una rejilla vacía.
+  const roto = ventanaDeRejilla(Number.NaN, Number.NaN);
+  assert.equal(roto.horaInicio, 8);
+  assert.equal(roto.horaFin, 20);
+});
+
+/* ── Lo que se PINTA, de punta a punta: horario real → rejilla ─────────── */
+
+// `paintedAgendaWindow` (horario del día ensanchado con sus citas) alimenta a
+// `ventanaDeRejilla`. Esto prueba la cadena entera con el horario que guarda
+// Ajustes (`ClinicSchedule`: 0=Lunes…6=Domingo, "HH:MM").
+
+/** Clínica de siempre: agendaDayStart/End por defecto de la fila Clinic. */
+const SIN_HORARIO = { dayStart: 8, dayEnd: 20 };
+
+/** Lunes a viernes 9–18, sábado 9–14, domingo cerrado. */
+const HORARIO: ScheduleDay[] = [
+  ...[0, 1, 2, 3, 4].map((d) => ({ dayOfWeek: d, enabled: true, openTime: "09:00", closeTime: "18:00" })),
+  { dayOfWeek: 5, enabled: true, openTime: "09:00", closeTime: "14:00" },
+  { dayOfWeek: 6, enabled: false, openTime: "09:00", closeTime: "14:00" },
+];
+
+const MARTES = "2026-09-15"; // martes en México
+const SABADO = "2026-09-19";
+
+/** Una cita local de México (UTC−6) a `HH:MM`, de `dur` minutos. */
+function cita(dayISO: string, hhmm: string, dur = 30): { startsAt: string; endsAt: string } {
+  const [h, m] = hhmm.split(":").map(Number);
+  const inicio = Date.UTC(
+    Number(dayISO.slice(0, 4)),
+    Number(dayISO.slice(5, 7)) - 1,
+    Number(dayISO.slice(8, 10)),
+    h + 6,
+    m,
+  );
+  return {
+    startsAt: new Date(inicio).toISOString(),
+    endsAt: new Date(inicio + dur * 60_000).toISOString(),
+  };
+}
+
+function rejillaDelDia(dayISO: string, schedules: ScheduleDay[], citas: { startsAt: string; endsAt: string }[]) {
+  const painted = paintedAgendaWindow({
+    fallback: SIN_HORARIO,
+    schedules,
+    visibleDays: [scheduleDayOfISO(dayISO, MX)],
+    appointments: citas,
+    onlyDayISO: dayISO,
+    timezone: MX,
+  });
+  return ventanaDeRejilla(painted.dayStart, painted.dayEnd);
+}
+
+test("horario normal: clínica 9–18 sin citas raras → la agenda va de 9 a 18 y nada más", () => {
+  const v = rejillaDelDia(MARTES, HORARIO, [cita(MARTES, "10:00"), cita(MARTES, "17:00", 60)]);
+  assert.equal(v.horaInicio, 9);
+  assert.equal(v.horaFin, 18);
+  assert.equal(v.horas[0], 9);
+  assert.equal(v.horas[v.horas.length - 1], 18);
+});
+
+test("cita ANTES de abrir: una urgencia a las 8:00 baja la rejilla a las 8 — nunca se esconde", () => {
+  const v = rejillaDelDia(MARTES, HORARIO, [cita(MARTES, "08:00"), cita(MARTES, "10:00")]);
+  assert.equal(v.horaInicio, 8);
+  assert.equal(v.horaFin, 18);
+  // La cita cae DENTRO del lienzo: su top no es negativo.
+  assert.equal(topDeCita(8 * 60, v.minutoInicio), 1);
+});
+
+test("cita DESPUÉS de cerrar: una que termina a las 19:30 sube la rejilla a las 20", () => {
+  const v = rejillaDelDia(MARTES, HORARIO, [cita(MARTES, "18:30", 60)]);
+  assert.equal(v.horaInicio, 9);
+  assert.equal(v.horaFin, 20);
+  // El final de la cita cabe en el alto del lienzo.
+  const fondo = topDeCita(18 * 60 + 30, v.minutoInicio) + altoDeCita(60);
+  assert.ok(fondo <= v.alto, `la cita se sale del lienzo: ${fondo} > ${v.alto}`);
+});
+
+test("clínica SIN horario guardado: se usa la ventana de siempre, nadie se queda sin agenda", () => {
+  const v = rejillaDelDia(MARTES, [], [cita(MARTES, "10:00")]);
+  assert.equal(v.horaInicio, 8);
+  assert.equal(v.horaFin, 20);
+  assert.equal(v.alto, 1352);
+});
+
+test("por día de la semana: el sábado abre 9–14 → el sábado acaba a las 14", () => {
+  const sabado = rejillaDelDia(SABADO, HORARIO, [cita(SABADO, "11:00")]);
+  assert.equal(sabado.horaInicio, 9);
+  assert.equal(sabado.horaFin, 14);
+  // Y el martes de la misma clínica sigue llegando a las 18.
+  const martes = rejillaDelDia(MARTES, HORARIO, []);
+  assert.equal(martes.horaFin, 18);
 });
 
 /* ── La zona horaria de la clínica ─────────────────────────────────────── */
@@ -110,7 +223,7 @@ test("diaEnTz: una cita de madrugada UTC sigue siendo del día anterior en Méxi
 });
 
 test("la línea de «ahora» SOLO se pinta el día de hoy, y en la zona de la clínica", () => {
-  const ventana = ventanaDeRejilla(8, 18);
+  const ventana = ventanaDeRejilla(9, 18);
   // 2026-09-02 17:20 UTC = 11:20 en México.
   const ahora = new Date("2026-09-02T17:20:00.000Z");
 
@@ -140,18 +253,21 @@ test("la línea de «ahora» cambia de DÍA según la zona, no según el servido
   assert.equal(minutosDeAhora({ dayISO: "2026-09-02", timezone: "UTC", ventana, ahora }), null);
 });
 
-test("en el lienzo 8–20 del diseño, una hora de noche no pinta línea ningún día", () => {
-  const ventana = ventanaDeRejilla(8, 18); // lienzo 8–20
+test("en un lienzo 9–18, una hora de noche no pinta línea ningún día", () => {
+  const ventana = ventanaDeRejilla(9, 18);
   const ahora = new Date("2026-09-03T04:00:00.000Z"); // 22:00 en México
   assert.equal(minutosDeAhora({ dayISO: "2026-09-02", timezone: MX, ventana, ahora }), null);
   assert.equal(minutosDeAhora({ dayISO: "2026-09-03", timezone: MX, ventana, ahora }), null);
 });
 
 test("«ahora» fuera del lienzo no se pinta", () => {
-  const ventana = ventanaDeRejilla(8, 18); // lienzo 8–20
+  const ventana = ventanaDeRejilla(9, 18);
   // 06:30 en México = 12:30 UTC.
   const temprano = new Date("2026-09-02T12:30:00.000Z");
   assert.equal(minutosDeAhora({ dayISO: "2026-09-02", timezone: MX, ventana, ahora: temprano }), null);
+  // 08:30 en México = 14:30 UTC: antes de abrir, ya no hay lienzo ahí.
+  const antesDeAbrir = new Date("2026-09-02T14:30:00.000Z");
+  assert.equal(minutosDeAhora({ dayISO: "2026-09-02", timezone: MX, ventana, ahora: antesDeAbrir }), null);
 });
 
 /* ── Horas ─────────────────────────────────────────────────────────────── */

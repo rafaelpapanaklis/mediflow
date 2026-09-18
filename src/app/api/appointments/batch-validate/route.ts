@@ -11,6 +11,7 @@ import type {
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
+import { avisarCitaPorWhatsApp } from "@/lib/whatsapp/avisos-cita";
 
 export async function POST(req: NextRequest) {
   const session = await loadClinicSession();
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
     failed: [],
   };
 
+  const procesadas: string[] = [];
   for (const id of body.appointmentIds) {
     if (!validIds.has(id)) {
       result.failed.push({ id, error: "not_found_or_not_pending" });
@@ -100,14 +102,28 @@ export async function POST(req: NextRequest) {
         });
       }
       result.processed += 1;
+      procesadas.push(id);
     } catch (err) {
       console.error("[batch-validate] failed", id, err);
       result.failed.push({ id, error: "update_failed" });
     }
   }
 
-  // TODO(M3.b): if body.notifyPatients y session.clinic.waConnected,
-  //             enviar notificación a cada paciente afectado.
+  // Aviso a cada paciente (H-1): solo si quien valida lo pidió (`=== true`; la
+  // bandeja de hoy manda siempre `false`) y la clínica tiene encendido ese
+  // aviso en Dashboard → WhatsApp. Confirmar = «tu cita quedó registrada»;
+  // rechazar = aviso de cancelación. Una por una y sin lanzar: el tope es de
+  // 50 citas, y un envío que falla no deshace la validación ya hecha.
+  if (body.notifyPatients === true) {
+    for (const id of procesadas) {
+      await avisarCitaPorWhatsApp({
+        evento: body.action === "confirm" ? "agendada" : "cancelada",
+        appointmentId: id,
+        clinicId: session.clinic.id,
+        sentById: session.user.id,
+      });
+    }
+  }
 
   revalidateAfter("appointments");
   // Cada cita procesada pertenece a un paciente cuyo perfil muestra el estado

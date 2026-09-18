@@ -65,13 +65,15 @@ test("el menú nuevo de la ficha no enseña Presupuestos, y no pierde nada más"
   const menu = construirMenuFicha(items);
   const pintados = menu.fijos.map((i) => i.id).concat(...menu.grupos.map((g) => g.items.map((i) => i.id)));
   assert.ok(!pintados.includes("presupuestos"), "Presupuestos sigue en el menú nuevo de la ficha");
+  // «Referencias» también sale del menú desde ws1-t3 (Rafael); el candado de
+  // que no se pierda NADA más vive aquí y en `pacientes-rediseno.test.ts`.
   assert.deepEqual(
     pintados.slice().sort(),
-    items.map((i) => i.id).filter((id) => id !== "presupuestos").sort(),
-    "al quitar Presupuestos se perdió (o se coló) otro apartado",
+    items.map((i) => i.id).filter((id) => !APARTADOS_FUERA_DEL_MENU.includes(id)).sort(),
+    "al quitar Presupuestos y Referencias se perdió (o se coló) otro apartado",
   );
   assert.ok(pintados.includes("facturacion"), "Facturación tiene que seguir en la barra");
-  assert.deepEqual(APARTADOS_FUERA_DEL_MENU, ["presupuestos"]);
+  assert.deepEqual(APARTADOS_FUERA_DEL_MENU, ["presupuestos", "referencias"]);
 });
 
 test("el menú lateral nuevo no enseña Marketplace, y no pierde nada más", () => {

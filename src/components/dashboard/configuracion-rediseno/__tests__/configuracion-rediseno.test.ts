@@ -195,3 +195,45 @@ test("todas las claves t(\"…\") de los archivos tocados existen en es.json y e
   const faltan = [...claves].filter((k) => !existe(es, k) || !existe(en, k));
   assert.deepEqual(faltan, [], `claves sin traducción: ${faltan.join(", ")}`);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 1024 px (ws1-t1): la navegación se decide por el HUECO, no por la ventana
+// ═══════════════════════════════════════════════════════════════════════════
+// Con el menú lateral abierto, a 1024 px de ventana quedan 732 px útiles: la
+// fila se envolvía, pero la navegación seguía siendo una columna de 224 px con
+// un hueco en blanco al lado, porque su paso a fila colgaba de un `@media` de
+// 768 px de VENTANA. Estos candados impiden volver ahí.
+test("la navegación pasa a fila midiendo su contenedor, nunca con un @media de ventana", () => {
+  assert.match(css, /\.navCaja\s*\{[^}]*container-type:\s*inline-size/, ".navCaja es el contenedor que se mide");
+  assert.match(css, /@container\s+navconfig\s*\(min-width:/, "el paso a fila es un @container sobre navconfig");
+  const piezas = archivosNuevos.find((a) => a.nombre === "piezas.tsx")!.texto;
+  assert.match(piezas, /className=\{s\.navCaja\}/, "Navegacion monta la caja que se mide");
+  // Fuera del respaldo para navegadores sin @container, ningún @media de ancho toca .nav.
+  const sinRespaldo = css.replace(/@supports not \(container-type: inline-size\) \{[\s\S]*?\n\}\n/, "");
+  const mediaDeAncho = [...sinRespaldo.matchAll(/@media\s*\((?:max|min)-width:[^{]*\{([\s\S]*?)\n\}/g)].map((m) => m[1]);
+  for (const bloque of mediaDeAncho) {
+    assert.ok(!/\.nav(Item|Caja)?\s*\{/.test(bloque), "un @media de ancho de VENTANA vuelve a decidir la navegación");
+  }
+});
+
+test("el corte de la caja coincide con el punto en que la fila deja de caber (224 + 20 + 520)", () => {
+  const nav = Number(/\.navCaja\s*\{[^}]*min-width:\s*(\d+)px/.exec(css)?.[1]);
+  const corte = Number(/\.navCaja\s*\{[^}]*flex:\s*0 1 calc\(\((\d+)px - 100%\)/.exec(css)?.[1]);
+  const gap = Number(/\.cuerpo\s*\{[^}]*gap:\s*(\d+)px/.exec(css)?.[1]);
+  const contenido = Number(/\.contenido\s*\{[^}]*flex:\s*1 1 (\d+)px/.exec(css)?.[1]);
+  assert.equal(corte, nav + gap + contenido, "si cambias un ancho, cambia el corte: si no, vuelve el hueco en blanco");
+});
+
+test("ni .raiz ni .cuerpo ni .contenido son contenedores: Suscripción abre ventanas position:fixed sin portal", () => {
+  for (const clase of ["raiz", "cuerpo", "contenido"]) {
+    const regla = new RegExp(`\\.${clase}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
+    assert.ok(!/container-type|contain\s*:/.test(regla), `.${clase} no puede contener layout: rompería los position:fixed de dentro`);
+  }
+});
+
+test("la tabla ARCO no exige ancho fijo: la razón y el correo se envuelven", () => {
+  const recorte = /\.tablaRecorte\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  assert.ok(!/white-space:\s*nowrap/.test(recorte), "con nowrap la tabla desborda y «Gestionar» queda detrás de un scroll lateral");
+  assert.match(recorte, /line-clamp:\s*2/);
+  assert.match(css, /\.tabla \.tablaCorreo\s*\{[^}]*overflow-wrap:\s*anywhere/);
+});

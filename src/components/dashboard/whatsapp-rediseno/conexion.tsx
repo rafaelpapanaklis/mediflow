@@ -4,7 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 import Link from "next/link";
 import {
   MessageCircle, CheckCircle, CheckCircle2, ExternalLink, Eye, EyeOff, Bot,
-  Facebook, QrCode, Check, CreditCard, LifeBuoy, Info, RefreshCw, Mail, FileText,
+  Facebook, QrCode, Check, CreditCard, LifeBuoy, Info, RefreshCw, Mail, FileText, AlertTriangle,
 } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import type { RecentReminderDTO } from "@/lib/whatsapp/recent-reminders";
@@ -84,11 +84,24 @@ export type ConexionVM = {
   ) => Promise<void>;
   connChip: { tone: "success" | "neutral"; label: string } | null;
   remindersOn: boolean;
+  /** Avisos al agendar / reprogramar / cancelar, ya con su valor y su manejador. */
+  avisosEvento: ReadonlyArray<{
+    campo: string;
+    labelKey: string;
+    descKey: string;
+    val: boolean;
+    busy: boolean;
+    toggle: () => void;
+  }>;
+  /** Resumen de un vistazo: qué manda hoy esta sucursal. */
+  resumenAvisos: ReadonlyArray<{ key: string; label: string; on: boolean }>;
   esAvailable: boolean;
   onEmbeddedConnected: () => void;
   refrescar: () => void;
   recentReminders: RecentReminderDTO[];
   recentRemindersFailed: boolean;
+  /** Cumpleaños/recall/seguimientos bloqueados por la ventana de 24 h, 30 días (H-7). */
+  sinPlantilla30d?: number;
 };
 
 /** Las plantillas de recordatorio se cobran por unidad: la clínica necesita un
@@ -109,7 +122,8 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
     t, connected, step, setStep, loading, showToken, setShowToken, form, setForm,
     msg, setMsg, defaultMsg, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
     connect, disconnect, saveSettings, saveToggle, connChip, remindersOn, esAvailable,
-    onEmbeddedConnected, refrescar, recentReminders, recentRemindersFailed,
+    avisosEvento, resumenAvisos,
+    onEmbeddedConnected, refrescar, recentReminders, recentRemindersFailed, sinPlantilla30d = 0,
   } = vm;
 
   const pasos = [
@@ -284,6 +298,30 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
       {step === "done" && (
         <div className={s.rejillaPrincipal}>
           <div className={s.columna}>
+            {/* Avisos de citas (ws1-t2): qué sale al agendar, mover o cancelar,
+                y arriba el resumen de TODO lo que esta sucursal tiene encendido. */}
+            <Tarjeta titulo={t("inbox.whatsapp.eventsTitle")} sub={t("inbox.whatsapp.eventsSub")}>
+              <div className={s.resumenAvisos}>
+                {resumenAvisos.map((r) => (
+                  <Etiqueta key={r.key} tono={r.on ? "success" : "neutral"}>
+                    {r.label} · {t(r.on ? "inbox.whatsapp.summaryOn" : "inbox.whatsapp.summaryOff")}
+                  </Etiqueta>
+                ))}
+              </div>
+              <div className={s.apilado} style={{ gap: 10 }}>
+                {avisosEvento.map((opt) => (
+                  <FilaInterruptor
+                    key={opt.campo}
+                    on={opt.val}
+                    disabled={opt.busy}
+                    onToggle={opt.toggle}
+                    titulo={t(opt.labelKey)}
+                    desc={t(opt.descKey)}
+                  />
+                ))}
+              </div>
+            </Tarjeta>
+
             <Tarjeta titulo={t("inbox.whatsapp.whenToSendTitle")} sub={t("inbox.whatsapp.whenToSendSub")}>
               <div className={s.apilado} style={{ gap: 10 }}>
                 {interruptores.map((opt) => (
@@ -317,6 +355,13 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
                 </Boton>
               }
             >
+              {/* H-7: lo que NO salió por la ventana de 24 h, a la vista y sin
+                  buscar fila por fila. Solo aparece si hubo alguno. */}
+              {sinPlantilla30d > 0 && (
+                <Nota tono="alerta" icono={<AlertTriangle size={16} />} titulo={t("inbox.whatsapp.noTemplateSummaryTitle")}>
+                  <p className={s.notaCuerpo}>{t("inbox.whatsapp.noTemplateSummaryBody", { count: sinPlantilla30d })}</p>
+                </Nota>
+              )}
               {recentRemindersFailed ? (
                 <p className={s.vacio}>{t("inbox.whatsapp.recentFailed")}</p>
               ) : recentReminders.length === 0 ? (
