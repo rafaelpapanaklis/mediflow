@@ -12,7 +12,9 @@
 //      importa la capa cruda (`@/lib/whatsapp`) — hay un test que lo impide.
 //   2. La CLÍNICA manda: `reminderSettings.eventos` (Dashboard → WhatsApp)
 //      decide si cada aviso existe. Sin nada guardado valen los defaults de
-//      `DEFAULT_APPOINTMENT_EVENT_SETTINGS`.
+//      `DEFAULT_APPOINTMENT_EVENT_SETTINGS` — los TRES apagados (ws1-t2):
+//      cada aviso fuera de la ventana de 24 h es una plantilla de pago, y
+//      encenderla es una decisión de la clínica, no un accidente.
 //   3. NUNCA rompe la operación ni miente: no lanza, y devuelve por qué no
 //      salió para que la pantalla se lo diga a quien pulsó el botón.
 

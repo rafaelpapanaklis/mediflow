@@ -253,7 +253,19 @@ function citaExistente() {
 // H-1 · AGENDAR
 // ═══════════════════════════════════════════════════════════════════════════
 
-test("🔴→🟢 agendar con «Enviar WhatsApp» encendido MANDA la confirmación, por el embudo que deja copia en Inbox", async () => {
+test("🔴→🟢 ws1-t2: SIN configurar nada, agendar con «Enviar WhatsApp» encendido NO manda — los tres avisos arrancan apagados", async () => {
+  // `clinicRow.reminderSettings` sigue en `null` (beforeEach): es la clínica
+  // que nunca entró a Dashboard → WhatsApp → «Avisos de citas». Antes de este
+  // arreglo `DEFAULT_APPOINTMENT_EVENT_SETTINGS.alAgendar` era `true` y esto
+  // mandaba una plantilla de pago sin que nadie la hubiera pedido.
+  const r = await post(futureBody({ notifyPatient: true }));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(envios.length, 0, "sin configuración guardada no debe salir ningún WhatsApp (sería coste no pedido)");
+  assert.deepEqual(r.body.whatsapp, { enviado: false, motivo: "apagadoPorClinica" });
+});
+
+test("con «Confirmación al agendar» ENCENDIDA por la clínica, agendar con «Enviar WhatsApp» encendido MANDA la confirmación, por el embudo que deja copia en Inbox", async () => {
+  clinicRow.reminderSettings = { eventos: { alAgendar: true } };
   const r = await post(futureBody({ notifyPatient: true }));
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.equal(envios.length, 1, "el servidor tiró `notifyPatient`: no salió ningún WhatsApp");
@@ -297,6 +309,7 @@ test("LA CLÍNICA MANDA: con la confirmación apagada en WhatsApp → Avisos de 
 });
 
 test("clínica sin WhatsApp conectado: no se manda y el motivo viaja (no un «enviado» de mentira)", async () => {
+  clinicRow.reminderSettings = { eventos: { alAgendar: true } };
   clinicRow.waConnected = false;
   const r = await post(futureBody({ notifyPatient: true }));
   assert.equal(r.status, 201);
@@ -305,6 +318,7 @@ test("clínica sin WhatsApp conectado: no se manda y el motivo viaja (no un «en
 });
 
 test("paciente sin teléfono: la cita se crea y el motivo es «noPhone»", async () => {
+  clinicRow.reminderSettings = { eventos: { alAgendar: true } };
   patientPhone = null;
   const r = await post(futureBody({ notifyPatient: true }));
   assert.equal(r.status, 201);
@@ -313,6 +327,7 @@ test("paciente sin teléfono: la cita se crea y el motivo es «noPhone»", async
 });
 
 test("si el embudo bloquea (fuera de ventana y sin plantilla) la cita SE CREA IGUAL y el motivo es legible", async () => {
+  clinicRow.reminderSettings = { eventos: { alAgendar: true } };
   falloDelEmbudo = new Error(
     "Fuera de la ventana de 24 h y falta configurar la plantilla de este tipo de mensaje " +
       "en Configuración → WhatsApp → Plantillas.",
@@ -416,6 +431,7 @@ test("una cita que ya pasó no se le anuncia a nadie", async () => {
 test("agendar «para ahora» (dentro de la tolerancia del POST) SÍ manda: no es una cita pasada", async () => {
   // El paciente llega 10:10 y se le da la de las 10:00. El POST lo permite
   // (slot + 15 min); el aviso tiene que medir con la misma vara.
+  clinicRow.reminderSettings = { eventos: { alAgendar: true } };
   clinicRow.defaultSlotMinutes = 30;
   const startsAt = atMinute(-10 * MIN);
   const r = await post(futureBody({
