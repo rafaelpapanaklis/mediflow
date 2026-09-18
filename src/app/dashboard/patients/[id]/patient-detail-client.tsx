@@ -3631,6 +3631,7 @@ export function PatientDetailClient({
           {tab === "consentimientos" && canViewConsents && (
             <ConsentsTab
               patientId={patient.id}
+              patientDob={patient.dob ? String(patient.dob) : null}
               pacientesRediseno={rediseno}
               initialConsents={consents}
               doctors={doctors}

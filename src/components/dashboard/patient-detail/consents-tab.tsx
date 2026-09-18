@@ -42,6 +42,7 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { SignaturePad } from "@/components/ui/signature-pad";
 import { listConsentTemplates } from "@/lib/consent/templates";
+import { ageYears, isMinor } from "@/lib/consent/signers";
 import { parseConsentText, splitConsentBody } from "@/lib/consent/render";
 import type { ConsentDTO, ConsentStatus } from "@/lib/consent/types";
 import styles from "./patient-detail.module.css";
@@ -54,6 +55,12 @@ interface DoctorOption {
 
 export interface ConsentsTabProps {
   patientId: string;
+  /**
+   * Fecha de nacimiento del paciente (ISO). Decide si la carta la firma un
+   * representante legal: con un menor la casilla se marca sola y no se puede
+   * quitar. `null` = sin dato, y entonces no se afirma nada.
+   */
+  patientDob?: string | null;
   /** Snapshot del server component: la lista se pinta sin esperar al fetch. */
   initialConsents: ConsentDTO[];
   doctors: DoctorOption[];
@@ -105,7 +112,7 @@ function fmtDate(iso: string | null): string {
 
 export function ConsentsTab(props: ConsentsTabProps) {
   const {
-    patientId, initialConsents, doctors, currentUserId,
+    patientId, patientDob = null, initialConsents, doctors, currentUserId,
     canCreate, canRevoke, canSendWhatsApp, canCountersign,
     pacientesRediseno = false,
   } = props;
@@ -304,6 +311,7 @@ export function ConsentsTab(props: ConsentsTabProps) {
 
       {canCreate && (
         <NewConsentModal
+          patientDob={patientDob}
           open={newOpen}
           onClose={() => setNewOpen(false)}
           patientId={patientId}
@@ -721,11 +729,12 @@ function ConsentLetter({ content }: { content: string }) {
 // ---------------------------------------------------------------------------
 
 function NewConsentModal({
-  open, onClose, patientId, doctors, currentUserId, canSendWhatsApp, onCreated,
+  open, onClose, patientId, patientDob, doctors, currentUserId, canSendWhatsApp, onCreated,
 }: {
   open: boolean;
   onClose: () => void;
   patientId: string;
+  patientDob: string | null;
   doctors: DoctorOption[];
   currentUserId: string;
   canSendWhatsApp: boolean;
@@ -737,7 +746,12 @@ function NewConsentModal({
   const [doctorId, setDoctorId] = useState(
     doctors.some((d) => d.id === currentUserId) ? currentUserId : (doctors[0]?.id ?? ""),
   );
-  const [byRepresentative, setByRepresentative] = useState(false);
+  // Con un menor la casilla del representante se marca sola y no se puede
+  // quitar: la carta de un niño la firma su madre, padre o tutor, y el
+  // servidor la rechaza sin ese dato (misma regla, `minorSignerError`).
+  const minor = isMinor(patientDob);
+  const patientAge = ageYears(patientDob);
+  const [byRepresentative, setByRepresentative] = useState(minor);
   const [signerName, setSignerName] = useState("");
   const [signerRelation, setSignerRelation] = useState("");
   const [content, setContent] = useState("");
@@ -786,7 +800,7 @@ function NewConsentModal({
     setTouched(false);
     setEditing(false);
     setContent("");
-    setByRepresentative(false);
+    setByRepresentative(minor);
     setSignerName("");
     setSignerRelation("");
   }
@@ -894,6 +908,7 @@ function NewConsentModal({
                 <input
                   type="checkbox"
                   checked={byRepresentative}
+                  disabled={minor}
                   onChange={(e) => setByRepresentative(e.target.checked)}
                   className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--brand)]"
                 />
@@ -902,7 +917,9 @@ function NewConsentModal({
                     {t("patients.consents.fieldRepresentative")}
                   </span>
                   <br />
-                  {t("patients.consents.representativeHint")}
+                  {minor
+                    ? t("patients.consents.minorNotice", { age: patientAge ?? 0 })
+                    : t("patients.consents.representativeHint")}
                 </span>
               </label>
 

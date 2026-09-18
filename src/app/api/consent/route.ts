@@ -27,6 +27,7 @@ import { buildConsentContent, findConsentTemplate } from "@/lib/consent/template
 import { calculateAge } from "@/lib/pediatrics/age";
 import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 import { consentLinkExpiry, consentPublicUrl, newConsentToken } from "@/lib/consent/link";
+import { minorSignerError } from "@/lib/consent/signers";
 
 // GET /api/consent?patientId=xxx — lista del tab del expediente.
 export async function GET(req: NextRequest) {
@@ -107,6 +108,14 @@ export async function POST(req: NextRequest) {
     select: { id: true, firstName: true, lastName: true, dob: true, patientNumber: true },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  // Un menor no consiente por sí mismo (NOM-004 10.1.1.3): sin representante
+  // legal la carta no se crea. El modal marca la casilla solo con la misma
+  // regla; esto es la red por si llega sin ella (otro cliente, otra pestaña).
+  const minorError = minorSignerError(patient.dob, signerName);
+  if (minorError) {
+    return NextResponse.json({ error: minorError }, { status: 400 });
+  }
 
   // Visibilidad por paciente: no generar consentimientos sobre un paciente restringido.
   const hidden = await assertPatientVisible(patientId, {

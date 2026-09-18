@@ -1773,6 +1773,7 @@
       "fieldDoctor": "Profesional responsable",
       "fieldRepresentative": "Firma un representante legal",
       "representativeHint": "Actívalo cuando el paciente es menor de edad o no puede decidir por sí mismo.",
+      "minorNotice": "El paciente tiene {age} años: la carta la firma su madre, padre o tutor. Escribe su nombre y parentesco.",
       "fieldSignerName": "Nombre del representante",
       "signerNamePlaceholder": "Nombre y apellidos",
       "fieldSignerRelation": "Parentesco o relación",
