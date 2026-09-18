@@ -110,15 +110,39 @@
   gap: 20px;
 }
 
+/* La caja de la navegación decide SOLA si va al lado o arriba, midiendo el
+   hueco real de `.cuerpo` y no el viewport: con el menú lateral abierto, a
+   1024 px de ventana quedan 732 px útiles, y 224 (nav) + 20 (gap) + 520
+   (mínimo del contenido) = 764 no caben. Antes la fila se envolvía pero la
+   navegación seguía siendo una columna de 224 px con un hueco en blanco al
+   lado, porque su paso a fila dependía de un `@media` de 768 px de VENTANA.
+
+   · `flex-basis: calc((764px - 100%) * 9999)`: por debajo de 764 px de
+     hueco la base es enorme y `max-width` la deja en el 100 % (fila propia,
+     arriba); por encima es negativa, vale 0 y `min-width` la deja en 224 px
+     (al lado). El corte coincide con el punto en que `flex-wrap` envuelve.
+   · `container-type` va AQUÍ y no en `.cuerpo` ni en `.raiz`: la contención
+     de layout convierte al contenedor en el bloque de los `position: fixed`
+     de dentro, y Suscripción abre sus ventanas así, sin portal. Esta caja
+     solo contiene los botones de la navegación.
+   · `align-self: stretch`: la caja mide lo que el contenido, para que la
+     navegación de dentro siga siendo `sticky` cuando va al lado. */
+.navCaja {
+  flex: 0 1 calc((764px - 100%) * 9999);
+  min-width: 224px;
+  max-width: 100%;
+  align-self: stretch;
+  container-type: inline-size;
+  container-name: navconfig;
+}
+
 .nav {
   position: sticky;
   top: 16px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 224px;
-  max-width: 100%;
-  flex-shrink: 0;
+  width: 100%;
   padding: 6px;
   background: var(--m2-tarjeta);
   border: 1px solid var(--m2-tarjeta-borde);
@@ -179,19 +203,35 @@
   min-width: 0;
 }
 
-/* Cuando la fila no cabe (iPad vertical sin menú lateral), la navegación
-   pasa ARRIBA como una fila de botones que se envuelve: los diez apartados
+/* Cuando la fila no cabe (laptop de 13" con el menú lateral abierto, iPad
+   vertical), la navegación pasa ARRIBA como una fila de botones que se envuelve: los diez apartados
    siguen a la vista, ninguno detrás de un desplegable. */
-@media (max-width: 767.98px) {
+@container navconfig (min-width: 400px) {
   .nav {
     position: static;
     flex-direction: row;
     flex-wrap: wrap;
-    width: 100%;
   }
   .navItem {
     width: auto;
     min-height: 36px;
+  }
+}
+
+/* Navegadores sin `@container` (iPad con iPadOS 15): se decide por ventana,
+   como antes, pero con el corte donde de verdad deja de caber con el menú
+   lateral abierto. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 1100px) {
+    .nav {
+      position: static;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    .navItem {
+      width: auto;
+      min-height: 36px;
+    }
   }
 }
 
@@ -1307,11 +1347,28 @@ select.entrada {
   white-space: nowrap;
 }
 
+/* El correo se parte donde haga falta: una dirección larga no tiene espacios
+   y, sin esto, fija ella sola el ancho mínimo de la tabla. */
+.tabla .tablaCorreo {
+  min-width: 132px;
+  color: var(--m2-texto-2);
+  overflow-wrap: anywhere;
+}
+
+/* La razón se recorta a DOS líneas que se envuelven, no a una de 360 px
+   fijos: con `nowrap` la columna exigía sus 360 px enteros y, con el menú
+   lateral abierto, a 1280 y a 1024 px de ventana la tabla desbordaba su
+   caja y «Estado» y «Gestionar» quedaban detrás de un scroll lateral que
+   nada anunciaba. Así la columna cede ancho y se lee más razón que antes. */
 .tablaRecorte {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-width: 120px;
   max-width: 360px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--m2-texto-2);
 }
 

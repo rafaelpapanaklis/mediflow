@@ -77,20 +77,22 @@ export function Navegacion<T extends string>({
   onCambiar: (id: T) => void;
 }) {
   return (
-    <nav className={s.nav} aria-label="Apartados">
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => onCambiar(item.id)}
-          className={cx(s.navItem, activo === item.id && s.navItemActivo)}
-          aria-current={activo === item.id ? "page" : undefined}
-        >
-          {item.icono}
-          <span>{item.label}</span>
-        </button>
-      ))}
-    </nav>
+    <div className={s.navCaja}>
+      <nav className={s.nav} aria-label="Apartados">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onCambiar(item.id)}
+            className={cx(s.navItem, activo === item.id && s.navItemActivo)}
+            aria-current={activo === item.id ? "page" : undefined}
+          >
+            {item.icono}
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
   );
 }
 

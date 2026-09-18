@@ -219,7 +219,7 @@ function TablaRediseno({ rows, onEdit }: { rows: ArcoRow[]; onEdit: (r: ArcoRow)
                 {new Date(r.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
               </td>
               <td><strong style={{ fontWeight: 600 }}>{t(TYPE_LABEL_KEY[r.type])}</strong></td>
-              <td style={{ color: "var(--m2-texto-2)" }}>{r.email}</td>
+              <td className={cr.tablaCorreo}>{r.email}</td>
               <td><div className={cr.tablaRecorte}>{r.reason}</div></td>
               <td>
                 <Insignia tono={STATUS_TONO_REDISENO[r.status]} punto>{t(STATUS_LABEL_KEY[r.status])}</Insignia>
