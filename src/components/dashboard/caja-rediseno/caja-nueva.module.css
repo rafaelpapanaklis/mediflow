@@ -1,0 +1,580 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Caja reestructurada (ws1-t6) — la pantalla, con menos cuadros.
+
+   Rafael: «hay demasiados cuadrados; puede ser algo más básico pero que
+   funcione bien y rápido». La Caja de siempre pintaba ~26 bloques a la vez
+   (4 KPI del día + 10 KPI del turno + barra de estado + retiros + ventas +
+   historial…). Aquí son cinco: cabecera con estado y acciones, la tira del
+   día, el ARQUEO (un recibo con las mismas diez cifras del turno), las
+   VENTAS del turno y el historial. Nada se esconde: lo que hoy se ve sin
+   clic sigue a la vista; lo que hoy está tras un clic (historial, pestaña
+   Facturas) sigue tras el MISMO clic.
+
+   Solo se monta con el interruptor `menu-dos-niveles` encendido, dentro de
+   la raíz `.pagina` de `caja-rediseno.module.css`: de ahí hereda los tokens
+   `--pr-*` (con su versión oscura), Instrument Sans y `tabular-nums`. Aquí
+   no se declara ningún token ni hay hex: solo `var(--pr-*)`.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Cabecera: título · estado del turno · acciones · pestañas ────────── */
+
+.cabecera {
+  padding: clamp(14px, 1.6vw, 28px) clamp(14px, 1.6vw, 28px) 0;
+}
+
+.cabeceraFila {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px 20px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.cabeceraDerecha {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+}
+
+.estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--pr-texto-3);
+}
+
+.estadoChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.estadoChip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.estadoAbierta {
+  background: var(--pr-exito-suave);
+  color: var(--pr-exito);
+}
+
+.estadoCerrada {
+  background: var(--pr-hover);
+  color: var(--pr-texto-3);
+}
+
+.acciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pestanas {
+  margin-bottom: 4px;
+}
+
+/* ── Cuerpo ────────────────────────────────────────────────────────────
+   Es el contenedor de consulta: las rejillas de abajo se apilan por el
+   ancho ÚTIL de la pantalla, no por el de la ventana (el menú de dos
+   niveles se lleva entre 230 y 550 px según esté abierto). Los modales de
+   Caja NO cuelgan de aquí (son hermanos, en `CajaClient`): un
+   `container-type` encierra los `position: fixed` de sus descendientes. */
+
+.cuerpo {
+  padding: clamp(14px, 1.6vw, 28px);
+  container-type: inline-size;
+  container-name: caja;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Aviso de turno sin cortar (igual que hoy, con los tokens) ─────────── */
+
+.aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--pr-alerta);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-alerta-suave);
+  color: var(--pr-alerta);
+}
+
+.aviso > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.avisoTitulo {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.avisoTexto {
+  margin-top: 3px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* ── Tarjeta base (misma ropa que `.card` bajo `.pagina`) ─────────────── */
+
+.tarjeta {
+  min-width: 0;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra);
+}
+
+.tarjetaCabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--pr-borde);
+}
+
+.tarjetaTextos {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tarjetaIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+.tarjetaTitulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  line-height: 1.25;
+  color: var(--pr-texto);
+}
+
+.tarjetaSub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+/* ── Tira del día: cuatro cifras de la clínica en UNA tarjeta ──────────── */
+
+.tira {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tiraCelda {
+  min-width: 0;
+  padding: 14px 18px;
+  border-left: 1px solid var(--pr-borde);
+}
+
+.tiraCelda:first-child {
+  border-left: 0;
+}
+
+.tiraEtiqueta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+  white-space: nowrap;
+}
+
+.tiraValor {
+  margin-top: 6px;
+  font-size: clamp(18px, 1.5vw, 22px);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  color: var(--pr-texto);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tiraValorHero {
+  color: var(--pr-activo);
+}
+
+.tiraValorPeligro {
+  color: var(--pr-peligro);
+}
+
+@container caja (max-width: 640px) {
+  .tira {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tiraCelda:nth-child(3) {
+    border-left: 0;
+  }
+
+  .tiraCelda:nth-child(n + 3) {
+    border-top: 1px solid var(--pr-borde);
+  }
+}
+
+/* ── Rejilla del turno: arqueo | ventas ────────────────────────────────
+   Dos columnas cuando el ancho útil lo permite; por debajo se APILAN, con
+   todo dentro. Con el menú de dos niveles abierto: a 1600 y 1440 px de
+   ventana van en dos columnas; a 1024 (el nivel 2 flota y no empuja) el
+   útil ronda 766 px y se apila. */
+
+.rejilla {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@container caja (max-width: 880px) {
+  .rejilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Arqueo: un recibo con las diez cifras del turno ───────────────────── */
+
+.arqueoBloques {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Apilado bajo la tabla, el recibo se parte en dos medias columnas
+   (efectivo | ingresos) para no ser una tira larga. */
+@container caja (max-width: 880px) {
+  .arqueoBloques {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .arqueoBloque + .arqueoBloque {
+    border-top: 0;
+    border-left: 1px solid var(--pr-borde);
+  }
+}
+
+@container caja (max-width: 560px) {
+  .arqueoBloques {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .arqueoBloque + .arqueoBloque {
+    border-left: 0;
+    border-top: 1px solid var(--pr-borde);
+  }
+}
+
+.arqueoBloque {
+  min-width: 0;
+  padding: 12px 18px 14px;
+}
+
+.arqueoBloque + .arqueoBloque {
+  border-top: 1px solid var(--pr-borde);
+}
+
+.arqueoRotulo {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.linea {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+
+.lineaEtiqueta {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  color: var(--pr-texto-2);
+}
+
+/* El signo de la operación va en su propia columna estrecha, para que las
+   etiquetas queden alineadas entre sí. */
+.lineaSigno {
+  display: inline-block;
+  width: 10px;
+  flex-shrink: 0;
+  color: var(--pr-texto-3);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineaValor {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--pr-texto);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineaValorNegativo {
+  color: var(--pr-peligro);
+}
+
+/* La cifra que se mira cada cinco minutos: grande y con su raya de suma. */
+.lineaTotal {
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid var(--pr-borde);
+}
+
+.lineaTotal .lineaEtiqueta {
+  font-weight: 650;
+  color: var(--pr-texto);
+}
+
+.lineaTotal .lineaValor {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.7px;
+  line-height: 1.1;
+}
+
+/* Cada retiro, indentado bajo la fila «Retiros»: motivo · hora · quién. */
+.subfila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0 2px 17px;
+  font-size: 12px;
+}
+
+.subfilaTexto {
+  min-width: 0;
+  color: var(--pr-texto-2);
+  /* Sin puntos suspensivos: el motivo largo salta de línea. Nada se esconde. */
+  overflow-wrap: anywhere;
+}
+
+.subfilaMeta {
+  color: var(--pr-texto-3);
+}
+
+.subfilaValor {
+  flex-shrink: 0;
+  color: var(--pr-peligro);
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Ventas del turno ──────────────────────────────────────────────────── */
+
+.tablaEnvoltura {
+  overflow-x: auto;
+}
+
+.tablaImporte {
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--pr-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.tablaImporteNegativo {
+  color: var(--pr-peligro);
+}
+
+.tablaDescuento {
+  text-align: right;
+  white-space: nowrap;
+  color: var(--pr-texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.tablaDescuentoActivo {
+  color: var(--pr-peligro);
+  font-weight: 600;
+}
+
+.tablaHora {
+  white-space: nowrap;
+  color: var(--pr-texto-3);
+}
+
+.tablaFecha {
+  display: block;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.tablaPaciente {
+  color: var(--pr-texto);
+}
+
+.tablaTexto {
+  color: var(--pr-texto-2);
+}
+
+.tablaDia td {
+  padding: 7px 14px;
+  background: var(--pr-tarjeta-2);
+}
+
+.tablaDiaFila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tablaDiaNombre {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+.tablaDiaMeta {
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.vacioTabla {
+  padding: 40px 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+/* ── Caja cerrada ──────────────────────────────────────────────────────── */
+
+.cerrada {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 20px;
+  text-align: center;
+}
+
+.cerradaIcono {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+.cerradaTitulo {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--pr-texto);
+}
+
+.cerradaTexto {
+  margin: 0;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+.cerradaSugerido {
+  margin: 4px 0 14px;
+  font-size: 12.5px;
+  color: var(--pr-texto-3);
+}
+
+.cerradaSugerido strong {
+  color: var(--pr-texto);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Historial de cortes (colapsable, igual que hoy) ───────────────────── */
+
+.historial {
+  margin-top: 8px;
+}
+
+.historialBoton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 10px 4px;
+  border: 0;
+  border-radius: var(--pr-radio-s);
+  background: none;
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+
+.historialBoton:hover {
+  color: var(--pr-texto);
+}
+
+.historialBoton:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.historialVacio {
+  padding: 32px 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+.historialCifra {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.historialCifraFuerte {
+  font-weight: 600;
+}
