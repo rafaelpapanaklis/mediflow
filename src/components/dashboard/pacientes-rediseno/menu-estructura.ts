@@ -3,10 +3,14 @@ import { APARTADOS_FUERA_DEL_MENU } from "@/components/dashboard/presupuestos-en
 
 /**
  * La FORMA del menú de la ficha, acordada con Rafael: seis apartados
- * siempre a la vista y tres desplegables fijos.
+ * siempre a la vista y dos desplegables fijos.
  *
  *   Resumen · Nueva consulta · Odontograma · Plan de tratamiento · Citas · Facturación
- *      │ Clínico ▾   │ Archivos ▾   │ Más ▾
+ *      │ Clínico ▾   │ Archivos ▾
+ *
+ * «Más» existió hasta ws1-t3 con «Referencias» dentro; Rafael lo quitó (ver
+ * `APARTADOS_FUERA_DEL_MENU`). El grupo sigue existiendo como red: solo se
+ * pinta si aparece un apartado que ninguna lista conoce.
  *
  * Es la misma a 1440, a 1280 y en iPad. El menú de hoy MIDE el ancho que le
  * sobra y decide qué enseñar (a 1440 con el menú lateral abierto caben 5 de
@@ -34,15 +38,18 @@ export const GRUPO_CLINICO = [
   "historial-consultas",
   "recetas",
   "consentimientos",
+  // «Implantes» (solo con el módulo de Implantología, y hoy «Próximamente»)
+  // caía en «Más» por no estar en ninguna lista. Sin «Más», va con lo clínico.
+  "implantes",
 ] as const;
 
 export const GRUPO_ARCHIVOS = ["radiografias", "fotos", "subidos", "modelos-3d"] as const;
 
-// «Presupuestos» estuvo aquí hasta ws1-t1: Rafael unió Presupuestos con
-// Facturación y el apartado salió del menú (NO se borró: ver
-// `presupuestos-en-facturacion/menu.ts`). Volver a enseñarlo es vaciar
-// `APARTADOS_FUERA_DEL_MENU`: caería de nuevo en «Más», como todo suelto.
-export const GRUPO_MAS = ["referencias"] as const;
+// «Presupuestos» estuvo aquí hasta ws1-t1 (se unió con Facturación) y
+// «Referencias» hasta ws1-t3 (Rafael: no es necesario). Ninguno se borró: ver
+// `presupuestos-en-facturacion/menu.ts`. Volver a enseñar uno es sacarlo de
+// `APARTADOS_FUERA_DEL_MENU`: caería en «Más», como todo suelto.
+export const GRUPO_MAS = [] as const;
 
 export type IdGrupo = "clinico" | "archivos" | "mas";
 
@@ -82,8 +89,8 @@ function indiceEn(lista: readonly string[], id: string): number {
  * Un apartado que no esté en ninguna de las cuatro listas cae en **Más**. Eso
  * es a propósito: el día que alguien añada una pestaña a `patient-nav-items.ts`
  * y no se acuerde de este archivo, la pestaña seguirá siendo alcanzable en vez
- * de desaparecer de la interfaz. Hoy el único caso es *Implantes*, que aparece
- * solo si la clínica tiene el módulo de Implantología.
+ * de desaparecer de la interfaz. Hoy no hay ningún caso, así que «Más» no se
+ * pinta.
  *
  * Los grupos vacíos no se devuelven: sin permiso de recetas, consentimientos y
  * expediente, «Clínico» no se pinta como un botón que no abre nada.

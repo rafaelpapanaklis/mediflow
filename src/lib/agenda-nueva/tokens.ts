@@ -47,7 +47,7 @@ export const AGENDA_TOKENS = {
   morado: "var(--ag-morado, oklch(0.47 0.2 280))",
   /** Morado para texto sobre tinte. */
   moradoTexto: "var(--ag-morado-texto, oklch(0.40 0.19 280))",
-  /** Tinte morado — fondo de «en consulta» y del botón «Buscar hueco». */
+  /** Tinte morado — fondo de «en consulta» y del botón «Buscar espacio». */
   moradoTinte: "var(--ag-morado-tinte, oklch(0.94 0.035 280))",
   /** Fondo de la columna/celda de hoy. */
   hoy: "var(--ag-hoy, oklch(0.975 0.012 280))",
@@ -128,7 +128,7 @@ export const ALTO_BARRA = 64;
 /** Ancho del panel lateral de cita. */
 export const ANCHO_PANEL_CITA = 420;
 
-/** Ancho del panel «Buscar hueco». */
+/** Ancho del panel «Buscar espacio». */
 export const ANCHO_PANEL_HUECOS = 400;
 
 /**
