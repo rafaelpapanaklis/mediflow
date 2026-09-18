@@ -143,7 +143,10 @@ export const cancelarCita = definirHerramienta<ParamsCancelarCita, DatosAccionAg
         peticion: {
           metodo: "DELETE",
           ruta: `/api/appointments/${cita.id}`,
-          cuerpo: motivo ? { reason: motivo } : null,
+          // `notifyPatient: false`: misma razón que en reagendar — la propuesta
+          // promete que el sistema no le escribe al paciente, y el DELETE ahora
+          // avisa si la clínica encendió «Aviso al cancelar».
+          cuerpo: motivo ? { reason: motivo, notifyPatient: false } : { notifyPatient: false },
         },
         titulo: "Cancelar cita",
         frase: `Cancelar la cita de ${cita.paciente.nombre} con ${cita.doctor} del ${cuando}${motivo ? `. Motivo: ${motivo}` : ""}.`,

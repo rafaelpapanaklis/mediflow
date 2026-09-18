@@ -253,3 +253,67 @@ export function renderRecallMessage(template: string, vars: { nombre: string; cl
     .replaceAll("{clinicName}", vars.clinica)
     .trim();
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Avisos por EVENTO de la cita (ws1-t2, H-1/H-2).
+//
+// El cron de arriba solo habla de citas inminentes. Esto es lo otro: el mensaje
+// que sale EN EL MOMENTO en que alguien del equipo agenda, mueve o cancela una
+// cita desde el panel. Lo decide cada clínica (= cada sucursal: una fila de
+// `clinics` por sucursal) en Dashboard → WhatsApp.
+//
+// Vive en Clinic.reminderSettings.eventos —sub-objeto del MISMO Json, igual que
+// `recall`— → CERO cambio de schema. Como `eventos` no trae `offsets`, guardar
+// SOLO esto no convierte el Json en una config de recordatorios válida:
+// `getEffectiveReminderSettings` sigue cayendo a los toggles legacy y el cron
+// se comporta exactamente como antes.
+//
+// DEFAULTS = lo de hoy, sin el botón mentiroso:
+//   · alAgendar: true  → el interruptor «Enviar WhatsApp» del diálogo de nueva
+//     cita se sigue enseñando, como hoy —y como hoy nace ENCENDIDO en clínicas
+//     conectadas—, y ahora SÍ manda. Quien agenda lo ve y puede apagarlo cita
+//     por cita; apagado aquí, el diálogo ni lo enseña.
+//   · alReprogramar / alCancelar: false → hoy no sale nada al mover o cancelar,
+//     y aquí no hay nadie pulsando un botón: que una clínica empiece a escribir
+//     a sus pacientes sin haberlo pedido no es un default aceptable.
+// ════════════════════════════════════════════════════════════════════
+
+export interface AppointmentEventSettings {
+  /** Ofrecer (y honrar) la confirmación por WhatsApp al agendar desde el panel. */
+  alAgendar: boolean;
+  /** Avisar al paciente cuando el equipo cambia la fecha u hora de su cita. */
+  alReprogramar: boolean;
+  /** Avisar al paciente cuando el equipo cancela su cita. */
+  alCancelar: boolean;
+}
+
+export const DEFAULT_APPOINTMENT_EVENT_SETTINGS: AppointmentEventSettings = {
+  alAgendar: true,
+  alReprogramar: false,
+  alCancelar: false,
+};
+
+/**
+ * Valida/normaliza un `eventos` crudo (Json de DB o body de PATCH). Devuelve
+ * null solo si la forma base no es un objeto (el caller responde 400). Un campo
+ * que falta o no es booleano cae a su default, no a `false`: un Json a medias no
+ * puede apagar (ni encender) un aviso que la clínica no tocó.
+ */
+export function sanitizeAppointmentEventSettings(raw: unknown): AppointmentEventSettings | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const d = DEFAULT_APPOINTMENT_EVENT_SETTINGS;
+  return {
+    alAgendar: typeof o.alAgendar === "boolean" ? o.alAgendar : d.alAgendar,
+    alReprogramar: typeof o.alReprogramar === "boolean" ? o.alReprogramar : d.alReprogramar,
+    alCancelar: typeof o.alCancelar === "boolean" ? o.alCancelar : d.alCancelar,
+  };
+}
+
+/** Avisos por evento efectivos de la clínica (lee reminderSettings.eventos). */
+export function getAppointmentEventSettings(clinic: { reminderSettings?: unknown }): AppointmentEventSettings {
+  const rs = clinic.reminderSettings;
+  const eventos =
+    rs && typeof rs === "object" && !Array.isArray(rs) ? (rs as Record<string, unknown>).eventos : null;
+  return sanitizeAppointmentEventSettings(eventos) ?? { ...DEFAULT_APPOINTMENT_EVENT_SETTINGS };
+}

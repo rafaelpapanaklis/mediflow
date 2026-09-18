@@ -18,8 +18,9 @@
  *    el modal sí), y solo se ofrecen los abiertos y libres a esa hora;
  *  · solape con el doctor y con el sillón → alternativas, nunca un error.
  *
- * Nunca manda `overrideReason` (saltaría el solape) ni `notifyPatient` (no hace
- * nada, N5).
+ * Nunca manda `overrideReason` (saltaría el solape) ni `notifyPatient`: desde
+ * ws1-t2 ese campo SÍ manda la confirmación por WhatsApp (antes no hacía nada,
+ * N5), y que Sabina escriba a un paciente es una decisión que aquí nadie tomó.
  */
 
 import { z } from "zod";

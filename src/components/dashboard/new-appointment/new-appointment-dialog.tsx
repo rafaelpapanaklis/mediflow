@@ -24,6 +24,7 @@ import type {
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { bookingRuleMessage } from "@/lib/agenda/booking-rules";
 import { useT } from "@/i18n/i18n-provider";
+import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
 import type { TFunction } from "@/i18n/t";
 import { getResourceSchedule } from "@/lib/agenda/mutations";
 import type { WeekScheduleDTO } from "@/lib/agenda/types";
@@ -67,6 +68,8 @@ interface BootData {
   dayStart: number;
   dayEnd: number;
   waConnected: boolean;
+  /** La clínica tiene encendida la confirmación al agendar (Dashboard → WhatsApp). */
+  waConfirmOnCreate: boolean;
 }
 
 export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "clasica" }: Props) {
@@ -147,11 +150,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
           return;
         }
         let waConnected = false;
+        let waConfirmOnCreate = false;
         try {
           const sRes = await fetch("/api/clinic/me", { credentials: "include" });
           if (sRes.ok) {
             const sBody = await sRes.json();
             waConnected = !!sBody?.clinic?.waConnected;
+            waConfirmOnCreate = !!sBody?.clinic?.waConfirmOnCreate;
           }
         } catch {
           /* default false */
@@ -164,8 +169,11 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
           dayStart: body.dayStart,
           dayEnd: body.dayEnd,
           waConnected,
+          waConfirmOnCreate,
         });
-        setNotifyPatient(waConnected);
+        // Encendido solo si de verdad va a salir: conectada Y con la
+        // confirmación encendida por la clínica. Si no, viaja `false`.
+        setNotifyPatient(waConnected && waConfirmOnCreate);
         setDuration(defaultDurationFor(body.slotMinutes));
       })
       .finally(() => setBootLoading(false));
@@ -339,8 +347,26 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
         appointment: { id: string; startsAt: string };
         // P1-13: la API ya no bloquea fuera-de-horario/día cerrado; avisa.
         scheduleWarning?: { message: string } | null;
+        // null = no se pidió avisar. Si se pidió, el servidor dice qué pasó.
+        whatsapp?: { enviado: true } | { enviado: false; motivo: string } | null;
       };
-      toast.success(t("appointments.newApptDialog.toastCreated"));
+      // El interruptor prometía un WhatsApp: se dice si salió o por qué no. La
+      // cita está creada en los dos casos.
+      if (body.whatsapp?.enviado === true) {
+        toast.success(t("appointments.newApptDialog.toastCreatedWhatsAppSent"));
+      } else {
+        toast.success(t("appointments.newApptDialog.toastCreated"));
+        // «La cita ya pasó» no es un fallo que avisar (se agendó hacia atrás a
+        // propósito): solo se calla.
+        if (body.whatsapp && body.whatsapp.enviado === false && body.whatsapp.motivo !== "citaPasada") {
+          toast.error(
+            t("appointments.newApptDialog.toastWhatsAppNotSent", {
+              reason: t(whatsAppNotSentReasonKey(body.whatsapp.motivo)),
+            }),
+            { duration: 8000 },
+          );
+        }
+      }
       if (body.scheduleWarning?.message) {
         toast(body.scheduleWarning.message, { duration: 6000 });
       }
@@ -526,7 +552,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                   </Field>
                 )}
 
-                {boot.waConnected && (
+                {boot.waConnected && !boot.waConfirmOnCreate && (
+                  <div {...(nueva ? { className: nc.pediatriaTexto } : { style: { fontSize: 11, color: "var(--text-3)" } })}>
+                    {t("appointments.newApptDialog.whatsAppConfirmOff")}
+                  </div>
+                )}
+
+                {boot.waConnected && boot.waConfirmOnCreate && (
                   <div {...(nueva ? { className: nc.opciones } : { style: togglesRowStyle })}>
                     <ToggleChip
                       active={notifyPatient}
@@ -758,6 +790,20 @@ const gridDateDur: React.CSSProperties = {
   gridTemplateColumns: "280px 1fr",
   gap: 14,
 };
+
+/**
+ * Por qué no salió el WhatsApp → clave de traducción. Los motivos del envío
+ * reutilizan las frases del panel de recordatorios (REMINDER_REASON_KEY); los
+ * tres propios del aviso al agendar tienen la suya.
+ */
+function whatsAppNotSentReasonKey(motivo: string): string {
+  if (motivo === "apagadoPorClinica") return "appointments.newApptDialog.waReasonOffByClinic";
+  if (motivo === "citaPasada") return "appointments.newApptDialog.waReasonPastAppointment";
+  return (
+    (REMINDER_REASON_KEY as Record<string, string>)[motivo] ??
+    "appointments.newApptDialog.waReasonUnknown"
+  );
+}
 
 const togglesRowStyle: React.CSSProperties = {
   display: "flex",
