@@ -367,6 +367,23 @@
   background: var(--ag-morado-tinte);
 }
 
+.filtroBotonActivo .filtroIcono {
+  color: var(--ag-morado-texto);
+}
+
+/* Sin filtro: solo el ícono, cuadrado como los otros botones de 34 px.
+   Qué filtra lo dicen `title` y `aria-label`. */
+.filtroBotonSoloIcono {
+  width: 34px;
+  padding: 0;
+  justify-content: center;
+  flex: none;
+}
+
+.filtroBotonAbierto {
+  border-color: var(--ag-morado);
+}
+
 .filtroEtiqueta {
   font-weight: 600;
   white-space: nowrap;
@@ -523,7 +540,7 @@
   z-index: 5;
 }
 
-/* ── Botón «Buscar hueco» ── */
+/* ── Botón «Buscar espacio» ── */
 
 .botonHuecos {
   display: flex;
@@ -1443,7 +1460,7 @@ a.panelNombre:hover {
   text-overflow: ellipsis;
 }
 
-/* ═══ Panel «Buscar hueco» ══════════════════════════════════════════════ */
+/* ═══ Panel «Buscar espacio» ══════════════════════════════════════════════ */
 
 .huecosCabecera {
   display: flex;
@@ -1821,9 +1838,10 @@ a.panelNombre:hover {
    izquierda (228–250 px): la barra entera, con todas las etiquetas, pide
    ~1 200 px; sin las de los botones, ~1 020; sin la del filtro, ~830.
      · ≥ 1380: todo con su etiqueta (el filtro recorta la suya si le falta).
-     · < 1380: «Buscar hueco» y «Nueva cita» se quedan en su ícono, con su
+     · < 1380: «Buscar espacio» y «Nueva cita» se quedan en su ícono, con su
        nombre en `aria-label`.
-     · < 1280: el filtro también, y el título del día ya puede recortarse.
+     · < 1280: la selección del filtro también (sin filtro ya es solo ícono),
+       y el título del día ya puede recortarse.
    Sin esto, a 1024 el título del día desaparecía. */
 @media (max-width: 1379.98px) {
   .botonHuecos .etiquetaBoton,

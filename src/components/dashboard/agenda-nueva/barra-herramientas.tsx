@@ -6,7 +6,7 @@
  *
  * Lleva, en este orden: el control Día/Semana/Mes, la navegación de fecha, el
  * título del periodo, el espaciador, «N por validar» (solo si hay), el filtro
- * de doctores y unidades, el botón «Buscar hueco» y el botón «Nueva cita».
+ * de doctores y unidades, el botón «Buscar espacio» y el botón «Nueva cita».
  *
  * La fecha NO vive aquí: se navega con `setDay` del provider de siempre, que
  * cambia el `?date=` de la URL. Así un enlace a un día concreto sigue
@@ -113,16 +113,16 @@ export function BarraHerramientas() {
 
       <FiltroDoctoresUnidades />
 
-      {/* ── Buscar hueco ── */}
+      {/* ── Buscar espacio ── */}
       <button
         type="button"
         className={`${s.botonHuecos} ${ag.panel === "huecos" ? s.botonHuecosAbierto : ""}`}
         aria-expanded={ag.panel === "huecos"}
-        aria-label="Buscar hueco"
+        aria-label="Buscar espacio"
         onClick={ag.alternarHuecos}
       >
         <Search size={18} strokeWidth={2.2} />
-        <span className={s.etiquetaBoton}>Buscar hueco</span>
+        <span className={s.etiquetaBoton}>Buscar espacio</span>
       </button>
 
       {/* ── Nueva cita ── La MISMA ventana y la MISMA llamada que el botón de

@@ -61,19 +61,35 @@ test("los seis fijos son los seis acordados, en orden", () => {
   );
 });
 
-test("los tres grupos son Clínico, Archivos y Más, con su contenido", () => {
+test("los dos grupos son Clínico y Archivos, con su contenido; «Más» ya no se pinta", () => {
   const menu = construirMenuFicha(buildPatientNavItems(TODO));
-  assert.deepEqual(menu.grupos.map((g) => g.id), ["clinico", "archivos", "mas"]);
+  assert.deepEqual(menu.grupos.map((g) => g.id), ["clinico", "archivos"]);
   const porId: Record<string, string[]> = {};
   menu.grupos.forEach((g) => { porId[g.id] = g.items.map((i) => i.id); });
+  // Implantes (con módulo) va con lo clínico: antes caía en «Más» por suelto.
   assert.deepEqual(porId.clinico, [
-    "historia", "cuestionario", "historial-consultas", "recetas", "consentimientos",
+    "historia", "cuestionario", "historial-consultas", "recetas", "consentimientos", "implantes",
   ]);
   assert.deepEqual(porId.archivos, ["radiografias", "fotos", "subidos", "modelos-3d"]);
-  // Implantes no está en ninguna lista: cae en «Más», detrás de los suyos.
-  // «Presupuestos» salió del menú en ws1-t1 (se unió con Facturación): ver
-  // `presupuestos-en-facturacion/`. No está ni en «Más» ni en ningún otro sitio.
-  assert.deepEqual(porId.mas, ["referencias", "implantes"]);
+  // «Presupuestos» salió del menú en ws1-t1 (se unió con Facturación) y
+  // «Referencias» en ws1-t3 (Rafael: no es necesario): ver
+  // `presupuestos-en-facturacion/menu.ts`. No están en ningún sitio del menú.
+  assert.equal(porId.mas, undefined, "«Más» no tiene que pintarse");
+});
+
+test("«Referencias» y «Más» no están en el menú nuevo, con o sin módulo de implantes", () => {
+  [TODO, { ...TODO, showImplants: false }].forEach((opts) => {
+    const menu = construirMenuFicha(buildPatientNavItems(opts));
+    const pintados = menu.fijos
+      .map((i) => i.id)
+      .concat(...menu.grupos.map((g) => g.items.map((i) => i.id)));
+    assert.ok(pintados.indexOf("referencias") === -1, "«Referencias» sigue en el menú");
+    assert.ok(!menu.grupos.some((g) => g.id === "mas"), "«Más» sigue pintándose");
+  });
+  // Pero la pestaña sigue viva: el menú de siempre (bandera apagada) la lista
+  // y `?tab=referencias` la abre, porque `buildPatientNavItems` no cambia.
+  assert.ok(buildPatientNavItems(TODO).some((i) => i.id === "referencias"));
+  assert.ok(APARTADOS_FUERA_DEL_MENU.indexOf("referencias") !== -1);
 });
 
 test("ningún apartado se pierde ni se repite, para ningún juego de permisos", () => {
@@ -91,7 +107,7 @@ test("ningún apartado se pierde ni se repite, para ningún juego de permisos", 
       .map((i) => i.id)
       .concat(...menu.grupos.map((g) => g.items.map((i) => i.id)));
     // Todos, menos los que se sacaron del menú A PROPÓSITO y con nombre
-    // (`APARTADOS_FUERA_DEL_MENU`): hoy, solo «presupuestos».
+    // (`APARTADOS_FUERA_DEL_MENU`): hoy, «presupuestos» y «referencias».
     assert.deepEqual(
       pintados.slice().sort(),
       items.map((i) => i.id).filter((id) => APARTADOS_FUERA_DEL_MENU.indexOf(id) === -1).sort(),

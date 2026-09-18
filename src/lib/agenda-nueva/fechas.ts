@@ -144,7 +144,7 @@ export function moverPeriodo(
 }
 
 /**
- * El rango de días que barre cada opción de «Cuándo» del panel «Buscar hueco».
+ * El rango de días que barre cada opción de «Cuándo» del panel «Buscar espacio».
  *  · `asap`    — hoy y los trece días siguientes.
  *  · `semana`  — de hoy al domingo de ESTA semana (hoy incluido).
  *  · `proxima` — el lunes al domingo SIGUIENTES.
