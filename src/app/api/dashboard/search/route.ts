@@ -4,6 +4,15 @@ import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { dateISOInTz, timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { patientSearchTokens } from "@/lib/patients/patient-search-core";
+import { findPatientIdsBySearch } from "@/lib/patients/patient-search";
+import {
+  LARGO_MINIMO_BUSQUEDA,
+  terminosBusqueda,
+  condicionesCitas,
+  condicionesFacturas,
+  condicionesPacientesRespaldo,
+} from "@/lib/command-palette/terminos-busqueda";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +24,14 @@ export async function GET(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
-  if (q.length < 2) {
+  if (q.length < LARGO_MINIMO_BUSQUEDA) {
     return NextResponse.json({ patients: [], appointments: [], invoices: [] });
   }
 
-  const ci = { contains: q, mode: "insensitive" as const };
+  // "Ana Pérez" son DOS términos y cada uno tiene que casar en algún campo
+  // (AND de ORs). Antes se comparaba la cadena entera contra cada campo y un
+  // nombre completo no encontraba a nadie. Ver terminos-busqueda.ts.
+  const terminos = terminosBusqueda(q);
 
   const clinicTz = await prisma.clinic.findUnique({
     where: { id: ctx.clinicId },
@@ -66,17 +78,32 @@ export async function GET(req: NextRequest) {
       })
     : Promise.resolve([]);
 
+  // Pacientes con el MISMO criterio que el buscador de «Nueva cita»
+  // (/api/patients/search): sin acentos ("Perez" encuentra a "Pérez"), con el
+  // teléfono normalizado y por folio. Devuelve ids CANDIDATOS acotados por
+  // clinicId; el where de Prisma de abajo sigue poniendo clinicId y la
+  // visibilidad. Si la consulta normalizada falla (`null`), se cae a los
+  // cinco campos de siempre. Los campos no cambian: nombre, apellido, folio,
+  // teléfono y correo.
+  const idsPacientes = await findPatientIdsBySearch({
+    clinicIds: [ctx.clinicId],
+    tokens: patientSearchTokens(q),
+    limit: 200,
+  });
+
   const [patients, appointments, invoices, folioHits] = await Promise.all([
     prisma.patient.findMany({
       where: {
         clinicId: ctx.clinicId,
-        OR: [
-          { firstName: ci }, { lastName: ci },
-          { patientNumber: { contains: q } },
-          { phone: { contains: q } },
-          { email: ci },
+        // ARCO: un paciente cancelado (deletedAt ≠ null) no sale en el
+        // buscador — misma regla que /api/patients/search y que las listas.
+        deletedAt: null,
+        AND: [
+          ...(idsPacientes !== null
+            ? [{ id: { in: idsPacientes } }]
+            : condicionesPacientesRespaldo(terminos)),
+          ...patientVis,
         ],
-        ...(patientVis.length ? { AND: patientVis } : {}),
       },
       select: { id: true, firstName: true, lastName: true, patientNumber: true, phone: true },
       take: 5,
@@ -85,11 +112,7 @@ export async function GET(req: NextRequest) {
     prisma.appointment.findMany({
       where: {
         clinicId: ctx.clinicId,
-        OR: [
-          { patient: { firstName: ci } },
-          { patient: { lastName: ci } },
-        ],
-        ...(relatedVis.length ? { AND: relatedVis } : {}),
+        AND: [...condicionesCitas(terminos), ...relatedVis],
       },
       select: {
         id: true, startsAt: true, status: true,
@@ -102,12 +125,7 @@ export async function GET(req: NextRequest) {
     prisma.invoice.findMany({
       where: {
         clinicId: ctx.clinicId,
-        OR: [
-          { invoiceNumber: { contains: q, mode: "insensitive" } },
-          { patient: { firstName: ci } },
-          { patient: { lastName: ci } },
-        ],
-        ...(relatedVis.length ? { AND: relatedVis } : {}),
+        AND: [...condicionesFacturas(terminos), ...relatedVis],
       },
       select: invoiceSelect,
       take: 5,
