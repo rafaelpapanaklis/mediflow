@@ -2,11 +2,9 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { prisma } from "@/lib/prisma";
 import { signMaybeUrl, BUCKETS } from "@/lib/storage";
-import {
-  ConsentDocument,
-  type ConsentSignatureBlock,
-} from "@/lib/pdf/consent-document";
+import { ConsentDocument } from "@/lib/pdf/consent-document";
 import { consentTimeZone } from "@/lib/consent/dates";
+import { buildSignatureBlocks } from "@/lib/consent/signers";
 
 /**
  * buildConsentPdf — query + logo + firmas + render del PDF de un consentimiento.
@@ -89,42 +87,25 @@ export async function buildConsentPdf(
     ? `${doctor.firstName ?? ""} ${doctor.lastName ?? ""}`.trim()
     : "";
 
-  // Orden de las firmas: primero quien consiente, luego el profesional, al
-  // final los testigos. Los testigos solo aparecen si hay algo que imprimir
-  // (nombre o firma): una carta firmada a distancia no lleva testigos y dejar
-  // dos líneas vacías haría pensar que faltan.
-  const signatures: ConsentSignatureBlock[] = [
-    {
-      role: form.signerName ? "Representante legal" : "Paciente",
-      name: form.signerName
-        ? `${form.signerName}${form.signerRelation ? ` (${form.signerRelation})` : ""}`
-        : patientName,
-      dataUrl: patientSig,
-      signedAt: form.signedAt ? form.signedAt.toISOString() : null,
-    },
-    {
-      role: "Estomatólogo responsable",
-      name: doctorName,
-      dataUrl: doctorSig,
-      signedAt: form.doctorSignedAt ? form.doctorSignedAt.toISOString() : null,
-    },
-  ];
-  if (form.witness1Name || witness1Sig) {
-    signatures.push({
-      role: "Testigo 1",
-      name: form.witness1Name ?? "",
-      dataUrl: witness1Sig,
-      signedAt: form.witness1SignedAt ? form.witness1SignedAt.toISOString() : null,
-    });
-  }
-  if (form.witness2Name || witness2Sig) {
-    signatures.push({
-      role: "Testigo 2",
-      name: form.witness2Name ?? "",
-      dataUrl: witness2Sig,
-      signedAt: form.witness2SignedAt ? form.witness2SignedAt.toISOString() : null,
-    });
-  }
+  // Orden y presencia de las firmas (testigos solo cuando toca) los decide
+  // `buildSignatureBlocks`: una carta sin firmar se imprime con las dos líneas
+  // de testigos en blanco para el papel; una firmada solo trae los que hubo.
+  const signatures = buildSignatureBlocks({
+    patientName,
+    signerName: form.signerName ?? null,
+    signerRelation: form.signerRelation ?? null,
+    doctorName,
+    signedAt: form.signedAt ?? null,
+    doctorSignedAt: form.doctorSignedAt ?? null,
+    witness1Name: form.witness1Name ?? null,
+    witness1SignedAt: form.witness1SignedAt ?? null,
+    witness2Name: form.witness2Name ?? null,
+    witness2SignedAt: form.witness2SignedAt ?? null,
+    patientSig,
+    doctorSig,
+    witness1Sig,
+    witness2Sig,
+  });
 
   const element = createElement(ConsentDocument, {
     clinicName: form.clinic.name,

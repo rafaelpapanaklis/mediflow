@@ -101,6 +101,8 @@
     "test:wa-catalog": "tsx --test src/lib/whatsapp/__tests__/templates-catalog.test.ts",
     "test:consent-render": "tsx --test src/lib/consent/__tests__/render.test.ts",
     "test:consent-dates": "tsx --test src/lib/consent/__tests__/dates.test.ts",
+    "test:consent-signers": "tsx --test src/lib/consent/__tests__/signers.test.ts",
+    "test:consent-pdf": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/consent-document.test.tsx",
     "test:reminders-reschedule": "tsx --test src/lib/reminders/__tests__/reschedule.test.ts",
     "test:reminders-promise": "tsx --test src/lib/reminders/__tests__/promise.test.ts",
     "test:clinical-reminders": "tsx --test src/lib/clinical-shared/reminders/__tests__/worker-encola.test.ts",

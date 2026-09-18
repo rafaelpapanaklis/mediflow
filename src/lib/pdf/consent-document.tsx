@@ -274,23 +274,34 @@ export function ConsentDocument(props: ConsentDocumentProps) {
           </View>
         ))}
 
-        {/* Evidencia de la firma electrónica */}
+        {/* Evidencia. Una carta SIN firmar es la que se imprime para firmar a
+            mano: no puede decir "firmado electrónicamente" ni "IP" de nada.
+            Lleva solo la huella del texto, que es lo que permite comprobar
+            después que el papel firmado es este documento y no otro. */}
         <View style={styles.evidence} wrap={false}>
-          <Text style={styles.evidenceLine}>
-            Documento firmado electrónicamente. Evidencia conforme a arts. 89 y 89 bis del Código de
-            Comercio y 210-A del CFPC.
-          </Text>
+          {props.signedAt ? (
+            <Text style={styles.evidenceLine}>
+              Documento firmado electrónicamente. Evidencia conforme a arts. 89 y 89 bis del Código de
+              Comercio y 210-A del CFPC.
+            </Text>
+          ) : (
+            <Text style={styles.evidenceLine}>
+              Documento emitido para su firma autógrafa. La huella identifica el texto exacto de esta
+              carta.
+            </Text>
+          )}
           {props.contentHash ? (
             <Text style={styles.evidenceMono}>
               Huella del documento (SHA-256): {props.contentHash}
             </Text>
           ) : null}
-          <Text style={styles.evidenceMono}>
-            Firma del paciente:{" "}
-            {props.signedAt ? formatConsentDateTime(props.signedAt, props.timeZone) : "pendiente"}
-            {props.signedIp ? ` · IP ${props.signedIp}` : ""}
-          </Text>
-          {props.signedUserAgent ? (
+          {props.signedAt ? (
+            <Text style={styles.evidenceMono}>
+              Firma del paciente: {formatConsentDateTime(props.signedAt, props.timeZone)}
+              {props.signedIp ? ` · IP ${props.signedIp}` : ""}
+            </Text>
+          ) : null}
+          {props.signedAt && props.signedUserAgent ? (
             <Text style={styles.evidenceMono}>
               Dispositivo: {props.signedUserAgent.slice(0, 160)}
             </Text>
