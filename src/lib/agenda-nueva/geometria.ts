@@ -16,9 +16,11 @@
  *     Vercel el proceso corre en UTC; `new Date(iso).getHours()` daría la hora
  *     del servidor. Por eso `minutosEnTz` pasa por `getTzParts` (Intl) y no
  *     hay ni un `getHours()` en este archivo.
- *  2. **La cuadrícula no siempre empieza a las 8.** El diseño dibuja 8–20
- *     porque su clínica de ejemplo abre 8–18; una clínica real puede abrir a
- *     las 7. `ventanaDeRejilla` decide el rango y el resto de funciones toman
+ *  2. **La cuadrícula no empieza a las 8 ni termina a las 20.** El diseño
+ *     dibuja 8–20 porque su clínica de ejemplo abre 8–18; una clínica real
+ *     abre a las 9 y cierra a las 18, o abre a las 7. `ventanaDeRejilla`
+ *     pinta exactamente el rango que recibe (el horario real del día, ya
+ *     ensanchado con sus citas fuera de horario) y el resto de funciones toman
  *     la hora de inicio como parámetro, nunca la dan por supuesta.
  */
 
@@ -75,18 +77,31 @@ export interface VentanaRejilla {
 /**
  * El rango que DIBUJA la cuadrícula.
  *
- * El diseño pinta 8:00–20:00 (12 h × 112 + 8 = 1352 px). Eso vale mientras la
- * clínica abra dentro de esa franja, que es el caso de Altabrisa. Si abre
- * antes de las 8 o cierra después de las 20, la cuadrícula se ensancha para
- * que ninguna cita quede fuera del lienzo: **preferimos separarnos del diseño
- * a esconder una cita**.
+ * Pinta EXACTAMENTE las horas en que la clínica está abierta ese día: una
+ * clínica de 9 a 18 ve una rejilla de 9 a 18, sin la hora vacía de 8 a 9 ni
+ * las dos de 18 a 20 que dibujaba el diseño (su clínica de ejemplo abría
+ * 8–18 y el lienzo de 8–20 era suyo, no de todas).
  *
- * `dayStart`/`dayEnd` son las HORAS que ya calculó `paintedAgendaWindow` (el
- * horario real del día, ensanchado con las citas fuera de horario de ese día).
+ * `dayStart`/`dayEnd` son las HORAS que ya calculó `paintedAgendaWindow`: el
+ * horario real del día —por día de la semana, con el sábado corto incluido—
+ * ENSANCHADO con las citas fuera de horario de ese día. Por eso aquí no hay
+ * ni un `min` ni un `max` contra una constante: una urgencia a las 8:00 con
+ * apertura a las 9 ya viene dentro del rango (`dayStart = 8`), y una cita
+ * que se alargó más allá del cierre también. **Preferimos separarnos del
+ * horario a esconder una cita**, pero eso lo decide quien conoce las citas,
+ * no la geometría.
+ *
+ * Sin horario en Ajustes, `paintedAgendaWindow` ya trae la ventana de la
+ * clínica de siempre (8–20 por defecto): nadie se queda con la agenda vacía.
  */
 export function ventanaDeRejilla(dayStart: number, dayEnd: number): VentanaRejilla {
-  const horaInicio = Math.max(0, Math.min(HORA_INICIO_DISENO, Math.floor(dayStart)));
-  const horaFin = Math.min(24, Math.max(HORA_FIN_DISENO, Math.ceil(dayEnd)));
+  // Un número que no lo es (estado a medio cargar) cae al lienzo del diseño,
+  // nunca a una rejilla vacía.
+  const inicio = Number.isFinite(dayStart) ? Math.floor(dayStart) : HORA_INICIO_DISENO;
+  const fin = Number.isFinite(dayEnd) ? Math.ceil(dayEnd) : HORA_FIN_DISENO;
+  const horaInicio = Math.max(0, Math.min(23, inicio));
+  // Nunca menos de una hora de lienzo, y nunca fuera del día.
+  const horaFin = Math.max(horaInicio + 1, Math.min(24, fin));
   const horas: number[] = [];
   for (let h = horaInicio; h <= horaFin; h++) horas.push(h);
   return {
