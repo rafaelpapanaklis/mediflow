@@ -7,6 +7,7 @@ import { Sidebar, type SidebarProps } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { MenuDosNivelesServidor } from "@/components/dashboard/menu-dos-niveles/menu-servidor";
 import { TopbarDosNiveles } from "@/components/dashboard/menu-dos-niveles/topbar-dos-niveles";
+import { CacheNavegacion } from "@/components/dashboard/cache-navegacion/cache-navegacion";
 import { modulosParaMenuNuevo } from "@/components/dashboard/presupuestos-en-facturacion/menu";
 import { modulosSinReportes } from "@/components/dashboard/reportes-en-analitica/menu";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
@@ -324,6 +325,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         de a un toast rojo genérico o a un rebote al login. Va aquí y no en el
         minimalShell: sobre la propia pantalla del reto no tiene nada que hacer. */}
     <TwoFactorFetchGuard />
+    {/* Volver a Hoy o a Analítica, instantáneo pasados los 30 s de Next. No
+        pinta nada, NO toca el plazo de la Agenda ni de Caja (la lista de rutas
+        es cerrada: cache-navegacion/politica.ts) y solo existe con el
+        interruptor: apagado, aquí no se monta nada. */}
+    {menuDosNiveles && <CacheNavegacion />}
     {/* Ícono de chat flotante (FAB) permanente en todo el dashboard. Una sola
         instancia aquí ⇒ visible exactamente una vez en cada ruta /dashboard/*.
         Sus 2 pestañas son Proveedores + Laboratorios, así que se apaga junto con
