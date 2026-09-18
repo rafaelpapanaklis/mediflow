@@ -1773,6 +1773,7 @@
       "fieldDoctor": "Clinician in charge",
       "fieldRepresentative": "A legal representative signs",
       "representativeHint": "Turn this on when the patient is a minor or cannot decide for themselves.",
+      "minorNotice": "The patient is {age} years old: a parent or legal guardian signs this form. Enter their name and relationship.",
       "fieldSignerName": "Representative's name",
       "signerNamePlaceholder": "First and last name",
       "fieldSignerRelation": "Relationship to the patient",
