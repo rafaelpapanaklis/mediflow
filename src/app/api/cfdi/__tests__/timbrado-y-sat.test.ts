@@ -25,6 +25,7 @@
 import { test, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
+import { marcarTimbre } from "@/lib/invoices/cfdi-timbre-incierto";
 
 // ── Estado del doble de Prisma ──────────────────────────────────────────────
 const db = {
@@ -160,6 +161,18 @@ const pac = {
   efos: false,
   /** Se ejecuta justo después de timbrar, antes de devolver el resultado. */
   alTimbrar: null as null | (() => void),
+  /**
+   * El timbre SALE y la respuesta se pierde (H-8). El contador de timbres sube
+   * —el CFDI ya existe ante el SAT— y acto seguido revienta como revienta
+   * `fetch` de verdad cuando se corta la red: TypeError("fetch failed").
+   * A propósito SIN marcar el error: así la prueba mide lo que hace la ruta
+   * ante un error crudo, no lo que le dijimos que hiciera.
+   */
+  respuestaPerdida: false,
+  /** Facturapi contesta 200 pero sin `uuid` legible. */
+  sinUuid: false,
+  /** Error MARCADO como incierto cuyo texto suena a rechazo (5xx de Facturapi). */
+  rechazoMarcadoIncierto: null as string | null,
 };
 
 (mock as any).module("@/lib/facturapi", {
@@ -167,18 +180,36 @@ const pac = {
     getOrgApiKey: async () => "sk_test",
     getOrganizationStatus: async () => ({ exists: true, isProductionReady: true, pendingSteps: [] }),
     validateRfc: async () => ({ ok: !pac.efos }),
-    createOrUpdateCustomer: async () => "cus_1",
-    createInvoice: async () => {
+    createOrUpdateCustomer: async () => {
+      // Falla de red ANTES de apartar la factura y de pedir el timbre.
+      if (fallaCliente) throw new TypeError("fetch failed");
+      return "cus_1";
+    },
+    createInvoice: async (args: any) => {
       await new Promise((r) => setTimeout(r, 15));
       if (pac.rechazo) throw new Error(pac.rechazo);
       pac.timbres += 1;
       const n = pac.timbres;
       pac.alTimbrar?.();
+      if (pac.respuestaPerdida) throw new TypeError("fetch failed");
+      if (pac.rechazoMarcadoIncierto) {
+        throw marcarTimbre(new Error(pac.rechazoMarcadoIncierto), true);
+      }
+      // El createInvoice de verdad solo lanza si quien llama pasa `exigirUuid`.
+      if (pac.sinUuid) {
+        if (!args?.exigirUuid) return { id: `fapi_${n}`, total: 1000 } as any;
+        throw marcarTimbre(
+          new Error("Facturapi aceptó el timbrado pero la respuesta llegó sin UUID."),
+          true,
+        );
+      }
       return { id: `fapi_${n}`, uuid: `UUID-${n}`, total: 1000, xml_url: `x${n}`, pdf_url: `p${n}` };
     },
     CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
   },
 });
+/** La llamada a Facturapi PREVIA al timbrado se corta por red. */
+let fallaCliente = false;
 /** FACTURAPI_ENV=live (timbra ante el SAT) o pruebas. */
 const entorno = { live: true };
 (mock as any).module("@/lib/facturapi-env", { namedExports: { isFacturapiLive: () => entorno.live } });
@@ -262,6 +293,10 @@ beforeEach(() => {
   pac.rechazo = null;
   pac.efos = false;
   pac.alTimbrar = null;
+  pac.respuestaPerdida = false;
+  pac.sinUuid = false;
+  pac.rechazoMarcadoIncierto = null;
+  fallaCliente = false;
   vis.espera = null;
   entorno.live = true;
 });
@@ -314,6 +349,96 @@ test("N2 · si la base se cae mientras Facturapi timbra, el reintento tampoco ti
   assert.equal(pac.timbres, 1, "no se sabe qué quedó guardado: se bloquea, no se vuelve a timbrar");
   assert.equal(reintento.status, 409);
   assert.match(String(db.invoice.cfdiUuid), /^timbrando:inv1:./, "la factura queda apartada");
+});
+
+// ── H-8 · se timbró y no nos enteramos ─────────────────────────────────────
+// El candado de arriba cubre «dos pestañas» y «falló al guardar». Falta el
+// tercero: Facturapi TIMBRA y la respuesta se pierde por el camino. La
+// excepción llega igual que un rechazo, así que la ruta soltaba el apartado y
+// el reintento emitía un SEGUNDO CFDI — dos timbres cobrados y dos
+// comprobantes vigentes ante el SAT que en dental no se pueden cancelar.
+
+test("H-8 · la respuesta se pierde DESPUÉS de timbrar: el reintento NO vuelve a timbrar", async () => {
+  const { POST } = await import("@/app/api/cfdi/route");
+  pac.respuestaPerdida = true;
+
+  const primero = await quieto(async () => leer(await POST(req(TIMBRAR))));
+  assert.equal(pac.timbres, 1, "el CFDI ya salió: eso es justo lo que no sabemos");
+
+  // EL RENGLÓN QUE IMPORTA: aquí es donde salía el CFDI duplicado. Va antes que
+  // cualquier comprobación de forma para que, si esto se rompe, el fallo diga
+  // «se timbró dos veces» y no «falta un código».
+  pac.respuestaPerdida = false;
+  const reintento = await quieto(async () => leer(await POST(req(TIMBRAR))));
+  assert.equal(pac.timbres, 1,
+    `el reintento NO puede volver a timbrar: ${pac.timbres} timbres = ${pac.timbres} CFDI ante el SAT`);
+
+  assert.equal(primero.body.code, "CFDI_TIMBRE_INCIERTO",
+    `la primera responde que no se sabe si timbró (${JSON.stringify(primero.body)})`);
+  assert.match(String(db.invoice.cfdiUuid), /^timbrando:inv1:./,
+    "la factura SE QUEDA apartada: soltarla es lo que permitía el segundo timbre");
+  assert.equal(reintento.status, 409);
+  assert.equal(reintento.body.code, "CFDI_EN_CURSO");
+  assert.equal(db.cfdiRecords.length, 0, "y no se inventa un CfdiRecord");
+});
+
+test("H-8 · si la red falla ANTES de pedir el timbre, la factura NO se bloquea", async () => {
+  // El otro lado del arreglo: `createOrUpdateCustomer` y `validateRfc` también
+  // hablan con Facturapi y también pueden fallar por red, pero ahí todavía no
+  // se pidió ningún timbre. Bloquear la factura ahí sería un susto gratis y
+  // trabajo para soporte.
+  const { POST } = await import("@/app/api/cfdi/route");
+  fallaCliente = true;
+
+  const r = await quieto(async () => leer(await POST(req(TIMBRAR))));
+  assert.equal(pac.timbres, 0, "no se llegó a timbrar");
+  assert.equal(db.invoice.cfdiUuid, null, "la factura queda libre para reintentar");
+  assert.notEqual(r.body.code, "CFDI_TIMBRE_INCIERTO", "y no se le dice que quizá se timbró");
+
+  fallaCliente = false;
+  const reintento = await quieto(async () => leer(await POST(req(TIMBRAR))));
+  assert.equal(reintento.status, 200, "el reintento funciona con normalidad");
+  assert.equal(pac.timbres, 1);
+});
+
+test("H-8 · Facturapi acepta pero no manda UUID: tampoco se vuelve a timbrar", async () => {
+  const { POST } = await import("@/app/api/cfdi/route");
+  pac.sinUuid = true;
+
+  const primero = await quieto(async () => leer(await POST(req(TIMBRAR))));
+  assert.equal(pac.timbres, 1);
+  assert.equal(primero.body.code, "CFDI_TIMBRE_INCIERTO");
+  assert.match(String(db.invoice.cfdiUuid), /^timbrando:inv1:./);
+  assert.equal(db.cfdiRecords.length, 0, "no se guarda un CfdiRecord sin UUID");
+
+  pac.sinUuid = false;
+  await quieto(async () => leer(await POST(req(TIMBRAR))));
+  assert.equal(pac.timbres, 1, "el reintento NO vuelve a timbrar");
+});
+
+test("H-8 · manda la MARCA del error, no lo que parezca su mensaje", async () => {
+  // La costura entre createInvoice y la ruta. Un 500 de Facturapi trae un
+  // mensaje que suena a rechazo («El RFC no es válido»), pero createInvoice lo
+  // marcó como incierto porque un 5xx no dice nada sobre el comprobante. Si la
+  // ruta se guiara por el texto en vez de por la marca, soltaría el apartado.
+  const { POST } = await import("@/app/api/cfdi/route");
+  pac.rechazoMarcadoIncierto = "El RFC del receptor no está en la lista de RFC inscritos";
+
+  const r = await quieto(async () => leer(await POST(req(TIMBRAR))));
+  assert.equal(r.body.code, "CFDI_TIMBRE_INCIERTO", "gana la marca");
+  assert.match(String(db.invoice.cfdiUuid), /^timbrando:inv1:./, "el apartado se queda");
+});
+
+test("H-8 · el mensaje le dice a la clínica que NO lo vuelva a timbrar", async () => {
+  const { POST } = await import("@/app/api/cfdi/route");
+  pac.respuestaPerdida = true;
+
+  const r = await quieto(async () => leer(await POST(req(TIMBRAR))));
+  const msg = String(r.body.error ?? "");
+  assert.match(msg, /no se sabe/i, "dice que no se sabe qué pasó");
+  assert.match(msg, /segundo CFDI|volver a timbrar|vuelva a timbrar/i,
+    `y advierte del duplicado (${msg})`);
+  assert.match(msg, /soporte/i, "y da salida: soporte");
 });
 
 test("N2 · el precio cambió entre la lectura y el timbrado: no se timbra el importe viejo", async () => {

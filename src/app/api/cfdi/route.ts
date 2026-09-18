@@ -11,6 +11,7 @@ import {
   type InvoiceResult,
 } from "@/lib/facturapi";
 import { cfdiClaimFor, isCfdiClaim, CFDI_EN_CURSO_ERROR } from "@/lib/invoices/cfdi-vigente";
+import { pudoHaberTimbrado, CFDI_TIMBRE_INCIERTO_ERROR } from "@/lib/invoices/cfdi-timbre-incierto";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { isUsableWhereId } from "@/lib/validations";
 import { getResolvedPlan } from "@/lib/plans";
@@ -313,6 +314,13 @@ export async function POST(req: NextRequest) {
       usoCfdi:     usoCfdi ?? "D01",
       paymentForm: payForm,
       items,
+      // Un 200 sin UUID se trata como «no se sabe» y no como un timbre bueno:
+      // la factura está apartada y hay que conservar ese apartado. Lo comprueba
+      // `createInvoice` y no este tramo: aquí, ya con el CFDI emitido, no puede
+      // salir ninguna excepción ni ninguna respuesta de error, o perderíamos el
+      // CfdiRecord de un comprobante que ya existe ante el SAT (lo vigila
+      // src/lib/__tests__/cfdi-timbrado-alerta.test.ts).
+      exigirUuid: true,
     });
     timbrado = result;
 
@@ -430,8 +438,42 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error("CFDI error:", err);
     if (!timbrado) {
-      // Facturapi no devolvió timbre: se suelta el apartado, solo si sigue siendo
-      // el de esta petición, para que la factura se pueda corregir y reintentar.
+      // ── «Rechazó» y «no contestó» NO son lo mismo (H-8) ───────────────────
+      // No tener `timbrado` solo significa que no llegó el resultado a esta
+      // variable, NO que el SAT no timbrara. Si la respuesta se perdió después
+      // de que Facturapi emitiera —corte de red, 504, timeout—, soltar el
+      // apartado dejaba la factura re-timbrable y el reintento emitía un
+      // SEGUNDO CFDI: dos timbres cobrados y dos comprobantes vigentes que en
+      // dental ni siquiera se pueden cancelar desde el panel.
+      //
+      // Quien lo sabe es `createInvoice`, que vio la respuesta (o su ausencia)
+      // y marcó el error; `pudoHaberTimbrado` lee esa marca y, si no la hay,
+      // decide por el tipo de error y cae del lado seguro.
+      //
+      // `apartada` es la condición de entrada, y no es un detalle: el apartado
+      // se escribe en la línea JUSTO ANTES de pedir el timbre, así que sin él
+      // ni siquiera se llegó a pedir. Las llamadas anteriores a Facturapi
+      // (getOrgApiKey, validateRfc, createOrUpdateCustomer) también pueden
+      // fallar por red, y ahí NO hay nada que timbrar: tratarlas como dudosas
+      // asustaría a la clínica con un «no se sabe si se timbró» por un CFDI que
+      // nunca se pidió.
+      if (apartada && pudoHaberTimbrado(err)) {
+        // 🔴 EL APARTADO SE QUEDA, A PROPÓSITO. Mientras esté puesto,
+        // `isCfdiClaim` corta cualquier reintento con 409 antes de hablar con
+        // Facturapi. Desatascarla es mirar el panel de Facturapi; volver a
+        // timbrar a ciegas no tiene vuelta atrás.
+        console.error("CFDI: no se sabe si el timbre salió — el apartado se QUEDA:", {
+          clinicId: ctx!.clinicId, invoiceId, claim, motivo: err?.message,
+        });
+        return NextResponse.json({
+          error: CFDI_TIMBRE_INCIERTO_ERROR,
+          code:  "CFDI_TIMBRE_INCIERTO",
+        }, { status: 503 });
+      }
+
+      // Facturapi contestó y NO timbró: aquí no hay CFDI que proteger, así que
+      // se suelta el apartado —solo si sigue siendo el de esta petición— para
+      // que la factura se pueda corregir y reintentar.
       if (apartada) {
         await prisma.invoice.updateMany({
           where: { id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: claim },
