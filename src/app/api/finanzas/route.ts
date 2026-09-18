@@ -12,6 +12,7 @@ import {
   revenuePaymentWhere,
 } from "@/lib/caja";
 import { MX_OFFSET_MS, bucketKeyOf, eachBucket } from "@/lib/analytics/query";
+import { NOT_A_SALE_STATUSES, expenseWindowEnd, serieEnd } from "@/lib/finanzas-periodo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,6 +95,10 @@ export async function GET(req: NextRequest) {
   const win = resolveWindow(new URL(req.url).searchParams);
   if ("error" in win) return NextResponse.json({ error: win.error }, { status: 400 });
   const { from, to } = win;
+  // Los gastos de «este mes» llegan al FIN del mes, no a ahora: un gasto con
+  // fecha futura (la renta del 30 registrada el 5) tiene que verse y restar.
+  // Cobros, ventas y citas siguen cortando en `to` (ver finanzas-periodo.ts).
+  const expenseTo = expenseWindowEnd(new URL(req.url).searchParams.get("period"), new Date(), to);
 
   try {
     const todayStart = startOfTodayMx(new Date());
@@ -116,10 +121,12 @@ export async function GET(req: NextRequest) {
         _sum:  { amount: true },
         where: { ...revenueWhere, method: CASH_METHOD },
       }),
-      // ventas: facturas creadas en el periodo; el contrato solo pide excluir
-      // canceladas (CANCELLED) — DRAFT sí cuenta como venta en curso.
+      // ventas: facturas EMITIDAS creadas en el periodo. Ni canceladas ni
+      // borradores: un DRAFT (nace de «presupuesto → factura») aún no se
+      // confirma, no se puede cobrar ni enviar — no es una venta. Mismo
+      // criterio que porCobrar aquí abajo y que caja.ts.
       prisma.invoice.count({
-        where: { clinicId, createdAt: { gte: from, lte: to }, status: { not: "CANCELLED" } },
+        where: { clinicId, createdAt: { gte: from, lte: to }, status: { notIn: [...NOT_A_SALE_STATUSES] } },
       }),
       // citas del periodo (startsAt) con status distinto de cancelada
       // (NO_SHOW sí cuenta: la cita existió).
@@ -158,13 +165,14 @@ export async function GET(req: NextRequest) {
         where:  refundPaymentWhere(clinicId, { gte: from, lte: to }),
         select: { amount: true, paidAt: true },
       }),
+      // Misma población que `ventas`: sin borradores ni canceladas.
       prisma.invoice.findMany({
-        where:  { clinicId, createdAt: { gte: from, lte: to }, status: { not: "CANCELLED" } },
+        where:  { clinicId, createdAt: { gte: from, lte: to }, status: { notIn: [...NOT_A_SALE_STATUSES] } },
         select: { doctorId: true, total: true },
       }),
       prisma.expense
         .findMany({
-          where:  { clinicId, date: { gte: from, lte: to } },
+          where:  { clinicId, date: { gte: from, lte: expenseTo } },
           select: { amount: true, date: true },
         })
         .catch((e: any): { amount: number; date: Date }[] => {
@@ -186,7 +194,11 @@ export async function GET(req: NextRequest) {
       gastosPorDia[k] = (gastosPorDia[k] ?? 0) + (g.amount ?? 0);
       gastosTotal += g.amount ?? 0;
     }
-    const serie = eachBucket(from, to, "day").map((fecha) => ({
+    // La serie llega hasta `to`, o hasta el último gasto futuro si lo hay: así
+    // la suma de serie[].gastos sigue siendo el KPI. Sin gastos futuros es la
+    // misma serie de siempre.
+    const serieTo = serieEnd(to, expenseRows.map((g) => g.date));
+    const serie = eachBucket(from, serieTo, "day").map((fecha) => ({
       fecha,
       ingresos: money(neto.porBucket[fecha] ?? 0),
       gastos:   money(gastosPorDia[fecha] ?? 0),

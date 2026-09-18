@@ -5,6 +5,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { money } from "@/lib/caja";
 import { MX_OFFSET_MS } from "@/lib/analytics/query";
+import { expenseWindowEnd } from "@/lib/finanzas-periodo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,10 +101,14 @@ export async function GET(req: NextRequest) {
 
   const win = resolveWindow(new URL(req.url).searchParams);
   if ("error" in win) return NextResponse.json({ error: win.error }, { status: 400 });
+  // «Este mes» llega al FIN del mes para los gastos (misma ventana que usa
+  // /api/finanzas para la tarjeta y la utilidad): un gasto con fecha futura
+  // del mes en curso se lista en cuanto se registra.
+  const expenseTo = expenseWindowEnd(new URL(req.url).searchParams.get("period"), new Date(), win.to);
 
   try {
     const rows = await prisma.expense.findMany({
-      where:   { clinicId: ctx.clinicId, date: { gte: win.from, lte: win.to } },
+      where:   { clinicId: ctx.clinicId, date: { gte: win.from, lte: expenseTo } },
       orderBy: { date: "desc" },
       select:  { id: true, date: true, category: true, amount: true, note: true },
     });
