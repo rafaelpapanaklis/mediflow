@@ -44,6 +44,7 @@ import { Icono } from "./icono";
 import { CLASES_MENU } from "./clases";
 import { escucharCambioDeMenu } from "@/lib/menu-personalizado/avisos";
 import { EditorMenu } from "./personalizar/editor-menu";
+import { useEncogidoEnFicha } from "@/components/dashboard/menu-recogido-en-paciente/use-encogido-en-ficha";
 import s from "./menu-dos-niveles.module.css";
 
 /** El menú que esta persona se armó a mano, leído en el servidor. */
@@ -109,7 +110,8 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   const { open: abrirNuevaCita } = useNewAppointmentDialog();
 
   const router = useRouter();
-  const [encogido, setEncogido] = useEncogido();
+  // En la ficha de un paciente el menú se recoge solo (ws1-t4); fuera manda la preferencia.
+  const [encogido, setEncogido] = useEncogidoEnFicha(useEncogido(), pathname);
   const esMovil = useMedia("(max-width: 1023.98px)");
   const esSuperpuesto = useMedia("(max-width: 1279.98px)");
   /** Id del submenú abierto en el segundo nivel («admin» o uno de la persona). */
