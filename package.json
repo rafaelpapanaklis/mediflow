@@ -38,6 +38,7 @@
     "test:rediseno-por-defecto": "tsx --test src/lib/menu-dos-niveles/__tests__/rediseno-por-defecto.test.ts",
     "test:menu-en-todas-las-pantallas": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/menu-en-todas-las-pantallas.test.ts",
     "test:menu-personalizado": "tsx --test src/lib/menu-personalizado/__tests__/menu-personalizado.test.ts",
+    "test:menu-recogido-en-paciente": "tsx --test src/components/dashboard/menu-recogido-en-paciente/__tests__/menu-recogido-en-paciente.test.ts",
     "test:tipografia-panel": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/tipografia-panel.test.ts",
     "test:marketplace-oculto": "tsx --test src/components/dashboard/marketplace-oculto/__tests__/marketplace-oculto.test.ts",
     "test:presupuestos-en-facturacion": "tsx --test src/components/dashboard/presupuestos-en-facturacion/__tests__/presupuestos-en-facturacion.test.ts",
