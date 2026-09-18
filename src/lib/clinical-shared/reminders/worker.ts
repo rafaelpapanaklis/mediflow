@@ -9,9 +9,10 @@
 import { prisma } from "@/lib/prisma";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import {
-  CLINICAL_REMINDER_TEMPLATES,
-  type ClinicalReminderTemplate,
-} from "./templates";
+  ENQUEUEABLE_TYPES,
+  oldestEnqueueableDueDate,
+  planClinicalReminder,
+} from "./plan";
 
 const LOOKAHEAD_DAYS = 7;
 const BATCH_SIZE = 200;
@@ -20,6 +21,12 @@ export interface ClinicalRemindersSummary {
   picked: number;
   enqueued: number;
   skipped: number;
+  /**
+   * Pendientes ya exigibles que este encolador NO va a tocar: tipos sin
+   * plantilla renderizable y atrasos de más de MAX_OVERDUE_DAYS. Antes esto no
+   * se veía en ningún sitio, y por eso el cron pasó meses sin encolar nada.
+   */
+  unsupported: number;
   errors: Array<{ id: string; reason: string }>;
 }
 
@@ -37,9 +44,11 @@ export async function processClinicalReminders(opts?: {
     picked: 0,
     enqueued: 0,
     skipped: 0,
+    unsupported: 0,
     errors: [],
   };
   const now = opts?.now ?? new Date();
+  const oldest = oldestEnqueueableDueDate(now);
   const horizon = new Date(now.getTime() + LOOKAHEAD_DAYS * 24 * 3600 * 1000);
   const limit = opts?.batchSize ?? BATCH_SIZE;
 
@@ -47,7 +56,12 @@ export async function processClinicalReminders(opts?: {
     where: {
       status: "pending",
       deletedAt: null,
-      dueDate: { lte: horizon },
+      // Solo lo que se puede encolar de verdad (ver plan.ts). Lo demás no se
+      // lee: una fila que se salta sin cambiar de estado volvería a salir la
+      // primera cada día y acabaría taponando el lote.
+      reminderType: { in: [...ENQUEUEABLE_TYPES] },
+      dueDate: { gte: oldest, lte: horizon },
+      clinic: { waConnected: true },
     },
     orderBy: { dueDate: "asc" },
     take: limit,
@@ -74,16 +88,11 @@ export async function processClinicalReminders(opts?: {
         continue;
       }
 
-      // El reminderType viene del enum SQL pero el sub-tipo puede vivir
-      // en payload.subtype para los casos `other`.
-      const lookupKey = resolveLookupKey(r);
-      const tpl = resolveTemplate(lookupKey);
-      if (!tpl) {
+      const plan = planClinicalReminder(r);
+      if (plan.action === "skip") {
         summary.skipped++;
         continue;
       }
-
-      const message = `${tpl.prefix}${lookupKey}::${r.id}`;
 
       // Atómico: sin transacción, un crash entre create y update dejaría el
       // ClinicalReminder en pending con el WhatsAppReminder ya creado →
@@ -93,11 +102,11 @@ export async function processClinicalReminders(opts?: {
           data: {
             clinicId: r.clinic.id,
             patientPhone: r.patient.phone,
-            message,
-            type: tpl.prefix.replace(/_$/, ""),
+            message: plan.message,
+            type: plan.type,
             status: WA_REMINDER_STATUS.PENDING,
             scheduledFor: r.dueDate,
-            payload: (r.payload as object | null) ?? undefined,
+            payload: { ...plan.payload, sourceClinicalReminderId: r.id },
           },
           select: { id: true },
         });
@@ -118,24 +127,24 @@ export async function processClinicalReminders(opts?: {
     }
   }
 
+  // Lo que se queda fuera, contado y a la vista en el log de Vercel.
+  summary.unsupported = await prisma.clinicalReminder.count({
+    where: {
+      status: "pending",
+      deletedAt: null,
+      dueDate: { lte: horizon },
+      OR: [
+        { reminderType: { notIn: [...ENQUEUEABLE_TYPES] } },
+        { dueDate: { lt: oldest } },
+      ],
+    },
+  });
+  if (summary.unsupported > 0) {
+    console.warn(
+      `[clinical-reminders] ${summary.unsupported} recordatorios pendientes NO se encolan ` +
+        "(tipo sin plantilla en la cola, o vencidos hace más de 7 días)",
+    );
+  }
+
   return summary;
-}
-
-function resolveLookupKey(r: {
-  reminderType: string;
-  payload: unknown;
-}): string {
-  if (r.reminderType !== "other") return r.reminderType;
-  if (r.payload && typeof r.payload === "object") {
-    const sub = (r.payload as Record<string, unknown>).subtype;
-    if (typeof sub === "string") return sub;
-  }
-  return r.reminderType;
-}
-
-function resolveTemplate(key: string): ClinicalReminderTemplate | null {
-  if (key in CLINICAL_REMINDER_TEMPLATES) {
-    return CLINICAL_REMINDER_TEMPLATES[key as keyof typeof CLINICAL_REMINDER_TEMPLATES];
-  }
-  return null;
 }
