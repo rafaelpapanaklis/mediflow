@@ -49,13 +49,16 @@ interface Props {
   clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null; cfdiTaxMode?: string | null };
   /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. */
   cfdiLive?:     boolean;
+  /** Interruptor `menu-dos-niveles` (lo pasa Caja): viste el detalle de factura,
+   *  Registrar pago y Nueva factura con el diseño nuevo. Apagado, todo igual. */
+  rediseno?:     boolean;
 }
 
 function patientNameOf(inv: any): string {
   return `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.trim() || "—";
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueBefore, creditTotal = 0, clinic, cfdiLive = false }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueBefore, creditTotal = 0, clinic, cfdiLive = false, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
@@ -432,6 +435,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
        *  descuento por línea y global, doctor atribuido, IVA). Aquí además elige
        *  paciente porque Caja no parte de una ficha. */}
       <InvoiceEditorModal
+        rediseno={rediseno}
         open={showNew}
         patients={patients}
         clinicTaxMode={clinic.cfdiTaxMode}
@@ -447,6 +451,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
        *  Acciones: Cobrar, Marcar pagada, Editar precio, Aplicar descuento,
        *  Cancelar, Reembolsar, Imprimir, Copiar UUID. */}
       <InvoiceDetailModal
+        rediseno={rediseno}
         open={detailInvoice !== null}
         invoice={detailInvoice}
         patientName={detailInvoice ? patientNameOf(detailInvoice) : ""}
@@ -457,6 +462,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
 
       {/* PaymentModal compartido — atajo "Registrar pago" inline en cada row. */}
       <PaymentModal
+        rediseno={rediseno}
         open={paymentInvoice !== null}
         invoice={paymentInvoice}
         onClose={() => setPaymentInvoice(null)}
