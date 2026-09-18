@@ -2864,7 +2864,23 @@
       "other": "{count} movimientos · {amount}"
     },
     "staleShiftTitle": "Esta caja lleva abierta desde el {date} ({hours} h).",
-    "staleShiftDesc": "Te recomendamos cerrar el turno para cuadrar el efectivo. Mientras tanto, los totales y las ventas de abajo son de todo el turno, no solo de hoy."
+    "staleShiftDesc": "Te recomendamos cerrar el turno para cuadrar el efectivo. Mientras tanto, los totales y las ventas de abajo son de todo el turno, no solo de hoy.",
+    "nueva": {
+      "abierta": "Caja abierta",
+      "hoy": "Hoy en la clínica",
+      "facturadoHoy": "Facturado hoy",
+      "cobradoHoy": "Cobrado hoy",
+      "porCobrar": "Por cobrar",
+      "vencido": "Vencido",
+      "arqueo": "Arqueo del turno",
+      "efectivoEnCaja": "Efectivo en caja",
+      "efectivoCobrado": "Efectivo cobrado",
+      "ingresosPorMetodo": "Ingresos por método",
+      "otrosMetodos": "Otros (transferencia / cheque)",
+      "descuento": "Descuento",
+      "descargarExcel": "Descargar Excel",
+      "sugerido": "Efectivo de hoy aún sin cuadrar:"
+    }
   },
   "billing": {
     "billingClient": {
