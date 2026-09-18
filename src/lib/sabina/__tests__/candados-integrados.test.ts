@@ -114,7 +114,9 @@ const LAS_NUEVAS = [
 test("el catálogo del motor trae las herramientas de las cuatro ramas", () => {
   const nombres = SABINA_TOOLS.map((t) => t.nombre);
   for (const n of LAS_NUEVAS) assert.ok(nombres.includes(n), `falta ${n}`);
-  assert.equal(nombres.length, 28);
+  // 28 + las tres de la lista de pacientes (ws1-t5): cumpleanos,
+  // pacientes_con_etiqueta y proximas_citas.
+  assert.equal(nombres.length, 31);
 });
 
 test("🔴 cada herramienta del motor: el usuario tiene la key, el Super Admin se la quita a Sabina → sin_permiso «sabina», sin tocar la base", async () => {
