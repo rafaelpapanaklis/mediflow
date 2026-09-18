@@ -730,10 +730,20 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
         <div className={styles.pillGroup}>
           {([
             { id: "debt" as QuickFilter, label: t("patients.quickFilter.withDebt"), count: stats?.withDebt },
-            { id: "vip" as QuickFilter, label: t("patients.quickFilter.vip") },
-            { id: "nextAppt" as QuickFilter, label: t("patients.quickFilter.nextAppointment"), count: stats?.nextAppointmentsWeek },
-            { id: "birthdayWeek" as QuickFilter, label: t("patients.quickFilter.birthdayWeek") },
-            { id: "noContact6m" as QuickFilter, label: t("patients.quickFilter.noContact6m") },
+            // En el rediseño (el panel de todas las clínicas que pagan) solo queda
+            // «Con deuda» (ws1-t5, pedido de Rafael). Lo que contestaban las otras
+            // cuatro chips lo contesta Sabina: `pacientes_con_etiqueta` (VIP),
+            // `proximas_citas`, `cumpleanos` y `pacientes_inactivos` (sin contacto).
+            // Con la bandera `menu-dos-niveles` apagada la lista sigue idéntica a
+            // la de siempre, con las cinco.
+            ...(rediseno
+              ? []
+              : [
+                  { id: "vip" as QuickFilter, label: t("patients.quickFilter.vip") },
+                  { id: "nextAppt" as QuickFilter, label: t("patients.quickFilter.nextAppointment"), count: stats?.nextAppointmentsWeek },
+                  { id: "birthdayWeek" as QuickFilter, label: t("patients.quickFilter.birthdayWeek") },
+                  { id: "noContact6m" as QuickFilter, label: t("patients.quickFilter.noContact6m") },
+                ]),
           ]).map((q) => (
             <button
               key={q.id}
