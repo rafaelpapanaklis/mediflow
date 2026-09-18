@@ -2864,7 +2864,23 @@
       "other": "{count} movements · {amount}"
     },
     "staleShiftTitle": "This register has been open since {date} ({hours} h).",
-    "staleShiftDesc": "We recommend closing the shift to reconcile the cash. Until then, the totals and sales below cover the whole shift, not just today."
+    "staleShiftDesc": "We recommend closing the shift to reconcile the cash. Until then, the totals and sales below cover the whole shift, not just today.",
+    "nueva": {
+      "abierta": "Register open",
+      "hoy": "Today at the clinic",
+      "facturadoHoy": "Billed today",
+      "cobradoHoy": "Collected today",
+      "porCobrar": "Receivable",
+      "vencido": "Overdue",
+      "arqueo": "Shift reconciliation",
+      "efectivoEnCaja": "Cash in drawer",
+      "efectivoCobrado": "Cash collected",
+      "ingresosPorMetodo": "Income by method",
+      "otrosMetodos": "Other (transfer / check)",
+      "descuento": "Discount",
+      "descargarExcel": "Download Excel",
+      "sugerido": "Today's cash not yet reconciled:"
+    }
   },
   "billing": {
     "billingClient": {
