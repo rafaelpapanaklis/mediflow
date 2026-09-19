@@ -1,24 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  Bold,
-  Heading1,
-  Heading2,
-  Heading3,
-  Italic,
-  List,
-  ListOrdered,
-  Pilcrow,
-  Underline,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { Bold, Italic, List, ListOrdered, Underline, X, type LucideIcon } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { MAX_NAME_LENGTH, type DocumentTemplateKindValue } from "@/lib/document-templates/kinds";
 import { DOCUMENT_MARKERS } from "@/lib/document-templates/markers";
 import { sanitizeTemplateHtml } from "@/lib/document-templates/sanitize";
 import type { PlantillaFila } from "./plantillas-client";
+import { esPrecargada } from "./tarjeta";
 import styles from "./plantillas.module.css";
 
 interface Props {
@@ -36,7 +25,8 @@ interface Props {
 // (src/lib/document-templates/sanitize.ts) y devuelve lo que de verdad guardó.
 interface Herramienta {
   id: string;
-  icon: LucideIcon;
+  /** Sin icono = el botón lleva su nombre escrito (`barraCorta`), con el tamaño de lo que pone. */
+  icon?: LucideIcon;
   comando: string;
   valor?: string;
   /** Para `queryCommandState`; los de bloque se miran con `formatBlock`. */
@@ -48,10 +38,12 @@ const HERRAMIENTAS: readonly (Herramienta | "sep")[] = [
   { id: "cursiva", icon: Italic, comando: "italic", estado: true },
   { id: "subrayado", icon: Underline, comando: "underline", estado: true },
   "sep",
-  { id: "titulo1", icon: Heading1, comando: "formatBlock", valor: "h1" },
-  { id: "titulo2", icon: Heading2, comando: "formatBlock", valor: "h2" },
-  { id: "titulo3", icon: Heading3, comando: "formatBlock", valor: "h3" },
-  { id: "parrafo", icon: Pilcrow, comando: "formatBlock", valor: "p" },
+  // H1, H2, H3 y ¶ son jerga de quien hace webs: un dentista no los lee. Estos
+  // cuatro van con su nombre escrito, cada uno con el peso de lo que pone.
+  { id: "titulo1", comando: "formatBlock", valor: "h1" },
+  { id: "titulo2", comando: "formatBlock", valor: "h2" },
+  { id: "titulo3", comando: "formatBlock", valor: "h3" },
+  { id: "parrafo", comando: "formatBlock", valor: "p" },
   "sep",
   { id: "lista", icon: List, comando: "insertUnorderedList", estado: true },
   { id: "listaNumerada", icon: ListOrdered, comando: "insertOrderedList", estado: true },
@@ -209,7 +201,9 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
           name: data.name,
           body: data.body,
           isActive: data.isActive,
+          createdAt: data.createdAt,
           updatedAt: data.updatedAt,
+          precargada: esPrecargada(data.createdById),
         },
         !editing,
       );
@@ -261,7 +255,8 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
                       <button
                         key={h.id}
                         type="button"
-                        className={`${styles.toolBtn} ${activos[h.id] ? styles.toolBtnActive : ""}`}
+                        className={`${styles.toolBtn} ${h.icon ? "" : styles.toolBtnTexto} ${activos[h.id] ? styles.toolBtnActive : ""}`}
+                        data-herramienta={h.id}
                         // mousedown y no click: así el recuadro no pierde el cursor.
                         onMouseDown={(e) => {
                           e.preventDefault();
@@ -277,7 +272,7 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
                         title={t(`pages.plantillas.barra.${h.id}`)}
                         aria-label={t(`pages.plantillas.barra.${h.id}`)}
                       >
-                        <h.icon size={16} aria-hidden />
+                        {h.icon ? <h.icon size={16} aria-hidden /> : t(`pages.plantillas.barraCorta.${h.id}`)}
                       </button>
                     ),
                   )}

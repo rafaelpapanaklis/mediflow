@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { FilePlus2, Pencil, Plus, Power, Search, Trash2 } from "lucide-react";
+import { FileText, Pencil, Plus, Power, Search, Trash2 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import {
@@ -10,6 +10,7 @@ import {
   type DocumentTemplateKindValue,
 } from "@/lib/document-templates/kinds";
 import { PlantillaModal } from "./plantilla-modal";
+import { fueEditada, ordenarPlantillas } from "./tarjeta";
 import styles from "./plantillas.module.css";
 
 export interface PlantillaFila {
@@ -18,7 +19,10 @@ export interface PlantillaFila {
   name: string;
   body: string;
   isActive: boolean;
+  createdAt: string;
   updatedAt: string;
+  /** Sembrada por DaleControl, no escrita por la clínica. Ver tarjeta.ts. */
+  precargada: boolean;
 }
 
 interface Props {
@@ -37,22 +41,6 @@ const VACIO_KEY: Record<DocumentTemplateKindValue, string> = {
   CONSENTIMIENTO: "pages.plantillas.vacioConsentimiento",
 };
 
-/** El cuerpo es HTML: en la lista se enseña como TEXTO, nunca se inyecta. */
-function extracto(html: string): string {
-  const texto = html
-    .replace(/<\/(p|h1|h2|h3|li)>|<br>/g, " ")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
-  return texto.length > 180 ? `${texto.slice(0, 180)}…` : texto;
-}
-
 export function PlantillasClient({ initialTemplates }: Props) {
   const t = useT();
   const locale = useLocale();
@@ -70,10 +58,7 @@ export function PlantillasClient({ initialTemplates }: Props) {
   }, [templates]);
 
   const delTipo = useMemo(
-    () =>
-      templates
-        .filter((p) => p.kind === kind)
-        .sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name, locale)),
+    () => ordenarPlantillas(templates.filter((p) => p.kind === kind), locale),
     [templates, kind, locale],
   );
 
@@ -201,7 +186,9 @@ export function PlantillasClient({ initialTemplates }: Props) {
 
         {delTipo.length === 0 ? (
           <div className={styles.empty}>
-            <FilePlus2 size={28} aria-hidden />
+            <span className={styles.emptyIcon} aria-hidden>
+              <FileText size={26} />
+            </span>
             <p className={styles.emptyTitle}>{t(VACIO_KEY[kind])}</p>
             <p className={styles.emptyHelp}>{t("pages.plantillas.vacioAyuda")}</p>
             <button type="button" className={styles.btnPrimary} onClick={() => setModal({ editing: null })}>
@@ -215,13 +202,30 @@ export function PlantillasClient({ initialTemplates }: Props) {
           <ul className={styles.list}>
             {visibles.map((p) => (
               <li key={p.id} className={`${styles.card} ${p.isActive ? "" : styles.cardInactive}`}>
+                <span className={`${styles.cardIcon} ${p.precargada ? "" : styles.cardIconPropia}`} aria-hidden>
+                  <FileText size={18} />
+                </span>
+                {/* La tarjeta enseña el título, las fechas y los botones. El texto
+                    de la carta NO: ocupaba la fila entera y no ayudaba a encontrarla. */}
                 <div className={styles.cardMain}>
                   <div className={styles.cardTitleRow}>
-                    <h2 className={styles.cardTitle}>{p.name}</h2>
-                    {!p.isActive && <span className={styles.badge}>{t("pages.plantillas.inactiva")}</span>}
+                    <h2 className={styles.cardTitle}>
+                      <button type="button" className={styles.cardTitleBtn} onClick={() => setModal({ editing: p })}>
+                        {p.name}
+                      </button>
+                    </h2>
+                    <span className={`${styles.badge} ${p.isActive ? styles.badgeEnUso : ""}`}>
+                      {t(p.isActive ? "pages.plantillas.enUso" : "pages.plantillas.inactiva")}
+                    </span>
+                    <span className={`${styles.badge} ${p.precargada ? "" : styles.badgePropia}`}>
+                      {t(p.precargada ? "pages.plantillas.precargada" : "pages.plantillas.propia")}
+                    </span>
                   </div>
-                  <p className={styles.cardExcerpt}>{extracto(p.body)}</p>
-                  <p className={styles.cardMeta}>{t("pages.plantillas.actualizada", { fecha: fecha(p.updatedAt) })}</p>
+                  <p className={styles.cardMeta}>
+                    {t("pages.plantillas.creada", { fecha: fecha(p.createdAt) })}
+                    {fueEditada(p.createdAt, p.updatedAt) &&
+                      ` · ${t("pages.plantillas.actualizada", { fecha: fecha(p.updatedAt) })}`}
+                  </p>
                 </div>
                 <div className={styles.cardActions}>
                   <button

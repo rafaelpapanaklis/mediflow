@@ -200,6 +200,75 @@ test("una opción nueva aparece sola, en el sitio que le daría el menú de fáb
   assert.deepEqual(ids(dinero!.items), ["finanzas", "analytics", "reports"]);
 });
 
+// El caso medido el 19-sep-2026: un menú guardado el 17-sep enumera sus ids uno a
+// uno, trae «procedures» y NO trae «plantillas», que se añadió al panel después.
+// Se prueba con el JSON tal como sale de la base (pasado por normalizarDiseno),
+// y con un orden puesto A MANO, que es lo que no se puede tocar.
+test("un menú guardado SIN «plantillas» la enseña igualmente, en su grupo, y sin reordenar lo demás", () => {
+  const visibles = visiblesDe("SUPER_ADMIN");
+  assert.ok(ids(visibles).includes("plantillas"), "plantillas tiene que ser visible para quien la puede escribir");
+
+  // Lo que la persona dejó: Agenda arriba del todo, «clinica» al revés y
+  // Reportes sacado a su menú principal. Ni rastro de «plantillas».
+  const fabrica = disenoDesdeArmado(aplicarDiseno(null, visibles));
+  const aMano: DisenoMenu = {
+    v: VERSION_DISENO,
+    entradas: fabrica.entradas.map((e) =>
+      e.tipo === "opcion"
+        ? e
+        : {
+            ...e,
+            secciones: e.secciones.map((s) => ({
+              ...s,
+              opciones:
+                s.id === "clinica" ? s.opciones.filter((id) => id !== "plantillas").reverse() : s.opciones,
+            })),
+          },
+    ),
+  };
+  const guardado = normalizarDiseno(JSON.parse(JSON.stringify(moverOpcion(aMano, "reports", CONTENEDOR_RAIZ, 0))));
+  assert.ok(guardado, "el diseño guardado tiene que leerse");
+  assert.ok(idsDelDiseno(guardado).includes("procedures"));
+  assert.ok(!idsDelDiseno(guardado).includes("plantillas"));
+
+  const armado = aplicarDiseno(guardado, visibles);
+  const admin = armado.entradas.find((e) => e.tipo === "submenu") as Extract<(typeof armado.entradas)[number], { tipo: "submenu" }>;
+  const clinica = admin.secciones.find((s) => s.id === "clinica")!;
+
+  // 1. Aparece, y en SU grupo — no en «mas» ni suelta al final del menú.
+  assert.ok(ids(clinica.items).includes("plantillas"), "plantillas no salió en «clinica»");
+  const veces = retrato(armado).join("|").split("plantillas").length - 1;
+  assert.equal(veces, 1, "plantillas tiene que salir una sola vez");
+
+  // 2. Lo puesto a mano NO se reordena: quitando la recién llegada, el menú es
+  //    exactamente el guardado (cruzado con lo visible), posición por posición.
+  const sinLaNueva = (r: string[]) => r.map((x) => x.replace(/,plantillas\b|\bplantillas,/, ""));
+  const soloLoGuardado = aplicarDiseno(guardado, visibles.filter((it) => it.id !== "plantillas"));
+  assert.deepEqual(sinLaNueva(retrato(armado)), retrato(soloLoGuardado));
+  assert.equal(retrato(armado)[0], "reports", "lo que subió a mano sigue arriba");
+
+  // 3. Y al guardar desde el editor ya queda escrita: no depende de recalcularse siempre.
+  assert.ok(idsDelDiseno(disenoDesdeArmado(armado)).includes("plantillas"));
+});
+
+test("TODA opción de fábrica que falte en un menú guardado aparece (no solo plantillas)", () => {
+  const visibles = visiblesDe("SUPER_ADMIN");
+  const fabrica = disenoDesdeArmado(aplicarDiseno(null, visibles));
+  for (const falta of ids(visibles)) {
+    const guardado: DisenoMenu = {
+      v: VERSION_DISENO,
+      entradas: fabrica.entradas
+        .filter((e) => e.tipo !== "opcion" || e.id !== falta)
+        .map((e) =>
+          e.tipo === "opcion" ? e : { ...e, secciones: e.secciones.map((s) => ({ ...s, opciones: s.opciones.filter((id) => id !== falta) })) },
+        ),
+    };
+    // Sin esa opción guardada, el menú tiene que salir IGUAL que el de fábrica:
+    // la que falta vuelve a su sitio entre sus vecinas.
+    assert.deepEqual(retrato(aplicarDiseno(guardado, visibles)), retrato(aplicarDiseno(null, visibles)), `se perdió o se descolocó «${falta}»`);
+  }
+});
+
 test("si el sitio de fábrica ya no existe, la opción nueva sale al final del menú principal", () => {
   const visibles = visiblesDe("SUPER_ADMIN");
   // La persona borró «Administración» entera (después de vaciarla).

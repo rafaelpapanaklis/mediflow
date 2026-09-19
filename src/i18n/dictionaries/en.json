@@ -8459,9 +8459,13 @@
       "vacioAyuda": "Create the first one and it will show up as an option on the patient record.",
       "sinResultados": "No template matches your search.",
       "inactiva": "Inactive",
+      "enUso": "In use",
+      "precargada": "Preloaded",
+      "propia": "Your clinic’s",
       "activar": "Activate",
       "desactivar": "Deactivate",
       "eliminar": "Delete",
+      "creada": "Created on {fecha}",
       "actualizada": "Updated on {fecha}",
       "campoNombre": "Name",
       "campoNombrePlaceholder": "E.g. Root canal",
@@ -8477,6 +8481,12 @@
         "parrafo": "Normal text",
         "lista": "Bulleted list",
         "listaNumerada": "Numbered list"
+      },
+      "barraCorta": {
+        "titulo1": "Title",
+        "titulo2": "Subtitle",
+        "titulo3": "Section",
+        "parrafo": "Normal text"
       },
       "marcadoresTitulo": "Available placeholders",
       "marcadoresAyuda": "Click one to insert it at the cursor. When the document is created it is replaced with the real data of the patient, the doctor or the clinic.",

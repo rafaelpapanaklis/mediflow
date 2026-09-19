@@ -5,6 +5,7 @@ import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { listTemplates } from "@/lib/document-templates/service";
 import { TEMPLATES_WRITE_PERMISSION } from "@/lib/document-templates/permissions";
 import { PlantillasClient } from "./plantillas-client";
+import { esPrecargada } from "./tarjeta";
 
 export default async function PlantillasPage() {
   const user = await getCurrentUser();
@@ -23,7 +24,9 @@ export default async function PlantillasPage() {
         name: t.name,
         body: t.body,
         isActive: t.isActive,
+        createdAt: t.createdAt.toISOString(),
         updatedAt: t.updatedAt.toISOString(),
+        precargada: esPrecargada(t.createdById),
       }))}
     />
   );

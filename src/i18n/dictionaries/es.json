@@ -8459,9 +8459,13 @@
       "vacioAyuda": "Crea la primera y aparecerá como opción en la ficha del paciente.",
       "sinResultados": "Ninguna plantilla coincide con la búsqueda.",
       "inactiva": "Inactiva",
+      "enUso": "En uso",
+      "precargada": "Precargada",
+      "propia": "De tu clínica",
       "activar": "Activar",
       "desactivar": "Desactivar",
       "eliminar": "Eliminar",
+      "creada": "Creada el {fecha}",
       "actualizada": "Actualizada el {fecha}",
       "campoNombre": "Nombre",
       "campoNombrePlaceholder": "Ej. Endodoncia",
@@ -8477,6 +8481,12 @@
         "parrafo": "Texto normal",
         "lista": "Lista con viñetas",
         "listaNumerada": "Lista numerada"
+      },
+      "barraCorta": {
+        "titulo1": "Título",
+        "titulo2": "Subtítulo",
+        "titulo3": "Apartado",
+        "parrafo": "Texto normal"
       },
       "marcadoresTitulo": "Marcadores disponibles",
       "marcadoresAyuda": "Pulsa uno para insertarlo donde está el cursor. Al crear el documento se sustituye por el dato real del paciente, del doctor o de la clínica.",
