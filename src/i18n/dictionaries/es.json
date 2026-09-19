@@ -9476,5 +9476,40 @@
     "toast": {
       "signed": "Nota firmada",
       "draftSaved": "Borrador guardado"
-    }  }
+    }  },
+  "consentDoc": {
+    "kind": "Consentimiento informado",
+    "open": "Ver carta",
+    "back": "Volver a los consentimientos",
+    "loading": "Abriendo la carta…",
+    "loadError": "No se pudo abrir la carta. Vuelve a intentarlo.",
+    "representative": "Firma como representante legal",
+    "signatureAlt": "Firma de {name}",
+    "signedOn": "Firmado el {date}",
+    "dateBlank": "Fecha: ____ / ____ / ________",
+    "signaturePending": "Firma pendiente",
+    "revokedOn": "Consentimiento revocado el {date}",
+    "revokedReason": "Motivo: {reason}",
+    "revokedNoReason": "no se registró motivo.",
+    "evidencePaper": "Documento emitido para su firma autógrafa. La huella identifica el texto exacto de esta carta.",
+    "evidenceDigital": "Documento firmado electrónicamente. Evidencia conforme a los arts. 89 y 89 bis del Código de Comercio y 210-A del CFPC.",
+    "evidenceHash": "Huella del documento (SHA-256): {hash}",
+    "evidenceSigned": "Firma del paciente: {date}",
+    "strip": {
+      "patient": "Paciente",
+      "representative": "Representante legal",
+      "doctor": "Doctor",
+      "signed": "firmó",
+      "pending": "pendiente",
+      "witnesses": {
+        "one": "{count} testigo firmó",
+        "other": "{count} testigos firmaron"
+      },
+      "hintPending": "Imprime la hoja para firmarla en papel, o que el paciente la firme en este dispositivo.",
+      "hintExpired": "La liga para firmar venció. Regenérala desde la lista, o imprime la hoja para firmarla en papel.",
+      "hintDoctor": "El paciente ya firmó. Falta la firma del doctor para que la carta esté completa.",
+      "hintComplete": "La carta está completa. Puedes descargarla, imprimirla o mandársela al paciente.",
+      "hintRevoked": "Esta carta está revocada: se conserva en el expediente, pero ya no se envía."
+    }
+  }
 }

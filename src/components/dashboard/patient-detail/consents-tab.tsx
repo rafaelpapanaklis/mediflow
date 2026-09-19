@@ -21,13 +21,18 @@
 // usan en el sillón —firmar en la tableta y mandar la liga por WhatsApp— y el
 // resto (copiar, regenerar, eliminar) se va a un menú.
 //
+// LA CARTA SE ABRE (ws1-t3): cada fila lleva a la carta vista como documento
+// —`ConsentVisor`—, con la misma hoja y la misma barra de PDF, imprimir,
+// WhatsApp y correo que la nota de evolución. Vale para cualquier fila, también
+// las firmadas con el sistema viejo. La lista y sus modales siguen como estaban.
+//
 // Estilos: los del design system de facturación (card / badge-new / btn-new /
 // field-new / input-new de globals.css), para que el módulo se vea hermano de
 // los modales de cobro y no de una pantalla aparte.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Check, Copy, FileDown, FileSignature, Loader2, MessageCircle, MoreHorizontal,
+  ArrowLeft, Check, Clock, Copy, FileSignature, FileText, Loader2, MessageCircle, MoreHorizontal,
   PenLine, Plus, Printer, RefreshCw, Trash2, XCircle, Eye, Pencil, Link2, ShieldCheck,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -42,10 +47,10 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { SignaturePad } from "@/components/ui/signature-pad";
 import { ageYears, isMinor } from "@/lib/consent/signers";
-import { parseConsentText, splitConsentBody } from "@/lib/consent/render";
 import type { ConsentDTO, ConsentStatus } from "@/lib/consent/types";
 import type { ConsentMissingItem } from "@/lib/consent/document-data";
 import { ConsentMissingNotice } from "./consent-missing-notice";
+import { ConsentPrevia, ConsentVisor } from "./consent-documento";
 import styles from "./patient-detail.module.css";
 
 interface DoctorOption {
@@ -126,6 +131,10 @@ export function ConsentsTab(props: ConsentsTabProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [countersigning, setCountersigning] = useState<ConsentDTO | null>(null);
+  // La carta abierta como documento. Se guarda el id y no la fila: la lista se
+  // refresca sola y la hoja tiene que ver la fila NUEVA (con la firma recién hecha).
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const viewing = useMemo(() => list.find((c) => c.id === viewingId) ?? null, [list, viewingId]);
 
   useEffect(() => { setList(initialConsents); }, [initialConsents]);
 
@@ -269,6 +278,36 @@ export function ConsentsTab(props: ConsentsTabProps) {
     }
   }
 
+  const countersignModal = countersigning && (
+    <CountersignModal
+      consent={countersigning}
+      onClose={() => setCountersigning(null)}
+      onDone={async () => { setCountersigning(null); await load(); }}
+    />
+  );
+
+  if (viewing) {
+    return (
+      <div>
+        <ConsentVisor
+          consent={viewing}
+          patientId={patientId}
+          // Mismos permisos que ya pedían las rutas: el canal y el módulo.
+          puedeWhatsApp={canSendWhatsApp && canCreate}
+          puedeCorreo={canCreate}
+          canCountersign={canCountersign && canCreate}
+          onCountersign={() => setCountersigning(viewing)}
+          inicio={
+            <ButtonNew variant="ghost" size="sm" onClick={() => setViewingId(null)}>
+              <ArrowLeft size={14} aria-hidden /> {t("consentDoc.back")}
+            </ButtonNew>
+          }
+        />
+        {countersignModal}
+      </div>
+    );
+  }
+
   return (
     <div>
       <CardNew
@@ -304,6 +343,7 @@ export function ConsentsTab(props: ConsentsTabProps) {
                 onRevoke={() => revoke(c)}
                 onDelete={() => remove(c)}
                 onCountersign={() => setCountersigning(c)}
+                onOpen={() => setViewingId(c.id)}
               />
             ))}
           </div>
@@ -323,13 +363,7 @@ export function ConsentsTab(props: ConsentsTabProps) {
         />
       )}
 
-      {countersigning && (
-        <CountersignModal
-          consent={countersigning}
-          onClose={() => setCountersigning(null)}
-          onDone={async () => { setCountersigning(null); await load(); }}
-        />
-      )}
+      {countersignModal}
     </div>
   );
 }
@@ -425,7 +459,7 @@ function ConsentsEmptyState({ canCreate, onNew }: { canCreate: boolean; onNew: (
 function ConsentRow({
   consent: c, busy, copied, pacientesRediseno,
   canCreate, canRevoke, canSendWhatsApp, canCountersign,
-  onCopyLink, onSendWhatsApp, onRenew, onRevoke, onDelete, onCountersign,
+  onCopyLink, onSendWhatsApp, onRenew, onRevoke, onDelete, onCountersign, onOpen,
 }: {
   consent: ConsentDTO;
   busy: string | null;
@@ -441,6 +475,7 @@ function ConsentRow({
   onRevoke: () => void;
   onDelete: () => void;
   onCountersign: () => void;
+  onOpen: () => void;
 }) {
   const t = useT();
   const style = STATUS_TONE[c.status] ?? STATUS_TONE.PENDING;
@@ -473,7 +508,17 @@ function ConsentRow({
     >
       <div style={{ minWidth: 220, flex: "1 1 320px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>{c.procedure}</span>
+          {/* El nombre ES la puerta a la carta: se abre como documento. */}
+          <button
+            type="button"
+            onClick={onOpen}
+            style={{
+              fontSize: 14, fontWeight: 700, color: "var(--text-1)", textAlign: "left",
+              background: "none", border: 0, padding: 0, cursor: "pointer",
+            }}
+          >
+            {c.procedure}
+          </button>
           <BadgeNew tone={style.tone} dot style={pacientesRediseno ? { color: BADGE_TEXT_FIX[style.tone] } : undefined}>
             {t(style.labelKey)}
           </BadgeNew>
@@ -494,13 +539,34 @@ function ConsentRow({
             : ""}
         </div>
 
-        {/* Completitud de firmas — lo que dice si el documento está entero. */}
-        <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-2)", marginTop: 4 }}>
-          {t("patients.consents.completeness", {
-            patient: c.signedAt ? "✓" : "—",
-            witnesses: `${c.witnessCount}/2`,
-            doctor: c.doctorSignedAt ? "✓" : "—",
-          })}
+        {/* Completitud de firmas — lo que dice si el documento está entero.
+            Una marca por firma, no una frase con rayas que había que descifrar. */}
+        <div
+          style={{
+            display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 6,
+            fontSize: 12, fontWeight: 600,
+          }}
+        >
+          {([
+            [c.signerName ? t("consentDoc.strip.representative") : t("consentDoc.strip.patient"), Boolean(c.signedAt)],
+            [t("consentDoc.strip.doctor"), Boolean(c.doctorSignedAt)],
+          ] as Array<[string, boolean]>).map(([rotulo, hecha]) => (
+            <span
+              key={rotulo}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                color: hecha ? "var(--success-strong)" : "var(--text-3)",
+              }}
+            >
+              {hecha ? <Check size={13} aria-hidden /> : <Clock size={13} aria-hidden />}
+              {rotulo}: {hecha ? t("consentDoc.strip.signed") : t("consentDoc.strip.pending")}
+            </span>
+          ))}
+          {c.witnessCount > 0 ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--success-strong)" }}>
+              <Check size={13} aria-hidden /> {t("consentDoc.strip.witnesses", { count: c.witnessCount })}
+            </span>
+          ) : null}
         </div>
 
         {c.revokedAt ? (
@@ -565,16 +631,11 @@ function ConsentRow({
           </ButtonNew>
         )}
 
-        {c.signedAt && (
-          <a
-            href={`/api/consent/${c.id}/pdf`}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-new btn-new--secondary btn-new--sm"
-          >
-            <FileDown size={13} aria-hidden /> {t("patients.consents.actionPdf")}
-          </a>
-        )}
+        {/* La carta como documento: ahí están el PDF, imprimir, WhatsApp y
+            correo, con la misma barra que la nota de evolución. */}
+        <ButtonNew variant="secondary" size="sm" icon={<FileText size={13} aria-hidden />} onClick={onOpen}>
+          {t("consentDoc.open")}
+        </ButtonNew>
 
         {menuItems > 0 && (
         <DropdownMenu>
@@ -643,87 +704,6 @@ function ConsentRow({
         </DropdownMenu>
         )}
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Vista previa de la carta — el texto plano, maquetado
-// ---------------------------------------------------------------------------
-
-/**
- * Pinta el snapshot con la tipografía del panel en vez del textarea monospace.
- *
- * NO transforma el contenido: `parseConsentText` solo lo PARTE para presentarlo
- * (lo que se guarda y se firma sigue siendo el string tal cual). Si el texto no
- * trae encabezados numerados —porque el profesional lo reescribió— el parser
- * devuelve cero secciones y aquí se pinta íntegro con `pre-wrap`: la carta no
- * puede desaparecer por no seguir el formato esperado.
- */
-function ConsentLetter({ content }: { content: string }) {
-  const doc = useMemo(() => parseConsentText(content), [content]);
-
-  return (
-    <div style={{ fontSize: 12.5, lineHeight: 1.7, color: "var(--text-2)" }}>
-      {doc.title ? (
-        <div
-          style={{
-            fontSize: 13.5, fontWeight: 700, color: "var(--text-1)",
-            letterSpacing: "0.01em", textAlign: "center",
-          }}
-        >
-          {doc.title}
-        </div>
-      ) : null}
-
-      {doc.preamble ? (
-        <div
-          style={{
-            whiteSpace: "pre-wrap",
-            marginTop: doc.title ? 10 : 0,
-            paddingBottom: doc.sections.length ? 12 : 0,
-            borderBottom: doc.sections.length ? "1px solid var(--border-soft)" : undefined,
-            color: "var(--text-3)",
-            fontSize: 12,
-          }}
-        >
-          {doc.preamble}
-        </div>
-      ) : null}
-
-      {doc.sections.map((section, i) => (
-        <section key={`${section.number ?? "s"}-${i}`} style={{ marginTop: 16 }}>
-          <h4
-            style={{
-              display: "flex", alignItems: "baseline", gap: 7,
-              fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em",
-              color: "var(--brand)", textTransform: "uppercase", margin: "0 0 6px",
-            }}
-          >
-            {section.number != null ? (
-              <span style={{ color: "var(--text-4)", fontVariantNumeric: "tabular-nums" }}>
-                {section.number}.
-              </span>
-            ) : null}
-            {section.title}
-          </h4>
-          {splitConsentBody(section.body).map((block, bi) =>
-            block.kind === "bullets" ? (
-              <ul key={bi} style={{ margin: "0 0 8px", paddingLeft: 18, listStyle: "disc" }}>
-                {block.lines.map((line, li) => (
-                  <li key={li} style={{ marginTop: li === 0 ? 0 : 3 }}>{line}</li>
-                ))}
-              </ul>
-            ) : (
-              <div key={bi} style={{ margin: "0 0 8px" }}>
-                {block.lines.map((line, li) => (
-                  <p key={li} style={{ margin: li === 0 ? 0 : "3px 0 0" }}>{line}</p>
-                ))}
-              </div>
-            ),
-          )}
-        </section>
-      ))}
     </div>
   );
 }
@@ -1020,26 +1000,21 @@ function NewConsentModal({
                     style={{ minHeight: 340, resize: "vertical", lineHeight: 1.7, padding: 14 }}
                   />
                 ) : (
-                  <div
-                    className="overflow-y-auto"
-                    style={{
-                      maxHeight: 340,
-                      border: "1px solid var(--border-soft)",
-                      background: "var(--bg-elev)",
-                      borderRadius: 10,
-                      padding: "16px 18px",
-                    }}
-                  >
-                    {content.trim() ? (
-                      <ConsentLetter content={content} />
-                    ) : (
-                      <div style={{ fontSize: 12, color: "var(--text-4)", textAlign: "center", padding: "28px 0" }}>
-                        {loadingText
-                          ? t("patients.consents.previewLoading")
-                          : t("patients.consents.previewEmpty")}
-                      </div>
-                    )}
-                  </div>
+                  content.trim() ? (
+                    // La misma carta que se verá después, no una maqueta aparte.
+                    <ConsentPrevia content={content} />
+                  ) : (
+                    <div
+                      style={{
+                        border: "1px solid var(--border-soft)", background: "var(--bg-elev)", borderRadius: 10,
+                        fontSize: 12, color: "var(--text-4)", textAlign: "center", padding: "44px 18px",
+                      }}
+                    >
+                      {loadingText
+                        ? t("patients.consents.previewLoading")
+                        : t("patients.consents.previewEmpty")}
+                    </div>
+                  )
                 )}
 
                 <span className="mt-1.5 block text-[11px]" style={{ color: "var(--text-4)" }}>

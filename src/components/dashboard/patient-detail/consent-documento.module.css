@@ -1,0 +1,204 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Lo que la carta de consentimiento añade DENTRO de la hoja común de los
+   documentos del paciente (`documentos-paciente/documento.module.css`): el
+   representante legal, la revocación, el pie con DOS firmas (más testigos) y
+   la evidencia de la firma electrónica. Y, fuera de la hoja, la tira que dice
+   quién ha firmado y qué toca hacer ahora.
+
+   Todo cuelga de `DocumentoRaiz`, así que aquí solo se LEEN sus `--doc-*` (con
+   su versión oscura y su versión de papel ya resueltas allí) y los tokens
+   semánticos de globals.css. No hay ningún hex.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Fuera de la hoja: quién ha firmado y qué sigue ─────────────────── */
+
+.tira {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--doc-filete);
+  border-radius: 12px;
+  background: var(--doc-papel);
+}
+.tiraFirmas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--doc-tinta-2);
+}
+.tiraFirma {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tiraHecha { color: var(--success-strong); font-weight: 600; }
+.tiraPista {
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--doc-tinta-3);
+}
+.tiraAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ── Dentro de la hoja ──────────────────────────────────────────────── */
+
+.revocado {
+  margin: 0 0 22px;
+  padding: 12px 14px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: var(--danger-soft);
+  break-inside: avoid;
+}
+.revocadoTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--danger-strong);
+}
+.revocadoMotivo {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--doc-tinta);
+}
+
+.representante {
+  margin: -6px 0 22px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--doc-tinta-2);
+}
+.representante b { color: var(--doc-tinta); font-weight: 600; }
+
+/* Las firmas: dos por renglón, con sitio encima de la línea para un bolígrafo
+   de verdad. En un teléfono, una debajo de otra. */
+.firmas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 36px 40px;
+  margin: 56px 0 0;
+}
+.firmaCelda { break-inside: avoid; min-width: 0; }
+.firmaHueco {
+  display: flex;
+  align-items: flex-end;
+  height: 72px;
+}
+.firmaImagen {
+  max-width: 100%;
+  max-height: 72px;
+  object-fit: contain;
+  object-position: left bottom;
+}
+/* La firma es un PNG de trazo oscuro sobre transparente: en la hoja oscura se
+   perdería. Se invierte solo en pantalla; en papel la hoja vuelve a ser blanca. */
+:global(.dark) .firmaImagen { filter: invert(1) hue-rotate(180deg); }
+.firmaLinea {
+  padding-top: 8px;
+  border-top: 1px solid var(--doc-tinta);
+}
+.firmaRol {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--doc-tinta-3);
+}
+.firmaNombre {
+  display: block;
+  min-height: 1.3em;
+  margin-top: 2px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--doc-tinta);
+  overflow-wrap: anywhere;
+}
+.firmaFecha {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--doc-tinta-2);
+}
+/* El icono no se encoge cuando la fecha parte en dos renglones. */
+.firmaFecha svg { flex: none; }
+.firmaFechaHecha { color: var(--doc-acento-texto); font-weight: 600; }
+
+.evidencia {
+  margin: 40px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--doc-filete);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--doc-tinta-3);
+  break-inside: avoid;
+}
+.evidencia p { margin: 0; }
+.huella {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+/* ── Cargando / error ───────────────────────────────────────────────── */
+
+.espera {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 56px 16px;
+  font-size: 13px;
+  color: var(--doc-tinta-3);
+}
+
+/* ── La vista previa del modal de alta: la misma carta, en pequeño ──── */
+
+.previa {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 20px 22px;
+  border: 1px solid var(--doc-filete);
+  border-radius: 10px;
+  background: var(--doc-papel);
+}
+.previa > div { font-size: 14px; }
+.previaSello {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--doc-tinta-3);
+}
+
+@media (max-width: 560px) {
+  .firmas { grid-template-columns: minmax(0, 1fr); gap: 28px; margin-top: 40px; }
+  .tiraAcciones { margin-left: 0; width: 100%; }
+  .tiraAcciones > * { flex: 1 1 auto; justify-content: center; }
+}
+
+@media print {
+  :global(.dark) .firmaImagen { filter: none; }
+  .revocado { background: none; border-color: black; }
+  .revocadoTitulo { color: black; }
+}

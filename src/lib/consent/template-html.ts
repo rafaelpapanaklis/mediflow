@@ -51,13 +51,21 @@ function decodeEntities(text: string): string {
   });
 }
 
-function bodyToHtml(body: string): string {
+/**
+ * `grouped`: los renglones seguidos de un mismo bloque van en UN <p> separados por
+ * <br> ("Nombre: …", "Edad: …" juntos, como en el PDF). Solo para PINTAR la hoja:
+ * al sembrar plantillas no se usa, porque ahí cada renglón tiene que volver a ser
+ * un renglón al hacer el camino de vuelta.
+ */
+function bodyToHtml(body: string, grouped = false): string {
   return splitConsentBody(body)
     .map((block) =>
       block.kind === "bullets"
         ? `<ul>${block.lines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>`
-        // Un renglón = un párrafo: "Nombre: …" y "Edad: …" no se funden.
-        : block.lines.map((l) => `<p>${escapeHtml(l)}</p>`).join(""),
+        : grouped
+          ? `<p>${block.lines.map(escapeHtml).join("<br>")}</p>`
+          // Un renglón = un párrafo: "Nombre: …" y "Edad: …" no se funden.
+          : block.lines.map((l) => `<p>${escapeHtml(l)}</p>`).join(""),
     )
     .join("");
 }
@@ -72,6 +80,30 @@ export function consentTextToHtml(text: string): string {
     const heading = section.number == null ? section.title : `${section.number}. ${section.title}`;
     parts.push(`<h2>${escapeHtml(heading)}</h2>`);
     parts.push(bodyToHtml(section.body));
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Carta en texto plano → HTML del CUERPO de la hoja del panel.
+ *
+ * Igual que `consentTextToHtml` pero sin el <h1>: en la hoja el título ya lo
+ * pone la cabecera del documento, y repetirlo arriba del texto lo duplicaba. El
+ * texto guardado NO se toca: esto solo lo presenta. Una carta sin secciones
+ * numeradas (las del sistema viejo, o una reescrita a mano) sale entera como
+ * párrafos: no puede desaparecer por no seguir el formato.
+ *
+ * Solo <h2>, <p>, <br>, <ul> y <li>, sin atributos y con el texto escapado: es lo
+ * único que autoriza a inyectarlo en `DocumentoCuerpo`.
+ */
+export function consentTextToBodyHtml(text: string): string {
+  const doc = parseConsentText(text);
+  const parts: string[] = [];
+  if (doc.preamble) parts.push(bodyToHtml(doc.preamble, true));
+  for (const section of doc.sections) {
+    const heading = section.number == null ? section.title : `${section.number}. ${section.title}`;
+    parts.push(`<h2>${escapeHtml(heading)}</h2>`);
+    parts.push(bodyToHtml(section.body, true));
   }
   return parts.join("\n");
 }

@@ -9476,5 +9476,40 @@
     "toast": {
       "signed": "Note signed",
       "draftSaved": "Draft saved"
-    }  }
+    }  },
+  "consentDoc": {
+    "kind": "Informed consent",
+    "open": "View letter",
+    "back": "Back to consents",
+    "loading": "Opening the letter…",
+    "loadError": "The letter could not be opened. Please try again.",
+    "representative": "Signing as legal representative",
+    "signatureAlt": "Signature of {name}",
+    "signedOn": "Signed on {date}",
+    "dateBlank": "Date: ____ / ____ / ________",
+    "signaturePending": "Signature pending",
+    "revokedOn": "Consent revoked on {date}",
+    "revokedReason": "Reason: {reason}",
+    "revokedNoReason": "no reason was recorded.",
+    "evidencePaper": "Document issued for handwritten signature. The fingerprint identifies the exact text of this letter.",
+    "evidenceDigital": "Electronically signed document. Evidence under arts. 89 and 89 bis of the Mexican Commercial Code and 210-A of the CFPC.",
+    "evidenceHash": "Document fingerprint (SHA-256): {hash}",
+    "evidenceSigned": "Patient signature: {date}",
+    "strip": {
+      "patient": "Patient",
+      "representative": "Legal representative",
+      "doctor": "Doctor",
+      "signed": "signed",
+      "pending": "pending",
+      "witnesses": {
+        "one": "{count} witness signed",
+        "other": "{count} witnesses signed"
+      },
+      "hintPending": "Print the sheet to sign it on paper, or have the patient sign on this device.",
+      "hintExpired": "The signing link expired. Regenerate it from the list, or print the sheet to sign it on paper.",
+      "hintDoctor": "The patient has signed. The doctor's signature is still missing for the letter to be complete.",
+      "hintComplete": "The letter is complete. You can download it, print it or send it to the patient.",
+      "hintRevoked": "This letter is revoked: it stays in the record, but it is no longer sent."
+    }
+  }
 }

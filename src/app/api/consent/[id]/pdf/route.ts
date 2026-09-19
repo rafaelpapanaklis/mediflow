@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "consents.view");
@@ -45,7 +45,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${out.fileName}"`,
+      // `?download=1` es el botón «PDF» de la barra común: se baja. Sin él se
+      // abre en el visor del navegador, como siempre.
+      "Content-Disposition": `${req.nextUrl.searchParams.get("download") === "1" ? "attachment" : "inline"}; filename="${out.fileName}"`,
       "Cache-Control": "private, no-cache, no-store, must-revalidate",
     },
   });
