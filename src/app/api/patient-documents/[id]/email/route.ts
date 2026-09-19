@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import { correoDelDocumento, enmascararCorreo } from "@/lib/patient-documents/envio";
-import { entrar, VER } from "../../_lib/http";
+import { entrar, ESCRIBIR } from "../../_lib/http";
 import { cargarNotaParaSalida, soloFirmadas } from "../../_lib/salida";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,9 @@ export const dynamic = "force-dynamic";
 const CORREO_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const e = await entrar(req, VER, 10);
+  // Mismo permiso que el envío por WhatsApp y que firmar: "view" a secas no saca
+  // un documento clínico de la clínica.
+  const e = await entrar(req, ESCRIBIR, 10);
   if ("res" in e) return e.res;
   const { ctx } = e;
 

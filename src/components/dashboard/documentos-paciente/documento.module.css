@@ -23,6 +23,8 @@
   --doc-tinta-3: var(--m2-texto-3);
   --doc-filete: var(--m2-tarjeta-borde);
   --doc-acento: var(--m2-activo);
+  /* El acento cuando es TEXTO sobre el papel: el del menú se lee en claro y en oscuro. */
+  --doc-acento-texto: var(--m2-iniciales-texto);
   /* Las piezas del sistema de diseño (.btn-new) leen estas globales. */
   --brand: var(--m2-activo);
   --text-1: var(--m2-texto);
@@ -295,7 +297,7 @@
 /* ── El pie de firma ────────────────────────────────────────────────── */
 
 .firma {
-  width: min(100%, 320px);
+  width: min(100%, 400px);
   margin: 56px 0 0;
   padding-top: 10px;
   border-top: 1px solid var(--doc-tinta);
@@ -321,7 +323,7 @@
   margin: 10px 0 0;
   font-size: 12px;
   font-weight: 600;
-  color: var(--doc-acento);
+  color: var(--doc-acento-texto);
 }
 .firmaBorrador { color: var(--doc-tinta-3); }
 
@@ -361,7 +363,7 @@
   align-items: center;
   gap: 4px;
   font-weight: 600;
-  color: var(--doc-acento);
+  color: var(--doc-acento-texto);
   text-decoration: none;
 }
 .avisoEnlace:hover { text-decoration: underline; }
@@ -373,8 +375,13 @@
 @media (max-width: 560px) {
   .partes { grid-template-columns: minmax(0, 1fr); }
   .fecha { text-align: left; }
-  .barraAcciones { margin-left: 0; width: 100%; }
-  .barraAcciones > * { flex: 1 1 calc(50% - 4px); justify-content: center; }
+  .barraAcciones {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin-left: 0;
+  }
+  .barraAcciones > * { justify-content: center; }
 }
 
 /* ── Papel de verdad ────────────────────────────────────────────────── */
@@ -382,13 +389,17 @@
    oscuro. Colores con nombre: aquí no hay token que valga, es papel. */
 
 @media print {
-  .raiz {
+  /* Los dos selectores: `:global(.dark) .raiz` pesa más que `.raiz` y un
+     @media no suma especificidad; sin el segundo, en oscuro ganaba el papel oscuro. */
+  .raiz,
+  :global(.dark) .raiz {
     --doc-papel: white;
     --doc-tinta: black;
     --doc-tinta-2: dimgray;
     --doc-tinta-3: gray;
     --doc-filete: lightgray;
     --doc-acento: black;
+    --doc-acento-texto: black;
   }
   .hoja {
     max-width: none;

@@ -4,6 +4,11 @@
 // Mismo patrón que /api/quotes/[id]/send-whatsapp (rate limit, permiso,
 // visibilidad del paciente, credenciales de ESTA clínica, WhatsAppBlockedError).
 //
+// PERMISO: "medicalRecord.edit", el mismo que firmar. A propósito NO se exige
+// "whatsapp.send": el doctor no lo tiene por defecto y se quedaría sin mandar su
+// propia nota (mismo criterio que /api/prescriptions/[id]/send). Y "view" a
+// secas no basta: sacar un documento clínico de la clínica es más que leerlo.
+//
 // LA VENTANA DE 24 HORAS: fuera de ella Meta solo deja plantillas, que cuestan
 // dinero y no pueden llevar adjunto. Una nota clínica no tiene plantilla, así
 // que se manda con kind "system" —el único sin plantilla—: con la ventana
@@ -12,12 +17,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { construirPdfDeDocumento } from "@/lib/patient-documents/pdf";
 import { enmascararTelefono, explicarFalloDeWhatsApp, mensajeDeWhatsApp } from "@/lib/patient-documents/envio";
-import { entrar, VER } from "../../_lib/http";
+import { entrar, ESCRIBIR } from "../../_lib/http";
 import { cargarNotaParaSalida, soloFirmadas } from "../../_lib/salida";
 
 export const runtime = "nodejs"; // genera el PDF
@@ -25,11 +29,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const e = await entrar(req, VER, 10);
+  const e = await entrar(req, ESCRIBIR, 10);
   if ("res" in e) return e.res;
   const { ctx } = e;
-  const denied = denyIfMissingPermission(ctx, "whatsapp.send");
-  if (denied) return denied;
 
   try {
     const s = await cargarNotaParaSalida(ctx, params.id);

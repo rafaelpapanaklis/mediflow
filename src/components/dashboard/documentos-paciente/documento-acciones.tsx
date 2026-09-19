@@ -95,7 +95,7 @@ export function DocumentoAcciones({
           </ButtonNew>
         ) : null}
       </div>
-      {!puedeEnviar ? (
+      {!puedeEnviar && (rutas.whatsapp || rutas.correo) ? (
         <p className={s.estado} role="note">{t("documentosPaciente.acciones.onlySigned")}</p>
       ) : null}
       {estado ? (

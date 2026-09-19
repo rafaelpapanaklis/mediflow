@@ -182,7 +182,10 @@ describe("WhatsApp fuera de la ventana de 24 h", () => {
     const ruta = leer("src/app/api/patient-documents/[id]/whatsapp/route.ts");
     assert.ok(/kind:\s*"system"/.test(ruta));
     assert.ok(ruta.includes("explicarFalloDeWhatsApp(err)"));
-    assert.ok(ruta.includes('denyIfMissingPermission(ctx, "whatsapp.send")'));
+    // Firmar y enviar piden lo mismo; "whatsapp.send" NO (el doctor no lo tiene por defecto).
+    assert.ok(ruta.includes("entrar(req, ESCRIBIR, 10)") && !ruta.includes('"whatsapp.send")'));
+    assert.ok(leer("src/app/api/patient-documents/[id]/email/route.ts").includes("entrar(req, ESCRIBIR, 10)"));
+    assert.ok(leer("src/app/api/patient-documents/[id]/pdf/route.ts").includes('kind: "nota_pdf"'));
     assert.ok(ruta.includes("soloFirmadas("));
     const barra = leer("src/components/dashboard/documentos-paciente/documento-acciones.tsx");
     assert.ok(barra.includes('role={estado.tono === "bien" ? "status" : "alert"}'));
@@ -215,7 +218,8 @@ describe("imprimir", () => {
   it("la hoja de estilos no tiene ni un hex y en papel la hoja es blanca", () => {
     const css = leer("src/components/dashboard/documentos-paciente/documento.module.css");
     assert.deepEqual(css.match(/#[0-9a-fA-F]{3,8}\b/g), null);
-    assert.ok(/@media print[\s\S]*--doc-papel: white/.test(css));
+    // En oscuro también: la regla de papel tiene que pesar lo mismo que la de `.dark`.
+    assert.ok(/@media print \{[\s\S]*?\.raiz,\s*:global\(\.dark\) \.raiz \{\s*--doc-papel: white/.test(css));
     assert.ok(css.includes(":global(.dark) .raiz"));
   });
 });

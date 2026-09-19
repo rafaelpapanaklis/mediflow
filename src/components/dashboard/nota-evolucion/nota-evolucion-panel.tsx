@@ -152,7 +152,7 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
   }
 
   if (vista.tipo === "leer") {
-    return <NotaVisor nota={vista.nota} inicio={<Volver onClick={volver} />} />;
+    return <NotaVisor nota={vista.nota} canWrite={canWrite} inicio={<Volver onClick={volver} />} />;
   }
 
   return (

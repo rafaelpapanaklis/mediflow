@@ -15,12 +15,17 @@ export interface DocumentoParaEnviar {
   cuerpoHtml: string;
 }
 
-/** Texto libre del WhatsApp. El documento va DESPUÉS, como PDF adjunto. */
+/**
+ * Texto libre del WhatsApp. El PDF va DESPUÉS, como segundo mensaje, y
+ * `sendWhatsAppLogged` lo manda en best-effort: si el adjunto falla, el texto ya
+ * salió y la ruta no se entera. Por eso el texto NO afirma «va adjunto»: pide
+ * avisar si no llega.
+ */
 export function mensajeDeWhatsApp(d: DocumentoParaEnviar): string {
   const nombre = d.pacienteNombre.trim() || "paciente";
   return (
     `Hola ${nombre}, de parte de ${d.clinicaNombre.trim() || "tu clínica"} te compartimos tu documento ` +
-    `«${d.titulo}» del ${d.fecha}. Va adjunto en PDF. Cualquier duda respóndenos por este medio.`
+    `«${d.titulo}» del ${d.fecha}, en PDF por este mismo chat. Si no te llega o tienes dudas, respóndenos por aquí.`
   );
 }
 

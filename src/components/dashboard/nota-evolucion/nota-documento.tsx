@@ -11,13 +11,20 @@ import { DocumentoVisor } from "@/components/dashboard/documentos-paciente/docum
 import type { RutasDeDocumento } from "@/components/dashboard/documentos-paciente/tipos";
 import type { NotaCompleta } from "./tipos";
 
-export function rutasDeNota(id: string): RutasDeDocumento {
+/** Enviar pide el mismo permiso que firmar: sin él, los dos botones ni se pintan. */
+export function rutasDeNota(id: string, puedeEnviar: boolean): RutasDeDocumento {
   const base = `/api/patient-documents/${encodeURIComponent(id)}`;
-  return { pdf: `${base}/pdf`, whatsapp: `${base}/whatsapp`, correo: `${base}/email` };
+  return {
+    pdf: `${base}/pdf`,
+    whatsapp: puedeEnviar ? `${base}/whatsapp` : null,
+    correo: puedeEnviar ? `${base}/email` : null,
+  };
 }
 
 /** Una nota guardada (firmada, o un borrador ajeno): se lee, se imprime y se manda. */
-export function NotaVisor({ nota, inicio }: { nota: NotaCompleta; inicio?: ReactNode }) {
+export function NotaVisor({
+  nota, canWrite, inicio,
+}: { nota: NotaCompleta; canWrite: boolean; inicio?: ReactNode }) {
   const t = useT();
   return (
     <DocumentoVisor
@@ -26,7 +33,7 @@ export function NotaVisor({ nota, inicio }: { nota: NotaCompleta; inicio?: React
       tipo={t("notaEvolucionDoc.kind")}
       html={nota.body}
       firmado={nota.status === "SIGNED"}
-      rutas={rutasDeNota(nota.id)}
+      rutas={rutasDeNota(nota.id, canWrite)}
       inicio={inicio}
     />
   );
