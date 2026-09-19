@@ -11,13 +11,17 @@ import {
   type InvoiceResult,
 } from "@/lib/facturapi";
 import { cfdiClaimFor, isCfdiClaim, CFDI_EN_CURSO_ERROR } from "@/lib/invoices/cfdi-vigente";
+import { cfdiCuadre, CFDI_TOTAL_MISMATCH } from "@/lib/invoices/cfdi-cuadre";
 import { pudoHaberTimbrado, CFDI_TIMBRE_INCIERTO_ERROR } from "@/lib/invoices/cfdi-timbre-incierto";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { isUsableWhereId } from "@/lib/validations";
 import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
+import { getDict } from "@/i18n/dictionaries";
+import { makeT } from "@/i18n/t";
+import { fmtMXNdec } from "@/lib/format";
 import {
-  expectedCfdiTotal, spreadInvoiceDiscount, cfdiStampedCheck,
+  spreadInvoiceDiscount, cfdiStampedCheck,
   derivePaymentForm, resolveTaxMode, itemQuantity, itemUnitPrice,
   itemDiscount, round2, type CfdiTaxMode,
 } from "@/lib/invoice-totals";
@@ -120,7 +124,7 @@ export async function POST(req: NextRequest) {
     where:  { id: ctx!.clinicId },
     select: {
       facturApiOrgId: true, facturApiEnabled: true, name: true, rfcEmisor: true,
-      plan: true, timezone: true, cfdiTaxMode: true, csdUploaded: true,
+      plan: true, timezone: true, cfdiTaxMode: true, csdUploaded: true, locale: true,
     },
   });
 
@@ -187,20 +191,24 @@ export async function POST(req: NextRequest) {
   // distinto (p. ej. "Editar precio" legado que no tocaba los items), timbrar
   // emitiría un monto que el paciente NO pagó. Jamás timbrar montos que no
   // cuadren.
+  //
+  // Va ANTES del apartado de `cfdiUuid` y de cualquier llamada a Facturapi: una
+  // factura que no cuadra no se aparta, no se timbra y no se «arregla sola»
+  // (mover el total es tocar dinero). La cuenta vive en lib/invoices/cfdi-cuadre.ts.
   const discount = round2(Math.max(0, invoice.discount ?? 0));
-  const cfdiTotal = expectedCfdiTotal(invoiceItems, discount, taxMode, taxIncludedInv);
-  // Con IVA agregado, Facturapi calcula el impuesto por concepto: tolera un
-  // centavo de redondeo por línea; en los modos brutos la igualdad es exacta.
-  const tolerance = taxMode === "iva16" && !taxIncludedInv
-    ? 0.01 + 0.01 * invoiceItems.length
-    : 0.01;
-  // round2 en la diferencia: sin él, una diferencia legítima de exactamente
-  // 1¢ excede la tolerancia por ruido de punto flotante (31.00 − 30.99 =
-  // 0.010000000000001563 > 0.01) y bloquearía un caso que debe pasar.
-  if (round2(Math.abs(cfdiTotal - invoice.total)) > tolerance) {
+  const cuadre = cfdiCuadre({
+    items: invoiceItems, discount, total: invoice.total, taxMode, taxIncluded: taxIncludedInv,
+  });
+  const { cfdiTotal, tolerance } = cuadre;
+  if (!cuadre.ok) {
+    const t = makeT(getDict(clinic.locale));
     return NextResponse.json({
-      error: `El total de la factura ($${invoice.total.toFixed(2)}) no coincide con la suma de sus conceptos ($${cfdiTotal.toFixed(2)}). Corrige el precio, el descuento o los conceptos antes de timbrar — el CFDI se emitiría por un monto distinto al cobrado.`,
-      code: "CFDI_TOTAL_MISMATCH",
+      error: t("billing.billingClient.cfdiTotalMismatch", {
+        number:       invoice.invoiceNumber ?? "",
+        invoiceTotal: fmtMXNdec(invoice.total),
+        cfdiTotal:    fmtMXNdec(cfdiTotal),
+      }),
+      code: CFDI_TOTAL_MISMATCH,
       invoiceTotal: invoice.total,
       cfdiTotal,
     }, { status: 409 });

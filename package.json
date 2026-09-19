@@ -173,6 +173,7 @@
     "test:presupuesto-factura": "tsx --test --experimental-test-module-mocks src/app/api/quotes/__tests__/presupuesto-factura.test.ts",
     "test:cfdi-dinero": "tsx --test src/lib/__tests__/cfdi-dinero.test.ts",
     "test:cfdi-timbrado-alerta": "tsx --test src/lib/__tests__/cfdi-timbrado-alerta.test.ts",
+    "test:cfdi-cuadre": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/cuadre-renglones.test.ts",
     "test:cfdi-candado": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/timbrado-y-sat.test.ts",
     "test:cfdi-timbre-incierto": "tsx --test --experimental-test-module-mocks src/lib/invoices/__tests__/cfdi-timbre-incierto.test.ts",
     "test:iva-sat": "tsx --test src/lib/__tests__/invoice-iva-sat.test.ts",

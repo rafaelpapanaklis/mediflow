@@ -2947,7 +2947,8 @@
       "cfdiTaxIva16": "IVA 16%",
       "cfdiBalanceWarning": "Esta factura tiene saldo pendiente. Normalmente se factura cuando ya está pagada.",
       "cfdiUnpaidConfirm": "Timbrar de todos modos como PUE (pago en una sola exhibición)",
-      "cfdiOpenInvoice": "Abrir factura para corregir"
+      "cfdiOpenInvoice": "Abrir factura para corregir",
+      "cfdiTotalMismatch": "No se timbró: la factura {number} no cuadra. Su total dice {invoiceTotal}, pero sus renglones (ya con descuento e IVA) suman {cfdiTotal}, y el CFDI saldría por {cfdiTotal}. Si lo que se cobró es {invoiceTotal}, corrige los renglones o el descuento; si lo correcto es {cfdiTotal}, corrige el total con «Editar precio». Después vuelve a timbrar."
     },
     "invoiceEditor": {
       "title": "Nueva factura",
