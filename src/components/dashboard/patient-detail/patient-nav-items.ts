@@ -19,6 +19,7 @@ import {
   Box,
   FileText,
   FileSignature,
+  NotebookPen,
   Receipt,
   type LucideIcon,
 } from "lucide-react";
@@ -129,6 +130,9 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     { id: "cuestionario",        labelKey: "patients.tabs.cuestionario",       shortLabelKey: "patients.tabsShort.cuestionario",       icon: ClipboardCheck, section: "clinico" },
     { id: "expediente",          labelKey: "patients.tabs.expediente",         icon: Stethoscope,    section: "clinico" },
     { id: "historial-consultas", labelKey: "patients.tabs.historialConsultas", shortLabelKey: "patients.tabsShort.historialConsultas", icon: ClipboardList,  section: "clinico" },
+    // Nota de evolución como DOCUMENTO (plantillas de Administración → Plantillas).
+    // Camino nuevo al lado de «Nueva consulta»; sin bandera: sale en todas las clínicas.
+    { id: "nota-evolucion", labelKey: "patients.tabs.notaEvolucion", shortLabelKey: "patients.tabsShort.notaEvolucion", icon: NotebookPen, section: "clinico" },
   ];
 
   // Especialidades — visibles según gating por módulo activo en la clínica.

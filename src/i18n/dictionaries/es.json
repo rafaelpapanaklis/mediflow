@@ -1639,14 +1639,16 @@
       "ortodoncia": "Ortodoncia",
       "recetas": "Recetas",
       "consentimientos": "Consentimientos",
-      "sectionsAria": "Secciones del paciente"
+      "sectionsAria": "Secciones del paciente",
+      "notaEvolucion": "Nota de evolución"
     },
     "tabsShort": {
       "cuestionario": "Cuestionario",
       "historialConsultas": "Historial",
       "subidos": "Subidos",
       "tratamiento": "Plan",
-      "consentimientos": "Consent."
+      "consentimientos": "Consent.",
+      "notaEvolucion": "Nota"
     },
     "navBar": {
       "more": "Más",
@@ -9337,5 +9339,59 @@
     "readExportArco": "Exportó los datos (ARCO acceso)",
     "readNoteId": "Nota",
     "readNoContent": "Una consulta no modifica nada. La bitácora guarda quién y cuándo, no el contenido."
-  }
+  },
+  "notaEvolucionDoc": {
+    "title": "Notas de evolución",
+    "subtitle": "Las notas de este paciente, de la más nueva a la más vieja.",
+    "new": "Nueva nota de evolución",
+    "back": "Volver a las notas",
+    "status": {
+      "signed": "Firmada",
+      "draft": "Borrador"
+    },
+    "list": {
+      "empty": "Este paciente todavía no tiene notas de evolución. Crea la primera con «Nueva nota de evolución».",
+      "emptyReadOnly": "Este paciente todavía no tiene notas de evolución.",
+      "error": "No se pudieron cargar las notas.",
+      "retry": "Reintentar",
+      "noPermission": "No tienes permiso para ver el expediente clínico de este paciente."
+    },
+    "pick": {
+      "title": "Elige una plantilla",
+      "subtitle": "Son las plantillas de nota de evolución que tu clínica escribió en Administración → Plantillas.",
+      "empty": "Tu clínica todavía no tiene plantillas de nota de evolución.",
+      "goToTemplates": "Crear una en Administración → Plantillas"
+    },
+    "header": {
+      "patient": "Paciente",
+      "date": "Fecha",
+      "doctor": "Doctor",
+      "license": "Cédula profesional"
+    },
+    "editor": {
+      "label": "Texto de la nota",
+      "headerHint": "La cabecera se llena sola con los datos del paciente, la clínica y tu usuario.",
+      "saveDraft": "Guardar borrador",
+      "sign": "Firmar nota",
+      "signHint": "Al firmar, la nota queda guardada tal cual y ya no se puede modificar.",
+      "empty": "La nota está vacía.",
+      "leaveTitle": "¿Salir sin guardar?",
+      "leaveBody": "Lo que escribiste en esta nota se va a perder."
+    },
+    "missing": {
+      "title": "A esta nota le van a faltar datos en la cabecera",
+      "cedula": "Tu usuario no tiene cédula profesional.",
+      "cedulaLink": "Agrégala en Equipo",
+      "logo": "La clínica no tiene logo.",
+      "logoLink": "Súbelo en Configuración",
+      "canContinue": "Puedes firmarla así: esos datos simplemente no aparecerán. Una nota ya firmada no cambia si los agregas después."
+    },
+    "read": {
+      "signedBy": "Firmada por {doctor} el {date}.",
+      "draftOf": "Borrador de {doctor}. Todavía no está firmada."
+    },
+    "toast": {
+      "signed": "Nota firmada",
+      "draftSaved": "Borrador guardado"
+    }  }
 }

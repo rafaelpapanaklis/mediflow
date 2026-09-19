@@ -1639,14 +1639,16 @@
       "ortodoncia": "Orthodontics",
       "recetas": "Prescriptions",
       "consentimientos": "Consent forms",
-      "sectionsAria": "Patient sections"
+      "sectionsAria": "Patient sections",
+      "notaEvolucion": "Progress note"
     },
     "tabsShort": {
       "cuestionario": "Questionnaire",
       "historialConsultas": "History",
       "subidos": "Uploads",
       "tratamiento": "Plan",
-      "consentimientos": "Consent"
+      "consentimientos": "Consent",
+      "notaEvolucion": "Note"
     },
     "navBar": {
       "more": "More",
@@ -9337,5 +9339,59 @@
     "readExportArco": "Exported the data (ARCO access)",
     "readNoteId": "Note",
     "readNoContent": "A read changes nothing. The log keeps who and when, not the content."
-  }
+  },
+  "notaEvolucionDoc": {
+    "title": "Progress notes",
+    "subtitle": "This patient's notes, newest first.",
+    "new": "New progress note",
+    "back": "Back to notes",
+    "status": {
+      "signed": "Signed",
+      "draft": "Draft"
+    },
+    "list": {
+      "empty": "This patient has no progress notes yet. Create the first one with “New progress note”.",
+      "emptyReadOnly": "This patient has no progress notes yet.",
+      "error": "The notes could not be loaded.",
+      "retry": "Retry",
+      "noPermission": "You don't have permission to view this patient's clinical record."
+    },
+    "pick": {
+      "title": "Choose a template",
+      "subtitle": "These are the progress note templates your clinic wrote in Administration → Templates.",
+      "empty": "Your clinic has no progress note templates yet.",
+      "goToTemplates": "Create one in Administration → Templates"
+    },
+    "header": {
+      "patient": "Patient",
+      "date": "Date",
+      "doctor": "Doctor",
+      "license": "Professional license"
+    },
+    "editor": {
+      "label": "Note text",
+      "headerHint": "The header fills itself in with the patient, clinic and your user data.",
+      "saveDraft": "Save draft",
+      "sign": "Sign note",
+      "signHint": "Once signed, the note is stored as is and can no longer be changed.",
+      "empty": "The note is empty.",
+      "leaveTitle": "Leave without saving?",
+      "leaveBody": "What you wrote in this note will be lost."
+    },
+    "missing": {
+      "title": "This note's header will be missing some data",
+      "cedula": "Your user has no professional license number.",
+      "cedulaLink": "Add it in Team",
+      "logo": "The clinic has no logo.",
+      "logoLink": "Upload it in Settings",
+      "canContinue": "You can sign it like this: that data simply won't appear. A note that is already signed does not change if you add it later."
+    },
+    "read": {
+      "signedBy": "Signed by {doctor} on {date}.",
+      "draftOf": "Draft by {doctor}. Not signed yet."
+    },
+    "toast": {
+      "signed": "Note signed",
+      "draftSaved": "Draft saved"
+    }  }
 }

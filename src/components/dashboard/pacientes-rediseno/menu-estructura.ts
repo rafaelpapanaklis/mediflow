@@ -36,6 +36,7 @@ export const GRUPO_CLINICO = [
   "historia",
   "cuestionario",
   "historial-consultas",
+  "nota-evolucion", // la nota como documento (plantillas de la clínica), ws1-t3
   "recetas",
   "consentimientos",
   // «Implantes» (solo con el módulo de Implantología, y hoy «Próximamente»)

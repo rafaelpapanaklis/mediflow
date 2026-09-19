@@ -28,6 +28,7 @@ import { PaymentModal } from "@/components/dashboard/billing/payment-modal";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { BillingTab } from "@/components/dashboard/patient-detail/billing-tab";
 import { ConsentsTab } from "@/components/dashboard/patient-detail/consents-tab";
+import { NotaEvolucionPanel } from "@/components/dashboard/nota-evolucion/nota-evolucion-panel";
 import type { ConsentDTO } from "@/lib/consent/types";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import { PatientAuditHistory } from "@/components/dashboard/patient-detail/patient-audit-history";
@@ -2702,6 +2703,17 @@ export function PatientDetailClient({
               {currentSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
               {currentSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
             </div>
+          )}
+
+          {/* ===== TAB: NOTA DE EVOLUCIÓN (documento con plantilla) =====
+              Camino nuevo AL LADO de «Nueva consulta» (medical_records): no lo
+              sustituye. Lista + crear + leer viven en el panel. */}
+          {tab === "nota-evolucion" && (
+            <NotaEvolucionPanel
+              patientId={patient.id}
+              currentUserId={currentUser.id}
+              canWrite={canEditRecords}
+            />
           )}
 
           {/* ===== TAB: HISTORIAL DE CONSULTAS (expanded) ===== */}
