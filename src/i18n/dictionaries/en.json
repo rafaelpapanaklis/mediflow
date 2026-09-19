@@ -2947,7 +2947,8 @@
       "cfdiTaxIva16": "16% VAT",
       "cfdiBalanceWarning": "This invoice has a pending balance. It is usually invoiced once paid.",
       "cfdiUnpaidConfirm": "Stamp anyway as PUE (single-payment)",
-      "cfdiOpenInvoice": "Open invoice to fix"
+      "cfdiOpenInvoice": "Open invoice to fix",
+      "cfdiTotalMismatch": "Not stamped: invoice {number} does not add up. Its total says {invoiceTotal}, but its line items (after discount and VAT) add up to {cfdiTotal}, and the CFDI would be issued for {cfdiTotal}. If the amount charged is {invoiceTotal}, fix the line items or the discount; if {cfdiTotal} is right, fix the total with “Edit price”. Then stamp again."
     },
     "invoiceEditor": {
       "title": "New invoice",
