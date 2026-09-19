@@ -19,6 +19,8 @@ import {
   isClinicalNoteEmpty,
   normalizeNoteStatus,
 } from "@/lib/clinical/note-validation";
+import { resolveNoteAppointmentId, sanitizeAppointmentId } from "@/lib/clinical/note-appointment-link";
+import { calendarDayRangeUtc, todayInTz } from "@/lib/agenda/time-utils";
 import {
   nextInvoiceNumber,
   withInvoiceNumberRetry,
@@ -30,6 +32,9 @@ export const dynamic = "force-dynamic";
 // expedientes sin paciente. specialtyData se sanea aparte (status/signedAt).
 const CreateSchema = z.object({
   patientId: z.string().min(1),
+  // La cita a la que la ficha propone ligar la nota. z.any() a propósito: un
+  // valor raro aquí se IGNORA (se guarda sin ligar), no tumba la nota con un 400.
+  appointmentId: z.any().optional(),
   subjective: z.string().nullable().optional(),
   objective: z.string().nullable().optional(),
   assessment: z.string().nullable().optional(),
@@ -122,7 +127,15 @@ export async function POST(req: NextRequest) {
   // decide el status y sella signedAt. (Antes nacía sin status y aceptaba
   // status/signedAt arbitrarios del cliente vía specialtyData.)
   const incomingSpec = (data.specialtyData ?? {}) as Record<string, unknown>;
-  const { status: _ignoredStatus, signedAt: _ignoredSignedAt, ...cleanSpec } = incomingSpec;
+  // `appointmentId` tampoco se acepta por specialtyData: solo entra el que el
+  // servidor valida más abajo. Si no, bastaba mandarlo por aquí para saltarse
+  // la comprobación de clínica y paciente.
+  const {
+    status: _ignoredStatus,
+    signedAt: _ignoredSignedAt,
+    appointmentId: _ignoredAppointmentId,
+    ...cleanSpec
+  } = incomingSpec;
   const status = normalizeNoteStatus(incomingSpec.status);
 
   // NOM-004 CAMPOS-OBLIGATORIOS: no permitir que una nota NAZCA firmada vacía.
@@ -139,9 +152,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: EMPTY_NOTE_ERROR }, { status: 422 });
   }
 
+  // LA NOTA LIGADA A SU CITA. Mismo sitio que /api/clinical-notes
+  // (specialtyData.appointmentId), pero aquí un id que no cuadra se IGNORA en
+  // vez de devolver 404: perder la nota por un id viejo sería peor. El servidor
+  // no se fía del cliente: lee él las citas de HOY (día natural en la zona de la
+  // clínica) de ESTE paciente en ESTA clínica, y solo liga si hay exactamente
+  // una y es la que se pidió. Una cita de otra clínica o de otro paciente no
+  // sale en esa lectura; con dos citas el mismo día no se adivina. Tampoco se
+  // liga a la cita de otro doctor, a una que aún queda lejos, ni a una que ya
+  // tiene nota (ver note-appointment-link.ts).
+  let appointmentId: string | null = null;
+  if (sanitizeAppointmentId(data.appointmentId)) {
+    try {
+      const timezone = (dbUser as any).clinic?.timezone || "America/Mexico_City";
+      const day = calendarDayRangeUtc(todayInTz(timezone), timezone);
+      const todays = await prisma.appointment.findMany({
+        where: {
+          clinicId: dbUser.clinicId,
+          patientId: data.patientId,
+          startsAt: { gte: day.startUtc, lt: day.endUtc },
+        },
+        select: { id: true, status: true, doctorId: true, startsAt: true },
+        take: 20,
+      });
+      const candidate = resolveNoteAppointmentId(data.appointmentId, todays, {
+        doctorId: dbUser.id,
+        now: new Date(),
+      });
+      // Una cita, una nota: si esa cita ya tiene la suya (el paciente volvió por
+      // la tarde, o la nota se creó desde «Iniciar consulta»), esta va suelta.
+      const alreadyLinked = candidate
+        ? await prisma.medicalRecord.findFirst({
+            where: {
+              clinicId: dbUser.clinicId,
+              patientId: data.patientId,
+              specialtyData: { path: ["appointmentId"], equals: candidate },
+            },
+            select: { id: true },
+          })
+        : null;
+      appointmentId = candidate && !alreadyLinked ? candidate : null;
+    } catch (err) {
+      // Ligar es un extra: si la lectura falla, la nota se guarda sin ligar.
+      console.error("Error resolving appointment for clinical note:", err);
+    }
+  }
+
   const finalSpec = {
     ...cleanSpec,
     status,
+    ...(appointmentId ? { appointmentId } : {}),
     ...(status === "SIGNED" ? { signedAt: new Date().toISOString() } : {}),
   };
 
@@ -166,6 +226,7 @@ export async function POST(req: NextRequest) {
       patientId: record.patientId,
       doctorId: record.doctorId,
       status,
+      appointmentId,
       subjective: record.subjective,
       objective: record.objective,
       assessment: record.assessment,

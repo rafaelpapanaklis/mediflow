@@ -105,6 +105,7 @@
     "test:consent-pdf": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/consent-document.test.tsx",
     "test:reminders-reschedule": "tsx --test src/lib/reminders/__tests__/reschedule.test.ts",
     "test:reminders-promise": "tsx --test src/lib/reminders/__tests__/promise.test.ts",
+    "test:nota-plantillas-cita": "tsx --test --experimental-test-module-mocks src/lib/clinical-shared/evolution-templates/__tests__/seed-dental.test.ts src/app/api/clinical/__tests__/nota-ligada-a-cita.test.ts",
     "test:clinical-reminders": "tsx --test src/lib/clinical-shared/reminders/__tests__/worker-encola.test.ts",
     "test:wa-manual-reminder": "tsx --test src/lib/whatsapp/__tests__/manual-reminder-access.test.ts",
     "test:inbox": "tsx --test src/lib/inbox/__tests__/inbox-send.test.ts",

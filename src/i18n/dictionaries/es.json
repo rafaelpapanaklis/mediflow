@@ -5929,7 +5929,13 @@
       "nextVisitLabel": "Próxima cita recomendada",
       "nextVisitPlaceholder": "En 3 meses, urgente, etc.",
       "savingChanges": "Guardando cambios…",
-      "saveConsultation": "Guardar consulta"
+      "saveConsultation": "Guardar consulta",
+      "linkedToTodayAppointment": "Esta nota quedará ligada a la cita de hoy de este paciente.",
+      "templates": {
+        "hint": "Elige una plantilla: rellena los cuatro campos y deja [huecos] por completar. No borra lo que ya escribiste.",
+        "appliedToast": "Plantilla «{name}» aplicada. Completa los [huecos].",
+        "unfilledWarning": "Quedan [huecos] de la plantilla sin rellenar. Una consulta guardada queda firmada y ya no se edita. Revísalos, o pulsa Guardar otra vez para guardarla así."
+      }
     },
     "dermatologyForm": {
       "zoneScalp": "Cuero cabelludo",

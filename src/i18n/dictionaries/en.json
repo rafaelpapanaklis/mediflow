@@ -5929,7 +5929,13 @@
       "nextVisitLabel": "Recommended next appointment",
       "nextVisitPlaceholder": "In 3 months, urgent, etc.",
       "savingChanges": "Saving changes…",
-      "saveConsultation": "Save consultation"
+      "saveConsultation": "Save consultation",
+      "linkedToTodayAppointment": "This note will be linked to this patient's appointment today.",
+      "templates": {
+        "hint": "Pick a template: it fills the four fields and leaves [blanks] to complete. It never erases what you already wrote.",
+        "appliedToast": "Template “{name}” applied. Fill in the [blanks].",
+        "unfilledWarning": "There are still unfilled template [blanks]. A saved consultation is signed and can no longer be edited. Review them, or press Save again to save it as is."
+      }
     },
     "dermatologyForm": {
       "zoneScalp": "Scalp",
