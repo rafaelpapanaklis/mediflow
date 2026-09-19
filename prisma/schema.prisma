@@ -6765,6 +6765,9 @@ enum ClinicalModule {
   // Fotos clínicas de la ficha del paciente (tab "Fotos clínicas"),
   // sin especialidad — extraorales/intraorales por etapa.
   general
+  // Odontología general: plantillas de la nota de evolución de la ficha dental
+  // (DentalForm). En producción pide sql/clinical-module-dental-enum.sql.
+  dental
 }
 
 enum ClinicalPhotoStage {

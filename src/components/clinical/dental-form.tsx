@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type CSSProperties } from "react";
 import { FileText, Lock, Stethoscope } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -15,6 +15,42 @@ import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
 import { DictationMic } from "@/components/clinical/shared/dictation-mic";
 import { AiConsultPanel, type AiAssistValue } from "./dental/ai-consult-panel";
+import { EvolutionTemplatePicker } from "@/components/clinical-shared/EvolutionTemplatePicker";
+import { applyTemplateToNote } from "@/lib/clinical-shared/evolution-templates/apply-template";
+import { DENTAL_MODULE, hasUnfilledPlaceholders } from "@/lib/clinical-shared/evolution-templates/dental-templates";
+import { ensureDentalEvolutionTemplates } from "@/lib/clinical-shared/evolution-templates/dental-actions";
+import { pickSingleAppointmentOfDay } from "@/lib/clinical/note-appointment-link";
+
+/**
+ * La cita de HOY de este paciente, o null si no hay exactamente una. Con dos
+ * citas el mismo día, o con ninguna, no se adivina: la nota se guarda sin
+ * ligar. Nunca lanza — ligar es un extra y no puede tumbar el guardado. El
+ * servidor (POST /api/clinical) vuelve a comprobarlo por su cuenta.
+ */
+async function fetchTodayAppointmentId(patientId: string): Promise<string | null> {
+  try {
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 1);
+    to.setMilliseconds(-1);
+    const qs = new URLSearchParams({
+      types: "appointment", from: from.toISOString(), to: to.toISOString(), limit: "20",
+    });
+    const res = await fetch(`/api/patients/${patientId}/timeline?${qs}`);
+    if (!res.ok) return null;
+    const body = await res.json();
+    // Más de una página de citas en un solo día: desde luego no es «una».
+    if (body?.nextCursor || !Array.isArray(body?.events)) return null;
+    return pickSingleAppointmentOfDay(
+      body.events
+        .filter((e: any) => e?.type === "appointment" && typeof e?.meta?.entityId === "string")
+        .map((e: any) => ({ id: e.meta.entityId, status: e.meta.status })),
+    );
+  } catch {
+    return null;
+  }
+}
 
 /** ¿El registro de un diente trae algo marcado? (superficies, hallazgos o nota) */
 function toothRecordHasContent(rec: ToothRecord | undefined): boolean {
@@ -255,6 +291,36 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     nextVisit:   initialSpec.nextVisit ?? "",
   }));
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
+
+  // ── PLANTILLAS DE NOTA ────────────────────────────────────────────────────
+  // Mismo motor que pediatría y ortodoncia (ClinicalEvolutionTemplate, módulo
+  // `dental`). Las 8 plantillas de la clínica se siembran solas la primera vez;
+  // el selector solo se monta cuando eso salió bien — si en la base falta el
+  // valor `dental` del enum, la ficha sigue como siempre, sin selector.
+  const [templatesReady, setTemplatesReady] = useState(false);
+  useEffect(() => {
+    if (isLocked) return;
+    let cancelled = false;
+    ensureDentalEvolutionTemplates()
+      .then(res => { if (!cancelled && res.ok) setTemplatesReady(true); })
+      .catch(() => { /* sin plantillas: la ficha funciona igual */ });
+    return () => { cancelled = true; };
+  }, [isLocked]);
+  // Aviso único por texto: guardar firma la nota y una nota firmada no se edita,
+  // así que un [hueco] olvidado se queda ahí para siempre. Se avisa una vez; si
+  // el doctor vuelve a pulsar con el mismo texto, es que lo quiere así.
+  const placeholderWarnedRef = useRef<string | null>(null);
+
+  // ── LA CITA DE HOY ────────────────────────────────────────────────────────
+  // Solo para enseñar el aviso; al guardar se vuelve a leer, por si la cita se
+  // creó o se canceló mientras la ficha estaba abierta.
+  const [todayAppointmentId, setTodayAppointmentId] = useState<string | null>(null);
+  useEffect(() => {
+    if (isEditing) return;
+    let cancelled = false;
+    fetchTodayAppointmentId(patientId).then(id => { if (!cancelled) setTodayAppointmentId(id); });
+    return () => { cancelled = true; };
+  }, [isEditing, patientId]);
   // Dictado por voz: agrega la transcripción AL FINAL del campo (nunca reemplaza).
   // setForm funcional para no pisar lo que se tecleó mientras se transcribía.
   const appendDictation = (key: string, sep: string) => (text: string) =>
@@ -479,6 +545,12 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       toast.error(t("clinical.dentalForm.reasonOrDiagnosisRequired"));
       return;
     }
+    const soapText = [form.subjective, form.objective, form.assessment, form.plan].join("\n");
+    if (hasUnfilledPlaceholders(soapText) && placeholderWarnedRef.current !== soapText) {
+      placeholderWarnedRef.current = soapText;
+      toast(t("clinical.dentalForm.templates.unfilledWarning"), { icon: "⚠️", duration: 8000 });
+      return;
+    }
     setSaving(true);
     try {
       // Signos vitales → claves canónicas para el timeline + copia cruda en
@@ -534,11 +606,14 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         toast.success(t("clinical.dentalForm.updatedToast"));
       } else {
         // POST — crea record nuevo. autoInvoice si hay procedimientos con precio.
+        // Si el paciente tiene UNA cita hoy, la nota va ligada a ella.
+        const appointmentId = await fetchTodayAppointmentId(patientId);
         const res = await fetch("/api/clinical", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             patientId,
+            ...(appointmentId ? { appointmentId } : {}),
             subjective: form.subjective,
             objective: form.objective,
             assessment: form.assessment,
@@ -689,6 +764,33 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         onApply={handleAiApply}
         onRemove={handleAiRemove}
       />
+
+      {/* PLANTILLAS DE NOTA — rellenan los cuatro campos y dejan [huecos] */}
+      {templatesReady && !isLocked && (
+        <div
+          className="flex flex-wrap items-center gap-3"
+          // El selector compartido usa tokens (--surface-1/2) que fuera de los
+          // módulos de especialidad no existen, y aquí --border es un triple HSL.
+          style={{
+            "--surface-1": "hsl(var(--card))",
+            "--surface-2": "hsl(var(--muted))",
+            "--border": "rgba(125,120,146,0.35)",
+          } as CSSProperties}
+        >
+          <EvolutionTemplatePicker
+            module={DENTAL_MODULE}
+            ensureDefaults={false}
+            onApply={tpl => {
+              setForm(f => applyTemplateToNote(f, tpl.soapTemplate));
+              toast.success(t("clinical.dentalForm.templates.appliedToast", { name: tpl.name }));
+            }}
+          />
+          <span className="text-xs text-muted-foreground">{t("clinical.dentalForm.templates.hint")}</span>
+        </div>
+      )}
+      {!isEditing && todayAppointmentId && (
+        <div className="text-xs text-muted-foreground">{t("clinical.dentalForm.linkedToTodayAppointment")}</div>
+      )}
 
       {/* ANAMNESIS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
