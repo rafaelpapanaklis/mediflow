@@ -1,5 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
+import { ClinicLetterhead } from "./clinic-letterhead";
 import { formatConsentDate, formatConsentDateTime } from "@/lib/consent/dates";
+import { parseConsentText, splitConsentBody } from "@/lib/consent/render";
 import {
   consentValue,
   consentValueOrBlank,
@@ -32,7 +34,16 @@ import {
  * (así nadie nota que falta) ni se imprime "undefined" o un "N/A". Las etiquetas
  * y la raya salen de `lib/consent/document-data`, las mismas que usa el texto.
  *
- * Mismo lenguaje visual que QuoteDocument y PrescriptionDocument.
+ * ES UNA CARTA, con la misma composición que `PatientDocument` (la nota de
+ * evolución) y que la hoja del panel: membrete común (`ClinicLetterhead`), fecha
+ * a la derecha, a quién y de quién con las etiquetas pequeñas y los valores
+ * mandando, título, cuerpo a ancho de lectura y un pie de firmas que parece un
+ * pie de firmas. Lo que esta carta tiene de más —dos firmas, testigos,
+ * representante, revocación y evidencia— se queda.
+ *
+ * El TEXTO se imprime íntegro y en su orden: `parseConsentText` solo lo parte
+ * para darle jerarquía (encabezados, párrafos, viñetas). Una carta sin secciones
+ * numeradas —las del sistema viejo— sale entera como párrafos.
  */
 
 export interface ConsentSignatureBlock {
@@ -53,6 +64,8 @@ export interface ConsentDocumentProps {
   clinicPhone: string | null;
   clinicEmail: string | null;
   logoDataUrl: string | null;
+  /** Ancho/alto reales del logo. Sin esto el membrete lo asume cuadrado. */
+  logoAspect?: number | null;
 
   procedure: string;
   /** Lugar de la firma (ciudad de la clínica). */
@@ -95,78 +108,75 @@ export interface ConsentDocumentProps {
   revokedReason: string | null;
 }
 
+const ACCENT = "#7c3aed";
+const TINTA = "#14101f";
+const GRIS = "#6b6b78";
+
 const styles = StyleSheet.create({
+  // Los mismos márgenes de carta que `PatientDocument`: 56 pt a los lados.
   page: {
-    padding: 40,
-    paddingBottom: 70,
-    fontFamily: "Helvetica",
-    fontSize: 10,
-    color: "#14101f",
-    lineHeight: 1.5,
+    paddingTop: 48, paddingHorizontal: 56, paddingBottom: 72,
+    fontFamily: "Helvetica", fontSize: 10, color: TINTA, lineHeight: 1.5,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    borderBottomWidth: 2,
-    borderBottomColor: "#7c3aed",
-    paddingBottom: 12,
-    marginBottom: 14,
+  dateLabel: {
+    fontSize: 7.5, color: GRIS, textTransform: "uppercase", letterSpacing: 0.8,
+    textAlign: "right", lineHeight: 1.2,
   },
-  headerLeft: { flexDirection: "row", gap: 10, alignItems: "flex-start", maxWidth: 330 },
-  logo: { width: 44, height: 44, objectFit: "contain" },
-  brand: { fontSize: 16, color: "#7c3aed", fontFamily: "Helvetica-Bold" },
-  brandSub: { fontSize: 8.5, color: "#6b6b78", marginTop: 1 },
-  docTitle: { fontSize: 12, color: "#7c3aed", fontFamily: "Helvetica-Bold", textAlign: "right", maxWidth: 170 },
-  metaRight: { fontSize: 8, color: "#6b6b78", textAlign: "right", marginTop: 4 },
-  metaValue: { fontSize: 10, color: "#14101f", fontFamily: "Helvetica-Bold", textAlign: "right" },
+  dateValue: { fontSize: 10.5, fontFamily: "Helvetica-Bold", textAlign: "right", marginTop: 2, lineHeight: 1.25 },
 
-  block: { backgroundColor: "#f4f2f8", padding: 12, borderRadius: 6, marginBottom: 12 },
-  twoCol: { flexDirection: "row", gap: 18 },
-  col: { flex: 1 },
-  label: {
-    fontSize: 8, color: "#6b6b78", textTransform: "uppercase",
-    letterSpacing: 0.5, fontFamily: "Helvetica-Bold",
-  },
-  value: { fontSize: 11, color: "#14101f", fontFamily: "Helvetica-Bold", marginTop: 2 },
-  sub: { fontSize: 9, color: "#6b6b78", marginTop: 1 },
-  sectionTitle: {
-    fontSize: 10, color: "#7c3aed", fontFamily: "Helvetica-Bold",
-    textTransform: "uppercase", letterSpacing: 0.5, marginTop: 8, marginBottom: 6,
-  },
+  parties: { flexDirection: "row", gap: 24, marginBottom: 18 },
+  party: { flex: 1 },
+  label: { fontSize: 7.5, color: GRIS, textTransform: "uppercase", letterSpacing: 0.8, lineHeight: 1.2 },
+  labelGap: { marginTop: 8 },
+  value: { fontSize: 12, fontFamily: "Helvetica-Bold", marginTop: 2, lineHeight: 1.25 },
+  detail: { fontSize: 9, color: GRIS, marginTop: 2, lineHeight: 1.3 },
+  detailValue: { color: TINTA },
 
-  // Cuerpo de la carta: se respeta el salto de línea del texto guardado.
-  bodyLine: { fontSize: 9.5, color: "#14101f", lineHeight: 1.45 },
-  bodyGap: { height: 5 },
+  kind: { fontSize: 8.5, color: GRIS, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3, lineHeight: 1.2 },
+  title: { fontSize: 17, fontFamily: "Helvetica-Bold", lineHeight: 1.2 },
+  rule: { borderBottomWidth: 0.7, borderBottomColor: "#e5e5ed", marginTop: 10, marginBottom: 14 },
+
+  // Cuerpo: renglón a renglón, para que el salto de página caiga entre
+  // renglones y no parta una frase por la mitad.
+  body: { paddingRight: 28 },
+  heading: { fontSize: 10.5, fontFamily: "Helvetica-Bold", marginTop: 10, marginBottom: 4, lineHeight: 1.25 },
+  line: { fontSize: 10, lineHeight: 1.5 },
+  blockGap: { height: 7 },
+  item: { flexDirection: "row", marginBottom: 2, marginLeft: 6 },
+  itemMark: { width: 12 },
+  itemText: { flex: 1, fontSize: 10, lineHeight: 1.5 },
 
   revoked: {
     borderWidth: 1, borderColor: "#dc2626", borderRadius: 6,
-    padding: 8, marginBottom: 12,
+    padding: 8, marginBottom: 14,
   },
   revokedTitle: { fontSize: 10, color: "#dc2626", fontFamily: "Helvetica-Bold" },
   revokedText: { fontSize: 9, color: "#7f1d1d", marginTop: 2 },
 
-  // Firmas: dos por renglón.
-  sigRow: { flexDirection: "row", gap: 18, marginTop: 8 },
+  // Firmas: dos por renglón, con sitio de sobra encima de la línea para un
+  // bolígrafo de verdad.
+  sigRow: { flexDirection: "row", gap: 28, marginTop: 14 },
   sigBox: { flex: 1 },
-  sigImg: { width: 150, height: 46, objectFit: "contain", marginBottom: 2 },
-  sigImgEmpty: { height: 46 },
-  sigLine: { borderTopWidth: 0.7, borderTopColor: "#14101f", paddingTop: 4 },
-  sigRole: { fontSize: 8, color: "#6b6b78", textTransform: "uppercase", letterSpacing: 0.5, fontFamily: "Helvetica-Bold" },
-  sigName: { fontSize: 9.5, color: "#14101f", fontFamily: "Helvetica-Bold", marginTop: 1 },
-  sigDate: { fontSize: 8, color: "#6b6b78", marginTop: 1 },
+  sigImg: { width: 160, height: 54, objectFit: "contain", objectPositionX: 0, marginBottom: 2 },
+  sigImgEmpty: { height: 56 },
+  sigLine: { borderTopWidth: 0.8, borderTopColor: TINTA, paddingTop: 6 },
+  sigRole: { fontSize: 7.5, color: GRIS, textTransform: "uppercase", letterSpacing: 0.8, lineHeight: 1.2 },
+  sigName: { fontSize: 11, fontFamily: "Helvetica-Bold", marginTop: 2, lineHeight: 1.25 },
+  sigDate: { fontSize: 8.5, color: GRIS, marginTop: 2, lineHeight: 1.3 },
 
   evidence: {
-    marginTop: 16, borderTopWidth: 0.5, borderTopColor: "#e5e5ed", paddingTop: 8,
+    marginTop: 22, borderTopWidth: 0.5, borderTopColor: "#e5e5ed", paddingTop: 8,
   },
-  evidenceLine: { fontSize: 7.5, color: "#6b6b78" },
-  evidenceMono: { fontSize: 7, color: "#6b6b78" },
+  evidenceLine: { fontSize: 7.5, color: GRIS, lineHeight: 1.4 },
+  evidenceMono: { fontSize: 7, color: GRIS, lineHeight: 1.4 },
 
   footer: {
-    position: "absolute", bottom: 28, left: 40, right: 40, fontSize: 8, color: "#9b9aa8",
-    textAlign: "center", borderTopWidth: 0.5, borderTopColor: "#e5e5ed", paddingTop: 8,
+    position: "absolute", bottom: 28, left: 56, right: 56, fontSize: 8, color: "#9b9aa8",
+    textAlign: "center", borderTopWidth: 0.5, borderTopColor: "#e5e5ed", paddingTop: 8, lineHeight: 1.3,
   },
-  pageNum: { fontSize: 7.5, color: "#9b9aa8", textAlign: "center", marginTop: 2 },
+  // `lineHeight: ""` NO es decorativo: ver `patient-document.tsx`. Sin él
+  // @react-pdf 4.x pinta el «Página N de M» FUERA del papel.
+  pageNum: { fontSize: 7.5, color: "#9b9aa8", textAlign: "center", marginTop: 2, lineHeight: "" },
 });
 
 /** Pares de firmas por renglón (dos columnas). */
@@ -176,7 +186,9 @@ function inPairs(blocks: ConsentSignatureBlock[]): ConsentSignatureBlock[][] {
   return rows;
 }
 
-function SignatureCell({ block, timeZone }: { block: ConsentSignatureBlock; timeZone: string }) {
+function SignatureCell({
+  block, timeZone, forPaper,
+}: { block: ConsentSignatureBlock; timeZone: string; forPaper: boolean }) {
   return (
     <View style={styles.sigBox}>
       {block.dataUrl ? (
@@ -186,55 +198,83 @@ function SignatureCell({ block, timeZone }: { block: ConsentSignatureBlock; time
       )}
       <View style={styles.sigLine}>
         <Text style={styles.sigRole}>{block.role}</Text>
-        <Text style={styles.sigName}>{block.name || "—"}</Text>
+        <Text style={styles.sigName}>{block.name || " "}</Text>
         <Text style={styles.sigDate}>
           {block.signedAt
             ? `Firmado el ${formatConsentDateTime(block.signedAt, timeZone)}`
-            : "Fecha: ____ / ____ / ________"}
+            // La fecha por llenar es de la hoja que va a pasar por un bolígrafo.
+            // En una carta ya firmada en digital, a quien falta le falta FIRMAR.
+            : forPaper
+              ? "Fecha: ____ / ____ / ________"
+              : "Firma pendiente"}
         </Text>
       </View>
     </View>
   );
 }
 
+function Detalle({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+  return (
+    <Text style={styles.detail}>
+      {etiqueta}: <Text style={styles.detailValue}>{valor}</Text>
+    </Text>
+  );
+}
+
+/** Un tramo del texto de la carta: párrafos renglón a renglón y viñetas. */
+function Cuerpo({ text }: { text: string }) {
+  const blocks = splitConsentBody(text);
+  return (
+    <>
+      {blocks.map((block, bi) => (
+        <View key={bi}>
+          {block.kind === "bullets"
+            ? block.lines.map((l, li) => (
+                <View key={li} style={styles.item} wrap={false}>
+                  <Text style={styles.itemMark}>•</Text>
+                  <Text style={styles.itemText}>{l}</Text>
+                </View>
+              ))
+            : block.lines.map((l, li) => <Text key={li} style={styles.line}>{l}</Text>)}
+          {bi < blocks.length - 1 ? <View style={styles.blockGap} /> : null}
+        </View>
+      ))}
+    </>
+  );
+}
+
 export function ConsentDocument(props: ConsentDocumentProps) {
   // Dirección con etiqueta y, si falta, con raya: en el membrete un hueco
-  // silencioso es justo lo que hacía que nadie supiera que faltaba.
+  // silencioso es justo lo que hacía que nadie supiera que faltaba. Va en UN
+  // renglón con la ciudad (por eso `clinicCity` no se le pasa al membrete).
   const clinicAddress = consentValue(props.clinicAddress);
-  const clinicLine2 =
+  const addressLine =
     "Dirección: " +
     (clinicAddress
       ? [clinicAddress, consentValue(props.clinicCity)].filter(Boolean).join(", ")
       : consentValueOrBlank(null));
-  const clinicLine3 = [
-    props.clinicPhone ? `Tel: ${props.clinicPhone}` : null,
-    props.clinicEmail,
-  ].filter(Boolean).join(" · ");
 
-  // El contenido se guardó como texto plano con saltos de línea. Se pinta línea
-  // a línea (y no como un solo Text) para que el salto de página caiga entre
-  // renglones y no parta una frase por la mitad.
-  const lines = (props.content ?? "").split("\n");
+  const doc = parseConsentText(props.content ?? "");
+  const forPaper = !props.signedAt;
 
   return (
-    <Document>
+    <Document title={props.procedure} author={props.clinicName}>
       <Page size="LETTER" style={styles.page} wrap>
-        {/* Membrete */}
-        <View style={styles.header} fixed>
-          <View style={styles.headerLeft}>
-            {props.logoDataUrl ? <PdfImage style={styles.logo} src={props.logoDataUrl} /> : null}
+        <ClinicLetterhead
+          clinicName={props.clinicName}
+          clinicAddress={addressLine}
+          clinicPhone={props.clinicPhone}
+          clinicEmail={props.clinicEmail}
+          clinicLogoDataUrl={props.logoDataUrl}
+          clinicLogoAspect={props.logoAspect ?? null}
+          accent={ACCENT}
+          right={
             <View>
-              <Text style={styles.brand}>{props.clinicName}</Text>
-              <Text style={styles.brandSub}>{clinicLine2}</Text>
-              {clinicLine3 ? <Text style={styles.brandSub}>{clinicLine3}</Text> : null}
+              <Text style={styles.dateLabel}>Fecha</Text>
+              <Text style={styles.dateValue}>{formatConsentDate(props.issuedAt, props.timeZone)}</Text>
             </View>
-          </View>
-          <View>
-            <Text style={styles.docTitle}>CARTA DE CONSENTIMIENTO INFORMADO</Text>
-            <Text style={styles.metaRight}>Fecha</Text>
-            <Text style={styles.metaValue}>{formatConsentDate(props.issuedAt, props.timeZone)}</Text>
-          </View>
-        </View>
+          }
+        />
 
         {props.revokedAt ? (
           <View style={styles.revoked}>
@@ -247,55 +287,62 @@ export function ConsentDocument(props: ConsentDocumentProps) {
           </View>
         ) : null}
 
-        {/* Identificación — paciente, representante y estomatólogo */}
-        <View style={styles.block}>
-          <View style={styles.twoCol}>
-            <View style={styles.col}>
-              <Text style={styles.label}>Paciente</Text>
-              <Text style={styles.value}>{props.patientName}</Text>
-              {patientIdentityLines(props).map((l) => (
-                <Text key={l.label} style={styles.sub}>{l.label}: {l.value}</Text>
-              ))}
-              {props.signerName ? (
-                <View>
-                  <Text style={[styles.label, { marginTop: 6 }]}>Representante legal</Text>
-                  <Text style={styles.value}>{props.signerName}</Text>
-                  <Text style={styles.sub}>
-                    Parentesco o relación: {props.signerRelation || "—"}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <View style={styles.col}>
-              <Text style={styles.label}>Estomatólogo responsable</Text>
-              <Text style={styles.value}>{props.doctorName || "—"}</Text>
-              {doctorCredentialLines(props).map((l) => (
-                <Text key={l.label} style={styles.sub}>{l.label}: {l.value}</Text>
-              ))}
-              <Text style={[styles.label, { marginTop: 6 }]}>Lugar y fecha</Text>
-              <Text style={styles.sub}>
-                {(props.place || "—") + ", a " + formatConsentDate(props.issuedAt, props.timeZone)}
+        {/* A quién y de quién */}
+        <View style={styles.parties}>
+          <View style={styles.party}>
+            <Text style={styles.label}>Paciente</Text>
+            <Text style={styles.value}>{consentValueOrBlank(props.patientName)}</Text>
+            {patientIdentityLines(props).map((l) => (
+              <Detalle key={l.label} etiqueta={l.label} valor={l.value} />
+            ))}
+            {props.signerName ? (
+              <View>
+                <Text style={[styles.label, styles.labelGap]}>Representante legal</Text>
+                <Text style={styles.value}>{props.signerName}</Text>
+                <Detalle etiqueta="Parentesco o relación" valor={consentValueOrBlank(props.signerRelation)} />
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.party}>
+            <Text style={styles.label}>Estomatólogo responsable</Text>
+            <Text style={styles.value}>{consentValueOrBlank(props.doctorName)}</Text>
+            {doctorCredentialLines(props).map((l) => (
+              <Detalle key={l.label} etiqueta={l.label} valor={l.value} />
+            ))}
+            <Text style={[styles.label, styles.labelGap]}>Lugar y fecha</Text>
+            <Text style={styles.detail}>
+              <Text style={styles.detailValue}>
+                {consentValueOrBlank(props.place) + ", a " + formatConsentDate(props.issuedAt, props.timeZone)}
               </Text>
-              <Text style={[styles.label, { marginTop: 6 }]}>Acto autorizado</Text>
-              <Text style={styles.sub}>{props.procedure}</Text>
-            </View>
+            </Text>
           </View>
         </View>
 
+        {/* El título del propio texto va de sello: así la carta sale ÍNTEGRA. */}
+        <Text style={styles.kind}>{doc.title || "Carta de consentimiento informado"}</Text>
+        <Text style={styles.title}>{consentValueOrBlank(props.procedure)}</Text>
+        <View style={styles.rule} />
+
         {/* Cuerpo de la carta */}
-        {lines.map((line, i) =>
-          line.trim() === "" ? (
-            <View key={i} style={styles.bodyGap} />
-          ) : (
-            <Text key={i} style={styles.bodyLine}>{line}</Text>
-          ),
-        )}
+        <View style={styles.body}>
+          {doc.preamble ? <Cuerpo text={doc.preamble} /> : null}
+          {doc.sections.map((section, i) => (
+            <View key={i}>
+              {/* Un encabezado no se queda solo al pie de la hoja. */}
+              <Text style={styles.heading} minPresenceAhead={40}>
+                {section.number == null ? section.title : `${section.number}. ${section.title}`}
+              </Text>
+              <Cuerpo text={section.body} />
+            </View>
+          ))}
+        </View>
 
         {/* Firmas */}
-        <Text style={styles.sectionTitle}>Firmas</Text>
         {inPairs(props.signatures).map((row, i) => (
-          <View key={i} style={styles.sigRow} wrap={false}>
-            {row.map((b, j) => <SignatureCell key={j} block={b} timeZone={props.timeZone} />)}
+          <View key={i} style={[styles.sigRow, i === 0 ? { marginTop: 30 } : {}]} wrap={false}>
+            {row.map((b, j) => (
+              <SignatureCell key={j} block={b} timeZone={props.timeZone} forPaper={forPaper} />
+            ))}
             {/* Relleno para que una firma suelta no ocupe el ancho completo. */}
             {row.length === 1 ? <View style={styles.sigBox} /> : null}
           </View>
@@ -341,7 +388,6 @@ export function ConsentDocument(props: ConsentDocumentProps) {
             {props.clinicName}
           </Text>
           <Text
-            fixed
             style={styles.pageNum}
             render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
           />

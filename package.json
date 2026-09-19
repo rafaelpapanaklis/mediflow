@@ -105,6 +105,7 @@
     "test:consent-dates": "tsx --test src/lib/consent/__tests__/dates.test.ts",
     "test:consent-datos": "tsx --tsconfig tsconfig.test.json --test src/lib/consent/__tests__/datos-completos.test.tsx",
     "test:consent-plantillas": "tsx --tsconfig tsconfig.test.json --test src/lib/consent/__tests__/plantillas-precargadas.test.tsx",
+    "test:consent-diseno": "tsx --tsconfig tsconfig.test.json --test src/lib/consent/__tests__/diseno-documento.test.tsx",
     "test:consent-signers": "tsx --test src/lib/consent/__tests__/signers.test.ts",
     "test:consent-pdf": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/consent-document.test.tsx",
     "test:reminders-reschedule": "tsx --test src/lib/reminders/__tests__/reschedule.test.ts",

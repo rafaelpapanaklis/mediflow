@@ -5,6 +5,8 @@ import { signMaybeUrl, BUCKETS } from "@/lib/storage";
 import { ConsentDocument } from "@/lib/pdf/consent-document";
 import { consentTimeZone } from "@/lib/consent/dates";
 import { buildSignatureBlocks } from "@/lib/consent/signers";
+import { buildConsentDocumento, type ConsentDocumentoDTO } from "@/lib/consent/documento";
+import { fetchClinicLogo } from "@/lib/pdf/clinic-letterhead";
 
 /**
  * buildConsentPdf — query + logo + firmas + render del PDF de un consentimiento.
@@ -14,8 +16,8 @@ import { buildSignatureBlocks } from "@/lib/consent/signers";
  * firman con TTL corto y se traen a memoria como data URL porque @react-pdf no
  * puede descargar una URL protegida por sí mismo.
  *
- * Multi-tenant: si se pasa `clinicId`, el consentimiento DEBE pertenecer a esa
- * clínica. Devuelve null si no existe / no pertenece.
+ * Multi-tenant: el consentimiento DEBE pertenecer a `clinicId`. Devuelve null
+ * si no existe / no pertenece / no se pasa clínica.
  */
 
 async function fetchImageDataUrl(url: string | null): Promise<string | null> {
@@ -41,15 +43,21 @@ async function signatureDataUrl(path: string | null | undefined): Promise<string
   return fetchImageDataUrl(signed);
 }
 
-export async function buildConsentPdf(
-  id: string,
-  clinicId?: string,
-): Promise<{ buffer: Buffer; fileName: string } | null> {
+/**
+ * La fila de la carta con su paciente, su clínica y su doctor, y las cuatro
+ * imágenes de firma ya en memoria. Es la ÚNICA lectura de la carta: la usan el
+ * PDF y la hoja del panel (`loadConsentDocumento`), así que no pueden discrepar.
+ */
+async function loadConsent(id: string, clinicId: string) {
+  // `clinicId: undefined` no filtra nada: sin clínica NO se consulta.
+  if (!id || !clinicId) return null;
   const form = await prisma.consentForm.findFirst({
-    where: clinicId ? { id, clinicId, deletedAt: null } : { id, deletedAt: null },
+    where: { id, clinicId, deletedAt: null },
     include: {
       // patientNumber es el ID que se imprime (el folio del panel), no `id`.
-      patient: { select: { firstName: true, lastName: true, patientNumber: true, curp: true } },
+      patient: {
+        select: { firstName: true, lastName: true, patientNumber: true, curp: true, curpStatus: true },
+      },
       clinic: {
         select: {
           name: true, address: true, city: true, phone: true, email: true, logoUrl: true,
@@ -80,10 +88,8 @@ export async function buildConsentPdf(
       })
     : null;
 
-  // Cinco descargas como mucho (logo + cuatro firmas) en paralelo — bajo el
-  // tope de 7 del repo para Promise.all.
-  const [logoDataUrl, patientSig, witness1Sig, witness2Sig, doctorSig] = await Promise.all([
-    fetchImageDataUrl(form.clinic.logoUrl),
+  // Cuatro descargas como mucho, en paralelo — bajo el tope de 7 del repo.
+  const [patientSig, witness1Sig, witness2Sig, doctorSig] = await Promise.all([
     signatureDataUrl(form.signatureUrl),
     signatureDataUrl(form.witness1SignatureUrl),
     signatureDataUrl(form.witness2SignatureUrl),
@@ -115,13 +121,77 @@ export async function buildConsentPdf(
     witness2Sig,
   });
 
+  return { form, doctor, patientName, doctorName, signatures };
+}
+
+/**
+ * La carta lista para la hoja del panel. `clinicId` es OBLIGATORIO y sale de la
+ * sesión: sin él no se consulta (un `undefined` en el where no filtra nada).
+ */
+export async function loadConsentDocumento(
+  id: string,
+  clinicId: string,
+): Promise<ConsentDocumentoDTO | null> {
+  if (!clinicId || !id) return null;
+  const loaded = await loadConsent(id, clinicId);
+  if (!loaded) return null;
+  const { form, doctor, patientName, doctorName, signatures } = loaded;
+  return buildConsentDocumento(
+    {
+      id: form.id,
+      procedure: form.procedure,
+      content: form.content,
+      createdAt: form.createdAt,
+      expiresAt: form.expiresAt,
+      timeZone: consentTimeZone(form.clinic.timezone),
+      clinicName: form.clinic.name,
+      clinicAddress: form.clinic.address ?? null,
+      clinicCity: form.clinic.city ?? null,
+      clinicPhone: form.clinic.phone ?? null,
+      clinicLogoUrl: form.clinic.logoUrl ?? null,
+      patientName,
+      patientNumber: form.patient.patientNumber ?? null,
+      patientCurp: form.patient.curp ?? null,
+      patientCurpStatus: form.patient.curpStatus ?? null,
+      signerName: form.signerName ?? null,
+      signerRelation: form.signerRelation ?? null,
+      doctorName,
+      doctorLicense: doctor?.cedulaProfesional ?? null,
+      doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
+      doctorSpecialty: doctor?.especialidad ?? null,
+      signedAt: form.signedAt ?? null,
+      doctorSignedAt: form.doctorSignedAt ?? null,
+      revokedAt: form.revokedAt ?? null,
+      revokedReason: form.revokedReason ?? null,
+      contentHash: form.contentHash ?? null,
+      signedIp: form.signedIp ?? null,
+    },
+    signatures,
+  );
+}
+
+export async function buildConsentPdf(
+  id: string,
+  // Obligatorio: los tres llamadores ya lo pasaban (la ruta pública, el de la
+  // propia fila). Opcional, un `buildConsentPdf(id)` compilaba y cruzaba clínicas.
+  clinicId: string,
+): Promise<{ buffer: Buffer; fileName: string } | null> {
+  const loaded = await loadConsent(id, clinicId);
+  if (!loaded) return null;
+  const { form, doctor, patientName, doctorName, signatures } = loaded;
+
+  // El logo con su proporción real, como en el resto de los documentos: sin
+  // ella un logo apaisado se encajaba en un cuadrado y salía diminuto.
+  const logo = await fetchClinicLogo(form.clinic.logoUrl);
+
   const element = createElement(ConsentDocument, {
     clinicName: form.clinic.name,
     clinicAddress: form.clinic.address ?? null,
     clinicCity: form.clinic.city ?? null,
     clinicPhone: form.clinic.phone ?? null,
     clinicEmail: form.clinic.email ?? null,
-    logoDataUrl,
+    logoDataUrl: logo?.dataUrl ?? null,
+    logoAspect: logo?.aspect ?? null,
 
     procedure: form.procedure,
     place: form.clinic.city ?? null,

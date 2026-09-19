@@ -26,6 +26,7 @@ import { buildConsentPdf } from "@/lib/consent/consent-pdf";
 import { consentPublicUrl, ensureConsentLinkFresh } from "@/lib/consent/link";
 import { sendWhatsAppLogged, type WhatsAppOutboundAttachment } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
+import { enmascararTelefono } from "@/lib/patient-documents/envio";
 
 export const runtime = "nodejs"; // genera el PDF con el stack de consent-pdf
 export const dynamic = "force-dynamic";
@@ -140,12 +141,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
   } catch (e) {
     if (e instanceof WhatsAppBlockedError) {
-      return NextResponse.json({ error: e.message }, { status: 409 });
+      // `code`: la barra común de documentos lo pinta como aviso, no como error.
+      return NextResponse.json({ error: e.message, code: "WA_FUERA_DE_VENTANA" }, { status: 409 });
     }
     const msg = e instanceof Error ? e.message : "No se pudo enviar el mensaje.";
     console.error(`[consent/send-whatsapp] fallo al enviar (${form.id}):`, e);
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, patientId: form.patientId });
+  // `destino` es lo que la barra común de documentos enseña tras enviar
+  // («Enviado a •••• 1234»); la lista del tab lo ignora.
+  return NextResponse.json({ ok: true, patientId: form.patientId, destino: enmascararTelefono(patientPhone) });
 }
