@@ -15,10 +15,12 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { buildConsentContent, findConsentTemplate } from "@/lib/consent/templates";
+import { buildConsentContent, fillConsentTemplate, findConsentTemplate } from "@/lib/consent/templates";
+import { resolveClinicConsentTemplate } from "@/lib/consent/clinic-templates";
 // Único cálculo de edad del repo (lógica de cumpleaños, no resta de años): un
 // off-by-one aquí saldría impreso en un documento legal.
 import { calculateAge } from "@/lib/pediatrics/age";
+import { missingConsentData } from "@/lib/consent/document-data";
 
 export async function GET(req: NextRequest) {
   const limited = rateLimit(req, 60);
@@ -32,20 +34,35 @@ export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
   const patientId = sp.get("patientId") ?? "";
   const procedureKey = (sp.get("procedureKey") ?? "").trim();
+  // Plantilla de la clínica (DocumentTemplate kind CONSENTIMIENTO). Es el camino
+  // de la pantalla; `procedureKey` se conserva para quien aún llame al catálogo.
+  const templateId = (sp.get("templateId") ?? "").trim();
   const doctorId = (sp.get("doctorId") ?? "").trim();
   const signerName = (sp.get("signerName") ?? "").trim();
   const signerRelation = (sp.get("signerRelation") ?? "").trim();
 
   const template = findConsentTemplate(procedureKey);
-  if (!patientId || !template) {
+  if (!patientId || (!template && !templateId)) {
     return NextResponse.json({ error: "Faltan datos para generar la carta." }, { status: 400 });
+  }
+  // Acotada a la clínica de la sesión: el id de una plantilla ajena da 404.
+  const clinicTemplate = templateId
+    ? await resolveClinicConsentTemplate(ctx.clinicId, templateId)
+    : null;
+  if (templateId && !clinicTemplate) {
+    return NextResponse.json({ error: "La plantilla no existe en esta clínica." }, { status: 404 });
   }
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId },
     // dob y patientNumber: la carta identifica al paciente con su edad y su
     // número de expediente, como se firma en la práctica mexicana.
-    select: { firstName: true, lastName: true, dob: true, patientNumber: true },
+    // curp y curpStatus: el CURP va en la carta, y un paciente extranjero no
+    // tiene CURP que "falte".
+    select: {
+      firstName: true, lastName: true, dob: true, patientNumber: true,
+      curp: true, curpStatus: true,
+    },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
@@ -60,15 +77,21 @@ export async function GET(req: NextRequest) {
       // timezone: la vista previa tiene que fechar EXACTAMENTE igual que el POST
       // que guarda la carta. Si aquí faltara, el doctor revisaría un día y el
       // paciente firmaría otro.
-      select: { name: true, address: true, city: true, timezone: true },
+      // logoUrl no entra en el texto: solo sirve para avisar de que falta.
+      select: { name: true, address: true, city: true, timezone: true, logoUrl: true },
     }),
     prisma.user.findFirst({
       where: { id: doctorId || ctx.userId, clinicId: ctx.clinicId, isActive: true },
-      select: { firstName: true, lastName: true, cedulaProfesional: true },
+      // `especialidad` = la de Equipo. `specialty` es el módulo del panel: no va.
+      select: {
+        firstName: true, lastName: true,
+        cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true,
+      },
     }),
   ]);
 
-  const content = buildConsentContent(template.key, {
+  const vars = {
+    fullIdentification: true,
     clinicName: clinic?.name ?? "",
     clinicAddress: clinic?.address ?? null,
     clinicCity: clinic?.city ?? null,
@@ -76,11 +99,32 @@ export async function GET(req: NextRequest) {
     patientName: `${patient.firstName} ${patient.lastName}`.trim(),
     patientAge: patient.dob ? calculateAge(patient.dob).years : null,
     patientNumber: patient.patientNumber ?? null,
+    patientCurp: patient.curp ?? null,
     doctorName: doctor ? `${doctor.firstName ?? ""} ${doctor.lastName ?? ""}`.trim() : "",
     doctorLicense: doctor?.cedulaProfesional ?? null,
+    doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
+    doctorSpecialty: doctor?.especialidad ?? null,
     signerName: signerName || null,
     signerRelation: signerRelation || null,
+  };
+  const content = clinicTemplate
+    ? fillConsentTemplate(clinicTemplate.text, vars)
+    : buildConsentContent(template!.key, vars);
+
+  // Lo que falta se dice ANTES de crear la carta, para que el modal lo avise
+  // con el enlace a donde se captura. No bloquea: la carta se puede crear igual.
+  const missing = missingConsentData({
+    clinicAddress: clinic?.address ?? null,
+    clinicLogoUrl: clinic?.logoUrl ?? null,
+    doctorLicense: doctor?.cedulaProfesional ?? null,
+    doctorSpecialty: doctor?.especialidad ?? null,
+    patientCurp: patient.curp ?? null,
+    patientCurpStatus: patient.curpStatus ?? null,
   });
 
-  return NextResponse.json({ procedure: template.label, content });
+  return NextResponse.json({
+    procedure: clinicTemplate?.name ?? template!.label,
+    content,
+    missing,
+  });
 }

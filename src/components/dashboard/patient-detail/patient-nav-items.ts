@@ -135,6 +135,15 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     { id: "nota-evolucion", labelKey: "patients.tabs.notaEvolucion", shortLabelKey: "patients.tabsShort.notaEvolucion", icon: NotebookPen, section: "clinico" },
   ];
 
+  // Consentimiento informado — sección CLÍNICO. Sustituye a la pestaña
+  // «Consentimientos» que vivía con los documentos: Rafael la quiere junto a lo
+  // clínico, creando desde las plantillas de la clínica. CONSERVA el id
+  // `consentimientos` a propósito: es el que gatea `showConsents`
+  // ("consents.view"), el que monta la pantalla en la ficha, el que ya está en
+  // GRUPO_CLINICO del menú rediseñado y el de los enlaces `?tab=consentimientos`
+  // que ya circulan. Las cartas firmadas con el sistema anterior se leen aquí.
+  items.push({ id: "consentimientos", labelKey: "patients.tabs.consentimientos", shortLabelKey: "patients.tabsShort.consentimientos", icon: FileSignature, section: "clinico", isNew: true });
+
   // Especialidades — visibles según gating por módulo activo en la clínica.
   if (opts.pediatrics.state !== "hidden") {
     const isDisabled = opts.pediatrics.state === "disabled";
@@ -164,7 +173,6 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     { id: "modelos-3d",   labelKey: "patients.tabs.modelos3d",    icon: Box,          section: "imagen-docs" },
     { id: "tratamiento",  labelKey: "patients.tabs.tratamiento",  shortLabelKey: "patients.tabsShort.tratamiento", icon: Pill,         section: "imagen-docs" },
     { id: "recetas",      labelKey: "patients.tabs.recetas",      icon: FileText,     section: "imagen-docs" },
-    { id: "consentimientos", labelKey: "patients.tabs.consentimientos", shortLabelKey: "patients.tabsShort.consentimientos", icon: FileSignature, section: "imagen-docs", isNew: true },
     { id: "referencias",  labelKey: "patients.tabs.referencias",  icon: ArrowUpRight, section: "imagen-docs" },
     // Administrativo.
     { id: "agenda",       labelKey: "patients.tabs.agenda",       icon: Calendar,     section: "admin" },

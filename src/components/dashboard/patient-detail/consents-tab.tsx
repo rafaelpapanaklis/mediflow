@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check, Copy, FileDown, FileSignature, Loader2, MessageCircle, MoreHorizontal,
-  PenLine, Plus, RefreshCw, Trash2, XCircle, Eye, Pencil, Link2, ShieldCheck,
+  PenLine, Plus, Printer, RefreshCw, Trash2, XCircle, Eye, Pencil, Link2, ShieldCheck,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
@@ -41,10 +41,11 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { SignaturePad } from "@/components/ui/signature-pad";
-import { listConsentTemplates } from "@/lib/consent/templates";
 import { ageYears, isMinor } from "@/lib/consent/signers";
 import { parseConsentText, splitConsentBody } from "@/lib/consent/render";
 import type { ConsentDTO, ConsentStatus } from "@/lib/consent/types";
+import type { ConsentMissingItem } from "@/lib/consent/document-data";
+import { ConsentMissingNotice } from "./consent-missing-notice";
 import styles from "./patient-detail.module.css";
 
 interface DoctorOption {
@@ -589,9 +590,12 @@ function ConsentRow({
           <DropdownMenuContent align="end" className={styles.rowMenu}>
             {!c.signedAt && (
               <DropdownMenuItem className={styles.rowMenuItem} asChild>
+                {/* Sin firmar, el PDF ES la hoja para firmar a mano: trae las
+                    líneas de paciente, doctor y testigos en blanco. Se llama
+                    por lo que sirve, no "Ver PDF". */}
                 <a href={`/api/consent/${c.id}/pdf`} target="_blank" rel="noreferrer">
-                  <Eye size={14} aria-hidden />
-                  <span className={styles.rowMenuLabel}>{t("patients.consents.actionPdf")}</span>
+                  <Printer size={14} aria-hidden />
+                  <span className={styles.rowMenuLabel}>{t("patients.consents.actionPrint")}</span>
                 </a>
               </DropdownMenuItem>
             )}
@@ -741,8 +745,12 @@ function NewConsentModal({
   onCreated: () => Promise<void> | void;
 }) {
   const t = useT();
-  const templates = useMemo(() => listConsentTemplates(), []);
-  const [procedureKey, setProcedureKey] = useState(templates[0]?.key ?? "");
+  // Las plantillas son las de la CLÍNICA (DocumentTemplate, kind
+  // CONSENTIMIENTO): el catálogo se le siembra la primera vez y a partir de ahí
+  // las edita en Administración → Plantillas. El selector no conoce otras.
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
+  const [templatesState, setTemplatesState] = useState<"loading" | "ready" | "error">("loading");
+  const [templateId, setTemplateId] = useState("");
   const [doctorId, setDoctorId] = useState(
     doctors.some((d) => d.id === currentUserId) ? currentUserId : (doctors[0]?.id ?? ""),
   );
@@ -756,6 +764,9 @@ function NewConsentModal({
   const [signerRelation, setSignerRelation] = useState("");
   const [content, setContent] = useState("");
   const [loadingText, setLoadingText] = useState(false);
+  // Datos que la carta lleva y que hoy no están capturados (dirección, logo,
+  // cédula, especialidad, CURP). Los calcula el servidor junto con el texto.
+  const [missing, setMissing] = useState<ConsentMissingItem[]>([]);
   // `touched` evita que el regenerado pise lo que el doctor ya escribió: el
   // texto es lo que va a firmar el paciente, no un borrador que la UI pueda
   // sobrescribir por cambiar un selector.
@@ -768,6 +779,24 @@ function NewConsentModal({
   const [created, setCreated] = useState<{ id: string; signUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setTemplatesState("loading");
+    fetch("/api/consent/templates")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (cancelled) return;
+        const list: { id: string; name: string }[] = Array.isArray(d?.templates) ? d.templates : [];
+        setTemplates(list);
+        // Se conserva la elegida si sigue existiendo; si no, la primera.
+        setTemplateId((prev) => (list.some((x) => x.id === prev) ? prev : (list[0]?.id ?? "")));
+        setTemplatesState("ready");
+      })
+      .catch(() => { if (!cancelled) setTemplatesState("error"); });
+    return () => { cancelled = true; };
+  }, [open]);
+
   // Regenera el borrador cuando cambian los datos que lo componen.
   //
   // Con retardo: el nombre del representante se escribe letra a letra y sin
@@ -775,10 +804,10 @@ function NewConsentModal({
   // textarea a media escritura. Se pide una sola vez, 400 ms después del
   // último cambio.
   useEffect(() => {
-    if (!open || touched || created) return;
+    if (!open || touched || created || !templateId) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      const params = new URLSearchParams({ patientId, procedureKey });
+      const params = new URLSearchParams({ patientId, templateId });
       if (doctorId) params.set("doctorId", doctorId);
       if (byRepresentative && signerName.trim()) {
         params.set("signerName", signerName.trim());
@@ -787,12 +816,19 @@ function NewConsentModal({
       setLoadingText(true);
       fetch(`/api/consent/preview?${params.toString()}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => { if (!cancelled && d?.content) setContent(d.content); })
+        .then((d) => {
+          if (cancelled || !d) return;
+          if (d.content) setContent(d.content);
+          // El aviso se calcula con el MISMO texto que se está viendo: con la
+          // carta ya editada no se regenera ninguno de los dos, para que el
+          // aviso no diga "completo" sobre un texto que sigue con rayas.
+          setMissing(Array.isArray(d.missing) ? d.missing : []);
+        })
         .catch(() => undefined)
         .finally(() => { if (!cancelled) setLoadingText(false); });
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [open, touched, created, patientId, procedureKey, doctorId, byRepresentative, signerName, signerRelation]);
+  }, [open, touched, created, patientId, templateId, doctorId, byRepresentative, signerName, signerRelation]);
 
   function reset() {
     setCreated(null);
@@ -800,6 +836,7 @@ function NewConsentModal({
     setTouched(false);
     setEditing(false);
     setContent("");
+    setMissing([]);
     setByRepresentative(minor);
     setSignerName("");
     setSignerRelation("");
@@ -818,12 +855,11 @@ function NewConsentModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId,
-          procedureKey,
+          templateId,
           doctorId: doctorId || undefined,
           // El texto SIEMPRE viaja: es el snapshot que firmará el paciente,
           // editado o no.
           content: content.trim() || undefined,
-          procedure: templates.find((x) => x.key === procedureKey)?.label,
           signerName: byRepresentative ? signerName.trim() : undefined,
           signerRelation: byRepresentative ? signerRelation.trim() : undefined,
         }),
@@ -867,6 +903,7 @@ function NewConsentModal({
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
           {created ? (
             <CreatedPanel
+              consentId={created.id}
               signUrl={created.signUrl}
               saving={saving}
               canSendWhatsApp={canSendWhatsApp}
@@ -876,16 +913,26 @@ function NewConsentModal({
             <>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="field-new">
-                  <span className="field-new__label">{t("patients.consents.fieldProcedure")}</span>
+                  <span className="field-new__label">{t("patients.consents.fieldTemplate")}</span>
                   <select
-                    value={procedureKey}
-                    onChange={(e) => setProcedureKey(e.target.value)}
+                    value={templateId}
+                    // Cambiar de plantilla es pedir OTRA carta: se suelta lo
+                    // editado para que el texto nuevo pueda entrar.
+                    onChange={(e) => { setTemplateId(e.target.value); setTouched(false); }}
+                    disabled={templatesState !== "ready" || templates.length === 0}
                     className="input-new"
                   >
                     {templates.map((tpl) => (
-                      <option key={tpl.key} value={tpl.key}>{tpl.label}</option>
+                      <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
                     ))}
                   </select>
+                  <span className="mt-1 block text-[11px]" style={{ color: "var(--text-4)" }}>
+                    {templatesState === "error"
+                      ? t("patients.consents.templatesError")
+                      : templatesState === "ready" && templates.length === 0
+                        ? t("patients.consents.templatesEmpty")
+                        : t("patients.consents.templatesHint")}
+                  </span>
                 </label>
                 <label className="field-new">
                   <span className="field-new__label">{t("patients.consents.fieldDoctor")}</span>
@@ -956,6 +1003,9 @@ function NewConsentModal({
                     variant="ghost"
                     size="sm"
                     icon={editing ? <Eye size={13} aria-hidden /> : <Pencil size={13} aria-hidden />}
+                    // Sin plantilla no hay carta que editar: un texto suelto
+                    // llegaría al servidor sin acto que autorizar.
+                    disabled={!templateId}
                     onClick={() => setEditing((v) => !v)}
                   >
                     {editing ? t("patients.consents.viewPreview") : t("patients.consents.editText")}
@@ -997,6 +1047,8 @@ function NewConsentModal({
                 </span>
               </div>
 
+              <ConsentMissingNotice missing={missing} patientId={patientId} />
+
               {error ? <p className="text-xs" style={{ color: "var(--danger)" }}>{error}</p> : null}
             </>
           )}
@@ -1009,7 +1061,7 @@ function NewConsentModal({
           {!created && (
             <ButtonNew
               variant="primary"
-              disabled={saving || !content.trim()}
+              disabled={saving || !content.trim() || !templateId}
               onClick={create}
               icon={saving
                 ? <Loader2 size={13} className="animate-spin" aria-hidden />
@@ -1034,8 +1086,9 @@ function NewConsentModal({
  * la URL cruda pasa a ser una nota al pie.
  */
 function CreatedPanel({
-  signUrl, saving, canSendWhatsApp, onSendWhatsApp,
+  consentId, signUrl, saving, canSendWhatsApp, onSendWhatsApp,
 }: {
+  consentId: string;
   signUrl: string;
   saving: boolean;
   canSendWhatsApp: boolean;
@@ -1096,7 +1149,20 @@ function CreatedPanel({
         >
           {copied ? t("patients.consents.copied") : t("patients.consents.actionCopyLink")}
         </ButtonNew>
+        {/* La otra vía: papel. El PDF de una carta sin firmar sale con las
+            líneas de firma del paciente, el doctor y los testigos en blanco. */}
+        <a
+          href={`/api/consent/${consentId}/pdf`}
+          target="_blank"
+          rel="noreferrer"
+          className="btn-new btn-new--secondary"
+        >
+          <Printer size={13} aria-hidden /> {t("patients.consents.actionPrint")}
+        </a>
       </div>
+      <p className="text-[11px]" style={{ color: "var(--text-4)", marginTop: 6 }}>
+        {t("patients.consents.printHint")}
+      </p>
 
       <div>
         <div className="text-[11px] font-semibold" style={{ color: "var(--text-4)" }}>
