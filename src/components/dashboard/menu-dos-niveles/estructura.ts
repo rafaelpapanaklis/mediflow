@@ -48,7 +48,7 @@ export const GRUPOS: readonly { id: GrupoId; ids: readonly string[] }[] = [
   { id: "dinero", ids: ["finanzas", "analytics", "reports"] },
   {
     id: "clinica",
-    ids: ["team", "resources", "inventory", "procedures", "clinic-layout", "before-after", "formulas", "exercises", "orthotics"],
+    ids: ["team", "resources", "inventory", "procedures", "plantillas", "clinic-layout", "before-after", "formulas", "exercises", "orthotics"],
   },
   { id: "pacientes", ids: ["landing", "resenas", "tv-modes", "messages"] },
   { id: "sistema", ids: ["settings", "auditoria", "soporte"] },
@@ -72,6 +72,7 @@ export const ICONO_DE: Readonly<Record<string, string>> = {
   resources: "chair",
   inventory: "inventory_2",
   procedures: "dentistry",
+  plantillas: "assignment",
   "clinic-layout": "map",
   "before-after": "compare",
   formulas: "science",

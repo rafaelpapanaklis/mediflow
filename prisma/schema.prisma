@@ -323,6 +323,8 @@ model Clinic {
   // Clinical-shared cross-cutting features
   clinicalPhotos             ClinicalPhoto[]
   clinicalEvolutionTemplates ClinicalEvolutionTemplate[]
+  documentTemplates          DocumentTemplate[]
+  patientDocuments           PatientDocument[]
   referralLetters            ReferralLetter[]
   doctorContacts             DoctorContact[]
   labOrders                  LabOrder[]
@@ -1219,6 +1221,8 @@ model User {
   // Clinical-shared cross-cutting features
   clinicalPhotosCaptured     ClinicalPhoto[]             @relation("ClinicalPhotoCapturedBy")
   evolutionTemplatesCreated  ClinicalEvolutionTemplate[] @relation("EvolutionTemplateCreatedBy")
+  documentTemplatesCreated   DocumentTemplate[]          @relation("DocumentTemplateCreatedBy")
+  patientDocumentsAsDoctor   PatientDocument[]           @relation("PatientDocumentDoctor")
   referralLettersAuthored    ReferralLetter[]            @relation("ReferralLetterAuthor")
   labOrdersAuthored          LabOrder[]                  @relation("LabOrderAuthor")
   clinicalRemindersCreated   ClinicalReminder[]          @relation("ClinicalReminderCreator")
@@ -1460,6 +1464,7 @@ model Patient {
   patientShareLinks PatientShareLink[]
   quotes            Quote[]
   patientUploads    PatientUpload[]
+  patientDocuments  PatientDocument[]
 
   @@unique([clinicId, patientNumber])
   @@index([clinicId, status])
@@ -6976,6 +6981,70 @@ model ClinicalEvolutionTemplate {
   @@unique([clinicId, module, name])
   @@index([clinicId, module, isDefault])
   @@map("clinical_evolution_templates")
+}
+
+// ── DocumentTemplate / PatientDocument ──────────────────────────────────────
+//
+// Plantillas de texto de la clínica (Administración → Plantillas) y los
+// documentos que se llenan con ellas en la ficha del paciente. NO es
+// ClinicalEvolutionTemplate (SOAP por módulo): esto es un camino nuevo al lado.
+//
+// SQL: sql/document-templates-1-enum.sql y luego sql/document-templates-2-tablas.sql.
+enum DocumentTemplateKind {
+  NOTA_EVOLUCION
+  CONSENTIMIENTO
+}
+
+model DocumentTemplate {
+  id          String               @id @default(cuid())
+  clinicId    String
+  kind        DocumentTemplateKind
+  name        String // el nombre que le pone la clínica ("Endodoncia")
+  body        String               @db.Text // el HTML SANEADO del editor (src/lib/document-templates/sanitize.ts)
+  isActive    Boolean              @default(true)
+  createdById String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  deletedAt   DateTime?
+
+  clinic    Clinic            @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("DocumentTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  documents PatientDocument[]
+
+  @@unique([clinicId, kind, name])
+  @@index([clinicId, kind, isActive])
+  @@map("document_templates")
+}
+
+// El documento CONGELA sus datos al firmarse: `body` es el HTML final ya
+// interpolado (copia, no referencia) y `encabezado` la foto de los datos del
+// doctor/clínica/paciente en ese momento. Corregir la cédula o cambiar el logo
+// mañana no cambia un documento ya firmado.
+model PatientDocument {
+  id               String               @id @default(cuid())
+  clinicId         String
+  patientId        String
+  doctorId         String
+  templateId       String? // NULLABLE: la plantilla se puede borrar y el documento tiene que seguir leyéndose
+  kind             DocumentTemplateKind
+  title            String // COPIA del nombre de la plantilla en ese momento
+  body             String               @db.Text // el HTML FINAL ya interpolado
+  encabezado       Json // la FOTO de los datos al firmar
+  status           String               @default("DRAFT") // "DRAFT" | "SIGNED"
+  signedAt         DateTime?
+  firmaDoctorUrl   String?
+  firmaPacienteUrl String?
+  modoFirma        String? // "DIGITAL" | "IMPRESA" | null
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  clinic   Clinic            @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient  Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor   User              @relation("PatientDocumentDoctor", fields: [doctorId], references: [id])
+  template DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, patientId, kind, createdAt(sort: Desc)])
+  @@map("patient_documents")
 }
 
 // ── DoctorContact ───────────────────────────────────────────────────────────
