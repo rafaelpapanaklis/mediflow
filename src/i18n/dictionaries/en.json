@@ -9249,5 +9249,14 @@
       "notas": "Notes",
       "por": "for:"
     }
+  },
+  "auditoria": {
+    "readTitle": "What was accessed",
+    "readFicha": "Opened the patient chart",
+    "readNotaPdf": "PDF of a note",
+    "readExportCda": "Exported the record (CDA)",
+    "readExportArco": "Exported the data (ARCO access)",
+    "readNoteId": "Note",
+    "readNoContent": "A read changes nothing. The log keeps who and when, not the content."
   }
 }

@@ -8,7 +8,7 @@ import {
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import {
   AUDIT_ACTION_OPTIONS, AUDIT_ENTITY_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
-  actionMeta, entityLabel, normalizeChanges, formatAuditValue,
+  actionMeta, entityLabel, normalizeChanges, formatAuditValue, readInfo, readKindLabel,
   QUICK_RANGE_KEYS, QUICK_RANGE_LABELS, matchQuickRange,
   type QuickRangeKey, type AuditTone, type AuditLogRow,
 } from "@/lib/admin/audit-core";
@@ -217,7 +217,10 @@ export function AuditoriaRediseno({
                       </span>
                     </button>
                   </td>
-                  <td><CeldaAccion action={r.action} /></td>
+                  <td>
+                    <CeldaAccion action={r.action} />
+                    <Lectura changes={r.changes} tr={tr} />
+                  </td>
                   <td>
                     <button type="button" onClick={() => patch({ entityId: r.entityId })} title={tr("auditoria.filterByEntity", "Filtrar por esta entidad")} className={s.filaBoton}>
                       <span className={s.celdaTextos}>
@@ -271,6 +274,13 @@ export function AuditoriaRediseno({
   );
 }
 
+/** Bajo la acción «Lectura»: qué se consultó (ficha, PDF de nota, export). */
+function Lectura({ changes, tr }: { changes: unknown; tr: Traducir }) {
+  const lectura = readInfo(changes);
+  if (!lectura) return null;
+  return <div className={`${s.peq} ${s.discreto}`}>{readKindLabel(lectura.kind, tr)}</div>;
+}
+
 function Chip({ label, onQuitar }: { label: string; onQuitar: () => void }) {
   return (
     <span className={s.chip}>
@@ -285,6 +295,7 @@ function Chip({ label, onQuitar }: { label: string; onQuitar: () => void }) {
 function DetalleEvento({ row, onCerrar, tr }: { row: AuditLogRow; onCerrar: () => void; tr: Traducir }) {
   const am = actionMeta(row.action);
   const norm = normalizeChanges(row.changes);
+  const lectura = readInfo(row.changes);
 
   return (
     <Modal
@@ -311,6 +322,18 @@ function DetalleEvento({ row, onCerrar, tr }: { row: AuditLogRow; onCerrar: () =
         </div>
       )}
 
+      {lectura ? (
+        <div>
+          <h4 className={s.seccionTitulo}>{tr("auditoria.readTitle", "Qué se consultó")}</h4>
+          <div className={s.peq}>{readKindLabel(lectura.kind, tr)}</div>
+          {lectura.recordId && (
+            <div className={`${s.peq} ${s.discreto} ${s.rompe}`}>
+              <span className={s.negrita}>{tr("auditoria.readNoteId", "Nota")}:</span> {lectura.recordId}
+            </div>
+          )}
+          <div className={`${s.peq} ${s.discreto}`}>{tr("auditoria.readNoContent", "Una consulta no modifica nada. La bitácora guarda quién y cuándo, no el contenido.")}</div>
+        </div>
+      ) : (
       <div>
         <h4 className={s.seccionTitulo}>
           {norm.kind === "created" ? tr("auditoria.created", "Datos creados")
@@ -343,6 +366,7 @@ function DetalleEvento({ row, onCerrar, tr }: { row: AuditLogRow; onCerrar: () =
           </div>
         )}
       </div>
+      )}
     </Modal>
   );
 }

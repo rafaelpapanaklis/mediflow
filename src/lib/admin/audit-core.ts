@@ -277,6 +277,37 @@ export function matchQuickRange(
   return null;
 }
 
+// ───────────────────────── Lecturas del expediente ─────────────────────────
+
+/**
+ * Tipos de lectura que escribe `logRead` (src/lib/audit.ts) en
+ * `changes._read.after.kind`, con su clave i18n y su respaldo. Lo comparten la
+ * Bitácora de siempre y la del rediseño: las dos dicen lo mismo de la misma fila.
+ */
+export const READ_KIND_LABELS: Record<string, { key: string; fallback: string }> = {
+  ficha: { key: "auditoria.readFicha", fallback: "Abrió la ficha" },
+  nota_pdf: { key: "auditoria.readNotaPdf", fallback: "PDF de una nota" },
+  export_cda: { key: "auditoria.readExportCda", fallback: "Exportó el expediente (CDA)" },
+  export_arco: { key: "auditoria.readExportArco", fallback: "Exportó los datos (ARCO acceso)" },
+};
+
+/**
+ * Si la fila es una lectura del expediente devuelve su tipo y, si aplica, el id
+ * de la nota (solo ids: el rastro no guarda nombre ni dato clínico). null para
+ * cualquier otra fila, incluidas las lecturas antiguas sin `_read`.
+ */
+export function readInfo(changes: unknown): { kind: string; recordId: string | null } | null {
+  if (!isPlainObject(changes) || !isPlainObject(changes._read)) return null;
+  const after = changes._read.after;
+  if (!isPlainObject(after) || typeof after.kind !== "string") return null;
+  return { kind: after.kind, recordId: typeof after.recordId === "string" ? after.recordId : null };
+}
+
+export function readKindLabel(kind: string, tr: (k: string, fb: string) => string): string {
+  const meta = Object.prototype.hasOwnProperty.call(READ_KIND_LABELS, kind) ? READ_KIND_LABELS[kind] : null;
+  return meta ? tr(meta.key, meta.fallback) : kind;
+}
+
 // ───────────────────────── Normalización de `changes` ─────────────────────────
 
 export type AuditChangeKind = "created" | "deleted" | "updated" | "empty";

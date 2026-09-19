@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { ownPrivateRecordsOnly } from "@/lib/branches";
+import { logRead, extractAuditMeta } from "@/lib/audit";
 import {
   ClinicalNoteDocument,
   readNoteAddenda,
@@ -26,7 +27,7 @@ interface Params { params: { id: string } }
  * Multi-tenant: clinicId desde getCurrentUser(); validamos que el
  * MedicalRecord pertenezca a la clínica del usuario.
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
   const denied = denyIfMissingPermission(user, "medicalRecord.view");
   if (denied) return denied;
@@ -69,6 +70,18 @@ export async function GET(_req: NextRequest, { params }: Params) {
   // datos del paciente) para quien no puede ver a ese paciente.
   const visDenied = await assertPatientVisible(record.patientId, { userId: user.id, role: user.role, clinicId: user.clinicId });
   if (visDenied) return visDenied;
+
+  // Bitácora de lectura: abrir (imprimir) UNA nota concreta. Solo ids. Se lanza
+  // ya con los permisos pasados y se recoge tras el render del PDF, solapada con
+  // él: no añade un viaje en serie. Nunca tira (ver logRead).
+  const lecturaP = logRead({
+    clinicId: user.clinicId,
+    userId: user.id,
+    kind: "nota_pdf",
+    patientId: record.patientId,
+    recordId: record.id,
+    ...extractAuditMeta(req),
+  });
 
   const sd = (record.specialtyData ?? {}) as {
     status?: "DRAFT" | "SIGNED";
@@ -131,6 +144,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buffer = await renderToBuffer(element as any);
+  await lecturaP;
 
   const dateSlug = record.visitDate.toISOString().slice(0, 10);
   const fileName = `nota-clinica-${dateSlug}-${record.id.slice(0, 8)}.pdf`;

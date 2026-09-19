@@ -222,6 +222,8 @@ mock.module("@/lib/patient-visibility", {
 mock.module("@/lib/audit", {
   namedExports: {
     logAudit: async () => undefined,
+    // El export ahora deja su rastro con logRead (bitácora de lectura).
+    logRead: async () => undefined,
     extractAuditMeta: () => ({ ipAddress: "127.0.0.1", userAgent: "test" }),
   },
 });

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { buildCdaXml, readCdaAddenda } from "@/lib/hl7/cda";
-import { logAudit, extractAuditMeta } from "@/lib/audit";
+import { logRead, extractAuditMeta } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -117,15 +117,13 @@ export async function GET(req: NextRequest, { params }: Params) {
     })),
   });
 
-  // Audit log de export — read sensible.
+  // Bitácora de lectura: exportar el expediente. Solo ids (ver logRead).
   const { ipAddress, userAgent } = extractAuditMeta(req);
-  await logAudit({
+  await logRead({
     clinicId: user.clinicId,
     userId: user.id,
-    entityType: "patient",
-    entityId: patient.id,
-    action: "view",
-    changes: { exportCda: { before: null, after: { recordCount: records.length, prescriptionCount: prescriptions.length } } },
+    kind: "export_cda",
+    patientId: patient.id,
     ipAddress, userAgent,
   });
 

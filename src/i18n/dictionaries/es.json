@@ -9249,5 +9249,14 @@
       "notas": "Notas",
       "por": "por:"
     }
+  },
+  "auditoria": {
+    "readTitle": "Qué se consultó",
+    "readFicha": "Abrió la ficha",
+    "readNotaPdf": "PDF de una nota",
+    "readExportCda": "Exportó el expediente (CDA)",
+    "readExportArco": "Exportó los datos (ARCO acceso)",
+    "readNoteId": "Nota",
+    "readNoContent": "Una consulta no modifica nada. La bitácora guarda quién y cuándo, no el contenido."
   }
 }

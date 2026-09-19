@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { signMaybeUrls } from "@/lib/storage";
-import { logMutation } from "@/lib/audit";
+import { logRead, extractAuditMeta } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { stripPatientSecrets } from "@/lib/patient-secrets";
 
@@ -105,15 +105,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }));
   const signedBeforeAfter = beforeAfterPhotos.map((p, i) => ({ ...p, url: beforeAfterUrls[i] }));
 
-  await logMutation({
-    req,
+  // Bitácora de LECTURA (antes se registraba como un "update" ficticio con
+  // `_exported`): exportar no modifica al paciente. Solo ids (ver logRead).
+  await logRead({
     clinicId: ctx.clinicId,
     userId: ctx.userId,
-    entityType: "patient",
-    entityId: patient.id,
-    action: "update",
-    before: { _exported: false },
-    after: { _exported: true, exportedAt: new Date().toISOString() },
+    kind: "export_arco",
+    patientId: patient.id,
+    ...extractAuditMeta(req),
   });
 
   return NextResponse.json({

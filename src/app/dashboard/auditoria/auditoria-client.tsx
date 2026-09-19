@@ -12,7 +12,7 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { useTOptional } from "@/i18n/i18n-provider";
 import {
   AUDIT_ACTION_OPTIONS, AUDIT_ENTITY_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
-  actionMeta, entityLabel, normalizeChanges, formatAuditValue,
+  actionMeta, entityLabel, normalizeChanges, formatAuditValue, readInfo, readKindLabel,
   QUICK_RANGE_KEYS, QUICK_RANGE_LABELS, quickRangeValues, matchQuickRange,
   type QuickRangeKey, type AuditTone, type AuditLogRow, type AuditQueryResult,
 } from "@/lib/admin/audit-core";
@@ -263,7 +263,12 @@ export function AuditoriaClient({ rediseno = false }: { rediseno?: boolean } = {
                       </span>
                     </button>
                   </td>
-                  <td><ActionCell action={r.action} /></td>
+                  <td>
+                    <ActionCell action={r.action} />
+                    {readInfo(r.changes) && (
+                      <div style={{ fontSize: 11, color: "var(--text-3)" }}>{readKindLabel(readInfo(r.changes)!.kind, tr)}</div>
+                    )}
+                  </td>
                   <td>
                     <button type="button" onClick={() => patch({ entityId: r.entityId })} title={tr("auditoria.filterByEntity", "Filtrar por esta entidad")} className="text-left hover:underline">
                       <span className="block" style={{ color: "var(--text-2)" }}>{entityLabel(r.entityType)}</span>
@@ -342,6 +347,7 @@ function DetailModal({ row, onClose, tr }: { row: AuditLogRow; onClose: () => vo
 
   const am = actionMeta(row.action);
   const norm = normalizeChanges(row.changes);
+  const lectura = readInfo(row.changes);
 
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
@@ -367,6 +373,18 @@ function DetailModal({ row, onClose, tr }: { row: AuditLogRow; onClose: () => vo
             </div>
           )}
 
+          {lectura ? (
+            <div>
+              <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-1)" }}>{tr("auditoria.readTitle", "Qué se consultó")}</div>
+              <div style={{ fontSize: 12, color: "var(--text-1)" }}>{readKindLabel(lectura.kind, tr)}</div>
+              {lectura.recordId && (
+                <div className="break-words" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                  <span className="font-semibold">{tr("auditoria.readNoteId", "Nota")}:</span> {lectura.recordId}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: "var(--text-3)" }}>{tr("auditoria.readNoContent", "Una consulta no modifica nada. La bitácora guarda quién y cuándo, no el contenido.")}</div>
+            </div>
+          ) : (
           <div>
             <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-1)" }}>
               {norm.kind === "created" ? tr("auditoria.created", "Datos creados")
@@ -399,6 +417,7 @@ function DetailModal({ row, onClose, tr }: { row: AuditLogRow; onClose: () => vo
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
     </div>
