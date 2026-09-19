@@ -111,6 +111,7 @@
     "test:inbox-drafts": "tsx --test src/lib/inbox/__tests__/composer-drafts.test.ts",
     "test:inbox-templates": "tsx --test src/lib/inbox/__tests__/composer-templates.test.ts",
     "test:audit": "tsx --test src/lib/admin/audit-core.test.ts",
+    "test:audit-lectura": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/__tests__/audit-lectura.test.ts",
     "test:mrr": "tsx --test src/lib/admin/mrr-core.test.ts",
     "test:crm": "tsx --test src/lib/admin/crm/__tests__/crm-core.test.ts",
     "test:crm-textos": "tsx --test src/lib/admin/crm/__tests__/textos-core.test.ts",

@@ -9,7 +9,7 @@ import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { stripPatientSecrets } from "@/lib/patient-secrets";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { logAudit } from "@/lib/audit";
+import { logRead } from "@/lib/audit";
 import { PatientDetailClient } from "./patient-detail-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
@@ -135,28 +135,6 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
 
   if (!patient) notFound();
 
-  // NOM-024 §6.3.5 — bitácora de LECTURA del expediente. Abrir el detalle de
-  // un paciente (su expediente clínico) deja rastro: quién, qué, cuándo y
-  // origen (IP/UA). clinicId/userId SIEMPRE de sesión, nunca del request.
-  {
-    const h = headers();
-    const xff = h.get("x-forwarded-for");
-    const ip =
-      (xff ? xff.split(",")[0]!.trim() : null) ??
-      h.get("x-real-ip") ??
-      h.get("cf-connecting-ip") ??
-      undefined;
-    await logAudit({
-      clinicId:   user.clinicId,
-      userId:     user.id,
-      entityType: "record",
-      entityId:   patient.id,
-      action:     "view",
-      ipAddress:  ip || undefined,
-      userAgent:  h.get("user-agent") || undefined,
-    });
-  }
-
   const portalUrl = patient.portalToken
     ? `${process.env.NEXT_PUBLIC_APP_URL}/portal/${patient.portalToken}`
     : null;
@@ -228,7 +206,31 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // Consentimientos, Referencias, Modelos 3D— y el encaje del odontograma
   // (WS1-T5). Los dos trabajos lo leían por su cuenta; al juntarlos, una sola
   // lectura y un solo `rediseno` hacia el cliente.
+  //
+  // NOM-004 §5.12 / NOM-024 §6.3.5 — bitácora de LECTURA del expediente: quién
+  // abrió la ficha y cuándo. Solo ids (nunca nombre ni dato clínico), con dedupe
+  // en memoria para que un re-render no escriba otra fila. NO se espera aquí: se
+  // lanza DESPUÉS del lote de siete de arriba (no lo engorda) y se recoge tras
+  // `menuDosNivelesEncendido`, solapada con él: ningún viaje en serie de más. clinicId/userId SIEMPRE de sesión.
+  const lecturaP = (() => {
+    const h = headers();
+    const xff = h.get("x-forwarded-for");
+    const ip =
+      (xff ? xff.split(",")[0]!.trim() : null) ??
+      h.get("x-real-ip") ??
+      h.get("cf-connecting-ip") ??
+      undefined;
+    return logRead({
+      clinicId:  user.clinicId,
+      userId:    user.id,
+      kind:      "ficha",
+      patientId: patient.id,
+      ipAddress: ip || undefined,
+      userAgent: h.get("user-agent") || undefined,
+    });
+  })();
   const rediseno = await menuDosNivelesEncendido(user.clinicId);
+  await lecturaP; // nunca tira y tiene tope de 1,5 s (ver logRead)
 
   // CITAS EDITABLES DESDE EL EXPEDIENTE (ws1-t3) — solo con la bandera. La
   // pestaña Citas abre «Editar cita», la MISMA ventana de la agenda, y esa
