@@ -9356,7 +9356,55 @@
     "readNoteId": "Note",
     "readNoContent": "A read changes nothing. The log keeps who and when, not the content."
   },
+  "documentosPaciente": {
+    "hoja": {
+      "date": "Date",
+      "patient": "Patient",
+      "record": "Record no.",
+      "doctor": "Doctor",
+      "license": "Professional license",
+      "specialtyLicense": "Specialty license",
+      "specialty": "Specialty",
+      "blank": "not on file, to be filled in by hand",
+      "signed": "Electronically signed · {date}",
+      "draft": "Draft · not signed yet"
+    },
+    "acciones": {
+      "pdf": "Download PDF",
+      "print": "Print",
+      "whatsapp": "WhatsApp",
+      "email": "Email",
+      "onlySigned": "You can download or print it as a draft. To send it to the patient, sign it first.",
+      "sentTo": "Sent to {destino}.",
+      "error": "Could not send. Check your connection and try again.",
+      "confirm": {
+        "whatsappTitle": "Send via WhatsApp?",
+        "whatsappBody": "The PDF will be sent to the WhatsApp number on the patient's record. It only goes out if the patient messaged the clinic in the last 24 hours; otherwise we will tell you and nothing is charged.",
+        "correoTitle": "Send by email?",
+        "correoBody": "The document will be sent to the email address on the patient's record."
+      }
+    },
+    "faltantes": {
+      "title": {
+        "nota": "This note is missing some details",
+        "carta": "This letter is missing some details"
+      },
+      "hint": {
+        "nota": "You can sign it anyway: each missing detail prints as a labeled blank line to fill in by hand. If you add it now, reopen the note and it will be complete. A note that is already signed does not change.",
+        "carta": "You can create it anyway: each missing detail prints as a labeled blank line to fill in by hand. If you add it now, reopen this window and the letter will be complete."
+      },
+      "clinicAddress": "Clinic address",
+      "clinicLogo": "Clinic logo",
+      "doctorLicense": "Doctor's professional license",
+      "doctorSpecialty": "Doctor's specialty",
+      "patientCurp": "Patient's CURP",
+      "fixSettings": "Add in Settings",
+      "fixTeam": "Add in Team",
+      "fixPatient": "Add in the patient's record"
+    }
+  },
   "notaEvolucionDoc": {
+    "kind": "Progress note",
     "title": "Progress notes",
     "subtitle": "This patient's notes, newest first.",
     "new": "New progress note",
@@ -9385,6 +9433,15 @@
       "license": "Professional license"
     },
     "editor": {
+      "toolbar": "Text formatting",
+      "format": {
+        "bold": "Bold",
+        "italic": "Italic",
+        "underline": "Underline",
+        "heading": "Heading",
+        "list": "List",
+        "numbered": "Numbered list"
+      },
       "label": "Note text",
       "headerHint": "The header fills itself in with the patient, clinic and your user data.",
       "saveDraft": "Save draft",

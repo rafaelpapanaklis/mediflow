@@ -30,6 +30,8 @@ import { getTemplate, listTemplates } from "@/lib/document-templates/service";
 // Mismo helper de edad que las cartas de consentimiento: [EDAD_PACIENTE] no
 // puede decir una cosa en la carta y otra en la nota.
 import { calculateAge } from "@/lib/pediatrics/age";
+// El aviso de lo que falta es el MISMO que el de la carta de consentimiento.
+import { datosFaltantes, type DatoFaltante } from "@/lib/patient-documents/faltantes";
 
 export const NOTA_KIND = "NOTA_EVOLUCION" as const;
 
@@ -38,8 +40,8 @@ export type NotaDb = Pick<
   "patientDocument" | "documentTemplate" | "patient" | "clinic" | "user"
 >;
 
-/** Lo que puede faltar en la cabecera sin impedir la firma. */
-export type Faltante = "cedula" | "logo";
+/** Lo que puede faltar en la cabecera sin impedir la firma (común con el consentimiento). */
+export type Faltante = DatoFaltante;
 
 /**
  * La foto de la cabecera. Los datos que la clínica puede no tener (logo,
@@ -54,6 +56,17 @@ export interface EncabezadoNota {
   logoUrl: string | null;
   doctorNombre: string;
   cedula: string | null;
+  // Lo que sigue se añadió el 19-sep-2026. Una nota firmada ANTES no lo tiene en
+  // su foto: se lee como `null` y no se pinta — jamás se rellena con el dato de hoy.
+  clinicaDireccion: string | null;
+  clinicaTelefono: string | null;
+  doctorEspecialidad: string | null;
+  doctorCedulaEspecialidad: string | null;
+  /** `Patient.patientNumber`, el folio del expediente. Nunca el id interno. */
+  pacienteNumero: string | null;
+  pacienteCurp: string | null;
+  /** `curpStatus = FOREIGN`: no tiene CURP que capturar, así que no «falta». */
+  pacienteSinCurp: boolean;
 }
 
 export interface NotaResumen {
@@ -111,10 +124,14 @@ function exigir(nombre: string, valor: string): void {
 /* ─── cabecera ─────────────────────────────────────────────────────────── */
 
 export function faltantesDe(e: EncabezadoNota): Faltante[] {
-  const f: Faltante[] = [];
-  if (!e.cedula) f.push("cedula");
-  if (!e.logoUrl) f.push("logo");
-  return f;
+  return datosFaltantes({
+    clinicAddress: e.clinicaDireccion,
+    clinicLogoUrl: e.logoUrl,
+    doctorLicense: e.cedula,
+    doctorSpecialty: e.doctorEspecialidad,
+    patientCurp: e.pacienteCurp,
+    patientCurpStatus: e.pacienteSinCurp ? "FOREIGN" : null,
+  });
 }
 
 /** Lee la foto guardada. Tolera un JSON viejo o incompleto sin inventar datos. */
@@ -129,6 +146,13 @@ export function leerEncabezado(json: unknown): EncabezadoNota {
     logoUrl: opcional(o.logoUrl),
     doctorNombre: texto(o.doctorNombre),
     cedula: opcional(o.cedula),
+    clinicaDireccion: opcional(o.clinicaDireccion),
+    clinicaTelefono: opcional(o.clinicaTelefono),
+    doctorEspecialidad: opcional(o.doctorEspecialidad),
+    doctorCedulaEspecialidad: opcional(o.doctorCedulaEspecialidad),
+    pacienteNumero: opcional(o.pacienteNumero),
+    pacienteCurp: opcional(o.pacienteCurp),
+    pacienteSinCurp: o.pacienteSinCurp === true,
   };
 }
 
@@ -166,21 +190,31 @@ async function cargarContexto(
     // (assertPatientVisible) antes de llegar aquí.
     db.patient.findFirst({
       where: { id: patientId, clinicId },
-      select: { firstName: true, lastName: true, patientNumber: true, dob: true },
+      select: { firstName: true, lastName: true, patientNumber: true, dob: true, curp: true, curpStatus: true },
     }),
     db.clinic.findUnique({
       where: { id: clinicId },
-      select: { name: true, logoUrl: true, timezone: true, city: true },
+      select: { name: true, logoUrl: true, timezone: true, city: true, address: true, state: true, phone: true },
     }),
     db.user.findFirst({
       where: { id: doctorId, clinicId, isActive: true },
-      select: { firstName: true, lastName: true, cedulaProfesional: true },
+      select: {
+        firstName: true, lastName: true, cedulaProfesional: true,
+        // `especialidad` es la de Equipo; `specialty` es el módulo del panel y no va aquí.
+        especialidad: true, cedulaEspecialidad: true,
+      },
     }),
   ]);
   if (!patient || !clinic) return falla("PATIENT_NOT_FOUND");
   if (!doctor) return falla("DOCTOR_NOT_FOUND");
 
   const timezone = consentTimeZone(clinic.timezone);
+  const limpio = (v: string | null | undefined): string | null => (v ?? "").trim() || null;
+  // Calle + ciudad + estado, solo con lo que haya. Sin calle NO hay dirección:
+  // «Mérida, Yucatán» a secas no le dice a nadie dónde queda la clínica.
+  const direccion = limpio(clinic.address)
+    ? [clinic.address, clinic.city, clinic.state].map(limpio).filter(Boolean).join(", ")
+    : null;
   return bien({
     timezone,
     patientNumber: patient.patientNumber ?? null,
@@ -193,6 +227,13 @@ async function cargarContexto(
       logoUrl: (clinic.logoUrl ?? "").trim() || null,
       doctorNombre: `${doctor.firstName ?? ""} ${doctor.lastName ?? ""}`.trim(),
       cedula: (doctor.cedulaProfesional ?? "").trim() || null,
+      clinicaDireccion: direccion,
+      clinicaTelefono: limpio(clinic.phone),
+      doctorEspecialidad: limpio(doctor.especialidad),
+      doctorCedulaEspecialidad: limpio(doctor.cedulaEspecialidad),
+      pacienteNumero: limpio(patient.patientNumber),
+      pacienteCurp: limpio(patient.curp)?.toUpperCase() ?? null,
+      pacienteSinCurp: patient.curpStatus === "FOREIGN",
     },
   });
 }

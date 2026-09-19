@@ -11,20 +11,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { AlertTriangle, ArrowLeft, FileText, Loader2, PenLine, Plus } from "lucide-react";
+import { ArrowLeft, Bold, FileText, Heading2, Italic, List, ListOrdered, Loader2, PenLine, Plus, Underline } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { NotaCabecera, NotaCuerpo, CLASES_CUERPO } from "./nota-documento";
-import type { Faltante, NotaCompleta, NotaResumen, PlantillaNota, PreviewNota } from "./tipos";
-
-// Dónde se rellena lo que puede faltar en la cabecera.
-const DONDE_SE_ARREGLA: Record<Faltante, string> = {
-  cedula: "/dashboard/team",
-  logo: "/dashboard/settings",
-};
+import { AvisoDatosFaltantes } from "@/components/dashboard/documentos-paciente/aviso-datos-faltantes";
+import {
+  DocumentoHoja, DocumentoMesa, DocumentoRaiz, clasesDocumento,
+} from "@/components/dashboard/documentos-paciente/documento-hoja";
+import { NotaVisor } from "./nota-documento";
+import type { NotaCompleta, NotaResumen, PlantillaNota, PreviewNota } from "./tipos";
 
 type Vista =
   | { tipo: "lista" }
@@ -145,6 +143,7 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
       <Editor
         key={vista.notaId ?? `nueva-${vista.hoja.templateId}`}
         hoja={vista.hoja}
+        patientId={patientId}
         ocupado={ocupado}
         onVolver={volver}
         onGuardar={(body, firmar) => guardar(vista.hoja, vista.notaId, body, firmar)}
@@ -153,23 +152,7 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
   }
 
   if (vista.tipo === "leer") {
-    const { nota } = vista;
-    return (
-      <div className="space-y-3">
-        <Volver onClick={volver} />
-        <CardNew>
-          <div className="space-y-4">
-            <NotaCabecera encabezado={nota.encabezado} titulo={nota.title} />
-            <NotaCuerpo html={nota.body} />
-            <footer className="border-t border-border pt-3 text-xs" style={{ color: "var(--text-3)" }}>
-              {nota.status === "SIGNED"
-                ? t("notaEvolucionDoc.read.signedBy", { doctor: nota.encabezado.doctorNombre, date: nota.encabezado.fecha })
-                : t("notaEvolucionDoc.read.draftOf", { doctor: nota.encabezado.doctorNombre })}
-            </footer>
-          </div>
-        </CardNew>
-      </div>
-    );
+    return <NotaVisor nota={vista.nota} inicio={<Volver onClick={volver} />} />;
   }
 
   return (
@@ -299,42 +282,11 @@ function ElegirPlantilla({
   );
 }
 
-/**
- * El aviso de lo que falta, ANTES de firmar. No bloquea: una nota sin logo
- * sigue siendo una nota. Pero dice qué falta y dónde se rellena.
- */
-function AvisoFaltantes({ faltantes }: { faltantes: Faltante[] }) {
-  const t = useT();
-  if (faltantes.length === 0) return null;
-  return (
-    <div
-      role="alert"
-      className="flex items-start gap-2.5 rounded-lg border p-3 text-sm"
-      style={{ borderColor: "var(--warning, #d97706)", color: "var(--text-1)" }}
-    >
-      <AlertTriangle size={16} aria-hidden className="mt-0.5 flex-shrink-0" style={{ color: "var(--warning, #d97706)" }} />
-      <div className="space-y-1">
-        <p className="font-medium">{t("notaEvolucionDoc.missing.title")}</p>
-        <ul className="space-y-0.5">
-          {faltantes.map((f) => (
-            <li key={f}>
-              {t(`notaEvolucionDoc.missing.${f}`)}{" "}
-              <Link href={DONDE_SE_ARREGLA[f]} className="font-medium underline" style={{ color: "var(--brand)" }}>
-                {t(`notaEvolucionDoc.missing.${f}Link`)}
-              </Link>
-            </li>
-          ))}
-        </ul>
-        <p className="text-xs" style={{ color: "var(--text-3)" }}>{t("notaEvolucionDoc.missing.canContinue")}</p>
-      </div>
-    </div>
-  );
-}
-
 function Editor({
-  hoja, ocupado, onVolver, onGuardar,
+  hoja, patientId, ocupado, onVolver, onGuardar,
 }: {
   hoja: PreviewNota;
+  patientId: string;
   ocupado: boolean;
   onVolver: () => void;
   onGuardar: (body: string, firmar: boolean) => void;
@@ -374,13 +326,59 @@ function Editor({
     onGuardar(body, firmar);
   };
 
+  // Formato con los comandos del navegador: producen justo las etiquetas de la
+  // lista blanca del saneado (b, i, u, listas, h2). Lo que no lo sea se cae allí.
+  const formato = (comando: string, valor?: string) => {
+    caja.current?.focus();
+    document.execCommand(comando, false, valor);
+    tocado.current = true;
+  };
+  const HERRAMIENTAS: { clave: string; icono: typeof Bold; comando: string; valor?: string }[] = [
+    { clave: "bold", icono: Bold, comando: "bold" },
+    { clave: "italic", icono: Italic, comando: "italic" },
+    { clave: "underline", icono: Underline, comando: "underline" },
+    { clave: "heading", icono: Heading2, comando: "formatBlock", valor: "h2" },
+    { clave: "list", icono: List, comando: "insertUnorderedList" },
+    { clave: "numbered", icono: ListOrdered, comando: "insertOrderedList" },
+  ];
+
   return (
-    <div className="space-y-3">
-      <Volver onClick={() => void salir()} />
-      <CardNew>
-        <div className="space-y-4">
-          <NotaCabecera encabezado={hoja.encabezado} titulo={hoja.title} />
-          <p className="text-xs" style={{ color: "var(--text-3)" }}>{t("notaEvolucionDoc.editor.headerHint")}</p>
+    <DocumentoRaiz className="space-y-3">
+      {/* El aviso va ARRIBA y fuera de la hoja: se lee antes de escribir, no al firmar. */}
+      <AvisoDatosFaltantes faltantes={hoja.faltantes} patientId={patientId} documento="nota" />
+      <DocumentoMesa>
+        <div className={clasesDocumento.barra}>
+          <Volver onClick={() => void salir()} />
+          <div className={clasesDocumento.barraAcciones}>
+            <ButtonNew size="sm" disabled={ocupado} onClick={() => enviar(false)}>
+              {t("notaEvolucionDoc.editor.saveDraft")}
+            </ButtonNew>
+            <ButtonNew variant="primary" size="sm" disabled={ocupado} onClick={() => enviar(true)}>
+              {ocupado ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <PenLine size={13} aria-hidden />}{" "}
+              {t("notaEvolucionDoc.editor.sign")}
+            </ButtonNew>
+          </div>
+        </div>
+        <DocumentoHoja encabezado={hoja.encabezado} titulo={hoja.title} tipo={t("notaEvolucionDoc.kind")} firmado={null}>
+          <div className={clasesDocumento.herramientas} role="toolbar" aria-label={t("notaEvolucionDoc.editor.toolbar")}>
+            {HERRAMIENTAS.map((h) => (
+              <button
+                key={h.clave}
+                type="button"
+                className={clasesDocumento.herramienta}
+                disabled={ocupado}
+                title={t(`notaEvolucionDoc.editor.format.${h.clave}`)}
+                aria-label={t(`notaEvolucionDoc.editor.format.${h.clave}`)}
+                // mousedown y no click: un click le quita el foco (y la selección) al texto.
+                onMouseDown={(ev) => {
+                  ev.preventDefault();
+                  formato(h.comando, h.valor);
+                }}
+              >
+                <h.icono size={16} aria-hidden />
+              </button>
+            ))}
+          </div>
           <div
             ref={caja}
             contentEditable={!ocupado}
@@ -391,21 +389,12 @@ function Editor({
             role="textbox"
             aria-multiline="true"
             aria-label={t("notaEvolucionDoc.editor.label")}
-            className={`${CLASES_CUERPO} min-h-[240px] rounded-lg border border-border p-3 outline-none focus:border-[var(--brand)]`}
+            className={`${clasesDocumento.cuerpo} ${clasesDocumento.cuerpoEditable}`}
           />
-          <AvisoFaltantes faltantes={hoja.faltantes} />
-          <div className="flex flex-wrap justify-end gap-2">
-            <ButtonNew size="sm" disabled={ocupado} onClick={() => enviar(false)}>
-              {t("notaEvolucionDoc.editor.saveDraft")}
-            </ButtonNew>
-            <ButtonNew variant="primary" size="sm" disabled={ocupado} onClick={() => enviar(true)}>
-              {ocupado ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <PenLine size={13} aria-hidden />}{" "}
-              {t("notaEvolucionDoc.editor.sign")}
-            </ButtonNew>
-          </div>
-          <p className="text-right text-xs" style={{ color: "var(--text-3)" }}>{t("notaEvolucionDoc.editor.signHint")}</p>
-        </div>
-      </CardNew>
-    </div>
+          <p className={clasesDocumento.pista}>{t("notaEvolucionDoc.editor.headerHint")}</p>
+          <p className={clasesDocumento.pista}>{t("notaEvolucionDoc.editor.signHint")}</p>
+        </DocumentoHoja>
+      </DocumentoMesa>
+    </DocumentoRaiz>
   );
 }

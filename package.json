@@ -43,6 +43,7 @@
     "test:marketplace-oculto": "tsx --test src/components/dashboard/marketplace-oculto/__tests__/marketplace-oculto.test.ts",
     "test:presupuestos-en-facturacion": "tsx --test src/components/dashboard/presupuestos-en-facturacion/__tests__/presupuestos-en-facturacion.test.ts",
     "test:pacientes-rediseno": "tsx --test src/components/dashboard/pacientes-rediseno/__tests__/pacientes-rediseno.test.ts",
+    "test:documento-salidas": "tsx --tsconfig tsconfig.test.json --test src/lib/patient-documents/__tests__/documento-salidas.test.tsx",
     "test:nota-evolucion-documento": "tsx --test src/app/api/patient-documents/__tests__/nota-evolucion.test.ts",
     "test:expediente-rediseno": "tsx --test src/components/dashboard/expediente-rediseno/__tests__/expediente-rediseno.test.ts",
     "test:plan-tratamiento-rediseno": "tsx --test src/components/dashboard/plan-tratamiento-rediseno/__tests__/plan-tratamiento-rediseno.test.ts",

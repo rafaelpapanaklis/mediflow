@@ -121,21 +121,24 @@ beforeEach(() => {
       plantilla("t_otra", "cB", "NOTA_EVOLUCION", "De otra clínica"),
     ],
     patient: [
-      { id: "p1", clinicId: "cA", firstName: "Ana", lastName: "López Ruiz", patientNumber: "0007", dob: new Date("1990-03-10T12:00:00Z") },
+      { id: "p1", clinicId: "cA", firstName: "Ana", lastName: "López Ruiz", patientNumber: "0007", dob: new Date("1990-03-10T12:00:00Z"), curp: "loar900310mynpzn01", curpStatus: "COMPLETE" },
       { id: "p2", clinicId: "cA", firstName: "Beto", lastName: "Mora", patientNumber: null },
       { id: "p9", clinicId: "cB", firstName: "Zoe", lastName: "Otra", patientNumber: null },
     ],
     clinic: [
-      { id: "cA", name: "Dental Sol", logoUrl: "https://cdn/logo-a.png", timezone: "America/Mexico_City", city: "Mérida" },
+      { id: "cA", name: "Dental Sol", logoUrl: "https://cdn/logo-a.png", timezone: "America/Mexico_City", city: "Mérida", address: "Calle 60 #123", state: "Yucatán", phone: "999 123 4567" },
       { id: "cB", name: "Otra Clínica", logoUrl: null, timezone: "America/Mexico_City" },
     ],
     user: [
-      { id: "dA", clinicId: "cA", isActive: true, firstName: "Laura", lastName: "Pérez", cedulaProfesional: "1234567" },
-      { id: "dA2", clinicId: "cA", isActive: true, firstName: "Iván", lastName: "Sin Cédula", cedulaProfesional: null },
+      { id: "dA", clinicId: "cA", isActive: true, firstName: "Laura", lastName: "Pérez", cedulaProfesional: "1234567", especialidad: "Endodoncia", cedulaEspecialidad: null },
+      { id: "dA2", clinicId: "cA", isActive: true, firstName: "Iván", lastName: "Sin Cédula", cedulaProfesional: null, especialidad: "Ortodoncia" },
       { id: "dB", clinicId: "cB", isActive: true, firstName: "Omar", lastName: "Ajeno", cedulaProfesional: "  " },
     ],
   };
 });
+
+/** El aviso es el común de los documentos (`{ key, fixIn }`); aquí basta con QUÉ falta. */
+const claves = (f: { key: string }[]) => f.map((x) => x.key);
 
 // 13 de agosto de 2026, 23:43 en México = 14 de agosto 05:43 UTC.
 const NOCHE_MX = new Date("2026-08-14T05:43:00Z");
@@ -182,6 +185,14 @@ test("la cabecera se arma sola y la fecha es la de la CLÍNICA, no la del servid
     logoUrl: "https://cdn/logo-a.png",
     doctorNombre: "Laura Pérez",
     cedula: "1234567",
+    // Lo que el aviso común pide además del logo y la cédula (19-sep-2026).
+    clinicaDireccion: "Calle 60 #123, Mérida, Yucatán",
+    clinicaTelefono: "999 123 4567",
+    doctorEspecialidad: "Endodoncia",
+    doctorCedulaEspecialidad: null,
+    pacienteNumero: "0007",
+    pacienteCurp: "LOAR900310MYNPZN01",
+    pacienteSinCurp: false,
   });
   assert.equal(nota.title, "Endodoncia");
   assert.equal(nota.status, "SIGNED");
@@ -218,7 +229,7 @@ test("una nota más larga de lo que el saneado admite se RECHAZA: nunca se firma
 test("al reabrir un borrador propio, la cabecera y el aviso son los de HOY (los que se van a firmar)", async () => {
   const input = { patientId: "p1", doctorId: "dA2", templateId: "t_endo" };
   const borrador = valor(await createNota(db, "cA", input, NOCHE_MX));
-  assert.deepEqual(borrador.faltantes, ["cedula"]);
+  assert.deepEqual(claves(borrador.faltantes), ["doctorLicense"]);
 
   tablas.user.find((u) => u.id === "dA2")!.cedulaProfesional = "5550001";
   const hoy = new Date("2026-08-20T18:00:00Z");
@@ -340,7 +351,7 @@ test("sin cédula y sin logo: el aviso dice QUÉ falta antes de firmar, y aun as
   const input = { patientId: "p1", doctorId: "dA2", templateId: "t_endo" };
 
   const previa = valor(await previewNota(db, "cA", input, NOCHE_MX));
-  assert.deepEqual(previa.faltantes, ["cedula", "logo"]);
+  assert.deepEqual(claves(previa.faltantes), ["clinicLogo", "doctorLicense"]);
   assert.equal(tablas.patientDocument.length, 0, "previsualizar no guarda nada");
 
   const nota = valor(await createNota(db, "cA", { ...input, sign: true }, NOCHE_MX));
@@ -348,15 +359,15 @@ test("sin cédula y sin logo: el aviso dice QUÉ falta antes de firmar, y aun as
   // El hueco es null: quien pinta omite la línea. Nunca "N/A", "—" ni "S/N".
   assert.equal(nota.encabezado.cedula, null);
   assert.equal(nota.encabezado.logoUrl, null);
-  assert.deepEqual(nota.faltantes, ["cedula", "logo"]);
+  assert.deepEqual(claves(nota.faltantes), ["clinicLogo", "doctorLicense"]);
 });
 
 test("solo falta una cosa: el aviso nombra esa y no la otra", async () => {
   const sinCedula = valor(await previewNota(db, "cA", { patientId: "p1", doctorId: "dA2", templateId: "t_endo" }, NOCHE_MX));
-  assert.deepEqual(sinCedula.faltantes, ["cedula"]);
+  assert.deepEqual(claves(sinCedula.faltantes), ["doctorLicense"]);
   tablas.clinic[0].logoUrl = null;
   const sinLogo = valor(await previewNota(db, "cA", { patientId: "p1", doctorId: "dA", templateId: "t_endo" }, NOCHE_MX));
-  assert.deepEqual(sinLogo.faltantes, ["logo"]);
+  assert.deepEqual(claves(sinLogo.faltantes), ["clinicLogo"]);
 });
 
 /* ─── la pantalla y el menú ────────────────────────────────────────────── */
@@ -390,7 +401,11 @@ test("es.json y en.json tienen las mismas claves de la pantalla, y ninguna vací
 
 test("el aviso enlaza a donde se rellena lo que falta: Equipo (cédula) y Configuración (logo)", () => {
   const panel = leer("src/components/dashboard/nota-evolucion/nota-evolucion-panel.tsx");
-  assert.ok(panel.includes('"/dashboard/team"'));
-  assert.ok(panel.includes('"/dashboard/settings"'));
+  // Los enlaces ya no viven en el panel: son los del aviso común, el mismo que
+  // usa el consentimiento.
+  assert.ok(panel.includes("AvisoDatosFaltantes"));
+  const comun = leer("src/lib/patient-documents/faltantes.ts");
+  assert.ok(comun.includes('"/dashboard/team"'));
+  assert.ok(comun.includes('"/dashboard/settings"'));
   assert.ok(panel.startsWith('"use client";'));
 });

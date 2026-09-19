@@ -2,16 +2,14 @@
 // (las fechas llegan como cadena). El cliente no importa el servicio: ese
 // archivo arrastra Prisma.
 
-export type Faltante = "cedula" | "logo";
+import type { DatoFaltante } from "@/lib/patient-documents/faltantes";
+import type { EncabezadoDocumento } from "@/components/dashboard/documentos-paciente/tipos";
 
-export interface EncabezadoNota {
-  pacienteNombre: string;
-  fecha: string;
-  clinicaNombre: string;
-  logoUrl: string | null;
-  doctorNombre: string;
-  cedula: string | null;
-}
+/** El aviso de lo que falta es el común de los documentos del paciente. */
+export type Faltante = DatoFaltante;
+
+/** La cabecera de la nota ES la de cualquier documento del paciente. */
+export type EncabezadoNota = EncabezadoDocumento;
 
 export interface NotaResumen {
   id: string;
