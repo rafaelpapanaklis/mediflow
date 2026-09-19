@@ -21,7 +21,8 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { buildConsentContent, findConsentTemplate } from "@/lib/consent/templates";
+import { buildConsentContent, fillConsentTemplate, findConsentTemplate } from "@/lib/consent/templates";
+import { resolveClinicConsentTemplate } from "@/lib/consent/clinic-templates";
 // Mismo helper de edad que el preview: la carta creada no puede decir una edad
 // distinta de la que el doctor acaba de revisar en el modal.
 import { calculateAge } from "@/lib/pediatrics/age";
@@ -76,6 +77,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const patientId = typeof body.patientId === "string" ? body.patientId : "";
   const procedureKeyRaw = typeof body.procedureKey === "string" ? body.procedureKey.trim() : "";
+  const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
   const customContent = typeof body.content === "string" ? body.content.trim() : "";
   const customProcedure = typeof body.procedure === "string" ? body.procedure.trim() : "";
   const doctorIdRaw = typeof body.doctorId === "string" ? body.doctorId.trim() : "";
@@ -86,8 +88,16 @@ export async function POST(req: NextRequest) {
   if (!patientId) {
     return NextResponse.json({ error: "patientId requerido" }, { status: 400 });
   }
-  // O una clave del catálogo, o un texto propio con su nombre de procedimiento.
-  if (!template && !(customContent && customProcedure)) {
+  // Plantilla de la clínica: se busca DENTRO de la clínica de la sesión, así que
+  // el id de una plantilla ajena no sirve de nada.
+  const clinicTemplate = templateId
+    ? await resolveClinicConsentTemplate(ctx.clinicId, templateId)
+    : null;
+  if (templateId && !clinicTemplate) {
+    return NextResponse.json({ error: "La plantilla no existe en esta clínica." }, { status: 404 });
+  }
+  // O una plantilla, o una clave del catálogo, o un texto propio con su nombre.
+  if (!clinicTemplate && !template && !(customContent && customProcedure)) {
     return NextResponse.json(
       { error: "Elige un procedimiento del catálogo o escribe el texto y el nombre del acto." },
       { status: 400 },
@@ -154,27 +164,31 @@ export async function POST(req: NextRequest) {
 
   // El texto editado en el modal MANDA: es lo que el doctor revisó y lo que el
   // paciente va a leer. Solo si no viene se genera desde la plantilla.
+  const vars = {
+    fullIdentification: true,
+    clinicName: clinic?.name ?? "",
+    clinicAddress: clinic?.address ?? null,
+    clinicCity: clinic?.city ?? null,
+    timezone: clinic?.timezone ?? null,
+    patientName,
+    patientAge: patient.dob ? calculateAge(patient.dob).years : null,
+    patientNumber: patient.patientNumber ?? null,
+    patientCurp: patient.curp ?? null,
+    doctorName,
+    doctorLicense: doctor?.cedulaProfesional ?? null,
+    doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
+    doctorSpecialty: doctor?.especialidad ?? null,
+    signerName: signerName || null,
+    signerRelation: signerRelation || null,
+  };
   const content =
     customContent ||
-    buildConsentContent(template!.key, {
-      fullIdentification: true,
-      clinicName: clinic?.name ?? "",
-      clinicAddress: clinic?.address ?? null,
-      clinicCity: clinic?.city ?? null,
-      timezone: clinic?.timezone ?? null,
-      patientName,
-      patientAge: patient.dob ? calculateAge(patient.dob).years : null,
-      patientNumber: patient.patientNumber ?? null,
-      patientCurp: patient.curp ?? null,
-      doctorName,
-      doctorLicense: doctor?.cedulaProfesional ?? null,
-      doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
-      doctorSpecialty: doctor?.especialidad ?? null,
-      signerName: signerName || null,
-      signerRelation: signerRelation || null,
-    });
+    (clinicTemplate
+      ? fillConsentTemplate(clinicTemplate.text, vars)
+      : buildConsentContent(template!.key, vars));
 
-  const procedure = template?.label ?? customProcedure;
+  // El nombre del acto es el de la PLANTILLA, no uno que mande el cliente.
+  const procedure = clinicTemplate?.name ?? template?.label ?? customProcedure;
   // Huella del texto EXACTO que se firmará. El PDF la imprime como evidencia de
   // que el documento no se alteró después de la firma.
   const contentHash = createHash("sha256").update(content, "utf8").digest("hex");
@@ -186,7 +200,7 @@ export async function POST(req: NextRequest) {
       clinicId: ctx.clinicId,
       patientId,
       procedure,
-      procedureKey: template?.key ?? null,
+      procedureKey: clinicTemplate ? clinicTemplate.procedureKey : (template?.key ?? null),
       content,
       contentHash,
       createdById: ctx.userId,

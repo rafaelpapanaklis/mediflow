@@ -15,7 +15,8 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { buildConsentContent, findConsentTemplate } from "@/lib/consent/templates";
+import { buildConsentContent, fillConsentTemplate, findConsentTemplate } from "@/lib/consent/templates";
+import { resolveClinicConsentTemplate } from "@/lib/consent/clinic-templates";
 // Único cálculo de edad del repo (lógica de cumpleaños, no resta de años): un
 // off-by-one aquí saldría impreso en un documento legal.
 import { calculateAge } from "@/lib/pediatrics/age";
@@ -33,13 +34,23 @@ export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
   const patientId = sp.get("patientId") ?? "";
   const procedureKey = (sp.get("procedureKey") ?? "").trim();
+  // Plantilla de la clínica (DocumentTemplate kind CONSENTIMIENTO). Es el camino
+  // de la pantalla; `procedureKey` se conserva para quien aún llame al catálogo.
+  const templateId = (sp.get("templateId") ?? "").trim();
   const doctorId = (sp.get("doctorId") ?? "").trim();
   const signerName = (sp.get("signerName") ?? "").trim();
   const signerRelation = (sp.get("signerRelation") ?? "").trim();
 
   const template = findConsentTemplate(procedureKey);
-  if (!patientId || !template) {
+  if (!patientId || (!template && !templateId)) {
     return NextResponse.json({ error: "Faltan datos para generar la carta." }, { status: 400 });
+  }
+  // Acotada a la clínica de la sesión: el id de una plantilla ajena da 404.
+  const clinicTemplate = templateId
+    ? await resolveClinicConsentTemplate(ctx.clinicId, templateId)
+    : null;
+  if (templateId && !clinicTemplate) {
+    return NextResponse.json({ error: "La plantilla no existe en esta clínica." }, { status: 404 });
   }
 
   const patient = await prisma.patient.findFirst({
@@ -79,7 +90,7 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  const content = buildConsentContent(template.key, {
+  const vars = {
     fullIdentification: true,
     clinicName: clinic?.name ?? "",
     clinicAddress: clinic?.address ?? null,
@@ -95,7 +106,10 @@ export async function GET(req: NextRequest) {
     doctorSpecialty: doctor?.especialidad ?? null,
     signerName: signerName || null,
     signerRelation: signerRelation || null,
-  });
+  };
+  const content = clinicTemplate
+    ? fillConsentTemplate(clinicTemplate.text, vars)
+    : buildConsentContent(template!.key, vars);
 
   // Lo que falta se dice ANTES de crear la carta, para que el modal lo avise
   // con el enlace a donde se captura. No bloquea: la carta se puede crear igual.
@@ -108,5 +122,9 @@ export async function GET(req: NextRequest) {
     patientCurpStatus: patient.curpStatus ?? null,
   });
 
-  return NextResponse.json({ procedure: template.label, content, missing });
+  return NextResponse.json({
+    procedure: clinicTemplate?.name ?? template!.label,
+    content,
+    missing,
+  });
 }

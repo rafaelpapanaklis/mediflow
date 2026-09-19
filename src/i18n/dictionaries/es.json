@@ -1636,7 +1636,7 @@
       "implantes": "Implantes",
       "ortodoncia": "Ortodoncia",
       "recetas": "Recetas",
-      "consentimientos": "Consentimientos",
+      "consentimientos": "Consentimiento informado",
       "sectionsAria": "Secciones del paciente"
     },
     "tabsShort": {
@@ -1718,7 +1718,7 @@
     "consents": {
       "title": "Consentimientos informados",
       "subtitle": "Cartas conforme al contenido de la NOM-004 y la NOM-013, con la firma del paciente y la firma del doctor.",
-      "new": "Nuevo consentimiento",
+      "new": "Nuevo consentimiento informado",
       "empty": "Este paciente aún no tiene consentimientos",
       "emptyHint": "Así funciona una carta de consentimiento informado en DaleControl:",
       "step1Title": "Crea la carta",
@@ -1780,6 +1780,10 @@
       "signerRelationPlaceholder": "Ej. madre, padre, tutor",
       "fieldContent": "Texto que firmará el paciente",
       "contentHint": "Revísalo y complétalo para este caso: se guarda tal cual y ya no se puede cambiar después de la firma.",
+      "fieldTemplate": "Plantilla",
+      "templatesHint": "Son las plantillas de consentimiento de tu clínica. Se editan y se añaden en Administración → Plantillas.",
+      "templatesError": "No se pudieron cargar las plantillas. Cierra esta ventana y vuelve a abrirla.",
+      "templatesEmpty": "Tu clínica no tiene plantillas de consentimiento activas. Actívalas o crea una en Administración → Plantillas.",
       "actionPrint": "Imprimir para firmar en papel",
       "printHint": "En papel firman el paciente y el doctor sobre las líneas en blanco; en digital, el paciente firma en la liga y el doctor después, desde esta lista.",
       "missingTitle": "A esta carta le faltan datos",

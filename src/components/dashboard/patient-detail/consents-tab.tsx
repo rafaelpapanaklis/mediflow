@@ -41,7 +41,6 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { SignaturePad } from "@/components/ui/signature-pad";
-import { listConsentTemplates } from "@/lib/consent/templates";
 import { ageYears, isMinor } from "@/lib/consent/signers";
 import { parseConsentText, splitConsentBody } from "@/lib/consent/render";
 import type { ConsentDTO, ConsentStatus } from "@/lib/consent/types";
@@ -746,8 +745,12 @@ function NewConsentModal({
   onCreated: () => Promise<void> | void;
 }) {
   const t = useT();
-  const templates = useMemo(() => listConsentTemplates(), []);
-  const [procedureKey, setProcedureKey] = useState(templates[0]?.key ?? "");
+  // Las plantillas son las de la CLÍNICA (DocumentTemplate, kind
+  // CONSENTIMIENTO): el catálogo se le siembra la primera vez y a partir de ahí
+  // las edita en Administración → Plantillas. El selector no conoce otras.
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
+  const [templatesState, setTemplatesState] = useState<"loading" | "ready" | "error">("loading");
+  const [templateId, setTemplateId] = useState("");
   const [doctorId, setDoctorId] = useState(
     doctors.some((d) => d.id === currentUserId) ? currentUserId : (doctors[0]?.id ?? ""),
   );
@@ -776,6 +779,24 @@ function NewConsentModal({
   const [created, setCreated] = useState<{ id: string; signUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setTemplatesState("loading");
+    fetch("/api/consent/templates")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (cancelled) return;
+        const list: { id: string; name: string }[] = Array.isArray(d?.templates) ? d.templates : [];
+        setTemplates(list);
+        // Se conserva la elegida si sigue existiendo; si no, la primera.
+        setTemplateId((prev) => (list.some((x) => x.id === prev) ? prev : (list[0]?.id ?? "")));
+        setTemplatesState("ready");
+      })
+      .catch(() => { if (!cancelled) setTemplatesState("error"); });
+    return () => { cancelled = true; };
+  }, [open]);
+
   // Regenera el borrador cuando cambian los datos que lo componen.
   //
   // Con retardo: el nombre del representante se escribe letra a letra y sin
@@ -783,10 +804,10 @@ function NewConsentModal({
   // textarea a media escritura. Se pide una sola vez, 400 ms después del
   // último cambio.
   useEffect(() => {
-    if (!open || touched || created) return;
+    if (!open || touched || created || !templateId) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      const params = new URLSearchParams({ patientId, procedureKey });
+      const params = new URLSearchParams({ patientId, templateId });
       if (doctorId) params.set("doctorId", doctorId);
       if (byRepresentative && signerName.trim()) {
         params.set("signerName", signerName.trim());
@@ -807,7 +828,7 @@ function NewConsentModal({
         .finally(() => { if (!cancelled) setLoadingText(false); });
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [open, touched, created, patientId, procedureKey, doctorId, byRepresentative, signerName, signerRelation]);
+  }, [open, touched, created, patientId, templateId, doctorId, byRepresentative, signerName, signerRelation]);
 
   function reset() {
     setCreated(null);
@@ -834,12 +855,11 @@ function NewConsentModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId,
-          procedureKey,
+          templateId,
           doctorId: doctorId || undefined,
           // El texto SIEMPRE viaja: es el snapshot que firmará el paciente,
           // editado o no.
           content: content.trim() || undefined,
-          procedure: templates.find((x) => x.key === procedureKey)?.label,
           signerName: byRepresentative ? signerName.trim() : undefined,
           signerRelation: byRepresentative ? signerRelation.trim() : undefined,
         }),
@@ -893,16 +913,26 @@ function NewConsentModal({
             <>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="field-new">
-                  <span className="field-new__label">{t("patients.consents.fieldProcedure")}</span>
+                  <span className="field-new__label">{t("patients.consents.fieldTemplate")}</span>
                   <select
-                    value={procedureKey}
-                    onChange={(e) => setProcedureKey(e.target.value)}
+                    value={templateId}
+                    // Cambiar de plantilla es pedir OTRA carta: se suelta lo
+                    // editado para que el texto nuevo pueda entrar.
+                    onChange={(e) => { setTemplateId(e.target.value); setTouched(false); }}
+                    disabled={templatesState !== "ready" || templates.length === 0}
                     className="input-new"
                   >
                     {templates.map((tpl) => (
-                      <option key={tpl.key} value={tpl.key}>{tpl.label}</option>
+                      <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
                     ))}
                   </select>
+                  <span className="mt-1 block text-[11px]" style={{ color: "var(--text-4)" }}>
+                    {templatesState === "error"
+                      ? t("patients.consents.templatesError")
+                      : templatesState === "ready" && templates.length === 0
+                        ? t("patients.consents.templatesEmpty")
+                        : t("patients.consents.templatesHint")}
+                  </span>
                 </label>
                 <label className="field-new">
                   <span className="field-new__label">{t("patients.consents.fieldDoctor")}</span>
@@ -973,6 +1003,9 @@ function NewConsentModal({
                     variant="ghost"
                     size="sm"
                     icon={editing ? <Eye size={13} aria-hidden /> : <Pencil size={13} aria-hidden />}
+                    // Sin plantilla no hay carta que editar: un texto suelto
+                    // llegaría al servidor sin acto que autorizar.
+                    disabled={!templateId}
                     onClick={() => setEditing((v) => !v)}
                   >
                     {editing ? t("patients.consents.viewPreview") : t("patients.consents.editText")}
@@ -1028,7 +1061,7 @@ function NewConsentModal({
           {!created && (
             <ButtonNew
               variant="primary"
-              disabled={saving || !content.trim()}
+              disabled={saving || !content.trim() || !templateId}
               onClick={create}
               icon={saving
                 ? <Loader2 size={13} className="animate-spin" aria-hidden />

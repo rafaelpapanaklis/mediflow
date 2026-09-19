@@ -1636,7 +1636,7 @@
       "implantes": "Implants",
       "ortodoncia": "Orthodontics",
       "recetas": "Prescriptions",
-      "consentimientos": "Consent forms",
+      "consentimientos": "Informed consent",
       "sectionsAria": "Patient sections"
     },
     "tabsShort": {
@@ -1718,7 +1718,7 @@
     "consents": {
       "title": "Informed consent forms",
       "subtitle": "Letters following the content of NOM-004 and NOM-013, with the patient signature and the doctor signature.",
-      "new": "New consent form",
+      "new": "New informed consent",
       "empty": "This patient has no consent forms yet",
       "emptyHint": "This is how an informed consent form works in DaleControl:",
       "step1Title": "Create the letter",
@@ -1780,6 +1780,10 @@
       "signerRelationPlaceholder": "e.g. mother, father, guardian",
       "fieldContent": "Text the patient will sign",
       "contentHint": "Review and complete it for this case: it is stored as-is and cannot be changed after signing.",
+      "fieldTemplate": "Template",
+      "templatesHint": "These are your clinic's consent templates. Edit them or add new ones in Administration → Templates.",
+      "templatesError": "The templates could not be loaded. Close this window and open it again.",
+      "templatesEmpty": "Your clinic has no active consent templates. Activate them or create one in Administration → Templates.",
       "actionPrint": "Print to sign on paper",
       "printHint": "On paper, the patient and the doctor sign on the blank lines; digitally, the patient signs through the link and the doctor afterwards, from this list.",
       "missingTitle": "This letter is missing some data",

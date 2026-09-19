@@ -406,3 +406,135 @@ Firman ${who}, el estomatólogo responsable y, cuando están presentes, los test
 
   return interpolateConsent(raw, vars);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLANTILLAS EDITABLES (DocumentTemplate kind = CONSENTIMIENTO)
+//
+// Rafael pidió que el doctor no empiece con la hoja en blanco: el catálogo se
+// siembra como plantillas de la clínica, que luego ella edita. Una plantilla NO
+// puede llevar datos resueltos —no sabe de qué paciente ni de qué doctor es—,
+// así que aquí la carta se arma con TODOS los datos como marcadores.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Marcadores OPCIONALES: si no hay dato, el renglón entero que los contiene se
+ * quita en vez de salir con raya. Cédula de especialidad (solo la tiene quien
+ * cursó una) y los dos del representante legal (solo cuando firma él).
+ */
+const OPTIONAL_LINE_TOKENS = [
+  "CEDULA_ESPECIALIDAD_DOCTOR",
+  "NOMBRE_REPRESENTANTE",
+  "PARENTESCO_REPRESENTANTE",
+] as const;
+
+function optionalTokenIsEmpty(token: string, vars: ConsentTemplateVars): boolean {
+  if (token === "CEDULA_ESPECIALIDAD_DOCTOR") return !consentValue(vars.doctorSpecialtyLicense);
+  // Los dos renglones del representante van o se quitan JUNTOS.
+  return !consentValue(vars.signerName);
+}
+
+/**
+ * Texto de la plantilla de un procedimiento: la misma carta de
+ * `buildConsentContent` con identificación completa, pero sin interpolar.
+ */
+export function buildConsentTemplateText(procedureKey: string): string {
+  const proc = findConsentTemplate(procedureKey) ?? GENERAL_PROCEDURE;
+  const objective = OBJECTIVES[proc.key] ?? OBJECTIVES[GENERAL_CONSENT_KEY];
+  const benefit = BENEFITS[proc.key] ?? BENEFITS[GENERAL_CONSENT_KEY];
+  const alternatives = [
+    ...proc.alternatives,
+    "No realizar ningún tratamiento, con las consecuencias que se describen en el punto siguiente.",
+  ];
+
+  return `CARTA DE CONSENTIMIENTO INFORMADO
+
+Establecimiento: [NOMBRE_CLINICA]
+Dirección: [DIRECCION_CLINICA]
+Lugar y fecha: [LUGAR], a [FECHA]
+
+1. DATOS DEL PACIENTE
+Nombre del paciente: [NOMBRE_PACIENTE]
+Edad: [EDAD_PACIENTE]
+CURP: [CURP_PACIENTE]
+ID del paciente: [ID_PACIENTE]
+Representante legal que firma en su nombre: [NOMBRE_REPRESENTANTE]
+Parentesco o relación con el paciente: [PARENTESCO_REPRESENTANTE]
+
+2. ESTOMATÓLOGO RESPONSABLE
+Nombre: [NOMBRE_DOCTOR]
+Cédula profesional: [CEDULA_DOCTOR]
+Cédula de especialidad: [CEDULA_ESPECIALIDAD_DOCTOR]
+Especialidad: [ESPECIALIDAD_DOCTOR]
+
+3. ACTO QUE SE AUTORIZA
+Procedimiento: ${proc.label}
+${proc.description}
+El objetivo del tratamiento es ${objective}.
+
+4. RIESGOS Y MOLESTIAS QUE PUEDEN PRESENTARSE
+Se me explicó que ningún tratamiento está libre de riesgos y que, aun realizándolo correctamente, pueden presentarse:
+${bullets(proc.risks)}
+También se me informó que pueden aparecer complicaciones poco frecuentes que no es posible enumerar por completo, y que serán atendidas si ocurren.
+
+5. BENEFICIOS QUE SE ESPERAN
+${benefit} Se me explicó que ningún resultado puede garantizarse, porque depende de mi situación clínica y de los cuidados que yo mantenga.
+
+6. ALTERNATIVAS QUE SE ME OFRECIERON
+${bullets(alternatives)}
+
+7. QUÉ PUEDE PASAR SI NO ME TRATO
+${NO_TREATMENT}
+
+8. LO QUE SE ESPERA DE TU PARTE
+Para que el resultado sea el previsto, se te pide:
+${bullets(proc.care)}
+
+9. ATENCIÓN DE CONTINGENCIAS Y URGENCIAS
+Autorizo al estomatólogo y al personal del establecimiento a realizar, durante este procedimiento, las medidas necesarias para atender las contingencias y urgencias que se deriven del acto autorizado, cuando esperar a consultarme ponga en riesgo mi salud. Toda medida distinta al procedimiento aquí descrito se me explicará y se recabará mi autorización antes de realizarla, salvo esa situación de urgencia.
+
+10. REVOCACIÓN
+Se me informó que puedo revocar este consentimiento en cualquier momento mientras el procedimiento no haya iniciado, sin necesidad de justificarlo y sin que ello afecte la calidad de la atención que recibo. La revocación se hace por escrito y queda registrada en mi expediente.
+
+11. DECLARACIÓN
+Declaro que la información que proporcioné sobre mi estado de salud, mis alergias y los medicamentos que tomo es verídica y completa. Declaro también que esta carta se me explicó en lenguaje sencillo, que pude hacer todas las preguntas que quise, que se resolvieron mis dudas y que acepto de forma libre y voluntaria el procedimiento descrito.
+
+12. FIRMAS
+Firman el paciente o, en su caso, su representante legal, el estomatólogo responsable y, cuando están presentes, los testigos del acto. Se entrega copia de este documento al paciente y una copia se conserva en su expediente clínico conforme al contenido de la NOM-004-SSA3-2012 y la NOM-013-SSA2-2015.`;
+}
+
+/**
+ * ¿El renglón existe SOLO para ese marcador? — "Etiqueta: [MARCADOR]".
+ *
+ * Es la condición para poder quitarlo entero. La clínica edita sus plantillas:
+ * si mete `[NOMBRE_REPRESENTANTE]` en mitad de la DECLARACIÓN, quitar "el
+ * renglón" borraría un párrafo legal completo cada vez que no hay representante.
+ * Un renglón así se deja, y el marcador vacío sale como en cualquier otra parte.
+ */
+function isDedicatedLine(line: string, token: string): boolean {
+  const marker = `[${token}]`;
+  const rest = line.trim();
+  if (!rest.endsWith(marker)) return false;
+  const label = rest.slice(0, -marker.length);
+  return label.length <= 80 && !/[\[\]]/.test(label) && !/[.;]\s/.test(label);
+}
+
+/**
+ * Llena el texto de una plantilla de la clínica con los datos del caso.
+ *
+ * Primero quita los renglones DEDICADOS a un marcador opcional sin dato; después
+ * interpola lo demás, donde un dato que falta deja su raya. Un marcador que la
+ * clínica haya escrito mal se queda tal cual: mejor un `[NOMBRE_PACINTE]` que
+ * el doctor ve y corrige en la vista previa, que un hueco silencioso.
+ */
+export function fillConsentTemplate(text: string, vars: ConsentTemplateVars): string {
+  const kept = (text ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .filter((line) =>
+      !OPTIONAL_LINE_TOKENS.some(
+        (token) => isDedicatedLine(line, token) && optionalTokenIsEmpty(token, vars),
+      ),
+    )
+    .join("\n");
+  return interpolateConsent(kept, vars);
+}
