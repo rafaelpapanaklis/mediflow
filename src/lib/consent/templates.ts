@@ -32,6 +32,14 @@ import {
 // runtime: esta función corre en el servidor (Vercel = UTC) y una carta creada
 // por la noche se fechaba al día siguiente.
 import { formatConsentDate } from "./dates";
+// Etiquetas y rayas de los datos de identificación: las mismas que usa el PDF.
+import {
+  CONSENT_BLANK,
+  consentValue,
+  consentValueOrBlank,
+  doctorCredentialLines,
+  patientIdentityLines,
+} from "./document-data";
 
 /** Clave de la carta genérica de atención odontológica. */
 export const GENERAL_CONSENT_KEY = "atencion-general";
@@ -158,12 +166,35 @@ export interface ConsentTemplateVars {
    * llenarla a mano — nunca desaparece.
    */
   patientAge?: number | null;
-  /** Número de expediente del paciente (`Patient.patientNumber`). */
+  /**
+   * ID del paciente: el folio que le da el panel (`Patient.patientNumber`),
+   * que es el que la clínica reconoce. NUNCA el `id` interno (un cuid).
+   */
   patientNumber?: string | null;
+  /**
+   * Identificación COMPLETA: CURP e ID del paciente, cédula(s) y especialidad
+   * del doctor y dirección de la clínica, cada uno en su renglón y con raya si
+   * falta. La activan los dos routes de `/api/consent`.
+   *
+   * Es opt-in porque este generador lo comparte el vertical de instituto
+   * (`lib/edu/consentimientos-core`), que no tiene de dónde sacar esos datos:
+   * sin la bandera, sus cartas saldrían con cuatro rayas que nadie puede llenar.
+   * Sin ella la carta sale exactamente como antes.
+   */
+  fullIdentification?: boolean;
+  /** CURP del paciente (`Patient.curp`). Sin dato, raya para llenar a mano. */
+  patientCurp?: string | null;
   /** Estomatólogo responsable del acto. */
   doctorName?: string | null;
   /** Cédula profesional del estomatólogo (NOM-004 10.1.1.4). */
   doctorLicense?: string | null;
+  /** Cédula de especialidad (`User.cedulaEspecialidad`). Solo se imprime si existe. */
+  doctorSpecialtyLicense?: string | null;
+  /**
+   * Especialidad del doctor (`User.especialidad`, la que se captura en Equipo).
+   * OJO: `User.specialty` es otra cosa —el módulo del panel— y no va aquí.
+   */
+  doctorSpecialty?: string | null;
   /** Representante legal que firma en nombre del paciente, si aplica. */
   signerName?: string | null;
   signerRelation?: string | null;
@@ -186,7 +217,7 @@ export interface ConsentTemplateVars {
  * —o sin la línea— es una carta que no sirve; una con la raya se completa con
  * un bolígrafo delante del paciente.
  */
-const BLANK = "______";
+const BLANK = CONSENT_BLANK;
 
 /** Edad en años cumplidos → "34 años". Sin dato, hueco para llenar. */
 function ageLabel(age: number | null | undefined): string {
@@ -200,10 +231,18 @@ function tokenMap(vars: ConsentTemplateVars): Record<string, string> {
   return {
     NOMBRE_PACIENTE: vars.patientName || "—",
     EDAD_PACIENTE: ageLabel(vars.patientAge),
-    EXPEDIENTE_PACIENTE: (vars.patientNumber ?? "").trim() || BLANK,
+    EXPEDIENTE_PACIENTE: consentValueOrBlank(vars.patientNumber),
+    ID_PACIENTE: consentValueOrBlank(vars.patientNumber),
+    CURP_PACIENTE: consentValueOrBlank(vars.patientCurp).toUpperCase(),
     NOMBRE_DOCTOR: (vars.doctorName ?? "").trim() || "—",
     NOMBRE_CLINICA: vars.clinicName || "—",
-    CEDULA_DOCTOR: (vars.doctorLicense ?? "").trim() || "—",
+    // Cédula, especialidad y dirección: raya y no "—". Son justo los datos que
+    // hoy faltan en casi todas las clínicas, y en papel la raya se llena con
+    // bolígrafo; un guion largo parece un dato.
+    CEDULA_DOCTOR: consentValueOrBlank(vars.doctorLicense),
+    CEDULA_ESPECIALIDAD_DOCTOR: consentValueOrBlank(vars.doctorSpecialtyLicense),
+    ESPECIALIDAD_DOCTOR: consentValueOrBlank(vars.doctorSpecialty),
+    DIRECCION_CLINICA: consentValueOrBlank(vars.clinicAddress),
     NOMBRE_REPRESENTANTE: (vars.signerName ?? "").trim() || "—",
     PARENTESCO_REPRESENTANTE: (vars.signerRelation ?? "").trim() || "—",
     LUGAR: (vars.place ?? vars.clinicCity ?? "").trim() || "—",
@@ -256,22 +295,44 @@ export function buildConsentContent(
   const proc = findConsentTemplate(procedureKey) ?? GENERAL_PROCEDURE;
   const isMinorRepresented = Boolean((vars.signerName ?? "").trim());
 
-  const clinicLine = [vars.clinicName, vars.clinicAddress, vars.clinicCity]
+  // La dirección va en SU renglón y con su etiqueta: pegada al nombre con una
+  // coma, cuando faltaba simplemente no se notaba que faltaba.
+  const full = vars.fullIdentification === true;
+  const clinicName = consentValue(vars.clinicName) || "[NOMBRE_CLINICA]";
+  const clinicCity = consentValue(vars.clinicCity);
+  const legacyClinicLine = [vars.clinicName, vars.clinicAddress, vars.clinicCity]
     .map((s) => (s ?? "").trim())
     .filter(Boolean)
     .join(", ");
+  const clinicLines = full
+    ? `Establecimiento: ${clinicName}\n` +
+      `Dirección: [DIRECCION_CLINICA]${
+        consentValue(vars.clinicAddress) && clinicCity ? `, ${clinicCity}` : ""
+      }`
+    : `Establecimiento: ${legacyClinicLine || "[NOMBRE_CLINICA]"}`;
 
-  const doctorLine = vars.doctorLicense
-    ? "Nombre: [NOMBRE_DOCTOR]\nCédula profesional: [CEDULA_DOCTOR]"
-    : "Nombre: [NOMBRE_DOCTOR]";
+  // Cédula profesional y especialidad van SIEMPRE, con raya si no están
+  // capturadas; la cédula de especialidad solo si existe. Antes la cédula
+  // desaparecía entera cuando faltaba, y nadie se enteraba de que faltaba.
+  const doctorLine = full
+    ? [
+        "Nombre: [NOMBRE_DOCTOR]",
+        ...doctorCredentialLines(vars).map((l) => `${l.label}: ${l.value}`),
+      ].join("\n")
+    : vars.doctorLicense
+      ? "Nombre: [NOMBRE_DOCTOR]\nCédula profesional: [CEDULA_DOCTOR]"
+      : "Nombre: [NOMBRE_DOCTOR]";
 
-  // Edad y expediente van SIEMPRE, tengan dato o no: son la identificación
+  // Edad, CURP e ID van SIEMPRE, tengan dato o no: son la identificación
   // mínima del paciente en el expediente clínico (NOM-004 numeral 5.11) y lo
   // primero que se busca cuando la carta se archiva en papel.
-  const patientIdBlock =
-    "Nombre del paciente: [NOMBRE_PACIENTE]\n" +
-    "Edad: [EDAD_PACIENTE]\n" +
-    "Número de expediente: [EXPEDIENTE_PACIENTE]";
+  const patientIdBlock = [
+    "Nombre del paciente: [NOMBRE_PACIENTE]",
+    "Edad: [EDAD_PACIENTE]",
+    ...(full
+      ? patientIdentityLines(vars).map((l) => `${l.label}: ${l.value}`)
+      : ["Número de expediente: [EXPEDIENTE_PACIENTE]"]),
+  ].join("\n");
 
   const patientBlock = isMinorRepresented
     ? patientIdBlock +
@@ -299,7 +360,7 @@ export function buildConsentContent(
 
   const raw = `CARTA DE CONSENTIMIENTO INFORMADO
 
-Establecimiento: ${clinicLine || "[NOMBRE_CLINICA]"}
+${clinicLines}
 Lugar y fecha: [LUGAR], a [FECHA]
 
 1. DATOS DEL PACIENTE

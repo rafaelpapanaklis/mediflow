@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
     // dob y patientNumber alimentan la identificación de la carta (edad y
     // número de expediente). Mismos campos que lee /api/consent/preview: el
     // texto que el doctor revisó tiene que ser el que se guarda.
-    select: { id: true, firstName: true, lastName: true, dob: true, patientNumber: true },
+    select: { id: true, firstName: true, lastName: true, dob: true, patientNumber: true, curp: true },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
@@ -138,7 +138,11 @@ export async function POST(req: NextRequest) {
     // clínica no puede colarse por el body.
     prisma.user.findFirst({
       where: { id: doctorIdRaw || ctx.userId, clinicId: ctx.clinicId, isActive: true },
-      select: { id: true, firstName: true, lastName: true, cedulaProfesional: true },
+      // `especialidad` = la de Equipo. `specialty` es el módulo del panel: no va.
+      select: {
+        id: true, firstName: true, lastName: true,
+        cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true,
+      },
     }),
   ]);
   if (doctorIdRaw && !doctor) {
@@ -153,6 +157,7 @@ export async function POST(req: NextRequest) {
   const content =
     customContent ||
     buildConsentContent(template!.key, {
+      fullIdentification: true,
       clinicName: clinic?.name ?? "",
       clinicAddress: clinic?.address ?? null,
       clinicCity: clinic?.city ?? null,
@@ -160,8 +165,11 @@ export async function POST(req: NextRequest) {
       patientName,
       patientAge: patient.dob ? calculateAge(patient.dob).years : null,
       patientNumber: patient.patientNumber ?? null,
+      patientCurp: patient.curp ?? null,
       doctorName,
       doctorLicense: doctor?.cedulaProfesional ?? null,
+      doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
+      doctorSpecialty: doctor?.especialidad ?? null,
       signerName: signerName || null,
       signerRelation: signerRelation || null,
     });

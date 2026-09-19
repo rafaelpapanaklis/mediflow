@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check, Copy, FileDown, FileSignature, Loader2, MessageCircle, MoreHorizontal,
-  PenLine, Plus, RefreshCw, Trash2, XCircle, Eye, Pencil, Link2, ShieldCheck,
+  PenLine, Plus, Printer, RefreshCw, Trash2, XCircle, Eye, Pencil, Link2, ShieldCheck,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
@@ -45,6 +45,8 @@ import { listConsentTemplates } from "@/lib/consent/templates";
 import { ageYears, isMinor } from "@/lib/consent/signers";
 import { parseConsentText, splitConsentBody } from "@/lib/consent/render";
 import type { ConsentDTO, ConsentStatus } from "@/lib/consent/types";
+import type { ConsentMissingItem } from "@/lib/consent/document-data";
+import { ConsentMissingNotice } from "./consent-missing-notice";
 import styles from "./patient-detail.module.css";
 
 interface DoctorOption {
@@ -589,9 +591,12 @@ function ConsentRow({
           <DropdownMenuContent align="end" className={styles.rowMenu}>
             {!c.signedAt && (
               <DropdownMenuItem className={styles.rowMenuItem} asChild>
+                {/* Sin firmar, el PDF ES la hoja para firmar a mano: trae las
+                    líneas de paciente, doctor y testigos en blanco. Se llama
+                    por lo que sirve, no "Ver PDF". */}
                 <a href={`/api/consent/${c.id}/pdf`} target="_blank" rel="noreferrer">
-                  <Eye size={14} aria-hidden />
-                  <span className={styles.rowMenuLabel}>{t("patients.consents.actionPdf")}</span>
+                  <Printer size={14} aria-hidden />
+                  <span className={styles.rowMenuLabel}>{t("patients.consents.actionPrint")}</span>
                 </a>
               </DropdownMenuItem>
             )}
@@ -756,6 +761,9 @@ function NewConsentModal({
   const [signerRelation, setSignerRelation] = useState("");
   const [content, setContent] = useState("");
   const [loadingText, setLoadingText] = useState(false);
+  // Datos que la carta lleva y que hoy no están capturados (dirección, logo,
+  // cédula, especialidad, CURP). Los calcula el servidor junto con el texto.
+  const [missing, setMissing] = useState<ConsentMissingItem[]>([]);
   // `touched` evita que el regenerado pise lo que el doctor ya escribió: el
   // texto es lo que va a firmar el paciente, no un borrador que la UI pueda
   // sobrescribir por cambiar un selector.
@@ -787,7 +795,14 @@ function NewConsentModal({
       setLoadingText(true);
       fetch(`/api/consent/preview?${params.toString()}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => { if (!cancelled && d?.content) setContent(d.content); })
+        .then((d) => {
+          if (cancelled || !d) return;
+          if (d.content) setContent(d.content);
+          // El aviso se calcula con el MISMO texto que se está viendo: con la
+          // carta ya editada no se regenera ninguno de los dos, para que el
+          // aviso no diga "completo" sobre un texto que sigue con rayas.
+          setMissing(Array.isArray(d.missing) ? d.missing : []);
+        })
         .catch(() => undefined)
         .finally(() => { if (!cancelled) setLoadingText(false); });
     }, 400);
@@ -800,6 +815,7 @@ function NewConsentModal({
     setTouched(false);
     setEditing(false);
     setContent("");
+    setMissing([]);
     setByRepresentative(minor);
     setSignerName("");
     setSignerRelation("");
@@ -867,6 +883,7 @@ function NewConsentModal({
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
           {created ? (
             <CreatedPanel
+              consentId={created.id}
               signUrl={created.signUrl}
               saving={saving}
               canSendWhatsApp={canSendWhatsApp}
@@ -997,6 +1014,8 @@ function NewConsentModal({
                 </span>
               </div>
 
+              <ConsentMissingNotice missing={missing} patientId={patientId} />
+
               {error ? <p className="text-xs" style={{ color: "var(--danger)" }}>{error}</p> : null}
             </>
           )}
@@ -1034,8 +1053,9 @@ function NewConsentModal({
  * la URL cruda pasa a ser una nota al pie.
  */
 function CreatedPanel({
-  signUrl, saving, canSendWhatsApp, onSendWhatsApp,
+  consentId, signUrl, saving, canSendWhatsApp, onSendWhatsApp,
 }: {
+  consentId: string;
   signUrl: string;
   saving: boolean;
   canSendWhatsApp: boolean;
@@ -1096,7 +1116,20 @@ function CreatedPanel({
         >
           {copied ? t("patients.consents.copied") : t("patients.consents.actionCopyLink")}
         </ButtonNew>
+        {/* La otra vía: papel. El PDF de una carta sin firmar sale con las
+            líneas de firma del paciente, el doctor y los testigos en blanco. */}
+        <a
+          href={`/api/consent/${consentId}/pdf`}
+          target="_blank"
+          rel="noreferrer"
+          className="btn-new btn-new--secondary"
+        >
+          <Printer size={13} aria-hidden /> {t("patients.consents.actionPrint")}
+        </a>
       </div>
+      <p className="text-[11px]" style={{ color: "var(--text-4)", marginTop: 6 }}>
+        {t("patients.consents.printHint")}
+      </p>
 
       <div>
         <div className="text-[11px] font-semibold" style={{ color: "var(--text-4)" }}>

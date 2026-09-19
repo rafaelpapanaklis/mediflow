@@ -48,7 +48,8 @@ export async function buildConsentPdf(
   const form = await prisma.consentForm.findFirst({
     where: clinicId ? { id, clinicId, deletedAt: null } : { id, deletedAt: null },
     include: {
-      patient: { select: { firstName: true, lastName: true, patientNumber: true } },
+      // patientNumber es el ID que se imprime (el folio del panel), no `id`.
+      patient: { select: { firstName: true, lastName: true, patientNumber: true, curp: true } },
       clinic: {
         select: {
           name: true, address: true, city: true, phone: true, email: true, logoUrl: true,
@@ -66,9 +67,16 @@ export async function buildConsentPdf(
   // que dar de baja al usuario no bloquee ni borre el documento): se resuelve
   // aquí, y si ya no existe la carta se imprime igual sin su nombre.
   const doctor = form.doctorId
-    ? await prisma.user.findUnique({
-        where: { id: form.doctorId },
-        select: { firstName: true, lastName: true, cedulaProfesional: true },
+    ? await prisma.user.findFirst({
+        // Acotado a la clínica de la carta: ahora se leen cédulas y
+        // especialidad, y un id suelto no debe poder traerlas de otra clínica.
+        where: { id: form.doctorId, clinicId: form.clinicId },
+        // `especialidad` es la que se captura en Equipo. `specialty` es el
+        // módulo del panel y NO va en la carta.
+        select: {
+          firstName: true, lastName: true,
+          cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true,
+        },
       })
     : null;
 
@@ -122,10 +130,13 @@ export async function buildConsentPdf(
 
     patientName,
     patientNumber: form.patient.patientNumber ?? null,
+    patientCurp: form.patient.curp ?? null,
     signerName: form.signerName ?? null,
     signerRelation: form.signerRelation ?? null,
     doctorName: doctorName || null,
     doctorLicense: doctor?.cedulaProfesional ?? null,
+    doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
+    doctorSpecialty: doctor?.especialidad ?? null,
 
     content: form.content,
     signatures,

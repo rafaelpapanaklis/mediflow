@@ -19,6 +19,7 @@ import { buildConsentContent, findConsentTemplate } from "@/lib/consent/template
 // Único cálculo de edad del repo (lógica de cumpleaños, no resta de años): un
 // off-by-one aquí saldría impreso en un documento legal.
 import { calculateAge } from "@/lib/pediatrics/age";
+import { missingConsentData } from "@/lib/consent/document-data";
 
 export async function GET(req: NextRequest) {
   const limited = rateLimit(req, 60);
@@ -45,7 +46,12 @@ export async function GET(req: NextRequest) {
     where: { id: patientId, clinicId: ctx.clinicId },
     // dob y patientNumber: la carta identifica al paciente con su edad y su
     // número de expediente, como se firma en la práctica mexicana.
-    select: { firstName: true, lastName: true, dob: true, patientNumber: true },
+    // curp y curpStatus: el CURP va en la carta, y un paciente extranjero no
+    // tiene CURP que "falte".
+    select: {
+      firstName: true, lastName: true, dob: true, patientNumber: true,
+      curp: true, curpStatus: true,
+    },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
@@ -60,15 +66,21 @@ export async function GET(req: NextRequest) {
       // timezone: la vista previa tiene que fechar EXACTAMENTE igual que el POST
       // que guarda la carta. Si aquí faltara, el doctor revisaría un día y el
       // paciente firmaría otro.
-      select: { name: true, address: true, city: true, timezone: true },
+      // logoUrl no entra en el texto: solo sirve para avisar de que falta.
+      select: { name: true, address: true, city: true, timezone: true, logoUrl: true },
     }),
     prisma.user.findFirst({
       where: { id: doctorId || ctx.userId, clinicId: ctx.clinicId, isActive: true },
-      select: { firstName: true, lastName: true, cedulaProfesional: true },
+      // `especialidad` = la de Equipo. `specialty` es el módulo del panel: no va.
+      select: {
+        firstName: true, lastName: true,
+        cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true,
+      },
     }),
   ]);
 
   const content = buildConsentContent(template.key, {
+    fullIdentification: true,
     clinicName: clinic?.name ?? "",
     clinicAddress: clinic?.address ?? null,
     clinicCity: clinic?.city ?? null,
@@ -76,11 +88,25 @@ export async function GET(req: NextRequest) {
     patientName: `${patient.firstName} ${patient.lastName}`.trim(),
     patientAge: patient.dob ? calculateAge(patient.dob).years : null,
     patientNumber: patient.patientNumber ?? null,
+    patientCurp: patient.curp ?? null,
     doctorName: doctor ? `${doctor.firstName ?? ""} ${doctor.lastName ?? ""}`.trim() : "",
     doctorLicense: doctor?.cedulaProfesional ?? null,
+    doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
+    doctorSpecialty: doctor?.especialidad ?? null,
     signerName: signerName || null,
     signerRelation: signerRelation || null,
   });
 
-  return NextResponse.json({ procedure: template.label, content });
+  // Lo que falta se dice ANTES de crear la carta, para que el modal lo avise
+  // con el enlace a donde se captura. No bloquea: la carta se puede crear igual.
+  const missing = missingConsentData({
+    clinicAddress: clinic?.address ?? null,
+    clinicLogoUrl: clinic?.logoUrl ?? null,
+    doctorLicense: doctor?.cedulaProfesional ?? null,
+    doctorSpecialty: doctor?.especialidad ?? null,
+    patientCurp: patient.curp ?? null,
+    patientCurpStatus: patient.curpStatus ?? null,
+  });
+
+  return NextResponse.json({ procedure: template.label, content, missing });
 }

@@ -1,5 +1,11 @@
 import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
 import { formatConsentDate, formatConsentDateTime } from "@/lib/consent/dates";
+import {
+  consentValue,
+  consentValueOrBlank,
+  doctorCredentialLines,
+  patientIdentityLines,
+} from "@/lib/consent/document-data";
 
 /**
  * ConsentDocument — PDF de la carta de consentimiento informado.
@@ -19,6 +25,12 @@ import { formatConsentDate, formatConsentDateTime } from "@/lib/consent/dates";
  * que llega como prop obligatoria. Este componente se renderiza en el servidor,
  * donde la zona local es UTC: sin ella el PDF fechaba las firmas seis horas
  * adelante y contradecía a la pantalla que el paciente acababa de ver.
+ *
+ * DATOS DE IDENTIFICACIÓN: CURP e ID del paciente, cédula(s) y especialidad del
+ * doctor y dirección de la clínica van SIEMPRE con su etiqueta. Si el dato no
+ * está capturado sale la raya para llenarlo a mano — nunca se omite el renglón
+ * (así nadie nota que falta) ni se imprime "undefined" o un "N/A". Las etiquetas
+ * y la raya salen de `lib/consent/document-data`, las mismas que usa el texto.
  *
  * Mismo lenguaje visual que QuoteDocument y PrescriptionDocument.
  */
@@ -55,11 +67,19 @@ export interface ConsentDocumentProps {
   timeZone: string;
 
   patientName: string;
+  /** ID del paciente = `Patient.patientNumber` (el folio), NUNCA el id interno. */
   patientNumber: string | null;
+  /** `Patient.curp`. */
+  patientCurp: string | null;
   signerName: string | null;
   signerRelation: string | null;
   doctorName: string | null;
+  /** `User.cedulaProfesional`. */
   doctorLicense: string | null;
+  /** `User.cedulaEspecialidad`. Solo se imprime si existe. */
+  doctorSpecialtyLicense: string | null;
+  /** `User.especialidad` (la de Equipo), no `User.specialty`. */
+  doctorSpecialty: string | null;
 
   /** Texto íntegro de la carta, tal como se guardó y como lo leyó el paciente. */
   content: string;
@@ -178,7 +198,14 @@ function SignatureCell({ block, timeZone }: { block: ConsentSignatureBlock; time
 }
 
 export function ConsentDocument(props: ConsentDocumentProps) {
-  const clinicLine2 = [props.clinicAddress, props.clinicCity].filter(Boolean).join(", ");
+  // Dirección con etiqueta y, si falta, con raya: en el membrete un hueco
+  // silencioso es justo lo que hacía que nadie supiera que faltaba.
+  const clinicAddress = consentValue(props.clinicAddress);
+  const clinicLine2 =
+    "Dirección: " +
+    (clinicAddress
+      ? [clinicAddress, consentValue(props.clinicCity)].filter(Boolean).join(", ")
+      : consentValueOrBlank(null));
   const clinicLine3 = [
     props.clinicPhone ? `Tel: ${props.clinicPhone}` : null,
     props.clinicEmail,
@@ -198,7 +225,7 @@ export function ConsentDocument(props: ConsentDocumentProps) {
             {props.logoDataUrl ? <PdfImage style={styles.logo} src={props.logoDataUrl} /> : null}
             <View>
               <Text style={styles.brand}>{props.clinicName}</Text>
-              {clinicLine2 ? <Text style={styles.brandSub}>{clinicLine2}</Text> : null}
+              <Text style={styles.brandSub}>{clinicLine2}</Text>
               {clinicLine3 ? <Text style={styles.brandSub}>{clinicLine3}</Text> : null}
             </View>
           </View>
@@ -226,9 +253,9 @@ export function ConsentDocument(props: ConsentDocumentProps) {
             <View style={styles.col}>
               <Text style={styles.label}>Paciente</Text>
               <Text style={styles.value}>{props.patientName}</Text>
-              {props.patientNumber ? (
-                <Text style={styles.sub}>Expediente: {props.patientNumber}</Text>
-              ) : null}
+              {patientIdentityLines(props).map((l) => (
+                <Text key={l.label} style={styles.sub}>{l.label}: {l.value}</Text>
+              ))}
               {props.signerName ? (
                 <View>
                   <Text style={[styles.label, { marginTop: 6 }]}>Representante legal</Text>
@@ -242,9 +269,9 @@ export function ConsentDocument(props: ConsentDocumentProps) {
             <View style={styles.col}>
               <Text style={styles.label}>Estomatólogo responsable</Text>
               <Text style={styles.value}>{props.doctorName || "—"}</Text>
-              {props.doctorLicense ? (
-                <Text style={styles.sub}>Cédula profesional: {props.doctorLicense}</Text>
-              ) : null}
+              {doctorCredentialLines(props).map((l) => (
+                <Text key={l.label} style={styles.sub}>{l.label}: {l.value}</Text>
+              ))}
               <Text style={[styles.label, { marginTop: 6 }]}>Lugar y fecha</Text>
               <Text style={styles.sub}>
                 {(props.place || "—") + ", a " + formatConsentDate(props.issuedAt, props.timeZone)}
