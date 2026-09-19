@@ -240,71 +240,35 @@ function preguntar(pregunta: string, extra: Record<string, unknown> = {}) {
  * 1 · El catálogo llega al modelo
  * ══════════════════════════════════════════════════════════════════════ */
 
-const LAS_DIEZ = [
-  "agenda_ocupacion",
-  "ausencias",
-  "buscar_paciente",
-  "citas_del_dia",
-  "ingresos_por_periodo",
-  "pacientes_con_deuda",
-  "pacientes_inactivos",
-  "pacientes_nuevos",
-  "resumen_clinica",
-  "tratamientos_por_ingreso",
-];
-
 /**
- * Las de agenda y pacientes (ws1-t2, ws1-t3) y las de dinero (ws1-t2):
- * proponer_horarios y facturas_de_paciente leen; las demás solo proponen.
+ * Aquí NO va la lista de nombres escrita a mano. La hubo, y se pudría con cada
+ * herramienta nueva: la prueba se ponía roja sin que nada estuviera roto
+ * (`cumpleanos`, `pacientes_con_etiqueta` y `proximas_citas` entraron al motor y
+ * nadie las apuntó aquí). Lo que esta prueba protege es el CAMINO: que todo lo
+ * que declara `SABINA_TOOLS` —consultas y la mitad «proponer» de cada acción—
+ * llegue al modelo, sin que sobre ni falte nada, y con su esquema. Qué
+ * herramientas existen lo fija `engine-catalog.ts`, y cada una tiene sus propias
+ * pruebas; el suelo de abajo solo impide que el catálogo encoja sin que alguien
+ * venga a decirlo aquí.
  */
-const LAS_NUEVAS = [
-  "agendar_cita",
-  "avisar_saldo_whatsapp",
-  "cancelar_cita",
-  "cobrar_factura",
-  "crear_factura",
-  "facturas_de_paciente",
-  "proponer_horarios",
-  "reagendar_cita",
-  "registrar_paciente",
-];
+const SUELO_DEL_CATALOGO = 31;
 
-/** Caja (ws1-t3): una sola consulta con tres vistas. Sabina no abre, no retira y no cierra. */
-const LAS_DE_CAJA = ["caja"];
-
-/** Las tres de CLÍNICO (ws1-t4): todas de solo lectura. */
-const LAS_DE_CLINICO = ["recetas", "estudios_del_paciente", "analisis_y_notas_de_estudio"];
-
-/** Las dos de LA CLÍNICA (ws1-t5): el catálogo de precios y el cuadro de profesionales. */
-const LAS_DE_LA_CLINICA = ["procedimientos_y_precios", "equipo_clinica"];
-/** Comparar sedes (ws1-t4): la única que mira más de una clínica. Solo lee. */
-const LAS_DE_SEDES = ["comparar_sedes"];
-/** Lo que se escapa (ws1-t8): una sola, con `tipo` para pedir una lista concreta. */
-const LAS_DE_ESCAPE = ["oportunidades_perdidas"];
-/** El odontograma (ws1-t1): lee los hallazgos que el doctor marcó, y nada más. */
-const LA_DEL_ODONTOGRAMA = ["odontograma"];
-
-test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja, las tres de clínico, las dos de la clínica, la de sedes, la de lo que se escapa y la del odontograma, con su esquema", async () => {
+test("el modelo recibe el catálogo ENTERO de Sabina —ni una de más, ni una de menos—, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
   const res = await preguntar("hola");
   assert.equal(res.status, 200);
 
-  const tools = estado.peticiones[0]?.tools ?? [];
-  assert.deepEqual(
-    tools.map((t: any) => t.name).sort(),
-    [
-      ...LAS_DIEZ,
-      ...LAS_NUEVAS,
-      ...LAS_DE_CAJA,
-      ...LAS_DE_CLINICO,
-      ...LAS_DE_LA_CLINICA,
-      ...LAS_DE_SEDES,
-      ...LAS_DE_ESCAPE,
-      ...LA_DEL_ODONTOGRAMA,
-    ].sort(),
+  const { SABINA_TOOLS } = await import("../engine-catalog");
+  const delCatalogo = SABINA_TOOLS.map((h) => h.nombre);
+  assert.equal(new Set(delCatalogo).size, delCatalogo.length, "hay nombres repetidos en SABINA_TOOLS");
+  assert.ok(
+    delCatalogo.length >= SUELO_DEL_CATALOGO,
+    `el catálogo encogió a ${delCatalogo.length} (eran ${SUELO_DEL_CATALOGO}): si se quitó una a propósito, baja el suelo`,
   );
 
-  const { SABINA_TOOLS } = await import("../engine-catalog");
+  const tools = estado.peticiones[0]?.tools ?? [];
+  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...delCatalogo].sort());
+
   for (const t of tools) {
     const tool = SABINA_TOOLS.find((h) => h.nombre === t.name)!;
     assert.equal(t.input_schema.type, "object", t.name);
