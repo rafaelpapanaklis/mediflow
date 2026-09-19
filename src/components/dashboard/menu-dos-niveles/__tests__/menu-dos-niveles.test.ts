@@ -113,36 +113,38 @@ test("conteos por tipo de usuario — clínica dental, plan Profesional o en pru
   const cuenta = (role: UserRole, mods: string[]) => opcionesVisibles(persona(role), "DENTAL", mods).length;
   assert.deepEqual(
     ROLES.slice(0, 5).map((r) => cuenta(r, MODULOS_PRO)),
-    [23, 23, 9, 10, 15],
+    [24, 24, 10, 10, 15],
     "Profesional: dueño, administrador, doctor, recepción, solo lectura",
   );
   assert.deepEqual(
     ROLES.slice(0, 5).map((r) => cuenta(r, MODULOS_BASICO)),
-    [20, 20, 8, 9, 14],
+    [21, 21, 9, 9, 14],
     "Básico",
   );
 });
 
-test("dueño, plan Profesional: dónde acaba cada una de las 23 opciones", () => {
+test("dueño, plan Profesional: dónde acaba cada una de las 24 opciones", () => {
   const menu = armarMenu(opcionesVisibles(persona("SUPER_ADMIN"), "DENTAL", MODULOS_PRO));
   assert.deepEqual(menu.nivel1.map((it) => it.id), ["home", "appointments", "patients", "inbox", "billing", "sabina"]);
   assert.deepEqual(
     menu.grupos.map((g) => [g.id, g.items.map((it) => it.id)]),
     [
       ["dinero", ["finanzas", "analytics", "reports"]],
-      ["clinica", ["team", "resources", "inventory", "procedures", "clinic-layout"]],
+      ["clinica", ["team", "resources", "inventory", "procedures", "plantillas", "clinic-layout"]],
       ["pacientes", ["landing", "resenas", "tv-modes", "messages"]],
       ["sistema", ["settings", "auditoria", "soporte"]],
       ["mas", ["ai", "marketplace"]],
     ],
   );
-  assert.equal(idsDe(menu).length, 23);
+  assert.equal(idsDe(menu).length, 24);
 });
 
 test("doctor, plan Profesional: primer nivel sin «WhatsApp y recordatorios» y segundo nivel con lo suyo", () => {
   const menu = armarMenu(opcionesVisibles(persona("DOCTOR"), "DENTAL", MODULOS_PRO));
   assert.deepEqual(menu.nivel1.map((it) => it.id), ["home", "appointments", "patients", "inbox", "billing", "sabina"]);
   assert.deepEqual(menu.grupos.map((g) => [g.id, g.items.map((it) => it.id)]), [
+    // Plantillas (WS1-T1): las escribe el doctor, así que es lo único de «clinica» que ve.
+    ["clinica", ["plantillas"]],
     ["sistema", ["soporte"]],
     ["mas", ["ai", "marketplace"]],
   ]);

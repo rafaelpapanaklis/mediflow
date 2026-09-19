@@ -10,8 +10,9 @@
 --   firmar. `templateId` es nullable + ON DELETE SET NULL: borrar la plantilla
 --   no rompe el documento.
 --
--- SQL plano e idempotente salvo los ADD CONSTRAINT (Postgres no tiene
--- ADD CONSTRAINT IF NOT EXISTS): si repites el Run, esos dan «already exists».
+-- SQL plano e idempotente salvo los ADD CONSTRAINT y los CREATE POLICY (Postgres
+-- no tiene IF NOT EXISTS para ninguno de los dos): si repites el Run, esos dan
+-- «already exists».
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS "document_templates" (
@@ -88,7 +89,17 @@ ALTER TABLE "patient_documents"
     FOREIGN KEY ("templateId") REFERENCES "document_templates"("id")
     ON DELETE SET NULL ON UPDATE CASCADE;
 
--- Prisma entra con el rol dueño y no pasa por RLS; encenderlo sin políticas
--- deja a anon/authenticated (la API pública de Supabase) sin acceso a nada.
+-- RLS, con la convención de la casa: encendido y UNA política "<tabla>_deny_anon"
+-- que cierra la API pública de Supabase (anon / authenticated). El panel entra
+-- como `postgres` (rolbypassrls = true), así que a Prisma no le afecta.
+-- CREATE POLICY tampoco tiene IF NOT EXISTS: si repites el Run, «already exists».
 ALTER TABLE "document_templates" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "patient_documents" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "document_templates_deny_anon" ON "document_templates"
+    AS PERMISSIVE FOR ALL TO anon, authenticated
+    USING (false) WITH CHECK (false);
+
+CREATE POLICY "patient_documents_deny_anon" ON "patient_documents"
+    AS PERMISSIVE FOR ALL TO anon, authenticated
+    USING (false) WITH CHECK (false);

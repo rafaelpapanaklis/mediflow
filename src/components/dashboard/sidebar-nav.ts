@@ -13,9 +13,10 @@ import {
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, Wallet, PiggyBank, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ShoppingBag, Baby, Zap, Smile, Anchor, Truck, ShoppingCart,
-  LifeBuoy, Star, ScrollText, type LucideIcon,
+  LifeBuoy, Star, ScrollText, FileText, type LucideIcon,
 } from "lucide-react";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { TEMPLATES_WRITE_PERMISSION } from "@/lib/document-templates/permissions";
 import { PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import {
@@ -205,6 +206,10 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "team",           section: "admin", label: "Equipo",            href: "/dashboard/team",          icon: UserCog,        permission: "team.view" },
   { id: "landing",        section: "admin", label: "Página web",        href: "/dashboard/landing",       icon: Globe,          permission: "landing.view", moduleKey: "landing" },
   { id: "procedures",     section: "admin", label: "Procedimientos",    href: "/dashboard/procedures",    icon: ClipboardList,  permission: "procedures.view" },
+  // Plantillas de nota de evolución y de consentimiento (WS1-T1). El permiso es
+  // el de quien las escribe — doctor o (super)admin —, el mismo que exige la API:
+  // ver src/lib/document-templates/permissions.ts.
+  { id: "plantillas",     section: "admin", label: "Plantillas",        href: "/dashboard/plantillas",    icon: FileText,       permission: TEMPLATES_WRITE_PERMISSION },
   { id: "clinic-layout",  section: "admin", label: "Mi Clínica Visual", href: "/dashboard/clinic-layout", icon: Building2, adminOnly: true, permission: "clinicLayout.view" },
   // Soporte Técnico: sin `permission` a propósito — cualquier usuario de la
   // clínica puede levantar tickets hacia DaleControl. Va JUSTO ARRIBA de
