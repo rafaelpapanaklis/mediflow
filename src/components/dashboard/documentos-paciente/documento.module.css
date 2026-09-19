@@ -1,0 +1,414 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Documentos del paciente: la HOJA (nota de evolución, consentimiento…),
+   su barra de acciones y el aviso de datos faltantes.
+
+   Es una CARTA, no una ficha de formulario: hoja de papel sobre una mesa,
+   márgenes generosos, el texto a ~65 caracteres de ancho, y una jerarquía en
+   la que el título manda, las etiquetas son pequeñas y los VALORES se leen.
+
+   Todo cuelga de `.raiz`, que se monta junto a `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`): de ahí salen los `--m2-*` con su versión
+   oscura. Aquí solo se LEEN; lo que el menú no tiene (aviso) sale de los
+   tokens semánticos de globals.css. No hay ningún hex.
+
+   La barra de acciones NO es parte de la carta: va fuera de la hoja, pegada
+   arriba, y no se imprime (ver `impresion.ts`).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  --doc-mesa: var(--m2-n1-fondo);
+  --doc-papel: var(--m2-tarjeta);
+  --doc-tinta: var(--m2-texto);
+  --doc-tinta-2: var(--m2-texto-2);
+  --doc-tinta-3: var(--m2-texto-3);
+  --doc-filete: var(--m2-tarjeta-borde);
+  --doc-acento: var(--m2-activo);
+  /* El acento cuando es TEXTO sobre el papel: el del menú se lee en claro y en oscuro. */
+  --doc-acento-texto: var(--m2-iniciales-texto);
+  /* Las piezas del sistema de diseño (.btn-new) leen estas globales. */
+  --brand: var(--m2-activo);
+  --text-1: var(--m2-texto);
+  --text-2: var(--m2-texto-2);
+  --text-3: var(--m2-texto-3);
+  --bg-elev: var(--m2-tarjeta);
+  --bg-hover: var(--m2-hover);
+  --border-soft: var(--m2-tarjeta-borde);
+  --border-strong: var(--m2-borde);
+  --radius: 10px;
+  color: var(--doc-tinta);
+}
+
+/* En oscuro la hoja NO se invierte a negro: es la tarjeta del menú aclarada con
+   un poco de su propia tinta, para que siga leyéndose como papel sobre la mesa. */
+:global(.dark) .raiz {
+  --doc-papel: color-mix(in srgb, var(--m2-tarjeta) 88%, var(--m2-texto));
+  --doc-filete: color-mix(in srgb, var(--m2-tarjeta) 78%, var(--m2-texto));
+}
+
+/* ── La mesa y la barra ─────────────────────────────────────────────── */
+
+.mesa {
+  background: var(--doc-mesa);
+  border: 1px solid var(--m2-borde);
+  border-radius: 14px;
+  padding: 0 clamp(8px, 3vw, 28px) clamp(16px, 4vw, 40px);
+}
+
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  background: var(--doc-mesa);
+}
+
+.barraAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.estado {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--doc-tinta);
+  border: 1px solid var(--doc-filete);
+  background: var(--doc-papel);
+}
+.estadoAviso {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+}
+.estadoBien {
+  border-color: var(--success);
+  background: var(--success-soft);
+}
+
+/* ── La hoja ────────────────────────────────────────────────────────── */
+
+.hoja {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 816px; /* una carta a 96 ppp */
+  margin: 0 auto;
+  padding: clamp(24px, 7vw, 72px) clamp(20px, 8vw, 88px);
+  background: var(--doc-papel);
+  border: 1px solid var(--doc-filete);
+  border-radius: 4px;
+  box-shadow: var(--m2-sombra);
+  overflow-wrap: anywhere;
+}
+
+.cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px 24px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--doc-acento);
+}
+
+.membrete {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.logo {
+  flex: none;
+  width: auto;
+  max-width: 132px;
+  height: 52px;
+  object-fit: contain;
+  object-position: left top;
+}
+
+.clinica {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--doc-tinta);
+}
+/* Sin logo, el nombre de la clínica hace de identidad: más grande. */
+.clinicaSola {
+  font-size: 24px;
+}
+
+.clinicaDato {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--doc-tinta-2);
+}
+
+.fecha {
+  flex: none;
+  text-align: right;
+}
+
+.etiqueta {
+  display: block;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: var(--doc-tinta-3);
+}
+
+.valor {
+  display: block;
+  margin: 3px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--doc-tinta);
+}
+
+.partes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 32px;
+  margin: 24px 0 0;
+}
+
+.detalle {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--doc-tinta-3);
+}
+.detalle b {
+  font-weight: 500;
+  color: var(--doc-tinta-2);
+}
+/* La raya para llenar a mano: un hueco con su etiqueta, nunca un dato inventado. */
+.raya {
+  display: inline-block;
+  width: 7em;
+  border-bottom: 1px solid var(--doc-tinta-3);
+  vertical-align: baseline;
+}
+
+.sello {
+  margin: 36px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--doc-tinta-3);
+}
+
+.titulo {
+  margin: 6px 0 0;
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--doc-tinta);
+}
+
+/* ── El cuerpo: lo que se lee ───────────────────────────────────────── */
+
+.cuerpo {
+  max-width: 65ch;
+  margin: 24px 0 0;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--doc-tinta);
+}
+.cuerpo p { margin: 0 0 1em; }
+.cuerpo ul,
+.cuerpo ol { margin: 0 0 1em; padding-left: 1.5em; }
+.cuerpo ul { list-style: disc; }
+.cuerpo ol { list-style: decimal; }
+.cuerpo li { margin: 0.2em 0; }
+.cuerpo h1,
+.cuerpo h2,
+.cuerpo h3 { margin: 1.4em 0 0.4em; font-weight: 700; line-height: 1.25; }
+.cuerpo h1 { font-size: 21px; }
+.cuerpo h2 { font-size: 18px; }
+.cuerpo h3 { font-size: 16px; }
+.cuerpo > :first-child { margin-top: 0; }
+
+/* ── El editor: la misma hoja, con el cuerpo abierto ────────────────── */
+
+.herramientas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 65ch;
+  margin: 24px 0 0;
+  padding: 4px;
+  border: 1px solid var(--doc-filete);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--doc-mesa);
+}
+.herramienta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--doc-tinta-2);
+  cursor: pointer;
+}
+.herramienta:hover { background: var(--m2-hover); color: var(--doc-tinta); }
+.herramienta:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+.cuerpoEditable {
+  box-sizing: border-box;
+  min-height: 320px;
+  margin-top: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--doc-filete);
+  border-radius: 0 0 8px 8px;
+  outline: none;
+}
+.cuerpoEditable:focus { border-color: var(--doc-acento); box-shadow: var(--m2-foco); }
+
+.pista {
+  max-width: 65ch;
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--doc-tinta-3);
+}
+
+/* ── El pie de firma ────────────────────────────────────────────────── */
+
+.firma {
+  width: min(100%, 400px);
+  margin: 56px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--doc-tinta);
+  break-inside: avoid;
+}
+.firmaNombre {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--doc-tinta);
+}
+.firmaDato {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--doc-tinta-2);
+}
+.firmaSello {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--doc-acento-texto);
+}
+.firmaBorrador { color: var(--doc-tinta-3); }
+
+/* ── El aviso de datos faltantes ────────────────────────────────────── */
+/* Sale casi siempre (0 de 15 clínicas tienen dirección): es una lista de
+   pendientes con su atajo, no una alarma. Por eso papel y filete, y del color
+   de aviso solo una franja y el icono. */
+
+.aviso {
+  display: flex;
+  gap: 12px;
+  max-width: 816px;
+  margin: 0 auto;
+  padding: 14px 16px;
+  border: 1px solid var(--doc-filete);
+  border-left: 3px solid var(--warning);
+  border-radius: 10px;
+  background: var(--doc-papel);
+  color: var(--doc-tinta);
+}
+.avisoIcono { flex: none; margin-top: 2px; color: var(--warning); }
+.avisoTitulo { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.35; }
+.avisoLista { margin: 8px 0 0; padding: 0; list-style: none; }
+.avisoFila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 16px;
+  padding: 7px 0;
+  border-top: 1px solid var(--doc-filete);
+  font-size: 13px;
+  color: var(--doc-tinta-2);
+}
+.avisoEnlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--doc-acento-texto);
+  text-decoration: none;
+}
+.avisoEnlace:hover { text-decoration: underline; }
+.avisoEnlace:focus-visible { outline: none; border-radius: 4px; box-shadow: var(--m2-foco); }
+.avisoPista { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--doc-tinta-3); }
+
+/* ── Teléfono ───────────────────────────────────────────────────────── */
+
+@media (max-width: 560px) {
+  .partes { grid-template-columns: minmax(0, 1fr); }
+  .fecha { text-align: left; }
+  .barraAcciones {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin-left: 0;
+  }
+  .barraAcciones > * { justify-content: center; }
+}
+
+/* ── Papel de verdad ────────────────────────────────────────────────── */
+/* Al imprimir la hoja es blanca y la tinta negra, esté el panel en claro o en
+   oscuro. Colores con nombre: aquí no hay token que valga, es papel. */
+
+@media print {
+  /* Los dos selectores: `:global(.dark) .raiz` pesa más que `.raiz` y un
+     @media no suma especificidad; sin el segundo, en oscuro ganaba el papel oscuro. */
+  .raiz,
+  :global(.dark) .raiz {
+    --doc-papel: white;
+    --doc-tinta: black;
+    --doc-tinta-2: dimgray;
+    --doc-tinta-3: gray;
+    --doc-filete: lightgray;
+    --doc-acento: black;
+    --doc-acento-texto: black;
+  }
+  .hoja {
+    max-width: none;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .cuerpo { font-size: 11.5pt; line-height: 1.6; }
+  .cuerpo p, .cuerpo li { orphans: 3; widows: 3; }
+  .cuerpo h1, .cuerpo h2, .cuerpo h3 { break-after: avoid; }
+}

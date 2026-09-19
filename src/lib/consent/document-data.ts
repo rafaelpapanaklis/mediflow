@@ -19,78 +19,37 @@
 // PURO: sin Prisma, sin React y sin red. Lo importan el cliente y el servidor.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// La raya, la lista de faltantes y sus sitios de captura son COMUNES a todos los
+// documentos del paciente (la nota de evolución avisa de lo mismo): viven en
+// `@/lib/patient-documents/faltantes`. Aquí se conservan los nombres de
+// siempre para que la carta, su PDF y sus pruebas no cambien.
+import {
+  RAYA_PARA_LLENAR,
+  datosFaltantes,
+  valorCapturado,
+  valorORaya,
+  type DatoFaltante,
+  type DatoFaltanteClave,
+  type DatosDelDocumento,
+  type LugarDeCaptura,
+} from "@/lib/patient-documents/faltantes";
+
 /** Raya para llenar a mano. La misma en el texto de la carta y en el PDF. */
-export const CONSENT_BLANK = "______";
+export const CONSENT_BLANK = RAYA_PARA_LLENAR;
 
 /** Valor capturado, o "" si no hay nada que imprimir. */
-export function consentValue(value: string | null | undefined): string {
-  return (value ?? "").trim();
-}
+export const consentValue = valorCapturado;
 
 /** Valor capturado, o la raya. Lo que va DESPUÉS de una etiqueta. */
-export function consentValueOrBlank(value: string | null | undefined): string {
-  return consentValue(value) || CONSENT_BLANK;
-}
+export const consentValueOrBlank = valorORaya;
 
-/** Un dato que el documento lleva y que hoy no está capturado. */
-export type ConsentMissingKey =
-  | "clinicAddress"
-  | "clinicLogo"
-  | "doctorLicense"
-  | "doctorSpecialty"
-  | "patientCurp";
+export type ConsentMissingKey = DatoFaltanteClave;
+export type ConsentFixPlace = LugarDeCaptura;
+export type ConsentMissingItem = DatoFaltante;
+export type ConsentDataCheckInput = DatosDelDocumento;
 
-/** Dónde se captura: Configuración, Equipo o la ficha del paciente. */
-export type ConsentFixPlace = "settings" | "team" | "patient";
-
-export interface ConsentMissingItem {
-  key: ConsentMissingKey;
-  fixIn: ConsentFixPlace;
-}
-
-export interface ConsentDataCheckInput {
-  clinicAddress?: string | null;
-  clinicLogoUrl?: string | null;
-  /** `User.cedulaProfesional`. */
-  doctorLicense?: string | null;
-  /** `User.especialidad` (la de Equipo) — NO `User.specialty`, que es el módulo del panel. */
-  doctorSpecialty?: string | null;
-  patientCurp?: string | null;
-  /**
-   * `Patient.curpStatus`. Un paciente marcado FOREIGN no tiene CURP que
-   * capturar: avisar de que "falta" mandaría a la recepción a buscar un dato
-   * que no existe.
-   */
-  patientCurpStatus?: string | null;
-}
-
-const FIX_PLACE: Record<ConsentMissingKey, ConsentFixPlace> = {
-  clinicAddress: "settings",
-  clinicLogo: "settings",
-  doctorLicense: "team",
-  doctorSpecialty: "team",
-  patientCurp: "patient",
-};
-
-/**
- * Los datos que faltan, en el orden en que se leen en la carta (clínica,
- * doctor, paciente). Lista vacía = documento completo.
- *
- * La cédula de especialidad NO cuenta como faltante: solo la tiene quien cursó
- * una especialidad, y pedírsela a un odontólogo general sería un aviso falso
- * que enseña a ignorar el aviso.
- */
-export function missingConsentData(input: ConsentDataCheckInput): ConsentMissingItem[] {
-  const missing: ConsentMissingKey[] = [];
-  if (!consentValue(input.clinicAddress)) missing.push("clinicAddress");
-  if (!consentValue(input.clinicLogoUrl)) missing.push("clinicLogo");
-  if (!consentValue(input.doctorLicense)) missing.push("doctorLicense");
-  if (!consentValue(input.doctorSpecialty)) missing.push("doctorSpecialty");
-  if (!consentValue(input.patientCurp) && input.patientCurpStatus !== "FOREIGN") {
-    missing.push("patientCurp");
-  }
-  return missing.map((key) => ({ key, fixIn: FIX_PLACE[key] }));
-}
+/** Los datos que le faltan a la carta. Ver `datosFaltantes`. */
+export const missingConsentData = datosFaltantes;
 
 /** Un renglón "Etiqueta: valor" del bloque de identificación. */
 export interface ConsentLabeledLine {

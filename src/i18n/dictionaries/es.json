@@ -9366,7 +9366,55 @@
     "readNoteId": "Nota",
     "readNoContent": "Una consulta no modifica nada. La bitácora guarda quién y cuándo, no el contenido."
   },
+  "documentosPaciente": {
+    "hoja": {
+      "date": "Fecha",
+      "patient": "Paciente",
+      "record": "Expediente",
+      "doctor": "Doctor",
+      "license": "Cédula profesional",
+      "specialtyLicense": "Cédula de especialidad",
+      "specialty": "Especialidad",
+      "blank": "sin capturar, para llenar a mano",
+      "signed": "Firmada electrónicamente · {date}",
+      "draft": "Borrador · todavía no está firmada"
+    },
+    "acciones": {
+      "pdf": "Descargar PDF",
+      "print": "Imprimir",
+      "whatsapp": "WhatsApp",
+      "email": "Correo",
+      "onlySigned": "Puedes descargarla o imprimirla como borrador. Para enviarla al paciente, primero fírmala.",
+      "sentTo": "Enviado a {destino}.",
+      "error": "No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.",
+      "confirm": {
+        "whatsappTitle": "¿Enviar por WhatsApp?",
+        "whatsappBody": "Se enviará el PDF al WhatsApp que el paciente tiene registrado en su expediente. Solo sale si el paciente le escribió a la clínica en las últimas 24 horas; si no, te lo diremos y no se cobra nada.",
+        "correoTitle": "¿Enviar por correo?",
+        "correoBody": "Se enviará el documento al correo que el paciente tiene registrado en su expediente."
+      }
+    },
+    "faltantes": {
+      "title": {
+        "nota": "A esta nota le faltan datos",
+        "carta": "A esta carta le faltan datos"
+      },
+      "hint": {
+        "nota": "Puedes firmarla igual: cada dato que falte sale como una línea en blanco con su etiqueta, para llenarla a mano. Si lo capturas ahora, vuelve a abrir la nota y saldrá completa. Una nota ya firmada no cambia.",
+        "carta": "Puedes crearla igual: cada dato que falte sale como una línea en blanco con su etiqueta, para llenarla a mano. Si lo capturas ahora, vuelve a abrir esta ventana y la carta saldrá completa."
+      },
+      "clinicAddress": "Dirección de la clínica",
+      "clinicLogo": "Logo de la clínica",
+      "doctorLicense": "Cédula profesional del doctor",
+      "doctorSpecialty": "Especialidad del doctor",
+      "patientCurp": "CURP del paciente",
+      "fixSettings": "Capturar en Configuración",
+      "fixTeam": "Capturar en Equipo",
+      "fixPatient": "Capturar en la ficha del paciente"
+    }
+  },
   "notaEvolucionDoc": {
+    "kind": "Nota de evolución",
     "title": "Notas de evolución",
     "subtitle": "Las notas de este paciente, de la más nueva a la más vieja.",
     "new": "Nueva nota de evolución",
@@ -9395,6 +9443,15 @@
       "license": "Cédula profesional"
     },
     "editor": {
+      "toolbar": "Formato del texto",
+      "format": {
+        "bold": "Negrita",
+        "italic": "Cursiva",
+        "underline": "Subrayado",
+        "heading": "Título",
+        "list": "Lista",
+        "numbered": "Lista numerada"
+      },
       "label": "Texto de la nota",
       "headerHint": "La cabecera se llena sola con los datos del paciente, la clínica y tu usuario.",
       "saveDraft": "Guardar borrador",
