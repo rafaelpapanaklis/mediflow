@@ -68,7 +68,7 @@ test("los dos grupos son Clínico y Archivos, con su contenido; «Más» ya no s
   menu.grupos.forEach((g) => { porId[g.id] = g.items.map((i) => i.id); });
   // Implantes (con módulo) va con lo clínico: antes caía en «Más» por suelto.
   assert.deepEqual(porId.clinico, [
-    "historia", "cuestionario", "historial-consultas", "recetas", "consentimientos", "implantes",
+    "historia", "cuestionario", "historial-consultas", "nota-evolucion", "recetas", "consentimientos", "implantes",
   ]);
   assert.deepEqual(porId.archivos, ["radiografias", "fotos", "subidos", "modelos-3d"]);
   // «Presupuestos» salió del menú en ws1-t1 (se unió con Facturación) y
