@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./procedures.module.css";
+import { margenDe } from "./margen";
 // Mismos tokens `--pr-*` e Instrument Sans del rediseño de Pacientes: es el
 // idioma visual ya aprobado por Rafael, no uno nuevo. Se heredan por CSS
 // (custom properties), así que reutilizarlos aquí no acopla este módulo al
@@ -27,9 +28,10 @@ import {
 interface Procedure {
   id: string;
   name: string;
-  code: string | null;
   category: string;
   basePrice: number;
+  /** Gasto de la clínica. null = no medido (≠ 0). */
+  cost: number | null;
   duration: number | null;
   description: string | null;
   isActive: boolean;
@@ -59,9 +61,9 @@ const CATEGORY_LABEL_KEY: Record<string, string> = Object.fromEntries(
 
 interface FormState {
   name: string;
-  code: string;
   category: string;
   basePrice: string;
+  cost: string;
   duration: string;
   description: string;
   isActive: boolean;
@@ -69,9 +71,9 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   name: "",
-  code: "",
   category: "general",
   basePrice: "",
+  cost: "",
   duration: "",
   description: "",
   isActive: true,
@@ -94,7 +96,6 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
     return procedures.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
-        (p.code ?? "").toLowerCase().includes(q) ||
         (p.description ?? "").toLowerCase().includes(q) ||
         p.category.toLowerCase().includes(q)
     );
@@ -118,9 +119,9 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
     setEditing(p);
     setForm({
       name: p.name,
-      code: p.code ?? "",
       category: p.category,
       basePrice: String(p.basePrice),
+      cost: p.cost != null ? String(p.cost) : "",
       duration: p.duration != null ? String(p.duration) : "",
       description: p.description ?? "",
       isActive: p.isActive,
@@ -146,14 +147,20 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
       toast.error(t("pages.procedures.invalidPrice"));
       return;
     }
+    // Vacío = null («no lo hemos medido»), que no es lo mismo que 0.
+    const cost = form.cost.trim() === "" ? null : Number(form.cost);
+    if (cost !== null && (Number.isNaN(cost) || cost < 0)) {
+      toast.error(t("pages.procedures.invalidCost"));
+      return;
+    }
 
     setSaving(true);
     try {
       const payload = {
         name: form.name.trim(),
-        code: form.code.trim() || null,
         category: form.category,
         basePrice: price,
+        cost,
         duration: form.duration ? Number(form.duration) : null,
         description: form.description.trim() || null,
         isActive: form.isActive,
@@ -331,15 +338,18 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                   <thead>
                     <tr className={rediseno ? undefined : "text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border"}>
                       <th className={rediseno ? undefined : "px-5 py-3"}>{t("common.name")}</th>
-                      <th className={rediseno ? undefined : "px-3 py-3"}>{t("pages.procedures.colSatCode")}</th>
                       <th className={rediseno ? styles.thNum : "px-3 py-3 text-right"}>{t("pages.procedures.colPrice")}</th>
+                      <th className={rediseno ? styles.thNum : "px-3 py-3 text-right"}>{t("pages.procedures.colCost")}</th>
+                      <th className={rediseno ? styles.thNum : "px-3 py-3 text-right"}>{t("pages.procedures.colMargin")}</th>
                       <th className={rediseno ? undefined : "px-3 py-3"}>{t("pages.procedures.colDuration")}</th>
                       <th className={rediseno ? undefined : "px-3 py-3"}>{t("common.status")}</th>
                       <th className={rediseno ? styles.thNum : "px-5 py-3 text-right"}>{t("common.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((p) => (
+                    {items.map((p) => {
+                      const margen = margenDe(p.basePrice, p.cost);
+                      return (
                       <tr
                         key={p.id}
                         className={
@@ -362,14 +372,15 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                             </div>
                           )}
                         </td>
-                        {/* El código de catálogo (SAT) es alfanumérico: Instrument Sans en el
-                            100% del panel, alineado con tabular-nums en vez de una fuente de
-                            máquina (ver tipografia-panel.tsx). */}
-                        <td className={rediseno ? styles.codeCell : "px-3 py-3 text-muted-foreground text-xs tabular-nums"}>
-                          {p.code ?? "—"}
-                        </td>
                         <td className={rediseno ? styles.priceCell : "px-3 py-3 text-right font-bold text-foreground whitespace-nowrap tabular-nums"}>
                           {formatCurrency(p.basePrice)}
+                        </td>
+                        <td className={rediseno ? styles.costCell : "px-3 py-3 text-right text-muted-foreground whitespace-nowrap tabular-nums"}>
+                          {p.cost != null ? formatCurrency(p.cost) : "—"}
+                        </td>
+                        {/* Sin gasto no hay margen: ni 0 ni el precio (ver ./margen). */}
+                        <td className={rediseno ? styles.marginCell : "px-3 py-3 text-right font-semibold text-foreground whitespace-nowrap tabular-nums"}>
+                          {margen != null ? formatCurrency(margen) : "—"}
                         </td>
                         <td className={rediseno ? styles.durationCell : "px-3 py-3 text-muted-foreground whitespace-nowrap"}>
                           {p.duration ? (
@@ -438,7 +449,8 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -485,16 +497,42 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
               <div className={rediseno ? styles.formRow : "grid grid-cols-2 gap-4"}>
                 <div className={rediseno ? styles.field : undefined}>
                   <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
-                    {t("pages.procedures.colSatCode")}
+                    {t("pages.procedures.basePriceMxn")} <span className={rediseno ? styles.required : "text-red-500"}>*</span>
                   </label>
                   <input
-                    type="text"
-                    value={form.code}
-                    onChange={(e) => setForm({ ...form, code: e.target.value })}
-                    placeholder={t("pages.procedures.optional")}
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={form.basePrice}
+                    onChange={(e) =>
+                      setForm({ ...form, basePrice: e.target.value })
+                    }
+                    placeholder="0.00"
                     className={rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"}
                   />
                 </div>
+                <div className={rediseno ? styles.field : undefined}>
+                  <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
+                    {t("pages.procedures.costMxn")}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.cost}
+                    onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                    placeholder={t("pages.procedures.optional")}
+                    aria-describedby="procedure-cost-hint"
+                    className={rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"}
+                  />
+                  <p id="procedure-cost-hint" className={rediseno ? styles.fieldHint : "text-xs text-muted-foreground mt-1"}>
+                    {t("pages.procedures.costHint")}
+                  </p>
+                </div>
+              </div>
+
+              <div className={rediseno ? styles.formRow : "grid grid-cols-2 gap-4"}>
                 <div className={rediseno ? styles.field : undefined}>
                   <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
                     {t("pages.procedures.category")}
@@ -512,26 +550,6 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                       </option>
                     ))}
                   </select>
-                </div>
-              </div>
-
-              <div className={rediseno ? styles.formRow : "grid grid-cols-2 gap-4"}>
-                <div className={rediseno ? styles.field : undefined}>
-                  <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
-                    {t("pages.procedures.basePriceMxn")} <span className={rediseno ? styles.required : "text-red-500"}>*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={form.basePrice}
-                    onChange={(e) =>
-                      setForm({ ...form, basePrice: e.target.value })
-                    }
-                    placeholder="0.00"
-                    className={rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"}
-                  />
                 </div>
                 <div className={rediseno ? styles.field : undefined}>
                   <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>

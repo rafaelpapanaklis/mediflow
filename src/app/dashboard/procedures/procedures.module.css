@@ -270,6 +270,23 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* Gasto y Margen: números a la derecha, como el precio. El gasto va en el tono
+   secundario (es un dato de apoyo); el margen en el principal. */
+.costCell {
+  text-align: right;
+  font-size: 13px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.marginCell {
+  text-align: right;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .durationCell {
   font-size: 12.5px;
   color: var(--text-3);
@@ -415,6 +432,12 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.fieldHint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-3);
 }
 .fieldLabel {
   font-size: 11px;
@@ -597,6 +620,8 @@
 .pageRediseno .procDesc { color: var(--pr-texto-3); }
 .pageRediseno .codeCell { color: var(--pr-texto-3); }
 .pageRediseno .priceCell { color: var(--pr-texto); }
+.pageRediseno .costCell { color: var(--pr-texto-3); }
+.pageRediseno .marginCell { color: var(--pr-texto); }
 .pageRediseno .durationCell,
 .pageRediseno .durationVal { color: var(--pr-texto-3); }
 
@@ -627,6 +652,7 @@
 .pageRediseno .modalClose:hover { background: var(--pr-hover); color: var(--pr-texto); }
 
 .pageRediseno .fieldLabel { color: var(--pr-texto-3); }
+.pageRediseno .fieldHint { color: var(--pr-texto-3); }
 .pageRediseno .required { color: var(--pr-peligro); }
 
 .pageRediseno .input,

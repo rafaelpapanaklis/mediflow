@@ -190,6 +190,8 @@
     "test:pdf-cabecera": "tsx --test src/lib/pdf/__tests__/clinic-letterhead.test.ts",
     "test:pdf-documentos": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/documentos-cabecera.test.tsx",
     "test:comprobante-cabecera": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/invoices/__tests__/comprobante-cabecera.test.tsx",
+    "//test:procedimientos-gasto": "Necesita --experimental-test-module-mocks: ejecuta DE VERDAD el POST/PATCH de /api/procedures y changesToTreatments del odontograma. El gasto no sale por ningun lector del catalogo fuera del panel, sin gasto no hay margen, gasto negativo = 400, y el PATCH jamas escribe code (llave ODO_* del odontograma).",
+    "test:procedimientos-gasto": "tsx --test --experimental-test-module-mocks src/app/api/procedures/__tests__/gasto-y-llave.test.ts",
     "//test:alta-paciente": "Necesita --experimental-test-module-mocks: ejecuta DE VERDAD el POST de /api/patients (N7 y N8) con getAuthContext, buildPatientWhere y la visibilidad reales; sólo sustituye Prisma, la sesión de Supabase y los efectos de después del alta.",
     "test:alta-paciente": "tsx --test --experimental-test-module-mocks src/app/api/patients/__tests__/alta-servidor.test.ts",
     "//test:edu": "NO listar los archivos a mano como test:billing: una lista fija se pudre en la primera ola del instituto y las pruebas nuevas dejan de correrse en silencio. Tampoco un glob: `tsx --test` con un patrón que no encuentra nada sale con código 0 ('tests 0, fail 0'), y además lee los corchetes de una ruta como patrón y se salta el archivo. El runner descubre, FALLA si descubre cero, y propaga el exit code.",

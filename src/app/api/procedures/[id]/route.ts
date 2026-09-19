@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { datosDeCambio } from "../entrada";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -18,17 +19,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!existing) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
     const body = await req.json();
+    // `code` jamás se escribe desde aquí aunque venga en el body: es la llave
+    // ODO_* del odontograma (ver ../entrada).
+    const entrada = datosDeCambio(body);
+    if (!entrada.ok) return NextResponse.json({ error: entrada.error }, { status: 400 });
+
     const updated = await prisma.procedureCatalog.update({
       where: { id: params.id },
-      data: {
-        ...(body.name !== undefined && { name: body.name.trim() }),
-        ...(body.code !== undefined && { code: body.code?.trim() || null }),
-        ...(body.category !== undefined && { category: body.category.trim() }),
-        ...(body.basePrice !== undefined && { basePrice: Number(body.basePrice) }),
-        ...(body.duration !== undefined && { duration: body.duration ? Number(body.duration) : null }),
-        ...(body.description !== undefined && { description: body.description?.trim() || null }),
-        ...(body.isActive !== undefined && { isActive: Boolean(body.isActive) }),
-      },
+      data: entrada.data,
     });
     revalidateAfter("procedures");
     return NextResponse.json(updated);

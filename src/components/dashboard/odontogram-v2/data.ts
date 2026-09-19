@@ -220,7 +220,7 @@ export const I18N: Record<Lang, Record<string, string>> = {
     primary: "Temporal",
     mixed: "Mixta",
     adult: "Adulto",
-    child: "Niño",
+    child: "Menor",
     numbering: "Numeración",
     language: "Idioma",
     dentition: "Dentición",

@@ -2799,11 +2799,15 @@ model ProcedureCatalog {
   id          String    @id @default(cuid())
   clinicId    String
   name        String
-  code        String? // SAT code for CFDI
+  code        String? // Llave interna del odontograma (ODO_*, ver src/lib/odontogram/snapshot.ts). NO es un código SAT y el panel no la escribe.
   /// NOM-024 — código clínico CIE-9-MC del procedimiento (separado del SAT)
   cieCode     String?   @db.VarChar(8)
   category    String // "general", "dental", "aesthetic", etc.
   basePrice   Float
+  /// Gasto: lo que a la clínica le CUESTA hacer el procedimiento (materiales,
+  /// laboratorio). null = «no lo hemos medido»; 0 = «no cuesta nada». Dato
+  /// interno: jamás entra en un `select` de cara al paciente.
+  cost        Float?
   duration    Int? // minutes
   description String?
   isActive    Boolean   @default(true)

@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { datosDeAlta } from "./entrada";
 
 // Default dental procedures with MX average prices
 const DENTAL_SEED = [
@@ -72,19 +73,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    if (!body.name?.trim()) return NextResponse.json({ error: "Nombre es requerido" }, { status: 400 });
-    if (body.basePrice === undefined || body.basePrice < 0) return NextResponse.json({ error: "Precio inválido" }, { status: 400 });
+    // Sin `code`: es la llave del odontograma, no un dato del panel (ver ./entrada).
+    const entrada = datosDeAlta(body);
+    if (!entrada.ok) return NextResponse.json({ error: entrada.error }, { status: 400 });
 
     const procedure = await prisma.procedureCatalog.create({
-      data: {
-        clinicId: ctx.clinicId,
-        name: body.name.trim(),
-        code: body.code?.trim() || null,
-        category: body.category?.trim() || "general",
-        basePrice: Number(body.basePrice),
-        duration: body.duration ? Number(body.duration) : null,
-        description: body.description?.trim() || null,
-      },
+      data: { clinicId: ctx.clinicId, ...entrada.data },
     });
     revalidateAfter("procedures");
     return NextResponse.json(procedure, { status: 201 });
