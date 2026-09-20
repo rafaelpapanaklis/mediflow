@@ -15,6 +15,38 @@ import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
 import { DictationMic } from "@/components/clinical/shared/dictation-mic";
 import { AiConsultPanel, type AiAssistValue } from "./dental/ai-consult-panel";
+import { pickSingleAppointmentOfDay } from "@/lib/clinical/note-appointment-link";
+
+/**
+ * La cita de HOY de este paciente, o null si no hay exactamente una. Con dos
+ * citas el mismo día, o con ninguna, no se adivina: la nota se guarda sin
+ * ligar. Nunca lanza — ligar es un extra y no puede tumbar el guardado. El
+ * servidor (POST /api/clinical) vuelve a comprobarlo por su cuenta.
+ */
+async function fetchTodayAppointmentId(patientId: string): Promise<string | null> {
+  try {
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 1);
+    to.setMilliseconds(-1);
+    const qs = new URLSearchParams({
+      types: "appointment", from: from.toISOString(), to: to.toISOString(), limit: "20",
+    });
+    const res = await fetch(`/api/patients/${patientId}/timeline?${qs}`);
+    if (!res.ok) return null;
+    const body = await res.json();
+    // Más de una página de citas en un solo día: desde luego no es «una».
+    if (body?.nextCursor || !Array.isArray(body?.events)) return null;
+    return pickSingleAppointmentOfDay(
+      body.events
+        .filter((e: any) => e?.type === "appointment" && typeof e?.meta?.entityId === "string")
+        .map((e: any) => ({ id: e.meta.entityId, status: e.meta.status })),
+    );
+  } catch {
+    return null;
+  }
+}
 
 /** ¿El registro de un diente trae algo marcado? (superficies, hallazgos o nota) */
 function toothRecordHasContent(rec: ToothRecord | undefined): boolean {
@@ -255,6 +287,17 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     nextVisit:   initialSpec.nextVisit ?? "",
   }));
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
+
+  // ── LA CITA DE HOY ────────────────────────────────────────────────────────
+  // Solo para enseñar el aviso; al guardar se vuelve a leer, por si la cita se
+  // creó o se canceló mientras la ficha estaba abierta.
+  const [todayAppointmentId, setTodayAppointmentId] = useState<string | null>(null);
+  useEffect(() => {
+    if (isEditing) return;
+    let cancelled = false;
+    fetchTodayAppointmentId(patientId).then(id => { if (!cancelled) setTodayAppointmentId(id); });
+    return () => { cancelled = true; };
+  }, [isEditing, patientId]);
   // Dictado por voz: agrega la transcripción AL FINAL del campo (nunca reemplaza).
   // setForm funcional para no pisar lo que se tecleó mientras se transcribía.
   const appendDictation = (key: string, sep: string) => (text: string) =>
@@ -534,11 +577,14 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         toast.success(t("clinical.dentalForm.updatedToast"));
       } else {
         // POST — crea record nuevo. autoInvoice si hay procedimientos con precio.
+        // Si el paciente tiene UNA cita hoy, la nota va ligada a ella.
+        const appointmentId = await fetchTodayAppointmentId(patientId);
         const res = await fetch("/api/clinical", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             patientId,
+            ...(appointmentId ? { appointmentId } : {}),
             subjective: form.subjective,
             objective: form.objective,
             assessment: form.assessment,
@@ -689,6 +735,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         onApply={handleAiApply}
         onRemove={handleAiRemove}
       />
+
+      {!isEditing && todayAppointmentId && (
+        <div className="text-xs text-muted-foreground">{t("clinical.dentalForm.linkedToTodayAppointment")}</div>
+      )}
 
       {/* ANAMNESIS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>

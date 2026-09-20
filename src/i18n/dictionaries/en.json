@@ -5950,7 +5950,8 @@
       "nextVisitLabel": "Recommended next appointment",
       "nextVisitPlaceholder": "In 3 months, urgent, etc.",
       "savingChanges": "Saving changes…",
-      "saveConsultation": "Save consultation"
+      "saveConsultation": "Save consultation",
+      "linkedToTodayAppointment": "This note will be linked to this patient's appointment today."
     },
     "dermatologyForm": {
       "zoneScalp": "Scalp",
