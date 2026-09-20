@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   AlertTriangle,
   Check,
   ChevronDown,
@@ -12,16 +13,23 @@ import {
   ShieldAlert,
   Smile,
   Stethoscope,
+  Users,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   ALERGIAS,
+  GRUPO_APARATOS_SISTEMAS,
+  GRUPO_HEREDO_FAMILIARES,
   HABITOS,
   PADECIMIENTOS,
   RISK_FLAG_LABELS,
   computeRiskFlags,
+  grupoValores,
+  normalizeAnswers,
+  ponerEnGrupo,
   type Answers,
   type QDef,
+  type QGroup,
 } from "@/lib/health-questionnaire";
 import { useT } from "@/i18n/i18n-provider";
 import { fechaLarga } from "./fechas";
@@ -46,6 +54,12 @@ import s from "./rediseno.module.css";
  *  · El botón de guardar va en una barra PEGADA ABAJO: el cuestionario mide
  *    varias pantallas y antes había que bajar del todo para guardar.
  *  · El historial de versiones, plegado al final.
+ *
+ * WS1-T5 añade lo que la NOM-004 pide y no se capturaba: los antecedentes
+ * heredo-familiares y el interrogatorio por aparatos y sistemas. Las dos
+ * secciones son CASILLAS y arrancan PLEGADAS —una revisión de control no las
+ * llena— y lo que no se marca no se guarda: ni un `false`, ni un «sin
+ * alteraciones» que nadie miró.
  */
 
 interface Props {
@@ -150,6 +164,109 @@ function Grupo({
   );
 }
 
+/**
+ * Un grupo de CASILLAS, plegable, cuyas respuestas viven anidadas en
+ * `answers[group.namespace]`.
+ *
+ * A nivel de MÓDULO a propósito, como `Pregunta`: un componente definido
+ * dentro de otro se remonta en cada render y el campo de texto libre
+ * perdería el foco a cada tecla.
+ */
+function GrupoCasillas({
+  group,
+  icono: Icono,
+  tono,
+  answers,
+  onSet,
+}: {
+  group: QGroup;
+  icono: typeof Smile;
+  tono?: string;
+  answers: Answers;
+  onSet: (key: string, value: any) => void;
+}) {
+  const t = useT();
+  const [abierto, setAbierto] = useState(!group.plegado);
+  const valores = grupoValores(answers, group);
+  const marcadas = group.questions.filter((q) => valores[q.key] === true).length;
+  const libre = group.libre;
+  const textoLibre = libre ? (valores[libre.key] ?? "") : "";
+  // Con algo escrito en el texto libre la sección tampoco está vacía.
+  const conContenido = marcadas > 0 || String(textoLibre).trim() !== "";
+
+  return (
+    <section className={`${s.tarjeta} ${s.bitacoraCaja}`}>
+      <button
+        type="button"
+        className={s.bitacoraCabeza}
+        onClick={() => setAbierto((v) => !v)}
+        aria-expanded={abierto}
+      >
+        <span className={[s.tarjetaIcono, tono ?? ""].filter(Boolean).join(" ")}>
+          <Icono size={15} strokeWidth={1.75} aria-hidden />
+        </span>
+        <span className={s.tarjetaTitulo}>{group.titleKey ? t(group.titleKey) : group.title}</span>
+        {conContenido && (
+          <span className={`${s.etiqueta} ${s.etiquetaNeutra}`}>
+            {marcadas > 0
+              ? t("clinical.nom004.marcadas", { count: marcadas })
+              : t("clinical.nom004.conNota")}
+          </span>
+        )}
+        <ChevronDown
+          size={16}
+          strokeWidth={2}
+          aria-hidden
+          style={{
+            marginLeft: "auto",
+            flexShrink: 0,
+            transform: abierto ? "rotate(180deg)" : undefined,
+            transition: "transform .15s",
+          }}
+        />
+      </button>
+      {abierto && (
+        <div className={s.bitacoraCuerpo}>
+          {group.ayudaKey && <p className={s.ayudaSeccion}>{t(group.ayudaKey)}</p>}
+          <div className={s.casillas}>
+            {group.questions.map((q) => {
+              const marcada = valores[q.key] === true;
+              return (
+                <label
+                  key={q.key}
+                  className={[s.casilla, marcada ? s.casillaMarcada : ""].filter(Boolean).join(" ")}
+                >
+                  <input
+                    type="checkbox"
+                    className={s.casillaEntrada}
+                    checked={marcada}
+                    onChange={(e) => onSet(q.key, e.target.checked)}
+                  />
+                  <span>{q.labelKey ? t(q.labelKey) : q.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          {libre && (
+            <div className={s.campo} style={{ marginTop: 12 }}>
+              <label className={s.campoEtiqueta} htmlFor={`pr-${group.id}-libre`}>
+                {libre.labelKey ? t(libre.labelKey) : libre.label}
+              </label>
+              <textarea
+                id={`pr-${group.id}-libre`}
+                className={`${s.campoEntrada} ${s.campoArea}`}
+                placeholder={libre.placeholderKey ? t(libre.placeholderKey) : (libre.placeholder ?? "")}
+                value={textoLibre}
+                onChange={(e) => onSet(libre.key, e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function Cuestionario({ patientId, onSaved }: Props) {
   const t = useT();
   const [answers, setAnswers] = useState<Answers>({});
@@ -186,21 +303,36 @@ export function Cuestionario({ patientId, onSaved }: Props) {
   }, [patientId, t]);
 
   const set = (key: string, value: any) => setAnswers((a) => ({ ...a, [key]: value }));
+  /**
+   * Setter de los grupos anidados. Pasa por `ponerEnGrupo`, que BORRA la
+   * clave cuando se desmarca o se vacía y borra la sección entera cuando se
+   * queda sin nada: vacío es vacío, también a medio llenar.
+   */
+  const setEnGrupo = (group: QGroup) => (key: string, value: any) =>
+    setAnswers((a) => ponerEnGrupo(a, group, key, value));
 
   const banderas = useMemo(() => computeRiskFlags(answers), [answers]);
 
   async function guardar() {
     setGuardando(true);
+    // Lo que viaja es lo NORMALIZADO: solo casillas marcadas y texto con algo.
+    const limpias = normalizeAnswers(answers);
     try {
       const res = await fetch(`/api/patients/${patientId}/health-questionnaire`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers, notes }),
+        body: JSON.stringify({ answers: limpias, notes }),
       });
       if (!res.ok) {
         throw new Error((await res.json()).error ?? t("pacientesRediseno.cuestionario.errorGuardar"));
       }
       const data = await res.json();
+      // La pantalla se queda con lo mismo que quedó guardado… pero SOLO si
+      // nadie tocó nada mientras la petición viajaba. El botón se deshabilita
+      // al guardar; los campos no. Pisar el estado con la foto de antes del
+      // envío le borraría al asistente lo que acaba de escribir, y encima
+      // bajo un toast que dice «guardado».
+      setAnswers((actual) => (actual === answers ? limpias : actual));
       setVigente(data.questionnaire ?? null);
       setHistorial((prev) => [data.questionnaire, ...prev]);
       toast.success(t("pacientesRediseno.cuestionario.guardado"));
@@ -280,6 +412,15 @@ export function Cuestionario({ patientId, onSaved }: Props) {
         </div>
       </section>
 
+      {/* Antecedentes heredo-familiares — NOM-004. Va PRIMERO, que es el
+          orden en que la norma lee el expediente, y plegado. */}
+      <GrupoCasillas
+        group={GRUPO_HEREDO_FAMILIARES}
+        icono={Users}
+        answers={answers}
+        onSet={setEnGrupo(GRUPO_HEREDO_FAMILIARES)}
+      />
+
       <Grupo
         icono={Stethoscope}
         titulo={t("pacientesRediseno.cuestionario.padecimientos")}
@@ -308,6 +449,15 @@ export function Cuestionario({ patientId, onSaved }: Props) {
         onSet={set}
         textoSi={si}
         textoNo={no}
+      />
+
+      {/* Interrogatorio por aparatos y sistemas — NOM-004, también plegado. */}
+      <GrupoCasillas
+        group={GRUPO_APARATOS_SISTEMAS}
+        icono={Activity}
+        tono={s.tarjetaIconoAlerta}
+        answers={answers}
+        onSet={setEnGrupo(GRUPO_APARATOS_SISTEMAS)}
       />
 
       {/* Antecedentes médicos */}
