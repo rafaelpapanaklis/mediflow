@@ -17,7 +17,7 @@ import type { TFunction } from "@/i18n/t";
 import { EmbeddedSignupButton } from "./embedded-signup-button";
 import type { RecentReminderDTO } from "@/lib/whatsapp/recent-reminders";
 import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
-import type { AppointmentEventSettings } from "@/lib/reminders/config";
+import type { AppointmentEventSettings, CobranzaSettings } from "@/lib/reminders/config";
 import { ConexionRediseno } from "@/components/dashboard/whatsapp-rediseno/conexion";
 import s from "./whatsapp.module.css";
 
@@ -48,6 +48,8 @@ interface Props {
   reminderMasterOn:      boolean;
   /** Avisos al agendar / reprogramar / cancelar (reminderSettings.eventos). */
   eventos:               AppointmentEventSettings;
+  /** Aviso de mensualidad + saldo por el bot (reminderSettings.cobranza, ws1-t3). */
+  cobranza:              CobranzaSettings;
   recentReminders:       RecentReminderDTO[];
   recentRemindersFailed: boolean;
   /** Cumpleaños/recall/seguimientos bloqueados por la ventana de 24 h, 30 días (H-7). */
@@ -82,6 +84,7 @@ const REMINDER_KIND_KEY: Record<RecentReminderDTO["kind"], string> = {
   Birthday:          "inbox.whatsapp.recentKindBirthday",
   Followup:          "inbox.whatsapp.recentKindFollowup",
   TreatmentFollowup: "inbox.whatsapp.recentKindTreatmentFollowup",
+  PaymentDue: "inbox.whatsapp.recentKindPaymentDue",
   Clinical:          "inbox.whatsapp.recentKindClinical",
   Other:             "inbox.whatsapp.recentKindOther",
 };
@@ -116,6 +119,7 @@ export function WhatsAppClient({
   connMethod: initConnMethod,
   reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h,
   remindersEnabled, reminderOffsets, reminderFromSettings, reminderMasterOn, eventos: initEventos,
+  cobranza: initCobranza,
   recentReminders, recentRemindersFailed, sinPlantilla30d = 0, clinicName,
   rediseno = false,
 }: Props) {
@@ -134,6 +138,7 @@ export function WhatsAppClient({
   const [r1h,        setR1h]        = useState(init1h);
   const [savingMsg,  setSavingMsg]  = useState(false);
   const [eventos,    setEventos]    = useState(initEventos);
+  const [cobranza,   setCobranza]   = useState(initCobranza);
   // Switch con un PATCH en vuelo (por llave). Mientras vale true el propio
   // interruptor va deshabilitado, así dos clics rápidos no dejan respuestas
   // pisándose ni un revert contra un valor que ya cambió.
@@ -289,6 +294,49 @@ export function WhatsAppClient({
     }
   }
 
+  /**
+   * Autosave de los dos interruptores de cobranza (ws1-t3). Mismo contrato que
+   * saveEvento: se mueve al instante y REGRESA si el guardado falla, y viaja el
+   * objeto `cobranza` entero porque el servidor lo mezcla dentro del mismo Json
+   * (recordatorios + recall + eventos + cobranza) sin pisar las otras partes.
+   */
+  async function saveCobranza(campo: "enabled" | "bot", next: boolean) {
+    const prev = cobranza;
+    const nuevo = { ...cobranza, [campo]: next };
+    setCobranza(nuevo);
+    setToggleBusy(b => ({ ...b, cobranza: true }));
+    try {
+      const res = await fetch(SETTINGS_URL, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cobranza: nuevo }),
+      });
+      if (!res.ok) {
+        setCobranza(prev);
+        toast.error(t(res.status === 403
+          ? "inbox.whatsapp.reminderToggleForbidden"
+          : "inbox.whatsapp.reminderToggleError"));
+        return;
+      }
+      toast.success(t(next ? "inbox.whatsapp.eventOnToast" : "inbox.whatsapp.eventOffToast"));
+    } catch {
+      setCobranza(prev);
+      toast.error(t("inbox.whatsapp.reminderToggleError"));
+    } finally {
+      setToggleBusy(b => ({ ...b, cobranza: false }));
+    }
+  }
+
+  const avisosCobranza = ([
+    { campo: "enabled", labelKey: "inbox.whatsapp.duesRemindLabel", descKey: "inbox.whatsapp.duesRemindDesc" },
+    { campo: "bot",     labelKey: "inbox.whatsapp.duesBotLabel",    descKey: "inbox.whatsapp.duesBotDesc"    },
+  ] as const).map(a => ({
+    ...a,
+    val: cobranza[a.campo],
+    busy: !!toggleBusy.cobranza,
+    toggle: () => saveCobranza(a.campo, !cobranza[a.campo]),
+  }));
+
   const avisosEvento = ([
     { campo: "alAgendar",     labelKey: "inbox.whatsapp.eventCreateLabel",     descKey: "inbox.whatsapp.eventCreateDesc" },
     { campo: "alReprogramar", labelKey: "inbox.whatsapp.eventRescheduleLabel", descKey: "inbox.whatsapp.eventRescheduleDesc" },
@@ -317,6 +365,8 @@ export function WhatsAppClient({
         : t("inbox.whatsapp.summaryReminder"),                           on: horasRecordatorio !== "" },
     { key: "reprogramar",  label: t("inbox.whatsapp.summaryReschedule"), on: eventos.alReprogramar },
     { key: "cancelar",     label: t("inbox.whatsapp.summaryCancel"),     on: eventos.alCancelar },
+    { key: "mensualidad",  label: t("inbox.whatsapp.summaryDues"),       on: cobranza.enabled },
+    { key: "saldoBot",     label: t("inbox.whatsapp.summaryDuesBot"),    on: cobranza.bot },
   ];
 
   // "embedded" y "coexistence" son el mismo flujo real (el número se queda en el
@@ -355,7 +405,7 @@ export function WhatsAppClient({
           t, connected, step, setStep, loading, showToken, setShowToken, form, setForm,
           msg, setMsg, defaultMsg, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
           connect, disconnect, saveSettings, saveToggle, connChip, remindersOn,
-          avisosEvento, resumenAvisos,
+          avisosEvento, avisosCobranza, cobranzaOn: cobranza.enabled, resumenAvisos,
           esAvailable: ES_AVAILABLE,
           onEmbeddedConnected: () => {
             setConnected(true);
@@ -581,6 +631,47 @@ export function WhatsAppClient({
                   </div>
                 ))}
               </div>
+            </CardNew>
+
+            {/* Cobranza (ws1-t3): el aviso de la mensualidad por vencer y el
+                permiso para que el bot diga el saldo. Los DOS apagados de
+                fábrica; ver src/lib/reminders/config.ts. */}
+            <CardNew title={t("inbox.whatsapp.duesTitle")} sub={t("inbox.whatsapp.duesSub")}>
+              <div className={s.toggles}>
+                {avisosCobranza.map(opt => (
+                  <div key={opt.campo} className={[s.toggle, opt.val ? s.toggleOn : ""].filter(Boolean).join(" ")}>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-label={t(opt.labelKey)}
+                      aria-checked={opt.val}
+                      disabled={opt.busy}
+                      onClick={opt.toggle}
+                      className={`switch ${opt.val ? "switch--on" : ""}`}
+                    >
+                      <span className="switch__thumb" />
+                    </button>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>{t(opt.labelKey)}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{t(opt.descKey)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* La misma honestidad que la tarjeta de recordatorios de al
+                  lado: este aviso no cuelga de una cita, así que fuera de la
+                  ventana de 24 h de Meta no hay plantilla que mandar. Se dice
+                  aquí, junto al interruptor que lo promete. */}
+              {cobranza.enabled && (
+                <div className={`${s.billing} ${s.windowNote}`}>
+                  <Info size={16} className={s.billingIcon} />
+                  <div>
+                    <div className={s.billingLabel}>{t("inbox.whatsapp.duesWindow24Label")}</div>
+                    <p className={s.billingBody}>{t("inbox.whatsapp.duesWindow24Body")}</p>
+                  </div>
+                </div>
+              )}
             </CardNew>
 
             <CardNew title={t("inbox.whatsapp.whenToSendTitle")} sub={t("inbox.whatsapp.whenToSendSub")}>

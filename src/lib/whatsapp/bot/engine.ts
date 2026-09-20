@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { generateAiReply } from "./ai";
 import { handleBookingTurn, isBookingInProgress } from "./booking";
+import { handleSaldoTurn, isSaldoInProgress } from "./saldo";
+import { getCobranzaSettings } from "@/lib/reminders/config";
 import { BotIntent } from "./types";
 import type {
   BotBusinessHours,
@@ -13,7 +15,7 @@ import type {
 // Re-exporta los stubs para que el resto del código (y T3/T4) los importe desde
 // el motor. T3 implementa generateAiReply en ai.ts; T4, handleBookingTurn en
 // booking.ts. runBotTurn no se toca.
-export { generateAiReply, handleBookingTurn };
+export { generateAiReply, handleBookingTurn, handleSaldoTurn };
 
 /** Carga la config del bot + FAQs habilitadas + timezone de la clínica. */
 async function loadBotConfig(
@@ -23,7 +25,9 @@ async function loadBotConfig(
     where: { clinicId },
     include: {
       faqs: { where: { enabled: true }, orderBy: { order: "asc" } },
-      clinic: { select: { timezone: true } },
+      // `reminderSettings` trae el interruptor del saldo (ws1-t3): vive en el
+      // Json de la clínica, no en una columna de whatsapp_bot_configs.
+      clinic: { select: { timezone: true, reminderSettings: true } },
     },
   });
   if (!row) return null;
@@ -39,7 +43,9 @@ async function loadBotConfig(
     afterHoursMsg: row.afterHoursMsg,
     canAnswerFaq: row.canAnswerFaq,
     canBookAppointments: row.canBookAppointments,
+    canAnswerBalance: getCobranzaSettings(row.clinic).bot,
     fallbackToHuman: row.fallbackToHuman,
+    timezone: row.clinic.timezone,
   };
   const faqs: BotFaqDTO[] = row.faqs.map((f) => ({
     id: f.id,
@@ -138,10 +144,11 @@ function detectBookingIntent(text: string): BotIntent | null {
 
 /**
  * Motor híbrido del bot. Orden:
- *   1) FAQ por reglas (rápido y barato).
- *   2) Agenda (T4) si hay intención de cita y canBookAppointments.
- *   3) IA libre con Claude (T3) como respuesta general.
- *   4) Handoff a humano si nada respondió y fallbackToHuman.
+ *   1) Saldo (ws1-t3) si preguntan por dinero y canAnswerBalance.
+ *   2) FAQ por reglas (rápido y barato).
+ *   3) Agenda (T4) si hay intención de cita y canBookAppointments.
+ *   4) IA libre con Claude (T3) como respuesta general.
+ *   5) Handoff a humano si nada respondió y fallbackToHuman.
  *
  * Booking va ANTES que la IA libre para que una petición de cita use el flujo
  * especializado (T4) y no la charla genérica (T3). En la fundación, (2) y (3)
@@ -167,18 +174,37 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
     if (booking) return booking;
   }
 
+  // 0b) Verificación de saldo a medias: igual que el agendado, se continúa
+  //     antes que nada. El paciente ya recibió «dime tu fecha de nacimiento» y
+  //     lo que escriba ahora es la respuesta a ESO, no una pregunta nueva; si
+  //     cayera en FAQ o en la IA, el flujo se rompería a media verificación.
+  if (config.canAnswerBalance && isSaldoInProgress(input.botState)) {
+    const saldo = await handleSaldoTurn(input, config);
+    if (saldo) return saldo;
+  }
+
   // Fuera de horario → mensaje de after-hours (si está configurado).
   if (config.afterHoursMsg && !isWithinBusinessHours(config.businessHours, timezone, new Date())) {
     return { reply: config.afterHoursMsg, intent: BotIntent.SMALLTALK };
   }
 
-  // 1) FAQ por reglas.
+  // 1) ¿Preguntan por dinero? Va ANTES que la FAQ a propósito: una FAQ de
+  //    precios («¿cuánto cuesta una limpieza?») puede solapar con «¿cuánto
+  //    debo?» y contestar una tarifa genérica a quien pregunta por SU deuda.
+  //    Si el interruptor está apagado o no es una pregunta de saldo, devuelve
+  //    null y el motor sigue exactamente como hoy.
+  {
+    const saldo = await handleSaldoTurn(input, config);
+    if (saldo) return saldo;
+  }
+
+  // 2) FAQ por reglas.
   if (config.canAnswerFaq) {
     const faq = matchFaq(input.incomingText, faqs);
     if (faq) return { reply: faq.answer, intent: BotIntent.FAQ };
   }
 
-  // 2) Agenda (T4) si hay intención de cita.
+  // 3) Agenda (T4) si hay intención de cita.
   if (config.canBookAppointments) {
     const intent = detectBookingIntent(input.incomingText);
     if (intent) {
@@ -187,11 +213,11 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
     }
   }
 
-  // 3) IA libre (T3).
+  // 4) IA libre (T3).
   const ai = await generateAiReply(input, config, faqs);
   if (ai) return ai;
 
-  // 4) Nada respondió → derivar a humano.
+  // 5) Nada respondió → derivar a humano.
   if (config.fallbackToHuman) return { intent: BotIntent.HANDOFF, handoff: true };
   return { intent: BotIntent.UNKNOWN };
 }

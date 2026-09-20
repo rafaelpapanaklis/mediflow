@@ -41,6 +41,7 @@ const REMINDER_KIND_KEY: Record<RecentReminderDTO["kind"], string> = {
   Birthday: "inbox.whatsapp.recentKindBirthday",
   Followup: "inbox.whatsapp.recentKindFollowup",
   TreatmentFollowup: "inbox.whatsapp.recentKindTreatmentFollowup",
+  PaymentDue: "inbox.whatsapp.recentKindPaymentDue",
   Clinical: "inbox.whatsapp.recentKindClinical",
   Other: "inbox.whatsapp.recentKindOther",
 };
@@ -93,6 +94,17 @@ export type ConexionVM = {
     busy: boolean;
     toggle: () => void;
   }>;
+  /** Cobranza (ws1-t3): aviso de mensualidad por vencer + saldo por el bot. */
+  avisosCobranza: ReadonlyArray<{
+    campo: string;
+    labelKey: string;
+    descKey: string;
+    val: boolean;
+    busy: boolean;
+    toggle: () => void;
+  }>;
+  /** ¿El aviso de mensualidad está encendido? (para la nota de la ventana de 24 h) */
+  cobranzaOn: boolean;
   /** Resumen de un vistazo: qué manda hoy esta sucursal. */
   resumenAvisos: ReadonlyArray<{ key: string; label: string; on: boolean }>;
   esAvailable: boolean;
@@ -122,7 +134,7 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
     t, connected, step, setStep, loading, showToken, setShowToken, form, setForm,
     msg, setMsg, defaultMsg, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
     connect, disconnect, saveSettings, saveToggle, connChip, remindersOn, esAvailable,
-    avisosEvento, resumenAvisos,
+    avisosEvento, avisosCobranza, cobranzaOn, resumenAvisos,
     onEmbeddedConnected, refrescar, recentReminders, recentRemindersFailed, sinPlantilla30d = 0,
   } = vm;
 
@@ -320,6 +332,36 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
                   />
                 ))}
               </div>
+            </Tarjeta>
+
+            {/* Cobranza (ws1-t3): avisar de la mensualidad por vencer y dejar
+                que el bot conteste el saldo. Los DOS apagados de fábrica: el
+                primero porque cada plantilla fuera de la ventana de 24 h cuesta
+                dinero; el segundo porque hablar de deudas por WhatsApp es una
+                decisión de la clínica, nunca un default. */}
+            <Tarjeta titulo={t("inbox.whatsapp.duesTitle")} sub={t("inbox.whatsapp.duesSub")}>
+              <div className={s.apilado} style={{ gap: 10 }}>
+                {avisosCobranza.map((opt) => (
+                  <FilaInterruptor
+                    key={opt.campo}
+                    on={opt.val}
+                    disabled={opt.busy}
+                    onToggle={opt.toggle}
+                    titulo={t(opt.labelKey)}
+                    desc={t(opt.descKey)}
+                  />
+                ))}
+              </div>
+
+              {/* Igual que bajo los recordatorios de cita: el aviso no cuelga
+                  de una cita, así que fuera de la ventana de 24 h de Meta no
+                  hay plantilla aprobada y el envío se bloquea. Se dice junto
+                  al interruptor, no se deja morir en silencio. */}
+              {cobranzaOn && (
+                <Nota icono={<Info size={16} />} titulo={t("inbox.whatsapp.duesWindow24Label")} className={s.arribaMas}>
+                  <p className={s.notaCuerpo}>{t("inbox.whatsapp.duesWindow24Body")}</p>
+                </Nota>
+              )}
             </Tarjeta>
 
             <Tarjeta titulo={t("inbox.whatsapp.whenToSendTitle")} sub={t("inbox.whatsapp.whenToSendSub")}>
