@@ -39,12 +39,14 @@ export function enfocarMontoAlAbrir(e: Event) {
  * «Registrar pago» va en el pie del detalle, donde hoy está «Cobrar ahora».
  * Se viste con las clases de `factura-rediseno` (cuelga de su `.raiz`).
  */
-export function SeccionCobro({ cobro, bloqueado, descuento }: {
+export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto }: {
   cobro: Cobro;
   /** El detalle está ocupado con otra acción (o cobrando): campos quietos. */
   bloqueado: boolean;
   /** La fila del descuento, cuando la factura todavía lo admite. */
   descuento?: ReactNode;
+  /** Lo que se enseña justo debajo del monto: a qué cuota del plan va (ws1-t2). */
+  bajoElMonto?: ReactNode;
 }) {
   const t = useT();
   return (
@@ -70,6 +72,7 @@ export function SeccionCobro({ cobro, bloqueado, descuento }: {
             {t("clinical.paymentModal.overpayWarning", { balance: fmtMXNdec(cobro.balance) })}
           </p>
         )}
+        {bajoElMonto}
       </div>
 
       <div className={c.campo}>

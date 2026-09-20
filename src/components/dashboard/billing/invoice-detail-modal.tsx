@@ -29,6 +29,11 @@ import { ConfirmacionFactura } from "@/components/dashboard/factura-rediseno/con
 // del detalle en vez de abrir otro diálogo. Ver factura-un-popup/.
 import { CLASES_UN_POPUP, CLASE_CUERPO_CON_COBRO } from "@/components/dashboard/factura-un-popup/raiz";
 import { useCobro } from "@/components/dashboard/factura-un-popup/use-cobro";
+// El plan de pagos de una factura a plazos (ws1-t2): por qué cuota va, y a cuál
+// va lo que se está cobrando. Derivado; sin condiciones a plazos no pinta nada.
+import { BloquePlan } from "@/components/dashboard/plan-de-pagos/bloque-plan";
+import { DestinoDelAbono } from "@/components/dashboard/plan-de-pagos/destino-abono";
+import { useCondicionesDeFactura } from "@/components/dashboard/plan-de-pagos/use-condiciones";
 import { SeccionCobro, DescuentoEnLinea, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 import { invoiceStatusBadge } from "./invoice-status";
@@ -196,6 +201,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     alOcupar: setBusy,
     alCobrar: handlePaymentSuccess,
   });
+  // Solo con el diseño nuevo: con el interruptor apagado este modal es, byte
+  // por byte, el de siempre, y ni siquiera se pregunta por las condiciones.
+  const condicionesPago = useCondicionesDeFactura(invoice?.id, open && rediseno);
   // El descuento en línea arranca con el de la factura, igual que openSub()
   // al abrir su diálogo. Solo en el diseño nuevo.
   useEffect(() => {
@@ -625,6 +633,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               </div>
             )}
 
+            {/* Un borrador todavía no debe nada: sin bloque (ni «vencidas»). */}
+            {rediseno && !isCancelled && !isDraft && (
+              <BloquePlan condiciones={condicionesPago} total={invoice.total} pagado={invoice.paid} />
+            )}
+
             {/* Pagos registrados — refunds aparecen con method="refund" en rojo */}
             {Array.isArray(invoice.payments) && invoice.payments.length > 0 && (
               <div>
@@ -660,6 +673,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               <SeccionCobro
                 cobro={cobro}
                 bloqueado={busy}
+                bajoElMonto={
+                  <DestinoDelAbono invoiceId={invoice.id} total={invoice.total} pagado={invoice.paid} importe={cobro.isOverpay ? 0 : cobro.amountNum || 0} activo={open} condiciones={condicionesPago} />
+                }
                 descuento={admiteDescuento ? (
                   <DescuentoEnLinea
                     subtotal={invoice.subtotal ?? invoice.total + (invoice.discount ?? 0)}

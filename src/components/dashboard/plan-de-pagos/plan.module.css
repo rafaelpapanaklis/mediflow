@@ -1,0 +1,254 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   El BLOQUE del plan de pagos y el «a qué cuota va» del cobro (ws1-t2).
+
+   No se declara ningún token y no hay ningún color escrito a mano: la
+   superficie, el texto y el violeta son los `--m2-*` del menú (los monta
+   `CLASES_MENU` en la raíz de cada pieza) y lo que el menú no tiene —éxito,
+   alerta, peligro— son los semánticos de globals.css, que ya traen su versión
+   oscura.
+
+   Todo lo que es dinero o fecha va en `tabular-nums`: si no alinean, no se
+   pueden comparar de un vistazo.
+
+   Cabe en un teléfono sin scroll lateral: la cabeza y los datos ENVUELVEN, y
+   la fila de una cuota pasa de cinco columnas a dos renglones.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.bloque {
+  flex-basis: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--m2-borde);
+  border-left: 3px solid var(--m2-activo);
+  border-radius: 10px;
+  background: var(--m2-tarjeta-hover);
+  color: var(--m2-texto);
+  font-size: 12.5px;
+  line-height: 1.4;
+  cursor: default;
+  /* El bloque vive en una ficha ancha, en un teléfono y en un modal estrecho:
+     la fila de una cuota se adapta al ancho DEL BLOQUE, no al de la ventana. */
+  container-type: inline-size;
+}
+
+/* Sobre los HIJOS, no sobre la raíz: `tipografia-panel.tsx` le pone a `.tokens`
+   `font-variant-numeric: normal` con más peso (ver ficha.module.css). */
+.bloque > *,
+.destino > * { font-variant-numeric: tabular-nums; }
+
+/* Con cuotas vencidas, el filo del bloque deja de ser violeta. */
+.bloqueVencido { border-left-color: var(--danger); }
+
+.cabeza {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+
+.avance { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+.rotulo {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+/* Lo primero que se lee: «Cuota 7 de 24». */
+.grande {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  font-variant-numeric: tabular-nums;
+  color: var(--m2-texto);
+}
+
+.grandeDe { font-weight: 550; color: var(--m2-texto-3); }
+
+.sello {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.selloAlCorriente { background: var(--success-soft); color: var(--success-strong); }
+.selloNeutro { background: var(--m2-hover); color: var(--m2-texto-2); }
+
+/* Relleno entero, no suave: una vencida tiene que saltar sin buscarla. */
+.selloVencido { background: var(--danger); color: var(--m2-activo-texto); }
+
+/* ── La tira: una marca por cuota ─────────────────────────────────────── */
+
+.tira { display: flex; gap: 2px; }
+
+.marca {
+  flex: 1 1 0;
+  min-width: 2px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--m2-hover);
+  box-shadow: inset 0 0 0 1px var(--m2-tarjeta-borde);
+}
+
+.marca.pagada { background: var(--success); box-shadow: none; }
+/* La vencida es MÁS ALTA además de roja: se distingue sin ver el color. */
+.marca.vencida { background: var(--danger); box-shadow: none; height: 10px; margin-top: -2px; margin-bottom: -2px; }
+.marcaParcial { background: linear-gradient(90deg, var(--success) 50%, var(--m2-hover) 50%); }
+.marca.vencida.marcaParcial { background: linear-gradient(90deg, var(--success) 50%, var(--danger) 50%); }
+
+/* ── Los datos ────────────────────────────────────────────────────────── */
+
+.datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin: 0;
+}
+
+.dato { min-width: 0; }
+.dato dt { font-size: 11px; color: var(--m2-texto-3); }
+.dato dd { margin: 0; font-size: 13px; color: var(--m2-texto-2); }
+.dato dd strong { font-weight: 700; color: var(--m2-texto); }
+
+.descuadre {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--warning);
+  border-radius: 8px;
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.descuadre svg { flex-shrink: 0; margin-top: 2px; }
+
+/* ── El detalle: se despliega, no se impone ───────────────────────────── */
+
+.detalle { min-width: 0; }
+
+.detalleResumen {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m2-activo);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.detalleResumen:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+.cuotas {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--m2-borde);
+  border-radius: 8px;
+  background: var(--m2-tarjeta);
+  overflow: hidden;
+}
+
+.cuota {
+  display: grid;
+  /* Anchos FIJOS para fecha, importe y estado: cada fila es su propia rejilla,
+     y con `auto` una fila con «faltan $1,000.00» desalineaba a las demás. */
+  grid-template-columns: 18px minmax(64px, 1fr) 96px 104px 184px;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--m2-borde);
+  border-left: 3px solid transparent;
+  font-size: 12.5px;
+  color: var(--m2-texto-2);
+}
+
+.cuota:first-child { border-top: none; }
+
+.cuotaIcono { color: var(--m2-texto-3); }
+.cuotaNombre { font-weight: 600; color: var(--m2-texto); }
+.cuotaFecha { text-align: right; font-variant-numeric: tabular-nums; }
+.cuotaImporte { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--m2-texto); }
+.cuotaEstado { text-align: right; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--m2-texto-3); }
+.cuotaParcial { font-weight: 500; }
+
+.cuota.pagada .cuotaIcono,
+.cuota.pagada .cuotaEstado { color: var(--success-strong); }
+.cuota.pagada .cuotaNombre,
+.cuota.pagada .cuotaImporte { color: var(--m2-texto-3); }
+
+.cuota.vencida {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+.cuota.vencida .cuotaIcono,
+.cuota.vencida .cuotaEstado { color: var(--danger); font-weight: 700; }
+
+.nota {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--m2-texto-3);
+}
+
+/* ── «A qué cuota va», debajo del monto a cobrar ──────────────────────── */
+
+.destino {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 11px;
+  border: 1px solid var(--m2-borde);
+  border-left: 3px solid var(--m2-activo);
+  border-radius: 8px;
+  background: var(--m2-tarjeta-hover);
+  color: var(--m2-texto-2);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.destinoLista { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+
+.destinoFila { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.destinoFlecha { flex-shrink: 0; color: var(--m2-activo); }
+.destinoNombre { flex: 1; min-width: 0; font-weight: 600; color: var(--m2-texto); }
+.destinoVencida { font-weight: 700; color: var(--danger); }
+.destinoImporte { flex-shrink: 0; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--m2-texto); }
+
+.destinoMas { padding-left: 19px; font-size: 12px; color: var(--m2-texto-3); }
+.destinoMas strong { font-weight: 650; color: var(--m2-texto-2); }
+
+.destino .nota { margin: 0; }
+
+/* ── Estrecho (teléfono o modal): la fila de una cuota en dos renglones, sin
+   scroll lateral ─────────────────────────────────────────────────────── */
+
+@container (max-width: 560px) {
+  .cuota {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icono nombre importe"
+      "icono fecha  estado";
+  }
+  .cuotaIcono { grid-area: icono; align-self: start; margin-top: 2px; }
+  .cuotaNombre { grid-area: nombre; }
+  .cuotaImporte { grid-area: importe; }
+  .cuotaFecha { grid-area: fecha; text-align: left; font-size: 11.5px; color: var(--m2-texto-3); }
+  .cuotaEstado { grid-area: estado; }
+}

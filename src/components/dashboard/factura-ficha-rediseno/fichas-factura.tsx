@@ -41,6 +41,7 @@ import {
   type ContactoPaciente, type FacturaDeFicha, type ViaEnvio,
 } from "./datos";
 import { enviarFactura, useExtrasDeFacturas } from "./extras";
+import { BloquePlan } from "@/components/dashboard/plan-de-pagos/bloque-plan";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import s from "./ficha.module.css";
 
@@ -219,6 +220,11 @@ function Ficha({
           </span>
         </p>
       </div>
+
+      {/* Por qué cuota va y si está al corriente (ws1-t2). Derivado de lo
+          cobrado; sin condiciones a plazos no pinta nada. Una anulada no debe, y
+          un borrador TODAVÍA no: nada de «vencidas» en lo que no se ha confirmado. */}
+      {!anulada && inv.status !== "DRAFT" && <BloquePlan condiciones={condiciones} total={inv.total} pagado={inv.paid} />}
 
       {/* Las acciones no abren el detalle: cada botón hace lo suyo. */}
       <div className={s.fichaAcciones} onClick={(e) => e.stopPropagation()}>
