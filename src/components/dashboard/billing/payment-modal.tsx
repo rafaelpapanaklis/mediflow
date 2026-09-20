@@ -16,6 +16,8 @@ import { fmtMXNdec } from "@/lib/format";
 import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
 import { useT } from "@/i18n/i18n-provider";
 // Ropa del diseño nuevo (solo con `rediseno`). Ver factura-rediseno/.
+// A qué cuota va lo que se cobra (solo informa; el POST no cambia). ws1-t2.
+import { DestinoDelAbono } from "@/components/dashboard/plan-de-pagos/destino-abono";
 import { CLASES_FACTURA_REDISENO, CLASES_CALENDARIO_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
@@ -158,6 +160,11 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
               <p className={cx("text-[11px]", `${c.ayuda} ${c.cifraPeligro}`)} style={rediseno ? undefined : { color: "var(--danger)" }}>
                 {t("clinical.paymentModal.overpayWarning", { balance: fmtMXNdec(invoice.balance) })}
               </p>
+            )}
+            {/* Solo con el diseño nuevo: apagado, este modal es el de siempre.
+                Siempre montado (un sobrepago le pasa 0): remontarlo volvería a leer. */}
+            {rediseno && (
+              <DestinoDelAbono invoiceId={invoice.id} total={invoice.total} pagado={invoice.paid} importe={isOverpay ? 0 : amountNum || 0} activo={open} />
             )}
           </div>
 

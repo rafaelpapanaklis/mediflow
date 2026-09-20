@@ -174,6 +174,12 @@ export interface EstadoPlan {
   importeVencido: number;
   /** Lo pagado ≥ la suma de lo vencido hasta hoy. Nada más. */
   alCorriente: boolean;
+  /**
+   * ¿Alguna cuota tiene fecha? Sin fechas nada vence y `alCorriente` es `true`
+   * por definición: quien lo pinte NO debe presumir de «al corriente» sobre la
+   * ausencia de un dato. Que diga que el plan no tiene fechas.
+   */
+  conFechas: boolean;
   /** Lo cobrado, en pesos (nunca negativo). */
   pagado: number;
   /** Lo que falta del plan entero, en pesos. */
@@ -223,6 +229,7 @@ export function estadoDelPlan(
     vencidas: vencidas.length,
     importeVencido: aPesos(vencidas.reduce((acc, q) => acc + aCentavos(q.falta), 0)),
     alCorriente: vencidas.length === 0,
+    conFechas: conEstado.some((q) => q.vencimiento !== null),
     pagado: aPesos(cobradoC),
     pendiente: aPesos(pendienteC),
     excedente: aPesos(restoC),

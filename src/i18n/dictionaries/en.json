@@ -9191,6 +9191,51 @@
     "envioSinConfirmar": "The delivery could not be confirmed: the connection dropped before a response arrived. Before resending, check with the patient or in the Inbox whether it already arrived.",
     "creadaEnvioSinConfirmar": "The invoice was created, but it could not be confirmed whether it was sent to the patient. Check before resending it from its card."
   },
+  "planDePagos": {
+    "titulo": "Payment plan",
+    "vaPor": "Installment {n}",
+    "deN": "of {total}",
+    "vaPorEnganche": "Down payment due",
+    "saldado": "Plan paid off",
+    "enganche": "Down payment",
+    "cuotaN": "Installment {n}",
+    "alCorriente": "Up to date",
+    "pagadoEntero": "Paid in full",
+    "vencidas": {
+      "one": "{count} payment overdue",
+      "other": "{count} payments overdue"
+    },
+    "siguiente": "Next one due",
+    "sinFecha": "no date",
+    "pagado": "Paid",
+    "pendiente": "Outstanding",
+    "verCuotas": {
+      "one": "View {count} plan payment",
+      "other": "View all {count} plan payments"
+    },
+    "estado": {
+      "pagada": "Paid",
+      "porVencer": "Upcoming",
+      "vencida": "Overdue"
+    },
+    "falta": "{importe} left",
+    "notaCascada": "Each payment settles the oldest installment still open. This is calculated from the recorded payments: if one is refunded, the plan moves back by itself.",
+    "descuadreTitulo": "The plan no longer matches the invoice.",
+    "descuadre": {
+      "engancheCubreTodo": "A down payment of {enganche} was agreed and the invoice total is now {total}: there are no installments left to split. Review the payment terms with the patient.",
+      "menosCuotasQueLasAcordadas": "{acordadas} installments were agreed, but today's total ({total}) only gives {quedan}. Review the payment terms with the patient.",
+      "noSumaElTotal": "The installments do not add up to the invoice total ({total}). Review the payment terms with the patient."
+    },
+    "destinoTitulo": "Where this payment goes",
+    "destinoSalda": "Settles: {cuota}",
+    "destinoAbona": "Goes toward: {cuota}",
+    "destinoNota": "It goes to the oldest installment still open; there is nothing to choose.",
+    "sinFechas": "No due dates set",
+    "destinoMas": {
+      "one": "and {count} more plan payment",
+      "other": "and {count} more plan payments"
+    }
+  },
   "presupuestoNuevo": {
     "listaTitulo": "Quotes",
     "listaSubtitulo": "What the patient was quoted, and how they will pay for it.",

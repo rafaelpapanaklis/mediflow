@@ -9191,6 +9191,51 @@
     "envioSinConfirmar": "No se pudo confirmar el envío: la conexión se cortó antes de recibir respuesta. Antes de reenviar, comprueba con el paciente o en el Inbox si ya le llegó.",
     "creadaEnvioSinConfirmar": "La factura se creó, pero no se pudo confirmar si se le envió al paciente. Compruébalo antes de reenviarla desde su ficha."
   },
+  "planDePagos": {
+    "titulo": "Plan de pagos",
+    "vaPor": "Cuota {n}",
+    "deN": "de {total}",
+    "vaPorEnganche": "Falta el enganche",
+    "saldado": "Plan saldado",
+    "enganche": "Enganche",
+    "cuotaN": "Cuota {n}",
+    "alCorriente": "Al corriente",
+    "pagadoEntero": "Pagado completo",
+    "vencidas": {
+      "one": "{count} pago vencido",
+      "other": "{count} pagos vencidos"
+    },
+    "siguiente": "La siguiente vence",
+    "sinFecha": "sin fecha",
+    "pagado": "Pagado",
+    "pendiente": "Pendiente",
+    "verCuotas": {
+      "one": "Ver {count} pago del plan",
+      "other": "Ver los {count} pagos del plan"
+    },
+    "estado": {
+      "pagada": "Pagada",
+      "porVencer": "Por vencer",
+      "vencida": "Vencida"
+    },
+    "falta": "faltan {importe}",
+    "notaCascada": "Cada pago salda la cuota más vieja que quede. Esto se calcula con los pagos registrados: si se reembolsa uno, el plan retrocede solo.",
+    "descuadreTitulo": "El plan ya no cuadra con la factura.",
+    "descuadre": {
+      "engancheCubreTodo": "Se acordó un enganche de {enganche} y el total de la factura hoy es {total}: no quedan cuotas que repartir. Revisa la forma de pago con el paciente.",
+      "menosCuotasQueLasAcordadas": "Se acordaron {acordadas} cuotas y con el total de hoy ({total}) solo salen {quedan}. Revisa la forma de pago con el paciente.",
+      "noSumaElTotal": "La suma de las cuotas no da el total de la factura ({total}). Revisa la forma de pago con el paciente."
+    },
+    "destinoTitulo": "A qué va este pago",
+    "destinoSalda": "Salda: {cuota}",
+    "destinoAbona": "Abona a: {cuota}",
+    "destinoNota": "Va a la cuota más vieja que quede; no hay que elegir.",
+    "sinFechas": "Sin fechas de vencimiento",
+    "destinoMas": {
+      "one": "y {count} pago más del plan",
+      "other": "y {count} pagos más del plan"
+    }
+  },
   "presupuestoNuevo": {
     "listaTitulo": "Presupuestos",
     "listaSubtitulo": "Lo que se le cotizó al paciente y cómo lo va a pagar.",

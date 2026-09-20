@@ -255,3 +255,25 @@ test("es.json y en.json traen las MISMAS claves de planDePagos, y las que usa la
     assert.ok(todas.includes(k), `falta planDePagos.${k}`);
   }
 });
+
+test("sin fechas: `conFechas` es false, para que nadie presuma de «al corriente»", () => {
+  const sin = calendarioDeCuotas(plazos({ numPagos: 3, primerPago: null }), 6000);
+  assert.equal(estadoDelPlan(sin, [], "2030-01-01").conFechas, false);
+  assert.equal(estadoDelPlan(deDosMil(3), [], "2026-01-01").conFechas, true);
+});
+
+test("montaje: tras el interruptor, sin borradores, y el destino no tapa el cobro", () => {
+  const detalle = leer("src/components/dashboard/billing/invoice-detail-modal.tsx");
+  assert.match(detalle, /rediseno && !isCancelled && !isDraft && \(\s*<BloquePlan/);
+  assert.match(detalle, /useCondicionesDeFactura\(invoice\?\.id, open && rediseno\)/);
+  assert.match(leer("src/components/dashboard/billing/payment-modal.tsx"), /\{rediseno && \(\s*<DestinoDelAbono/);
+  assert.match(leer("src/components/dashboard/factura-ficha-rediseno/fichas-factura.tsx"), /!anulada && inv\.status !== "DRAFT" && <BloquePlan/);
+  assert.match(leer("src/components/dashboard/plan-de-pagos/destino-abono.tsx"), /const MAX_FILAS = 3;/);
+  // Ninguna clase de CSS module que no exista (saldría `undefined` en el DOM).
+  const css = leer("src/components/dashboard/plan-de-pagos/plan.module.css");
+  for (const f of ["bloque-plan.tsx", "destino-abono.tsx"]) {
+    for (const m of leer(`src/components/dashboard/plan-de-pagos/${f}`).matchAll(/\bs\.(\w+)/g)) {
+      assert.ok(css.includes(`.${m[1]}`), `${f} usa s.${m[1]} y plan.module.css no la declara`);
+    }
+  }
+});
