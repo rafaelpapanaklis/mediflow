@@ -324,3 +324,132 @@ export function getAppointmentEventSettings(clinic: { reminderSettings?: unknown
     rs && typeof rs === "object" && !Array.isArray(rs) ? (rs as Record<string, unknown>).eventos : null;
   return sanitizeAppointmentEventSettings(eventos) ?? { ...DEFAULT_APPOINTMENT_EVENT_SETTINGS };
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Cobranza — el aviso de la mensualidad por vencer y el saldo por el bot
+// (ws1-t3).
+//
+// Hoy hay recordatorios de cita, de cumpleaños y de seguimiento. De COBRANZA,
+// ninguno: nadie avisa de una mensualidad antes de que venza. Esto lo cierra,
+// y de paso deja que el bot conteste «¿cuánto debo?» sin que la clínica tenga
+// que estar.
+//
+// Vive en Clinic.reminderSettings.cobranza —sub-objeto del MISMO Json, igual
+// que `recall` y `eventos`— → CERO cambio de schema. Como `cobranza` no trae
+// `offsets`, guardar SOLO esto no convierte el Json en una config de
+// recordatorios válida: `getEffectiveReminderSettings` sigue cayendo a los
+// toggles legacy y el cron de citas se comporta exactamente como antes.
+//
+// LOS DOS APAGADOS DE FÁBRICA, y por dos razones distintas:
+//   · `enabled` (el aviso): cada plantilla fuera de la ventana de 24 h de Meta
+//     CUESTA DINERO, y una mensualidad por vencer casi nunca cae dentro de esa
+//     ventana. Con esto encendido de fábrica, el día que llegara a producción
+//     TODAS las clínicas empezarían a pagar mensajes que no pidieron. Es el
+//     mismo criterio que `DEFAULT_APPOINTMENT_EVENT_SETTINGS` (ws1-t2).
+//   · `bot` (decir el saldo por WhatsApp): esto no cuesta dinero, cuesta algo
+//     peor — es soltar cuánto debe un paciente a quien tenga el teléfono. Que
+//     el bot hable de dinero es una decisión deliberada de la clínica, nunca
+//     un default. Ver `src/lib/whatsapp/bot/saldo-core.ts` para lo que exige
+//     ANTES de decir un peso.
+// ════════════════════════════════════════════════════════════════════
+
+export interface CobranzaSettings {
+  /** Avisar por WhatsApp de una mensualidad que está por vencer. */
+  enabled: boolean;
+  /** Cuántos días ANTES del vencimiento sale el aviso. */
+  diasAntes: number;
+  /** El bot puede decir la próxima mensualidad (tras verificar identidad). */
+  bot: boolean;
+  /** Plantilla con {nombre} {clinica} {importe} {fecha} {cuota} {total}. */
+  message: string;
+}
+
+/** Días seleccionables en la UI. */
+export const ALLOWED_COBRANZA_DIAS_ANTES = [1, 3, 5, 7] as const;
+export const DEFAULT_COBRANZA_DIAS_ANTES = 3;
+
+/** Tope de seguridad por clínica y por corrida del barrido. */
+export const COBRANZA_MAX_PER_CLINIC = 200;
+
+export const DEFAULT_COBRANZA_MESSAGE =
+  "Hola {nombre} 👋, te recordamos que tu mensualidad de *{clinica}* por *{importe}* " +
+  "vence el *{fecha}*. Si ya la pagaste, ignora este mensaje. ¡Gracias! 🦷";
+
+export const DEFAULT_COBRANZA_SETTINGS: CobranzaSettings = {
+  enabled: false,
+  diasAntes: DEFAULT_COBRANZA_DIAS_ANTES,
+  bot: false,
+  message: DEFAULT_COBRANZA_MESSAGE,
+};
+
+/**
+ * Llave de idempotencia del aviso de cobranza: jamás dos avisos para la misma
+ * factura + cuota + vencimiento.
+ *
+ * Lleva el vencimiento dentro A PROPÓSITO: si la clínica reescribe las
+ * condiciones y la cuota 7 cambia de fecha, ese es un aviso NUEVO que sí debe
+ * salir. Sin la fecha, un plan reprogramado se quedaría callado para siempre.
+ */
+export function dedupeKeyCobranza(
+  invoiceId: string,
+  numeroCuota: number,
+  vencimiento: string,
+): string {
+  return `${invoiceId}|${numeroCuota}|${vencimiento}`;
+}
+
+/**
+ * Valida/normaliza un `cobranza` crudo (Json de DB o body de PATCH). Devuelve
+ * null solo si la forma base no es un objeto (el caller responde 400). Un campo
+ * que falta o no es del tipo esperado cae a su default: un Json a medias no
+ * puede encender lo que la clínica no tocó.
+ */
+export function sanitizeCobranzaSettings(raw: unknown): CobranzaSettings | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+
+  const diasRaw = typeof o.diasAntes === "number" ? Math.round(o.diasAntes) : NaN;
+  const allowed = ALLOWED_COBRANZA_DIAS_ANTES as readonly number[];
+  const diasAntes = allowed.includes(diasRaw) ? diasRaw : DEFAULT_COBRANZA_DIAS_ANTES;
+
+  const message =
+    typeof o.message === "string" && o.message.trim()
+      ? o.message.trim().slice(0, MAX_TEMPLATE_LEN)
+      : DEFAULT_COBRANZA_MESSAGE;
+
+  // `=== true` y no `!!`: los dos interruptores solo se encienden con un
+  // booleano de verdad. Un "true" de cadena o un 1 no enciende nada.
+  return {
+    enabled: o.enabled === true,
+    diasAntes,
+    bot: o.bot === true,
+    message,
+  };
+}
+
+/** Config de cobranza efectiva de la clínica (lee reminderSettings.cobranza). */
+export function getCobranzaSettings(clinic: { reminderSettings?: unknown }): CobranzaSettings {
+  const rs = clinic?.reminderSettings;
+  const cobranza =
+    rs && typeof rs === "object" && !Array.isArray(rs)
+      ? (rs as Record<string, unknown>).cobranza
+      : null;
+  return sanitizeCobranzaSettings(cobranza) ?? { ...DEFAULT_COBRANZA_SETTINGS };
+}
+
+/** Sustituye las variables de la plantilla del aviso de cobranza. */
+export function renderCobranzaMessage(
+  template: string,
+  vars: { nombre: string; clinica: string; importe: string; fecha: string; cuota: string; total: string },
+): string {
+  return template
+    .replaceAll("{nombre}", vars.nombre)
+    .replaceAll("{paciente}", vars.nombre)
+    .replaceAll("{clinica}", vars.clinica)
+    .replaceAll("{clinicName}", vars.clinica)
+    .replaceAll("{importe}", vars.importe)
+    .replaceAll("{fecha}", vars.fecha)
+    .replaceAll("{cuota}", vars.cuota)
+    .replaceAll("{total}", vars.total)
+    .trim();
+}

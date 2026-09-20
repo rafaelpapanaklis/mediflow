@@ -40,7 +40,25 @@ export interface BotConfigDTO {
   afterHoursMsg: string | null;
   canAnswerFaq: boolean;
   canBookAppointments: boolean;
+  /**
+   * ws1-t3 — el bot puede decir la próxima mensualidad y lo pendiente, SIEMPRE
+   * tras verificar la identidad (ver bot/saldo-core.ts). Apagado de fábrica.
+   *
+   * A diferencia de los otros dos, NO es una columna de `whatsapp_bot_configs`:
+   * vive en `Clinic.reminderSettings.cobranza.bot`, el mismo Json donde ya
+   * viven `recall` y `eventos`, para no tocar el schema. `loadBotConfig` lo
+   * resuelve y lo deja aquí, así que el motor y el núcleo no notan la
+   * diferencia.
+   *
+   * OPCIONAL a propósito: un DTO al que nadie le puso el campo está APAGADO,
+   * que es exactamente el default que queremos. Así ningún otro constructor
+   * del DTO tiene que enterarse de que este interruptor existe para seguir
+   * comportándose como hoy.
+   */
+  canAnswerBalance?: boolean;
   fallbackToHuman: boolean;
+  /** TZ de la clínica: el saldo necesita saber qué día es HOY donde atienden. */
+  timezone?: string;
 }
 
 /** FAQ habilitada de la clínica (espejo de WhatsAppBotFaq). */

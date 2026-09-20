@@ -7,6 +7,7 @@ import {
   getAppointmentEventSettings,
   getEffectiveReminderSettings,
   sanitizeReminderSettings,
+  getCobranzaSettings,
 } from "@/lib/reminders/config";
 import { getRecentReminders } from "@/lib/whatsapp/recent-reminders";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
@@ -64,6 +65,7 @@ export default async function WhatsAppPage() {
       reminderFromSettings={sanitizeReminderSettings(user.clinic.reminderSettings) !== null}
       reminderMasterOn={user.clinic.waReminderActive ?? true}
       eventos={getAppointmentEventSettings(user.clinic)}
+      cobranza={getCobranzaSettings(user.clinic)}
       recentReminders={recent.rows}
       recentRemindersFailed={recent.failed}
       sinPlantilla30d={recent.sinPlantilla30d}
