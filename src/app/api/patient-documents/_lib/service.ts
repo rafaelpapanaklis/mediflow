@@ -1,4 +1,9 @@
-// Nota de evolución como DOCUMENTO (plantilla de la clínica → texto → firma).
+// Nota de evolución como DOCUMENTO (texto del doctor → firma).
+//
+// La plantilla es OPCIONAL: una nota se escribe en blanco y se firma sin tocar
+// ninguna (`templateId = null`, el mismo caso que una plantilla borrada). La
+// plantilla solo ahorra teclear; nunca es un peaje. El consentimiento es otra
+// cosa: allí la plantilla sigue siendo obligatoria y no pasa por este archivo.
 //
 // Es un camino NUEVO al lado de la nota de evolución de siempre (el formulario
 // dental sobre `medical_records`). Aquello no se toca desde aquí.
@@ -262,6 +267,25 @@ function entradaDemasiadoLarga(crudo: unknown): NotaFallo | null {
   return typeof crudo === "string" && crudo.length > MAX_INPUT_LENGTH ? falla("BODY_TOO_LONG") : null;
 }
 
+/* ─── título ───────────────────────────────────────────────────────────── */
+
+export const MAX_TITLE_LENGTH = 120;
+
+/**
+ * El título de una nota que el doctor no tituló. Lleva su fecha porque la lista
+ * se lee por el título: veinte «Nota de evolución» iguales no dicen nada.
+ */
+export function tituloPorDefecto(fecha: string): string {
+  return fecha ? `Nota de evolución · ${fecha}` : "Nota de evolución";
+}
+
+/** Texto plano de una línea. Lo que no sea texto, o quede vacío, es «sin título». */
+export function limpiarTitulo(crudo: unknown): string {
+  if (typeof crudo !== "string") return "";
+  // eslint-disable-next-line no-control-regex
+  return crudo.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, MAX_TITLE_LENGTH).trim();
+}
+
 function validarCuerpo(body: string): NotaFallo | null {
   if (isBlankHtml(body)) return falla("BODY_REQUIRED");
   if (body.length > MAX_BODY_LENGTH) return falla("BODY_TOO_LONG");
@@ -367,34 +391,58 @@ export async function getNotaParaEditar(
   if (!fila) return nota;
   const c = await cargarContexto(db, clinicId, fila.patientId, doctorId, ahora);
   if (c.ok === false) return nota;
-  return { ...nota, fecha: c.value.encabezado.fecha, doctorNombre: c.value.encabezado.doctorNombre,
+  // El título por defecto lleva la fecha: se enseña ya con la de hoy, que es con
+  // la que se va a firmar (misma regla que `guardarBorrador`).
+  const title = nota.title === tituloPorDefecto(nota.encabezado.fecha)
+    ? tituloPorDefecto(c.value.encabezado.fecha) : nota.title;
+  return { ...nota, title, fecha: c.value.encabezado.fecha, doctorNombre: c.value.encabezado.doctorNombre,
     encabezado: c.value.encabezado, faltantes: faltantesDe(c.value.encabezado) };
 }
 
 /* ─── previsualizar, crear, editar, firmar ─────────────────────────────── */
 
 export interface PreviewNota {
-  templateId: string;
+  /** `null` = hoja en blanco: no salió de ninguna plantilla. */
+  templateId: string | null;
+  /** El nombre de la plantilla; vacío en la hoja en blanco (lo pone el doctor o el servidor). */
   title: string;
+  /** El título que llevará la nota si el doctor no escribe uno. */
+  tituloPorDefecto: string;
   body: string;
   encabezado: EncabezadoNota;
   faltantes: Faltante[];
 }
 
-/** La plantilla ya rellenada con los datos de hoy. No guarda nada. */
+/**
+ * La hoja con la que arranca el editor. Sin `templateId` es la hoja EN BLANCO
+ * (solo la cabecera de hoy): no consulta ninguna plantilla, así que una clínica
+ * sin plantillas escribe igual. Con él, la plantilla ya rellenada. No guarda nada.
+ */
 export async function previewNota(
   db: NotaDb,
   clinicId: string,
-  input: { patientId: string; doctorId: string; templateId: string },
+  input: { patientId: string; doctorId: string; templateId?: string | null },
   ahora: Date,
 ): Promise<NotaResult<PreviewNota>> {
   const c = await cargarContexto(db, clinicId, input.patientId, input.doctorId, ahora);
   if (c.ok === false) return c;
+  const porDefecto = tituloPorDefecto(c.value.encabezado.fecha);
+  if (!input.templateId) {
+    return bien({
+      templateId: null,
+      title: "",
+      tituloPorDefecto: porDefecto,
+      body: "",
+      encabezado: c.value.encabezado,
+      faltantes: faltantesDe(c.value.encabezado),
+    });
+  }
   const plantilla = await plantillaDeNota(db, clinicId, input.templateId);
   if (!plantilla) return falla("TEMPLATE_NOT_FOUND");
   return bien({
     templateId: plantilla.id,
     title: plantilla.name,
+    tituloPorDefecto: porDefecto,
     body: rellenar(plantilla.body, c.value),
     encabezado: c.value.encabezado,
     faltantes: faltantesDe(c.value.encabezado),
@@ -404,9 +452,12 @@ export async function previewNota(
 export interface CreateNotaInput {
   patientId: string;
   doctorId: string;
-  templateId: string;
-  /** El texto ya rellenado por el doctor. Sin él se usa el de la plantilla. */
+  /** Opcional. Sin plantilla es una nota libre y `body` es obligatorio. */
+  templateId?: string | null;
+  /** El texto del doctor. Sin él se usa el de la plantilla (si hay). */
   body?: unknown;
+  /** El título que escribió el doctor. Vacío = el de la plantilla o el de por defecto. */
+  title?: unknown;
   /** `true` = crear y firmar en un solo paso. */
   sign?: boolean;
 }
@@ -419,12 +470,15 @@ export async function createNota(
 ): Promise<NotaResult<NotaCompleta>> {
   const c = await cargarContexto(db, clinicId, input.patientId, input.doctorId, ahora);
   if (c.ok === false) return c;
-  const plantilla = await plantillaDeNota(db, clinicId, input.templateId);
-  if (!plantilla) return falla("TEMPLATE_NOT_FOUND");
+  // Una plantilla NOMBRADA tiene que existir y ser de nota; lo que no hace falta
+  // es nombrarla. `undefined` jamás llega a un `where`: sin id no se consulta.
+  const plantilla = input.templateId ? await plantillaDeNota(db, clinicId, input.templateId) : null;
+  if (input.templateId && !plantilla) return falla("TEMPLATE_NOT_FOUND");
 
   const largo = entradaDemasiadoLarga(input.body);
   if (largo) return largo;
-  const origen = typeof input.body === "string" ? input.body : plantilla.body;
+  const origen = typeof input.body === "string" ? input.body : plantilla?.body ?? "";
+  // Libre o de plantilla, el texto pasa por el MISMO saneado de lista blanca.
   const body = rellenar(origen, c.value);
   const malo = validarCuerpo(body);
   if (malo) return malo;
@@ -435,9 +489,11 @@ export async function createNota(
       clinicId,
       patientId: input.patientId,
       doctorId: input.doctorId,
-      templateId: plantilla.id,
+      templateId: plantilla?.id ?? null,
       kind: NOTA_KIND,
-      title: plantilla.name, // COPIA: renombrar la plantilla no renombra la nota
+      // Nunca vacío: la lista se lee por el título. El de la plantilla es una
+      // COPIA: renombrarla no renombra la nota.
+      title: limpiarTitulo(input.title) || plantilla?.name || tituloPorDefecto(c.value.encabezado.fecha),
       body,
       encabezado: { ...c.value.encabezado },
       status: firmar ? "SIGNED" : "DRAFT",
@@ -459,7 +515,7 @@ async function borradorPropio(db: NotaDb, clinicId: string, id: string, doctorId
   if (typeof id !== "string" || id.length === 0) return falla("NOT_FOUND");
   const f = await db.patientDocument.findFirst({
     where: { id, clinicId, kind: NOTA_KIND },
-    select: { id: true, patientId: true, doctorId: true, status: true, body: true },
+    select: { id: true, patientId: true, doctorId: true, status: true, body: true, title: true, encabezado: true },
   });
   if (!f) return falla("NOT_FOUND");
   if (f.status !== "DRAFT") return falla("ALREADY_SIGNED");
@@ -493,11 +549,18 @@ async function guardarBorrador(
   // `status: "DRAFT"` en el WHERE, no solo en la lectura de arriba: si otra
   // pestaña la firmó entre medias, esta escritura no encuentra fila y lo
   // firmado se queda como estaba.
+  // El título por defecto lleva la fecha de la foto: si la foto se renueva, él
+  // también. Un título que escribió el doctor (o el de una plantilla) no se toca.
+  const fechaVieja = leerEncabezado(actual.value.encabezado).fecha;
+  const tituloNuevo =
+    actual.value.title === tituloPorDefecto(fechaVieja) ? tituloPorDefecto(c.value.encabezado.fecha) : null;
+
   const r = await db.patientDocument.updateMany({
     where: { id, clinicId, kind: NOTA_KIND, doctorId, status: "DRAFT" },
     data: {
       body,
       encabezado: { ...c.value.encabezado },
+      ...(tituloNuevo ? { title: tituloNuevo } : {}),
       ...(firmar ? { status: "SIGNED", signedAt: ahora, modoFirma: "DIGITAL" } : {}),
     },
   });

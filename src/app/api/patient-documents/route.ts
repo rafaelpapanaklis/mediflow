@@ -28,7 +28,10 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/patient-documents { patientId, templateId, body?, sign? }
+// POST /api/patient-documents { patientId, templateId?, title?, body?, sign? }
+// `templateId` es OPCIONAL: una nota se escribe en blanco y se firma sin tocar
+// ninguna plantilla (ticket del 19-sep-2026). Si viene, tiene que ser una
+// plantilla de nota de ESTA clínica; si no viene, `body` es obligatorio.
 // El doctor de la nota es SIEMPRE quien tiene la sesión: no se acepta del body.
 export async function POST(req: NextRequest) {
   const e = await entrar(req, ESCRIBIR, 20);
@@ -37,9 +40,9 @@ export async function POST(req: NextRequest) {
 
   const body = await leerJson(req);
   const patientId = typeof body.patientId === "string" ? body.patientId : "";
-  const templateId = typeof body.templateId === "string" ? body.templateId : "";
-  if (!patientId || !templateId) {
-    return NextResponse.json({ error: "patientId y templateId requeridos" }, { status: 400 });
+  const templateId = typeof body.templateId === "string" && body.templateId ? body.templateId : null;
+  if (!patientId) {
+    return NextResponse.json({ error: "patientId requerido" }, { status: 400 });
   }
   const oculto = await pacienteOculto(ctx, patientId);
   if (oculto) return oculto;
@@ -48,7 +51,7 @@ export async function POST(req: NextRequest) {
     const r = await createNota(
       prisma,
       ctx.clinicId,
-      { patientId, templateId, doctorId: ctx.userId, body: body.body, sign: body.sign === true },
+      { patientId, templateId, doctorId: ctx.userId, title: body.title, body: body.body, sign: body.sign === true },
       new Date(),
     );
     if (r.ok === false) return respuestaDeFallo(r);

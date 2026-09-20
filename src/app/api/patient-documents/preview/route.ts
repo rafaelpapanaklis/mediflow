@@ -1,6 +1,7 @@
-// GET /api/patient-documents/preview?patientId=&templateId= — la plantilla ya
-// rellenada con los datos de hoy, la cabecera que va a llevar y QUÉ LE FALTA
-// (cédula, logo), para avisar ANTES de firmar. No guarda nada.
+// GET /api/patient-documents/preview?patientId=[&templateId=] — la hoja con la
+// que arranca el editor: la cabecera que va a llevar y QUÉ LE FALTA (cédula,
+// logo), para avisar ANTES de firmar. Sin `templateId` es la hoja EN BLANCO; con
+// él, la plantilla ya rellenada con los datos de hoy. No guarda nada.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -16,9 +17,9 @@ export async function GET(req: NextRequest) {
 
   const q = new URL(req.url).searchParams;
   const patientId = q.get("patientId") ?? "";
-  const templateId = q.get("templateId") ?? "";
-  if (!patientId || !templateId) {
-    return NextResponse.json({ error: "patientId y templateId requeridos" }, { status: 400 });
+  const templateId = q.get("templateId") || null;
+  if (!patientId) {
+    return NextResponse.json({ error: "patientId requerido" }, { status: 400 });
   }
   const oculto = await pacienteOculto(ctx, patientId);
   if (oculto) return oculto;

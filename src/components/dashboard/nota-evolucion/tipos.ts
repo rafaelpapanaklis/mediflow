@@ -29,8 +29,12 @@ export interface NotaCompleta extends NotaResumen {
 }
 
 export interface PreviewNota {
-  templateId: string;
+  /** `null` = hoja en blanco: no salió de ninguna plantilla. */
+  templateId: string | null;
+  /** El nombre de la plantilla; vacío en la hoja en blanco. */
   title: string;
+  /** El título que llevará la nota si el doctor no escribe uno. */
+  tituloPorDefecto: string;
   body: string;
   encabezado: EncabezadoNota;
   faltantes: Faltante[];

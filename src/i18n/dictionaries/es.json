@@ -9431,10 +9431,8 @@
       "noPermission": "No tienes permiso para ver el expediente clínico de este paciente."
     },
     "pick": {
-      "title": "Elige una plantilla",
-      "subtitle": "Son las plantillas de nota de evolución que tu clínica escribió en Administración → Plantillas.",
-      "empty": "Tu clínica todavía no tiene plantillas de nota de evolución.",
-      "goToTemplates": "Crear una en Administración → Plantillas"
+      "title": "Plantillas de nota de evolución de tu clínica",
+      "empty": "Tu clínica no tiene plantillas de nota de evolución, y no hacen falta: la nota se escribe aquí mismo. Una plantilla solo ahorra teclear lo que se repite."
     },
     "header": {
       "patient": "Paciente",
@@ -9453,6 +9451,12 @@
         "numbered": "Lista numerada"
       },
       "label": "Texto de la nota",
+      "placeholder": "Escribe aquí la evolución de esta consulta…",
+      "titleLabel": "Título de la nota (opcional)",
+      "titlePlaceholder": "Título (opcional)",
+      "useTemplate": "Usar una plantilla",
+      "templateApplied": "Plantilla «{name}» lista para completar",
+      "templateAppended": "La plantilla se añadió debajo de lo que ya habías escrito",
       "headerHint": "La cabecera se llena sola con los datos del paciente, la clínica y tu usuario.",
       "saveDraft": "Guardar borrador",
       "sign": "Firmar nota",

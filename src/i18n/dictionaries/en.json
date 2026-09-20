@@ -9431,10 +9431,8 @@
       "noPermission": "You don't have permission to view this patient's clinical record."
     },
     "pick": {
-      "title": "Choose a template",
-      "subtitle": "These are the progress note templates your clinic wrote in Administration → Templates.",
-      "empty": "Your clinic has no progress note templates yet.",
-      "goToTemplates": "Create one in Administration → Templates"
+      "title": "Your clinic's progress note templates",
+      "empty": "Your clinic has no progress note templates, and none are needed: the note is written right here. A template only saves retyping what repeats."
     },
     "header": {
       "patient": "Patient",
@@ -9453,6 +9451,12 @@
         "numbered": "Numbered list"
       },
       "label": "Note text",
+      "placeholder": "Write this visit's progress here…",
+      "titleLabel": "Note title (optional)",
+      "titlePlaceholder": "Title (optional)",
+      "useTemplate": "Use a template",
+      "templateApplied": "Template “{name}” ready to fill in",
+      "templateAppended": "The template was added below what you had already written",
       "headerHint": "The header fills itself in with the patient, clinic and your user data.",
       "saveDraft": "Save draft",
       "sign": "Sign note",
