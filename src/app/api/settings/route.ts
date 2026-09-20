@@ -10,6 +10,7 @@ import {
   sanitizeReminderSettings,
   sanitizeRecallSettings,
   sanitizeAppointmentEventSettings,
+  sanitizeCobranzaSettings,
 } from "@/lib/reminders/config";
 import { esUrlDeLogoValida } from "@/lib/clinic-logo";
 
@@ -85,7 +86,11 @@ export async function PATCH(req: NextRequest) {
   // (ws1-t2). Tercera mitad del mismo Json y misma regla: `merged` se arma DE
   // CERO con las partes conocidas, así que una parte que no se arrastre aquí se
   // BORRA al guardar cualquiera de las otras.
-  if ("reminderSettings" in body || "recall" in body || "eventos" in body) {
+  //
+  // + reminderSettings.cobranza = el aviso de la mensualidad por vencer y el
+  // permiso para que el bot diga el saldo (ws1-t3). CUARTA parte del mismo
+  // Json, misma regla de mezcla.
+  if ("reminderSettings" in body || "recall" in body || "eventos" in body || "cobranza" in body) {
     const current = await prisma.clinic.findUnique({
       where: { id: ctx.clinicId },
       select: { reminderSettings: true },
@@ -142,10 +147,26 @@ export async function PATCH(req: NextRequest) {
       eventosPart = cur?.eventos ? sanitizeAppointmentEventSettings(cur.eventos) ?? undefined : undefined;
     }
 
+    // Parte de cobranza (aviso de mensualidad + saldo por el bot).
+    let cobranzaPart: ReturnType<typeof sanitizeCobranzaSettings> | undefined;
+    if ("cobranza" in body) {
+      if (body.cobranza === null) {
+        cobranzaPart = undefined;
+      } else {
+        cobranzaPart = sanitizeCobranzaSettings(body.cobranza);
+        if (!cobranzaPart) {
+          return NextResponse.json({ error: "cobranza inválido" }, { status: 400 });
+        }
+      }
+    } else {
+      cobranzaPart = cur?.cobranza ? sanitizeCobranzaSettings(cur.cobranza) ?? undefined : undefined;
+    }
+
     const merged: Record<string, any> = {};
     if (apptPart) Object.assign(merged, apptPart);
     if (recallPart) merged.recall = recallPart;
     if (eventosPart) merged.eventos = eventosPart;
+    if (cobranzaPart) merged.cobranza = cobranzaPart;
     data.reminderSettings = Object.keys(merged).length > 0 ? merged : Prisma.DbNull;
   }
 

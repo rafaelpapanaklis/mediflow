@@ -25,6 +25,8 @@ export type RecentReminderKind =
   | "Birthday"
   | "Followup"
   | "TreatmentFollowup"
+  /** Aviso de mensualidad por vencer (ws1-t3). */
+  | "PaymentDue"
   | "Clinical"
   | "Other";
 
@@ -76,6 +78,7 @@ function kindOf(type: string): RecentReminderKind {
   if (type === "RECALL") return "Recall";
   if (type === "BIRTHDAY") return "Birthday";
   if (type === "FOLLOWUP") return "Followup";
+  if (type === "PAYMENT_DUE") return "PaymentDue";
   if (type === "TREATMENT_FOLLOWUP") return "TreatmentFollowup";
   if (CLINICAL_TYPES.includes(type)) return "Clinical";
   return "Other";
