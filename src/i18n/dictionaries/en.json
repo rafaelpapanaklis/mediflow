@@ -2477,7 +2477,8 @@
       "noAllergies": "No known allergies",
       "emergencyLabel": "Emergency",
       "moreCount": "+{count}",
-      "deletePatient": "Delete patient"
+      "deletePatient": "Delete patient",
+      "downloadRecord": "Download full medical record"
     },
     "deleteModal": {
       "title": "You're about to delete {name}",
@@ -2805,6 +2806,28 @@
       "fieldDiagnoses": "Relevant diagnoses (ICD-10)",
       "sending": "Sending…",
       "createReferral": "Create referral"
+    },
+    "expedientePdf": {
+      "title": "Download full medical record",
+      "intro": "This builds a single PDF with {name}'s medical record (file {folio}): identification, health history, progress notes with their addenda, odontogram, treatment plans, prescriptions, consents, studies and appointments.",
+      "imagesLabel": "Include X-ray and photo images",
+      "imagesHint": {
+        "one": "Embeds 1 image in the document. The PDF will be about {size} larger.",
+        "other": "Embeds {count} images in the document. The PDF will be about {size} larger."
+      },
+      "imagesNone": "This patient has no images that can be embedded.",
+      "imagesUnknown": "We couldn't estimate the image size. You can still turn it on; the document will take longer.",
+      "imagesOffHint": "When off, X-rays and photos are listed with their type, date and who uploaded them.",
+      "imagesCapped": "At most {max} images will be embedded; the rest will be listed and the PDF will say why.",
+      "billingLabel": "Include invoices and quotes",
+      "billingHint": "Off by default: NOM-004 does not require them — the record is clinical — and mixing money with clinical history reads badly in a claim.",
+      "auditNotice": "Who generated this record and when is written to the audit log. It contains sensitive personal data: hand it only to the patient or to whoever they authorize.",
+      "generate": "Generate PDF",
+      "generating": "Generating…",
+      "working": "We're building the document. With many notes, or with images turned on, it can take a minute; don't close this window.",
+      "listo": "Medical record downloaded",
+      "error": "The medical record could not be generated",
+      "errorPermiso": "You don't have permission to download the full medical record"
     }
   },
   "cashRegister": {
@@ -9468,6 +9491,7 @@
     "readNotaPdf": "PDF of a note",
     "readExportCda": "Exported the record (CDA)",
     "readExportArco": "Exported the data (ARCO access)",
+    "readExpedientePdf": "Downloaded the full medical record (PDF)",
     "readNoteId": "Note",
     "readNoContent": "A read changes nothing. The log keeps who and when, not the content."
   },

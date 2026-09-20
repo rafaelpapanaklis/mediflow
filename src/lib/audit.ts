@@ -194,8 +194,16 @@ export async function logMutation(opts: {
  * Qué se leyó. Lista CERRADA a propósito: solo abrir la ficha, imprimir una nota
  * concreta y exportar el expediente. Listas, agenda y buscador NO se registran —
  * multiplicarían las filas por mil y un rastro ilegible es no tener rastro.
+ *
+ * `expediente_pdf` (WS1-T4) es el expediente clínico COMPLETO en un solo PDF
+ * (GET /api/patients/[id]/expediente-pdf). Entra en la lista y no se cuelga de
+ * `export_arco` porque no es lo mismo: ARCO es una solicitud del titular que se
+ * atiende con un JSON de portabilidad, y esto es una copia clínica impresa que
+ * cualquiera con `medicalRecord.export` puede sacar desde la ficha. Si compartieran
+ * etiqueta, la bitácora no podría contestar cuál de las dos pasó — y ésta es la
+ * lectura más grande que existe en el panel.
  */
-export type ReadKind = "ficha" | "nota_pdf" | "export_cda" | "export_arco";
+export type ReadKind = "ficha" | "nota_pdf" | "export_cda" | "export_arco" | "expediente_pdf";
 
 /**
  * Ventana de dedupe. Aplica SOLO a "ficha": la página se re-renderiza con cada
@@ -283,9 +291,10 @@ export async function logRead(opts: {
         recentReads.delete(key);
         console.error("logRead error:", e);
       });
-    const limit = opts.kind === "export_cda" || opts.kind === "export_arco"
-      ? READ_LOG_EXPORT_TIMEOUT_MS
-      : READ_LOG_TIMEOUT_MS;
+    const limit =
+      opts.kind === "export_cda" || opts.kind === "export_arco" || opts.kind === "expediente_pdf"
+        ? READ_LOG_EXPORT_TIMEOUT_MS
+        : READ_LOG_TIMEOUT_MS;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<"timeout">((resolve) => {
       timer = setTimeout(() => resolve("timeout"), limit);

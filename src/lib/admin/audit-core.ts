@@ -289,6 +289,10 @@ export const READ_KIND_LABELS: Record<string, { key: string; fallback: string }>
   nota_pdf: { key: "auditoria.readNotaPdf", fallback: "PDF de una nota" },
   export_cda: { key: "auditoria.readExportCda", fallback: "Exportó el expediente (CDA)" },
   export_arco: { key: "auditoria.readExportArco", fallback: "Exportó los datos (ARCO acceso)" },
+  // WS1-T4. Sin esta entrada la fila saldría en la Bitácora con el string
+  // crudo "expediente_pdf" — y justamente ésta es la que nadie puede tener que
+  // descifrar: es la lectura más grande del panel.
+  expediente_pdf: { key: "auditoria.readExpedientePdf", fallback: "Descargó el expediente completo (PDF)" },
 };
 
 /**

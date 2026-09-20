@@ -203,6 +203,8 @@
     "test:gate-antes-despues": "tsx --test src/lib/auth/__tests__/gate-antes-despues.test.ts",
     "test:pdf-cabecera": "tsx --test src/lib/pdf/__tests__/clinic-letterhead.test.ts",
     "test:pdf-documentos": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/documentos-cabecera.test.tsx",
+    "test:expediente-pdf": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/expediente-documento.test.tsx",
+    "test:expediente-ruta": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/app/api/patients/__tests__/expediente-pdf-ruta.test.tsx",
     "test:comprobante-cabecera": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/invoices/__tests__/comprobante-cabecera.test.tsx",
     "//test:procedimientos-gasto": "Necesita --experimental-test-module-mocks: ejecuta DE VERDAD el POST/PATCH de /api/procedures y changesToTreatments del odontograma. El gasto no sale por ningun lector del catalogo fuera del panel, sin gasto no hay margen, gasto negativo = 400, y el PATCH jamas escribe code (llave ODO_* del odontograma).",
     "test:procedimientos-gasto": "tsx --test --experimental-test-module-mocks src/app/api/procedures/__tests__/gasto-y-llave.test.ts",
