@@ -749,6 +749,61 @@
 .siNoNoActivo { background: var(--pr-exito); color: #fff; }
 .siNoNoActivo:hover { background: var(--pr-exito); color: #fff; }
 
+/* ═══ Secciones de casillas (NOM-004) ════════════════════════════════
+   Lo largo del cuestionario —heredo-familiares e interrogatorio por
+   aparatos— va PLEGADO y en casillas, no en botones Sí/No: una revisión de
+   control no lo llena, y la primera visita lo llena de un tirón. La fila
+   entera es el objetivo del toque (44 px, que es el pulgar en un teléfono),
+   no solo el cuadrito. */
+
+.casillas {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pr-texto);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.casilla:hover { border-color: var(--pr-borde); background: var(--pr-hover); }
+
+.casillaMarcada,
+.casillaMarcada:hover {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo-suave);
+}
+
+.casillaEntrada {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--pr-activo);
+  cursor: pointer;
+}
+
+.casillaEntrada:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+.ayudaSeccion {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--pr-texto-3);
+}
+
 .campo { display: flex; flex-direction: column; gap: 5px; }
 
 .campoEtiqueta {

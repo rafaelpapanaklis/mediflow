@@ -5158,6 +5158,55 @@
     }
   },
   "clinical": {
+    "nom004": {
+      "titulo": "NOM-004",
+      "marcadas": { "one": "1 checked", "other": "{count} checked" },
+      "conNota": "With a note",
+      "heredoFamiliares": {
+        "titulo": "Family medical history",
+        "ayuda": "What the parents have or had. Check only what the patient reports: anything left unchecked asserts nothing.",
+        "diabetes": "Diabetes",
+        "hipertension": "Hypertension",
+        "cardiopatias": "Heart disease",
+        "cancer": "Cancer",
+        "otros": "Other family history",
+        "otrosEjemplo": "E.g. mother with rheumatoid arthritis; father died of a stroke"
+      },
+      "aparatosSistemas": {
+        "titulo": "Review of systems",
+        "ayuda": "Check the system where the patient reports something. What is left unchecked stays blank: it does not mean “unremarkable”.",
+        "cardiovascular": "Cardiovascular",
+        "respiratorio": "Respiratory",
+        "digestivo": "Digestive",
+        "genitourinario": "Genitourinary",
+        "endocrino": "Endocrine",
+        "nervioso": "Nervous",
+        "musculoesqueletico": "Musculoskeletal",
+        "notas": "Review notes",
+        "notasEjemplo": "E.g. reports shortness of breath on moderate exertion for the past month"
+      },
+      "exploracionFisica": {
+        "titulo": "Physical examination",
+        "ayuda": "What was examined today. Whatever was not examined is left blank.",
+        "capturada": "recorded",
+        "habitus": "General appearance",
+        "habitusEjemplo": "E.g. well built, normal gait",
+        "cabezaCuello": "Head and neck",
+        "cabezaCuelloEjemplo": "E.g. facial symmetry preserved",
+        "cavidadOral": "Oral cavity",
+        "cavidadOralEjemplo": "E.g. calculus on lower anteriors, gingiva 36",
+        "atm": "TMJ",
+        "atmEjemplo": "E.g. 42 mm opening, right-side click",
+        "ganglios": "Lymph nodes",
+        "gangliosEjemplo": "E.g. submandibular nodes not palpable",
+        "notas": "Examination notes",
+        "notasEjemplo": "Anything that does not fit above. E.g. patient markedly anxious in the chair"
+      },
+      "pronostico": {
+        "titulo": "Prognosis",
+        "ayuda": "The same three as the treatment plan."
+      }
+    },
     "aiConsult": {
       "analyze": "Analyze with AI",
       "analyzing": "Analyzing…",

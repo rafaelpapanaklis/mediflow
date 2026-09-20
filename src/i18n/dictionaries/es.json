@@ -5158,6 +5158,55 @@
     }
   },
   "clinical": {
+    "nom004": {
+      "titulo": "NOM-004",
+      "marcadas": { "one": "1 marcada", "other": "{count} marcadas" },
+      "conNota": "Con nota",
+      "heredoFamiliares": {
+        "titulo": "Antecedentes heredo-familiares",
+        "ayuda": "De qué padecen o padecieron los padres. Marca solo lo que el paciente refiera: lo que queda sin marcar no afirma nada.",
+        "diabetes": "Diabetes",
+        "hipertension": "Hipertensión",
+        "cardiopatias": "Cardiopatías",
+        "cancer": "Cáncer",
+        "otros": "Otros antecedentes familiares",
+        "otrosEjemplo": "Ej. madre con artritis reumatoide; padre finado por EVC"
+      },
+      "aparatosSistemas": {
+        "titulo": "Interrogatorio por aparatos y sistemas",
+        "ayuda": "Marca el aparato donde el paciente refiera algo. Lo que no se marca queda en blanco: no se interpreta como «sin alteraciones».",
+        "cardiovascular": "Cardiovascular",
+        "respiratorio": "Respiratorio",
+        "digestivo": "Digestivo",
+        "genitourinario": "Genitourinario",
+        "endocrino": "Endocrino",
+        "nervioso": "Nervioso",
+        "musculoesqueletico": "Musculoesquelético",
+        "notas": "Notas del interrogatorio",
+        "notasEjemplo": "Ej. refiere disnea de medianos esfuerzos desde hace un mes"
+      },
+      "exploracionFisica": {
+        "titulo": "Exploración física",
+        "ayuda": "Lo que se exploró hoy. Lo que no se exploró se deja en blanco.",
+        "capturada": "capturada",
+        "habitus": "Habitus exterior",
+        "habitusEjemplo": "Ej. buena constitución, marcha normal",
+        "cabezaCuello": "Cabeza y cuello",
+        "cabezaCuelloEjemplo": "Ej. simetría facial conservada",
+        "cavidadOral": "Cavidad oral",
+        "cavidadOralEjemplo": "Ej. cálculo en anteroinferiores, encía 36",
+        "atm": "ATM",
+        "atmEjemplo": "Ej. apertura 42 mm, chasquido derecho",
+        "ganglios": "Ganglios",
+        "gangliosEjemplo": "Ej. submandibulares no palpables",
+        "notas": "Notas de la exploración",
+        "notasEjemplo": "Lo que no entre arriba. Ej. paciente con ansiedad marcada al sillón"
+      },
+      "pronostico": {
+        "titulo": "Pronóstico",
+        "ayuda": "Los mismos tres del plan de tratamiento."
+      }
+    },
     "aiConsult": {
       "analyze": "Analizar con IA",
       "analyzing": "Analizando…",

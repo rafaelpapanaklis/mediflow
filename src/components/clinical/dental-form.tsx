@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { FileText, Lock, Stethoscope } from "lucide-react";
+import { ClipboardList, FileText, Lock, Stethoscope } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { formatCurrency } from "@/lib/utils";
@@ -15,6 +15,19 @@ import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
 import { DictationMic } from "@/components/clinical/shared/dictation-mic";
 import { AiConsultPanel, type AiAssistValue } from "./dental/ai-consult-panel";
+import {
+  EXPLORACION_FISICA,
+  normalizeExploracionFisica,
+  normalizePronostico,
+} from "@/lib/health-questionnaire";
+// El pronóstico NO se redefine aquí: los tres valores y sus textos son los del
+// plan de tratamiento. Dos léxicos para el mismo concepto es deuda desde el
+// día uno (NOM-004 §6.2).
+import {
+  PRONOSTICOS,
+  PRONOSTICO_CLAVE,
+  type Pronostico,
+} from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { pickSingleAppointmentOfDay } from "@/lib/clinical/note-appointment-link";
 
 /**
@@ -323,7 +336,19 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     height: initVitals.height ?? "",
   });
   const setV = (k: string, v: string) => setVitals(s => ({ ...s, [k]: v }));
-  const [vitalsOpen, setVitalsOpen] = useState(false);
+  const hayVitalesGuardados = !!(
+    initVitals.bpSys || initVitals.bpDia || initVitals.hr || initVitals.rr ||
+    initVitals.temp || initVitals.spo2 || initVitals.weight || initVitals.height
+  );
+  // ⚠ DESVIACIÓN DE WS1-T5, declarada en el reporte. Esta sección no es de esta
+  // tarea, pero tenía el MISMO defecto que la exploración física de abajo y se
+  // arregla en la misma línea: el `<fieldset disabled>` de una nota firmada
+  // apaga TODOS los controles que cuelgan de él, y el botón de desplegar es
+  // uno. Con la nota firmada y los vitales capturados, la sección arrancaba
+  // plegada, con su chip verde «capturados», y NO había forma de abrirla: los
+  // signos vitales de esa consulta quedaban invisibles en el panel. Se abre
+  // sola; en una nota sin firmar todo sigue exactamente igual que antes.
+  const [vitalsOpen, setVitalsOpen] = useState(() => isLocked && hayVitalesGuardados);
   const hasVitals = !!(vitals.bpSys || vitals.bpDia || vitals.hr || vitals.rr || vitals.temp || vitals.spo2 || vitals.weight || vitals.height);
   const bmi = useMemo(() => {
     const w = parseFloat(vitals.weight);
@@ -342,6 +367,35 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   if (vitals.temp && (nv(vitals.temp) < 34 || nv(vitals.temp) > 42))  vitalWarnings.push("Temp fuera de rango (34–42)");
   if (vitals.spo2 && (nv(vitals.spo2) < 80 || nv(vitals.spo2) > 100)) vitalWarnings.push("SpO₂ fuera de rango (80–100)");
 
+  // ── EXPLORACIÓN FÍSICA Y PRONÓSTICO — NOM-004 §6.2 (WS1-T5) ──────────────
+  //
+  // Van en `specialtyData` (columna JSON que ya existía), al lado de los
+  // signos vitales, que es donde el doctor ya está mirando. La sección
+  // arranca PLEGADA: una revisión de control no llena la exploración entera,
+  // la primera visita sí.
+  //
+  // ⛔ VACÍO ES VACÍO: lo que no se exploró se queda en blanco y NO se guarda.
+  // Un «sin alteraciones» por defecto que nadie miró es peor que el hueco,
+  // porque afirma algo que no se exploró.
+  const initExploracion = normalizeExploracionFisica(initialSpec.exploracionFisica);
+  const [exploracion, setExploracion] = useState<Record<string, string>>(() => {
+    const base: Record<string, string> = {};
+    EXPLORACION_FISICA.forEach(c => { base[c.key] = initExploracion[c.key] ?? ""; });
+    return base;
+  });
+  const setEx = (k: string, v: string) => setExploracion(e => ({ ...e, [k]: v }));
+  // Plegada de entrada… salvo en una nota FIRMADA que tenga algo dentro. El
+  // `<fieldset disabled>` apaga TODOS los controles que cuelgan de él, y el
+  // botón de desplegar es uno: si arrancara plegada, lo capturado quedaría
+  // ilegible en la pantalla, con un chip verde prometiendo que está ahí.
+  const [exploracionOpen, setExploracionOpen] = useState(
+    () => isLocked && Object.keys(initExploracion).length > 0,
+  );
+  const hasExploracion = EXPLORACION_FISICA.some(c => String(exploracion[c.key] ?? "").trim() !== "");
+  const [pronostico, setPronostico] = useState<Pronostico>(
+    () => normalizePronostico(initialSpec.pronostico, PRONOSTICOS) as Pronostico,
+  );
+
   // ── BORRADOR LOCAL DE LA CONSULTA EN CURSO — hallazgo 29 ──────────────────
   //
   // Sin esto, recargar a media consulta borraba lo tecleado del SOAP: el doctor
@@ -357,9 +411,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   // Tampoco viaja a la base ni a ningún servidor: el borrador no es expediente.
   //
   // Qué se guarda: lo que se TECLEA (SOAP, periodontal, oclusal, ATM, higiene,
-  // radiografías, próxima visita), los signos vitales y los procedimientos
-  // elegidos. El odontograma queda fuera a propósito: en una consulta nueva se
-  // precarga del estado vivo del paciente y al guardar se sincroniza
+  // radiografías, próxima visita), los signos vitales, la exploración física,
+  // el pronóstico y los procedimientos elegidos. El odontograma queda fuera a
+  // propósito: en una consulta nueva se precarga del estado vivo del paciente
+  // y al guardar se sincroniza
   // REEMPLAZANDO su historial dental — restaurar ahí una foto a medias es la
   // forma de borrarle el odontograma a alguien, y no vale la pena.
   const draftKey = isEditing ? null : `dc:dental-draft:${patientId}`;
@@ -397,6 +452,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       if (d && d.v === 1) {
         if (d.form)   setForm(f => ({ ...f, ...d.form }));
         if (d.vitals) setVitals(v => ({ ...v, ...d.vitals }));
+        if (d.exploracion) setExploracion(e => ({ ...e, ...normalizeExploracionFisica(d.exploracion) }));
+        if (typeof d.pronostico === "string") {
+          setPronostico(normalizePronostico(d.pronostico, PRONOSTICOS) as Pronostico);
+        }
         if (Array.isArray(d.procs)) setSelectedProcs(d.procs);
         setDraftRestored(true);
       }
@@ -412,18 +471,19 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     const id = window.setTimeout(() => {
       try {
         const hayAlgoQueGuardar =
-          tieneContenido(form) || tieneContenido(vitals) || selectedProcs.length > 0;
+          tieneContenido(form) || tieneContenido(vitals) || tieneContenido(exploracion) ||
+          !!pronostico || selectedProcs.length > 0;
         if (!hayAlgoQueGuardar) {
           window.sessionStorage.removeItem(draftKey);
         } else {
           window.sessionStorage.setItem(draftKey, JSON.stringify({
-            v: 1, savedAt: Date.now(), form, vitals, procs: selectedProcs,
+            v: 1, savedAt: Date.now(), form, vitals, exploracion, pronostico, procs: selectedProcs,
           }));
         }
       } catch { /* sin almacenamiento: se sigue sin borrador */ }
     }, 700);
     return () => window.clearTimeout(id);
-  }, [draftKey, form, vitals, selectedProcs]);
+  }, [draftKey, form, vitals, exploracion, pronostico, selectedProcs]);
 
   /** Tira el borrador y deja el formulario como recién abierto. */
   function discardDraft() {
@@ -437,6 +497,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       xrays: "", nextVisit: "",
     });
     setVitals({ bpSys: "", bpDia: "", hr: "", rr: "", temp: "", spo2: "", weight: "", height: "" });
+    const exploracionVacia: Record<string, string> = {};
+    EXPLORACION_FISICA.forEach(c => { exploracionVacia[c.key] = ""; });
+    setExploracion(exploracionVacia);
+    setPronostico("");
     setSelectedProcs([]);
     setDraftRestored(false);
   }
@@ -553,6 +617,12 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         xrays: form.xrays,
         nextVisit: form.nextVisit,
         vitals: hasVitals ? { ...vitals, bloodPressure: bp, bmi } : undefined,
+        // NOM-004 §6.2. Los dos van SIEMPRE, y siempre con la misma forma —un
+        // objeto y una cadena— para que el PDF del expediente no tenga que
+        // defenderse de un `undefined`. Lo que está en blanco simplemente no
+        // aparece dentro: ni un «sin alteraciones» inventado.
+        exploracionFisica: normalizeExploracionFisica(exploracion),
+        pronostico: normalizePronostico(pronostico, PRONOSTICOS),
       };
 
       let record: any;
@@ -836,6 +906,69 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
                 ⚠️ {vitalWarnings.join(" · ")}
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* EXPLORACIÓN FÍSICA — NOM-004 §6.2. Al lado de los signos vitales, que
+          es donde el doctor ya está mirando. Plegada por defecto y con
+          ejemplos reales de odontología en cada placeholder: nadie escribe
+          «habitus exterior» de memoria. Vive DENTRO del <fieldset>, así que
+          con la nota firmada queda en solo lectura como todo lo demás. */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setExploracionOpen(o => !o)}
+          aria-expanded={exploracionOpen}
+          className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+        >
+          <span className="text-sm font-bold flex items-center gap-2">
+            {rediseno ? <ClipboardList size={14} strokeWidth={1.75} aria-hidden /> : "🔎"}
+            {t("clinical.nom004.exploracionFisica.titulo")}
+            {hasExploracion && (
+              <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-full">
+                {t("clinical.nom004.exploracionFisica.capturada")}
+              </span>
+            )}
+          </span>
+          <span className="text-muted-foreground text-xs">{exploracionOpen ? "▲" : "▼"}</span>
+        </button>
+        {exploracionOpen && (
+          <div className="px-4 pb-4 pt-1 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-3">
+              {t("clinical.nom004.exploracionFisica.ayuda")}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {EXPLORACION_FISICA.map(c => (
+                <div
+                  key={c.key}
+                  className="field-new"
+                  style={c.area ? { gridColumn: "1 / -1" } : undefined}
+                >
+                  <label className="field-new__label" htmlFor={`dental-ef-${c.key}`}>
+                    {t(c.labelKey)}
+                  </label>
+                  {c.area ? (
+                    <textarea
+                      id={`dental-ef-${c.key}`}
+                      className="input-new"
+                      style={{ minHeight: 60, resize: "vertical" }}
+                      placeholder={t(c.placeholderKey)}
+                      value={exploracion[c.key] ?? ""}
+                      onChange={e => setEx(c.key, e.target.value)}
+                    />
+                  ) : (
+                    <input
+                      id={`dental-ef-${c.key}`}
+                      className="input-new"
+                      placeholder={t(c.placeholderKey)}
+                      value={exploracion[c.key] ?? ""}
+                      onChange={e => setEx(c.key, e.target.value)}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -1180,6 +1313,31 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           <textarea className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
             placeholder={t("clinical.dentalForm.futurePlanPlaceholder")} value={form.plan} onChange={e => set("plan", e.target.value)} />
+        </div>
+      </div>
+
+      {/* PRONÓSTICO — el último hueco del numeral 6.2 de la NOM-004. Los tres
+          valores y sus textos son los MISMOS del plan de tratamiento, tomados
+          de `plan-clinico.ts`: aquí no se redefine ninguno. */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="field-new">
+          <label className="field-new__label" htmlFor="dental-pronostico">
+            {t("clinical.nom004.pronostico.titulo")}
+          </label>
+          <select
+            id="dental-pronostico"
+            className="input-new"
+            value={pronostico}
+            onChange={e => setPronostico(e.target.value as Pronostico)}
+          >
+            <option value="">{t("planTratamiento.pronostico.sinDefinir")}</option>
+            {PRONOSTICOS.map(p => (
+              <option key={p} value={p}>{t(PRONOSTICO_CLAVE[p])}</option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {t("clinical.nom004.pronostico.ayuda")}
+          </p>
         </div>
       </div>
 

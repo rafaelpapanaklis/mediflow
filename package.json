@@ -33,6 +33,7 @@
     "test:agenda-metrics": "tsx --test src/lib/agenda/__tests__/slot-metrics.test.ts",
     "test:hover-slot": "tsx --test src/lib/agenda/__tests__/hover-slot.test.ts",
     "test:agenda-legend": "tsx --test src/lib/agenda/__tests__/doctor-legend.test.ts",
+    "test:campos-nom004": "tsx --test src/lib/__tests__/campos-nom004.test.ts",
     "test:permissions": "tsx --test src/lib/auth/__tests__/permissions-matrix.test.ts",
     "test:menu-dos-niveles": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/menu-dos-niveles.test.ts",
     "test:rediseno-por-defecto": "tsx --test src/lib/menu-dos-niveles/__tests__/rediseno-por-defecto.test.ts",
