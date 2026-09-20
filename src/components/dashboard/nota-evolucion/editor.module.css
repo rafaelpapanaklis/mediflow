@@ -1,0 +1,104 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Lo que el editor de la nota añade a la hoja común: el título que escribe
+   el doctor y el menú de «Usar una plantilla».
+
+   Vive SIEMPRE dentro de `DocumentoRaiz`, así que solo LEE los `--doc-*` y
+   `--m2-*` que cuelgan de ahí (claro y oscuro incluidos). No hay ningún hex.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.titulo {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 65ch;
+  margin: 20px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--doc-filete);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--doc-tinta);
+  /* 16px: por debajo, Safari en iOS hace zoom al enfocar. */
+  font-size: 16px;
+  line-height: 1.3;
+}
+.titulo::placeholder { color: var(--doc-tinta-3); }
+.titulo:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+/* Pegado al título, la barra de formato no necesita su margen grande. */
+.trasTitulo { margin-top: 10px; }
+
+.plantilla {
+  position: relative;
+  margin-left: auto;
+}
+.plantillaBoton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--doc-tinta-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.plantillaBoton:hover { background: var(--m2-hover); color: var(--doc-tinta); }
+.plantillaBoton:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.plantillaBoton:disabled { opacity: 0.6; cursor: default; }
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  width: min(300px, calc(100vw - 48px));
+  max-height: 280px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--doc-filete);
+  border-radius: 10px;
+  background: var(--doc-papel);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--m2-texto) 18%, transparent);
+}
+.opcion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  /* 44px: se acierta con el pulgar. */
+  min-height: 44px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--doc-tinta);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.opcion:hover { background: var(--m2-hover); }
+.opcion:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.opcion span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* La hoja en blanco dice qué se espera de ella, y calla en cuanto hay texto.
+   La clase la pone el editor mirando el TEXTO: `:empty` no vale, porque al
+   borrar todo el navegador deja un <br> y la pista no volvería. */
+.lienzoVacio::before {
+  content: attr(data-placeholder);
+  color: var(--doc-tinta-3);
+  pointer-events: none;
+}
+
+/* En un teléfono el menú se abre hacia la izquierda del botón si éste ha saltado
+   de renglón: anclarlo a la izquierda evita que se salga de la pantalla. */
+@media (max-width: 480px) {
+  .plantilla { margin-left: 0; }
+  .menu { right: auto; left: 0; }
+}

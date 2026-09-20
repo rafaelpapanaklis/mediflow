@@ -3,15 +3,20 @@
 // Nota de evolución (documento) en la ficha del paciente: la LISTA de las notas
 // que ya tiene y, desde ahí mismo, la creación de una nueva. Rafael: «una vez
 // creada una nota van a quedar en listado en su página, ahí mismo donde se
-// crean más». Una sola pantalla con cuatro vistas, no cuatro pantallas.
+// crean más». Una sola pantalla con tres vistas, no tres pantallas.
+//
+// «Nueva nota» abre LA HOJA EN BLANCO, no un selector: se escribe y se firma sin
+// tocar ninguna plantilla (ticket del 19-sep-2026: «me envía a Plantillas»). La
+// plantilla es un botón dentro del editor, y una clínica sin plantillas escribe
+// igual. Aquí no hay ningún enlace a Administración → Plantillas a propósito:
+// ése era el callejón.
 //
 // Es un camino nuevo AL LADO de la nota de siempre (pestaña «Nueva consulta»,
 // sobre medical_records). No la sustituye ni la lee.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import toast from "react-hot-toast";
-import { ArrowLeft, Bold, FileText, Heading2, Italic, List, ListOrdered, Loader2, PenLine, Plus, Underline } from "lucide-react";
+import { ArrowLeft, Bold, ChevronDown, FileText, Heading2, Italic, List, ListOrdered, Loader2, PenLine, Plus, Underline } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -21,12 +26,13 @@ import { AvisoDatosFaltantes } from "@/components/dashboard/documentos-paciente/
 import {
   DocumentoHoja, DocumentoMesa, DocumentoRaiz, clasesDocumento,
 } from "@/components/dashboard/documentos-paciente/documento-hoja";
+import { combinarConPlantilla } from "@/lib/patient-documents/combinar-plantilla";
 import { NotaVisor } from "./nota-documento";
+import estilos from "./editor.module.css";
 import type { NotaCompleta, NotaResumen, PlantillaNota, PreviewNota } from "./tipos";
 
 type Vista =
   | { tipo: "lista" }
-  | { tipo: "elegir" }
   | { tipo: "editar"; hoja: PreviewNota; notaId: string | null }
   | { tipo: "leer"; nota: NotaCompleta };
 
@@ -87,7 +93,10 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
         setVista({
           tipo: "editar",
           notaId: nota.id,
-          hoja: { templateId: "", title: nota.title, body: nota.body, encabezado: nota.encabezado, faltantes: nota.faltantes },
+          hoja: {
+            templateId: null, title: nota.title, tituloPorDefecto: nota.title,
+            body: nota.body, encabezado: nota.encabezado, faltantes: nota.faltantes,
+          },
         });
       } else {
         setVista({ tipo: "leer", nota });
@@ -99,12 +108,11 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
     }
   }
 
-  async function elegir(p: PlantillaNota) {
+  // La hoja en blanco: solo la cabecera de hoy. No pasa por ninguna plantilla.
+  async function nueva() {
     setOcupado(true);
     try {
-      const hoja = await pedir<PreviewNota>(
-        `/api/patient-documents/preview?patientId=${encodeURIComponent(patientId)}&templateId=${encodeURIComponent(p.id)}`,
-      );
+      const hoja = await pedir<PreviewNota>(`/api/patient-documents/preview?patientId=${encodeURIComponent(patientId)}`);
       setVista({ tipo: "editar", hoja, notaId: null });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -113,7 +121,7 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
     }
   }
 
-  async function guardar(hoja: PreviewNota, notaId: string | null, body: string, firmar: boolean) {
+  async function guardar(notaId: string | null, { body, title, templateId }: Escrito, firmar: boolean) {
     setOcupado(true);
     try {
       const nota = notaId
@@ -122,7 +130,8 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
           : await pedir<NotaCompleta>(`/api/patient-documents/${notaId}`, conJson("PATCH", { body }))
         : await pedir<NotaCompleta>(
             "/api/patient-documents",
-            conJson("POST", { patientId, templateId: hoja.templateId, body, sign: firmar }),
+            // `templateId` solo viaja si el doctor usó una plantilla; sin ella la nota es libre.
+            conJson("POST", { patientId, ...(templateId ? { templateId } : {}), title, body, sign: firmar }),
           );
       toast.success(t(firmar ? "notaEvolucionDoc.toast.signed" : "notaEvolucionDoc.toast.draftSaved"));
       await cargar();
@@ -134,19 +143,16 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
     }
   }
 
-  if (vista.tipo === "elegir") {
-    return <ElegirPlantilla onElegir={elegir} onVolver={volver} ocupado={ocupado} />;
-  }
-
   if (vista.tipo === "editar") {
     return (
       <Editor
-        key={vista.notaId ?? `nueva-${vista.hoja.templateId}`}
+        key={vista.notaId ?? "nueva"}
         hoja={vista.hoja}
+        esNueva={vista.notaId === null}
         patientId={patientId}
         ocupado={ocupado}
         onVolver={volver}
-        onGuardar={(body, firmar) => guardar(vista.hoja, vista.notaId, body, firmar)}
+        onGuardar={(escrito, firmar) => guardar(vista.notaId, escrito, firmar)}
       />
     );
   }
@@ -161,8 +167,9 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
       sub={t("notaEvolucionDoc.subtitle")}
       action={
         canWrite ? (
-          <ButtonNew variant="primary" size="sm" onClick={() => setVista({ tipo: "elegir" })}>
-            <Plus size={14} aria-hidden /> {t("notaEvolucionDoc.new")}
+          <ButtonNew variant="primary" size="sm" disabled={ocupado} onClick={() => void nueva()}>
+            {ocupado ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Plus size={14} aria-hidden />}{" "}
+            {t("notaEvolucionDoc.new")}
           </ButtonNew>
         ) : undefined
       }
@@ -228,73 +235,113 @@ function Cargando() {
   );
 }
 
-function ElegirPlantilla({
-  onElegir, onVolver, ocupado,
-}: { onElegir: (p: PlantillaNota) => void; onVolver: () => void; ocupado: boolean }) {
+/** Lo que sale del editor al guardar. */
+interface Escrito {
+  body: string;
+  title: string;
+  /** La última plantilla que se usó, o `null` si la nota es libre. */
+  templateId: string | null;
+}
+
+/**
+ * «Usar una plantilla»: un botón discreto en la barra de formato. Sin plantillas
+ * en la clínica NO se pinta (lo explica una línea bajo la hoja): nunca manda a
+ * ninguna parte.
+ */
+function MenuPlantillas({
+  plantillas, ocupado, onUsar,
+}: { plantillas: PlantillaNota[]; ocupado: boolean; onUsar: (p: PlantillaNota) => void }) {
   const t = useT();
-  const [plantillas, setPlantillas] = useState<PlantillaNota[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [abierto, setAbierto] = useState(false);
+  const raiz = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let vivo = true;
-    pedir<PlantillaNota[]>("/api/patient-documents/templates")
-      .then((p) => vivo && setPlantillas(p))
-      .catch((err) => vivo && setError(err instanceof Error ? err.message : String(err)));
-    return () => {
-      vivo = false;
+    if (!abierto) return;
+    const fuera = (ev: PointerEvent) => {
+      if (raiz.current && !raiz.current.contains(ev.target as Node)) setAbierto(false);
     };
-  }, []);
+    const tecla = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setAbierto(false);
+    };
+    document.addEventListener("pointerdown", fuera);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("pointerdown", fuera);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [abierto]);
 
+  if (plantillas.length === 0) return null;
   return (
-    <div className="space-y-3">
-      <Volver onClick={onVolver} />
-      <CardNew title={t("notaEvolucionDoc.pick.title")} sub={t("notaEvolucionDoc.pick.subtitle")}>
-        {error ? (
-          <p className="text-sm" style={{ color: "var(--text-2)" }}>{error}</p>
-        ) : plantillas === null ? (
-          <Cargando />
-        ) : plantillas.length === 0 ? (
-          <div className="space-y-2 py-4 text-center text-sm" style={{ color: "var(--text-3)" }}>
-            <p>{t("notaEvolucionDoc.pick.empty")}</p>
-            <Link href="/dashboard/plantillas" className="font-medium underline" style={{ color: "var(--brand)" }}>
-              {t("notaEvolucionDoc.pick.goToTemplates")}
-            </Link>
-          </div>
-        ) : (
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {plantillas.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  disabled={ocupado}
-                  onClick={() => onElegir(p)}
-                  className="flex w-full items-center gap-2 rounded-lg border border-border p-3 text-left text-sm font-medium text-foreground hover:opacity-80 disabled:opacity-60"
-                >
-                  <FileText size={15} aria-hidden style={{ color: "var(--text-3)" }} />
-                  <span className="truncate">{p.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardNew>
+    <div ref={raiz} className={estilos.plantilla}>
+      <button
+        type="button"
+        className={estilos.plantillaBoton}
+        disabled={ocupado}
+        aria-haspopup="menu"
+        aria-expanded={abierto}
+        onClick={() => setAbierto((a) => !a)}
+      >
+        <FileText size={15} aria-hidden /> {t("notaEvolucionDoc.editor.useTemplate")} <ChevronDown size={13} aria-hidden />
+      </button>
+      {abierto ? (
+        <ul className={estilos.menu} role="menu" aria-label={t("notaEvolucionDoc.pick.title")}>
+          {plantillas.map((p) => (
+            <li key={p.id} role="none">
+              <button
+                type="button"
+                role="menuitem"
+                className={estilos.opcion}
+                onClick={() => {
+                  setAbierto(false);
+                  onUsar(p);
+                }}
+              >
+                <FileText size={15} aria-hidden style={{ color: "var(--doc-tinta-3)", flex: "none" }} />
+                <span>{p.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
 
 function Editor({
-  hoja, patientId, ocupado, onVolver, onGuardar,
+  hoja, esNueva, patientId, ocupado, onVolver, onGuardar,
 }: {
   hoja: PreviewNota;
+  /** Una nota nueva se titula aquí; la de un borrador ya guardado es la que tiene. */
+  esNueva: boolean;
   patientId: string;
   ocupado: boolean;
   onVolver: () => void;
-  onGuardar: (body: string, firmar: boolean) => void;
+  onGuardar: (escrito: Escrito, firmar: boolean) => void;
 }) {
   const t = useT();
   const confirm = useConfirm();
   const caja = useRef<HTMLDivElement>(null);
   const tocado = useRef(false);
+  const [titulo, setTitulo] = useState(hoja.title);
+  const plantillaUsada = useRef<string | null>(hoja.templateId);
+  // `null` = todavía no se sabe. Si la lista falla se trata como vacía: la
+  // plantilla es una comodidad y su fallo no puede impedir escribir.
+  const [plantillas, setPlantillas] = useState<PlantillaNota[] | null>(null);
+  const [trayendo, setTrayendo] = useState(false);
+  // Por texto y no por `:empty`: al borrar todo, el navegador deja un <br> fantasma.
+  const [vacio, setVacio] = useState(!hoja.body);
+  const medirVacio = () => setVacio(!(caja.current?.textContent ?? "").trim());
+
+  useEffect(() => {
+    let vivo = true;
+    pedir<PlantillaNota[]>("/api/patient-documents/templates")
+      .then((p) => vivo && setPlantillas(p))
+      .catch(() => vivo && setPlantillas([]));
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   // Lo tecleado vive solo en el DOM: salir sin guardar lo pierde. Se pregunta.
   const salir = async () => {
@@ -313,7 +360,12 @@ function Editor({
   // en cada render y se comería lo tecleado. `hoja.body` viene ya saneado del
   // servidor, y lo que salga de aquí se vuelve a sanear allí al guardar.
   useEffect(() => {
-    if (caja.current) caja.current.innerHTML = hoja.body;
+    if (!caja.current) return;
+    caja.current.innerHTML = hoja.body;
+    // Intro hace párrafos (<p>) y no <div>: es lo que espera la lista blanca.
+    document.execCommand("defaultParagraphSeparator", false, "p");
+    // La hoja en blanco se abre lista para teclear: tres líneas y a firmar.
+    if (esNueva) caja.current.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -323,8 +375,46 @@ function Editor({
       toast.error(t("notaEvolucionDoc.editor.empty"));
       return;
     }
-    onGuardar(body, firmar);
+    // Se manda EXACTAMENTE el título que la hoja está enseñando: lo que se firma
+    // es lo que se vio. (Vacío, el servidor pondría el nombre de la plantilla.)
+    onGuardar({ body, title: titulo.trim() || hoja.tituloPorDefecto, templateId: plantillaUsada.current }, firmar);
   };
+
+  // Lo ya escrito NO se pisa: con texto, la plantilla se añade debajo y se dice.
+  const usarPlantilla = async (p: PlantillaNota) => {
+    setTrayendo(true);
+    try {
+      const rellena = await pedir<PreviewNota>(
+        `/api/patient-documents/preview?patientId=${encodeURIComponent(patientId)}&templateId=${encodeURIComponent(p.id)}`,
+      );
+      if (!caja.current) return;
+      // `rellena.body` viene saneado del servidor, igual que `hoja.body`.
+      const r = combinarConPlantilla(caja.current.innerHTML, caja.current.textContent ?? "", rellena.body);
+      caja.current.innerHTML = r.html;
+      medirVacio();
+      // Reescribir la caja pierde el cursor: vuelve al FINAL, que es donde se sigue.
+      const donde = caja.current;
+      requestAnimationFrame(() => {
+        donde.focus();
+        const sel = window.getSelection();
+        sel?.selectAllChildren(donde);
+        sel?.collapseToEnd();
+      });
+      tocado.current = true;
+      plantillaUsada.current = rellena.templateId;
+      if (esNueva && !r.anadida && !titulo.trim()) setTitulo(rellena.title);
+      toast.success(
+        r.anadida
+          ? t("notaEvolucionDoc.editor.templateAppended")
+          : t("notaEvolucionDoc.editor.templateApplied", { name: p.name }),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTrayendo(false);
+    }
+  };
+  const quieto = ocupado || trayendo;
 
   // Formato con los comandos del navegador: producen justo las etiquetas de la
   // lista blanca del saneado (b, i, u, listas, h2). Lo que no lo sea se cae allí.
@@ -359,8 +449,32 @@ function Editor({
             </ButtonNew>
           </div>
         </div>
-        <DocumentoHoja encabezado={hoja.encabezado} titulo={hoja.title} tipo={t("notaEvolucionDoc.kind")} firmado={null}>
-          <div className={clasesDocumento.herramientas} role="toolbar" aria-label={t("notaEvolucionDoc.editor.toolbar")}>
+        <DocumentoHoja
+          encabezado={hoja.encabezado}
+          titulo={titulo.trim() || hoja.tituloPorDefecto}
+          tipo={t("notaEvolucionDoc.kind")}
+          firmado={null}
+        >
+          {esNueva ? (
+            <input
+              type="text"
+              value={titulo}
+              maxLength={120}
+              disabled={ocupado}
+              onChange={(ev) => {
+                setTitulo(ev.target.value);
+                tocado.current = true;
+              }}
+              placeholder={t("notaEvolucionDoc.editor.titlePlaceholder")}
+              aria-label={t("notaEvolucionDoc.editor.titleLabel")}
+              className={estilos.titulo}
+            />
+          ) : null}
+          <div
+            className={`${clasesDocumento.herramientas} ${esNueva ? estilos.trasTitulo : ""}`}
+            role="toolbar"
+            aria-label={t("notaEvolucionDoc.editor.toolbar")}
+          >
             {HERRAMIENTAS.map((h) => (
               <button
                 key={h.clave}
@@ -378,19 +492,25 @@ function Editor({
                 <h.icono size={16} aria-hidden />
               </button>
             ))}
+            <MenuPlantillas plantillas={plantillas ?? []} ocupado={quieto} onUsar={(p) => void usarPlantilla(p)} />
           </div>
           <div
             ref={caja}
-            contentEditable={!ocupado}
+            contentEditable={!quieto}
             suppressContentEditableWarning
             onInput={() => {
               tocado.current = true;
+              medirVacio();
             }}
             role="textbox"
             aria-multiline="true"
             aria-label={t("notaEvolucionDoc.editor.label")}
-            className={`${clasesDocumento.cuerpo} ${clasesDocumento.cuerpoEditable}`}
+            data-placeholder={t("notaEvolucionDoc.editor.placeholder")}
+            className={`${clasesDocumento.cuerpo} ${clasesDocumento.cuerpoEditable} ${vacio ? estilos.lienzoVacio : ""}`}
           />
+          {plantillas !== null && plantillas.length === 0 ? (
+            <p className={clasesDocumento.pista}>{t("notaEvolucionDoc.pick.empty")}</p>
+          ) : null}
           <p className={clasesDocumento.pista}>{t("notaEvolucionDoc.editor.headerHint")}</p>
           <p className={clasesDocumento.pista}>{t("notaEvolucionDoc.editor.signHint")}</p>
         </DocumentoHoja>
