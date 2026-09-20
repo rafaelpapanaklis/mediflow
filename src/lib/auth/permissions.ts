@@ -51,6 +51,15 @@ export const ALL_PERMISSIONS = {
   // regalaría a recepción.
   "medicalRecord.view":   "Ver expediente clínico",
   "medicalRecord.edit":   "Editar notas SOAP / firmar (y borrar borradores, placas y modelos 3D)",
+  // Sacar el expediente COMPLETO en un PDF (GET /api/patients/[id]/expediente-pdf).
+  // Es una key aparte de `medicalRecord.view` y no un extra de ella porque no
+  // son la misma acción: ver la ficha en pantalla deja al dato dentro del
+  // sistema; armar el expediente entero en un archivo lo saca, y es el acceso
+  // más grande que existe en el panel (NOM-004 §5.5 — la información es del
+  // paciente y puede pedir copia). Por default SOLO SUPER_ADMIN y ADMIN —les
+  // llega por `[...ALL_PERMISSION_KEYS]`—, y como cualquier otra se puede
+  // conceder persona a persona desde Equipo → Permisos.
+  "medicalRecord.export": "Descargar el expediente clínico completo en PDF",
   // Recetas. `prescription.create` cubre también ANULAR (el inverso de firmar,
   // mismo criterio que consents.revoke) y el chequeo de contraindicaciones.
   "prescription.view":    "Ver recetas (lista, PDF y envío al paciente)",
@@ -140,7 +149,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Hoy",            keys: ["today.view"] },
   { title: "Agenda",         keys: ["agenda.view", "agenda.create", "agenda.edit", "agenda.delete"] },
   { title: "Pacientes",      keys: ["patients.view", "patients.create", "patients.edit", "patients.delete"] },
-  { title: "Expediente",     keys: ["medicalRecord.view", "medicalRecord.edit"] },
+  { title: "Expediente",     keys: ["medicalRecord.view", "medicalRecord.edit", "medicalRecord.export"] },
   { title: "Recetas",        keys: ["prescription.view", "prescription.create"] },
   { title: "Consentimientos", keys: ["consents.view", "consents.create", "consents.revoke"] },
   { title: "Radiografías",   keys: ["xrays.view", "xrays.upload", "xrays.analyze"] },

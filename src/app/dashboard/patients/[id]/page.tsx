@@ -527,6 +527,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
             "patients.edit",
           )}
+          // Permiso granular "medicalRecord.export" (WS1-T4): controla el ítem
+          // "Descargar expediente completo" del menú y el diálogo de las dos
+          // casillas. Por default solo SUPER_ADMIN y ADMIN; se concede a quien
+          // haga falta desde Equipo → Permisos. GET
+          // /api/patients/[id]/expediente-pdf lo revalida con 403.
+          canExportRecord={hasPermission(permsUser, "medicalRecord.export")}
           canViewBilling={canViewBilling}
           consents={consentRows.map((c) => toConsentDTO(c))}
           canViewConsents={canViewConsents}

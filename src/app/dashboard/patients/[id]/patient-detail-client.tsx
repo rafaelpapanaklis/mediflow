@@ -10,6 +10,7 @@ import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
 import { DeletePatientModal } from "@/components/dashboard/patient-detail/delete-patient-modal";
+import { ExpedientePdfDialog } from "@/components/dashboard/patient-detail/expediente-pdf-dialog";
 import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard/patient-detail/treatments-modal";
 import { PatientNavBar } from "@/components/dashboard/patient-detail/patient-nav-bar";
 import { buildPatientNavItems } from "@/components/dashboard/patient-detail/patient-nav-items";
@@ -396,6 +397,13 @@ interface Props {
    */
   canDeletePatient?: boolean;
   /**
+   * ¿La sesión tiene "medicalRecord.export"? Mismo mecanismo que
+   * canDeletePatient: lo resuelve page.tsx en el server con hasPermission — el
+   * cliente NO lo deduce del rol. Sin él no se renderiza ni el ítem del menú ni
+   * el diálogo; la ruta vuelve a validarlo con 403.
+   */
+  canExportRecord?: boolean;
+  /**
    * ¿La sesión tiene "patients.edit"? Mismo mecanismo que canDeletePatient:
    * lo resuelve page.tsx en el server. Controla "Editar paciente" del hero;
    * PUT/PATCH de la API lo revalidan con 403.
@@ -496,6 +504,7 @@ export function PatientDetailClient({
   fotosCount: initialFotosCount = 0,
   originClinicName = null,
   canDeletePatient = false,
+  canExportRecord = false,
   canEditPatient = false,
   canViewBilling = false,
   consents = [],
@@ -886,6 +895,7 @@ export function PatientDetailClient({
   // Modal de "Eliminar paciente" (archivar vs. borrado definitivo). Solo se
   // puede abrir desde el menú del hero card, que ya exige "patients.delete".
   const [showDelete, setShowDelete] = useState(false);
+  const [showExpediente, setShowExpediente] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: patient.firstName, lastName: patient.lastName,
     email: patient.email ?? "", phone: patient.phone ?? "",
@@ -1487,6 +1497,8 @@ export function PatientDetailClient({
           canEdit={canEditPatient}
           canDelete={canDeletePatient}
           onDelete={() => setShowDelete(true)}
+          canExportRecord={canExportRecord}
+          onExportRecord={() => setShowExpediente(true)}
           rediseno={rediseno}
         />
       )}
@@ -3783,6 +3795,21 @@ export function PatientDetailClient({
         <DeletePatientModal
           open={showDelete}
           onOpenChange={setShowDelete}
+          patient={{
+            id: patient.id,
+            firstName: patient.firstName,
+            lastName: patient.lastName,
+            patientNumber: patient.patientNumber,
+          }}
+        />
+      )}
+
+      {/* Expediente clínico completo en un PDF — con sus dos casillas, las dos
+          apagadas al abrir. Solo se monta con el permiso; la ruta lo revalida. */}
+      {canExportRecord && (
+        <ExpedientePdfDialog
+          open={showExpediente}
+          onOpenChange={setShowExpediente}
           patient={{
             id: patient.id,
             firstName: patient.firstName,

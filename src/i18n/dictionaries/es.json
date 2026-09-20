@@ -2478,7 +2478,8 @@
       "noAllergies": "Sin alergias registradas",
       "emergencyLabel": "Emergencia",
       "moreCount": "+{count}",
-      "deletePatient": "Eliminar paciente"
+      "deletePatient": "Eliminar paciente",
+      "downloadRecord": "Descargar expediente completo"
     },
     "deleteModal": {
       "title": "Vas a eliminar a {name}",
@@ -2806,6 +2807,28 @@
       "fieldDiagnoses": "Diagnósticos relevantes (CIE-10)",
       "sending": "Enviando…",
       "createReferral": "Crear referencia"
+    },
+    "expedientePdf": {
+      "title": "Descargar expediente completo",
+      "intro": "Se arma un solo PDF con el expediente clínico de {name} (folio {folio}): ficha, antecedentes, notas de evolución con sus adendas, odontograma, planes, recetas, consentimientos, estudios y citas.",
+      "imagesLabel": "Incluir imágenes de radiografías y fotos",
+      "imagesHint": {
+        "one": "Incrusta 1 imagen en el documento. El PDF pesará alrededor de {size} más.",
+        "other": "Incrusta {count} imágenes en el documento. El PDF pesará alrededor de {size} más."
+      },
+      "imagesNone": "Este paciente no tiene imágenes que se puedan incrustar.",
+      "imagesUnknown": "No se pudo calcular cuánto pesarían las imágenes. Puedes encenderla igual; el documento tarda más.",
+      "imagesOffHint": "Apagada, las radiografías y fotos salen listadas con su tipo, su fecha y quién las subió.",
+      "imagesCapped": "Se incrustarán como máximo {max} imágenes; las demás saldrán listadas y el PDF dirá por qué.",
+      "billingLabel": "Incluir facturas y presupuestos",
+      "billingHint": "Apagada por default: la NOM-004 no las pide — el expediente es clínico — y mezclar dinero con historia clínica se lee mal en una reclamación.",
+      "auditNotice": "Queda registrado en la bitácora quién generó este expediente y cuándo. Contiene datos personales sensibles: entrégalo solo al paciente o a quien él autorice.",
+      "generate": "Generar PDF",
+      "generating": "Generando…",
+      "working": "Estamos armando el documento. Con muchas notas o con las imágenes encendidas puede tardar un minuto; no cierres esta ventana.",
+      "listo": "Expediente descargado",
+      "error": "No se pudo generar el expediente",
+      "errorPermiso": "No tienes permiso para descargar el expediente completo"
     }
   },
   "cashRegister": {
@@ -9363,6 +9386,7 @@
     "readNotaPdf": "PDF de una nota",
     "readExportCda": "Exportó el expediente (CDA)",
     "readExportArco": "Exportó los datos (ARCO acceso)",
+    "readExpedientePdf": "Descargó el expediente completo (PDF)",
     "readNoteId": "Nota",
     "readNoContent": "Una consulta no modifica nada. La bitácora guarda quién y cuándo, no el contenido."
   },

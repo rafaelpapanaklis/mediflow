@@ -20,6 +20,7 @@ import {
   HeartPulse,
   Pill,
   Check,
+  FileText,
   History,
   Activity,
   Building2,
@@ -87,6 +88,16 @@ export interface HeroCardProps {
    * vuelve a validarlo por su cuenta con 403.
    */
   canDelete?: boolean;
+  /**
+   * ¿La sesión tiene "medicalRecord.export"? Lo resuelve page.tsx en el server
+   * con hasPermission — el cliente NO lo deduce del rol. Sin él, «Descargar
+   * expediente completo» ni siquiera se renderiza; la ruta vuelve a validarlo
+   * por su cuenta con 403. Por default solo SUPER_ADMIN y ADMIN lo tienen, y
+   * se concede a quien haga falta desde Equipo → Permisos.
+   */
+  canExportRecord?: boolean;
+  /** Abre el diálogo del expediente. Solo se llama si `canExportRecord`. */
+  onExportRecord?: () => void;
   riskFlags?: string[];
   emergencyContact?: { name?: string | null; phone?: string | null; relation?: string | null } | null;
   /** Sede de origen cuando el paciente viene prestado de otra sucursal (Fase 2). null = paciente propio. */
@@ -155,6 +166,8 @@ export function HeroCard({
   onCharge,
   onDelete,
   canDelete = false,
+  canExportRecord = false,
+  onExportRecord,
   riskFlags = [],
   emergencyContact,
   originClinicName = null,
@@ -370,6 +383,24 @@ export function HeroCard({
             >
               <Printer size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.printSummary")}
             </button>
+            {/* El expediente ENTERO en un PDF. Va junto a «Imprimir resumen»
+                porque es lo que la gente busca cuando quiere papel, y se
+                distingue de él en el nombre: uno es la hoja de la pantalla, el
+                otro es el documento que se entrega. Sin el permiso no se
+                renderiza (la ruta lo revalida con 403 igualmente). */}
+            {canExportRecord && onExportRecord && (
+              <button
+                type="button"
+                className={styles.heroMenuItem}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onExportRecord();
+                }}
+              >
+                <FileText size={12} strokeWidth={1.75} aria-hidden />{" "}
+                {t("patients.heroCard.downloadRecord")}
+              </button>
+            )}
             <button
               type="button"
               className={styles.heroMenuItem}
