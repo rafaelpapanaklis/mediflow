@@ -19,6 +19,7 @@ import {
   SESSION_TIMEOUT_MS,
   FLUSH_INTERVAL_MS,
   HEARTBEAT_INTERVAL_MS,
+  HEARTBEAT_IDLE_MS,
   CLICK_FLUSH_MS,
   MAX_BATCH,
   surfaceFromPath,
@@ -39,7 +40,8 @@ let curPath = "";
 let curEnteredAt = 0;
 let pageOpen = false; // hay un segmento de tiempo-en-página activo
 let maxScrollPct = 0;
-let scrollDone: Record<number, boolean> = {};
+/** Última interacción REAL del visitante (ms epoch). 0 = aún ninguna. */
+let lastActivityAt = 0;
 
 let clickTimes: number[] = [];
 let lastCx = 0;
@@ -68,6 +70,41 @@ function local(): Storage | null {
   } catch {
     return null;
   }
+}
+
+function isVisible(): boolean {
+  try {
+    return document.visibilityState === "visible";
+  } catch {
+    return false; // sin document (SSR/entorno raro): no se late
+  }
+}
+
+/** Marca que el visitante hizo algo. Barato a propósito: se llama desde el
+ *  listener de scroll, que corre muy seguido. */
+function markActivity(): void {
+  lastActivityAt = now();
+}
+
+/**
+ * ¿Toca mandar ping en este tick? Pura y exportada para poder probarla sin DOM.
+ *
+ * Tres puertas, y las tres importan:
+ *  - `visible`: una pestaña oculta o en segundo plano NO manda nada. Nunca.
+ *  - `hasPath`: sin ruta activa no hay nada que refrescar.
+ *  - inactividad: pasados HEARTBEAT_IDLE_MS desde la última interacción, el
+ *    visitante está presente pero ausente y el latido calla hasta que vuelva.
+ */
+export function shouldHeartbeat(s: {
+  visible: boolean;
+  hasPath: boolean;
+  now: number;
+  lastActivityAt: number;
+}): boolean {
+  if (!s.visible) return false;
+  if (!s.hasPath) return false;
+  if (!s.lastActivityAt) return false;
+  return s.now - s.lastActivityAt <= HEARTBEAT_IDLE_MS;
 }
 
 function ensureVisitor(): string {
@@ -268,6 +305,7 @@ function inFixedLayer(el: Element | null): boolean {
 }
 
 function onClick(e: MouseEvent): void {
+  markActivity();
   try {
     const target = e.target as Element | null;
     if (!target) return;
@@ -309,7 +347,25 @@ function detectRage(cx: number, cy: number): void {
   }
 }
 
+// Listener `{ passive: true }` (ver start()): sólo lee, nunca llama a
+// preventDefault, así que no bloquea el scroll.
+//
+// DIETA: ya NO se emite un evento por hito (25/50/75/100). Esas filas no las lee
+// NADIE — ni /api/admin/analytics ni el heatmap consultan type="scroll". Hasta 4
+// filas por pageview menos.
+//
+// La profundidad NO se pierde: `maxScrollPct` sale por dos caminos, y ninguno
+// escribe una fila nueva.
+//   1. en el evento `page_time` al cerrar la página (ver emitPageLeave), y
+//   2. montada en el propio ping del latido (ver startHeartbeat).
+// /api/track calcula batchMaxScroll con el max de `scrollPct` de CUALQUIER
+// evento del batch —incluido el ping, que no se persiste— y lo sube a
+// analytics_sessions.maxScroll. El camino 2 existe porque el 1 depende de un
+// evento de salida: si el navegador mata la pestaña sin pagehide ni
+// visibilitychange, `page_time` no llega nunca y sin el ping la profundidad se
+// habría perdido entera.
 function onScroll(): void {
+  markActivity();
   if (scrollTimer) return;
   scrollTimer = setTimeout(() => {
     scrollTimer = null;
@@ -318,12 +374,6 @@ function onScroll(): void {
       const vh = window.innerHeight || 0;
       const pct = Math.min(100, Math.round(((window.scrollY || 0) + vh) / docH * 100));
       if (pct > maxScrollPct) maxScrollPct = pct;
-      [25, 50, 75, 100].forEach((m) => {
-        if (pct >= m && !scrollDone[m]) {
-          scrollDone[m] = true;
-          enqueue({ type: "scroll", path: curPath, t: now(), scrollPct: m });
-        }
-      });
     } catch {
       /* ignore */
     }
@@ -337,19 +387,25 @@ function clearScrollTimer(): void {
   }
 }
 
-// Heartbeat: mientras la pestaña esté visible y haya una página activa, envía un
-// "ping" ligero cada HEARTBEAT_INTERVAL_MS para refrescar lastSeenAt en el server
-// (así "en vivo" cuenta al presente-pero-quieto). Se detiene al ocultarse/salir.
+// Heartbeat: mientras la pestaña esté visible, haya página activa y el visitante
+// siga interactuando, envía un "ping" ligero cada HEARTBEAT_INTERVAL_MS para
+// refrescar lastSeenAt en el server (así "en vivo" cuenta al presente-pero-quieto).
+// Se detiene al ocultarse/salir, y calla solo tras HEARTBEAT_IDLE_MS sin actividad.
+//
+// El timer NI SIQUIERA ARRANCA con la pestaña oculta: una pestaña abierta en
+// segundo plano (ctrl+click, sesión restaurada) no crea intervalo. Al pasar a
+// visible, el handler de visibilitychange lo arranca.
 function startHeartbeat(): void {
   if (heartbeatTimer) return;
+  if (!isVisible()) return;
   heartbeatTimer = setInterval(() => {
-    try {
-      if (document.visibilityState !== "visible") return;
-    } catch {
+    if (!shouldHeartbeat({ visible: isVisible(), hasPath: !!curPath, now: now(), lastActivityAt })) {
       return;
     }
-    if (!curPath) return;
-    enqueue({ type: "ping", path: curPath, t: now() });
+    // El ping carga la profundidad de scroll a cuestas: no se persiste como
+    // fila (/api/track descarta los ping) pero sí sube analytics_sessions.maxScroll.
+    // Gratis: es un campo más en una petición que ya iba a salir.
+    enqueue({ type: "ping", path: curPath, t: now(), scrollPct: maxScrollPct });
   }, HEARTBEAT_INTERVAL_MS);
 }
 
@@ -383,7 +439,6 @@ function emitPageEnter(path: string): void {
   curEnteredAt = now();
   pageOpen = true;
   maxScrollPct = 0;
-  scrollDone = {};
   enqueue({
     type: "pageview",
     path,
@@ -404,6 +459,7 @@ function emitPageLeave(): void {
 
 export function pageview(path: string): void {
   if (!started) return;
+  markActivity(); // navegar ES interactuar: re-arma el latido si estaba callado
   sid = ensureSession();
 
   // Rotación por cambio de identidad (login/logout, típico en equipo compartido de clínica).
@@ -436,6 +492,7 @@ export function start(): void {
     return;
   }
   started = true;
+  markActivity(); // abrir la página cuenta como interacción
   vid = ensureVisitor();
   sid = ensureSession();
   lastAuth = authState();
@@ -446,6 +503,12 @@ export function start(): void {
 
   const scrollL = () => onScroll();
   window.addEventListener("scroll", scrollL, { passive: true });
+
+  // Teclear también es estar presente: sin esto, quien redacta una nota clínica
+  // larga sin tocar el ratón se caería de "en vivo" por el corte de inactividad.
+  // El listener sólo asigna un número; no lee la tecla (jamás PII).
+  const keyL = () => markActivity();
+  document.addEventListener("keydown", keyL, { passive: true });
 
   // visibilitychange→hidden es la señal de salida MÁS fiable en móvil (pagehide
   // a veces no dispara). Emitimos el cierre de página aquí; pageOpen evita el
@@ -460,6 +523,7 @@ export function start(): void {
         curEnteredAt = now();
         pageOpen = true;
       }
+      markActivity(); // volver a primer plano cuenta como interacción
       startHeartbeat(); // volvió: reanuda el latido
     }
   };
@@ -478,6 +542,7 @@ export function start(): void {
   cleanups = [
     () => document.removeEventListener("click", clickL, true),
     () => window.removeEventListener("scroll", scrollL),
+    () => document.removeEventListener("keydown", keyL),
     () => document.removeEventListener("visibilitychange", visL),
     () => window.removeEventListener("pagehide", hideL),
     () => {
