@@ -1,27 +1,30 @@
 /**
- * LA zona horaria del panel /admin, en un solo sitio.
+ * LA hora del panel /admin, en un solo sitio: el FORMATO y los CORTES de
+ * periodo. De aquí lo toman las tres pantallas (portada, clínicas y clientes).
  *
  * ── El fallo que arregla ────────────────────────────────────────────────────
- * `/admin` pintaba fechas con `toLocaleDateString("es-MX", {…})` SIN `timeZone`.
- * Sin zona, `Intl` usa la del runtime: en este servidor son ~2 h por delante de
- * Yucatán y en producción (Vercel, UTC) son 6. Medido el 20-sep-2026 a las
- * 19:52 de Mérida, la portada del panel decía «21 de septiembre».
+ * `/admin` pintaba fechas con `toLocaleDateString("es-MX", {…})` SIN `timeZone`,
+ * así que fechaba en la zona del runtime. Medido el 20-sep-2026: en Mérida eran
+ * las 19:52 del día 20, el servidor del panel marcaba las 21:52, y el de
+ * producción (que corre en UTC) ya decía **21 de septiembre**. Rafael lo vio
+ * como «dice que ya es 21 y aquí son las 7:47pm del 20».
  *
- * Y no es solo cosmético: los CORTES de «hoy», «este mes» y «este año» se
- * calculaban sobre el día del servidor, así que a partir de las 18:00 de Mérida
- * los ingresos del día ya se sumaban al día siguiente. Por eso los números no
- * cuadraban.
+ * Y no era solo el texto: los CORTES de «hoy», «este mes» y «este año» salían
+ * de `new Date(y, m, 1)`, que también usa la zona del runtime. A partir de las
+ * 18:00 de Mérida, lo cobrado hoy se sumaba a mañana, y lo del último día del
+ * mes, al mes siguiente. Ése es el descuadre de las métricas.
  *
  * Mismo criterio que `src/lib/consent/dates.ts`, que existe por un bug gemelo:
  * una carta de consentimiento se fechaba un día que todavía no había llegado.
  *
- * ── Por qué una constante y no `Clinic.timezone` ────────────────────────────
- * Esto NO es la zona de una clínica (esa vive en `Clinic.timezone` y la usa el
- * producto). Es la zona desde la que Rafael MIRA el panel: una sola, la misma
- * para las tres pantallas de /admin, pase lo que pase con las clínicas.
+ * ── Por qué una constante y no `Clinic.timezone` ni `DEFAULT_TZ` ────────────
+ * `DEFAULT_TZ` (`src/lib/agenda/date-ranges.ts`) es `America/Mexico_City` y es
+ * la zona de la CLÍNICA: cada clínica agenda en la suya, y la suya vive en
+ * `Clinic.timezone`. Esto es otra cosa — es la zona de la PERSONA que opera el
+ * panel, que está en Mérida. Hoy coinciden en número; se declaran aparte porque
+ * son dos decisiones distintas y algún día pueden divergir.
  *
- * PURO: sin Prisma, sin React y sin red. Se prueba con
- * `npm run test:zona-admin`.
+ * PURO: sin Prisma, sin React y sin red. Se prueba con `npm run test:zona-admin`.
  */
 
 /**
@@ -29,6 +32,10 @@
  * que aquí no hay saltos. Aun así NADA en este archivo asume el −6 a mano — el
  * desfase se le pregunta a `Intl`, para que el día que cambie la regla el código
  * siga bien.
+ *
+ * Es el ÚNICO nombre de esta zona. Hubo un tiempo en que también se llamaba
+ * `ADMIN_TZ` desde la portada; dos nombres para la misma constante son la
+ * semilla de que los dos archivos vuelvan a divergir.
  */
 export const ZONA_ADMIN = "America/Merida";
 
@@ -45,33 +52,64 @@ function aFecha(valor: Fecha): Date | null {
 
 // ── Formato ────────────────────────────────────────────────────────────────
 
-/** `15 sept 2026`. Sin fecha devuelve null: el llamador decide qué decir. */
+/**
+ * Los formateadores de `Intl` son caros de construir y aquí se llaman por fila
+ * de tabla. Se cachean por forma en el módulo. `fechaAdmin` con opciones a
+ * medida no entra al caché: esa forma es de un solo uso.
+ */
+const FORMATEADORES = new Map<string, Intl.DateTimeFormat>();
+
+function formateador(clave: string, opciones: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const cacheado = FORMATEADORES.get(clave);
+  if (cacheado) return cacheado;
+  const creado = new Intl.DateTimeFormat(LOCALE_ADMIN, { timeZone: ZONA_ADMIN, ...opciones });
+  FORMATEADORES.set(clave, creado);
+  return creado;
+}
+
+const CORTA: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
+
+/** `20 sept 2026`. Sin fecha devuelve null: el llamador decide qué decir. */
 export function fechaAdmin(valor: Fecha, opciones?: Intl.DateTimeFormatOptions): string | null {
   const d = aFecha(valor);
   if (!d) return null;
+  if (!opciones) return formateador("corta", CORTA).format(d);
   return new Intl.DateTimeFormat(LOCALE_ADMIN, {
     timeZone: ZONA_ADMIN,
-    day: "numeric",
-    month: "short",
-    year: "numeric",
+    ...CORTA,
     ...opciones,
   }).format(d);
 }
 
-/** `15 de septiembre de 2026`, para cuando hay sitio. */
+/** `20 de septiembre de 2026`, para cuando hay sitio. */
 export function fechaLargaAdmin(valor: Fecha): string | null {
-  return fechaAdmin(valor, { day: "numeric", month: "long", year: "numeric" });
+  const d = aFecha(valor);
+  if (!d) return null;
+  return formateador("larga", { day: "numeric", month: "long", year: "numeric" }).format(d);
 }
 
-/** `15 sept 2026, 19:52`. */
+/**
+ * `domingo, 20 de septiembre de 2026` — el encabezado de la portada, que sí
+ * quiere el día de la semana. Sale en minúsculas a propósito: la mayúscula la
+ * pone la UI con `::first-letter`.
+ */
+export function fechaConDiaSemanaAdmin(valor: Fecha): string | null {
+  const d = aFecha(valor);
+  if (!d) return null;
+  return formateador("con-dia-semana", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
+}
+
+/** `20 sept 2026, 19:52`. Para «visto hace un momento» y auditorías. */
 export function fechaHoraAdmin(valor: Fecha): string | null {
   const d = aFecha(valor);
   if (!d) return null;
-  return new Intl.DateTimeFormat(LOCALE_ADMIN, {
-    timeZone: ZONA_ADMIN,
-    day: "numeric",
-    month: "short",
-    year: "numeric",
+  return formateador("fecha-hora", {
+    ...CORTA,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -82,108 +120,140 @@ export function fechaHoraAdmin(valor: Fecha): string | null {
 export function horaAdmin(valor: Fecha): string | null {
   const d = aFecha(valor);
   if (!d) return null;
-  return new Intl.DateTimeFormat(LOCALE_ADMIN, {
-    timeZone: ZONA_ADMIN,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(d);
+  return formateador("hora", { hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+}
+
+// ── El reloj de pared de Mérida ────────────────────────────────────────────
+
+interface PartesEnZona {
+  anio: number;
+  mes: number; // 1-12
+  dia: number;
+  hora: number;
+  minuto: number;
+  segundo: number;
+}
+
+const PARTES = new Intl.DateTimeFormat("en-CA", {
+  timeZone: ZONA_ADMIN,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
+/** Qué marca el reloj de pared de Mérida en el instante `d`. */
+function partesEnZona(d: Date): PartesEnZona {
+  const p = PARTES.formatToParts(d);
+  const n = (tipo: Intl.DateTimeFormatPartTypes): number => {
+    const parte = p.find((x) => x.type === tipo);
+    return parte ? parseInt(parte.value, 10) : 0;
+  };
+  return {
+    anio: n("year"),
+    mes: n("month"),
+    dia: n("day"),
+    // Algunas versiones de ICU devuelven "24" para la medianoche con
+    // hour12:false. `% 24` lo normaliza a 0 y evita un desfase de un día.
+    hora: n("hour") % 24,
+    minuto: n("minute"),
+    segundo: n("second"),
+  };
+}
+
+/**
+ * Cuánto va la hora de pared de Mérida por delante de UTC en el instante `d`,
+ * en milisegundos (negativo, porque es UTC−6).
+ */
+function desfaseEnZona(d: Date): number {
+  const p = partesEnZona(d);
+  const comoSiFueraUtc = Date.UTC(p.anio, p.mes - 1, p.dia, p.hora, p.minuto, p.segundo);
+  // El desfase se redondea al segundo porque `Date.UTC` no lleva los ms del
+  // instante original; da igual, solo se usa para situar un corte de día.
+  return comoSiFueraUtc - Math.floor(d.getTime() / 1000) * 1000;
+}
+
+/**
+ * El instante UTC en el que empieza un día concreto de Mérida. `mes` y `dia`
+ * pueden salirse de rango (`dia - 30`, `mes + 1`): `Date.UTC` los normaliza,
+ * que es justo lo que quieren `inicioDeHaceDias` y `finDelDia`.
+ *
+ * Dos pasadas a propósito: la primera estima el desfase con el instante que nos
+ * dan, la segunda lo recalcula ya sobre la medianoche candidata. Con una zona
+ * de offset fijo como Mérida la segunda pasada nunca cambia nada; se hace igual
+ * para que la función siga siendo correcta si algún día la zona del panel se
+ * cambia por una que sí tenga horario de verano.
+ */
+function instanteDeMedianoche(anio: number, mes: number, dia: number, referencia: Date): Date {
+  const paredUtc = Date.UTC(anio, mes - 1, dia, 0, 0, 0);
+  const primera = new Date(paredUtc - desfaseEnZona(referencia));
+  return new Date(paredUtc - desfaseEnZona(primera));
 }
 
 // ── Cortes de periodo: lo que de verdad descuadraba las métricas ───────────
 
-interface PartesLocales {
-  anio: number; mes: number; dia: number;
-  hora: number; minuto: number; segundo: number;
-}
-
-/** Qué hora marca el reloj de Mérida en este instante. */
-function partesEnZona(instante: Date): PartesLocales {
-  const partes = new Intl.DateTimeFormat("en-US", {
-    timeZone: ZONA_ADMIN,
-    hour12: false,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(instante);
-
-  const m: Record<string, string> = {};
-  for (const p of partes) if (p.type !== "literal") m[p.type] = p.value;
-
-  return {
-    anio: Number(m.year),
-    mes: Number(m.month),
-    dia: Number(m.day),
-    // `hour12:false` da "24" para la medianoche en algunos runtimes.
-    hora: Number(m.hour) % 24,
-    minuto: Number(m.minute),
-    segundo: Number(m.second),
-  };
-}
-
-/** Desfase de la zona respecto a UTC, en minutos, EN ese instante. */
-function desfaseMinutos(instante: Date): number {
-  const p = partesEnZona(instante);
-  const comoSiFueraUtc = Date.UTC(p.anio, p.mes - 1, p.dia, p.hora, p.minuto, p.segundo);
-  // Se tira el resto de milisegundos: formatToParts no los da.
-  const base = Math.floor(instante.getTime() / 1000) * 1000;
-  return (comoSiFueraUtc - base) / 60_000;
-}
-
-/**
- * El instante UTC en el que el reloj de Mérida marca esa fecha y hora.
- *
- * Dos pasadas: la primera estima el desfase, la segunda lo corrige. Con una
- * zona de desfase fijo la primera ya acierta; la segunda está para que esto
- * siga siendo correcto si algún día la zona vuelve a tener horario de verano.
- */
-function instanteDeLocal(anio: number, mes: number, dia: number, hora = 0, minuto = 0, segundo = 0): Date {
-  const ingenuo = Date.UTC(anio, mes - 1, dia, hora, minuto, segundo);
-  let resultado = new Date(ingenuo - desfaseMinutos(new Date(ingenuo)) * 60_000);
-  resultado = new Date(ingenuo - desfaseMinutos(resultado) * 60_000);
-  return resultado;
-}
-
 /** El día de Mérida como `YYYY-MM-DD`. La clave con la que agrupar por día. */
 export function diaAdmin(ahora: Date = new Date()): string {
   const p = partesEnZona(ahora);
-  const dd = String(p.dia).padStart(2, "0");
-  const mm = String(p.mes).padStart(2, "0");
-  return `${p.anio}-${mm}-${dd}`;
+  const dos = (n: number) => String(n).padStart(2, "0");
+  return `${p.anio}-${dos(p.mes)}-${dos(p.dia)}`;
 }
 
-/** Medianoche de HOY en Mérida. El corte de «ingresos de hoy». */
-export function inicioDeHoy(ahora: Date = new Date()): Date {
+/** Medianoche del día de Mérida que contiene a `ahora`. El corte de «hoy». */
+export function inicioDelDia(ahora: Date = new Date()): Date {
   const p = partesEnZona(ahora);
-  return instanteDeLocal(p.anio, p.mes, p.dia);
+  return instanteDeMedianoche(p.anio, p.mes, p.dia, ahora);
 }
 
-/** Medianoche de mañana en Mérida: el fin abierto de «hoy» (`lt`). */
-export function finDeHoy(ahora: Date = new Date()): Date {
+/** Medianoche del día siguiente en Mérida: el fin abierto de «hoy» (`lt`). */
+export function finDelDia(ahora: Date = new Date()): Date {
   const p = partesEnZona(ahora);
-  return instanteDeLocal(p.anio, p.mes, p.dia + 1);
+  return instanteDeMedianoche(p.anio, p.mes, p.dia + 1, ahora);
 }
 
 /** Día 1 del mes en curso en Mérida, a las 00:00. */
-export function inicioDeMes(ahora: Date = new Date()): Date {
+export function inicioDelMes(ahora: Date = new Date()): Date {
   const p = partesEnZona(ahora);
-  return instanteDeLocal(p.anio, p.mes, 1);
+  return instanteDeMedianoche(p.anio, p.mes, 1, ahora);
+}
+
+/** Día 1 del mes ANTERIOR al de `ahora`, en Mérida. */
+export function inicioDelMesAnterior(ahora: Date = new Date()): Date {
+  const p = partesEnZona(ahora);
+  const mes = p.mes === 1 ? 12 : p.mes - 1;
+  const anio = p.mes === 1 ? p.anio - 1 : p.anio;
+  return instanteDeMedianoche(anio, mes, 1, ahora);
 }
 
 /** 1 de enero del año en curso en Mérida, a las 00:00. */
-export function inicioDeAnio(ahora: Date = new Date()): Date {
+export function inicioDelAnio(ahora: Date = new Date()): Date {
   const p = partesEnZona(ahora);
-  return instanteDeLocal(p.anio, 1, 1);
+  return instanteDeMedianoche(p.anio, 1, 1, ahora);
 }
 
 /** Medianoche de hace `dias` días en Mérida (ventanas de actividad). */
 export function inicioDeHaceDias(dias: number, ahora: Date = new Date()): Date {
   const p = partesEnZona(ahora);
-  return instanteDeLocal(p.anio, p.mes, p.dia - dias);
+  return instanteDeMedianoche(p.anio, p.mes, p.dia - dias, ahora);
 }
 
 /**
- * Los tres cortes de la portada, de una vez. `hoy`, `mes` y `anio` son
- * instantes UTC listos para un `where: { gte: … }` de Prisma.
+ * Días enteros de Mérida entre dos instantes: `hasta − desde`. Cuenta CAMBIOS
+ * DE FECHA, no tramos de 24 h, que es lo que espera quien lee «hace 1 día»
+ * mirando una cita de ayer por la tarde.
+ */
+export function diasDeCalendario(desde: Date, hasta: Date): number {
+  const a = inicioDelDia(desde).getTime();
+  const b = inicioDelDia(hasta).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * Los cortes de la portada, de una vez. Todos son instantes UTC listos para un
+ * `where: { gte: … }` de Prisma.
  */
 export interface CortesAdmin {
   ahora: Date;
@@ -196,9 +266,9 @@ export interface CortesAdmin {
 export function cortesAdmin(ahora: Date = new Date()): CortesAdmin {
   return {
     ahora,
-    hoy:    inicioDeHoy(ahora),
-    finHoy: finDeHoy(ahora),
-    mes:    inicioDeMes(ahora),
-    anio:   inicioDeAnio(ahora),
+    hoy:    inicioDelDia(ahora),
+    finHoy: finDelDia(ahora),
+    mes:    inicioDelMes(ahora),
+    anio:   inicioDelAnio(ahora),
   };
 }
