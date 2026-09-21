@@ -93,6 +93,7 @@
     "test:private-records": "tsx --test src/lib/__tests__/private-records-scope.test.ts",
     "test:active-clinic": "tsx --test src/lib/active-clinic-core.test.ts",
     "test:admin-modules": "tsx --test src/app/actions/admin/toggle-clinic-module-core.test.ts",
+    "test:admin-portada": "tsx --test src/components/admin/portada/__tests__/atencion-core.test.ts",
     "test:active-clinic-modules": "tsx --test src/lib/clinical-shared/__tests__/get-active-clinic-modules.test.ts",
     "test:pediatrics-tab-state": "tsx --test src/lib/pediatrics/__tests__/tab-state.test.ts",
     "test:wa-booking": "tsx --test src/lib/whatsapp/bot/__tests__/booking.test.ts",
