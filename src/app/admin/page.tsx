@@ -17,6 +17,7 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
 import { getPlanStatus, isInTrial, isPlanExpired } from "@/lib/plan-status";
+import { inicioDeHaceDias, inicioDelMes, inicioDelMesAnterior } from "@/lib/admin/zona-horaria";
 
 export const metadata: Metadata = { title: "Super Admin — DaleControl" };
 
@@ -83,9 +84,12 @@ export default async function AdminPage() {
 
 async function renderAdminDashboard() {
   const now    = new Date();
-  const month1 = new Date(now.getFullYear(), now.getMonth(), 1);
-  const prev1  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prev7  = new Date(now); prev7.setDate(prev7.getDate() - 7);
+  // Cortes de mes EN LA ZONA DEL PANEL. `new Date(y, m, 1)` usaba la zona del
+  // runtime —y el de producción corre en UTC—, así que a partir de las 18:00 de
+  // Mérida una clínica creada "hoy" se contaba en el mes siguiente.
+  const month1 = inicioDelMes(now);
+  const prev1  = inicioDelMesAnterior(now);
+  const prev7  = inicioDeHaceDias(7, now);
 
   const [allClinics, newClinicsMonth, newClinicsPrev, subInvoices, planPrices] = await Promise.all([
     prisma.clinic.findMany({

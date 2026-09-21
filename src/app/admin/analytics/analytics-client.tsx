@@ -24,6 +24,7 @@ import { PagesTab } from "./pages-tab";
 import { HeatmapTab } from "./heatmap-tab";
 import { IdentifiedTab } from "./identified-tab";
 import { LiveTab } from "./live-tab";
+import { diaAdmin, inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 
 export interface TabProps {
   /** querystring compartido: from, to, surface, clinicId (ya codificado). */
@@ -50,13 +51,14 @@ const TABS: { k: TabKey; label: string; icon: React.ComponentType<{ size?: numbe
 
 type Preset = "today" | "7d" | "30d" | "90d" | "custom";
 
+// El día EN LA ZONA DEL PANEL (America/Merida), no en la del navegador ni en
+// UTC. `toISOString()` siempre devuelve UTC: a las 23:00 de Mérida ya es el día
+// siguiente, así que el rango por defecto arrancaba y terminaba un día tarde.
 function iso(d: Date) {
-  return d.toISOString().slice(0, 10);
+  return diaAdmin(d);
 }
 function daysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return iso(d);
+  return diaAdmin(inicioDeHaceDias(n));
 }
 
 export function AnalyticsClient() {
