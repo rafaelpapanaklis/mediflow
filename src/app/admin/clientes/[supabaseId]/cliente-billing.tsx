@@ -13,8 +13,14 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
+import { formatCurrency } from "@/lib/utils";
+import { daysUntil } from "@/lib/plan-status";
+import { fechaAdmin } from "@/lib/admin/zona-horaria";
+import { computeMrr, mrrBreakdownHint, type AdminMrr } from "@/lib/admin/mrr-core";
+import { PLAN_IDS } from "@/lib/billing/plans";
 import type { ClienteDetalle, ClienteClinica, ClienteInvoice } from "@/lib/admin/clientes";
+import css from "./ficha.module.css";
 
 type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 
@@ -63,15 +69,38 @@ function paymentMethodDisplay(c: ClienteClinica): string {
   return "No registrado";
 }
 
-function nextBillingLabel(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  const days = Math.ceil((d.getTime() - Date.now()) / 86_400_000);
-  const fecha = formatDate(d);
+/**
+ * "15 sept 2026 · en 12d". La fecha se pinta en la zona del panel
+ * (America/Mérida) y los días los cuenta `daysUntil`, el mismo helper que usa
+ * plan-status: dos formas distintas de contar días daban "vencido" y "hoy"
+ * a la vez en la misma pantalla.
+ */
+function nextBillingLabel(iso: string | null, ahora: Date): string {
+  const fecha = fechaAdmin(iso);
+  if (!fecha) return "—";
+  // El MISMO "ahora" que la insignia de al lado. Con el reloj del navegador,
+  // una pestaña abierta cruzando la medianoche decía "renueva en 1 d" en la
+  // insignia (calculada en el servidor) y "· hoy" en este campo.
+  const days = daysUntil(iso, ahora);
+  if (days === null) return fecha;
   if (days < 0) return `${fecha} · vencido`;
   if (days === 0) return `${fecha} · hoy`;
   return `${fecha} · en ${days}d`;
+}
+
+/**
+ * Lo que vale al mes el plan de UNA sede, por la fuente única: `computeMrr`
+ * sobre esa sola clínica, con la misma precedencia de siempre (el precio
+ * negociado manda sobre el de lista de plan_configs). A propósito NO filtra
+ * por estado: el campo dice cuánto vale su plan, no si se le está cobrando.
+ *
+ * Antes salía de `clinic.planPrice`, que cae en la tabla de respaldo del
+ * código cuando no hay precio negociado. Desde que el KPI de MRR y el selector
+ * de plan leen plan_configs, eso dejaba dos precios distintos del MISMO plan en
+ * la misma tarjeta en cuanto Rafael tocara los precios en /admin/settings.
+ */
+function precioMensual(clinic: ClienteClinica, planPrices: Record<string, number>): number {
+  return computeMrr([{ plan: clinic.plan, monthlyPrice: clinic.monthlyPrice }], planPrices).total;
 }
 
 async function postJson(url: string, body: any): Promise<any> {
@@ -87,10 +116,23 @@ async function postJson(url: string, body: any): Promise<any> {
 
 export function ClienteBilling({
   cliente,
+  mrr,
+  planPrices,
+  ahora,
   stripeConfigured,
   stripeInstructions,
 }: {
   cliente: ClienteDetalle;
+  /**
+   * MRR del cliente por la FUENTE ÚNICA (@/lib/admin/mrr). Antes esta pestaña
+   * pintaba `cliente.mrr`, que sumaba el precio de lista de la tabla de
+   * respaldo del código en vez del de plan_configs y no miraba el precio
+   * negociado.
+   */
+  mrr: AdminMrr;
+  /** Precios de lista de plan_configs. Ni un número escrito a mano aquí. */
+  planPrices: Record<string, number>;
+  ahora: Date;
   stripeConfigured: boolean;
   stripeInstructions: string;
 }) {
@@ -250,7 +292,7 @@ export function ClienteBilling({
       {/* Aviso Stripe no configurado */}
       {!stripeConfigured && (
         <div style={{
-          padding: 16, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)",
+          padding: 16, background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)",
           borderRadius: 14, display: "flex", flexDirection: "column", gap: 8,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -270,7 +312,14 @@ export function ClienteBilling({
       {/* KPIs de facturación */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
         <KpiCard label="Ingresos históricos" value={formatCurrency(cliente.ingresosTotales, "MXN")} icon={Wallet} />
-        <KpiCard label="MRR" value={formatCurrency(cliente.mrr, "MXN")} icon={DollarSign} />
+        {/* El desglose va de `hint` y NO de `delta`: `delta` pinta una flecha
+            de subida y "MRR $2,408 ↗ 2 PRO" se lee como que el MRR creció. */}
+        <KpiCard
+          label="MRR"
+          value={formatCurrency(mrr.total, "MXN")}
+          icon={DollarSign}
+          hint={mrr.total > 0 ? mrrBreakdownHint(mrr) : undefined}
+        />
         <KpiCard
           label="Cobros pendientes"
           value={String(cliente.pendingPaymentsCount)}
@@ -294,14 +343,19 @@ export function ClienteBilling({
                   {clinic.name}
                 </Link>
                 <BadgeNew tone={PLAN_TONE[clinic.plan] ?? "neutral"}>{clinic.plan}</BadgeNew>
+                {/* El estado del PLAN según la regla única (plan-status), que
+                    es lo que decide si la clínica entra al panel… */}
+                <PlanStatusBadge clinic={clinic} now={ahora} />
+                {/* …y aparte el subscriptionStatus CRUDO de Stripe, que es lo
+                    que explica por qué. No son la misma pregunta. */}
                 <BadgeNew tone={sub.tone} dot>{sub.label}</BadgeNew>
               </div>
 
               {/* Datos de billing */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
-                <Field label="Próximo cobro" value={nextBillingLabel(clinic.nextBillingDate)} />
+                <Field label="Próximo cobro" value={nextBillingLabel(clinic.nextBillingDate, ahora)} />
                 <Field label="Método de pago (alta)" value={paymentMethodDisplay(clinic)} />
-                <Field label="Precio mensual" value={`${formatCurrency(clinic.planPrice, "MXN")}/mes`} />
+                <Field label="Precio mensual" value={`${formatCurrency(precioMensual(clinic, planPrices), "MXN")}/mes`} />
                 <Field label="Suscripción Stripe" value={clinic.stripeSubscriptionId ?? "—"} mono />
               </div>
 
@@ -315,9 +369,14 @@ export function ClienteBilling({
                   style={{ width: "auto" }}
                   title="Cambiar plan"
                 >
-                  <option value="BASIC">Plan BASIC</option>
-                  <option value="PRO">Plan PRO</option>
-                  <option value="CLINIC">Plan CLINIC</option>
+                  {/* El catálogo y sus PRECIOS salen de plan_configs
+                      (loadPlanPrices), no de tres <option> escritas a mano:
+                      Rafael los edita en /admin/settings sin redeploy. */}
+                  {PLAN_IDS.map((id) => (
+                    <option key={id} value={id}>
+                      Plan {id} · {formatCurrency(planPrices[id] ?? 0, "MXN")}/mes
+                    </option>
+                  ))}
                 </select>
 
                 <ButtonNew
@@ -359,7 +418,7 @@ export function ClienteBilling({
                 {clinic.invoices.length === 0 ? (
                   <div style={{ fontSize: 12, color: "var(--text-3)", padding: "8px 0" }}>Sin cobros registrados.</div>
                 ) : (
-                  <div style={{ overflowX: "auto" }}>
+                  <div className={css.tablaCobros}>
                     <table className="table-new">
                       <thead>
                         <tr>
@@ -377,18 +436,18 @@ export function ClienteBilling({
                           const invBusy = loadingKey === `inv:${inv.id}`;
                           return (
                             <tr key={inv.id}>
-                              <td className="mono" style={{ color: "var(--text-2)" }}>
-                                {formatDate(inv.paidAt ?? inv.createdAt)}
+                              <td data-col="Fecha" className="mono" style={{ color: "var(--text-2)" }}>
+                                {fechaAdmin(inv.paidAt ?? inv.createdAt) ?? "—"}
                               </td>
-                              <td className="mono" style={{ color: "var(--text-1)", fontWeight: 500 }}>
+                              <td data-col="Monto" className="mono" style={{ color: "var(--text-1)", fontWeight: 500 }}>
                                 {formatCurrency(inv.amount, "MXN")}
                               </td>
-                              <td style={{ color: "var(--text-2)" }}>{methodLabel(inv.method)}</td>
-                              <td><BadgeNew tone={st.tone} dot>{st.label}</BadgeNew></td>
-                              <td className="mono" style={{ color: "var(--text-3)", fontSize: 11, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <td data-col="Método" style={{ color: "var(--text-2)" }}>{methodLabel(inv.method)}</td>
+                              <td data-col="Estado"><BadgeNew tone={st.tone} dot>{st.label}</BadgeNew></td>
+                              <td data-col="Referencia" className="mono" style={{ color: "var(--text-3)", fontSize: 11, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {inv.reference ?? "—"}
                               </td>
-                              <td style={{ textAlign: "right" }}>
+                              <td data-col="Acciones" style={{ textAlign: "right" }}>
                                 <div style={{ display: "inline-flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
                                   {inv.status === "pending" && (
                                     <>
