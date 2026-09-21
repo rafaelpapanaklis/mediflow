@@ -4,7 +4,9 @@
 // /admin/soporte — bandeja global de tickets (DaleControl).
 // KpiCards de métricas + segment de estado (pseudo-valor "OPEN" = abiertos) +
 // selects de categoría/prioridad + búsqueda server (folio/asunto, debounce) +
-// filtro de clínica CLIENT-SIDE + tabla .table-new con fila clicable.
+// filtro de clínica CLIENT-SIDE + filtro "Sin leer" CLIENT-SIDE + tabla
+// .table-new con fila clicable. La columna "Leído" dice si la clínica ya abrió
+// nuestra respuesta (regla en ./lectura-clinica, dato: AdminTicketSummary).
 // API: GET /api/admin/support/tickets?status=&category=&priority=&q=&metrics=1
 // Contrato: src/lib/support/types.ts (AdminTicketSummary, SupportAdminMetrics).
 // ═══════════════════════════════════════════════════════════════════════════
@@ -12,7 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { AlertTriangle, Building2, Clock, Hourglass, Inbox, LifeBuoy, Search, Star } from "lucide-react";
+import { AlertTriangle, Building2, Clock, EyeOff, Hourglass, Inbox, LifeBuoy, Search, Star } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -27,6 +29,8 @@ import {
   formatFolio,
 } from "@/lib/support/types";
 import type { AdminTicketSummary, SupportAdminMetrics } from "@/lib/support/types";
+import { estadoLectura } from "./lectura-clinica";
+import { EtiquetaLectura } from "./etiqueta-lectura";
 
 // "OPEN" es pseudo-valor del API (= todos los abiertos); "" = todos.
 const STATUS_SEGMENTS: { value: string; label: string }[] = [
@@ -69,11 +73,11 @@ function fullDate(iso: string): string {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-// Columnas: Folio · Clínica · Asunto · Categoría · Prioridad · Estado · Espera · Últ. actividad · ★
-const COL_COUNT = 9;
+// Columnas: Folio · Clínica · Asunto · Categoría · Prioridad · Estado · Leído · Espera · Últ. actividad · ★
+const COL_COUNT = 10;
 // Anchos de skeleton por columna (las ocultas en móvil comparten índice con la tabla real).
-const SKEL_WIDTHS = [64, 130, 220, 80, 56, 110, 48, 64, 24];
-const HIDDEN_MD_COLS = [3, 8]; // Categoría y ★ se ocultan en pantallas angostas
+const SKEL_WIDTHS = [64, 130, 220, 80, 56, 110, 70, 48, 64, 24];
+const HIDDEN_MD_COLS = [3, 9]; // Categoría y ★ se ocultan en pantallas angostas
 
 export function AdminSoporteClient() {
   const router = useRouter();
@@ -85,6 +89,8 @@ export function AdminSoporteClient() {
   const [q, setQ] = useState("");
   const [appliedQ, setAppliedQ] = useState("");
   const [clinicQ, setClinicQ] = useState("");
+  // "Solo sin leer": client-side, sobre lo ya traído (el API no filtra por esto).
+  const [soloSinLeer, setSoloSinLeer] = useState(false);
 
   const [tickets, setTickets] = useState<AdminTicketSummary[]>([]);
   const [metrics, setMetrics] = useState<SupportAdminMetrics | null>(null);
@@ -144,13 +150,25 @@ export function AdminSoporteClient() {
   }, [status, category, priority, appliedQ, refreshKey]);
 
   // Filtro de clínica: client-side por clinicName contains.
-  const visible = useMemo(() => {
+  const porClinica = useMemo(() => {
     const cq = clinicQ.trim().toLowerCase();
     if (!cq) return tickets;
     return tickets.filter(t => (t.clinicName || "").toLowerCase().includes(cq));
   }, [tickets, clinicQ]);
 
-  const hasExtraFilters = !!(category || priority || appliedQ.trim() || clinicQ.trim());
+  // Cuántos de los visibles siguen sin abrir nuestra respuesta (la pregunta
+  // que trae a alguien a esta pantalla).
+  const sinLeerCount = useMemo(
+    () => porClinica.filter(t => estadoLectura(t) === "sin-leer").length,
+    [porClinica],
+  );
+
+  const visible = useMemo(
+    () => (soloSinLeer ? porClinica.filter(t => estadoLectura(t) === "sin-leer") : porClinica),
+    [porClinica, soloSinLeer],
+  );
+
+  const hasExtraFilters = !!(category || priority || appliedQ.trim() || clinicQ.trim() || soloSinLeer);
   // Vacío "global": sin filtros extra y el server no devolvió nada.
   const showGlobalEmpty =
     loadedOnce && !loading && !error && tickets.length === 0 && !hasExtraFilters;
@@ -287,7 +305,36 @@ export function AdminSoporteClient() {
             aria-label="Filtrar por clínica"
           />
         </div>
+
+        {/* Atajo a la pregunta del día: ¿quién no ha visto nuestra respuesta? */}
+        <div className="segment-new" style={{ display: "inline-flex" }}>
+          <button
+            type="button"
+            onClick={() => setSoloSinLeer(v => !v)}
+            className={`segment-new__btn ${soloSinLeer ? "segment-new__btn--active" : ""}`}
+            aria-pressed={soloSinLeer}
+            title="Solo tickets con respuesta nuestra que la clínica todavía no ha abierto"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <EyeOff size={13} aria-hidden />
+            Sin leer ({sinLeerCount})
+          </button>
+        </div>
       </div>
+
+      {/* El filtro es client-side: si hay un estado activo, avisa de lo que queda fuera. */}
+      {soloSinLeer && status !== "" && (
+        <div style={{ fontSize: 12, color: "var(--text-3)", margin: "-6px 0 14px" }}>
+          Solo dentro de «{STATUS_SEGMENTS.find(s => s.value === status)?.label ?? status}».{" "}
+          <button
+            type="button"
+            onClick={() => setStatus("")}
+            style={{ background: "none", border: "none", padding: 0, font: "inherit", color: "var(--brand)", cursor: "pointer", textDecoration: "underline" }}
+          >
+            Buscar en todos los estados
+          </button>
+        </div>
+      )}
 
       {/* Tabla / estados vacíos */}
       <CardNew noPad>
@@ -338,6 +385,7 @@ export function AdminSoporteClient() {
                   <th className="hidden md:table-cell">Categoría</th>
                   <th>Prioridad</th>
                   <th>Estado</th>
+                  <th>Leído</th>
                   <th>Espera</th>
                   <th>Última actividad</th>
                   <th className="hidden md:table-cell" style={{ textAlign: "center" }}>★</th>
@@ -411,6 +459,9 @@ export function AdminSoporteClient() {
                           </BadgeNew>
                         </td>
                         <td>
+                          <EtiquetaLectura estado={estadoLectura(t)} />
+                        </td>
+                        <td>
                           {t.needsReply ? (
                             <BadgeNew tone={t.waitingHours != null && t.waitingHours > 24 ? "danger" : "neutral"}>
                               {t.waitingHours != null ? `${Math.round(t.waitingHours)} h` : "—"}
@@ -436,7 +487,9 @@ export function AdminSoporteClient() {
                     {visible.length === 0 && (
                       <tr>
                         <td colSpan={COL_COUNT} style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
-                          Sin tickets con estos filtros
+                          {soloSinLeer
+                            ? "Ninguna clínica tiene respuestas sin abrir con estos filtros"
+                            : "Sin tickets con estos filtros"}
                         </td>
                       </tr>
                     )}

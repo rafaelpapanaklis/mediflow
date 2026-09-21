@@ -2,7 +2,8 @@
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /admin/soporte/[id] — detalle admin del ticket: hilo completo (con notas
-// internas en ámbar bien diferenciadas), responder o guardar nota interna
+// internas en ámbar bien diferenciadas), si la clínica ya abrió nuestra
+// respuesta (regla en ../lectura-clinica), responder o guardar nota interna
 // (ambas con adjuntos imagen/PDF, 5MB, máx 5), y cambiar estado/prioridad.
 // El cambio de estado genera el mensaje system y el email a la clínica DEL
 // LADO DEL SERVER (aquí solo se hace re-fetch, no se duplica nada).
@@ -34,6 +35,8 @@ import {
   type SupportAttachment,
   type SupportMessageDTO,
 } from "@/lib/support/types";
+import { estadoLectura, LECTURA_DETALLE } from "../lectura-clinica";
+import { EtiquetaLectura } from "../etiqueta-lectura";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -517,6 +520,9 @@ export function AdminTicketClient({ ticketId }: { ticketId: string }) {
               <BadgeNew tone={PRIORITY_TONES[ticket.priority] ?? "neutral"}>
                 {SUPPORT_PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
               </BadgeNew>
+              {/* Lo que tiene que saltar: nuestra respuesta sigue sin abrirse.
+                  "Leído" y "sin respuesta" se quedan abajo, en la meta. */}
+              {estadoLectura(ticket) === "sin-leer" && <EtiquetaLectura estado="sin-leer" />}
             </div>
             <h1
               style={{
@@ -589,6 +595,14 @@ export function AdminTicketClient({ ticketId }: { ticketId: string }) {
             {ticket.createdByEmail && <div style={{ fontSize: 11, color: "var(--text-3)" }}>{ticket.createdByEmail}</div>}
           </MetaItem>
           <MetaItem label="Creado">{formatDate(ticket.createdAt)}</MetaItem>
+          <MetaItem label="Leído por la clínica">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <EtiquetaLectura estado={estadoLectura(ticket)} />
+              <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                {LECTURA_DETALLE[estadoLectura(ticket)]}
+              </span>
+            </span>
+          </MetaItem>
           <MetaItem label="1ª respuesta">
             {ticket.firstResponseAt ? (
               formatDate(ticket.firstResponseAt)
