@@ -40,6 +40,46 @@ function csrfOriginMismatch(request: NextRequest): boolean {
   return sourceHost !== host;
 }
 
+/**
+ * La URL pública de esta petición, para construir un `Location` de redirect.
+ *
+ * `request.nextUrl` trae el origen INTERNO con el que arrancó el servidor. En
+ * Vercel da igual —la plataforma resuelve el host— pero AUTOALOJADO DETRÁS DE
+ * UN PROXY no: el panel de QA corre `next start -H 127.0.0.1 -p 3300`, así que
+ * un `nextUrl.clone()` salía con `location: http://localhost:3300/...` y el
+ * navegador de Rafael se iba a su propia máquina. Caddy solo repite lo que le
+ * damos.
+ *
+ * Así que el host sale de `x-forwarded-host` (lo que el proxy dice que pidió el
+ * navegador) y, si no está, de `host`. Si no hay ninguna de las dos, se queda
+ * como estaba.
+ *
+ * ⚠️ `x-forwarded-host` y `x-forwarded-proto` se las puede inventar quien llame
+ * directo al puerto, así que esto vale SOLO para decidir a dónde mandar un
+ * redirect de login —nunca para autorizar, validar origen ni firmar nada— y por
+ * eso no se usa en ningún otro sitio. El CSRF de arriba sigue comparando contra
+ * `host`, que es el que pone el proxy.
+ */
+function urlPublica(request: NextRequest) {
+  const url = request.nextUrl.clone();
+  // Una cadena de proxies deja "a.example, b.interno": manda el primero, que es
+  // el que vio el navegador.
+  const reenviado = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "")
+    .split(",")[0]
+    .trim();
+  if (!reenviado) return url;
+
+  url.host = reenviado;
+  // El setter de `host` SOLO toca el puerto si el valor lo trae. Sin esto,
+  // `panel.108-181-149-131.sslip.io` + el 3300 interno = `panel.108-…:3300`.
+  if (!reenviado.includes(":")) url.port = "";
+
+  const proto = (request.headers.get("x-forwarded-proto") ?? "").split(",")[0].trim();
+  if (proto) url.protocol = `${proto}:`;
+
+  return url;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -108,7 +148,7 @@ export async function middleware(request: NextRequest) {
     // (fail-closed), así que la revocación es efectiva donde importa.
     const token = request.cookies.get("admin_token")?.value;
     if (!token) {
-      const url = request.nextUrl.clone();
+      const url = urlPublica(request);
       url.pathname = "/admin/login";
       return NextResponse.redirect(url);
     }
@@ -153,7 +193,7 @@ export async function middleware(request: NextRequest) {
       !pathname.startsWith("/dashboard/2fa") &&
       request.cookies.get(TWO_FA_PENDING_COOKIE)?.value
     ) {
-      const url = request.nextUrl.clone();
+      const url = urlPublica(request);
       url.pathname = "/dashboard/2fa";
       url.search = `?next=${encodeURIComponent(pathname)}`;
       return NextResponse.redirect(url);
