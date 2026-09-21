@@ -1,0 +1,204 @@
+/* Bloque de salud de la ficha de clínica.
+ * Colores por token (globals.css); ni un hex a mano. */
+
+.banda {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius, 10px);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+}
+
+.bandaCritico { border-color: var(--danger);  background: var(--danger-soft); }
+.bandaAlto    { border-color: var(--warning); background: var(--warning-soft); }
+.bandaMedio   { border-color: var(--info);    background: var(--info-soft); }
+
+.bandaIcono { flex-shrink: 0; margin-top: 1px; }
+.bandaIconoCritico { color: var(--danger); }
+.bandaIconoAlto    { color: var(--warning); }
+.bandaIconoMedio   { color: var(--info); }
+
+.bandaTexto { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.bandaTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.bandaDetalle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.bandaExtra {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+/* ── Rejilla de cuatro bloques ─────────────────────────────────────────── */
+
+.rejilla {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+
+.bloque {
+  padding: 4px 18px;
+  border-left: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bloque:first-child { border-left: none; padding-left: 4px; }
+
+.bloqueTitulo {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.dato {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.datoEtiqueta { color: var(--text-3); }
+
+.datoValor {
+  color: var(--text-1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.destacado {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.destacadoPie {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.nivel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.sinDato {
+  color: var(--text-3);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Cuánto trabajo hizo en la ventana. */
+.volumen {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.volumen strong {
+  color: var(--text-1);
+  font-weight: 700;
+  font-size: 13px;
+  min-width: 2.4ch;
+  display: inline-block;
+}
+
+.tendencia {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tendenciaSube  { color: var(--success-strong); }
+.tendenciaBaja  { color: var(--danger); }
+.tendenciaIgual { color: var(--text-3); }
+
+/* "En línea": señal discreta. */
+.enLinea {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--success-strong);
+}
+
+.enLineaPunto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+  flex-shrink: 0;
+}
+
+.listaRiesgos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.riesgo {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.riesgoIcono { flex-shrink: 0; margin-top: 2px; }
+.riesgoCritico { color: var(--danger); }
+.riesgoAlto    { color: var(--warning); }
+.riesgoMedio   { color: var(--info); }
+
+.riesgoTitulo { color: var(--text-1); font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 20px; }
+  .bloque:nth-child(odd) { border-left: none; padding-left: 4px; }
+}
+
+@media (max-width: 640px) {
+  .rejilla { grid-template-columns: minmax(0, 1fr); row-gap: 18px; }
+  .bloque { border-left: none; padding-left: 4px; }
+}

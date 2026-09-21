@@ -1,0 +1,539 @@
+/* Rediseño de /admin/clinics — lista y triage.
+ *
+ * Todo el color sale de los tokens de src/app/globals.css (--text-*, --bg-*,
+ * --success/--warning/--danger/--info y sus variantes -soft). Ni un hex a
+ * mano: dos pantallas del panel se quedaron con el violeta viejo por copiar
+ * #4d3fc6 en vez de leer el token, y en oscuro se veían mal.
+ *
+ * Convive con las clases globales que ya usa el panel (.table-new,
+ * .segment-new, .input-new, .badge-new, .mono): esta hoja sólo añade lo que
+ * esas no tienen — la bandeja de triage, los números tabulares y el paso a
+ * tarjetas en móvil.
+ */
+
+.pagina {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 28px 20px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Cualquier cifra, fecha o conteo: si no alinean, no se comparan. */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── Cabecera ───────────────────────────────────────────────────────────── */
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.titulo {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+}
+
+.subtitulo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Letra pequeña que explica un dato flojo en vez de dejarlo parecer fuerte. */
+.aclaracion {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  max-width: 62ch;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Bandeja: lo que exige atención hoy ─────────────────────────────────── */
+
+.bandeja {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+/* Hay algo crítico: el borde lo dice antes de leer nada. */
+.bandejaCritica { border-color: var(--danger); }
+.bandejaAlta    { border-color: var(--warning); }
+
+.bandejaCabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+}
+
+.bandejaTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-1);
+}
+
+.bandejaCuenta {
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.bandejaVacia {
+  padding: 22px 18px;
+  font-size: 13px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fila {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1.1fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  text-decoration: none;
+  transition: background .12s;
+}
+
+.fila:last-child { border-bottom: none; }
+.fila:hover { background: var(--bg-hover); }
+
+.fila:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+/* La marca de severidad: forma + color, nunca color solo. */
+.marca {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.marcaCritico { background: var(--danger-soft);  color: var(--danger); }
+.marcaAlto    { background: var(--warning-soft); color: var(--warning); }
+.marcaMedio   { background: var(--info-soft);    color: var(--info); }
+
+.filaNombre {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filaDetalle {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.filaMas {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.verTodo {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand);
+  cursor: pointer;
+  border-top: 1px solid var(--border-soft);
+}
+
+.verTodo:hover { background: var(--bg-hover); }
+
+/* ── Tira de cifras (secundaria, no el protagonista) ────────────────────── */
+
+.cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.cifra {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius, 10px);
+  background: var(--bg-elev);
+  padding: 12px 14px;
+}
+
+.cifraEtiqueta {
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cifraValor {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.cifraPie {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.cifraAlerta .cifraValor { color: var(--danger); }
+
+/* ── Barra de herramientas ──────────────────────────────────────────────── */
+
+.herramientas {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.buscador {
+  position: relative;
+  flex: 1 1 260px;
+  max-width: 360px;
+}
+
+.buscadorIcono {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.buscadorInput { padding-left: 34px; }
+
+.filtros {
+  display: inline-flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.filtroCuenta {
+  margin-left: 6px;
+  opacity: 0.65;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tabla ──────────────────────────────────────────────────────────────── */
+
+.tablaCaja {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+.tablaScroll { overflow-x: auto; }
+
+.orden {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.orden:hover { color: var(--text-1); }
+.ordenActivo { color: var(--text-1); }
+
+.celdaNombre {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.enlaceClinica {
+  color: var(--text-1);
+  font-weight: 600;
+  text-decoration: none;
+  display: block;
+}
+
+.enlaceClinica:hover { color: var(--brand); }
+
+.meta {
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+.pila {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+}
+
+/* Contenido de una celda con varias piezas, apilado. En móvil, donde la celda
+   es una fila etiqueta/valor, esto es lo que mantiene el valor en una columna
+   en vez de desparramar sus trozos uno al lado del otro. */
+.celda {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* .badge-new tiene height: 20px fijo en globals.css: si el texto se parte en
+   dos líneas, la segunda se sale de la píldora y pisa la insignia de abajo.
+   "Trial vencido usando" y "Cobro fallido" lo hacían. */
+.pila :global(.badge-new),
+.celda :global(.badge-new) {
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Barra de actividad: la forma dice cuánta vida hay, no sólo el color. */
+.pulso {
+  width: 74px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg-elev-2);
+  overflow: hidden;
+}
+
+.pulsoRelleno { height: 100%; border-radius: 3px; }
+.pulsoActiva      { background: var(--success); }
+.pulsoNueva       { background: var(--info); }
+.pulsoEnfriandose { background: var(--warning); }
+.pulsoApagada     { background: var(--danger); }
+.pulsoSinEstrenar { background: var(--text-4); }
+
+.sinDato {
+  color: var(--text-3);
+  font-style: italic;
+  font-size: 11px;
+}
+
+/* ── Cuánto ha hecho la clínica ─────────────────────────────────────────── */
+
+.volumen {
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.volumen strong {
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.volumenSep {
+  color: var(--text-3);
+  margin: 0 4px;
+  font-weight: 400;
+}
+
+.tendencia {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  font-weight: 600;
+}
+
+.tendenciaSube  { color: var(--success-strong); }
+.tendenciaBaja  { color: var(--danger); }
+.tendenciaIgual { color: var(--text-3); }
+
+/* ── "En línea": una señal discreta, nunca un número grande ─────────────── */
+
+.enLinea {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--success-strong);
+}
+
+.enLineaPunto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+  flex-shrink: 0;
+}
+
+/* Riesgo en la tabla: icono + texto, sin píldora. La pastilla gastaba ~45 px
+   de ancho por fila y empujaba la columna de Acciones fuera de la pantalla. */
+.riesgo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Las variantes -strong son la tinta legible de cada color, y globals.css las
+   redefine en oscuro (línea 238): no hace falta fallback. */
+.riesgoCritico { color: var(--danger); }
+.riesgoAlto    { color: var(--warning-strong); }
+.riesgoMedio   { color: var(--info-strong); }
+
+.tokens {
+  width: 100%;
+  min-width: 90px;
+  height: 4px;
+  background: var(--bg-elev-2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.tokensRelleno { height: 100%; transition: width .3s; }
+
+.acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.selectPlan {
+  margin-top: 6px;
+  font-size: 11px;
+  padding: 4px 6px;
+  height: auto;
+}
+
+.vacio {
+  padding: 44px 20px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* Etiqueta que sólo ven los lectores de pantalla. */
+.soloLectores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Móvil: la tabla se vuelve tarjetas ─────────────────────────────────── */
+/* Rafael mira esto desde el teléfono. Una tabla de 8 columnas con scroll
+   horizontal no se lee; cada fila pasa a ser una tarjeta con sus etiquetas. */
+
+@media (max-width: 900px) {
+  .pagina { padding: 18px 16px 48px; }
+
+  .fila {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "marca nombre"
+      "marca detalle"
+      "marca mas";
+    row-gap: 3px;
+  }
+
+  .filaMarca   { grid-area: marca; }
+  .filaNombre  { grid-area: nombre; white-space: normal; }
+  .filaDetalle { grid-area: detalle; }
+  .filaMas     { grid-area: mas; }
+
+  .tablaScroll { overflow-x: visible; }
+
+  .tablaCaja table,
+  .tablaCaja tbody,
+  .tablaCaja tr,
+  .tablaCaja td { display: block; width: 100%; }
+
+  .tablaCaja thead { display: none; }
+
+  .tablaCaja tbody tr {
+    border-bottom: 1px solid var(--border-soft);
+    padding: 12px 14px;
+  }
+
+  .tablaCaja tbody tr:last-child { border-bottom: none; }
+
+  .tablaCaja tbody td {
+    border: none !important;
+    padding: 5px 0 !important;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  /* El título de la columna, que en escritorio está en el thead. */
+  .tablaCaja tbody td::before {
+    content: attr(data-col);
+    flex: 0 0 96px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-3);
+    padding-top: 3px;
+  }
+
+  .tablaCaja tbody td[data-col="Clínica"] { display: block; }
+  .tablaCaja tbody td[data-col="Clínica"]::before { content: none; }
+
+  .meta { max-width: none; white-space: normal; }
+  .acciones { align-items: stretch; flex-direction: row; flex-wrap: wrap; }
+  .cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

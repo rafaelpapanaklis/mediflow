@@ -16,15 +16,19 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { fmtMXN, formatRelativeDate } from "@/lib/format";
+// Toda fecha del panel pasa por la zona de Mérida. Sin `timeZone`, `Intl` usa
+// la del runtime (UTC en producción) y el panel fechaba un día de más.
+import { fechaAdmin, fechaLargaAdmin } from "@/lib/admin/zona-horaria";
 import type { TemplateChannel } from "@/lib/admin-templates";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
 import { ClinicAccountManagerBlock } from "@/components/admin/clinic-account-manager-block";
 import { ClinicPaymentMethodCard, type ClinicRecurringCharge } from "@/components/admin/clinic-payment-method-card";
 import type { AccountManagerDTO } from "@/lib/account-manager/types";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 import { daysUntil, getPlanStatus } from "@/lib/plan-status";
 import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
+import { evaluarSaludClinica, ETIQUETA_ESTADO_OPERATIVO } from "@/lib/admin/salud-clinica";
+import { SaludPanel } from "./salud-panel";
 
 /** Lo que ESTA clínica nos ha pagado por su suscripción (subscription_invoices). */
 export interface PlatformPayments {
@@ -42,10 +46,37 @@ interface AdminNote {
   author?: { firstName: string; lastName: string; email: string } | null;
 }
 
-const PLAN_PRICES: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
+// (Aquí vivía PLAN_PRICES = { BASIC: 419, PRO: 689, CLINIC: 1719 }: una tabla
+// de precios escrita a mano que ya no usaba nadie. Los precios llegan por la
+// prop planPrices, leída de plan_configs — regla (d) de CLAUDE.md.)
 const BANK_INFO = { nombre: "Efthymios Rafail Papanaklis", clabe: "012910015008025244", banco: "BBVA" };
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
+
+/**
+ * Estado operativo que se espera de cada veredicto del gate. Coinciden casi
+ * siempre; cuando NO, esa discrepancia es lo único que hay que ver (el trial
+ * caducado al que subscriptionStatus "trialing" le sigue dando acceso), y sólo
+ * entonces se pinta también la insignia del gate. Si no, serían dos pastillas
+ * diciendo lo mismo.
+ */
+const ESTADO_ESPERADO: Record<string, string[]> = {
+  active:   ["pagando"],
+  past_due: ["cobro-fallido"],
+  trial:    ["trial-vigente", "pago-pendiente", "prueba"],
+  expired:  ["vencida", "prueba"],
+};
+
+/** Tono del estado operativo. `prueba` en gris: no es un cliente. */
+const ESTADO_TONO: Record<string, BadgeTone> = {
+  "pagando":        "success",
+  "cobro-fallido":  "danger",
+  "trial-vigente":  "info",
+  "trial-vencido":  "danger",
+  "pago-pendiente": "warning",
+  "vencida":        "danger",
+  "prueba":         "neutral",
+};
 
 function planTone(plan: string): BadgeTone {
   if (plan === "CLINIC") return "brand";
@@ -70,6 +101,26 @@ interface Props {
   /** Importe recurrente de Stripe ya contrastado con el precio del plan. */
   recurringCharge:      ClinicRecurringCharge | null;
   platformPayments:     PlatformPayments;
+  /** Precios de lista por plan, desde plan_configs. Nunca un literal. */
+  planPrices:           Record<string, number>;
+  /** "Ahora" del servidor: SSR e hidratación cuentan los mismos días. */
+  ahoraISO:             string;
+  /** Agregados de citas de ESTA clínica (3 consultas, ninguna por fila). */
+  actividad: {
+    citasPasadas:  number;
+    ultimaCitaAt:  string | null;
+    citasVentana:  number;
+    citasFuturas:  number;
+    proximaCitaAt: string | null;
+    citasVentanaPrevia:    number;
+    facturasVentana:       number;
+    facturasVentanaPrevia: number;
+    notasVentana:          number;
+    notasVentanaPrevia:    number;
+    /** De analytics_sessions (surface="dashboard"), NO de User.lastLogin. */
+    ultimoAccesoAt: string | null;
+    enLinea:        boolean;
+  };
 }
 
 const SUB_PAYMENT_METHOD_LABEL: Record<string, string> = {
@@ -91,6 +142,9 @@ export function AdminClinicDetailClient({
   livePaymentMethod,
   recurringCharge,
   platformPayments,
+  planPrices,
+  ahoraISO,
+  actividad,
 }: Props) {
   const askConfirm = useConfirm();
   const [saving, setSaving]   = useState(false);
@@ -141,6 +195,40 @@ export function AdminClinicDetailClient({
       ? (daysUntil(planStatus.nextBillingDate) ?? 0) - (daysLeft ?? 0)
       : 0;
   const owner     = clinic.users[0];
+
+  // ── Salud de la cuenta ───────────────────────────────────────────────────
+  // Mismo cálculo que la lista de clínicas y el dashboard. Aquí sólo se le da
+  // de comer: lo de la clínica + los agregados de citas que trae el servidor.
+  const ahora = new Date(ahoraISO);
+  const usuarios: any[] = clinic.users ?? [];
+
+  const salud = evaluarSaludClinica({
+    id: clinic.id,
+    createdAt: clinic.createdAt,
+    subscriptionStatus: clinic.subscriptionStatus ?? null,
+    trialEndsAt: clinic.trialEndsAt,
+    nextBillingDate: clinic.nextBillingDate ?? null,
+    cancelRequested: Boolean(clinic.cancelRequested),
+    pacientes: clinic._count?.patients ?? 0,
+    citasPasadas: actividad.citasPasadas,
+    citasVentana: actividad.citasVentana,
+    facturasVentana: actividad.facturasVentana,
+    notasVentana: actividad.notasVentana,
+    citasVentanaPrevia: actividad.citasVentanaPrevia,
+    facturasVentanaPrevia: actividad.facturasVentanaPrevia,
+    notasVentanaPrevia: actividad.notasVentanaPrevia,
+    enLinea: actividad.enLinea,
+    ultimaCitaAt: actividad.ultimaCitaAt,
+    proximaCitaAt: actividad.proximaCitaAt,
+    ultimoAccesoAt: actividad.ultimoAccesoAt,
+    pagosRegistrados: platformPayments.count,
+    ultimoPagoAt: platformPayments.lastPaidAt,
+  }, ahora);
+
+  // Lo que aporta al mes. El precio NEGOCIADO de la clínica manda sobre el de
+  // lista del plan; es la misma precedencia que el MRR (@/lib/admin/mrr).
+  const negociado = Number(clinic.monthlyPrice ?? 0);
+  const mensual   = negociado > 0 ? negociado : (planPrices[clinic.plan] ?? 0);
   // Dueño-cliente (cuenta SUPER_ADMIN) para enlazar al CRM de clientes.
   const clienteOwner = (clinic.users || []).find((u: any) => u.role === "SUPER_ADMIN") || owner;
 
@@ -324,7 +412,16 @@ export function AdminClinicDetailClient({
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
               <h1 style={{ fontSize: 20, margin: 0, color: "var(--text-1)", fontWeight: 600 }}>{clinic.name}</h1>
               <BadgeNew tone={planTone(clinic.plan)}>{clinic.plan}</BadgeNew>
-              <PlanStatusBadge clinic={clinic} />
+              {/* El estado COMERCIAL, que es el que manda para operar. */}
+              <BadgeNew tone={ESTADO_TONO[salud.estadoOperativo] ?? "neutral"} dot>
+                {ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}
+              </BadgeNew>
+              {/* Y el del gate de acceso, sólo cuando no dice lo mismo. */}
+              {!(ESTADO_ESPERADO[salud.plan.kind] ?? []).includes(salud.estadoOperativo) && (
+                <span title="Lo que ve la clínica: el gate de acceso todavía la deja entrar">
+                  <PlanStatusBadge clinic={clinic} now={ahora} />
+                </span>
+              )}
             </div>
             <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-2)", flexWrap: "wrap" }}>
               <span>{clinic.specialty}</span>
@@ -402,6 +499,25 @@ export function AdminClinicDetailClient({
       {/* TAB: OVERVIEW */}
       {tab === "overview" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Lo primero que se lee: qué exige atención en ESTA clínica, y su
+              actividad, su gente, su dinero y sus avisos en un solo sitio.
+              Es de lectura: no mueve nada. */}
+          <SaludPanel
+            salud={salud}
+            gente={{
+              total:   usuarios.length,
+              activos: usuarios.filter((u: any) => u.isActive).length,
+            }}
+            dinero={{
+              mensual,
+              esNegociado:  negociado > 0,
+              totalPagado:  platformPayments.total,
+              pagos:        platformPayments.count,
+              ultimoPagoAt: platformPayments.lastPaidAt,
+              ultimoMetodo: platformPayments.lastMethod,
+            }}
+          />
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {/* Clinic info */}
             <CardNew>
@@ -417,7 +533,7 @@ export function AdminClinicDetailClient({
                   { label: "Ciudad",       val: clinic.city ?? "—" },
                   { label: "Teléfono",     val: clinic.phone ?? "—" },
                   { label: "Email",        val: clinic.email ?? "—" },
-                  { label: "Registro",     val: new Date(clinic.createdAt).toLocaleDateString("es-MX") },
+                  { label: "Registro",     val: fechaAdmin(clinic.createdAt) ?? "—" },
                 ].map(r => (
                   <div
                     key={r.label}
@@ -448,9 +564,9 @@ export function AdminClinicDetailClient({
                     onChange={e => setEditPlan(e.target.value)}
                     className="input-new"
                   >
-                    {(["BASIC", "PRO", "CLINIC"] as const).map(p => (
+                    {Object.keys(planPrices).map(p => (
                       <option key={p} value={p}>
-                        {p} — ${FALLBACK_PLAN_PRICES_MXN[p].toLocaleString("es-MX")}/mes
+                        {p} — ${planPrices[p].toLocaleString("es-MX")}/mes
                       </option>
                     ))}
                   </select>
@@ -474,7 +590,7 @@ export function AdminClinicDetailClient({
                   >
                     <span>
                       {planStatus.periodEnd
-                        ? planStatus.periodEnd.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+                        ? fechaLargaAdmin(planStatus.periodEnd)
                         : "Sin fecha"}
                     </span>
                     <PlanStatusBadge clinic={clinic} />
@@ -482,7 +598,7 @@ export function AdminClinicDetailClient({
                   {planStatus.nextBillingDate && (
                     <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
                       Próximo cobro (nextBillingDate):{" "}
-                      {planStatus.nextBillingDate.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
+                      {fechaLargaAdmin(planStatus.nextBillingDate)}
                       {accessLag > 1 && (
                         <span style={{ color: "var(--warning)", fontWeight: 600 }}>
                           {" "}· acceso-hasta va {accessLag} días atrás del cobro: fila anterior al fix, corre sql/sub-02-renovacion-trialEndsAt-update.sql
@@ -603,7 +719,7 @@ export function AdminClinicDetailClient({
                     </BadgeNew>
                   </td>
                   <td className="mono" style={{ color: "var(--text-3)", fontSize: 12 }}>
-                    {new Date(u.createdAt).toLocaleDateString("es-MX")}
+                    {fechaAdmin(u.createdAt) ?? "—"}
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <ButtonNew
@@ -664,7 +780,7 @@ export function AdminClinicDetailClient({
                 <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>Último pago</div>
                 <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)", marginTop: 6 }}>
                   {platformPayments.lastPaidAt
-                    ? new Date(platformPayments.lastPaidAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+                    ? fechaLargaAdmin(platformPayments.lastPaidAt)
                     : "Sin pagos registrados"}
                 </div>
                 {platformPayments.lastPaidAt && (

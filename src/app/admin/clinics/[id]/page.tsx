@@ -7,6 +7,9 @@ import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { formatWhatsappDisplay, type AccountManagerDTO } from "@/lib/account-manager/types";
 import { getLiveSubscriptionSnapshot, type StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 import { getResolvedPlan } from "@/lib/plans";
+import { loadPlanPrices } from "@/lib/admin/mrr";
+import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
+import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import type { ClinicRecurringCharge } from "@/components/admin/clinic-payment-method-card";
 import { AdminClinicDetailClient, type PlatformPayments } from "./clinic-detail-client";
 
@@ -33,6 +36,58 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
   });
 
   if (!clinic) notFound();
+
+  // ── Actividad de la clínica, para el cálculo de salud ──────────────────
+  // Agregados, NINGUNO por fila. "Última cita" mira solo citas ya pasadas (una
+  // agendada para dentro de un mes haría parecer viva a una clínica apagada);
+  // el resto mide CUÁNTO trabaja: citas, facturas y notas de la ventana y de
+  // la ventana anterior, para la tendencia.
+  //
+  // Las ventanas cortan en la MEDIANOCHE DE MÉRIDA (@/lib/admin/zona-horaria),
+  // no en la del servidor.
+  const ahora = new Date();
+  const desdeVentana = inicioDeHaceDias(DIAS_VENTANA_ACTIVIDAD, ahora);
+  const desdePrevia  = inicioDeHaceDias(DIAS_VENTANA_ACTIVIDAD * 2, ahora);
+  const desdeEnLinea = new Date(ahora.getTime() - MINUTOS_EN_LINEA * 60_000);
+
+  const [citasPasadas, citasVentana, citasPrevias, citasFuturas, sesionPanel] = await Promise.all([
+    prisma.appointment.aggregate({
+      where: { clinicId: params.id, startsAt: { lte: ahora } },
+      _count: { _all: true },
+      _max:   { startsAt: true },
+    }),
+    prisma.appointment.count({
+      where: { clinicId: params.id, startsAt: { gte: desdeVentana, lte: ahora } },
+    }),
+    prisma.appointment.count({
+      where: { clinicId: params.id, startsAt: { gte: desdePrevia, lt: desdeVentana } },
+    }),
+    prisma.appointment.aggregate({
+      where: { clinicId: params.id, startsAt: { gt: ahora } },
+      _count: { _all: true },
+      _min:   { startsAt: true },
+    }),
+    // ⛔ NO User.lastLogin: está vacío en las 36 filas de producción. La fuente
+    // de "alguien está trabajando en el panel" es analytics_sessions con
+    // surface="dashboard" (surface="public" son visitas a la web, no trabajo).
+    prisma.analyticsSession.aggregate({
+      where: { clinicId: params.id, surface: SUPERFICIE_PANEL },
+      _max:  { lastSeenAt: true },
+    }),
+  ]);
+
+  const [facturasVentana, facturasPrevias, notasVentana, notasPrevias] = await Promise.all([
+    prisma.invoice.count({ where: { clinicId: params.id, createdAt: { gte: desdeVentana } } }),
+    prisma.invoice.count({ where: { clinicId: params.id, createdAt: { gte: desdePrevia, lt: desdeVentana } } }),
+    prisma.medicalRecord.count({ where: { clinicId: params.id, createdAt: { gte: desdeVentana } } }),
+    prisma.medicalRecord.count({ where: { clinicId: params.id, createdAt: { gte: desdePrevia, lt: desdeVentana } } }),
+  ]);
+
+  const ultimoAccesoAt = sesionPanel._max.lastSeenAt ?? null;
+
+  // Precios de lista desde plan_configs (fuente única). El selector de plan de
+  // la ficha los pintaba desde la tabla de fallback del código.
+  const planPrices = await loadPlanPrices();
 
   // Manager de cuenta asignado. Query APARTE y en try/catch: si
   // sql/account-managers.sql todavía no está aplicado, la ficha de la clínica
@@ -185,6 +240,22 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       livePaymentMethod={livePaymentMethod}
       recurringCharge={recurringCharge}
       platformPayments={platformPayments}
+      planPrices={planPrices}
+      ahoraISO={ahora.toISOString()}
+      actividad={{
+        citasPasadas:  citasPasadas._count._all,
+        ultimaCitaAt:  citasPasadas._max.startsAt ? citasPasadas._max.startsAt.toISOString() : null,
+        citasVentana,
+        citasFuturas:  citasFuturas._count._all,
+        proximaCitaAt: citasFuturas._min.startsAt ? citasFuturas._min.startsAt.toISOString() : null,
+        citasVentanaPrevia: citasPrevias,
+        facturasVentana,
+        facturasVentanaPrevia: facturasPrevias,
+        notasVentana,
+        notasVentanaPrevia: notasPrevias,
+        ultimoAccesoAt: ultimoAccesoAt ? ultimoAccesoAt.toISOString() : null,
+        enLinea: ultimoAccesoAt !== null && ultimoAccesoAt >= desdeEnLinea,
+      }}
     />
   );
 }
