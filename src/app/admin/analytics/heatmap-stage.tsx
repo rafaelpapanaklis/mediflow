@@ -25,12 +25,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HeatmapCanvas } from "./heatmap-canvas";
 import { referenceWidth, sizeMismatch, stageHeight } from "./heatmap-geom";
+import { desplegarDocumento } from "./iframe-desplegar";
 import type { HeatPoint } from "@/lib/analytics/types";
 
 type Status = "loading" | "ok" | "failed";
 
 /** Alto de sondeo del iframe antes de tener medida real (ver stageH). */
 const PROBE_H = 320;
+/** Cuántas veces puede moverse el alto del iframe antes de darlo por asentado. */
+const MAX_AJUSTES = 24;
 
 export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: string }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -86,6 +89,14 @@ export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: stri
     let timer = 0;
     let tries = 0;
     let settled = false;
+    // Último alto aceptado y cuántas veces se ha movido. El contador es un TECHO
+    // DE CORDURA, no el arreglo: si alguna pantalla conserva un `100vh` propio
+    // que la hoja no neutraliza, el alto mediría al iframe en vez de al
+    // contenido y cada aviso del ResizeObserver lo subiría otro poco, sin fin.
+    // Con el techo eso se queda en una franja acotada en vez de un lienzo que
+    // crece para siempre — que es justo cómo acabó el intento anterior.
+    let ultimo = 0;
+    let ajustes = 0;
 
     const measure = () => {
       if (cancelled) return;
@@ -100,6 +111,21 @@ export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: stri
         retry();
         return;
       }
+      // ── El armazón encierra la página: hay que desplegarla ANTES de medir ──
+      // La columna de trabajo del panel lleva `max-height:100vh` + su propia
+      // barra de scroll (`lg:max-h-screen lg:overflow-y-auto`). Dentro de un
+      // iframe, `100vh` ES el alto del iframe, así que la página NUNCA puede ser
+      // más alta que su ventana y las tres medidas de abajo —que sí son
+      // content-driven— devuelven el alto del iframe, no el del contenido: la
+      // página salía cortada en la franja de sondeo con el resto en gris, y con
+      // barra de scroll dentro de la mini página.
+      //
+      // ./iframe-desplegar.ts le quita ese techo, y sólo ese, con una hoja
+      // inyectada en el <head> del PROPIO iframe (mismo origen). No hay bucle
+      // nuevo: va en esta misma medición, que ya la disparan el `load`, los
+      // reintentos y el ResizeObserver, y es idempotente. Leer `scrollHeight`
+      // justo después fuerza el recálculo, así que se mide ya desplegada.
+      desplegarDocumento(doc);
       // OJO con `documentElement.scrollHeight`: NO sirve para medir aquí porque
       // nunca baja del alto del PROPIO iframe (es el viewport del frame). Con una
       // página más corta que el lienzo devolvía el alto del lienzo, el canvas se
@@ -116,7 +142,11 @@ export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: stri
         retry(); // aún hidratando / en blanco → reintenta
         return;
       }
-      setFrameH((prev) => (Math.abs(prev - h) > 2 ? h : prev));
+      if (Math.abs(ultimo - h) > 2 && ajustes < MAX_AJUSTES) {
+        ultimo = h;
+        ajustes += 1;
+        setFrameH(h);
+      }
       setStatus("ok");
       if (!settled) {
         settled = true;
