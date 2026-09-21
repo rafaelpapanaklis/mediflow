@@ -24,7 +24,7 @@ import {
   ACTIVIDAD_CERO, type ActividadClinica, type FilaPortada,
 } from "@/components/admin/portada/atencion-core";
 import {
-  fechaLargaAdmin, inicioDelAnio, inicioDelDia, inicioDelMes, inicioDelMesAnterior,
+  fechaConDiaSemanaAdmin, inicioDelAnio, inicioDelDia, inicioDelMes, inicioDelMesAnterior,
 } from "@/lib/admin/zona-horaria";
 
 /** Para decir en pantalla desde dónde se corta el día, sin repetir la zona. */
@@ -351,7 +351,7 @@ async function renderAdminDashboard() {
   const ultimosPagos = subInvoices.slice().sort(comparePaymentDateDesc).slice(0, 10);
 
   // En la zona del panel, NO en la del runtime: ver @/lib/admin/zona-horaria.
-  const fechaStr = fechaLargaAdmin(now);
+  const fechaStr = fechaConDiaSemanaAdmin(now) ?? "";
   const apartadas = portada.totales.dePrueba + portada.totales.archivadas;
 
   return (
