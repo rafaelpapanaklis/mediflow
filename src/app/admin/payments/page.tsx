@@ -5,6 +5,7 @@ import { getAdminMrr, mrrBreakdownHint, EMPTY_MRR } from "@/lib/admin/mrr";
 import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
 import { isInTrial, isPlanExpired } from "@/lib/plan-status";
 import { PaymentsClient } from "./payments-client";
+import { inicioDelMes, inicioDelMesAnterior } from "@/lib/admin/zona-horaria";
 
 /** Tope de la pestaña "Todos los pagos". */
 const RECENT_PAYMENTS_LIMIT = 100;
@@ -89,9 +90,14 @@ export default async function PaymentsPage() {
 
 async function renderPaymentsPage() {
   const now = new Date();
-  const firstOfMonth      = new Date(now.getFullYear(), now.getMonth(), 1);
-  const firstOfPrevMonth  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastOfPrevMonth   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+  // Cortes de mes EN LA ZONA DEL PANEL. Con `new Date(y, m, 1)` (zona del
+  // runtime, que en producción es UTC) lo cobrado después de las 18:00 de
+  // Mérida se sumaba al mes siguiente: ése era el descuadre de "Cobrado este
+  // mes". `lastOfPrevMonth` pasa a ser el INICIO de este mes y el filtro usa
+  // `lt` en vez de `lte`, que es el mismo tramo sin el hueco del último
+  // segundo.
+  const firstOfMonth      = inicioDelMes(now);
+  const firstOfPrevMonth  = inicioDelMesAnterior(now);
 
   // Ejecutamos todas las queries en paralelo pero cada una con fallback
   // seguro para que un fallo individual no tire toda la página.
@@ -158,7 +164,7 @@ async function renderPaymentsPage() {
         _count: true,
       }), { _sum: { amount: 0 }, _count: 0 } as any),
       safe(prisma.subscriptionInvoice.aggregate({
-        where: { status: "paid", paidAt: { gte: firstOfPrevMonth, lte: lastOfPrevMonth } },
+        where: { status: "paid", paidAt: { gte: firstOfPrevMonth, lt: firstOfMonth } },
         _sum: { amount: true },
       }), { _sum: { amount: 0 } } as any),
     ]);

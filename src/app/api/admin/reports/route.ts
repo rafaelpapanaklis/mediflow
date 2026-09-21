@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isInTrial } from "@/lib/plan-status";
 import * as XLSX from "xlsx";
+import { diaAdmin } from "@/lib/admin/zona-horaria";
+import { diaDePeriodo } from "@/lib/admin/dia-de-periodo";
 
 
 export const runtime = "nodejs";
@@ -130,12 +132,37 @@ function parseDate(raw: string | null, fallback: Date): Date {
   return isNaN(d.getTime()) ? fallback : d;
 }
 
+const DIA_PLANO = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * La etiqueta del periodo (la que va en la hoja "Resumen" y en el NOMBRE del
+ * archivo que se descarga). Aquí conviven DOS tipos de fecha y mezclarlos es
+ * justo lo que producía «un día de más»:
+ *
+ *  · `from`/`to` que vienen por querystring son `YYYY-MM-DD` de un
+ *    `<input type="date">` — una FECHA DE CALENDARIO. `new Date("YYYY-MM-DD")`
+ *    la coloca en medianoche UTC, así que pasarla a Mérida la retrasaría un
+ *    día. Se devuelve el texto tal cual, sin tocar ninguna zona.
+ *  · el DEFAULT, en cambio, era `new Date()` — un INSTANTE. A las 23:00 de
+ *    Mérida ya son las 05:00 UTC del día siguiente, y ahí sí hacía falta
+ *    fechar en la zona del panel.
+ */
+function etiquetaDia(raw: string | null, resuelta: Date): string {
+  if (raw && DIA_PLANO.test(raw.trim())) return raw.trim();
+  return diaAdmin(resuelta);
+}
+
+
 export async function GET(req: NextRequest) {
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
-  const from = parseDate(url.searchParams.get("from"), new Date(new Date().getFullYear(), 0, 1));
-  const to   = parseDate(url.searchParams.get("to"),   new Date());
+  const rawFrom = url.searchParams.get("from");
+  const rawTo   = url.searchParams.get("to");
+  const from = parseDate(rawFrom, new Date(new Date().getFullYear(), 0, 1));
+  const to   = parseDate(rawTo,   new Date());
+  const desde = etiquetaDia(rawFrom, from);
+  const hasta = etiquetaDia(rawTo, to);
   const format = url.searchParams.get("format") ?? "json";
 
   if (from > to) return NextResponse.json({ error: "from debe ser anterior a to" }, { status: 400 });
@@ -156,7 +183,7 @@ export async function GET(req: NextRequest) {
   const wb = XLSX.utils.book_new();
 
   const summarySheet = XLSX.utils.json_to_sheet([
-    { Métrica: "Periodo",           Valor: `${from.toISOString().slice(0,10)} → ${to.toISOString().slice(0,10)}` },
+    { Métrica: "Periodo",           Valor: `${desde} → ${hasta}` },
     { Métrica: "MRR (activo)",      Valor: data.summary.mrr },
     { Métrica: "ARR",               Valor: data.summary.arr },
     { Métrica: "ARPU",              Valor: Number(data.summary.arpu.toFixed(2)) },
@@ -186,7 +213,8 @@ export async function GET(req: NextRequest) {
 
   const paymentsSheet = XLSX.utils.json_to_sheet(
     data.periodInvoices.map(inv => ({
-      Fecha:          inv.createdAt.toISOString().slice(0, 10),
+      // `createdAt` SÍ es un instante: se fecha en la zona del panel.
+      Fecha:          diaAdmin(inv.createdAt),
       Clínica:        inv.clinic?.name ?? "",
       Plan:           inv.clinic?.plan ?? "",
       Monto:          inv.amount,
@@ -194,14 +222,16 @@ export async function GET(req: NextRequest) {
       Método:         inv.method ?? "",
       Estado:         inv.status,
       Referencia:     inv.reference ?? "",
-      PeriodoInicio:  inv.periodStart.toISOString().slice(0, 10),
-      PeriodoFin:     inv.periodEnd.toISOString().slice(0, 10),
+      // Columna MIXTA (manual = fecha de calendario, Stripe = instante):
+      // ver `diaDePeriodo`. No se puede fechar todo igual.
+      PeriodoInicio:  diaDePeriodo(inv.periodStart),
+      PeriodoFin:     diaDePeriodo(inv.periodEnd),
     })),
   );
   XLSX.utils.book_append_sheet(wb, paymentsSheet, "Pagos");
 
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  const fname = `dalecontrol-reporte-${from.toISOString().slice(0,10)}_${to.toISOString().slice(0,10)}.xlsx`;
+  const fname = `dalecontrol-reporte-${desde}_${hasta}.xlsx`;
 
   return new NextResponse(buffer, {
     status: 200,

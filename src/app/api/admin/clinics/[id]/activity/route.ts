@@ -1,6 +1,7 @@
 import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { diaAdmin, inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -70,17 +71,22 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     }).catch(() => [] as any[]),
   ]);
 
-  // Agrupa auditLog por día (YYYY-MM-DD)
+  // Agrupa auditLog por día (YYYY-MM-DD) EN LA ZONA DEL PANEL.
+  // Antes esto usaba `toISOString()`, que SIEMPRE devuelve UTC: a las 23:00 de
+  // Mérida ya son las 05:00 UTC del día siguiente, así que el eje pintaba un
+  // día que aquí no había empezado y los eventos de la tarde caían en el día
+  // equivocado. Los DOS sitios —el agrupado y el eje— tienen que usar el mismo
+  // criterio; si solo se arregla uno, las barras se mueven de columna.
   const byDay = new Map<string, number>();
   for (const row of dailyAudit as { createdAt: Date }[]) {
-    const key = new Date(row.createdAt).toISOString().slice(0, 10);
+    const key = diaAdmin(new Date(row.createdAt));
     byDay.set(key, (byDay.get(key) ?? 0) + 1);
   }
   const days: { date: string; count: number }[] = [];
   for (let i = 29; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
+    // `inicioDeHaceDias` da la medianoche de ese día de Mérida, así que cada
+    // paso cae en un día distinto sin depender de la zona del runtime.
+    const key = diaAdmin(inicioDeHaceDias(i));
     days.push({ date: key, count: byDay.get(key) ?? 0 });
   }
 

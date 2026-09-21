@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/utils";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { diaAdmin } from "@/lib/admin/zona-horaria";
 
 interface ReportData {
   summary: {
@@ -24,11 +25,25 @@ interface ReportData {
 
 type Preset = "month" | "quarter" | "year" | "custom";
 
-function firstOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
-function firstOfYear(d: Date)  { return new Date(d.getFullYear(), 0, 1); }
+// ── Cortes de periodo, en la zona del panel ────────────────────────────────
+// Antes salían de `new Date(y, m, 1).toISOString().slice(0,10)`: el constructor
+// usa la zona del NAVEGADOR y `toISOString()` devuelve UTC, así que a las 23:00
+// de Mérida el "hasta" saltaba al día siguiente y el informe se descargaba con
+// un día de más en el nombre. Ahora todo se deriva del día de Mérida
+// (`YYYY-MM-DD`) con aritmética de texto: ni una zona de por medio.
+const dos = (n: number) => String(n).padStart(2, "0");
+
+/** Parte el día de Mérida en año y mes. */
+function anioMes(ahora: Date): { anio: number; mes: number } {
+  const [anio, mes] = diaAdmin(ahora).split("-").map(Number);
+  return { anio, mes };
+}
+
+function firstOfMonth(d: Date) { const { anio, mes } = anioMes(d); return `${anio}-${dos(mes)}-01`; }
+function firstOfYear(d: Date)  { return `${anioMes(d).anio}-01-01`; }
 function firstOfQuarter(d: Date) {
-  const q = Math.floor(d.getMonth() / 3) * 3;
-  return new Date(d.getFullYear(), q, 1);
+  const { anio, mes } = anioMes(d);
+  return `${anio}-${dos(Math.floor((mes - 1) / 3) * 3 + 1)}-01`;
 }
 
 const TOOLTIP_STYLE = {
@@ -42,8 +57,8 @@ const TOOLTIP_STYLE = {
 export function ReportsClient() {
   const today = new Date();
   const [preset, setPreset] = useState<Preset>("year");
-  const [from, setFrom] = useState(firstOfYear(today).toISOString().slice(0, 10));
-  const [to, setTo]     = useState(today.toISOString().slice(0, 10));
+  const [from, setFrom] = useState(firstOfYear(today));
+  const [to, setTo]     = useState(diaAdmin(today));
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,10 +71,10 @@ export function ReportsClient() {
     const f = p === "month"   ? firstOfMonth(t)
             : p === "quarter" ? firstOfQuarter(t)
             : p === "year"    ? firstOfYear(t)
-            : new Date(from);
+            : from;
     if (p !== "custom") {
-      setFrom(f.toISOString().slice(0, 10));
-      setTo(t.toISOString().slice(0, 10));
+      setFrom(f);
+      setTo(diaAdmin(t));
     }
   }
 
