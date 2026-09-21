@@ -377,6 +377,19 @@ export function ClientesClient({ clientes, planPrices, ahoraISO }: Props) {
               ? `${formatCurrency(Math.round(resumen.mrrTotal / resumen.reales), "MXN")} por cliente`
               : "sin clientes"}
           </div>
+          {/* A QUIÉN cuenta. Mismos precios (plan_configs) y misma regla de
+              cobro que /admin/clinics; lo que cambia es QUIÉN entra. No se
+              unifica a la fuerza: esta pantalla mide CLIENTES, y un cliente es
+              una cuenta dueña. Lo que faltaba era decirlo. */}
+          <div
+            className={css.cifraUniverso}
+            title="Sólo las clínicas no archivadas que tienen una cuenta dueña activa (role SUPER_ADMIN, isActive). Es un subconjunto del MRR de /admin/clinics: una clínica cuyo dueño se dio de baja suma allí y no aquí. Y ojo con las sedes: una sucursal incluida en el plan de la madre (POST /api/clinics la crea con subscriptionStatus=active y monthlyPrice=0) se valora a precio de lista aunque no se le cobre nada. Un CLINIC con 2 sedes incluidas suma 3 veces el precio de lista. Pasa igual en las dos pantallas."
+          >
+            Cuenta sólo clínicas con cuenta dueña activa.
+            Una sin dueño suma en Clínicas y no aquí.
+            Una sede incluida en el plan de la madre suma precio de lista
+            aunque no se le cobre.
+          </div>
         </div>
         <div className={`${css.cifra} ${resumen.mixtos > 0 ? css.cifraAlerta : ""}`}>
           <div className={css.cifraEtiqueta}>Paga en parte</div>

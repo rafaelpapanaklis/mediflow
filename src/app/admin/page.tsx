@@ -166,10 +166,14 @@ async function renderAdminDashboard() {
   // atender" y "no se pudo mirar" se ven igual y no son lo mismo.
   const avisos: string[] = [];
   const [ultimaCitaRows, pagadasRows, cobrosDelAnio, accesoRows] = await Promise.all([
-    // Cita MÁS RECIENTE por clínica, futura incluida: una clínica con una cita
-    // agendada para la semana que viene está viva aunque hoy no tenga nada.
+    // Cita PASADA más reciente por clínica. `lte: now` a propósito y desde el
+    // 21-sep-2026: es EXACTAMENTE la misma consulta que hace /admin/clinics, y
+    // las dos alimentan el mismo cálculo (`evaluarSaludClinica`). Antes esta
+    // traía la más reciente con las futuras incluidas, así que la portada y
+    // Clínicas podían dar estados distintos de la misma clínica — que es el
+    // descuadre que este cambio cierra. Ver `FilaPortada.ultimaCita`.
     prisma.appointment
-      .groupBy({ by: ["clinicId"], _max: { startsAt: true } })
+      .groupBy({ by: ["clinicId"], where: { startsAt: { lte: now } }, _max: { startsAt: true } })
       .catch((e) => { console.error("[admin] última cita por clínica:", e); return null; }),
     // "¿Alguna vez pagó?" mira TODO el histórico a propósito: es lo que separa
     // una cuenta de pruebas vacía de una clínica que dejó de pagar.

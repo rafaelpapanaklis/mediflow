@@ -164,7 +164,7 @@ test("cuenta de prueba: 0 pacientes, 0 citas, nunca pagó → apartada, no borra
     ultimoAcceso: null,
     algunaVezPago: false,
   });
-  assert.equal(esCuentaDePrueba(prueba), true);
+  assert.equal(esCuentaDePrueba(prueba, AHORA), true);
 
   const real = clinica({ id: "real", nombre: "Real" });
   const portada = construirPortada([prueba, real], AHORA);
@@ -215,7 +215,7 @@ test("una cuenta vacía que YA DEBE dinero no se aparta: eso es dinero, no basur
     montoPorCobrar: 419,
     cobrosFallidos: 1,
   });
-  assert.equal(esCuentaDePrueba(debe), false);
+  assert.equal(esCuentaDePrueba(debe, AHORA), false);
   const portada = construirPortada([debe], AHORA);
   assert.equal(portada.totales.dePrueba, 0);
   assert.equal(portada.totales.dineroEnRiesgo, 419);
@@ -232,7 +232,7 @@ test("una cuenta vacía que alguna vez pagó tampoco se aparta", () => {
     subscriptionStatus: "cancelled",
     trialEndsAt: haceDias(30),
   });
-  assert.equal(esCuentaDePrueba(exCliente), false);
+  assert.equal(esCuentaDePrueba(exCliente, AHORA), false);
 });
 
 test("una clínica archivada se aparta aparte: se apagó a propósito", () => {
@@ -328,23 +328,39 @@ test("trial por vencer: dentro de la ventana sí, fuera no, y las últimas horas
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("apagada: 30 días es aviso medio, 60 es alto, 29 no es nada", () => {
-  const a29 = senalesDeClinica(clinica({ ultimaCita: haceDias(DIAS_APAGADA - 1) }), AHORA);
+  // `actividad: act(0,0,0)` en los tres: la clínica base tiene 40 citas en la
+  // ventana, y con citas DENTRO de la ventana `evaluarSaludClinica` la llama
+  // "activa" pase lo que pase con `ultimaCita` — que es lo coherente (en datos
+  // reales, 40 citas en 30 días y la última hace 30 días no puede darse a la
+  // vez). Antes esta capa miraba sólo `ultimaCita` y se contradecía a sí misma.
+  const parada = (dias: number) => clinica({ ultimaCita: haceDias(dias), actividad: act(0, 0, 0) });
+
+  const a29 = senalesDeClinica(parada(DIAS_APAGADA - 1), AHORA);
   assert.ok(!a29.some((s) => s.motivo === "apagada"));
 
-  const a30 = senalesDeClinica(clinica({ ultimaCita: haceDias(DIAS_APAGADA) }), AHORA)
+  const a30 = senalesDeClinica(parada(DIAS_APAGADA), AHORA)
     .find((s) => s.motivo === "apagada");
   assert.equal(a30?.severidad, "medio");
 
-  const a60 = senalesDeClinica(clinica({ ultimaCita: haceDias(DIAS_APAGADA_GRAVE) }), AHORA)
+  const a60 = senalesDeClinica(parada(DIAS_APAGADA_GRAVE), AHORA)
     .find((s) => s.motivo === "apagada");
   assert.equal(a60?.severidad, "alto");
   assert.equal(a60?.dato, "hace 60 días");
 });
 
-test("una cita FUTURA mantiene viva a la clínica", () => {
-  // Sin citas desde hace meses, pero con una agendada para dentro de 3 días.
-  const conAgenda = clinica({ ultimaCita: enDias(3), actividad: act(0, 0, 0), ultimoAcceso: haceDias(1) });
-  assert.ok(!motivos(conAgenda).includes("apagada"));
+test("una cita futura ya NO mantiene viva a la clínica: manda la última PASADA", () => {
+  // Cambió el 21-sep-2026 y es deliberado. `ultimaCita` pasó a ser la última
+  // cita PASADA, que es lo que /admin/clinics le da al mismo cálculo; con la
+  // regla vieja (futura incluida) las dos pantallas daban estados distintos de
+  // la misma clínica. Una agenda por delante ya no tapa 90 días de parón.
+  const conAgenda = clinica({
+    ultimaCita: haceDias(90),          // lo último que de verdad ocurrió
+    actividad: act(0, 0, 0),
+    ultimoAcceso: haceDias(1),
+  });
+  const s = senalesDeClinica(conAgenda, AHORA).find((x) => x.motivo === "apagada");
+  assert.ok(s, "90 días sin una cita pasada es una clínica apagada");
+  assert.equal(s.severidad, "alto");
 });
 
 test("pacientes de alta y ninguna cita: se quedó a medio arrancar", () => {
@@ -550,7 +566,7 @@ test("si no se pudo leer el histórico de pagos, nadie se aparta como cuenta de 
     ultimoAcceso: null, subscriptionStatus: "pending_payment", trialEndsAt: haceDias(5),
     algunaVezPago: null, // ← no se pudo mirar
   });
-  assert.equal(esCuentaDePrueba(vacia), false);
+  assert.equal(esCuentaDePrueba(vacia, AHORA), false);
 
   const portada = construirPortada([vacia], AHORA);
   assert.equal(portada.totales.dePrueba, 0);

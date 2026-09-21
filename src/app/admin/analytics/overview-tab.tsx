@@ -17,6 +17,8 @@ import { StatTile, BarList, LoadingState, ErrorState, EmptyState, SERIES, TOOLTI
 import { formatNumber, formatDuration, formatPct } from "@/lib/analytics/format";
 import type { OverviewResponse, BucketUnit } from "@/lib/analytics/types";
 import type { TabProps } from "./analytics-client";
+// El rótulo sale de LIVE_WINDOW_MS, no de una cadena a mano: ver ./ventana-en-vivo.
+import { rotuloVentanaEnVivo } from "./ventana-en-vivo";
 
 function fmtBucket(b: string, unit: BucketUnit): string {
   const months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -90,7 +92,7 @@ export function OverviewTab({ query }: TabProps) {
         <StatTile label="Duración media" value={formatDuration(k.avgDurationMs)} />
         <StatTile label="Clicks" value={formatNumber(k.clicks)} />
         <StatTile label="Identificadas" value={formatNumber(k.identifiedVisits)} sub="visitas de registrados" />
-        <StatTile label="En vivo" value={formatNumber(k.liveNow)} tone={k.liveNow > 0 ? "good" : "default"} sub="últimos 5 min" />
+        <StatTile label="En vivo" value={formatNumber(k.liveNow)} tone={k.liveNow > 0 ? "good" : "default"} sub={rotuloVentanaEnVivo()} />
       </div>
 
       {/* Serie temporal */}

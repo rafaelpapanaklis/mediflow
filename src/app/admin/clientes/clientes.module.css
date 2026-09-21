@@ -223,6 +223,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* El UNIVERSO de una cifra: a quién cuenta. Un número sin su universo es una
+   trampa — /admin/clinics y /admin/clientes miden MRR con los mismos precios y
+   la misma regla de cobro, pero NO sobre las mismas clínicas, y quien compara
+   las dos pantallas no tiene cómo saberlo. Va debajo del pie, más apagado,
+   porque es la letra pequeña de la cifra y no un dato más. */
+.cifraUniverso {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border-soft);
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-3);
+  opacity: 0.9;
+}
+
 .cifraAlerta .cifraValor { color: var(--danger); }
 
 /* ── Barra de herramientas ──────────────────────────────────────────────── */
@@ -329,10 +344,19 @@
 }
 
 /* .badge-new tiene height fija en globals.css: si el texto se parte en dos
-   líneas, la segunda se sale de la píldora. */
+   líneas, la segunda se sale de la píldora.
+
+   `overflow: hidden` acompaña al `max-width: 100%` (21-sep-2026): sin él la
+   PÍLDORA sí quedaba limitada pero el TEXTO se salía por la derecha, y el
+   recorte lo acababa haciendo `.tablaCaja { overflow: hidden }` a mitad de
+   pantalla. Aquí llega por `PlanStatusBadge`, cuya etiqueta más larga es
+   "Al corriente · renueva el 12 de octubre". Medido en maqueta a 390 px: el
+   contenido de la tabla se iba a 394 px contra 342 de caja. */
 .celda :global(.badge-new) {
   white-space: nowrap;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── La tira de sedes: lo que la lista vieja no decía ────────────────────── */
@@ -608,5 +632,9 @@
 
   .meta { max-width: none; white-space: normal; }
   .sede { max-width: none; }
+  /* Mismo caso que en clinics.module.css: `.volumen` es nowrap y a 320 px mide
+     202 px contra los ~147 de la columna de valor, así que se salía 51 px
+     (medido en maqueta el 21-sep-2026). A 390 px cabía, por eso no se vio. */
+  .volumen { white-space: normal; }
   .cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

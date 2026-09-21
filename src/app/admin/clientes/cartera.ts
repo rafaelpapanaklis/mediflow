@@ -436,9 +436,22 @@ export function resumirClientes(filas: FilaCliente[]): ResumenClientes {
     conApagada: reales.filter((f) => f.resumen.porActividad.apagada > 0).length,
     conTrialVencido: reales.filter((f) => f.resumen.porEstado["trial-vencido"] > 0).length,
     enLinea: reales.filter((f) => f.enLinea).length,
-    // Se suma sobre TODAS las filas: una cuenta de prueba aporta 0 por
-    // definición (no tiene suscripción activa), así que no hay que excluirla
-    // a mano — y si algún día una la tuviera, el dinero no se escondería.
+    // Se suma sobre TODAS las filas, pruebas incluidas, y así tiene que ser:
+    // /admin/clinics tampoco las excluye, y esconder dinero de un lado y no
+    // del otro es justo lo que hace que las dos pantallas no cuadren.
+    //
+    // ⚠️ El comentario que había aquí decía que una cuenta de prueba «aporta 0
+    // por definición, no tiene suscripción activa». Es FALSO y se corrigió el
+    // 21-sep-2026: `evaluarPrueba` (salud-clinica.ts) mira pacientes, citas
+    // pasadas y pagos registrados — jamás `subscriptionStatus`. Una clínica
+    // `active` sin pacientes, sin citas y sin cobro registrado es `esPrueba` y
+    // aporta su MRR completo. Sumarla sigue siendo lo correcto; lo que no lo
+    // era es el motivo.
+    //
+    // Consecuencia que esta capa NO arregla y que hay que saber: el «por
+    // cliente» de la pantalla divide este total (todas las filas) entre
+    // `reales` (sólo las que no son prueba). Con una cuenta de prueba que
+    // aporte dinero, el promedio sale alto.
     mrrTotal: filas.reduce((s, f) => s + f.mrr.total, 0),
     clinicas: reales.reduce((s, f) => s + f.vigentes.length, 0),
   };

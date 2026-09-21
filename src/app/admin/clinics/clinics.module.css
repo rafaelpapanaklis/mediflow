@@ -218,6 +218,21 @@
 
 .cifraAlerta .cifraValor { color: var(--danger); }
 
+/* El UNIVERSO de una cifra: a quién cuenta. Un número sin su universo es una
+   trampa — /admin/clinics y /admin/clientes miden MRR con los mismos precios y
+   la misma regla de cobro, pero NO sobre las mismas clínicas, y quien compara
+   las dos pantallas no tiene cómo saberlo. Va debajo del pie, más apagado,
+   porque es la letra pequeña de la cifra y no un dato más. */
+.cifraUniverso {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border-soft);
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-3);
+  opacity: 0.9;
+}
+
 /* ── Barra de herramientas ──────────────────────────────────────────────── */
 
 .herramientas {
@@ -313,6 +328,14 @@
   flex-direction: column;
   gap: 3px;
   align-items: flex-start;
+  /* EL arreglo del desborde de móvil (21-sep-2026). `.pila` es un ítem flex
+     dentro de un `td` que en móvil también es flex: sin `min-width: 0` no
+     puede encogerse por debajo de su contenido, y la insignia más larga
+     ("Al corriente · renueva el 12 de octubre") le fijaba el ancho. Medido a
+     390 px: el contenido de la tabla llegaba a 412 px contra 342 de caja, o
+     sea 70 px que `.tablaCaja { overflow: hidden }` recortaba en silencio.
+     `.celda`, justo debajo, ya lo tenía; `.pila` se quedó sin él. */
+  min-width: 0;
 }
 
 /* Contenido de una celda con varias piezas, apilado. En móvil, donde la celda
@@ -327,11 +350,19 @@
 
 /* .badge-new tiene height: 20px fijo en globals.css: si el texto se parte en
    dos líneas, la segunda se sale de la píldora y pisa la insignia de abajo.
-   "Trial vencido usando" y "Cobro fallido" lo hacían. */
+   "Trial vencido usando" y "Cobro fallido" lo hacían.
+
+   `overflow: hidden` acompaña al `max-width: 100%`: sin él, el ancho de la
+   píldora sí quedaba limitado pero el TEXTO seguía saliéndose por la derecha,
+   así que el recorte lo acababa haciendo `.tablaCaja` y la frase se cortaba a
+   mitad de pantalla en vez de a mitad de píldora. La parte que importa
+   ("Al corriente", "Cobro fallido") va delante. */
 .pila :global(.badge-new),
 .celda :global(.badge-new) {
   white-space: nowrap;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Barra de actividad: la forma dice cuánta vida hay, no sólo el color. */
@@ -534,6 +565,12 @@
   .tablaCaja tbody td[data-col="Clínica"]::before { content: none; }
 
   .meta { max-width: none; white-space: normal; }
+  /* `.volumen` es nowrap para que "116 citas · 12 facturas · 34 notas" no se
+     parta en escritorio. A 320 px no cabe: mide 202 px contra los ~147 que
+     deja la columna de valor, y se comía 55 px por la derecha (medido en
+     maqueta el 21-sep-2026). A 390 px sí cabía, por eso no se había visto.
+     En móvil se le deja envolver: no es una píldora de altura fija. */
+  .volumen { white-space: normal; }
   .acciones { align-items: stretch; flex-direction: row; flex-wrap: wrap; }
   .cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
