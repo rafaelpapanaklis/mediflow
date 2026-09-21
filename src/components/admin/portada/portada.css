@@ -1,0 +1,725 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Portada de /admin — «qué exige atención hoy».
+
+   Reglas que sigue esta hoja, y por qué:
+   · NI UN HEX. Todo sale de los tokens de globals.css (--bg-*, --text-*,
+     --danger/--warning/--info/--success y sus *-soft/-strong). Por eso el
+     claro y el oscuro (`.dark` en el root) funcionan sin una sola regla por
+     tema: lo único que cambia son los valores de los tokens.
+   · La severidad se lee por FORMA además de por color: la barra izquierda de
+     cada grupo es sólida (crítico), rayada (alto) o punteada (medio), y cada
+     una lleva su icono y su palabra. Quien no distingue rojo de ámbar sigue
+     leyendo el panel.
+   · `tabular-nums` en TODA cifra (dinero, fechas relativas, conteos): sin él
+     las columnas de números bailan de fila en fila.
+   · Móvil primero. Rafael mira esto desde el teléfono: la rejilla arranca en
+     una columna y solo se abre cuando hay sitio de verdad.
+
+   Prefijo `pa-` (portada admin) en todos los selectores. Es CSS global, como
+   barberias.css en esta misma carpeta, así que el prefijo es lo que evita que
+   choque con otra hoja del panel.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Cifras ────────────────────────────────────────────────────────────────
+   Una sola utilidad para todo lo que sea número. */
+.pa-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── Cabecera de la portada ─────────────────────────────────────────────── */
+.pa-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.pa-head__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+}
+
+.pa-head__sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* `toLocaleDateString("es-MX")` devuelve la fecha en minúsculas. Se sube SOLO
+   la primera letra: `text-transform: capitalize` (lo que había) sube también
+   las de "de" y salía «Domingo, 20 De Septiembre De 2026». */
+.pa-head__sub::first-letter {
+  text-transform: uppercase;
+}
+
+.pa-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Barra de resumen: el titular de «atención hoy» ─────────────────────── */
+.pa-resumen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+}
+
+/* Cuando hay algo crítico la barra se tiñe — y además lo dice con palabras. */
+.pa-resumen--alerta {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.pa-resumen--limpio {
+  border-color: var(--border-soft);
+}
+
+.pa-resumen__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  color: var(--text-2);
+}
+
+.pa-resumen--alerta .pa-resumen__icon {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.pa-resumen--limpio .pa-resumen__icon {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.pa-resumen__main {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.pa-resumen__titular {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-1);
+}
+
+.pa-resumen__detalle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+/* Cifra grande de dinero en riesgo. Se va abajo en móvil, a la derecha luego. */
+.pa-resumen__dinero {
+  flex: none;
+  text-align: left;
+}
+
+.pa-resumen__dinero-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.pa-resumen__dinero-valor {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--danger);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Matiz bajo la cifra: cuánto del pendiente viene de un cobro roto. */
+.pa-resumen__dinero-nota {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 720px) {
+  .pa-resumen__dinero { text-align: right; }
+}
+
+/* ── Rejilla de grupos ──────────────────────────────────────────────────── */
+.pa-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+@media (min-width: 720px) {
+  .pa-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1100px) {
+  .pa-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ── Tarjeta de grupo ───────────────────────────────────────────────────── */
+.pa-grupo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  /* Hueco para la barra de severidad de la izquierda. */
+  padding-left: 6px;
+}
+
+/* La BARRA es la marca de forma. Sólida / rayada / punteada: tres texturas
+   distinguibles en escala de grises, no tres rojos distintos. */
+.pa-grupo::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+}
+
+.pa-grupo--critico::before {
+  background: var(--danger);
+}
+
+.pa-grupo--alto::before {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--warning) 0 4px,
+    transparent 4px 8px
+  );
+  background-color: var(--warning-soft);
+}
+
+.pa-grupo--medio::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--info) 0 3px,
+    transparent 3px 8px
+  );
+  background-color: var(--info-soft);
+}
+
+.pa-grupo__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 14px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.pa-grupo__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+}
+
+.pa-grupo--critico .pa-grupo__icon { color: var(--danger);  background: var(--danger-soft); }
+.pa-grupo--alto    .pa-grupo__icon { color: var(--warning-strong); background: var(--warning-soft); }
+.pa-grupo--medio   .pa-grupo__icon { color: var(--info-strong);    background: var(--info-soft); }
+
+.pa-grupo__titles { flex: 1 1 auto; min-width: 0; }
+
+.pa-grupo__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-1);
+}
+
+.pa-grupo__criterio {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+/* Contador + palabra de severidad. La PALABRA es el tercer canal, después de
+   color y forma: sin ella el panel no se puede leer en blanco y negro. */
+.pa-grupo__count {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.pa-grupo__n {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-grupo__sev {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pa-grupo--critico .pa-grupo__sev { color: var(--danger); }
+.pa-grupo--alto    .pa-grupo__sev { color: var(--warning-strong); }
+.pa-grupo--medio   .pa-grupo__sev { color: var(--info-strong); }
+
+/* ── Filas de clínica ───────────────────────────────────────────────────── */
+.pa-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pa-fila {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.pa-fila:last-child { border-bottom: none; }
+
+.pa-fila__link {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 14px;
+  text-decoration: none;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.pa-fila__link:hover,
+.pa-fila__link:focus-visible {
+  background: var(--bg-hover);
+}
+
+.pa-fila__link:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
+}
+
+.pa-fila__texto {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pa-fila__nombre {
+  /* flex y no block: al lado del nombre puede ir el punto de "en línea", y el
+     nombre largo tiene que seguir recortándose con puntos suspensivos sin
+     empujar al punto fuera de la tarjeta. */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-1);
+  min-width: 0;
+}
+
+.pa-fila__nombre > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pa-fila__porque {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
+.pa-fila__dato {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pa-fila__dato--dinero { color: var(--danger); }
+
+/* «y N más» al pie del grupo. */
+.pa-grupo__mas {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--text-3);
+  border-top: 1px solid var(--border-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Nada que atender ───────────────────────────────────────────────────── */
+.pa-vacio {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 18px;
+  margin-bottom: 20px;
+  border: 1px solid var(--success);
+  border-radius: var(--radius-lg);
+  background: var(--success-soft);
+}
+
+.pa-vacio__icon {
+  flex: none;
+  color: var(--success-strong);
+}
+
+.pa-vacio__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.pa-vacio__body {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.pa-vacio__lista {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+/* ── Pie: lo apartado y lo que no se pudo medir ─────────────────────────── */
+.pa-nota {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+}
+
+.pa-nota__icon { flex: none; margin-top: 1px; color: var(--text-4); }
+
+.pa-nota strong { color: var(--text-2); font-weight: 600; }
+
+/* ── Separador «los indicadores de siempre» ─────────────────────────────── */
+.pa-sep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 26px 0 14px;
+}
+
+.pa-sep__label {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.pa-sep__line {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border-soft);
+}
+
+/* ── Rejillas de los KPI de siempre ─────────────────────────────────────
+   Antes eran `repeat(4, minmax(0,1fr))` fijo: a 390 px cada tarjeta quedaba
+   en ~80 px y el importe se cortaba. Ahora bajan solas. */
+.pa-kpis {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 560px) {
+  .pa-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1100px) {
+  .pa-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.pa-contadores {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+@media (min-width: 1100px) {
+  .pa-contadores { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.pa-contador__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.pa-contador__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.pa-contador__valor {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-contador__pie {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tablas de siempre: que no rompan el ancho en un teléfono ──────────── */
+.pa-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pa-scroll-x > .table-new {
+  min-width: 560px;
+}
+
+/* ── Movimiento ─────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .pa-fila__link { transition: none; }
+}
+
+/* ── Texto solo para lector de pantalla ────────────────────────────────────
+   Un punto de color, solo, no es información: quien navega por voz tiene que
+   oír «en línea». No se usa `display:none`, que lo borraría del árbol. */
+.pa-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── «En línea» ────────────────────────────────────────────────────────────
+   Señal de contexto, no métrica: un punto pequeño que no compite con las
+   alarmas. Lleva anillo además de color para que se vea sobre cualquier fondo
+   y para que no dependa solo del verde. */
+.pa-online {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.pa-online__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--success-soft);
+  flex: none;
+}
+
+/* ── Panel de actividad ───────────────────────────────────────────────────── */
+.pa-act {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.pa-act__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 13px 16px 11px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.pa-act__titles { min-width: 0; }
+
+.pa-act__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.pa-act__sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.pa-act__resumen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.pa-act__resumen > .pa-num {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.pa-act__resumen-label { color: var(--text-3); }
+
+.pa-act__enlinea {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success-strong);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-act__tabla { font-variant-numeric: tabular-nums; }
+
+.pa-act__th-num { text-align: right; }
+
+.pa-act__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.pa-act__num--total {
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* El cero se apaga para que la vista salte a lo que sí tiene movimiento.
+   Sigue siendo un 0 legible, no un hueco: --text-4 conserva contraste. */
+.pa-act__cero { color: var(--text-4); }
+
+.pa-act__nombre {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.pa-act__link {
+  color: var(--text-1);
+  font-weight: 500;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pa-act__link:hover { color: var(--brand); }
+
+.pa-act__link:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
+}
+
+.pa-act__vacio,
+.pa-act__mas {
+  padding: 12px 16px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.pa-act__mas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--border-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tendencia ─────────────────────────────────────────────────────────────
+   Flecha + número: la DIRECCIÓN se lee por la forma de la flecha y por el
+   signo, no solo por el verde y el rojo. */
+.pa-tend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-tend--sube  { color: var(--success-strong); }
+.pa-tend--baja  { color: var(--danger); }
+.pa-tend--igual { color: var(--text-3); }
+.pa-tend--nuevo { color: var(--info-strong); }
+
+/* ── Rejilla de KPI de tres en fondo ancho ────────────────────────────────── */
+@media (min-width: 1100px) {
+  .pa-kpis--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
