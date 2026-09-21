@@ -8,6 +8,9 @@ import { formatNumber, formatRelative, countryName, countryFlag, surfaceLabel, i
 import type { LiveResponse } from "@/lib/analytics/types";
 import type { MapMarker } from "./analytics-map";
 import type { TabProps } from "./analytics-client";
+// El respaldo de `windowSeconds` era un `75` clavado, que dejó de ser cierto
+// al subir LIVE_WINDOW_MS a 150 s. Ahora sale de la misma constante que la API.
+import { fraseVentanaEnVivo, VENTANA_EN_VIVO_S } from "./ventana-en-vivo";
 
 const AnalyticsMap = dynamic(() => import("./analytics-map").then((m) => m.AnalyticsMap), {
   ssr: false,
@@ -84,7 +87,7 @@ export function LiveTab(_: TabProps) {
             {formatNumber(count)} <span style={{ fontSize: 14, fontWeight: 400, color: "var(--text-3)" }}>{count === 1 ? "visitante ahora" : "visitantes ahora"}</span>
           </div>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
-            Activos en los últimos {data?.windowSeconds ?? 75}s · se actualiza cada 5s
+            {fraseVentanaEnVivo(data?.windowSeconds ?? VENTANA_EN_VIVO_S)} · se actualiza cada 5s
           </div>
         </div>
       </div>

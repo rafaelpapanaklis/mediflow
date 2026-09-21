@@ -487,6 +487,19 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
           <div className={css.cifraEtiqueta}>MRR</div>
           <div className={css.cifraValor}>{formatCurrency(mrr.total, "MXN")}</div>
           <div className={css.cifraPie}>{mrrBreakdownHint(mrr)}</div>
+          {/* A QUIÉN cuenta. Esta cifra y la de /admin/clientes usan los mismos
+              precios (plan_configs) y la misma regla de cobro, pero NO el mismo
+              universo, y sin decirlo las dos pantallas parecen contradecirse.
+              El criterio no se unifica: cada una mide lo suyo y está bien. */}
+          <div
+            className={css.cifraUniverso}
+            title="Toda clínica no archivada con subscriptionStatus = active, tenga o no una cuenta dueña viva. /admin/clientes cuenta menos: allí una clínica cuyo dueño se dio de baja no aparece. Y ojo con las sedes: una sucursal incluida en el plan de la madre (POST /api/clinics la crea con subscriptionStatus=active y monthlyPrice=0) se valora a precio de lista aunque no se le cobre nada. Un CLINIC con 2 sedes incluidas suma 3 veces el precio de lista. Pasa igual en las dos pantallas."
+          >
+            Cuenta toda clínica activa no archivada, tenga cuenta dueña o no.
+            En Clientes sale menos: allí hace falta un dueño activo.
+            Una sede incluida en el plan de la madre suma precio de lista
+            aunque no se le cobre.
+          </div>
         </div>
         <div className={`${css.cifra} ${resumen.porActividad.apagada > 0 ? css.cifraAlerta : ""}`}>
           <div className={css.cifraEtiqueta}>Apagadas</div>
