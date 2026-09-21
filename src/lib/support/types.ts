@@ -107,6 +107,7 @@ export interface AdminTicketSummary extends SupportTicketSummary {
   clinicName: string;
   createdByName: string | null;
   needsReply: boolean; // la última palabra la tiene la clínica (o nadie respondió aún)
+  hasSupportReply: boolean; // ya existe una respuesta pública nuestra (lastSupportMessageAt != null)
   waitingHours: number | null; // horas esperando respuesta de soporte (null si no aplica)
 }
 

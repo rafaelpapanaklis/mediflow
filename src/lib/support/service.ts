@@ -182,6 +182,9 @@ function toAdminSummary(t: TicketRow, clinicName: string): AdminTicketSummary {
     clinicName,
     createdByName: t.createdByName,
     needsReply,
+    // Para /admin/soporte: sin respuesta nuestra no hay nada que la clínica
+    // pueda leer, así que clinicUnread no se puede leer como "no lo ha visto".
+    hasSupportReply: t.lastSupportMessageAt != null,
     waitingHours: needsReply
       ? Math.round(((Date.now() - since.getTime()) / 36e5) * 10) / 10
       : null,
