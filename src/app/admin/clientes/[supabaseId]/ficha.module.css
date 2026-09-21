@@ -1,0 +1,486 @@
+/* Ficha de un cliente — /admin/clientes/[supabaseId].
+ *
+ * Mismo idioma visual que la lista (../clientes.module.css) y que la ficha de
+ * clínica de ws1-t2: primero lo que hay que atender, después las cifras.
+ * Todo el color sale de los tokens de globals.css; ni un hex a mano.
+ */
+
+.pagina {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 20px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── Cabecera ───────────────────────────────────────────────────────────── */
+
+.cabecera {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--bg-elev);
+  padding: 18px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.volver {
+  padding: 8px;
+  border-radius: var(--radius-sm, 8px);
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  flex-shrink: 0;
+}
+
+.volver:hover { color: var(--text-1); border-color: var(--border-interactive); }
+
+.identidad { flex: 1; min-width: 220px; }
+
+.nombre {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+}
+
+.insignias {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.datos {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+}
+
+.dato strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.acciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.aclaracion {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  max-width: 70ch;
+  line-height: 1.45;
+}
+
+/* ── Lo que hay que atender ─────────────────────────────────────────────── */
+
+.bandeja {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+.bandejaCritica { border-color: var(--danger); }
+.bandejaAlta    { border-color: var(--warning); }
+
+.bandejaCabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+}
+
+.bandejaTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-1);
+}
+
+.bandejaCuenta {
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.bandejaVacia {
+  margin: 0;
+  padding: 20px 18px;
+  font-size: 13px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aviso {
+  display: grid;
+  grid-template-columns: auto minmax(130px, 1fr) minmax(0, 3fr);
+  align-items: center;
+  gap: 14px;
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.aviso:last-child { border-bottom: none; }
+
+.marca {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.marcaCritico { background: var(--danger-soft);  color: var(--danger); }
+.marcaAlto    { background: var(--warning-soft); color: var(--warning); }
+.marcaMedio   { background: var(--info-soft);    color: var(--info); }
+
+.avisoSede {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  text-decoration: none;
+}
+
+.avisoSede:hover { color: var(--brand); }
+
+.avisoTexto {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.avisoTexto strong { color: var(--text-1); }
+
+/* ── Cifras ─────────────────────────────────────────────────────────────── */
+
+.cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.cifra {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius, 10px);
+  background: var(--bg-elev);
+  padding: 12px 14px;
+}
+
+.cifraEtiqueta {
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cifraValor {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.cifraPie {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.cifraAlerta .cifraValor { color: var(--danger); }
+.cifraAviso  .cifraValor { color: var(--warning-strong); }
+
+/* ── Sedes ──────────────────────────────────────────────────────────────── */
+
+.seccion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+}
+
+.seccionTitulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.seccionNota {
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.sedes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.sede {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--bg-elev);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* El borde dice si esta sede es la que arde, antes de leer nada. */
+.sedeCritica { border-color: var(--danger); }
+.sedeAlta    { border-color: var(--warning); }
+.sedeArchivada { border-style: dashed; opacity: 0.75; }
+
+.sedeCabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sedeNombre {
+  color: var(--text-1);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sedeNombre:hover { color: var(--brand); }
+
+.sedeSlug {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.sedeInsignias {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sedeRiesgo {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 8px);
+}
+
+.riesgoCritico { background: var(--danger-soft);  color: var(--danger); }
+.riesgoAlto    { background: var(--warning-soft); color: var(--warning-strong); }
+.riesgoMedio   { background: var(--info-soft);    color: var(--info-strong); }
+
+.sedeRiesgo strong { font-weight: 700; }
+
+.metricas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metricaEtiqueta {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.metricaValor {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.metricaAviso  { color: var(--warning-strong); }
+.metricaLleno  { color: var(--danger); }
+
+.barra {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-elev-2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.barraRelleno { height: 100%; transition: width .3s; }
+.barraOk      { background: var(--brand); }
+.barraAviso   { background: var(--warning); }
+.barraAlerta  { background: var(--danger); }
+
+.barraCabecera {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Los dos botones, pegados al fondo de la tarjeta: con tarjetas de alturas
+   distintas (una con riesgo y otra sin él), si no van abajo cada una los pone
+   a una altura y la rejilla se lee como un diente de sierra. */
+.botones {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.boton { flex: 1; text-decoration: none; }
+
+/* El <button> de dentro ocupa su mitad entera, no sólo lo que mide su texto. */
+.boton > button { width: 100%; justify-content: center; }
+
+.sinDato {
+  color: var(--text-3);
+  font-style: italic;
+  font-size: 11px;
+}
+
+.enLinea {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--success-strong);
+}
+
+.enLineaPunto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+  flex-shrink: 0;
+}
+
+.tendencia {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 600;
+}
+
+.tendenciaSube  { color: var(--success-strong); }
+.tendenciaBaja  { color: var(--danger); }
+.tendenciaIgual { color: var(--text-3); }
+
+/* ── Gráficas ───────────────────────────────────────────────────────────── */
+
+.graficas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .pagina { padding: 16px 14px 48px; }
+
+  /* El título y su nota, uno debajo del otro: en una línea el título se
+     partía en dos ("Clínicas del / cliente") para dejarle sitio a la nota. */
+  .seccion { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sedes  { grid-template-columns: minmax(0, 1fr); }
+  .acciones { justify-content: flex-start; width: 100%; }
+
+  .aviso {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "marca sede"
+      "marca texto";
+    row-gap: 3px;
+  }
+
+  .avisoMarca { grid-area: marca; }
+  .avisoSede  { grid-area: sede; }
+  .avisoTexto { grid-area: texto; }
+}
+
+/* ── Historial de cobros: en móvil, tarjetas ────────────────────────────── */
+/* La tabla tiene 6 columnas y en un teléfono se salía de la pantalla; las
+   acciones (Aceptar / Rechazar / Reembolsar) quedaban fuera del scroll. */
+
+.tablaCobros { overflow-x: auto; }
+
+@media (max-width: 900px) {
+  .tablaCobros { overflow-x: visible; }
+
+  .tablaCobros table,
+  .tablaCobros tbody,
+  .tablaCobros tr,
+  .tablaCobros td { display: block; width: 100%; }
+
+  .tablaCobros thead { display: none; }
+
+  .tablaCobros tbody tr {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius, 10px);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+
+  .tablaCobros tbody td {
+    border: none !important;
+    padding: 4px 0 !important;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    text-align: left !important;
+  }
+
+  .tablaCobros tbody td::before {
+    content: attr(data-col);
+    flex: 0 0 84px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-3);
+    padding-top: 3px;
+  }
+}

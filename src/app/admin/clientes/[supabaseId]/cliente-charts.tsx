@@ -10,13 +10,22 @@ const TOOLTIP_STYLE = {
   borderRadius: 8,
   fontSize: 12,
   color: "var(--text-1)",
+  // Las cifras del tooltip alinean como las de las tablas.
+  fontVariantNumeric: "tabular-nums",
 } as const;
 
+/**
+ * Color de cada plan. Son TOKENS, no hexes: `fill` de SVG entiende `var(…)`,
+ * así que la gráfica cambia sola entre claro y oscuro igual que el resto del
+ * panel. Antes eran tres hexes copiados a mano que en oscuro se veían planos.
+ * Un plan que no esté en la tabla se pinta con el color de marca.
+ */
 const PLAN_COLORS: Record<string, string> = {
-  BASIC: "#64748b",
-  PRO: "#2563eb",
-  CLINIC: "#7c3aed",
+  BASIC: "var(--text-3)",
+  PRO: "var(--brand-blue)",
+  CLINIC: "var(--brand)",
 };
+const COLOR_PLAN_DESCONOCIDO = "var(--brand)";
 
 export function PlanDonut({ data }: { data: { plan: string; count: number; mrr: number }[] }) {
   return (
@@ -33,7 +42,7 @@ export function PlanDonut({ data }: { data: { plan: string; count: number; mrr: 
             stroke="var(--bg-elev)"
           >
             {data.map((d) => (
-              <Cell key={d.plan} fill={PLAN_COLORS[d.plan] || "#7c3aed"} />
+              <Cell key={d.plan} fill={PLAN_COLORS[d.plan] || COLOR_PLAN_DESCONOCIDO} />
             ))}
           </Pie>
           <Tooltip
@@ -52,7 +61,7 @@ export function ActivityBars({ data }: { data: { name: string; pacientes: number
     <div style={{ width: "100%", height: 260 }}>
       <ResponsiveContainer>
         <BarChart data={data} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-soft)" />
           <XAxis
             dataKey="name"
             stroke="var(--text-4)"
@@ -69,10 +78,10 @@ export function ActivityBars({ data }: { data: { name: string; pacientes: number
             allowDecimals={false}
             width={36}
           />
-          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(124,58,237,0.06)" }} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "var(--brand-softer)" }} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="pacientes" name="Pacientes" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="citas" name="Citas" fill="#2563eb" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="pacientes" name="Pacientes" fill="var(--brand)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="citas" name="Citas" fill="var(--brand-blue)" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

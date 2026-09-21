@@ -125,6 +125,7 @@
     "test:audit-lectura": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/__tests__/audit-lectura.test.ts",
     "test:mrr": "tsx --test src/lib/admin/mrr-core.test.ts",
     "test:salud-clinica": "tsx --test src/lib/admin/salud-clinica.test.ts",
+    "test:cartera-clientes": "tsx --test src/app/admin/clientes/cartera.test.ts",
     "test:zona-admin": "tsx --test src/lib/admin/zona-horaria.test.ts",
     "test:crm": "tsx --test src/lib/admin/crm/__tests__/crm-core.test.ts",
     "test:crm-textos": "tsx --test src/lib/admin/crm/__tests__/textos-core.test.ts",
