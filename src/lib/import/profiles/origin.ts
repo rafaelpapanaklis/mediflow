@@ -8,6 +8,8 @@
 // llama `types.ts`: ese nombre pertenece a T1.)
 // ═══════════════════════════════════════════════════════════════════════════
 
+import type { Entity } from "../types";
+
 /**
  * Campos canónicos de DaleControl a los que mapea una columna del origen.
  * Alineados con el importador real de pacientes
@@ -61,6 +63,14 @@ export interface OriginProfile {
   instructions: OriginInstruction[];
   /** columna conocida del origen → campo canónico de DaleControl. */
   mapping: Record<string, DcField>;
+  /**
+   * Mapeos de las DEMÁS entidades (saldos, citas, expedientes, notas,
+   * presupuestos): columna del reporte de ese sistema → campo canónico del
+   * validador de esa entidad (ver el comentario de ColumnMapping en
+   * `../types`). `mapping` sigue siendo el de pacientes. El motor los aplica
+   * encima de la autodetección cuando el asistente dice de qué origen viene.
+   */
+  entityMappings?: Partial<Record<Exclude<Entity, "patients">, Record<string, string>>>;
 }
 
 /**

@@ -23,6 +23,8 @@ import {
   type OnUploadProgress,
   ORIGINS,
   DATA_TYPES,
+  CLINICAL_ENTITIES,
+  VALUE_UNLINKED,
   isAcceptedFile,
   MAX_FILE_MB,
 } from "./import-client";
@@ -45,6 +47,11 @@ type Flow = "wizard" | "assisted";
 
 const STEP_KEYS = ["origin", "export", "what", "upload", "map", "review"] as const;
 const DEFAULT_TYPES = new Set(DATA_TYPES.filter((d) => d.on).map((d) => d.id));
+
+/** Huella de un mapeo (solo lo mapeado, en orden estable): ¿cambió desde la última vista previa? */
+function mappingKey(m: ColumnMapping): string {
+  return JSON.stringify(Object.entries(m).filter(([, v]) => v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
 
 interface Props {
   open: boolean;
@@ -86,6 +93,13 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [result, setResult] = useState<CommitResult | null>(null);
+  // Paso 6: equivalente elegido para cada procedimiento que no casó con el
+  // tarifario (clave normalizada → id del catálogo, o VALUE_UNLINKED).
+  const [decisions, setDecisions] = useState<Record<string, string>>({});
+  // Con qué mapeo se calculó la vista previa que hay en pantalla. Si el usuario
+  // lo cambia en el paso 5, «Continuar» la recalcula antes del paso 6: si no, la
+  // revisión enseñaría las cifras del mapeo automático, no las del suyo.
+  const previewMappingRef = useRef<string>("");
   // Progreso REAL de la subida (vista previa del paso 5 + commit). null = inactivo.
   const [uploadProg, setUploadProg] = useState<UploadProgressState | null>(null);
 
@@ -107,6 +121,17 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     [types],
   );
   const principalEntity: Entity = selectedEntities[0] ?? "patients";
+
+  /** Cada procedimiento sin equivalente arranca en «solo el importe» (nada se inventa ni se tira). */
+  function seedDecisions(res: PreviewResult) {
+    setDecisions((prev) => {
+      const next: Record<string, string> = {};
+      for (const u of res.unresolved ?? []) {
+        if (u.field === "procedure") next[u.key] = prev[u.key] ?? VALUE_UNLINKED;
+      }
+      return next;
+    });
+  }
 
   // Token de la petición de preview EN VUELO: solo la MÁS RECIENTE aplica su
   // resultado/loading. Atado a la PETICIÓN (archivo/montaje), NO al ciclo del
@@ -159,6 +184,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       setPreviewError(null);
       previewReqRef.current++;
       setResult(null);
+      setDecisions({});
       setUploadProg(null);
       setAssistedFile(null);
       setAssistedNote("");
@@ -185,18 +211,44 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setPreviewLoading(true);
     setUploadProg({ phase: "uploading", pct: 0, eta: null, label: "" });
     const onProg = makeUploadHandler("");
-    api.preview(principalEntity, f, undefined, (p) => { if (!stale()) onProg(p); })
+    api.preview(principalEntity, f, undefined, (p) => { if (!stale()) onProg(p); }, { origin: originId })
       .then((res) => {
         if (stale()) return;
         setPreview(res);
+        seedDecisions(res);
         // Siembra el mapeo desde las sugerencias del backend (autodetecta SIEMPRE,
         // con o sin perfil); el usuario solo ajusta lo que falte. Antes solo sembraba
         // con perfil → "Mi Excel"/"Otro" salían con TODO en "Sin importar".
         const seeded: ColumnMapping = {};
         for (const c of res.columns) seeded[c.source] = c.suggestion ?? "";
         setMapping(seeded);
+        previewMappingRef.current = mappingKey(seeded);
       })
       .catch(() => { if (!stale()) setPreviewError(t("shell.importClinic.step5.errorTitle")); })
+      .finally(() => { if (!stale()) { setPreviewLoading(false); setUploadProg(null); } });
+  }
+
+  // Recalcula la vista previa con el mapeo del USUARIO (paso 5 → 6). Si todavía
+  // falta una columna obligatoria, se queda en el paso 5 con el motivo a la
+  // vista; si falla la red, se avisa y el mapeo no se pierde.
+  function repreview() {
+    if (!file) return;
+    const f = file;
+    const sent = mapping;
+    const reqId = ++previewReqRef.current;
+    const stale = () => previewReqRef.current !== reqId;
+    setPreviewLoading(true);
+    setUploadProg({ phase: "uploading", pct: 0, eta: null, label: "" });
+    const onProg = makeUploadHandler("");
+    api.preview(principalEntity, f, sent, (p) => { if (!stale()) onProg(p); }, { origin: originId })
+      .then((res) => {
+        if (stale()) return;
+        setPreview(res);
+        seedDecisions(res);
+        previewMappingRef.current = mappingKey(sent);
+        if (!res.mappingError) setStep(6);
+      })
+      .catch((e) => { if (!stale()) toast.error(e instanceof Error ? e.message : t("shell.importClinic.errPreview")); })
       .finally(() => { if (!stale()) { setPreviewLoading(false); setUploadProg(null); } });
   }
 
@@ -217,6 +269,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     principalRef.current = principalEntity;
     setPreview(null);
     setMapping({});
+    setDecisions({});
     setPreviewError(null);
     setPreviewLoading(false);
     previewReqRef.current++;
@@ -250,6 +303,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     // Un archivo nuevo invalida preview/mapeo/estado y cualquier petición en vuelo.
     setPreview(null);
     setMapping({});
+    setDecisions({});
     setPreviewError(null);
     setPreviewLoading(false);
     previewReqRef.current++;
@@ -284,7 +338,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       created: 0,
       errors: 0,
       duplicates: 0,
-      summary: { patients: 0, balances: "—", appointments: 0 },
+      summary: {},
       errorReportUrl: undefined,
     };
     let committedAny = false;
@@ -298,11 +352,18 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       setUploadProg({ phase: "uploading", pct: 0, eta: null, label });
       const onProg = makeUploadHandler(label);
       try {
+        const principal = ent === principalEntity;
         const r = await api.commit(
           ent,
           f,
-          ent === principalEntity ? mapping : {},
-          { skipDuplicates: skipDup },
+          principal ? mapping : {},
+          {
+            skipDuplicates: skipDup,
+            origin: originId,
+            // Las decisiones del paso 6 son de la vista previa de la entidad
+            // principal; una secundaria importa lo que no case «solo el importe».
+            ...(principal && Object.keys(decisions).length > 0 ? { valueMapping: { procedure: decisions } } : {}),
+          },
           onProg,
         );
         committedAny = true;
@@ -310,9 +371,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
         agg.errors += r.errors;
         agg.duplicates += r.duplicates;
         if (r.errorReportUrl) agg.errorReportUrl = r.errorReportUrl;
-        if (ent === "patients") agg.summary.patients = r.created;
-        else if (ent === "balances") agg.summary.balances = r.created.toLocaleString();
-        else if (ent === "appointments") agg.summary.appointments = r.created;
+        agg.summary[ent] = r.created;
       } catch (e) {
         // Falla la PRIMERA entidad sin nada importado → abortar y volver a revisar.
         // Falla una entidad secundaria (p. ej. el archivo no trae columnas de saldo
@@ -353,9 +412,18 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   }
 
   function toggleType(id: string) {
+    const solo = (x: string) => DATA_TYPES.find((d) => d.id === x)?.solo === true;
     setTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (prev.has(id)) {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      }
+      // Lo clínico va solo (con su propia revisión): elegirlo deja solo eso, y
+      // elegir otra cosa lo quita.
+      if (solo(id)) return new Set([id]);
+      const next = new Set(Array.from(prev).filter((x) => !solo(x)));
+      next.add(id);
       return next;
     });
   }
@@ -374,6 +442,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setPreviewLoading(false);
     previewReqRef.current++;
     setResult(null);
+    setDecisions({});
     setUploadProg(null);
   }
 
@@ -381,6 +450,14 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   function goNext() {
     if (flow === "assisted") { submitAssisted(); return; }
     if (step === 6) { runImport(); return; }
+    if (step === 5) {
+      if (!preview || previewLoading) return;
+      if (mappingKey(mapping) !== previewMappingRef.current) { repreview(); return; }
+      // Mismo mapeo que ya dio «falta una columna»: repetir la petición daría lo mismo.
+      if (preview.mappingError) return;
+      setStep(6);
+      return;
+    }
     if (typeof step === "number" && step < 6) setStep((step + 1) as NumStep);
   }
   function goBack() {
@@ -410,8 +487,13 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   } else if (step === 4) {
     nextDisabled = !file;
     if (!file) hint = t("shell.importClinic.step4.needFile");
+  } else if (step === 5) {
+    nextDisabled = !preview || previewLoading;
+    if (preview?.mappingError) hint = t("shell.importClinic.step5.needMapping");
   } else if (step === 6) {
-    const n = preview ? (skipDup ? preview.stats.valid : preview.stats.valid + preview.stats.duplicates) : 0;
+    // Lo clínico nunca reimporta duplicados (el backend los salta siempre).
+    const conDup = !skipDup && !CLINICAL_ENTITIES.has(principalEntity);
+    const n = preview ? (conDup ? preview.stats.valid + preview.stats.duplicates : preview.stats.valid) : 0;
     nextLabel = t("shell.importClinic.step6.importBtn", { count: n });
   }
 
@@ -539,7 +621,15 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                   />
                 ) : null
               ) : step === 6 && preview ? (
-                <StepReview t={t} preview={preview} skipDup={skipDup} onToggleSkip={() => setSkipDup((v) => !v)} />
+                <StepReview
+                  t={t}
+                  entity={principalEntity}
+                  preview={preview}
+                  skipDup={skipDup}
+                  onToggleSkip={() => setSkipDup((v) => !v)}
+                  decisions={decisions}
+                  onDecide={(key, id) => setDecisions((d) => ({ ...d, [key]: id }))}
+                />
               ) : null}
             </div>
           </div>

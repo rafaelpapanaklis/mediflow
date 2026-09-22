@@ -1,24 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireRole } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseImportForm, runImport, importErrorResponse } from "@/lib/import/engine";
-import { balancesHandler } from "@/lib/import/entities";
+import { quotesHandler } from "@/lib/import/entities";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * POST /api/import/balances — importa SALDOS (entity="balances"). Crea una
- * "factura de apertura" (Invoice) por paciente con su saldo (concepto
- * "Saldo inicial migrado", balance=monto, SIN CFDI). Resuelve al paciente por
- * teléfono(last10)/correo/nombre dentro de la clínica.
+ * POST /api/import/quotes — importa PRESUPUESTOS (entity="quotes"): cada fila
+ * es una línea; se agrupan por paciente + folio original (o día). Entran con
+ * status "MIGRATED": historia, no una venta — sin factura, sin CFDI, sin caja.
+ * Los procedimientos que no casan con el tarifario entran sin ligar, o ligados
+ * al equivalente que el usuario eligió (valueMapping.procedure).
  *
- * Mismo contrato que /api/patients/import (FormData + dry-run/commit). Idempotente:
- * si el paciente ya tiene saldo inicial migrado, la fila se marca como duplicado.
+ * Mismo contrato que /api/patients/import (FormData + dry-run/commit), más
+ * `origin` (perfil del sistema de origen) y `valueMapping` opcionales.
  *
  * Multi-tenant: clinicId SIEMPRE de la sesión (getAuthContext), nunca del body.
- * Acceso: solo ADMIN/RECEPCIONISTA (SUPER_ADMIN incluido). Importar saldos crea
- * registros financieros (Invoice), así que el DOCTOR no puede hacerlo en masa.
+ * Acceso: el mismo gate de rol que las demás importaciones (ADMIN/RECEPCIONISTA,
+ * SUPER_ADMIN incluido) y, además, la misma llave que crear un presupuesto a mano
+ * (POST /api/quotes): "billing.create".
  */
 export async function POST(req: NextRequest) {
   // 6/min por IP y ruta: el asistente hace vista previa + (si el usuario
@@ -31,10 +34,12 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const roleGate = requireRole(ctx, "ADMIN", "RECEPTIONIST");
   if (roleGate) return roleGate;
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.create");
+  if (deniedPerm) return deniedPerm;
 
   try {
     const form = await parseImportForm(req);
-    const result = await runImport(balancesHandler, {
+    const result = await runImport(quotesHandler, {
       file: form.file,
       clinicId: ctx.clinicId,
       userId: ctx.userId,

@@ -22,7 +22,10 @@ export const maxDuration = 60;
  * Multi-tenant: clinicId SIEMPRE de la sesión (getAuthContext), nunca del body.
  */
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 3, 60_000);
+  // 6/min por IP y ruta: el asistente hace vista previa + (si el usuario
+  // corrige el mapeo) otra vista previa + importar, por entidad. Con 3 un solo
+  // ajuste de columnas dejaba el «Importar» en 429.
+  const rl = rateLimit(req, 6, 60_000);
   if (rl) return rl;
 
   const ctx = await getAuthContext();
@@ -41,9 +44,12 @@ export async function POST(req: NextRequest) {
       file: form.file,
       clinicId: ctx.clinicId,
       userId: ctx.userId,
+      role: ctx.role,
       dryRun: form.dryRun,
       skipDuplicates: form.skipDuplicates,
       columnMapping: form.columnMapping,
+      origin: form.origin,
+      valueMapping: form.valueMapping,
     });
     return NextResponse.json(result);
   } catch (e) {

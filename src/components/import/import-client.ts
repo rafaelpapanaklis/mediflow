@@ -10,10 +10,11 @@
 // que el flujo sea navegable de punta a punta sin backend.
 // ============================================================================
 
-export type Entity = "patients" | "balances" | "appointments";
-
-/** Mapa columna-del-archivo → campo de DaleControl (valor "" = sin importar). */
-export type ColumnMapping = Record<string, string>;
+// Entidad y mapeos: los del contrato del motor (src/lib/import/types.ts), no
+// una copia — una entidad nueva allí aparece aquí sola.
+import type { ColumnMapping, Entity, UnresolvedValue, ValueMapping, ValueOption } from "@/lib/import/types";
+export type { Entity, ColumnMapping, ValueMapping, UnresolvedValue, ValueOption } from "@/lib/import/types";
+export { VALUE_UNLINKED } from "@/lib/import/types";
 
 /**
  * Progreso REAL de subida del archivo, tal cual lo reporta `xhr.upload.onprogress`
@@ -66,6 +67,8 @@ export interface PreviewRow {
   balance: string;
   /** Solo en saldos: "credit" = a favor (verde), "debt" = adeudo. */
   kind?: "debt" | "credit";
+  /** Resumen de la fila para las entidades sin saldo (nota: fecha y título; presupuesto: procedimiento e importe). */
+  detail?: string;
   status: "ok" | "error" | "duplicate";
   /** Motivo del error/duplicado (se muestra en tooltip). */
   reason?: string;
@@ -82,14 +85,20 @@ export interface PreviewResult {
   stats: { valid: number; errors: number; duplicates: number };
   /** Muestra de filas validadas para la tabla del paso 6. */
   rows: PreviewRow[];
+  /** Falta emparejar una columna obligatoria: el paso 5 lo pide en vez de fallar. */
+  mappingError?: string;
+  /** Valores sin equivalente en el catálogo de la clínica (hoy: procedimientos). */
+  unresolved?: UnresolvedValue[];
+  /** Catálogo para elegir equivalente, por campo. */
+  options?: Record<string, ValueOption[]>;
 }
 
 export interface CommitResult {
   created: number;
   errors: number;
   duplicates: number;
-  /** Resumen para las "pills" de la pantalla de resultado. */
-  summary: { patients: number; balances: string; appointments: number };
+  /** Resumen para las "pills" de la pantalla de resultado: creados por entidad importada. */
+  summary: Partial<Record<Entity, number>>;
   /** URL del reporte de errores descargable (TODO(T4): generar real). */
   errorReportUrl?: string;
 }
@@ -110,12 +119,14 @@ export interface ImportClient {
     file: File,
     mapping?: ColumnMapping,
     onProgress?: OnUploadProgress,
+    /** `origin`: id del sistema elegido en el paso 1 (el backend aplica su perfil). */
+    opts?: { origin?: string | null },
   ): Promise<PreviewResult>;
   commit(
     entity: Entity,
     file: File,
     mapping: ColumnMapping,
-    opts: { skipDuplicates: boolean },
+    opts: { skipDuplicates: boolean; origin?: string | null; valueMapping?: ValueMapping },
     onProgress?: OnUploadProgress,
   ): Promise<CommitResult>;
   templateUrl(): string;
@@ -145,27 +156,38 @@ export function originGlyph(o: Origin): string {
 }
 
 // ---------------------------------------------------------------------------
-// Tipos de dato a importar (paso 3). `entity` mapea al contrato Entity cuando
-// aplica; los avanzados (tratamientos/historial) no tienen Entity propio aún.
+// Tipos de dato a importar (paso 3), en el ORDEN en que se importan: pacientes
+// primero, porque todo lo demás se empareja con un paciente que ya existe.
 // ---------------------------------------------------------------------------
 export interface DataType {
   id: string;
-  /** Clave i18n del nombre, bajo shell.importClinic.what.*. */
+  /** Clave i18n del nombre, bajo shell.importClinic.step3.*. */
   labelKey: string;
   descKey: string;
-  icon: "users" | "money" | "calendar" | "stack" | "file";
+  icon: "users" | "money" | "calendar" | "stack" | "file" | "clipboard";
   badge: "rec" | "easy" | "adv";
   /** Seleccionado por defecto. */
   on: boolean;
-  entity?: Entity;
+  entity: Entity;
+  /**
+   * Se importa SOLO, con su propia vista previa. Lo clínico no puede colarse
+   * como entidad secundaria (esas se importan sin revisión, autodetectando
+   * columnas): un CSV de pacientes con «Fecha» y «Notas» acabaría en notas de
+   * evolución que nadie vio.
+   */
+  solo?: boolean;
 }
+
+/** Entidades clínicas: van solas y nunca reimportan duplicados (ver entities.ts). */
+export const CLINICAL_ENTITIES: ReadonlySet<Entity> = new Set<Entity>(["medicalHistory", "clinicalNotes", "quotes"]);
 
 export const DATA_TYPES: DataType[] = [
   { id: "pacientes", labelKey: "patients", descKey: "patientsMeta", icon: "users", badge: "rec", on: true, entity: "patients" },
   { id: "saldos", labelKey: "balances", descKey: "balancesMeta", icon: "money", badge: "easy", on: true, entity: "balances" },
   { id: "citas", labelKey: "appointments", descKey: "appointmentsMeta", icon: "calendar", badge: "easy", on: true, entity: "appointments" },
-  { id: "tratamientos", labelKey: "treatments", descKey: "treatmentsMeta", icon: "stack", badge: "adv", on: false },
-  { id: "historial", labelKey: "history", descKey: "historyMeta", icon: "file", badge: "adv", on: false },
+  { id: "expedientes", labelKey: "medicalHistory", descKey: "medicalHistoryMeta", icon: "clipboard", badge: "adv", on: false, entity: "medicalHistory", solo: true },
+  { id: "notas", labelKey: "clinicalNotes", descKey: "clinicalNotesMeta", icon: "file", badge: "adv", on: false, entity: "clinicalNotes", solo: true },
+  { id: "presupuestos", labelKey: "quotes", descKey: "quotesMeta", icon: "stack", badge: "adv", on: false, entity: "quotes", solo: true },
 ];
 
 // Límites de archivo del paso 4.
@@ -230,6 +252,7 @@ export class MockImportClient implements ImportClient {
     _file: File,
     _mapping?: ColumnMapping,
     _onProgress?: OnUploadProgress,
+    _opts?: { origin?: string | null },
   ): Promise<PreviewResult> {
     return delay({
       totalRows: 1265,
@@ -244,14 +267,14 @@ export class MockImportClient implements ImportClient {
     _entity: Entity,
     _file: File,
     _mapping: ColumnMapping,
-    opts: { skipDuplicates: boolean },
+    opts: { skipDuplicates: boolean; origin?: string | null; valueMapping?: ValueMapping },
     _onProgress?: OnUploadProgress,
   ): Promise<CommitResult> {
     return delay({
       created: 1240,
       errors: 18,
       duplicates: opts.skipDuplicates ? 7 : 0,
-      summary: { patients: 1240, balances: "$340,000", appointments: 85 },
+      summary: { patients: 1240, balances: 312, appointments: 85 },
       // TODO(T4): URL real del reporte de errores generado en el commit.
       errorReportUrl: undefined,
     });

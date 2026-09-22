@@ -30,6 +30,7 @@ import {
   type TargetField,
   type PreviewRow,
   type OnUploadProgress,
+  type ValueMapping,
   ORIGINS,
 } from "@/components/import/import-client";
 import type {
@@ -54,10 +55,8 @@ interface BackendOrigin {
 // src/lib/import/entities.ts · headerVariants). Se declaran aquí —y no se importa
 // entities.ts— porque ese módulo arrastra Prisma (server-only) y este cliente
 // vive en el bundle del navegador. El comentario de types.ts documenta el mismo
-// contrato, así que es estable.
-//   patients:     firstName | lastName | email | phone | dob | gender | bloodType | address | notes
-//   balances:     name | phone | email | amount
-//   appointments: name | phone | email | doctor | date | time | type | duration | notes
+// contrato, así que es estable. La lista completa por entidad está en el
+// comentario de ColumnMapping (src/lib/import/types.ts).
 // ---------------------------------------------------------------------------
 // Las etiquetas llevan `labelKey` (shell.importClinic.fields.*) para que el paso 5
 // (Mapear) se muestre en el idioma activo; `label` queda como fallback en español.
@@ -99,12 +98,56 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "duration", label: "Duración (min)", labelKey: "shell.importClinic.fields.duration" },
     { value: "notes", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
   ],
+  medicalHistory: [
+    NO_IMPORT,
+    { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "allergies", label: "Alergias", labelKey: "shell.importClinic.fields.allergies" },
+    { value: "chronicConditions", label: "Padecimientos", labelKey: "shell.importClinic.fields.chronicConditions" },
+    { value: "currentMedications", label: "Medicamentos", labelKey: "shell.importClinic.fields.currentMedications" },
+    { value: "familyHistory", label: "Antecedentes heredofamiliares", labelKey: "shell.importClinic.fields.familyHistory" },
+    { value: "nonPathologicalHistory", label: "Antecedentes no patológicos", labelKey: "shell.importClinic.fields.nonPathologicalHistory" },
+  ],
+  clinicalNotes: [
+    NO_IMPORT,
+    { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "date", label: "Fecha", labelKey: "shell.importClinic.fields.date" },
+    { value: "doctor", label: "Doctor / Profesional", labelKey: "shell.importClinic.fields.doctor" },
+    { value: "title", label: "Título", labelKey: "shell.importClinic.fields.title" },
+    { value: "text", label: "Texto de la nota", labelKey: "shell.importClinic.fields.text" },
+  ],
+  quotes: [
+    NO_IMPORT,
+    { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "folio", label: "Folio del presupuesto", labelKey: "shell.importClinic.fields.folio" },
+    { value: "date", label: "Fecha", labelKey: "shell.importClinic.fields.date" },
+    { value: "title", label: "Título", labelKey: "shell.importClinic.fields.title" },
+    { value: "procedure", label: "Procedimiento", labelKey: "shell.importClinic.fields.procedure" },
+    { value: "tooth", label: "Pieza / diente", labelKey: "shell.importClinic.fields.tooth" },
+    { value: "quantity", label: "Cantidad", labelKey: "shell.importClinic.fields.quantity" },
+    { value: "price", label: "Precio unitario", labelKey: "shell.importClinic.fields.price" },
+    { value: "discount", label: "Descuento", labelKey: "shell.importClinic.fields.discount" },
+    { value: "total", label: "Importe de la línea", labelKey: "shell.importClinic.fields.total" },
+    { value: "status", label: "Estado original", labelKey: "shell.importClinic.fields.quoteStatus" },
+    { value: "doctor", label: "Doctor / Profesional", labelKey: "shell.importClinic.fields.doctor" },
+  ],
 };
 
 const ENDPOINTS: Record<Entity, string> = {
   patients: "/api/patients/import",
   balances: "/api/import/balances",
   appointments: "/api/import/appointments",
+  medicalHistory: "/api/import/medical-history",
+  clinicalNotes: "/api/import/clinical-notes",
+  quotes: "/api/import/quotes",
 };
 
 const PREVIEW_TIMEOUT_MS = 60_000;
@@ -142,6 +185,43 @@ function rowName(data: Record<string, any>): string {
   const full = [data.firstName, data.lastName].filter(Boolean).join(" ").trim();
   const name = data.name || full || data.patientName || data.fullName;
   return name ? String(name) : "—";
+}
+
+/** Etiquetas del resumen de un expediente (lo que la fila AÑADE a la ficha). */
+const HISTORY_LABELS: Record<string, string> = {
+  allergies: "Alergias",
+  chronicConditions: "Padecimientos",
+  currentMedications: "Medicamentos",
+  familyHistory: "Heredofamiliares",
+  personalNonPathologicalHistory: "No patológicos",
+};
+
+/**
+ * Resumen de una fila para la columna «Detalle» del paso 6, en las entidades
+ * que no tienen saldo. Sale de `data` tal como la devuelve el backend.
+ */
+function rowDetail(entity: Entity, data: Record<string, any>): string | undefined {
+  if (entity === "clinicalNotes") {
+    // `date` llega como día de calendario "AAAA-MM-DD": se enseña dd/mm/aaaa, como el resto del asistente.
+    const dia = typeof data.date === "string" ? data.date.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$3/$2/$1") : "";
+    const parts = [dia, data.title, data.doctorName].filter(Boolean);
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "quotes") {
+    const parts: string[] = [];
+    if (data.procedure) parts.push(String(data.procedure));
+    if (data.toothFdi) parts.push(`#${data.toothFdi}`);
+    if (typeof data.lineTotal === "number") parts.push(formatMoney(data.lineTotal));
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "medicalHistory") {
+    const added = (data.added ?? {}) as Record<string, unknown>;
+    const parts = Object.entries(added).map(([k, v]) =>
+      `${HISTORY_LABELS[k] ?? k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`,
+    );
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  return undefined;
 }
 
 /** Motivo (tooltip) de una fila: error primero, si no, advertencia. */
@@ -193,11 +273,12 @@ export class RealImportClient implements ImportClient {
     file: File,
     mapping?: ColumnMapping,
     onProgress?: OnUploadProgress,
+    opts?: { origin?: string | null },
   ): Promise<PreviewResult> {
     const backend = (await this.post(
       entity,
       file,
-      { dryRun: true, mapping },
+      { dryRun: true, mapping, origin: opts?.origin },
       onProgress,
     )) as BackendPreviewResult;
     return adaptPreview(entity, backend);
@@ -208,19 +289,25 @@ export class RealImportClient implements ImportClient {
     entity: Entity,
     file: File,
     mapping: ColumnMapping,
-    opts: { skipDuplicates: boolean },
+    opts: { skipDuplicates: boolean; origin?: string | null; valueMapping?: ValueMapping },
     onProgress?: OnUploadProgress,
   ): Promise<CommitResult> {
     const backend = (await this.post(
       entity,
       file,
-      { dryRun: false, mapping, skipDuplicates: opts.skipDuplicates },
+      {
+        dryRun: false,
+        mapping,
+        skipDuplicates: opts.skipDuplicates,
+        origin: opts.origin,
+        valueMapping: opts.valueMapping,
+      },
       onProgress,
     )) as BackendCommitResult;
     return adaptCommit(entity, backend);
   }
 
-  // -- Plantilla (3 hojas: Pacientes/Saldos/Citas — la dejó T2) ------------------
+  // -- Plantilla (una hoja por tipo de dato; el motor lee cada entidad de la suya) --
   templateUrl(): string {
     return "/api/patients/import/template";
   }
@@ -248,7 +335,13 @@ export class RealImportClient implements ImportClient {
   private async post(
     entity: Entity,
     file: File,
-    opts: { dryRun: boolean; mapping?: ColumnMapping; skipDuplicates?: boolean },
+    opts: {
+      dryRun: boolean;
+      mapping?: ColumnMapping;
+      skipDuplicates?: boolean;
+      origin?: string | null;
+      valueMapping?: ValueMapping;
+    },
     onProgress?: OnUploadProgress,
   ): Promise<unknown> {
     const fd = new FormData();
@@ -256,6 +349,11 @@ export class RealImportClient implements ImportClient {
     fd.append("dryRun", opts.dryRun ? "true" : "false");
     if (opts.skipDuplicates !== undefined) {
       fd.append("skipDuplicates", opts.skipDuplicates ? "true" : "false");
+    }
+    // El sistema de origen: el backend aplica su perfil de columnas (lista blanca por id).
+    if (opts.origin) fd.append("origin", opts.origin);
+    if (opts.valueMapping && Object.keys(opts.valueMapping).length > 0) {
+      fd.append("valueMapping", JSON.stringify(opts.valueMapping));
     }
     // columnMapping solo si trae al menos un campo mapeado; si va vacío, el backend
     // autodetecta (clave para saldos/citas, que no se mapean en esta UI).
@@ -294,18 +392,17 @@ export class RealImportClient implements ImportClient {
 
 /**
  * PreviewResult del backend → del wizard.
- * - columns: cada header del archivo + su sugerencia (campo canónico) + una muestra
- *   tomada de la primera fila con valor para ese campo. (El backend solo devuelve
- *   `data` por campo CANÓNICO, no la fila cruda; por eso las columnas no mapeadas
- *   no traen muestra.)
+ * - columns: cada header del archivo + su sugerencia (campo canónico) + una muestra.
+ *   La muestra sale de `samples` (primer valor crudo de CADA columna, también de
+ *   las que no se reconocieron); si el backend no la manda, del `data` ya mapeado.
  * - targetFields: campos canónicos REALES de la entidad (no los del mock).
  * - rows: name/phone/balance derivados de `data` + estado + motivo.
  */
 function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
   const columns: DetectedColumn[] = b.columns.map((header) => {
     const suggestion = b.suggestedMapping?.[header] ?? "";
-    let sample = "";
-    if (suggestion) {
+    let sample = b.samples?.[header] ? sampleText(b.samples[header]) : "";
+    if (!sample && suggestion) {
       for (const r of b.preview) {
         const v = r.data?.[suggestion];
         if (v !== null && v !== undefined && String(v).trim() !== "") {
@@ -327,6 +424,7 @@ function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
       balance: amount !== null ? formatMoney(amount) : "—",
       // Solo saldos traen `kind` (adeudo/favor); en pacientes/citas queda undefined.
       kind: data.kind === "credit" || data.kind === "debt" ? data.kind : undefined,
+      detail: rowDetail(entity, data),
       status: r.status,
       reason: rowReason(r),
     };
@@ -338,6 +436,9 @@ function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
     targetFields: CANONICAL_FIELDS[entity] ?? CANONICAL_FIELDS.patients,
     stats: { valid: b.validos, errors: b.invalidos, duplicates: b.duplicados },
     rows,
+    ...(b.mappingError ? { mappingError: b.mappingError } : {}),
+    ...(b.unresolved?.length ? { unresolved: b.unresolved } : {}),
+    ...(b.options ? { options: b.options } : {}),
   };
 }
 
@@ -347,10 +448,7 @@ function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
  * entidades. Aquí se llena el slot de la entidad importada.
  */
 function adaptCommit(entity: Entity, b: BackendCommitResult): CommitResult {
-  const summary = { patients: 0, balances: "—", appointments: 0 } as CommitResult["summary"];
-  if (entity === "patients") summary.patients = b.created;
-  else if (entity === "balances") summary.balances = b.created.toLocaleString();
-  else if (entity === "appointments") summary.appointments = b.created;
+  const summary: CommitResult["summary"] = { [entity]: b.created };
 
   return {
     created: b.created,

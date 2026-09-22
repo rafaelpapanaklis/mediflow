@@ -3,7 +3,17 @@
 // Pantalla "Resultado" — resumen de éxito + descarga de reporte de errores + CTAs.
 import { Check, AlertCircle, Download, Users, Upload } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
-import type { CommitResult } from "./import-client";
+import { DATA_TYPES, type CommitResult, type Entity } from "./import-client";
+
+/** Etiqueta de la pill de cada entidad (shell.importClinic.result.*). */
+const PILL_KEY: Record<Entity, string> = {
+  patients: "pillPatients",
+  balances: "pillBalances",
+  appointments: "pillAppointments",
+  medicalHistory: "pillMedicalHistory",
+  clinicalNotes: "pillClinicalNotes",
+  quotes: "pillQuotes",
+};
 
 interface Props {
   t: TFunction;
@@ -23,18 +33,13 @@ export function ResultPanel({ t, result, onGoPatients, onImportAnother, onDownlo
       <p className="imp-result__lead">{t("shell.importClinic.result.lead", { count: errors })}</p>
 
       <div className="imp-summary-row">
-        <div className="imp-summary-pill">
-          <span className="imp-summary-pill__v mono">{summary.patients.toLocaleString()}</span>
-          <span className="imp-summary-pill__k">{t("shell.importClinic.result.pillPatients")}</span>
-        </div>
-        <div className="imp-summary-pill">
-          <span className="imp-summary-pill__v mono">{summary.balances}</span>
-          <span className="imp-summary-pill__k">{t("shell.importClinic.result.pillBalances")}</span>
-        </div>
-        <div className="imp-summary-pill">
-          <span className="imp-summary-pill__v mono">{summary.appointments.toLocaleString()}</span>
-          <span className="imp-summary-pill__k">{t("shell.importClinic.result.pillAppointments")}</span>
-        </div>
+        {/* Una pill por entidad importada, en el orden del paso 3. */}
+        {DATA_TYPES.filter((d) => summary[d.entity] !== undefined).map((d) => (
+          <div className="imp-summary-pill" key={d.entity}>
+            <span className="imp-summary-pill__v mono">{(summary[d.entity] ?? 0).toLocaleString()}</span>
+            <span className="imp-summary-pill__k">{t(`shell.importClinic.result.${PILL_KEY[d.entity]}`)}</span>
+          </div>
+        ))}
       </div>
 
       {errors > 0 && (

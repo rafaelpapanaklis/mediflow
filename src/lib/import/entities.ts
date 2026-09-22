@@ -9,16 +9,27 @@ import { prisma } from "@/lib/prisma";
 import { getPatientQuota } from "@/lib/patient-quota";
 import { lastPatientFolio } from "@/lib/patients/next-patient-number";
 import { formatPatientNumber } from "@/lib/patients/next-patient-number-core";
+import { canSeePatient } from "@/lib/patient-visibility";
 import { lastInvoiceFolio } from "@/lib/invoices/next-invoice-number";
 import { formatInvoiceNumber } from "@/lib/invoices/next-invoice-number-core";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
-import type { PreviewRow } from "./types";
+import { MAX_INVOICE_FOLIO_DIGITS } from "@/lib/invoices/next-invoice-number-core";
+import { computeTotals, formatFolio } from "@/lib/quotes/compute";
+import { consentTimeZone, formatConsentDate } from "@/lib/consent/dates";
+import { MAX_BODY_LENGTH, MAX_INPUT_LENGTH, isBlankHtml } from "@/lib/document-templates/sanitize";
+import {
+  MAX_TITLE_LENGTH,
+  NOTA_KIND,
+  type EncabezadoNota,
+} from "@/app/api/patient-documents/_lib/service";
+import { VALUE_UNLINKED, type PreviewRow, type UnresolvedRef } from "./types";
 import {
   BATCH,
   EMAIL_RE,
   ImportError,
   VALID_BLOOD,
   type EntityHandler,
+  type ImportContext,
   last10,
   norm,
   normName,
@@ -27,6 +38,28 @@ import {
   parseGender,
   parsePhone,
 } from "./engine";
+import {
+  MIGRATED_STATUS,
+  calendarNoonUtc,
+  cellText,
+  dayKey,
+  folioDeNotas,
+  huellaDe,
+  isFutureDay,
+  mergeList,
+  mergeText,
+  migratedQuoteNotes,
+  migratedTitle,
+  migrationBannerHtml,
+  newId,
+  noteFingerprint,
+  nombreOrigen,
+  oneLine,
+  sanitizeFdi,
+  splitList,
+  textToNoteHtml,
+  type MarcaMigracion,
+} from "./migrado";
 
 const OPENING_BALANCE_NOTE = "Saldo inicial migrado";
 
@@ -38,6 +71,8 @@ interface PatientIndex {
   byPhone: Map<string, string[]>;
   byEmail: Map<string, string[]>;
   byName: Map<string, string[]>;
+  /** Nombre completo tal como está en la ficha (para decir a QUIÉN va una fila). */
+  nameById: Map<string, string>;
 }
 
 function pushKey(m: Map<string, string[]>, k: string, id: string) {
@@ -51,14 +86,26 @@ function pushKey(m: Map<string, string[]>, k: string, id: string) {
  * Carga TODOS los pacientes de la clínica (5 campos) para resolver en memoria por
  * teléfono (last10), correo o nombre. El nombre normalizado no es indexable en
  * DB; cargar el padrón es aceptable para una migración puntual.
+ *
+ * Visibilidad por paciente (patient-visibility.ts): quien importa solo empareja
+ * con los pacientes que PUEDE VER. Un paciente restringido que no le toca es,
+ * para su archivo, «no encontrado» — ni se le escribe ni la vista previa delata
+ * qué tiene. Los admins ven a todos. Sin viewer (no debería pasar: runImport
+ * siempre lo pone) se trata como NO admin, que es lo restrictivo.
  */
-async function loadPatientIndex(clinicId: string): Promise<PatientIndex> {
+async function loadPatientIndex(
+  clinicId: string,
+  viewer?: { userId: string; role: string },
+): Promise<PatientIndex> {
   const patients = await prisma.patient.findMany({
     where: { clinicId, deletedAt: null },
-    select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true, visibleUserIds: true },
   });
-  const idx: PatientIndex = { byPhone: new Map(), byEmail: new Map(), byName: new Map() };
+  const idx: PatientIndex = { byPhone: new Map(), byEmail: new Map(), byName: new Map(), nameById: new Map() };
+  const quien = { userId: viewer?.userId ?? "", role: viewer?.role ?? "", clinicId };
   for (const p of patients) {
+    if (!canSeePatient(quien, p.visibleUserIds)) continue;
+    idx.nameById.set(p.id, `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim());
     if (p.phone) pushKey(idx.byPhone, last10(p.phone), p.id);
     if (p.email) pushKey(idx.byEmail, p.email.toLowerCase(), p.id);
     pushKey(idx.byName, normName(`${p.firstName} ${p.lastName}`), p.id);
@@ -78,10 +125,20 @@ function resolvePatient(mapped: Record<string, any>, idx: PatientIndex): { id?: 
   return { id: hit[0] };
 }
 
-/** Resuelve por nombre exacto (normalizado) dentro de un índice nombre→ids. */
-function resolveByName(value: any, byName: Map<string, string[]>, label: string): { id?: string; error?: string } {
+/**
+ * Resuelve por nombre exacto (normalizado) dentro de un índice nombre→ids.
+ * `normalize` es normName (personas: quita "Dr."/"Dra."…) salvo que se diga
+ * otra cosa: un procedimiento se normaliza con `norm`, porque "Drenaje" no
+ * empieza por un honorífico. El índice tiene que armarse con el MISMO.
+ */
+function resolveByName(
+  value: any,
+  byName: Map<string, string[]>,
+  label: string,
+  normalize: (v: any) => string = normName,
+): { id?: string; error?: string } {
   const shown = String(value).trim();
-  const ids = byName.get(normName(value));
+  const ids = byName.get(normalize(value));
   if (!ids || ids.length === 0) return { error: `${label} "${shown}" no encontrado en la clínica` };
   if (ids.length > 1) return { error: `Varios coinciden con ${label.toLowerCase()} "${shown}"` };
   return { id: ids[0] };
@@ -194,6 +251,7 @@ async function insertSliceByRow(
 
 export const patientsHandler: EntityHandler = {
   entity: "patients",
+  sheetNames: ["pacientes", "paciente", "patients"],
   auditEntityType: "patient",
   headerVariants: {
     firstName: ["nombre", "nombres", "firstname", "primernombre"],
@@ -438,6 +496,7 @@ async function insertCredits(rows: PreviewRow[], clinicId: string): Promise<numb
 
 export const balancesHandler: EntityHandler = {
   entity: "balances",
+  sheetNames: ["saldos", "saldo", "balances"],
   auditEntityType: "invoice",
   headerVariants: {
     name:        ["nombre", "nombredelpaciente", "paciente", "nombrecompleto", "nombres", "cliente"],
@@ -458,8 +517,8 @@ export const balancesHandler: EntityHandler = {
     return null;
   },
 
-  async process(rows, clinicId) {
-    const idx = await loadPatientIndex(clinicId);
+  async process(rows, clinicId, ctx) {
+    const idx = await loadPatientIndex(clinicId, ctx);
     // Idempotencia ADEUDOS: pacientes con factura de apertura migrada.
     const existingOpening = await prisma.invoice.findMany({
       where: { clinicId, notes: OPENING_BALANCE_NOTE },
@@ -627,9 +686,14 @@ function parseDuration(v: any): number {
 
 export const appointmentsHandler: EntityHandler = {
   entity: "appointments",
+  sheetNames: ["citas", "cita", "agenda", "appointments"],
   auditEntityType: "appointment",
   headerVariants: {
     name:     ["paciente", "nombre", "nombredelpaciente", "nombrecompleto", "cliente"],
+    // La pestaña «Citas» de la plantilla trae «apellido» desde el principio, pero
+    // este validador no lo conocía: sin teléfono, «María» nunca casaba con
+    // «María Hernández». Se combina como en saldos (resolvePatientRow).
+    lastName: ["apellido", "apellidos", "lastname"],
     phone:    ["telefono", "celular", "whatsapp", "phone", "movil"],
     email:    ["email", "correo", "correoelectronico"],
     doctor:   ["doctor", "doctora", "medico", "odontologo", "odontologa", "dentista", "profesional", "atiende"],
@@ -649,8 +713,8 @@ export const appointmentsHandler: EntityHandler = {
     return null;
   },
 
-  async process(rows, clinicId) {
-    const idx = await loadPatientIndex(clinicId);
+  async process(rows, clinicId, ctx) {
+    const idx = await loadPatientIndex(clinicId, ctx);
     // Índice de doctores por nombre (cualquier usuario activo de la clínica).
     const users = await prisma.user.findMany({
       where: { clinicId, isActive: true },
@@ -668,7 +732,7 @@ export const appointmentsHandler: EntityHandler = {
       const startsAt = parseStartsAt(mapped.date, mapped.time);
       if (!startsAt) pr.errors.push(`Fecha inválida "${mapped.date ?? ""}"`);
 
-      const pRes = resolvePatient(mapped, idx);
+      const pRes = resolvePatientRow(mapped, idx);
       if (pRes.error) pr.errors.push(pRes.error);
 
       const dRes = (!mapped.doctor || !String(mapped.doctor).trim())
@@ -690,7 +754,7 @@ export const appointmentsHandler: EntityHandler = {
         type,
         notes: mapped.notes ? String(mapped.notes).trim() : null,
         status: "SCHEDULED",
-        patientName: mapped.name ? String(mapped.name).trim() : undefined,
+        patientName: pRes.fullName || undefined,
         doctorName: String(mapped.doctor).trim(),
       };
 
@@ -767,8 +831,1059 @@ export const appointmentsHandler: EntityHandler = {
   },
 };
 
+
+// ===========================================================================
+// ENTIDADES CLÍNICAS — expedientes, notas de evolución y presupuestos.
+//
+// Las tres comparten tres reglas con saldos/citas:
+//  · Solo completan pacientes QUE YA EXISTEN: se emparejan con loadPatientIndex
+//    + resolvePatient (teléfono → correo → nombre + apellido). No crean pacientes.
+//  · Leen en bloque (una consulta por tabla, nunca una por fila) y escriben por
+//    lotes de BATCH, aislando fila por fila solo si el lote falla.
+//  · Lo que llega de otro sistema es HISTORIA: fecha original, origen dicho, y
+//    nada se hace pasar por firmado, cotizado ni cobrado aquí (ver migrado.ts).
+// ===========================================================================
+
+/** Columnas para identificar al paciente, comunes a las tres. */
+const IDENTITY_VARIANTS: Record<string, string[]> = {
+  name:     ["paciente", "nombre", "nombredelpaciente", "nombrecompleto", "nombres", "cliente"],
+  lastName: ["apellido", "apellidos", "lastname", "apellidopaterno"],
+  phone:    ["telefono", "celular", "whatsapp", "phone", "movil", "telefonocelular"],
+  email:    ["email", "correo", "correoelectronico", "mail"],
+};
+
+const DOCTOR_VARIANTS = [
+  "doctor", "doctora", "medico", "odontologo", "odontologa", "dentista", "profesional",
+  "tratante", "atendio", "atendiopor", "realizadopor",
+];
+
+const NEED_IDENTITY = "Falta una columna para identificar al paciente (teléfono, correo o nombre)";
+
+function hasIdentity(campos: Set<string>): boolean {
+  return campos.has("phone") || campos.has("email") || campos.has("name");
+}
+
+/** Palabras de un nombre, sin acentos ni honoríficos: "Dra. María  Hernández" → [maria, hernandez]. */
+function nameTokens(s: string): string[] {
+  const fuera = new Set(["dr", "dra", "doctor", "doctora", "lic", "sr", "sra", "srita"]);
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/[^a-z0-9ñ]+/)
+    .filter((t) => t && !fuera.has(t));
+}
+
+/** ¿Dos nombres pueden ser la misma persona? Uno contiene todas las palabras del otro. */
+function sameName(a: string, b: string): boolean {
+  const x = nameTokens(a);
+  const y = new Set(nameTokens(b));
+  if (x.length === 0 || y.size === 0) return true; // sin nombre que comparar
+  if (x.every((t) => y.has(t))) return true;
+  const xs = new Set(x);
+  return Array.from(y).every((t) => xs.has(t));
+}
+
+/**
+ * resolvePatient con nombre + apellido juntos (mismo criterio que saldos: el
+ * índice byName se arma así).
+ *
+ * `strict` (las entidades CLÍNICAS): el teléfono manda en resolvePatient, y en
+ * una familia es común que la mamá registre su celular para los hijos. Si la
+ * fila trae además un nombre y NO es el del paciente al que apunta el teléfono
+ * (o el correo), la fila es un error: la nota de Juanito no puede entrar en el
+ * expediente de su mamá. Un saldo o una cita se corrigen; un expediente mezclado, no.
+ */
+function resolvePatientRow(
+  mapped: Record<string, any>,
+  idx: PatientIndex,
+  strict = false,
+): { id?: string; error?: string; fullName: string } {
+  const fullName = [mapped.name, mapped.lastName]
+    .map((v) => (v == null ? "" : String(v).trim()))
+    .filter(Boolean)
+    .join(" ");
+  const res = resolvePatient(fullName ? { ...mapped, name: fullName } : mapped, idx);
+  if (strict && res.id && fullName) {
+    const enFicha = idx.nameById.get(res.id) ?? "";
+    if (enFicha && !sameName(fullName, enFicha)) {
+      return {
+        error: `El teléfono o correo es de «${enFicha}», no de «${fullName}»: revisa la fila`,
+        fullName,
+      };
+    }
+  }
+  return { ...res, fullName };
+}
+
+/**
+ * Día de calendario de una celda, anclado al mediodía UTC (ver calendarNoonUtc).
+ * "AAAA-MM-DD" se lee a mano: `new Date("2023-11-05")` es la medianoche UTC, y
+ * leída con la hora LOCAL de un servidor al oeste de Greenwich caía el día 4.
+ */
+function parseCalendarDay(v: any): Date | null {
+  if (typeof v === "string") {
+    const iso = v.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) {
+      const [y, m, d] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+      const out = new Date(Date.UTC(y, m - 1, d, 12));
+      return out.getUTCMonth() === m - 1 && out.getUTCDate() === d ? out : null;
+    }
+  }
+  const d = parseDate(v);
+  return d ? calendarNoonUtc(d) : null;
+}
+
+/** Ids distintos de las filas que resolvieron paciente. */
+function patientIdsOf(rows: PreviewRow[]): string[] {
+  return Array.from(new Set(rows.map((r) => r.data.patientId).filter(Boolean) as string[]));
+}
+
+// ===========================================================================
+// EXPEDIENTES — los antecedentes del paciente, que en DaleControl viven EN la
+// ficha (Patient): alergias, padecimientos, medicamentos, antecedentes
+// heredofamiliares y personales no patológicos. Son los que imprime el
+// expediente en PDF. Nunca se pisa lo capturado: las listas se SUMAN (sin
+// repetir) y los textos se agregan debajo si traen algo nuevo. Una fila que no
+// añade nada es "duplicado" (idempotencia: subir el archivo dos veces no cambia
+// nada la segunda).
+// ===========================================================================
+
+type HistoryListField = "allergies" | "chronicConditions" | "currentMedications";
+type HistoryTextField = "familyHistory" | "personalNonPathologicalHistory";
+const HISTORY_LISTS: HistoryListField[] = ["allergies", "chronicConditions", "currentMedications"];
+/** campo canónico del archivo → columna de Patient. */
+const HISTORY_TEXTS: { campo: string; column: HistoryTextField }[] = [
+  { campo: "familyHistory", column: "familyHistory" },
+  { campo: "nonPathologicalHistory", column: "personalNonPathologicalHistory" },
+];
+
+interface HistoryState {
+  allergies: string[];
+  chronicConditions: string[];
+  currentMedications: string[];
+  familyHistory: string | null;
+  personalNonPathologicalHistory: string | null;
+}
+
+const HISTORY_CONFLICT = "El paciente cambió mientras se importaba: vuelve a subir el archivo para no pisar esos cambios";
+
+/**
+ * Escribe los antecedentes de un lote de pacientes en UNA sentencia (no hay un
+ * `updateMany` de Prisma con valores distintos por fila). Candado optimista por
+ * `updatedAt`: si alguien editó al paciente entre la lectura y esta escritura,
+ * esa fila no se toca y se devuelve como no actualizada. Devuelve los ids
+ * escritos. El `clinicId` va en el WHERE aunque los ids ya salieron de la
+ * clínica: la regla de la casa no tiene excepciones.
+ */
+async function writeHistoryBatch(
+  clinicId: string,
+  now: Date,
+  payload: Array<HistoryState & { id: string; updatedAt: string }>,
+): Promise<Set<string>> {
+  const json = JSON.stringify(payload);
+  // La hora de ESTA escritura (no la del inicio de la importación): si no,
+  // `updatedAt` podía quedar ANTES del valor que se acababa de leer.
+  const nowIso = new Date(Math.max(Date.now(), now.getTime())).toISOString();
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    UPDATE "patients" AS p SET
+      "allergies" = ARRAY(SELECT e.x FROM jsonb_array_elements_text(v.d->'allergies') WITH ORDINALITY AS e(x, i) ORDER BY e.i),
+      "chronicConditions" = ARRAY(SELECT e.x FROM jsonb_array_elements_text(v.d->'chronicConditions') WITH ORDINALITY AS e(x, i) ORDER BY e.i),
+      "currentMedications" = ARRAY(SELECT e.x FROM jsonb_array_elements_text(v.d->'currentMedications') WITH ORDINALITY AS e(x, i) ORDER BY e.i),
+      "familyHistory" = v.d->>'familyHistory',
+      "personalNonPathologicalHistory" = v.d->>'personalNonPathologicalHistory',
+      "updatedAt" = ${nowIso}::timestamp(3)
+    FROM jsonb_array_elements(${json}::jsonb) AS v(d)
+    WHERE p."id" = v.d->>'id'
+      AND p."clinicId" = ${clinicId}
+      AND p."updatedAt" = (v.d->>'updatedAt')::timestamp(3)
+    RETURNING p."id"
+  `;
+  return new Set(rows.map((r) => r.id));
+}
+
+export const medicalHistoryHandler: EntityHandler = {
+  entity: "medicalHistory",
+  auditEntityType: "patient",
+  auditAction: "update",
+  sheetNames: ["expedientes", "expediente", "antecedentes", "historiaclinica", "anamnesis", "fichaclinica"],
+  headerVariants: {
+    ...IDENTITY_VARIANTS,
+    allergies: ["alergias", "alergia", "alergiasconocidas", "alergicoa", "allergies"],
+    chronicConditions: [
+      "padecimientos", "padecimientoscronicos", "enfermedades", "enfermedadescronicas",
+      "enfermedadessistemicas", "antecedentespatologicos", "antecedentespersonalespatologicos",
+      "diagnosticosprevios", "conditions",
+    ],
+    currentMedications: [
+      "medicamentos", "medicamentosactuales", "medicacion", "medicacionactual", "farmacos",
+      "tratamientofarmacologico", "medications",
+    ],
+    familyHistory: ["antecedentesfamiliares", "antecedentesheredofamiliares", "heredofamiliares", "familyhistory"],
+    nonPathologicalHistory: [
+      "antecedentesnopatologicos", "antecedentespersonalesnopatologicos", "nopatologicos", "habitos",
+    ],
+  },
+
+  validateMapping(campos) {
+    if (!hasIdentity(campos)) return NEED_IDENTITY;
+    const any = HISTORY_LISTS.some((f) => campos.has(f)) || HISTORY_TEXTS.some((t) => campos.has(t.campo));
+    if (!any) {
+      return "Falta al menos una columna de antecedentes (alergias, padecimientos, medicamentos, heredofamiliares o no patológicos)";
+    }
+    return null;
+  },
+
+  async process(rows, clinicId, ctx) {
+    const idx = await loadPatientIndex(clinicId, ctx);
+    const out: PreviewRow[] = [];
+
+    // 1ª pasada: paciente y valores de cada fila. Nada de base todavía.
+    const parsed: Array<{ pr: PreviewRow; lists: Record<HistoryListField, string[]>; texts: Record<HistoryTextField, string> }> = [];
+    for (const { row, mapped } of rows) {
+      const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
+      const res = resolvePatientRow(mapped, idx, true);
+      if (res.error) pr.errors.push(res.error);
+
+      const lists = {} as Record<HistoryListField, string[]>;
+      for (const f of HISTORY_LISTS) lists[f] = splitList(mapped[f]);
+      const texts = {} as Record<HistoryTextField, string>;
+      for (const t of HISTORY_TEXTS) texts[t.column] = cellText(mapped[t.campo]).slice(0, 5000);
+      const empty = HISTORY_LISTS.every((f) => lists[f].length === 0) && Object.values(texts).every((v) => !v);
+      if (empty) pr.errors.push("La fila no trae antecedentes");
+
+      // El nombre que se enseña es el de la FICHA: a quién va a parar la fila.
+      const name = (res.id && idx.nameById.get(res.id)) || res.fullName || undefined;
+      pr.data = { patientId: res.id, name, phone: mapped.phone ? parsePhone(mapped.phone) : undefined };
+      if (pr.errors.length > 0) pr.status = "error";
+      parsed.push({ pr, lists, texts });
+      out.push(pr);
+    }
+
+    // Lo que YA tiene cada paciente: una sola consulta para todos.
+    const ids = patientIdsOf(out.filter((r) => r.status === "ok"));
+    const current = new Map<string, HistoryState & { updatedAt: Date }>();
+    if (ids.length > 0) {
+      const found = await prisma.patient.findMany({
+        where: { clinicId, id: { in: ids } },
+        select: {
+          id: true, updatedAt: true, allergies: true, chronicConditions: true, currentMedications: true,
+          familyHistory: true, personalNonPathologicalHistory: true,
+        },
+      });
+      for (const p of found) current.set(p.id, p);
+    }
+
+    // 2ª pasada: se suma fila a fila sobre el estado acumulado del paciente, así
+    // dos filas del mismo paciente en el archivo se complementan.
+    const state = new Map<string, HistoryState>();
+    for (const { pr, lists, texts } of parsed) {
+      if (pr.status !== "ok") continue;
+      const id = pr.data.patientId as string;
+      const base = current.get(id);
+      if (!base) { pr.status = "error"; pr.errors.push("Paciente no encontrado en la clínica"); continue; }
+      const prev: HistoryState = state.get(id) ?? {
+        allergies: base.allergies ?? [],
+        chronicConditions: base.chronicConditions ?? [],
+        currentMedications: base.currentMedications ?? [],
+        familyHistory: base.familyHistory,
+        personalNonPathologicalHistory: base.personalNonPathologicalHistory,
+      };
+      const next: HistoryState = { ...prev };
+      const added: Record<string, unknown> = {};
+      for (const f of HISTORY_LISTS) {
+        const m = mergeList(prev[f], lists[f]);
+        next[f] = m.merged;
+        if (m.added.length) added[f] = m.added;
+      }
+      for (const t of HISTORY_TEXTS) {
+        const m = mergeText(prev[t.column], texts[t.column]);
+        next[t.column] = m.value;
+        if (m.changed) added[t.column] = texts[t.column];
+      }
+      state.set(id, next);
+      pr.data.added = added;
+      pr.data.next = next;
+      pr.data.updatedAt = base.updatedAt.toISOString();
+      if (Object.keys(added).length === 0) {
+        pr.status = "duplicate";
+        pr.warnings.push("El expediente ya tiene estos antecedentes");
+      }
+    }
+    return out;
+  },
+
+  toPreview(r) {
+    const { next: _next, updatedAt: _u, ...data } = r.data;
+    return { ...r, data };
+  },
+
+  async commit(rows, clinicId, _skipDuplicates, ctx) {
+    // Lo clínico NUNCA reimporta un duplicado, ni con «Omitir duplicados»
+    // apagado: la misma nota, el mismo presupuesto o el mismo antecedente dos
+    // veces no le sirven a nadie, y no se pueden borrar después.
+    const toInsert = pickInsertable(rows, true);
+    if (toInsert.length === 0) return { created: 0, skipped: 0 };
+
+    // Un paciente = una escritura, con el estado de su ÚLTIMA fila (acumula las anteriores).
+    const byPatient = new Map<string, PreviewRow[]>();
+    for (const r of toInsert) {
+      const id = r.data.patientId as string;
+      const list = byPatient.get(id);
+      if (list) list.push(r);
+      else byPatient.set(id, [r]);
+    }
+    const entries = Array.from(byPatient.entries()).map(([id, list]) => {
+      const last = list[list.length - 1];
+      return { id, rows: list, payload: { id, updatedAt: last.data.updatedAt as string, ...(last.data.next as HistoryState) } };
+    });
+
+    let updated = 0;
+    const fail = (list: PreviewRow[], msg: string) => {
+      for (const r of list) { r.status = "error"; r.errors.push(msg); }
+    };
+    for (let i = 0; i < entries.length; i += BATCH) {
+      const slice = entries.slice(i, i + BATCH);
+      let written: Set<string>;
+      try {
+        written = await writeHistoryBatch(clinicId, ctx.now, slice.map((e) => e.payload));
+      } catch {
+        // El lote falló entero (dato raro en una fila): se aísla paciente por
+        // paciente con el mismo candado, para escribir los buenos.
+        written = new Set();
+        for (const e of slice) {
+          try {
+            const r = await prisma.patient.updateMany({
+              where: { id: e.id, clinicId, updatedAt: new Date(e.payload.updatedAt) },
+              data: {
+                allergies: e.payload.allergies,
+                chronicConditions: e.payload.chronicConditions,
+                currentMedications: e.payload.currentMedications,
+                familyHistory: e.payload.familyHistory,
+                personalNonPathologicalHistory: e.payload.personalNonPathologicalHistory,
+              },
+            });
+            if (r.count > 0) written.add(e.id);
+          } catch (e2: any) {
+            fail(e.rows, rowDbErrorMessage(e2));
+          }
+        }
+      }
+      for (const e of slice) {
+        if (written.has(e.id)) updated++;
+        else if (e.rows.every((r) => r.status !== "error")) fail(e.rows, HISTORY_CONFLICT);
+      }
+    }
+    const errored = entries.filter((e) => e.rows.some((r) => r.status === "error")).length;
+    // Conteos por PACIENTE (un expediente = un paciente), no por fila.
+    return { created: updated, skipped: Math.max(0, entries.length - updated - errored) };
+  },
+};
+
+// ===========================================================================
+// NOTAS DE EVOLUCIÓN — se escriben en la MISMA tabla que la «Nota de evolución»
+// del panel (patient_documents, kind NOTA_EVOLUCION), no en un almacén aparte.
+//
+// 🔴 NOM-004: una nota de otro sistema no la firmó nadie aquí. Entra con
+// status "MIGRATED" —ni DRAFT ni SIGNED—, y por eso ninguna ruta de ese módulo
+// la puede editar, firmar ni enviar (editar y firmar solo encuentran DRAFT;
+// enviar exige SIGNED). Lleva su fecha original (createdAt y la foto
+// `encabezado.fecha`), el autor tal como venía, y la marca completa en
+// `encabezado.migracion`. El cuerpo ABRE con un párrafo que lo dice en claro.
+// ===========================================================================
+
+/** Lo que se muestra del texto de una nota en la tabla de revisión. */
+const NOTE_SNIPPET = 160;
+
+export const clinicalNotesHandler: EntityHandler = {
+  entity: "clinicalNotes",
+  auditEntityType: "record",
+  sheetNames: ["notas", "notasclinicas", "notasdeevolucion", "evoluciones", "evolucion", "notas_clinicas"],
+  headerVariants: {
+    ...IDENTITY_VARIANTS,
+    date: ["fecha", "fechadeatencion", "fechaatencion", "fechanota", "fechaevolucion", "fechadelanota", "fechaconsulta", "date"],
+    doctor: DOCTOR_VARIANTS,
+    title: ["titulo", "asunto", "tiponota", "tipodenota", "motivo", "motivodeconsulta", "tipo"],
+    text: [
+      "nota", "notas", "texto", "evolucion", "evoluciones", "descripcion", "detalle", "observaciones",
+      "notaclinica", "notadeevolucion", "contenido", "comentarios", "text",
+    ],
+  },
+
+  validateMapping(campos) {
+    if (!hasIdentity(campos)) return NEED_IDENTITY;
+    if (!campos.has("date")) return "Falta la columna de fecha de la nota";
+    if (!campos.has("text")) return "Falta la columna con el texto de la nota";
+    return null;
+  },
+
+  async process(rows, clinicId, ctx) {
+    const idx = await loadPatientIndex(clinicId, ctx);
+    // Autor: cualquier usuario de la clínica, activo o no — el doctor que se fue
+    // hace años sigue siendo el autor de sus notas viejas.
+    const users = await prisma.user.findMany({
+      where: { clinicId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    const byDoctor = new Map<string, string[]>();
+    const userName = new Map<string, string>();
+    for (const u of users) {
+      const full = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
+      pushKey(byDoctor, normName(full), u.id);
+      userName.set(u.id, full);
+    }
+    const seen = new Set<string>();
+    const out: PreviewRow[] = [];
+
+    for (const { row, mapped } of rows) {
+      const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
+      const res = resolvePatientRow(mapped, idx, true);
+      if (res.error) pr.errors.push(res.error);
+
+      const fecha = parseCalendarDay(mapped.date);
+      if (!fecha) pr.errors.push(`Fecha inválida "${cellText(mapped.date)}"`);
+      else if (isFutureDay(fecha, ctx.now)) pr.errors.push(`La fecha ${dayKey(fecha)} es posterior a hoy`);
+
+      const raw = cellText(mapped.text);
+      if (!raw) pr.errors.push("Falta el texto de la nota");
+      else if (raw.length > MAX_INPUT_LENGTH) pr.errors.push("La nota es demasiado larga");
+
+      // Autor: si es un usuario de la clínica, se liga; si no, la nota queda a
+      // cargo de quien importa y conserva el nombre original en la foto.
+      const doctorRaw = oneLine(mapped.doctor, 120);
+      let doctorId = ctx.userId;
+      let doctorNombre = doctorRaw;
+      if (doctorRaw) {
+        const d = resolveByName(doctorRaw, byDoctor, "Doctor");
+        if (d.id) { doctorId = d.id; doctorNombre = userName.get(d.id) || doctorRaw; }
+        else pr.warnings.push(`${d.error}: la nota conserva ese nombre como autor original`);
+      } else {
+        pr.warnings.push("Sin doctor en el archivo: la nota queda sin autor original");
+      }
+
+      if (pr.errors.length > 0) {
+        pr.status = "error";
+        pr.data = { name: res.fullName || undefined, date: fecha ? dayKey(fecha) : undefined, doctorName: doctorNombre || undefined };
+        out.push(pr);
+        continue;
+      }
+
+      const day = dayKey(fecha!);
+      const huella = noteFingerprint(res.id!, day, raw);
+      const titulo = oneLine(mapped.title, MAX_TITLE_LENGTH) || "Nota de evolución";
+      pr.data = {
+        patientId: res.id,
+        doctorId,
+        name: idx.nameById.get(res.id!) || res.fullName || undefined,
+        phone: mapped.phone ? parsePhone(mapped.phone) : undefined,
+        date: day,
+        createdAt: fecha,
+        doctorName: doctorNombre || undefined,
+        doctorOriginal: doctorRaw,
+        title: titulo,
+        text: raw,
+        huella,
+      };
+      if (seen.has(huella)) {
+        pr.status = "duplicate"; pr.warnings.push("Nota repetida en el archivo (mismo paciente, día y texto)");
+      } else {
+        seen.add(huella);
+      }
+      out.push(pr);
+    }
+
+    // Idempotencia contra la base: huellas de las notas YA migradas de estos
+    // pacientes en el rango de fechas del archivo. Una consulta.
+    const okRows = out.filter((r) => r.status === "ok");
+    if (okRows.length > 0) {
+      let min = okRows[0].data.createdAt as Date;
+      let max = min;
+      for (const r of okRows) {
+        const d = r.data.createdAt as Date;
+        if (d < min) min = d;
+        if (d > max) max = d;
+      }
+      const existing = await prisma.patientDocument.findMany({
+        where: {
+          clinicId,
+          kind: NOTA_KIND,
+          status: MIGRATED_STATUS,
+          patientId: { in: patientIdsOf(okRows) },
+          createdAt: { gte: min, lte: max },
+        },
+        select: { encabezado: true },
+      });
+      const dbHuellas = new Set(existing.map((e) => huellaDe(e.encabezado)).filter(Boolean) as string[]);
+      for (const r of okRows) {
+        if (dbHuellas.has(r.data.huella)) {
+          r.status = "duplicate"; r.warnings.push("Esta nota ya se había migrado");
+        }
+      }
+    }
+    return out;
+  },
+
+  toPreview(r) {
+    const { text, ...data } = r.data;
+    const snippet = typeof text === "string" && text.length > NOTE_SNIPPET ? `${text.slice(0, NOTE_SNIPPET)}…` : text;
+    return { ...r, data: { ...data, ...(snippet ? { text: snippet } : {}) } };
+  },
+
+  async commit(rows, clinicId, _skipDuplicates, ctx) {
+    // Lo clínico NUNCA reimporta un duplicado, ni con «Omitir duplicados»
+    // apagado: la misma nota, el mismo presupuesto o el mismo antecedente dos
+    // veces no le sirven a nadie, y no se pueden borrar después.
+    const toInsert = pickInsertable(rows, true);
+    if (toInsert.length === 0) return { created: 0, skipped: 0 };
+
+    // La foto de la cabecera, armada en bloque: la clínica una vez y los
+    // pacientes en una consulta (la nota nativa la arma por nota; aquí son miles).
+    const [clinic, patients] = await Promise.all([
+      prisma.clinic.findUnique({
+        where: { id: clinicId },
+        select: { name: true, logoUrl: true, timezone: true, city: true, address: true, state: true, phone: true },
+      }),
+      prisma.patient.findMany({
+        where: { clinicId, id: { in: patientIdsOf(toInsert) } },
+        select: { id: true, firstName: true, lastName: true, patientNumber: true, curp: true, curpStatus: true },
+      }),
+    ]);
+    const tz = consentTimeZone(clinic?.timezone);
+    const limpio = (v: string | null | undefined): string | null => (v ?? "").trim() || null;
+    const direccion = limpio(clinic?.address)
+      ? [clinic?.address, clinic?.city, clinic?.state].map(limpio).filter(Boolean).join(", ")
+      : null;
+    const byId = new Map(patients.map((p) => [p.id, p]));
+    const origen = nombreOrigen(ctx.originName);
+
+    const build = (slice: PreviewRow[]) =>
+      slice.map((r) => {
+        const p = byId.get(r.data.patientId);
+        const fecha = r.data.createdAt as Date;
+        const doctorNombre = (r.data.doctorName as string | undefined) ?? "";
+        const migracion: MarcaMigracion = {
+          origen,
+          fechaOriginal: r.data.date,
+          doctorOriginal: r.data.doctorOriginal ?? "",
+          importadoEl: ctx.now.toISOString(),
+          importadoPor: ctx.userId,
+          archivo: ctx.fileName,
+          huella: r.data.huella,
+        };
+        const encabezado: EncabezadoNota & { migracion: MarcaMigracion } = {
+          pacienteNombre: p ? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() : (r.data.name ?? ""),
+          fecha: formatConsentDate(fecha, tz),
+          clinicaNombre: clinic?.name ?? "",
+          logoUrl: limpio(clinic?.logoUrl),
+          doctorNombre,
+          // La cédula NO se rellena: no consta con cuál se escribió allí, y la
+          // foto nunca lleva un dato inventado (se omite la línea).
+          cedula: null,
+          clinicaDireccion: direccion,
+          clinicaTelefono: limpio(clinic?.phone),
+          doctorEspecialidad: null,
+          doctorCedulaEspecialidad: null,
+          pacienteNumero: limpio(p?.patientNumber),
+          pacienteCurp: limpio(p?.curp)?.toUpperCase() ?? null,
+          pacienteSinCurp: p?.curpStatus === "FOREIGN",
+          migracion,
+        };
+        const body =
+          migrationBannerHtml({ origen, fecha, timezone: tz, doctor: doctorNombre, importadoEl: ctx.now }) +
+          textToNoteHtml(r.data.text);
+        return {
+          clinicId,
+          patientId: r.data.patientId as string,
+          doctorId: r.data.doctorId as string,
+          templateId: null,
+          kind: NOTA_KIND,
+          // "Resina en 16 · migrada de Dentalink": la lista de notas se lee por el título.
+          title: migratedTitle(r.data.title as string, origen, MAX_TITLE_LENGTH, "a"),
+          body,
+          encabezado: encabezado as any,
+          status: MIGRATED_STATUS,
+          signedAt: null,
+          modoFirma: null,
+          // La fecha ORIGINAL: la lista de notas se ordena por aquí. Cuándo se
+          // importó queda en encabezado.migracion.importadoEl (y en updatedAt).
+          createdAt: fecha,
+        };
+      });
+
+    // Un cuerpo que tras sanear no deja nada que leer, o que se pasa del tope,
+    // no se guarda: se reporta en su fila.
+    const writable: PreviewRow[] = [];
+    for (const r of toInsert) {
+      const html = textToNoteHtml(r.data.text);
+      if (isBlankHtml(html)) { r.status = "error"; r.errors.push("La nota está vacía"); continue; }
+      if (html.length > MAX_BODY_LENGTH) { r.status = "error"; r.errors.push("La nota es demasiado larga"); continue; }
+      writable.push(r);
+    }
+
+    const createMany = (data: any[]) => prisma.patientDocument.createMany({ data });
+    let created = 0;
+    for (let i = 0; i < writable.length; i += BATCH) {
+      const slice = writable.slice(i, i + BATCH);
+      try {
+        created += (await createMany(build(slice))).count;
+      } catch {
+        for (const r of slice) {
+          try {
+            created += (await createMany(build([r]))).count;
+          } catch (e2: any) {
+            markRowError(r, e2);
+          }
+        }
+      }
+    }
+    const erroredNow = toInsert.filter((r) => r.status === "error").length;
+    return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
+  },
+};
+
+// ===========================================================================
+// PRESUPUESTOS — cada fila es una LÍNEA (un procedimiento); las líneas se
+// agrupan en un presupuesto por paciente + folio original (o paciente + día si
+// el archivo no trae folio). Se escriben en quotes / quote_items, las mismas
+// tablas del módulo Presupuestos, con la MISMA aritmética (computeTotals).
+//
+// 🔴 ES HISTORIA, NO UNA VENTA. Entra con status "MIGRATED", que ninguna
+// lectura de dinero reconoce: la factura (POST /api/quotes/[id]/invoice) y el
+// plan de tratamiento exigen ACCEPTED; Sabina solo mira PRESENTED/EXPIRED
+// («sin respuesta») y ACCEPTED («dinero parado»); el vencimiento perezoso solo
+// toca PRESENTED; no hay cron ni trigger sobre quotes. No se crea factura, ni
+// CFDI, ni movimiento de caja, ni condiciones de pago.
+//
+// El procedimiento se casa con el tarifario de la clínica por nombre con la
+// misma tolerancia que resolveByName (mayúsculas, acentos, espacios). Lo que
+// no casa NO se inventa ni se tira: la línea entra con su nombre y su importe,
+// sin ligar, y el usuario puede elegir el equivalente (valueMapping).
+// ===========================================================================
+
+/**
+ * Mayor folio de presupuesto emitido en la clínica. ESPEJO de lastQuoteFolio
+ * de src/lib/quotes/service.ts (privada allí): mismo criterio —último bloque de
+ * dígitos, como número, con tope de longitud— para que los folios migrados y
+ * los del panel sigan una sola secuencia.
+ */
+async function lastQuoteFolio(clinicId: string): Promise<number | null> {
+  const rows = await prisma.$queryRaw<{ max: bigint | number | null }[]>`
+    SELECT MAX(CAST(digits AS BIGINT)) AS max
+    FROM (
+      SELECT substring("folio" from '([0-9]+)[^0-9]*$') AS digits
+      FROM "quotes"
+      WHERE "clinicId" = ${clinicId}
+    ) s
+    WHERE digits IS NOT NULL AND length(digits) <= ${MAX_INVOICE_FOLIO_DIGITS}
+  `;
+  const raw = rows[0]?.max ?? null;
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+const QUOTE_TITLE_MAX = 160;
+const QUOTE_ITEM_NAME_MAX = 200;
+
+/** Clave de un presupuesto ya migrado o por migrar (idempotencia). */
+const quoteKeyByFolio = (patientId: string, folio: string) => `${patientId}|f:${norm(folio)}`;
+const quoteKeyByDay = (patientId: string, day: string, total: number) => `${patientId}|d:${day}|${round2(total).toFixed(2)}`;
+
+export const quotesHandler: EntityHandler = {
+  entity: "quotes",
+  auditEntityType: "quote",
+  sheetNames: ["presupuestos", "presupuesto", "tratamientos", "planesdetratamiento", "planes"],
+  headerVariants: {
+    ...IDENTITY_VARIANTS,
+    folio: [
+      "folio", "numeropresupuesto", "numerodepresupuesto", "nopresupuesto", "nodepresupuesto", "npresupuesto",
+      "idpresupuesto", "folioplan", "numerodeplan", "nplan", "idplan", "nodeplan",
+    ],
+    date: ["fecha", "fechapresupuesto", "fechadelpresupuesto", "fechacreacion", "fechaplan", "date"],
+    title: ["titulo", "nombrepresupuesto", "nombredelpresupuesto", "nombreplan", "nombredelplan", "plandetratamiento", "presupuesto"],
+    procedure: ["procedimiento", "prestacion", "servicio", "concepto", "tratamiento", "accion", "descripcion"],
+    tooth: ["pieza", "diente", "piezadental", "dientes", "piezas", "fdi", "organodentario"],
+    quantity: ["cantidad", "cant", "unidades", "qty"],
+    price: ["precio", "preciounitario", "valor", "valorunitario", "arancel", "costo", "tarifa", "precioneto"],
+    discount: ["descuento", "dcto", "desc", "descuentolinea"],
+    total: ["total", "importe", "monto", "subtotal", "totallinea", "valortotal"],
+    status: ["estado", "estatus", "status", "situacion"],
+    doctor: DOCTOR_VARIANTS,
+  },
+
+  validateMapping(campos) {
+    if (!hasIdentity(campos)) return NEED_IDENTITY;
+    if (!campos.has("procedure")) return "Falta la columna del procedimiento";
+    if (!campos.has("price") && !campos.has("total")) return "Falta la columna del precio o del importe";
+    if (!campos.has("date")) return "Falta la columna de fecha del presupuesto";
+    return null;
+  },
+
+  async process(rows, clinicId, ctx) {
+    const idx = await loadPatientIndex(clinicId, ctx);
+    const catalog = await prisma.procedureCatalog.findMany({
+      where: { clinicId },
+      select: { id: true, name: true },
+    });
+    const byProcedure = new Map<string, string[]>();
+    for (const c of catalog) pushKey(byProcedure, norm(c.name), c.id);
+    const catalogIds = new Set(catalog.map((c) => c.id));
+    const chosen = ctx.valueMapping.procedure ?? {};
+
+    // ── 1. Cada línea por su cuenta: importe, procedimiento, paciente y fecha ──
+    interface Linea {
+      pr: PreviewRow;
+      mapped: Record<string, any>;
+      patientId?: string;
+      fecha: Date | null;
+      folio: string;
+      /** La línea no trae NINGUNA columna del paciente: lo hereda de su folio. */
+      sinPaciente: boolean;
+      procedure: string;
+      quantity: number;
+      unitPrice: number;
+      discount: number;
+      itemNotes: string | null;
+    }
+    const lineas: Linea[] = [];
+    for (const { row, mapped } of rows) {
+      const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
+      const folio = oneLine(mapped.folio, 40);
+      const sinPaciente = !cellText(mapped.name) && !cellText(mapped.lastName) && !cellText(mapped.phone) && !cellText(mapped.email);
+
+      // Paciente: una línea con folio y sin columnas de paciente lo hereda de las
+      // demás líneas de su folio (muchos exports solo lo ponen en la primera).
+      let patientId: string | undefined;
+      if (!(sinPaciente && folio)) {
+        const res = resolvePatientRow(mapped, idx, true);
+        if (res.error) pr.errors.push(res.error);
+        patientId = res.id;
+      }
+      // Fecha: igual, se hereda del folio si la línea no la trae.
+      let fecha: Date | null = null;
+      if (cellText(mapped.date) || !folio) {
+        fecha = parseCalendarDay(mapped.date);
+        if (!fecha) pr.errors.push(`Fecha inválida "${cellText(mapped.date)}"`);
+        else if (isFutureDay(fecha, ctx.now)) { pr.errors.push(`La fecha ${dayKey(fecha)} es posterior a hoy`); fecha = null; }
+      }
+
+      const procedure = oneLine(mapped.procedure, QUOTE_ITEM_NAME_MAX);
+      if (!procedure) pr.errors.push("Falta el procedimiento");
+
+      // Cantidad: vacía = 1; si viene, entero ≥ 1.
+      let quantity = 1;
+      if (cellText(mapped.quantity)) {
+        const q = Number(String(mapped.quantity).replace(",", "."));
+        if (Number.isInteger(q) && q >= 1 && q <= 999) quantity = q;
+        else pr.errors.push(`Cantidad inválida "${cellText(mapped.quantity)}"`);
+      }
+      const discount = cellText(mapped.discount) ? parseAmount(mapped.discount) : 0;
+      if (discount === null || discount < 0) pr.errors.push(`Descuento inválido "${cellText(mapped.discount)}"`);
+      const price = cellText(mapped.price) ? parseAmount(mapped.price) : null;
+      const total = cellText(mapped.total) ? parseAmount(mapped.total) : null;
+      if (cellText(mapped.price) && (price === null || price < 0)) pr.errors.push(`Precio inválido "${cellText(mapped.price)}"`);
+      if (cellText(mapped.total) && (total === null || total < 0)) pr.errors.push(`Importe inválido "${cellText(mapped.total)}"`);
+      if (!cellText(mapped.price) && !cellText(mapped.total)) pr.errors.push("Falta el precio de la línea");
+
+      let unitPrice = 0;
+      let itemNotes: string | null = null;
+      // El precio se calcula aunque la fila tenga otro error: cada rama valida lo suyo.
+      const d = round2(discount ?? 0);
+      if (price !== null && price >= 0) {
+        unitPrice = round2(price);
+        const computed = round2(Math.max(0, unitPrice * quantity - d));
+        if (unitPrice * quantity < d) pr.errors.push("El descuento es mayor que el importe de la línea");
+        else if (total !== null && Math.abs(computed - round2(total)) > 0.01) {
+          pr.warnings.push(`El importe del archivo (${round2(total).toFixed(2)}) no cuadra con precio × cantidad − descuento (${computed.toFixed(2)}); se usa el cálculo`);
+        }
+      } else if (total !== null && total >= 0) {
+        // Solo el importe de la línea: precio = (importe + descuento) / cantidad
+        // si sale exacto al centavo; si no, cantidad 1 y la original en la nota.
+        const gross = round2(total + d);
+        const each = round2(gross / quantity);
+        if (quantity > 1 && round2(each * quantity) !== gross) {
+          itemNotes = `Cantidad original: ${quantity}`;
+          quantity = 1;
+          unitPrice = gross;
+        } else {
+          unitPrice = each;
+        }
+      }
+      lineas.push({ pr, mapped, patientId, fecha, folio, sinPaciente, procedure, quantity, unitPrice, discount: round2(discount ?? 0), itemNotes });
+    }
+
+    // ── 2. Presupuestos: por FOLIO original (único en el sistema de origen) o,
+    //    sin folio, por paciente + día. El folio pone paciente y fecha a las
+    //    líneas que no los traen, y si mezcla pacientes es un error del archivo.
+    const grupos = new Map<string, Linea[]>();
+    for (const l of lineas) {
+      const k = l.folio
+        ? `f:${norm(l.folio)}`
+        : l.patientId && l.fecha ? `${l.patientId}|d:${dayKey(l.fecha)}` : null;
+      if (!k) continue;
+      const g = grupos.get(k);
+      if (g) g.push(l);
+      else grupos.set(k, [l]);
+    }
+    for (const [k, g] of Array.from(grupos.entries())) {
+      if (!k.startsWith("f:")) continue;
+      const folio = g[0].folio;
+      const pacientes = new Set(g.filter((l) => l.patientId).map((l) => l.patientId!));
+      if (pacientes.size > 1) {
+        for (const l of g) l.pr.errors.push(`El folio ${folio} trae líneas de pacientes distintos`);
+      } else if (pacientes.size === 1) {
+        const pid = Array.from(pacientes)[0];
+        for (const l of g) if (l.sinPaciente) l.patientId = pid;
+      } else {
+        for (const l of g) if (l.sinPaciente) l.pr.errors.push(`Ninguna línea del folio ${folio} identifica al paciente`);
+      }
+      const fechaGrupo = g.find((l) => l.fecha)?.fecha ?? null;
+      for (const l of g) {
+        if (l.fecha || cellText(l.mapped.date)) continue; // la suya (o su error) manda
+        if (fechaGrupo) l.fecha = fechaGrupo;
+        else l.pr.errors.push(`Ninguna línea del folio ${folio} trae la fecha`);
+      }
+    }
+
+    // Un presupuesto entra COMPLETO o no entra: con una línea rota, su total
+    // sería mentira. Se marca todo el grupo con la fila culpable.
+    for (const g of Array.from(grupos.values())) {
+      const rota = g.find((l) => l.pr.errors.length > 0);
+      if (!rota) continue;
+      for (const l of g) {
+        if (l.pr.errors.length > 0) continue;
+        l.pr.errors.push(`La fila ${rota.pr.row} de este presupuesto tiene error: el presupuesto entra completo o no entra`);
+      }
+    }
+
+    // ── 3. Lo que queda en pie: procedimiento → tarifario, y los datos de la línea ──
+    const out: PreviewRow[] = [];
+    const grupoDe = new Map<Linea, string>();
+    for (const [k, g] of Array.from(grupos.entries())) for (const l of g) grupoDe.set(l, k);
+    for (const l of lineas) {
+      const pr = l.pr;
+      const name = (l.patientId && idx.nameById.get(l.patientId)) || undefined;
+      if (pr.errors.length > 0) {
+        pr.status = "error";
+        pr.data = { name: name ?? (oneLine([l.mapped.name, l.mapped.lastName].filter(Boolean).join(" "), 120) || undefined), procedure: l.procedure || undefined };
+        out.push(pr);
+        continue;
+      }
+
+      // Primero la decisión del usuario; si no hay, el nombre con la tolerancia
+      // de resolveByName; si no casa, sin ligar (y se ofrece elegir equivalente).
+      const key = norm(l.procedure);
+      let procedureId: string | null = null;
+      const pick = chosen[key];
+      if (pick && pick !== VALUE_UNLINKED) {
+        if (catalogIds.has(pick)) procedureId = pick;
+        else pr.warnings.push("El equivalente elegido ya no está en tu catálogo: la línea entra sin ligar");
+      } else if (!pick) {
+        const hit = resolveByName(l.procedure, byProcedure, "Procedimiento", norm);
+        if (hit.id) procedureId = hit.id;
+        else {
+          const unresolved: UnresolvedRef = { field: "procedure", key, value: l.procedure };
+          pr.unresolved = [unresolved];
+          pr.warnings.push(`${hit.error}: entra con su nombre e importe, sin ligar (puedes elegir el equivalente)`);
+        }
+      }
+
+      pr.data = {
+        patientId: l.patientId,
+        name,
+        phone: l.mapped.phone ? parsePhone(l.mapped.phone) : undefined,
+        groupKey: grupoDe.get(l),
+        folioOriginal: l.folio,
+        date: dayKey(l.fecha!),
+        createdAt: l.fecha,
+        title: oneLine(l.mapped.title, QUOTE_TITLE_MAX),
+        statusOriginal: oneLine(l.mapped.status, 60),
+        doctor: oneLine(l.mapped.doctor, 120),
+        procedure: l.procedure,
+        procedureId,
+        toothFdi: sanitizeFdi(l.mapped.tooth),
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        discount: l.discount,
+        lineTotal: round2(Math.max(0, l.unitPrice * l.quantity - l.discount)),
+        itemNotes: l.itemNotes,
+      };
+      out.push(pr);
+    }
+
+    // Idempotencia: presupuestos YA migrados de estos pacientes (una consulta),
+    // por folio original si lo hay y, si no, por día + total.
+    const okRows = out.filter((r) => r.status === "ok");
+    const dbKeys = new Set<string>();
+    if (okRows.length > 0) {
+      const existing = await prisma.quote.findMany({
+        where: { clinicId, status: MIGRATED_STATUS, patientId: { in: patientIdsOf(okRows) } },
+        select: { patientId: true, createdAt: true, total: true, notes: true },
+      });
+      for (const q of existing) {
+        const f = folioDeNotas(q.notes);
+        if (f) dbKeys.add(quoteKeyByFolio(q.patientId, f));
+        dbKeys.add(quoteKeyByDay(q.patientId, dayKey(q.createdAt), Number(q.total)));
+      }
+    }
+    const porGrupo = new Map<string, PreviewRow[]>();
+    for (const r of okRows) {
+      const k = r.data.groupKey as string;
+      const g = porGrupo.get(k);
+      if (g) g.push(r);
+      else porGrupo.set(k, [r]);
+    }
+    for (const lines of Array.from(porGrupo.values())) {
+      const first = lines[0].data;
+      const sum = lines.reduce((a, l) => a + (l.data.lineTotal as number), 0);
+      const dupKey = first.folioOriginal
+        ? quoteKeyByFolio(first.patientId, first.folioOriginal)
+        : quoteKeyByDay(first.patientId, first.date, sum);
+      if (dbKeys.has(dupKey)) {
+        for (const l of lines) { l.status = "duplicate"; l.warnings.push("Este presupuesto ya se había migrado"); }
+      }
+    }
+    return out;
+  },
+
+  async valueOptions(clinicId) {
+    const catalog = await prisma.procedureCatalog.findMany({
+      where: { clinicId },
+      select: { id: true, name: true, isActive: true },
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+    });
+    return {
+      procedure: catalog.map((c) => ({ id: c.id, label: c.isActive ? c.name : `${c.name} (inactivo)` })),
+    };
+  },
+
+  async commit(rows, clinicId, _skipDuplicates, ctx) {
+    // Lo clínico NUNCA reimporta un duplicado, ni con «Omitir duplicados»
+    // apagado: la misma nota, el mismo presupuesto o el mismo antecedente dos
+    // veces no le sirven a nadie, y no se pueden borrar después.
+    const toInsert = pickInsertable(rows, true);
+    if (toInsert.length === 0) return { created: 0, skipped: 0 };
+
+    const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } });
+    const tz = consentTimeZone(clinic?.timezone);
+    const origen = nombreOrigen(ctx.originName);
+
+    // Una "fila" de insertNumbered por PRESUPUESTO; sus líneas cuelgan de data.lines.
+    const groups = new Map<string, PreviewRow[]>();
+    for (const r of toInsert) {
+      const k = r.data.groupKey as string;
+      const list = groups.get(k);
+      if (list) list.push(r);
+      else groups.set(k, [r]);
+    }
+    const headers: PreviewRow[] = Array.from(groups.values()).map((lines) => {
+      lines.sort((a, b) => a.row - b.row);
+      const first = lines[0].data;
+      const pickFirst = (f: string) => (lines.find((l) => l.data[f])?.data[f] as string | undefined) ?? "";
+      const totals = computeTotals(
+        lines.map((l) => ({
+          procedureId: l.data.procedureId,
+          name: l.data.procedure,
+          toothFdi: l.data.toothFdi,
+          quantity: l.data.quantity,
+          unitPrice: l.data.unitPrice,
+          discount: l.data.discount,
+          phase: null,
+          notes: l.data.itemNotes,
+        })),
+        { discountPct: null, discountAmount: 0 },
+      );
+      return {
+        row: lines[0].row,
+        status: "ok" as const,
+        errors: [],
+        warnings: [],
+        data: {
+          id: newId(),
+          lines,
+          totals,
+          patientId: first.patientId,
+          createdAt: first.createdAt,
+          title: migratedTitle(pickFirst("title") || "Presupuesto", origen, QUOTE_TITLE_MAX, "o"),
+          notes: migratedQuoteNotes({
+            origen,
+            importadoEl: ctx.now,
+            timezone: tz,
+            folio: pickFirst("folioOriginal"),
+            estado: pickFirst("statusOriginal"),
+            doctor: pickFirst("doctor"),
+          }),
+        },
+      };
+    });
+
+    const created = await insertNumbered({
+      rows: headers,
+      lastSeq: async () => (await lastQuoteFolio(clinicId)) ?? 0,
+      numberField: "folio",
+      format: formatFolio,
+      build: (slice) =>
+        slice.map((h) => ({
+          quote: {
+            id: h.data.id,
+            clinicId,
+            patientId: h.data.patientId,
+            // Quien lo creó EN ESTE SISTEMA: el que importó. El doctor original va en las notas.
+            createdById: ctx.userId,
+            folio: h.data.folio,
+            title: h.data.title,
+            status: MIGRATED_STATUS,
+            subtotal: h.data.totals.subtotal,
+            discountPct: null,
+            discountAmount: h.data.totals.discountAmount,
+            total: h.data.totals.total,
+            validUntil: null,
+            notes: h.data.notes,
+            createdAt: h.data.createdAt,
+          },
+          items: (h.data.totals.items as any[]).map((it, i) => ({
+            id: newId(),
+            quoteId: h.data.id,
+            procedureId: it.procedureId ?? null,
+            name: it.name,
+            toothFdi: it.toothFdi ?? null,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            discount: it.discount,
+            lineTotal: it.lineTotal,
+            phase: null,
+            notes: it.notes ?? null,
+            sortOrder: i,
+          })),
+        })),
+      // Cabecera y líneas en una transacción: o entra el presupuesto entero o nada.
+      // Sin skipDuplicates: un choque de folio tiene que LANZAR P2002 para que
+      // insertNumbered renumere, no saltarse la cabecera y dejar líneas huérfanas.
+      create: async (data) => {
+        const [q] = await prisma.$transaction([
+          prisma.quote.createMany({ data: data.map((d: any) => d.quote) }),
+          prisma.quoteItem.createMany({ data: data.flatMap((d: any) => d.items) }),
+        ]);
+        return { count: q.count };
+      },
+    });
+
+    // El error de un presupuesto es el de todas sus líneas.
+    for (const h of headers) {
+      if (h.status !== "error") continue;
+      for (const l of h.data.lines as PreviewRow[]) { l.status = "error"; l.errors.push(...h.errors); }
+    }
+    const errored = headers.filter((h) => h.status === "error").length;
+    // Conteos por PRESUPUESTO, no por línea.
+    return { created, skipped: Math.max(0, headers.length - created - errored) };
+  },
+};
+
 export const HANDLERS: Record<string, EntityHandler> = {
   patients: patientsHandler,
   balances: balancesHandler,
   appointments: appointmentsHandler,
+  medicalHistory: medicalHistoryHandler,
+  clinicalNotes: clinicalNotesHandler,
+  quotes: quotesHandler,
 };
