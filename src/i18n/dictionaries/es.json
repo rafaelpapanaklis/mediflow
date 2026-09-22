@@ -1571,6 +1571,14 @@
       "medium": "Riesgo",
       "probabilityTitle": "Probabilidad de no-show: {pct}%",
       "ariaLabel": "{label} de no-show: {pct}%"
+    },
+    "bloqueos": {
+      "tituloClinica": "{motivo} · toda la clínica",
+      "tituloDoctor": "{motivo} · {doctor}",
+      "masBloqueos": {
+        "one": "+1 bloqueo",
+        "other": "+{count} bloqueos"
+      }
     }
   },
   "patients": {
@@ -3527,7 +3535,7 @@
       "tabAi": "Asistente IA",
       "tabIntegrations": "Integraciones",
       "tabReminders": "Recordatorios",
-      "tabHours": "Horarios",
+      "tabHours": "Horarios y bloqueos",
       "tabSecurity": "Seguridad",
       "pageTitle": "Configuración",
       "pageSubtitle": "Personaliza tu clínica, perfil e integraciones",
@@ -3915,6 +3923,87 @@
       "saveError": "Error al guardar los permisos de Sabina",
       "loadError": "No se pudieron leer los permisos de Sabina",
       "updated": "Permisos de Sabina actualizados"
+    },
+    "bloqueos": {
+      "titulo": "Bloqueos",
+      "sub": "Días y horas en que, excepcionalmente, no se agenda. El horario semanal de arriba sigue siendo la jornada normal.",
+      "festivosTitulo": "Días festivos de México",
+      "anio": "Año",
+      "grupoOficiales": "Oficiales",
+      "grupoOficialesAyuda": "Días de descanso obligatorio por ley (LFT art. 74).",
+      "grupoCostumbre": "De costumbre",
+      "grupoCostumbreAyuda": "No son de ley, pero muchas clínicas cierran. Marca los que apliquen.",
+      "aplicado": "Aplicado",
+      "aplicarN": {
+        "one": "Aplicar 1 festivo",
+        "other": "Aplicar {count} festivos"
+      },
+      "aplicando": "Aplicando…",
+      "aplicadosResumen": {
+        "one": "Se aplicó 1 festivo.",
+        "other": "Se aplicaron {count} festivos."
+      },
+      "choqueFestivo": {
+        "one": "El {dia} no se pudo: hay 1 cita agendada.",
+        "other": "El {dia} no se pudo: hay {count} citas agendadas."
+      },
+      "seleccionVacia": "Marca al menos un festivo.",
+      "festivosVacio": "No hay festivos para este año.",
+      "festivosError": "No se pudieron cargar los festivos.",
+      "festivosAplicarError": "No se pudieron aplicar los festivos.",
+      "avisoAnioNuevo": "Ya puedes cargar los festivos de {anio}",
+      "nuevoTitulo": "Bloqueo personalizado",
+      "aQuienCierra": "¿A quién cierra?",
+      "todaLaClinica": "Toda la clínica",
+      "doctorSinNombre": "Un doctor",
+      "desde": "Desde",
+      "hasta": "Hasta",
+      "diaCompleto": "Día completo",
+      "horaInicio": "Hora de inicio",
+      "horaFin": "Hora de fin",
+      "tipo": "Tipo",
+      "tipoFESTIVO": "Festivo",
+      "tipoVACACIONES": "Vacaciones",
+      "tipoPERSONAL": "Personal",
+      "tipoMANTENIMIENTO": "Mantenimiento",
+      "tipoOTRO": "Otro",
+      "motivo": "Motivo",
+      "motivoAyuda": "Se lee en la agenda; un hueco cerrado sin motivo acaba en una llamada a recepción.",
+      "motivoFalta": "Escribe el motivo del bloqueo.",
+      "rangoInvalido": "«Hasta» no puede ser anterior a «Desde».",
+      "horasInvalidas": "La hora de fin tiene que ser posterior a la de inicio.",
+      "guardar": "Crear bloqueo",
+      "guardando": "Creando…",
+      "creadoToast": "Bloqueo creado",
+      "errorToast": "No se pudo crear el bloqueo",
+      "revisando": "Comprobando si hay citas en ese rango…",
+      "avisoTitulo": {
+        "one": "No se puede bloquear: hay 1 cita agendada en ese rango.",
+        "other": "No se puede bloquear: hay {count} citas agendadas en ese rango."
+      },
+      "avisoSub": "Muévelas o cancélalas primero.",
+      "avisoCon": "con {doctor}",
+      "avisoYMas": {
+        "one": "y 1 más",
+        "other": "y {count} más"
+      },
+      "avisoVerAgenda": "Ver en la agenda",
+      "listaTitulo": "Bloqueos activos",
+      "listaVacia": "No hay bloqueos futuros.",
+      "listaError": "No se pudieron cargar los bloqueos.",
+      "rangoDias": "{desde} – {hasta}",
+      "diaCompletoEtiqueta": "Todo el día",
+      "puestoPor": "Lo puso {quien} el {cuando}",
+      "puestoPorSinFecha": "Lo puso {quien}",
+      "retirar": "Retirar",
+      "retirando": "Retirando…",
+      "retiradoToast": "Bloqueo retirado",
+      "retirarError": "No se pudo retirar el bloqueo",
+      "pasados": {
+        "one": "Ver 1 bloqueo pasado",
+        "other": "Ver {count} bloqueos pasados"
+      },
+      "horarioSoloLectura": "Lo define la administración de la clínica."
     }
   },
   "procurement": {
@@ -5183,7 +5272,10 @@
   "clinical": {
     "nom004": {
       "titulo": "NOM-004",
-      "marcadas": { "one": "1 marcada", "other": "{count} marcadas" },
+      "marcadas": {
+        "one": "1 marcada",
+        "other": "{count} marcadas"
+      },
       "conNota": "Con nota",
       "heredoFamiliares": {
         "titulo": "Antecedentes heredo-familiares",

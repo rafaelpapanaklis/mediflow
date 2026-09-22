@@ -21,6 +21,8 @@ import {
   Persona, Seccion, Selector, SubtituloGrupo, Vacio,
 } from "@/components/dashboard/configuracion-rediseno/piezas";
 import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
+import { SeccionBloqueos } from "@/components/dashboard/bloqueos/seccion-bloqueos";
+import blo from "@/components/dashboard/bloqueos/bloqueos.module.css";
 
 const ClinicLocationPicker = dynamic(
   () => import("@/components/dashboard/ClinicLocationPicker").then((m) => m.ClinicLocationPicker),
@@ -518,6 +520,29 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   }
 
   const isAdminUser = initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN";
+  // BLOQUEOS DE AGENDA (ws1-t3) — la pestaña «Horarios y bloqueos» se le abre
+  // también al DOCTOR, pero RECORTADA: ver `SeccionBloqueos`. Las demás
+  // pestañas de Configuración siguen saliéndole exactamente igual que hoy.
+  const esDoctor = initUser.role === "DOCTOR";
+  // La puerta de esta pestaña, en UN sitio: la barra de navegación y los dos
+  // caminos de render la leen de aquí.
+  //
+  // 🔴 Y se comprueba TAMBIÉN en el render, no solo en `TABS`. Cada apartado
+  // de esta pantalla se decide con `tab === "…"`, que es independiente de la
+  // lista de pestañas: quitar una de `TABS` la borra de la barra pero NO
+  // impide que su contenido se pinte si `tab` acaba valiendo eso (por
+  // ejemplo, con `?tab=horarios` en la URL). El apartado de Suscripción ya lo
+  // resuelve así desde antes (`tab === "subscription" && isAdminUser`); esto
+  // sigue ese mismo patrón en vez de inventar otro.
+  const verHorarios = isAdminUser || esDoctor;
+  // Quien no es admin ve el horario semanal en SOLO LECTURA: lo necesita para
+  // saber contra qué bloquea, pero la jornada de la clínica no es suya.
+  // Fail-closed: cualquier rol que no sea admin cae aquí, no solo DOCTOR.
+  const horarioEditable = isAdminUser;
+  const doctoresParaBloqueo = team.map((m) => ({
+    id: m.id,
+    nombre: `${m.firstName} ${m.lastName}`.trim() || m.id,
+  }));
 
   const TABS = [
     { id:"clinica",      label:t("settings.client.tabClinic"),       icon:Building,      show:true        },
@@ -528,7 +553,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     { id:"ia",           label:t("settings.client.tabAi"),           icon:Bot,           show:true        },
     { id:"integraciones",label:t("settings.client.tabIntegrations"), icon:CalendarCheck, show:true        },
     { id:"recordatorios",label:t("settings.client.tabReminders"),    icon:Bell,          show:isAdminUser },
-    { id:"horarios",     label:t("settings.client.tabHours"),        icon:Clock,         show:isAdminUser },
+    { id:"horarios",     label:t("settings.client.tabHours"),        icon:Clock,         show:verHorarios },
     { id:"seguridad",    label:t("settings.client.tabSecurity"),     icon:Shield,        show:true        },
   ].filter(item => item.show);
 
@@ -1094,38 +1119,62 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             {/* ── RECORDATORIOS ── */}
             {tab === "recordatorios" && <RemindersSection clinic={clinic} rediseno />}
 
-            {/* ── HORARIOS ── */}
-            {tab === "horarios" && (
-              <Seccion
-                titulo={t("settings.client.hoursTitle")}
-                pie={<BotonGuardar onClick={saveSchedule} guardando={savingSchedule} texto={t("settings.client.hoursSaveBtn")} textoGuardando={t("common.saving")} />}
-              >
-                <div className={cr.columna} style={{ gap: 8 }}>
-                  {DAYS.map((day, i) => {
-                    const sd = schedule[i] ?? { enabled:false, open:"09:00", close:"18:00" };
-                    return (
-                      <BloqueFila key={day} activo={sd.enabled}>
-                        <div className={cr.horaFila}>
-                          <Casilla checked={sd.enabled}
-                            onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...(sc[i] ?? { enabled:false, open:"09:00", close:"18:00" }), enabled:e.target.checked } }))} />
-                          <span className={cr.horaDia}>{t(day)}</span>
-                          {sd.enabled ? (
-                            <>
-                              <Entrada type="time" corta value={sd.open}
-                                onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], open:e.target.value } }))} />
-                              <span className={cr.horaHasta}>{t("settings.client.hoursTo")}</span>
-                              <Entrada type="time" corta value={sd.close}
-                                onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], close:e.target.value } }))} />
-                            </>
-                          ) : (
-                            <span className={cr.horaHasta}>{t("settings.client.hoursClosed")}</span>
-                          )}
-                        </div>
-                      </BloqueFila>
-                    );
-                  })}
-                </div>
-              </Seccion>
+            {/* ── HORARIOS Y BLOQUEOS ──
+                ① El horario semanal, TAL CUAL estaba: es la jornada normal y
+                   funciona. Lo único nuevo es que quien no es admin (el doctor)
+                   lo ve en SOLO LECTURA — sin casillas, sin `type=time` y sin
+                   botón de guardar — porque necesita saber contra qué bloquea.
+                ② Debajo, la sección de bloqueos (ws1-t3). */}
+            {tab === "horarios" && verHorarios && (
+              <Columna>
+                <Seccion
+                  titulo={t("settings.client.hoursTitle")}
+                  pie={horarioEditable
+                    ? <BotonGuardar onClick={saveSchedule} guardando={savingSchedule} texto={t("settings.client.hoursSaveBtn")} textoGuardando={t("common.saving")} />
+                    : undefined}
+                >
+                  <div className={cr.columna} style={{ gap: 8 }}>
+                    {DAYS.map((day, i) => {
+                      const sd = schedule[i] ?? { enabled:false, open:"09:00", close:"18:00" };
+                      return (
+                        <BloqueFila key={day} activo={sd.enabled}>
+                          <div className={cr.horaFila}>
+                            {horarioEditable && (
+                              <Casilla checked={sd.enabled}
+                                onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...(sc[i] ?? { enabled:false, open:"09:00", close:"18:00" }), enabled:e.target.checked } }))} />
+                            )}
+                            <span className={cr.horaDia}>{t(day)}</span>
+                            {!sd.enabled ? (
+                              <span className={cr.horaHasta}>{t("settings.client.hoursClosed")}</span>
+                            ) : horarioEditable ? (
+                              <>
+                                <Entrada type="time" corta value={sd.open}
+                                  onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], open:e.target.value } }))} />
+                                <span className={cr.horaHasta}>{t("settings.client.hoursTo")}</span>
+                                <Entrada type="time" corta value={sd.close}
+                                  onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], close:e.target.value } }))} />
+                              </>
+                            ) : (
+                              <span className={cr.horaHasta}>
+                                {sd.open} {t("settings.client.hoursTo")} {sd.close}
+                              </span>
+                            )}
+                          </div>
+                        </BloqueFila>
+                      );
+                    })}
+                  </div>
+                  {!horarioEditable && (
+                    <span className={blo.notaSoloLectura}>{t("settings.bloqueos.horarioSoloLectura")}</span>
+                  )}
+                </Seccion>
+
+                <SeccionBloqueos
+                  timezone={clinic.timezone ?? "America/Mexico_City"}
+                  doctores={doctoresParaBloqueo}
+                  modoDoctor={!isAdminUser}
+                />
+              </Columna>
             )}
 
             {/* ── SEGURIDAD ── */}
@@ -1944,8 +1993,16 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── RECORDATORIOS ── */}
       {tab === "recordatorios" && <RemindersSection clinic={clinic} />}
 
-      {/* ── HORARIOS ── */}
-      {tab === "horarios" && (
+      {/* ── HORARIOS Y BLOQUEOS ──
+          ① El horario semanal, TAL CUAL estaba (misma tarjeta `max-w-lg`, mismos
+             7 días): es la jornada normal y funciona. Lo único nuevo es que quien
+             no es admin —el doctor, a quien ahora se le abre esta pestaña— lo ve
+             en SOLO LECTURA: sin casillas, sin `type=time` y sin botón de guardar.
+             Lo ve porque necesita saber contra qué está bloqueando.
+          ② Debajo, la sección de bloqueos (ws1-t3), que trae su propio CSS y es
+             la MISMA en los dos caminos de render de esta pantalla. */}
+      {tab === "horarios" && verHorarios && (
+        <>
         <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg">
           <h2 className="text-base font-bold mb-4">{t("settings.client.hoursTitle")}</h2>
           <div className="space-y-3">
@@ -1953,11 +2010,15 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               const s = schedule[i] ?? { enabled:false, open:"09:00", close:"18:00" };
               return (
                 <div key={day} className={`flex items-center gap-4 p-3.5 rounded-xl border transition-colors ${s.enabled ? "bg-brand-600/15 border-brand-200" : "bg-muted/30 border-border"}`}>
-                  <input type="checkbox" checked={s.enabled}
-                    onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...(sc[i] ?? { enabled:false, open:"09:00", close:"18:00" }), enabled:e.target.checked } }))}
-                    className="w-4 h-4 rounded accent-brand-600 flex-shrink-0" />
+                  {horarioEditable && (
+                    <input type="checkbox" checked={s.enabled}
+                      onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...(sc[i] ?? { enabled:false, open:"09:00", close:"18:00" }), enabled:e.target.checked } }))}
+                      className="w-4 h-4 rounded accent-brand-600 flex-shrink-0" />
+                  )}
                   <span className={`text-base font-semibold w-24 ${s.enabled ? "text-brand-700 dark:text-brand-300" : "text-muted-foreground"}`}>{t(day)}</span>
-                  {s.enabled ? (
+                  {!s.enabled ? (
+                    <span className="text-sm text-muted-foreground">{t("settings.client.hoursClosed")}</span>
+                  ) : horarioEditable ? (
                     <>
                       <input type="time" value={s.open}
                         onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], open:e.target.value } }))}
@@ -1968,16 +2029,29 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                         className="h-9 w-26 rounded-xl border border-border bg-card px-3 text-sm font-mono focus:outline-none" />
                     </>
                   ) : (
-                    <span className="text-sm text-muted-foreground">{t("settings.client.hoursClosed")}</span>
+                    <span className="text-sm font-mono text-muted-foreground">
+                      {s.open} {t("settings.client.hoursTo")} {s.close}
+                    </span>
                   )}
                 </div>
               );
             })}
           </div>
-          <div className="flex justify-end mt-5">
-            <Button onClick={saveSchedule} disabled={savingSchedule}>{savingSchedule ? t("common.saving") : t("settings.client.hoursSaveBtn")}</Button>
-          </div>
+          {horarioEditable ? (
+            <div className="flex justify-end mt-5">
+              <Button onClick={saveSchedule} disabled={savingSchedule}>{savingSchedule ? t("common.saving") : t("settings.client.hoursSaveBtn")}</Button>
+            </div>
+          ) : (
+            <span className={blo.notaSoloLectura}>{t("settings.bloqueos.horarioSoloLectura")}</span>
+          )}
         </div>
+
+        <SeccionBloqueos
+          timezone={clinic.timezone ?? "America/Mexico_City"}
+          doctores={doctoresParaBloqueo}
+          modoDoctor={!isAdminUser}
+        />
+        </>
       )}
 
       {/* ── SEGURIDAD ── */}

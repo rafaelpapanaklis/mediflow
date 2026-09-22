@@ -1571,6 +1571,14 @@
       "medium": "Risk",
       "probabilityTitle": "No-show probability: {pct}%",
       "ariaLabel": "{label} of no-show: {pct}%"
+    },
+    "bloqueos": {
+      "tituloClinica": "{motivo} · whole clinic",
+      "tituloDoctor": "{motivo} · {doctor}",
+      "masBloqueos": {
+        "one": "+1 block",
+        "other": "+{count} blocks"
+      }
     }
   },
   "patients": {
@@ -3527,7 +3535,7 @@
       "tabAi": "AI Assistant",
       "tabIntegrations": "Integrations",
       "tabReminders": "Reminders",
-      "tabHours": "Hours",
+      "tabHours": "Hours & blocks",
       "tabSecurity": "Security",
       "pageTitle": "Settings",
       "pageSubtitle": "Customize your clinic, profile and integrations",
@@ -3915,6 +3923,87 @@
       "saveError": "Error saving Sabina's permissions",
       "loadError": "Could not load Sabina's permissions",
       "updated": "Sabina's permissions updated"
+    },
+    "bloqueos": {
+      "titulo": "Blocks",
+      "sub": "Days and hours when, as an exception, nothing gets booked. The weekly schedule above is still the normal working day.",
+      "festivosTitulo": "Mexican public holidays",
+      "anio": "Year",
+      "grupoOficiales": "Statutory",
+      "grupoOficialesAyuda": "Mandatory days of rest under Mexican labour law (LFT art. 74).",
+      "grupoCostumbre": "By custom",
+      "grupoCostumbreAyuda": "Not required by law, but many clinics close. Tick the ones that apply.",
+      "aplicado": "Applied",
+      "aplicarN": {
+        "one": "Apply 1 holiday",
+        "other": "Apply {count} holidays"
+      },
+      "aplicando": "Applying…",
+      "aplicadosResumen": {
+        "one": "1 holiday applied.",
+        "other": "{count} holidays applied."
+      },
+      "choqueFestivo": {
+        "one": "{dia} could not be applied: there is 1 booked appointment.",
+        "other": "{dia} could not be applied: there are {count} booked appointments."
+      },
+      "seleccionVacia": "Tick at least one holiday.",
+      "festivosVacio": "No holidays for this year.",
+      "festivosError": "Holidays could not be loaded.",
+      "festivosAplicarError": "The holidays could not be applied.",
+      "avisoAnioNuevo": "You can now load the {anio} holidays",
+      "nuevoTitulo": "Custom block",
+      "aQuienCierra": "Who does it close?",
+      "todaLaClinica": "The whole clinic",
+      "doctorSinNombre": "A doctor",
+      "desde": "From",
+      "hasta": "To",
+      "diaCompleto": "All day",
+      "horaInicio": "Start time",
+      "horaFin": "End time",
+      "tipo": "Type",
+      "tipoFESTIVO": "Holiday",
+      "tipoVACACIONES": "Vacation",
+      "tipoPERSONAL": "Personal",
+      "tipoMANTENIMIENTO": "Maintenance",
+      "tipoOTRO": "Other",
+      "motivo": "Reason",
+      "motivoAyuda": "It shows on the agenda; a closed slot with no reason ends up as a phone call to the front desk.",
+      "motivoFalta": "Write the reason for the block.",
+      "rangoInvalido": "“To” cannot be earlier than “From”.",
+      "horasInvalidas": "The end time must be later than the start time.",
+      "guardar": "Create block",
+      "guardando": "Creating…",
+      "creadoToast": "Block created",
+      "errorToast": "The block could not be created",
+      "revisando": "Checking for appointments in that range…",
+      "avisoTitulo": {
+        "one": "Cannot block: there is 1 appointment booked in that range.",
+        "other": "Cannot block: there are {count} appointments booked in that range."
+      },
+      "avisoSub": "Move or cancel them first.",
+      "avisoCon": "with {doctor}",
+      "avisoYMas": {
+        "one": "and 1 more",
+        "other": "and {count} more"
+      },
+      "avisoVerAgenda": "View in the agenda",
+      "listaTitulo": "Active blocks",
+      "listaVacia": "No upcoming blocks.",
+      "listaError": "The blocks could not be loaded.",
+      "rangoDias": "{desde} – {hasta}",
+      "diaCompletoEtiqueta": "All day",
+      "puestoPor": "Added by {quien} on {cuando}",
+      "puestoPorSinFecha": "Added by {quien}",
+      "retirar": "Remove",
+      "retirando": "Removing…",
+      "retiradoToast": "Block removed",
+      "retirarError": "The block could not be removed",
+      "pasados": {
+        "one": "Show 1 past block",
+        "other": "Show {count} past blocks"
+      },
+      "horarioSoloLectura": "Set by the clinic's administration."
     }
   },
   "procurement": {
@@ -5183,7 +5272,10 @@
   "clinical": {
     "nom004": {
       "titulo": "NOM-004",
-      "marcadas": { "one": "1 checked", "other": "{count} checked" },
+      "marcadas": {
+        "one": "1 checked",
+        "other": "{count} checked"
+      },
       "conNota": "With a note",
       "heredoFamiliares": {
         "titulo": "Family medical history",

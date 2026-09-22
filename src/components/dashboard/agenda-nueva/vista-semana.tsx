@@ -21,6 +21,8 @@ import { useMemo } from "react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
+import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
+import { bandasDelDia } from "@/components/dashboard/bloqueos/fechas";
 import { Cuadricula, type ColumnaCuadricula } from "./cuadricula";
 import { TarjetaCita } from "./tarjeta-cita";
 import { FantasmaCita } from "./fantasma-cita";
@@ -89,6 +91,8 @@ export function VistaSemana(props: PropsVistaSemana) {
 
   const responsables = nueva.responsablesVisibles;
   const citas = useCitasDeLaSemana(ahora);
+  // Los bloqueos del periodo, del mismo payload que las citas (ws1-t2).
+  const bloqueos = useBloqueosAgenda();
 
   const irADia = (dayISO: string) => {
     setDay(dayISO);
@@ -116,6 +120,12 @@ export function VistaSemana(props: PropsVistaSemana) {
 
   const columnas: ColumnaCuadricula[] = dias.map((dia) => {
     const delDia = porDia.get(dia.iso) ?? [];
+    // En Semana la columna ES un día, no un responsable: entran TODOS los
+    // bloqueos que tapan ese día —los de la clínica y los de cualquier
+    // doctor— porque no hay una columna por doctor contra la que acotar. Se
+    // dice y no se disimula: aquí la franja significa «hay un cierre ese
+    // día», y de quién es lo lleva escrito y en su color.
+    const bandas = bandasDelDia(bloqueos, dia.iso, state.timezone, null);
     const horario = horarioDelDia(dia.iso, state.schedules, state.timezone);
     const cerrada = horario !== null && !horario.abierto;
     const esHoy = dia.iso === hoyISO;
@@ -190,6 +200,7 @@ export function VistaSemana(props: PropsVistaSemana) {
           }
         : undefined,
       carriles: carriles.length,
+      bloqueos: bandas.length > 0 ? bandas : undefined,
       superpuesto: sombra,
       encabezado: (
         <CabeceraDia
