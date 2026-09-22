@@ -17,6 +17,8 @@ import { rateLimit } from "@/lib/rate-limit";
 import { buildDaySlots } from "@/lib/appointment-change/slots";
 import { tzLocalToUtc, todayInTz } from "@/lib/agenda/time-utils";
 import type { PacienteBookingSlotsResponse } from "@/lib/patient-portal/types";
+import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 
 export const dynamic = "force-dynamic";
 
@@ -96,16 +98,24 @@ export async function GET(req: NextRequest) {
   // Citas del doctor ese día en UNA query (overlap del rango del día en tz).
   const dayStartUtc = tzLocalToUtc(dateStr, 0, 0, timezone);
   const dayEndUtc = new Date(dayStartUtc.getTime() + 86_400_000);
-  const busy = await prisma.appointment.findMany({
-    where: {
-      clinicId,
-      doctorId,
-      status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      startsAt: { lt: dayEndUtc },
-      endsAt: { gt: dayStartUtc },
-    },
-    select: { startsAt: true, endsAt: true },
-  });
+  const [busy, bloqueos] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        clinicId,
+        doctorId,
+        status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        startsAt: { lt: dayEndUtc },
+        endsAt: { gt: dayStartUtc },
+      },
+      select: { startsAt: true, endsAt: true },
+    }),
+    // WS1-T2 — los bloqueos del día. Este endpoint NO estaba en la lista de
+    // cinco de la tarea y es una puerta más por la que sale disponibilidad: el
+    // portal del paciente con sesión. Un paciente que reserva aquí dentro de un
+    // día cerrado se presenta a una clínica vacía igual que el que reserva
+    // desde la página pública.
+    leerBloqueosDelRango(clinicId, dayStartUtc, dayEndUtc, { doctorIds: [doctorId] }),
+  ]);
 
   const [closeH, closeM] = daySchedule.closeTime.split(":").map(Number);
   const closeMins = closeH * 60 + closeM;
@@ -126,7 +136,11 @@ export async function GET(req: NextRequest) {
     const taken = busy.some(
       (b) => b.startsAt.getTime() < slotEndMs && b.endsAt.getTime() > slotStart.getTime(),
     );
-    if (!taken) slots.push(hhmm);
+    if (taken) continue;
+    // WS1-T2 — ni una hora bloqueada. El motivo NO se manda: el portal es del
+    // paciente y no le corresponde saber por qué su doctora no está.
+    if (bloqueaEsteSlot(bloqueos, slotStart, DURATION_MIN, doctorId)) continue;
+    slots.push(hhmm);
   }
 
   const body: PacienteBookingSlotsResponse = {

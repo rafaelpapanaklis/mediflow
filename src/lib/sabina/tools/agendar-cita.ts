@@ -105,9 +105,14 @@ export const agendarCita = definirHerramienta<ParamsAgendarCita, DatosAccionAgen
     if (sillon.tipo === "no") return { estado: "no_se_puede", causa: sillon.causa, frase: sillon.frase };
     if (sillon.tipo === "pregunta") return { estado: "pregunta", preguntas: [sillon.pregunta] };
 
-    const noDisponible = (causa: Parameters<typeof respuestaNoDisponible>[0]["causa"]) =>
+    const noDisponible = (
+      causa: Parameters<typeof respuestaNoDisponible>[0]["causa"],
+      // WS1-T2 — el motivo escrito del bloqueo, para que la frase diga «está
+      // cerrado por el congreso» y no un «no se puede» sin salida.
+      motivoBloqueo?: string,
+    ) =>
       respuestaNoDisponible({
-        causa, fecha: p.fecha, hora: p.hora, duracion, clinica, ocupacion,
+        causa, motivoBloqueo, fecha: p.fecha, hora: p.hora, duracion, clinica, ocupacion,
         sillon: sillon.valor, doctor: doctor.valor.nombre, ahora,
       });
 
@@ -132,7 +137,10 @@ export const agendarCita = definirHerramienta<ParamsAgendarCita, DatosAccionAgen
       sillonId: sillon.valor?.id ?? null,
       ahora: new Date(ahora.getTime() - pastToleranceMs(clinica.defaultSlotMinutes)),
     });
-    if (veredicto.ok === false) return noDisponible((veredicto as Extract<typeof veredicto, { ok: false }>).causa);
+    if (veredicto.ok === false) {
+      const no = veredicto as Extract<typeof veredicto, { ok: false }>;
+      return noDisponible(no.causa, no.motivoBloqueo);
+    }
 
     // La clínica usa sillones y no se dijo cuál: se pregunta, con los que sirven a esa hora.
     const libres = (veredicto as Extract<typeof veredicto, { ok: true }>).sillonesLibres;

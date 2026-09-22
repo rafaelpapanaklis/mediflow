@@ -12,7 +12,10 @@
  *    AVISA; decisión de Rafael: Sabina ni lo ofrece);
  *  · horario del sillón    → `validateResourceSchedule` (el 422 del POST);
  *  · ocupado               → `slotOverlapsBusy`, intervalos `[inicio, fin)`;
- *  · pasado                → no se ofrece nada que ya empezó.
+ *  · pasado                → no se ofrece nada que ya empezó;
+ *  · BLOQUEADO (WS1-T2)    → `bloqueaEsteHueco`, la única función que decide
+ *    si un bloqueo de agenda tapa un hueco, compartida con los otros nueve
+ *    consumidores de disponibilidad del repo.
  *
  * Una diferencia a propósito con la constraint: aquí ocupa TODA cita no
  * cancelada ni «no asistió», también las que tienen `overrideReason`. La
@@ -31,6 +34,8 @@ import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import { slotOverlapsBusy, type BusyInterval } from "@/lib/public-booking/slots";
+import { bloqueaEsteHueco, type BloqueoLike } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { ventanaDelDia } from "./fechas";
 import {
   fechaLarga,
@@ -56,8 +61,28 @@ export interface Sillon {
 export interface Ocupacion {
   /** Citas vivas del doctor ese día. */
   doctor: BusyInterval[];
+  /**
+   * DE QUIÉN es esta ocupación (WS1-T2). Va aquí y no en la firma de
+   * `evaluarHora` porque este objeto YA está acotado a un doctor —`doctor` son
+   * SUS citas—, y porque así no hay dos sitios desde donde pueda llegar un id
+   * distinto. `null` = sin doctor concreto: entonces solo tapan los bloqueos
+   * de toda la clínica.
+   */
+  doctorId: string | null;
   /** Todos los sillones activos de la clínica, con su horario y su ocupación. Vacío = la clínica no usa sillones. */
   sillones: Sillon[];
+  /**
+   * Los bloqueos de agenda que tapan el rango (WS1-T2).
+   *
+   * 🔴 OBLIGATORIO, no opcional, Y ESE ES EL PUNTO. `evaluarHora` es el cuello
+   * de botella por el que pasan Sabina Y «Buscar espacio» del panel
+   * (src/lib/agenda-nueva/huecos.server.ts, que arma este objeto a mano).
+   * Con el campo opcional, quien olvidara rellenarlo seguiría compilando y
+   * ofrecería huecos bloqueados sin que nadie se enterara; obligatorio, el
+   * compilador para la build. Una lista vacía es una respuesta válida —«no hay
+   * bloqueos»—, pero tiene que escribirse a propósito.
+   */
+  bloqueos: BloqueoLike[];
 }
 
 /** La ventana de atención de un día, o `null` si la clínica cierra. Minutos locales. */
@@ -77,7 +102,20 @@ export function ventanaDeAtencion(fecha: string, clinica: ConfigClinica): { abre
 
 export type Veredicto =
   | { ok: true; sillonesLibres: Sillon[] }
-  | { ok: false; causa: "pasado" | "dia_cerrado" | "fuera_de_horario" | "ocupado" | "sillon_no_disponible" | "sin_sillon_libre" };
+  | {
+      ok: false;
+      causa:
+        | "pasado"
+        | "dia_cerrado"
+        | "fuera_de_horario"
+        | "ocupado"
+        | "sillon_no_disponible"
+        | "sin_sillon_libre"
+        /** WS1-T2 — hay un bloqueo de agenda encima. */
+        | "bloqueado";
+      /** El motivo escrito del bloqueo, solo cuando `causa` es "bloqueado". */
+      motivoBloqueo?: string;
+    };
 
 /**
  * ¿Cabe una cita de `duracion` minutos a las `hora` del `fecha`?
@@ -109,6 +147,15 @@ export function evaluarHora(args: {
   if (desde < ventana.abre || desde + duracion > ventana.cierra) return { ok: false, causa: "fuera_de_horario" };
   if (scheduleViolation(inicio, fin, clinica.timezone, clinica, clinica.schedules) !== null) {
     return { ok: false, causa: "fuera_de_horario" };
+  }
+
+  // WS1-T2 — ANTES que el solape con citas y que el sillón: si el día está
+  // cerrado, da igual que el sillón esté libre, y el motivo del bloqueo es una
+  // respuesta mejor que «ese sillón no está disponible». El alcance lo aplica
+  // `bloqueaEsteHueco`: un bloqueo de otro doctor no estorba a éste.
+  const bloqueo = bloqueaEsteHueco(ocupacion.bloqueos, inicio, fin, ocupacion.doctorId);
+  if (bloqueo) {
+    return { ok: false, causa: "bloqueado", motivoBloqueo: bloqueo.reason };
   }
 
   if (slotOverlapsBusy(inicio, duracion, ocupacion.doctor)) return { ok: false, causa: "ocupado" };
@@ -194,6 +241,8 @@ export function buscarHuecos(args: {
  */
 export function respuestaNoDisponible(args: {
   causa: Exclude<Veredicto, { ok: true }>["causa"];
+  /** El motivo del bloqueo, cuando `causa` es "bloqueado". */
+  motivoBloqueo?: string;
   fecha: string;
   hora: string;
   duracion: number;
@@ -216,6 +265,9 @@ export function respuestaNoDisponible(args: {
   const dia = fechaLarga(tzLocalToUtc(fecha, 12, 0, clinica.timezone), clinica.timezone);
   const frases: Record<typeof causa, string> = {
     ocupado: `A las ${hora} del ${dia}, ${doctor} ya tiene otra cita.`,
+    // WS1-T2 — el motivo lo escribió la clínica y se repite tal cual: es la
+    // diferencia entre «no se puede» y «está cerrado por el congreso».
+    bloqueado: `La agenda está cerrada a las ${hora} del ${dia}${args.motivoBloqueo ? `: ${args.motivoBloqueo}` : ""}.`,
     fuera_de_horario: `Las ${hora} (${duracion} min) queda fuera del horario de la clínica el ${dia}${ventana ? ` (${ventana.abre}–${ventana.cierra})` : ""}.`,
     dia_cerrado: `La clínica está cerrada el ${dia}.`,
     pasado: `El ${dia} a las ${hora} ya pasó.`,
@@ -256,7 +308,7 @@ export async function leerOcupacion(
 ): Promise<Ocupacion> {
   const { desde, hasta } = ventanaDelDia(args.fecha, args.timezone);
 
-  const [recursos, citas] = await Promise.all([
+  const [recursos, citas, bloqueos] = await Promise.all([
     db.resource.findMany({
       // clinicId de la SESIÓN. Mismo filtro que `fetchResources` (lo que el
       // modal «Nueva cita» cuenta para exigir sillón).
@@ -280,6 +332,14 @@ export async function leerOcupacion(
       },
       select: { doctorId: true, resourceId: true, startsAt: true, endsAt: true },
     }),
+    // WS1-T2 — los bloqueos del día. Se piden los de ESTE doctor y los de toda
+    // la clínica; el alcance lo aplica `bloqueaEsteHueco` en `evaluarHora`.
+    // Con el `db` de la sesión, igual que las dos de arriba: en pruebas es el
+    // cliente de mentira y en producción el `prisma` del repo.
+    leerBloqueosDelRango(ctx.clinicId, desde, hasta, {
+      doctorIds: [args.doctorId],
+      db: db as any,
+    }),
   ]);
 
   const ids = recursos.map((r: any) => r.id as string);
@@ -294,6 +354,8 @@ export async function leerOcupacion(
   const intervalo = (c: any): BusyInterval => ({ startsAt: new Date(c.startsAt), endsAt: new Date(c.endsAt) });
 
   return {
+    doctorId: args.doctorId,
+    bloqueos,
     doctor: citas.filter((c: any) => c.doctorId === args.doctorId).map(intervalo),
     sillones: recursos.map((r: any) => ({
       id: r.id,

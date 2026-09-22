@@ -23,6 +23,9 @@ export type AuditAction =
 export type AuditEntityType =
   | "patient"
   | "appointment"
+  // Bloqueo de agenda (WS1-T2): cerrar un día o unas horas se audita igual
+  // que crear o cancelar una cita — es lo que explica un hueco vacío.
+  | "agenda-block"
   | "invoice"
   | "record"
   | "consent"

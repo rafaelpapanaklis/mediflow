@@ -78,6 +78,13 @@ export interface OpcionesSiembra {
   sillones?: boolean;
   /** Google Calendar conectado. */
   google?: boolean;
+  /**
+   * Bloqueos de agenda vigentes (WS1-T2). Vacío por defecto: la mayoría de
+   * las pruebas de agenda no van de bloqueos y no tienen que enterarse de que
+   * existen. Las filas llevan la forma de `agenda_blocks`: `doctorId` en null
+   * = toda la clínica.
+   */
+  bloqueos?: Fila[];
 }
 
 export function datosAgenda(op: OpcionesSiembra = {}) {
@@ -163,7 +170,13 @@ export function datosAgenda(op: OpcionesSiembra = {}) {
     { id: "w-1", clinicId: CL_A, appointmentId: "a-juan-10", status: "SENT" },
   ];
 
-  return { clinics, clinicSchedules, users, patients, appointments, resources, resourceSchedules, whatsAppReminders };
+  // WS1-T2 — la tabla de bloqueos. Tiene que EXISTIR en el doble aunque esté
+  // vacía: `leerOcupacion` la consulta siempre, y un doble que no la declara
+  // se lleva por delante toda la agenda de Sabina con un
+  // «Cannot read properties of undefined (reading 'findMany')».
+  const agendaBlocks: Fila[] = op.bloqueos ?? [];
+
+  return { clinics, clinicSchedules, users, patients, appointments, resources, resourceSchedules, whatsAppReminders, agendaBlocks };
 }
 
 /* ── el espía ─────────────────────────────────────────────────────────── */
@@ -200,6 +213,7 @@ export function baseAgenda(op: OpcionesSiembra = {}): BaseAgenda {
     user: delegadoDe(filas.users),
     resourceSchedule: delegadoDe(filas.resourceSchedules),
     whatsAppReminder: delegadoDe(filas.whatsAppReminders),
+    agendaBlock: delegadoDe(filas.agendaBlocks),
   };
 
   const espia: Espia = { llamadas: [], escrituras: [] };

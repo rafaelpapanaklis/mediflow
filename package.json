@@ -20,6 +20,8 @@
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts",
     "test:agenda": "tsx --test src/lib/agenda/date-ranges.test.ts",
     "test:heatmap-iframe": "tsx --test src/app/admin/analytics/__tests__/iframe-desplegar.test.ts",
+    "test:agenda-bloqueos": "tsx --test src/lib/agenda-bloqueos/__tests__/core.test.ts",
+    "test:agenda-bloqueos-festivos": "tsx --test src/lib/agenda-bloqueos/__tests__/festivos-mx.test.ts",
     "test:agenda-nueva-geometria": "tsx --test src/lib/agenda-nueva/__tests__/geometria.test.ts",
     "test:agenda-nueva-estados": "tsx --test src/lib/agenda-nueva/__tests__/estados.test.ts",
     "test:agenda-nueva-vista": "tsx --test src/lib/agenda-nueva/__tests__/vista-modelo.test.ts",

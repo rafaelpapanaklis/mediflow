@@ -29,6 +29,8 @@ import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { scheduleViolation } from "@/lib/agenda/clinic-hours";
+import { bloqueaEsteHueco, avisoDeBloqueo } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import {
   bookingRuleBody,
   rescheduleRuleViolation,
@@ -233,6 +235,23 @@ export async function PATCH(
     session.clinic.schedules,
   );
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // WS1-T2 — AL STAFF SE LE AVISA, NO SE LE PROHÍBE. Ver el bloque gemelo en
+  // POST /api/appointments; el criterio y el porqué son los mismos.
+  //
+  // Se mira el DESTINO con el doctor efectivo del PATCH (el nuevo si se
+  // cambió, el de siempre si no): mover una cita FUERA de un bloqueo no puede
+  // avisar de nada, y moverla DENTRO sí.
+  const doctorEfectivo = body.doctorId || existing.doctorId;
+  const bloqueosDelHueco = await leerBloqueosDelRango(
+    session.clinic.id,
+    newStarts,
+    newEnds,
+    { doctorIds: [doctorEfectivo] },
+  );
+  const bloqueoEncima = bloqueaEsteHueco(bloqueosDelHueco, newStarts, newEnds, doctorEfectivo);
+  const avisoHorario = bloqueoEncima ? avisoDeBloqueo(bloqueoEncima) : hoursWarning;
+
   // Resource working-hours validation. Applies if the appointment ends up with
   // a resourceId (either explicitly set in this PATCH or inherited from the
   // existing record). overrideReason — current or already set on existing —
@@ -368,7 +387,8 @@ export async function PATCH(
           userId: session.user.id, role: session.user.role, clinicId: session.clinic.id,
         }),
         // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
-        scheduleWarning: hoursWarning,
+        // WS1-T2: si además hay un bloqueo encima, manda el del bloqueo.
+        scheduleWarning: avisoHorario,
         // null = no tocaba avisar. Si tocaba: { enviado } o { enviado:false, motivo }.
         whatsapp,
       },
