@@ -15,16 +15,29 @@
  * porcentaje: un número de ocupación falso es peor que ninguno, porque es el
  * número con el que un dueño decide si contrata o si abre los sábados.
  *
- * ── Y no hay feriados ────────────────────────────────────────────────────
- * El prototipo marca el 16 de septiembre como «Feriado · Independencia». En
- * Dental no existe modelo de días festivos ni de bloqueos de agenda: lo único
- * que sabe el sistema es `ClinicSchedule`. Así que un día cerrado dice
- * «Cerrado» y nunca inventa el motivo. Ver `ocupacion.ts` para el detalle.
+ * ── Los feriados, y de dónde sale su motivo ──────────────────────────────
+ * Esto decía que en Dental no existía modelo de festivos ni de bloqueos de
+ * agenda. Desde WS1-T2/T3 SÍ existe: hay bloqueos de agenda, y los festivos de
+ * México se aplican desde Configuración → Horarios y bloqueos. Lo que NO ha
+ * cambiado es la regla, y sigue valiendo entera:
+ *
+ *   · un día cerrado por el HORARIO SEMANAL dice «Cerrado» y NO inventa un
+ *     motivo — eso lo sigue decidiendo `notaDelDia` en `ocupacion.ts`, que no
+ *     sabe nada de bloqueos y no tiene por qué saberlo;
+ *   · un día con un BLOQUEO enseña el motivo que alguien escribió, porque el
+ *     motivo es obligatorio justo para esto. «Cerrado — Navidad» sale de la
+ *     base; «Feriado · Independencia» del prototipo seguía siendo inventado.
+ *
+ * Los bloqueos llegan en el payload que la agenda ya trae; esta vista no pide
+ * nada por su cuenta.
  */
 
 import { useMemo } from "react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
+import { useT } from "@/i18n/i18n-provider";
+import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
+import { bandasDelDia, type BandaBloqueo } from "@/components/dashboard/bloqueos/fechas";
 import { aCitaVista, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { diaEnTz } from "@/lib/agenda-nueva/geometria";
 import {
@@ -54,6 +67,22 @@ export function VistaMes(props: PropsVistaMes) {
   const filas = useMemo(() => filasDelMes(state.dayISO), [state.dayISO]);
   const responsables = nueva.responsablesVisibles;
   const citas = useCitasDelMes(ahora);
+
+  // Los bloqueos del mes, del mismo payload que las citas (ws1-t2). Una sola
+  // pasada para las 42 celdas: con un `filter` por celda serían 42 recorridos
+  // de la lista entera cada vez que cambia el filtro.
+  const bloqueos = useBloqueosAgenda();
+  const bandasPorDia = useMemo(() => {
+    const mapa = new Map<string, BandaBloqueo[]>();
+    if (bloqueos.length === 0) return mapa;
+    for (const fila of filas) {
+      for (const celda of fila) {
+        const bandas = bandasDelDia(bloqueos, celda.iso, state.timezone, null);
+        if (bandas.length > 0) mapa.set(celda.iso, bandas);
+      }
+    }
+    return mapa;
+  }, [bloqueos, filas, state.timezone]);
 
   const carriles: Carril[] = useMemo(
     () => responsables.map((r) => ({ id: r.id, nombre: r.nombreCorto, color: r.color })),
@@ -138,6 +167,7 @@ export function VistaMes(props: PropsVistaMes) {
             key={celda.iso}
             celda={celda}
             ocupacion={ocupacionPorDia.get(celda.iso)!}
+            bloqueos={bandasPorDia.get(celda.iso)}
             esHoy={celda.iso === hoyISO}
             esPasado={celda.iso < hoyISO}
             esSeleccionado={celda.iso === state.dayISO}
@@ -154,12 +184,15 @@ export function VistaMes(props: PropsVistaMes) {
 function CeldaDelMes(props: {
   celda: CeldaMes;
   ocupacion: OcupacionDia;
+  /** Las franjas de bloqueo de este día, si las hay. */
+  bloqueos?: BandaBloqueo[];
   esHoy: boolean;
   esPasado: boolean;
   esSeleccionado: boolean;
   onAbrir: () => void;
 }) {
-  const { celda, ocupacion, esHoy, esPasado, esSeleccionado } = props;
+  const { celda, ocupacion, bloqueos, esHoy, esPasado, esSeleccionado } = props;
+  const t = useT();
   const nota = notaDelDia(ocupacion);
   const hayBarra = !ocupacion.cerrado && ocupacion.porcentaje !== null;
 
@@ -229,6 +262,30 @@ function CeldaDelMes(props: {
         </>
       )}
 
+      {/* ── La tira del bloqueo ──
+          Una por día, con el motivo si cabe. La primera manda; si hay más de
+          una, el resto se resume con «+N». Va DESPUÉS de la barra de ocupación
+          y ANTES de la nota: la nota sigue siendo la del horario semanal
+          («Cerrado»), y no la sustituye ningún bloqueo. */}
+      {bloqueos && bloqueos.length > 0 && (
+        <div className={css.tiras}>
+          <span
+            className={[
+              css.tira,
+              bloqueos[0].doctorId === null ? css.tiraClinica : css.tiraDoctor,
+            ].join(" ")}
+            title={tituloTira(bloqueos[0], t)}
+          >
+            {bloqueos[0].reason}
+          </span>
+          {bloqueos.length > 1 && (
+            <span className={css.tiraMas}>
+              {t("agenda.bloqueos.masBloqueos", { count: bloqueos.length - 1 })}
+            </span>
+          )}
+        </div>
+      )}
+
       {nota && (
         <div
           className={[
@@ -279,4 +336,14 @@ function useCitasDelMes(ahora: Date): CitaVista[] {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [state.appointments, state.doctors, state.resources, state.timezone, citaVisible],
   );
+}
+
+/** «Cerrado — Navidad · toda la clínica», para el `title` de la tira del mes. */
+function tituloTira(banda: BandaBloqueo, t: ReturnType<typeof useT>): string {
+  return banda.doctorId === null
+    ? t("agenda.bloqueos.tituloClinica", { motivo: banda.reason })
+    : t("agenda.bloqueos.tituloDoctor", {
+        motivo: banda.reason,
+        doctor: banda.doctorNombre ?? "",
+      });
 }
