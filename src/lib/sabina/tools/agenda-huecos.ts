@@ -46,6 +46,7 @@ import {
   type DatosAccionAgenda,
 } from "./agenda-comun";
 import type { SabinaCtx } from "../tipos";
+import { apartadoVencido } from "@/lib/agenda/apartado";
 
 /** Cuántas horas se ofrecen como mucho: las más cercanas, no la rejilla entera. */
 export const TOPE_HUECOS = 5;
@@ -330,7 +331,10 @@ export async function leerOcupacion(
         endsAt: { gt: desde },
         ...(args.excluirCitaId ? { id: { not: args.excluirCitaId } } : {}),
       },
-      select: { doctorId: true, resourceId: true, startsAt: true, endsAt: true },
+      // `status` y `holdExpiresAt` solo para descartar abajo la cita apartada
+      // cuyo anticipo venció (WS1-T5). Se filtra en memoria con la misma regla
+      // que el resto de la agenda.
+      select: { doctorId: true, resourceId: true, startsAt: true, endsAt: true, status: true, holdExpiresAt: true },
     }),
     // WS1-T2 — los bloqueos del día. Se piden los de ESTE doctor y los de toda
     // la clínica; el alcance lo aplica `bloqueaEsteHueco` en `evaluarHora`.
@@ -352,16 +356,19 @@ export async function leerOcupacion(
     : [];
 
   const intervalo = (c: any): BusyInterval => ({ startsAt: new Date(c.startsAt), endsAt: new Date(c.endsAt) });
+  // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+  const ahora = new Date();
+  const vivas = citas.filter((c: any) => !apartadoVencido(c, ahora));
 
   return {
     doctorId: args.doctorId,
     bloqueos,
-    doctor: citas.filter((c: any) => c.doctorId === args.doctorId).map(intervalo),
+    doctor: vivas.filter((c: any) => c.doctorId === args.doctorId).map(intervalo),
     sillones: recursos.map((r: any) => ({
       id: r.id,
       nombre: r.name,
       horario: horarioDeSillon(filasHorario.filter((f: any) => f.resourceId === r.id)),
-      ocupado: citas.filter((c: any) => c.resourceId === r.id).map(intervalo),
+      ocupado: vivas.filter((c: any) => c.resourceId === r.id).map(intervalo),
     })),
   };
 }

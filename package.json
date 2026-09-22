@@ -106,6 +106,7 @@
     "test:active-clinic-modules": "tsx --test src/lib/clinical-shared/__tests__/get-active-clinic-modules.test.ts",
     "test:pediatrics-tab-state": "tsx --test src/lib/pediatrics/__tests__/tab-state.test.ts",
     "test:wa-booking": "tsx --test src/lib/whatsapp/bot/__tests__/booking.test.ts",
+    "test:anticipos": "tsx --test src/lib/anticipos/__tests__/core.test.ts src/lib/anticipos/__tests__/servicio.test.ts src/lib/anticipos/__tests__/mercadopago-wrapper.test.ts src/lib/whatsapp/bot/__tests__/booking-anticipo.test.ts",
     "test:wa-reminder-pick": "tsx --test src/lib/whatsapp/__tests__/reminder-pick.test.ts",
     "test:wa-permissions": "tsx --test src/lib/auth/__tests__/whatsapp-write-permission.test.ts",
     "test:wa-delivery": "tsx --test src/lib/whatsapp/__tests__/delivery-status.test.ts",

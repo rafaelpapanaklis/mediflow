@@ -37,7 +37,7 @@ export async function POST(
 
   const appt = await prisma.appointment.findUnique({
     where: { id: params.id },
-    select: { id: true, clinicId: true, patientId: true, startsAt: true, status: true },
+    select: { id: true, clinicId: true, patientId: true, startsAt: true, status: true, holdExpiresAt: true },
   });
 
   // Multi-tenant: la cita debe pertenecer a un link (patientId + clinicId) de la
@@ -52,6 +52,12 @@ export async function POST(
   // Idempotente: ya confirmada (independiente de la hora).
   if (appt.status === "CONFIRMED") {
     return NextResponse.json({ ok: true, status: "CONFIRMED", changed: false });
+  }
+
+  // WS1-T5 — una cita apartada esperando el anticipo se confirma SOLA al
+  // acreditarse el pago; «confirmar asistencia» aquí se saltaría el anticipo.
+  if (appt.status === "SCHEDULED" && appt.holdExpiresAt) {
+    return NextResponse.json({ error: "espera_anticipo" }, { status: 409 });
   }
 
   // Solo PENDING/SCHEDULED son confirmables; cualquier otro estado, conflicto.

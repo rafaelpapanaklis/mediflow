@@ -58,6 +58,7 @@ import type {
   AppointmentStatus,
   CreateAppointmentInput,
 } from "@/lib/agenda/types";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -596,6 +597,8 @@ async function findConflictingAppointment(
       overrideReason: null,
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt },
+      // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+      AND: [sinApartadoVencido()],
     },
     include: { patient: { select: { firstName: true, lastName: true, visibleUserIds: true } } },
     take: 1,

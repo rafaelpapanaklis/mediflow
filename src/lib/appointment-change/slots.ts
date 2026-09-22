@@ -24,6 +24,7 @@
 // pendientes y encola los nuevos en la misma transacción que mueve la cita.
 
 import { prisma } from "@/lib/prisma";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 /** Estados de cita que el paciente puede pedir cambiar desde el portal. */
 export const CHANGEABLE_STATUSES: string[] = ["PENDING", "SCHEDULED", "CONFIRMED"];
@@ -77,6 +78,8 @@ export async function isSlotFree(opts: IsSlotFreeOpts): Promise<boolean> {
       status: { notIn: ["CANCELLED", "NO_SHOW"] },
       startsAt: { lt: opts.endsAt },
       endsAt: { gt: opts.startsAt },
+      // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+      AND: [sinApartadoVencido()],
     },
     select: { id: true },
   });

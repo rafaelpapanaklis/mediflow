@@ -19,6 +19,7 @@ import { tzLocalToUtc, todayInTz } from "@/lib/agenda/time-utils";
 import type { PacienteBookingSlotsResponse } from "@/lib/patient-portal/types";
 import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,8 @@ export async function GET(req: NextRequest) {
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
         startsAt: { lt: dayEndUtc },
         endsAt: { gt: dayStartUtc },
+        // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+        AND: [sinApartadoVencido()],
       },
       select: { startsAt: true, endsAt: true },
     }),

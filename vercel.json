@@ -94,6 +94,10 @@
     {
       "path": "/api/cron/analytics-retention",
       "schedule": "30 9 * * *"
+    },
+    {
+      "path": "/api/cron/anticipos",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

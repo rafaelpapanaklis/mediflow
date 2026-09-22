@@ -116,6 +116,10 @@ export async function sweepAppointmentReminders(opts?: {
               lte: new Date(now.getTime() + (offset + lookaheadMin) * 60000),
             },
             status: { in: ["PENDING", "SCHEDULED", "CONFIRMED"] },
+            // WS1-T5 — una cita APARTADA (esperando anticipo, o ya vencida) no
+            // recibe recordatorio: todavía no es una cita. En cuanto se acredita
+            // el anticipo pasa a CONFIRMED sin apartado y entra al barrido.
+            OR: [{ holdExpiresAt: null }, { status: { not: "SCHEDULED" } }],
           },
           select: {
             id: true,

@@ -38,6 +38,7 @@ import {
 import type { ConfigClinica } from "@/lib/sabina/tools/agenda-comun";
 import { rangoDeCuando, sumarDias } from "./fechas";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 // Reexportado para que la ruta lo importe de un solo sitio.
 export { rangoDeCuando };
@@ -114,6 +115,8 @@ export async function buscarHuecosDelRango(args: BuscarHuecosArgs): Promise<Huec
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
         startsAt: { lt: rango.toUtc },
         endsAt: { gt: rango.fromUtc },
+        // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+        AND: [sinApartadoVencido()],
       },
       select: { doctorId: true, resourceId: true, startsAt: true, endsAt: true },
     }),

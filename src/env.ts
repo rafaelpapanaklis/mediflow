@@ -56,6 +56,19 @@ const envSchema = z.object({
   STRIPE_PRICE_ID_PRO: z.string().optional(),
   STRIPE_PRICE_ID_CLINIC: z.string().optional(),
   MERCADOPAGO_ACCESS_TOKEN: z.string().optional(),
+  // Anticipo por WhatsApp (WS1-T5): la APLICACIÓN de DaleControl en Mercado
+  // Pago, para conectar por OAuth la cuenta de cada clínica. Sin las dos, la
+  // función está apagada y la pantalla lo dice. Ver src/lib/anticipos/.
+  MERCADOPAGO_CLIENT_ID: z.string().optional(),
+  MERCADOPAGO_CLIENT_SECRET: z.string().optional(),
+  // Opcional: por defecto <NEXT_PUBLIC_APP_URL>/api/mercadopago/oauth/callback.
+  MERCADOPAGO_OAUTH_REDIRECT_URI: z.string().url().optional(),
+  // "1" = pide a MP tokens de PRUEBA al conectar (test_token=true). Solo para
+  // probar con cuentas de prueba; en producción, sin definir.
+  MERCADOPAGO_OAUTH_TEST_TOKEN: z.string().optional(),
+  // Firma x-signature del webhook de MP. Ya la leía el webhook con process.env;
+  // se declara aquí para que conste.
+  MERCADOPAGO_WEBHOOK_SECRET: z.string().optional(),
 
   // ── Email & mensajería ────────────────────────────────────────────
   RESEND_API_KEY: z.string().optional(),

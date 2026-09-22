@@ -23,6 +23,7 @@ import {
 import { notifyPatientChangeResolution } from "@/lib/appointment-change/notify";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
 
@@ -256,6 +257,8 @@ export async function POST(
           overrideReason: null,
           startsAt: { lt: proposedEndsAt },
           endsAt: { gt: proposedStartsAt },
+          // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+          AND: [sinApartadoVencido()],
         },
         select: { id: true },
       });

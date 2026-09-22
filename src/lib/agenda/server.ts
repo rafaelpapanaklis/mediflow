@@ -16,6 +16,7 @@ import {
   type ClinicTimeConfig,
   type AdminPeriod,
 } from "./time-utils";
+import { MOTIVO_APARTADO_LIBERADO, apartadoVencido } from "./apartado";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el MISMO include para poder enmascarar en una sola
@@ -82,11 +83,16 @@ export function appointmentToDTO(
   category: ClinicCategory,
   viewer?: VisibilityViewer | null,
 ): AgendaAppointmentDTO {
+  // WS1-T5 — una cita apartada cuyo anticipo venció ya liberó su hueco,
+  // aunque el cron todavía no la haya cancelado: la agenda la pinta y la
+  // cuenta como CANCELADA, que es lo que la base hará en cuanto alguien pise
+  // ese hueco (trigger appt_liberar_apartado_vencido).
+  const vencida = apartadoVencido(a);
   return {
     id: a.id,
     startsAt: a.startsAt.toISOString(),
     endsAt: a.endsAt.toISOString(),
-    status: a.status as AppointmentStatus,
+    status: (vencida ? "CANCELLED" : a.status) as AppointmentStatus,
     patient: maskedPatient(a.patient, viewer),
     doctor: a.doctor
       ? { id: a.doctor.id, shortName: professionalShortName(a.doctor, category) }
@@ -102,7 +108,7 @@ export function appointmentToDTO(
     checkedInAt: a.checkedInAt?.toISOString() ?? null,
     startedAt: a.startedAt?.toISOString() ?? null,
     completedAt: a.completedAt?.toISOString() ?? null,
-    cancelReason: a.cancelReason ?? null,
+    cancelReason: vencida ? MOTIVO_APARTADO_LIBERADO : a.cancelReason ?? null,
   };
 }
 

@@ -53,6 +53,7 @@ import {
 } from "@/lib/reminders/reschedule.server";
 import { notifyPatientChangeResolution } from "@/lib/appointment-change/notify";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
 
@@ -240,6 +241,8 @@ export async function POST(
             status: { notIn: ["CANCELLED", "NO_SHOW"] },
             startsAt: { lt: proposedEndsAt! },
             endsAt: { gt: proposedStartsAt! },
+            // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+            AND: [sinApartadoVencido()],
           },
           select: { id: true },
         });

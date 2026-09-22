@@ -3,15 +3,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPayment } from "@/lib/mercadopago";
 import { verifyAndCreditMpTopup } from "@/lib/ai-wallet/mercadopago";
+import { aplicarPagoDeAnticipo } from "@/lib/anticipos/servicio.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Webhook COMPARTIDO labs + proveedores + recargas del monedero IA. MercadoPago
-// llama el notification_url con `?ref=lab:<orderId>` / `?ref=sup:<orderId>` /
-// `?ref=aitopup:<topupId>` + el id del pago en el body `data.id` (o `id`). Cada
-// vendedor cobra a su propia cuenta, así que el token con el que consultamos el
-// pago sale de la orden (lab/supplier), nunca del body.
+// Webhook COMPARTIDO labs + proveedores + recargas del monedero IA + anticipos
+// de cita por WhatsApp. MercadoPago llama el notification_url con
+// `?ref=lab:<orderId>` / `?ref=sup:<orderId>` / `?ref=aitopup:<topupId>` /
+// `?ref=anticipo:<depositId>` + el id del pago en el body `data.id` (o `id`).
+// Cada vendedor cobra a su propia cuenta, así que el token con el que
+// consultamos el pago sale de la orden (lab/supplier) o de la clínica
+// (anticipo), nunca del body.
 //
 // Códigos de respuesta (MercadoPago SOLO reintenta si NO respondemos 2xx):
 //  · 200 — procesado O descartado por causa DETERMINISTA (ref/payload inválido,
@@ -58,6 +61,18 @@ export async function POST(req: NextRequest) {
     if (kind === "aitopup") {
       if (orderId && paymentId) {
         await verifyAndCreditMpTopup(orderId, paymentId);
+      }
+      return NextResponse.json({ received: true });
+    }
+
+    // ── Anticipo de cita por WhatsApp (WS1-T5) ───────────────────────────────
+    // Cobra la CLÍNICA, con el token OAuth de su cuenta. El pago se re-consulta
+    // a MP con ese token (nada del body se cree), se exige approved + ref exacto
+    // + monto + cuenta que cobró, y el saldo a favor se crea una sola vez por
+    // pago (índice único de mpPaymentId). Lanza solo en lo transitorio → 500.
+    if (kind === "anticipo") {
+      if (orderId && paymentId) {
+        await aplicarPagoDeAnticipo(orderId, paymentId);
       }
       return NextResponse.json({ received: true });
     }

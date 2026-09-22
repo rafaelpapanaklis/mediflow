@@ -9,6 +9,7 @@ import { getPatientPortalContext } from "@/lib/patient-portal/guard";
 import { resolveBookingPatient } from "@/lib/patient-portal/link";
 import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export async function POST(req: NextRequest) {
   try {
@@ -176,6 +177,8 @@ export async function POST(req: NextRequest) {
           overrideReason: null,
           startsAt:  { lt: endsAtBook },
           endsAt:    { gt: startsAtBook },
+          // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+          AND: [sinApartadoVencido()],
         },
         select: { doctorId: true },
       });

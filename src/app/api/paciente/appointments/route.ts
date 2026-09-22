@@ -28,6 +28,7 @@ import type {
   PacienteClinica,
   PacientePoliticaCambios,
 } from "@/lib/patient-portal/types";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ const citaSelect = {
   status: true,
   startsAt: true,
   endsAt: true,
+  holdExpiresAt: true,
   doctor: { select: { firstName: true, lastName: true } },
 };
 
@@ -49,6 +51,7 @@ type CitaRow = {
   status: string;
   startsAt: Date;
   endsAt: Date;
+  holdExpiresAt: Date | null;
   doctor: { firstName: string; lastName: string };
 };
 
@@ -62,6 +65,8 @@ function toCita(a: CitaRow, pendingChange: PacienteCambioPendiente | null): Paci
     endsAt: a.endsAt.toISOString(),
     doctorName: `${a.doctor.firstName} ${a.doctor.lastName}`,
     pendingChange,
+    // WS1-T5 — apartada esperando el anticipo: se confirma sola al pagarse.
+    esperaAnticipo: a.status === "SCHEDULED" && a.holdExpiresAt != null,
   };
 }
 
@@ -105,6 +110,8 @@ export async function GET() {
         patient: { deletedAt: null },
         startsAt: { gte: now },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        // WS1-T5 — la cita apartada cuyo anticipo venció ya no es una cita próxima.
+        AND: [sinApartadoVencido()],
       },
       orderBy: { startsAt: "asc" },
       select: citaSelect,
@@ -327,6 +334,8 @@ export async function POST(req: NextRequest) {
             doctorId,
             startsAt,
             status: { notIn: ["CANCELLED", "NO_SHOW"] },
+            // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+            AND: [sinApartadoVencido()],
           },
           select: { id: true },
         });

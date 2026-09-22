@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
   const appt = await prisma.appointment.findUnique({
     where: { confirmToken: token },
-    select: { id: true, startsAt: true, status: true },
+    select: { id: true, startsAt: true, status: true, holdExpiresAt: true },
   });
   // 404 genérico: no se distingue entre token inexistente o mal formado.
   if (!appt) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -34,6 +34,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "confirm") {
+    // WS1-T5 — la cita apartada esperando el anticipo solo la confirma el pago.
+    if (appt.status === "SCHEDULED" && appt.holdExpiresAt) {
+      return NextResponse.json({ error: "espera_anticipo" }, { status: 409 });
+    }
     if (appt.status === "PENDING" || appt.status === "SCHEDULED") {
       await prisma.appointment.update({
         where: { id: appt.id },

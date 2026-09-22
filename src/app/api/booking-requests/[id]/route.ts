@@ -13,6 +13,7 @@ import {
 } from "@/lib/booking-requests/server";
 import { findPatientsByWhatsAppPhone } from "@/lib/whatsapp/inbox-log";
 import { pickExistingPatientForBooking } from "@/lib/patients/patient-search-core";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
 
@@ -200,6 +201,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           overrideReason: null,
           startsAt: { lt: endsAt },
           endsAt: { gt: startsAt },
+          // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+          AND: [sinApartadoVencido()],
         },
         select: { doctorId: true },
       });

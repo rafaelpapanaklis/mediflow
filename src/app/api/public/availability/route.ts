@@ -5,6 +5,7 @@ import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
 import { partitionSlotsByOverlap, slotOverlapsBusy } from "@/lib/public-booking/slots";
 import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 // GET /api/public/availability?slug=my-clinic&date=2026-04-10&doctorId=xxx
 // No authentication required — public endpoint
@@ -125,6 +126,8 @@ export async function GET(req: NextRequest) {
         status:   { notIn: ["CANCELLED","NO_SHOW"] },
         overrideReason: null,
         ...(doctorId ? { doctorId } : {}),
+        // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+        AND: [sinApartadoVencido()],
       },
       // doctorId hace falta para el modo "cualquiera": hay que saber de QUIÉN es
       // cada cita ocupada, no solo que la clínica está ocupada a esa hora.
