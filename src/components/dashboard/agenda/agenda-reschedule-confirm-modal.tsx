@@ -5,6 +5,7 @@ import { X, Calendar, Clock, AlertTriangle } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { useT } from "@/i18n/i18n-provider";
+import { usePuedoAgendarEncima } from "@/components/dashboard/bloqueos/usar-politica-bloqueos";
 
 /** Lo mínimo del bloqueo del destino para avisar (WS1-T3). */
 export interface BloqueoDelDestino {
@@ -54,6 +55,12 @@ export function AgendaRescheduleConfirmModal({
   const originalDate = formatDateShort(originalStartsAt, timezone);
   const newTime = formatTimeInTz(newStartsAt, timezone);
   const newDate = formatDateShort(newStartsAt, timezone);
+  // Solo se pregunta si hay bloqueo en el destino. Con la clínica en «No»
+  // (Configuración → Horarios y bloqueos) no se puede soltar encima: se dice
+  // por qué y «Reagendar» se apaga. `null` = preguntando: también apagado.
+  const puedo = usePuedoAgendarEncima(open && bloqueo !== null);
+  const prohibido = bloqueo !== null && puedo === false;
+  const esperando = bloqueo !== null && puedo === null;
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o && !submitting) onCancel(); }}>
@@ -117,8 +124,19 @@ export function AgendaRescheduleConfirmModal({
                       : bloqueo.doctorNombre ?? t("agenda.bloqueos.confirmar.alcanceDoctorSinNombre")}
                   </div>
                   <div style={{ fontSize: 12, lineHeight: 1.45, color: "var(--text-2)", overflowWrap: "anywhere" }}>
-                    {t("agenda.bloqueos.confirmar.cerradaPara")}{" "}
-                    {t("agenda.bloqueos.confirmar.tuSiPuedes")}
+                    {prohibido ? (
+                      <>
+                        <strong style={{ fontWeight: 650, color: "var(--text-1)" }}>
+                          {t("agenda.bloqueos.confirmar.prohibido")}
+                        </strong>{" "}
+                        {t("agenda.bloqueos.confirmar.prohibidoQueHacer")}
+                      </>
+                    ) : (
+                      <>
+                        {t("agenda.bloqueos.confirmar.cerradaPara")}{" "}
+                        {t("agenda.bloqueos.confirmar.tuSiPuedes")}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -129,7 +147,7 @@ export function AgendaRescheduleConfirmModal({
             <ButtonNew variant="ghost" onClick={onCancel} disabled={submitting}>
               {t("common.cancel")}
             </ButtonNew>
-            <ButtonNew variant="primary" onClick={onConfirm} disabled={submitting}>
+            <ButtonNew variant="primary" onClick={onConfirm} disabled={submitting || prohibido || esperando}>
               {submitting ? t("agenda.rescheduleConfirm.rescheduling") : t("agenda.rescheduleConfirm.reschedule")}
             </ButtonNew>
           </footer>

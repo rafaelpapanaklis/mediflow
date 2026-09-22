@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { TeamClient } from "./team-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { horarioClinica } from "@/components/dashboard/horario-doctor/tipos";
 
 export const metadata: Metadata = { title: "Equipo — DaleControl" };
 
@@ -23,7 +24,12 @@ export default async function TeamPage() {
   // sin fila o con error → false = la pantalla de hoy, tal cual). Va en el
   // mismo Promise.all que la lista de equipo para no añadir un viaje sin
   // superponer; la respuesta además vive 60 s en memoria por clínica.
-  const [team, rediseno] = await Promise.all([
+  //
+  // + el horario de la CLÍNICA (ws1-t3, horario por doctor): la ventana
+  // «Horario» de cada doctor dice «sigue el horario de la clínica (Lun-Vie
+  // 9:00-19:00…)» y avisa de las horas que se salen de él. Tercera consulta
+  // del mismo Promise.all, con el clinicId de la sesión.
+  const [team, rediseno, horarios] = await Promise.all([
     prisma.user.findMany({
       where: { clinicId: user.clinicId },
       select: {
@@ -43,6 +49,11 @@ export default async function TeamPage() {
       orderBy: [{ role: "asc" }, { firstName: "asc" }],
     }),
     menuDosNivelesEncendido(user.clinicId),
+    prisma.clinicSchedule.findMany({
+      where: { clinicId: user.clinicId },
+      select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+      orderBy: { dayOfWeek: "asc" },
+    }),
   ]);
 
   return (
@@ -53,6 +64,7 @@ export default async function TeamPage() {
       currentUserRole={user.role}
       clinicName={user.clinic.name}
       rediseno={rediseno}
+      horarioClinica={horarioClinica(horarios)}
     />
   );
 }
