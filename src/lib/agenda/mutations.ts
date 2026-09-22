@@ -102,7 +102,8 @@ export interface RescheduleAppointmentInput {
 
 /** Aviso de fuera-de-horario/día cerrado (P1-13): la API ya no bloquea, avisa. */
 export interface ScheduleWarningDTO {
-  reason: "closed_day" | "before_open" | "after_close";
+  /** `blocked` = un bloqueo de agenda (WS1-T2). Ver `ScheduleViolation`. */
+  reason: "closed_day" | "before_open" | "after_close" | "blocked";
   message: string;
   openTime: string | null;
   closeTime: string | null;

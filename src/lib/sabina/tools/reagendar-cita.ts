@@ -144,11 +144,23 @@ export const reagendarCita = definirHerramienta<ParamsReagendarCita, DatosAccion
     // igual que el PATCH, que valida el horario del sillón que ya tenía sin mirar
     // si sigue activo (y la constraint cuenta todas sus citas).
     const sillonDeLaCita = ocupacionDia.sillones.find((s) => s.id === cita.resourceId) ?? null;
-    const ocupacion = { doctor: ocupacionDia.doctor, sillones: sillonDeLaCita ? [sillonDeLaCita] : [] };
+    const ocupacion = {
+      doctor: ocupacionDia.doctor,
+      sillones: sillonDeLaCita ? [sillonDeLaCita] : [],
+      // WS1-T2 — el doctor y los bloqueos se arrastran TAL CUAL de la lectura
+      // del día. Aquí se recorta la lista de sillones al de la cita, pero un
+      // bloqueo no depende del sillón: recortarlo dejaría reagendar dentro de
+      // un día cerrado.
+      doctorId: ocupacionDia.doctorId,
+      bloqueos: ocupacionDia.bloqueos,
+    };
 
-    const noDisponible = (causa: Parameters<typeof respuestaNoDisponible>[0]["causa"]) =>
+    const noDisponible = (
+      causa: Parameters<typeof respuestaNoDisponible>[0]["causa"],
+      motivoBloqueo?: string,
+    ) =>
       respuestaNoDisponible({
-        causa, fecha: p.nuevaFecha, hora: p.nuevaHora, duracion, clinica, ocupacion,
+        causa, motivoBloqueo, fecha: p.nuevaFecha, hora: p.nuevaHora, duracion, clinica, ocupacion,
         sillon: sillonDeLaCita ? { id: sillonDeLaCita.id, nombre: sillonDeLaCita.nombre } : null,
         doctor: cita.doctor, ahora,
       });
@@ -160,7 +172,10 @@ export const reagendarCita = definirHerramienta<ParamsReagendarCita, DatosAccion
       sillonId: sillonDeLaCita?.id ?? null,
       ahora: new Date(ahora.getTime() - pastToleranceMs(clinica.defaultSlotMinutes)),
     });
-    if (veredicto.ok === false) return noDisponible((veredicto as Extract<typeof veredicto, { ok: false }>).causa);
+    if (veredicto.ok === false) {
+      const no = veredicto as Extract<typeof veredicto, { ok: false }>;
+      return noDisponible(no.causa, no.motivoBloqueo);
+    }
 
     const despues = momento(inicio, fin, clinica.timezone, cita.doctor);
 

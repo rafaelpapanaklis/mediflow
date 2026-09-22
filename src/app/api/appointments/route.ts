@@ -20,6 +20,13 @@ import {
   todayInTz,
 } from "@/lib/agenda/time-utils";
 import { scheduleViolation } from "@/lib/agenda/clinic-hours";
+import { bloqueaEsteHueco, avisoDeBloqueo } from "@/lib/agenda-bloqueos/core";
+// El GET solo LEE: se importa del lector y no de `service.ts` (que escribe
+// y lleva `server-only`), para que esta ruta siga siendo montable desde
+// `tsx --test` con mocks de módulo, como hace reglas-servidor.test.ts.
+import { ctxDeSesion } from "@/lib/agenda-bloqueos/core-ctx";
+import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import {
   bookingRuleBody,
   newAppointmentRuleViolation,
@@ -110,7 +117,9 @@ export async function GET(req: NextRequest) {
     clinicId: session.clinic.id,
   };
 
-  const [appointments, doctors, resources, pendingValidation, waitlistCount] =
+  // SEIS consultas en el `Promise.all` — el tope de la casa son 7 antes de que
+  // el pooler empiece a dar timeouts.
+  const [appointments, doctors, resources, pendingValidation, waitlistCount, bloqueos] =
     await Promise.all([
       fetchAppointmentsForDay(dateISO, session.timeConfig, {
         clinicId: session.clinic.id,
@@ -131,6 +140,14 @@ export async function GET(req: NextRequest) {
         viewer,
       ),
       fetchWaitlistCount(session.clinic.id),
+      // WS1-T2 — los bloqueos del MISMO rango que las citas, para que ws1-t3
+      // pinte la franja sin pedir nada aparte y sin que las dos cosas se
+      // desincronicen al navegar entre días. `listarBloqueos` aplica ya el
+      // alcance por rol: un DOCTOR recibe los suyos y los de la clínica.
+      listarBloqueos(ctxDeSesion(session), {
+        desde: range.startUtc.toISOString(),
+        hasta: range.endUtc.toISOString(),
+      }),
     ]);
 
   const response: AgendaDayResponse = {
@@ -149,6 +166,7 @@ export async function GET(req: NextRequest) {
     resources,
     pendingValidation,
     waitlistCount,
+    bloqueos,
   };
 
   return NextResponse.json(response, {
@@ -213,6 +231,28 @@ export async function POST(req: NextRequest) {
     session.clinic,
     session.clinic.schedules,
   );
+
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // WS1-T2 — AL STAFF SE LE AVISA, NO SE LE PROHÍBE.
+  //
+  // Mismo criterio que el aviso de fuera-de-horario de arriba, y por la misma
+  // razón: quien está en el mostrador con el paciente delante sabe algo que el
+  // sistema no. Un 422 aquí obligaría a RETIRAR el bloqueo entero —abriéndoselo
+  // de paso al bot, a la web, al portal y a Sabina— para meter una sola cita.
+  //
+  // Viaja por `scheduleWarning` y no por un campo nuevo: las pantallas del
+  // staff ya leen ese campo y sacan el toast, y esas pantallas son de ws1-t3.
+  // Si hay bloqueo Y fuera-de-horario, manda el bloqueo: lleva escrito el
+  // motivo, y el otro solo dice una hora.
+  const bloqueosDelHueco = await leerBloqueosDelRango(
+    session.clinic.id,
+    startsAt,
+    endsAt,
+    { doctorIds: [body.doctorId] },
+  );
+  const bloqueoEncima = bloqueaEsteHueco(bloqueosDelHueco, startsAt, endsAt, body.doctorId);
+  const avisoHorario = bloqueoEncima ? avisoDeBloqueo(bloqueoEncima) : hoursWarning;
 
   if (body.overrideReason && !canOverrideOverlap(session.user.role)) {
     return NextResponse.json(
@@ -395,7 +435,8 @@ export async function POST(req: NextRequest) {
       {
         appointment: appointmentToDTO(created, session.clinic.category),
         // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
-        scheduleWarning: hoursWarning,
+        // WS1-T2: si además hay un bloqueo encima, manda el del bloqueo.
+        scheduleWarning: avisoHorario,
         // null = nadie pidió avisar. Si se pidió: { enviado } o { enviado:false, motivo }.
         whatsapp,
       },

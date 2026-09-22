@@ -43,24 +43,24 @@ model Clinic {
   updatedAt       DateTime       @updatedAt
 
   // WhatsApp (legacy Meta Cloud API)
-  waPhoneNumberId  String? @unique
-  waAccessToken    String?
+  waPhoneNumberId     String? @unique
+  waAccessToken       String?
   waBusinessAccountId String? // WhatsApp Business Account ID (coexistence)
   waConnMethod        String? // "manual" | "coexistence" | "embedded"
-  waConnected      Boolean @default(false)
-  waReminderActive Boolean @default(true)
-  waReminder24h    Boolean @default(true)
-  waReminder1h     Boolean @default(false)
-  waReminderMsg    String?
+  waConnected         Boolean @default(false)
+  waReminderActive    Boolean @default(true)
+  waReminder24h       Boolean @default(true)
+  waReminder1h        Boolean @default(false)
+  waReminderMsg       String?
   /// Plantillas aprobadas de ESTA clínica en Meta, por tipo de mensaje:
   /// { "reminder": { "name": "recordatorio_cita", "lang": "es_MX" }, … }.
   /// La clave es un WhatsAppSendKind (src/lib/whatsapp/system-message.ts).
   /// Sin plantilla para un tipo, ese aviso NO sale fuera de la ventana de 24 h.
-  waTemplates      Json?
+  waTemplates         Json?
   /// La WABA de la clínica tiene método de pago válido. Meta le cobra a ELLA
   /// cada plantilla; sin tarjeta el envío falla con 131042. Se pone true al
   /// primer envío de plantilla aceptado y vuelve a false ante ese error.
-  waBillingOk      Boolean @default(false)
+  waBillingOk         Boolean @default(false)
 
   // Inbox unificado — Twilio Conversations + Postmark Inbound
   twilioAccountSid     String? // SID de la cuenta Twilio (admin la conecta en /settings/integrations)
@@ -80,7 +80,7 @@ model Clinic {
   rfcEmisor        String?
   regimenFiscal    String?
   cpEmisor         String?
-  facturApiEnabled Boolean @default(false)
+  facturApiEnabled Boolean   @default(false)
   csdUploaded      Boolean   @default(false) // CSD (Certificado de Sello Digital) cargado en Facturapi
   csdValidUntil    DateTime? // Vigencia del CSD (expires_at que reporta Facturapi)
   // Impuestos con los que se pre-llena el timbrado de esta clínica:
@@ -132,9 +132,9 @@ model Clinic {
 
   // CRM — automatizaciones (mejoras CRM jun 2026). Default OFF: ningún cron
   // envía nada hasta que la clínica active el toggle desde Configuración.
-  birthdayMsgActive      Boolean   @default(false) // mensaje de cumpleaños por WhatsApp
-  postApptFollowupActive Boolean   @default(false) // seguimiento post-cita por WhatsApp
-  noShowTaskActive       Boolean   @default(false) // tarea de staff por riesgo de no-show
+  birthdayMsgActive      Boolean @default(false) // mensaje de cumpleaños por WhatsApp
+  postApptFollowupActive Boolean @default(false) // seguimiento post-cita por WhatsApp
+  noShowTaskActive       Boolean @default(false) // tarea de staff por riesgo de no-show
 
   // Cambios de cita desde el portal del paciente (WS1-T5). Si autoApprove está
   // OFF, las solicitudes quedan PENDING hasta que la clínica las resuelva.
@@ -158,7 +158,7 @@ model Clinic {
   landingTagline      String?
 
   // Landing — selector de plantilla pública (T1 fundación)
-  landingTemplate        String?  @default("classic")
+  landingTemplate        String? @default("classic")
   landingYearsExperience Int?
   landingPatients        String?
 
@@ -176,7 +176,7 @@ model Clinic {
   landingSections   Json?
   landingPhotos     Json?
   landingUrgentText String?
-  landingMsiPlazos  Int[]  @default([])
+  landingMsiPlazos  Int[]   @default([])
 
   // Landing v3 — TODO el texto de la mini-web editable, no solo los títulos de
   // sección. Requiere sql/landing-copy.sql aplicado en Supabase.
@@ -185,7 +185,7 @@ model Clinic {
   //     clave que ningún manifiesto declara NO se guarda: nada de bolsa libre.
   //     Los textos por defecto de la plantilla nunca se materializan aquí —
   //     vaciar un campo borra su clave y vuelve a salir el literal real.
-  landingCopy       Json?
+  landingCopy Json?
 
   bookingRequests BookingRequest[]
 
@@ -220,54 +220,54 @@ model Clinic {
   // null = fallback a los campos legacy waReminderActive/waReminder24h/waReminder1h/waReminderMsg.
   reminderSettings Json?
 
-  users                User[]
-  patients             Patient[]
-  appointments         Appointment[]
+  users                     User[]
+  patients                  Patient[]
+  appointments              Appointment[]
   appointmentChangeRequests AppointmentChangeRequest[]
-  records              MedicalRecord[]
-  invoices             Invoice[]
-  cashRegisters        CashRegister[]
-  schedules            ClinicSchedule[]
-  inventory            InventoryItem[]
-  reminders            WhatsAppReminder[]
-  cfdis                CfdiRecord[]
-  cfdiUsages           CfdiUsage[]
-  treatments           TreatmentPlan[]
-  paymentPlans         PaymentPlan[]
-  patientCredits       PatientCredit[]
-  patientNotifications PatientNotification[]
-  consentForms         ConsentForm[]
-  periodontalRecords   PeriodontalRecord[]
-  subscriptionInvoices SubscriptionInvoice[]
-  files                PatientFile[]
-  auditLogs            AuditLog[]
-  beforeAfterPhotos    BeforeAfterPhoto[]
-  servicePackages      ServicePackage[]
-  formulaRecords       FormulaRecord[]
-  bodyMapAnnotations   BodyMapAnnotation[]
-  walkInQueue          WalkInQueue[]
-  resourceBookings     ResourceBooking[]
-  procedureCatalog     ProcedureCatalog[]
-  xrayAnalyses         XrayAnalysis[]
-  adminNotes           AdminClinicNote[]
-  prescriptions        Prescription[]
-  resources            Resource[]
-  waitlistEntries      WaitlistEntry[]
-  inboxThreads         InboxThread[]
-  whatsAppBotConfig    WhatsAppBotConfig?
-  remindersList        Reminder[]
-  clinicLayout         ClinicLayout?
+  records                   MedicalRecord[]
+  invoices                  Invoice[]
+  cashRegisters             CashRegister[]
+  schedules                 ClinicSchedule[]
+  inventory                 InventoryItem[]
+  reminders                 WhatsAppReminder[]
+  cfdis                     CfdiRecord[]
+  cfdiUsages                CfdiUsage[]
+  treatments                TreatmentPlan[]
+  paymentPlans              PaymentPlan[]
+  patientCredits            PatientCredit[]
+  patientNotifications      PatientNotification[]
+  consentForms              ConsentForm[]
+  periodontalRecords        PeriodontalRecord[]
+  subscriptionInvoices      SubscriptionInvoice[]
+  files                     PatientFile[]
+  auditLogs                 AuditLog[]
+  beforeAfterPhotos         BeforeAfterPhoto[]
+  servicePackages           ServicePackage[]
+  formulaRecords            FormulaRecord[]
+  bodyMapAnnotations        BodyMapAnnotation[]
+  walkInQueue               WalkInQueue[]
+  resourceBookings          ResourceBooking[]
+  procedureCatalog          ProcedureCatalog[]
+  xrayAnalyses              XrayAnalysis[]
+  adminNotes                AdminClinicNote[]
+  prescriptions             Prescription[]
+  resources                 Resource[]
+  waitlistEntries           WaitlistEntry[]
+  inboxThreads              InboxThread[]
+  whatsAppBotConfig         WhatsAppBotConfig?
+  remindersList             Reminder[]
+  clinicLayout              ClinicLayout?
   // Analytics (Push 1)
-  weeklyInsights       WeeklyInsight[]
-  tvDisplays           TVDisplay[]
+  weeklyInsights            WeeklyInsight[]
+  tvDisplays                TVDisplay[]
   // Compliance Fase C
-  referrals            Referral[]
+  referrals                 Referral[]
   // Marketplace de módulos (Sprint 1) — 1:N con módulos comprados,
   // logs de uso, órdenes de checkout y 1:1 con carrito persistente.
-  clinicModules        ClinicModule[]
-  moduleUsageLogs      ModuleUsageLog[]
-  orders               Order[]
-  cart                 Cart?
+  clinicModules             ClinicModule[]
+  moduleUsageLogs           ModuleUsageLog[]
+  orders                    Order[]
+  cart                      Cart?
 
   // Endodontics module — see docs/marketplace/research/endodoncia/SPEC.md §4
   endodonticDiagnoses  EndodonticDiagnosis[]
@@ -335,13 +335,13 @@ model Clinic {
 
   // Proveedores / Compras (marketplace B2B) — el proveedor es global; la
   // clínica solo tiene carritos, pedidos y chats hacia proveedores.
-  supplierCarts   SupplierCart[]
-  supplierOrders  SupplierOrder[]
-  supplierChats   SupplierChatThread[]
+  supplierCarts     SupplierCart[]
+  supplierOrders    SupplierOrder[]
+  supplierChats     SupplierChatThread[]
   supplierReviews   SupplierReview[]
   supplierFavorites SupplierFavorite[]
-  dentalLabOrders DentalLabOrder[]
-  dentalLabChats  DentalLabChatThread[]
+  dentalLabOrders   DentalLabOrder[]
+  dentalLabChats    DentalLabChatThread[]
 
   // Afiliados / Referidos — la clínica fue referida por un afiliado (opcional).
   // Se setea SOLO en el alta vía ?ref validado; nunca desde el cliente después.
@@ -371,6 +371,10 @@ model Clinic {
   // feature. NO confundir con AiUsageEvent, que pertenece al monedero prepago
   // del bot de WhatsApp. Requiere sql/ai-quota-usage.sql aplicado en Supabase.
   aiQuotaUsage AiQuotaUsage[]
+
+  // Bloqueos de agenda (WS1-T2): los días y las horas en que NO entra nada.
+  // Ver `model AgendaBlock` al final de este archivo.
+  agendaBlocks AgendaBlock[]
 
   // Manager de cuenta — la persona real de DaleControl que atiende a esta
   // clínica por WhatsApp (se asigna desde /admin/account-managers). Nullable:
@@ -499,26 +503,26 @@ enum SupplierChatSender {
 }
 
 model Supplier {
-  id             String         @id @default(cuid())
-  businessName   String
-  slug           String         @unique
-  rfc            String?        @db.VarChar(13)
-  email          String
-  phone          String?
-  address        String?
-  city           String?
-  state          String?
-  logoUrl        String?
-  description    String?        @db.Text
-  categories     String[]       @default([])
-  paymentMethods String[]       @default([])
-  payTransferEnabled    Boolean @default(false)
-  payCashEnabled        Boolean @default(false)
-  payMercadoPagoEnabled Boolean @default(false)
+  id                    String         @id @default(cuid())
+  businessName          String
+  slug                  String         @unique
+  rfc                   String?        @db.VarChar(13)
+  email                 String
+  phone                 String?
+  address               String?
+  city                  String?
+  state                 String?
+  logoUrl               String?
+  description           String?        @db.Text
+  categories            String[]       @default([])
+  paymentMethods        String[]       @default([])
+  payTransferEnabled    Boolean        @default(false)
+  payCashEnabled        Boolean        @default(false)
+  payMercadoPagoEnabled Boolean        @default(false)
   mpAccessToken         String?
-  status         SupplierStatus @default(PENDING)
-  approvedAt     DateTime?
-  rejectedReason String?
+  status                SupplierStatus @default(PENDING)
+  approvedAt            DateTime?
+  rejectedReason        String?
 
   // Perfil extendido + reputación (T1 mejoras proveedores)
   whatsapp       String?
@@ -529,14 +533,14 @@ model Supplier {
   rating         Float   @default(0)
   ratingCount    Int     @default(0)
 
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  users    SupplierUser[]
-  products SupplierProduct[]
-  orders   SupplierOrder[]
-  carts    SupplierCart[]
-  chats    SupplierChatThread[]
+  users        SupplierUser[]
+  products     SupplierProduct[]
+  orders       SupplierOrder[]
+  carts        SupplierCart[]
+  chats        SupplierChatThread[]
   bankAccounts SupplierBankAccount[]
   reviews      SupplierReview[]
   favorites    SupplierFavorite[]
@@ -631,21 +635,21 @@ model SupplierCartItem {
 }
 
 model SupplierOrder {
-  id            String                @id @default(cuid())
-  orderNumber   String                @unique
-  clinicId      String
-  supplierId    String
-  status        SupplierOrderStatus   @default(PENDING)
-  paymentStatus SupplierPaymentStatus @default(UNPAID)
-  paymentMethod String?
+  id             String                @id @default(cuid())
+  orderNumber    String                @unique
+  clinicId       String
+  supplierId     String
+  status         SupplierOrderStatus   @default(PENDING)
+  paymentStatus  SupplierPaymentStatus @default(UNPAID)
+  paymentMethod  String?
   mpPreferenceId String?
   mpPaymentId    String?
   paidAt         DateTime?
-  subtotal      Float
-  total         Float
-  notes         String?               @db.Text
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  subtotal       Float
+  total          Float
+  notes          String?               @db.Text
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
   clinic   Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
@@ -916,32 +920,32 @@ model DentalLabService {
 }
 
 model DentalLabOrder {
-  id            String                 @id @default(cuid())
-  orderNumber   String                 @unique
-  clinicId      String
-  labId         String
-  serviceId     String?
-  patientId     String?
-  patientName   String?
-  internalRef   String?
-  status        DentalLabOrderStatus   @default(SOLICITADA)
-  notes         String?                @db.Text
-  basePrice     Float                  @default(0)
-  extrasTotal   Float                  @default(0)
-  total         Float                  @default(0)
-  paymentStatus DentalLabPaymentStatus @default(UNPAID)
-  paymentMethod String?
-  priority      Boolean                @default(false)
-  pickupAt      DateTime?
-  etaAt         DateTime?
-  courier       Json?
+  id             String                 @id @default(cuid())
+  orderNumber    String                 @unique
+  clinicId       String
+  labId          String
+  serviceId      String?
+  patientId      String?
+  patientName    String?
+  internalRef    String?
+  status         DentalLabOrderStatus   @default(SOLICITADA)
+  notes          String?                @db.Text
+  basePrice      Float                  @default(0)
+  extrasTotal    Float                  @default(0)
+  total          Float                  @default(0)
+  paymentStatus  DentalLabPaymentStatus @default(UNPAID)
+  paymentMethod  String?
+  priority       Boolean                @default(false)
+  pickupAt       DateTime?
+  etaAt          DateTime?
+  courier        Json?
   mpPreferenceId String?
   mpPaymentId    String?
   paidAt         DateTime?
-  deliveredAt   DateTime?
-  cancelledAt   DateTime?
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
+  deliveredAt    DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   clinic  Clinic                @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   lab     DentalLab             @relation(fields: [labId], references: [id], onDelete: Restrict)
@@ -1163,23 +1167,23 @@ model User {
   canAccessCaja Boolean @default(false)
   cajaPinHash   String?
 
-  clinic             Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  appointments       Appointment[]
-  records            MedicalRecord[]
-  primaryPatients    Patient[]           @relation("PrimaryDoctor")
-  treatments         TreatmentPlan[]
-  periodontalRecords PeriodontalRecord[]
-  auditLogs          AuditLog[]
-  adminNotesAuthored AdminClinicNote[]
-  prescriptions      Prescription[]
-  apptsOverriddenBy  Appointment[]       @relation("ApptOverriddenBy")
+  clinic                 Clinic                     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments           Appointment[]
+  records                MedicalRecord[]
+  primaryPatients        Patient[]                  @relation("PrimaryDoctor")
+  treatments             TreatmentPlan[]
+  periodontalRecords     PeriodontalRecord[]
+  auditLogs              AuditLog[]
+  adminNotesAuthored     AdminClinicNote[]
+  prescriptions          Prescription[]
+  apptsOverriddenBy      Appointment[]              @relation("ApptOverriddenBy")
   resolvedChangeRequests AppointmentChangeRequest[] @relation("ApptChangeResolvedBy")
-  waitlistCreated    WaitlistEntry[]     @relation("WaitlistCreatedBy")
-  waitlistPreferred  WaitlistEntry[]     @relation("WaitlistPreferredDoctor")
-  inboxAssigned      InboxThread[]       @relation("InboxAssignee")
-  inboxSent          InboxMessage[]
-  remindersCreated   Reminder[]          @relation("ReminderCreator")
-  remindersAssigned  Reminder[]          @relation("ReminderAssignee")
+  waitlistCreated        WaitlistEntry[]            @relation("WaitlistCreatedBy")
+  waitlistPreferred      WaitlistEntry[]            @relation("WaitlistPreferredDoctor")
+  inboxAssigned          InboxThread[]              @relation("InboxAssignee")
+  inboxSent              InboxMessage[]
+  remindersCreated       Reminder[]                 @relation("ReminderCreator")
+  remindersAssigned      Reminder[]                 @relation("ReminderAssignee")
 
   // Endodontics module — see docs/marketplace/research/endodoncia/SPEC.md §4
   endoDiagnosisDoctor EndodonticDiagnosis[] @relation("EndoDiagnosisDoctor")
@@ -1239,6 +1243,13 @@ model User {
   // Lo que Sabina puede hacer en nombre de este usuario. Relación virtual: no
   // añade columnas a "users" (ver el porqué en SabinaUserPermission).
   sabinaPermissions SabinaUserPermission?
+
+  // Bloqueos de agenda (WS1-T2). Tres relaciones distintas y las tres hacen
+  // falta: de QUIÉN es el hueco cerrado (`doctorId`), quién lo cerró y quién
+  // lo retiró. Ver `model AgendaBlock`.
+  agendaBlocksAsDoctor AgendaBlock[] @relation("AgendaBlockDoctor")
+  agendaBlocksCreated  AgendaBlock[] @relation("AgendaBlockCreatedBy")
+  agendaBlocksDeleted  AgendaBlock[] @relation("AgendaBlockDeletedBy")
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -1372,32 +1383,32 @@ model Patient {
   deletedAt    DateTime?
   anonymizedAt DateTime?
 
-  clinic              Clinic               @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  primaryDoctor       User?                @relation("PrimaryDoctor", fields: [primaryDoctorId], references: [id])
-  appointments        Appointment[]
+  clinic                    Clinic                     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  primaryDoctor             User?                      @relation("PrimaryDoctor", fields: [primaryDoctorId], references: [id])
+  appointments              Appointment[]
   appointmentChangeRequests AppointmentChangeRequest[]
-  records             MedicalRecord[]
-  invoices            Invoice[]
-  files               PatientFile[]
-  treatments          TreatmentPlan[]
-  paymentPlans        PaymentPlan[]
-  patientCredits      PatientCredit[]
-  consentForms        ConsentForm[]
-  periodontalRecords  PeriodontalRecord[]
-  beforeAfterPhotos   BeforeAfterPhoto[]
-  formulaRecords      FormulaRecord[]
-  bodyMapAnnotations  BodyMapAnnotation[]
-  packageRedemptions  PackageRedemption[]
-  xrayAnalyses        XrayAnalysis[]
-  prescriptions       Prescription[]
-  waitlistEntries     WaitlistEntry[]
-  odontogramEntries   OdontogramEntry[]
-  odontogramSnapshots OdontogramSnapshot[]
-  inboxThreads        InboxThread[]
-  patientReminders    Reminder[]
-  referrals           Referral[]
-  accountLinks        PatientAccountLink[]
-  notifications       PatientNotification[]
+  records                   MedicalRecord[]
+  invoices                  Invoice[]
+  files                     PatientFile[]
+  treatments                TreatmentPlan[]
+  paymentPlans              PaymentPlan[]
+  patientCredits            PatientCredit[]
+  consentForms              ConsentForm[]
+  periodontalRecords        PeriodontalRecord[]
+  beforeAfterPhotos         BeforeAfterPhoto[]
+  formulaRecords            FormulaRecord[]
+  bodyMapAnnotations        BodyMapAnnotation[]
+  packageRedemptions        PackageRedemption[]
+  xrayAnalyses              XrayAnalysis[]
+  prescriptions             Prescription[]
+  waitlistEntries           WaitlistEntry[]
+  odontogramEntries         OdontogramEntry[]
+  odontogramSnapshots       OdontogramSnapshot[]
+  inboxThreads              InboxThread[]
+  patientReminders          Reminder[]
+  referrals                 Referral[]
+  accountLinks              PatientAccountLink[]
+  notifications             PatientNotification[]
 
   // Pediatrics module — see docs/marketplace/research/odontopediatria/SPEC.md §5
   pediatricRecord      PediatricRecord?
@@ -1789,22 +1800,22 @@ enum AppointmentStatus {
 }
 
 model AppointmentChangeRequest {
-  id            String  @id @default(cuid())
-  clinicId      String
-  appointmentId String
-  patientId     String
-  accountId     String // PatientAccount.id que solicitó (audit de quién pidió)
-  type          String // "RESCHEDULE" | "CANCEL" — String a propósito, sin enum PG
-  status        String  @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
-  reason        String? @db.VarChar(500)
+  id               String    @id @default(cuid())
+  clinicId         String
+  appointmentId    String
+  patientId        String
+  accountId        String // PatientAccount.id que solicitó (audit de quién pidió)
+  type             String // "RESCHEDULE" | "CANCEL" — String a propósito, sin enum PG
+  status           String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  reason           String?   @db.VarChar(500)
   proposedStartsAt DateTime? @db.Timestamptz(6)
   proposedEndsAt   DateTime? @db.Timestamptz(6)
-  autoApproved   Boolean   @default(false)
-  resolvedById   String?
-  resolvedAt     DateTime? @db.Timestamptz(6)
-  resolutionNote String?   @db.VarChar(500)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  autoApproved     Boolean   @default(false)
+  resolvedById     String?
+  resolvedAt       DateTime? @db.Timestamptz(6)
+  resolutionNote   String?   @db.VarChar(500)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
@@ -2013,10 +2024,10 @@ model CfdiRecord {
 /// clínica y marca `billedAt` (idempotencia: un periodo se cobra una sola vez).
 /// Requiere sql/cfdi-quotas.sql APLICADO antes de deployar.
 model CfdiUsage {
-  id            String @id @default(cuid())
+  id            String    @id @default(cuid())
   clinicId      String
   period        String // "YYYY-MM" en la zona horaria de la clínica
-  stamped       Int    @default(0)
+  stamped       Int       @default(0)
   // ── Estado de cobro del excedente del periodo (lo escribe el cron) ──
   // null = sin procesar aún · "none" = sin excedente · "invoice_item" = sumado a
   // la próxima mensualidad de Stripe · "charged" = cobro off-session pagado ·
@@ -2059,8 +2070,8 @@ model Invoice {
 
   // Doctor atribuido para reportes por médico en Caja + IVA configurable por factura.
   doctorId    String?
-  taxRate     Float    @default(16)
-  taxIncluded Boolean  @default(true)
+  taxRate     Float   @default(16)
+  taxIncluded Boolean @default(true)
 
   clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -2353,20 +2364,20 @@ enum FileCategory {
 
 // ── Payment Plans ─────────────────────────────────────────────────────
 model PaymentPlan {
-  id           String           @id @default(cuid())
+  id           String   @id @default(cuid())
   clinicId     String
   patientId    String
   invoiceId    String?
   name         String
   totalAmount  Float
-  downPayment  Float            @default(0)
-  installments Int              @default(12)
-  frequency    String           @default("MONTHLY") // WEEKLY | BIWEEKLY | MONTHLY — TEXT en prod (sql/migration_features6.sql; el type PaymentFrequency nunca existió)
-  startDate    DateTime         @default(now())
+  downPayment  Float    @default(0)
+  installments Int      @default(12)
+  frequency    String   @default("MONTHLY") // WEEKLY | BIWEEKLY | MONTHLY — TEXT en prod (sql/migration_features6.sql; el type PaymentFrequency nunca existió)
+  startDate    DateTime @default(now())
   notes        String?
-  status       String           @default("ACTIVE") // ACTIVE | COMPLETED | CANCELLED | OVERDUE — TEXT en prod (el type PlanStatus nunca existió)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  status       String   @default("ACTIVE") // ACTIVE | COMPLETED | CANCELLED | OVERDUE — TEXT en prod (el type PlanStatus nunca existió)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   clinic   Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient  Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -2564,7 +2575,7 @@ model AuditLog {
   // "admin" (AdminUser de plataforma). actorAdminId referencia AdminUser.id SIN
   // FK estricta (a propósito): la bitácora no se acopla al panel y los borrados
   // de AdminUser no la rompen.
-  actorType    String?  @default("staff")
+  actorType    String? @default("staff")
   actorAdminId String?
 
   // NOM-024 §6.3.5 — la bitácora NO se destruye al borrar la clínica. La FK
@@ -2588,16 +2599,16 @@ model AuditLog {
 // única (env ADMIN_SECRET_TOKEN) por sesiones con identidad + revocación.
 // GLOBAL: NO lleva clinicId, queda fuera del RLS por clínica a propósito.
 model AdminUser {
-  id           String         @id @default(cuid())
-  email        String         @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
   passwordHash String
   totpSecret   String?
-  totpEnabled  Boolean        @default(false)
-  role         String         @default("SUPER_ADMIN")
-  isActive     Boolean        @default(true)
-  createdAt    DateTime       @default(now())
+  totpEnabled  Boolean  @default(false)
+  role         String   @default("SUPER_ADMIN")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
 
-  sessions     AdminSession[]
+  sessions AdminSession[]
 
   @@map("admin_users")
 }
@@ -2614,7 +2625,7 @@ model AdminSession {
   expiresAt   DateTime
   revokedAt   DateTime?
 
-  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
 
   @@index([adminUserId])
   @@map("admin_sessions")
@@ -2653,7 +2664,7 @@ model InventoryHistory {
 }
 
 model WhatsAppReminder {
-  id            String                 @id @default(cuid())
+  id            String    @id @default(cuid())
   clinicId      String
   appointmentId String? // null for non-appointment reminders (recalls)
   patientPhone  String? // for recall reminders without appointment
@@ -2662,14 +2673,14 @@ model WhatsAppReminder {
   // diccionario correspondiente. Ej: { installmentNumber, daysOverdue, … }.
   // Null para mensajes legacy o templates sin argumentos.
   payload       Json?
-  type          String                 @default("APPOINTMENT") // APPOINTMENT | RECALL | ENDO | PERIO | ORTHO | IMPLANT
-  status        String                 @default("PENDING") // PENDING | SENT | FAILED | CANCELLED — TEXT en prod (el type Postgres nunca existió); filas legacy con 'ACTIVE' = pendiente
+  type          String    @default("APPOINTMENT") // APPOINTMENT | RECALL | ENDO | PERIO | ORTHO | IMPLANT
+  status        String    @default("PENDING") // PENDING | SENT | FAILED | CANCELLED — TEXT en prod (el type Postgres nunca existió); filas legacy con 'ACTIVE' = pendiente
   sentAt        DateTime?
   errorMsg      String?
-  scheduledFor  DateTime               @default(now())
+  scheduledFor  DateTime  @default(now())
   patientReply  String?
   repliedAt     DateTime?
-  createdAt     DateTime               @default(now())
+  createdAt     DateTime  @default(now())
 
   clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
@@ -2801,12 +2812,12 @@ model ResourceBooking {
 }
 
 model ProcedureCatalog {
-  id          String    @id @default(cuid())
+  id          String      @id @default(cuid())
   clinicId    String
   name        String
   code        String? // Llave interna del odontograma (ODO_*, ver src/lib/odontogram/snapshot.ts). NO es un código SAT y el panel no la escribe.
   /// NOM-024 — código clínico CIE-9-MC del procedimiento (separado del SAT)
-  cieCode     String?   @db.VarChar(8)
+  cieCode     String?     @db.VarChar(8)
   category    String // "general", "dental", "aesthetic", etc.
   basePrice   Float
   /// Gasto: lo que a la clínica le CUESTA hacer el procedimiento (materiales,
@@ -2815,11 +2826,11 @@ model ProcedureCatalog {
   cost        Float?
   duration    Int? // minutes
   description String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  cie9        Cie9Code? @relation(fields: [cieCode], references: [code])
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  cie9        Cie9Code?   @relation(fields: [cieCode], references: [code])
   quoteItems  QuoteItem[]
 
   @@index([clinicId, isActive])
@@ -3583,24 +3594,24 @@ enum AffiliateStatus {
 }
 
 model Affiliate {
-  id            String          @id @default(cuid())
-  name          String
-  slug          String          @unique
-  email         String          @unique
-  status        AffiliateStatus @default(PENDING)
-  approvedAt    DateTime?
-  referralCode  String          @unique
-  commissionPct Float           @default(20)
+  id                   String          @id @default(cuid())
+  name                 String
+  slug                 String          @unique
+  email                String          @unique
+  status               AffiliateStatus @default(PENDING)
+  approvedAt           DateTime?
+  referralCode         String          @unique
+  commissionPct        Float           @default(20)
   /// Modalidad de pago para sus PRÓXIMOS referidos: "recurring" | "onetime".
   /// Se CONGELA por clínica en AffiliateClinicTerms al atribuirse el alta, así
   /// que cambiarla nunca afecta a las clínicas ya referidas.
-  payoutMode    String          @default("recurring")
-  payoutMethod  String?
-  payoutDetails String?
+  payoutMode           String          @default("recurring")
+  payoutMethod         String?
+  payoutDetails        String?
   /// Manager de cuenta asignado (sql/afiliados-atribucion-soporte.sql). null =
   /// sin manager: la pantalla de soporte cae al canal general, nunca a una
   /// tarjeta vacía. Mismo catálogo global que usan las clínicas.
-  accountManagerId String?
+  accountManagerId     String?
   /// Quién lo invitó al programa, vía su link de invitación
   /// (/afiliados/registro?inv=<referralCode>). null = se registró directo.
   ///
@@ -3626,11 +3637,11 @@ model Affiliate {
   /// Los tres en null = este socio no personalizó nada, y su página se ve
   /// EXACTAMENTE como antes de que esto existiera. Ese es el caso por defecto
   /// y el que no se puede romper.
-  photoUrl      String?
+  photoUrl       String?
   /// Presentación del socio con su voz. Se guarda y se pinta como TEXTO
   /// PLANO: es contenido de un tercero en nuestro dominio, nada de HTML ni
   /// markdown. El tope de longitud lo pone el código (page-config.ts).
-  bio           String?
+  bio            String?
   /// [{ id, visible, orden }] — QUÉ secciones se ven y en qué orden. El
   /// contenido de cada sección sigue siendo el del home; esto no lo edita.
   /// Las secciones con el CTA de registro no son apagables (lo impone el
@@ -3655,19 +3666,19 @@ model Affiliate {
   bioPending            String?
   sectionsConfigPending Json?
 
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  clinics     Clinic[]
-  commissions AffiliateCommission[]
-  users       AffiliateUser[]
-  links           AffiliateLink[]
-  conversions     AffiliateConversion[]
+  clinics          Clinic[]
+  commissions      AffiliateCommission[]
+  users            AffiliateUser[]
+  links            AffiliateLink[]
+  conversions      AffiliateConversion[]
   affiliateCoupons AffiliateCoupon[]
   supportTickets   AffiliateSupportTicket[]
-  accountManager   AccountManager? @relation(fields: [accountManagerId], references: [id])
-  invitedBy        Affiliate?      @relation("AffiliateInvites", fields: [invitedByAffiliateId], references: [id])
-  invited          Affiliate[]     @relation("AffiliateInvites")
+  accountManager   AccountManager?          @relation(fields: [accountManagerId], references: [id])
+  invitedBy        Affiliate?               @relation("AffiliateInvites", fields: [invitedByAffiliateId], references: [id])
+  invited          Affiliate[]              @relation("AffiliateInvites")
 
   @@index([status])
   @@index([accountManagerId])
@@ -7419,13 +7430,13 @@ model AiPricingConfig {
 /// storageBytes es BigInt (100GB ≈ 1.07e11 no cabe en Int). maxPatients/maxUsers
 /// null = ilimitado. features = mapa { moduleKey: boolean } (casillas del panel).
 model PlanConfig {
-  planId          String   @id
-  label           String
-  priceMxnMonthly Int
-  priceMxnAnnual  Int
-  storageBytes    BigInt
-  aiTokensDefault Int
-  whatsappMonthly Int
+  planId           String   @id
+  label            String
+  priceMxnMonthly  Int
+  priceMxnAnnual   Int
+  storageBytes     BigInt
+  aiTokensDefault  Int
+  whatsappMonthly  Int
   // Facturas CFDI (timbres) incluidas por MES CALENDARIO y precio del excedente.
   // Seed: incluidas BASIC=25 (provisional) / PRO=50 / CLINIC=150; excedente por
   // timbre (centavos MXN) BASIC=200 / PRO=200 / CLINIC=125. Jamás bloquea el
@@ -7433,14 +7444,14 @@ model PlanConfig {
   // sql/cfdi-quotas.sql APLICADO antes de deployar.
   cfdiMonthly      Int      @default(50)
   cfdiOverageCents Int      @default(200)
-  maxPatients     Int?
-  maxUsers        Int?
+  maxPatients      Int?
+  maxUsers         Int?
   // Máximo de sucursales (clínicas) que el dueño puede tener con este plan.
   // NULL = ilimitado. Seed: BASIC=1, PRO=1, CLINIC=3. Requiere
   // sql/plan_configs_max_clinics.sql APLICADO antes de deployar.
-  maxClinics      Int?
-  features        Json
-  updatedAt       DateTime @updatedAt
+  maxClinics       Int?
+  features         Json
+  updatedAt        DateTime @updatedAt
 
   @@map("plan_configs")
 }
@@ -7913,10 +7924,10 @@ model ClinicReview {
   reportedAt     DateTime?
 
   // Invitación tokenizada de un solo uso.
-  token           String   @unique
+  token           String    @unique
   tokenExpiresAt  DateTime
   submittedAt     DateTime?
-  invitedChannels String[] @default([]) // ["whatsapp","email"] enviados
+  invitedChannels String[]  @default([]) // ["whatsapp","email"] enviados
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -7962,7 +7973,7 @@ model HealthQuestionnaire {
 // ============================================================================
 
 model Quote {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   clinicId    String
   patientId   String
   createdById String?
@@ -8044,12 +8055,12 @@ model QuoteItem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model AnalyticsSession {
-  id               String   @id // uuid generado en el cliente (== sid)
-  visitorId        String
-  surface          String   @default("public") // public|dashboard|portal|affiliate|supplier|lab
+  id        String @id // uuid generado en el cliente (== sid)
+  visitorId String
+  surface   String @default("public") // public|dashboard|portal|affiliate|supplier|lab
 
   // Identidad resuelta desde cookies en el servidor (anonymous|staff|patient|admin)
-  identityType     String   @default("anonymous")
+  identityType     String  @default("anonymous")
   clinicId         String?
   userId           String?
   patientAccountId String?
@@ -8059,47 +8070,47 @@ model AnalyticsSession {
   plan             String?
 
   // Navegación / atribución
-  entryPath        String?
-  exitPath         String?
-  referrer         String?
-  referrerHost     String?
-  referrerType     String?  // direct|search|social|ads|referral|internal
-  utmSource        String?
-  utmMedium        String?
-  utmCampaign      String?
-  utmTerm          String?
-  utmContent       String?
-  gclid            String?
+  entryPath    String?
+  exitPath     String?
+  referrer     String?
+  referrerHost String?
+  referrerType String? // direct|search|social|ads|referral|internal
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  utmTerm      String?
+  utmContent   String?
+  gclid        String?
 
   // Geo (headers de Vercel)
-  country          String?
-  region           String?
-  city             String?
-  latitude         Float?
-  longitude        Float?
-  ip               String?
+  country   String?
+  region    String?
+  city      String?
+  latitude  Float?
+  longitude Float?
+  ip        String?
 
   // Dispositivo
-  device           String?
-  browser          String?
-  os               String?
-  screenW          Int?
-  screenH          Int?
-  language         String?
-  timezone         String?
+  device   String?
+  browser  String?
+  os       String?
+  screenW  Int?
+  screenH  Int?
+  language String?
+  timezone String?
 
   // Métricas agregadas de la sesión
-  pageviews        Int      @default(0)
-  clicks           Int      @default(0)
-  maxScroll        Int      @default(0)
-  durationMs       Int      @default(0)
-  isBounce         Boolean  @default(true)
+  pageviews  Int     @default(0)
+  clicks     Int     @default(0)
+  maxScroll  Int     @default(0)
+  durationMs Int     @default(0)
+  isBounce   Boolean @default(true)
 
-  startedAt        DateTime @default(now())
-  lastSeenAt       DateTime @default(now())
-  createdAt        DateTime @default(now())
+  startedAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
-  events           AnalyticsEvent[]
+  events AnalyticsEvent[]
 
   @@index([startedAt])
   @@index([clinicId, startedAt])
@@ -8139,7 +8150,7 @@ model AnalyticsEvent {
   meta       Json?
   createdAt  DateTime @default(now())
 
-  session    AnalyticsSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session AnalyticsSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([clinicId, createdAt])
@@ -8335,36 +8346,36 @@ model AiQuotaUsage {
 /// /admin/affiliates. Los 6 montos + las reglas de disparo. Si la tabla no
 /// existe, el motor cae al modo % por nivel (comportamiento actual).
 model AffiliatePayoutConfig {
-  id                   Int      @id @default(1)
+  id                     Int      @id @default(1)
   // Modo del programa: "fixed" (montos por plan) | "pct" (niveles).
-  defaultMode          String   @default("fixed")
+  defaultMode            String   @default("fixed")
   // Modalidad por defecto de un afiliado nuevo: "recurring" | "onetime".
-  defaultPayoutMode    String   @default("recurring")
+  defaultPayoutMode      String   @default("recurring")
   // ¿El afiliado puede elegir su modalidad desde su panel?
-  allowAffiliateChoice Boolean  @default(true)
+  allowAffiliateChoice   Boolean  @default(true)
   // Fijo recurrente por plan (MXN por mes cubierto).
-  recurringBasicMxn    Float    @default(40)
-  recurringProMxn      Float    @default(90)
-  recurringClinicMxn   Float    @default(250)
+  recurringBasicMxn      Float    @default(40)
+  recurringProMxn        Float    @default(90)
+  recurringClinicMxn     Float    @default(250)
   // Pago único por plan (MXN, una sola vez por clínica).
-  oneTimeBasicMxn      Float    @default(350)
-  oneTimeProMxn        Float    @default(650)
-  oneTimeClinicMxn     Float    @default(1400)
+  oneTimeBasicMxn        Float    @default(350)
+  oneTimeProMxn          Float    @default(650)
+  oneTimeClinicMxn       Float    @default(1400)
   // Desde qué número de cobro empieza a pagarse (1 = desde el primero).
-  startAtInvoiceNo     Int      @default(2)
+  startAtInvoiceNo       Int      @default(2)
   // En qué número de cobro se dispara el pago único.
-  oneTimeAtInvoiceNo   Int      @default(2)
+  oneTimeAtInvoiceNo     Int      @default(2)
   // ── Bonos por hitos (sql/afiliados-hitos.sql) ────────────────────────────
   // Sólo se ANUNCIAN y se configuran: el sistema NO los calcula ni los paga
   // (no hay contador de hitos ni registro de bonos entregados). Apagar el
   // switch retira la promoción de /afiliados y /terminos-afiliados sin deploy.
-  milestonesEnabled    Boolean  @default(true)
-  milestone1Clinics    Int      @default(5)
-  milestone1Mxn        Float    @default(2500)
-  milestone2Clinics    Int      @default(25)
-  milestone2Mxn        Float    @default(10000)
-  milestone3Clinics    Int      @default(50)
-  milestone3Mxn        Float    @default(100000)
+  milestonesEnabled      Boolean  @default(true)
+  milestone1Clinics      Int      @default(5)
+  milestone1Mxn          Float    @default(2500)
+  milestone2Clinics      Int      @default(25)
+  milestone2Mxn          Float    @default(10000)
+  milestone3Clinics      Int      @default(50)
+  milestone3Mxn          Float    @default(100000)
   // ── Bonos por RED (sql/afiliados-bonos-red.sql) ──────────────────────────
   // Premian las clínicas activas que trajeron los AFILIADOS INVITADOS por este
   // afiliado (Affiliate.invitedByAffiliateId). Cinco escalones, PAGO ÚNICO.
@@ -8379,23 +8390,23 @@ model AffiliatePayoutConfig {
   // ⚠️ Se leen con `select` explícito (getNetworkBonusConfig) para que un
   // deploy sin el SQL aplicado NO tumbe la lectura del motor de comisiones:
   // ver el comentario de getPayoutConfig() en @/lib/affiliates/payout.
-  networkBonusEnabled    Boolean @default(true)
-  networkTier1Clinics    Int     @default(5)
-  networkTier1OnceMxn    Float   @default(3000)
-  networkTier1MonthlyMxn Float   @default(0)
-  networkTier2Clinics    Int     @default(20)
-  networkTier2OnceMxn    Float   @default(15000)
-  networkTier2MonthlyMxn Float   @default(0)
-  networkTier3Clinics    Int     @default(50)
-  networkTier3OnceMxn    Float   @default(40000)
-  networkTier3MonthlyMxn Float   @default(0)
-  networkTier4Clinics    Int     @default(150)
-  networkTier4OnceMxn    Float   @default(120000)
-  networkTier4MonthlyMxn Float   @default(0)
-  networkTier5Clinics    Int     @default(500)
-  networkTier5OnceMxn    Float   @default(400000)
-  networkTier5MonthlyMxn Float   @default(0)
-  updatedAt            DateTime @updatedAt
+  networkBonusEnabled    Boolean  @default(true)
+  networkTier1Clinics    Int      @default(5)
+  networkTier1OnceMxn    Float    @default(3000)
+  networkTier1MonthlyMxn Float    @default(0)
+  networkTier2Clinics    Int      @default(20)
+  networkTier2OnceMxn    Float    @default(15000)
+  networkTier2MonthlyMxn Float    @default(0)
+  networkTier3Clinics    Int      @default(50)
+  networkTier3OnceMxn    Float    @default(40000)
+  networkTier3MonthlyMxn Float    @default(0)
+  networkTier4Clinics    Int      @default(150)
+  networkTier4OnceMxn    Float    @default(120000)
+  networkTier4MonthlyMxn Float    @default(0)
+  networkTier5Clinics    Int      @default(500)
+  networkTier5OnceMxn    Float    @default(400000)
+  networkTier5MonthlyMxn Float    @default(0)
+  updatedAt              DateTime @updatedAt
 
   @@map("affiliate_payout_config")
 }
@@ -8412,35 +8423,35 @@ model AffiliatePayoutConfig {
 /// lo que ya se prometió. Al otorgar se genera la comisión de PAGO ÚNICO en la
 /// misma transacción; no hay elección de modalidad ni mensualidades.
 model AffiliateNetworkBonusAward {
-  id          String @id @default(cuid())
-  affiliateId String
+  id               String    @id @default(cuid())
+  affiliateId      String
   /// 1..5 — el escalón EN LA CONFIG, no en pantalla.
-  tier        Int
+  tier             Int
   /// Umbral congelado al otorgarse.
-  clinics     Int
+  clinics          Int
   /// Monto de pago único, congelado al otorgarse.
-  onceMxn     Float
+  onceMxn          Float
   /// ⚠️ SIN USO desde ago 2026 (se retiró la modalidad mensual). Queda en 0.
-  monthlyMxn  Float
+  monthlyMxn       Float
   /// tracking | awarded
-  status      String @default("tracking")
+  status           String    @default("tracking")
   /// Inicio de la racha de 3 meses. null = hoy no está en el umbral.
-  qualifiedSince DateTime?
-  awardedAt      DateTime?
+  qualifiedSince   DateTime?
+  awardedAt        DateTime?
   /// ⚠️ SIN USO desde ago 2026 (columnas de la elección de modalidad retirada).
-  chosenAt       DateTime?
-  choice         String?
+  chosenAt         DateTime?
+  choice           String?
   /// Cuándo se generó la comisión del pago único.
-  paidAt         DateTime?
+  paidAt           DateTime?
   /// ⚠️ SIN USO desde ago 2026 (rastro de la modalidad mensual retirada).
-  lastMonthlyAt  DateTime?
-  lastMonthlyKey String?
-  monthlyPaidCount Int     @default(0)
-  pausedAt       DateTime?
+  lastMonthlyAt    DateTime?
+  lastMonthlyKey   String?
+  monthlyPaidCount Int       @default(0)
+  pausedAt         DateTime?
   /// Último conteo de red que vio el cron: es lo que explica una pausa.
-  lastCount      Int       @default(0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  lastCount        Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([affiliateId, tier])
   @@index([status])
@@ -8502,7 +8513,7 @@ model AffiliateSupportTicket {
   updatedAt DateTime  @updatedAt
 
   messages  AffiliateSupportMessage[]
-  affiliate Affiliate                @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  affiliate Affiliate                 @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
 
   @@index([affiliateId, status])
   @@index([status, updatedAt])
@@ -8688,15 +8699,15 @@ model Barbershop {
   // Prisma no los modela y la capa de negocio los repite en código.
   //
   // Fidelidad e inactividad → src/lib/barber/clients.ts
-  loyaltyEnabled   Boolean @default(true)
-  loyaltyThreshold Int     @default(10)
-  loyaltyReward    String?
-  inactiveDays     Int     @default(60)
+  loyaltyEnabled       Boolean @default(true)
+  loyaltyThreshold     Int     @default(10)
+  loyaltyReward        String?
+  inactiveDays         Int     @default(60)
   // Campañas de retención → src/lib/barber/campaigns.ts
-  campaignCooldownDays Int   @default(21)
+  campaignCooldownDays Int     @default(21)
   campaignTemplates    Json?
   // Reserva pública: 'manual' | 'auto' → settings.ts y resolveBookingPolicy
-  bookingPolicy String @default("manual")
+  bookingPolicy        String  @default("manual")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -8830,8 +8841,8 @@ model BarberClient {
   lastPortalLoginAt DateTime?
   supabaseId        String?   @unique
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   barbershop   Barbershop               @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   appointments BarberAppointment[]
@@ -9045,13 +9056,13 @@ model BarberSale {
 /// Línea del ticket. serviceId XOR productId (o ninguno para línea libre);
 /// description siempre presente para que el ticket sobreviva borrados.
 model BarberSaleItem {
-  id        String  @id @default(cuid())
-  saleId    String
-  serviceId String?
-  productId String?
+  id          String  @id @default(cuid())
+  saleId      String
+  serviceId   String?
+  productId   String?
   description String
-  qty       Int     @default(1)
-  unitPrice Decimal @db.Decimal(10, 2)
+  qty         Int     @default(1)
+  unitPrice   Decimal @db.Decimal(10, 2)
 
   sale    BarberSale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   service BarberService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
@@ -9102,9 +9113,9 @@ model BarberCashSession {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  barbershop Barbershop  @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
-  openedBy   BarberUser  @relation("BarberCashOpenedBy", fields: [openedByUserId], references: [id], onDelete: NoAction)
-  closedBy   BarberUser? @relation("BarberCashClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
+  barbershop Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  openedBy   BarberUser   @relation("BarberCashOpenedBy", fields: [openedByUserId], references: [id], onDelete: NoAction)
+  closedBy   BarberUser?  @relation("BarberCashClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
   sales      BarberSale[]
 
   @@index([barbershopId, openedAt])
@@ -9512,20 +9523,20 @@ model BarberAffiliateAccount {
 /// dcb_vid del navegador) y NO por IP: en México el CGNAT móvil pone miles
 /// de teléfonos detrás de una sola IP y la liga se comparte por WhatsApp.
 model BarberAffiliateClick {
-  id           String @id @default(cuid())
+  id           String   @id @default(cuid())
   barbershopId String
   code         String
   /// Cookie dcb_vid — id opaco aleatorio del navegador. Nada derivado de la
   /// IP ni del user-agent: derivarlo de la red sería el mismo bug con otro
   /// nombre. Nullable porque un visitante sin cookies igual se redirige.
-  vid       String?
+  vid          String?
   /// sha256 truncado con sal — JAMÁS la IP cruda.
-  ipHash    String?
-  userAgent String?
+  ipHash       String?
+  userAgent    String?
   /// true = suma al contador; false = bot o repetido dentro de la ventana.
   /// La fila se guarda igual para poder auditar por qué no contó.
-  counted   Boolean  @default(true)
-  createdAt DateTime @default(now())
+  counted      Boolean  @default(true)
+  createdAt    DateTime @default(now())
 
   @@index([barbershopId, createdAt])
   @@index([code, vid, createdAt])
@@ -9538,20 +9549,20 @@ model BarberAffiliateClick {
 /// Si se pudiera reasignar, cualquiera se robaría la comisión de otro justo
 /// antes del primer cobro.
 model BarberAffiliateReferral {
-  id           String @id @default(cuid())
+  id                   String @id @default(cuid())
   /// Barbería que REFIERE (la que cobra). Redundante con account.barbershopId
   /// a propósito: todo filtro del panel es `where barbershopId` directo.
-  barbershopId String
-  accountId    String
+  barbershopId         String
+  accountId            String
   /// Barbería REFERIDA. Única: primer toque gana, no hay segunda atribución.
   referredBarbershopId String @unique
   code                 String
 
-  status BarberAffiliateReferralStatus @default(SIGNED_UP)
+  status       BarberAffiliateReferralStatus @default(SIGNED_UP)
   /// Epoch del clic que sembró la cookie (no del alta): es la fecha que
   /// prueba que el socio hizo el trabajo antes del registro.
   firstTouchAt DateTime
-  signedUpAt   DateTime  @default(now())
+  signedUpAt   DateTime                      @default(now())
   /// Primera vez que la referida quedó al día. null = nunca ha pagado.
   firstPaidAt  DateTime?
 
@@ -9570,11 +9581,11 @@ model BarberAffiliateReferral {
 /// día, NUNCA al registrarse. Idempotente por (referredBarbershopId,
 /// periodKey): correr la sincronización mil veces no duplica un peso.
 model BarberAffiliateCommission {
-  id           String @id @default(cuid())
+  id                   String @id @default(cuid())
   /// Barbería que COBRA. El índice con status es la consulta del panel.
-  barbershopId String
-  accountId    String
-  referralId   String
+  barbershopId         String
+  accountId            String
+  referralId           String
   /// Denormalizado para no unir con la referida al listar.
   referredBarbershopId String
   /// Periodo que cubre: "signup" (pago único) o "YYYY-MM" (recurrente).
@@ -11477,11 +11488,11 @@ model RealtyPldFile {
   address     String?
 
   /// Semáforo PEP. pepDetail guarda el cargo, el ente y el parentesco.
-  pep          RealtyPldPepKind @default(NO)
-  pepDetail    String?          @db.Text
+  pep        RealtyPldPepKind @default(NO)
+  pepDetail  String?          @db.Text
   /// Cuándo se le PREGUNTÓ. Sin fecha, el cuestionario no está contestado:
   /// "NO" por omisión y "NO" declarado no son lo mismo.
-  pepAskedAt   DateTime?
+  pepAskedAt DateTime?
 
   /// Beneficiario controlador de una persona moral o fideicomiso:
   /// [{ name, rfc, curp, pct, pep }]. Json y no tabla porque son dos o tres
@@ -11490,8 +11501,8 @@ model RealtyPldFile {
   beneficialOwners Json?
 
   /// Riesgo calculado y su sello de tiempo.
-  risk        RealtyPldRisk @default(BAJO)
-  riskNote    String?       @db.Text
+  risk     RealtyPldRisk @default(BAJO)
+  riskNote String?       @db.Text
 
   /// Última revisión humana del expediente.
   reviewedAt     DateTime?
@@ -11704,16 +11715,16 @@ model RealtyPldNotice {
 /// Plantilla de contrato de una inmobiliaria. UNA por (cuenta, tipo).
 /// Sin fila = se usa la plantilla base del código (REALTY_BASE_TEMPLATES).
 model RealtyContractTemplate {
-  id String @id
-  accountId String
+  id              String   @id
+  accountId       String
   /// ARRENDAMIENTO | EXCLUSIVA | PROMESA | COMISION
-  kind String
-  name String
-  body String
-  version Int @default(1)
+  kind            String
+  name            String
+  body            String
+  version         Int      @default(1)
   updatedByUserId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
   account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -11739,43 +11750,43 @@ model RealtyContractTemplate {
 /// alguien borre la renta de la que salió. Se guarda el id y se resuelve al
 /// leer; si el origen ya no está, el contrato sigue legible.
 model RealtyContract {
-  id String @id
+  id        String @id
   accountId String
-  kind String
-  folio String
-  title String
+  kind      String
+  folio     String
+  title     String
 
-  leaseId String?
+  leaseId     String?
   exclusiveId String?
-  dealId String?
-  propertyId String?
-  contactId String?
+  dealId      String?
+  propertyId  String?
+  contactId   String?
 
-  body String
+  body         String
   /// JSON de las variables resueltas, como TEXT (no Json): aquí no hay
   /// consultas por dentro del objeto y TEXT evita el baile de DbNull.
-  variables String @default("{}")
+  variables    String @default("{}")
   documentHash String
 
   /// BORRADOR | ENVIADO | PARCIAL | FIRMADO | ARCHIVADO | ANULADO
   status String @default("BORRADOR")
 
   effectiveFrom DateTime?
-  effectiveTo DateTime?
+  effectiveTo   DateTime?
 
-  sealedAt DateTime?
-  signedAt DateTime?
-  archivedAt DateTime?
-  voidedAt DateTime?
-  voidReason String?
+  sealedAt     DateTime?
+  signedAt     DateTime?
+  archivedAt   DateTime?
+  voidedAt     DateTime?
+  voidReason   String?
   /// Cuando se anula por corrección, el contrato que lo sustituye.
   replacedById String?
 
   createdByUserId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
-  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account RealtyAccount         @relation(fields: [accountId], references: [id], onDelete: Cascade)
   parties RealtyContractParty[]
 
   @@unique([accountId, folio], map: "realty_contracts_account_folio_key")
@@ -11790,21 +11801,21 @@ model RealtyContract {
 /// Quién firma. El contrato NO queda FIRMADO hasta que todas las partes con
 /// `mustSign = true` tienen `signedAt`.
 model RealtyContractParty {
-  id String @id
-  accountId String
-  contractId String
+  id          String    @id
+  accountId   String
+  contractId  String
   /// ARRENDADOR | INQUILINO | AVAL | PROPIETARIO | INMOBILIARIA |
   /// COMPRADOR | VENDEDOR | ASESOR
-  role String
-  name String
-  email String?
-  phone String?
-  contactId String?
-  mustSign Boolean @default(true)
-  sortOrder Int @default(0)
-  signedAt DateTime?
+  role        String
+  name        String
+  email       String?
+  phone       String?
+  contactId   String?
+  mustSign    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  signedAt    DateTime?
   signatureId String?
-  createdAt DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   contract RealtyContract @relation(fields: [contractId], references: [id], onDelete: Cascade, map: "realty_contract_parties_contract_fkey")
 
@@ -11830,21 +11841,21 @@ model RealtyContractParty {
 /// SIN relación a RealtyContractParty a propósito: la evidencia no puede
 /// desaparecer en cascada detrás de una fila de partes.
 model RealtyContractSignature {
-  id String @id
-  accountId String
-  contractId String
-  partyId String
-  signerName String
+  id           String   @id
+  accountId    String
+  contractId   String
+  partyId      String
+  signerName   String
   documentHash String
-  strokePath String?
+  strokePath   String?
   strokeInline String?
-  strokeHash String
-  ip String?
-  userAgent String?
+  strokeHash   String
+  ip           String?
+  userAgent    String?
   /// Reloj del SERVIDOR. Jamás una fecha que venga del dispositivo.
-  signedAt DateTime @default(now())
-  tokenId String?
-  createdAt DateTime @default(now())
+  signedAt     DateTime @default(now())
+  tokenId      String?
+  createdAt    DateTime @default(now())
 
   account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -11863,20 +11874,20 @@ model RealtyContractSignature {
 /// token de 256 bits no se adivina a fuerza bruta; lo que hay que frenar es
 /// que una liga filtrada se use a golpes.
 model RealtySignatureToken {
-  id String @id
-  accountId String
+  id         String    @id
+  accountId  String
   contractId String
-  partyId String
-  tokenHash String
-  expiresAt DateTime
-  attempts Int @default(0)
-  usedAt DateTime?
-  revokedAt DateTime?
-  sentAt DateTime?
+  partyId    String
+  tokenHash  String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  usedAt     DateTime?
+  revokedAt  DateTime?
+  sentAt     DateTime?
   /// whatsapp | correo | copiada
-  sentVia String?
-  viewedAt DateTime?
-  createdAt DateTime @default(now())
+  sentVia    String?
+  viewedAt   DateTime?
+  createdAt  DateTime  @default(now())
 
   account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -12553,89 +12564,89 @@ model EduInstitution {
   /// lectura de edu_institutions revienta — y de ahí cuelga la sesión.
   storageQuotaBytes BigInt @default(5497558138880)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  users        EduUser[]
-  programs     EduProgram[]
-  cohorts      EduCohort[]
-  students     EduStudent[]
-  supervisions EduSupervisorAssignment[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  users               EduUser[]
+  programs            EduProgram[]
+  cohorts             EduCohort[]
+  students            EduStudent[]
+  supervisions        EduSupervisorAssignment[]
   // Ola 2 · el piso clínico.
-  patients        EduPatient[]
-  chairs          EduChair[]
-  chairSchedules  EduChairSchedule[]
-  cases           EduCase[]
-  appointments    EduAppointment[]
+  patients            EduPatient[]
+  chairs              EduChair[]
+  chairSchedules      EduChairSchedule[]
+  cases               EduCase[]
+  appointments        EduAppointment[]
   // Ola 3 · el expediente clínico.
-  records           EduRecord[]
-  odontogramEntries EduOdontogramEntry[]
-  studies           EduStudy[]
+  records             EduRecord[]
+  odontogramEntries   EduOdontogramEntry[]
+  studies             EduStudy[]
   // Ola 5 · tarifarios y caja. Bloque ADITIVO al final de las relaciones:
   // los modelos viven al FINAL del archivo, con su propio encabezado.
-  procedures       EduProcedure[]
-  feeSchedules     EduFeeSchedule[]
-  feeScheduleItems EduFeeScheduleItem[]
-  charges          EduCharge[]
-  chargeItems      EduChargeItem[]
-  payments         EduPayment[]
-  cashSessions     EduCashSession[]
+  procedures          EduProcedure[]
+  feeSchedules        EduFeeSchedule[]
+  feeScheduleItems    EduFeeScheduleItem[]
+  charges             EduCharge[]
+  chargeItems         EduChargeItem[]
+  payments            EduPayment[]
+  cashSessions        EduCashSession[]
   // Ola 4 · el gate de autorización. Back-relation OBLIGATORIA (Prisma no
   // deja declarar una relación por un solo lado); el modelo vive al FINAL
   // del archivo, con su propio encabezado.
-  caseApprovals    EduCaseApproval[]
+  caseApprovals       EduCaseApproval[]
   // Ola 3B · IA de apoyo y consentimientos. Bloque ADITIVO al final de las
   // relaciones: los modelos viven al FINAL del archivo, con su encabezado.
-  studyAnalyses    EduStudyAnalysis[]
-  consents         EduConsent[]
+  studyAnalyses       EduStudyAnalysis[]
+  consents            EduConsent[]
   // Ola 6 · evaluación académica. Bloque ADITIVO al final de las
   // relaciones: los modelos viven al FINAL del archivo, con su encabezado.
-  rubrics          EduRubric[]
-  rubricCriteria   EduRubricCriterion[]
-  caseGrades       EduCaseGrade[]
-  caseGradeItems   EduCaseGradeItem[]
-  requirements     EduRequirement[]
+  rubrics             EduRubric[]
+  rubricCriteria      EduRubricCriterion[]
+  caseGrades          EduCaseGrade[]
+  caseGradeItems      EduCaseGradeItem[]
+  requirements        EduRequirement[]
   // Ola 11 · las SEDES. Bloque ADITIVO al final de las relaciones: los
   // modelos viven al FINAL del archivo, con su propio encabezado.
   //
   // 🔴 La sede NO sustituye al instituto: institutionId sigue siendo el
   // aislamiento duro entre escuelas y la sede es una división DENTRO de
   // una. Por eso EduCampus cuelga de aquí, como todo lo demás.
-  campuses         EduCampus[]
-  campusAccess     EduUserCampusAccess[]
+  campuses            EduCampus[]
+  campusAccess        EduUserCampusAccess[]
   // Ola 8 · la cartera de IA. Bloque ADITIVO al final de las relaciones:
   // los modelos viven al FINAL del archivo, con su propio encabezado.
   //
   // 🔴 `aiQuota` es 1:1 y OPCIONAL, y esa opcionalidad ES el interruptor:
   // un instituto SIN fila de cupo tiene la IA apagada y el panel dice por
   // qué. No hay ninguna bandera de entorno que la encienda por instituto.
-  aiQuota          EduAiQuota?
-  aiUsages         EduAiUsage[]
+  aiQuota             EduAiQuota?
+  aiUsages            EduAiUsage[]
   // Ola 9 · WhatsApp y recordatorios. Bloque ADITIVO al final de las
   // relaciones: los modelos viven al FINAL del archivo, con su encabezado.
   // La conexión es 1:1 (cada instituto conecta SU propia WhatsApp; no hay
   // una compartida porque Meta le cobra las plantillas a la tarjeta de esa
   // WABA y no se puede mandar en nombre de otra cuenta).
-  whatsappConfig   EduWhatsappConfig?
-  whatsappMessages EduWhatsappMessage[]
+  whatsappConfig      EduWhatsappConfig?
+  whatsappMessages    EduWhatsappMessage[]
   // Ola 10 · facturación CFDI. Bloque ADITIVO al final de las relaciones:
   // los modelos viven al FINAL del archivo, con su propio encabezado.
-  fiscalConfig       EduFiscalConfig?
-  patientTaxProfiles EduPatientTaxProfile[]
-  invoices           EduInvoice[]
+  fiscalConfig        EduFiscalConfig?
+  patientTaxProfiles  EduPatientTaxProfile[]
+  invoices            EduInvoice[]
   // Ola 14 · recetas. Bloque ADITIVO al final de las relaciones: los
   // modelos viven al FINAL del archivo, con su propio encabezado.
-  prescriptions      EduPrescription[]
-  prescriptionItems  EduPrescriptionItem[]
+  prescriptions       EduPrescription[]
+  prescriptionItems   EduPrescriptionItem[]
   // Pagos a meses. Bloque ADITIVO al final de las relaciones: los
   // modelos viven al FINAL del archivo, con su propio encabezado.
-  paymentPlans       EduPaymentPlan[]
-  installments       EduInstallment[]
+  paymentPlans        EduPaymentPlan[]
+  installments        EduInstallment[]
   // El PLANO de cada sede. Bloque ADITIVO al final de las relaciones: el
   // modelo vive al FINAL del archivo, con su propio encabezado.
-  campusLayouts      EduCampusLayout[]
+  campusLayouts       EduCampusLayout[]
   // Ola B · las FOTOS CLÍNICAS. Bloque ADITIVO al final de las
   // relaciones: el modelo vive al FINAL del archivo, con su encabezado.
-  clinicalPhotos     EduClinicalPhoto[]
+  clinicalPhotos      EduClinicalPhoto[]
   // Ola C · la BASE. Bloque ADITIVO al final de las relaciones: los
   // modelos viven al FINAL del archivo, con su propio encabezado.
   auditLogs           EduAuditLog[]
@@ -12658,16 +12669,16 @@ model EduInstitution {
 /// (supabaseId, institutionId) es único, así que una misma persona puede
 /// existir en dos institutos sin pisarse.
 model EduUser {
-  id            String  @id @default(cuid())
-  institutionId String
-  supabaseId    String
-  email         String  @db.VarChar(160)
-  firstName     String  @db.VarChar(80)
-  lastName      String  @db.VarChar(80)
-  role          EduRole
-  phone         String? @db.VarChar(30)
-  avatarUrl     String?
-  isActive      Boolean @default(true)
+  id                  String   @id @default(cuid())
+  institutionId       String
+  supabaseId          String
+  email               String   @db.VarChar(160)
+  firstName           String   @db.VarChar(80)
+  lastName            String   @db.VarChar(80)
+  role                EduRole
+  phone               String?  @db.VarChar(30)
+  avatarUrl           String?
+  isActive            Boolean  @default(true)
   mustChangePassword  Boolean  @default(false)
   /// Ola 1B. Nombre + apellido + correo + dígitos del teléfono, en
   /// minúsculas y SIN ACENTOS. Es lo único que mira el buscador de equipo
@@ -12676,7 +12687,7 @@ model EduUser {
   /// el texto tal cual. La escribe eduUserSearchIndex
   /// (src/lib/edu/search.ts) en cada alta y en cada edición; nunca se
   /// pinta.
-  searchIndex   String  @default("") @db.VarChar(400)
+  searchIndex         String   @default("") @db.VarChar(400)
   /// Si trae keys, REEMPLAZAN al default del rol (no se suman). Misma
   /// semántica que User.permissionsOverride del dental — ver
   /// src/lib/edu/permissions.ts.
@@ -12722,9 +12733,9 @@ model EduUser {
   rolePrevious  EduRole?
   roleChangedAt DateTime? @db.Timestamptz(3)
 
-  lastLogin     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
 
@@ -12773,8 +12784,8 @@ model EduUser {
   /// Ola 6. Quién CALIFICÓ (siempre un docente o la dirección: el alumno
   /// ve su calificación y no la escribe) y quién hizo un TRASPASO de caso.
   /// Las dos son columnas de autoría; ninguna decide visibilidad.
-  gradesGiven      EduCaseGrade[] @relation("EduGradeBy")
-  transfersMade    EduCase[]      @relation("EduCaseTransferBy")
+  gradesGiven   EduCaseGrade[] @relation("EduGradeBy")
+  transfersMade EduCase[]      @relation("EduCaseTransferBy")
 
   /// Ola B. Las fotos clínicas que subió y las que dio de BAJA, más las
   /// tres bajas suaves que esta ola le pone al resto del expediente
@@ -12797,24 +12808,24 @@ model EduUser {
   /// 🔴 SIN FILAS = ENTRA A TODAS las sedes de su instituto. No es un
   /// descuido: es lo que hace que aplicar la ola no deje fuera a nadie de
   /// los que ya existen. Con filas, solo a esas.
-  campusAccess     EduUserCampusAccess[]
+  campusAccess EduUserCampusAccess[]
 
   /// Ola 8. Cada uso de IA que esta persona pidió. Es una columna de
   /// AUDITORÍA del gasto: /instituto/ia contesta "quién se está gastando
   /// el cupo" agrupando por aquí. Opcional con SetNull —dar de baja a
   /// alguien no puede borrar lo que ya se gastó— y el NOMBRE va congelado
   /// en la fila, que es lo que de verdad se lee después.
-  aiUsages         EduAiUsage[]   @relation("EduAiUsageBy")
+  aiUsages EduAiUsage[] @relation("EduAiUsageBy")
 
   /// Ola 10 · facturación. Cuatro columnas de AUTORÍA, ninguna de ellas
   /// decide visibilidad: quién dejó los datos fiscales del instituto,
   /// quién capturó los de un paciente, quién emitió una factura y quién
   /// la canceló. Emitir y cancelar son dos permisos distintos, así que
   /// también son dos columnas distintas.
-  fiscalConfigsSet   EduFiscalConfig[]      @relation("EduFiscalConfigBy")
-  taxProfilesSet     EduPatientTaxProfile[] @relation("EduTaxProfileBy")
-  invoicesIssued     EduInvoice[]           @relation("EduInvoiceBy")
-  invoicesCancelled  EduInvoice[]           @relation("EduInvoiceCancelledBy")
+  fiscalConfigsSet  EduFiscalConfig[]      @relation("EduFiscalConfigBy")
+  taxProfilesSet    EduPatientTaxProfile[] @relation("EduTaxProfileBy")
+  invoicesIssued    EduInvoice[]           @relation("EduInvoiceBy")
+  invoicesCancelled EduInvoice[]           @relation("EduInvoiceCancelledBy")
 
   /// Ola 14 · recetas. La cédula profesional de un DOCENTE (o de quien
   /// dirige, si también expide). Opcional: un alumno no tiene, y ésa es
@@ -12822,7 +12833,7 @@ model EduUser {
   /// EXPEDIR la primera receta (y se puede corregir ahí mismo); cada
   /// receta expedida CONGELA la cédula con la que salió, así que corregir
   /// esta columna mañana no reescribe ningún documento de ayer.
-  cedulaProfesional  String? @db.VarChar(30)
+  cedulaProfesional     String?           @db.VarChar(30)
   /// Las tres puntas de una receta: quién la PROPUSO (el alumno), quién la
   /// EXPIDIÓ (el docente con cédula) y quién la ANULÓ. Tres columnas de
   /// autoría; ninguna decide visibilidad.
@@ -12839,7 +12850,7 @@ model EduUser {
   /// El PLANO de la sede. Una sola columna de AUTORÍA —quién lo acomodó la
   /// última vez— y ninguna de visibilidad: el plano es infraestructura de
   /// la escuela, lo edita la dirección y lo mira todo el piso.
-  campusLayoutsUpdated  EduCampusLayout[] @relation("EduCampusLayoutUpdatedBy")
+  campusLayoutsUpdated EduCampusLayout[] @relation("EduCampusLayoutUpdatedBy")
 
   /// Ola C · H-04 · quién tocó esta cuenta, apuntando a OTRA cuenta del
   /// mismo instituto. SetNull: dar de baja a quien hizo el cambio no
@@ -12851,28 +12862,28 @@ model EduUser {
   /// visibilidad. Van con SetNull sin excepción: dar de baja a alguien no
   /// puede borrar el rastro de lo que hizo, y por eso el NOMBRE va
   /// congelado en cada fila.
-  auditLogs               EduAuditLog[]            @relation("EduAuditActor")
-  patientsDeleted         EduPatient[]             @relation("EduPatientDeletedBy")
-  patientsAnonymized      EduPatient[]             @relation("EduPatientAnonymizedBy")
-  patientsMerged          EduPatient[]             @relation("EduPatientMergedBy")
-  questionnairesRecorded  EduHealthQuestionnaire[] @relation("EduQuestionnaireBy")
-  treatmentPlansCreated   EduTreatmentPlan[]       @relation("EduPlanTratamientoBy")
-  treatmentPlansClosed    EduTreatmentPlan[]       @relation("EduPlanTratamientoClosedBy")
-  treatmentSessionsDone   EduTreatmentSession[]    @relation("EduPlanSessionBy")
-  quotesCreated           EduQuote[]               @relation("EduQuoteBy")
-  agendaBlocksCreated     EduAgendaBlock[]         @relation("EduAgendaBlockBy")
-  agendaBlocksDeleted     EduAgendaBlock[]         @relation("EduAgendaBlockDeletedBy")
-  odontogramEvents        EduOdontogramEvent[]     @relation("EduOdontogramEventBy")
-  prescriptionsArchived   EduPrescription[]        @relation("EduRecetaArchivedBy")
-  proceduresUpdated       EduProcedure[]           @relation("EduProcedureUpdatedBy")
-  feeSchedulesUpdated     EduFeeSchedule[]         @relation("EduFeeScheduleUpdatedBy")
-  feeItemsCreated         EduFeeScheduleItem[]     @relation("EduFeeItemCreatedBy")
-  feeItemsUpdated         EduFeeScheduleItem[]     @relation("EduFeeItemUpdatedBy")
-  feeItemsDeleted         EduFeeScheduleItem[]     @relation("EduFeeItemDeletedBy")
-  procedureCategoriesSet  EduProcedureCategory[]   @relation("EduProcCategoryBy")
-  requirementVersionsSet  EduRequirementVersion[]  @relation("EduRequirementVersionBy")
-  requirementsUpdated     EduRequirement[]         @relation("EduRequirementUpdatedBy")
-  aiQuotaChanges          EduAiQuotaChange[]       @relation("EduAiQuotaChangeBy")
+  auditLogs              EduAuditLog[]            @relation("EduAuditActor")
+  patientsDeleted        EduPatient[]             @relation("EduPatientDeletedBy")
+  patientsAnonymized     EduPatient[]             @relation("EduPatientAnonymizedBy")
+  patientsMerged         EduPatient[]             @relation("EduPatientMergedBy")
+  questionnairesRecorded EduHealthQuestionnaire[] @relation("EduQuestionnaireBy")
+  treatmentPlansCreated  EduTreatmentPlan[]       @relation("EduPlanTratamientoBy")
+  treatmentPlansClosed   EduTreatmentPlan[]       @relation("EduPlanTratamientoClosedBy")
+  treatmentSessionsDone  EduTreatmentSession[]    @relation("EduPlanSessionBy")
+  quotesCreated          EduQuote[]               @relation("EduQuoteBy")
+  agendaBlocksCreated    EduAgendaBlock[]         @relation("EduAgendaBlockBy")
+  agendaBlocksDeleted    EduAgendaBlock[]         @relation("EduAgendaBlockDeletedBy")
+  odontogramEvents       EduOdontogramEvent[]     @relation("EduOdontogramEventBy")
+  prescriptionsArchived  EduPrescription[]        @relation("EduRecetaArchivedBy")
+  proceduresUpdated      EduProcedure[]           @relation("EduProcedureUpdatedBy")
+  feeSchedulesUpdated    EduFeeSchedule[]         @relation("EduFeeScheduleUpdatedBy")
+  feeItemsCreated        EduFeeScheduleItem[]     @relation("EduFeeItemCreatedBy")
+  feeItemsUpdated        EduFeeScheduleItem[]     @relation("EduFeeItemUpdatedBy")
+  feeItemsDeleted        EduFeeScheduleItem[]     @relation("EduFeeItemDeletedBy")
+  procedureCategoriesSet EduProcedureCategory[]   @relation("EduProcCategoryBy")
+  requirementVersionsSet EduRequirementVersion[]  @relation("EduRequirementVersionBy")
+  requirementsUpdated    EduRequirement[]         @relation("EduRequirementUpdatedBy")
+  aiQuotaChanges         EduAiQuotaChange[]       @relation("EduAiQuotaChangeBy")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -12929,11 +12940,11 @@ model EduProgram {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  cohorts     EduCohort[]
-  students    EduStudent[]
+  institution  EduInstitution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  cohorts      EduCohort[]
+  students     EduStudent[]
   /// Ola 2: el caso clínico cuelga de la especialidad.
-  cases       EduCase[]
+  cases        EduCase[]
   /// Ola 6: las rúbricas y los requisitos del plan de estudios de ESTA
   /// especialidad. Los dos son opcionales del otro lado (una rúbrica puede
   /// servir para toda la escuela), así que aquí solo cuelga lo que sí la
@@ -12963,9 +12974,9 @@ model EduCohort {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
-  students    EduStudent[]
+  institution         EduInstitution          @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  program             EduProgram              @relation(fields: [programId], references: [id], onDelete: Cascade)
+  students            EduStudent[]
   /// Ola C · H-89: las versiones de requisito que aplican SOLO a esta
   /// generación. Sin filas = le aplica la regla general.
   requirementVersions EduRequirementVersion[]
@@ -13000,17 +13011,17 @@ model EduStudent {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  user        EduUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
-  cohort      EduCohort      @relation(fields: [cohortId], references: [id], onDelete: Cascade)
-  supervisors EduSupervisorAssignment[]
+  institution      EduInstitution            @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user             EduUser                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program          EduProgram                @relation(fields: [programId], references: [id], onDelete: Cascade)
+  cohort           EduCohort                 @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  supervisors      EduSupervisorAssignment[]
   /// Ola 2: lo que este alumno lleva en el piso clínico.
   cases            EduCase[]
   appointments     EduAppointment[]
   /// Pacientes que ESTE alumno trajo a la clínica. En la Ola 5 decide el
   /// precio, por eso se guarda desde ahora.
-  referredPatients EduPatient[] @relation("EduPatientReferrer")
+  referredPatients EduPatient[]              @relation("EduPatientReferrer")
   /// Ola 3: las notas clínicas de sus casos. Es el alumno RESPONSABLE del
   /// acto clínico, no necesariamente quien tecleó la nota (eso es
   /// EduRecord.authorUserId).
@@ -13224,17 +13235,17 @@ model EduPatient {
   /// APLICARLO ANTES del deploy: si Prisma las lee sin que existan,
   /// cualquier lectura de edu_patients revienta
   /// (mismo trato que la searchIndex de la Ola 1B).
-  bloodType          String?
-  allergies          String[] @default([])
-  chronicConditions  String[] @default([])
-  currentMedications String[] @default([])
+  bloodType                String?
+  allergies                String[]  @default([])
+  chronicConditions        String[]  @default([])
+  currentMedications       String[]  @default([])
   emergencyContactName     String?
   emergencyContactPhone    String?
   emergencyContactRelation String?
   /// Cuándo se capturaron/revisaron por última vez y quién. Se escriben
   /// JUNTOS en cada guardado de antecedentes; nunca por separado.
-  historyRecordedAt   DateTime?
-  historyRecordedById String?
+  historyRecordedAt        DateTime?
+  historyRecordedById      String?
 
   /// ═══════════════════════════════════════════════════════════════════
   /// OLA B · LO QUE LE FALTA A LA FICHA
@@ -13368,69 +13379,69 @@ model EduPatient {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution      EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  referredByStudent EduStudent?   @relation("EduPatientReferrer", fields: [referredByStudentId], references: [id], onDelete: SetNull)
-  originSetBy       EduUser?      @relation("EduPatientOriginSetBy", fields: [originSetById], references: [id], onDelete: SetNull)
+  institution       EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  referredByStudent EduStudent?           @relation("EduPatientReferrer", fields: [referredByStudentId], references: [id], onDelete: SetNull)
+  originSetBy       EduUser?              @relation("EduPatientOriginSetBy", fields: [originSetById], references: [id], onDelete: SetNull)
   /// Ola de Casos: quién capturó los antecedentes. SetNull — perder el
   /// nombre es aceptable, perder los antecedentes no.
-  historyRecordedBy EduUser?      @relation("EduPatientHistoryBy", fields: [historyRecordedById], references: [id], onDelete: SetNull)
+  historyRecordedBy EduUser?              @relation("EduPatientHistoryBy", fields: [historyRecordedById], references: [id], onDelete: SetNull)
   /// Ola B: quién tocó la ficha por última vez. SetNull por lo mismo que
   /// las de arriba — perder el nombre es aceptable, perder la ficha no.
-  updatedBy         EduUser?      @relation("EduPatientUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedBy         EduUser?              @relation("EduPatientUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   /// Ola C · ARCO. Quién dio de baja y quién anonimizó. SetNull, como
   /// todas las de autoría: perder el nombre es aceptable, perder la
   /// constancia de que se ejerció un derecho ARCO no — por eso el motivo
   /// va como texto en la propia fila.
-  deletedBy         EduUser?      @relation("EduPatientDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
-  anonymizedBy      EduUser?      @relation("EduPatientAnonymizedBy", fields: [anonymizedById], references: [id], onDelete: SetNull)
-  mergedBy          EduUser?      @relation("EduPatientMergedBy", fields: [mergedById], references: [id], onDelete: SetNull)
+  deletedBy         EduUser?              @relation("EduPatientDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  anonymizedBy      EduUser?              @relation("EduPatientAnonymizedBy", fields: [anonymizedById], references: [id], onDelete: SetNull)
+  mergedBy          EduUser?              @relation("EduPatientMergedBy", fields: [mergedById], references: [id], onDelete: SetNull)
   /// Ola C · la FUSIÓN, apuntando a sí misma. El perdedor apunta al
   /// ganador (`mergedInto`) y el ganador lista a los que absorbió
   /// (`mergedFrom`). SetNull: si algún día el ganador desapareciera, el
   /// perdedor se queda sin puntero pero no se borra.
-  mergedInto        EduPatient?   @relation("EduPatientMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
-  mergedFrom        EduPatient[]  @relation("EduPatientMerge")
-  cases        EduCase[]
-  appointments EduAppointment[]
+  mergedInto        EduPatient?           @relation("EduPatientMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom        EduPatient[]          @relation("EduPatientMerge")
+  cases             EduCase[]
+  appointments      EduAppointment[]
   /// Ola 3 · el expediente. El ODONTOGRAMA y los ESTUDIOS cuelgan del
   /// PACIENTE y no del caso: la boca es una sola y una tomografía sirve
   /// para la endodoncia y para la ortodoncia. Las NOTAS sí cuelgan del
   /// caso — son el registro de un acto clínico con un responsable.
-  records    EduRecord[]
-  odontogram EduOdontogramEntry[]
-  studies    EduStudy[]
+  records           EduRecord[]
+  odontogram        EduOdontogramEntry[]
+  studies           EduStudy[]
   /// Ola 5: lo que este paciente debe y lo que ya pagó.
-  charges      EduCharge[]
+  charges           EduCharge[]
   /// Ola 3B: sus cartas de consentimiento informado.
-  consents     EduConsent[]
+  consents          EduConsent[]
   /// Ola 10 · facturación. Los DATOS FISCALES del paciente viven en su
   /// propia tabla (uno a uno) y NO en columnas de aquí: esta fila la leen
   /// la agenda, el buscador y la ficha, y un RFC de más viaja a pantallas
   /// donde nadie lo pidió. Ver el encabezado de EduPatientTaxProfile.
-  taxProfile   EduPatientTaxProfile?
-  invoices     EduInvoice[]
+  taxProfile        EduPatientTaxProfile?
+  invoices          EduInvoice[]
   /// Ola 14: sus recetas. Se leen con el alcance CLÍNICO ("cases"), no con
   /// el del paciente: una receta es un documento clínico y caja no la ve.
-  prescriptions EduPrescription[]
+  prescriptions     EduPrescription[]
   /// Pagos a meses: sus planes de pago. Se leen con el alcance del DINERO
   /// ("charges"), como los cobros de los que cuelgan.
-  paymentPlans  EduPaymentPlan[]
+  paymentPlans      EduPaymentPlan[]
   /// Ola B: sus FOTOS CLÍNICAS. Cuelgan del PACIENTE y no del caso, como
   /// el odontograma y los estudios: la cara y la boca son las mismas para
   /// la ortodoncia y para la periodoncia. Se leen con el alcance CLÍNICO
   /// ("cases"), así que caja no las ve.
-  clinicalPhotos EduClinicalPhoto[]
+  clinicalPhotos    EduClinicalPhoto[]
 
   /// ── Ola C ──────────────────────────────────────────────────────────
   /// El cuestionario VERSIONADO y su historial, los planes de tratamiento
   /// y los movimientos de su odontograma se leen con el alcance CLÍNICO
   /// ("cases"). Los PRESUPUESTOS se leen con el del DINERO ("charges"):
   /// son dinero y el alumno no los ve. La BITÁCORA es de dirección.
-  questionnaires  EduHealthQuestionnaire[]
-  treatmentPlans  EduTreatmentPlan[]
-  quotes          EduQuote[]
+  questionnaires   EduHealthQuestionnaire[]
+  treatmentPlans   EduTreatmentPlan[]
+  quotes           EduQuote[]
   odontogramEvents EduOdontogramEvent[]
-  auditLogs       EduAuditLog[]  @relation("EduAuditPatient")
+  auditLogs        EduAuditLog[]            @relation("EduAuditPatient")
 
   @@unique([institutionId, folio])
   @@index([institutionId, status])
@@ -13535,20 +13546,20 @@ model EduChairSchedule {
 /// alumno en el momento de abrir el caso: es el responsable EN ESE
 /// MOMENTO, guardado para poder contestarlo dentro de un año.
 model EduCase {
-  id            String        @id @default(cuid())
-  institutionId String
-  patientId     String
-  studentId     String
+  id               String        @id @default(cuid())
+  institutionId    String
+  patientId        String
+  studentId        String
   /// La especialidad. Es el mismo EduProgram del padrón: un caso de
   /// Endodoncia y uno de Ortodoncia no son el mismo caso.
-  programId     String
+  programId        String
   supervisorUserId String?
-  status        EduCaseStatus @default(SCREENING)
-  openedAt      DateTime      @default(now())
+  status           EduCaseStatus @default(SCREENING)
+  openedAt         DateTime      @default(now())
   /// Se escribe cuando el caso llega a un estado final (COMPLETED,
   /// TRANSFERRED, ABANDONED). Se deriva del status: no se captura.
-  closedAt      DateTime?
-  notes         String?       @db.VarChar(1000)
+  closedAt         DateTime?
+  notes            String?       @db.VarChar(1000)
 
   /// La cita de tamizaje que abrió este caso. Sin FK en cascada: es una
   /// referencia hacia atrás y borrar la cita no puede llevarse el caso.
@@ -13595,58 +13606,57 @@ model EduCase {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  student     EduStudent     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
-  supervisor  EduUser?       @relation("EduCaseSupervisor", fields: [supervisorUserId], references: [id], onDelete: SetNull)
-  screeningAppointment EduAppointment? @relation("EduCaseScreening", fields: [screeningAppointmentId], references: [id], onDelete: SetNull)
-  appointments EduAppointment[] @relation("EduCaseAppointments")
+  institution          EduInstitution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient              EduPatient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  student              EduStudent         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program              EduProgram         @relation(fields: [programId], references: [id], onDelete: Cascade)
+  supervisor           EduUser?           @relation("EduCaseSupervisor", fields: [supervisorUserId], references: [id], onDelete: SetNull)
+  screeningAppointment EduAppointment?    @relation("EduCaseScreening", fields: [screeningAppointmentId], references: [id], onDelete: SetNull)
+  appointments         EduAppointment[]   @relation("EduCaseAppointments")
   /// Ola 3: las notas clínicas del caso y los estudios que se le engancharon.
-  records EduRecord[]
-  studies EduStudy[]
+  records              EduRecord[]
+  studies              EduStudy[]
   /// Ola 5: los cobros que se colgaron de ESTE caso. Es opcional del lado
   /// del cobro: caja cobra sin abrir expediente (no ve casos), así que la
   /// mayoría de los cobros no traen caso.
-  charges      EduCharge[]
+  charges              EduCharge[]
   /// Ola 4: las autorizaciones del caso. NO hay una columna "autorizado"
   /// aquí a propósito — el estado del gate se LEE de estas filas, que son
   /// también el historial. Una bandera en el caso habría que mantenerla
   /// sincronizada con ellas, y el día que discrepen gana la bandera, que
   /// es la que no tiene firma ni fecha.
-  approvals    EduCaseApproval[]
+  approvals            EduCaseApproval[]
   /// Ola 3B: los consentimientos que se firmaron para ESTE caso.
-  consents     EduConsent[]
+  consents             EduConsent[]
   /// Ola 6: el procedimiento principal, las calificaciones de este caso y
   /// las dos puntas del traspaso.
-  procedure       EduProcedure?  @relation(fields: [procedureId], references: [id], onDelete: SetNull)
-  grades          EduCaseGrade[]
-  transferredFrom EduCase?       @relation("EduCaseTransfer", fields: [transferredFromCaseId], references: [id], onDelete: SetNull)
-  transferredTo   EduCase[]      @relation("EduCaseTransfer")
-  transferredBy   EduUser?       @relation("EduCaseTransferBy", fields: [transferredByUserId], references: [id], onDelete: SetNull)
+  procedure            EduProcedure?      @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+  grades               EduCaseGrade[]
+  transferredFrom      EduCase?           @relation("EduCaseTransfer", fields: [transferredFromCaseId], references: [id], onDelete: SetNull)
+  transferredTo        EduCase[]          @relation("EduCaseTransfer")
+  transferredBy        EduUser?           @relation("EduCaseTransferBy", fields: [transferredByUserId], references: [id], onDelete: SetNull)
   /// Ola 8: los usos de IA imputados a ESTE caso (el dictado de una nota).
   /// No hay columna con el gasto del caso: se cuenta contando estas filas,
   /// igual que el avance de la Ola 6.
-  aiUsages        EduAiUsage[]
+  aiUsages             EduAiUsage[]
   /// Ola 14: las recetas del caso. La receta CUELGA del caso porque quien
   /// la firma es el docente que responde por ese caso; no hay columna
   /// "tiene receta" — se cuenta contando estas filas, como todo lo demás.
-  prescriptions   EduPrescription[]
+  prescriptions        EduPrescription[]
   /// Ola B: las fotos clínicas que se engancharon a ESTE caso. Opcional
   /// del lado de la foto — una foto de tamizaje existe antes que el caso.
-  clinicalPhotos  EduClinicalPhoto[]
+  clinicalPhotos       EduClinicalPhoto[]
+  // Ola 6: contar requisitos por procedimiento, y seguir la cadena de
+  /// Ola C: el plan de tratamiento y el presupuesto de este caso. Los dos
+  /// OPCIONALES por el otro lado (un plan puede no tener caso), y por eso
+  /// aquí son listas: un caso largo puede tener más de un presupuesto.
+  treatmentPlans       EduTreatmentPlan[]
+  quotes               EduQuote[]
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
   @@index([institutionId, patientId], map: "edu_cases_patient_idx")
   @@index([institutionId, programId, status], map: "edu_cases_program_idx")
-  // Ola 6: contar requisitos por procedimiento, y seguir la cadena de
-  /// Ola C: el plan de tratamiento y el presupuesto de este caso. Los dos
-  /// OPCIONALES por el otro lado (un plan puede no tener caso), y por eso
-  /// aquí son listas: un caso largo puede tener más de un presupuesto.
-  treatmentPlans EduTreatmentPlan[]
-  quotes         EduQuote[]
-
   // traspasos hacia atrás sin recorrer la tabla.
   @@index([institutionId, procedureId, status], map: "edu_cases_procedure_idx")
   @@index([transferredFromCaseId], map: "edu_cases_transfer_idx")
@@ -13670,39 +13680,41 @@ model EduCase {
 /// exista el caso: primero se agenda la valoración, y es esa valoración la
 /// que abre el caso y le engancha el `caseId` después.
 model EduAppointment {
-  id            String               @id @default(cuid())
-  institutionId String
-  patientId     String
+  id               String               @id @default(cuid())
+  institutionId    String
+  patientId        String
   /// El alumno que atiende. Nunca es opcional: una cita sin dueño no la
   /// ve nadie (la visibilidad del ALUMNO y la del DOCENTE cuelgan de aquí).
-  studentId     String
-  chairId       String
+  studentId        String
+  chairId          String
   supervisorUserId String?
-  caseId        String?
-  startsAt      DateTime             @db.Timestamptz(3)
-  endsAt        DateTime             @db.Timestamptz(3)
-  type          EduAppointmentType   @default(TRATAMIENTO)
-  status        EduAppointmentStatus @default(SCHEDULED)
+  caseId           String?
+  startsAt         DateTime             @db.Timestamptz(3)
+  endsAt           DateTime             @db.Timestamptz(3)
+  type             EduAppointmentType   @default(TRATAMIENTO)
+  status           EduAppointmentStatus @default(SCHEDULED)
   /// Los tres momentos que la escuela mide: llegó, se sentó, terminó.
-  checkedInAt   DateTime?            @db.Timestamptz(3)
-  startedAt     DateTime?            @db.Timestamptz(3)
-  completedAt   DateTime?            @db.Timestamptz(3)
-  notes         String?              @db.VarChar(1000)
+  checkedInAt      DateTime?            @db.Timestamptz(3)
+  startedAt        DateTime?            @db.Timestamptz(3)
+  completedAt      DateTime?            @db.Timestamptz(3)
+  notes            String?              @db.VarChar(1000)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  student     EduStudent     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  chair       EduChair       @relation(fields: [chairId], references: [id], onDelete: Cascade)
-  supervisor  EduUser?       @relation("EduApptSupervisor", fields: [supervisorUserId], references: [id], onDelete: SetNull)
-  case        EduCase?       @relation("EduCaseAppointments", fields: [caseId], references: [id], onDelete: SetNull)
-  screeningFor EduCase[]     @relation("EduCaseScreening")
+  institution       EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient           EduPatient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  student           EduStudent            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  chair             EduChair              @relation(fields: [chairId], references: [id], onDelete: Cascade)
+  supervisor        EduUser?              @relation("EduApptSupervisor", fields: [supervisorUserId], references: [id], onDelete: SetNull)
+  case              EduCase?              @relation("EduCaseAppointments", fields: [caseId], references: [id], onDelete: SetNull)
+  screeningFor      EduCase[]             @relation("EduCaseScreening")
   /// Ola 3: la nota de ESTA sesión. Es opcional en los dos sentidos — hay
   /// citas sin nota (la que se canceló) y notas sin cita (la corrección que
   /// se escribe al día siguiente).
-  records      EduRecord[]
+  records           EduRecord[]
+  /// Ola C: las sesiones de plan de tratamiento que documentan esta cita.
+  treatmentSessions EduTreatmentSession[] @relation("EduPlanSessionAppointment")
 
   // Los nombres van EXPLÍCITOS: el que Prisma generaría solo
   // (edu_appointments_institutionId_chairId_startsAt_idx y compañía) es
@@ -13714,9 +13726,6 @@ model EduAppointment {
   @@index([institutionId, chairId, startsAt], map: "edu_appointments_chair_idx")
   @@index([institutionId, studentId, startsAt], map: "edu_appointments_student_idx")
   @@index([institutionId, patientId, startsAt], map: "edu_appointments_patient_idx")
-  /// Ola C: las sesiones de plan de tratamiento que documentan esta cita.
-  treatmentSessions EduTreatmentSession[] @relation("EduPlanSessionAppointment")
-
   @@index([institutionId, caseId], map: "edu_appointments_case_idx")
   // Ola 7: el bloque EN VIVO del panel de dirección pregunta cada 25
   // segundos por las citas de HOY en CHECKED_IN / IN_CHAIR / IN_PROGRESS.
@@ -13806,7 +13815,7 @@ enum EduStudyKind {
 ///     atribuirle al alumno una nota que no escribió, que es falsear la
 ///     autoría de un documento clínico.
 model EduRecord {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   institutionId String
   caseId        String
   patientId     String
@@ -13826,12 +13835,12 @@ model EduRecord {
   plan        String? @db.VarChar(4000)
   diagnostico String? @db.VarChar(500)
 
-  status EduRecordStatus @default(BORRADOR)
+  status         EduRecordStatus @default(BORRADOR)
   /// Cuándo se entregó para revisión y cuándo se firmó. Se DERIVAN del
   /// status (no se capturan), igual que EduCase.closedAt: así no existe una
   /// nota "firmada" sin fecha de firma.
-  submittedAt DateTime?
-  signedAt    DateTime?
+  submittedAt    DateTime?
+  signedAt       DateTime?
   /// Quién firmó. Puede no ser el autor — el docente firma lo que el alumno
   /// escribió, y ésa es justo la pregunta que se hace un año después.
   signedByUserId String?
@@ -13912,7 +13921,7 @@ model EduRecord {
 /// el odontograma. La única key que no está en el catálogo es la RESERVADA
 /// "__nota__", que es como se guarda la nota por diente.
 model EduOdontogramEntry {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   institutionId String
   patientId     String
   /// Número FDI del diente (11-18, 21-28, 31-38, 41-48 y los temporales
@@ -13961,11 +13970,11 @@ model EduOdontogramEntry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  recordedBy  EduUser        @relation("EduOdontogramRecorder", fields: [recordedById], references: [id], onDelete: Cascade)
+  institution EduInstitution       @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  recordedBy  EduUser              @relation("EduOdontogramRecorder", fields: [recordedById], references: [id], onDelete: Cascade)
   /// Ola B: quién lo dio de baja. SetNull, como el resto de las bajas.
-  deletedBy   EduUser?       @relation("EduOdontogramDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy   EduUser?             @relation("EduOdontogramDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   /// Ola C · N-3: el libro de MOVIMIENTOS de este hallazgo. Es lo que
   /// sobrevive a que la fila se reviva: el `update` del upsert pisa
   /// `deletedById`, pero no puede tocar lo que ya se escribió aquí.
@@ -13990,7 +13999,7 @@ model EduOdontogramEntry {
 /// byte — y falla al escribir, después de que el usuario esperó la subida
 /// entera.
 model EduStudy {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   institutionId String
   patientId     String
   /// El caso al que se enganchó, si se enganchó a alguno. Opcional: una
@@ -14000,11 +14009,11 @@ model EduStudy {
   kind        EduStudyKind @default(OTRO)
   /// El nombre ORIGINAL, tal como lo tenía el archivo. Es lo que se le
   /// enseña a la persona; el path lleva un nombre saneado aparte.
-  name        String  @db.VarChar(160)
-  storagePath String  @db.VarChar(400)
-  mimeType    String  @db.VarChar(120)
+  name        String       @db.VarChar(160)
+  storagePath String       @db.VarChar(400)
+  mimeType    String       @db.VarChar(120)
   sizeBytes   BigInt
-  notes       String? @db.VarChar(1000)
+  notes       String?      @db.VarChar(1000)
 
   uploadedById String
 
@@ -14028,24 +14037,24 @@ model EduStudy {
   /// `createdAt` y una placa de hace un año subida hoy se ordena como si
   /// fuera de hoy. Nullable: quien lea ordena por
   /// `COALESCE(takenAt, createdAt)`.
-  takenAt      DateTime? @db.Timestamptz(3)
+  takenAt DateTime? @db.Timestamptz(3)
 
   /// Anotaciones libres sobre la imagen. Es el campo que el dental sí
   /// tiene en `PatientFile` y aquí faltaba (fila 18 del informe ws2-t1);
   /// `notes` sigue siendo el texto que se lee, esto es lo que dibuja
   /// encima un visor.
-  annotations  Json?
+  annotations Json?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
-  uploadedBy  EduUser        @relation("EduStudyUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+  institution EduInstitution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  case        EduCase?           @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  uploadedBy  EduUser            @relation("EduStudyUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
   /// Ola B: quién lo dio de baja. SetNull — perder el nombre es aceptable,
   /// perder la constancia de que el estudio se retiró no.
-  deletedBy   EduUser?       @relation("EduStudyDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy   EduUser?           @relation("EduStudyDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   /// Ola 3B: los análisis de IA que se le pidieron a esta imagen. Son N y
   /// no uno: en una escuela el alumno pide el suyo y el docente quiere ver
   /// exactamente lo que el alumno vio (ver EduStudyAnalysis).
@@ -14172,31 +14181,31 @@ enum EduPaymentMethod {
 /// `priceCents` aquí sería la puerta a "y el de alumno lo pongo en otra
 /// columna", que es justo lo que esta ola no hace.
 model EduProcedure {
-  id            String  @id @default(cuid())
-  institutionId String
-  name          String  @db.VarChar(120)
+  id              String  @id @default(cuid())
+  institutionId   String
+  name            String  @db.VarChar(120)
   /// La clave corta que la escuela ya usa en sus papeles. Única DENTRO
   /// del instituto y normalizada en MAYÚSCULAS por la aplicación
   /// (Postgres distingue: "endo-1" y "ENDO-1" serían dos claves con el
   /// mismo texto impreso en el tarifario de la pared).
-  code          String  @db.VarChar(20)
+  code            String  @db.VarChar(20)
   /// Agrupación libre para leer el tarifario ("Endodoncia", "Prótesis").
   /// Texto y no catálogo: cada escuela agrupa distinto, y un catálogo
   /// cerrado obligaría a pedir permiso para dar de alta una categoría.
-  category      String? @db.VarChar(60)
+  category        String? @db.VarChar(60)
   /// Cuánto dura en el sillón. Sirve para proponer la duración de la
   /// cita; no bloquea nada.
-  durationMinutes Int   @default(60)
+  durationMinutes Int     @default(60)
   /// ── Ola C · H-90 · LA CATEGORÍA CON LLAVE ──────────────────────────
   /// La columna `category` de arriba se queda EXACTAMENTE como está —no
   /// se renombra, no se borra, no se migra—, y ésta se le pone al lado:
   /// hoy renombrar una categoría pone el avance de un requisito a cero EN
   /// SILENCIO, porque el requisito la compara por texto. SetNull:
   /// desactivar una categoría no puede vaciar el tarifario.
-  categoryId    String?
-  isActive      Boolean @default(true)
+  categoryId      String?
+  isActive        Boolean @default(true)
   /// Orden en que se pinta el tarifario. Empata con el alta por defecto.
-  orderIndex    Int     @default(0)
+  orderIndex      Int     @default(0)
 
   /// ── Ola C · H-76 · QUIÉN LO TOCÓ ───────────────────────────────────
   /// El cobro guarda quién cobró y la factura quién la emitió; los tres
@@ -14207,12 +14216,12 @@ model EduProcedure {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  categoryRef EduProcedureCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  updatedBy   EduUser?              @relation("EduProcedureUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
-  quoteItems  EduQuoteItem[]
-  feeItems    EduFeeScheduleItem[]
-  chargeItems EduChargeItem[]
+  institution  EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  categoryRef  EduProcedureCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  updatedBy    EduUser?              @relation("EduProcedureUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  quoteItems   EduQuoteItem[]
+  feeItems     EduFeeScheduleItem[]
+  chargeItems  EduChargeItem[]
   /// Ola 6: el catálogo de la Ola 5 es también el vocabulario ACADÉMICO —
   /// la rúbrica de una endodoncia, el requisito de "tres endodoncias" y el
   /// caso que cuenta para él hablan del mismo procedimiento. Un segundo
@@ -14284,13 +14293,13 @@ model EduFeeSchedule {
 /// lista de alumno no tiene este procedimiento"). Un 0 implícito sería
 /// regalar el tratamiento sin que nadie lo decidiera.
 model EduFeeScheduleItem {
-  id             String @id @default(cuid())
-  institutionId  String
-  feeScheduleId  String
-  procedureId    String
+  id            String @id @default(cuid())
+  institutionId String
+  feeScheduleId String
+  procedureId   String
   /// Centavos enteros. Cero es un precio válido y querido (un tamizaje
   /// gratis), y por eso "sin fila" y "cero" tienen que poder distinguirse.
-  priceCents     Int
+  priceCents    Int
 
   /// ── Ola C · H-76 · EL AUTOR Y LA FECHA DEL PRECIO ──────────────────
   /// «En febrero la resina costaba $800 y hoy $1,200: no se puede
@@ -14343,18 +14352,18 @@ model EduFeeScheduleItem {
 /// que la dirección la renombre. Un recibo que cambia de contenido
 /// después de firmado no es un recibo.
 model EduCharge {
-  id            String          @id @default(cuid())
-  institutionId String
+  id               String  @id @default(cuid())
+  institutionId    String
   /// Folio del cobro, único dentro del instituto. Lo genera la
   /// aplicación (C-0001, C-0002…) o lo teclea la escuela.
-  folio         String          @db.VarChar(30)
-  patientId     String
+  folio            String  @db.VarChar(30)
+  patientId        String
   /// El caso clínico, cuando se sabe. Es opcional porque CAJA no ve
   /// casos (src/lib/edu/visibility.ts) y cobra igual: el expediente no es
   /// asunto suyo. Lo cuelga quien sí los ve.
-  caseId        String?
-  feeScheduleId String?
-  feeScheduleLabel String?      @db.VarChar(80)
+  caseId           String?
+  feeScheduleId    String?
+  feeScheduleLabel String? @db.VarChar(80)
 
   /// Suma de (cantidad × precio unitario) de las líneas, ANTES de
   /// descuentos. En centavos.
@@ -14370,12 +14379,12 @@ model EduCharge {
   balanceCents  Int             @default(0)
   status        EduChargeStatus @default(PENDING)
 
-  notes         String?         @db.VarChar(500)
+  notes String? @db.VarChar(500)
 
   /// Quién cobró y cuándo. `chargedAt` es el instante del cobro y puede
   /// diferir de `createdAt` si algún día se captura en diferido.
   chargedByUserId String
-  chargedAt       DateTime      @default(now()) @db.Timestamptz(3)
+  chargedAt       DateTime @default(now()) @db.Timestamptz(3)
 
   /// El turno de caja en el que se emitió. Null = se emitió sin turno
   /// abierto (se permite: el corte es una herramienta, no un peaje).
@@ -14392,12 +14401,12 @@ model EduCharge {
   /// infraestructura. sql/edu-ola-11.sql rellena los cobros que ya existen
   /// con la sede por defecto de su instituto (que hoy es la única que hay,
   /// así que no es una suposición).
-  campusId      String?
+  campusId String?
 
   /// Anulación. Se guarda quién y cuándo porque es dinero.
-  cancelledAt      DateTime? @db.Timestamptz(3)
+  cancelledAt       DateTime? @db.Timestamptz(3)
   cancelledByUserId String?
-  cancelReason     String?   @db.VarChar(300)
+  cancelReason      String?   @db.VarChar(300)
 
   /// Cierre (P2-10). Clave de idempotencia que manda el CLIENTE al emitir:
   /// dos POST con la misma clave son UN cobro (el segundo devuelve el que
@@ -14407,26 +14416,26 @@ model EduCharge {
   /// se emite igual (los POST viejos no traían ninguna), y NULL no choca
   /// con NULL en el índice único de Postgres. Mismo patrón que la subida de
   /// estudios (índice único sobre storagePath).
-  idempotencyKey   String?   @db.VarChar(80)
+  idempotencyKey String? @db.VarChar(80)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  patient     EduPatient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  case        EduCase?        @relation(fields: [caseId], references: [id], onDelete: SetNull)
-  feeSchedule EduFeeSchedule? @relation(fields: [feeScheduleId], references: [id], onDelete: SetNull)
-  chargedBy   EduUser         @relation("EduChargeBy", fields: [chargedByUserId], references: [id], onDelete: Cascade)
-  cancelledBy EduUser?        @relation("EduChargeCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
-  cashSession EduCashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
-  campus      EduCampus?      @relation(fields: [campusId], references: [id], onDelete: SetNull)
-  items       EduChargeItem[]
-  payments    EduPayment[]
+  institution  EduInstitution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient      EduPatient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  case         EduCase?         @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  feeSchedule  EduFeeSchedule?  @relation(fields: [feeScheduleId], references: [id], onDelete: SetNull)
+  chargedBy    EduUser          @relation("EduChargeBy", fields: [chargedByUserId], references: [id], onDelete: Cascade)
+  cancelledBy  EduUser?         @relation("EduChargeCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  cashSession  EduCashSession?  @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  campus       EduCampus?       @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  items        EduChargeItem[]
+  payments     EduPayment[]
   /// Ola 10: sus facturas. Es una LISTA y no un uno-a-uno a propósito: un
   /// CFDI cancelado se queda en la tabla y el cobro se puede volver a
   /// facturar. Que solo haya UNA viva a la vez lo garantiza el índice
   /// único de EduInvoice sobre "activeChargeId", no esta relación.
-  invoices    EduInvoice[]
+  invoices     EduInvoice[]
   /// Pagos a meses: sus planes. LISTA por la misma razón que las
   /// facturas: un plan CANCELADO se queda en la tabla y el cobro se puede
   /// volver a diferir. Que solo haya UN ACTIVO a la vez lo garantiza la
@@ -14457,15 +14466,15 @@ model EduCharge {
 /// es opcional para permitir la línea libre (un material, una placa) y va
 /// en SetNull para que dar de baja un procedimiento no borre historia.
 model EduChargeItem {
-  id            String @id @default(cuid())
-  institutionId String
-  chargeId      String
-  procedureId   String?
+  id             String  @id @default(cuid())
+  institutionId  String
+  chargeId       String
+  procedureId    String?
   /// El nombre CONGELADO de lo que se cobró.
-  description   String @db.VarChar(160)
-  quantity      Int    @default(1)
+  description    String  @db.VarChar(160)
+  quantity       Int     @default(1)
   unitPriceCents Int
-  discountCents  Int   @default(0)
+  discountCents  Int     @default(0)
   /// cantidad × unitario − descuento. Se guarda calculado para que el
   /// recibo no dependa de que quien lo lea repita la fórmula.
   totalCents     Int
@@ -14497,44 +14506,44 @@ model EduChargeItem {
 /// número que esconde las dos cosas, y nadie tiene que borrar un renglón
 /// de dinero para corregir un error.
 model EduPayment {
-  id            String           @id @default(cuid())
-  institutionId String
-  chargeId      String
-  method        EduPaymentMethod @default(CASH)
+  id               String           @id @default(cuid())
+  institutionId    String
+  chargeId         String
+  method           EduPaymentMethod @default(CASH)
   /// Siempre POSITIVO, también en una devolución: el signo lo pone
   /// `isRefund`. Un monto negativo se cuela en cualquier suma que olvide
   /// mirar la bandera.
-  amountCents   Int
-  isRefund      Boolean          @default(false)
+  amountCents      Int
+  isRefund         Boolean          @default(false)
   /// Autorización de la terminal, folio de la transferencia… texto libre.
-  reference     String?          @db.VarChar(80)
-  notes         String?          @db.VarChar(300)
+  reference        String?          @db.VarChar(80)
+  notes            String?          @db.VarChar(300)
   /// 🔴 MESES SIN INTERESES DEL BANCO. Solo con CARD_CREDIT: 3, 6, 9, 12
   /// o 18. Es INFORMATIVO y no cambia un centavo de este pago — la escuela
   /// recibe el total hoy y quien financia es el banco. NO confundirlo con
   /// el plan de pagos de la ESCUELA (EduPaymentPlan), que sí parte el
   /// cobro en mensualidades que se cobran mes a mes.
-  msiMonths     Int?
+  msiMonths        Int?
   /// 🔴 PAGO DIVIDIDO DE UNA MENSUALIDAD. La mensualidad que este pago
   /// ayudó a cubrir, cuando una fila del plan se paga entre varias formas
   /// (efectivo + tarjeta). Todas las filas de la operación la apuntan; la
   /// que la LIQUIDÓ es la que además queda enganchada en
   /// `EduInstallment.paymentId` (relación 1:1, la de abajo).
-  installmentId String?
+  installmentId    String?
   /// Cuándo entró (o salió) el dinero. Es un INSTANTE.
-  paidAt        DateTime         @default(now()) @db.Timestamptz(3)
+  paidAt           DateTime         @default(now()) @db.Timestamptz(3)
   receivedByUserId String
   /// 🔴 El turno del PAGO, no el del cobro. Un cobro de ayer que se
   /// liquida hoy entra en el corte de HOY: el dinero está en la caja de
   /// hoy. Colgarlo del turno del cobro descuadraría los dos cortes.
-  cashSessionId String?
+  cashSessionId    String?
 
   createdAt DateTime @default(now())
 
-  institution EduInstitution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  charge      EduCharge       @relation(fields: [chargeId], references: [id], onDelete: Cascade)
-  receivedBy  EduUser         @relation("EduPaymentBy", fields: [receivedByUserId], references: [id], onDelete: Cascade)
-  cashSession EduCashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  institution   EduInstitution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  charge        EduCharge       @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  receivedBy    EduUser         @relation("EduPaymentBy", fields: [receivedByUserId], references: [id], onDelete: Cascade)
+  cashSession   EduCashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
   /// Pagos a meses: la mensualidad que ESTE pago liquidó, si fue el pago
   /// de una. Back-relation obligatoria; la FK vive en EduInstallment.
   ///
@@ -14564,22 +14573,22 @@ model EduPayment {
 /// garantiza la aplicación; en la base no cabe sin un índice único
 /// parcial, y uno parcial rompería cualquier upsert futuro.
 model EduCashSession {
-  id            String    @id @default(cuid())
-  institutionId String
-  openedAt      DateTime  @default(now()) @db.Timestamptz(3)
-  closedAt      DateTime? @db.Timestamptz(3)
+  id              String    @id @default(cuid())
+  institutionId   String
+  openedAt        DateTime  @default(now()) @db.Timestamptz(3)
+  closedAt        DateTime? @db.Timestamptz(3)
   /// Fondo con el que se abre.
-  openingCents  Int       @default(0)
+  openingCents    Int       @default(0)
   /// Lo que se CONTÓ al cerrar. Null mientras el turno sigue abierto.
-  countedCents  Int?
+  countedCents    Int?
   /// Lo que DEBERÍA haber en efectivo: fondo + efectivo cobrado −
   /// efectivo devuelto. Se congela al cerrar para que el corte impreso no
   /// cambie si mañana alguien registra un pago con fecha vieja.
-  expectedCents Int?
+  expectedCents   Int?
   /// contado − esperado. Positivo sobra, negativo falta. También
   /// congelado al cerrar.
   differenceCents Int?
-  notes         String?   @db.VarChar(500)
+  notes           String?   @db.VarChar(500)
 
   /// ── Ola C · H-09 · LA SEDE DEL TURNO ───────────────────────────────
   ///
@@ -14594,7 +14603,7 @@ model EduCashSession {
   /// existen: aplicar esta ola no cambia el comportamiento de ninguno.
   /// La LÓGICA que abre un turno POR SEDE la pone la casilla de caja
   /// (src/lib/edu/caja.ts); aquí solo va la columna.
-  campusId      String?
+  campusId String?
 
   /// ── Ola C · H-53 · EL DESGLOSE POR MÉTODO, GUARDADO ────────────────
   ///
@@ -14866,8 +14875,8 @@ model EduStudyAnalysis {
   /// Qué modelo lo escribió. Va en la fila y no en una constante: dentro
   /// de un año hay que poder contestar con QUÉ se generó esta lectura, y
   /// la constante del código ya será otra.
-  modelUsed  String @db.VarChar(80)
-  tokensUsed Int    @default(0)
+  modelUsed     String @db.VarChar(80)
+  tokensUsed    Int    @default(0)
   /// Costo estimado en MILLONÉSIMAS de dólar (entero, como los centavos de
   /// la Ola 5: en coma flotante no se puede sumar dinero). null = no se
   /// pudo calcular. Se guarda aunque hoy no se le cobre a nadie —el
@@ -14979,8 +14988,8 @@ model EduConsent {
   witness2SignedAt     DateTime?
 
   /// Contrafirma del ALUMNO que va a tratar.
-  studentSignedAt     DateTime?
-  studentSignatureUrl String?   @db.VarChar(400)
+  studentSignedAt          DateTime?
+  studentSignatureUrl      String?   @db.VarChar(400)
   /// Contrafirma del DOCENTE responsable. `supervisorSignedByUserId`
   /// existe aparte de `supervisorUserId` por lo mismo que EduRecord separa
   /// `authorUserId` de `signedByUserId`: el docente titular puede haber
@@ -15126,7 +15135,7 @@ model EduRubricCriterion {
   ///
   /// NOT NULL con DEFAULT true: es su propio backfill — todo criterio que
   /// ya exista está activo.
-  isActive      Boolean @default(true)
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -15308,11 +15317,11 @@ model EduRequirement {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  program     EduProgram            @relation(fields: [programId], references: [id], onDelete: Cascade)
-  updatedBy   EduUser?              @relation("EduRequirementUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
-  procedure   EduProcedure?         @relation(fields: [procedureId], references: [id], onDelete: SetNull)
-  categoryRef EduProcedureCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  institution EduInstitution          @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  program     EduProgram              @relation(fields: [programId], references: [id], onDelete: Cascade)
+  updatedBy   EduUser?                @relation("EduRequirementUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  procedure   EduProcedure?           @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+  categoryRef EduProcedureCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   /// Ola C · H-89 · sus VERSIONES. Esta fila es LA VIGENTE (que es lo que
   /// todo el código de evaluación ya lee); cada cambio escribe una
   /// versión con su cohorte y su autor. Ver EduRequirementVersion.
@@ -15401,17 +15410,17 @@ model EduCampus {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  chairs      EduChair[]
-  access      EduUserCampusAccess[]
-  charges     EduCharge[]
+  institution  EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  chairs       EduChair[]
+  access       EduUserCampusAccess[]
+  charges      EduCharge[]
   /// Ola C · H-09 · los TURNOS DE CAJA de esta sede, y H-19 · los
   /// bloqueos que cierran esta sede entera.
   cashSessions EduCashSession[]
   agendaBlocks EduAgendaBlock[]
   /// El PLANO de esta sede. OPCIONAL, y esa opcionalidad ES la regla: una
   /// sede sin fila se pinta con el plano automático de sus sillones.
-  layout      EduCampusLayout?
+  layout       EduCampusLayout?
 
   @@unique([institutionId, code], map: "edu_campuses_code_key")
   @@index([institutionId, isActive, orderIndex], map: "edu_campuses_orden_idx")
@@ -15645,8 +15654,8 @@ model EduAiUsage {
   /// A QUÉ se aplicó. Los dos son opcionales y solo uno se llena: el
   /// análisis cuelga de un estudio, el dictado de un caso (y de ninguno si
   /// se dictó una nota que todavía no tiene caso).
-  studyId String?
-  caseId  String?
+  studyId     String?
+  caseId      String?
   /// Cómo se llama eso, congelado ("Estudio: pano-2026.jpg"). Se guarda el
   /// texto además del id por lo mismo que el nombre de arriba: el detalle
   /// del gasto se tiene que poder leer sin JOIN y sin depender de que la
@@ -15896,12 +15905,12 @@ model EduWhatsappConfig {
   /// revocado), igual que waConnected en el dental: sin esto, el cron
   /// seguiría intentando con un token muerto en cada tick y la escuela
   /// creería que sus recordatorios salen.
-  connected      Boolean   @default(false)
-  connectedAt    DateTime?
+  connected     Boolean   @default(false)
+  connectedAt   DateTime?
   /// Último error de Meta que se vio, para poder pintarlo tal cual.
-  lastErrorCode  Int?
-  lastErrorMsg   String?   @db.VarChar(500)
-  lastErrorAt    DateTime?
+  lastErrorCode Int?
+  lastErrorMsg  String?   @db.VarChar(500)
+  lastErrorAt   DateTime?
 
   /// 🔴 ¿La WABA tiene método de pago válido? Meta le cobra a ELLA cada
   /// plantilla. Sin tarjeta, el envío falla con 131042 y esto se pone en
@@ -15917,22 +15926,22 @@ model EduWhatsappConfig {
   /// Se lee con eduParseWaTemplates (src/lib/edu/whatsapp-core.ts), que
   /// DESCARTA lo que venga mal formado: mandarle a Meta un nombre inválido
   /// gasta un intento y devuelve un código que no explica nada.
-  templates      Json?
+  templates Json?
 
   /// ── Qué avisos están encendidos ────────────────────────────────────
   /// Los tres nacen APAGADOS. Un producto que empieza a mandarle WhatsApp a
   /// pacientes reales el día que se aplica el .sql —sin que nadie lo haya
   /// pedido y con cargo a la tarjeta de la escuela— no es una función, es
   /// un accidente.
-  remindersEnabled Boolean @default(false)
+  remindersEnabled    Boolean @default(false)
   /// CUÁNTAS HORAS ANTES sale el recordatorio. Una sola anticipación y no
   /// dos como el dental: cada plantilla que sale se le cobra al instituto,
   /// y "24 h y además 2 h" es duplicar la factura de la escuela sin que
   /// nadie lo haya pedido. Si un día hacen falta dos, se agrega la segunda
   /// columna — no se agrega ahora "por si acaso".
-  reminderHoursBefore Int  @default(24)
-  consentEnabled   Boolean @default(false)
-  receiptEnabled   Boolean @default(false)
+  reminderHoursBefore Int     @default(24)
+  consentEnabled      Boolean @default(false)
+  receiptEnabled      Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -16224,7 +16233,7 @@ model EduInvoice {
   institutionId String
 
   /// El cobro facturado. SIEMPRE presente: es de dónde salen los importes.
-  chargeId String
+  chargeId       String
   /// 🔴 EL CANDADO. Igual a chargeId mientras la factura vive; NULL en
   /// cuanto se cancela o falla. Ver el encabezado.
   activeChargeId String?
@@ -16259,7 +16268,7 @@ model EduInvoice {
   // ── Los IMPORTES, copiados del COBRO ────────────────────────────────
   // En CENTAVOS, como todo el dinero del vertical. No se recalculan.
   subtotalCents Int
-  discountCents Int @default(0)
+  discountCents Int  @default(0)
   totalCents    Int
   /// Las líneas EXACTAS que se mandaron a timbrar, congeladas. Sirven
   /// para reimprimir el detalle sin depender de que el cobro (o el
@@ -16462,14 +16471,14 @@ model EduPrescription {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  case        EduCase        @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  proposedBy  EduUser?       @relation("EduRecetaProposedBy", fields: [proposedByUserId], references: [id], onDelete: SetNull)
-  issuedBy    EduUser?       @relation("EduRecetaIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
-  voidedBy    EduUser?       @relation("EduRecetaVoidedBy", fields: [voidedByUserId], references: [id], onDelete: SetNull)
+  institution EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  case        EduCase               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patient     EduPatient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  proposedBy  EduUser?              @relation("EduRecetaProposedBy", fields: [proposedByUserId], references: [id], onDelete: SetNull)
+  issuedBy    EduUser?              @relation("EduRecetaIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+  voidedBy    EduUser?              @relation("EduRecetaVoidedBy", fields: [voidedByUserId], references: [id], onDelete: SetNull)
   /// Ola C: quién archivó la rechazada. SetNull, como las demás.
-  archivedBy  EduUser?       @relation("EduRecetaArchivedBy", fields: [archivedByUserId], references: [id], onDelete: SetNull)
+  archivedBy  EduUser?              @relation("EduRecetaArchivedBy", fields: [archivedByUserId], references: [id], onDelete: SetNull)
   items       EduPrescriptionItem[]
 
   // · paciente → la pestaña Recetas de su ficha, más recientes primero.
@@ -16598,7 +16607,7 @@ model EduPaymentPlan {
   /// Lo que el cobro tenía PAGADO al crear el plan (el enganche, si lo
   /// hubo, más cualquier abono anterior). Congelado e informativo: el
   /// saldo vivo se sigue derivando de los pagos reales.
-  downPaymentCents Int                  @default(0)
+  downPaymentCents Int @default(0)
   /// El día de corte pactado (1-31). Si el mes no lo tiene, la fecha se
   /// RECORTA al último día de ese mes (corte 31 vence el 28 en febrero) —
   /// nunca se corre al mes siguiente.
@@ -16620,11 +16629,11 @@ model EduPaymentPlan {
 
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  charge      EduCharge      @relation(fields: [chargeId], references: [id], onDelete: Cascade)
-  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  createdBy   EduUser        @relation("EduPlanCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
-  cancelledBy EduUser?       @relation("EduPlanCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  institution  EduInstitution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  charge       EduCharge        @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  patient      EduPatient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy    EduUser          @relation("EduPlanCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  cancelledBy  EduUser?         @relation("EduPlanCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   installments EduInstallment[]
 
   // · status   → "los planes activos", que es la pantalla de caja.
@@ -16646,7 +16655,7 @@ model EduPaymentPlan {
 ///     CALENDARIO en cada lectura (eduInstallmentStatus), no un cron.
 ///   · El monto NO se teclea al pagar: se cobra EXACTAMENTE `amountCents`.
 model EduInstallment {
-  id            String @id @default(cuid())
+  id            String   @id @default(cuid())
   institutionId String
   planId        String
   /// 1-based. La número 1 es la que carga los centavos del residuo.
@@ -16817,7 +16826,7 @@ enum EduPhotoStage {
 /// `deleteReason` se escriben JUNTOS: una foto retirada del expediente sin
 /// quién ni por qué no es una baja, es una desaparición.
 model EduClinicalPhoto {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   institutionId String
   patientId     String
   /// El caso al que se enganchó, si se enganchó a alguno. Opcional por lo
@@ -16836,7 +16845,7 @@ model EduClinicalPhoto {
   /// tarde, `createdAt` pondría las fotos al revés.
   capturedAt DateTime @default(now()) @db.Timestamptz(3)
 
-  storagePath String @db.VarChar(400)
+  storagePath   String  @db.VarChar(400)
   /// La miniatura de 300 px. Nullable porque la compresión es
   /// best-effort: si sharp no puede con el formato (HEIC en algunas
   /// plataformas) se sube el original SIN miniatura y la galería cae a la
@@ -16850,7 +16859,7 @@ model EduClinicalPhoto {
   width         Int?
   height        Int?
 
-  notes String? @db.VarChar(1000)
+  notes       String? @db.VarChar(1000)
   /// Anotaciones libres sobre la foto ("diente 36, fractura vestibular").
   annotations Json?
 
@@ -16867,6 +16876,11 @@ model EduClinicalPhoto {
   uploadedBy  EduUser        @relation("EduPhotoUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
   deletedBy   EduUser?       @relation("EduPhotoDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
+  // Un path, una fila. La subida pasa por el servidor en un solo viaje
+  // (no hay /confirm que reintentar), así que esto no es idempotencia: es
+  // el candado de que dos filas no apunten al mismo objeto y que borrar
+  // el binario de una no deje a la otra ciega.
+  @@unique([institutionId, storagePath], map: "edu_clinical_photos_path_key")
   // Los nombres van EXPLÍCITOS: el que Prisma generaría solo se acerca a
   // los 63 caracteres que admite un identificador de Postgres, y
   // sql/edu-ola-b.sql tiene que poder decir exactamente lo mismo.
@@ -16875,11 +16889,6 @@ model EduClinicalPhoto {
   // toma, que es lo que decide cuál es la A y cuál la B).
   @@index([institutionId, patientId], map: "edu_clinical_photos_patient_idx")
   @@index([patientId, stage, capturedAt], map: "edu_clinical_photos_etapa_idx")
-  // Un path, una fila. La subida pasa por el servidor en un solo viaje
-  // (no hay /confirm que reintentar), así que esto no es idempotencia: es
-  // el candado de que dos filas no apunten al mismo objeto y que borrar
-  // el binario de una no deje a la otra ciega.
-  @@unique([institutionId, storagePath], map: "edu_clinical_photos_path_key")
   @@map("edu_clinical_photos")
 }
 
@@ -16963,7 +16972,7 @@ model CrmProspect {
   id String @id @default(cuid())
 
   /// El negocio: "Clínica Dental Sonrisa", "Universidad Cuauhtémoc".
-  name String
+  name     String
   /// Qué producto se le vende. Catálogo: CRM_VERTICALES.
   vertical String  @default("DENTAL")
   /// Dónde va en el embudo. Catálogo: CRM_ETAPAS.
@@ -17109,7 +17118,7 @@ model CrmTemplate {
   /// En qué momento del embudo se usa. NULL = en cualquiera. Catálogo:
   /// CRM_ETAPAS. Es una ETIQUETA, no una regla: nada impide copiar un texto
   /// de otra etapa.
-  stage String?
+  stage    String?
 
   /// El orden que le puso la persona. Se reescribe entero al reordenar (no
   /// se intercambian dos valores) para que dos textos nuevos, ambos en 0,
@@ -17183,9 +17192,9 @@ model AiConversation {
 
   messages AiConversationMessage[]
 
+  @@unique([clinicId, userId, legacyId])
   /// Listado de la barra lateral: las mías, de esta clínica, por actividad reciente.
   @@index([clinicId, userId, updatedAt])
-  @@unique([clinicId, userId, legacyId])
   @@map("ai_conversations")
 }
 
@@ -17359,8 +17368,8 @@ model EduHealthQuestionnaire {
 
   /// Quién lo capturó y cuándo. El nombre CONGELADO al lado del id.
   recordedById   String?
-  recordedByName String    @db.VarChar(160)
-  recordedAt     DateTime  @default(now()) @db.Timestamptz(3)
+  recordedByName String   @db.VarChar(160)
+  recordedAt     DateTime @default(now()) @db.Timestamptz(3)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -17401,7 +17410,7 @@ enum EduTreatmentPlanStatus {
 /// esto cubre "cuántas sesiones lleva y cuánto falta", que es lo que hoy
 /// no se puede contestar en ninguna pantalla del vertical.
 model EduTreatmentPlan {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   institutionId String
   patientId     String
   /// El caso al que pertenece. SetNull: perder el enlace es aceptable,
@@ -17422,12 +17431,12 @@ model EduTreatmentPlan {
 
   status EduTreatmentPlanStatus @default(ACTIVO)
 
-  startsAt         DateTime  @default(now()) @db.Timestamptz(3)
+  startsAt       DateTime  @default(now()) @db.Timestamptz(3)
   /// La fecha ESPERADA de cierre y la del cierre REAL. Dos columnas
   /// porque son dos preguntas distintas.
-  expectedEndAt    DateTime? @db.Timestamptz(3)
-  closedAt         DateTime? @db.Timestamptz(3)
-  nextExpectedAt   DateTime? @db.Timestamptz(3)
+  expectedEndAt  DateTime? @db.Timestamptz(3)
+  closedAt       DateTime? @db.Timestamptz(3)
+  nextExpectedAt DateTime? @db.Timestamptz(3)
 
   /// Quién lo armó y quién lo cerró, con el nombre congelado.
   createdById   String?
@@ -17438,11 +17447,11 @@ model EduTreatmentPlan {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
-  createdBy   EduUser?       @relation("EduPlanTratamientoBy", fields: [createdById], references: [id], onDelete: SetNull)
-  closedBy    EduUser?       @relation("EduPlanTratamientoClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  institution EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  case        EduCase?              @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  createdBy   EduUser?              @relation("EduPlanTratamientoBy", fields: [createdById], references: [id], onDelete: SetNull)
+  closedBy    EduUser?              @relation("EduPlanTratamientoClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
   sessions    EduTreatmentSession[]
   quotes      EduQuote[]
 
@@ -17474,10 +17483,10 @@ model EduTreatmentSession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  institution EduInstitution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   plan        EduTreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  appointment EduAppointment? @relation("EduPlanSessionAppointment", fields: [appointmentId], references: [id], onDelete: SetNull)
-  completedBy EduUser?        @relation("EduPlanSessionBy", fields: [completedById], references: [id], onDelete: SetNull)
+  appointment EduAppointment?  @relation("EduPlanSessionAppointment", fields: [appointmentId], references: [id], onDelete: SetNull)
+  completedBy EduUser?         @relation("EduPlanSessionBy", fields: [completedById], references: [id], onDelete: SetNull)
 
   @@unique([planId, sessionNumber], map: "edu_treatment_sessions_numero_key")
   @@index([institutionId, planId], map: "edu_treatment_sessions_plan_idx")
@@ -17514,7 +17523,7 @@ enum EduQuoteStatus {
 /// presupuesto: por eso cada partida guarda su `name` y su
 /// `unitPriceCents` COPIADOS del tarifario, y no un JOIN.
 model EduQuote {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   institutionId String
   patientId     String
   /// El caso, si el presupuesto sale de uno. SetNull.
@@ -17544,16 +17553,16 @@ model EduQuote {
   /// es único en toda la base: es una URL que sale del instituto.
   acceptToken String? @db.VarChar(64)
 
-  presentedAt DateTime? @db.Timestamptz(3)
-  acceptedAt  DateTime? @db.Timestamptz(3)
-  rejectedAt  DateTime? @db.Timestamptz(3)
+  presentedAt       DateTime? @db.Timestamptz(3)
+  acceptedAt        DateTime? @db.Timestamptz(3)
+  rejectedAt        DateTime? @db.Timestamptz(3)
   /// Quién aceptó, escrito por quien aceptó, y la evidencia — mismo trío
   /// que EduConsent y EduPrescription: hash del texto canónico que tenía
   /// delante, IP y navegador.
-  acceptedByName String? @db.VarChar(160)
-  acceptedHash   String? @db.VarChar(64)
-  acceptedIp     String? @db.VarChar(60)
-  acceptedUserAgent String? @db.VarChar(300)
+  acceptedByName    String?   @db.VarChar(160)
+  acceptedHash      String?   @db.VarChar(64)
+  acceptedIp        String?   @db.VarChar(60)
+  acceptedUserAgent String?   @db.VarChar(300)
 
   /// AGUAS ABAJO, e idempotente: cuando el presupuesto se acepta se puede
   /// convertir UNA vez en cobro y UNA vez en plan. Que la columna esté
@@ -17562,8 +17571,8 @@ model EduQuote {
   chargeId        String?
   treatmentPlanId String?
 
-  cancelledAt   DateTime? @db.Timestamptz(3)
-  cancelReason  String?   @db.VarChar(500)
+  cancelledAt  DateTime? @db.Timestamptz(3)
+  cancelReason String?   @db.VarChar(500)
 
   createdById   String?
   createdByName String  @db.VarChar(160)
@@ -17589,7 +17598,7 @@ model EduQuote {
 /// UNA PARTIDA del presupuesto. El nombre y el precio van COPIADOS del
 /// tarifario a propósito (ver el encabezado de EduQuote).
 model EduQuoteItem {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   institutionId String
   quoteId       String
   /// El procedimiento del catálogo, si salió de ahí. SetNull: desactivar
@@ -17655,7 +17664,7 @@ enum EduAgendaBlockKind {
 /// ⚠️ Y NO SE BORRA: se retira con `deletedAt`, como todo lo de la Ola B.
 /// Un bloqueo que existió explica por qué esa tarde no hubo nadie.
 model EduAgendaBlock {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   institutionId String
   /// La SEDE. Null = todas.
   campusId      String?
@@ -17665,7 +17674,7 @@ model EduAgendaBlock {
   kind   EduAgendaBlockKind @default(OTRO)
   /// Lo que se lee en la rejilla. Obligatorio: un hueco cerrado sin motivo
   /// es una llamada de teléfono.
-  reason String @db.VarChar(200)
+  reason String             @db.VarChar(200)
 
   /// INSTANTES, no horas de pared: un bloqueo se compara contra las citas,
   /// que son instantes. La conversión desde lo que teclea la pantalla usa
@@ -17738,7 +17747,7 @@ enum EduOdontogramEventAction {
 /// hallazgo desaparezca algún día. Un libro de movimientos que depende de
 /// que exista lo que registra no es un libro de movimientos.
 model EduOdontogramEvent {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   institutionId String
   patientId     String
   /// La fila del hallazgo. SetNull.
@@ -17752,7 +17761,7 @@ model EduOdontogramEvent {
   action EduOdontogramEventAction
 
   /// El texto que tenía la nota, si el movimiento la tocó.
-  notes String? @db.VarChar(1000)
+  notes  String? @db.VarChar(1000)
   /// El motivo, cuando quitar exige uno.
   reason String? @db.VarChar(500)
 
@@ -17903,4 +17912,99 @@ model EduAiQuotaChange {
 
   @@index([institutionId, createdAt], map: "edu_ai_quota_changes_institucion_idx")
   @@map("edu_ai_quota_changes")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// WS1-T2 · LOS BLOQUEOS DE AGENDA (dental)
+//
+// Hasta ahora Dental no sabía cerrar un día ni unas horas: lo ÚNICO que
+// conocía era `ClinicSchedule`, el horario SEMANAL. Para cerrar el 25 de
+// diciembre había que apagar los jueves —y con ellos todos los jueves del
+// año— o no cerrarlo. La agenda ofrecía huecos que no existían, y los
+// ofrecía por CINCO puertas a la vez: la rejilla del panel, el bot de
+// WhatsApp, Sabina, la página web de la clínica y las solicitudes sin
+// cuenta.
+//
+// El diseño está PORTADO de `EduAgendaBlock` (la vertical educativa, que ya
+// lo tenía resuelto), simplificado: en dental no hay sedes ni sillones, solo
+// clínica y doctor. Las cuatro decisiones que se copian tal cual van
+// comentadas campo por campo abajo.
+//
+// 🔴 EL ALCANCE LO DA EL NULL, y es toda la tabla en dos líneas:
+//   · `doctorId = null` → LA CLÍNICA ENTERA. No entra nada, de nadie.
+//   · `doctorId = X`    → solo X. A los demás doctores no les afecta.
+//
+// ⚠️ UN BLOQUEO NO CANCELA LAS CITAS QUE YA ESTÁN, y aquí dental se aparta
+// de edu a propósito (decisión de Rafael): edu deja bloquear encima de lo
+// agendado; dental NO CREA el bloqueo si dentro del rango hay una cita viva
+// y contesta 409 con la lista, para que primero se muevan esas citas. Ni en
+// un caso ni en el otro se cancela nada en cascada: una cita se cancela con
+// motivo y con aviso al paciente, nunca en silencio.
+//
+// El .sql idempotente equivalente vive en sql/agenda-bloqueos.sql y se
+// aplica A MANO en Supabase. ⛔ NUNCA `prisma migrate dev` ni `deploy`: hay
+// migraciones del repo sin registrar contra producción.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Por qué está cerrado el hueco. Solo cambia la etiqueta y el ícono; el
+/// alcance y el solape no dependen del tipo.
+enum AgendaBlockKind {
+  /// Día festivo (oficial o de costumbre). Suele venir del catálogo.
+  FESTIVO
+  /// Vacaciones o puente de un doctor, o de toda la clínica.
+  VACACIONES
+  /// Asunto personal: un congreso, una cita médica, una boda.
+  PERSONAL
+  /// Obra, fumigación, el equipo de rayos en servicio.
+  MANTENIMIENTO
+  /// Cualquier otra cosa; manda el motivo que se escriba.
+  OTRO
+}
+
+model AgendaBlock {
+  id       String  @id @default(cuid())
+  clinicId String
+  /// EL DOCTOR. Null = toda la clínica (no entra nada, de nadie).
+  doctorId String?
+
+  kind   AgendaBlockKind @default(OTRO)
+  /// Lo que se lee en la rejilla y en el aviso del bot. OBLIGATORIO: un hueco
+  /// cerrado sin motivo es una llamada de teléfono.
+  reason String          @db.VarChar(200)
+
+  /// INSTANTES, no horas de pared. Se comparan contra citas, que son
+  /// instantes. La conversión desde lo que teclea la pantalla («el 25, todo el
+  /// día») la hace el SERVIDOR con la zona de la clínica: el navegador
+  /// interpretaría el día en la zona del DISPOSITIVO y quien abra el panel
+  /// desde otro huso cerraría la clínica con horas de desfase.
+  startsAt DateTime @db.Timestamptz(3)
+  endsAt   DateTime @db.Timestamptz(3)
+
+  /// Sello del catálogo de festivos: "MX-2026-NAVIDAD". Null si es a mano.
+  /// Sirve para saber qué festivos del año YA están puestos sin tener que
+  /// adivinarlo comparando fechas.
+  holidayKey String? @db.VarChar(40)
+
+  createdById   String?
+  /// El nombre se CONGELA al crear. Así el bloqueo sigue diciendo quién lo
+  /// puso aunque esa persona se vaya de la clínica y su fila se borre.
+  createdByName String  @db.VarChar(160)
+
+  /// BORRADO SUAVE. Un bloqueo retirado deja rastro: es lo que explica por qué
+  /// esa tarde de hace tres meses no hubo nadie en la clínica.
+  deletedAt   DateTime? @db.Timestamptz(3)
+  deletedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic    Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor    User?  @relation("AgendaBlockDoctor", fields: [doctorId], references: [id], onDelete: SetNull)
+  createdBy User?  @relation("AgendaBlockCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  deletedBy User?  @relation("AgendaBlockDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@unique([clinicId, holidayKey], map: "agenda_blocks_festivo_unico")
+  @@index([clinicId, startsAt, endsAt], map: "agenda_blocks_rango_idx")
+  @@index([clinicId, doctorId, startsAt], map: "agenda_blocks_doctor_idx")
+  @@map("agenda_blocks")
 }

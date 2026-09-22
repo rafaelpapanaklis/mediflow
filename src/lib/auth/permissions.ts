@@ -40,6 +40,14 @@ export const ALL_PERMISSIONS = {
   "agenda.create":        "Crear citas",
   "agenda.edit":          "Editar/mover citas",
   "agenda.delete":        "Cancelar citas",
+  // WS1-T2. Cerrar días y horas de la agenda (festivos, vacaciones,
+  // mantenimiento). Es una key propia y no un extra de `agenda.edit` porque no
+  // son la misma acción: mover una cita afecta a un paciente, y cerrar un día
+  // le cierra la puerta a todos los que aún no han llamado — al bot, a la
+  // página web y a Sabina a la vez. El SERVIDOR acota además el alcance por
+  // rol (un DOCTOR solo cierra SU agenda, nunca la de la clínica), así que
+  // esta key abre la pantalla; no decide hasta dónde llega quien la abre.
+  "agenda.bloqueos":      "Cerrar días y horas de la agenda (festivos, vacaciones)",
   // Pacientes
   "patients.view":        "Ver lista de pacientes",
   "patients.create":      "Crear pacientes",
@@ -147,7 +155,7 @@ export const ALL_PERMISSION_KEYS = Object.keys(ALL_PERMISSIONS) as PermissionKey
  */
 export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Hoy",            keys: ["today.view"] },
-  { title: "Agenda",         keys: ["agenda.view", "agenda.create", "agenda.edit", "agenda.delete"] },
+  { title: "Agenda",         keys: ["agenda.view", "agenda.create", "agenda.edit", "agenda.delete", "agenda.bloqueos"] },
   { title: "Pacientes",      keys: ["patients.view", "patients.create", "patients.edit", "patients.delete"] },
   { title: "Expediente",     keys: ["medicalRecord.view", "medicalRecord.edit", "medicalRecord.export"] },
   { title: "Recetas",        keys: ["prescription.view", "prescription.create"] },
@@ -195,6 +203,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
   DOCTOR: [
     "today.view",
     "agenda.view", "agenda.create", "agenda.edit", "agenda.delete",
+    // El doctor cierra SU propia agenda (vacaciones, un congreso) sin pedir
+    // permiso a nadie: eso es lo que sustituye al flujo de aprobación que no
+    // existe. Lo que NO puede es cerrar la clínica entera ni la agenda de un
+    // compañero — eso lo corta el servidor (resolverAlcance en
+    // src/lib/agenda-bloqueos/service.ts), no este catálogo.
+    "agenda.bloqueos",
     "patients.view", "patients.create", "patients.edit",
     "medicalRecord.view", "medicalRecord.edit",
     "prescription.view", "prescription.create",
@@ -241,6 +255,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
   RECEPTIONIST: [
     "today.view",
     "agenda.view", "agenda.create", "agenda.edit", "agenda.delete",
+    // ⚠️ `agenda.bloqueos` NO está aquí A PROPÓSITO (decisión de Rafael):
+    // recepción agenda y mueve citas todo el día, pero cerrar el 25 de
+    // diciembre para toda la clínica es una decisión de la dirección. Si una
+    // clínica quiere dárselo, el SUPER_ADMIN lo enciende persona a persona
+    // desde Equipo → Permisos, como el resto. No lo añadas aquí "porque
+    // falta".
     "patients.view", "patients.create", "patients.edit",
     // billing.edit: la recepción con Caja borra borradores y edita facturas desde
     // el detalle — DELETE y PATCH de /api/invoices/[id] ahora lo exigen (edit-price ya).

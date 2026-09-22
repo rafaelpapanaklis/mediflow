@@ -14,8 +14,14 @@ import "server-only";
  *
  * Por qué no se llama a `leerOcupacion` en bucle: sería una consulta por día y
  * por doctor (14 × 3 = 42). La regla de la casa es menos de 7 por `Promise.all`
- * porque el pooler se satura. Aquí son TRES en total —unidades, citas del rango
- * y horarios de unidad— y el reparto por día se hace en memoria.
+ * porque el pooler se satura. Aquí son CUATRO en total —unidades, citas del
+ * rango, bloqueos del rango y horarios de unidad— y el reparto por día se hace
+ * en memoria.
+ *
+ * ⚠️ WS1-T2 — ESTE ES EL SEXTO SITIO que calcula disponibilidad, y no estaba en
+ * la lista de cinco de la tarea. No hizo falta encontrarlo a mano: al volver
+ * OBLIGATORIO el campo `bloqueos` de `Ocupacion`, el compilador señaló este
+ * archivo. Es exactamente para eso que ese campo no es opcional.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -31,6 +37,7 @@ import {
 } from "@/lib/sabina/tools/agenda-huecos";
 import type { ConfigClinica } from "@/lib/sabina/tools/agenda-comun";
 import { rangoDeCuando, sumarDias } from "./fechas";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 
 // Reexportado para que la ruta lo importe de un solo sitio.
 export { rangoDeCuando };
@@ -90,9 +97,9 @@ export async function buscarHuecosDelRango(args: BuscarHuecosArgs): Promise<Huec
   // El rango UTC completo del barrido, de la primera medianoche a la última.
   const rango = calendarRangeUtc(args.desde, fechas[fechas.length - 1]!, timezone);
 
-  // TRES consultas, no una por día. `clinicId` sale de la sesión: si faltara,
+  // CUATRO consultas, no una por día. `clinicId` sale de la sesión: si faltara,
   // Prisma descartaría la clave y devolvería las citas de TODAS las clínicas.
-  const [unidades, citas] = await Promise.all([
+  const [unidades, citas, bloqueos] = await Promise.all([
     prisma.resource.findMany({
       where: { clinicId: args.clinicId, isActive: true },
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
@@ -109,6 +116,12 @@ export async function buscarHuecosDelRango(args: BuscarHuecosArgs): Promise<Huec
         endsAt: { gt: rango.fromUtc },
       },
       select: { doctorId: true, resourceId: true, startsAt: true, endsAt: true },
+    }),
+    // WS1-T2 — los bloqueos de TODO el barrido, de una vez. Se piden los de
+    // estos doctores y los de toda la clínica; `bloqueaEsteHueco` (dentro de
+    // `evaluarHora`) aplica el alcance doctor a doctor.
+    leerBloqueosDelRango(args.clinicId, rango.fromUtc, rango.toUtc, {
+      doctorIds: args.doctorIds,
     }),
   ]);
 
@@ -148,6 +161,11 @@ export async function buscarHuecosDelRango(args: BuscarHuecosArgs): Promise<Huec
     const delDia = citas.filter(
       (c) => c.startsAt.getTime() < endUtc.getTime() && c.endsAt.getTime() > startUtc.getTime(),
     );
+    // Los bloqueos que tocan ESTE día, recortando en memoria el barrido entero
+    // (mismo criterio de solape que las citas de arriba).
+    const bloqueosDelDia = bloqueos.filter(
+      (b) => b.startsAt.getTime() < endUtc.getTime() && b.endsAt.getTime() > startUtc.getTime(),
+    );
 
     const sillonesDelDia: Sillon[] = unidades.map((u) => ({
       id: u.id,
@@ -160,8 +178,10 @@ export async function buscarHuecosDelRango(args: BuscarHuecosArgs): Promise<Huec
     const delDiaOrdenados: HuecoEncontrado[] = [];
     for (const doctorId of args.doctorIds) {
       const ocupacion: Ocupacion = {
+        doctorId,
         doctor: delDia.filter((c) => c.doctorId === doctorId).map(intervalo),
         sillones: sillonesDelDia,
+        bloqueos: bloqueosDelDia,
       };
 
       const { huecos } = buscarHuecos({

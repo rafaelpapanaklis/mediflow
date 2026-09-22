@@ -2,6 +2,8 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { partitionSlotsByOverlap } from "@/lib/public-booking/slots";
+import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 
 /**
  * Solicitudes de cita SIN cuenta — lado panel.
@@ -139,23 +141,36 @@ export async function freeSlotsForDay(args: {
 
   const inicioDia = tzLocalToUtc(dateISO, 0, 0, timezone);
   const finDia = new Date(inicioDia.getTime() + 86_400_000);
-  const ocupadas = await prisma.appointment.findMany({
-    where: {
-      clinicId,
-      doctorId: { in: doctorIds },
-      startsAt: { lt: finDia },
-      endsAt: { gt: inicioDia },
-      status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      overrideReason: null,
-    },
-    select: { startsAt: true, endsAt: true, doctorId: true },
-  });
+  const [ocupadas, bloqueos] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        clinicId,
+        doctorId: { in: doctorIds },
+        startsAt: { lt: finDia },
+        endsAt: { gt: inicioDia },
+        status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        overrideReason: null,
+      },
+      select: { startsAt: true, endsAt: true, doctorId: true },
+    }),
+    // WS1-T2 — los bloqueos del día para estos doctores (más los de toda la
+    // clínica, que `leerBloqueosDelRango` añade siempre).
+    leerBloqueosDelRango(clinicId, inicioDia, finDia, { doctorIds }),
+  ]);
 
   // Un horario sirve si al menos UN doctor lo tiene libre.
   const disponibles = new Set<string>();
   for (const id of doctorIds) {
     const suyas = ocupadas.filter(o => o.doctorId === id);
     for (const s of partitionSlotsByOverlap(slots, dateISO, timezone, durationMin, suyas).available) {
+      // WS1-T2 — y sin bloqueo encima, doctor a doctor: el mismo criterio que
+      // el «al menos uno libre» de arriba. Estas horas se le OFRECEN a quien ya
+      // pidió una cita y se la ocuparon; ofrecerle una que está cerrada la
+      // manda a la misma llamada de teléfono que esto vino a evitar.
+      const [h, mn] = s.split(":").map(Number);
+      if (bloqueaEsteSlot(bloqueos, tzLocalToUtc(dateISO, h, mn, timezone), durationMin, id)) {
+        continue;
+      }
       disponibles.add(s);
     }
   }

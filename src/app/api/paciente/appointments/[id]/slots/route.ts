@@ -33,6 +33,8 @@ import {
   canPatientChange,
 } from "@/lib/appointment-change/slots";
 import { tzLocalToUtc, todayInTz } from "@/lib/agenda/time-utils";
+import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 
 export const dynamic = "force-dynamic";
 
@@ -115,17 +117,26 @@ export async function GET(
   // de la clínica, overlap para atrapar también citas que cruzan medianoche).
   const dayStartUtc = tzLocalToUtc(dateStr, 0, 0, timezone);
   const dayEndUtc = new Date(dayStartUtc.getTime() + 86_400_000);
-  const busy = await prisma.appointment.findMany({
-    where: {
-      clinicId: appt.clinicId,
-      doctorId: appt.doctorId,
-      id: { not: appt.id }, // excluye la propia cita
-      status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      startsAt: { lt: dayEndUtc },
-      endsAt: { gt: dayStartUtc },
-    },
-    select: { startsAt: true, endsAt: true },
-  });
+  const [busy, bloqueos] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        clinicId: appt.clinicId,
+        doctorId: appt.doctorId,
+        id: { not: appt.id }, // excluye la propia cita
+        status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        startsAt: { lt: dayEndUtc },
+        endsAt: { gt: dayStartUtc },
+      },
+      select: { startsAt: true, endsAt: true },
+    }),
+    // WS1-T2 — los bloqueos del día de DESTINO. Lo que se filtra es a dónde se
+    // puede mover la cita; que la cita actual esté dentro de un bloqueo (el día
+    // se cerró después de agendarla) no la ata: moverla FUERA es justo lo que
+    // hay que dejar hacer.
+    leerBloqueosDelRango(appt.clinicId, dayStartUtc, dayEndUtc, {
+      doctorIds: [appt.doctorId],
+    }),
+  ]);
 
   const [closeH, closeM] = daySchedule.closeTime.split(":").map(Number);
   const closeMins = closeH * 60 + closeM;
@@ -146,7 +157,10 @@ export async function GET(
     const taken = busy.some(
       (b) => b.startsAt.getTime() < slotEndMs && b.endsAt.getTime() > slotStart.getTime(),
     );
-    if (!taken) slots.push(hhmm);
+    if (taken) continue;
+    // WS1-T2 — y sin bloqueo encima.
+    if (bloqueaEsteSlot(bloqueos, slotStart, durationMin, appt.doctorId)) continue;
+    slots.push(hhmm);
   }
 
   return NextResponse.json({ date: dateStr, timezone, durationMin, slots });

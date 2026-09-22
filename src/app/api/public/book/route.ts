@@ -7,6 +7,8 @@ import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
 import { isOverlapError } from "@/lib/agenda/api-helpers";
 import { getPatientPortalContext } from "@/lib/patient-portal/guard";
 import { resolveBookingPatient } from "@/lib/patient-portal/link";
+import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 
 export async function POST(req: NextRequest) {
   try {
@@ -128,6 +130,34 @@ export async function POST(req: NextRequest) {
   const startsAtBook = tzLocalToUtc(date, slotH, slotM, clinic.timezone);
   const endsAtBook = new Date(startsAtBook.getTime() + 30 * 60_000);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // WS1-T2 — EL CANDADO DEL ALTA, no solo el de la oferta.
+  //
+  // GET /api/public/availability ya esconde los horarios bloqueados, pero esa
+  // pantalla se pinta una vez y se queda abierta: entre que alguien la abre y
+  // le da a reservar pueden pasar minutos, y en ese rato la clínica puede
+  // cerrar el día desde el panel. Sin esta comprobación una pestaña vieja
+  // seguiría metiendo citas dentro de un festivo recién puesto.
+  //
+  // Se descartan los doctores bloqueados ANTES de la transacción y no dentro:
+  // el bloqueo no es una carrera (no lo gana otro reservando a la vez), así
+  // que releerlo en cada reintento no aportaría nada.
+  // ═══════════════════════════════════════════════════════════════════════
+  const bloqueosDelHueco = await leerBloqueosDelRango(clinic.id, startsAtBook, endsAtBook, {
+    doctorIds: candidates.map(c => c.id),
+  });
+  const libresDeBloqueo = candidates.filter(
+    c => !bloqueaEsteHueco(bloqueosDelHueco, startsAtBook, endsAtBook, c.id),
+  );
+  if (libresDeBloqueo.length === 0) {
+    // El motivo NO sale al público: basta con que no se puede y con ofrecer
+    // otra hora. Y es 409 (conflicto con el estado de la agenda), el mismo
+    // código con el que esta ruta ya contesta «ese horario acaba de ocuparse».
+    return NextResponse.json({
+      error: "La clínica cerró la agenda en ese horario. Elige otro horario, por favor.",
+    }, { status: 409 });
+  }
+
   /**
    * Elige un doctor libre y crea la cita en la MISMA transacción: la lectura
    * de ocupados y el INSERT no se pueden separar o dos reservas simultáneas
@@ -141,7 +171,7 @@ export async function POST(req: NextRequest) {
       const conflicts = await tx.appointment.findMany({
         where: {
           clinicId:  clinic!.id,
-          doctorId:  { in: candidates.map(c => c.id) },
+          doctorId:  { in: libresDeBloqueo.map(c => c.id) },
           status:    { notIn: ["CANCELLED","NO_SHOW"] },
           overrideReason: null,
           startsAt:  { lt: endsAtBook },
@@ -150,7 +180,7 @@ export async function POST(req: NextRequest) {
         select: { doctorId: true },
       });
       const ocupados = new Set(conflicts.map(c => c.doctorId));
-      const elegido = candidates.find(c => !ocupados.has(c.id));
+      const elegido = libresDeBloqueo.find(c => !ocupados.has(c.id));
       if (!elegido) throw new Error("SLOT_TAKEN");
 
       const created = await tx.appointment.create({

@@ -2,6 +2,8 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { applyReminderReschedule } from "@/lib/reminders/reschedule.server";
+import { bloqueaEsteSlot, bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 
 /**
  * Servicio server-side reutilizable para que el bot de WhatsApp agende y
@@ -71,6 +73,12 @@ export interface SlotResult {
   closed: boolean;
   reason?: string;
   slots: string[];
+  /**
+   * El motivo del bloqueo, cuando lo que cerró el día fue un bloqueo de agenda
+   * y no el horario semanal (WS1-T2). El bot puede decir «ese día está cerrado
+   * por vacaciones» en vez de un «no hay atención» que no explica nada.
+   */
+  mensajeBloqueo?: string;
 }
 
 /**
@@ -122,36 +130,67 @@ export async function getAvailableSlots(params: {
 
   const dayStartUtc = tzLocalToUtc(dateISO, 0, 0, tz);
   const dayEndUtc = new Date(dayStartUtc.getTime() + DAY_MS);
-  const existing = await prisma.appointment.findMany({
-    where: {
-      clinicId,
-      doctorId,
-      status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      startsAt: { lt: dayEndUtc },
-      endsAt: { gt: dayStartUtc },
-    },
-    select: { startsAt: true, endsAt: true },
-  });
+  const [existing, bloqueos] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        clinicId,
+        doctorId,
+        status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        startsAt: { lt: dayEndUtc },
+        endsAt: { gt: dayStartUtc },
+      },
+      select: { startsAt: true, endsAt: true },
+    }),
+    // WS1-T2 — los bloqueos que tapan el día. Se piden los de ESTE doctor y
+    // los de toda la clínica; el `bloqueaEsteSlot` de abajo aplica el alcance.
+    leerBloqueosDelRango(clinicId, dayStartUtc, dayEndUtc, { doctorIds: [doctorId] }),
+  ]);
 
   const nowMs = Date.now();
   const slots: string[] = [];
   for (let m = openMin; m + duration <= closeMin; m += step) {
     const h = Math.floor(m / 60);
     const mn = m % 60;
-    const startMs = tzLocalToUtc(dateISO, h, mn, tz).getTime();
+    const inicio = tzLocalToUtc(dateISO, h, mn, tz);
+    const startMs = inicio.getTime();
     const endMs = startMs + duration * 60_000;
     if (startMs <= nowMs) continue;
     const overlaps = existing.some(
       (a) => startMs < a.endsAt.getTime() && endMs > a.startsAt.getTime(),
     );
     if (overlaps) continue;
+    // WS1-T2 — un hueco bloqueado no se ofrece. Los que quedan SON las
+    // alternativas más cercanas fuera del bloqueo: si se cerró la mañana, el
+    // bot lista la tarde en vez de contestar que no hay nada.
+    if (bloqueaEsteSlot(bloqueos, inicio, duration, doctorId)) continue;
     slots.push(`${pad(h)}:${pad(mn)}`);
   }
+
+  // Si no quedó ni un hueco Y el día entero está bloqueado, se dice POR QUÉ.
+  // La diferencia le importa a quien está del otro lado: «no quedan horarios»
+  // invita a insistir ese mismo día; «está cerrado por vacaciones» hace que
+  // pregunte por otra fecha, que es la conversación que lleva a algún sitio.
+  if (slots.length === 0) {
+    const tapaTodo = bloqueaEsteHueco(bloqueos, dayStartUtc, dayEndUtc, doctorId);
+    if (tapaTodo) {
+      return {
+        closed: true,
+        reason: "blocked",
+        slots: [],
+        // El motivo, sin decir de QUIÉN es el bloqueo: al paciente del otro
+        // lado no le corresponde saber que la doctora está operada.
+        mensajeBloqueo: tapaTodo.reason,
+      };
+    }
+  }
+
   return { closed: false, slots };
 }
 
 export type CreateErrorCode =
   | "outside_hours"
+  /** WS1-T2 — el hueco está cerrado por un bloqueo de agenda. */
+  | "blocked"
   | "overlap"
   | "doctor_not_found"
   | "patient_not_found"
@@ -205,6 +244,17 @@ export async function createBotAppointment(params: {
 
   if (await hasConflict(clinicId, doctorId, startsAt, endsAt)) return { ok: false, error: "overlap" };
 
+  // WS1-T2 — el candado del ALTA, no solo el de la oferta. Entre que el bot
+  // enseña los horarios y el paciente contesta pueden pasar minutos, y en ese
+  // rato alguien puede cerrar el día desde el panel. Sin esta comprobación el
+  // bot agendaría dentro de un bloqueo recién puesto.
+  const bloqueos = await leerBloqueosDelRango(clinicId, startsAt, endsAt, {
+    doctorIds: [doctorId],
+  });
+  if (bloqueaEsteHueco(bloqueos, startsAt, endsAt, doctorId)) {
+    return { ok: false, error: "blocked" };
+  }
+
   try {
     const created = await prisma.appointment.create({
       data: {
@@ -231,7 +281,14 @@ export async function createBotAppointment(params: {
   }
 }
 
-export type RescheduleErrorCode = "not_found" | "outside_hours" | "overlap" | "invalid" | "failed";
+export type RescheduleErrorCode =
+  | "not_found"
+  | "outside_hours"
+  /** WS1-T2 — el hueco de destino está cerrado por un bloqueo de agenda. */
+  | "blocked"
+  | "overlap"
+  | "invalid"
+  | "failed";
 
 export interface RescheduleResult {
   ok: boolean;
@@ -271,6 +328,17 @@ export async function rescheduleBotAppointment(params: {
   }
   if (await hasConflict(clinicId, existing.doctorId, startsAt, endsAt, existing.id)) {
     return { ok: false, error: "overlap" };
+  }
+
+  // WS1-T2 — mover una cita A un hueco bloqueado es lo mismo que crearla ahí.
+  // Lo que NO se toca es la cita que YA está dentro de un bloqueo: si alguien
+  // cerró el día encima de ella, moverla FUERA es justo lo que hay que dejar
+  // hacer, y esta comprobación mira el destino, nunca el origen.
+  const bloqueos = await leerBloqueosDelRango(clinicId, startsAt, endsAt, {
+    doctorIds: [existing.doctorId],
+  });
+  if (bloqueaEsteHueco(bloqueos, startsAt, endsAt, existing.doctorId)) {
+    return { ok: false, error: "blocked" };
   }
 
   try {

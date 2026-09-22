@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
 import { partitionSlotsByOverlap, slotOverlapsBusy } from "@/lib/public-booking/slots";
+import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 
 // GET /api/public/availability?slug=my-clinic&date=2026-04-10&doctorId=xxx
 // No authentication required — public endpoint
@@ -114,19 +116,26 @@ export async function GET(req: NextRequest) {
   const dayStartUtc = tzLocalToUtc(dateStr, 0, 0, clinic.timezone);
   const dayEndUtc = new Date(dayStartUtc.getTime() + 86_400_000);
 
-  const busy = await prisma.appointment.findMany({
-    where: {
-      clinicId: clinic.id,
-      startsAt: { lt: dayEndUtc },
-      endsAt:   { gt: dayStartUtc },
-      status:   { notIn: ["CANCELLED","NO_SHOW"] },
-      overrideReason: null,
-      ...(doctorId ? { doctorId } : {}),
-    },
-    // doctorId hace falta para el modo "cualquiera": hay que saber de QUIÉN es
-    // cada cita ocupada, no solo que la clínica está ocupada a esa hora.
-    select: { startsAt: true, endsAt: true, doctorId: true },
-  });
+  const [busy, bloqueos] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        clinicId: clinic.id,
+        startsAt: { lt: dayEndUtc },
+        endsAt:   { gt: dayStartUtc },
+        status:   { notIn: ["CANCELLED","NO_SHOW"] },
+        overrideReason: null,
+        ...(doctorId ? { doctorId } : {}),
+      },
+      // doctorId hace falta para el modo "cualquiera": hay que saber de QUIÉN es
+      // cada cita ocupada, no solo que la clínica está ocupada a esa hora.
+      select: { startsAt: true, endsAt: true, doctorId: true },
+    }),
+    // WS1-T2 — los bloqueos del día. SIN filtrar por doctor aunque se pregunte
+    // por uno: en el modo "cualquiera" se necesitan los de TODOS los doctores
+    // para poder descartarlos uno a uno más abajo. Un festivo de la clínica
+    // (doctorId null) entra siempre.
+    leerBloqueosDelRango(clinic.id, dayStartUtc, dayEndUtc),
+  ]);
 
   let available: string[];
   let bookedTimes: string[];
@@ -136,8 +145,25 @@ export async function GET(req: NextRequest) {
   if (doctorId) {
     // Un doctor concreto: comportamiento de siempre, intacto.
     const partition = partitionSlotsByOverlap(slots, dateStr, clinic.timezone, 30, busy);
-    available = partition.available;
-    bookedTimes = partition.taken;
+    // WS1-T2 — y encima, fuera los bloqueados. Van a `bookedSlots` y no
+    // desaparecen de `allSlots`: la reserva pública pinta el horario completo
+    // con los tomados en gris, y hacer desaparecer las horas le cambiaría la
+    // forma a la rejilla sin decir por qué. Lo que NO se manda es el motivo:
+    // "vacaciones de la Dra. X" en una página pública es más de lo que nadie
+    // pidió saber.
+    available = [];
+    bookedTimes = [...partition.taken];
+    for (const hhmm of partition.available) {
+      const [h, mn] = hhmm.split(":").map(Number);
+      const slotStart = tzLocalToUtc(dateStr, h, mn, clinic.timezone);
+      if (bloqueaEsteSlot(bloqueos, slotStart, 30, doctorId)) bookedTimes.push(hhmm);
+      else available.push(hhmm);
+    }
+    // Reordenar: los bloqueados se fueron añadiendo al final y `bookedSlots`
+    // sale en el cuerpo. La rejilla los pinta en gris en su sitio, así que una
+    // lista desordenada no rompe nada visible — pero es la clase de detalle que
+    // desconcierta a quien depure el JSON a mano.
+    bookedTimes.sort();
   } else {
     // "Cualquier disponible": el horario se cae SOLO si TODOS los doctores lo
     // tienen ocupado. Se parte la agenda por doctor y se pregunta por cada uno.
@@ -156,6 +182,12 @@ export async function GET(req: NextRequest) {
       const slotStart = tzLocalToUtc(dateStr, h, mn, clinic.timezone);
       const free = clinic.users
         .filter(u => !slotOverlapsBusy(slotStart, 30, busyByDoctor.get(u.id) ?? []))
+        // WS1-T2 — y que no lo tenga bloqueado. Se pregunta DOCTOR A DOCTOR,
+        // con el mismo criterio que el "libre si al menos uno lo tiene libre":
+        // que la doctora esté de vacaciones no cierra el horario si su
+        // compañero atiende. Un bloqueo de toda la clínica cae sobre todos y el
+        // horario se apaga entero, que es lo correcto.
+        .filter(u => !bloqueaEsteSlot(bloqueos, slotStart, 30, u.id))
         .map(u => u.id);
       if (free.length > 0) {
         available.push(hhmm);
