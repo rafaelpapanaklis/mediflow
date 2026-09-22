@@ -1,0 +1,462 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   HORARIO POR DOCTOR — el panel de Equipo → «Horario» y de Configuración →
+   «Mi horario». Una sola hoja para los TRES sitios donde sale (la ventana
+   de Equipo y los dos caminos de render de settings-client.tsx), igual que
+   `bloqueos.module.css`: no lee ni una clase de ninguno de ellos.
+
+   Solo TOKENS de `globals.css` (`--card`, `--border`, `--foreground`,
+   `--muted`, `--muted-foreground`, `--brand-600`, `--destructive`,
+   `--warning-*`, `--radius`, `--shadow-1`), que ya se dan la vuelta con
+   `.dark` en <html>. Ni un hexadecimal: el modo oscuro sale solo.
+
+   🔴 `--brand-600` dentro del panel es VIOLETA (globals.css lo remapea en
+   `body:has(.dashboard-shell)`): el mismo de la fila «abierta» del horario de
+   la clínica, que es la forma que esto copia — casilla, día, «de … a …».
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── La tarjeta de «Mi horario» (Configuración) ─────────────────────────
+   En la ventana de Equipo no hay tarjeta: el marco lo pone la ventana. */
+
+.seccion {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* El mismo ancho que la tarjeta del horario de la clínica (`max-w-lg`),
+     que va justo encima: dos tarjetas con la misma forma una bajo la otra. */
+  max-width: 32rem;
+  margin-top: 24px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 16px;
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-1);
+}
+
+/* En el camino del rediseño: el mismo tope que la sección de bloqueos. */
+.seccionAncha {
+  max-width: 880px;
+}
+
+.seccionCabecera {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 18px 20px 0;
+}
+
+.seccionTitulo {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: hsl(var(--foreground));
+}
+
+.seccionSub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+}
+
+.cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.seccion .cuerpo {
+  padding: 14px 20px 18px;
+}
+
+/* En la ventana de Equipo: el cuerpo es lo que hace scroll, entre la
+   cabecera y el pie, que se quedan quietos. */
+.cuerpoModal {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── El estado: lo que más confunde si no se dice ─────────────────────── */
+
+.estado {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--muted) / 0.35);
+  min-width: 0;
+}
+
+.estadoPropio {
+  border-color: hsl(var(--brand-600) / 0.35);
+  background: hsl(var(--brand-600) / 0.07);
+}
+
+.punto {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: hsl(var(--muted-foreground));
+}
+
+.estadoPropio .punto {
+  background: hsl(var(--brand-600));
+}
+
+.estadoTextos {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.estadoTitulo {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: hsl(var(--foreground));
+}
+
+.estadoResumen {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: hsl(var(--foreground) / 0.8);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.estadoNota {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
+
+.tramo {
+  white-space: nowrap;
+}
+
+/* En su propio renglón, alineada con el texto (punto 9 px + hueco 10 px). */
+.estadoAccion {
+  flex: 1 1 100%;
+  padding-left: 19px;
+  min-width: 0;
+}
+
+/* El «Volver…» es texto: se alinea con la letra, no con la caja del botón. */
+.estadoAccion .botonTexto {
+  margin-left: -8px;
+}
+
+/* Un aviso en línea, sin caja: «todavía sigue el de la clínica», «con todos
+   los días cerrados…». El texto dice lo que pasa; el color refuerza. */
+.nota {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
+
+.notaAviso {
+  color: var(--warning-strong);
+}
+
+.notaIcono {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+/* ── Los 7 días ──────────────────────────────────────────────────────── */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  /* Contenedor para decidir SOLO por el ancho útil de aquí dentro si las
+     horas caben en la fila del día. Nada de lo que cuelga de aquí es
+     `position: fixed`: el contenedor no encierra ninguna ventana. */
+  container-type: inline-size;
+}
+
+.fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--muted) / 0.3);
+  min-width: 0;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+
+.filaAbierta {
+  border-color: hsl(var(--brand-600) / 0.3);
+  background: hsl(var(--brand-600) / 0.08);
+}
+
+.dia {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 8.5rem;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.casilla {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: hsl(var(--brand-600));
+  cursor: pointer;
+}
+
+.casilla:focus-visible,
+.hora:focus-visible,
+.boton:focus-visible,
+.botonPrincipal:focus-visible,
+.botonTexto:focus-visible {
+  outline: 2px solid hsl(var(--brand-600));
+  outline-offset: 1px;
+}
+
+.diaNombre {
+  font-size: 14px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filaAbierta .diaNombre {
+  color: hsl(var(--brand-600));
+}
+
+.horas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cerrado,
+.hasta {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+}
+
+.hora {
+  width: 7rem;
+  min-width: 0;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--foreground));
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  /* Sin `color-scheme` propio: hereda el `dark` que `globals.css` pone en
+     `.dark`, y así el reloj del campo se ve en oscuro. */
+}
+
+.hora:hover:not(:disabled) {
+  border-color: hsl(var(--brand-600) / 0.45);
+}
+
+.horaMal {
+  border-color: hsl(var(--destructive));
+}
+
+/* El aviso del día, en su propia línea, debajo del día al que se refiere. */
+.avisoDia {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--warning-strong);
+  overflow-wrap: anywhere;
+}
+
+.errorDia {
+  color: hsl(var(--destructive));
+}
+
+/* A lo angosto (la ventana de Equipo en un teléfono) las horas no caben
+   junto al día: bajan a su línea, alineadas con el nombre y no con la
+   casilla. Medido: a 390 px el cuerpo de la ventana deja ~320 px útiles. */
+@container (max-width: 25rem) {
+  .dia {
+    flex-basis: 100%;
+  }
+
+  .horas {
+    flex-basis: 100%;
+    padding-left: 26px;
+  }
+
+  .hora {
+    flex: 1 1 0;
+    width: auto;
+  }
+
+  .avisoDia {
+    padding-left: 26px;
+  }
+}
+
+/* ── Acciones ─────────────────────────────────────────────────────────── */
+
+/* El `modal__footer` de siempre no parte de línea: a 390 px «Cancelar» y
+   «Guardar horario propio» caben justos, y en inglés o con otro texto no. */
+.pieModal {
+  flex-wrap: wrap;
+}
+
+.pie {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.boton,
+.botonPrincipal {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
+}
+
+.boton {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+.boton:hover:not(:disabled) {
+  border-color: hsl(var(--brand-600) / 0.45);
+}
+
+.botonPrincipal {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 18px;
+  border: 0;
+  background: hsl(var(--brand-600));
+  color: hsl(var(--primary-foreground));
+  box-shadow: var(--shadow-1);
+}
+
+.botonPrincipal:hover:not(:disabled) {
+  background: hsl(var(--brand-700));
+  box-shadow: var(--shadow-2);
+}
+
+.boton:disabled,
+.botonPrincipal:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* «Volver al horario de la clínica»: es un DELETE, pero no destruye nada
+   que no se pueda volver a poner, así que va como texto y no en rojo. */
+.botonTexto {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: hsl(var(--brand-600));
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.botonTexto:hover:not(:disabled) {
+  background: hsl(var(--brand-600) / 0.1);
+}
+
+.botonTexto:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.girando {
+  animation: girar 0.9s linear infinite;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Cargando / error ────────────────────────────────────────────────── */
+
+.vacio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 12px;
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+}
+
+.vacioError {
+  border-style: solid;
+  border-color: hsl(var(--destructive) / 0.35);
+  background: hsl(var(--destructive) / 0.06);
+  color: hsl(var(--foreground));
+}
+
+@media (max-width: 480px) {
+  .seccionCabecera {
+    padding: 16px 14px 0;
+  }
+
+  .seccion .cuerpo {
+    padding: 12px 14px 16px;
+  }
+
+  /* La acción de la tarjeta, a lo ancho: pegada a la derecha en un teléfono
+     se lee como un detalle. */
+  .seccion .pie .botonPrincipal {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}

@@ -14,11 +14,13 @@
  * versión oscura + los `--ag-*` de `.tokensAgenda`) y su letra.
  */
 
+import { useEffect, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, ArrowRight, Loader2, X } from "lucide-react";
 import { instrumentSans } from "@/fonts/menu";
 import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
+import { usePuedoAgendarEncima } from "@/components/dashboard/bloqueos/usar-politica-bloqueos";
 import type { PlannedReschedule } from "@/lib/agenda/reschedule-flow";
 import { fechaCorta } from "@/lib/agenda-nueva/fechas";
 import { diaEnTz } from "@/lib/agenda-nueva/geometria";
@@ -63,6 +65,18 @@ export function ConfirmarMovimiento({
   // textos tal cual estaban (los traduce ws1-t1 cuando le toque la agenda
   // nueva entera). `vista-mes.tsx` ya usa `useT` en esta misma carpeta.
   const t = useT();
+  // Solo se pregunta si hay bloqueo en el destino. Con la clínica en «No»
+  // (Configuración → Horarios y bloqueos) no se puede soltar encima: se dice
+  // por qué y «Mover cita» se apaga. `null` = preguntando: también apagado.
+  const puedo = usePuedoAgendarEncima(bloqueo !== null);
+  const prohibido = bloqueo !== null && puedo === false;
+  const esperando = bloqueo !== null && puedo === null;
+  // Con bloqueo, «Mover cita» nace apagado mientras pregunta y su `autoFocus`
+  // no prende. Con el «sí», el foco vuelve a él, como antes de este ajuste.
+  const moverRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (bloqueo !== null && puedo === true) moverRef.current?.focus();
+  }, [bloqueo, puedo]);
   const tz = state.timezone;
   const { original } = plan;
 
@@ -161,8 +175,17 @@ export function ConfirmarMovimiento({
                     : bloqueo.doctorNombre ?? t("agenda.bloqueos.confirmar.alcanceDoctorSinNombre")}
                 </span>
                 <span className={s.moverBloqueoNota}>
-                  {t("agenda.bloqueos.confirmar.cerradaPara")}{" "}
-                  {t("agenda.bloqueos.confirmar.tuSiPuedes")}
+                  {prohibido ? (
+                    <>
+                      <strong style={{ fontWeight: 650 }}>{t("agenda.bloqueos.confirmar.prohibido")}</strong>{" "}
+                      {t("agenda.bloqueos.confirmar.prohibidoQueHacer")}
+                    </>
+                  ) : (
+                    <>
+                      {t("agenda.bloqueos.confirmar.cerradaPara")}{" "}
+                      {t("agenda.bloqueos.confirmar.tuSiPuedes")}
+                    </>
+                  )}
                 </span>
               </div>
             </div>
@@ -178,10 +201,11 @@ export function ConfirmarMovimiento({
               Cancelar
             </button>
             <button
+              ref={moverRef}
               type="button"
               className={s.accionPrincipal}
               onClick={onConfirmar}
-              disabled={guardando}
+              disabled={guardando || prohibido || esperando}
               autoFocus
             >
               {guardando ? (

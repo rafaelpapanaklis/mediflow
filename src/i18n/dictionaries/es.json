@@ -1586,7 +1586,11 @@
         "cerradaPara": "La agenda está cerrada para el bot, la web y el portal del paciente.",
         "tuSiPuedes": "Tú sí puedes agendar desde aquí, y quedará registrado.",
         "agendarIgual": "Agendar de todas formas",
-        "guardando": "Guardando…"
+        "guardando": "Guardando…",
+        "prohibido": "La clínica no permite agendar sobre un día bloqueado.",
+        "prohibidoQueHacer": "Elige otro día u hora. Lo decide la administración en Configuración → Horarios y bloqueos.",
+        "elegirOtra": "Elegir otra fecha",
+        "comprobando": "Comprobando…"
       },
       "aviso": {
         "etiquetaClinica": "{motivo}",
@@ -3907,7 +3911,8 @@
       "deactivateTitle": "Desactivar",
       "activateTitle": "Activar",
       "addDoctorTitle": "Agregar doctor",
-      "editTitle": "Editar — {name}"
+      "editTitle": "Editar — {name}",
+      "horario": "Horario"
     },
     "permissions": {
       "useRoleDefault": "Usar default del rol",
@@ -4038,7 +4043,70 @@
         "one": "1 activo",
         "other": "{count} activos"
       },
-      "listaVaciaAyuda": "Aquí irán los días y las horas que cierres. Mientras esté vacío, la agenda acepta citas en todo el horario semanal."
+      "listaVaciaAyuda": "Aquí irán los días y las horas que cierres. Mientras esté vacío, la agenda acepta citas en todo el horario semanal.",
+      "politica": {
+        "titulo": "¿Recepción puede agendar sobre un día bloqueado?",
+        "sub": "Qué pasa cuando alguien intenta agendar en un día u hora que está cerrado.",
+        "si": "Sí, avisando y dejando registro",
+        "siAyuda": "Sale un aviso con el motivo del bloqueo; quien agenda lo confirma y queda registrado.",
+        "deFabrica": "Por defecto",
+        "no": "No, queda prohibido",
+        "noAyuda": "Ni recepción ni la IA pueden agendar encima: tienen que elegir otro día u hora.",
+        "guardadoToast": "Ajuste guardado",
+        "guardarError": "No se pudo guardar el ajuste.",
+        "cargaError": "No se pudo leer este ajuste.",
+        "cargando": "Cargando el ajuste…"
+      }
+    },
+    "horarioDoctor": {
+      "modalTitulo": "Horario de {name}",
+      "miHorarioTitulo": "Mi horario",
+      "miHorarioSub": "Los días y las horas en que atiendes. Fuera de ellos no se te ofrecen citas.",
+      "heredaTitulo": "Sigue el horario de la clínica",
+      "heredaTituloYo": "Sigues el horario de la clínica",
+      "heredaNota": "Un doctor sin horario propio sigue el de la clínica.",
+      "propioTitulo": "Horario propio",
+      "propioNota": "Solo se le ofrecen citas dentro de estas horas.",
+      "propioNotaYo": "Solo se te ofrecen citas dentro de estas horas.",
+      "darPropio": "Darle un horario propio",
+      "darPropioYo": "Poner mi propio horario",
+      "volverClinica": "Volver al horario de la clínica",
+      "volviendo": "Volviendo…",
+      "borradorNota": "Mientras no lo guardes, sigue con el horario de la clínica.",
+      "borradorNotaYo": "Mientras no lo guardes, sigues con el horario de la clínica.",
+      "clinicaSinHorario": "La clínica todavía no tiene horario de atención.",
+      "clinicaSinDias": "La clínica no tiene ningún día abierto.",
+      "guardarPropio": "Guardar horario propio",
+      "guardadoToast": "Horario guardado",
+      "guardarError": "No se pudo guardar el horario.",
+      "volverConfirmTitulo": "¿Volver al horario de la clínica?",
+      "volverConfirmDesc": "Se borra el horario propio de {name} y vuelve a seguir el de la clínica.",
+      "volverConfirmDescYo": "Se borra tu horario propio y vuelves a seguir el de la clínica.",
+      "volverConfirmBtn": "Volver al de la clínica",
+      "volvioToast": "De vuelta al horario de la clínica",
+      "volverError": "No se pudo volver al horario de la clínica.",
+      "cargando": "Cargando el horario…",
+      "cargaError": "No se pudo cargar el horario.",
+      "rangoInvalido": "La hora de salida tiene que ser después de la de entrada.",
+      "avisoCierra": "La clínica cierra a las {hora}; esas horas no se van a ofrecer.",
+      "avisoAbre": "La clínica abre a las {hora}; esas horas no se van a ofrecer.",
+      "avisoAbreYCierra": "La clínica abre de {abre} a {cierra}; las horas de fuera no se van a ofrecer.",
+      "avisoCerrada": "La clínica cierra este día; no se va a ofrecer.",
+      "sinDiasAbiertos": "Con todos los días cerrados no se le va a ofrecer ninguna cita.",
+      "sinDiasAbiertosYo": "Con todos los días cerrados no se te va a ofrecer ninguna cita.",
+      "entradaAria": "Entrada del {dia}",
+      "salidaAria": "Salida del {dia}",
+      "diaCorto": {
+        "lun": "Lun",
+        "mar": "Mar",
+        "mie": "Mié",
+        "jue": "Jue",
+        "vie": "Vie",
+        "sab": "Sáb",
+        "dom": "Dom"
+      },
+      "tramoUno": "{dia} {abre}-{cierra}",
+      "tramoVarios": "{desde}-{hasta} {abre}-{cierra}"
     }
   },
   "procurement": {

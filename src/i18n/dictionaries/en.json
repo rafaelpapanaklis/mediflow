@@ -1586,7 +1586,11 @@
         "cerradaPara": "The agenda is closed for the bot, the website and the patient portal.",
         "tuSiPuedes": "You can still book from here, and it will be recorded.",
         "agendarIgual": "Book anyway",
-        "guardando": "Saving…"
+        "guardando": "Saving…",
+        "prohibido": "The clinic doesn't allow booking over a blocked day.",
+        "prohibidoQueHacer": "Pick another day or time. The administration sets this in Settings → Hours & blocks.",
+        "elegirOtra": "Pick another date",
+        "comprobando": "Checking…"
       },
       "aviso": {
         "etiquetaClinica": "{motivo}",
@@ -3907,7 +3911,8 @@
       "deactivateTitle": "Deactivate",
       "activateTitle": "Activate",
       "addDoctorTitle": "Add doctor",
-      "editTitle": "Edit — {name}"
+      "editTitle": "Edit — {name}",
+      "horario": "Schedule"
     },
     "permissions": {
       "useRoleDefault": "Use role default",
@@ -4038,7 +4043,70 @@
         "one": "1 active",
         "other": "{count} active"
       },
-      "listaVaciaAyuda": "Days and hours you close will show up here. While it is empty, the calendar accepts bookings across the whole weekly schedule."
+      "listaVaciaAyuda": "Days and hours you close will show up here. While it is empty, the calendar accepts bookings across the whole weekly schedule.",
+      "politica": {
+        "titulo": "Can the front desk book over a blocked day?",
+        "sub": "What happens when someone tries to book on a day or time that is closed.",
+        "si": "Yes, with a warning and an audit record",
+        "siAyuda": "A warning shows the reason for the block; whoever books confirms it and it's logged.",
+        "deFabrica": "Default",
+        "no": "No, it's not allowed",
+        "noAyuda": "Neither the front desk nor the AI can book over it: they have to pick another day or time.",
+        "guardadoToast": "Setting saved",
+        "guardarError": "Couldn't save the setting.",
+        "cargaError": "Couldn't load this setting.",
+        "cargando": "Loading setting…"
+      }
+    },
+    "horarioDoctor": {
+      "modalTitulo": "{name}'s schedule",
+      "miHorarioTitulo": "My schedule",
+      "miHorarioSub": "The days and hours you see patients. You won't be offered appointments outside them.",
+      "heredaTitulo": "Follows the clinic's hours",
+      "heredaTituloYo": "You follow the clinic's hours",
+      "heredaNota": "A doctor without their own schedule follows the clinic's.",
+      "propioTitulo": "Own schedule",
+      "propioNota": "Appointments are only offered within these hours.",
+      "propioNotaYo": "You're only offered appointments within these hours.",
+      "darPropio": "Give them their own schedule",
+      "darPropioYo": "Set my own schedule",
+      "volverClinica": "Go back to the clinic's hours",
+      "volviendo": "Going back…",
+      "borradorNota": "Until you save it, they keep following the clinic's hours.",
+      "borradorNotaYo": "Until you save it, you keep following the clinic's hours.",
+      "clinicaSinHorario": "The clinic has no business hours yet.",
+      "clinicaSinDias": "The clinic has no open days.",
+      "guardarPropio": "Save own schedule",
+      "guardadoToast": "Schedule saved",
+      "guardarError": "Couldn't save the schedule.",
+      "volverConfirmTitulo": "Go back to the clinic's hours?",
+      "volverConfirmDesc": "{name}'s own schedule is deleted and they follow the clinic's hours again.",
+      "volverConfirmDescYo": "Your own schedule is deleted and you follow the clinic's hours again.",
+      "volverConfirmBtn": "Use the clinic's hours",
+      "volvioToast": "Back to the clinic's hours",
+      "volverError": "Couldn't go back to the clinic's hours.",
+      "cargando": "Loading schedule…",
+      "cargaError": "Couldn't load the schedule.",
+      "rangoInvalido": "The end time has to be after the start time.",
+      "avisoCierra": "The clinic closes at {hora}; those hours won't be offered.",
+      "avisoAbre": "The clinic opens at {hora}; those hours won't be offered.",
+      "avisoAbreYCierra": "The clinic is open {abre}–{cierra}; hours outside that won't be offered.",
+      "avisoCerrada": "The clinic is closed this day; it won't be offered.",
+      "sinDiasAbiertos": "With every day closed, no appointments will be offered.",
+      "sinDiasAbiertosYo": "With every day closed, you won't be offered any appointments.",
+      "entradaAria": "Start time, {dia}",
+      "salidaAria": "End time, {dia}",
+      "diaCorto": {
+        "lun": "Mon",
+        "mar": "Tue",
+        "mie": "Wed",
+        "jue": "Thu",
+        "vie": "Fri",
+        "sab": "Sat",
+        "dom": "Sun"
+      },
+      "tramoUno": "{dia} {abre}-{cierra}",
+      "tramoVarios": "{desde}-{hasta} {abre}-{cierra}"
     }
   },
   "procurement": {

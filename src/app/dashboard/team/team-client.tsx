@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, ClipboardList, Users as UsersIcon, Camera, Loader2, Sparkles } from "lucide-react";
+import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, ClipboardList, Users as UsersIcon, Camera, Loader2, Sparkles, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -13,6 +13,8 @@ import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PermissionsModal } from "@/components/dashboard/team/permissions-modal";
 import { SabinaPermissionsModal } from "@/components/dashboard/team/sabina-permissions-modal";
+import { ModalHorarioDoctor } from "@/components/dashboard/horario-doctor/modal-horario-doctor";
+import type { Dia } from "@/components/dashboard/horario-doctor/tipos";
 import { RaizRediseno } from "@/components/dashboard/equipo-rediseno/raiz";
 import { useT } from "@/i18n/i18n-provider";
 import { prepararImagen } from "@/lib/image-client";
@@ -531,9 +533,12 @@ interface Props {
   // false por defecto: sin la prop (o con la clínica apagada) la pantalla se
   // pinta exactamente igual que hoy.
   rediseno?: boolean;
+  /** El horario de la clínica (0=Lunes…6=Domingo), o `null` si no tiene
+   *  filas. Lo lee la ventana «Horario» de cada doctor. */
+  horarioClinica?: Dia[] | null;
 }
 
-export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -543,6 +548,8 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   // Member cuyo modal de permisos está abierto. Solo SUPER_ADMIN puede abrirlo.
   const [permsMember, setPermsMember] = useState<TeamMember | null>(null);
   const [sabinaMember, setSabinaMember] = useState<TeamMember | null>(null);
+  // Doctor cuya ventana «Horario» está abierta. Solo ADMIN y SUPER_ADMIN.
+  const [horarioMember, setHorarioMember] = useState<TeamMember | null>(null);
   const [loading,    setLoading]    = useState(false);
   const [filter,     setFilter]     = useState<"active"|"all"|"inactive">("active");
   const [tempPass,   setTempPass]   = useState<string | null>(null);
@@ -558,6 +565,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   const [emailNotice, setEmailNotice] = useState<{ name: string; email: string } | null>(null);
 
   const isSuperAdmin = currentUserRole === "SUPER_ADMIN";
+  // «Horario» por doctor: lo ponen ADMIN y SUPER_ADMIN (no solo el super,
+  // como Permisos). A `team.view` también llega READONLY, que no lo ve.
+  const puedeHorario = currentUserRole === "ADMIN" || currentUserRole === "SUPER_ADMIN";
 
   const usedColors = team.map(m => m.color);
   const nextColor  = DOCTOR_COLORS.find(c => !usedColors.includes(c)) ?? DOCTOR_COLORS[0];
@@ -971,6 +981,17 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                         {t("settings.sabinaPermissions.button")}
                       </ButtonNew>
                     )}
+                    {/* Horario: solo sobre DOCTOR, que son los que tiene la
+                     *  agenda. Sin horario propio, sigue el de la clínica. */}
+                    {puedeHorario && m.role === "DOCTOR" && (
+                      <ButtonNew
+                        variant="secondary"
+                        icon={<Clock size={16} strokeWidth={1.75} />}
+                        onClick={() => setHorarioMember(m)}
+                      >
+                        {t("settings.team.horario")}
+                      </ButtonNew>
+                    )}
                     {m.id !== currentUserId && (
                       <>
                         <button
@@ -1069,6 +1090,15 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         open={sabinaMember !== null}
         member={sabinaMember}
         onClose={() => setSabinaMember(null)}
+      />
+
+      {/* Horario de cada doctor — ADMIN y SUPER_ADMIN. Mismo patrón que
+       *  Permisos: el miembro abierto vive aquí y la ventana lee el resto. */}
+      <ModalHorarioDoctor
+        open={horarioMember !== null}
+        member={horarioMember}
+        clinica={horarioClinica}
+        onClose={() => setHorarioMember(null)}
       />
     </Raiz>
   );

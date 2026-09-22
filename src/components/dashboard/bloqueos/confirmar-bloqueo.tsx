@@ -36,13 +36,26 @@
  * abre una confirmación, y encadenar dos para un solo gesto se convierte en
  * dos «aceptar» seguidos que nadie lee.
  * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * Y SI LA CLÍNICA DIJO «NO»
+ *
+ * Configuración → Horarios y bloqueos → «¿Recepción puede agendar sobre un
+ * día bloqueado?» (`politica.ts`). Con «No», esta ventana deja de ofrecer
+ * «Agendar de todas formas», dice por qué y solo deja volver a elegir fecha.
+ * Lo pregunta ELLA al abrirse (`usePuedoAgendarEncima`), no quien la monta:
+ * así los tres sitios —uno de ellos, `appointments-client`, fuera de
+ * `components/`— se enteran sin tocarlos. Mientras pregunta, el botón de agendar espera apagado; si no hay
+ * respuesta, se comporta como antes y el servidor tiene la última palabra.
+ * ═══════════════════════════════════════════════════════════════════════
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { diaLargo } from "./fechas";
+import { usePuedoAgendarEncima } from "./usar-politica-bloqueos";
 import s from "./confirmar-bloqueo.module.css";
 
 /**
@@ -94,6 +107,16 @@ export function ConfirmarBloqueo({
    */
   const [yaPulsado, setYaPulsado] = useState(false);
   const bloqueado = guardando || yaPulsado;
+  // `null` mientras pregunta; `false` = la clínica no deja agendar encima.
+  const puedo = usePuedoAgendarEncima(true);
+  const prohibido = puedo === false;
+  // Mientras pregunta, el botón está apagado y su `autoFocus` no prende: el
+  // foco cae en «Cancelar». En cuanto llega el «sí», vuelve adonde estaba
+  // antes de este ajuste, para que el Enter de siempre haga lo de siempre.
+  const confirmarRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (puedo === true) confirmarRef.current?.focus();
+  }, [puedo]);
 
   // El alcance, escrito: «toda la clínica» o el nombre de quien se ausenta.
   // Es la diferencia entre «la clínica está en obra» y «la Dra. Ruiz está en
@@ -156,41 +179,65 @@ export function ConfirmarBloqueo({
             </span>
           </p>
 
-          <p className={s.explicacion}>
-            {t("agenda.bloqueos.confirmar.cerradaPara")}
-            <br />
-            {t("agenda.bloqueos.confirmar.tuSiPuedes")}
-          </p>
+          {prohibido ? (
+            <p className={s.explicacion}>
+              <strong className={s.prohibido}>{t("agenda.bloqueos.confirmar.prohibido")}</strong>
+              <br />
+              {t("agenda.bloqueos.confirmar.prohibidoQueHacer")}
+            </p>
+          ) : (
+            <p className={s.explicacion}>
+              {t("agenda.bloqueos.confirmar.cerradaPara")}
+              <br />
+              {t("agenda.bloqueos.confirmar.tuSiPuedes")}
+            </p>
+          )}
 
           <div className={s.pie}>
-            <button
-              type="button"
-              className={s.cancelar}
-              onClick={onCancelar}
-              disabled={bloqueado}
-            >
-              {t("common.cancel")}
-            </button>
-            <button
-              type="button"
-              className={s.confirmar}
-              onClick={() => {
-                if (bloqueado) return;
-                setYaPulsado(true);
-                onConfirmar();
-              }}
-              disabled={bloqueado}
-              autoFocus
-            >
-              {bloqueado ? (
-                <>
-                  <Loader2 size={15} className={s.girando} aria-hidden />
-                  {t("agenda.bloqueos.confirmar.guardando")}
-                </>
-              ) : (
-                t("agenda.bloqueos.confirmar.agendarIgual")
-              )}
-            </button>
+            {prohibido ? (
+              // Una sola salida: volver al formulario y elegir otra fecha.
+              // Nada se ha guardado todavía.
+              <button type="button" className={`${s.cancelar} ${s.volver}`} onClick={onCancelar} autoFocus>
+                {t("agenda.bloqueos.confirmar.elegirOtra")}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={s.cancelar}
+                  onClick={onCancelar}
+                  disabled={bloqueado}
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  ref={confirmarRef}
+                  type="button"
+                  className={s.confirmar}
+                  onClick={() => {
+                    if (bloqueado || puedo === null) return;
+                    setYaPulsado(true);
+                    onConfirmar();
+                  }}
+                  disabled={bloqueado || puedo === null}
+                  autoFocus
+                >
+                  {bloqueado ? (
+                    <>
+                      <Loader2 size={15} className={s.girando} aria-hidden />
+                      {t("agenda.bloqueos.confirmar.guardando")}
+                    </>
+                  ) : puedo === null ? (
+                    <>
+                      <Loader2 size={15} className={s.girando} aria-hidden />
+                      {t("agenda.bloqueos.confirmar.comprobando")}
+                    </>
+                  ) : (
+                    t("agenda.bloqueos.confirmar.agendarIgual")
+                  )}
+                </button>
+              </>
+            )}
           </div>
         </Dialog.Content>
       </Dialog.Portal>

@@ -23,6 +23,8 @@ import {
 import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 import { SeccionBloqueos } from "@/components/dashboard/bloqueos/seccion-bloqueos";
 import blo from "@/components/dashboard/bloqueos/bloqueos.module.css";
+import { SeccionMiHorario } from "@/components/dashboard/horario-doctor/seccion-mi-horario";
+import { horarioClinica } from "@/components/dashboard/horario-doctor/tipos";
 
 const ClinicLocationPicker = dynamic(
   () => import("@/components/dashboard/ClinicLocationPicker").then((m) => m.ClinicLocationPicker),
@@ -106,7 +108,18 @@ interface Props {
 
 export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false }: Props) {
   const t = useT();
+  // El DOCTOR entra RECORTADO (ver `verComun`), salvo el que ya tenía
+  // «Ver configuración» concedido persona a persona desde Equipo → Permisos:
+  // ese entraba antes de esta tarea y sigue viendo lo mismo que veía. Se lee
+  // del override y no de `hasPermission`: así da igual que ws1-t2 abra la
+  // puerta dándole al rol una `settings.*` o de otra forma.
+  const doctorRecortado =
+    initUser.role === "DOCTOR" &&
+    !(Array.isArray(initUser.permissionsOverride) && initUser.permissionsOverride.includes("settings.view"));
   const [tab,      setTab]      = useState(() => {
+    // Recortado, su única pestaña es «Horarios y bloqueos» (ver `TABS`), así
+    // que aterriza ahí pida lo que pida por `?tab=`.
+    if (doctorRecortado) return "horarios";
     const requested = initialTab || "clinica";
     const admin = initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN";
     // El tab de suscripción es solo para el dueño/admin. Si un rol operativo
@@ -521,8 +534,16 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
   const isAdminUser = initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN";
   // BLOQUEOS DE AGENDA (ws1-t3) — la pestaña «Horarios y bloqueos» se le abre
-  // también al DOCTOR, pero RECORTADA: ver `SeccionBloqueos`. Las demás
-  // pestañas de Configuración siguen saliéndole exactamente igual que hoy.
+  // también al DOCTOR, pero RECORTADA: ver `SeccionBloqueos`.
+  //
+  // HORARIO POR DOCTOR (ws1-t3) — y es la ÚNICA que ve. Hasta ahora el DOCTOR
+  // no entraba a `/dashboard/settings` (sin ninguna `settings.*`, el servidor
+  // lo mandaba a `?denied=settings.view`); ws1-t2 le abre la puerta para que
+  // ponga su horario, y aquí la pantalla entra recortada a eso:
+  //   · pestañas: solo «Horarios y bloqueos»;
+  //   · horario de la clínica: solo lectura («Lo define la administración»);
+  //   · «Mi horario»: el suyo, editable (`SeccionMiHorario`);
+  //   · festivos: no; bloqueos: los suyos + ve los de la clínica.
   // 🔴 Y su id VIAJA en el cuerpo del bloqueo. `resolverAlcance` (service.ts)
   // lee «sin doctorId» como «toda la clínica», y a un DOCTOR eso le devuelve
   // un 403: sin mandarlo no podría crear ni su propio bloqueo. Va solo para
@@ -533,13 +554,22 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   // caminos de render la leen de aquí.
   //
   // 🔴 Y se comprueba TAMBIÉN en el render, no solo en `TABS`. Cada apartado
-  // de esta pantalla se decide con `tab === "…"`, que es independiente de la
+  // de esta pantalla se decide comparando `tab`, que es independiente de la
   // lista de pestañas: quitar una de `TABS` la borra de la barra pero NO
   // impide que su contenido se pinte si `tab` acaba valiendo eso (por
   // ejemplo, con `?tab=horarios` en la URL). El apartado de Suscripción ya lo
-  // resuelve así desde antes (`tab === "subscription" && isAdminUser`); esto
-  // sigue ese mismo patrón en vez de inventar otro.
+  // resuelve así desde antes (su condición lleva `&& isAdminUser`); esto
+  // sigue ese mismo patrón en vez de inventar otro. (No se escribe aquí la
+  // condición literal: el test de configuracion-rediseno cuenta cuántas veces
+  // aparece cada `tab === "…"` y un comentario le suma una.)
   const verHorarios = isAdminUser || esDoctor;
+  // Las pestañas que NO son del doctor. Fail-closed por rol: aunque ws1-t2 le
+  // abra la puerta con una `settings.*`, el doctor solo ve «Horarios» — salvo
+  // el que ya las veía por un permiso concedido a mano (`doctorRecortado`).
+  const verComun = !doctorRecortado;
+  // El horario de la clínica en la forma de `tipos.ts` (0=Lunes…6=Domingo),
+  // o `null` si no tiene filas: contra eso avisa «Mi horario».
+  const horarioDeLaClinica = horarioClinica(initClinic.schedules);
   // Quien no es admin ve el horario semanal en SOLO LECTURA: lo necesita para
   // saber contra qué bloquea, pero la jornada de la clínica no es suya.
   // Fail-closed: cualquier rol que no sea admin cae aquí, no solo DOCTOR.
@@ -550,17 +580,20 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   }));
 
   const TABS = [
-    { id:"clinica",      label:t("settings.client.tabClinic"),       icon:Building,      show:true        },
+    { id:"clinica",      label:t("settings.client.tabClinic"),       icon:Building,      show:verComun    },
     { id:"subscription", label:t("settings.client.tabSubscription"), icon:CreditCard,    show:isAdminUser },
     { id:"servicios",    label:t("settings.client.tabServices"),     icon:Zap,           show:isAdminUser },
-    { id:"perfil",       label:t("settings.client.tabProfile"),      icon:User,          show:true        },
+    { id:"perfil",       label:t("settings.client.tabProfile"),      icon:User,          show:verComun    },
     { id:"facturacion",  label:t("settings.client.tabBilling"),      icon:Receipt,       show:isAdminUser },
-    { id:"ia",           label:t("settings.client.tabAi"),           icon:Bot,           show:true        },
-    { id:"integraciones",label:t("settings.client.tabIntegrations"), icon:CalendarCheck, show:true        },
+    { id:"ia",           label:t("settings.client.tabAi"),           icon:Bot,           show:verComun    },
+    { id:"integraciones",label:t("settings.client.tabIntegrations"), icon:CalendarCheck, show:verComun    },
     { id:"recordatorios",label:t("settings.client.tabReminders"),    icon:Bell,          show:isAdminUser },
     { id:"horarios",     label:t("settings.client.tabHours"),        icon:Clock,         show:verHorarios },
-    { id:"seguridad",    label:t("settings.client.tabSecurity"),     icon:Shield,        show:true        },
+    { id:"seguridad",    label:t("settings.client.tabSecurity"),     icon:Shield,        show:verComun    },
   ].filter(item => item.show);
+  // ¿Se puede pintar este apartado? La MISMA decisión que la barra, leída de
+  // `TABS`: cada `tab === "…"` de los dos caminos la lleva detrás.
+  const ve = (id: string) => TABS.some(item => item.id === id);
 
   // ── REDISEÑO (ws1-t2) ──────────────────────────────────────────────────
   // Mismo estado, mismas funciones de guardado, mismos apartados y mismos
@@ -599,7 +632,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} rediseno />}
 
             {/* ── CLÍNICA ── */}
-            {tab === "clinica" && (
+            {tab === "clinica" && ve("clinica") && (
               <Columna>
                 <Seccion
                   titulo={t("settings.client.clinicDataTitle")}
@@ -806,7 +839,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             )}
 
             {/* ── SERVICIOS POR DOCTOR ── */}
-            {tab === "servicios" && (
+            {tab === "servicios" && ve("servicios") && (
               <Seccion titulo={t("settings.client.servicesTitle")} subtitulo={t("settings.client.servicesSubtitle")}>
                 {team.length === 0 ? (
                   <Vacio>{t("settings.client.noActiveProfessionals")}</Vacio>
@@ -853,7 +886,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             )}
 
             {/* ── PERFIL ── */}
-            {tab === "perfil" && (
+            {tab === "perfil" && ve("perfil") && (
               <Seccion
                 titulo={t("settings.client.profileTitle")}
                 pie={<BotonGuardar onClick={saveUser} guardando={saving} texto={t("settings.client.saveProfileBtn")} textoGuardando={t("common.saving")} />}
@@ -986,7 +1019,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             )}
 
             {/* ── ASISTENTE IA ── */}
-            {tab === "ia" && (
+            {tab === "ia" && ve("ia") && (
               <Seccion
                 icono={<Bot size={18} strokeWidth={1.75} aria-hidden />}
                 titulo={t("settings.client.aiTitle")}
@@ -1043,7 +1076,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             )}
 
             {/* ── INTEGRACIONES ── */}
-            {tab === "integraciones" && (
+            {tab === "integraciones" && ve("integraciones") && (
               <Columna>
                 <Seccion
                   icono={<CalendarCheck size={18} strokeWidth={1.75} aria-hidden />}
@@ -1122,7 +1155,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             )}
 
             {/* ── RECORDATORIOS ── */}
-            {tab === "recordatorios" && <RemindersSection clinic={clinic} rediseno />}
+            {tab === "recordatorios" && ve("recordatorios") && <RemindersSection clinic={clinic} rediseno />}
 
             {/* ── HORARIOS Y BLOQUEOS ──
                 ① El horario semanal, TAL CUAL estaba: es la jornada normal y
@@ -1174,6 +1207,18 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   )}
                 </Seccion>
 
+                {/* «Mi horario» — el del doctor, entre el de la clínica y los
+                    bloqueos. Solo para el rol DOCTOR: quien administra pone
+                    los horarios desde Equipo. */}
+                {esDoctor && (
+                  <SeccionMiHorario
+                    doctorId={initUser.id}
+                    nombre={`${initUser.firstName ?? ""} ${initUser.lastName ?? ""}`.trim()}
+                    clinica={horarioDeLaClinica}
+                    ancha
+                  />
+                )}
+
                 <SeccionBloqueos
                   timezone={clinic.timezone ?? "America/Mexico_City"}
                   doctores={doctoresParaBloqueo}
@@ -1184,7 +1229,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             )}
 
             {/* ── SEGURIDAD ── */}
-            {tab === "seguridad" && (
+            {tab === "seguridad" && ve("seguridad") && (
               <Columna>
                 <Seccion
                   titulo={t("settings.client.changePasswordTitle")}
@@ -1254,7 +1299,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} />}
 
       {/* ── CLÍNICA ── */}
-      {tab === "clinica" && (
+      {tab === "clinica" && ve("clinica") && (
         <>
         <div className="card max-w-lg">
           <div className="card__header">
@@ -1536,7 +1581,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       )}
 
       {/* ── SERVICIOS POR DOCTOR ── */}
-      {tab === "servicios" && (
+      {tab === "servicios" && ve("servicios") && (
         <div className="space-y-5 max-w-2xl">
           <div className="card">
             <div className="card__header">
@@ -1610,7 +1655,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       )}
 
       {/* ── PERFIL ── */}
-      {tab === "perfil" && (
+      {tab === "perfil" && ve("perfil") && (
         <div className="card max-w-lg">
           <div className="card__header">
             <div className="card__title">{t("settings.client.profileTitle")}</div>
@@ -1805,7 +1850,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       )}
 
       {/* ── ASISTENTE IA ── */}
-      {tab === "ia" && (
+      {tab === "ia" && ve("ia") && (
         <div className="space-y-5 max-w-lg">
           <div className="card">
             <div className="card__header">
@@ -1898,7 +1943,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       )}
 
       {/* ── INTEGRACIONES ── */}
-      {tab === "integraciones" && (
+      {tab === "integraciones" && ve("integraciones") && (
         <div className="space-y-5 max-w-lg">
           {/* Google Calendar */}
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
@@ -1997,7 +2042,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       )}
 
       {/* ── RECORDATORIOS ── */}
-      {tab === "recordatorios" && <RemindersSection clinic={clinic} />}
+      {tab === "recordatorios" && ve("recordatorios") && <RemindersSection clinic={clinic} />}
 
       {/* ── HORARIOS Y BLOQUEOS ──
           ① El horario semanal, TAL CUAL estaba (misma tarjeta `max-w-lg`, mismos
@@ -2015,7 +2060,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             {DAYS.map((day, i) => {
               const s = schedule[i] ?? { enabled:false, open:"09:00", close:"18:00" };
               return (
-                <div key={day} className={`flex items-center gap-4 p-3.5 rounded-xl border transition-colors ${s.enabled ? "bg-brand-600/15 border-brand-200" : "bg-muted/30 border-border"}`}>
+                // `flex-wrap` + las dos horas en UN grupo: a 390 px no cabían junto
+                // al día y la hora de cierre se salía de la tarjeta (medido). Ahora
+                // el grupo baja entero a la línea siguiente; en escritorio, igual.
+                <div key={day} className={`flex flex-wrap items-center gap-x-4 gap-y-2 p-3.5 rounded-xl border transition-colors ${s.enabled ? "bg-brand-600/15 border-brand-200" : "bg-muted/30 border-border"}`}>
                   {horarioEditable && (
                     <input type="checkbox" checked={s.enabled}
                       onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...(sc[i] ?? { enabled:false, open:"09:00", close:"18:00" }), enabled:e.target.checked } }))}
@@ -2025,7 +2073,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   {!s.enabled ? (
                     <span className="text-sm text-muted-foreground">{t("settings.client.hoursClosed")}</span>
                   ) : horarioEditable ? (
-                    <>
+                    <div className="flex items-center gap-4">
                       <input type="time" value={s.open}
                         onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], open:e.target.value } }))}
                         className="h-9 w-26 rounded-xl border border-border bg-card px-3 text-sm font-mono focus:outline-none" />
@@ -2033,7 +2081,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                       <input type="time" value={s.close}
                         onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], close:e.target.value } }))}
                         className="h-9 w-26 rounded-xl border border-border bg-card px-3 text-sm font-mono focus:outline-none" />
-                    </>
+                    </div>
                   ) : (
                     <span className="text-sm font-mono text-muted-foreground">
                       {s.open} {t("settings.client.hoursTo")} {s.close}
@@ -2052,6 +2100,16 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           )}
         </div>
 
+        {/* «Mi horario» — el del doctor, entre el de la clínica y los
+            bloqueos (ver el camino del rediseño, arriba). */}
+        {esDoctor && (
+          <SeccionMiHorario
+            doctorId={initUser.id}
+            nombre={`${initUser.firstName ?? ""} ${initUser.lastName ?? ""}`.trim()}
+            clinica={horarioDeLaClinica}
+          />
+        )}
+
         <SeccionBloqueos
           timezone={clinic.timezone ?? "America/Mexico_City"}
           doctores={doctoresParaBloqueo}
@@ -2062,7 +2120,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       )}
 
       {/* ── SEGURIDAD ── */}
-      {tab === "seguridad" && (
+      {tab === "seguridad" && ve("seguridad") && (
         <div className="space-y-5 max-w-lg">
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-4">
             <h2 className="text-base font-bold">{t("settings.client.changePasswordTitle")}</h2>
