@@ -450,6 +450,18 @@ async function presentSlots(
 
   if (res.closed) {
     state.step = "date";
+    // WS1-T2 — si el día está cerrado por un BLOQUEO, se dice el motivo. «No
+    // hay atención» invita a insistir ese mismo día; «cerrado por vacaciones»
+    // hace que la persona pregunte por otra fecha, que es la conversación que
+    // lleva a algún sitio. El motivo lo escribió la clínica y no nombra a
+    // nadie: quien está del otro lado no tiene por qué saber de quién es.
+    if (res.reason === "blocked" && res.mensajeBloqueo) {
+      return step(
+        `${prefix}Ese día (${human}) la agenda está cerrada: ${res.mensajeBloqueo}. ¿Qué otra fecha te acomoda?`,
+        state.mode,
+        state,
+      );
+    }
     return step(`${prefix}Ese día (${human}) no hay atención. ¿Qué otra fecha te acomoda?`, state.mode, state);
   }
   if (res.slots.length === 0) {
@@ -642,6 +654,14 @@ function createError(
     state.step = "date";
     return step("Ese horario quedó fuera del horario de atención. Elige otra fecha, por favor.", state.mode, state);
   }
+  // WS1-T2 — entre que se enseñaron los horarios y llegó el "sí", alguien
+  // cerró ese hueco desde el panel. Se vuelve a la lista del mismo día, igual
+  // que con `overlap`: si el bloqueo era de unas horas quedan huecos, y si era
+  // del día entero `presentSlots` lo dirá con su motivo.
+  if (error === "blocked") {
+    state.step = "slot";
+    return presentSlots(input, state, tz, deps, "Ese horario acaba de cerrarse en la agenda. 😅");
+  }
   return done("No pude registrar la cita ahora. Intenta más tarde o llama al consultorio.", state.mode);
 }
 
@@ -662,6 +682,11 @@ function rescheduleError(
   }
   if (error === "not_found") {
     return done('Ya no encuentro esa cita. Si necesitas, escribe "agendar" para una nueva.', state.mode);
+  }
+  // WS1-T2 — el hueco de DESTINO se cerró mientras se elegía. Ver createError.
+  if (error === "blocked") {
+    state.step = "slot";
+    return presentSlots(input, state, tz, deps, "Ese horario acaba de cerrarse en la agenda. 😅");
   }
   return done("No pude reagendar la cita ahora. Intenta más tarde o llama al consultorio.", state.mode);
 }

@@ -33,6 +33,22 @@
  *
  * Si no hay sillones activos configurados no se inventa un denominador: la
  * ocupación sale `null` y el resumen lo dice (regla 5 del contrato).
+ *
+ * ── WS1-T2 · LOS BLOQUEOS DESCUENTAN CAPACIDAD ────────────────────────
+ * Un día cerrado por un bloqueo no es tiempo disponible que se desaprovechó:
+ * es tiempo que no existió. Contarlo en el denominador hace que diciembre
+ * parezca flojo por cerrar el 25, y que Sabina conteste «los viernes tienes
+ * huecos» señalando un viernes de vacaciones. Los minutos bloqueados se restan
+ * de la capacidad de su día de la semana.
+ *
+ * 🔴 QUÉ BLOQUEOS DESCUENTAN, Y POR QUÉ NO TODOS. El denominador de la clínica
+ * son SILLONES, no doctores, así que un bloqueo de UN doctor no se puede
+ * traducir a sillones sin inventar un número — y este archivo existe
+ * precisamente para no inventar denominadores. Por eso:
+ *   · midiendo LA CLÍNICA → solo descuentan los de toda la clínica
+ *     (`doctorId` null), que cierran los sillones de verdad;
+ *   · midiendo UN DOCTOR  → descuentan los suyos y los de la clínica, porque
+ *     ahí el denominador es su propio tiempo y la cuenta sí es exacta.
  */
 
 import { z } from "zod";
@@ -49,6 +65,9 @@ import {
   type ParamsRango,
 } from "./fechas";
 import { ESTADOS_ACTIVOS } from "./estados";
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { bloqueoAlcanzaDoctor, type BloqueoLike } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import type { SabinaCtx } from "../tipos";
 
 const parametros = esquemaRango.extend({
@@ -134,7 +153,7 @@ export const agendaOcupacion = definirHerramienta<ParamsOcupacion, DatosOcupacio
       ...(doctorPedido ? { doctorId: doctorPedido } : {}),
     });
 
-    const [clinica, horarios, sillones, citas] = await Promise.all([
+    const [clinica, horarios, sillones, citas, bloqueos] = await Promise.all([
       db.clinic.findFirst({
         where: { id: ctx.clinicId },
         select: { agendaDayStart: true, agendaDayEnd: true },
@@ -152,6 +171,10 @@ export const agendaOcupacion = definirHerramienta<ParamsOcupacion, DatosOcupacio
         where,
         select: { startsAt: true, endsAt: true },
       }),
+      // WS1-T2 — los bloqueos del rango. Sin filtro de doctor: `calcularOcupacion`
+      // decide cuáles descuentan según se esté midiendo la clínica o a uno solo
+      // (ver la cabecera). Con el `db` de la sesión, como las cuatro de arriba.
+      leerBloqueosDelRango(ctx.clinicId, desde, hasta, { db: db as any }),
     ]);
 
     const calculado = calcularOcupacion({
@@ -165,6 +188,10 @@ export const agendaOcupacion = definirHerramienta<ParamsOcupacion, DatosOcupacio
       desdeISO: rango.desdeISO,
       hastaISO: rango.hastaISO,
       timezone: ctx.timezone,
+      bloqueos,
+      // Midiendo a UN doctor, el suyo; midiendo la clínica, `null` y entonces
+      // solo descuentan los bloqueos de toda la clínica.
+      doctorMedido: unDoctor ? (doctorPedido ?? ctx.userId ?? null) : null,
     });
 
     return {
@@ -211,6 +238,13 @@ export function calcularOcupacion(input: {
   desdeISO: string;
   hastaISO: string;
   timezone: string;
+  /** WS1-T2 — los bloqueos del rango. Ausente = como antes de esa tarea. */
+  bloqueos?: readonly BloqueoLike[];
+  /**
+   * WS1-T2 — a quién se está midiendo. `null` = la clínica entera, y entonces
+   * solo descuentan los bloqueos de toda la clínica. Ver la cabecera.
+   */
+  doctorMedido?: string | null;
 }): Omit<DatosOcupacion, "desde" | "hasta" | "alcance" | "unidades"> {
   const { citas, horarios, horarioGeneral, unidades, desdeISO, hastaISO, timezone } = input;
 
@@ -227,10 +261,34 @@ export function calcularOcupacion(input: {
   // y contarlo solo cuando hubo citas es lo que hace que un mes flojo parezca
   // lleno.
   const veces = [0, 0, 0, 0, 0, 0, 0];
+  // WS1-T2 — minutos que un bloqueo se comió DENTRO del horario de atención,
+  // por día de la semana. Solo cuentan los que están dentro de la ventana
+  // abierta: cerrar de 20:00 a 22:00 una clínica que cierra a las 19:00 no
+  // resta capacidad, porque esa capacidad nunca existió.
+  const minutosBloqueadosPorDia = [0, 0, 0, 0, 0, 0, 0];
+
+  // Los que descuentan, según a quién se mida (ver la cabecera). Los retirados
+  // ya no llegan aquí, pero se filtran igual: esta función es pura y puede
+  // recibir una lista armada a mano en una prueba.
+  const aplicables = (input.bloqueos ?? []).filter(
+    (b) => !b.deletedAt && bloqueoAlcanzaDoctor(b, input.doctorMedido ?? null),
+  );
+
   let cursor = desdeISO;
   let guarda = 0;
   while (cursor <= hastaISO && guarda++ < 400) {
-    veces[diaSemana(cursor, timezone)]++;
+    const d = diaSemana(cursor, timezone);
+    veces[d]++;
+
+    if (aplicables.length > 0) {
+      const v = ventanaDelDiaSemana(d, utilizables, horarioGeneral, fuenteHorario);
+      if (!v.cerrado) {
+        const abreUtc = tzLocalToUtc(cursor, Math.floor(v.abre / 60), v.abre % 60, timezone);
+        const cierraUtc = tzLocalToUtc(cursor, Math.floor(v.cierra / 60), v.cierra % 60, timezone);
+        minutosBloqueadosPorDia[d] += minutosTapados(aplicables, abreUtc, cierraUtc);
+      }
+    }
+
     cursor = sumarDias(cursor, 1);
   }
 
@@ -253,8 +311,14 @@ export function calcularOcupacion(input: {
   for (let d = 0; d < 7; d++) {
     const ventana = ventanaDelDiaSemana(d, utilizables, horarioGeneral, fuenteHorario);
     const abiertoMin = ventana.cerrado ? 0 : ventana.cierra - ventana.abre;
+    // WS1-T2 — los minutos bloqueados salen del numerador de tiempo abierto
+    // ANTES de multiplicar por sillones: un cierre de clínica se lleva los
+    // sillones con él. `Math.max(0, …)` porque un bloqueo que empieza antes de
+    // abrir y acaba después de cerrar ya viene recortado a la ventana, pero un
+    // solo minuto de desajuste no puede dejar una capacidad negativa.
+    const abiertoNeto = Math.max(0, abiertoMin * veces[d] - minutosBloqueadosPorDia[d]);
     const capacidad =
-      unidades > 0 && abiertoMin > 0 && veces[d] > 0 ? abiertoMin * veces[d] * unidades : null;
+      unidades > 0 && abiertoMin > 0 && veces[d] > 0 ? abiertoNeto * unidades : null;
     porDia.push({
       dia: d,
       nombre: NOMBRES_DIA[d],
@@ -304,6 +368,46 @@ function ventanaDelDiaSemana(
   const fila = utilizables.find((f) => f.dayOfWeek === dia);
   if (!fila || !fila.enabled) return { abre: 0, cierra: 0, cerrado: true };
   return { abre: minutosHHMM(fila.openTime)!, cierra: minutosHHMM(fila.closeTime)!, cerrado: false };
+}
+
+/**
+ * MINUTOS DE `[abre, cierra)` QUE TAPA ALGÚN BLOQUEO (WS1-T2).
+ *
+ * 🔴 FUSIONA LOS SOLAPES ANTES DE SUMAR. Dos bloqueos que se pisan —«congreso
+ * de 9 a 14» y «toda la mañana»— sumados por separado darían más minutos
+ * cerrados que horas tiene el día, y la capacidad saldría negativa: el
+ * porcentaje se dispararía a miles justo en la clínica que más bloqueos usa.
+ */
+function minutosTapados(
+  bloqueos: readonly BloqueoLike[],
+  abre: Date,
+  cierra: Date,
+): number {
+  const tramos: Array<[number, number]> = [];
+  const a = abre.getTime();
+  const c = cierra.getTime();
+  for (const b of bloqueos) {
+    const ini = Math.max(b.startsAt.getTime(), a);
+    const fin = Math.min(b.endsAt.getTime(), c);
+    if (fin > ini) tramos.push([ini, fin]);
+  }
+  if (tramos.length === 0) return 0;
+
+  tramos.sort((x, y) => x[0] - y[0]);
+  let total = 0;
+  let [iniActual, finActual] = tramos[0];
+  for (let i = 1; i < tramos.length; i++) {
+    const [ini, fin] = tramos[i];
+    if (ini <= finActual) {
+      finActual = Math.max(finActual, fin);
+    } else {
+      total += finActual - iniActual;
+      iniActual = ini;
+      finActual = fin;
+    }
+  }
+  total += finActual - iniActual;
+  return Math.round(total / 60_000);
 }
 
 /** "09:30" → 570. `null` si no es una hora. Mismo criterio que `parseHHMM` de clinic-hours. */

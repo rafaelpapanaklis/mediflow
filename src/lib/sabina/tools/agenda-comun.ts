@@ -45,6 +45,13 @@ export interface AgendaDb {
   clinic: { findFirst(args: any): Promise<any> };
   clinicSchedule: { findMany(args: any): Promise<any[]> };
   whatsAppReminder: { count(args: any): Promise<number> };
+  /**
+   * Los bloqueos de agenda (WS1-T2). OPCIONAL a propósito: los dobles de
+   * prueba anteriores a esa tarea no lo declaran, y `leerBloqueosDelRango`
+   * devuelve una lista vacía cuando no está — que es el comportamiento de
+   * siempre, no un fallo.
+   */
+  agendaBlock?: { findMany(args: any): Promise<any[]> };
   $queryRaw(query: any): Promise<any[]>;
 }
 
@@ -146,7 +153,9 @@ export type CausaNoDisponible =
   | "dia_cerrado"
   | "pasado"
   | "sillon_no_disponible"
-  | "sin_sillon_libre";
+  | "sin_sillon_libre"
+  /** WS1-T2 — hay un bloqueo de agenda encima (festivo, vacaciones, obra). */
+  | "bloqueado";
 
 /**
  * El resultado de una acción. `ok: true` en el runner siempre: estas cinco

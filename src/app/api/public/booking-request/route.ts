@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 
 /**
@@ -156,6 +158,35 @@ export async function POST(req: NextRequest) {
         where: { id: doctorId, clinicId: clinic.id, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
         select: { id: true, firstName: true, lastName: true },
       });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WS1-T2 — UNA SOLICITUD PARA UN DÍA CERRADO NO ENTRA.
+    //
+    // Esto va en la misma familia que las dos comprobaciones de arriba (día
+    // deshabilitado, hora fuera del horario) y no en la de «¿está libre?»:
+    // arriba se dice, con todas las letras, que la ocupación NO se comprueba
+    // porque una solicitud no reserva el hueco. Un bloqueo no es ocupación —
+    // es la clínica cerrada—, y dejar entrar la solicitud solo consigue que
+    // recepción la rechace a mano y llame por teléfono, que es exactamente lo
+    // que este formulario vino a evitar.
+    //
+    // El ALCANCE sigue el mismo criterio prudente del resto de la ruta: con un
+    // doctor pedido se miran los suyos y los de la clínica; con «cualquiera»
+    // solo los de toda la clínica, porque que UNA doctora esté de vacaciones
+    // no cierra la clínica y aquí no se está eligiendo a quién atiende.
+    // ═══════════════════════════════════════════════════════════════════
+    const finPedido = new Date(requestedAt.getTime() + 30 * 60_000);
+    const bloqueosPedido = await leerBloqueosDelRango(clinic.id, requestedAt, finPedido, {
+      doctorIds: doctorPedido ? [doctorPedido.id] : [],
+    });
+    if (bloqueaEsteHueco(bloqueosPedido, requestedAt, finPedido, doctorPedido?.id ?? null)) {
+      // Sin el motivo: el formulario es público y «vacaciones de la Dra. X» no
+      // es información de nadie que pase por ahí.
+      return NextResponse.json(
+        { error: "La clínica tiene cerrada la agenda en ese horario. Elige otro, por favor." },
+        { status: 400 },
+      );
     }
 
     const servicio = typeof service === "string" && service.trim() ? service.trim().slice(0, 160) : null;

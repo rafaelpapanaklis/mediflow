@@ -53,6 +53,12 @@ import type { ScheduleDay } from "@/lib/agenda/clinic-hours";
 import { scheduleDayOfISO } from "@/lib/agenda/clinic-hours";
 import type { AppointmentStatus } from "@/lib/agenda/types";
 import { citaContada, citaViva, esSinConfirmar } from "./estados";
+import {
+  bandasDelDia,
+  lineaDeBloqueo,
+  type BandaBloqueo,
+  type BloqueoDTO,
+} from "@/lib/agenda-bloqueos/core";
 
 /** Lo mínimo que la ocupación necesita saber de una cita. */
 export interface CitaOcupacion {
@@ -104,6 +110,13 @@ export interface OcupacionDia {
   /** `null` = no se puede calcular de verdad. NO se recorta a 100. */
   porcentaje: number | null;
   segmentos: SegmentoOcupacion[];
+  /**
+   * Las bandas de bloqueo que tapan este día (WS1-T2), ordenadas por hora.
+   * Vacío = nada bloqueado. Es lo que ws1-t3 pinta sobre la rejilla.
+   */
+  bloqueos: BandaBloqueo[];
+  /** El día entero está cerrado por un bloqueo (no por el horario semanal). */
+  bloqueadoTodoElDia: boolean;
 }
 
 function parseHHMM(hhmm: string | null | undefined): number | null {
@@ -181,6 +194,18 @@ export interface EntradaOcupacion {
   carriles: readonly Carril[];
   /** Cómo se reparte una cita entre carriles: por responsable o por sillón. */
   modo?: "doctor" | "resource";
+  /**
+   * Los bloqueos del periodo que solapan ESTE día (WS1-T2). Opcional: quien no
+   * los pase obtiene exactamente el comportamiento anterior a esa tarea, que
+   * es lo que hace que esto se pueda integrar antes de que el SQL esté puesto.
+   */
+  bloqueos?: readonly BloqueoDTO[];
+  /**
+   * El doctor de la columna, cuando la hay. `null` (o ausente) = la celda es
+   * un DÍA entero (el Mes, la Semana): entonces cuenta cualquier bloqueo,
+   * porque no hay un doctor contra el que aplicar la regla del NULL.
+   */
+  doctorId?: string | null;
 }
 
 /**
@@ -190,6 +215,18 @@ export interface EntradaOcupacion {
 export function ocupacionDelDia(entrada: EntradaOcupacion): OcupacionDia {
   const { dayISO, citas, schedules, timezone, carriles } = entrada;
   const modo = entrada.modo ?? "doctor";
+
+  // Las bandas de bloqueo de ESTE día. Se calculan aunque el día esté cerrado
+  // por horario: un festivo puesto sobre un domingo que ya cerraba no cambia
+  // nada, pero tampoco tiene que desaparecer de la pantalla — quien lo puso
+  // necesita poder encontrarlo para retirarlo.
+  const bloqueos = bandasDelDia(
+    entrada.bloqueos ?? [],
+    dayISO,
+    entrada.doctorId ?? null,
+    timezone,
+  );
+  const bloqueadoTodoElDia = bloqueos.some((b) => b.todoElDia);
 
   const contadas = citas.filter((c) => citaContada(c.status));
   const totalCitas = contadas.length;
@@ -252,6 +289,8 @@ export function ocupacionDelDia(entrada: EntradaOcupacion): OcupacionDia {
     minutosDisponibles,
     porcentaje,
     segmentos,
+    bloqueos,
+    bloqueadoTodoElDia,
   };
 }
 
@@ -259,29 +298,54 @@ export function ocupacionDelDia(entrada: EntradaOcupacion): OcupacionDia {
  * La nota de una celda del Mes. El prototipo enseña tres: «2 sin confirmar»
  * (ámbar), «Cerrado» (gris) y «Feriado · Independencia» (gris).
  *
- * ⛔ La tercera NO se puede pintar con datos de verdad. En Dental no existe
- * modelo de días festivos ni de bloqueos de agenda: lo ÚNICO que sabe el
- * sistema es `ClinicSchedule` (`enabled` + horas por día de la semana). Los
- * otros verticales sí lo tienen —Barbería con `BarberTimeOff` (tipo `HOLIDAY`)
- * e Instituto con `EduAgendaBlock` (tipo `FESTIVO`)—, pero eso no es esta
- * agenda. Inventar «Feriado · Independencia» sería escribir en la pantalla del
- * dueño una cosa que el sistema no sabe: si ese 16 de septiembre la clínica
- * abrió, la agenda estaría mintiendo. Así que un día cerrado dice «Cerrado» y
- * punto, venga de donde venga el motivo.
+ * ── La tercera YA SE PUEDE PINTAR (WS1-T2) ────────────────────────────────
+ * Aquí decía que no. Y era verdad: hasta esta tarea, en Dental lo ÚNICO que
+ * sabía el sistema era `ClinicSchedule` (`enabled` + horas por día de la
+ * SEMANA), así que «Feriado · Independencia» habría sido escribirle al dueño
+ * una cosa que el sistema no sabía — si ese 16 de septiembre la clínica abrió,
+ * la agenda habría estado mintiendo.
+ *
+ * Ahora existe `AgendaBlock` (portado de `EduAgendaBlock`, que es el que esta
+ * nota citaba como ejemplo de lo que dental no tenía), y con él el motivo es
+ * un dato y no una suposición: la nota dice lo que alguien escribió al cerrar
+ * el día, con su tipo y su alcance.
+ *
+ * El ORDEN importa y no es arbitrario:
+ *  1. El BLOQUEO manda sobre «Cerrado». Los dos dejan el día sin citas, pero
+ *     el bloqueo trae el porqué y el horario semanal no; enseñar «Cerrado»
+ *     sobre un día que alguien cerró a mano esconde justo lo que se escribió.
+ *  2. «Cerrado» sigue siendo lo que dice el horario semanal, venga de donde
+ *     venga el motivo. Ahí no se inventa nada, igual que antes.
+ *  3. Un bloqueo PARCIAL (unas horas) no tapa el «N sin confirmar»: el día
+ *     sigue teniendo citas que alguien tiene que confirmar por teléfono, y ese
+ *     aviso existe precisamente para eso.
  */
 export type NotaDia =
+  | { tipo: "bloqueado"; texto: string }
   | { tipo: "cerrado"; texto: string }
   | { tipo: "sin-confirmar"; texto: string }
   | null;
 
 export function notaDelDia(ocupacion: OcupacionDia): NotaDia {
+  // Un bloqueo de día completo es la nota más informativa que hay: lleva
+  // escrito el motivo. Si hay varios, manda el primero (vienen ordenados por
+  // hora de inicio, así que es el que una persona nombraría).
+  const todoElDia = ocupacion.bloqueos.find((b) => b.todoElDia);
+  if (todoElDia) return { tipo: "bloqueado", texto: lineaDeBloqueo(todoElDia) };
+
   if (ocupacion.cerrado) return { tipo: "cerrado", texto: "Cerrado" };
+
   if (ocupacion.sinConfirmar > 0) {
     return {
       tipo: "sin-confirmar",
       texto: `${ocupacion.sinConfirmar} sin confirmar`,
     };
   }
+
+  // Un bloqueo de unas horas, cuando no hay nada más urgente que decir.
+  const parcial = ocupacion.bloqueos[0];
+  if (parcial) return { tipo: "bloqueado", texto: lineaDeBloqueo(parcial) };
+
   return null;
 }
 

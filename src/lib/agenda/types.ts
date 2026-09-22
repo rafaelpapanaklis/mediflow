@@ -3,6 +3,7 @@ import type {
   AppointmentDTO as HomeAppointmentDTO,
 } from "@/lib/home/types";
 import type { ScheduleDay } from "./clinic-hours";
+import type { BloqueoDTO } from "@/lib/agenda-bloqueos/core";
 
 export type { AppointmentStatus } from "@/lib/home/types";
 
@@ -172,6 +173,21 @@ export interface AgendaDayResponse {
   resources: ResourceDTO[];
   pendingValidation: AgendaAppointmentDTO[];
   waitlistCount: number;
+  /**
+   * LOS BLOQUEOS DEL PERIODO (WS1-T2) — los días y las horas cerrados que
+   * solapan el rango que devuelve este payload, en el mismo DTO que
+   * `/api/settings/bloqueos`.
+   *
+   * Es lo único que ws1-t3 consume de esta tarea: con esto pinta la franja
+   * sobre la rejilla sin tener que pedir nada aparte. Se manda AQUÍ y no en
+   * una llamada suya para que la banda y las citas lleguen en el mismo viaje
+   * y del mismo rango — dos peticiones distintas se desincronizan al navegar
+   * rápido entre días y la banda se quedaría un día atrás.
+   *
+   * Opcional: los endpoints que no lo mandan dejan al cliente sin bandas, que
+   * es el comportamiento anterior a esta tarea.
+   */
+  bloqueos?: BloqueoDTO[];
 }
 
 export interface CreateAppointmentInput {

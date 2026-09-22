@@ -186,7 +186,15 @@ export function paintedAgendaWindow(
 }
 
 export interface ScheduleViolation {
-  reason: "closed_day" | "before_open" | "after_close";
+  /**
+   * `blocked` (WS1-T2) NO lo produce `scheduleViolation`: lo produce
+   * `avisoDeBloqueo` (src/lib/agenda-bloqueos/core.ts) y viaja por este mismo
+   * tipo A PROPÓSITO. Las tres pantallas que avisan al staff —el alta, el
+   * modal de edición y el arrastre— leen `scheduleWarning.message` y sacan un
+   * toast; un campo nuevo habría sido un aviso que nadie pinta, y esas
+   * pantallas son de ws1-t3 en esta ola.
+   */
+  reason: "closed_day" | "before_open" | "after_close" | "blocked";
   /** Copy listo para toast del staff. */
   message: string;
   /** Ventana del día en "HH:MM" (null si el día está cerrado). */
