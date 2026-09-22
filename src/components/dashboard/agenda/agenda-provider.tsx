@@ -43,6 +43,7 @@ import type {
   AgendaStoreState,
   AgendaViewMode,
 } from "@/lib/agenda/types";
+import type { BloqueoDTO } from "@/lib/agenda-bloqueos/core";
 
 /**
  * Permisos granulares del usuario sobre la agenda (P1-3), calculados en el
@@ -118,6 +119,14 @@ interface AgendaContextValue {
 
 interface CacheEntry {
   data: AgendaAppointmentDTO[];
+  /**
+   * Los bloqueos de ESE mismo rango (WS1-T3). Viajan en la misma entrada de
+   * caché que las citas y no en otra suya: servir las citas del 23 con la
+   * franja del 22 es exactamente el desfase que WS1-T2 evitó mandándolos en
+   * el mismo payload, y una caché aparte lo reintroduciría al volver a un día
+   * ya visto.
+   */
+  bloqueos: BloqueoDTO[];
   ts: number;
 }
 
@@ -268,7 +277,11 @@ export function AgendaProvider({
     const range = viewRangeISO("day", initialDayISO, state.timezone);
     const key = `${range.from}|${range.to}|||`;
     cacheRef.current.clear();
-    cacheRef.current.set(key, { data: initialPayload.appointments, ts: Date.now() });
+    cacheRef.current.set(key, {
+      data: initialPayload.appointments,
+      bloqueos: initialPayload.bloqueos ?? [],
+      ts: Date.now(),
+    });
   }, [initialPayload, initialDayISO, state.timezone]);
 
   // ── Unified data loader ─────────────────────────────────────────────
@@ -315,6 +328,7 @@ export function AgendaProvider({
     const cached = cacheRef.current.get(key);
     if (cached && !options.backgroundOnly) {
       dispatch({ type: "SET_APPOINTMENTS", appointments: cached.data });
+      dispatch({ type: "SET_BLOQUEOS", bloqueos: cached.bloqueos });
       if (Date.now() - cached.ts < 30_000) return;
     }
 
@@ -328,12 +342,20 @@ export function AgendaProvider({
     try {
       const res = await fetch(`/api/agenda/range?${params}`, { signal: options.signal });
       if (!res.ok) throw new Error("range_failed");
-      const data = (await res.json()) as { appointments: AgendaAppointmentDTO[] };
+      const data = (await res.json()) as {
+        appointments: AgendaAppointmentDTO[];
+        bloqueos?: BloqueoDTO[];
+      };
       if (options.signal?.aborted) return;
       const appts = data.appointments ?? [];
-      cacheRef.current.set(key, { data: appts, ts: Date.now() });
+      // Lista vacía y no `undefined` si el endpoint no lo manda: así la
+      // pantalla dice «no hay bloqueos en este rango» en vez de conservar los
+      // del rango anterior, que sería mentir sobre el día que se está viendo.
+      const bloqs = Array.isArray(data.bloqueos) ? data.bloqueos : [];
+      cacheRef.current.set(key, { data: appts, bloqueos: bloqs, ts: Date.now() });
       if (!options.backgroundOnly) {
         dispatch({ type: "SET_APPOINTMENTS", appointments: appts });
+        dispatch({ type: "SET_BLOQUEOS", bloqueos: bloqs });
       }
     } catch (e) {
       const err = e as { name?: string };
@@ -360,7 +382,11 @@ export function AgendaProvider({
       initialFetchSkipped.current = true;
       const range = viewRangeISO("day", initialDayISO, state.timezone);
       const key = `${range.from}|${range.to}|||`;
-      cacheRef.current.set(key, { data: initialPayload.appointments, ts: Date.now() });
+      cacheRef.current.set(key, {
+        data: initialPayload.appointments,
+        bloqueos: initialPayload.bloqueos ?? [],
+        ts: Date.now(),
+      });
       return;
     }
     initialFetchSkipped.current = true;

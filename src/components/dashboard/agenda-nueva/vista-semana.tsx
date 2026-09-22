@@ -18,11 +18,12 @@
  */
 
 import { useMemo } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
-import { bandasDelDia } from "@/components/dashboard/bloqueos/fechas";
+import { bandasDelDia, type BandaBloqueo } from "@/components/dashboard/bloqueos/fechas";
 import { Cuadricula, type ColumnaCuadricula } from "./cuadricula";
 import { TarjetaCita } from "./tarjeta-cita";
 import { FantasmaCita } from "./fantasma-cita";
@@ -209,6 +210,11 @@ export function VistaSemana(props: PropsVistaSemana) {
           cerrada={cerrada}
           citas={delDia.length}
           onAbrir={() => irADia(dia.iso)}
+          // WS1-T3 — el día bloqueado se distingue en su COLUMNA, y no solo
+          // por la franja de la rejilla: la rejilla hace scroll y un bloqueo
+          // de 14:00 a 16:00 puede quedar fuera de pantalla justo cuando
+          // alguien está agendando por la mañana. La cabecera no se va nunca.
+          bloqueos={bandas}
         />
       ),
       contenido: (
@@ -269,19 +275,55 @@ export function VistaSemana(props: PropsVistaSemana) {
 function CabeceraDia(props: {
   dia: DiaSemana;
   esHoy: boolean;
+  /** Cerrado por el HORARIO SEMANAL. Sigue diciendo «Cerrado», en gris. */
   cerrada: boolean;
   citas: number;
   onAbrir: () => void;
+  /** Los bloqueos que tapan este día (WS1-T3). Vacío = columna normal. */
+  bloqueos?: readonly BandaBloqueo[];
 }) {
-  const { dia, esHoy, cerrada, citas } = props;
+  const { dia, esHoy, cerrada, citas, bloqueos } = props;
   const etiqueta = `${dia.abreviatura} ${dia.numero}`;
+
+  // 🔴 «CERRADO» Y «BLOQUEADO» NO SON LO MISMO Y NO SE MEZCLAN. El primero es
+  // la jornada normal (el domingo no se abre) y va en gris; el segundo es una
+  // excepción que alguien escribió con un motivo, y va en ámbar con su
+  // triángulo. Un día puede ser las dos cosas: entonces manda el bloqueo, que
+  // es lo que la persona no sabe todavía.
+  const bloqueado = (bloqueos?.length ?? 0) > 0;
+  const principal = bloqueado
+    ? bloqueos!.find((b) => b.doctorId === null) ?? bloqueos![0]
+    : null;
+  // El motivo completo en el `title`; en la columna solo cabe el triángulo.
+  const detalle = principal
+    ? principal.doctorId === null
+      ? principal.reason
+      : `${principal.doctorNombre ?? "un doctor"} — ${principal.reason}`
+    : null;
+  const titulo = detalle
+    ? `${detalle}${bloqueos!.length > 1 ? ` (+${bloqueos!.length - 1})` : ""}`
+    : `Abrir el ${dia.numero} en la vista Día`;
+
   return (
     <button
       type="button"
-      className={css.cabeceraDia}
+      className={[
+        css.cabeceraDia,
+        bloqueado
+          ? principal!.doctorId === null
+            ? css.cabeceraBloqueada
+            : css.cabeceraBloqueadaDoctor
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       onClick={props.onAbrir}
-      aria-label={`${etiqueta} · abrir en la vista Día`}
-      title={`Abrir el ${dia.numero} en la vista Día`}
+      aria-label={
+        bloqueado
+          ? `${etiqueta} · día con bloqueo de agenda: ${titulo} · abrir en la vista Día`
+          : `${etiqueta} · abrir en la vista Día`
+      }
+      title={titulo}
     >
       <span className={[css.cabeceraAbrev, esHoy ? css.cabeceraAbrevHoy : ""].join(" ")}>
         {dia.abreviatura}
@@ -289,6 +331,17 @@ function CabeceraDia(props: {
       <span className={[css.cabeceraNumero, esHoy ? css.cabeceraNumeroHoy : ""].join(" ")}>
         {dia.numero}
       </span>
+      {/* El triángulo, no solo el color: la columna es estrecha y el motivo no
+          cabe, pero el icono sí — y con él la columna se distingue sin
+          depender de ver el ámbar. */}
+      {bloqueado && (
+        <AlertTriangle
+          size={14}
+          strokeWidth={2.4}
+          className={css.cabeceraBloqueoIcono}
+          aria-hidden
+        />
+      )}
       <span className={css.espaciador} />
       <span className={css.cabeceraConteo}>
         {cerrada ? "Cerrado" : `${citas} ${citas === 1 ? "cita" : "citas"}`}

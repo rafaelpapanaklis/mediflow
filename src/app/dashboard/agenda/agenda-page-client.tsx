@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
@@ -47,6 +47,8 @@ import {
   optimisticDoctorIdOf,
   planReschedule,
 } from "@/lib/agenda/reschedule-flow";
+import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
+import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
 import {
   RESOURCE_KIND_LABELS,
   TREATMENT_KINDS,
@@ -482,6 +484,23 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
     ],
   );
 
+  // ── El bloqueo del DESTINO del arrastre (WS1-T3) ──
+  //
+  // De los bloqueos que la agenda ya tiene cargados: solo se puede soltar
+  // sobre columnas que están en pantalla, así que el destino cae siempre
+  // dentro del rango que llegó junto a las citas. Ni una consulta más.
+  const bloqueosCargados = useBloqueosAgenda();
+  const bloqueoDelDestino = useMemo(() => {
+    if (!pendingReschedule || bloqueosCargados.length === 0) return null;
+    const b = bloqueoQueTapa(
+      bloqueosCargados,
+      pendingReschedule.newStartsAt,
+      pendingReschedule.newEndsAt,
+      pendingReschedule.newDoctorId ?? pendingReschedule.original.doctor?.id ?? null,
+    );
+    return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
+  }, [pendingReschedule, bloqueosCargados]);
+
   const handleConfirmReschedule = useCallback(async () => {
     if (!pendingReschedule || rescheduling) return;
     const plan = pendingReschedule;
@@ -490,7 +509,12 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
     try {
       // Optimista → PATCH → REPLACE, o ROLLBACK si el servidor dice que no.
       // Vive en reschedule-flow.ts porque la agenda nueva hace lo MISMO.
-      const result = await commitReschedule(plan, { dispatch });
+      const result = await commitReschedule(plan, {
+        dispatch,
+        // «Ya lo confirmé»: el aviso que la persona acaba de leer en la
+        // ventana. Solo si de verdad hay un bloqueo en el destino.
+        bloqueoConfirmado: bloqueoDelDestino !== null,
+      });
       if (result.ok) {
         // P1-13: fuera-de-horario/día cerrado ya no bloquea — se avisa.
         if (result.scheduleWarning?.message) toast(result.scheduleWarning.message, { duration: 6000 });
@@ -518,7 +542,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
     } finally {
       setRescheduling(false);
     }
-  }, [pendingReschedule, rescheduling, dispatch, state.dayISO, setDay, invalidateRangeCache, t]);
+  }, [pendingReschedule, rescheduling, dispatch, state.dayISO, setDay, invalidateRangeCache, t, bloqueoDelDestino]);
 
   const handleCancelReschedule = useCallback(() => {
     if (rescheduling) return;
@@ -648,6 +672,11 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
           submitting={rescheduling}
           onConfirm={handleConfirmReschedule}
           onCancel={handleCancelReschedule}
+          // ⚠ El aviso va DENTRO de esta ventana y no en una segunda encima:
+          // soltar una cita ya abre una confirmación, y encadenar dos para un
+          // solo gesto se vuelve dos «aceptar» que nadie lee. «Cancelar» sigue
+          // dejando la cita donde estaba.
+          bloqueo={bloqueoDelDestino}
         />
       )}
       {highlightId && <AgendaHighlightListener highlightId={highlightId} />}

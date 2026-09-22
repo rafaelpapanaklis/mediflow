@@ -20,7 +20,11 @@ import {
   todayInTz,
 } from "@/lib/agenda/time-utils";
 import { scheduleViolation } from "@/lib/agenda/clinic-hours";
-import { bloqueaEsteHueco, avisoDeBloqueo } from "@/lib/agenda-bloqueos/core";
+import {
+  bloqueaEsteHueco,
+  avisoDeBloqueo,
+  trazaDeBloqueo,
+} from "@/lib/agenda-bloqueos/core";
 // El GET solo LEE: se importa del lector y no de `service.ts` (que escribe
 // y lleva `server-only`), para que esta ruta siga siendo montable desde
 // `tsx --test` con mocks de módulo, como hace reglas-servidor.test.ts.
@@ -254,12 +258,51 @@ export async function POST(req: NextRequest) {
   const bloqueoEncima = bloqueaEsteHueco(bloqueosDelHueco, startsAt, endsAt, body.doctorId);
   const avisoHorario = bloqueoEncima ? avisoDeBloqueo(bloqueoEncima) : hoursWarning;
 
+  // 🔴 ESTE GATE, Y ESTA COLUMNA, SE QUEDAN EXACTAMENTE COMO ESTABAN.
+  //
+  // `overrideReason` no es un campo de notas: es la bandera que saca la cita
+  // del índice de exclusión `appt_doctor_no_overlap` y apaga el «dos citas no
+  // se pisan». Por eso pide `canOverrideOverlap` (ADMIN y SUPER_ADMIN).
+  //
+  // WS1-T3 NO escribe aquí. Agendar sobre un BLOQUEO entra por
+  // `bloqueoConfirmado`, no lleva gate de rol —quien puede crear citas hoy las
+  // sigue creando— y no toca ninguna regla de solape; su rastro va a
+  // `AuditLog`. El porqué completo, en `agenda-bloqueos/core.ts` §7.
   if (body.overrideReason && !canOverrideOverlap(session.user.role)) {
     return NextResponse.json(
       { error: "override_not_allowed_for_role" },
       { status: 403 },
     );
   }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // EL RASTRO DE HABER AGENDADO ENCIMA DE UN BLOQUEO (WS1-T3)
+  //
+  // 🔴 EL TEXTO LO ESCRIBE EL SERVIDOR, NO EL NAVEGADOR. La pantalla manda
+  // `bloqueoConfirmado: true` y nada más; lo que se registra sale de
+  // `bloqueoEncima`, que es el bloqueo que el servidor acaba de leer de la
+  // base. Si se copiara un texto del cuerpo, una fila de auditoría guardaría
+  // lo que quisiera escribir quien llama a la API.
+  //
+  // Y si NO hay bloqueo encima, no se registra nada aunque el cuerpo lo pida:
+  // entre que la pantalla preguntó y llegó el POST, alguien pudo retirarlo.
+  // Un rastro de un bloqueo que ya no existe es peor que ninguno.
+  // 🔴 EL RASTRO NO DEPENDE DE QUE LA PANTALLA HAYA AVISADO.
+  //
+  // Se registra siempre que la cita caiga encima de un bloqueo, y aparte se
+  // anota SI la persona llegó a ver el aviso. Existe un caso real en que no lo
+  // ve: un doctor agendando para OTRA doctora que tiene un bloqueo personal.
+  // El navegador no recibe ese bloqueo —`listarBloqueos` acota por rol para no
+  // enseñarle a nadie el motivo de la ausencia de un compañero («operación de
+  // rodilla»)—, así que el diálogo no sale; pero el servidor sí lo ve aquí.
+  //
+  // Si el rastro colgara de `bloqueoConfirmado`, ese caso —justo el que nadie
+  // vigila— sería el único que no dejaría huella. Quien audite el hueco vacío
+  // meses después necesita saber que la cita se metió ahí, y también si se
+  // avisó o no: lo segundo es lo que dice si hay que arreglar la pantalla o
+  // hablar con una persona.
+  const trazaBloqueo = bloqueoEncima ? trazaDeBloqueo(bloqueoEncima) : null;
+  const avisadaDelBloqueo = body.bloqueoConfirmado === true;
 
   const [patient, doctor, resource] = await Promise.all([
     prisma.patient.findFirst({
@@ -367,6 +410,8 @@ export async function POST(req: NextRequest) {
           mode: body.isTeleconsult ? "TELECONSULTATION" : "IN_PERSON",
           source: "STAFF",
           requiresValidation: false,
+          // ⛔ SIN TOCAR (WS1-T3). Esta columna apaga el no-solape; el rastro
+          // del bloqueo va a `AuditLog`, más abajo.
           overrideReason: body.overrideReason ?? null,
           overriddenBy: body.overrideReason ? session.user.id : null,
           overriddenAt: body.overrideReason ? new Date() : null,
@@ -401,7 +446,22 @@ export async function POST(req: NextRequest) {
       entityType: "appointment",
       entityId: created.id,
       action: "create",
-      after: { patientId: created.patientId, doctorId: created.doctorId, startsAt: created.startsAt, type: created.type, status: created.status },
+      after: {
+        patientId: created.patientId,
+        doctorId: created.doctorId,
+        startsAt: created.startsAt,
+        type: created.type,
+        status: created.status,
+        // WS1-T3 — EL RASTRO. Va en la MISMA fila de auditoría que la
+        // creación y no en una aparte: quien revise por qué hay una cita un
+        // día que la clínica cerró lo lee de un vistazo, sin cruzar dos
+        // tablas. Ausente en el 99 % de las citas, que no tocan ningún
+        // bloqueo. `bloqueoAvisado: false` = se agendó encima sin que la
+        // pantalla pudiera avisar; ver arriba.
+        ...(trazaBloqueo
+          ? { bloqueoSaltado: trazaBloqueo, bloqueoAvisado: avisadaDelBloqueo }
+          : {}),
+      },
     });
 
     // Google Calendar sync (best-effort, no falla la creacion si Google falla)

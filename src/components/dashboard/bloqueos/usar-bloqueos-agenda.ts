@@ -8,12 +8,11 @@
  * rango y podría enseñar un bloqueo que las citas de al lado todavía no saben
  * que existe.
  *
- * 🔴 SE LEE CON CAST Y SE PARSEA. El campo todavía no está en el tipo del
- * proveedor (`src/components/dashboard/agenda/agenda-provider.tsx`), que es de
- * ws1-t2 y esta pantalla no toca. Mientras no lo esté, esto devuelve una lista
- * vacía y la agenda se pinta exactamente como hoy; en cuanto lo esté, las
- * franjas salen solas sin tocar una línea de aquí. Ese es el punto de leerlo
- * así y no de esperar su aviso.
+ * 🔴 SE SIGUE PARSEANDO AUNQUE EL CAMPO YA ESTÉ TIPADO. Desde WS1-T3
+ * `state.bloqueos` existe de verdad en el store, pero su contenido llega por
+ * red sin validar (`/api/agenda/range` devuelve lo que devuelve). Un `fin` que
+ * no sea una fecha o un `reason` que llegue `null` descartan la fila en vez de
+ * tumbar la agenda entera en mitad de una consulta.
  */
 
 import { useMemo } from "react";
@@ -24,9 +23,9 @@ const VACIO: BloqueoDTO[] = [];
 
 export function useBloqueosAgenda(): BloqueoDTO[] {
   const { state } = useAgenda();
-  // El campo que ws1-t2 añade al estado de la agenda. Cualquier otra forma
-  // (ausente, null, un objeto) cae a la lista vacía sin romper el render.
-  const crudo = (state as unknown as { bloqueos?: unknown }).bloqueos;
+  // Cualquier forma que no sea una lista (ausente, null, un objeto) cae a la
+  // lista vacía sin romper el render.
+  const crudo: unknown = state.bloqueos;
 
   return useMemo(() => {
     if (!Array.isArray(crudo)) return VACIO;

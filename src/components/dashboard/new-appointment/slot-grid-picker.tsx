@@ -37,6 +37,17 @@ interface Props {
   resourceSchedule?: WeekScheduleDTO | null;
   /** Agrupa los slots en Mañana / Tarde / Noche (rediseño popup Nueva cita). */
   grouped?: boolean;
+  /**
+   * WS1-T3 — LOS BLOQUEOS DEL DÍA, SACADOS DEL LOTE QUE ESTA REJILLA YA PIDE.
+   *
+   * `/api/appointments?date=…` devuelve `bloqueos` del mismo rango desde
+   * WS1-T2. La ventana de «Nueva cita» los necesita para preguntar antes de
+   * guardar, y pedirlos ella por su cuenta sería una segunda consulta del
+   * MISMO día: además de sobrar, podría discrepar de la que ve esta rejilla.
+   *
+   * Se entregan tal cual llegan; quien los recibe los parsea.
+   */
+  onBloqueos?: (bloqueos: unknown) => void;
 }
 
 interface FetchedDay {
@@ -54,6 +65,7 @@ export function SlotGridPicker({
   onChange,
   resourceSchedule,
   grouped = false,
+  onBloqueos,
 }: Props) {
   const t = useT();
   const nueva = useAparienciaNueva();
@@ -62,20 +74,43 @@ export function SlotGridPicker({
   const selectedRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
+    // Vaciar ANTES del corte por falta de doctor: si se quita el doctor, la
+    // lista del día/doctor anterior no puede quedarse viva en el padre.
+    onBloqueos?.(undefined);
     if (!doctorId) return;
     setLoading(true);
     setDay({ appointments: [], loaded: false });
+    // Dos cambios de fecha seguidos lanzan dos consultas, y la que responda
+    // última gana. Sin esto, volver del 24 al 22 podía dejar en pantalla los
+    // bloqueos del 24 — o peor, ninguno en un día que sí está cerrado.
+    let cancelado = false;
     fetch(`/api/appointments?date=${dateISO}&scope=clinic`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
+        if (cancelado) return;
+        // Los bloqueos del día van al de arriba aunque no haya citas: un día
+        // cerrado por mantenimiento suele venir justamente sin ninguna.
+        onBloqueos?.(body?.bloqueos);
         if (body && Array.isArray(body.appointments)) {
           setDay({ appointments: body.appointments, loaded: true });
         } else {
           setDay({ appointments: [], loaded: true });
         }
       })
-      .catch(() => setDay({ appointments: [], loaded: true }))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelado) setDay({ appointments: [], loaded: true });
+      })
+      .finally(() => {
+        if (!cancelado) setLoading(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+    // `onBloqueos` NO entra en las dependencias a propósito: quien la pasa
+    // suele hacerlo con una función nueva en cada render y esto volvería a
+    // consultar el día entero en cada tecla. El efecto se dispara por el día y
+    // el doctor, que es lo que de verdad cambia la respuesta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateISO, doctorId]);
 
   const total = slotsPerDay(config);

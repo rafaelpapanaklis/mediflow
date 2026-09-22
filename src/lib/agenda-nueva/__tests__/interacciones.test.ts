@@ -268,8 +268,13 @@ test("el arrastre de la agenda nueva mide con la rejilla que dibuja (112 px/h de
   assert.match(src, /slotHpx: altoDeHueco\(state\.slotMinutes\)/);
   assert.match(src, /dayStart: ventana\.horaInicio/);
   assert.match(src, /dayEnd: ventana\.horaFin/);
-  // Y guarda con la lógica compartida, no con una copia.
-  assert.match(src, /commitReschedule\(plan, \{ dispatch \}\)/);
+  // Y guarda con la lógica compartida, no con una copia. Desde WS1-T3 la
+  // llamada lleva además `bloqueoConfirmado` (la persona aceptó soltar la cita
+  // sobre un día bloqueado), así que se comprueba el `dispatch` compartido en
+  // vez del objeto literal entero: lo que defiende esta prueba es que no haya
+  // una segunda implementación de mover, no cuántas claves lleva el objeto.
+  assert.match(src, /commitReschedule\(plan, \{/);
+  assert.match(src, /\bdispatch,?\s*$/m);
   assert.match(src, /planReschedule\(\{/);
   // Si no se sabe qué quedó, relee la VISTA (no `router.refresh()`, que en
   // Semana rehidrata con un solo día).

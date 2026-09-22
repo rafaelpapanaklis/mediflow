@@ -10,6 +10,12 @@ import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agen
 import { getTzParts } from "@/lib/agenda/time-utils";
 import { DateField } from "@/components/ui/date-field";
 import type { AgendaAppointmentDTO, DoctorColumnDTO, ResourceDTO } from "@/lib/agenda/types";
+import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
+import { useBloqueosDeDia } from "@/components/dashboard/bloqueos/usar-bloqueos-dia";
+import {
+  ConfirmarBloqueo,
+  type BloqueoParaConfirmar,
+} from "@/components/dashboard/bloqueos/confirmar-bloqueo";
 
 /**
  * La ROPA del rediseño (ws1-t1, hallazgo 9): clases para cada pieza de la
@@ -131,12 +137,29 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
+  /**
+   * WS1-T3 — el bloqueo sobre el que se está preguntando, o `null`. Mientras
+   * no sea `null` hay una confirmación en pantalla y NADA se ha guardado.
+   */
+  const [bloqueoPendiente, setBloqueoPendiente] = useState<BloqueoParaConfirmar | null>(null);
+
+  /**
+   * Los bloqueos del día ELEGIDO en el formulario, no los del día de la cita:
+   * reagendar es justamente mover la cita a otra fecha, y es la de destino la
+   * que puede estar cerrada.
+   *
+   * Esta ventana se abre también desde el expediente del paciente, que no
+   * monta `AgendaProvider`, así que no puede leerlos del estado de la agenda.
+   * Ver la cabecera de `usar-bloqueos-dia.ts`.
+   */
+  const bloqueosDelDia = useBloqueosDeDia(form?.date ?? null, state.timezone, isOpen);
 
   // Hidratar el form cuando se abre con un appointment.
   useEffect(() => {
     if (!isOpen || !appt) {
       setForm(null);
       setConflict(null);
+      setBloqueoPendiente(null);
       return;
     }
     const startLocal = isoToLocalParts(appt.startsAt, state.timezone);
@@ -158,15 +181,31 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
   // Cerrar con Escape.
   useEffect(() => {
     if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    // Con la confirmación de bloqueo abierta, Escape la cierra a ELLA y no
+    // también a esta ventana: si no, una sola tecla se llevaría por delante
+    // todo lo que la persona acababa de escribir.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !bloqueoPendiente) onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, bloqueoPendiente]);
 
   if (!isOpen || !appt || !form) return null;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    void guardar(null);
+  }
+
+  /**
+   * El guardado de siempre, con UN paso nuevo delante: si el destino cae
+   * dentro de un bloqueo y todavía no se ha confirmado, pregunta.
+   *
+   * `bloqueoConfirmado` lo pasa la ventana de confirmación al aceptar; en la
+   * primera llamada es `null`.
+   */
+  async function guardar(bloqueoConfirmado: BloqueoParaConfirmar | null) {
     if (!appt || !form || submitting) return;
     setConflict(null);
 
@@ -182,6 +221,34 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
       return;
     }
 
+    // ── LA PREGUNTA, ANTES DE GUARDAR (WS1-T3) ──
+    //
+    // Con la MISMA función que el servidor (`bloqueoQueTapa`), y sobre el
+    // DESTINO: mover una cita fuera de un bloqueo no avisa de nada. Si no hay
+    // bloqueo encima, esto es `null` y no cuesta ni un clic.
+    //
+    // 🔴 Y SOLO SI LA CITA SE MUEVE DE VERDAD. Una cita que YA vive en el día
+    // bloqueado —porque alguien ya confirmó ponerla ahí— no puede volver a
+    // preguntar cada vez que se le corrige el motivo o se le cambia el sillón:
+    // eso es un clic de peaje por editar algo que no tiene nada que ver, y a
+    // la tercera vez nadie lee el aviso. Se pregunta cuando cambia la hora, la
+    // duración o el doctor, que es cuando la cita entra en el bloqueo.
+    const semueve =
+      startsAtIso !== appt.startsAt ||
+      form.doctorId !== (appt.doctor?.id ?? "") ||
+      endsAtIso !== (appt.endsAt ?? appt.startsAt);
+    if (!bloqueoConfirmado && semueve && bloqueosDelDia.length > 0) {
+      const b = bloqueoQueTapa(bloqueosDelDia, startsAtIso, endsAtIso, form.doctorId || null);
+      if (b) {
+        setBloqueoPendiente({
+          doctorId: b.doctorId,
+          doctorNombre: b.doctorNombre,
+          reason: b.reason,
+        });
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const { appointment: updated, scheduleWarning } = await rescheduleAppointment(appt.id, {
@@ -191,6 +258,9 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
         resourceId: form.resourceId || null,
         ...(form.overrideReason ? { overrideReason: form.overrideReason } : {}),
         ...(form.reason !== (appt.reason ?? "") ? { reason: form.reason } : {}),
+        // Solo «ya lo confirmé»; el motivo lo escribe el servidor. NO va por
+        // `overrideReason`, cuyo valor apaga el no-solape.
+        ...(bloqueoConfirmado ? { bloqueoConfirmado: true } : {}),
       });
       if (prestado) prestado.onGuardada(updated);
       else agenda!.dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
@@ -234,6 +304,12 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
   const campo = ropa ? { campo: ropa.campo, campoRotulo: ropa.campoRotulo } : undefined;
 
   return (
+    // 🔴 FRAGMENTO, NO UN DIV QUE ENVUELVA A LOS DOS. La confirmación de
+    // bloqueo sale en un portal de Radix, y los eventos de un portal de React
+    // burbujean por el ÁRBOL DE COMPONENTES, no por el DOM: si colgara del
+    // velo de abajo, pulsar «Cancelar» dentro de ella llegaría al `onClick`
+    // del velo y cerraría la ventana de edición entera, perdiendo lo escrito.
+    <>
     <div
       role="dialog"
       aria-modal="true"
@@ -420,6 +496,25 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
         </form>
       </div>
     </div>
+
+    {/* ── «Ese día está bloqueado» (WS1-T3) ──
+        Al confirmar se limpia ANTES de reenviar: así los errores del servidor
+        (solape, sillón cerrado) siguen saliendo sobre la ventana de edición
+        como hasta hoy, y no sobre una confirmación ya cumplida. */}
+    {bloqueoPendiente && form && (
+      <ConfirmarBloqueo
+        bloqueo={bloqueoPendiente}
+        dayISO={form.date}
+        guardando={submitting}
+        onConfirmar={() => {
+          const confirmado = bloqueoPendiente;
+          setBloqueoPendiente(null);
+          void guardar(confirmado);
+        }}
+        onCancelar={() => setBloqueoPendiente(null)}
+      />
+    )}
+    </>
   );
 }
 

@@ -1578,6 +1578,25 @@
       "masBloqueos": {
         "one": "+1 bloqueo",
         "other": "+{count} bloqueos"
+      },
+      "confirmar": {
+        "titulo": "Ese día está bloqueado",
+        "alcanceClinica": "toda la clínica",
+        "alcanceDoctorSinNombre": "un doctor",
+        "cerradaPara": "La agenda está cerrada para el bot, la web y el portal del paciente.",
+        "tuSiPuedes": "Tú sí puedes agendar desde aquí, y quedará registrado.",
+        "agendarIgual": "Agendar de todas formas",
+        "guardando": "Guardando…"
+      },
+      "aviso": {
+        "etiquetaClinica": "{motivo}",
+        "etiquetaDoctor": "{doctor} — {motivo}",
+        "aria": "Aviso: este día tiene un bloqueo de agenda. {detalle}",
+        "ariaSemana": "Día con bloqueo de agenda",
+        "yMas": {
+          "one": "y 1 más",
+          "other": "y {count} más"
+        }
       }
     }
   },

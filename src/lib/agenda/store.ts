@@ -11,6 +11,7 @@ import type {
   DoctorColumnDTO,
   ResourceDTO,
 } from "./types";
+import type { BloqueoDTO } from "@/lib/agenda-bloqueos/core";
 
 export type AgendaAction =
   | { type: "LOAD_DAY"; payload: AgendaDayResponse; dayISO: string }
@@ -34,6 +35,14 @@ export type AgendaAction =
   | { type: "REPLACE_APPOINTMENT"; appointment: AgendaAppointmentDTO }
   | { type: "REMOVE_APPOINTMENT"; id: string }
   | { type: "SET_APPOINTMENTS"; appointments: AgendaAppointmentDTO[] }
+  /**
+   * WS1-T3 — los bloqueos del rango que acaba de llegar. Va SEPARADA de
+   * `SET_APPOINTMENTS` porque el loader la despacha desde el mismo lote pero
+   * las mutaciones optimistas de citas (mover, cambiar estado) no tocan los
+   * bloqueos: mezclarlas obligaría a reenviar la lista entera en cada
+   * arrastre.
+   */
+  | { type: "SET_BLOQUEOS"; bloqueos: BloqueoDTO[] }
   | { type: "UPSERT_RESOURCE"; resource: ResourceDTO }
   | { type: "REMOVE_RESOURCE"; id: string }
   | { type: "REORDER_RESOURCES"; orderedIds: string[] }
@@ -58,6 +67,7 @@ export function buildInitialState(payload: AgendaDayResponse, dayISO: string): A
     dayEnd: payload.dayEnd,
     schedules: payload.schedules ?? [],
     timezone: payload.timezone,
+    bloqueos: payload.bloqueos ?? [],
     drag: {
       draggingId: null,
       ghostStartsAt: null,
@@ -94,6 +104,9 @@ export function agendaReducer(
         dayEnd: action.payload.dayEnd,
         schedules: action.payload.schedules ?? state.schedules,
         timezone: action.payload.timezone,
+        // Un payload SIN el campo conserva los que había: las rutas que no lo
+        // mandan (ninguna hoy) no pueden borrar la franja de la pantalla.
+        bloqueos: action.payload.bloqueos ?? state.bloqueos,
         isLoading: false,
         error: null,
       };
@@ -107,6 +120,8 @@ export function agendaReducer(
       return { ...state, density: action.density };
     case "SET_FILTERS":
       return { ...state, filters: action.filters };
+    case "SET_BLOQUEOS":
+      return { ...state, bloqueos: action.bloqueos };
     case "SET_APPOINTMENTS":
       return { ...state, appointments: action.appointments, isLoading: false, error: null };
     case "SET_SEARCH":

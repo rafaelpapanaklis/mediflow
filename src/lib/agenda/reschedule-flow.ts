@@ -141,7 +141,17 @@ export function planReschedule(input: PlanRescheduleInput): PlannedReschedule {
 }
 
 /** El cuerpo del PATCH: las horas siempre; doctor y sillón solo si cambiaron. */
-export function reschedulePayload(plan: ReschedulePlan): RescheduleAppointmentInput {
+export function reschedulePayload(
+  plan: ReschedulePlan,
+  /**
+   * WS1-T3 — `true` cuando la persona acaba de confirmar en pantalla que el
+   * destino cae en un día bloqueado. Viaja en su campo propio
+   * (`bloqueoConfirmado`) y NO en `overrideReason`, cuyo valor apaga el
+   * no-solape y por eso exige rol de administradora. Ver
+   * `agenda-bloqueos/core.ts` §7.
+   */
+  bloqueoConfirmado?: boolean,
+): RescheduleAppointmentInput {
   const currentDoctorId = plan.original.doctor?.id ?? null;
   const currentResourceId = plan.original.resourceId;
   const payload: RescheduleAppointmentInput = {
@@ -150,6 +160,7 @@ export function reschedulePayload(plan: ReschedulePlan): RescheduleAppointmentIn
   };
   if (plan.newDoctorId !== currentDoctorId && plan.newDoctorId) payload.doctorId = plan.newDoctorId;
   if (plan.newResourceId !== currentResourceId) payload.resourceId = plan.newResourceId;
+  if (bloqueoConfirmado) payload.bloqueoConfirmado = true;
   return payload;
 }
 
@@ -182,6 +193,11 @@ export interface CommitRescheduleDeps {
     id: string,
     input: RescheduleAppointmentInput,
   ) => Promise<RescheduleAppointmentResult>;
+  /**
+   * WS1-T3 — `true` si la persona confirmó el aviso de bloqueo antes de
+   * soltar. Sin él, el cuerpo del PATCH es exactamente el de siempre.
+   */
+  bloqueoConfirmado?: boolean;
 }
 
 /**
@@ -205,7 +221,10 @@ export async function commitReschedule(
 
   const reschedule = deps.reschedule ?? rescheduleAppointment;
   try {
-    const { appointment, scheduleWarning } = await reschedule(original.id, reschedulePayload(plan));
+    const { appointment, scheduleWarning } = await reschedule(
+      original.id,
+      reschedulePayload(plan, deps.bloqueoConfirmado),
+    );
     deps.dispatch({ type: "REPLACE_APPOINTMENT", appointment });
     return { ok: true, appointment, scheduleWarning };
   } catch (error) {

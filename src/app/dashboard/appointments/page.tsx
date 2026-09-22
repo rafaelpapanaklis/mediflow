@@ -82,6 +82,11 @@ export default async function AppointmentsPage() {
         doctors={doctors}
         currentUserId={user.id}
         clinicId={user.clinicId}
+        // WS1-T3 — la zona de la CLÍNICA, para poder preguntar «¿este hueco
+        // cae en un bloqueo?» sin adivinarla con la del dispositivo. Ya estaba
+        // leída aquí arriba (`tz`); bajarla evita que el cliente tenga que
+        // pedir el día entero de la agenda solo para averiguarla.
+        timezone={tz}
         waConnected={user.clinic.waConnected ?? false}
         canSendReminder={canSendManualReminder(user.role)}
       />

@@ -59,3 +59,42 @@ export function ctxDeSesion(session: ClinicSession): BloqueoCtx {
     ),
   };
 }
+
+/**
+ * EL MISMO CONTEXTO, PARTIENDO DEL USUARIO DE `getCurrentUser()`.
+ *
+ * Lo necesita la SSR de `/dashboard/agenda`, que no tiene un `ClinicSession`
+ * (eso lo arma `loadClinicSession`, que es de las rutas de API) sino la fila
+ * del usuario con su clínica incluida.
+ *
+ * 🔴 EXISTE PARA QUE NO HAYA UNA TERCERA CONSTRUCCIÓN A MANO. La cabecera de
+ * `ctxDeSesion` ya dice por qué esto se escribe una sola vez: dos sitios
+ * armando el contexto son dos sitios donde se puede colar un `clinicId` que no
+ * venga de la sesión. Aquí el `clinicId` sale de `usuario.clinic.id` y el rol
+ * de `usuario.role`, nunca de una query ni de un cuerpo.
+ */
+export function ctxDeUsuario(usuario: {
+  id: string;
+  role: Role;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  permissionsOverride?: string[] | null;
+  clinic: { id: string; timezone: string };
+}): BloqueoCtx {
+  return {
+    clinicId: usuario.clinic.id,
+    userId: usuario.id,
+    role: usuario.role,
+    displayName:
+      `${usuario.firstName ?? ""} ${usuario.lastName ?? ""}`.trim() || usuario.email || "",
+    timezone: usuario.clinic.timezone,
+    puedeGestionar: hasPermission(
+      {
+        role: usuario.role,
+        permissionsOverride: usuario.permissionsOverride ?? [],
+      },
+      "agenda.bloqueos",
+    ),
+  };
+}

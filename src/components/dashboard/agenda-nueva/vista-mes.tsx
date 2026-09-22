@@ -33,6 +33,7 @@
  */
 
 import { useMemo } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useT } from "@/i18n/i18n-provider";
@@ -276,7 +277,11 @@ function CeldaDelMes(props: {
             ].join(" ")}
             title={tituloTira(bloqueos[0], t)}
           >
-            {bloqueos[0].reason}
+            {/* WS1-T3 — el triángulo dentro de la tira. La celda del mes mide
+                ~100 px y el motivo se recorta; el icono no se recorta nunca, y
+                es lo que hace que la celda se distinga sin depender del color. */}
+            <AlertTriangle size={11} strokeWidth={2.6} className={css.tiraIcono} aria-hidden />
+            <span className={css.tiraTexto}>{bloqueos[0].reason}</span>
           </span>
           {bloqueos.length > 1 && (
             <span className={css.tiraMas}>

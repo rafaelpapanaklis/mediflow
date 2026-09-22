@@ -7,6 +7,9 @@ import {
   fetchWaitlistCount,
 } from "@/lib/agenda/server";
 import { isValidDateISO } from "@/lib/agenda/time-utils";
+import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
+import { ctxDeSesion } from "@/lib/agenda-bloqueos/core-ctx";
+import { hasPermission } from "@/lib/auth/permissions";
 import { calendarRangeUtc } from "@/lib/agenda/date-ranges";
 import type { AppointmentStatus } from "@/lib/agenda/types";
 
@@ -83,7 +86,15 @@ export async function GET(req: Request) {
     (VALID_STATUSES as string[]).includes(s),
   );
 
-  const [appointments, doctors, resources, waitlistCount] = await Promise.all([
+  const puedeVerBloqueos = hasPermission(
+    {
+      role: session.user.role,
+      permissionsOverride: session.user.permissionsOverride ?? [],
+    },
+    "agenda.view",
+  );
+
+  const [appointments, doctors, resources, waitlistCount, bloqueos] = await Promise.all([
     fetchAppointmentsForRange(fromUtc, toUtc, {
       clinicId: session.clinic.id,
       clinicCategory: session.clinic.category,
@@ -97,6 +108,30 @@ export async function GET(req: Request) {
     fetchActiveDoctors(session.clinic.id, session.clinic.category),
     fetchResources(session.clinic.id),
     fetchWaitlistCount(session.clinic.id),
+    // WS1-T3 — los bloqueos del MISMO rango que las citas, en el MISMO viaje.
+    //
+    // El GET de /api/appointments ya los mandaba (WS1-T2), pero la agenda solo
+    // pasa por ahí en la SSR del primer día: a partir del segundo día, y en
+    // Semana y Mes, todo lo recarga este endpoint. Sin esto, cambiar de día
+    // borraba la franja de la pantalla y el bloqueo dejaba de verse.
+    //
+    // 🔴 SOLO PARA QUIEN PUEDE VER LA AGENDA. El `reason` de un bloqueo es
+    // texto libre y puede ser privado («operación de rodilla»); por eso
+    // `/api/settings/bloqueos` exige `agenda.view`. Este endpoint no lo
+    // exigía y NO se le añade un gate nuevo —eso le quitaría a alguien algo
+    // que hoy puede hacer—: lo que se hace es no ADJUNTAR los bloqueos si no
+    // tiene el permiso. Quien hoy lee este endpoint lo sigue leyendo igual;
+    // simplemente no recibe un dato que hasta ahora no recibía.
+    //
+    // `listarBloqueos` aplica además el alcance por rol: un DOCTOR recibe los
+    // suyos y los de toda la clínica, nunca el motivo del bloqueo de otra.
+    // Y degrada a [] si la tabla todavía no existe, igual que allí.
+    puedeVerBloqueos
+      ? listarBloqueos(ctxDeSesion(session), {
+          desde: fromUtc.toISOString(),
+          hasta: toUtc.toISOString(),
+        })
+      : Promise.resolve([]),
   ]);
 
   return NextResponse.json({
@@ -111,5 +146,6 @@ export async function GET(req: Request) {
     resources,
     pendingValidation: [],
     waitlistCount,
+    bloqueos,
   });
 }

@@ -200,6 +200,20 @@ export interface CreateAppointmentInput {
   isTeleconsult?: boolean;
   isWalkIn?: boolean;
   overrideReason?: string | null;
+  /**
+   * WS1-T3 — «YA CONFIRMÉ QUE ESE DÍA ESTÁ BLOQUEADO».
+   *
+   * 🔴 UN BOOLEANO, NO UN TEXTO, Y A PROPÓSITO. El motivo del bloqueo lo
+   * escribe el SERVIDOR leyéndolo de la base, así que mandarlo desde el
+   * navegador no aportaría nada y sí dos problemas: pasearía por la red un
+   * motivo que puede ser privado («operación de rodilla») y dejaría a mano un
+   * campo de texto del cliente al lado de una escritura de auditoría.
+   *
+   * Y NO es `overrideReason`: aquél exige `canOverrideOverlap(role)` (solo
+   * ADMIN y SUPER_ADMIN) porque su valor saca la cita del índice de exclusión
+   * que impide dos citas encima. Ver `agenda-bloqueos/core.ts` §7.
+   */
+  bloqueoConfirmado?: boolean;
   notifyPatient?: boolean;
 }
 
@@ -210,6 +224,8 @@ export interface UpdateAppointmentInput {
   endsAt?: string;
   reason?: string | null;
   overrideReason?: string | null;
+  /** WS1-T3 — ver `CreateAppointmentInput.bloqueoConfirmado`. */
+  bloqueoConfirmado?: boolean;
   notifyPatient?: boolean;
 }
 
@@ -286,6 +302,20 @@ export interface AgendaStoreState {
   /** Horario de Ajustes — entrada de `paintedAgendaWindow` en el cliente. */
   schedules: ScheduleDay[];
   timezone: string;
+  /**
+   * LOS BLOQUEOS DEL RANGO CARGADO (WS1-T3).
+   *
+   * 🔴 SIN ESTE CAMPO, LO DE WS1-T2 ERA CÓDIGO MUERTO. El payload ya traía
+   * `bloqueos` (ver `AgendaDayResponse`) y las tres vistas ya sabían pintar la
+   * franja, pero el reducer no lo guardaba: `useBloqueosAgenda` leía
+   * `state.bloqueos`, no encontraba nada y devolvía la lista vacía SIEMPRE. La
+   * agenda se pintaba como si no hubiera bloqueos aunque los hubiera.
+   *
+   * Vive en el estado y no en un fetch aparte por lo mismo que viaja en el
+   * payload: la franja y las citas tienen que venir del MISMO rango, o al
+   * navegar rápido entre días la banda se queda un día atrás.
+   */
+  bloqueos: BloqueoDTO[];
 
   drag: AgendaDragState;
   waitlistOpen: boolean;

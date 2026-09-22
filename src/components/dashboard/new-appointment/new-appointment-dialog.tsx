@@ -24,6 +24,12 @@ import type {
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { bookingRuleMessage } from "@/lib/agenda/booking-rules";
 import { useT } from "@/i18n/i18n-provider";
+import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
+import {
+  ConfirmarBloqueo,
+  type BloqueoParaConfirmar,
+} from "@/components/dashboard/bloqueos/confirmar-bloqueo";
+import { parseBloqueos, type BloqueoDTO } from "@/components/dashboard/bloqueos/tipos";
 import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
 import type { TFunction } from "@/i18n/t";
 import { getResourceSchedule } from "@/lib/agenda/mutations";
@@ -90,6 +96,17 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   const [slotIso, setSlotIso] = useState<string | null>(null);
   const [notifyPatient, setNotifyPatient] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  /**
+   * WS1-T3 — los bloqueos del día que se está mirando. Llegan del MISMO lote
+   * que la rejilla de huecos ya pide (`SlotGridPicker` → `onBloqueos`), así
+   * que esta ventana no añade ni una consulta.
+   */
+  const [bloqueosDelDia, setBloqueosDelDia] = useState<BloqueoDTO[]>([]);
+  /**
+   * El bloqueo sobre el que se está preguntando, o `null`. Mientras no es
+   * `null` la ventana de confirmación está abierta y NADA se ha guardado.
+   */
+  const [bloqueoPendiente, setBloqueoPendiente] = useState<BloqueoParaConfirmar | null>(null);
   const [errors, setErrors] = useState<{ patient?: boolean; doctorId?: boolean; resourceId?: boolean; reason?: boolean; slot?: boolean }>({});
   // Pediatrics — context derivado del paciente seleccionado. Se hidrata
   // tras seleccionar paciente vía /api/pediatrics/context. Cuando no
@@ -135,6 +152,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     // (evita selectores stale sin necesidad de hard refresh).
     if (!isOpen) {
       setBoot(null);
+      // Nada del día anterior sobrevive a cerrar la ventana: ni los bloqueos
+      // ni una confirmación a medias.
+      setBloqueosDelDia([]);
+      setBloqueoPendiente(null);
       return;
     }
     if (boot) return;
@@ -187,6 +208,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     setReason(params?.initialReason ?? "");
     setSubmitting(false);
     setPediatricContext(null);
+    setBloqueoPendiente(null);
 
     const initialSlot = params?.initialSlot;
     if (initialSlot?.startsAt) {
@@ -260,7 +282,28 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     return () => { cancelled = true; };
   }, [patient]);
 
-  const submit = async () => {
+  /**
+   * ¿El hueco elegido cae dentro de un bloqueo? Devuelve el bloqueo o `null`.
+   *
+   * 🔴 LA MISMA FUNCIÓN QUE USA EL SERVIDOR (`bloqueoQueTapa` → 
+   * `bloqueaEsteHueco`). Comparar fechas aquí a mano es lo que haría que la
+   * ventana preguntara por un hueco que el servidor no considera bloqueado, o
+   * al revés.
+   */
+  const bloqueoDelHueco = (): BloqueoParaConfirmar | null => {
+    if (!slotIso || bloqueosDelDia.length === 0) return null;
+    const inicio = new Date(slotIso);
+    const fin = new Date(inicio.getTime() + duration * 60_000);
+    const b = bloqueoQueTapa(
+      bloqueosDelDia,
+      inicio.toISOString(),
+      fin.toISOString(),
+      doctorId || null,
+    );
+    return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
+  };
+
+  const submit = async (bloqueoConfirmado: BloqueoParaConfirmar | null = null) => {
     const newErrors: typeof errors = {};
     if (!patient) newErrors.patient = true;
     if (!doctorId) newErrors.doctorId = true;
@@ -273,6 +316,19 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       return;
     }
     if (!boot) return;
+
+    // ── LA PREGUNTA, ANTES DE GUARDAR (WS1-T3) ──
+    //
+    // Solo si de verdad hay un bloqueo encima del hueco elegido. En el 99 % de
+    // las citas esto devuelve `null` y no cuesta ni un clic ni un render: se
+    // sigue derecho al POST de siempre.
+    if (!bloqueoConfirmado) {
+      const bloqueo = bloqueoDelHueco();
+      if (bloqueo) {
+        setBloqueoPendiente(bloqueo);
+        return;
+      }
+    }
 
     const finalReason = reason.trim() || null;
 
@@ -294,6 +350,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
           reason: finalReason,
           isTeleconsult: false,
           notifyPatient,
+          // Solo «ya lo confirmé»: el motivo lo escribe el servidor con el
+          // bloqueo que él mismo lee de la base. Y NO va por `overrideReason`,
+          // cuyo valor apaga el no-solape. Ver `agenda-bloqueos/core.ts` §7.
+          ...(bloqueoConfirmado ? { bloqueoConfirmado: true } : {}),
         }),
       });
 
@@ -543,6 +603,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                       onChange={(iso) => { setSlotIso(iso); if (errors.slot) setErrors((er) => ({ ...er, slot: undefined })); }}
                       resourceSchedule={resourceSchedule}
                       grouped
+                      onBloqueos={(crudo) =>
+                        setBloqueosDelDia(parseBloqueos({ bloqueos: crudo }))
+                      }
                     />
                     {errors.slot && (
                       <div {...(nueva ? { className: nc.error } : { style: { fontSize: 11, color: "var(--danger)", marginTop: 4 } })}>
@@ -585,11 +648,36 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
             submitting={submitting}
             disabled={submitting || !boot}
             onCancel={onClose}
-            onSubmit={submit}
+            // Envuelto y no `onSubmit={submit}`: el pie lo enchufa a un
+            // `onClick`, que le pasaría el evento del ratón como primer
+            // argumento — y ese argumento es justo el «ya confirmó el
+            // bloqueo» de `submit`. La ventana de aviso no saldría nunca.
+            onSubmit={() => {
+              void submit();
+            }}
           />
           </AparienciaNuevaCitaProvider>
         </Dialog.Content>
       </Dialog.Portal>
+
+      {/* ── «Ese día está bloqueado» (WS1-T3) ──
+          Solo se monta si `submit` encontró un bloqueo encima del hueco. Al
+          confirmar se limpia ANTES de reenviar: así los errores del servidor
+          (solape, sillón cerrado) salen sobre la ventana de siempre, como
+          hasta ahora, y no sobre una confirmación que ya cumplió su papel. */}
+      {bloqueoPendiente && (
+        <ConfirmarBloqueo
+          bloqueo={bloqueoPendiente}
+          dayISO={dateISO}
+          guardando={submitting}
+          onConfirmar={() => {
+            const confirmado = bloqueoPendiente;
+            setBloqueoPendiente(null);
+            void submit(confirmado);
+          }}
+          onCancelar={() => setBloqueoPendiente(null)}
+        />
+      )}
     </Dialog.Root>
   );
 }

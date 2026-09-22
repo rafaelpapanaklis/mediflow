@@ -1,10 +1,18 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, Calendar, Clock } from "lucide-react";
+import { X, Calendar, Clock, AlertTriangle } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { useT } from "@/i18n/i18n-provider";
+
+/** Lo mínimo del bloqueo del destino para avisar (WS1-T3). */
+export interface BloqueoDelDestino {
+  /** `null` = toda la clínica. */
+  doctorId: string | null;
+  doctorNombre: string | null;
+  reason: string;
+}
 
 export interface RescheduleConfirmProps {
   open: boolean;
@@ -15,6 +23,19 @@ export interface RescheduleConfirmProps {
   submitting: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /**
+   * WS1-T3 — el bloqueo que tapa el destino, o `null`.
+   *
+   * 🔴 ESTA ES LA AGENDA QUE CORRE POR DEFECTO. La agenda nueva vive detrás
+   * del interruptor `menu-dos-niveles`, que falla CERRADO: en toda clínica sin
+   * la bandera —el caso normal hoy— arrastrar una cita pasa por aquí. Sin este
+   * aviso, el agujero que la tarea venía a cerrar seguía abierto justo en el
+   * camino más transitado.
+   *
+   * Sin bloqueo (el 99 % de los movimientos) la ventana sale exactamente como
+   * antes: ni un nodo de más.
+   */
+  bloqueo?: BloqueoDelDestino | null;
 }
 
 function formatDateShort(iso: string, timezone: string): string {
@@ -26,6 +47,7 @@ function formatDateShort(iso: string, timezone: string): string {
 
 export function AgendaRescheduleConfirmModal({
   open, doctorName, originalStartsAt, newStartsAt, timezone, submitting, onConfirm, onCancel,
+  bloqueo = null,
 }: RescheduleConfirmProps) {
   const t = useT();
   const originalTime = formatTimeInTz(originalStartsAt, timezone);
@@ -74,6 +96,33 @@ export function AgendaRescheduleConfirmModal({
                 <div style={dateStyle}>{newDate}</div>
               </div>
             </div>
+
+            {/* ── El aviso de bloqueo (WS1-T3) ──
+                Va justo encima de los botones, que es donde se decide.
+                Triángulo + motivo escrito: el amarillo es refuerzo, no el
+                mensaje. Cancelar deja la cita donde estaba — nada se ha
+                guardado todavía, el movimiento optimista vive dentro de
+                `commitReschedule` y solo corre al confirmar. */}
+            {bloqueo && (
+              <div style={bloqueoStyle} role="alert">
+                <AlertTriangle size={17} strokeWidth={2.2} style={{ flex: "none", marginTop: 1, color: "var(--warning-strong)" }} aria-hidden />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.3, color: "var(--warning-strong)" }}>
+                    {t("agenda.bloqueos.confirmar.titulo")}
+                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.4, color: "var(--warning-strong)", overflowWrap: "anywhere" }}>
+                    {newDate} · {bloqueo.reason} ·{" "}
+                    {bloqueo.doctorId === null
+                      ? t("agenda.bloqueos.confirmar.alcanceClinica")
+                      : bloqueo.doctorNombre ?? t("agenda.bloqueos.confirmar.alcanceDoctorSinNombre")}
+                  </div>
+                  <div style={{ fontSize: 12, lineHeight: 1.45, color: "var(--text-2)", overflowWrap: "anywhere" }}>
+                    {t("agenda.bloqueos.confirmar.cerradaPara")}{" "}
+                    {t("agenda.bloqueos.confirmar.tuSiPuedes")}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <footer style={footerStyle}>
@@ -90,6 +139,16 @@ export function AgendaRescheduleConfirmModal({
   );
 }
 
+/* Tokens de aviso de `globals.css`, con pareja en claro y en oscuro. Ni un
+   hexadecimal a mano. */
+const bloqueoStyle: React.CSSProperties = {
+  display: "flex", alignItems: "flex-start", gap: 10,
+  marginTop: 14, padding: "12px 14px",
+  borderRadius: 10,
+  background: "var(--warning-soft-strong)",
+  borderLeft: "3px solid var(--warning)",
+  minWidth: 0,
+};
 const overlayStyle: React.CSSProperties = {
   position: "fixed", inset: 0, background: "rgba(15,10,30,0.55)", backdropFilter: "blur(4px)", zIndex: 80,
 };

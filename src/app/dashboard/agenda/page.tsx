@@ -23,6 +23,8 @@ import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { canSendManualReminder } from "@/lib/whatsapp/manual-reminder-access";
 import { viewRangeUtc } from "@/lib/agenda/date-ranges";
+import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
+import { ctxDeUsuario } from "@/lib/agenda-bloqueos/core-ctx";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
 import { AgendaPageClient } from "./agenda-page-client";
 
@@ -127,6 +129,29 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     timezone: clinic.timezone,
   });
 
+  // ── Los bloqueos del día (WS1-T3) ────────────────────────────────────
+  //
+  // 🔴 FUERA del Promise.all de arriba A PROPÓSITO: ese lote ya lleva seis
+  // consultas y la regla de la casa es menos de siete por tanda (el pooler de
+  // Supabase se satura y empiezan los timeouts). Una séptima ahí cambiaría un
+  // aviso por una agenda que no carga.
+  //
+  // Va en la SSR y no solo en `/api/agenda/range` porque el provider SALTA el
+  // primer fetch cuando los datos del servidor ya cubren la vista: sin esto,
+  // abrir la agenda directamente en un día bloqueado no enseñaría nada hasta
+  // navegar a otro día y volver.
+  //
+  // `listarBloqueos` degrada a [] si la tabla aún no existe (el .sql lo aplica
+  // Rafael a mano), así que esto no puede tumbar la página.
+  // El contexto se arma con el helper compartido y NO a mano: el `clinicId`
+  // tiene que salir de la sesión siempre y de la misma forma (ver
+  // `core-ctx.ts`). `listarBloqueos` acota además por rol — un DOCTOR recibe
+  // los suyos y los de toda la clínica, nunca el motivo del bloqueo de otra.
+  const bloqueos = await listarBloqueos(ctxDeUsuario({ ...user, clinic }), {
+    desde: range.fromUtc.toISOString(),
+    hasta: range.toUtc.toISOString(),
+  });
+
   const payload: AgendaDayResponse = {
     range: {
       from: range.fromUtc.toISOString(),
@@ -145,6 +170,7 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     resources,
     pendingValidation,
     waitlistCount,
+    bloqueos,
   };
 
   return (

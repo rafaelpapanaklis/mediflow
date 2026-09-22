@@ -245,7 +245,17 @@ function accionDeAgenda(def: {
       const permitida = PETICION_PERMITIDA[accion];
       const { metodo, ruta, cuerpo } = propuesta.peticion;
       const id = permitida.ruta.exec(ruta);
-      if (propuesta.accion !== accion || metodo !== permitida.metodo || !id || (cuerpo && "overrideReason" in cuerpo)) {
+      // WS1-T3: `bloqueoConfirmado` se suma a la lista por el mismo criterio
+      // que `overrideReason`. No es una escalada —no apaga ninguna regla y el
+      // texto del rastro lo escribe el servidor—, pero Sabina es justamente
+      // una de las puertas a las que un bloqueo SÍ prohíbe: que no pueda
+      // mandar el campo con el que el staff dice «ya lo confirmé».
+      if (
+        propuesta.accion !== accion ||
+        metodo !== permitida.metodo ||
+        !id ||
+        (cuerpo && ("overrideReason" in cuerpo || "bloqueoConfirmado" in cuerpo))
+      ) {
         console.error("[sabina/agenda] propuesta guardada con una petición que no corresponde", { accion, metodo, ruta });
         return { ok: false, tipo: "error", frase: "Esa propuesta no se pudo ejecutar tal como estaba. No se hizo nada; pídemelo otra vez." };
       }

@@ -15,8 +15,9 @@
  */
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowRight, Loader2, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, X } from "lucide-react";
 import { instrumentSans } from "@/fonts/menu";
+import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import type { PlannedReschedule } from "@/lib/agenda/reschedule-flow";
 import { fechaCorta } from "@/lib/agenda-nueva/fechas";
@@ -25,15 +26,43 @@ import { rangoDePlan } from "@/lib/agenda-nueva/interacciones";
 import { CLASES_PORTAL_AGENDA } from "./ropa";
 import s from "./agenda-nueva.module.css";
 
+/** Lo mínimo del bloqueo para avisar. Subconjunto del `BloqueoDTO`. */
+export interface BloqueoDelDestino {
+  /** `null` = toda la clínica. */
+  doctorId: string | null;
+  doctorNombre: string | null;
+  reason: string;
+}
+
 export interface ConfirmarMovimientoProps {
   plan: PlannedReschedule;
   guardando: boolean;
   onConfirmar: () => void;
   onCancelar: () => void;
+  /**
+   * WS1-T3 — el bloqueo que tapa el destino, o `null`. Con él, esta ventana
+   * deja de ser un «¿mover?» de trámite y dice en amarillo que ese día está
+   * cerrado, con el motivo escrito. Sin él (el 99 % de los movimientos) la
+   * ventana sale exactamente como antes: ni un píxel de más.
+   */
+  bloqueo?: BloqueoDelDestino | null;
+  /** El día de destino, `YYYY-MM-DD` en la zona de la clínica. */
+  diaDestino?: string;
 }
 
-export function ConfirmarMovimiento({ plan, guardando, onConfirmar, onCancelar }: ConfirmarMovimientoProps) {
+export function ConfirmarMovimiento({
+  plan,
+  guardando,
+  onConfirmar,
+  onCancelar,
+  bloqueo = null,
+  diaDestino,
+}: ConfirmarMovimientoProps) {
   const { state } = useAgenda();
+  // Solo para el aviso de bloqueo: el resto de esta ventana conserva sus
+  // textos tal cual estaban (los traduce ws1-t1 cuando le toque la agenda
+  // nueva entera). `vista-mes.tsx` ya usa `useT` en esta misma carpeta.
+  const t = useT();
   const tz = state.timezone;
   const { original } = plan;
 
@@ -112,6 +141,32 @@ export function ConfirmarMovimiento({ plan, guardando, onConfirmar, onCancelar }
               </span>
             </div>
           </div>
+
+          {/* ── El aviso de bloqueo (WS1-T3) ──
+              Triángulo + texto: el color amarillo es refuerzo, no el mensaje.
+              Se lee el MOTIVO que escribió la persona, y de quién es el cierre
+              —toda la clínica, o el doctor que se ausenta—. */}
+          {bloqueo && (
+            <div className={s.moverBloqueo} role="alert">
+              <AlertTriangle size={17} strokeWidth={2.2} className={s.moverBloqueoIcono} aria-hidden />
+              <div className={s.moverBloqueoTextos}>
+                <span className={s.moverBloqueoTitulo}>
+                  {t("agenda.bloqueos.confirmar.titulo")}
+                </span>
+                <span className={s.moverBloqueoDetalle}>
+                  {diaDestino ? `${fechaCorta(diaDestino)} · ` : ""}
+                  {bloqueo.reason} ·{" "}
+                  {bloqueo.doctorId === null
+                    ? t("agenda.bloqueos.confirmar.alcanceClinica")
+                    : bloqueo.doctorNombre ?? t("agenda.bloqueos.confirmar.alcanceDoctorSinNombre")}
+                </span>
+                <span className={s.moverBloqueoNota}>
+                  {t("agenda.bloqueos.confirmar.cerradaPara")}{" "}
+                  {t("agenda.bloqueos.confirmar.tuSiPuedes")}
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className={s.modalPie}>
             <button

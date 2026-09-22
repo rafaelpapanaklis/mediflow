@@ -98,6 +98,14 @@ export interface RescheduleAppointmentInput {
   resourceId?: string | null;
   reason?: string | null;
   overrideReason?: string | null;
+  /**
+   * WS1-T3 — «ya confirmé que ese día está bloqueado».
+   *
+   * Campo aparte de `overrideReason` a propósito: aquél exige rol de
+   * administradora y su valor apaga el no-solape; éste no hace ninguna de las
+   * dos cosas — solo deja rastro en `AuditLog`. Ver `agenda-bloqueos/core.ts` §7.
+   */
+  bloqueoConfirmado?: boolean;
 }
 
 /** Aviso de fuera-de-horario/día cerrado (P1-13): la API ya no bloquea, avisa. */

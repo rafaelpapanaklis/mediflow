@@ -1578,6 +1578,25 @@
       "masBloqueos": {
         "one": "+1 block",
         "other": "+{count} blocks"
+      },
+      "confirmar": {
+        "titulo": "That day is blocked",
+        "alcanceClinica": "whole clinic",
+        "alcanceDoctorSinNombre": "one doctor",
+        "cerradaPara": "The agenda is closed for the bot, the website and the patient portal.",
+        "tuSiPuedes": "You can still book from here, and it will be recorded.",
+        "agendarIgual": "Book anyway",
+        "guardando": "Saving…"
+      },
+      "aviso": {
+        "etiquetaClinica": "{motivo}",
+        "etiquetaDoctor": "{doctor} — {motivo}",
+        "aria": "Warning: this day has an agenda block. {detalle}",
+        "ariaSemana": "Day with an agenda block",
+        "yMas": {
+          "one": "and 1 more",
+          "other": "and {count} more"
+        }
       }
     }
   },

@@ -621,3 +621,122 @@ export function lineaDeBloqueo(b: {
   const alcance = b.doctorId === null ? "toda la clínica" : "un doctor";
   return `${BLOQUEO_KIND_LABELS[b.kind]} · ${b.reason} · ${alcance}`;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 7 · EL RASTRO DE QUIEN AGENDÓ SOBRE UN BLOQUEO (WS1-T3)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 EL RASTRO VA AL REGISTRO DE AUDITORÍA, **NO** A `overrideReason`.
+ *
+ * El encargo pedía reutilizar las columnas `overrideReason` /
+ * `overriddenBy` / `overriddenAt` de la cita, para no inventar un rastro
+ * nuevo. Al mirarlo de cerca no se puede, y no por el gate de rol —eso se
+ * podía rodear— sino por lo que esa columna ES en la base:
+ *
+ *   -- prisma/migrations/20260424120000_fase_4_agenda/migration.sql
+ *   ALTER TABLE "appointments" ADD CONSTRAINT appt_doctor_no_overlap
+ *     EXCLUDE USING gist (…)
+ *     WHERE ("status" NOT IN ('CANCELLED','NO_SHOW')
+ *            AND "overrideReason" IS NULL);
+ *   COMMENT ON CONSTRAINT appt_doctor_no_overlap ON "appointments" IS
+ *     '… Admin puede bypasear con overrideReason.';
+ *
+ * `overrideReason` no es un campo de texto: es la BANDERA que saca la fila
+ * del índice de exclusión y apaga el «dos citas no se pisan». Hay otra
+ * constraint igual para el sillón, y `overlap-client.ts` hace lo propio en
+ * la pantalla (`if (a.overrideReason) continue`) para la rejilla de huecos.
+ *
+ * Escribir ahí el motivo del bloqueo le habría regalado a cualquiera que
+ * pueda crear una cita el bypass de solape que la casa reserva a ADMIN y
+ * SUPER_ADMIN — dos citas del mismo doctor a la misma hora, sin 409 y con
+ * el hueco pintado como libre. Es exactamente lo contrario de lo que el
+ * encargo pedía proteger, y ningún prefijo en el texto lo evita: el filtro
+ * lo aplica Postgres sobre `overrideReason IS NULL`, no el código.
+ *
+ * Así que el rastro va donde va el rastro de todo lo demás: la fila de
+ * `AuditLog` que las dos rutas ya escriben con `logMutation` al crear y al
+ * editar una cita, con el campo `bloqueoSaltado`. Una sola fila por acción,
+ * con quién, cuándo y qué bloqueo se saltó — que es lo que hay que poder
+ * responder meses después— y sin tocar ninguna regla de solape.
+ *
+ * `overrideReason` se queda EXACTAMENTE como estaba: mismo gate, mismos
+ * valores, mismo significado.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export const TRAZA_BLOQUEO_PREFIJO = "Bloqueo: ";
+
+/**
+ * «Bloqueo: Mantenimiento de clínica» — lo que se escribe en la auditoría.
+ *
+ * Lleva el MOTIVO que escribió la persona, no la etiqueta del tipo: es lo que
+ * explica el hueco meses después, cuando nadie recuerde qué pasó ese día. Sin
+ * motivo, la etiqueta del tipo como último recurso.
+ */
+export function trazaDeBloqueo(b: BloqueoLike): string {
+  const motivo = (b.reason ?? "").trim();
+  const tipo = b.kind ? BLOQUEO_KIND_LABELS[b.kind] : null;
+  if (!motivo) return `${TRAZA_BLOQUEO_PREFIJO}${tipo ?? "sin motivo"}`;
+  return `${TRAZA_BLOQUEO_PREFIJO}${motivo}`.slice(0, MOTIVO_MAX + TRAZA_BLOQUEO_PREFIJO.length);
+}
+
+/**
+ * EL BLOQUEO QUE TAPA ESTE HUECO, partiendo del DTO que viaja a la pantalla.
+ *
+ * Es `bloqueaEsteHueco` con la conversión de ISO a `Date` hecha una sola vez y
+ * en un sitio: las tres pantallas que preguntan «¿este hueco cae en un
+ * bloqueo?» (alta, reagendar, arrastrar) tienen que responder lo MISMO que el
+ * servidor, y la única manera es que llamen a la misma función. Una tercera
+ * comparación de fechas escrita a mano en un componente es exactamente lo que
+ * el encabezado de este archivo dice que no se haga.
+ *
+ * Pura y client-safe: no toca la red ni el reloj.
+ */
+export function bloqueoQueTapa(
+  bloqueos: readonly {
+    id: string;
+    doctorId: string | null;
+    doctorNombre?: string | null;
+    kind?: AgendaBlockKind;
+    reason: string;
+    inicio: string;
+    fin: string;
+    /** Los retirados no cuentan NUNCA, igual que en `bloqueaEsteHueco`. */
+    deletedAt?: string | Date | null;
+  }[],
+  inicioISO: string,
+  finISO: string,
+  doctorId: string | null,
+): {
+  id: string;
+  doctorId: string | null;
+  doctorNombre: string | null;
+  kind?: AgendaBlockKind;
+  reason: string;
+  inicio: string;
+  fin: string;
+} | null {
+  const inicio = new Date(inicioISO);
+  const fin = new Date(finISO);
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) return null;
+
+  for (const b of bloqueos) {
+    // Primero, para que ni se mire el resto — el mismo orden que
+    // `bloqueaEsteHueco`. Hoy el DTO no trae el campo, pero si un día lo trae
+    // (o alguien pasa filas de la tabla) un bloqueo retirado no puede hacer
+    // saltar un aviso que el servidor no va a dar.
+    if (b.deletedAt) continue;
+    const bIni = new Date(b.inicio);
+    const bFin = new Date(b.fin);
+    if (Number.isNaN(bIni.getTime()) || Number.isNaN(bFin.getTime())) continue;
+    const tapa = bloqueaEsteHueco(
+      [{ doctorId: b.doctorId, startsAt: bIni, endsAt: bFin }],
+      inicio,
+      fin,
+      doctorId,
+    );
+    if (tapa) return { ...b, doctorNombre: b.doctorNombre ?? null };
+  }
+  return null;
+}

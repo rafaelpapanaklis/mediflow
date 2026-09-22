@@ -29,7 +29,11 @@ import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { scheduleViolation } from "@/lib/agenda/clinic-hours";
-import { bloqueaEsteHueco, avisoDeBloqueo } from "@/lib/agenda-bloqueos/core";
+import {
+  bloqueaEsteHueco,
+  avisoDeBloqueo,
+  trazaDeBloqueo,
+} from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import {
   bookingRuleBody,
@@ -139,6 +143,9 @@ export async function PATCH(
     }
   }
 
+  // 🔴 GATE DEL SOLAPE DE CITAS — intacto, igual que la columna que gatea.
+  // Reagendar sobre un BLOQUEO entra por `bloqueoConfirmado`, no pide rol y no
+  // escribe aquí; su rastro va a `AuditLog`. Ver `agenda-bloqueos/core.ts` §7.
   if (body.overrideReason && !canOverrideOverlap(session.user.role)) {
     return NextResponse.json(
       { error: "override_not_allowed_for_role" },
@@ -286,6 +293,31 @@ export async function PATCH(
     data.notes = body.notes ?? null;
   }
 
+  // ── El rastro de haber reagendado ENCIMA de un bloqueo (WS1-T3) ──
+  //
+  // Solo para `AuditLog`, más abajo: ⛔ NO se escribe en `overrideReason`, que
+  // es la bandera del no-solape. El texto sale de `bloqueoEncima` —lo que el
+  // servidor acaba de leer de la base—, nunca del cuerpo. Y si al llegar el
+  // PATCH ya no hay bloqueo encima (lo retiraron entre medias), no se registra
+  // algo que no pasó.
+  // 🔴 EL RASTRO NO DEPENDE DE QUE LA PANTALLA HAYA AVISADO.
+  //
+  // Se registra siempre que la cita caiga encima de un bloqueo, y aparte se
+  // anota SI la persona llegó a ver el aviso. Existe un caso real en que no lo
+  // ve: un doctor agendando para OTRA doctora que tiene un bloqueo personal.
+  // El navegador no recibe ese bloqueo —`listarBloqueos` acota por rol para no
+  // enseñarle a nadie el motivo de la ausencia de un compañero («operación de
+  // rodilla»)—, así que el diálogo no sale; pero el servidor sí lo ve aquí.
+  //
+  // Si el rastro colgara de `bloqueoConfirmado`, ese caso —justo el que nadie
+  // vigila— sería el único que no dejaría huella. Quien audite el hueco vacío
+  // meses después necesita saber que la cita se metió ahí, y también si se
+  // avisó o no: lo segundo es lo que dice si hay que arreglar la pantalla o
+  // hablar con una persona.
+  const trazaBloqueo = bloqueoEncima ? trazaDeBloqueo(bloqueoEncima) : null;
+  const avisadaDelBloqueo = body.bloqueoConfirmado === true;
+
+  // ⛔ SIN TOCAR (WS1-T3): mismo gate, mismo significado, mismos valores.
   if (body.overrideReason !== undefined) {
     data.overrideReason = body.overrideReason;
     if (body.overrideReason) {
@@ -351,7 +383,20 @@ export async function PATCH(
       entityId: params.id,
       action: "update",
       before: { startsAt: existing.startsAt, endsAt: existing.endsAt, doctorId: existing.doctorId, resourceId: existing.resourceId, type: existing.type, status: existing.status },
-      after: { startsAt: updated.startsAt, endsAt: updated.endsAt, doctorId: updated.doctorId, resourceId: updated.resourceId, type: updated.type, status: updated.status },
+      after: {
+        startsAt: updated.startsAt,
+        endsAt: updated.endsAt,
+        doctorId: updated.doctorId,
+        resourceId: updated.resourceId,
+        type: updated.type,
+        status: updated.status,
+        // WS1-T3 — EL RASTRO: se reagendó encima de un bloqueo. Solo cuando
+        // lo hubo, y en la misma fila de auditoría que el resto del cambio.
+        // `bloqueoAvisado: false` = la pantalla no pudo avisar; ver arriba.
+        ...(trazaBloqueo
+          ? { bloqueoSaltado: trazaBloqueo, bloqueoAvisado: avisadaDelBloqueo }
+          : {}),
+      },
     });
 
     // Google Calendar sync (best-effort)

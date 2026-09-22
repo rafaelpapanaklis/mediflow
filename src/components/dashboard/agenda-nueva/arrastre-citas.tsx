@@ -55,7 +55,9 @@ import {
   planReschedule,
   type PlannedReschedule,
 } from "@/lib/agenda/reschedule-flow";
-import { ventanaDeRejilla } from "@/lib/agenda-nueva/geometria";
+import { ventanaDeRejilla, diaEnTz } from "@/lib/agenda-nueva/geometria";
+import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
+import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
 import { altoDeHueco, mensajeDeRechazo, rechazoIncierto } from "@/lib/agenda-nueva/interacciones";
 import { ConfirmarMovimiento } from "./confirmar-movimiento";
 
@@ -131,6 +133,28 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
   const [destino, setDestino] = useState<DestinoArrastre | null>(null);
   const [pendiente, setPendiente] = useState<PlannedReschedule | null>(null);
   const [guardando, setGuardando] = useState(false);
+
+  // Los bloqueos del rango que la agenda ya tiene cargado (WS1-T3). Aquí NO se
+  // pide nada por red: solo se puede soltar sobre columnas que están en
+  // pantalla, así que el destino siempre cae dentro del rango que se cargó
+  // junto a las citas.
+  const bloqueos = useBloqueosAgenda();
+
+  /**
+   * ¿El destino del arrastre cae dentro de un bloqueo? Con la MISMA función
+   * que usa el servidor. `null` en el 99 % de los movimientos, y entonces la
+   * ventana de confirmar sale exactamente como hasta hoy.
+   */
+  const bloqueoDelDestino = useMemo(() => {
+    if (!pendiente || bloqueos.length === 0) return null;
+    const b = bloqueoQueTapa(
+      bloqueos,
+      pendiente.newStartsAt,
+      pendiente.newEndsAt,
+      pendiente.newDoctorId ?? pendiente.original.doctor?.id ?? null,
+    );
+    return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
+  }, [pendiente, bloqueos]);
 
   // La rejilla que se DIBUJA: la hora redondeada y el tope de abajo salen de
   // ella, igual que en la agenda de siempre salen de la suya.
@@ -229,7 +253,12 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
     const plan = pendiente;
     setGuardando(true);
     try {
-      const r = await commitReschedule(plan, { dispatch });
+      // «Ya lo confirmé», solo si de verdad hay un bloqueo en el destino: el
+      // aviso que la persona acaba de leer en la ventana de confirmar.
+      const r = await commitReschedule(plan, {
+        dispatch,
+        bloqueoConfirmado: bloqueoDelDestino !== null,
+      });
       if (r.ok) {
         // Fuera de horario o en día cerrado el servidor guarda y AVISA (P1-13).
         if (r.scheduleWarning?.message) toast(r.scheduleWarning.message, { duration: 6000 });
@@ -259,7 +288,15 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
     } finally {
       setGuardando(false);
     }
-  }, [pendiente, guardando, dispatch, invalidateRangeCache, refetchView, state.resources]);
+  }, [
+    pendiente,
+    guardando,
+    dispatch,
+    invalidateRangeCache,
+    refetchView,
+    state.resources,
+    bloqueoDelDestino,
+  ]);
 
   const valor = useMemo<ArrastreValor>(
     () => ({ citaArrastrada, destino }),
@@ -288,6 +325,15 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
           guardando={guardando}
           onConfirmar={confirmar}
           onCancelar={cancelar}
+          // ⚠ El aviso va DENTRO de esta ventana y no en una segunda encima
+          // (WS1-T3): soltar una cita ya abre una confirmación, y encadenar
+          // dos para un solo gesto se convierte en dos «aceptar» seguidos que
+          // nadie lee. Aquí el aviso está donde ya se está mirando, y
+          // «Cancelar» sigue dejando la cita EXACTAMENTE donde estaba: el
+          // movimiento optimista vive dentro de `commitReschedule`, que solo
+          // corre al confirmar.
+          bloqueo={bloqueoDelDestino}
+          diaDestino={diaEnTz(pendiente.newStartsAt, state.timezone)}
         />
       )}
     </Ctx.Provider>

@@ -78,6 +78,50 @@
   white-space: nowrap;
 }
 
+/* ── El día BLOQUEADO, en la cabecera de su columna (ws1-t3) ─────────────
+   La franja de la rejilla ya lo dice, pero la rejilla hace scroll: un
+   bloqueo de 14:00 a 16:00 queda fuera de pantalla mientras alguien agenda
+   por la mañana. La cabecera está siempre a la vista.
+
+   ⛔ NO se pinta así un día cerrado por el HORARIO SEMANAL: ése sigue con su
+   «Cerrado» gris. Ámbar = excepción con motivo; gris = jornada normal.
+
+   `--ag-ambar-*` de `agenda-nueva.module.css`, que se heredan hasta aquí y
+   ya traen su versión oscura. */
+
+.cabeceraBloqueada,
+.cabeceraBloqueadaDoctor {
+  border-radius: var(--ag-r-5);
+}
+
+/* Toda la clínica: amarillo lleno. */
+.cabeceraBloqueada {
+  background: var(--ag-ambar-fondo);
+}
+
+/* Un doctor: los demás atienden, así que solo el filete y un tinte. */
+.cabeceraBloqueadaDoctor {
+  background: var(--ag-ambar-claro);
+  box-shadow: inset 3px 0 0 var(--ag-ambar-icono);
+}
+
+.cabeceraBloqueoIcono {
+  flex: none;
+  color: var(--ag-ambar-icono);
+}
+
+.cabeceraBloqueada .cabeceraAbrev,
+.cabeceraBloqueadaDoctor .cabeceraAbrev,
+.cabeceraBloqueada .cabeceraConteo,
+.cabeceraBloqueadaDoctor .cabeceraConteo {
+  color: var(--ag-ambar-texto);
+}
+
+.cabeceraBloqueada .cabeceraNumero:not(.cabeceraNumeroHoy),
+.cabeceraBloqueadaDoctor .cabeceraNumero:not(.cabeceraNumeroHoy) {
+  color: var(--ag-ambar-texto);
+}
+
 /* ═══ MES ════════════════════════════════════════════════════════════════ */
 
 .mes {
@@ -280,11 +324,22 @@
 .tira {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
   padding: 1px 5px;
   border-radius: var(--ag-r-5);
   font-size: 10.5px;
   font-weight: 600;
   line-height: 15px;
+}
+
+.tiraIcono {
+  flex: none;
+}
+
+.tiraTexto {
+  min-width: 0;
   /* El motivo puede tener 200 caracteres; la celda, 100 px. Una línea y
      puntos suspensivos — el texto entero va en el `title`. */
   white-space: nowrap;
@@ -292,10 +347,17 @@
   text-overflow: ellipsis;
 }
 
+/* ws1-t3 — TODA LA CLÍNICA VA EN AMARILLO, no en gris.
+   Estaba al revés: el cierre de toda la clínica salía gris apagado y el de un
+   solo doctor en ámbar, cuando el primero es la noticia grande («ese día hay
+   mantenimiento o está cerrada la clínica») y el segundo no cierra a nadie
+   más. Ahora los dos son ámbar y la diferencia es el peso: lleno para la
+   clínica, apenas teñido con filete para un doctor — la misma gramática que
+   el título de la barra y la cabecera de la Semana. */
 .tiraClinica {
-  color: var(--ag-texto-3);
-  background: var(--ag-fondo-cerrado);
-  box-shadow: inset 2px 0 0 var(--ag-texto-2);
+  color: var(--ag-ambar-texto);
+  background: var(--ag-ambar-fondo);
+  box-shadow: inset 2px 0 0 var(--ag-ambar-icono);
 }
 
 .tiraDoctor {

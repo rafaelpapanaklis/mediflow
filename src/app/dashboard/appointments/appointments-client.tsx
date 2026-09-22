@@ -21,6 +21,13 @@ import { possibleTransitions } from "@/lib/agenda/transitions";
 import type { AppointmentStatus } from "@/lib/agenda/types";
 import { DateField } from "@/components/ui/date-field";
 import { useT } from "@/i18n/i18n-provider";
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
+import { useBloqueosDeDia } from "@/components/dashboard/bloqueos/usar-bloqueos-dia";
+import {
+  ConfirmarBloqueo,
+  type BloqueoParaConfirmar,
+} from "@/components/dashboard/bloqueos/confirmar-bloqueo";
 import { BookingRequestsPanel } from "./booking-requests-panel";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
@@ -38,6 +45,14 @@ interface Appt {
 interface Props {
   appointments: Appt[]; patients: Patient[]; doctors: Doctor[];
   currentUserId: string; clinicId: string; waConnected: boolean;
+  /**
+   * WS1-T3 — la zona de la CLÍNICA, del servidor. Esta pantalla razona en hora
+   * de pared («2026-09-22» + «09:00») y la resuelve el servidor al guardar, a
+   * propósito: la del dispositivo agendaría a la hora equivocada. Pero para
+   * saber si un hueco cae dentro de un bloqueo hacen falta instantes, y para
+   * eso hace falta la zona.
+   */
+  timezone: string;
   /** Espejo de lo que exige POST /api/whatsapp/send: sin esto, el botón daba 403. */
   canSendReminder: boolean;
 }
@@ -308,7 +323,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
   );
 }
 
-export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected, canSendReminder }: Props) {
+export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected, canSendReminder, timezone: tzClinica }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -377,6 +392,54 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   const [form, setForm] = useState<{ patientId: string; doctorId: string; type: string; date: string; startTime: string; durationMins: number; notes: string; mode: string; resourceId?: string }>(emptyForm);
   const setF = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // WS1-T3 — «ese día está bloqueado», también aquí.
+  //
+  // Esta pantalla es uno de los caminos por los que NACE una cita en
+  // producción, no solo la agenda: si se tapa la agenda y no esta, el agujero
+  // sigue abierto y se agenda por accidente igual.
+  //
+  // La zona de la clínica baja del servidor por props (`timezone`): esta
+  // pantalla trabaja en hora de pared y no la tenía. Con ella se puede usar la
+  // consulta BARATA de bloqueos (una tabla, un rango) en vez de pedir el día
+  // entero de la agenda solo para averiguar la zona.
+  // ═══════════════════════════════════════════════════════════════════════
+  const modalAbierto = showNew || showEdit;
+  const bloqueosDelDia = useBloqueosDeDia(
+    modalAbierto ? form.date : null,
+    tzClinica,
+    modalAbierto,
+  );
+  /**
+   * El bloqueo sobre el que se pregunta y CUÁL de las dos acciones lo disparó:
+   * esta pantalla crea y edita con el mismo formulario, y al confirmar hay que
+   * reanudar la que se interrumpió, no la otra.
+   */
+  const [bloqueoPendiente, setBloqueoPendiente] = useState<
+    { bloqueo: BloqueoParaConfirmar; accion: "crear" | "editar" } | null
+  >(null);
+
+  /**
+   * ¿El hueco del formulario cae dentro de un bloqueo? Con la MISMA función
+   * que el servidor. Sin zona (la consulta falló) devuelve `null` y se guarda
+   * como hasta hoy: un aviso que no se pudo calcular nunca puede estorbar.
+   */
+  function bloqueoDelHueco(): BloqueoParaConfirmar | null {
+    if (!tzClinica || bloqueosDelDia.length === 0) return null;
+    const [h, m] = form.startTime.split(":").map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    const inicio = tzLocalToUtc(form.date, h, m, tzClinica);
+    if (Number.isNaN(inicio.getTime())) return null;
+    const fin = new Date(inicio.getTime() + form.durationMins * 60_000);
+    const b = bloqueoQueTapa(
+      bloqueosDelDia,
+      inicio.toISOString(),
+      fin.toISOString(),
+      form.doctorId || null,
+    );
+    return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
+  }
+
   const calDays = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -440,7 +503,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
    * navegador no conoce la tz de la clínica y usar la del dispositivo agendaría
    * a la hora equivocada.
    */
-  function apptPayload() {
+  function apptPayload(bloqueoConfirmado: BloqueoParaConfirmar | null = null) {
     return {
       patientId: form.patientId,
       doctorId: form.doctorId,
@@ -452,17 +515,25 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       reason: form.type,
       notes: form.notes || null,
       isTeleconsult: form.mode === "TELECONSULTATION",
+      // WS1-T3 — solo «ya lo confirmé». El motivo lo escribe el servidor, y
+      // NO va por `overrideReason`, cuyo valor apaga el no-solape.
+      ...(bloqueoConfirmado ? { bloqueoConfirmado: true } : {}),
     };
   }
 
-  async function createAppt() {
+  async function createAppt(bloqueoConfirmado: BloqueoParaConfirmar | null = null) {
     if (!form.patientId) { toast.error(t("appointments.toast.selectPatient")); return; }
+    // La pregunta, antes de guardar. `null` en el 99 % de las citas.
+    if (!bloqueoConfirmado) {
+      const b = bloqueoDelHueco();
+      if (b) { setBloqueoPendiente({ bloqueo: b, accion: "crear" }); return; }
+    }
     setLoading(true);
     try {
       const endTime = addTime(form.startTime, form.durationMins);
       const res = await fetch("/api/appointments", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apptPayload()),
+        body: JSON.stringify(apptPayload(bloqueoConfirmado)),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(apiErrorMessage(res.status, body, t("common.genericError")));
@@ -500,14 +571,25 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   }
 
   // Improvement 5: Edit existing appointment
-  async function saveEdit() {
+  async function saveEdit(bloqueoConfirmado: BloqueoParaConfirmar | null = null) {
     if (!showDetail) return;
+    // Solo si la cita se MUEVE de verdad: corregirle las notas a una cita que
+    // ya vive en un día bloqueado no puede costar un clic de peaje cada vez.
+    const semueve =
+      form.date !== showDetail.date.split("T")[0] ||
+      form.startTime !== showDetail.startTime ||
+      form.durationMins !== showDetail.durationMins ||
+      form.doctorId !== showDetail.doctorId;
+    if (!bloqueoConfirmado && semueve) {
+      const b = bloqueoDelHueco();
+      if (b) { setBloqueoPendiente({ bloqueo: b, accion: "editar" }); return; }
+    }
     setLoading(true);
     try {
       const endTime = addTime(form.startTime, form.durationMins);
       const res = await fetch(`/api/appointments/${showDetail.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apptPayload()),
+        body: JSON.stringify(apptPayload(bloqueoConfirmado)),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(apiErrorMessage(res.status, body, t("appointments.toast.saveError")));
@@ -1094,7 +1176,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 <X size={14} />
               </button>
             </div>
-            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={createAppt} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.scheduleSubmit")} />
+            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={() => { void createAppt(); }} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.scheduleSubmit")} />
           </div>
         </div>
       )}
@@ -1109,7 +1191,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 <X size={14} />
               </button>
             </div>
-            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={saveEdit} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.saveChanges")} />
+            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={() => { void saveEdit(); }} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.saveChanges")} />
           </div>
         </div>
       )}
@@ -1256,6 +1338,26 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           </div>
         );
       })()}
+
+      {/* ── «Ese día está bloqueado» (WS1-T3) ──
+          El mismo aviso que la agenda, y al confirmar reanuda la acción que se
+          interrumpió: crear o editar, nunca la otra. Se limpia ANTES de
+          reenviar, para que los errores del servidor salgan sobre el
+          formulario como hasta hoy. */}
+      {bloqueoPendiente && (
+        <ConfirmarBloqueo
+          bloqueo={bloqueoPendiente.bloqueo}
+          dayISO={form.date}
+          guardando={loading}
+          onConfirmar={() => {
+            const pendiente = bloqueoPendiente;
+            setBloqueoPendiente(null);
+            if (pendiente.accion === "crear") void createAppt(pendiente.bloqueo);
+            else void saveEdit(pendiente.bloqueo);
+          }}
+          onCancelar={() => setBloqueoPendiente(null)}
+        />
+      )}
       </div>
     </div>
   );
