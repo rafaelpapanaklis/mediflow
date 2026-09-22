@@ -27,6 +27,8 @@ import type { DroppableData } from "@/lib/agenda/drag-utils";
 import { comoHora, topDeHora, topDeLinea, type VentanaRejilla } from "@/lib/agenda-nueva/geometria";
 import { aceptaClic, altoDeHueco, carrilDeClic, inicioDeClic } from "@/lib/agenda-nueva/interacciones";
 import { ANCHO_EJE } from "@/lib/agenda-nueva/tokens";
+import { useT } from "@/i18n/i18n-provider";
+import type { BandaBloqueo } from "@/components/dashboard/bloqueos/fechas";
 import s from "./agenda-nueva.module.css";
 
 export interface ColumnaCuadricula {
@@ -62,6 +64,21 @@ export interface ColumnaCuadricula {
   carriles?: number;
   /** Encima de las tarjetas: la sombra de la cita que se está arrastrando. */
   superpuesto?: ReactNode;
+  /**
+   * Los BLOQUEOS que tapan esta columna, ya recortados a su día y en minutos
+   * de pared de la clínica (`bandasDelDia`).
+   *
+   * 🔴 Se pintan DEBAJO de las tarjetas, nunca encima. Un bloqueo no cancela
+   * las citas que ya estaban: si el rayado las tapara, quien mira el día del
+   * puente vería la clínica cerrada y NO vería a los pacientes que hay que
+   * llamar para reagendar — que es lo único que hay que hacer ese día.
+   *
+   * 🔴 Y no capturan el puntero: el clic en un hueco tiene que seguir llegando
+   * a la columna. Quien cierra el hueco de verdad es el servidor, no el
+   * rayado; una franja que se traga el clic deja a recepción tocando una
+   * pantalla que no contesta.
+   */
+  bloqueos?: BandaBloqueo[];
 }
 
 export interface CuadriculaProps {
@@ -376,6 +393,14 @@ function ColumnaRejilla({
         </>
       )}
 
+      {/* ── Las franjas de BLOQUEO ──
+          Entre la franja de cierre y las tarjetas: se ven sobre el fondo de la
+          columna y por debajo de cualquier cita. El orden del DOM es lo que
+          las deja abajo — las tarjetas van después y ganan. */}
+      {c.bloqueos?.map((b) => (
+        <FranjaBloqueo key={b.id} banda={b} ventana={ventana} />
+      ))}
+
       {/* El hueco que crearía el clic, con su hora. Debajo de las tarjetas. */}
       {guia && (
         <div
@@ -425,5 +450,68 @@ function rotuloCierre(
     <span className={s.ejeCierre} style={{ top: topDeLinea(masTemprano, minutoInicio) + 22 }}>
       Cierre
     </span>
+  );
+}
+
+/**
+ * UNA FRANJA DE BLOQUEO en la rejilla — rayada, apagada y con el motivo encima.
+ *
+ * Se lee sin abrir nada, que es el punto: recepción tiene que saber POR QUÉ
+ * ese hueco está cerrado sin llamar a preguntar. «Congreso CDMX», «Vacaciones
+ * Dr. Pérez», «Cerrado — Navidad».
+ *
+ * Un bloqueo de toda la clínica y uno de un doctor NO se ven igual: el de la
+ * clínica va más marcado (`franjaBloqueoClinica`), porque cierra a todo el
+ * mundo. La diferencia está en el CSS, no aquí.
+ *
+ * Las flechas «←» y «→» dicen que el bloqueo viene de ayer o sigue mañana, sin
+ * tener que abrir nada: una banda recortada a su día no puede parecer que
+ * empieza y acaba en él.
+ */
+function FranjaBloqueo({
+  banda,
+  ventana,
+}: {
+  banda: BandaBloqueo;
+  ventana: VentanaRejilla;
+}) {
+  const t = useT();
+  const { minutoInicio, horaFin } = ventana;
+
+  // 🔴 SE RECORTA A LA VENTANA, y no es cosmético. La banda viene recortada a
+  // su DÍA (0–1440), pero el lienzo dibuja solo el horario del día: un bloqueo
+  // de día completo empieza en el minuto 0 y, con la rejilla arrancando a las
+  // 8, su `top` sale en −896 px. El rayado se veía igual (la columna lo
+  // recorta), pero el MOTIVO —que va pegado al borde de arriba de la franja—
+  // se pintaba fuera de la pantalla y no se leía nunca. Medido: una franja de
+  // día completo salía muda. Y el motivo es justo lo que esta franja existe
+  // para decir.
+  const desde = Math.max(banda.desdeMin, minutoInicio);
+  const hasta = Math.min(banda.hastaMin, horaFin * 60);
+  const top = topDeLinea(desde, minutoInicio);
+  const alto = topDeLinea(hasta, minutoInicio) - top;
+  if (alto <= 0) return null;
+
+  const titulo =
+    banda.doctorId === null
+      ? t("agenda.bloqueos.tituloClinica", { motivo: banda.reason })
+      : t("agenda.bloqueos.tituloDoctor", {
+          motivo: banda.reason,
+          doctor: banda.doctorNombre ?? "",
+        });
+
+  const clases = [
+    s.franjaBloqueo,
+    banda.doctorId === null ? s.franjaBloqueoClinica : s.franjaBloqueoDoctor,
+  ].join(" ");
+
+  return (
+    <div className={clases} style={{ top, height: alto }} title={titulo}>
+      <span className={s.franjaBloqueoTexto}>
+        {banda.vieneDeAntes ? "← " : ""}
+        {banda.reason}
+        {banda.sigueDespues ? " →" : ""}
+      </span>
+    </div>
   );
 }

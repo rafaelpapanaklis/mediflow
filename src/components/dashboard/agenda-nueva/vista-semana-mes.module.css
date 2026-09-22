@@ -260,6 +260,57 @@
   color: var(--ag-texto-2);
 }
 
+/* ── La tira de BLOQUEO en la celda del mes (ws1-t3) ─────────────────────
+   Una tira por día con el motivo escrito, si cabe. Es lo mismo que la
+   franja de Día y Semana, pero en una celda que mide poco más de 100 px:
+   aquí no hay rayado (a este tamaño se lee como suciedad) sino un filete
+   de color y el motivo recortado con puntos suspensivos.
+
+   La clínica entera y un doctor no se ven igual, igual que en la rejilla:
+   gris con filete de tinta el de todos, ámbar el de uno. Todo sale de los
+   `--ag-*`, así que el modo oscuro viene solo. */
+
+.tiras {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tira {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 5px;
+  border-radius: var(--ag-r-5);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 15px;
+  /* El motivo puede tener 200 caracteres; la celda, 100 px. Una línea y
+     puntos suspensivos — el texto entero va en el `title`. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tiraClinica {
+  color: var(--ag-texto-3);
+  background: var(--ag-fondo-cerrado);
+  box-shadow: inset 2px 0 0 var(--ag-texto-2);
+}
+
+.tiraDoctor {
+  color: var(--ag-ambar-texto);
+  background: var(--ag-ambar-claro);
+  box-shadow: inset 2px 0 0 var(--ag-ambar-icono);
+}
+
+.tiraMas {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ag-texto-2);
+}
+
 /* ── Pantallas estrechas ─────────────────────────────────────────────────
    Por debajo de 1280 el mes se queda sin aire: se recorta el acolchado y
    la leyenda pasa a la línea de abajo antes que encogerse hasta ser

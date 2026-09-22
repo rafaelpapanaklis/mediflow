@@ -788,6 +788,79 @@
   background-color: var(--ag-fondo-cerrado);
 }
 
+/* ── Franja de BLOQUEO de agenda (ws1-t3) ───────────────────────────────
+   Rayada y apagada, con el motivo escrito encima para que se lea sin abrir
+   nada. Dos cosas que NO son de estilo y por eso se dicen aquí:
+
+   · `z-index: 0` + el orden del DOM la dejan DEBAJO de las tarjetas. Un
+     bloqueo no cancela las citas que ya estaban, y taparlas escondería
+     justo a los pacientes que hay que llamar para reagendar.
+   · `pointer-events: none`: el clic sigue llegando a la columna. Quien
+     cierra el hueco es el servidor, no el rayado.
+
+   Los colores salen de los `--ag-*` de esta misma hoja, así que el modo
+   oscuro viene solo con el bloque `:global(.dark)` de arriba. */
+
+.franjaBloqueo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: var(--ag-r-5);
+  display: flex;
+  align-items: flex-start;
+  padding: 3px 8px;
+}
+
+.franjaBloqueoTexto {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.01em;
+  /* Una sola línea: la franja puede medir 14 px (un bloqueo de 7 min) y un
+     motivo de 200 caracteres no puede empujar nada fuera. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* TODA LA CLÍNICA — cierra a todo el mundo, así que va más marcado: rayas
+   de más contraste y un filete a la izquierda que se ve de un vistazo. */
+.franjaBloqueoClinica {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      var(--ag-borde-casilla) 0 5px,
+      transparent 5px 12px
+    ),
+    var(--ag-fondo-cerrado);
+  box-shadow: inset 3px 0 0 var(--ag-texto-2);
+}
+
+.franjaBloqueoClinica .franjaBloqueoTexto {
+  color: var(--ag-texto-3);
+}
+
+/* UN DOCTOR — el resto de la clínica sigue atendiendo. Más suave, y el
+   filete en ámbar para que no se confunda con el cierre de todos. */
+.franjaBloqueoDoctor {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      var(--ag-ambar-borde) 0 4px,
+      transparent 4px 12px
+    ),
+    var(--ag-ambar-claro);
+  box-shadow: inset 3px 0 0 var(--ag-ambar-icono);
+}
+
+.franjaBloqueoDoctor .franjaBloqueoTexto {
+  color: var(--ag-ambar-texto);
+}
+
 /* ── Agendar con un clic: el hueco bajo el cursor ──
    Marca el hueco que crearía el clic, con su hora, del alto de un hueco de la
    clínica. Va debajo de las tarjetas y no captura el ratón. */

@@ -48,6 +48,8 @@ import { TarjetaCita } from "./tarjeta-cita";
 import { FantasmaCita } from "./fantasma-cita";
 import { useArrastreCitas } from "./arrastre-citas";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
+import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
+import { bandasDelDia } from "@/components/dashboard/bloqueos/fechas";
 import { useMinuto } from "./usar-minuto";
 import s from "./agenda-nueva.module.css";
 
@@ -61,6 +63,10 @@ export function VistaDia() {
   const { responsablesVisibles, responsablesTodos, citaVisible, citaAbiertaId, abrirCita } =
     useAgendaNueva();
   const ahora = useMinuto();
+  // Los bloqueos del periodo, del MISMO payload que ya trae las citas (ws1-t2).
+  // Mientras su rama no esté integrada esto es una lista vacía y la rejilla se
+  // pinta exactamente como hoy.
+  const bloqueos = useBloqueosAgenda();
 
   const ventana = useMemo(
     () => ventanaDeRejilla(state.dayStart, state.dayEnd),
@@ -91,6 +97,19 @@ export function VistaDia() {
       ),
     [state.appointments, state.dayISO, state.timezone],
   );
+
+  // Las franjas de bloqueo del día, por columna. Aparte del `useMemo` de las
+  // columnas para que moverse por la rejilla no las recalcule: dependen solo
+  // del día, de la zona y de la lista de bloqueos.
+  const bandasPorResponsable = useMemo(() => {
+    const mapa = new Map<string, ReturnType<typeof bandasDelDia>>();
+    if (bloqueos.length === 0) return mapa;
+    for (const r of responsablesVisibles) {
+      const bandas = bandasDelDia(bloqueos, state.dayISO, state.timezone, r.id);
+      if (bandas.length > 0) mapa.set(r.id, bandas);
+    }
+    return mapa;
+  }, [bloqueos, responsablesVisibles, state.dayISO, state.timezone]);
 
   const columnas = useMemo<ColumnaCuadricula[]>(() => {
     const ctx = {
@@ -153,6 +172,7 @@ export function VistaDia() {
               })
           : undefined,
         fondo: undefined,
+        bloqueos: bandasPorResponsable.get(r.id),
         cierreDesdeMin: horarioDelDia.cierra,
         aperturaHastaMin: horarioDelDia.abre,
         cerrada: horarioDelDia.cerrado,
@@ -198,6 +218,7 @@ export function VistaDia() {
     permissions.canCreate,
     permissions.canEdit,
     ahora,
+    bandasPorResponsable,
     citasDelDia,
     horarioDelDia,
     state.dayISO,

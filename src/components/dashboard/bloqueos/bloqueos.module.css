@@ -1,0 +1,618 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   BLOQUEOS DE AGENDA — la sección de Configuración → Horarios y bloqueos.
+
+   Una sola hoja para los DOS caminos de render de settings-client.tsx (el de
+   siempre, con clases de Tailwind, y el del rediseño de ws1-t2, con las
+   piezas de `configuracion-rediseno`). No lee ni una clase de ninguno de los
+   dos: se apoya solo en los tokens globales de `globals.css`
+   (`--card`, `--border`, `--foreground`, `--muted-foreground`, `--brand-600`,
+   `--destructive`), que ya se dan la vuelta con `.dark` en <html>. Por eso
+   aquí NO hay un bloque `:global(.dark)`: el modo oscuro sale solo, y un
+   color escrito a mano sería el único que no se enteraría.
+
+   Medido a 390 px: no hay ni un ancho fijo. Los campos son una rejilla
+   `auto-fit` con mínimo de 150 px, que a esa anchura cae a una columna, y los
+   renglones de la lista pasan de tres tramos a uno apilado.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Sin `max-width`: la tarjeta de arriba (el horario semanal) es `max-w-lg`
+     y esta sección es más ancha a propósito — la lista de bloqueos lleva
+     fechas, alcance, tipo, motivo y autor en el mismo renglón. */
+  max-width: 880px;
+  margin-top: 20px;
+}
+
+.seccionCabecera {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.seccionTitulo {
+  font-size: 15px;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+  margin: 0;
+}
+
+.seccionSub {
+  font-size: 13px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+  margin: 0;
+}
+
+/* ── Tarjeta ────────────────────────────────────────────────────────── */
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 16px;
+  background: hsl(var(--card));
+}
+
+.tarjetaCabecera {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tarjetaTitulo {
+  font-size: 14px;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Campos ─────────────────────────────────────────────────────────── */
+
+.campos {
+  display: grid;
+  /* A 390 px el mínimo de 150 px deja UNA columna y ni un píxel de desborde;
+     a partir de ~700 px caben tres. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.campoAncho {
+  grid-column: 1 / -1;
+}
+
+.etiqueta {
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.obligatorio {
+  color: hsl(var(--destructive));
+}
+
+.control,
+.controlCorto {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 13px;
+  color: hsl(var(--foreground));
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+}
+
+.controlCorto {
+  width: auto;
+  min-width: 88px;
+}
+
+.control:focus-visible,
+.controlCorto:focus-visible,
+.botonPrincipal:focus-visible,
+.botonTexto:focus-visible,
+.plegadoBoton:focus-visible,
+.pista:focus-visible {
+  outline: 2px solid hsl(var(--brand-600));
+  outline-offset: 1px;
+}
+
+/* `accent-color` pinta la casilla marcada con el color de marca en los dos
+   temas sin tener que dibujar una casilla propia. */
+.casilla {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: hsl(var(--brand-600));
+  cursor: pointer;
+}
+
+.casillaFila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.ayuda {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+  margin: 0;
+}
+
+.error {
+  font-size: 12.5px;
+  color: hsl(var(--destructive));
+  margin: 0;
+}
+
+.revisando,
+.cargando,
+.vacio {
+  font-size: 12.5px;
+  color: hsl(var(--muted-foreground));
+  margin: 0;
+}
+
+/* ── Botones ────────────────────────────────────────────────────────── */
+
+.acciones {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.botonPrincipal {
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: hsl(var(--brand-600));
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.botonPrincipal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.botonTexto {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: hsl(var(--muted-foreground));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.botonTexto:hover:not(:disabled) {
+  color: hsl(var(--destructive));
+}
+
+.botonTexto:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── El aviso de citas agendadas ────────────────────────────────────────
+   El elemento más importante de la pantalla. NO es un «¿seguro?»: no lleva
+   botón de continuar, porque el bloqueo no se crea. */
+
+.aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid hsl(var(--destructive) / 0.35);
+  border-radius: 12px;
+  background: hsl(var(--destructive) / 0.07);
+}
+
+.avisoCabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.avisoIcono {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: hsl(var(--destructive));
+}
+
+.avisoTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: hsl(var(--foreground));
+}
+
+.avisoSub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: hsl(var(--muted-foreground));
+}
+
+.avisoLista {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Cada cita lleva a SU cita en la agenda: quien tiene que moverla no puede
+   quedarse buscándola a ciegas. */
+.avisoCita {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 3px 6px;
+  margin-left: -6px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: hsl(var(--foreground));
+  text-decoration: none;
+}
+
+.avisoCita:hover {
+  background: hsl(var(--destructive) / 0.1);
+}
+
+.avisoCitaCuando {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.avisoCitaQuien {
+  color: hsl(var(--muted-foreground));
+  min-width: 0;
+}
+
+.avisoMas {
+  font-size: 12px;
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+}
+
+.avisoEnlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  margin-left: 24px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: hsl(var(--brand-600));
+  text-decoration: none;
+}
+
+.avisoEnlace:hover {
+  text-decoration: underline;
+}
+
+/* ── Grupos (festivos oficiales / de costumbre, y meses de la lista) ─── */
+
+.grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grupoTitulo {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.grupoAyuda {
+  margin: 0 0 2px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ── Festivos ───────────────────────────────────────────────────────── */
+
+.festivos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* `flex-wrap` no es decoración: un festivo APLICADO lleva además la insignia
+   y el botón de retirar, y a 390 px los tres juntos comprimían el nombre
+   hasta dejar «N» en vez de «Navidad» (medido). Cuando no caben, la insignia
+   y el botón bajan a su línea y el nombre recupera el ancho. */
+.festivo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.festivo:hover {
+  background: hsl(var(--muted) / 0.5);
+}
+
+.festivoEtiqueta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* El 160 es el ancho por debajo del cual el nombre deja de leerse; al
+     llegar ahí, lo que sobra se va a la línea siguiente en vez de seguir
+     apretando esto. */
+  flex: 1 1 160px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.festivoNombre {
+  font-size: 13px;
+  color: hsl(var(--foreground));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.festivoFecha {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.insignia {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: hsl(var(--brand-600));
+  background: hsl(var(--brand-600) / 0.12);
+}
+
+.anioCampo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* El aviso de fin de año: discreto, y NO carga nada solo — solo ofrece el
+   salto al año siguiente. */
+.pista {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+
+.pista:hover {
+  color: hsl(var(--foreground));
+}
+
+/* ── La lista ───────────────────────────────────────────────────────── */
+
+.renglones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.renglonesPasados {
+  opacity: 0.65;
+}
+
+.renglon {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border-bottom: 1px solid hsl(var(--border));
+  min-width: 0;
+}
+
+.renglon:last-child {
+  border-bottom: 0;
+}
+
+.renglonCuando {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 0 0 auto;
+  width: 104px;
+}
+
+.renglonFechas {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+.renglonHoras {
+  font-size: 11.5px;
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+.renglonCuerpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.renglonMotivo {
+  margin: 0;
+  font-size: 13px;
+  color: hsl(var(--foreground));
+  overflow-wrap: anywhere;
+}
+
+.renglonMeta {
+  margin: 2px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: hsl(var(--muted-foreground));
+}
+
+.alcance {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.punto {
+  opacity: 0.5;
+}
+
+/* En su propio renglón, no dentro de la línea de meta: ahí el «·» que lo
+   precedía se quedaba colgando al final cuando el autor bajaba de línea. */
+.renglonAutor {
+  margin: 2px 0 0;
+  min-width: 0;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ── El plegado de los pasados ──────────────────────────────────────── */
+
+.plegado {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.plegadoBoton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+
+.plegadoBoton:hover {
+  color: hsl(var(--foreground));
+}
+
+/* ── La nota de solo lectura del horario semanal (la ve el doctor) ───── */
+
+.notaSoloLectura {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── 390 px ─────────────────────────────────────────────────────────────
+   El único punto de ruptura de la hoja. Debajo de 480 el renglón de la
+   lista deja de repartirse en tres tramos y se apila: con 104 px fijos de
+   fechas + el motivo + el botón, a 390 px el motivo se quedaba en dos
+   letras por línea. */
+
+@media (max-width: 480px) {
+  .tarjeta {
+    padding: 14px;
+  }
+
+  .renglon {
+    flex-wrap: wrap;
+  }
+
+  .renglonCuando {
+    width: 100%;
+    flex-direction: row;
+    gap: 8px;
+    align-items: baseline;
+  }
+
+  .festivoFecha {
+    font-size: 11.5px;
+  }
+
+  .avisoLista,
+  .avisoEnlace {
+    padding-left: 0;
+    margin-left: 0;
+  }
+}
