@@ -462,6 +462,16 @@ async function presentSlots(
         state,
       );
     }
+    // WS1-T2 · horario — la clínica abre, pero ESTE doctor no atiende ese día.
+    // Se dice con su nombre (la persona lo eligió en este mismo chat) y sin
+    // explicar su horario: basta con que ese día no, y con pedir otra fecha.
+    if (res.reason === "doctor_off") {
+      return step(
+        `${prefix}${state.doctorName ?? "El profesional"} no atiende ese día (${human}). ¿Qué otra fecha te acomoda?`,
+        state.mode,
+        state,
+      );
+    }
     return step(`${prefix}Ese día (${human}) no hay atención. ¿Qué otra fecha te acomoda?`, state.mode, state);
   }
   if (res.slots.length === 0) {
@@ -662,6 +672,13 @@ function createError(
     state.step = "slot";
     return presentSlots(input, state, tz, deps, "Ese horario acaba de cerrarse en la agenda. 😅");
   }
+  // WS1-T2 · horario — esa hora ya no está en el horario del doctor (lo cambió
+  // mientras se elegía). Se vuelve a la lista del mismo día, que ya sale
+  // recortada a su horario.
+  if (error === "doctor_off") {
+    state.step = "slot";
+    return presentSlots(input, state, tz, deps, "A esa hora el profesional no atiende. 😅");
+  }
   return done("No pude registrar la cita ahora. Intenta más tarde o llama al consultorio.", state.mode);
 }
 
@@ -687,6 +704,11 @@ function rescheduleError(
   if (error === "blocked") {
     state.step = "slot";
     return presentSlots(input, state, tz, deps, "Ese horario acaba de cerrarse en la agenda. 😅");
+  }
+  // WS1-T2 · horario — ver createError.
+  if (error === "doctor_off") {
+    state.step = "slot";
+    return presentSlots(input, state, tz, deps, "A esa hora el profesional no atiende. 😅");
   }
   return done("No pude reagendar la cita ahora. Intenta más tarde o llama al consultorio.", state.mode);
 }

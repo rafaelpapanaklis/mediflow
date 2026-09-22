@@ -193,8 +193,13 @@ export interface ScheduleViolation {
    * modal de edición y el arrastre— leen `scheduleWarning.message` y sacan un
    * toast; un campo nuevo habría sido un aviso que nadie pinta, y esas
    * pantallas son de ws1-t3 en esta ola.
+   *
+   * `doctor_off` (WS1-T2 · horario) tampoco sale de aquí: lo produce
+   * `avisoDeHorarioDoctor` (src/lib/horario-doctor/core.ts) cuando la cita
+   * cae fuera del horario PROPIO del doctor, y viaja por el mismo campo por
+   * la misma razón.
    */
-  reason: "closed_day" | "before_open" | "after_close" | "blocked";
+  reason: "closed_day" | "before_open" | "after_close" | "blocked" | "doctor_off";
   /** Copy listo para toast del staff. */
   message: string;
   /** Ventana del día en "HH:MM" (null si el día está cerrado). */

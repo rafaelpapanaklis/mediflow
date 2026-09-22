@@ -53,6 +53,10 @@ import {
 } from "@/lib/reminders/reschedule.server";
 import { notifyPatientChangeResolution } from "@/lib/appointment-change/notify";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiende } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 
 export const dynamic = "force-dynamic";
 
@@ -179,6 +183,26 @@ export async function POST(
     const slotMins = slotH * 60 + slotM;
     const durationMin = Math.max(1, Math.round(durationMs / 60_000));
     if (slotMins < openH * 60 + openM || slotMins + durationMin > closeH * 60 + closeM) {
+      return NextResponse.json({ error: "outside_schedule" }, { status: 400 });
+    }
+
+    // WS1-T2 · horario — ni dentro de un bloqueo ni fuera del horario propio
+    // del doctor. Esta ruta ESCRIBE (con auto-aprobación mueve la cita en el
+    // acto) y no estaba entre los diez sitios que tapó el bloqueo: el GET de
+    // slots esconde esas horas, pero una pestaña vieja las seguía mandando. Se
+    // mira el DESTINO, nunca el origen. Mismo `outside_schedule` que la
+    // comprobación de arriba: la pantalla ya lo sabe pintar, y al paciente no
+    // se le cuenta por qué su doctor no está.
+    const [bloqueosDestino, horarios] = await Promise.all([
+      leerBloqueosDelRango(appt.clinicId, proposedStartsAt, proposedEndsAt, {
+        doctorIds: [appt.doctorId],
+      }),
+      leerHorariosDeDoctores(appt.clinicId, { doctorIds: [appt.doctorId] }),
+    ]);
+    if (
+      bloqueaEsteHueco(bloqueosDestino, proposedStartsAt, proposedEndsAt, appt.doctorId) ||
+      doctorNoAtiende(horarios, proposedStartsAt, proposedEndsAt, appt.doctorId, appt.clinic.timezone)
+    ) {
       return NextResponse.json({ error: "outside_schedule" }, { status: 400 });
     }
 

@@ -14,14 +14,19 @@ import "server-only";
  *
  * Por qué no se llama a `leerOcupacion` en bucle: sería una consulta por día y
  * por doctor (14 × 3 = 42). La regla de la casa es menos de 7 por `Promise.all`
- * porque el pooler se satura. Aquí son CUATRO en total —unidades, citas del
- * rango, bloqueos del rango y horarios de unidad— y el reparto por día se hace
- * en memoria.
+ * porque el pooler se satura. Aquí son CINCO en total —unidades, citas del
+ * rango, bloqueos del rango, horario propio de los doctores y horarios de
+ * unidad— y el reparto por día se hace en memoria.
  *
  * ⚠️ WS1-T2 — ESTE ES EL SEXTO SITIO que calcula disponibilidad, y no estaba en
  * la lista de cinco de la tarea. No hizo falta encontrarlo a mano: al volver
  * OBLIGATORIO el campo `bloqueos` de `Ocupacion`, el compilador señaló este
  * archivo. Es exactamente para eso que ese campo no es opcional.
+ *
+ * WS1-T2 · horario — y por lo mismo `ConfigClinica.horariosDoctores` es
+ * obligatorio: aquí se lee el horario propio de los doctores del barrido y se
+ * completa la configuración antes de pasársela a `buscarHuecos`. Un doctor
+ * sin horario propio busca exactamente igual que antes.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -38,6 +43,7 @@ import {
 import type { ConfigClinica } from "@/lib/sabina/tools/agenda-comun";
 import { rangoDeCuando, sumarDias } from "./fechas";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 
 // Reexportado para que la ruta lo importe de un solo sitio.
 export { rangoDeCuando };
@@ -64,7 +70,11 @@ export interface HuecoEncontrado {
 
 export interface BuscarHuecosArgs {
   clinicId: string;
-  clinica: ConfigClinica;
+  /**
+   * La configuración de la clínica SIN el horario de los doctores: ese lo lee
+   * esta función, de los doctores del barrido y en la misma tanda de consultas.
+   */
+  clinica: Omit<ConfigClinica, "horariosDoctores">;
   /** Primer día del barrido, `YYYY-MM-DD`. */
   desde: string;
   /** Cuántos días barrer desde `desde`, ambos inclusive. */
@@ -97,9 +107,10 @@ export async function buscarHuecosDelRango(args: BuscarHuecosArgs): Promise<Huec
   // El rango UTC completo del barrido, de la primera medianoche a la última.
   const rango = calendarRangeUtc(args.desde, fechas[fechas.length - 1]!, timezone);
 
-  // CUATRO consultas, no una por día. `clinicId` sale de la sesión: si faltara,
-  // Prisma descartaría la clave y devolvería las citas de TODAS las clínicas.
-  const [unidades, citas, bloqueos] = await Promise.all([
+  // CINCO consultas, no una por día (cuatro aquí y la de horarios de unidad
+  // abajo). `clinicId` sale de la sesión: si faltara, Prisma descartaría la
+  // clave y devolvería las citas de TODAS las clínicas.
+  const [unidades, citas, bloqueos, horariosDoctores] = await Promise.all([
     prisma.resource.findMany({
       where: { clinicId: args.clinicId, isActive: true },
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
@@ -123,7 +134,11 @@ export async function buscarHuecosDelRango(args: BuscarHuecosArgs): Promise<Huec
     leerBloqueosDelRango(args.clinicId, rango.fromUtc, rango.toUtc, {
       doctorIds: args.doctorIds,
     }),
+    // WS1-T2 · horario — el horario propio de estos doctores. Quien no tiene
+    // no sale en el mapa y busca en el horario de la clínica, como siempre.
+    leerHorariosDeDoctores(args.clinicId, { doctorIds: args.doctorIds }),
   ]);
+  const clinica: ConfigClinica = { ...args.clinica, horariosDoctores };
 
   const idsUnidad = unidades.map((u) => u.id);
   const filasHorario = idsUnidad.length
@@ -155,7 +170,7 @@ export async function buscarHuecosDelRango(args: BuscarHuecosArgs): Promise<Huec
     // Día cerrado: ni se mira. `ventanaDeAtencion` ya aplica el criterio de
     // `scheduleViolation` (manda el horario del día de Ajustes; sin él, la
     // ventana histórica agendaDayStart/End).
-    if (ventanaDeAtencion(fecha, args.clinica) === null) continue;
+    if (ventanaDeAtencion(fecha, clinica) === null) continue;
 
     const { startUtc, endUtc } = calendarDayRangeUtc(fecha, timezone);
     const delDia = citas.filter(
@@ -187,7 +202,7 @@ export async function buscarHuecosDelRango(args: BuscarHuecosArgs): Promise<Huec
       const { huecos } = buscarHuecos({
         fecha,
         duracion: args.duracionMin,
-        clinica: args.clinica,
+        clinica,
         ocupacion,
         sillonId: null,
         ahora: args.ahora,

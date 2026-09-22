@@ -59,6 +59,7 @@ import {
   type BandaBloqueo,
   type BloqueoDTO,
 } from "@/lib/agenda-bloqueos/core";
+import { ventanaDelDoctor } from "@/lib/horario-doctor/core";
 
 /** Lo mínimo que la ocupación necesita saber de una cita. */
 export interface CitaOcupacion {
@@ -206,6 +207,15 @@ export interface EntradaOcupacion {
    * porque no hay un doctor contra el que aplicar la regla del NULL.
    */
   doctorId?: string | null;
+  /**
+   * WS1-T2 · horario — el horario propio de los doctores (`horariosDoctores`
+   * del payload). Solo cuenta con `modo: "doctor"`: entonces los minutos
+   * disponibles de cada carril son los de la clínica RECORTADOS a su horario
+   * (la intersección), no los de la clínica a secas. Un doctor que no trabaja
+   * los miércoles no deja los miércoles «vacíos al 0%»: no los tiene.
+   * Opcional: sin él (o sin fila para un doctor), la cuenta de siempre.
+   */
+  horariosDoctores?: Readonly<Record<string, readonly ScheduleDay[]>> | null;
 }
 
 /**
@@ -236,11 +246,22 @@ export function ocupacionDelDia(entrada: EntradaOcupacion): OcupacionDia {
   const horarioDesconocido = horario === null;
   const cerrado = horario !== null && !horario.abierto;
 
-  const minutosAbiertos =
+  const ventanaClinica =
     horario && horario.abierto && horario.aperturaMin !== null && horario.cierreMin !== null
-      ? horario.cierreMin - horario.aperturaMin
-      : 0;
-  const minutosDisponibles = minutosAbiertos * carriles.length;
+      ? { abre: horario.aperturaMin, cierra: horario.cierreMin }
+      : null;
+  const minutosAbiertos = ventanaClinica ? ventanaClinica.cierra - ventanaClinica.abre : 0;
+  // WS1-T2 · horario — carril a carril: la ventana de la clínica recortada al
+  // horario propio de SU doctor. Sin horario propio (o por sillón), la de la
+  // clínica: exactamente la cuenta de antes.
+  const horarios = modo === "doctor" ? entrada.horariosDoctores ?? null : null;
+  const dow = ventanaClinica && horarios ? scheduleDayOfISO(dayISO, timezone) : 0;
+  const minutosDisponibles = carriles.reduce((total, carril) => {
+    const filas = horarios?.[carril.id];
+    if (!ventanaClinica || !filas || filas.length === 0) return total + minutosAbiertos;
+    const v = ventanaDelDoctor(ventanaClinica, filas, dow);
+    return total + (v ? v.cierra - v.abre : 0);
+  }, 0);
 
   // Los minutos ocupados se reparten por carril. Una cita sin carril conocido
   // (doctor borrado, sillón sin asignar) suma al total del día pero no pinta

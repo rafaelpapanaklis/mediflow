@@ -22,6 +22,8 @@ import { z } from "zod";
 import type { PermissionKey } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import type { ScheduleDay } from "@/lib/agenda/clinic-hours";
+import type { HorariosDeDoctores } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { normalizePatientText } from "@/lib/patients/patient-search-core";
 import type { SabinaCtx } from "../tipos";
 
@@ -52,6 +54,12 @@ export interface AgendaDb {
    * siempre, no un fallo.
    */
   agendaBlock?: { findMany(args: any): Promise<any[]> };
+  /**
+   * El horario propio de cada doctor (WS1-T2 · horario). OPCIONAL por lo mismo
+   * que `agendaBlock`: sin él, `leerHorariosDeDoctores` devuelve un mapa vacío,
+   * que es «nadie tiene horario propio» = el comportamiento de siempre.
+   */
+  doctorSchedule?: { findMany(args: any): Promise<any[]> };
   $queryRaw(query: any): Promise<any[]>;
 }
 
@@ -155,7 +163,9 @@ export type CausaNoDisponible =
   | "sillon_no_disponible"
   | "sin_sillon_libre"
   /** WS1-T2 — hay un bloqueo de agenda encima (festivo, vacaciones, obra). */
-  | "bloqueado";
+  | "bloqueado"
+  /** WS1-T2 · horario — la clínica abre, pero el doctor no atiende a esa hora. */
+  | "doctor_no_atiende";
 
 /**
  * El resultado de una acción. `ok: true` en el runner siempre: estas cinco
@@ -210,6 +220,21 @@ export interface ConfigClinica {
   defaultSlotMinutes: number;
   googleCalendarEnabled: boolean;
   schedules: ScheduleDay[];
+  /**
+   * EL HORARIO PROPIO DE LOS DOCTORES (WS1-T2 · horario): `doctorId → filas`,
+   * solo los que tienen uno. Un doctor ausente del mapa sigue `schedules`.
+   *
+   * 🔴 OBLIGATORIO, no opcional, por lo mismo que `Ocupacion.bloqueos`:
+   * `evaluarHora` es el cuello de botella de Sabina Y de «Buscar espacio», y un
+   * constructor que olvidara rellenarlo seguiría compilando y ofrecería horas
+   * en que el doctor no atiende. Un mapa vacío es una respuesta válida, pero
+   * se escribe a propósito.
+   *
+   * Va AQUÍ, con el horario de la clínica, y no en `Ocupacion`: `reagendar-cita`
+   * arma su `Ocupacion` a mano copiando campo a campo, y un campo nuevo ahí se
+   * habría perdido por el camino. La configuración de la clínica viaja entera.
+   */
+  horariosDoctores: HorariosDeDoctores;
 }
 
 /**
@@ -217,7 +242,7 @@ export interface ConfigClinica {
  * y horario de Ajustes. Nunca se leen los tokens de Google, solo si está activo.
  */
 export async function cargarClinica(ctx: SabinaCtx, db: AgendaDb): Promise<ConfigClinica> {
-  const [clinica, horario] = await Promise.all([
+  const [clinica, horario, horariosDoctores] = await Promise.all([
     db.clinic.findFirst({
       where: { id: ctx.clinicId },
       select: {
@@ -233,6 +258,10 @@ export async function cargarClinica(ctx: SabinaCtx, db: AgendaDb): Promise<Confi
       select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
       orderBy: { dayOfWeek: "asc" },
     }),
+    // WS1-T2 · horario — los de TODA la clínica: son siete filas por doctor
+    // como mucho, y así cualquier herramienta (agendar, reagendar, proponer)
+    // tiene el del doctor que acabe resolviendo sin otra ida a la base.
+    leerHorariosDeDoctores(ctx.clinicId, { db }),
   ]);
   if (!clinica) throw new Error("clinica_no_encontrada");
   return {
@@ -242,6 +271,7 @@ export async function cargarClinica(ctx: SabinaCtx, db: AgendaDb): Promise<Confi
     defaultSlotMinutes: typeof clinica.defaultSlotMinutes === "number" && clinica.defaultSlotMinutes > 0 ? clinica.defaultSlotMinutes : 30,
     googleCalendarEnabled: clinica.googleCalendarEnabled === true,
     schedules: (horario ?? []) as ScheduleDay[],
+    horariosDoctores,
   };
 }
 

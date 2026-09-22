@@ -376,6 +376,10 @@ model Clinic {
   // Ver `model AgendaBlock` al final de este archivo.
   agendaBlocks AgendaBlock[]
 
+  // Horario propio de cada doctor (WS1-T2 · horario). Ver `model DoctorSchedule`
+  // al final de este archivo.
+  doctorSchedules DoctorSchedule[]
+
   // Manager de cuenta — la persona real de DaleControl que atiende a esta
   // clínica por WhatsApp (se asigna desde /admin/account-managers). Nullable:
   // sin manager la clínica solo tiene soporte por tickets. onDelete SetNull —
@@ -1250,6 +1254,11 @@ model User {
   agendaBlocksAsDoctor AgendaBlock[] @relation("AgendaBlockDoctor")
   agendaBlocksCreated  AgendaBlock[] @relation("AgendaBlockCreatedBy")
   agendaBlocksDeleted  AgendaBlock[] @relation("AgendaBlockDeletedBy")
+
+  // Horario propio del doctor (WS1-T2 · horario). Relación virtual: no añade
+  // columnas a "users". Sin filas = sigue el horario de la clínica, como
+  // siempre. Ver `model DoctorSchedule`.
+  doctorSchedules DoctorSchedule[]
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -18007,4 +18016,51 @@ model AgendaBlock {
   @@index([clinicId, startsAt, endsAt], map: "agenda_blocks_rango_idx")
   @@index([clinicId, doctorId, startsAt], map: "agenda_blocks_doctor_idx")
   @@map("agenda_blocks")
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// HORARIO PROPIO DEL DOCTOR (dental) — WS1-T2 · horario.
+//
+// «Nunca trabajo los miércoles» es un HORARIO; «el 12 de noviembre no vengo»
+// es un BLOQUEO (`AgendaBlock`). Son dos piezas distintas y no se convierte
+// una en la otra: el horario se repite cada semana y no tiene fecha; el
+// bloqueo tiene fecha y no se repite.
+//
+// Misma forma que `ClinicSchedule`, a propósito: una fila por día de la
+// semana, `dayOfWeek` 0=Lunes … 6=Domingo (≠ JS getDay), horas "HH:MM" de
+// pared en la zona de la clínica.
+//
+// 🔴 LA REGLA QUE PROTEGE A LAS CLÍNICAS: un doctor SIN filas aquí sigue el
+// horario de la clínica exactamente como antes de esta tabla. Solo cambia la
+// agenda de quien define su horario a propósito.
+//
+// 🔴 EL HORARIO DEL DOCTOR NO SE SALE DEL DE LA CLÍNICA. La disponibilidad
+// efectiva es la INTERSECCIÓN: abre la clínica ∩ atiende el doctor ∩ no hay
+// bloqueo. Si aquí se guarda 08:00–20:00 y la clínica abre 09:00–18:00, se
+// ofrece 09:00–18:00. La API lo acepta y avisa; el cálculo recorta.
+//
+// El .sql idempotente equivalente vive en sql/doctor-horarios.sql y se aplica
+// A MANO en Supabase. ⛔ NUNCA `prisma migrate dev` ni `deploy`: hay
+// migraciones del repo sin registrar contra producción.
+// ═══════════════════════════════════════════════════════════════════════
+
+model DoctorSchedule {
+  id        String  @id @default(cuid())
+  /// Multi-tenant: SIEMPRE se filtra por aquí.
+  clinicId  String
+  doctorId  String
+  /// 0=Lunes … 6=Domingo, como ClinicSchedule (≠ JS getDay).
+  dayOfWeek Int
+  /// `false` = ese día el doctor no atiende, aunque la clínica abra.
+  enabled   Boolean @default(true)
+  openTime  String  @default("09:00")
+  closeTime String  @default("18:00")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor User   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, dayOfWeek])
+  @@index([clinicId, doctorId])
+  @@map("doctor_schedules")
 }

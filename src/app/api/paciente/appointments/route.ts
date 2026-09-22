@@ -15,6 +15,10 @@ import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { rateLimit } from "@/lib/rate-limit";
 import { tzLocalToUtc, todayInTz } from "@/lib/agenda/time-utils";
+import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiende, MENSAJE_PUBLICO_FUERA_DE_HORARIO } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import {
   createCalendarEvent,
@@ -314,6 +318,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Ese horario ya pasó. Elige otro." }, { status: 400 });
     }
     const endsAt = new Date(startsAt.getTime() + DURATION_MIN * 60_000);
+
+    // ═════════════════════════════════════════════════════════════════════
+    // WS1-T2 · horario — EL CANDADO DEL ALTA DEL PORTAL.
+    //
+    // Esta ruta ESCRIBE una cita y no estaba entre los diez sitios que tapó
+    // el bloqueo: `GET /api/paciente/booking/slots` esconde las horas
+    // bloqueadas y las que el doctor no atiende, pero una pestaña vieja —o
+    // una petición a mano— seguía creando la cita. Se comprueban las dos
+    // cosas con las funciones de siempre: el bloqueo (`bloqueaEsteHueco`) y
+    // el horario propio del doctor (`doctorNoAtiende`). 409, como el hueco
+    // ocupado: es un conflicto con el estado de la agenda, y el motivo no se
+    // le cuenta al paciente.
+    // ═════════════════════════════════════════════════════════════════════
+    const [bloqueosDelHueco, horarios] = await Promise.all([
+      leerBloqueosDelRango(clinicId, startsAt, endsAt, { doctorIds: [doctorId] }),
+      leerHorariosDeDoctores(clinicId, { doctorIds: [doctorId] }),
+    ]);
+    if (bloqueaEsteHueco(bloqueosDelHueco, startsAt, endsAt, doctorId)) {
+      return NextResponse.json(
+        { error: "La clínica cerró la agenda en ese horario. Elige otro horario, por favor." },
+        { status: 409 }
+      );
+    }
+    if (doctorNoAtiende(horarios, startsAt, endsAt, doctorId, timezone)) {
+      return NextResponse.json({ error: MENSAJE_PUBLICO_FUERA_DE_HORARIO }, { status: 409 });
+    }
 
     const cleanType = (type ?? "").trim() || "Consulta general";
     const cleanNotes = (reason ?? "").trim().slice(0, 500) || null;

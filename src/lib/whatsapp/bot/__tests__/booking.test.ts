@@ -325,3 +325,43 @@ describe("bot booking — parsers puros", () => {
     assert.equal(isCancelWord("sí"), false);
   });
 });
+
+// WS1-T2 · horario — el horario PROPIO del doctor. El cálculo vive en
+// bot-booking-service (lo prueba src/lib/horario-doctor/__tests__); aquí se
+// prueba lo que el bot le DICE a la persona con cada respuesta del servicio.
+describe("bot booking — horario propio del doctor", () => {
+  it("el día que el doctor no atiende lo dice y pide otra fecha (no «no quedan horarios»)", async () => {
+    const deps = makeDeps({
+      getAvailableSlots: async () => ({ closed: true, reason: "doctor_off", slots: [] }),
+    });
+    const c = makeConvo(makeConfig(), deps, { id: "patP", phone: "5215512345678" });
+    await c.say("quiero una cita");
+    await c.say("1"); // servicio → doctor único → pide fecha
+    const r = await c.say("mañana");
+    assert.match(r.reply ?? "", /no atiende ese día/);
+    assert.match(r.reply ?? "", /otra fecha/);
+    assert.doesNotMatch(r.reply ?? "", /No quedan horarios/);
+    assert.equal(c.state?.step, "date");
+  });
+
+  it("si al confirmar la hora ya no está en su horario, vuelve a la lista del mismo día", async () => {
+    let ofertas = 0;
+    const deps = makeDeps({
+      getAvailableSlots: async () => {
+        ofertas++;
+        return { closed: false, slots: ["09:00", "09:30"] };
+      },
+      createBotAppointment: async () => ({ ok: false, error: "doctor_off" }),
+    });
+    const c = makeConvo(makeConfig(), deps, { id: "patP", phone: "5215512345678" });
+    await c.say("quiero una cita");
+    await c.say("1");
+    await c.say("mañana");
+    await c.say("1"); // 09:00 → confirma
+    const r = await c.say("sí");
+    assert.match(r.reply ?? "", /A esa hora el profesional no atiende/);
+    assert.match(r.reply ?? "", /Horarios disponibles/);
+    assert.equal(ofertas, 2, "se volvió a pedir la lista del día");
+    assert.equal(c.state?.step, "slot");
+  });
+});

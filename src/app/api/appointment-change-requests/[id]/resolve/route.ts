@@ -23,6 +23,10 @@ import {
 import { notifyPatientChangeResolution } from "@/lib/appointment-change/notify";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { avisoDeBloqueo, bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 
 export const dynamic = "force-dynamic";
 
@@ -364,5 +368,43 @@ export async function POST(
 
   revalidateAfter("appointments");
   await notifyBestEffort(cr.id);
-  return NextResponse.json({ ok: true, status: "APPROVED" });
+
+  // WS1-T2 · horario — aprobar un reagendado lo MUEVE, igual que el PATCH del
+  // panel, y como allí al staff se le avisa y no se le prohíbe: la cita ya se
+  // movió; `scheduleWarning` (la forma que las pantallas ya pintan) dice si el
+  // destino cae en un bloqueo o fuera del horario propio del doctor. Mismo
+  // orden que el PATCH. Hasta ahora esta ruta no miraba ninguna de las dos.
+  //
+  // 🔴 BEST-EFFORT, como las notificaciones de arriba: a estas alturas la cita
+  // YA se movió y el paciente YA está avisado. Si esta lectura fallara (un
+  // timeout del pooler), un 500 le diría al staff que no se aprobó, y el
+  // reintento chocaría con `not_pending`. Sin aviso es mejor que un error falso.
+  let scheduleWarning:
+    | ReturnType<typeof avisoDeBloqueo>
+    | ReturnType<typeof avisoDeHorarioDoctor>
+    | null = null;
+  try {
+    const [bloqueosDestino, horariosDestino] = await Promise.all([
+      leerBloqueosDelRango(session.clinic.id, proposedStartsAt, proposedEndsAt, {
+        doctorIds: [appointment.doctorId],
+      }),
+      leerHorariosDeDoctores(session.clinic.id, { doctorIds: [appointment.doctorId] }),
+    ]);
+    const bloqueoDestino = bloqueaEsteHueco(bloqueosDestino, proposedStartsAt, proposedEndsAt, appointment.doctorId);
+    const fueraDelDoctor = doctorNoAtiende(
+      horariosDestino,
+      proposedStartsAt,
+      proposedEndsAt,
+      appointment.doctorId,
+      session.clinic.timezone,
+    );
+    scheduleWarning = bloqueoDestino
+      ? avisoDeBloqueo(bloqueoDestino)
+      : fueraDelDoctor
+        ? avisoDeHorarioDoctor(fueraDelDoctor)
+        : null;
+  } catch (err) {
+    console.error("[resolve CR] aviso de bloqueo/horario no disponible:", err);
+  }
+  return NextResponse.json({ ok: true, status: "APPROVED", scheduleWarning });
 }

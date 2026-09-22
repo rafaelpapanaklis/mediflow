@@ -19,6 +19,8 @@ import { tzLocalToUtc, todayInTz } from "@/lib/agenda/time-utils";
 import type { PacienteBookingSlotsResponse } from "@/lib/patient-portal/types";
 import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiendeSlot } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +100,7 @@ export async function GET(req: NextRequest) {
   // Citas del doctor ese día en UNA query (overlap del rango del día en tz).
   const dayStartUtc = tzLocalToUtc(dateStr, 0, 0, timezone);
   const dayEndUtc = new Date(dayStartUtc.getTime() + 86_400_000);
-  const [busy, bloqueos] = await Promise.all([
+  const [busy, bloqueos, horarios] = await Promise.all([
     prisma.appointment.findMany({
       where: {
         clinicId,
@@ -115,6 +117,8 @@ export async function GET(req: NextRequest) {
     // día cerrado se presenta a una clínica vacía igual que el que reserva
     // desde la página pública.
     leerBloqueosDelRango(clinicId, dayStartUtc, dayEndUtc, { doctorIds: [doctorId] }),
+    // WS1-T2 · horario — el horario propio del doctor, si lo tiene.
+    leerHorariosDeDoctores(clinicId, { doctorIds: [doctorId] }),
   ]);
 
   const [closeH, closeM] = daySchedule.closeTime.split(":").map(Number);
@@ -140,6 +144,9 @@ export async function GET(req: NextRequest) {
     // WS1-T2 — ni una hora bloqueada. El motivo NO se manda: el portal es del
     // paciente y no le corresponde saber por qué su doctora no está.
     if (bloqueaEsteSlot(bloqueos, slotStart, DURATION_MIN, doctorId)) continue;
+    // WS1-T2 · horario — ni una hora en que el doctor no atiende. El horario
+    // de la clínica ya acotó el bucle; esto lo recorta a la intersección.
+    if (doctorNoAtiendeSlot(horarios, slotStart, DURATION_MIN, doctorId, timezone)) continue;
     slots.push(hhmm);
   }
 

@@ -4,6 +4,8 @@ import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { applyReminderReschedule } from "@/lib/reminders/reschedule.server";
 import { bloqueaEsteSlot, bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiende, doctorNoAtiendeSlot, ventanaDelDoctor } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 
 /**
  * Servicio server-side reutilizable para que el bot de WhatsApp agende y
@@ -81,6 +83,14 @@ export interface SlotResult {
   mensajeBloqueo?: string;
 }
 
+/*
+ * `reason` de un día cerrado (`closed: true`):
+ *  · "closed_day"  — la clínica no abre ese día (ClinicSchedule).
+ *  · "blocked"     — un bloqueo de agenda tapa el día entero (WS1-T2).
+ *  · "doctor_off"  — la clínica abre pero ESTE doctor no atiende ese día, o su
+ *                    horario no coincide con el de la clínica (WS1-T2 · horario).
+ */
+
 /**
  * Calcula horarios libres "HH:MM" (hora local de la clínica) para un doctor en
  * una fecha. Respeta a la vez el horario por día (ClinicSchedule) y la ventana
@@ -94,18 +104,23 @@ export async function getAvailableSlots(params: {
   durationMin: number;
 }): Promise<SlotResult> {
   const { clinicId, doctorId, dateISO } = params;
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: clinicId },
-    select: {
-      timezone: true,
-      agendaDayStart: true,
-      agendaDayEnd: true,
-      defaultSlotMinutes: true,
-      schedules: {
-        select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+  const [clinic, horarios] = await Promise.all([
+    prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: {
+        timezone: true,
+        agendaDayStart: true,
+        agendaDayEnd: true,
+        defaultSlotMinutes: true,
+        schedules: {
+          select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+        },
       },
-    },
-  });
+    }),
+    // WS1-T2 · horario — el horario PROPIO del doctor, si lo tiene. Sin filas
+    // el mapa sale vacío y todo lo de abajo se calcula exactamente como antes.
+    leerHorariosDeDoctores(clinicId, { doctorIds: [doctorId] }),
+  ]);
   if (!clinic) return { closed: true, reason: "clinic_not_found", slots: [] };
 
   const tz = clinic.timezone;
@@ -126,6 +141,20 @@ export async function getAvailableSlots(params: {
     openMin = Math.max(openMin, oH * 60 + oM);
     closeMin = Math.min(closeMin, cH * 60 + cM);
   }
+
+  // WS1-T2 · horario — la ventana del día se RECORTA al horario del doctor:
+  // abre la clínica ∩ atiende el doctor. Sin horario propio, `ventanaDelDoctor`
+  // devuelve la de la clínica tal cual. Si ese día el doctor no atiende (o su
+  // horario no se cruza con el de la clínica), el día está cerrado PARA ÉL y
+  // se dice así: «no quedan horarios» invitaría a insistir ese mismo día.
+  const ventana = ventanaDelDoctor(
+    { abre: openMin, cierra: closeMin },
+    horarios.get(doctorId),
+    scheduleDay,
+  );
+  if (!ventana) return { closed: true, reason: "doctor_off", slots: [] };
+  openMin = ventana.abre;
+  closeMin = ventana.cierra;
   if (closeMin - openMin < duration) return { closed: false, slots: [] };
 
   const dayStartUtc = tzLocalToUtc(dateISO, 0, 0, tz);
@@ -163,6 +192,10 @@ export async function getAvailableSlots(params: {
     // alternativas más cercanas fuera del bloqueo: si se cerró la mañana, el
     // bot lista la tarde en vez de contestar que no hay nada.
     if (bloqueaEsteSlot(bloqueos, inicio, duration, doctorId)) continue;
+    // WS1-T2 · horario — el mismo criterio que el alta de abajo, hueco a hueco.
+    // Con la ventana ya recortada no debería saltar nunca; está para que la
+    // oferta y el alta digan SIEMPRE lo mismo aunque alguien toque el bucle.
+    if (doctorNoAtiendeSlot(horarios, inicio, duration, doctorId, tz)) continue;
     slots.push(`${pad(h)}:${pad(mn)}`);
   }
 
@@ -191,6 +224,8 @@ export type CreateErrorCode =
   | "outside_hours"
   /** WS1-T2 — el hueco está cerrado por un bloqueo de agenda. */
   | "blocked"
+  /** WS1-T2 · horario — el doctor no atiende a esa hora (su horario propio). */
+  | "doctor_off"
   | "overlap"
   | "doctor_not_found"
   | "patient_not_found"
@@ -255,6 +290,14 @@ export async function createBotAppointment(params: {
     return { ok: false, error: "blocked" };
   }
 
+  // WS1-T2 · horario — el candado del ALTA, por lo mismo que el del bloqueo:
+  // entre la oferta y el «sí» pueden pasar minutos, y la oferta no es la
+  // única forma de llegar aquí (el paciente puede teclear una hora).
+  const horarios = await leerHorariosDeDoctores(clinicId, { doctorIds: [doctorId] });
+  if (doctorNoAtiende(horarios, startsAt, endsAt, doctorId, clinic.timezone)) {
+    return { ok: false, error: "doctor_off" };
+  }
+
   try {
     const created = await prisma.appointment.create({
       data: {
@@ -286,6 +329,8 @@ export type RescheduleErrorCode =
   | "outside_hours"
   /** WS1-T2 — el hueco de destino está cerrado por un bloqueo de agenda. */
   | "blocked"
+  /** WS1-T2 · horario — el doctor no atiende a la hora de destino. */
+  | "doctor_off"
   | "overlap"
   | "invalid"
   | "failed";
@@ -339,6 +384,13 @@ export async function rescheduleBotAppointment(params: {
   });
   if (bloqueaEsteHueco(bloqueos, startsAt, endsAt, existing.doctorId)) {
     return { ok: false, error: "blocked" };
+  }
+
+  // WS1-T2 · horario — igual: se mira el DESTINO. Una cita que quedó fuera del
+  // horario porque el doctor lo cambió después se puede mover sin estorbo.
+  const horarios = await leerHorariosDeDoctores(clinicId, { doctorIds: [existing.doctorId] });
+  if (doctorNoAtiende(horarios, startsAt, endsAt, existing.doctorId, clinic.timezone)) {
+    return { ok: false, error: "doctor_off" };
   }
 
   try {

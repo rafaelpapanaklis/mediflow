@@ -12,6 +12,7 @@ import type {
   ResourceDTO,
 } from "./types";
 import type { BloqueoDTO } from "@/lib/agenda-bloqueos/core";
+import type { ScheduleDay } from "./clinic-hours";
 
 export type AgendaAction =
   | { type: "LOAD_DAY"; payload: AgendaDayResponse; dayISO: string }
@@ -43,6 +44,12 @@ export type AgendaAction =
    * arrastre.
    */
   | { type: "SET_BLOQUEOS"; bloqueos: BloqueoDTO[] }
+  /**
+   * WS1-T2 · horario — el horario propio de los doctores. Aparte, por lo mismo
+   * que los bloqueos; y casi nunca cambia (es semanal): basta con el payload
+   * inicial o con volver a despacharlo tras guardar un horario.
+   */
+  | { type: "SET_HORARIOS_DOCTORES"; horariosDoctores: Record<string, ScheduleDay[]> }
   | { type: "UPSERT_RESOURCE"; resource: ResourceDTO }
   | { type: "REMOVE_RESOURCE"; id: string }
   | { type: "REORDER_RESOURCES"; orderedIds: string[] }
@@ -68,6 +75,7 @@ export function buildInitialState(payload: AgendaDayResponse, dayISO: string): A
     schedules: payload.schedules ?? [],
     timezone: payload.timezone,
     bloqueos: payload.bloqueos ?? [],
+    horariosDoctores: payload.horariosDoctores ?? {},
     drag: {
       draggingId: null,
       ghostStartsAt: null,
@@ -107,6 +115,8 @@ export function agendaReducer(
         // Un payload SIN el campo conserva los que había: las rutas que no lo
         // mandan (ninguna hoy) no pueden borrar la franja de la pantalla.
         bloqueos: action.payload.bloqueos ?? state.bloqueos,
+        // WS1-T2 · horario — mismo criterio: sin el campo, se conserva.
+        horariosDoctores: action.payload.horariosDoctores ?? state.horariosDoctores,
         isLoading: false,
         error: null,
       };
@@ -122,6 +132,8 @@ export function agendaReducer(
       return { ...state, filters: action.filters };
     case "SET_BLOQUEOS":
       return { ...state, bloqueos: action.bloqueos };
+    case "SET_HORARIOS_DOCTORES":
+      return { ...state, horariosDoctores: action.horariosDoctores };
     case "SET_APPOINTMENTS":
       return { ...state, appointments: action.appointments, isLoading: false, error: null };
     case "SET_SEARCH":
