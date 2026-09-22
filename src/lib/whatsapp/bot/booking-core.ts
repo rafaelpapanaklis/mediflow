@@ -739,6 +739,7 @@ function createError(
   if (error === "doctor_off") {
     state.step = "slot";
     return presentSlots(input, state, tz, deps, "A esa hora el profesional no atiende. 😅");
+  }
   // WS1-T5 — la clínica pide anticipo y el link no salió. La cita NO quedó
   // apartada (el servidor lo deshizo): se dice tal cual y pasa a una persona,
   // en vez de agendar sin el anticipo que la clínica pidió.
