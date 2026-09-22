@@ -813,7 +813,22 @@
         "date": "Date",
         "time": "Time",
         "type": "Type / Reason",
-        "duration": "Duration (min)"
+        "duration": "Duration (min)",
+        "allergies": "Allergies",
+        "chronicConditions": "Conditions",
+        "currentMedications": "Medications",
+        "familyHistory": "Family history",
+        "nonPathologicalHistory": "Non-pathological history",
+        "title": "Title",
+        "text": "Note text",
+        "folio": "Estimate number",
+        "procedure": "Procedure",
+        "tooth": "Tooth",
+        "quantity": "Quantity",
+        "price": "Unit price",
+        "discount": "Discount",
+        "total": "Line amount",
+        "quoteStatus": "Original status"
       },
       "launch": "Import my clinic",
       "assistedCta": "Assisted migration",
@@ -855,7 +870,7 @@
         "subProfile": "Follow these steps to get the file from {name}.",
         "subExcel": "Use our template to arrange your data. That makes mapping faster.",
         "templateTitle": "DaleControl template (.xlsx)",
-        "templateDesc": "Three tabs: Patients, Balances and Appointments. Copy and paste your data into the indicated columns.",
+        "templateDesc": "One tab per data type: Patients, Balances, Appointments, Medical history, Notes and Estimates. Copy and paste your data into the indicated columns.",
         "templateBtn": "Download template",
         "ownFileNote": "Already have your own file? That works too. Just make sure the first row has the column names.",
         "dentalink": {
@@ -892,10 +907,13 @@
         "balancesMeta": "Debts and credits per patient",
         "appointments": "Upcoming appointments",
         "appointmentsMeta": "Future schedule so you don't miss any",
-        "treatments": "Treatments",
-        "treatmentsMeta": "Plans and procedures per patient",
-        "history": "Clinical history",
-        "historyMeta": "Notes and progress (requires more mapping)"
+        "medicalHistory": "Medical history",
+        "medicalHistoryMeta": "Allergies, conditions, medications and history of existing patients",
+        "clinicalNotes": "Progress notes",
+        "clinicalNotesMeta": "Brought in marked as migrated, with their original date and author",
+        "quotes": "Estimates",
+        "quotesMeta": "Patient history: they don't create invoices or charges",
+        "soloNote": "Medical history, notes and estimates are imported one at a time, each with its own review."
       },
       "step4": {
         "title": "Upload your file",
@@ -921,7 +939,7 @@
         "bannerAutoDesc": "We matched {matched} of {total} columns automatically. Check that they line up.",
         "bannerManualTitle": "Manual mapping",
         "bannerManualDesc": "Since your source is «{name}», pick the field for each column by hand.",
-        "autoDetectNote": "Balance or appointment columns (Balance, Type, Date…) are detected automatically on import; leave anything that isn't patient data as «Don't import».",
+        "autoDetectNote": "Columns for the other data types you chose (Balance, Appointment date, Allergies…) are detected automatically on import; leave anything that isn't this type as «Don't import».",
         "colYour": "Your column",
         "colTarget": "DaleControl field",
         "statusAuto": "Automatic",
@@ -931,7 +949,10 @@
         "loading": "Reading your file…",
         "errorTitle": "We couldn't read your file",
         "errorDesc": "Check that it's a valid .xlsx or .csv and try again.",
-        "retry": "Try again"
+        "retry": "Try again",
+        "needMapping": "Match the missing columns",
+        "mappingErrorTitle": "A column still needs matching",
+        "mappingErrorDesc": "Pick on the right what each column of your file is, then press Continue."
       },
       "step6": {
         "title": "Review before importing",
@@ -953,7 +974,19 @@
         "importBtn": {
           "one": "Import {count} record",
           "other": "Import {count} records"
-        }
+        },
+        "colDetail": "Detail",
+        "unresolvedTitle": {
+          "one": "{count} procedure isn't in your catalog",
+          "other": "{count} procedures aren't in your catalog"
+        },
+        "unresolvedDesc": "They come in with their name and amount, not linked to a procedure. If your catalog has an equivalent, pick it.",
+        "unresolvedUnlinked": "Amount only, not linked",
+        "unresolvedRows": {
+          "one": "({count} row)",
+          "other": "({count} rows)"
+        },
+        "dupNever": "Anything already migrated is never imported again."
       },
       "upload": {
         "uploading": "Uploading file… {pct}%",
@@ -968,7 +1001,10 @@
         "ent": {
           "patients": "Patients",
           "balances": "Balances",
-          "appointments": "Appointments"
+          "appointments": "Appointments",
+          "medicalHistory": "Medical history",
+          "clinicalNotes": "Notes",
+          "quotes": "Estimates"
         }
       },
       "result": {
@@ -987,7 +1023,10 @@
         "downloadReport": "Download report",
         "reportSoon": "The error report will be available once the backend is connected.",
         "goPatients": "View patients",
-        "importAnother": "Import something else"
+        "importAnother": "Import something else",
+        "pillMedicalHistory": "histories completed",
+        "pillClinicalNotes": "notes migrated",
+        "pillQuotes": "estimates"
       },
       "assisted": {
         "title": "Assisted migration · free",

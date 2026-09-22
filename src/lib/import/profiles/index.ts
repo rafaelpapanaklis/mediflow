@@ -7,6 +7,7 @@
 // 9 sistemas con perfil + "Mi Excel" / "Otro" (mapeo manual) al final.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import type { Entity } from "../types";
 import type { Origin, OriginProfile } from "./origin";
 import dentalink from "./dentalink";
 import medilink from "./medilink";
@@ -40,6 +41,12 @@ export const ORIGIN_PROFILES: OriginProfile[] = [
 /** Busca un perfil por id (o null). Útil para el engine de T1 al auto-mapear. */
 export function getOriginProfile(id: string): OriginProfile | null {
   return ORIGIN_PROFILES.find((p) => p.id === id) ?? null;
+}
+
+/** El mapeo del perfil para UNA entidad: `mapping` es el de pacientes; el resto, `entityMappings`. */
+export function profileMappingFor(p: OriginProfile, entity: Entity): Record<string, string> {
+  if (entity === "patients") return p.mapping;
+  return p.entityMappings?.[entity] ?? {};
 }
 
 /**

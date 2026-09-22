@@ -31,6 +31,64 @@ const dentalink: OriginProfile = {
     "RFC": "rfc",
     "Saldo": "balance",
   },
+  // Reportes clínicos (ws1-t4, 22-sep-2026). SIN export real delante: son los
+  // nombres más probables en los reportes de Dentalink (vocabulario chileno:
+  // «prestación», «profesional», «N° presupuesto»). Por eso `verified` sigue en
+  // false: si no casan, el paso de mapeo pide emparejar a mano y nada se rompe.
+  // La autodetección genérica (headerVariants de cada entidad) ya cubre las
+  // variantes comunes («Fecha», «Alergias», «Precio»…); aquí va lo propio.
+  entityMappings: {
+    medicalHistory: {
+      "Paciente": "name",
+      "Nombre paciente": "name",
+      "Celular": "phone",
+      "Email": "email",
+      "Alergias": "allergies",
+      "Alergia a medicamentos": "allergies",
+      "Enfermedades": "chronicConditions",
+      "Enfermedades sistémicas": "chronicConditions",
+      "Medicamentos": "currentMedications",
+      "Medicamentos que toma": "currentMedications",
+      "Antecedentes familiares": "familyHistory",
+      "Hábitos": "nonPathologicalHistory",
+    },
+    clinicalNotes: {
+      "Paciente": "name",
+      "Nombre paciente": "name",
+      "Celular": "phone",
+      "Fecha evolución": "date",
+      "Fecha de evolución": "date",
+      "Fecha atención": "date",
+      "Profesional": "doctor",
+      "Dentista": "doctor",
+      "Tratamiento": "title",
+      "Evolución": "text",
+      "Detalle evolución": "text",
+    },
+    quotes: {
+      "Paciente": "name",
+      "Nombre paciente": "name",
+      "Celular": "phone",
+      "N° Presupuesto": "folio",
+      "Nº Presupuesto": "folio",
+      "N° Tratamiento": "folio",
+      "Fecha creación": "date",
+      "Fecha presupuesto": "date",
+      "Tratamiento": "title",
+      "Nombre tratamiento": "title",
+      "Prestación": "procedure",
+      "Prestaciones": "procedure",
+      "Pieza": "tooth",
+      "Diente": "tooth",
+      "Valor": "price",
+      "Valor unitario": "price",
+      "Dcto.": "discount",
+      "Descuento": "discount",
+      "Total": "total",
+      "Estado": "status",
+      "Profesional": "doctor",
+    },
+  },
 };
 
 export default dentalink;

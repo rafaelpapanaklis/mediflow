@@ -813,7 +813,22 @@
         "date": "Fecha",
         "time": "Hora",
         "type": "Tipo / Motivo",
-        "duration": "Duración (min)"
+        "duration": "Duración (min)",
+        "allergies": "Alergias",
+        "chronicConditions": "Padecimientos",
+        "currentMedications": "Medicamentos",
+        "familyHistory": "Antecedentes heredofamiliares",
+        "nonPathologicalHistory": "Antecedentes no patológicos",
+        "title": "Título",
+        "text": "Texto de la nota",
+        "folio": "Folio del presupuesto",
+        "procedure": "Procedimiento",
+        "tooth": "Pieza / diente",
+        "quantity": "Cantidad",
+        "price": "Precio unitario",
+        "discount": "Descuento",
+        "total": "Importe de la línea",
+        "quoteStatus": "Estado original"
       },
       "launch": "Importar mi clínica",
       "assistedCta": "Migración asistida",
@@ -855,7 +870,7 @@
         "subProfile": "Sigue estos pasos para obtener el archivo desde {name}.",
         "subExcel": "Usa nuestra plantilla para acomodar tus datos. Así el mapeo será más rápido.",
         "templateTitle": "Plantilla de DaleControl (.xlsx)",
-        "templateDesc": "Tres pestañas: Pacientes, Saldos y Citas. Copia y pega tus datos en las columnas indicadas.",
+        "templateDesc": "Una pestaña por tipo de dato: Pacientes, Saldos, Citas, Expedientes, Notas y Presupuestos. Copia y pega tus datos en las columnas indicadas.",
         "templateBtn": "Descargar plantilla",
         "ownFileNote": "¿Ya tienes tu propio archivo? También funciona. Solo asegúrate de que la primera fila tenga los nombres de las columnas.",
         "dentalink": {
@@ -892,10 +907,13 @@
         "balancesMeta": "Adeudos y pagos a favor por paciente",
         "appointments": "Citas próximas",
         "appointmentsMeta": "Agenda futura para no perder ninguna",
-        "treatments": "Tratamientos",
-        "treatmentsMeta": "Planes y procedimientos por paciente",
-        "history": "Historial clínico",
-        "historyMeta": "Notas y evolución (requiere más mapeo)"
+        "medicalHistory": "Expedientes",
+        "medicalHistoryMeta": "Alergias, padecimientos, medicamentos y antecedentes de pacientes que ya existen",
+        "clinicalNotes": "Notas de evolución",
+        "clinicalNotesMeta": "Entran marcadas como migradas, con su fecha y su autor originales",
+        "quotes": "Presupuestos",
+        "quotesMeta": "Historia del paciente: no generan factura ni cobro",
+        "soloNote": "Expedientes, notas y presupuestos se importan de uno en uno, cada uno con su propia revisión."
       },
       "step4": {
         "title": "Sube tu archivo",
@@ -921,7 +939,7 @@
         "bannerAutoDesc": "Reconocimos {matched} de {total} columnas y las emparejamos solas. Revisa que cuadren.",
         "bannerManualTitle": "Mapeo manual",
         "bannerManualDesc": "Como tu origen es «{name}», elige a mano el campo de cada columna.",
-        "autoDetectNote": "Las columnas de saldos o citas (Saldo, Tipo, Fecha…) se detectan automáticamente al importar; deja en «Sin importar» lo que no sea del paciente.",
+        "autoDetectNote": "Las columnas de los otros tipos de dato que elegiste (Saldo, Fecha de cita, Alergias…) se detectan automáticamente al importar; deja en «Sin importar» lo que no sea de este tipo.",
         "colYour": "Tu columna",
         "colTarget": "Campo de DaleControl",
         "statusAuto": "Automático",
@@ -931,7 +949,10 @@
         "loading": "Leyendo tu archivo…",
         "errorTitle": "No pudimos leer tu archivo",
         "errorDesc": "Revisa que sea un .xlsx o .csv válido e inténtalo de nuevo.",
-        "retry": "Reintentar"
+        "retry": "Reintentar",
+        "needMapping": "Empareja las columnas que faltan",
+        "mappingErrorTitle": "Falta emparejar una columna",
+        "mappingErrorDesc": "Elige a la derecha qué es cada columna de tu archivo y pulsa Continuar."
       },
       "step6": {
         "title": "Revisa antes de importar",
@@ -953,7 +974,19 @@
         "importBtn": {
           "one": "Importar {count} registro",
           "other": "Importar {count} registros"
-        }
+        },
+        "colDetail": "Detalle",
+        "unresolvedTitle": {
+          "one": "{count} procedimiento no está en tu catálogo",
+          "other": "{count} procedimientos no están en tu catálogo"
+        },
+        "unresolvedDesc": "Entran con su nombre y su importe, sin ligar a un procedimiento. Si en tu catálogo tienen equivalente, elígelo.",
+        "unresolvedUnlinked": "Solo el importe, sin ligar",
+        "unresolvedRows": {
+          "one": "({count} fila)",
+          "other": "({count} filas)"
+        },
+        "dupNever": "Lo que ya se había migrado no se vuelve a importar."
       },
       "upload": {
         "uploading": "Subiendo archivo… {pct}%",
@@ -968,7 +1001,10 @@
         "ent": {
           "patients": "Pacientes",
           "balances": "Saldos",
-          "appointments": "Citas"
+          "appointments": "Citas",
+          "medicalHistory": "Expedientes",
+          "clinicalNotes": "Notas",
+          "quotes": "Presupuestos"
         }
       },
       "result": {
@@ -987,7 +1023,10 @@
         "downloadReport": "Descargar reporte",
         "reportSoon": "El reporte de errores estará disponible al conectar el backend.",
         "goPatients": "Ver pacientes",
-        "importAnother": "Importar otra cosa"
+        "importAnother": "Importar otra cosa",
+        "pillMedicalHistory": "expedientes completados",
+        "pillClinicalNotes": "notas migradas",
+        "pillQuotes": "presupuestos"
       },
       "assisted": {
         "title": "Migración asistida · gratis",
