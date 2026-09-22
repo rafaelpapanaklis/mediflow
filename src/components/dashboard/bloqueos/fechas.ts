@@ -15,7 +15,7 @@
  * `src/lib/agenda/time-utils.ts`, que ya lo resuelve así para la agenda.
  */
 
-import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { getTzParts } from "@/lib/agenda/time-utils";
 import type { BloqueoDTO } from "./tipos";
 
 export const MINUTOS_DEL_DIA = 24 * 60;
@@ -80,44 +80,95 @@ export interface RangoLocal {
   horaFin: string;
 }
 
-export interface RangoUtc {
-  inicio: string;
-  fin: string;
+/** A quién cierra el bloqueo, resuelto desde quien está mirando la pantalla. */
+export interface AlcanceBloqueo {
+  /** true = quien mira no es admin: no elige a quién cierra. */
+  modoDoctor: boolean;
+  /** Su propio id de usuario, SOLO si es DOCTOR. Cualquier otro rol: `null`. */
+  miDoctorId: string | null;
+  /** Lo que el admin eligió en el selector. `""` = toda la clínica. */
+  doctorElegido: string;
 }
 
 /**
- * Lo que teclea la pantalla → los dos instantes UTC que viajan a la API.
+ * EL CUERPO DEL POST, tal y como lo espera el servidor.
  *
- * Día completo: de las 00:00 de `desde` a las 00:00 del día SIGUIENTE a
- * `hasta`. El fin es exclusivo, así que «del 24 al 2» son los nueve días
- * enteros y ni un minuto del 3.
+ * 🔴 DÍAS Y HORAS TECLEADOS, NO INSTANTES UTC. Ver `cuerpoDeBloqueo`.
+ */
+export interface CuerpoBloqueo {
+  /** `null` = toda la clínica. Va SIEMPRE, porque `null` significa algo. */
+  doctorId: string | null;
+  /** `YYYY-MM-DD`, tal como salió del campo. */
+  desdeDia: string;
+  /** `YYYY-MM-DD` INCLUSIVE: «hasta el 23» cubre el 23 entero. */
+  hastaDia: string;
+  /** `HH:MM`. Solo si NO es día completo; si no, no viaja la clave. */
+  desdeHora?: string;
+  hastaHora?: string;
+}
+
+/**
+ * A QUIÉN CIERRA, en el valor que el servidor sabe resolver.
  *
- * Por horas: de `horaInicio` a `horaFin` del MISMO día `desde`. Un bloqueo por
- * horas que cruzara varios días no es ninguno de los dos casos reales del
- * encargo («el 12 de noviembre de 2 a 6») y sería ambiguo: ¿son cuatro horas
- * un día, o cuatro horas cada día?
+ * 🔴 EL DOCTOR MANDA SU PROPIO ID, NO OMITE LA CLAVE. `resolverAlcance`
+ * (service.ts) trata «sin doctorId» como «toda la clínica», y a un DOCTOR eso
+ * le devuelve un 403 —«cerrar la clínica entera no es decisión de un
+ * doctor»—: omitirla le impide crear hasta su propio bloqueo. Su bloqueo sale
+ * a su nombre porque la pantalla lo dice, no porque el servidor lo adivine.
+ *
+ * Y esconder no es permitir: el servidor sigue comprobando que ese id es el
+ * suyo. Esto es para que pueda crear el bloqueo que le corresponde, no para
+ * sustituir la cerradura.
+ */
+export function alcanceDelBloqueo(a: AlcanceBloqueo): string | null {
+  if (a.modoDoctor) return a.miDoctorId || null;
+  return a.doctorElegido || null;
+}
+
+/**
+ * LO QUE LA PERSONA TECLEÓ → EL CUERPO QUE VIAJA A LA API.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 AQUÍ NO SE CONVIERTE A UTC, Y NO ES UN DETALLE
+ *
+ * La conversión la hace el SERVIDOR con la zona de la CLÍNICA, que el
+ * navegador no conoce (`parseRangoTecleado`, core.ts). Si la hiciera esta
+ * pantalla, usaría la zona del DISPOSITIVO: un doctor que abre el panel desde
+ * Cancún con el portátil en hora de Madrid cerraría la clínica con ocho horas
+ * de desfase, y en un cierre de día entero ese desfase se come la primera
+ * cita de la mañana.
+ *
+ * 🔴 «HASTA EL 23» INCLUYE EL 23 ENTERO. Aquí se manda el día tal cual; el
+ * corte exclusivo en la medianoche del 24 lo pone el servidor.
+ * ═══════════════════════════════════════════════════════════════════════
  *
  * Devuelve `null` si el rango no es utilizable; quien llama no manda nada.
  */
-export function rangoALaUtc(rango: RangoLocal, timezone: string): RangoUtc | null {
+export function cuerpoDeBloqueo(rango: RangoLocal, alcance: AlcanceBloqueo): CuerpoBloqueo | null {
   const { desde, hasta, diaCompleto, horaInicio, horaFin } = rango;
   if (!fechaValida(desde)) return null;
+  const doctorId = alcanceDelBloqueo(alcance);
 
   if (diaCompleto) {
+    // Sin «Hasta», el bloqueo es de un día suelto: el mismo día en las dos claves.
     const fin = fechaValida(hasta) ? hasta : desde;
     if (esPosterior(desde, fin)) return null;
-    return {
-      inicio: tzLocalToUtc(desde, 0, 0, timezone).toISOString(),
-      fin: tzLocalToUtc(sumarDias(fin, 1), 0, 0, timezone).toISOString(),
-    };
+    return { doctorId, desdeDia: desde, hastaDia: fin };
   }
 
+  // Por horas es de UN día: «el 12 de noviembre de 2 a 6». Un rango por horas
+  // que cruzara varios días sería ambiguo (¿cuatro horas un día, o cuatro
+  // horas cada día?) y no es ninguno de los dos casos del encargo.
   const ini = deHora(horaInicio);
   const fin = deHora(horaFin);
   if (ini === null || fin === null || fin <= ini) return null;
   return {
-    inicio: tzLocalToUtc(desde, Math.floor(ini / 60), ini % 60, timezone).toISOString(),
-    fin: tzLocalToUtc(desde, Math.floor(fin / 60), fin % 60, timezone).toISOString(),
+    doctorId,
+    desdeDia: desde,
+    hastaDia: desde,
+    // Normalizadas a `HH:MM`: el campo tolera «9:00» y el servidor pide dos dígitos.
+    desdeHora: comoHora(ini),
+    hastaHora: comoHora(fin),
   };
 }
 

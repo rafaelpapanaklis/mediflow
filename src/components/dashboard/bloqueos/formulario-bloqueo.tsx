@@ -7,6 +7,18 @@
  *   «Del 24 de diciembre al 2 de enero — vacaciones» → un bloqueo, nueve días
  *   «El 12 de noviembre de 2 a 6 — congreso»          → un bloqueo, cuatro horas
  *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 LO QUE VIAJA ES LO QUE SE TECLEÓ, NO INSTANTES UTC
+ *
+ * El cuerpo lo arma `cuerpoDeBloqueo` (fechas.ts) y lleva `desdeDia`,
+ * `hastaDia` y, si no es día completo, `desdeHora`/`hastaHora`. La conversión
+ * a instantes la hace el SERVIDOR con la zona de la CLÍNICA, que el navegador
+ * no conoce. Esta pantalla convirtió a UTC en el navegador hasta ws1-t3 y era
+ * doblemente malo: mandaba `inicio`/`fin` —que es el DTO de RESPUESTA, no el
+ * cuerpo de PETICIÓN, así que el servidor contestaba `RANGO_REQUERIDO` y el
+ * bloqueo no se creaba nunca— y encima usaba la zona del DISPOSITIVO.
+ * ═══════════════════════════════════════════════════════════════════════
+ *
  * 🔴 EL AVISO SALE MIENTRAS SE ELIGEN LAS FECHAS, NO AL GUARDAR. En cuanto el
  * rango está completo se llama a `POST /api/settings/bloqueos/revision`, que
  * hace el mismo chequeo que el alta pero sin crear nada, y el botón de guardar
@@ -18,14 +30,17 @@
  * entre medias. Se trata igual y NO se pierde lo tecleado.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { CalendarX2, Clock, Sun } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { DateField } from "@/components/ui/date-field";
 import { AvisoCitas } from "./aviso-citas";
-import { esPosterior, fechaValida, rangoALaUtc, type RangoLocal } from "./fechas";
+import { cuerpoDeBloqueo, type RangoLocal } from "./fechas";
 import {
   MAX_MOTIVO,
   TIPOS_BLOQUEO,
+  mensajeDeError,
   parseConflicto,
   type ConflictoCitas,
   type TipoBloqueo,
@@ -47,6 +62,9 @@ export function FormularioBloqueo({
   locale,
   doctores,
   modoDoctor,
+  miDoctorId,
+  minDia,
+  maxDia,
   onCreado,
 }: {
   timezone: string;
@@ -55,9 +73,18 @@ export function FormularioBloqueo({
   /**
    * El doctor NO elige a quién cierra: el selector no existe (no está
    * deshabilitado, ni con una sola opción — no está) y su bloqueo sale siempre
-   * a su nombre, que es lo que hace el servidor con un doctor autenticado.
+   * a su nombre.
    */
   modoDoctor: boolean;
+  /**
+   * Su propio id, SOLO si quien mira es DOCTOR. Va en el cuerpo: el servidor
+   * exige que un doctor diga a quién cierra y que sea él mismo. Ver
+   * `alcanceDelBloqueo`.
+   */
+  miDoctorId: string | null;
+  /** Los bordes del calendario: la MISMA ventana que la lista consulta. */
+  minDia: string;
+  maxDia: string;
   onCreado: () => void;
 }) {
   const t = useT();
@@ -76,27 +103,16 @@ export function FormularioBloqueo({
   const [guardando, setGuardando] = useState(false);
 
   const rango: RangoLocal = { desde, hasta, diaCompleto, horaInicio, horaFin };
-  const utc = rangoALaUtc(rango, timezone);
+  const cuerpoRango = cuerpoDeBloqueo(rango, { modoDoctor, miDoctorId, doctorElegido: doctorId });
 
   // Qué le pasa al rango, para decirlo en vez de dejar el botón muerto sin
   // explicación. `null` = el rango está bien (o todavía está vacío).
   const problemaRango =
-    !desde || !fechaValida(desde)
+    !desde || cuerpoRango
       ? null
-      : diaCompleto && hasta && fechaValida(hasta) && esPosterior(desde, hasta)
+      : diaCompleto
       ? t("settings.bloqueos.rangoInvalido")
-      : !diaCompleto && utc === null
-      ? t("settings.bloqueos.horasInvalidas")
-      : null;
-
-  const cuerpoRango = utc
-    ? {
-        doctorId: modoDoctor ? undefined : doctorId || null,
-        inicio: utc.inicio,
-        fin: utc.fin,
-        diaCompleto,
-      }
-    : null;
+      : t("settings.bloqueos.horasInvalidas");
 
   /* ── La revisión con rebote ──────────────────────────────────────────────
      Se dispara con el RANGO, no con el motivo ni con el tipo: escribir el
@@ -123,10 +139,11 @@ export function FormularioBloqueo({
         });
         const datos = await res.json().catch(() => null);
         if (!vivo) return;
-        // Fail-OPEN a propósito: si la revisión no contesta (red, 500, o el
-        // endpoint todavía no existe porque ws1-t2 no ha integrado), NO se
-        // bloquea el formulario. El alta vuelve a comprobarlo en el servidor y
-        // devuelve su 409; quien manda es esa, no esta.
+        // Fail-OPEN a propósito: si la revisión no contesta (red, 500, o un
+        // rango que ella rechaza), NO se bloquea el formulario. El alta vuelve
+        // a comprobarlo en el servidor y devuelve su 409; quien manda es esa,
+        // no esta. Y su error NO se pinta: es una comprobación de cortesía, y
+        // un aviso rojo mientras se teclea una fecha a medias sería ruido.
         setConflicto(parseConflicto(datos));
       } catch {
         if (vivo) setConflicto(null);
@@ -192,10 +209,8 @@ export function FormularioBloqueo({
         setConflicto(choque);
         return;
       }
-      toast.error(
-        (datos && typeof datos.error === "string" && datos.error) ||
-          t("settings.bloqueos.errorToast"),
-      );
+      // 🔴 La FRASE del servidor, nunca su código. Ver `mensajeDeError`.
+      toast.error(mensajeDeError(datos, t("settings.bloqueos.errorToast")));
     } catch {
       toast.error(t("settings.bloqueos.errorToast"));
     } finally {
@@ -205,20 +220,31 @@ export function FormularioBloqueo({
 
   const idMotivo = "bloqueo-motivo";
   const idAyuda = "bloqueo-motivo-ayuda";
+  const idDesde = "bloqueo-desde";
+  const idHasta = "bloqueo-hasta";
 
   return (
     <div className={s.tarjeta}>
-      <h3 className={s.tarjetaTitulo}>{t("settings.bloqueos.nuevoTitulo")}</h3>
+      <div className={s.tarjetaCabecera}>
+        <span className={`${s.iconoCaja} ${s.iconoCajaMarca}`} aria-hidden>
+          <CalendarX2 size={17} strokeWidth={2} />
+        </span>
+        <div className={s.tarjetaTextos}>
+          <h3 className={s.tarjetaTitulo}>{t("settings.bloqueos.nuevoTitulo")}</h3>
+          <p className={s.tarjetaSub}>{t("settings.bloqueos.nuevoSub")}</p>
+        </div>
+      </div>
 
-      <div className={s.campos}>
-        {/* ¿A quién cierra? — el doctor no lo ve. */}
+      <div className={s.tarjetaCuerpo}>
+        {/* ① A QUIÉN CIERRA — el doctor no lo ve: el suyo sale a su nombre. */}
         {!modoDoctor && (
-          <label className={s.campo}>
-            <span className={s.etiqueta}>{t("settings.bloqueos.aQuienCierra")}</span>
+          <fieldset className={s.bloque}>
+            <legend className={s.bloqueTitulo}>{t("settings.bloqueos.aQuienCierra")}</legend>
             <select
               className={s.control}
               value={doctorId}
               onChange={(e) => setDoctorId(e.target.value)}
+              aria-label={t("settings.bloqueos.aQuienCierra")}
             >
               <option value="">{t("settings.bloqueos.todaLaClinica")}</option>
               {doctores.map((d) => (
@@ -227,116 +253,164 @@ export function FormularioBloqueo({
                 </option>
               ))}
             </select>
-          </label>
+          </fieldset>
         )}
 
-        <label className={s.campo}>
-          <span className={s.etiqueta}>{t("settings.bloqueos.desde")}</span>
-          <input
-            type="date"
-            className={s.control}
-            value={desde}
-            onChange={(e) => {
-              const v = e.target.value;
-              setDesde(v);
-              // «Hasta» sigue a «Desde» mientras no se haya tocado o se quede
-              // atrás: teclear una sola fecha es el caso común (un día suelto).
-              setHasta((h) => (!h || (v && h < v) ? v : h));
-            }}
-          />
-        </label>
+        {/* ② CUÁNDO — el interruptor primero, porque decide qué campos hay
+            debajo, y los campos APARECEN donde el ojo ya está mirando. */}
+        <fieldset className={s.bloque}>
+          <legend className={s.bloqueTitulo}>{t("settings.bloqueos.cuandoTitulo")}</legend>
 
-        {diaCompleto && (
-          <label className={s.campo}>
-            <span className={s.etiqueta}>{t("settings.bloqueos.hasta")}</span>
-            <input
-              type="date"
+          <div className={s.segmentado} role="radiogroup" aria-label={t("settings.bloqueos.cuandoTitulo")}>
+            <label className={s.segmento}>
+              <input
+                type="radio"
+                name="bloqueo-duracion"
+                className={s.segmentoRadio}
+                checked={diaCompleto}
+                onChange={() => setDiaCompleto(true)}
+              />
+              <span className={s.segmentoCara}>
+                <Sun size={14} strokeWidth={2.2} aria-hidden />
+                {t("settings.bloqueos.diaCompleto")}
+              </span>
+            </label>
+            <label className={s.segmento}>
+              <input
+                type="radio"
+                name="bloqueo-duracion"
+                className={s.segmentoRadio}
+                checked={!diaCompleto}
+                onChange={() => setDiaCompleto(false)}
+              />
+              <span className={s.segmentoCara}>
+                <Clock size={14} strokeWidth={2.2} aria-hidden />
+                {t("settings.bloqueos.soloUnasHoras")}
+              </span>
+            </label>
+          </div>
+
+          <div className={s.parejaCampos}>
+            <div className={s.campo}>
+              <label className={s.etiqueta} htmlFor={idDesde}>
+                {diaCompleto ? t("settings.bloqueos.desde") : t("settings.bloqueos.dia")}
+              </label>
+              <DateField
+                id={idDesde}
+                className={s.control}
+                value={desde}
+                min={minDia}
+                max={maxDia}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDesde(v);
+                  // «Hasta» sigue a «Desde» mientras no se haya tocado o se
+                  // quede atrás: teclear una sola fecha es el caso común.
+                  setHasta((h) => (!h || (v && h < v) ? v : h));
+                }}
+              />
+            </div>
+
+            {diaCompleto ? (
+              <div className={s.campo}>
+                <label className={s.etiqueta} htmlFor={idHasta}>
+                  {t("settings.bloqueos.hasta")}
+                </label>
+                <DateField
+                  id={idHasta}
+                  className={s.control}
+                  value={hasta}
+                  min={desde || minDia}
+                  max={maxDia}
+                  onChange={(e) => setHasta(e.target.value)}
+                />
+                {/* «Hasta el 23» cubre el 23 entero. Decirlo evita el bloqueo
+                    que acaba un día antes de lo que la persona creía. */}
+                <p className={s.ayuda}>{t("settings.bloqueos.hastaAyuda")}</p>
+              </div>
+            ) : (
+              <div className={s.dosHoras}>
+                <div className={s.campo}>
+                  <label className={s.etiqueta} htmlFor="bloqueo-hora-inicio">
+                    {t("settings.bloqueos.horaInicio")}
+                  </label>
+                  <input
+                    id="bloqueo-hora-inicio"
+                    type="time"
+                    className={s.control}
+                    value={horaInicio}
+                    onChange={(e) => setHoraInicio(e.target.value)}
+                  />
+                </div>
+                <div className={s.campo}>
+                  <label className={s.etiqueta} htmlFor="bloqueo-hora-fin">
+                    {t("settings.bloqueos.horaFin")}
+                  </label>
+                  <input
+                    id="bloqueo-hora-fin"
+                    type="time"
+                    className={s.control}
+                    value={horaFin}
+                    onChange={(e) => setHoraFin(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {problemaRango && <p className={s.error}>{problemaRango}</p>}
+        </fieldset>
+
+        {/* ③ QUÉ ES Y POR QUÉ. */}
+        <fieldset className={s.bloque}>
+          <legend className={s.bloqueTitulo}>{t("settings.bloqueos.queEsTitulo")}</legend>
+
+          <div className={s.campo}>
+            <label className={s.etiqueta} htmlFor="bloqueo-tipo">
+              {t("settings.bloqueos.tipo")}
+            </label>
+            <select
+              id="bloqueo-tipo"
               className={s.control}
-              value={hasta}
-              min={desde || undefined}
-              onChange={(e) => setHasta(e.target.value)}
-            />
-          </label>
-        )}
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value as TipoBloqueo)}
+            >
+              {TIPOS_BLOQUEO.map((k) => (
+                <option key={k} value={k}>
+                  {t(`settings.bloqueos.tipo${k}`)}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <label className={`${s.campo} ${s.campoAncho}`}>
-          <span className={s.casillaFila}>
+          <div className={s.campo}>
+            <label className={s.etiqueta} htmlFor={idMotivo}>
+              {t("settings.bloqueos.motivo")} <span className={s.obligatorio}>*</span>
+            </label>
             <input
-              type="checkbox"
-              className={s.casilla}
-              checked={diaCompleto}
-              onChange={(e) => setDiaCompleto(e.target.checked)}
+              id={idMotivo}
+              type="text"
+              className={s.control}
+              value={motivo}
+              maxLength={MAX_MOTIVO}
+              placeholder={t("settings.bloqueos.motivoEjemplo")}
+              aria-describedby={idAyuda}
+              onChange={(e) => setMotivo(e.target.value)}
             />
-            <span className={s.etiqueta}>{t("settings.bloqueos.diaCompleto")}</span>
-          </span>
-        </label>
+            <p className={s.ayuda} id={idAyuda}>
+              {t("settings.bloqueos.motivoAyuda")}
+            </p>
+          </div>
+        </fieldset>
 
-        {!diaCompleto && (
-          <>
-            <label className={s.campo}>
-              <span className={s.etiqueta}>{t("settings.bloqueos.horaInicio")}</span>
-              <input
-                type="time"
-                className={s.control}
-                value={horaInicio}
-                onChange={(e) => setHoraInicio(e.target.value)}
-              />
-            </label>
-            <label className={s.campo}>
-              <span className={s.etiqueta}>{t("settings.bloqueos.horaFin")}</span>
-              <input
-                type="time"
-                className={s.control}
-                value={horaFin}
-                onChange={(e) => setHoraFin(e.target.value)}
-              />
-            </label>
-          </>
+        {revisando && !conflicto && (
+          <p className={s.revisando}>{t("settings.bloqueos.revisando")}</p>
         )}
 
-        <label className={s.campo}>
-          <span className={s.etiqueta}>{t("settings.bloqueos.tipo")}</span>
-          <select
-            className={s.control}
-            value={tipo}
-            onChange={(e) => setTipo(e.target.value as TipoBloqueo)}
-          >
-            {TIPOS_BLOQUEO.map((k) => (
-              <option key={k} value={k}>
-                {t(`settings.bloqueos.tipo${k}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className={`${s.campo} ${s.campoAncho}`}>
-          <label className={s.etiqueta} htmlFor={idMotivo}>
-            {t("settings.bloqueos.motivo")} <span className={s.obligatorio}>*</span>
-          </label>
-          <input
-            id={idMotivo}
-            type="text"
-            className={s.control}
-            value={motivo}
-            maxLength={MAX_MOTIVO}
-            aria-describedby={idAyuda}
-            onChange={(e) => setMotivo(e.target.value)}
-          />
-          <p className={s.ayuda} id={idAyuda}>
-            {t("settings.bloqueos.motivoAyuda")}
-          </p>
-        </div>
+        {conflicto && <AvisoCitas conflicto={conflicto} timezone={timezone} locale={locale} />}
       </div>
 
-      {problemaRango && <p className={s.error}>{problemaRango}</p>}
-
-      {revisando && !conflicto && (
-        <p className={s.revisando}>{t("settings.bloqueos.revisando")}</p>
-      )}
-
-      {conflicto && <AvisoCitas conflicto={conflicto} timezone={timezone} locale={locale} />}
-
-      <div className={s.acciones}>
+      <div className={s.tarjetaPie}>
         <button type="button" className={s.botonPrincipal} disabled={!puedeGuardar} onClick={guardar}>
           {guardando ? t("settings.bloqueos.guardando") : t("settings.bloqueos.guardar")}
         </button>

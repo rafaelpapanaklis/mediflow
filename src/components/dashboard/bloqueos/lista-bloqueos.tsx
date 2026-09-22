@@ -12,11 +12,11 @@
  */
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Building2, User } from "lucide-react";
+import { ChevronDown, ChevronRight, Building2, CalendarClock, User } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { diaCorto, diaDeInstante, diasDelBloqueo, horaDeInstante, mesLargo } from "./fechas";
-import type { BloqueoDTO } from "./tipos";
+import { mensajeDeError, type BloqueoDTO } from "./tipos";
 import s from "./bloqueos.module.css";
 
 interface Grupo {
@@ -55,7 +55,8 @@ export function ListaBloqueos({
   /** Hoy EN LA ZONA DE LA CLÍNICA. De aquí sale qué es pasado y qué futuro. */
   hoyISO: string;
   cargando: boolean;
-  error: boolean;
+  /** La FRASE del fallo al cargar, o `null`. Nunca un código. */
+  error: string | null;
   onCambio: () => void;
 }) {
   const t = useT();
@@ -88,7 +89,14 @@ export function ListaBloqueos({
       const res = await fetch(`/api/settings/bloqueos/${encodeURIComponent(b.id)}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        // 🔴 La frase del servidor, nunca su código: aquí caen el 403 «ese
+        // bloqueo no es tuyo» y el 503 de `SQL_PENDIENTE`, que traen su
+        // propio `mensaje` y explican mucho mejor que un texto genérico.
+        const datos = await res.json().catch(() => null);
+        toast.error(mensajeDeError(datos, t("settings.bloqueos.retirarError")));
+        return;
+      }
       toast.success(t("settings.bloqueos.retiradoToast"));
       onCambio();
     } catch {
@@ -100,13 +108,36 @@ export function ListaBloqueos({
 
   return (
     <div className={s.tarjeta}>
-      <h3 className={s.tarjetaTitulo}>{t("settings.bloqueos.listaTitulo")}</h3>
+      <div className={s.tarjetaCabecera}>
+        <span className={`${s.iconoCaja} ${s.iconoCajaNeutro}`} aria-hidden>
+          <CalendarClock size={17} strokeWidth={2} />
+        </span>
+        <div className={s.tarjetaTextos}>
+          <h3 className={s.tarjetaTitulo}>{t("settings.bloqueos.listaTitulo")}</h3>
+          <p className={s.tarjetaSub}>{t("settings.bloqueos.listaSub")}</p>
+        </div>
+        {futuros.length > 0 && (
+          <span className={s.contador}>
+            {t("settings.bloqueos.listaCuenta", { count: futuros.length })}
+          </span>
+        )}
+      </div>
 
+      <div className={s.tarjetaCuerpo}>
       {cargando && <p className={s.cargando}>{t("common.loading")}</p>}
-      {error && !cargando && <p className={s.error}>{t("settings.bloqueos.listaError")}</p>}
+      {error && !cargando && <p className={s.error}>{error}</p>}
 
+      {/* Un vacío es una oportunidad de explicar: qué va a aparecer aquí y
+          para qué sirve. «No hay bloqueos futuros» y nada más no enseña nada
+          a quien abre esto por primera vez. */}
       {!cargando && !error && grupos.length === 0 && (
-        <p className={s.vacio}>{t("settings.bloqueos.listaVacia")}</p>
+        <div className={s.vacioCaja}>
+          <span className={s.vacioIcono} aria-hidden>
+            <CalendarClock size={20} strokeWidth={1.8} />
+          </span>
+          <p className={s.vacioTitulo}>{t("settings.bloqueos.listaVacia")}</p>
+          <p className={s.vacioAyuda}>{t("settings.bloqueos.listaVaciaAyuda")}</p>
+        </div>
       )}
 
       {grupos.map((g) => (
@@ -162,6 +193,7 @@ export function ListaBloqueos({
             ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

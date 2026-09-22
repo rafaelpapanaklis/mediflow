@@ -4,84 +4,264 @@
    Una sola hoja para los DOS caminos de render de settings-client.tsx (el de
    siempre, con clases de Tailwind, y el del rediseño de ws1-t2, con las
    piezas de `configuracion-rediseno`). No lee ni una clase de ninguno de los
-   dos: se apoya solo en los tokens globales de `globals.css`
+   dos: se apoya solo en los TOKENS globales de `globals.css`
    (`--card`, `--border`, `--foreground`, `--muted-foreground`, `--brand-600`,
-   `--destructive`), que ya se dan la vuelta con `.dark` en <html>. Por eso
-   aquí NO hay un bloque `:global(.dark)`: el modo oscuro sale solo, y un
-   color escrito a mano sería el único que no se enteraría.
+   `--destructive`, `--radius`, `--shadow-1`), que ya se dan la vuelta con
+   `.dark` en <html>. Por eso aquí NO hay un bloque `:global(.dark)` ni un
+   solo hexadecimal: el modo oscuro sale solo, y un color escrito a mano
+   sería el único que no se enteraría.
 
-   Medido a 390 px: no hay ni un ancho fijo. Los campos son una rejilla
-   `auto-fit` con mínimo de 150 px, que a esa anchura cae a una columna, y los
-   renglones de la lista pasan de tres tramos a uno apilado.
+   🔴 `--brand-600` dentro del panel es VIOLETA, no el azul de `:root`:
+   `globals.css` remapea la rampa en `body:has(.dashboard-shell)`. Es el
+   mismo violeta que el resto de Configuración, y por eso esta hoja lo usa en
+   vez de `--brand`.
+
+   ── El idioma que copia ──────────────────────────────────────────────────
+   El mismo de `configuracion-rediseno/configuracion.module.css`, que es la
+   pantalla ya rediseñada de al lado: tarjeta con CABEZA (icono en caja +
+   título + subtítulo), CUERPO con aire, y PIE con la acción sobre fondo
+   teñido. Dentro del cuerpo, los campos van en BLOQUES con su rótulo — no
+   sueltos en fila india.
+
+   Medido a 390 px: no hay ni un ancho fijo, ni un `min-width` mayor que 140.
+   Las rejillas son `auto-fit`/`auto-fill` y caen a una columna solas.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .seccion {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  /* Sin `max-width`: la tarjeta de arriba (el horario semanal) es `max-w-lg`
-     y esta sección es más ancha a propósito — la lista de bloqueos lleva
+  /* Sin `max-width` estrecho: la tarjeta de arriba (el horario semanal) es
+     `max-w-lg` y esta sección es más ancha a propósito — la lista lleva
      fechas, alcance, tipo, motivo y autor en el mismo renglón. */
   max-width: 880px;
-  margin-top: 20px;
+  margin-top: 24px;
+  min-width: 0;
 }
 
 .seccionCabecera {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .seccionTitulo {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
+  letter-spacing: -0.2px;
   color: hsl(var(--foreground));
   margin: 0;
 }
 
 .seccionSub {
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: hsl(var(--muted-foreground));
   margin: 0;
+  max-width: 62ch;
 }
 
-/* ── Tarjeta ────────────────────────────────────────────────────────── */
+/* ── La tarjeta: cabeza · cuerpo · pie ───────────────────────────────── */
 
 .tarjeta {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px;
+  min-width: 0;
   border: 1px solid hsl(var(--border));
-  border-radius: 16px;
+  border-radius: 14px;
   background: hsl(var(--card));
+  box-shadow: var(--shadow-1);
 }
 
 .tarjetaCabecera {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   flex-wrap: wrap;
+  padding: 14px 16px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.tarjetaTextos {
+  flex: 1 1 180px;
+  min-width: 0;
 }
 
 .tarjetaTitulo {
   font-size: 14px;
   font-weight: 700;
+  letter-spacing: -0.15px;
+  line-height: 1.3;
   color: hsl(var(--foreground));
   margin: 0;
-  flex: 1;
+}
+
+.tarjetaSub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
+
+.tarjetaCuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px;
   min-width: 0;
+}
+
+.tarjetaPie {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 16px;
+  border-top: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.4);
+  border-radius: 0 0 14px 14px;
+}
+
+/* El icono en caja: la misma pieza que encabeza cada sección del rediseño
+   de Configuración. Da a la tarjeta un ancla visual sin pesar. */
+.iconoCaja {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+.iconoCajaMarca {
+  background: hsl(var(--brand-600) / 0.12);
+  color: hsl(var(--brand-600));
+}
+
+.iconoCajaNeutro {
+  background: hsl(var(--muted) / 0.8);
+  color: hsl(var(--muted-foreground));
+}
+
+.contador {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--brand-600));
+  background: hsl(var(--brand-600) / 0.12);
+}
+
+/* ── Bloques del formulario ──────────────────────────────────────────────
+   Agrupan por SIGNIFICADO: a quién cierra · cuándo · qué es y por qué. Un
+   `fieldset` de verdad, para que el lector de pantalla anuncie el grupo. */
+
+.bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.bloqueTitulo {
+  padding: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ── El interruptor de duración ──────────────────────────────────────────
+   «Día completo» ya no es una casilla suelta perdida entre campos: es una de
+   dos opciones que se excluyen, y se lee como lo que hace — encender o
+   apagar las horas. Los campos que decide aparecen JUSTO debajo, donde el
+   ojo ya está mirando. */
+
+.segmentado {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--muted) / 0.45);
+}
+
+/* `position: relative` para ANCLAR el radio oculto de dentro: sin esto se
+   posiciona contra el ancestro posicionado más cercano —que puede estar
+   pantallas más arriba— y al recibir el foco el navegador desplaza la
+   página hasta allí. */
+.segmento {
+  display: block;
+  position: relative;
+  min-width: 0;
+}
+
+/* El radio existe y recibe el foco; lo que se ve es `.segmentoCara`. No se
+   usa `display:none`: eso lo sacaría del orden de tabulación. */
+.segmentoRadio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmentoCara {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.segmentoCara:hover {
+  color: hsl(var(--foreground));
+}
+
+.segmentoRadio:checked + .segmentoCara {
+  background: hsl(var(--card));
+  color: hsl(var(--brand-600));
+  box-shadow: var(--shadow-1);
+}
+
+.segmentoRadio:focus-visible + .segmentoCara {
+  outline: 2px solid hsl(var(--brand-600));
+  outline-offset: 1px;
 }
 
 /* ── Campos ─────────────────────────────────────────────────────────── */
 
-.campos {
+.parejaCampos,
+.dosHoras {
   display: grid;
-  /* A 390 px el mínimo de 150 px deja UNA columna y ni un píxel de desborde;
-     a partir de ~700 px caben tres. */
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  /* A 390 px el mínimo de 140 px deja UNA columna y ni un píxel de desborde. */
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
   gap: 12px;
+  min-width: 0;
+}
+
+/* Las dos horas ocupan el hueco de «Hasta» y se reparten entre ellas. */
+.dosHoras {
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(110px, 100%), 1fr));
 }
 
 .campo {
@@ -89,10 +269,6 @@
   flex-direction: column;
   gap: 5px;
   min-width: 0;
-}
-
-.campoAncho {
-  grid-column: 1 / -1;
 }
 
 .etiqueta {
@@ -105,6 +281,9 @@
   color: hsl(var(--destructive));
 }
 
+/* `.control` viste también el CONTENEDOR de `<DateField>` (un <span> que
+   pone su propio display/align por estilo en línea). Por eso aquí no se
+   declara `display`: se declararía y no ganaría. */
 .control,
 .controlCorto {
   width: 100%;
@@ -117,20 +296,34 @@
   color: hsl(var(--foreground));
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
-  border-radius: 10px;
+  border-radius: var(--radius);
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+
+.control:hover:not(:disabled),
+.controlCorto:hover:not(:disabled) {
+  border-color: hsl(var(--brand-600) / 0.45);
 }
 
 .controlCorto {
   width: auto;
-  min-width: 88px;
+  min-width: 82px;
+  height: 32px;
+  font-size: 12.5px;
 }
 
+/* `:focus-within` y no solo `:focus-visible`: el campo de fecha lleva su
+   input DENTRO del contenedor al que se le pone esta clase, así que el foco
+   nunca llega al contenedor en sí. */
 .control:focus-visible,
+.control:focus-within,
 .controlCorto:focus-visible,
 .botonPrincipal:focus-visible,
 .botonTexto:focus-visible,
 .plegadoBoton:focus-visible,
-.pista:focus-visible {
+.pista:focus-visible,
+.avisoCita:focus-visible,
+.avisoEnlace:focus-visible {
   outline: 2px solid hsl(var(--brand-600));
   outline-offset: 1px;
 }
@@ -145,24 +338,21 @@
   cursor: pointer;
 }
 
-.casillaFila {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
 .ayuda {
   font-size: 11.5px;
-  line-height: 1.4;
+  line-height: 1.45;
   color: hsl(var(--muted-foreground));
   margin: 0;
 }
 
 .error {
-  font-size: 12.5px;
-  color: hsl(var(--destructive));
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: hsl(var(--destructive));
 }
 
 .revisando,
@@ -173,34 +363,79 @@
   margin: 0;
 }
 
-/* ── Botones ────────────────────────────────────────────────────────── */
+/* ── El vacío que explica ────────────────────────────────────────────────
+   Un vacío es una oportunidad: dice qué va a aparecer aquí y para qué
+   sirve, en vez de dejar «No hay bloqueos futuros» solo en medio. */
 
-.acciones {
+.vacioCaja {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 16px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--muted) / 0.25);
+  text-align: center;
 }
+
+.vacioIcono {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 2px;
+  border-radius: 50%;
+  background: hsl(var(--muted) / 0.9);
+  color: hsl(var(--muted-foreground));
+}
+
+.vacioTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: hsl(var(--foreground));
+}
+
+.vacioAyuda {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ── Botones ────────────────────────────────────────────────────────── */
 
 .botonPrincipal {
   height: 36px;
-  padding: 0 16px;
+  padding: 0 18px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: hsl(var(--brand-600));
   color: #fff;
   font: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
   cursor: pointer;
+  box-shadow: var(--shadow-1);
+  transition: background var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+
+.botonPrincipal:hover:not(:disabled) {
+  background: hsl(var(--brand-700));
+  box-shadow: var(--shadow-2);
 }
 
 .botonPrincipal:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .botonTexto {
   flex: 0 0 auto;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border: 0;
   border-radius: 8px;
   background: none;
@@ -209,12 +444,11 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .botonTexto:hover:not(:disabled) {
   color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.08);
 }
 
 .botonTexto:disabled {
@@ -223,84 +457,140 @@
 }
 
 /* ── El aviso de citas agendadas ────────────────────────────────────────
-   El elemento más importante de la pantalla. NO es un «¿seguro?»: no lleva
+   El elemento más importante de la pantalla, y el que el cliente ve justo
+   cuando algo no le deja hacer lo que quería. NO es un «¿seguro?»: no lleva
    botón de continuar, porque el bloqueo no se crea. */
 
 .aviso {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 14px;
   border: 1px solid hsl(var(--destructive) / 0.35);
+  border-left: 3px solid hsl(var(--destructive));
   border-radius: 12px;
-  background: hsl(var(--destructive) / 0.07);
+  background: hsl(var(--destructive) / 0.06);
+  min-width: 0;
 }
 
 .avisoCabecera {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
 }
 
 .avisoIcono {
+  display: grid;
+  place-items: center;
   flex: 0 0 auto;
-  margin-top: 2px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.14);
+}
+
+.avisoTextos {
+  min-width: 0;
 }
 
 .avisoTitulo {
   margin: 0;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1.35;
   color: hsl(var(--foreground));
 }
 
 .avisoSub {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   font-size: 12.5px;
+  line-height: 1.45;
   color: hsl(var(--muted-foreground));
 }
 
 .avisoLista {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 24px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 /* Cada cita lleva a SU cita en la agenda: quien tiene que moverla no puede
    quedarse buscándola a ciegas. */
 .avisoCita {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 2px 8px;
-  padding: 3px 6px;
-  margin-left: -6px;
-  border-radius: 8px;
+  gap: 2px 10px;
+  padding: 7px 10px;
+  border: 1px solid hsl(var(--destructive) / 0.18);
+  border-radius: 9px;
+  background: hsl(var(--card));
   font-size: 12.5px;
   color: hsl(var(--foreground));
   text-decoration: none;
+  min-width: 0;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
 }
 
 .avisoCita:hover {
-  background: hsl(var(--destructive) / 0.1);
+  border-color: hsl(var(--destructive) / 0.45);
+  background: hsl(var(--destructive) / 0.05);
 }
 
 .avisoCitaCuando {
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  color: hsl(var(--destructive));
+}
+
+.avisoCitaHora {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: hsl(var(--destructive) / 0.12);
+  font-size: 11.5px;
 }
 
 .avisoCitaQuien {
-  color: hsl(var(--muted-foreground));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
+.avisoCitaPaciente {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.avisoCitaDoctor {
+  color: hsl(var(--muted-foreground));
+  overflow-wrap: anywhere;
+}
+
+.avisoCitaFlecha {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: hsl(var(--muted-foreground));
+}
+
+.avisoCita:hover .avisoCitaFlecha {
+  color: hsl(var(--destructive));
+}
+
 .avisoMas {
+  padding: 2px 2px 0;
   font-size: 12px;
   font-style: italic;
   color: hsl(var(--muted-foreground));
@@ -311,96 +601,163 @@
   align-items: center;
   gap: 5px;
   align-self: flex-start;
-  margin-left: 24px;
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--destructive) / 0.35);
+  border-radius: 999px;
   font-size: 12.5px;
-  font-weight: 600;
-  color: hsl(var(--brand-600));
+  font-weight: 650;
+  color: hsl(var(--destructive));
+  background: hsl(var(--card));
   text-decoration: none;
 }
 
 .avisoEnlace:hover {
-  text-decoration: underline;
+  background: hsl(var(--destructive) / 0.08);
 }
 
-/* ── Grupos (festivos oficiales / de costumbre, y meses de la lista) ─── */
+/* ── Grupos (meses de la lista) ──────────────────────────────────────── */
 
 .grupo {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .grupoTitulo {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: hsl(var(--muted-foreground));
 }
 
 .grupoAyuda {
-  margin: 0 0 2px;
+  margin: 0;
   font-size: 11.5px;
-  line-height: 1.4;
+  line-height: 1.45;
   color: hsl(var(--muted-foreground));
 }
 
-/* ── Festivos ───────────────────────────────────────────────────────── */
+/* ── Festivos ────────────────────────────────────────────────────────────
+   Los dos grupos —Oficiales y De costumbre— tienen que distinguirse de un
+   vistazo, porque la diferencia decide si la clínica TIENE que cerrar o
+   ELIGE cerrar. Por eso cada uno lleva su sello además del rótulo. */
 
-.festivos {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.grupoFestivos {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--muted) / 0.22);
+  min-width: 0;
 }
 
-/* `flex-wrap` no es decoración: un festivo APLICADO lleva además la insignia
-   y el botón de retirar, y a 390 px los tres juntos comprimían el nombre
-   hasta dejar «N» en vez de «Navidad» (medido). Cuando no caben, la insignia
-   y el botón bajan a su línea y el nombre recupera el ancho. */
+.grupoCabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sello {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.selloLey {
+  color: hsl(var(--brand-600));
+  background: hsl(var(--brand-600) / 0.12);
+}
+
+.selloOpcional {
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.9);
+}
+
+/* 🔴 REJILLA, no una columna. Con una columna a lo ancho de la tarjeta, la
+   fecha (que va a la derecha de su renglón) acababa a 900 px de su nombre y
+   no se leía como suya. En celdas acotadas la fecha queda pegada al nombre,
+   y la tarjeta deja de ser una lista larga y plana.
+
+   El mínimo es 280 y no menos: con tres columnas «Natalicio de Benito
+   Juárez» + «16 de marzo» no cabían y el nombre se quedaba en «Natalicio de
+   Benito…» (medido a 1280 px). Con dos columnas entran enteros, y a 390 px
+   la rejilla cae a una sola igual. */
+.festivos {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  /* `min(280px, 100%)` y no `280px` a secas: una pista mínima MAYOR que el
+     contenedor no se encoge, y a 320 px la celda se salía un píxel por la
+     derecha (medido). Con `min()` el mínimo nunca pasa del ancho que hay. */
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: 2px 12px;
+  min-width: 0;
+}
+
 .festivo {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px 8px;
-  padding: 5px 6px;
+  gap: 2px 6px;
+  padding: 5px 7px;
   border-radius: 8px;
   min-width: 0;
 }
 
 .festivo:hover {
-  background: hsl(var(--muted) / 0.5);
+  background: hsl(var(--card));
 }
 
+.festivoAplicado {
+  background: hsl(var(--brand-600) / 0.07);
+}
+
+/* A LÍNEA COMPLETA dentro de su celda. Con `flex: 1 1 150px` la insignia
+   «Aplicado» y el botón «Retirar» se le ponían al lado y comprimían el
+   nombre hasta dejar «N…» en vez de «Navidad» (medido a 1280 px). Ahora esos
+   dos bajan a su propia línea y el nombre conserva la celda entera. */
 .festivoEtiqueta {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* El 160 es el ancho por debajo del cual el nombre deja de leerse; al
-     llegar ahí, lo que sobra se va a la línea siguiente en vez de seguir
-     apretando esto. */
-  flex: 1 1 160px;
+  flex: 1 1 100%;
   min-width: 0;
   cursor: pointer;
 }
 
+.festivoTextos {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .festivoNombre {
-  font-size: 13px;
+  font-size: 12.5px;
   color: hsl(var(--foreground));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* `margin-left:auto` DENTRO de la celda de la rejilla, no del ancho de la
+   tarjeta: alinea las fechas de una columna sin alejarlas de su nombre. */
 .festivoFecha {
-  font-size: 12px;
+  font-size: 11.5px;
   color: hsl(var(--muted-foreground));
   white-space: nowrap;
   margin-left: auto;
-  padding-left: 8px;
+  font-variant-numeric: tabular-nums;
 }
 
 .insignia {
@@ -410,34 +767,36 @@
   flex: 0 0 auto;
   padding: 1px 7px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: hsl(var(--brand-600));
-  background: hsl(var(--brand-600) / 0.12);
+  background: hsl(var(--brand-600) / 0.14);
 }
 
 .anioCampo {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 /* El aviso de fin de año: discreto, y NO carga nada solo — solo ofrece el
    salto al año siguiente. */
 .pista {
   align-self: flex-start;
-  padding: 5px 10px;
-  border: 1px dashed hsl(var(--border));
+  padding: 5px 12px;
+  border: 1px dashed hsl(var(--brand-600) / 0.4);
   border-radius: 999px;
-  background: none;
+  background: hsl(var(--brand-600) / 0.06);
   font: inherit;
   font-size: 12px;
-  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+  color: hsl(var(--brand-600));
   cursor: pointer;
 }
 
 .pista:hover {
-  color: hsl(var(--foreground));
+  background: hsl(var(--brand-600) / 0.12);
 }
 
 /* ── La lista ───────────────────────────────────────────────────────── */
@@ -449,6 +808,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .renglonesPasados {
@@ -459,22 +819,28 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 8px 6px;
+  padding: 9px 8px;
   border-radius: 10px;
   border-bottom: 1px solid hsl(var(--border));
   min-width: 0;
+}
+
+.renglon:hover {
+  background: hsl(var(--muted) / 0.35);
 }
 
 .renglon:last-child {
   border-bottom: 0;
 }
 
+/* 122 px, no 104: «22 sep – 23 sep» se partía en dos líneas y el renglón
+   crecía de alto sin motivo (medido a 1280 px). */
 .renglonCuando {
   display: flex;
   flex-direction: column;
   gap: 1px;
   flex: 0 0 auto;
-  width: 104px;
+  width: 122px;
 }
 
 .renglonFechas {
@@ -503,7 +869,7 @@
 }
 
 .renglonMeta {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -538,8 +904,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-top: 6px;
+  padding-top: 8px;
   border-top: 1px solid hsl(var(--border));
+  min-width: 0;
 }
 
 .plegadoBoton {
@@ -584,15 +951,37 @@
   border: 0;
 }
 
-/* ── 390 px ─────────────────────────────────────────────────────────────
+/* ── 480 px ─────────────────────────────────────────────────────────────
    El único punto de ruptura de la hoja. Debajo de 480 el renglón de la
    lista deja de repartirse en tres tramos y se apila: con 104 px fijos de
    fechas + el motivo + el botón, a 390 px el motivo se quedaba en dos
    letras por línea. */
 
 @media (max-width: 480px) {
-  .tarjeta {
-    padding: 14px;
+  .tarjetaCabecera,
+  .tarjetaCuerpo {
+    padding: 13px;
+  }
+
+  .tarjetaPie {
+    padding: 11px 13px;
+  }
+
+  /* El botón de crear, a todo lo ancho: a esta anchura un botón pegado a la
+     derecha se lee como un detalle y es la acción de la tarjeta. */
+  .tarjetaPie .botonPrincipal {
+    width: 100%;
+  }
+
+  /* El día a lo ancho y las dos horas juntas debajo. Sin esto la rejilla
+     dejaba «Día» y «Hora de inicio» en la misma fila y «Hora de fin» sola en
+     la siguiente, que se lee como si le faltara algo (medido a 390 px). */
+  .parejaCampos {
+    grid-template-columns: 1fr;
+  }
+
+  .dosHoras {
+    grid-template-columns: 1fr 1fr;
   }
 
   .renglon {
@@ -606,13 +995,11 @@
     align-items: baseline;
   }
 
-  .festivoFecha {
-    font-size: 11.5px;
+  .grupoFestivos {
+    padding: 10px;
   }
 
-  .avisoLista,
-  .avisoEnlace {
-    padding-left: 0;
-    margin-left: 0;
+  .avisoCitaQuien {
+    flex-basis: 100%;
   }
 }

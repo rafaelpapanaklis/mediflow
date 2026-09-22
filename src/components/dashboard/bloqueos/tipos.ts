@@ -110,6 +110,50 @@ const entero = (v: unknown, fb = 0): number =>
 const esInstante = (v: unknown): v is string =>
   typeof v === "string" && v.length > 0 && !Number.isNaN(new Date(v).getTime());
 
+/* ───────────────────── los errores, como los lee una persona ───────────── */
+
+/**
+ * EL MENSAJE DE UN ERROR DE ESTA API. NUNCA EL CÓDIGO.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 POR QUÉ ESTO EXISTE
+ *
+ * El servidor manda LAS DOS COSAS (`respuestaDeError`, ruta.server.ts):
+ *
+ *     { error: "RANGO_REQUERIDO", mensaje: "Elige el día en que empieza…" }
+ *
+ * `error` es el código estable, para que la pantalla DECIDA sin leer texto.
+ * `mensaje` es la frase para la persona. Pintar el código es un fallo por sí
+ * mismo: Rafael llenó el formulario entero y lo que le salió fue
+ * «RANGO_REQUERIDO» en rojo, que no le dice ni qué falta ni qué hacer.
+ *
+ * El orden es: la frase del servidor → el texto de i18n → y nunca el código.
+ * El servidor conoce el caso exacto («el último día no puede ser anterior al
+ * primero», «ese bloqueo dura 900 días: revisa el año»); i18n solo conoce la
+ * familia. Por eso manda el servidor, y i18n es la red cuando no dice nada.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function mensajeDeError(raw: unknown, respaldo: string): string {
+  if (esObjeto(raw) && typeof raw.mensaje === "string" && raw.mensaje.trim()) {
+    return raw.mensaje.trim();
+  }
+  return respaldo;
+}
+
+/**
+ * El CÓDIGO estable, para decidir. No se pinta nunca: se compara.
+ *
+ * Existe aparte de `mensajeDeError` para que la diferencia esté en el nombre
+ * de la función y no en la cabeza de quien lee — el que devuelve texto no
+ * puede devolver un código ni por accidente.
+ */
+export function codigoDeError(raw: unknown): string | null {
+  return esObjeto(raw) && typeof raw.error === "string" && raw.error ? raw.error : null;
+}
+
+/** El 503 de la tabla que todavía no existe: el SQL de ws1-t2 sin aplicar. */
+export const ERROR_SQL_PENDIENTE = "SQL_PENDIENTE";
+
 export function parseTipo(raw: unknown): TipoBloqueo {
   return (TIPOS_BLOQUEO as readonly string[]).includes(raw as string)
     ? (raw as TipoBloqueo)

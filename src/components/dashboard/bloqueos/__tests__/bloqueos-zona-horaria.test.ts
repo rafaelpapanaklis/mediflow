@@ -11,16 +11,41 @@
  * `toISOString().slice(0,10)` lo pinta un día corrido. Es el bug que Rafael
  * fotografió en /admin, y aquí está clavado en una aserción — el test
  * comprueba a la vez que la forma ingenua falla y que la que se usa acierta.
+ *
+ * 🔴 LOS INSTANTES LOS FABRICA EL SERVIDOR, TAMBIÉN AQUÍ. Hasta ws1-t3 este
+ * archivo los sacaba de un `rangoALaUtc` que vivía en la pantalla, y esa
+ * función era justo el error: el navegador no puede convertir a UTC porque no
+ * conoce la zona de la clínica. Ahora el test hace el recorrido entero —lo
+ * tecleado → `cuerpoDeBloqueo` → `parseRangoTecleado` (el MISMO que corre en
+ * la API) → lo pintado—, así que además de la zona horaria vigila que el
+ * cuerpo siga siendo el que el servidor entiende.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  bandasDelDia, diasDelBloqueo, rangoALaUtc, diaDeInstante, horaDeInstante,
+  bandasDelDia, cuerpoDeBloqueo, diasDelBloqueo, diaDeInstante, horaDeInstante,
+  type RangoLocal,
 } from "../fechas";
+import { parseRangoTecleado } from "@/lib/agenda-bloqueos/core";
 import type { BloqueoDTO } from "../tipos";
 
 const MX = "America/Mexico_City";
 const TJ = "America/Tijuana";
+
+/** Cierra toda la clínica: el alcance no es lo que mira este archivo. */
+const CLINICA = { modoDoctor: false, miDoctorId: null, doctorElegido: "" };
+
+/**
+ * EL RECORRIDO COMPLETO: lo que se teclea → lo que el servidor guardaría.
+ *
+ * `null` cuando la pantalla no manda nada (rango incompleto o imposible).
+ */
+function comoLoGuardaElServidor(rango: RangoLocal, tz: string) {
+  const cuerpo = cuerpoDeBloqueo(rango, CLINICA);
+  if (!cuerpo) return null;
+  const { startsAt, endsAt } = parseRangoTecleado(cuerpo, tz);
+  return { inicio: startsAt.toISOString(), fin: endsAt.toISOString() };
+}
 
 const bloq = (inicio: string, fin: string, extra: Partial<BloqueoDTO> = {}): BloqueoDTO => ({
   id: "b1", doctorId: null, doctorNombre: null, kind: "VACACIONES", reason: "x",
@@ -29,7 +54,7 @@ const bloq = (inicio: string, fin: string, extra: Partial<BloqueoDTO> = {}): Blo
 });
 
 test("día completo del 24-dic al 2-ene: nueve días, ni uno más", () => {
-  const r = rangoALaUtc(
+  const r = comoLoGuardaElServidor(
     { desde: "2026-12-24", hasta: "2027-01-02", diaCompleto: true, horaInicio: "", horaFin: "" }, MX)!;
   assert.equal(r.inicio, "2026-12-24T06:00:00.000Z");
   assert.equal(r.fin,    "2027-01-03T06:00:00.000Z");  // corte EXCLUSIVO
@@ -53,7 +78,7 @@ test("día completo del 24-dic al 2-ene: nueve días, ni uno más", () => {
 });
 
 test("12-nov de 14 a 18: el fin cae en otro día UTC y aun así se pinta el 12", () => {
-  const r = rangoALaUtc(
+  const r = comoLoGuardaElServidor(
     { desde: "2026-11-12", hasta: "", diaCompleto: false, horaInicio: "14:00", horaFin: "18:00" }, MX)!;
   assert.equal(r.inicio, "2026-11-12T20:00:00.000Z");
   assert.equal(r.fin,    "2026-11-13T00:00:00.000Z");
@@ -84,7 +109,7 @@ test("Tijuana (UTC-8) el 31 de diciembre por la tarde sigue siendo 31 de diciemb
 });
 
 test("un bloqueo de un doctor no tapa la columna de otro; el de la clínica tapa todas", () => {
-  const r = rangoALaUtc(
+  const r = comoLoGuardaElServidor(
     { desde: "2026-11-12", hasta: "", diaCompleto: false, horaInicio: "09:00", horaFin: "11:00" }, MX)!;
   const deDoc = bloq(r.inicio, r.fin, { id: "d", doctorId: "doc-1", doctorNombre: "Dr. Pérez" });
   const deTodos = bloq(r.inicio, r.fin, { id: "c", doctorId: null });
@@ -97,7 +122,7 @@ test("un bloqueo de un doctor no tapa la columna de otro; el de la clínica tapa
 });
 
 test("rangos imposibles no mandan nada al servidor", () => {
-  const no = (r: any) => assert.equal(rangoALaUtc(r, MX), null);
+  const no = (r: any) => assert.equal(cuerpoDeBloqueo(r, CLINICA), null);
   no({ desde: "2026-11-20", hasta: "2026-11-12", diaCompleto: true, horaInicio: "", horaFin: "" });
   no({ desde: "2026-11-12", hasta: "", diaCompleto: false, horaInicio: "18:00", horaFin: "14:00" });
   no({ desde: "2026-11-12", hasta: "", diaCompleto: false, horaInicio: "14:00", horaFin: "14:00" });

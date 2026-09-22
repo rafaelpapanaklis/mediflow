@@ -523,6 +523,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   // BLOQUEOS DE AGENDA (ws1-t3) — la pestaña «Horarios y bloqueos» se le abre
   // también al DOCTOR, pero RECORTADA: ver `SeccionBloqueos`. Las demás
   // pestañas de Configuración siguen saliéndole exactamente igual que hoy.
+  // 🔴 Y su id VIAJA en el cuerpo del bloqueo. `resolverAlcance` (service.ts)
+  // lee «sin doctorId» como «toda la clínica», y a un DOCTOR eso le devuelve
+  // un 403: sin mandarlo no podría crear ni su propio bloqueo. Va solo para
+  // el rol DOCTOR, no para todo el que no sea admin — recepción con el
+  // permiso concedido sí puede cerrar la clínica entera.
   const esDoctor = initUser.role === "DOCTOR";
   // La puerta de esta pestaña, en UN sitio: la barra de navegación y los dos
   // caminos de render la leen de aquí.
@@ -1173,6 +1178,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   timezone={clinic.timezone ?? "America/Mexico_City"}
                   doctores={doctoresParaBloqueo}
                   modoDoctor={!isAdminUser}
+                  miDoctorId={esDoctor ? initUser.id : null}
                 />
               </Columna>
             )}
@@ -2050,6 +2056,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           timezone={clinic.timezone ?? "America/Mexico_City"}
           doctores={doctoresParaBloqueo}
           modoDoctor={!isAdminUser}
+          miDoctorId={esDoctor ? initUser.id : null}
         />
         </>
       )}

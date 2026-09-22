@@ -28,7 +28,7 @@ import { useT, useLocale } from "@/i18n/i18n-provider";
 import { FestivosCard } from "./festivos-card";
 import { FormularioBloqueo, type DoctorOpcion } from "./formulario-bloqueo";
 import { ListaBloqueos } from "./lista-bloqueos";
-import { parseBloqueos, type BloqueoDTO } from "./tipos";
+import { mensajeDeError, parseBloqueos, type BloqueoDTO } from "./tipos";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import s from "./bloqueos.module.css";
 
@@ -41,19 +41,31 @@ export function SeccionBloqueos({
   timezone,
   doctores,
   modoDoctor,
+  miDoctorId = null,
 }: {
   /** La zona de la CLÍNICA. Todo lo que se pinta pasa por ella. */
   timezone: string;
   doctores: DoctorOpcion[];
   /** true = quien mira no es admin: sin festivos y sin selector de alcance. */
   modoDoctor: boolean;
+  /**
+   * El id de quien mira, SOLO si su rol es DOCTOR. Cualquier otro rol: `null`.
+   *
+   * 🔴 No se deduce de `modoDoctor`: ese es «no es admin», que también cubre a
+   * recepción con el permiso `agenda.bloqueos` concedido a mano. A recepción
+   * el servidor SÍ le acepta cerrar la clínica entera (`esAdministrativo`), y
+   * mandarle su propio id le colgaría el bloqueo como si fuera un doctor.
+   */
+  miDoctorId?: string | null;
 }) {
   const t = useT();
   const locale = useLocale();
 
   const [bloqueos, setBloqueos] = useState<BloqueoDTO[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState(false);
+  // La FRASE del fallo, no un booleano: si el servidor explica qué pasa
+  // («falta aplicar sql/agenda-bloqueos.sql»), eso es lo que se enseña.
+  const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
 
   // Hoy EN LA ZONA DE LA CLÍNICA. De aquí salen el año de los festivos y el
@@ -73,29 +85,47 @@ export function SeccionBloqueos({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timezone]);
 
+  /**
+   * LA VENTANA DE LA SECCIÓN, en un solo sitio.
+   *
+   * La consulta de la lista y los bordes del calendario del formulario son la
+   * MISMA ventana a propósito: un bloqueo creado fuera de ella se guardaría y
+   * después no saldría en «Bloqueos activos», y nadie entendería por qué.
+   */
+  const ventana = useMemo(
+    () => ({
+      desde: `${ahoraClinica.anio - ANIOS_ATRAS}-01-01`,
+      hasta: `${ahoraClinica.anio + ANIOS_ADELANTE}-12-31`,
+    }),
+    [ahoraClinica.anio],
+  );
+
   const recargar = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
     let vivo = true;
     setCargando(true);
-    setError(false);
-    const desde = `${ahoraClinica.anio - ANIOS_ATRAS}-01-01`;
-    const hasta = `${ahoraClinica.anio + ANIOS_ADELANTE}-12-31`;
+    setError(null);
     (async () => {
       try {
         const res = await fetch(
-          `/api/settings/bloqueos?desde=${desde}&hasta=${hasta}`,
+          `/api/settings/bloqueos?desde=${ventana.desde}&hasta=${ventana.hasta}`,
         );
-        if (!res.ok) throw new Error();
-        const datos = await res.json();
+        const datos = await res.json().catch(() => null);
         if (!vivo) return;
+        if (!res.ok) {
+          // 🔴 La frase del servidor, nunca su código. Ver `mensajeDeError`.
+          setBloqueos([]);
+          setError(mensajeDeError(datos, t("settings.bloqueos.listaError")));
+          return;
+        }
         setBloqueos(parseBloqueos(datos));
       } catch {
         // Sin lista no se rompe la pestaña: el horario semanal de arriba
         // sigue funcionando y el formulario sigue pudiendo crear.
         if (vivo) {
           setBloqueos([]);
-          setError(true);
+          setError(t("settings.bloqueos.listaError"));
         }
       } finally {
         if (vivo) setCargando(false);
@@ -104,7 +134,10 @@ export function SeccionBloqueos({
     return () => {
       vivo = false;
     };
-  }, [version, ahoraClinica.anio]);
+    // `t` cambia de identidad en cada render del proveedor de idioma; meterlo
+    // en las dependencias volvería a pedir la lista en cada uno.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version, ventana.desde, ventana.hasta]);
 
   // Por `holidayKey`: de aquí saca la tarjeta de festivos el id con el que
   // retirar uno ya aplicado, y su `puedoRetirarlo`.
@@ -139,6 +172,9 @@ export function SeccionBloqueos({
         locale={locale}
         doctores={doctores}
         modoDoctor={modoDoctor}
+        miDoctorId={miDoctorId}
+        minDia={ventana.desde}
+        maxDia={ventana.hasta}
         onCreado={recargar}
       />
 

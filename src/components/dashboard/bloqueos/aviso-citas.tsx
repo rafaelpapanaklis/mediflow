@@ -14,9 +14,13 @@
  * 🔴 Y enseña LAS CITAS CONCRETAS, nunca «hay conflictos». Cada renglón lleva a
  * su cita en la agenda (`?date=…&highlight=<id>`): quien tiene que moverla no
  * puede quedarse buscándola a ciegas.
+ *
+ * Por eso tiene peso de aviso de verdad —franja de color, icono en caja, las
+ * citas en renglones pulsables— y no el gris de una nota al pie: es la pieza
+ * que el cliente ve justo cuando algo no le deja hacer lo que quería.
  */
 
-import { AlertTriangle, ExternalLink } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CalendarDays } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { diaCorto, diaDeCita } from "./fechas";
 import type { ConflictoCitas } from "./tipos";
@@ -47,8 +51,10 @@ export function AvisoCitas({
   return (
     <div className={s.aviso} role="alert">
       <div className={s.avisoCabecera}>
-        <AlertTriangle size={16} strokeWidth={2.2} aria-hidden className={s.avisoIcono} />
-        <div>
+        <span className={s.avisoIcono} aria-hidden>
+          <AlertTriangle size={17} strokeWidth={2.2} />
+        </span>
+        <div className={s.avisoTextos}>
           <p className={s.avisoTitulo}>
             {t("settings.bloqueos.avisoTitulo", { count: conflicto.total })}
           </p>
@@ -66,14 +72,19 @@ export function AvisoCitas({
                 href={`/dashboard/agenda?date=${encodeURIComponent(dia)}&highlight=${encodeURIComponent(c.id)}`}
               >
                 <span className={s.avisoCitaCuando}>
-                  {diaCorto(dia, locale)}, {c.hora}
+                  <CalendarDays size={12} strokeWidth={2.2} aria-hidden />
+                  {diaCorto(dia, locale)}
+                  <span className={s.avisoCitaHora}>{c.hora}</span>
                 </span>
                 <span className={s.avisoCitaQuien}>
-                  {c.pacienteNombre}
-                  {c.doctorNombre
-                    ? ` — ${t("settings.bloqueos.avisoCon", { doctor: c.doctorNombre })}`
-                    : ""}
+                  <span className={s.avisoCitaPaciente}>{c.pacienteNombre}</span>
+                  {c.doctorNombre && (
+                    <span className={s.avisoCitaDoctor}>
+                      {t("settings.bloqueos.avisoCon", { doctor: c.doctorNombre })}
+                    </span>
+                  )}
                 </span>
+                <ArrowUpRight className={s.avisoCitaFlecha} size={13} strokeWidth={2.2} aria-hidden />
               </a>
             </li>
           );
@@ -88,8 +99,8 @@ export function AvisoCitas({
           className={s.avisoEnlace}
           href={`/dashboard/agenda?date=${encodeURIComponent(primerDia)}`}
         >
-          <ExternalLink size={13} strokeWidth={2.2} aria-hidden />
           {t("settings.bloqueos.avisoVerAgenda")}
+          <ArrowUpRight size={14} strokeWidth={2.4} aria-hidden />
         </a>
       )}
     </div>

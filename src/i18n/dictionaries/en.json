@@ -4003,7 +4003,23 @@
         "one": "Show 1 past block",
         "other": "Show {count} past blocks"
       },
-      "horarioSoloLectura": "Set by the clinic's administration."
+      "horarioSoloLectura": "Set by the clinic's administration.",
+      "nuevoSub": "Close single days or a few specific hours. For the normal working day, use the weekly schedule above.",
+      "cuandoTitulo": "When",
+      "queEsTitulo": "What it is and why",
+      "soloUnasHoras": "Just a few hours",
+      "dia": "Day",
+      "hastaAyuda": "The last day is included in full.",
+      "motivoEjemplo": "Easter holidays",
+      "festivosSub": "Suggestions, not automatic: tick the ones this clinic closes and apply them.",
+      "grupoOficialesSello": "Statutory",
+      "grupoCostumbreSello": "Optional",
+      "listaSub": "What is already closed, from the soonest to the furthest away.",
+      "listaCuenta": {
+        "one": "1 active",
+        "other": "{count} active"
+      },
+      "listaVaciaAyuda": "Days and hours you close will show up here. While it is empty, the calendar accepts bookings across the whole weekly schedule."
     }
   },
   "procurement": {

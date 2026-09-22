@@ -4003,7 +4003,23 @@
         "one": "Ver 1 bloqueo pasado",
         "other": "Ver {count} bloqueos pasados"
       },
-      "horarioSoloLectura": "Lo define la administración de la clínica."
+      "horarioSoloLectura": "Lo define la administración de la clínica.",
+      "nuevoSub": "Cierra días sueltos o unas horas concretas. Para la jornada normal, el horario semanal de arriba.",
+      "cuandoTitulo": "Cuándo",
+      "queEsTitulo": "Qué es y por qué",
+      "soloUnasHoras": "Solo unas horas",
+      "dia": "Día",
+      "hastaAyuda": "El último día entra entero.",
+      "motivoEjemplo": "Vacaciones de Semana Santa",
+      "festivosSub": "Propuestas, no automáticas: marca las que cierre esta clínica y aplícalas.",
+      "grupoOficialesSello": "De ley",
+      "grupoCostumbreSello": "Opcional",
+      "listaSub": "Lo que ya está cerrado, del más próximo al más lejano.",
+      "listaCuenta": {
+        "one": "1 activo",
+        "other": "{count} activos"
+      },
+      "listaVaciaAyuda": "Aquí irán los días y las horas que cierres. Mientras esté vacío, la agenda acepta citas en todo el horario semanal."
     }
   },
   "procurement": {

@@ -14,11 +14,17 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Check } from "lucide-react";
+import { CalendarHeart, Check } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { diaLargo } from "./fechas";
-import { parseFestivos, parseRespuestaFestivos, type BloqueoDTO, type FestivoDTO } from "./tipos";
+import {
+  mensajeDeError,
+  parseFestivos,
+  parseRespuestaFestivos,
+  type BloqueoDTO,
+  type FestivoDTO,
+} from "./tipos";
 import s from "./bloqueos.module.css";
 
 /** El mes (1-12) a partir del cual se ofrece el año siguiente. */
@@ -43,7 +49,8 @@ export function FestivosCard({
   const t = useT();
   const [anio, setAnio] = useState(anioActual);
   const [festivos, setFestivos] = useState<FestivoDTO[] | null>(null);
-  const [error, setError] = useState(false);
+  // La FRASE del fallo, no un booleano. Ver `mensajeDeError`.
+  const [error, setError] = useState<string | null>(null);
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [aplicando, setAplicando] = useState(false);
   const [retirando, setRetirando] = useState<string | null>(null);
@@ -57,13 +64,17 @@ export function FestivosCard({
   useEffect(() => {
     let vivo = true;
     setFestivos(null);
-    setError(false);
+    setError(null);
     (async () => {
       try {
         const res = await fetch(`/api/settings/bloqueos/festivos?anio=${anio}`);
-        if (!res.ok) throw new Error();
-        const datos = await res.json();
+        const datos = await res.json().catch(() => null);
         if (!vivo) return;
+        if (!res.ok) {
+          setFestivos([]);
+          setError(mensajeDeError(datos, t("settings.bloqueos.festivosError")));
+          return;
+        }
         const lista = parseFestivos(datos);
         setFestivos(lista);
         // El estado inicial de las casillas es EXACTAMENTE `porDefecto`, y los
@@ -72,13 +83,15 @@ export function FestivosCard({
       } catch {
         if (vivo) {
           setFestivos([]);
-          setError(true);
+          setError(t("settings.bloqueos.festivosError"));
         }
       }
     })();
     return () => {
       vivo = false;
     };
+    // `t` cambia de identidad en cada render del proveedor de idioma.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anio, recarga]);
 
   const { oficiales, costumbre } = useMemo(() => {
@@ -117,10 +130,8 @@ export function FestivosCard({
       });
       const datos = await res.json().catch(() => null);
       if (!res.ok) {
-        toast.error(
-          (datos && typeof datos.error === "string" && datos.error) ||
-            t("settings.bloqueos.festivosAplicarError"),
-        );
+        // 🔴 La frase del servidor, nunca su código.
+        toast.error(mensajeDeError(datos, t("settings.bloqueos.festivosAplicarError")));
         return;
       }
       const { creados, chocaron } = parseRespuestaFestivos(datos);
@@ -162,7 +173,11 @@ export function FestivosCard({
       const res = await fetch(`/api/settings/bloqueos/${encodeURIComponent(bloqueo.id)}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const datos = await res.json().catch(() => null);
+        toast.error(mensajeDeError(datos, t("settings.bloqueos.retirarError")));
+        return;
+      }
       toast.success(t("settings.bloqueos.retiradoToast"));
       onCambio();
       recargar();
@@ -183,7 +198,13 @@ export function FestivosCard({
   return (
     <div className={s.tarjeta}>
       <div className={s.tarjetaCabecera}>
-        <h3 className={s.tarjetaTitulo}>{t("settings.bloqueos.festivosTitulo")}</h3>
+        <span className={`${s.iconoCaja} ${s.iconoCajaMarca}`} aria-hidden>
+          <CalendarHeart size={17} strokeWidth={2} />
+        </span>
+        <div className={s.tarjetaTextos}>
+          <h3 className={s.tarjetaTitulo}>{t("settings.bloqueos.festivosTitulo")}</h3>
+          <p className={s.tarjetaSub}>{t("settings.bloqueos.festivosSub")}</p>
+        </div>
         <label className={s.anioCampo}>
           <span className={s.sr}>{t("settings.bloqueos.anio")}</span>
           <select
@@ -200,74 +221,109 @@ export function FestivosCard({
         </label>
       </div>
 
-      {ofreceSiguiente && (
-        <button type="button" className={s.pista} onClick={() => setAnio(anioActual + 1)}>
-          {t("settings.bloqueos.avisoAnioNuevo", { anio: anioActual + 1 })}
-        </button>
-      )}
+      <div className={s.tarjetaCuerpo}>
+        {ofreceSiguiente && (
+          <button type="button" className={s.pista} onClick={() => setAnio(anioActual + 1)}>
+            {t("settings.bloqueos.avisoAnioNuevo", { anio: anioActual + 1 })}
+          </button>
+        )}
 
-      {festivos === null && <p className={s.cargando}>{t("common.loading")}</p>}
-      {error && <p className={s.error}>{t("settings.bloqueos.festivosError")}</p>}
+        {festivos === null && <p className={s.cargando}>{t("common.loading")}</p>}
+        {error && <p className={s.error}>{error}</p>}
 
-      {festivos !== null && !error && festivos.length === 0 && (
-        <p className={s.vacio}>{t("settings.bloqueos.festivosVacio")}</p>
-      )}
+        {festivos !== null && !error && festivos.length === 0 && (
+          <p className={s.vacio}>{t("settings.bloqueos.festivosVacio")}</p>
+        )}
 
-      {[
-        { lista: oficiales, titulo: "grupoOficiales", ayuda: "grupoOficialesAyuda" },
-        { lista: costumbre, titulo: "grupoCostumbre", ayuda: "grupoCostumbreAyuda" },
-      ].map(
-        (grupo) =>
-          grupo.lista.length > 0 && (
-            <section key={grupo.titulo} className={s.grupo}>
-              <h4 className={s.grupoTitulo}>{t(`settings.bloqueos.${grupo.titulo}`)}</h4>
-              <p className={s.grupoAyuda}>{t(`settings.bloqueos.${grupo.ayuda}`)}</p>
-              <ul className={s.festivos}>
-                {grupo.lista.map((f) => {
-                  const bloqueo = bloqueoPorFestivo.get(f.key);
-                  // El botón de retirar solo si el SERVIDOR dice que se puede.
-                  const puedeRetirar = f.aplicado && !!bloqueo?.puedoRetirarlo;
-                  return (
-                    <li key={f.key} className={s.festivo}>
-                      <label className={s.festivoEtiqueta}>
-                        <input
-                          type="checkbox"
-                          className={s.casilla}
-                          // Aplicado = marcado y bloqueado: ya no es una
-                          // propuesta, es un hecho. Se deshace con «Retirar».
-                          checked={f.aplicado || marcados.has(f.key)}
-                          disabled={f.aplicado}
-                          onChange={() => alternar(f.key)}
-                        />
-                        <span className={s.festivoNombre} title={f.nombre}>{f.nombre}</span>
-                        <span className={s.festivoFecha}>{diaLargo(f.fecha, locale)}</span>
-                      </label>
-                      {f.aplicado && (
-                        <span className={s.insignia}>
-                          <Check size={12} strokeWidth={2.6} aria-hidden />
-                          {t("settings.bloqueos.aplicado")}
-                        </span>
-                      )}
-                      {puedeRetirar && (
-                        <button
-                          type="button"
-                          className={s.botonTexto}
-                          disabled={retirando === f.key}
-                          onClick={() => retirar(f)}
-                        >
-                          {t("settings.bloqueos.retirar")}
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ),
-      )}
+        {/* Los dos grupos se distinguen de un vistazo por su insignia —«De
+            ley» / «Opcional»— y no solo por el rótulo: la diferencia entre
+            ellos es la que decide si una clínica tiene que cerrar o elige
+            cerrar. */}
+        {[
+          {
+            lista: oficiales,
+            titulo: "grupoOficiales",
+            ayuda: "grupoOficialesAyuda",
+            sello: "grupoOficialesSello",
+            claseSello: s.selloLey,
+          },
+          {
+            lista: costumbre,
+            titulo: "grupoCostumbre",
+            ayuda: "grupoCostumbreAyuda",
+            sello: "grupoCostumbreSello",
+            claseSello: s.selloOpcional,
+          },
+        ].map(
+          (grupo) =>
+            grupo.lista.length > 0 && (
+              <section key={grupo.titulo} className={s.grupoFestivos}>
+                <div className={s.grupoCabecera}>
+                  <h4 className={s.grupoTitulo}>{t(`settings.bloqueos.${grupo.titulo}`)}</h4>
+                  <span className={`${s.sello} ${grupo.claseSello}`}>
+                    {t(`settings.bloqueos.${grupo.sello}`)}
+                  </span>
+                </div>
+                <p className={s.grupoAyuda}>{t(`settings.bloqueos.${grupo.ayuda}`)}</p>
+                {/* Rejilla, no una columna: en un panel ancho la columna
+                    dejaba la fecha a 900 px de su nombre. Cada celda tope
+                    ~1/3 del ancho, así que la fecha queda pegada al suyo. */}
+                <ul className={s.festivos}>
+                  {grupo.lista.map((f) => {
+                    const bloqueo = bloqueoPorFestivo.get(f.key);
+                    // El botón de retirar solo si el SERVIDOR dice que se puede.
+                    const puedeRetirar = f.aplicado && !!bloqueo?.puedoRetirarlo;
+                    return (
+                      <li
+                        key={f.key}
+                        className={`${s.festivo} ${f.aplicado ? s.festivoAplicado : ""}`}
+                      >
+                        <label className={s.festivoEtiqueta}>
+                          <input
+                            type="checkbox"
+                            className={s.casilla}
+                            // Aplicado = marcado y bloqueado: ya no es una
+                            // propuesta, es un hecho. Se deshace con «Retirar».
+                            checked={f.aplicado || marcados.has(f.key)}
+                            disabled={f.aplicado}
+                            onChange={() => alternar(f.key)}
+                          />
+                          <span className={s.festivoTextos}>
+                            <span className={s.festivoNombre} title={f.nombre}>
+                              {f.nombre}
+                            </span>
+                            <span className={s.festivoFecha}>{diaLargo(f.fecha, locale)}</span>
+                          </span>
+                        </label>
+                        {f.aplicado && (
+                          <span className={s.insignia}>
+                            <Check size={12} strokeWidth={2.6} aria-hidden />
+                            {t("settings.bloqueos.aplicado")}
+                          </span>
+                        )}
+                        {puedeRetirar && (
+                          <button
+                            type="button"
+                            className={s.botonTexto}
+                            disabled={retirando === f.key}
+                            onClick={() => retirar(f)}
+                          >
+                            {t("settings.bloqueos.retirar")}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ),
+        )}
+      </div>
 
       {festivos !== null && festivos.length > 0 && (
-        <div className={s.acciones}>
+        <div className={s.tarjetaPie}>
+          {/* Dice SIEMPRE cuántos lleva marcados: es lo único que separa
+              «aplicar tres» de «aplicar el calendario entero». */}
           <button
             type="button"
             className={s.botonPrincipal}
