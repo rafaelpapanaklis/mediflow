@@ -15,6 +15,20 @@ export interface CreatePreferenceOptions {
   externalReference: string;
   notificationUrl: string;
   backUrls: { success: string; failure: string; pending: string };
+  // ── Opcionales (anticipo por WhatsApp, WS1-T5). Labs y proveedores no los
+  //    mandan y su preferencia sale exactamente igual que antes. ──
+  /**
+   * Comisión del marketplace en PESOS (MP no acepta porcentaje). Solo tiene
+   * efecto con un token obtenido por OAuth de la aplicación de DaleControl.
+   * 0 o ausente = no se manda.
+   */
+  marketplaceFee?: number;
+  /** El link deja de aceptar pagos a esta hora (expires + expiration_date_to). */
+  expiresAt?: Date;
+  /** true = el pago solo puede quedar aprobado o rechazado, nunca «pendiente». */
+  binaryMode?: boolean;
+  /** Tipos de pago que no se ofrecen (p. ej. "ticket" = OXXO, "atm"). */
+  excludedPaymentTypes?: string[];
 }
 
 export interface CreatePreferenceResult {
@@ -42,6 +56,24 @@ export async function createPreference(
       notification_url: opts.notificationUrl,
       back_urls: opts.backUrls,
       auto_return: "approved",
+      ...(opts.marketplaceFee && opts.marketplaceFee > 0
+        ? { marketplace_fee: opts.marketplaceFee }
+        : {}),
+      ...(opts.expiresAt
+        ? {
+            expires: true,
+            expiration_date_from: new Date().toISOString(),
+            expiration_date_to: opts.expiresAt.toISOString(),
+          }
+        : {}),
+      ...(opts.binaryMode ? { binary_mode: true } : {}),
+      ...(opts.excludedPaymentTypes?.length
+        ? {
+            payment_methods: {
+              excluded_payment_types: opts.excludedPaymentTypes.map((id) => ({ id })),
+            },
+          }
+        : {}),
     }),
   });
 
@@ -62,6 +94,24 @@ export interface MercadoPagoPayment {
   transactionAmount: number | null;
   /** Moneda del pago (currency_id de MP, ej. "MXN"). null si MP no la manda. */
   currencyId: string | null;
+  // ── Campos añadidos para el anticipo por WhatsApp (WS1-T5): solo lectura. ──
+  /** status_detail de MP (p. ej. "cc_rejected_insufficient_amount"). */
+  statusDetail: string | null;
+  /** Cuándo lo aprobó MP (date_approved), ISO. */
+  dateApproved: string | null;
+  /** Cuenta que cobró (collector_id). */
+  collectorId: string | null;
+  payerEmail: string | null;
+  paymentMethodId: string | null;
+}
+
+export interface GetPaymentOptions {
+  /**
+   * true = un 401/403 de MP LANZA en vez de devolver null. Con un token de
+   * OAuth, 401 significa «el token ya no sirve» (la clínica revocó el permiso o
+   * caducó), no «el pago no existe»: tragarlo con un 200 perdería el pago.
+   */
+  throwOnAuthError?: boolean;
 }
 
 /**
@@ -80,6 +130,7 @@ export interface MercadoPagoPayment {
 export async function getPayment(
   accessToken: string,
   paymentId: string,
+  options: GetPaymentOptions = {},
 ): Promise<MercadoPagoPayment | null> {
   if (!/^\d+$/.test(paymentId)) return null;
 
@@ -90,6 +141,9 @@ export async function getPayment(
 
   if (res.status >= 500 || res.status === 429) {
     throw new Error(`MercadoPago error ${res.status}`);
+  }
+  if (options.throwOnAuthError && (res.status === 401 || res.status === 403)) {
+    throw new Error(`MercadoPago auth error ${res.status}`);
   }
   if (!res.ok) return null;
 
@@ -103,5 +157,10 @@ export async function getPayment(
         ? data.transaction_amount
         : null,
     currencyId: typeof data.currency_id === "string" ? data.currency_id : null,
+    statusDetail: typeof data.status_detail === "string" ? data.status_detail : null,
+    dateApproved: typeof data.date_approved === "string" ? data.date_approved : null,
+    collectorId: data.collector_id != null ? String(data.collector_id) : null,
+    payerEmail: typeof data.payer?.email === "string" ? data.payer.email : null,
+    paymentMethodId: typeof data.payment_method_id === "string" ? data.payment_method_id : null,
   };
 }

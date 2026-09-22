@@ -20,6 +20,7 @@ import {
   horarioPropio,
 } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
 
@@ -217,6 +218,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           overrideReason: null,
           startsAt: { lt: endsAt },
           endsAt: { gt: startsAt },
+          // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+          AND: [sinApartadoVencido()],
         },
         select: { doctorId: true },
       });

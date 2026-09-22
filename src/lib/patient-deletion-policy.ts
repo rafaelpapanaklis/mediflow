@@ -164,6 +164,10 @@ export const BLOCKER_TYPE_BY_MODEL: Record<string, PatientDeleteBlockerType> = {
   // la ficha sin más lo desaparece de la contabilidad sin dejar rastro.
   PatientCredit: "credit",
   PackageRedemption: "credit",
+  // Anticipo de cita por WhatsApp (WS1-T5): cuelga de él el rastro de cada pago
+  // de Mercado Pago (quién pagó, cuánto, con qué referencia). Si el paciente se
+  // borrara en cascada, se iría también la prueba del «yo pagué».
+  AppointmentDeposit: "credit",
 };
 
 /**

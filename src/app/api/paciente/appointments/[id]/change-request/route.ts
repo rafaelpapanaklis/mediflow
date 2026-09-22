@@ -57,6 +57,7 @@ import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
 
@@ -264,6 +265,8 @@ export async function POST(
             status: { notIn: ["CANCELLED", "NO_SHOW"] },
             startsAt: { lt: proposedEndsAt! },
             endsAt: { gt: proposedStartsAt! },
+            // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+            AND: [sinApartadoVencido()],
           },
           select: { id: true },
         });

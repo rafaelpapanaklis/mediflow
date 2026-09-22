@@ -6,6 +6,7 @@ import { bloqueaEsteSlot, bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende, doctorNoAtiendeSlot, ventanaDelDoctor } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
+import { apartadoVencido, sinApartadoVencido } from "@/lib/agenda/apartado";
 
 /**
  * Servicio server-side reutilizable para que el bot de WhatsApp agende y
@@ -65,6 +66,10 @@ async function hasConflict(
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt },
       ...(excludeId ? { id: { not: excludeId } } : {}),
+      // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+      // Al crear encima, el trigger appt_liberar_apartado_vencido la cancela
+      // antes de que la constraint mire.
+      AND: [sinApartadoVencido()],
     },
     select: { id: true },
   });
@@ -167,6 +172,8 @@ export async function getAvailableSlots(params: {
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
         startsAt: { lt: dayEndUtc },
         endsAt: { gt: dayStartUtc },
+        // WS1-T5 — el hueco de un anticipo que no se pagó a tiempo vuelve a ofrecerse.
+        AND: [sinApartadoVencido()],
       },
       select: { startsAt: true, endsAt: true },
     }),
@@ -230,12 +237,47 @@ export type CreateErrorCode =
   | "doctor_not_found"
   | "patient_not_found"
   | "invalid"
+  /**
+   * WS1-T5 — la clínica pide anticipo y no se pudo generar el link de pago.
+   * La cita NO quedó apartada (se deshizo): el bot lo dice y pasa a humano.
+   */
+  | "pago_no_disponible"
   | "failed";
+
+/** WS1-T5 — el link de pago que el bot manda cuando la cita lleva anticipo. */
+export interface AnticipoCreado {
+  url: string;
+  /** Pesos, calculado en el servidor. */
+  monto: number;
+  /** ISO: hasta cuándo queda apartado el hueco. */
+  venceA: string;
+  minutos: number;
+}
 
 export interface CreateResult {
   ok: boolean;
   appointmentId?: string;
   error?: CreateErrorCode;
+  /** WS1-T5 — id del AppointmentDeposit creado junto con la cita apartada. */
+  depositId?: string;
+  /** WS1-T5 — presente solo si la cita quedó apartada esperando el anticipo. */
+  anticipo?: AnticipoCreado;
+}
+
+/**
+ * WS1-T5 — la cita nace APARTADA: ocupa el hueco solo hasta `vence` y, en la
+ * MISMA escritura, nace su anticipo pendiente. Lo arma
+ * src/lib/anticipos/servicio.server.ts; el monto ya viene decidido por el
+ * servidor.
+ */
+export interface ApartadoConAnticipo {
+  vence: Date;
+  anticipo: {
+    amount: number;
+    marketplaceFee: number;
+    mpCollectorId: string;
+    waPhone: string | null;
+  };
 }
 
 /** Crea una cita desde el bot replicando las validaciones de POST /api/appointments. */
@@ -247,8 +289,10 @@ export async function createBotAppointment(params: {
   time: string;
   durationMin: number;
   reason?: string | null;
+  /** WS1-T5 — solo lo pasa el servicio de anticipos. Ausente = la cita de siempre. */
+  apartado?: ApartadoConAnticipo;
 }): Promise<CreateResult> {
-  const { clinicId, patientId, doctorId, dateISO, time, reason } = params;
+  const { clinicId, patientId, doctorId, dateISO, time, reason, apartado } = params;
   const [hh, mm] = time.split(":").map(Number);
   if (Number.isNaN(hh) || Number.isNaN(mm)) return { ok: false, error: "invalid" };
 
@@ -311,12 +355,35 @@ export async function createBotAppointment(params: {
         type: reason && reason.trim() ? reason.trim() : "Consulta general",
         mode: "IN_PERSON",
         source: "WHATSAPP",
-        requiresValidation: true,
+        // WS1-T5 — la cita apartada NO entra a la cola «por validar»: la valida
+        // el pago (y si no llega, se libera sola). Con ella en la cola, el
+        // «Aprobar» de rutina la confirmaba sin anticipo.
+        requiresValidation: !apartado,
         overrideReason: null,
+        holdExpiresAt: apartado?.vence ?? null,
+        ...(apartado
+          ? {
+              deposits: {
+                create: {
+                  clinicId,
+                  patientId,
+                  amount: apartado.anticipo.amount,
+                  marketplaceFee: apartado.anticipo.marketplaceFee,
+                  expiresAt: apartado.vence,
+                  mpCollectorId: apartado.anticipo.mpCollectorId,
+                  waPhone: apartado.anticipo.waPhone,
+                },
+              },
+            }
+          : {}),
       },
-      select: { id: true },
+      select: { id: true, deposits: { select: { id: true } } },
     });
-    return { ok: true, appointmentId: created.id };
+    return {
+      ok: true,
+      appointmentId: created.id,
+      ...(apartado && created.deposits[0] ? { depositId: created.deposits[0].id } : {}),
+    };
   } catch (err) {
     if (isOverlapError(err)) return { ok: false, error: "overlap" };
     console.error("[bot-booking-service] create failed", err);
@@ -354,9 +421,12 @@ export async function rescheduleBotAppointment(params: {
 
   const existing = await prisma.appointment.findFirst({
     where: { id: appointmentId, clinicId },
-    select: { id: true, doctorId: true, startsAt: true, endsAt: true },
+    select: { id: true, doctorId: true, startsAt: true, endsAt: true, status: true, holdExpiresAt: true },
   });
   if (!existing) return { ok: false, error: "not_found" };
+  // WS1-T5 — una cita apartada cuyo anticipo venció ya no es de nadie: moverla
+  // la «reviviría» vencida y la agenda seguiría tratándola como hueco libre.
+  if (apartadoVencido(existing)) return { ok: false, error: "not_found" };
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
@@ -461,6 +531,8 @@ export async function getUpcomingAppointmentsForPatient(clinicId: string, patien
       patientId,
       status: { in: ["PENDING", "SCHEDULED", "CONFIRMED"] },
       startsAt: { gte: new Date() },
+      // WS1-T5 — la cita cuyo anticipo venció ya no es suya: no se ofrece reagendarla.
+      AND: [sinApartadoVencido()],
     },
     orderBy: { startsAt: "asc" },
     take: 5,

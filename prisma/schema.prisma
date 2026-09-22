@@ -235,6 +235,10 @@ model Clinic {
   treatments                TreatmentPlan[]
   paymentPlans              PaymentPlan[]
   patientCredits            PatientCredit[]
+  // Anticipo por WhatsApp con Mercado Pago (WS1-T5): la cuenta conectada por
+  // OAuth + la configuración del anticipo, y cada anticipo pedido.
+  mercadoPago               ClinicMercadoPago?
+  appointmentDeposits       AppointmentDeposit[]
   patientNotifications      PatientNotification[]
   consentForms              ConsentForm[]
   periodontalRecords        PeriodontalRecord[]
@@ -1402,6 +1406,7 @@ model Patient {
   treatments                TreatmentPlan[]
   paymentPlans              PaymentPlan[]
   patientCredits            PatientCredit[]
+  appointmentDeposits       AppointmentDeposit[]
   consentForms              ConsentForm[]
   periodontalRecords        PeriodontalRecord[]
   beforeAfterPhotos         BeforeAfterPhoto[]
@@ -1515,6 +1520,123 @@ model PatientCredit {
 
   @@index([clinicId, patientId])
   @@map("patient_credits")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Anticipo por WhatsApp con Mercado Pago (WS1-T5). Tablas creadas a mano por
+// sql/anticipo-whatsapp.sql — nunca con `prisma migrate`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// La cuenta de Mercado Pago de la clínica (conectada por OAuth) y cómo cobra el
+/// anticipo. Una fila por clínica. Los dos tokens van CIFRADOS con el envelope
+/// AES-256-GCM (src/lib/crypto/envelope.ts): sin DATA_ENCRYPTION_KEY no se
+/// guardan. Jamás salen al cliente: la pantalla recibe solo `conectada`, el
+/// apodo y el correo de la cuenta.
+model ClinicMercadoPago {
+  clinicId            String    @id
+  // ── Conexión (null = sin cuenta conectada) ──
+  mpUserId            String?
+  mpNickname          String?
+  mpEmail             String?
+  liveMode            Boolean?
+  accessToken         String? // cifrado
+  refreshToken        String? // cifrado
+  tokenExpiresAt      DateTime? @db.Timestamptz(6)
+  connectedAt         DateTime? @db.Timestamptz(6)
+  // Sin relación Prisma a propósito: la FK (SET NULL) vive en el SQL.
+  connectedById       String?
+  disconnectedAt      DateTime? @db.Timestamptz(6)
+  // ── El anticipo ──
+  depositEnabled      Boolean   @default(false)
+  /// "fixed" = monto fijo (default) · "percent" = % del precio del servicio ·
+  /// "total" = el precio completo del servicio. Sin servicio con precio, los dos
+  /// últimos caen al monto fijo.
+  depositMode         String    @default("fixed")
+  depositAmount       Float     @default(0) // pesos, para "fixed" y como respaldo
+  depositPercent      Int       @default(0) // 1–100, para "percent"
+  holdMinutes         Int       @default(30)
+  // ── Comisión de DaleControl (marketplace_fee de MP). Arranca en 0. ──
+  /// "fixed" = pesos por cobro · "percent" = % del anticipo. MP recibe SIEMPRE
+  /// pesos: el % se convierte en cada cobro.
+  marketplaceFeeMode  String    @default("fixed")
+  marketplaceFeeValue Float     @default(0)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("clinic_mercadopago")
+}
+
+/// Un anticipo pedido para una cita apartada por el bot. Es el rastro: a qué
+/// cita, cuánto se pidió, con qué preferencia de MP, hasta cuándo, y qué pasó.
+/// status: PENDING (esperando pago) · PAID (entró dinero) · EXPIRED (venció sin
+/// pago) · FAILED (no se pudo generar el link; la cita no quedó apartada).
+model AppointmentDeposit {
+  id                   String    @id @default(cuid())
+  clinicId             String
+  appointmentId        String?
+  patientId            String
+  amount               Float // pesos que se piden — lo decide el servidor
+  marketplaceFee       Float     @default(0) // pesos que se mandan como marketplace_fee
+  currency             String    @default("MXN")
+  status               String    @default("PENDING")
+  expiresAt            DateTime  @db.Timestamptz(6)
+  mpPreferenceId       String?
+  checkoutUrl          String?
+  /// Cuenta de MP que cobra (user_id del vendedor al crear el link). El pago se
+  /// verifica contra ESTA cuenta.
+  mpCollectorId        String?
+  /// wa_id del hilo donde se pidió: a él van los avisos.
+  waPhone              String?
+  mpPaymentId          String? // el pago que lo saldó
+  paidAmount           Float?
+  paidAt               DateTime? @db.Timestamptz(6)
+  appointmentConfirmed Boolean   @default(false)
+  /// Último estado que MP reportó sin aprobar (rejected, in_process…): «yo pagué».
+  lastMpStatus         String?
+  lastMpStatusDetail   String?
+  /// Aviso al paciente (confirmada / liberada): cuándo salió o por qué no.
+  noticeSentAt         DateTime? @db.Timestamptz(6)
+  noticeError          String?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+
+  clinic      Clinic                      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointment Appointment?                @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  patient     Patient                     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  payments    AppointmentDepositPayment[]
+
+  @@index([clinicId, createdAt])
+  @@index([status, expiresAt])
+  @@index([appointmentId])
+  @@map("appointment_deposits")
+}
+
+/// Cada pago APROBADO de Mercado Pago que se aplicó a un anticipo. `mpPaymentId`
+/// es ÚNICO: es lo que hace idempotente al webhook (MP reintenta y el mismo pago
+/// puede llegar tres veces; solo la primera crea el saldo a favor).
+model AppointmentDepositPayment {
+  id              String    @id @default(cuid())
+  clinicId        String
+  depositId       String
+  mpPaymentId     String    @unique
+  amount          Float // lo que de verdad pagó (transaction_amount)
+  currency        String
+  dateApproved    DateTime? @db.Timestamptz(6)
+  payerEmail      String?
+  paymentMethodId String?
+  // Sin relación Prisma: FK (SET NULL) en el SQL.
+  patientCreditId String?   @unique
+  /// null = pago normal. Texto = algo raro que alguien debe revisar/devolver.
+  anomaly         String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+
+  deposit AppointmentDeposit @relation(fields: [depositId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, createdAt])
+  @@index([depositId])
+  @@map("appointment_deposit_payments")
 }
 
 /// Estado por superficie del odontograma (32 dientes adultos / 5 superficies).
@@ -1756,6 +1878,14 @@ model Appointment {
   // primer recordatorio automático de la cita.
   confirmToken String? @unique
 
+  // Anticipo por WhatsApp (WS1-T5). Una cita SCHEDULED con esta fecha APARTA
+  // el hueco solo hasta ese instante: pasado, ninguna consulta de
+  // disponibilidad la cuenta (src/lib/agenda/apartado.ts) y el trigger
+  // appt_liberar_apartado_vencido la cancela en cuanto otra cita pisa ese
+  // hueco. null = cita normal (lo de siempre). Se limpia al acreditarse el
+  // anticipo. Ver sql/anticipo-whatsapp.sql.
+  holdExpiresAt DateTime? @db.Timestamptz(6)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1777,11 +1907,13 @@ model Appointment {
   fluorideApplications FluorideApplication[]
   spaceMaintainers     SpaceMaintainer[]
   endoTreatments       PediatricEndodonticTreatment[]
+  deposits             AppointmentDeposit[]
 
   @@index([clinicId, startsAt, endsAt, status])
   @@index([doctorId, startsAt])
   @@index([resourceId, startsAt])
   @@index([clinicId, requiresValidation])
+  @@index([holdExpiresAt])
   @@map("appointments")
 }
 

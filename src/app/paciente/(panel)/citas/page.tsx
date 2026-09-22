@@ -238,9 +238,16 @@ export default function PacienteCitasPage() {
                         )}
                         {/* WS1-T3: confirmar asistencia (solo PENDING/SCHEDULED sin cambio en curso). */}
                         {!cita.pendingChange &&
+                          !cita.esperaAnticipo &&
                           (cita.status === "PENDING" || cita.status === "SCHEDULED") && (
                             <ConfirmarAsistencia citaId={cita.id} onConfirmed={() => mutate()} />
                           )}
+                        {/* WS1-T5: apartada por WhatsApp, esperando el anticipo. */}
+                        {cita.esperaAnticipo && (
+                          <span style={{ fontSize: 12, color: MUTED }}>
+                            Apartada: se confirma sola en cuanto se acredite tu anticipo.
+                          </span>
+                        )}
                         {cita.pendingChange ? (
                           <div
                             style={{

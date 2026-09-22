@@ -1123,6 +1123,19 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   </Seccion>
                 )}
 
+                {/* Anticipos por WhatsApp con Mercado Pago (WS1-T5, admin only) */}
+                {isAdminUser && (
+                  <Seccion
+                    icono={<CreditCard size={18} strokeWidth={1.75} aria-hidden />}
+                    titulo="Anticipos por WhatsApp (Mercado Pago)"
+                    subtitulo="El bot pide un anticipo al agendar y la cita se confirma sola al acreditarse."
+                  >
+                    <Acciones>
+                      <Enlace href="/dashboard/settings/anticipos">Configurar anticipos</Enlace>
+                    </Acciones>
+                  </Seccion>
+                )}
+
                 {/* Automatizaciones CRM (admin only) — gated, default OFF */}
                 {isAdminUser && (
                   <Seccion
@@ -1998,6 +2011,22 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <p className="text-sm text-muted-foreground mb-3">{t("settings.client.whatsappDesc")}</p>
               <a href="/dashboard/whatsapp" className="text-sm font-semibold text-brand-600 hover:underline">
                 {t("settings.client.whatsappLink")}
+              </a>
+            </div>
+          )}
+
+          {/* Anticipos por WhatsApp con Mercado Pago (WS1-T5, admin only) */}
+          {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") && (
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-11 h-11 rounded-2xl bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center text-2xl">💳</div>
+                <div>
+                  <h2 className="text-base font-bold">Anticipos por WhatsApp (Mercado Pago)</h2>
+                  <p className="text-sm text-muted-foreground">El bot pide un anticipo al agendar y la cita se confirma sola al acreditarse.</p>
+                </div>
+              </div>
+              <a href="/dashboard/settings/anticipos" className="text-sm font-semibold text-brand-600 hover:underline">
+                Configurar anticipos
               </a>
             </div>
           )}

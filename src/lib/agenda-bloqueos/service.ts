@@ -73,6 +73,7 @@ import {
   puedeRetirar,
   type FilaBloqueo,
 } from "./consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 // Re-exportados para que quien ya los importaba de aquí siga encontrándolos:
 // viven en consulta.server.ts (sin `server-only`) porque el GET de la agenda
@@ -210,6 +211,8 @@ export async function citasEnElRango(
     endsAt: { gt: args.startsAt },
     // Alcance: `null` = todos los doctores de la clínica.
     ...(args.doctorId ? { doctorId: args.doctorId } : {}),
+    // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+    AND: [sinApartadoVencido()],
   };
 
   const [total, filas] = await Promise.all([
