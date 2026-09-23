@@ -26,6 +26,7 @@ import {
   FRECUENCIAS_PAGO, MAX_PAGOS, METODO_MERCADO_PAGO, METODOS_PAGO, MIN_PAGOS, PAGOS_SUGERIDOS,
   type CondicionesPago, type FrecuenciaPago, type ModoPago,
 } from "@/lib/quotes/condiciones-pago";
+import { IconoMercadoPago } from "@/components/dashboard/billing/icono-mercado-pago";
 import { clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import { useT } from "@/i18n/i18n-provider";
 import type { ContactoPaciente, ViaEnvio } from "./datos";
@@ -124,6 +125,7 @@ export function FormaDePagoFactura({
               onClick={() => parchear({ metodo: cond.metodo === METODO_MERCADO_PAGO ? null : METODO_MERCADO_PAGO })}
               data-metodo="mercadopago"
             >
+              <IconoMercadoPago />
               {t("presupuestoNuevo.metodos.mercadopago")}
             </button>
           )}

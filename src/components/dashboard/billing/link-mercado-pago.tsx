@@ -14,6 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useState } from "react";
+import { IconoMercadoPago } from "./icono-mercado-pago";
 import toast from "react-hot-toast";
 import { Copy, ExternalLink, Link2, Loader2 } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -83,7 +84,7 @@ export function BotonMercadoPago({ activo, alElegir, disabled, className, style 
   const t = useT();
   return (
     <button type="button" onClick={alElegir} disabled={disabled} aria-pressed={activo} className={className} style={style} data-metodo="mercadopago">
-      <Link2 size={14} aria-hidden />
+      <IconoMercadoPago />
       {t("facturaMp.metodo")}
     </button>
   );
