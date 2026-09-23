@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard, Link2, MessageCircle, Receipt } from "lucide-react";
+import { CreditCard, Link2, MessageCircle, QrCode, Receipt } from "lucide-react";
 import toast from "react-hot-toast";
 import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
 import {
@@ -25,6 +25,7 @@ import {
 } from "@/components/dashboard/configuracion-rediseno/piezas";
 import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 import type { AnticipoReciente, PantallaAnticipos } from "@/lib/anticipos/pantalla.server";
 import {
   ANTICIPO_MINIMO_MXN,
@@ -37,11 +38,14 @@ import {
 /**
  * Configuración → Anticipos por WhatsApp (WS1-T5).
  *
- * Tres cosas, en este orden, porque cada una depende de la anterior:
+ * En este orden, porque cada una depende de la anterior:
  *   1. La cuenta de Mercado Pago de la clínica (conectar / con qué cuenta / desconectar).
- *   2. El anticipo: apagado hasta que haya cuenta. Sin cuenta NO hay botón que
+ *   2. El pago en línea del PORTAL del paciente (ws1-t2): su propio
+ *      interruptor, aparte del anticipo. Solo existe con cuenta conectada, se
+ *      enciende solo al conectar y se guarda en cuanto se mueve.
+ *   3. El anticipo: apagado hasta que haya cuenta. Sin cuenta NO hay botón que
  *      falle: la sección se ve atenuada y dice por qué.
- *   3. Los últimos anticipos: el rastro para el día que alguien diga «yo pagué».
+ *   4. Los últimos anticipos: el rastro para el día que alguien diga «yo pagué».
  */
 
 const MOTIVOS: Record<string, string> = {
@@ -95,6 +99,7 @@ export function AnticiposClient({
   motivo: string | null;
 }) {
   const confirm = useConfirm();
+  const t = useT();
   const [datos, setDatos] = useState<PantallaAnticipos>(inicial);
   const [activo, setActivo] = useState(inicial.config.activo);
   const [modo, setModo] = useState<ModoAnticipo>(inicial.config.modo);
@@ -103,6 +108,7 @@ export function AnticiposClient({
   const [minutos, setMinutos] = useState(String(inicial.config.minutos));
   const [guardando, setGuardando] = useState(false);
   const [desconectando, setDesconectando] = useState(false);
+  const [guardandoPortal, setGuardandoPortal] = useState(false);
 
   const { plataforma, cuenta, comision } = datos;
   const puedeConectar = datos.tablasListas && plataforma.lista;
@@ -132,6 +138,36 @@ export function AnticiposClient({
       toast.success(activo ? "Listo: el bot pedirá anticipo al agendar." : "Guardado. El bot agenda sin anticipo.");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  /** El interruptor del portal se guarda al moverlo (apagar pide confirmación). */
+  async function cambiarPortal(siguiente: boolean) {
+    if (!siguiente) {
+      const ok = await confirm({
+        title: t("anticiposPortal.confirmarTitulo"),
+        description: t("anticiposPortal.confirmarTexto"),
+        confirmText: t("anticiposPortal.confirmarBoton"),
+        variant: "danger",
+      });
+      if (!ok) return;
+    }
+    setGuardandoPortal(true);
+    try {
+      const res = await fetch("/api/settings/anticipos/portal", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activo: siguiente }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof json.error === "string" ? json.error : t("anticiposPortal.errorGuardar"));
+        return;
+      }
+      setDatos(json as PantallaAnticipos);
+      toast.success(siguiente ? t("anticiposPortal.encendido") : t("anticiposPortal.apagado"));
+    } finally {
+      setGuardandoPortal(false);
     }
   }
 
@@ -169,7 +205,9 @@ export function AnticiposClient({
       />
       <Columna>
         {resultado === "conectada" && (
-          <Aviso tono="exito">Cuenta de Mercado Pago conectada. Ya puedes encender el anticipo.</Aviso>
+          <Aviso tono="exito">
+            Cuenta de Mercado Pago conectada. Ya puedes encender el anticipo. {t("anticiposPortal.conectadaAviso")}
+          </Aviso>
         )}
         {resultado === "cancelado" && <Aviso tono="alerta">No se conectó: la autorización se canceló en Mercado Pago.</Aviso>}
         {resultado === "error" && (
@@ -235,7 +273,31 @@ export function AnticiposClient({
           )}
         </Seccion>
 
-        {/* ── 2. El anticipo ── */}
+        {/* ── 2. El pago en línea del portal (solo con cuenta: sin ella no hay interruptor) ── */}
+        {puedeCobrar && (
+          <Seccion
+            icono={<QrCode size={18} strokeWidth={1.75} aria-hidden />}
+            titulo={t("anticiposPortal.titulo")}
+            subtitulo={t("anticiposPortal.subtitulo")}
+            extra={
+              datos.portal.activo ? (
+                <Insignia tono="exito" punto>{t("anticiposPortal.insigniaEncendido")}</Insignia>
+              ) : (
+                <Insignia>{t("anticiposPortal.insigniaApagado")}</Insignia>
+              )
+            }
+          >
+            <FilaInterruptor
+              titulo={t("anticiposPortal.interruptor")}
+              descripcion={t("anticiposPortal.interruptorAyuda")}
+              activo={datos.portal.activo}
+              onCambiar={cambiarPortal}
+              disabled={guardandoPortal}
+            />
+          </Seccion>
+        )}
+
+        {/* ── 3. El anticipo ── */}
         <Seccion
           icono={<CreditCard size={18} strokeWidth={1.75} aria-hidden />}
           titulo="Anticipo al agendar por WhatsApp"
@@ -333,7 +395,7 @@ export function AnticiposClient({
           </p>
         </Seccion>
 
-        {/* ── 3. El rastro ── */}
+        {/* ── 4. El rastro ── */}
         <Seccion
           icono={<Receipt size={18} strokeWidth={1.75} aria-hidden />}
           titulo="Últimos anticipos"

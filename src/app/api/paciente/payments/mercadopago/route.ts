@@ -22,7 +22,10 @@
 //     solo trae invoiceId y todo lo demás se ignora.
 //   · Solo estados PENDING|PARTIAL|OVERDUE con saldo > 0.
 //   · Cobra la cuenta de Mercado Pago de la clínica DE LA FACTURA; si no tiene,
-//     409 y la pantalla dice «Paga en tu clínica».
+//     o la clínica APAGÓ el pago en línea del portal (Configuración → Anticipos),
+//     409 y la pantalla dice «Paga en tu clínica». El interruptor se vuelve a
+//     mirar DESPUÉS de crear el link: si lo apagaron justo en medio, el link
+//     recién nacido se cierra y no se entrega.
 //   · La URL que se devuelve tiene que ser de Mercado Pago (`esUrlDeMercadoPago`):
 //     de ella sale el QR.
 import { NextRequest, NextResponse } from "next/server";
@@ -31,6 +34,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { PAYABLE_STATUSES, MIN_ONLINE_AMOUNT_MXN } from "@/lib/patient-portal/online-payment";
 import { obtenerLinkDeFactura } from "@/lib/factura-mp/servicio.server";
+import { cerrarLinksDelPortal, cobroMpEnPortal } from "@/lib/patient-portal/pago-mercadopago.server";
 import {
   esUrlDeMercadoPago,
   textoErrorPortal,
@@ -78,6 +82,7 @@ export async function POST(req: NextRequest) {
     if (invoice.balance < MIN_ONLINE_AMOUNT_MXN) return error("bajo_minimo", 400);
 
     // clinicId de la factura ya validada contra la sesión, nunca del cliente.
+    if (!(await cobroMpEnPortal(invoice.clinicId))) return error("sin_mp", 409);
     const r = await obtenerLinkDeFactura({ clinicId: invoice.clinicId, invoiceId: invoice.id, userId: null });
     if (!r.ok || !r.link) {
       switch (r.error) {
@@ -94,6 +99,11 @@ export async function POST(req: NextRequest) {
         default:
           return error("mp_fallo", 502);
       }
+    }
+    if (!(await cobroMpEnPortal(invoice.clinicId))) {
+      // Lo apagaron mientras se creaba: el link del portal no sobrevive.
+      await cerrarLinksDelPortal({ clinicId: invoice.clinicId, invoiceId: invoice.id });
+      return error("sin_mp", 409);
     }
     if (!esUrlDeMercadoPago(r.link.url)) {
       console.error(`[paciente/payments/mercadopago] Mercado Pago devolvió una URL inesperada para la factura ${invoice.id}`);

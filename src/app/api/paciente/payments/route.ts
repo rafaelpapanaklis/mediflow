@@ -11,11 +11,13 @@
 // · onlinePaymentMethod por clínica (ws1-t2): "mercadopago" si la clínica
 //   cobra facturas con Mercado Pago (el criterio de factura-mp), si no
 //   "stripe" si tiene Stripe Connect, si no null («Paga en tu clínica»).
+//   Mercado Pago cuenta solo con el interruptor del portal encendido
+//   (Configuración → Anticipos); apagado, esa clínica cae a Stripe o a null.
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { getClinicConnectAccounts } from "@/lib/patient-portal/online-payment";
-import { cobroMpDisponible } from "@/lib/factura-mp/servicio.server";
+import { cobroMpEnPortal } from "@/lib/patient-portal/pago-mercadopago.server";
 import { metodoDePagoEnLinea } from "@/lib/patient-portal/pago-mercadopago";
 import type {
   PacienteClinica,
@@ -104,7 +106,7 @@ export async function GET() {
     const conMercadoPago = new Set<string>();
     for (const clinicId of clinicIds) {
       try {
-        if (await cobroMpDisponible(clinicId)) conMercadoPago.add(clinicId);
+        if (await cobroMpEnPortal(clinicId)) conMercadoPago.add(clinicId);
       } catch (err) {
         console.error(`[paciente/payments] no se pudo saber si ${clinicId} cobra con Mercado Pago:`, err);
       }

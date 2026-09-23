@@ -10049,5 +10049,20 @@
       "sin_mp": "This clinic doesn't accept online payments yet. Please pay at your clinic.",
       "mp_fallo": "Mercado Pago didn't respond. Please try again in a few minutes."
     }
+  },
+  "anticiposPortal": {
+    "titulo": "Online payment in the patient portal",
+    "subtitulo": "Your patients pay their invoice balance from their portal with a Mercado Pago button and QR code. The payment is recorded on the invoice automatically.",
+    "interruptor": "Offer Mercado Pago payment in the portal",
+    "interruptorAyuda": "Turns on automatically when you connect the account. When off, the portal says \"Pay at your clinic\" and links opened from the portal stop accepting payments. Links you send by WhatsApp or email don't change.",
+    "insigniaEncendido": "On",
+    "insigniaApagado": "Off",
+    "confirmarTitulo": "Turn off online payment in the portal?",
+    "confirmarTexto": "Your patients will see \"Pay at your clinic\" on their invoices, and the payment links they opened from the portal are closed in Mercado Pago. You can turn it back on anytime.",
+    "confirmarBoton": "Turn off",
+    "encendido": "Done: your patients can pay their invoices from the portal.",
+    "apagado": "Turned off. The portal says \"Pay at your clinic\".",
+    "errorGuardar": "Couldn't save. Please try again.",
+    "conectadaAviso": "Online payment in the patient portal is on."
   }
 }

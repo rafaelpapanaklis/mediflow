@@ -38,6 +38,17 @@ let sesion: PatientPortalContext | null = null;
 let cuentasMp = new Map<string, { accessToken: string; mpUserId: string }>();
 let stripeListo = false;
 let usuariosStripe: Array<{ clinicId: string; role: string; createdAt: Date; stripeAccountId: string; isActive: boolean }> = [];
+/** Preferencias que se cerraron en Mercado Pago. */
+let expiradas: string[] = [];
+/** Se llama al crear una preferencia (para meter un «a la vez»). */
+let alCrearPreferencia: (() => void) | null = null;
+/** El código llegó antes que el SQL del interruptor (la columna no existe). */
+let sinColumnaPortal = false;
+/** La sesión del PANEL (Configuración → Anticipos). */
+let sesionPanel: { userId: string; clinicId: string; role: string; permissionsOverride: string[] } | null = null;
+let auditorias: any[] = [];
+/** Carga la cuenta.server REAL en vez del doble (para probar guardarConexion). */
+let cuentaReal = false;
 /** Expedientes borrados (Patient.deletedAt). */
 let borrados = new Set<string>();
 /** Vínculos cuenta ↔ expediente que ve GET /api/paciente/payments. */
@@ -89,6 +100,21 @@ const prismaDoble = new Proxy(
           },
         };
       }
+      if (k === "clinicMercadoPago" && sinColumnaPortal) {
+        const real = db.db().clinicMercadoPago;
+        return {
+          ...real,
+          findFirst: async (args: any) => {
+            if (args?.select?.portalPaymentsEnabled || "portalPaymentsEnabled" in (args?.where ?? {})) {
+              const e: any = new Error('The column `clinic_mercadopago.portalPaymentsEnabled` does not exist');
+              e.code = "P2022";
+              throw e;
+            }
+            return real.findFirst(args);
+          },
+        };
+      }
+      if (k === "appointmentDeposit") return { findMany: async () => [] };
       if (k === "user") {
         return {
           findMany: async (args: any) =>
@@ -110,12 +136,15 @@ const dobles = new Map<string, unknown>([
       getPayment: async (_token: string, id: string) => pagosMp.get(id) ?? null,
       createPreference: async (token: string, opts: { externalReference: string }) => {
         preferencias.push({ token, opts });
+        alCrearPreferencia?.();
         return {
           id: `pref-${opts.externalReference}`,
           initPoint: (urlQueDevuelveMp ?? urlMp)(opts.externalReference),
         };
       },
-      expirePreference: async () => {},
+      expirePreference: async (_token: string, id: string) => {
+        expiradas.push(id);
+      },
     },
   ],
   [
@@ -124,7 +153,16 @@ const dobles = new Map<string, unknown>([
       credencialDeCobro: async (clinicId: string) => cuentasMp.get(clinicId) ?? null,
       plataformaAnticipos: () => ({ lista: true, falta: [] }),
       urlBaseApp: () => "https://app.dalecontrol.test",
+      enmascarar: (id: string | null) => (id ? `••••${id.slice(-3)}` : null),
     },
+  ],
+  [
+    path.join(RAIZ, "src/lib/auth-context.ts"),
+    { getAuthContext: async () => sesionPanel },
+  ],
+  [
+    path.join(RAIZ, "src/lib/audit.ts"),
+    { logAudit: async (a: unknown) => { auditorias.push(a); }, extractAuditMeta: () => ({}) },
   ],
   [
     path.join(RAIZ, "src/lib/patient-portal/guard.ts"),
@@ -148,6 +186,9 @@ M._load = function (req, parent, isMain) {
   if (req === "server-only" || req === "client-only") return {};
   let resuelto: string | null = null;
   try { resuelto = M._resolveFilename(req, parent, isMain); } catch { resuelto = null; }
+  if (cuentaReal && resuelto === path.join(RAIZ, "src/lib/anticipos/cuenta.server.ts")) {
+    return cargaOriginal.call(this, req, parent, isMain);
+  }
   if (resuelto && dobles.has(resuelto)) return dobles.get(resuelto);
   return cargaOriginal.call(this, req, parent, isMain);
 };
@@ -162,6 +203,8 @@ let webhook: typeof import("@/app/api/webhooks/mercadopago/route").POST;
 let servicio: typeof import("@/lib/factura-mp/servicio.server");
 let pantalla: typeof import("@/components/paciente/pago-mercadopago");
 let reglas: typeof import("@/lib/patient-portal/pago-mercadopago");
+let interruptor: typeof import("@/app/api/settings/anticipos/portal/route").PUT;
+let portalServer: typeof import("@/lib/patient-portal/pago-mercadopago.server");
 
 before(async () => {
   ({ NextRequest } = await import("next/server"));
@@ -171,6 +214,8 @@ before(async () => {
   servicio = await import("@/lib/factura-mp/servicio.server");
   pantalla = await import("@/components/paciente/pago-mercadopago");
   reglas = await import("@/lib/patient-portal/pago-mercadopago");
+  ({ PUT: interruptor } = await import("@/app/api/settings/anticipos/portal/route"));
+  portalServer = await import("@/lib/patient-portal/pago-mercadopago.server");
 });
 
 function factura(id: string, clinicId: string, patientId: string, extra: Record<string, unknown> = {}) {
@@ -186,7 +231,12 @@ beforeEach(() => {
   db = new DobleBase();
   (db.tablas as any).user = [];
   db.tablas.clinic.push({ id: "c1", name: "Clínica Sonrisa" }, { id: "c2", name: "Otra Clínica" });
-  db.tablas.clinicMercadoPago.push({ clinicId: "c1", mpUserId: "999", accessToken: "v1:cifrado" });
+  // Una cuenta conectada ANTES del interruptor: la fila no trae la columna (la
+  // llena el DEFAULT true del SQL; el caso «sin columna» va aparte).
+  db.tablas.clinicMercadoPago.push({
+    clinicId: "c1", mpUserId: "999", accessToken: "v1:cifrado",
+    tokenExpiresAt: new Date("2026-12-01T00:00:00Z"), disconnectedAt: null,
+  });
   // Ana (p1, c1) — la dueña de la sesión. Beto (p2, c1) — otro paciente de la
   // MISMA clínica. p9 en c2 — otra clínica, sin Mercado Pago.
   db.tablas.invoice.push(
@@ -199,6 +249,12 @@ beforeEach(() => {
   );
   pagosMp.clear();
   preferencias = [];
+  expiradas = [];
+  alCrearPreferencia = null;
+  sinColumnaPortal = false;
+  auditorias = [];
+  cuentaReal = false;
+  sesionPanel = { userId: "u-admin", clinicId: "c1", role: "ADMIN", permissionsOverride: [] };
   urlQueDevuelveMp = null;
   cuentasMp = new Map([["c1", { accessToken: "tok-c1", mpUserId: "999" }]]);
   stripeListo = false;
@@ -537,4 +593,191 @@ test("los textos del portal: el respaldo en español es EXACTAMENTE es.json, y e
     assert.notEqual(valor, enEs, `«${k}» sin traducir`);
     assert.deepEqual(valor.match(/\{\w+\}/g), enEs.match(/\{\w+\}/g), `«${k}»: mismas variables`);
   }
+});
+
+// ── 7. El interruptor del pago en línea del portal ─────────────────────────
+
+function mover(activo: unknown) {
+  return interruptor(
+    new NextRequest("https://app.dalecontrol.test/api/settings/anticipos/portal", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ activo }),
+    }),
+  );
+}
+
+test("encendido de FÁBRICA: la cuenta que ya estaba conectada (sin tocar nada) cobra en el portal", async () => {
+  assert.equal("portalPaymentsEnabled" in db.tablas.clinicMercadoPago[0], false);
+  assert.equal(await portalServer.cobroMpEnPortal("c1"), true);
+  const lista = await (await listaDePagos()).json();
+  assert.equal(lista.clinics[0].onlinePaymentMethod, "mercadopago");
+  assert.equal((await pedirLink(pedido({ invoiceId: "f1" }))).status, 200);
+  // Y la pantalla de Configuración lo pinta encendido.
+  const pantalla = await (await mover(true)).json();
+  assert.equal(pantalla.portal.activo, true);
+});
+
+test("el código antes que el SQL (la columna todavía no existe) → sigue ENCENDIDO, nadie pierde el cobro", async () => {
+  sinColumnaPortal = true;
+  assert.equal(await portalServer.cobroMpEnPortal("c1"), true);
+  assert.equal((await (await listaDePagos()).json()).clinics[0].onlinePaymentMethod, "mercadopago");
+  assert.equal((await pedirLink(pedido({ invoiceId: "f1" }))).status, 200);
+});
+
+test("conectar la cuenta ENCIENDE el pago del portal, también al reconectar después de haberlo apagado", async () => {
+  process.env.DATA_ENCRYPTION_KEY = "a".repeat(64);
+  cuentaReal = true;
+  try {
+    const cuenta = await import("@/lib/anticipos/cuenta.server");
+    assert.equal(typeof cuenta.guardarConexion, "function", "es la cuenta.server REAL");
+    const escritas: any[] = [];
+    const dbFalsa: any = { clinicMercadoPago: { upsert: async (a: any) => { escritas.push(a); } } };
+    await cuenta.guardarConexion(
+      {
+        clinicId: "c1",
+        userId: "u-admin",
+        tokens: { accessToken: "tok", refreshToken: "ref", expiresIn: 3600, userId: "999", liveMode: true } as any,
+        cuenta: null,
+      },
+      dbFalsa,
+    );
+    assert.equal(escritas[0].where.clinicId, "c1");
+    assert.equal(escritas[0].create.portalPaymentsEnabled, true);
+    assert.equal(escritas[0].update.portalPaymentsEnabled, true);
+  } finally {
+    cuentaReal = false;
+  }
+});
+
+test("APAGARLO → el portal dice «Paga en tu clínica» y la ruta RECHAZA el link (409), sin tocar Mercado Pago", async () => {
+  const res = await mover(false);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).portal.activo, false);
+  assert.equal(db.tablas.clinicMercadoPago[0].portalPaymentsEnabled, false);
+
+  const lista = await (await listaDePagos()).json();
+  assert.equal(lista.clinics[0].onlinePaymentMethod, null);
+  assert.equal(lista.clinics[0].onlinePaymentEnabled, false);
+
+  const r = await pedirLink(pedido({ invoiceId: "f1" }));
+  assert.equal(r.status, 409);
+  assert.equal((await r.json()).code, "sin_mp");
+  assert.equal(preferencias.length, 0);
+  assert.equal(db.tablas.invoicePaymentLink.length, 0);
+
+  // Se deja rastro de quién lo apagó.
+  assert.equal(auditorias.length, 1);
+  assert.deepEqual(auditorias[0].changes.pagoEnLineaPortal, { before: true, after: false });
+  assert.equal(auditorias[0].userId, "u-admin");
+
+  // Y encenderlo lo devuelve.
+  assert.equal((await (await mover(true)).json()).portal.activo, true);
+  assert.equal((await pedirLink(pedido({ invoiceId: "f1" }))).status, 200);
+});
+
+test("apagarlo CIERRA el link que el paciente abrió en el portal; el que mandó la recepción no se toca", async () => {
+  // Beto (p2) también tiene cuenta: su link sale del portal. El de Ana lo mandó la recepción.
+  const delPortal = await (async () => {
+    sesion = { account: { id: "acc-beto", name: "Beto", email: "b@test.mx", phone: null }, links: [{ patientId: "p2", clinicId: "c1" }] };
+    const r = await (await pedirLink(pedido({ invoiceId: "f2" }))).json();
+    return db.tablas.invoicePaymentLink.find((l) => l.checkoutUrl === r.url)!;
+  })();
+  const recepcion = await servicio.obtenerLinkDeFactura({ clinicId: "c1", invoiceId: "f1", userId: "u-recepcion" });
+  const deRecepcion = db.tablas.invoicePaymentLink.find((l) => l.checkoutUrl === recepcion.link!.url)!;
+
+  await mover(false);
+  assert.equal(delPortal.status, "REPLACED", "el link viejo del portal ya no acepta pagos");
+  assert.deepEqual(expiradas, [delPortal.mpPreferenceId], "y se cerró en Mercado Pago");
+  assert.equal(deRecepcion.status, "PENDING", "el WhatsApp de la recepción sigue valiendo");
+  assert.deepEqual(auditorias[0].changes.linksDelPortalCerrados, { before: 1, after: 0 });
+
+  // Si aun así entra un pago por el link cerrado (MP no lo cerró a tiempo), el
+  // dinero NO se pierde: el webhook de siempre lo registra.
+  pagosMp.set("7100", aprobado("7100", delPortal.id));
+  assert.equal((await webhook(notificacion(`factura:${delPortal.id}`, "7100"))).status, 200);
+  assert.equal(db.tablas.payment.length, 1);
+});
+
+test("lo apagan JUSTO mientras el paciente pide el link → el link recién creado se cierra y no se entrega", async () => {
+  alCrearPreferencia = () => {
+    db.tablas.clinicMercadoPago[0].portalPaymentsEnabled = false;
+  };
+  const r = await pedirLink(pedido({ invoiceId: "f1" }));
+  assert.equal(r.status, 409);
+  const cuerpo = await r.json();
+  assert.equal(cuerpo.url, undefined);
+  assert.equal(db.tablas.invoicePaymentLink[0].status, "REPLACED");
+  assert.deepEqual(expiradas, [db.tablas.invoicePaymentLink[0].mpPreferenceId]);
+});
+
+test("quién lo mueve: settings.edit. Recepción o doctor → 403 y no cambia nada", async () => {
+  for (const role of ["RECEPTIONIST", "DOCTOR"]) {
+    sesionPanel = { userId: "u-x", clinicId: "c1", role, permissionsOverride: [] };
+    const res = await mover(false);
+    assert.equal(res.status, 403, role);
+  }
+  // Ver la configuración no basta: hace falta EDITARLA.
+  sesionPanel = { userId: "u-x", clinicId: "c1", role: "ADMIN", permissionsOverride: ["settings.view", "billing.view", "billing.charge"] };
+  assert.equal((await mover(false)).status, 403, "settings.view sin settings.edit");
+  assert.equal(db.tablas.clinicMercadoPago[0].portalPaymentsEnabled, undefined, "la fila ni se tocó");
+  sesionPanel = { userId: "u-x", clinicId: "c1", role: "RECEPTIONIST", permissionsOverride: ["settings.edit"] };
+  assert.equal((await mover(true)).status, 200, "control: con settings.edit sí");
+  sesionPanel = null;
+  assert.equal((await mover(false)).status, 401);
+  sesionPanel = { userId: "u-admin", clinicId: "c1", role: "ADMIN", permissionsOverride: [] };
+  for (const activo of ["false", 0, null, undefined]) {
+    assert.equal((await mover(activo)).status, 400, String(activo));
+  }
+  assert.equal(auditorias.length, 0);
+});
+
+test("clínica SIN cuenta: ni interruptor (409 al moverlo) ni opción de pago en el portal", async () => {
+  db.tablas.clinicMercadoPago = [];
+  cuentasMp = new Map();
+  const res = await mover(true);
+  assert.equal(res.status, 409);
+  assert.equal((await (await listaDePagos()).json()).clinics[0].onlinePaymentMethod, null);
+  assert.equal((await pedirLink(pedido({ invoiceId: "f1" }))).status, 409);
+
+  // Cuenta DESCONECTADA (fila con tokens borrados, interruptor en true): tampoco.
+  db.tablas.clinicMercadoPago = [{
+    clinicId: "c1", mpUserId: "999", accessToken: null, tokenExpiresAt: null,
+    disconnectedAt: new Date("2026-09-01T00:00:00Z"), portalPaymentsEnabled: true,
+  }];
+  assert.equal((await mover(true)).status, 409);
+  assert.equal(await portalServer.cobroMpEnPortal("c1"), false);
+});
+
+test("aislamiento: c1 lo apaga y c2 sigue cobrando; los links del portal de c2 no se tocan", async () => {
+  db.tablas.clinicMercadoPago.push({
+    clinicId: "c2", mpUserId: "777", accessToken: "v1:cifrado",
+    tokenExpiresAt: new Date("2026-12-01T00:00:00Z"), disconnectedAt: null,
+  });
+  cuentasMp.set("c2", { accessToken: "tok-c2", mpUserId: "777" });
+  const deC2 = await servicio.obtenerLinkDeFactura({ clinicId: "c2", invoiceId: "f3", userId: null });
+  assert.ok(deC2.link);
+
+  await mover(false);
+  assert.equal(await portalServer.cobroMpEnPortal("c1"), false);
+  assert.equal(await portalServer.cobroMpEnPortal("c2"), true);
+  assert.equal(db.tablas.clinicMercadoPago.find((c) => c.clinicId === "c2")!.portalPaymentsEnabled, undefined);
+  assert.equal(db.tablas.invoicePaymentLink.find((l) => l.clinicId === "c2")!.status, "PENDING");
+  assert.deepEqual(expiradas, []);
+});
+
+test("los textos del interruptor: es y en con las mismas llaves, traducidas", async () => {
+  const es = (await import("@/i18n/dictionaries/es.json")).default as any;
+  const en = (await import("@/i18n/dictionaries/en.json")).default as any;
+  assert.deepEqual(Object.keys(en.anticiposPortal).sort(), Object.keys(es.anticiposPortal).sort());
+  for (const k of Object.keys(es.anticiposPortal)) {
+    assert.ok(es.anticiposPortal[k] && en.anticiposPortal[k], k);
+    assert.notEqual(en.anticiposPortal[k], es.anticiposPortal[k], `«${k}» sin traducir`);
+  }
+  // Toda llave que usa la pantalla existe.
+  const fs = await import("node:fs");
+  const pantalla = fs.readFileSync(path.join(RAIZ, "src/app/dashboard/settings/anticipos/anticipos-client.tsx"), "utf8");
+  const usadas = Array.from(pantalla.matchAll(/t\("anticiposPortal\.(\w+)"\)/g)).map((m) => m[1]);
+  assert.ok(usadas.length >= 10);
+  for (const k of usadas) assert.ok(k in es.anticiposPortal, k);
 });
