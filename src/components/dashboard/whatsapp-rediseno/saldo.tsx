@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Wallet, CreditCard, Building2, Upload, X } from "lucide-react";
 import type { WalletData } from "@/app/dashboard/whatsapp/bot/saldo/saldo-client";
+import { useT } from "@/i18n/i18n-provider";
 import { aiBillingFeatureLabel } from "@/lib/ai-billing/types";
 import { fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { RaizWhatsApp } from "./raiz";
@@ -11,9 +12,11 @@ import s from "./whatsapp-rediseno.module.css";
 /**
  * Todo lo que la vista necesita, tal cual lo tiene `SaldoClient`: el estado,
  * los manejadores (recarga, SPEI, recarga automática) y los TEXTOS que ya
- * vivían allí (por qué un $0.00 es correcto, qué significa «pausado», los
- * montos preestablecidos, el ancla de la tarjeta de recarga). Se pasan por
- * aquí en vez de copiarlos para que las dos pantallas digan lo mismo siempre.
+ * vivían allí (qué significa «pausado», los montos preestablecidos, el ancla
+ * de la tarjeta de recarga). Se pasan por aquí en vez de copiarlos para que
+ * las dos pantallas digan lo mismo siempre. Lo traducido —qué se paga con el
+ * saldo y el bloque «Recargas de saldo»— sale de i18n (`monederoIa.*`), con
+ * las mismas claves en las dos pantallas.
  */
 export type SaldoVM = {
   data: WalletData | null;
@@ -44,17 +47,19 @@ export type SaldoVM = {
   textos: {
     presetAmountsCents: readonly number[];
     rechargeAnchor: string;
-    spendScopeNote: string;
     idleConsequenceNote: string;
     idleTitle: (status: WalletData["status"]) => string;
-    txTypeLabel: (type: WalletData["transactions"][number]["type"]) => string;
-    txSourceLabel: (source: WalletData["transactions"][number]["source"]) => string;
+    /** Clave i18n del tipo de recarga (recarga, abono, devolución, SPEI en revisión). */
+    recargaTipoClave: (tipo: WalletData["recargas"][number]["tipo"]) => string;
+    /** Clave i18n de por dónde entró el dinero; null si no aplica. */
+    recargaViaClave: (via: WalletData["recargas"][number]["via"]) => string | null;
   };
 };
 
 const VOLVER = "/dashboard/whatsapp/bot";
 
 export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
+  const t = useT();
   const {
     data, loading, loadError, amountCents, setAmountCents, customPesos, setCustomPesos, payBusy,
     startCheckout, speiOpen, setSpeiOpen, speiPesos, setSpeiPesos, setSpeiFile, speiBusy, openSpei,
@@ -146,14 +151,26 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
           {walletIdle ? (
             <Nota titulo={textos.idleTitle(data.status)} className={s.arribaMas}>
               <p className={s.notaCuerpo}>{textos.idleConsequenceNote} Mientras tanto no se te cobra nada.</p>
-              {/* La tarjeta «Consumo de IA» explica lo mismo, pero queda más
-                  abajo: quien mira el $0.00 lo tiene aquí arriba. */}
-              <p className={`${s.notaCuerpo} ${s.textoSuaveMedio}`}>{textos.spendScopeNote}</p>
               {ctaRecarga}
             </Nota>
           ) : showLowWarning ? (
             <p className={`${s.parrafo} ${s.arribaMas}`}>Saldo bajo — recarga para que tu bot siga respondiendo.</p>
           ) : null}
+
+          {/* ── Qué se paga con este saldo: siempre visible, antes de recargar ── */}
+          <Nota titulo={t("monederoIa.queGasta.titulo")} className={s.arribaMas}>
+            <div className={s.apilado} style={{ gap: 4 }}>
+              <p className={s.parrafo}>
+                <strong>{t("monederoIa.queGasta.siEtiqueta")}</strong> {t("monederoIa.queGasta.si")}
+              </p>
+              <p className={s.parrafo}>
+                <strong>{t("monederoIa.queGasta.noEtiqueta")}</strong> {t("monederoIa.queGasta.no")}
+              </p>
+              <p className={s.parrafo}>
+                <strong>{t("monederoIa.queGasta.metaEtiqueta")}</strong> {t("monederoIa.queGasta.meta")}
+              </p>
+            </div>
+          </Nota>
         </Tarjeta>
 
         {/* Dos columnas en iMac: recargas a la izquierda, historiales a la
@@ -292,9 +309,6 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
                   <div className={`${s.textoSuaveMedio}`} style={{ marginTop: 4 }}>
                     gastado en IA hasta hoy
                   </div>
-                  <p className={s.parrafo} style={{ maxWidth: 520, margin: "12px auto 0" }}>
-                    {textos.spendScopeNote}
-                  </p>
                   {walletIdle && (
                     <p className={s.parrafo} style={{ maxWidth: 520, margin: "8px auto 0" }}>
                       {`${textos.idleTitle(data.status)}. ${textos.idleConsequenceNote}`}
@@ -327,37 +341,60 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
               )}
             </Tarjeta>
 
-            {/* ── Historial de movimientos ── */}
-            <Tarjeta titulo="Recargas y movimientos" sub="Tus recargas, consumos y ajustes de saldo." tabla>
-              {data.transactions.length === 0 ? (
+            {/* ── Recargas de saldo: SOLO el dinero que entra (lo que se gasta ya
+                está en «Consumo de IA», justo arriba) ── */}
+            <Tarjeta titulo={t("monederoIa.recargas.titulo")} sub={t("monederoIa.recargas.sub")} tabla>
+              {data.recargas.length === 0 ? (
                 <div className={s.vacioCentrado}>
-                  <p className={s.vacio}>Aún no hay movimientos.</p>
+                  <p className={s.vacio}>{t("monederoIa.recargas.vacio")}</p>
                 </div>
               ) : (
                 <div className={s.tablaEnvoltura}>
                   <table className={s.tabla}>
                     <thead>
                       <tr>
-                        <th>Fecha</th>
-                        <th>Tipo</th>
-                        <th>Origen</th>
-                        <th className={s.numero}>Monto</th>
-                        <th className={s.numero}>Saldo</th>
+                        <th>{t("monederoIa.recargas.colFecha")}</th>
+                        <th>{t("monederoIa.recargas.colTipo")}</th>
+                        <th>{t("monederoIa.recargas.colVia")}</th>
+                        <th className={s.numero}>{t("monederoIa.recargas.colMonto")}</th>
+                        <th className={s.numero}>{t("monederoIa.recargas.colSaldo")}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.transactions.map((tx) => {
-                        const positive = tx.amountCents >= 0;
+                      {data.recargas.map((r) => {
+                        const via = textos.recargaViaClave(r.via);
+                        // Una devolución es dinero que SALE; una SPEI en revisión
+                        // todavía no entró: ni verde ni «+» hasta que se acredite.
+                        const sale = r.amountCents < 0;
+                        const claseMonto = r.enRevision ? s.textoSuaveMedio : sale ? s.negativo : s.positivo;
                         return (
-                          <tr key={tx.id}>
-                            <td>{formatRelativeDate(tx.createdAt)}</td>
-                            <td>{textos.txTypeLabel(tx.type)}</td>
-                            <td>{textos.txSourceLabel(tx.source)}</td>
-                            <td className={`${s.numero} ${positive ? s.positivo : s.negativo}`}>
-                              {positive ? "+" : ""}
-                              {fmtMXNdec(tx.amountCents / 100)}
+                          <tr key={r.id}>
+                            <td>{formatRelativeDate(r.createdAt)}</td>
+                            <td>
+                              <div className={s.chips}>
+                                {t(textos.recargaTipoClave(r.tipo))}
+                                {r.enRevision && (
+                                  <Etiqueta tono="warning" punto>
+                                    {t("monederoIa.recargas.enRevision")}
+                                  </Etiqueta>
+                                )}
+                              </div>
+                              {r.enRevision && (
+                                <div className={s.textoSuaveMedio} style={{ marginTop: 2 }}>
+                                  {t("monederoIa.recargas.enRevisionNota")}
+                                </div>
+                              )}
                             </td>
-                            <td className={s.numero}>{fmtMXNdec(tx.balanceAfterCents / 100)}</td>
+                            <td>{via ? t(via) : ""}</td>
+                            <td className={`${s.numero} ${claseMonto}`}>
+                              {r.enRevision || sale ? "" : "+"}
+                              {fmtMXNdec(r.amountCents / 100)}
+                            </td>
+                            <td className={s.numero}>
+                              {r.balanceAfterCents == null
+                                ? t("monederoIa.recargas.sinSaldo")
+                                : fmtMXNdec(r.balanceAfterCents / 100)}
+                            </td>
                           </tr>
                         );
                       })}
