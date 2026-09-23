@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { persistentRateLimit } from "@/lib/failban";
-import { canSpend, chargeUsage } from "@/lib/ai-billing/wallet";
+import { chargeUsage, estimarCostoCents, liberarReserva, reservarSaldo, type ReservaSaldo } from "@/lib/ai-billing/wallet";
+import { tokensPorTexto, type LlamadaEstimada } from "@/lib/ai-billing/reserva-core";
 import { isAiHistoryStorageMissing } from "@/lib/ai-assistant/conversations";
 import { ejecutarSabina } from "@/lib/sabina/engine";
 import { AI_FEATURE_SABINA, SABINA_TOOLS } from "@/lib/sabina/engine-catalog";
-import { SABINA_MAX_PREGUNTA_CHARS, construirRastro } from "@/lib/sabina/engine-core";
+import {
+  SABINA_MAX_OUTPUT_TOKENS,
+  SABINA_MAX_PREGUNTA_CHARS,
+  SABINA_MAX_TOOL_ROUNDS,
+  SABINA_MAX_TURNOS_HISTORIAL,
+  construirRastro,
+  modeloPara,
+} from "@/lib/sabina/engine-core";
 import {
   anexarTurnosSabina,
   crearConversacionSabina,
@@ -39,8 +47,32 @@ import { bloqueDeContexto, resolverContextoSabina } from "@/lib/sabina/contexto"
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+/**
+ * Lo que COMO MUCHO cuesta una pregunta: las dos pasadas (la barata y la cara)
+ * agotando todas sus rondas, cada llamada con su techo de salida, ~9 000 tokens
+ * del prefijo leídos de caché, más una escritura de caché por modelo. La entrada
+ * nueva de CADA llamada es lo que de verdad se le manda —el historial que se
+ * reenvía, la pregunta y el contexto, contados a lo prudente— más ~3 000 tokens
+ * de margen para los resultados de herramientas que se van sumando ronda a
+ * ronda. Sin historial es el peor caso que midió la auditoría del 22-sep-2026
+ * (≈ $5.12 MXN con fx 19.5 y fee 8 %); una pregunta normal cuesta una fracción
+ * y la diferencia se suelta en cuanto se cobra lo real.
+ */
+function llamadasPeorPregunta(caracteresQueSeMandan: number): LlamadaEstimada[] {
+  const veces = SABINA_MAX_TOOL_ROUNDS + 1;
+  const entrada = 3_000 + tokensPorTexto(caracteresQueSeMandan);
+  return (["directa", "abierta"] as const).flatMap((dificultad) => {
+    const model = modeloPara(dificultad);
+    return [
+      { model, veces, entrada, cacheLectura: 9_000, salida: SABINA_MAX_OUTPUT_TOKENS },
+      { model, entrada: 0, salida: 0, cacheEscritura: 9_000 },
+    ];
+  });
+}
+
 export async function POST(req: NextRequest) {
   const arranque = Date.now();
+  let reserva: ReservaSaldo | null = null;
 
   try {
     /* ── 1. Quién pregunta ─────────────────────────────────────────── */
@@ -69,21 +101,6 @@ export async function POST(req: NextRequest) {
       windowSec: 300,
     });
     if (rl) return rl;
-
-    /* ── 3. El monedero. Sabina se paga con el saldo de la clínica, como
-          el bot de WhatsApp, y NO con el cupo de IA del plan: descontar de
-          los dos cobraría dos veces el mismo token, y dejaría sin cupo al
-          Asistente IA de una clínica que ya pagó en pesos ──────────────── */
-    if (!(await canSpend(ctx.clinicId))) {
-      return NextResponse.json(
-        {
-          error: "El monedero de IA de la clínica se quedó sin saldo. Recárgalo para seguir usando a Sabina.",
-          sinSaldo: true,
-          isAdmin: ctx.isAdmin,
-        },
-        { status: 402 },
-      );
-    }
 
     /* ── 5. La pregunta ────────────────────────────────────────────── */
     const body = await req.json().catch(() => null);
@@ -153,6 +170,38 @@ export async function POST(req: NextRequest) {
           err: e instanceof Error ? e.message : "desconocido",
         });
       }
+    }
+
+    /* ── 6c. El monedero. Sabina se paga con el saldo de la clínica, como
+          el bot de WhatsApp, y NO con el cupo de IA del plan: descontar de
+          los dos cobraría dos veces el mismo token, y dejaría sin cupo al
+          Asistente IA de una clínica que ya pagó en pesos.
+          Se RESERVA lo que puede costar la pregunta, no basta con tener
+          algo de saldo: con 1 centavo y 20 preguntas a la vez el monedero
+          acababa en ≈ −$102 (H6). Va AQUÍ, justo antes de la primera
+          llamada, porque el costo depende de lo que se manda: una
+          conversación larga reenvía su historial en cada ronda. Lo de antes
+          son lecturas de la base, que no gastan saldo. La reserva se suelta
+          en el `finally`, después de cobrar lo real ─────────────────────── */
+    const caracteresQueSeMandan =
+      pregunta.length +
+      (contexto?.length ?? 0) +
+      (tarjetaPendiente?.length ?? 0) +
+      historial.slice(-SABINA_MAX_TURNOS_HISTORIAL).reduce((n, t) => n + t.content.length, 0);
+    reserva = await reservarSaldo(
+      ctx.clinicId,
+      AI_FEATURE_SABINA,
+      await estimarCostoCents(llamadasPeorPregunta(caracteresQueSeMandan)),
+    );
+    if (!reserva) {
+      return NextResponse.json(
+        {
+          error: "El saldo del monedero de IA de la clínica no alcanza para otra pregunta. Recárgalo para seguir usando a Sabina.",
+          sinSaldo: true,
+          isAdmin: ctx.isAdmin,
+        },
+        { status: 402 },
+      );
     }
 
     /* ── 7. El bucle. El clinicId lo pone AQUÍ el servidor ──────────── */
@@ -305,5 +354,7 @@ export async function POST(req: NextRequest) {
       { error: "Sabina no está disponible en este momento." },
       { status: 503 },
     );
+  } finally {
+    await liberarReserva(reserva);
   }
 }

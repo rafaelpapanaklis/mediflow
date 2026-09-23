@@ -128,6 +128,14 @@ before(async () => {
         estado.alMonedero += 1;
         return true;
       },
+      // La ruta reserva el costo de la pregunta antes de llamar (H6): tocar el
+      // monedero es reservar, así que también cuenta.
+      reservarSaldo: async () => {
+        estado.alMonedero += 1;
+        return { id: "res", clinicId: "c", amountCents: 1 };
+      },
+      liberarReserva: async () => {},
+      estimarCostoCents: async () => 1,
       chargeUsage: async () => {
         estado.alMonedero += 1;
         return { billedCents: 0, balanceAfterCents: 0, eventId: "ev" };

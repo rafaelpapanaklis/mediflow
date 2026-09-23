@@ -2,6 +2,8 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/env";
 import { getPayment } from "@/lib/mercadopago";
+import { cuadrarConLaPasarela } from "@/lib/ai-billing/reversion";
+import { objetivoReversionMp } from "@/lib/ai-billing/reversion-core";
 
 /**
  * Recarga del monedero de IA vía MercadoPago (one-shot, sin auto-recarga).
@@ -35,6 +37,12 @@ export function buildMpTopupRef(topupId: string): string {
  * REINTENTA y el claim atómico evita la doble acreditación. Si el pago no
  * existe o no aplica (determinista: getPayment devuelve null, no aprobado, ref
  * que no coincide), retorna sin acreditar y el webhook responde 200.
+ *
+ * Y en cada aviso, cuadra los reembolsos y contracargos (H3): MP avisa al mismo
+ * notification_url cuando el pago cambia a `refunded`, `charged_back` o
+ * `in_mediation`, o cuando se devuelve una parte. Se descuenta del saldo lo que
+ * esté devuelto o retenido según el pago tal como está HOY, con un movimiento
+ * REFUND; el mismo aviso repetido no descuenta dos veces. Ver `reversion.ts`.
  */
 export async function verifyAndCreditMpTopup(topupId: string, paymentId: string): Promise<void> {
   const token = env.MERCADOPAGO_ACCESS_TOKEN;
@@ -47,29 +55,65 @@ export async function verifyAndCreditMpTopup(topupId: string, paymentId: string)
   }
 
   const pay = await getPayment(token, paymentId);
-  if (!pay || pay.status !== "approved" || pay.externalReference !== buildMpTopupRef(topupId)) {
+  if (!pay || pay.externalReference !== buildMpTopupRef(topupId)) {
     return;
   }
 
-  // Reconciliación de monto/moneda (defensa en profundidad, mismo espíritu que las
-  // ramas B2B del webhook): el pago real debe cubrir los centavos del AiTopup y
-  // venir en MXN. Fallar aquí es DETERMINISTA (pago menor/moneda ajena no cambian
-  // al reintentar): no se acredita, se loguea y el webhook responde 200.
   const topup = await prisma.aiTopup.findUnique({
     where: { id: topupId },
     select: { amountCents: true },
   });
   if (!topup) return;
-  const paidCents =
-    pay.transactionAmount != null ? Math.round(pay.transactionAmount * 100) : null;
-  if (paidCents == null || paidCents < topup.amountCents || pay.currencyId !== "MXN") {
-    console.error(
-      `[ai-topup] pago ${paymentId} NO cubre el topup ${topupId}: pagado=${paidCents ?? "?"} ${pay.currencyId ?? "?"}, esperado>=${topup.amountCents} MXN centavos; no se acredita`,
-    );
-    return;
+
+  if (pay.status === "approved") {
+    // Reconciliación de monto/moneda (defensa en profundidad, mismo espíritu que las
+    // ramas B2B del webhook): el pago real debe cubrir los centavos del AiTopup y
+    // venir en MXN. Fallar aquí es DETERMINISTA (pago menor/moneda ajena no cambian
+    // al reintentar): no se acredita, se loguea y el webhook responde 200.
+    const paidCents =
+      pay.transactionAmount != null ? Math.round(pay.transactionAmount * 100) : null;
+    if (paidCents == null || paidCents < topup.amountCents || pay.currencyId !== "MXN") {
+      console.error(
+        `[ai-topup] pago ${paymentId} NO cubre el topup ${topupId}: pagado=${paidCents ?? "?"} ${pay.currencyId ?? "?"}, esperado>=${topup.amountCents} MXN centavos; no se acredita`,
+      );
+      return;
+    }
+
+    await creditMpTopup(topupId, paymentId);
   }
 
-  await creditMpTopup(topupId, paymentId);
+  // Reembolso / contracargo / reclamación. No hace nada si la recarga nunca se
+  // abonó (no está PAID con este pago) o si el saldo ya cuadra. La primera vuelta
+  // usa el pago que ya se leyó; si mueve el saldo, se vuelve a preguntar a MP
+  // (ver `cuadrarConLaPasarela`: un aviso viejo no puede deshacer uno nuevo).
+  let pagoLeido: typeof pay | null = pay;
+  await cuadrarConLaPasarela({
+    metodo: "MERCADOPAGO",
+    gatewayRef: paymentId,
+    topupId,
+    leerObjetivo: async (recargaCents) => {
+      const actual = pagoLeido ?? (await getPayment(token, paymentId));
+      pagoLeido = null;
+      if (!actual || actual.externalReference !== buildMpTopupRef(topupId)) {
+        throw new Error(`[ai-topup] no se pudo releer el pago ${paymentId} de MP para cuadrar el reembolso`);
+      }
+      const { objetivoCents, motivo } = objetivoReversionMp({
+        recargaCents,
+        status: actual.status,
+        statusDetail: actual.statusDetail,
+        reembolsadoPesos: actual.transactionAmountRefunded,
+      });
+      return {
+        objetivoCents,
+        motivo:
+          motivo === "contracargo"
+            ? "Contracargo de la recarga con Mercado Pago"
+            : motivo === "reclamacion"
+              ? "Reclamación abierta en Mercado Pago sobre la recarga"
+              : "Reembolso de la recarga con Mercado Pago",
+      };
+    },
+  });
 }
 
 /**

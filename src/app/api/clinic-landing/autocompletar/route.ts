@@ -4,7 +4,8 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { chat } from "@/lib/integrations/claude";
-import { canSpend, chargeUsage } from "@/lib/ai-billing/wallet";
+import { canSpend, chargeUsage, estimarCostoCents, liberarReserva, reservarSaldo, type ReservaSaldo } from "@/lib/ai-billing/wallet";
+import { tokensPorTexto } from "@/lib/ai-billing/reserva-core";
 import { getPricingConfig } from "@/lib/ai-billing/pricing";
 import { computeCostUsdMicros, usdMicrosToBilledCents } from "@/lib/ai-billing/pricing-core";
 import { AI_FEATURE_LANDING_COPY } from "@/lib/ai-billing/types";
@@ -142,6 +143,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  let reserva: ReservaSaldo | null = null;
   try {
     const paso = await entrar();
     if (paso instanceof NextResponse) return paso;
@@ -174,6 +176,28 @@ export async function POST(req: NextRequest) {
       .filter(f => pedidos.has(f.id))
       .map(f => ({ id: f.id, nombre: f.name.trim(), categoria: f.category, nota: f.description?.trim() || null }));
     const hechos = construirHechos(datos.clinica, datos.doctores, datos.horarios, servicios);
+
+    // La puerta de verdad (H6): el `canSpend` de arriba solo mira que haya algo
+    // de saldo. Aquí se RESERVA el techo de esta redacción —lo que se manda, a
+    // lo prudente, y toda la salida permitida— con el monedero bloqueado, para
+    // que dos redacciones a la vez no pasen las dos con saldo para una.
+    reserva = await reservarSaldo(
+      clinicId,
+      AI_FEATURE_LANDING_COPY,
+      await estimarCostoCents([
+        {
+          model: MODELO,
+          entrada: tokensPorTexto(INSTRUCCIONES_DE_REDACCION.length + JSON.stringify(hechos).length + 8),
+          salida: MAX_TOKENS_DE_SALIDA,
+        },
+      ]),
+    );
+    if (!reserva) {
+      return NextResponse.json(
+        { error: "El saldo del monedero de IA no alcanza para esta redacción. Recárgalo para redactar con IA.", sinSaldo: true, isAdmin },
+        { status: 402 },
+      );
+    }
 
     const salida = await chat({
       model: MODELO,
@@ -224,5 +248,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[landing-autocompletar] fallo no previsto", err);
     return NextResponse.json({ error: "La redacción con IA no está disponible en este momento." }, { status: 503 });
+  } finally {
+    // Después del cobro: la reserva solo se suelta cuando lo real ya cuenta.
+    await liberarReserva(reserva);
   }
 }

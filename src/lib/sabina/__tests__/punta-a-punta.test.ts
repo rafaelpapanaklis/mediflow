@@ -138,6 +138,10 @@ before(async () => {
   mock.module("@/lib/ai-billing/wallet", {
     namedExports: {
       canSpend: async () => estado.saldo,
+      // La ruta reserva el costo de la pregunta antes de llamar (H6): sin saldo, no hay reserva.
+      reservarSaldo: async () => (estado.saldo ? { id: "res", clinicId: "c", amountCents: 1 } : null),
+      liberarReserva: async () => {},
+      estimarCostoCents: async () => 1,
       chargeUsage: async (input: Record<string, unknown>) => {
         estado.cobros.push(input);
         return { billedCents: 1, balanceAfterCents: 100, eventId: `ev_${estado.cobros.length}` };
