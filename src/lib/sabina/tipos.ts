@@ -93,6 +93,12 @@ export interface SabinaCtx {
   /** Ciudad y estado de la clínica, ya unidos ("Guadalajara, Jalisco"). Vacío si no los capturó. */
   clinicaLugar?: string;
   /**
+   * Idioma del panel de la clínica (`Clinic.locale`, el mismo que usa
+   * `localeFromClinic`). Solo lo mira `ayuda_del_panel`, para nombrar los
+   * botones como los ve quien pregunta. Ausente = "es".
+   */
+  idioma?: "es" | "en";
+  /**
    * Cliente de base. Se omite en producción (se usa el `prisma` del repo); las
    * pruebas inyectan aquí un doble con dos clínicas sembradas para demostrar
    * que ninguna herramienta cruza el tenant. Ver `dbDe` en ./tools/base.
@@ -215,6 +221,17 @@ export interface SabinaDb {
   sabinaUserPermission: {
     findFirst(args: any): Promise<any>;
   };
+  /**
+   * Mercado Pago de la clínica (`estado_mercado_pago`) — solo lectura. Lo lee
+   * `leerPantallaAnticipos` con este mismo cliente (ver `DbPantallaAnticipos`),
+   * que ya viene sin el token.
+   */
+  clinicMercadoPago: {
+    findUnique(args: any): Promise<any>;
+  };
+  appointmentDeposit: {
+    findMany(args: any): Promise<any[]>;
+  };
   $queryRaw(query: any): Promise<any[]>;
 }
 
@@ -317,6 +334,7 @@ export async function crearSabinaCtx(
           name?: string | null;
           city?: string | null;
           state?: string | null;
+          locale?: string | null;
         } | null;
       }
     | null
@@ -348,6 +366,7 @@ export async function crearSabinaCtx(
     clinicaLugar: [textoCorto(auth?.clinic?.city, 60), textoCorto(auth?.clinic?.state, 60)]
       .filter(Boolean)
       .join(", ") || undefined,
+    idioma: auth?.clinic?.locale === "en" ? "en" : "es",
   };
 }
 
