@@ -221,11 +221,14 @@
   gap: 8px;
 }
 
+/* La tarjeta elegible («Un pago», «A plazos», el envío). Rafael la pidió un
+   poco más baja que al principio: sigue mandando sobre los métodos, pero ya no
+   ocupa medio bloque. */
 .opcion {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 11px 12px;
+  gap: 9px;
+  padding: 8px 10px;
   border: 1px solid var(--m2-tarjeta-borde);
   border-radius: 10px;
   background: var(--m2-tarjeta);
@@ -240,7 +243,9 @@
 .opcion:focus-visible { outline: none; box-shadow: var(--m2-foco); }
 .opcion:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.opcionActiva {
+/* También con el ratón encima: `.opcion:hover` pesa más y la destintaba. */
+.opcionActiva,
+.opcionActiva:hover:not(:disabled) {
   border-color: var(--m2-activo);
   background: var(--m2-iniciales-fondo);
 }
@@ -248,44 +253,52 @@
 .opcionIcono {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--m2-hover);
   color: var(--m2-texto-2);
 }
 
 .opcionActiva .opcionIcono { background: var(--m2-activo); color: var(--m2-activo-texto); }
 
-.opcionTitulo { display: block; font-size: 13px; font-weight: 650; }
-.opcionPista { display: block; margin-top: 1px; font-size: 11.5px; color: var(--m2-texto-3); }
+/* Sin esto el texto no encoge y una palabra larga empuja fuera del borde. */
+.opcionTexto { min-width: 0; }
 
-.metodos { display: flex; flex-wrap: wrap; gap: 6px; }
+.opcionTitulo { display: block; font-size: 13px; font-weight: 650; line-height: 1.35; }
+.opcionPista { display: block; margin-top: 1px; font-size: 11px; line-height: 1.35; color: var(--m2-texto-3); }
 
-.metodo {
-  /* inline-flex por el icono de Mercado Pago: los demás métodos son solo texto
-     y se centraban igual, así que esto no los mueve. */
-  display: inline-flex;
+/* La misma tarjeta, en compacto: cada método de «Con qué paga». Más baja y sin
+   pista, el icono centrado con el nombre. */
+.opcionCompacta {
   align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--m2-tarjeta-borde);
-  border-radius: 999px;
-  background: var(--m2-tarjeta);
-  color: var(--m2-texto-2);
-  font-family: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  gap: 8px;
+  padding: 7px 9px;
 }
 
-.metodo:hover { background: var(--m2-hover); color: var(--m2-texto); }
-.metodo:focus-visible { outline: none; box-shadow: var(--m2-foco); }
-.metodoActivo,
-.metodoActivo:hover { border-color: var(--m2-activo); background: var(--m2-activo); color: var(--m2-activo-texto); }
+.opcionCompacta .opcionIcono { width: 22px; height: 22px; border-radius: 6px; }
+.opcionCompacta .opcionTitulo { font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
+
+/* El logotipo de Mercado Pago es una marca a color: sobre el violeta del
+   estado activo se ensucia, así que ahí su hueco se queda claro. */
+.opcionActiva[data-metodo="mercadopago"] .opcionIcono { background: var(--m2-tarjeta); box-shadow: inset 0 0 0 1px var(--m2-activo); }
+
+/* El aviso de Mercado Pago, separado de la rejilla. */
+.metodosCaja > .aviso { margin-top: 8px; }
+
+/* Los métodos, en rejilla y sin consultas de ancho: `max()` pone el tope de
+   columnas (3 con seis métodos: 3 + 3; 4 con Mercado Pago: 4 + 3) y el suelo de
+   132 px, que en un teléfono deja dos columnas a 390 px y una a 375 o menos. */
+.metodos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(132px, calc((100% - 12px) / 3)), 1fr));
+  gap: 6px;
+}
+
+.metodos:has(> :nth-child(7)) {
+  grid-template-columns: repeat(auto-fit, minmax(max(132px, calc((100% - 18px) / 4)), 1fr));
+}
 
 .camposPlan {
   display: grid;

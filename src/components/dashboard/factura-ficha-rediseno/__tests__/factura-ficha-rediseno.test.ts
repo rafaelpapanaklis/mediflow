@@ -19,7 +19,7 @@ import {
   sePuedeEnviarPorCorreo, sePuedeEnviarPorWhatsApp,
 } from "../datos";
 import { buildCorreoFactura, escaparHtml } from "@/lib/invoices/correo-factura";
-import { condicionesPorDefecto, frasePlan, type CondicionesPago } from "@/lib/quotes/condiciones-pago";
+import { condicionesPorDefecto, frasePlan, METODOS_PAGO, type CondicionesPago } from "@/lib/quotes/condiciones-pago";
 
 const SRC = join(__dirname, "..", "..", "..", "..");           // src/
 const CARPETA = join(SRC, "components", "dashboard", "factura-ficha-rediseno");
@@ -114,6 +114,22 @@ test("expediente: BillingTab sigue siendo el camino apagado", () => {
   assert.ok(ficha.includes('{tab === "facturacion" && canViewBilling && !rediseno && ('), "facturación vieja");
   assert.ok(/!rediseno && \(\s*<BillingTab/.test(ficha), "el viejo sigue montando BillingTab");
   assert.ok(!leer("components/dashboard/patient-detail/billing-tab.tsx").includes("factura-ficha-rediseno"), "la pestaña de siempre no conoce las fichas");
+});
+
+test("«Con qué paga»: tarjetitas de `Opcion` con el icono del mapa del cobro, no píldoras", () => {
+  const popup = leer("components/dashboard/factura-ficha-rediseno/forma-de-pago.tsx");
+  assert.match(popup, /import \{ METHODS \} from "@\/components\/dashboard\/billing\/payment-modal";/, "el icono se importa del mapa del cobro");
+  assert.doesNotMatch(popup, /\b(Banknote|ArrowLeftRight|FileCheck2|MoreHorizontal)\b/, "iconos de método copiados a mano");
+  assert.match(popup, /<Opcion\s+key=\{m\}\s+compacta/, "los métodos no salen de la pieza de «Un pago» / «A plazos»");
+  // Del mapa, el icono y nada más: las palabras son las de esta pantalla.
+  assert.match(popup, /titulo=\{t\(`presupuestoNuevo\.metodos\.\$\{m\}`\)\}/);
+  assert.doesNotMatch(popup, /clinical\.paymentModal|labelKey/, "se colaron las claves del cobro");
+  // Mercado Pago: solo con la cuenta conectada (o ya elegido) y solo en un pago.
+  assert.match(popup, /if \(\(mercadoPago \|\| cond\.metodo === METODO_MERCADO_PAGO\) && cond\.modo === "unico"\)/);
+  const mapa = leer("components/dashboard/billing/payment-modal.tsx");
+  for (const m of METODOS_PAGO) {
+    assert.match(mapa, new RegExp(`value: "${m}",[^}]*icon: [A-Z]\\w+`), `«${m}» no tiene icono en METHODS`);
+  }
 });
 
 test("Nueva factura: lo de Presupuestos solo se monta y solo se llama con `rediseno`", () => {

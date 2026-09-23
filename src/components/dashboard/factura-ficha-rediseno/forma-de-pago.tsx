@@ -24,13 +24,18 @@ import { CalendarDays, CreditCard, Mail, MessageCircle, Send } from "lucide-reac
 import {
   calcularCalendario, dinero, fechaEnPalabras, frasePlan,
   FRECUENCIAS_PAGO, MAX_PAGOS, METODO_MERCADO_PAGO, METODOS_PAGO, MIN_PAGOS, PAGOS_SUGERIDOS,
-  type CondicionesPago, type FrecuenciaPago, type ModoPago,
+  type CondicionesPago, type FrecuenciaPago, type MetodoPago, type ModoPago,
 } from "@/lib/quotes/condiciones-pago";
 import { IconoMercadoPago } from "@/components/dashboard/billing/icono-mercado-pago";
+// El icono de cada método sale del mapa del cobro de verdad: uno solo para los
+// dos popups. Las palabras, en cambio, son las de esta pantalla (`presupuestoNuevo.metodos.*`).
+import { METHODS } from "@/components/dashboard/billing/payment-modal";
 import { clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import { useT } from "@/i18n/i18n-provider";
 import type { ContactoPaciente, ViaEnvio } from "./datos";
 import s from "./ficha.module.css";
+
+const ICONO_METODO = new Map(METHODS.map((m) => [m.value as string, m.icon]));
 
 const num = (v: string) => { const n = Number(v); return isFinite(n) ? n : 0; };
 
@@ -65,6 +70,14 @@ export function FormaDePagoFactura({
   const parchear = (cambio: Partial<CondicionesPago>) => onChange(parchearCondiciones(cond, cambio));
   const calendario = useMemo(() => calcularCalendario(total, cond), [total, cond]);
 
+  // Mercado Pago: solo con la cuenta conectada y en un solo pago. Si ya viene
+  // elegido (un duplicado) se enseña igual, para poder quitarlo. Va antes de
+  // «Otro», que es el cajón de sastre y cierra la lista.
+  const metodos: MetodoPago[] = [...METODOS_PAGO];
+  if ((mercadoPago || cond.metodo === METODO_MERCADO_PAGO) && cond.modo === "unico") {
+    metodos.splice(metodos.indexOf("other"), 0, METODO_MERCADO_PAGO);
+  }
+
   function elegirModo(modo: ModoPago) {
     parchear({
       modo,
@@ -85,50 +98,41 @@ export function FormaDePagoFactura({
       <div className={s.opciones}>
         <Opcion
           activa={cond.modo === "unico"}
-          icono={<CreditCard size={15} aria-hidden />}
+          icono={<CreditCard size={14} aria-hidden />}
           titulo={t("presupuestoNuevo.modoUnico")}
           pista={t("presupuestoNuevo.modoUnicoPista")}
           onClick={() => elegirModo("unico")}
         />
         <Opcion
           activa={cond.modo === "plazos"}
-          icono={<CalendarDays size={15} aria-hidden />}
+          icono={<CalendarDays size={14} aria-hidden />}
           titulo={t("presupuestoNuevo.modoPlazos")}
           pista={t("presupuestoNuevo.modoPlazosPista")}
           onClick={() => elegirModo("plazos")}
         />
       </div>
 
-      <div>
+      <div className={s.metodosCaja}>
         <span className={s.rotulo}>
           {cond.modo === "plazos" ? t("presupuestoNuevo.metodoDeLasCuotas") : t("presupuestoNuevo.metodo")}
         </span>
+        {/* Las mismas tarjetas que «Un pago» y «A plazos», en compacto: icono y
+            nombre, sin pista. Pulsar la elegida la quita, como antes. */}
         <div className={s.metodos}>
-          {METODOS_PAGO.map((m) => (
-            <button
-              key={m}
-              type="button"
-              aria-pressed={cond.metodo === m}
-              className={`${s.metodo} ${cond.metodo === m ? s.metodoActivo : ""}`}
-              onClick={() => parchear({ metodo: cond.metodo === m ? null : m })}
-            >
-              {t(`presupuestoNuevo.metodos.${m}`)}
-            </button>
-          ))}
-          {/* Mercado Pago: solo con la cuenta conectada y en un solo pago. Si ya
-              viene elegido (un duplicado) se enseña igual, para poder quitarlo. */}
-          {(mercadoPago || cond.metodo === METODO_MERCADO_PAGO) && cond.modo === "unico" && (
-            <button
-              type="button"
-              aria-pressed={cond.metodo === METODO_MERCADO_PAGO}
-              className={`${s.metodo} ${cond.metodo === METODO_MERCADO_PAGO ? s.metodoActivo : ""}`}
-              onClick={() => parchear({ metodo: cond.metodo === METODO_MERCADO_PAGO ? null : METODO_MERCADO_PAGO })}
-              data-metodo="mercadopago"
-            >
-              <IconoMercadoPago />
-              {t("presupuestoNuevo.metodos.mercadopago")}
-            </button>
-          )}
+          {metodos.map((m) => {
+            const Icono = ICONO_METODO.get(m);
+            return (
+              <Opcion
+                key={m}
+                compacta
+                metodo={m}
+                activa={cond.metodo === m}
+                icono={m === METODO_MERCADO_PAGO ? <IconoMercadoPago size={11} /> : Icono ? <Icono size={14} aria-hidden /> : null}
+                titulo={t(`presupuestoNuevo.metodos.${m}`)}
+                onClick={() => parchear({ metodo: cond.metodo === m ? null : m })}
+              />
+            );
+          })}
         </div>
         {cond.metodo === METODO_MERCADO_PAGO && <p className={s.aviso}>{t("facturaMp.avisoForma")}</p>}
       </div>
@@ -222,13 +226,19 @@ export function FraseDelTrato({ cond, total }: { cond: CondicionesPago; total: n
   return <p className={s.fichaPlan}>{frasePlan(total, cond)}</p>;
 }
 
-function Opcion({ activa, icono, titulo, pista, onClick, disabled = false }: {
+/** Una tarjeta elegible: «Un pago», «A plazos», las del envío y, en compacto,
+ *  cada método de «Con qué paga». Mismo borde, radio, estado activo y hueco del
+ *  icono; la compacta es más baja y va sin pista («Efectivo» no se explica). */
+function Opcion({ activa, icono, titulo, pista, onClick, disabled = false, compacta = false, metodo }: {
   activa: boolean;
   icono: React.ReactNode;
   titulo: string;
-  pista: string;
+  pista?: string;
   onClick: () => void;
   disabled?: boolean;
+  compacta?: boolean;
+  /** Solo en los métodos: `data-metodo`, como el botón de Mercado Pago del cobro. */
+  metodo?: string;
 }) {
   return (
     <button
@@ -236,12 +246,13 @@ function Opcion({ activa, icono, titulo, pista, onClick, disabled = false }: {
       aria-pressed={activa}
       disabled={disabled}
       onClick={onClick}
-      className={`${s.opcion} ${activa ? s.opcionActiva : ""}`}
+      data-metodo={metodo}
+      className={`${s.opcion} ${compacta ? s.opcionCompacta : ""} ${activa ? s.opcionActiva : ""}`}
     >
       <span className={s.opcionIcono}>{icono}</span>
-      <span>
+      <span className={s.opcionTexto}>
         <span className={s.opcionTitulo}>{titulo}</span>
-        <span className={s.opcionPista}>{pista}</span>
+        {pista && <span className={s.opcionPista}>{pista}</span>}
       </span>
     </button>
   );
@@ -272,7 +283,7 @@ export function EnvioFactura({
       <div className={s.opciones}>
         <Opcion
           activa={envio === null}
-          icono={<Send size={15} aria-hidden />}
+          icono={<Send size={14} aria-hidden />}
           titulo={t("facturaFicha.envioNo")}
           pista={t("facturaFicha.envioNoPista")}
           onClick={() => onChange(null)}
@@ -280,7 +291,7 @@ export function EnvioFactura({
         <Opcion
           activa={envio === "correo"}
           disabled={sinCorreo}
-          icono={<Mail size={15} aria-hidden />}
+          icono={<Mail size={14} aria-hidden />}
           titulo={t("facturaFicha.envioCorreo")}
           pista={t("facturaFicha.envioCorreoPista")}
           onClick={() => onChange("correo")}
@@ -288,7 +299,7 @@ export function EnvioFactura({
         <Opcion
           activa={envio === "whatsapp"}
           disabled={sinTelefono}
-          icono={<MessageCircle size={15} aria-hidden />}
+          icono={<MessageCircle size={14} aria-hidden />}
           titulo={t("facturaFicha.envioWhatsApp")}
           pista={t("facturaFicha.envioWhatsAppPista")}
           onClick={() => onChange("whatsapp")}
