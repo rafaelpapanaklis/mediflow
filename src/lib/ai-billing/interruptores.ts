@@ -197,6 +197,6 @@ export const GASTO_IA_TEXTO: Record<GastoIa, string> = {
 /** Encabezado de cada grupo de la pantalla. */
 export const GASTO_IA_GRUPO: Record<GastoIa, string> = {
   saldo: "Gastan tu Saldo de IA",
-  cupo: "Gastan el cupo de IA de tu plan",
+  cupo: "Gastan los Tokens de IA de tu plan",
   ninguno: "No gastan ni saldo ni cupo",
 };

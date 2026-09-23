@@ -298,9 +298,7 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
     const compacto = !!opts.compacto;
     const texto = etiqueta(item.id);
     const icono = ICONO_DE[item.id] ?? "chevron_right";
-    // El realce (halo morado) es solo del segundo nivel: en la barra estrecha
-    // no hay "vecinas" de las que destacar y el halo se cortaría al encoger.
-    const claseBase = cx(s.item, opts.segundo && s.itemSegundo, opts.segundo && OPCIONES_REALZADAS.has(item.id) && s.itemRealzado);
+    const claseBase = cx(s.item, opts.segundo && s.itemSegundo);
 
     if (item.comingSoon) {
       return (
@@ -314,7 +312,11 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
 
     const conteo = item.countKey ? counts[item.countKey] : 0;
     const conConsulta = item.id === "home" && Boolean(consultaActiva);
-    const iconoEstilo = item.id === "soporte" ? s.iconoSoporte : undefined;
+    const iconoEstilo = item.id === "soporte"
+      ? s.iconoSoporte
+      : OPCIONES_REALZADAS.has(item.id)
+        ? s.iconoRealzado
+        : undefined;
 
     // Caja con la misma regla de visibilidad de siempre (billing.view), pero
     // quien no tiene el acceso a Caja activado ya no cae en «Caja no está en tu

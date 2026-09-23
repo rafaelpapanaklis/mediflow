@@ -82,6 +82,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import dynamicImport from "next/dynamic";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 import { buildPediatricSoapPrefill } from "@/lib/pediatrics/soap-prefill";
+import { edadLegible } from "@/lib/pediatrics/age";
 import {
   derivePediatricsTabState,
   PEDIATRICS_DISABLED_REASON,
@@ -1500,6 +1501,11 @@ export function PatientDetailClient({
           canExportRecord={canExportRecord}
           onExportRecord={() => setShowExpediente(true)}
           rediseno={rediseno}
+          pediatria={pediatricsData ? {
+            edadMeses: pediatricsData.ageMonths,
+            denticion: pediatricsData.dentition,
+            cambra: pediatricsData.latestCambra?.category ?? null,
+          } : null}
         />
       )}
 
@@ -1516,11 +1522,14 @@ export function PatientDetailClient({
         </div>
       )}
 
-      {/* Pediatrics — chips informativos cuando aplica el módulo (spec §1.3) */}
-      {pediatricsData && (
-        <div className="flex flex-wrap items-center gap-2 px-1 -mt-2 mb-2">
+      {/* Pediatrics — chips informativos cuando aplica el módulo (spec §1.3).
+          Van dentro de la HeroCard, en la fila de alertas. Solo en Ortodoncia,
+          donde la HeroCard no se pinta, quedan aquí: en su propia fila y sin
+          el -mt-2 que los metía bajo el borde de la tarjeta. */}
+      {pediatricsData && tab === "ortodoncia" && (
+        <div className="flex flex-wrap items-center gap-2 px-1 mb-2">
           <span className="inline-flex items-center gap-1 rounded-full border border-[var(--violet-200)] bg-[var(--violet-100)] px-3 py-1 text-xs font-semibold text-[var(--violet-700)]">
-            <span className="font-mono">{pediatricsData.ageFormatted}</span>
+            <span>{edadLegible(pediatricsData.ageMonths, t)}</span>
           </span>
           <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold capitalize">
             {t("patients.pediatrics.dentition")} {pediatricsData.dentition}

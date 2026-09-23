@@ -25,9 +25,11 @@ import {
   Activity,
   Building2,
   Trash2,
+  Baby,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
+import { edadLegible } from "@/lib/pediatrics/age";
 import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
 import { construirAlertas, hayRiesgo } from "@/components/dashboard/pacientes-rediseno/alertas";
 import { fechaCorta } from "@/components/dashboard/pacientes-rediseno/fechas";
@@ -117,6 +119,17 @@ export interface HeroCardProps {
    * la gente encuentra sin leer.
    */
   rediseno?: boolean;
+  /**
+   * Módulo de pediatría: edad en años y meses, dentición y el último CAMBRA.
+   * Van en la fila de chips de la tarjeta, después de las alertas. Antes
+   * colgaban en una fila aparte con `-mt-2`, metida bajo el borde de la
+   * tarjeta. null/undefined = el paciente no tiene el módulo.
+   */
+  pediatria?: {
+    edadMeses: number;
+    denticion: string;
+    cambra: string | null;
+  } | null;
 }
 
 function fmtShortDate(iso: string): string {
@@ -172,6 +185,7 @@ export function HeroCard({
   emergencyContact,
   originClinicName = null,
   rediseno = false,
+  pediatria = null,
 }: HeroCardProps) {
   const t = useT();
   const router = useRouter();
@@ -208,6 +222,13 @@ export function HeroCard({
     alerta: styles.warning,
     violeta: styles.brand,
     exito: styles.success,
+  };
+  // CAMBRA con el mismo semáforo que los demás chips.
+  const tonoCambra: Record<string, string> = {
+    bajo: styles.success,
+    moderado: styles.warning,
+    alto: styles.danger,
+    extremo: styles.danger,
   };
 
   // Fecha, hora, doctor y tipo de la próxima cita. Solo se usa si la hay.
@@ -620,6 +641,21 @@ export function HeroCard({
           >
             {t("patients.heroCard.moreCount", { count: patient.currentMedications.length - 3 })}
           </span>
+        )}
+        {pediatria && (
+          <>
+            <span className={`${styles.alertChip} ${styles.brand}`}>
+              <Baby size={11} strokeWidth={1.75} aria-hidden /> {edadLegible(pediatria.edadMeses, t)}
+            </span>
+            <span className={styles.alertChip}>
+              {t("patients.pediatrics.dentition")} {pediatria.denticion}
+            </span>
+            {pediatria.cambra && (
+              <span className={`${styles.alertChip} ${tonoCambra[pediatria.cambra] ?? ""}`}>
+                <Activity size={11} strokeWidth={1.75} aria-hidden /> CAMBRA {pediatria.cambra}
+              </span>
+            )}
+          </>
         )}
         {emergencyContact && (emergencyContact.name || emergencyContact.phone) && (
           <span className={styles.alertChip} title={emergencyContact.relation ?? undefined}>

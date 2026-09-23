@@ -722,6 +722,12 @@ select.entrada {
   width: 100%;
 }
 
+/* Sin redondeo. Esta hoja no tiene token de radio (todos los radios son px
+   sueltos), así que el cero va aquí, con nombre. */
+.botonRecto {
+  border-radius: 0;
+}
+
 .enlace {
   display: inline-flex;
   align-items: center;

@@ -408,11 +408,14 @@ export function EnlaceBoton({
   href,
   variante = "secundario",
   externo = false,
+  recto = false,
   children,
 }: {
   href: string;
   variante?: VarianteBoton;
   externo?: boolean;
+  /** Esquinas rectas, sin redondeo (Rafael, «Configurar anticipos»). */
+  recto?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -420,7 +423,7 @@ export function EnlaceBoton({
       href={href}
       target={externo ? "_blank" : undefined}
       rel={externo ? "noopener noreferrer" : undefined}
-      className={cx(s.boton, variante === "principal" && s.botonPrincipal, variante === "peligro" && s.botonPeligro)}
+      className={cx(s.boton, variante === "principal" && s.botonPrincipal, variante === "peligro" && s.botonPeligro, recto && s.botonRecto)}
     >
       {children}
     </a>

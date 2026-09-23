@@ -2033,7 +2033,15 @@
       "other": "Other"
     },
     "pediatrics": {
-      "dentition": "Dentition"
+      "dentition": "Dentition",
+      "ageYears": {
+        "one": "{count} year",
+        "other": "{count} years"
+      },
+      "ageMonths": {
+        "one": "{count} month",
+        "other": "{count} months"
+      }
     },
     "deleteRecord": {
       "signedError": "Signed notes cannot be deleted (NOM-024)",
@@ -3749,6 +3757,7 @@
       "whatsappSubtitle": "Automatic reminders to patients",
       "whatsappDesc": "Set up the WhatsApp Cloud API to send automatic appointment reminders to patients.",
       "whatsappLink": "Go to WhatsApp settings →",
+      "anticiposTitle": "Set up account - Receive payments with MercadoPago",
       "hoursTitle": "Business hours",
       "hoursTo": "to",
       "hoursClosed": "Closed",

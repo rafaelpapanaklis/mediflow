@@ -2033,7 +2033,15 @@
       "other": "Otro"
     },
     "pediatrics": {
-      "dentition": "Dentición"
+      "dentition": "Dentición",
+      "ageYears": {
+        "one": "{count} año",
+        "other": "{count} años"
+      },
+      "ageMonths": {
+        "one": "{count} mes",
+        "other": "{count} meses"
+      }
     },
     "deleteRecord": {
       "signedError": "Las notas firmadas no se pueden eliminar (NOM-024)",
@@ -3749,6 +3757,7 @@
       "whatsappSubtitle": "Recordatorios automáticos a pacientes",
       "whatsappDesc": "Configura WhatsApp Cloud API para enviar recordatorios automáticos de citas a los pacientes.",
       "whatsappLink": "Ir a configuración de WhatsApp →",
+      "anticiposTitle": "Configurar cuenta - Recibir pagos por MercadoPago",
       "hoursTitle": "Horario de atención",
       "hoursTo": "a",
       "hoursClosed": "Cerrado",

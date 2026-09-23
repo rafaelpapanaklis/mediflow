@@ -123,10 +123,10 @@ export const ICONOS_CHROME = [
 ] as const;
 
 /**
- * Opciones del segundo nivel que se pintan con un realce (un halo suave en el
- * morado de marca, `itemRealzado` en la hoja del menú). Hoy solo Saldo IA:
- * Rafael quiere que se encuentre de un vistazo entre las de Dinero. No cambia
- * quién la ve ni dónde va; es solo la pinta.
+ * Opciones cuyo ICONO va en el morado de marca (`iconoRealzado` en la hoja del
+ * menú). Hoy solo Saldo IA: Rafael quiere que se encuentre de un vistazo entre
+ * las de Dinero. La fila es igual que las demás —el halo que llevaba antes lo
+ * quitó él—; solo el icono cambia de color. No cambia quién la ve ni dónde va.
  */
 export const OPCIONES_REALZADAS: ReadonlySet<string> = new Set(["saldo-ia"]);
 

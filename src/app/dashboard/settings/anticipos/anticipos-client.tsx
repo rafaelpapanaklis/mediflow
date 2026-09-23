@@ -208,7 +208,7 @@ export function AnticiposClient({
                 {desconectando ? "Desconectando…" : "Desconectar"}
               </Boton>
             ) : puedeConectar ? (
-              <EnlaceBoton href="/api/mercadopago/oauth/conectar" variante="principal">
+              <EnlaceBoton href="/api/mercadopago/oauth/conectar" variante="principal" externo>
                 Conectar con Mercado Pago
               </EnlaceBoton>
             ) : undefined

@@ -1,5 +1,7 @@
 // Pediatrics — cálculo de edad del paciente con desglose en años/meses. Spec: §1.3, §4.A.1
 
+import type { TFunction } from "@/i18n/t";
+
 export type AgeBreakdown = {
   years: number;
   months: number;
@@ -40,9 +42,24 @@ export function calculateAge(dateOfBirth: Date, refDate: Date = new Date()): Age
     months,
     decimal,
     totalMonths,
-    formatted: `${years} a ${months} m`,
+    formatted: `${years}a ${months}m`,
     long: `${years} ${years === 1 ? "año" : "años"} ${months} ${months === 1 ? "mes" : "meses"}`,
   };
+}
+
+/**
+ * La edad para leerla en pantalla, en el idioma de quien la mira: «8 años
+ * 3 meses» / «8 years 3 months». Sin la parte que vale cero («7 meses», «8
+ * años») y con singular («1 año 1 mes»). `formatted` se queda para el texto
+ * que se escribe en notas y listas, que no pasa por el diccionario.
+ */
+export function edadLegible(totalMonths: number, t: TFunction): string {
+  const years = Math.floor(totalMonths / MONTHS_PER_YEAR);
+  const months = totalMonths % MONTHS_PER_YEAR;
+  const partes: string[] = [];
+  if (years > 0) partes.push(t("patients.pediatrics.ageYears", { count: years }));
+  if (months > 0 || years === 0) partes.push(t("patients.pediatrics.ageMonths", { count: months }));
+  return partes.join(" ");
 }
 
 /**

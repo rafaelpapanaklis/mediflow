@@ -1127,11 +1127,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 {isAdminUser && (
                   <Seccion
                     icono={<CreditCard size={18} strokeWidth={1.75} aria-hidden />}
-                    titulo="Anticipos por WhatsApp (Mercado Pago)"
+                    titulo={t("settings.client.anticiposTitle")}
                     subtitulo="El bot pide un anticipo al agendar y la cita se confirma sola al acreditarse."
                   >
                     <Acciones>
-                      <Enlace href="/dashboard/settings/anticipos">Configurar anticipos</Enlace>
+                      <EnlaceBoton href="/dashboard/settings/anticipos" recto>Configurar anticipos</EnlaceBoton>
                     </Acciones>
                   </Seccion>
                 )}
@@ -2021,7 +2021,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-11 h-11 rounded-2xl bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center text-2xl">💳</div>
                 <div>
-                  <h2 className="text-base font-bold">Anticipos por WhatsApp (Mercado Pago)</h2>
+                  <h2 className="text-base font-bold">{t("settings.client.anticiposTitle")}</h2>
                   <p className="text-sm text-muted-foreground">El bot pide un anticipo al agendar y la cita se confirma sola al acreditarse.</p>
                 </div>
               </div>
