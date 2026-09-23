@@ -1,6 +1,12 @@
-// GET /api/consent/preview — el texto que se generaría, para editarlo antes de crear.
+// GET /api/consent/preview — la hoja con la que arranca «Nuevo consentimiento».
 //
-// El modal de alta enseña la carta ya redactada y deja modificarla. Ese texto
+// SIN plantilla es la HOJA EN BLANCO: la cabecera (paciente, CURP, doctor,
+// cédula, especialidad, clínica, logo, fecha) y el aviso de lo que falta, con el
+// texto vacío. Así la abre el panel siempre, igual que la nota de evolución: una
+// clínica sin plantillas escribe su carta igual. La plantilla es un botón dentro
+// del editor, y al pulsarlo se pide esto mismo CON `templateId`.
+//
+// Con plantilla, el texto que se generaría, para editarlo antes de crear. Ese texto
 // se pide AQUÍ en vez de armarlo en el navegador por una razón concreta: así lo
 // que el doctor ve es, carácter por carácter, lo que produciría el servidor. Si
 // el cliente tuviera su propia copia del generador, bastaría con que una de las
@@ -21,6 +27,8 @@ import { resolveClinicConsentTemplate } from "@/lib/consent/clinic-templates";
 // off-by-one aquí saldría impreso en un documento legal.
 import { calculateAge } from "@/lib/pediatrics/age";
 import { missingConsentData } from "@/lib/consent/document-data";
+import { consentTimeZone } from "@/lib/consent/dates";
+import { encabezadoDeCarta } from "@/lib/consent/documento";
 
 export async function GET(req: NextRequest) {
   const limited = rateLimit(req, 60);
@@ -42,7 +50,8 @@ export async function GET(req: NextRequest) {
   const signerRelation = (sp.get("signerRelation") ?? "").trim();
 
   const template = findConsentTemplate(procedureKey);
-  if (!patientId || (!template && !templateId)) {
+  // Solo el paciente es obligatorio. Sin plantilla ni clave, hoja en blanco.
+  if (!patientId) {
     return NextResponse.json({ error: "Faltan datos para generar la carta." }, { status: 400 });
   }
   // Acotada a la clínica de la sesión: el id de una plantilla ajena da 404.
@@ -77,8 +86,8 @@ export async function GET(req: NextRequest) {
       // timezone: la vista previa tiene que fechar EXACTAMENTE igual que el POST
       // que guarda la carta. Si aquí faltara, el doctor revisaría un día y el
       // paciente firmaría otro.
-      // logoUrl no entra en el texto: solo sirve para avisar de que falta.
-      select: { name: true, address: true, city: true, timezone: true, logoUrl: true },
+      // logoUrl y phone no entran en el texto: van a la cabecera de la hoja.
+      select: { name: true, address: true, city: true, timezone: true, logoUrl: true, phone: true },
     }),
     prisma.user.findFirst({
       where: { id: doctorId || ctx.userId, clinicId: ctx.clinicId, isActive: true },
@@ -109,7 +118,9 @@ export async function GET(req: NextRequest) {
   };
   const content = clinicTemplate
     ? fillConsentTemplate(clinicTemplate.text, vars)
-    : buildConsentContent(template!.key, vars);
+    : template
+      ? buildConsentContent(template.key, vars)
+      : "";
 
   // Lo que falta se dice ANTES de crear la carta, para que el modal lo avise
   // con el enlace a donde se captura. No bloquea: la carta se puede crear igual.
@@ -122,9 +133,32 @@ export async function GET(req: NextRequest) {
     patientCurpStatus: patient.curpStatus ?? null,
   });
 
+  // La MISMA cabecera que llevará la carta guardada (`encabezadoDeCarta`), con
+  // la fecha de hoy en la zona de la clínica: es la que tendrá al crearse.
+  const encabezado = encabezadoDeCarta({
+    createdAt: new Date(),
+    timeZone: consentTimeZone(clinic?.timezone),
+    clinicName: clinic?.name ?? "",
+    clinicAddress: clinic?.address ?? null,
+    clinicCity: clinic?.city ?? null,
+    clinicPhone: clinic?.phone ?? null,
+    clinicLogoUrl: clinic?.logoUrl ?? null,
+    patientName: vars.patientName,
+    patientNumber: patient.patientNumber ?? null,
+    patientCurp: patient.curp ?? null,
+    patientCurpStatus: patient.curpStatus ?? null,
+    doctorName: vars.doctorName,
+    doctorLicense: vars.doctorLicense,
+    doctorSpecialtyLicense: vars.doctorSpecialtyLicense,
+    doctorSpecialty: vars.doctorSpecialty,
+  });
+
   return NextResponse.json({
-    procedure: clinicTemplate?.name ?? template!.label,
+    // Vacíos en la hoja en blanco: no salió de ninguna plantilla.
+    templateId: clinicTemplate ? templateId : null,
+    procedure: clinicTemplate?.name ?? template?.label ?? "",
     content,
     missing,
+    encabezado,
   });
 }

@@ -29,8 +29,6 @@ import {
 import { ATRIBUTO_IMPRESION, CSS_IMPRESION } from "@/components/dashboard/documentos-paciente/impresion";
 import type { RutasDeDocumento } from "@/components/dashboard/documentos-paciente/tipos";
 import type { ConsentDocumentoDTO, ConsentFirmaDTO } from "@/lib/consent/documento";
-import { consentTextToBodyHtml } from "@/lib/consent/template-html";
-import { parseConsentText } from "@/lib/consent/render";
 import type { ConsentDTO } from "@/lib/consent/types";
 import s from "./consent-documento.module.css";
 
@@ -276,24 +274,6 @@ export function ConsentVisor({
             document.body,
           )
         : null}
-    </DocumentoRaiz>
-  );
-}
-
-/**
- * La vista previa del modal de alta: el MISMO cuerpo de carta que la hoja, con
- * su tipografía, en vez de una maqueta aparte. No transforma el texto: lo que se
- * guarda y se firma sigue siendo el string tal cual.
- */
-export function ConsentPrevia({ content }: { content: string }) {
-  const t = useT();
-  const titulo = parseConsentText(content).title;
-  return (
-    <DocumentoRaiz>
-      <div className={s.previa}>
-        <p className={s.previaSello}>{titulo || t("consentDoc.kind")}</p>
-        <DocumentoCuerpo html={consentTextToBodyHtml(content)} />
-      </div>
     </DocumentoRaiz>
   );
 }

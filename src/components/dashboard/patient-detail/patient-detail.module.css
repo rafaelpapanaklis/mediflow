@@ -2429,3 +2429,20 @@
   font-family: inherit;
   font-variant-numeric: tabular-nums;
 }
+
+/* Un `.btn-new` que parte su texto en dos renglones en vez de salirse: a 390 px
+   «Nuevo consentimiento informado» no cabe junto al título de la tarjeta, y
+   «Firma del paciente ahora (en este dispositivo)» no cabe en el modal. */
+/* Con `:global(.btn-new)` pesa más que la regla global: no depende del orden
+   en que se carguen las hojas. */
+.botonQueCabe:global(.btn-new) {
+  flex-shrink: 1;
+  min-width: 0;
+  height: auto;
+  min-height: 36px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  white-space: normal;
+  line-height: 1.25;
+}
+.botonQueCabe:global(.btn-new) > svg { flex: none; }

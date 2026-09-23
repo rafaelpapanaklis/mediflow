@@ -16,13 +16,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { ArrowLeft, Bold, ChevronDown, FileText, Heading2, Italic, List, ListOrdered, Loader2, PenLine, Plus, Underline } from "lucide-react";
+import { ArrowLeft, Bold, FileText, Heading2, Italic, List, ListOrdered, Loader2, PenLine, Plus, Underline } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { AvisoDatosFaltantes } from "@/components/dashboard/documentos-paciente/aviso-datos-faltantes";
+import { MenuPlantillas } from "@/components/dashboard/documentos-paciente/menu-plantillas";
 import {
   DocumentoHoja, DocumentoMesa, DocumentoRaiz, clasesDocumento,
 } from "@/components/dashboard/documentos-paciente/documento-hoja";
@@ -243,71 +244,6 @@ interface Escrito {
   templateId: string | null;
 }
 
-/**
- * «Usar una plantilla»: un botón discreto en la barra de formato. Sin plantillas
- * en la clínica NO se pinta (lo explica una línea bajo la hoja): nunca manda a
- * ninguna parte.
- */
-function MenuPlantillas({
-  plantillas, ocupado, onUsar,
-}: { plantillas: PlantillaNota[]; ocupado: boolean; onUsar: (p: PlantillaNota) => void }) {
-  const t = useT();
-  const [abierto, setAbierto] = useState(false);
-  const raiz = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!abierto) return;
-    const fuera = (ev: PointerEvent) => {
-      if (raiz.current && !raiz.current.contains(ev.target as Node)) setAbierto(false);
-    };
-    const tecla = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") setAbierto(false);
-    };
-    document.addEventListener("pointerdown", fuera);
-    document.addEventListener("keydown", tecla);
-    return () => {
-      document.removeEventListener("pointerdown", fuera);
-      document.removeEventListener("keydown", tecla);
-    };
-  }, [abierto]);
-
-  if (plantillas.length === 0) return null;
-  return (
-    <div ref={raiz} className={estilos.plantilla}>
-      <button
-        type="button"
-        className={estilos.plantillaBoton}
-        disabled={ocupado}
-        aria-haspopup="menu"
-        aria-expanded={abierto}
-        onClick={() => setAbierto((a) => !a)}
-      >
-        <FileText size={15} aria-hidden /> {t("notaEvolucionDoc.editor.useTemplate")} <ChevronDown size={13} aria-hidden />
-      </button>
-      {abierto ? (
-        <ul className={estilos.menu} role="menu" aria-label={t("notaEvolucionDoc.pick.title")}>
-          {plantillas.map((p) => (
-            <li key={p.id} role="none">
-              <button
-                type="button"
-                role="menuitem"
-                className={estilos.opcion}
-                onClick={() => {
-                  setAbierto(false);
-                  onUsar(p);
-                }}
-              >
-                <FileText size={15} aria-hidden style={{ color: "var(--doc-tinta-3)", flex: "none" }} />
-                <span>{p.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
 function Editor({
   hoja, esNueva, patientId, ocupado, onVolver, onGuardar,
 }: {
@@ -467,11 +403,11 @@ function Editor({
               }}
               placeholder={t("notaEvolucionDoc.editor.titlePlaceholder")}
               aria-label={t("notaEvolucionDoc.editor.titleLabel")}
-              className={estilos.titulo}
+              className={clasesDocumento.tituloEditable}
             />
           ) : null}
           <div
-            className={`${clasesDocumento.herramientas} ${esNueva ? estilos.trasTitulo : ""}`}
+            className={`${clasesDocumento.herramientas} ${esNueva ? clasesDocumento.trasTitulo : ""}`}
             role="toolbar"
             aria-label={t("notaEvolucionDoc.editor.toolbar")}
           >
@@ -492,7 +428,13 @@ function Editor({
                 <h.icono size={16} aria-hidden />
               </button>
             ))}
-            <MenuPlantillas plantillas={plantillas ?? []} ocupado={quieto} onUsar={(p) => void usarPlantilla(p)} />
+            <MenuPlantillas
+              plantillas={plantillas ?? []}
+              ocupado={quieto}
+              etiqueta={t("notaEvolucionDoc.editor.useTemplate")}
+              titulo={t("notaEvolucionDoc.pick.title")}
+              onUsar={(p) => void usarPlantilla(p)}
+            />
           </div>
           <div
             ref={caja}

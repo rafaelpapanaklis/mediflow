@@ -53,6 +53,63 @@
   margin-left: auto;
 }
 
+/* ── El alta: la hoja en blanco (`consent-editor.tsx`) ──────────────── */
+
+/* Quién responde y quién firma: encima de la hoja, con la misma cara que la tira. */
+.ajustes {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 14px;
+  border: 1px solid var(--doc-filete);
+  border-radius: 12px;
+  background: var(--doc-papel);
+}
+.ajustes :global(.field-new) { max-width: 420px; }
+.ajustesCasilla {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--doc-tinta-3);
+  cursor: pointer;
+}
+.ajustesCasilla b { color: var(--doc-tinta); font-weight: 600; }
+.ajustesCasilla input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--doc-acento);
+}
+.ajustesPar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 12px;
+}
+.ajustesPar :global(.field-new) { max-width: none; }
+
+/* El cuerpo de la carta: TEXTO PLANO en una caja con la tipografía de la hoja. */
+.textoCarta {
+  display: block;
+  width: 100%;
+  max-width: 65ch;
+  /* Crece sola con el texto (`consent-editor`): sin asa ni scroll propio. */
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  font-family: inherit;
+  white-space: pre-wrap;
+}
+.textoCarta::placeholder { color: var(--doc-tinta-3); }
+/* «Ver cómo quedará»: la misma caja, con la carta maquetada dentro. */
+.textoVista { max-width: 65ch; }
+.textoVista > div { margin-top: 0; }
+/* Botón con texto en la barra de la hoja (los de formato son solo icono). */
+.herramientaTexto { gap: 6px; font-size: 13px; font-weight: 500; }
+.herramientaTexto:disabled { opacity: 0.5; cursor: default; }
+
 /* ── Dentro de la hoja ──────────────────────────────────────────────── */
 
 .revocado {
@@ -168,26 +225,6 @@
   gap: 8px;
   padding: 56px 16px;
   font-size: 13px;
-  color: var(--doc-tinta-3);
-}
-
-/* ── La vista previa del modal de alta: la misma carta, en pequeño ──── */
-
-.previa {
-  max-height: 340px;
-  overflow-y: auto;
-  padding: 20px 22px;
-  border: 1px solid var(--doc-filete);
-  border-radius: 10px;
-  background: var(--doc-papel);
-}
-.previa > div { font-size: 14px; }
-.previaSello {
-  margin: 0 0 12px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--doc-tinta-3);
 }
 

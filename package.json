@@ -124,6 +124,7 @@
     "test:consent-diseno": "tsx --tsconfig tsconfig.test.json --test src/lib/consent/__tests__/diseno-documento.test.tsx",
     "test:consent-signers": "tsx --test src/lib/consent/__tests__/signers.test.ts",
     "test:consent-pdf": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/consent-document.test.tsx",
+    "test:consent-en-blanco": "tsx --tsconfig tsconfig.test.json --test src/app/api/consent/__tests__/consentimiento-en-blanco.test.tsx",
     "test:reminders-reschedule": "tsx --test src/lib/reminders/__tests__/reschedule.test.ts",
     "test:reminders-promise": "tsx --test src/lib/reminders/__tests__/promise.test.ts",
     "test:nota-ligada-a-cita": "tsx --test --experimental-test-module-mocks src/app/api/clinical/__tests__/nota-ligada-a-cita.test.ts",

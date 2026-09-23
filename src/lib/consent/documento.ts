@@ -106,6 +106,42 @@ export function direccionDeClinica(address: string | null, city: string | null):
   return [calle, valorCapturado(city)].filter(Boolean).join(", ");
 }
 
+/** Lo que la CABECERA necesita: paciente, doctor, clínica y el día de la carta. */
+export type ConsentEncabezadoSource = Pick<
+  ConsentDocumentSource,
+  | "createdAt" | "timeZone"
+  | "clinicName" | "clinicAddress" | "clinicCity" | "clinicPhone" | "clinicLogoUrl"
+  | "patientName" | "patientNumber" | "patientCurp" | "patientCurpStatus"
+  | "doctorName" | "doctorLicense" | "doctorSpecialtyLicense" | "doctorSpecialty"
+>;
+
+/**
+ * La cabecera de la carta. La usan la carta guardada (`buildConsentDocumento`) y
+ * la hoja en blanco del alta (`/api/consent/preview`): lo que el doctor ve arriba
+ * mientras escribe es, dato por dato, lo que la carta va a llevar.
+ */
+export function encabezadoDeCarta(src: ConsentEncabezadoSource): EncabezadoDocumento {
+  // Carta vieja sin doctor guardado, o doctor que ya no está en la clínica.
+  const sinDoctor = !valorCapturado(src.doctorName);
+  return {
+    pacienteNombre: src.patientName,
+    fecha: formatConsentDate(src.createdAt, src.timeZone),
+    clinicaNombre: valorCapturado(src.clinicName) || "Clínica",
+    logoUrl: valorCapturado(src.clinicLogoUrl) || null,
+    // La hoja común pinta el nombre tal cual: sin doctor iría un hueco MUDO donde
+    // el PDF pone la raya. Hoja y PDF no pueden discrepar, así que va la raya.
+    doctorNombre: sinDoctor ? RAYA_PARA_LLENAR : valorCapturado(src.doctorName),
+    cedula: valorCapturado(src.doctorLicense) || null,
+    clinicaDireccion: direccionDeClinica(src.clinicAddress, src.clinicCity),
+    clinicaTelefono: valorCapturado(src.clinicPhone) || null,
+    doctorEspecialidad: valorCapturado(src.doctorSpecialty) || null,
+    doctorCedulaEspecialidad: valorCapturado(src.doctorSpecialtyLicense) || null,
+    pacienteNumero: valorCapturado(src.patientNumber) || null,
+    pacienteCurp: valorCapturado(src.patientCurp).toUpperCase() || null,
+    pacienteSinCurp: src.patientCurpStatus === "FOREIGN",
+  };
+}
+
 export function buildConsentDocumento(
   src: ConsentDocumentSource,
   signatures: ConsentSignatureBlock[],
@@ -119,23 +155,7 @@ export function buildConsentDocumento(
     status: consentStatus(src, now),
     titulo: valorCapturado(src.procedure) || "Consentimiento informado",
     tipo: parseConsentText(src.content).title || null,
-    encabezado: {
-      pacienteNombre: src.patientName,
-      fecha: formatConsentDate(src.createdAt, tz),
-      clinicaNombre: valorCapturado(src.clinicName) || "Clínica",
-      logoUrl: valorCapturado(src.clinicLogoUrl) || null,
-      // La hoja común pinta el nombre tal cual: sin doctor iría un hueco MUDO donde
-      // el PDF pone la raya. Hoja y PDF no pueden discrepar, así que va la raya.
-      doctorNombre: sinDoctor ? RAYA_PARA_LLENAR : valorCapturado(src.doctorName),
-      cedula: valorCapturado(src.doctorLicense) || null,
-      clinicaDireccion: direccionDeClinica(src.clinicAddress, src.clinicCity),
-      clinicaTelefono: valorCapturado(src.clinicPhone) || null,
-      doctorEspecialidad: valorCapturado(src.doctorSpecialty) || null,
-      doctorCedulaEspecialidad: valorCapturado(src.doctorSpecialtyLicense) || null,
-      pacienteNumero: valorCapturado(src.patientNumber) || null,
-      pacienteCurp: valorCapturado(src.patientCurp).toUpperCase() || null,
-      pacienteSinCurp: src.patientCurpStatus === "FOREIGN",
-    },
+    encabezado: encabezadoDeCarta(src),
     html: consentTextToBodyHtml(src.content),
     representante: valorCapturado(src.signerName)
       ? { nombre: valorCapturado(src.signerName), relacion: valorCapturado(src.signerRelation) || null }

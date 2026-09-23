@@ -247,6 +247,25 @@
 
 /* ── El editor: la misma hoja, con el cuerpo abierto ────────────────── */
 
+/* El título que escribe quien redacta (nota: opcional; carta: el acto). */
+.tituloEditable {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 65ch;
+  margin: 20px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--doc-filete);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--doc-tinta);
+  /* 16px: por debajo, Safari en iOS hace zoom al enfocar. */
+  font-size: 16px;
+  line-height: 1.3;
+}
+.tituloEditable::placeholder { color: var(--doc-tinta-3); }
+.tituloEditable:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
 .herramientas {
   display: flex;
   flex-wrap: wrap;
@@ -274,6 +293,9 @@
 }
 .herramienta:hover { background: var(--m2-hover); color: var(--doc-tinta); }
 .herramienta:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+/* Pegado al título, la barra no necesita su margen grande. Va DESPUÉS de
+   `.herramientas`: misma especificidad, gana la última. */
+.trasTitulo { margin-top: 10px; }
 
 .cuerpoEditable {
   box-sizing: border-box;

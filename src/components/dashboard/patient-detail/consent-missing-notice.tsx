@@ -3,7 +3,8 @@
 //
 // El aviso en sí ya no vive aquí: es el COMÚN de los documentos del paciente
 // (`documentos-paciente/aviso-datos-faltantes`), el mismo que usa la nota de
-// evolución. Este archivo se queda como la puerta de siempre para `consents-tab`.
+// evolución. Este archivo se queda como la puerta de siempre de la carta: hoy la
+// usa la hoja en blanco del alta (`consent-editor`).
 //
 // Es un aviso, NO un bloqueo: el botón de crear sigue activo. Una carta
 // incompleta es mejor que ninguna; lo que no puede pasar es que el doctor se

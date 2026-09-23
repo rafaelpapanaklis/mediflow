@@ -26,6 +26,13 @@
 // WhatsApp y correo que la nota de evolución. Vale para cualquier fila, también
 // las firmadas con el sistema viejo. La lista y sus modales siguen como estaban.
 //
+// EN BLANCO (ws1-t1): «Nuevo consentimiento» abre la HOJA EN BLANCO en esta
+// misma pestaña —`ConsentEditor`—, como la nota de evolución: la cabecera que
+// calcula el servidor y el texto vacío. La plantilla es un botón dentro del
+// editor y ya no es obligatoria: una clínica sin plantillas escribe su carta
+// igual. El modal se queda solo para lo de DESPUÉS de crear (firmar ahora,
+// WhatsApp, copiar, imprimir), que no cambia.
+//
 // Estilos: los del design system de facturación (card / badge-new / btn-new /
 // field-new / input-new de globals.css), para que el módulo se vea hermano de
 // los modales de cobro y no de una pantalla aparte.
@@ -33,7 +40,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, Check, Clock, Copy, FileSignature, FileText, Loader2, MessageCircle, MoreHorizontal,
-  PenLine, Plus, Printer, RefreshCw, Trash2, XCircle, Eye, Pencil, Link2, ShieldCheck,
+  PenLine, Plus, Printer, RefreshCw, Trash2, XCircle, Link2, ShieldCheck,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
@@ -46,11 +53,9 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { SignaturePad } from "@/components/ui/signature-pad";
-import { ageYears, isMinor } from "@/lib/consent/signers";
 import type { ConsentDTO, ConsentStatus } from "@/lib/consent/types";
-import type { ConsentMissingItem } from "@/lib/consent/document-data";
-import { ConsentMissingNotice } from "./consent-missing-notice";
-import { ConsentPrevia, ConsentVisor } from "./consent-documento";
+import { ConsentVisor } from "./consent-documento";
+import { ConsentEditor, urlPreviewCarta, type PreviewCarta } from "./consent-editor";
 import styles from "./patient-detail.module.css";
 
 interface DoctorOption {
@@ -129,7 +134,12 @@ export function ConsentsTab(props: ConsentsTabProps) {
   const [list, setList] = useState<ConsentDTO[]>(initialConsents);
   const [busy, setBusy] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [newOpen, setNewOpen] = useState(false);
+  // La hoja en blanco abierta (null = la lista), y la carta recién creada que
+  // enseña el modal de «firmar ahora».
+  const [nueva, setNueva] = useState<PreviewCarta | null>(null);
+  const [abriendo, setAbriendo] = useState(false);
+  const [creada, setCreada] = useState<{ id: string; signUrl: string } | null>(null);
+  const doctorInicial = doctors.some((d) => d.id === currentUserId) ? currentUserId : (doctors[0]?.id ?? "");
   const [countersigning, setCountersigning] = useState<ConsentDTO | null>(null);
   // La carta abierta como documento. Se guarda el id y no la fila: la lista se
   // refresca sola y la hoja tiene que ver la fila NUEVA (con la firma recién hecha).
@@ -190,6 +200,22 @@ export function ConsentsTab(props: ConsentsTabProps) {
     }, 30_000);
     return () => clearInterval(timer);
   }, [hasPending, load]);
+
+  // La hoja en blanco: solo la cabecera de hoy. No pasa por ninguna plantilla.
+  async function abrirNueva() {
+    setAbriendo(true);
+    try {
+      const res = await fetch(urlPreviewCarta({ patientId, doctorId: doctorInicial }));
+      const out = await res.json().catch(() => null);
+      if (!res.ok || !out) throw new Error((out && out.error) || t("patients.consents.genericError"));
+      setViewingId(null);
+      setNueva(out as PreviewCarta);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAbriendo(false);
+    }
+  }
 
   function publicUrl(token: string): string {
     return `${window.location.origin}/consentimiento/${token}`;
@@ -286,6 +312,33 @@ export function ConsentsTab(props: ConsentsTabProps) {
     />
   );
 
+  const createdModal = canCreate && (
+    <CreatedDialog
+      created={creada}
+      canSendWhatsApp={canSendWhatsApp}
+      onClose={() => setCreada(null)}
+      onChanged={load}
+    />
+  );
+
+  if (nueva && canCreate) {
+    return (
+      <ConsentEditor
+        hoja={nueva}
+        patientId={patientId}
+        patientDob={patientDob}
+        doctors={doctors}
+        doctorInicial={doctorInicial}
+        onVolver={() => setNueva(null)}
+        onCreado={async (c) => {
+          setNueva(null);
+          setCreada(c);
+          await load();
+        }}
+      />
+    );
+  }
+
   if (viewing) {
     return (
       <div>
@@ -316,14 +369,20 @@ export function ConsentsTab(props: ConsentsTabProps) {
         sub={t("patients.consents.subtitle")}
         action={
           canCreate ? (
-            <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setNewOpen(true)}>
+            <ButtonNew
+              variant="primary"
+              className={styles.botonQueCabe}
+              disabled={abriendo}
+              icon={abriendo ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Plus size={14} />}
+              onClick={() => void abrirNueva()}
+            >
               {t("patients.consents.new")}
             </ButtonNew>
           ) : undefined
         }
       >
         {list.length === 0 ? (
-          <ConsentsEmptyState canCreate={canCreate} onNew={() => setNewOpen(true)} />
+          <ConsentsEmptyState canCreate={canCreate} busy={abriendo} onNew={() => void abrirNueva()} />
         ) : (
           <div>
             {list.map((c) => (
@@ -350,18 +409,7 @@ export function ConsentsTab(props: ConsentsTabProps) {
         )}
       </CardNew>
 
-      {canCreate && (
-        <NewConsentModal
-          patientDob={patientDob}
-          open={newOpen}
-          onClose={() => setNewOpen(false)}
-          patientId={patientId}
-          doctors={doctors}
-          currentUserId={currentUserId}
-          canSendWhatsApp={canSendWhatsApp}
-          onCreated={load}
-        />
-      )}
+      {createdModal}
 
       {countersignModal}
     </div>
@@ -378,7 +426,9 @@ export function ConsentsTab(props: ConsentsTabProps) {
  * pregunta y evita la carta a medias (firmada por el paciente y nunca
  * contrafirmada), que es incompleta según la NOM-004.
  */
-function ConsentsEmptyState({ canCreate, onNew }: { canCreate: boolean; onNew: () => void }) {
+function ConsentsEmptyState({
+  canCreate, busy, onNew,
+}: { canCreate: boolean; busy: boolean; onNew: () => void }) {
   const t = useT();
   const steps = [
     { icon: FileSignature, title: t("patients.consents.step1Title"), body: t("patients.consents.step1Body") },
@@ -443,7 +493,12 @@ function ConsentsEmptyState({ canCreate, onNew }: { canCreate: boolean; onNew: (
 
       {canCreate && (
         <div style={{ textAlign: "center", marginTop: 20 }}>
-          <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={onNew}>
+          <ButtonNew
+            variant="primary"
+            disabled={busy}
+            icon={busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Plus size={14} />}
+            onClick={onNew}
+          >
             {t("patients.consents.new")}
           </ButtonNew>
         </div>
@@ -709,151 +764,24 @@ function ConsentRow({
 }
 
 // ---------------------------------------------------------------------------
-// Modal: nuevo consentimiento
+// Modal: la carta recién creada
 // ---------------------------------------------------------------------------
 
-function NewConsentModal({
-  open, onClose, patientId, patientDob, doctors, currentUserId, canSendWhatsApp, onCreated,
+/**
+ * Lo que sigue a «Crear consentimiento» en la hoja: firmar ahora en la tableta,
+ * mandar la liga o imprimirla. Era el segundo paso del modal de alta; el alta
+ * se escribe ahora en la hoja (`ConsentEditor`) y aquí queda solo este paso.
+ */
+function CreatedDialog({
+  created, canSendWhatsApp, onClose, onChanged,
 }: {
-  open: boolean;
-  onClose: () => void;
-  patientId: string;
-  patientDob: string | null;
-  doctors: DoctorOption[];
-  currentUserId: string;
+  created: { id: string; signUrl: string } | null;
   canSendWhatsApp: boolean;
-  onCreated: () => Promise<void> | void;
+  onClose: () => void;
+  onChanged: () => Promise<void> | void;
 }) {
   const t = useT();
-  // Las plantillas son las de la CLÍNICA (DocumentTemplate, kind
-  // CONSENTIMIENTO): el catálogo se le siembra la primera vez y a partir de ahí
-  // las edita en Administración → Plantillas. El selector no conoce otras.
-  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
-  const [templatesState, setTemplatesState] = useState<"loading" | "ready" | "error">("loading");
-  const [templateId, setTemplateId] = useState("");
-  const [doctorId, setDoctorId] = useState(
-    doctors.some((d) => d.id === currentUserId) ? currentUserId : (doctors[0]?.id ?? ""),
-  );
-  // Con un menor la casilla del representante se marca sola y no se puede
-  // quitar: la carta de un niño la firma su madre, padre o tutor, y el
-  // servidor la rechaza sin ese dato (misma regla, `minorSignerError`).
-  const minor = isMinor(patientDob);
-  const patientAge = ageYears(patientDob);
-  const [byRepresentative, setByRepresentative] = useState(minor);
-  const [signerName, setSignerName] = useState("");
-  const [signerRelation, setSignerRelation] = useState("");
-  const [content, setContent] = useState("");
-  const [loadingText, setLoadingText] = useState(false);
-  // Datos que la carta lleva y que hoy no están capturados (dirección, logo,
-  // cédula, especialidad, CURP). Los calcula el servidor junto con el texto.
-  const [missing, setMissing] = useState<ConsentMissingItem[]>([]);
-  // `touched` evita que el regenerado pise lo que el doctor ya escribió: el
-  // texto es lo que va a firmar el paciente, no un borrador que la UI pueda
-  // sobrescribir por cambiar un selector.
-  const [touched, setTouched] = useState(false);
-  // La carta se ENSEÑA maquetada y se edita solo si hace falta. El textarea
-  // sigue siendo el mismo campo de siempre —lo editado es el snapshot exacto
-  // que se firma—, pero deja de ser lo primero que se ve.
-  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [created, setCreated] = useState<{ id: string; signUrl: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setTemplatesState("loading");
-    fetch("/api/consent/templates")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
-        if (cancelled) return;
-        const list: { id: string; name: string }[] = Array.isArray(d?.templates) ? d.templates : [];
-        setTemplates(list);
-        // Se conserva la elegida si sigue existiendo; si no, la primera.
-        setTemplateId((prev) => (list.some((x) => x.id === prev) ? prev : (list[0]?.id ?? "")));
-        setTemplatesState("ready");
-      })
-      .catch(() => { if (!cancelled) setTemplatesState("error"); });
-    return () => { cancelled = true; };
-  }, [open]);
-
-  // Regenera el borrador cuando cambian los datos que lo componen.
-  //
-  // Con retardo: el nombre del representante se escribe letra a letra y sin
-  // esperar saldría una petición por tecla — y cada respuesta reescribiría el
-  // textarea a media escritura. Se pide una sola vez, 400 ms después del
-  // último cambio.
-  useEffect(() => {
-    if (!open || touched || created || !templateId) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams({ patientId, templateId });
-      if (doctorId) params.set("doctorId", doctorId);
-      if (byRepresentative && signerName.trim()) {
-        params.set("signerName", signerName.trim());
-        params.set("signerRelation", signerRelation.trim());
-      }
-      setLoadingText(true);
-      fetch(`/api/consent/preview?${params.toString()}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          if (cancelled || !d) return;
-          if (d.content) setContent(d.content);
-          // El aviso se calcula con el MISMO texto que se está viendo: con la
-          // carta ya editada no se regenera ninguno de los dos, para que el
-          // aviso no diga "completo" sobre un texto que sigue con rayas.
-          setMissing(Array.isArray(d.missing) ? d.missing : []);
-        })
-        .catch(() => undefined)
-        .finally(() => { if (!cancelled) setLoadingText(false); });
-    }, 400);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [open, touched, created, patientId, templateId, doctorId, byRepresentative, signerName, signerRelation]);
-
-  function reset() {
-    setCreated(null);
-    setError(null);
-    setTouched(false);
-    setEditing(false);
-    setContent("");
-    setMissing([]);
-    setByRepresentative(minor);
-    setSignerName("");
-    setSignerRelation("");
-  }
-
-  async function create() {
-    if (byRepresentative && (!signerName.trim() || !signerRelation.trim())) {
-      setError(t("patients.consents.errorRepresentative"));
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/consent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId,
-          templateId,
-          doctorId: doctorId || undefined,
-          // El texto SIEMPRE viaja: es el snapshot que firmará el paciente,
-          // editado o no.
-          content: content.trim() || undefined,
-          signerName: byRepresentative ? signerName.trim() : undefined,
-          signerRelation: byRepresentative ? signerRelation.trim() : undefined,
-        }),
-      });
-      const out = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(out.error ?? t("patients.consents.genericError"));
-      setCreated({ id: out.id, signUrl: out.signUrl });
-      await onCreated();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function sendCreated() {
     if (!created) return;
@@ -863,7 +791,7 @@ function NewConsentModal({
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error ?? t("patients.consents.genericError"));
       toast.success(t("patients.consents.sentWhatsApp"));
-      await onCreated();
+      await onChanged();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -872,14 +800,11 @@ function NewConsentModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
+    <Dialog open={created !== null} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] bg-card text-foreground border border-border">
         <DialogHeader>
-          <DialogTitle className="text-foreground font-bold">
-            {created ? t("patients.consents.createdTitle") : t("patients.consents.newTitle")}
-          </DialogTitle>
+          <DialogTitle className="text-foreground font-bold">{t("patients.consents.createdTitle")}</DialogTitle>
         </DialogHeader>
-
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
           {created ? (
             <CreatedPanel
@@ -889,162 +814,10 @@ function NewConsentModal({
               canSendWhatsApp={canSendWhatsApp}
               onSendWhatsApp={sendCreated}
             />
-          ) : (
-            <>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="field-new">
-                  <span className="field-new__label">{t("patients.consents.fieldTemplate")}</span>
-                  <select
-                    value={templateId}
-                    // Cambiar de plantilla es pedir OTRA carta: se suelta lo
-                    // editado para que el texto nuevo pueda entrar.
-                    onChange={(e) => { setTemplateId(e.target.value); setTouched(false); }}
-                    disabled={templatesState !== "ready" || templates.length === 0}
-                    className="input-new"
-                  >
-                    {templates.map((tpl) => (
-                      <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
-                    ))}
-                  </select>
-                  <span className="mt-1 block text-[11px]" style={{ color: "var(--text-4)" }}>
-                    {templatesState === "error"
-                      ? t("patients.consents.templatesError")
-                      : templatesState === "ready" && templates.length === 0
-                        ? t("patients.consents.templatesEmpty")
-                        : t("patients.consents.templatesHint")}
-                  </span>
-                </label>
-                <label className="field-new">
-                  <span className="field-new__label">{t("patients.consents.fieldDoctor")}</span>
-                  <select
-                    value={doctorId}
-                    onChange={(e) => setDoctorId(e.target.value)}
-                    className="input-new"
-                  >
-                    {doctors.map((d) => (
-                      <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <label
-                className="flex items-start gap-2.5 rounded-lg p-3 cursor-pointer"
-                style={{ border: "1px solid var(--border-soft)", background: "var(--bg-elev)" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={byRepresentative}
-                  disabled={minor}
-                  onChange={(e) => setByRepresentative(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--brand)]"
-                />
-                <span className="text-xs leading-relaxed" style={{ color: "var(--text-3)" }}>
-                  <span className="font-semibold" style={{ color: "var(--text-1)" }}>
-                    {t("patients.consents.fieldRepresentative")}
-                  </span>
-                  <br />
-                  {minor
-                    ? t("patients.consents.minorNotice", { age: patientAge ?? 0 })
-                    : t("patients.consents.representativeHint")}
-                </span>
-              </label>
-
-              {byRepresentative && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="field-new">
-                    <span className="field-new__label">{t("patients.consents.fieldSignerName")}</span>
-                    <input
-                      value={signerName}
-                      onChange={(e) => setSignerName(e.target.value)}
-                      className="input-new"
-                      placeholder={t("patients.consents.signerNamePlaceholder")}
-                    />
-                  </label>
-                  <label className="field-new">
-                    <span className="field-new__label">{t("patients.consents.fieldSignerRelation")}</span>
-                    <input
-                      value={signerRelation}
-                      onChange={(e) => setSignerRelation(e.target.value)}
-                      className="input-new"
-                      placeholder={t("patients.consents.signerRelationPlaceholder")}
-                    />
-                  </label>
-                </div>
-              )}
-
-              <div>
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <span className="field-new__label flex items-center gap-2">
-                    {t("patients.consents.fieldContent")}
-                    {loadingText ? <Loader2 size={12} className="animate-spin" aria-hidden /> : null}
-                  </span>
-                  <ButtonNew
-                    variant="ghost"
-                    size="sm"
-                    icon={editing ? <Eye size={13} aria-hidden /> : <Pencil size={13} aria-hidden />}
-                    // Sin plantilla no hay carta que editar: un texto suelto
-                    // llegaría al servidor sin acto que autorizar.
-                    disabled={!templateId}
-                    onClick={() => setEditing((v) => !v)}
-                  >
-                    {editing ? t("patients.consents.viewPreview") : t("patients.consents.editText")}
-                  </ButtonNew>
-                </div>
-
-                {editing ? (
-                  <textarea
-                    value={content}
-                    onChange={(e) => { setContent(e.target.value); setTouched(true); }}
-                    className="input-new"
-                    style={{ minHeight: 340, resize: "vertical", lineHeight: 1.7, padding: 14 }}
-                  />
-                ) : (
-                  content.trim() ? (
-                    // La misma carta que se verá después, no una maqueta aparte.
-                    <ConsentPrevia content={content} />
-                  ) : (
-                    <div
-                      style={{
-                        border: "1px solid var(--border-soft)", background: "var(--bg-elev)", borderRadius: 10,
-                        fontSize: 12, color: "var(--text-4)", textAlign: "center", padding: "44px 18px",
-                      }}
-                    >
-                      {loadingText
-                        ? t("patients.consents.previewLoading")
-                        : t("patients.consents.previewEmpty")}
-                    </div>
-                  )
-                )}
-
-                <span className="mt-1.5 block text-[11px]" style={{ color: "var(--text-4)" }}>
-                  {t("patients.consents.contentHint")}
-                </span>
-              </div>
-
-              <ConsentMissingNotice missing={missing} patientId={patientId} />
-
-              {error ? <p className="text-xs" style={{ color: "var(--danger)" }}>{error}</p> : null}
-            </>
-          )}
+          ) : null}
         </div>
-
         <DialogFooter>
-          <ButtonNew variant="ghost" onClick={() => { reset(); onClose(); }}>
-            {created ? t("common.close") : t("common.cancel")}
-          </ButtonNew>
-          {!created && (
-            <ButtonNew
-              variant="primary"
-              disabled={saving || !content.trim() || !templateId}
-              onClick={create}
-              icon={saving
-                ? <Loader2 size={13} className="animate-spin" aria-hidden />
-                : <Check size={13} aria-hidden />}
-            >
-              {t("patients.consents.createCta")}
-            </ButtonNew>
-          )}
+          <ButtonNew variant="ghost" onClick={onClose}>{t("common.close")}</ButtonNew>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1095,8 +868,8 @@ function CreatedPanel({
         href={signUrl}
         target="_blank"
         rel="noreferrer"
-        className="btn-new btn-new--primary"
-        style={{ width: "100%", height: 52, justifyContent: "center", fontSize: 14 }}
+        className={`btn-new btn-new--primary ${styles.botonQueCabe}`}
+        style={{ width: "100%", minHeight: 52, justifyContent: "center", textAlign: "center", fontSize: 14 }}
       >
         <PenLine size={17} aria-hidden /> {t("patients.consents.actionSignNow")}
       </a>

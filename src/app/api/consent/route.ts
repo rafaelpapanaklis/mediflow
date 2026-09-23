@@ -79,7 +79,9 @@ export async function POST(req: NextRequest) {
   const procedureKeyRaw = typeof body.procedureKey === "string" ? body.procedureKey.trim() : "";
   const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
   const customContent = typeof body.content === "string" ? body.content.trim() : "";
-  const customProcedure = typeof body.procedure === "string" ? body.procedure.trim() : "";
+  // El nombre del acto, tal como lo enseña la hoja del panel (máx. 120, como el
+  // título de la nota de evolución).
+  const customProcedure = typeof body.procedure === "string" ? body.procedure.trim().slice(0, 120) : "";
   const doctorIdRaw = typeof body.doctorId === "string" ? body.doctorId.trim() : "";
   const signerName = typeof body.signerName === "string" ? body.signerName.trim() : "";
   const signerRelation = typeof body.signerRelation === "string" ? body.signerRelation.trim() : "";
@@ -97,9 +99,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "La plantilla no existe en esta clínica." }, { status: 404 });
   }
   // O una plantilla, o una clave del catálogo, o un texto propio con su nombre.
+  // El texto propio es el camino NORMAL del panel (la hoja en blanco): la
+  // plantilla es opcional y solo viaja si el doctor cargó una.
   if (!clinicTemplate && !template && !(customContent && customProcedure)) {
     return NextResponse.json(
-      { error: "Elige un procedimiento del catálogo o escribe el texto y el nombre del acto." },
+      { error: "Escribe el nombre del acto que se autoriza y el texto de la carta." },
       { status: 400 },
     );
   }
@@ -187,8 +191,10 @@ export async function POST(req: NextRequest) {
       ? fillConsentTemplate(clinicTemplate.text, vars)
       : buildConsentContent(template!.key, vars));
 
-  // El nombre del acto es el de la PLANTILLA, no uno que mande el cliente.
-  const procedure = clinicTemplate?.name ?? template?.label ?? customProcedure;
+  // El nombre del acto es el que la hoja ENSEÑABA como título al crear: lo que
+  // se firma es lo que se vio. Si no vino ninguno (un cliente viejo), el de la
+  // plantilla. Con texto propio, `customProcedure` ya es obligatorio arriba.
+  const procedure = customProcedure || clinicTemplate?.name || template?.label || "";
   // Huella del texto EXACTO que se firmará. El PDF la imprime como evidencia de
   // que el documento no se alteró después de la firma.
   const contentHash = createHash("sha256").update(content, "utf8").digest("hex");

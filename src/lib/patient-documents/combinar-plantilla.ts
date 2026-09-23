@@ -18,8 +18,18 @@ export interface HojaCombinada {
  * @param escritoHtml  el `innerHTML` del editor
  * @param escritoTexto su `textContent`: un `<p><br></p>` tiene HTML pero no texto
  * @param plantillaHtml la plantilla ya rellenada por el servidor
+ * @param separador    lo que va entre los dos. En HTML nada (cada bloque ya es
+ *                     su párrafo); en TEXTO PLANO —la carta de consentimiento—
+ *                     una línea en blanco, o la plantilla se pegaría al final
+ *                     del último renglón escrito.
  */
-export function combinarConPlantilla(escritoHtml: string, escritoTexto: string, plantillaHtml: string): HojaCombinada {
+export function combinarConPlantilla(
+  escritoHtml: string,
+  escritoTexto: string,
+  plantillaHtml: string,
+  separador = "",
+): HojaCombinada {
   if (!escritoTexto.trim()) return { html: plantillaHtml, anadida: false };
-  return { html: `${escritoHtml}${plantillaHtml}`, anadida: true };
+  const escrito = separador ? escritoHtml.replace(/\s+$/, "") : escritoHtml;
+  return { html: `${escrito}${separador}${plantillaHtml}`, anadida: true };
 }
