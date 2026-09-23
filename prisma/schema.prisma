@@ -1512,24 +1512,43 @@ model Patient {
   @@map("patients")
 }
 
-/// Saldo a favor (crédito) del paciente. v1 SIN consumo: el saldo a favor de un
-/// paciente = SUM(amount) de sus filas. Lo alimenta el import de "Saldos"
-/// (col tipo=favor) y, a futuro, sobrepagos / notas de crédito. Aislamiento por
+/// Saldo a favor (crédito) del paciente, como LIBRO de movimientos: el saldo a
+/// favor de un paciente = SUM(amount) de sus filas. Entra dinero con filas
+/// POSITIVAS (import de "Saldos" col tipo=favor, anticipo por Mercado Pago,
+/// anticipo devuelto al cancelar una factura) y se CONSUME con filas NEGATIVAS
+/// (source "aplicado_a_factura"), que nacen junto al Payment «anticipo» que
+/// abona la factura (src/lib/patient-credit-aplicar.ts). Aislamiento por
 /// clínica = Prisma-side (where clinicId), igual que el resto del modelo.
+/// Columnas del rastro y restricciones: sql/anticipo-aplicado-a-factura.sql.
 model PatientCredit {
   id          String   @id @default(cuid())
   clinicId    String
   patientId   String
-  amount      Float // siempre > 0; el "a favor" lo expresa el modelo, no el signo
+  // > 0 entra a favor; < 0 SOLO en source "aplicado_a_factura" (CHECK en la base).
+  amount      Float
   description String?
   source      String   @default("migrated")
   creditDate  DateTime @default(now())
   createdAt   DateTime @default(now())
 
+  // ── Rastro de la aplicación a una factura (nulos en todo lo demás) ──
+  // Sin relación Prisma a propósito: las FK viven en el SQL (invoiceId sin
+  // ON DELETE: no se borra una factura con saldo aplicado; el resto SET NULL)
+  // y así Invoice/Payment/User no cambian de forma.
+  /// Factura a la que se aplicó (fila negativa) o de la que se devolvió (positiva).
+  invoiceId   String?
+  /// El Payment «anticipo» que abonó la factura. Único: un Payment, una aplicación.
+  paymentId   String?  @unique
+  /// En una devolución: la fila de aplicación que deshace. Único: se devuelve una vez.
+  reversesId  String?  @unique
+  /// Quién hizo la acción que aplicó o devolvió el saldo. null = el sistema.
+  createdById String?
+
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@index([clinicId, patientId])
+  @@index([clinicId, invoiceId])
   @@map("patient_credits")
 }
 

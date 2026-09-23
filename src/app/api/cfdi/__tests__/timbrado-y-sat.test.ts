@@ -65,8 +65,10 @@ function cumple(row: any, where: any): boolean {
     if (v !== null && typeof v === "object" && !(v instanceof Date)) {
       const cond = v as any;
       const ops = Object.keys(cond);
-      if (ops.some((op) => op !== "notIn")) throw new Error(`el doble no sabe evaluar ${k}: ${ops.join(",")}`);
-      if (cond.notIn.includes(row[k])) return false;
+      if (ops.some((op) => op !== "notIn" && op !== "lte")) throw new Error(`el doble no sabe evaluar ${k}: ${ops.join(",")}`);
+      if (cond.notIn !== undefined && cond.notIn.includes(row[k])) return false;
+      // `paid: { lte: 0 }` de /cancel y del DELETE: no se cancela con dinero dentro.
+      if (cond.lte !== undefined && !(row[k] <= cond.lte)) return false;
       continue;
     }
     if (row[k] !== v) return false;

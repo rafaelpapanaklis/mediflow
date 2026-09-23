@@ -42,11 +42,13 @@ import { LinkMercadoPago, useCobroMercadoPago } from "./link-mercado-pago";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
+import { pagadoEsSoloAnticipo } from "@/lib/patient-credit-core";
 
 const METHOD_LABEL_KEYS: Record<string, string> = {
   cash: "clinical.invoiceDetail.methodCash", debit: "clinical.invoiceDetail.methodDebit", credit: "clinical.invoiceDetail.methodCredit",
   transfer: "clinical.invoiceDetail.methodTransfer", check: "clinical.invoiceDetail.methodCheck", refund: "clinical.invoiceDetail.methodRefund", other: "clinical.invoiceDetail.methodOther",
   mercadopago: "clinical.invoiceDetail.methodMercadoPago",
+  anticipo: "clinical.invoiceDetail.methodAnticipo",
 };
 
 interface Invoice {
@@ -232,6 +234,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // editar precio/descuento o eliminar el borrador completo desde aquí.
   const isDraft    = status === "DRAFT";
   const canEditPrice = (isPending || isDraft) && invoice.paid === 0;
+  // Lo pagado es SOLO el saldo a favor aplicado al emitirla: se puede cancelar
+  // y ese dinero vuelve a favor del paciente (el servidor lo vuelve a decidir).
+  const soloAnticipo = !invoice.cfdiUuid && pagadoEsSoloAnticipo(invoice.paid, invoice.payments);
   const s = invoiceStatusBadge(status);
 
   // CFDI: uuid efectivo (prop o timbrado optimista) y si aplica facturar.
@@ -411,7 +416,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     window.open(`/api/cfdi/${id}/${format}`, "_blank");
   }
 
-  async function callApi(path: string, method: "POST" | "PATCH" | "DELETE", body?: any, successMsg?: string) {
+  async function callApi(
+    path: string,
+    method: "POST" | "PATCH" | "DELETE",
+    body?: any,
+    successMsg?: string | ((respuesta: any) => string),
+  ) {
     if (!invoice) return;
     setBusy(true);
     try {
@@ -424,7 +434,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? t("clinical.invoiceDetail.operationError"));
       }
-      toast.success(successMsg ?? t("clinical.invoiceDetail.operationSuccess"));
+      const respuesta = typeof successMsg === "function" ? await res.json().catch(() => ({})) : null;
+      toast.success(
+        (typeof successMsg === "function" ? successMsg(respuesta) : successMsg)
+          ?? t("clinical.invoiceDetail.operationSuccess"),
+      );
       setSub(null);
       await onMutated();
       onClose();
@@ -493,7 +507,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   }
 
   async function handleCancel() {
-    await callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, t("clinical.invoiceDetail.cancelSuccess"));
+    // Si lo pagado era el saldo a favor aplicado, el servidor dice cuánto volvió a favor.
+    const mensajeCancelada = (r: any) => r?.anticipoDevuelto > 0
+      ? t("clinical.invoiceDetail.cancelSuccessAnticipo", { monto: fmtMXNdec(r.anticipoDevuelto) })
+      : t("clinical.invoiceDetail.cancelSuccess");
+    await callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, mensajeCancelada);
   }
 
   async function handleRefund() {
@@ -527,6 +545,20 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? t("clinical.invoiceDetail.confirmError"));
+      }
+      // Al confirmarse recibió el saldo a favor del paciente: lo que queda por
+      // cobrar ya no es el total del borrador. No se abre el cobro con la cifra
+      // vieja; se avisa y se refresca para cobrar sobre la nueva.
+      const confirmada = await res.json().catch(() => ({}));
+      if (confirmada?.anticipoAplicado > 0) {
+        toast(t("clinical.invoiceDetail.anticipoAplicadoAlConfirmar", {
+          monto: fmtMXNdec(confirmada.anticipoAplicado),
+          resta: fmtMXNdec(confirmada.balance ?? 0),
+        }), { duration: 10000 });
+        await onMutated();
+        onClose();
+        router.refresh();
+        return;
       }
       // router.refresh() removido: causaba race con el refresh post-payment
       // de handlePaymentSuccess. El refresh ocurre al cerrar el PaymentModal.
@@ -779,7 +811,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                     )}
                   </>
                 )}
-                {invoice.paid === 0 && (
+                {(invoice.paid === 0 || soloAnticipo) && (
                   <ButtonNew variant="danger" icon={<XCircle size={14} aria-hidden />} onClick={() => openSub("cancel")} disabled={busy}>
                     {t("clinical.invoiceDetail.cancelInvoice")}
                   </ButtonNew>
@@ -793,6 +825,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 <ButtonNew variant="danger" icon={<Undo2 size={14} aria-hidden />} onClick={() => openSub("refund")} disabled={busy}>
                   {t("clinical.invoiceDetail.refund")}
                 </ButtonNew>
+                {/* Pagada SOLO con el saldo a favor: cancelarla lo devuelve a favor. */}
+                {soloAnticipo && (
+                  <ButtonNew variant="danger" icon={<XCircle size={14} aria-hidden />} onClick={() => openSub("cancel")} disabled={busy}>
+                    {t("clinical.invoiceDetail.cancelInvoice")}
+                  </ButtonNew>
+                )}
                 {effectiveUuid && (
                   <ButtonNew variant="secondary" icon={<FileText size={14} aria-hidden />} onClick={() => {
                     navigator.clipboard.writeText(effectiveUuid).catch(() => {});

@@ -11,6 +11,7 @@ import {
   sumInvoiceItems, computeInvoiceTotal, round2, PRICE_ADJUST_FLAG,
 } from "@/lib/invoice-totals";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
+import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -67,7 +68,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (visDenied) return visDenied;
   }
   if (invoice.paid > 0) {
-    return NextResponse.json({ error: "No se puede modificar una factura con pagos registrados" }, { status: 400 });
+    // Con el saldo a favor ya aplicado el precio tampoco se toca aquí (lo
+    // aplicado depende del total), pero la salida existe: cancelarla devuelve
+    // el anticipo a favor y la nueva lo vuelve a recibir.
+    const conAnticipo = await prisma.payment.count({ where: { invoiceId: invoice.id, method: METODO_ANTICIPO } });
+    return NextResponse.json({
+      error: conAnticipo > 0
+        ? "Esta factura ya tiene aplicado el saldo a favor del paciente. Para cambiar el precio, cancélala (el anticipo vuelve a quedar a favor) y créala de nuevo."
+        : "No se puede modificar una factura con pagos registrados",
+    }, { status: 400 });
   }
   if (invoice.status === "CANCELLED" || invoice.status === "PAID") {
     return NextResponse.json({ error: "No se puede modificar una factura cerrada" }, { status: 400 });

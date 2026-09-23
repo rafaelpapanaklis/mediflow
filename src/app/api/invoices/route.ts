@@ -16,6 +16,7 @@ import {
   withInvoiceNumberRetry,
 } from "@/lib/invoices/next-invoice-number";
 import { DEFAULT_INVOICE_TZ, parseInvoiceDueDate } from "@/lib/invoices/due-date";
+import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -204,6 +205,12 @@ export async function POST(req: NextRequest) {
       }),
     );
 
+    // Saldo a favor del paciente (anticipo): la factura nace con él ya
+    // descontado. Va DESPUÉS de crear y en su propia transacción; no lanza
+    // nunca (ver patient-credit-aplicar.ts): si no se puede aplicar, la
+    // factura queda como nació y el saldo a favor intacto.
+    const saldo = await aplicarSaldoAFavor({ clinicId, invoiceId: invoice.id, userId: ctx.userId, origen: "creada" });
+
     await logMutation({
       req,
       clinicId,
@@ -211,13 +218,20 @@ export async function POST(req: NextRequest) {
       entityType: "invoice",
       entityId: invoice.id,
       action: "create",
-      after: { invoiceNumber: invoice.invoiceNumber, patientId: invoice.patientId, total: invoice.total },
+      after: {
+        invoiceNumber: invoice.invoiceNumber, patientId: invoice.patientId, total: invoice.total,
+        ...(saldo.aplicado > 0 ? { anticipoAplicado: saldo.aplicado, saldoAFavorRestante: saldo.restanteAFavor } : {}),
+      },
     });
 
     revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${invoice.patientId}`);
+    const creada = saldo.factura ? { ...invoice, ...saldo.factura } : invoice;
     // P1-N1: el `include: { patient: true }` de arriba arrastra `portalToken`.
-    return NextResponse.json(stripNestedPatientSecrets(invoice), { status: 201 });
+    return NextResponse.json(
+      { ...stripNestedPatientSecrets(creada), anticipoAplicado: saldo.aplicado },
+      { status: 201 },
+    );
   } catch (err: any) {
     // Un fallo de zod llega con `message` = el JSON crudo de TODOS los issues, y
     // el editor lo pinta tal cual en el toast. Se surfacea el primero con su ruta

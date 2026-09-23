@@ -131,6 +131,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     refund:   t("cashRegister.methodRefund"),
     // Pago de factura con link de Mercado Pago (ws1-t1): lo registra el webhook.
     mercadopago: t("cashRegister.methodMercadoPago"),
+    // Saldo a favor (anticipo) aplicado al emitir la factura: no entra al cajón.
+    anticipo: t("cashRegister.methodAnticipo"),
   };
   const methodLabel = (m: string) => METHOD_LABEL[m] ?? m;
 

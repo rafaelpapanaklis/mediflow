@@ -11,6 +11,7 @@ import { CASH_METHOD } from "@/lib/caja";
 import { esMetodoPago, METODOS_PAGO } from "@/lib/quotes/condiciones-pago";
 import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
+import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -52,6 +53,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { method } = await req.json().catch(() => ({ method: undefined }));
   const payMethod = (method ?? "cash") as string;
+  // «anticipo» solo lo escribe la aplicación del saldo a favor (patient-credit-aplicar.ts).
+  if (payMethod === METODO_ANTICIPO) return NextResponse.json({ error: "El anticipo se aplica solo al emitir la factura; cobra con el método real" }, { status: 400 });
   // Mercado Pago lo registra el webhook, no este atajo (ver POST /api/invoices/[id]).
   // Va ANTES de la lista blanca para que el mensaje diga qué hacer, y no solo
   // que el método no vale: `esMetodoPago` sí lo acepta.

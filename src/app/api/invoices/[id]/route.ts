@@ -14,6 +14,7 @@ import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vige
 import { esMetodoPago, METODOS_PAGO } from "@/lib/quotes/condiciones-pago";
 import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
+import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -107,6 +108,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // a paid, de paid a balance y de ahí al saldo fantasma.
   const amount = round2(Number(rawAmount));
   if (!isFinite(amount) || amount <= 0) return NextResponse.json({ error: "El monto debe ser mayor a 0" }, { status: 400 });
+  // «anticipo» solo lo escribe la aplicación del saldo a favor, junto con su
+  // fila en patient_credits. Tecleado a mano sería un abono sin dinero detrás.
+  if (method === METODO_ANTICIPO) return NextResponse.json({ error: "El anticipo se aplica solo al emitir la factura; registra el pago con su método real" }, { status: 400 });
   // El método sale del selector de cobro (los seis de METODOS_PAGO) y de ningún
   // otro sitio. Sin esta puerta cualquier texto se guardaba tal cual: un
   // `method: "refund"` sumaba a `paid` mientras Caja, Finanzas, la cobranza y el
@@ -267,7 +271,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     updateData.balance = round2(Math.max(0, total - invoice.paid));
   }
 
-  await prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: updateData });
+  // Conceptos: solo mientras SIGA siendo borrador sin dinero. Si entre la
+  // lectura y aquí se confirmó (y recibió el saldo a favor), el total ya no se
+  // cambia por debajo de lo aplicado.
+  const { count } = await prisma.invoice.updateMany({
+    where: { id: params.id, clinicId, ...(body.items ? { status: "DRAFT" as const, paid: { lte: 0 } } : {}) },
+    data: updateData,
+  });
+  if (count === 0) {
+    return NextResponse.json({ error: "La factura cambió mientras la editabas (se confirmó o se cobró). Vuelve a abrirla." }, { status: 409 });
+  }
   const updated = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
 
   await logMutation({
@@ -306,8 +319,14 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (invoice.status !== "DRAFT" && invoice.paid === 0) {
     // Non-draft without payments — mark cancelled instead of delete
     // `cfdiUuid` igual al leído: si alguien la timbró desde la lectura, no se anula.
-    const { count } = await prisma.invoice.updateMany({ where: { id: params.id, clinicId, cfdiUuid: invoice.cfdiUuid }, data: { status: "CANCELLED" } });
-    if (count === 0) return cfdiVigenteResponse(null, "anular");
+    // `paid ≤ 0` igual al leído: si desde la lectura entró un cobro o se le
+    // aplicó el saldo a favor (anticipo), no se anula con dinero dentro.
+    const { count } = await prisma.invoice.updateMany({ where: { id: params.id, clinicId, cfdiUuid: invoice.cfdiUuid, paid: { lte: 0 } }, data: { status: "CANCELLED" } });
+    if (count === 0) {
+      const ahora = await prisma.invoice.findFirst({ where: { id: params.id, clinicId }, select: { cfdiUuid: true } });
+      if (ahora?.cfdiUuid) return cfdiVigenteResponse(null, "anular");
+      return NextResponse.json({ error: "La factura cambió mientras la anulabas (entró un pago). Vuelve a abrirla." }, { status: 409 });
+    }
     await logMutation({
       req, clinicId, userId: ctx.userId,
       entityType: "invoice", entityId: params.id, action: "delete",
@@ -323,8 +342,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (invoice.paid > 0) {
     return NextResponse.json({ error: "No se puede eliminar una factura con pagos registrados" }, { status: 400 });
   }
-  // Only drafts can be hard-deleted
-  await prisma.invoice.deleteMany({ where: { id: params.id, clinicId } });
+  // Only drafts can be hard-deleted. `status: DRAFT` y `paid ≤ 0` en el mismo
+  // DELETE: si mientras tanto alguien lo confirmó (y recibió el saldo a favor
+  // del paciente) o le entró un pago, no se borra con ese dinero dentro.
+  const borrados = await prisma.invoice.deleteMany({ where: { id: params.id, clinicId, status: "DRAFT", paid: { lte: 0 } } });
+  if (borrados.count === 0) {
+    return NextResponse.json({ error: "El borrador cambió mientras lo eliminabas (se confirmó o se cobró). Vuelve a abrirlo." }, { status: 409 });
+  }
   await logMutation({
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "delete",

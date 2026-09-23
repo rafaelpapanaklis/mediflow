@@ -180,6 +180,7 @@
     "test:plan-de-pagos": "tsx --test src/lib/invoices/__tests__/plan-de-pagos.test.ts",
     "test:payment-plans": "tsx --test --experimental-test-module-mocks src/lib/payment-plans/__tests__/letras.test.ts src/app/api/payment-plans/__tests__/plan-letras-ruta.test.ts",
     "test:invoice-money": "tsx --test --experimental-test-module-mocks src/app/api/invoices/__tests__/invoice-money.test.ts",
+    "test:saldo-a-favor": "tsx --test --experimental-test-module-mocks src/lib/__tests__/saldo-a-favor-factura.test.ts",
     "test:jornada-clinica": "tsx --test --experimental-test-module-mocks src/app/api/__tests__/jornada-clinica.test.ts",
     "test:consulta-activa": "tsx --test --experimental-test-module-mocks src/app/api/dashboard/consultations/__tests__/consulta-activa.test.ts",
     "test:nota-firmada": "tsx --test --experimental-test-module-mocks src/app/api/clinical-notes/__tests__/nota-firmada.test.ts",
