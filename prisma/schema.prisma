@@ -1586,9 +1586,10 @@ model ClinicMercadoPago {
   depositPercent      Int       @default(0) // 1–100, para "percent"
   holdMinutes         Int       @default(30)
   // ── Pago en línea desde el portal del paciente (ws1-t2) ──
-  /// Encendido de fábrica: conectar la cuenta ya es decir «quiero cobrar en
-  /// línea». Apagado, el portal dice «Paga en tu clínica» y la ruta del portal
-  /// rechaza el link. No toca los links que manda la recepción.
+  /// Encendido de fábrica en la PRIMERA conexión (conectar ya es decir «quiero
+  /// cobrar en línea»); reconectar respeta lo que eligió la clínica. Apagado,
+  /// el portal dice «Paga en tu clínica» y la ruta del portal rechaza el link.
+  /// No toca los links que manda la recepción.
   portalPaymentsEnabled Boolean @default(true)
   // ── Comisión de DaleControl (marketplace_fee de MP). Arranca en 0. ──
   /// "fixed" = pesos por cobro · "percent" = % del anticipo. MP recibe SIEMPRE

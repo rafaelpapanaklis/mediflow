@@ -4,8 +4,9 @@
 // una vez se conecte la cuenta de mercadopago; si la clínica no tiene cuenta de
 // mercadopago entonces claramente no aparezca la opción de pagar».
 //
-// La columna es `clinic_mercadopago."portalPaymentsEnabled"` (DEFAULT true, y
-// `guardarConexion` la vuelve a poner en true al conectar). Aquí se decide:
+// La columna es `clinic_mercadopago."portalPaymentsEnabled"` (DEFAULT true;
+// `guardarConexion` la crea en true en la PRIMERA conexión y NO la toca al
+// reconectar: si la clínica lo apagó, se queda apagado). Aquí se decide:
 //   · si el portal ofrece —y la ruta del portal ACEPTA— pagar con Mercado Pago;
 //   · qué links se cierran cuando la clínica lo apaga.
 //

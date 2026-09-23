@@ -42,7 +42,8 @@ import {
  *   1. La cuenta de Mercado Pago de la clínica (conectar / con qué cuenta / desconectar).
  *   2. El pago en línea del PORTAL del paciente (ws1-t2): su propio
  *      interruptor, aparte del anticipo. Solo existe con cuenta conectada, se
- *      enciende solo al conectar y se guarda en cuanto se mueve.
+ *      enciende solo la PRIMERA vez que se conecta la cuenta (reconectar respeta
+ *      lo que eligió la clínica) y se guarda en cuanto se mueve.
  *   3. El anticipo: apagado hasta que haya cuenta. Sin cuenta NO hay botón que
  *      falle: la sección se ve atenuada y dice por qué.
  *   4. Los últimos anticipos: el rastro para el día que alguien diga «yo pagué».
@@ -206,7 +207,8 @@ export function AnticiposClient({
       <Columna>
         {resultado === "conectada" && (
           <Aviso tono="exito">
-            Cuenta de Mercado Pago conectada. Ya puedes encender el anticipo. {t("anticiposPortal.conectadaAviso")}
+            Cuenta de Mercado Pago conectada. Ya puedes encender el anticipo.{" "}
+            {datos.portal.activo ? t("anticiposPortal.conectadaAviso") : t("anticiposPortal.conectadaAvisoApagado")}
           </Aviso>
         )}
         {resultado === "cancelado" && <Aviso tono="alerta">No se conectó: la autorización se canceló en Mercado Pago.</Aviso>}

@@ -10054,7 +10054,7 @@
     "titulo": "Pago en línea en el portal del paciente",
     "subtitulo": "Tus pacientes pagan el saldo de sus facturas desde su portal, con un botón y un QR de Mercado Pago. El pago se registra solo en la factura.",
     "interruptor": "Ofrecer pagar con Mercado Pago en el portal",
-    "interruptorAyuda": "Se enciende solo al conectar la cuenta. Apagado, el portal dice «Paga en tu clínica» y los links que se abrieron desde el portal dejan de aceptar pagos. Los links que mandes tú por WhatsApp o correo no cambian.",
+    "interruptorAyuda": "Se enciende solo la primera vez que conectas la cuenta; si lo apagas, se queda apagado aunque reconectes. Apagado, el portal dice «Paga en tu clínica» y los links que se abrieron desde el portal dejan de aceptar pagos. Los links que mandes tú por WhatsApp o correo no cambian.",
     "insigniaEncendido": "Encendido",
     "insigniaApagado": "Apagado",
     "confirmarTitulo": "¿Apagar el pago en línea del portal?",
@@ -10063,6 +10063,7 @@
     "encendido": "Listo: tus pacientes pueden pagar sus facturas desde el portal.",
     "apagado": "Apagado. El portal dice «Paga en tu clínica».",
     "errorGuardar": "No se pudo guardar. Intenta de nuevo.",
-    "conectadaAviso": "El pago en línea del portal del paciente quedó encendido."
+    "conectadaAviso": "El pago en línea del portal del paciente quedó encendido.",
+    "conectadaAvisoApagado": "El pago en línea del portal del paciente sigue apagado, como lo dejaste."
   }
 }

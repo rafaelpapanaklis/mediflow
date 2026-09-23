@@ -625,29 +625,69 @@ test("el código antes que el SQL (la columna todavía no existe) → sigue ENCE
   assert.equal((await pedirLink(pedido({ invoiceId: "f1" }))).status, 200);
 });
 
-test("conectar la cuenta ENCIENDE el pago del portal, también al reconectar después de haberlo apagado", async () => {
+/**
+ * Conduce la `guardarConexion` REAL contra una tabla en memoria que aplica el
+ * upsert como Postgres: si la fila existe, `update`; si no, `create` más los
+ * DEFAULT de la columna (portalPaymentsEnabled = true).
+ */
+async function conectarDeVerdad(filas: any[], clinicId: string) {
   process.env.DATA_ENCRYPTION_KEY = "a".repeat(64);
   cuentaReal = true;
   try {
     const cuenta = await import("@/lib/anticipos/cuenta.server");
     assert.equal(typeof cuenta.guardarConexion, "function", "es la cuenta.server REAL");
-    const escritas: any[] = [];
-    const dbFalsa: any = { clinicMercadoPago: { upsert: async (a: any) => { escritas.push(a); } } };
+    const llamadas: any[] = [];
+    const dbTabla: any = {
+      clinicMercadoPago: {
+        upsert: async (a: any) => {
+          llamadas.push(a);
+          const fila = filas.find((f) => f.clinicId === a.where.clinicId);
+          if (fila) Object.assign(fila, a.update);
+          else filas.push({ portalPaymentsEnabled: true, depositEnabled: false, ...a.create });
+        },
+      },
+    };
     await cuenta.guardarConexion(
       {
-        clinicId: "c1",
+        clinicId,
         userId: "u-admin",
         tokens: { accessToken: "tok", refreshToken: "ref", expiresIn: 3600, userId: "999", liveMode: true } as any,
         cuenta: null,
       },
-      dbFalsa,
+      dbTabla,
     );
-    assert.equal(escritas[0].where.clinicId, "c1");
-    assert.equal(escritas[0].create.portalPaymentsEnabled, true);
-    assert.equal(escritas[0].update.portalPaymentsEnabled, true);
+    return llamadas[0];
   } finally {
     cuentaReal = false;
   }
+}
+
+test("PRIMERA conexión de una clínica → el pago del portal nace ENCENDIDO", async () => {
+  const filas: any[] = [];
+  const llamada = await conectarDeVerdad(filas, "c9");
+  assert.equal(filas.length, 1);
+  assert.equal(filas[0].portalPaymentsEnabled, true);
+  // Explícito en el create, no solo por el DEFAULT de la base.
+  assert.equal(llamada.create.portalPaymentsEnabled, true);
+});
+
+test("RECONEXIÓN de una clínica que lo había APAGADO → se queda apagado (no se enciende solo)", async () => {
+  const filas: any[] = [{
+    clinicId: "c1", mpUserId: "999", accessToken: null, tokenExpiresAt: null,
+    disconnectedAt: new Date("2026-09-20T00:00:00Z"), portalPaymentsEnabled: false,
+  }];
+  const llamada = await conectarDeVerdad(filas, "c1");
+  assert.equal(filas.length, 1);
+  assert.equal(filas[0].portalPaymentsEnabled, false, "la elección de la clínica se respeta");
+  assert.ok(filas[0].accessToken, "y la cuenta sí quedó reconectada");
+  assert.equal(filas[0].disconnectedAt, null);
+  assert.equal("portalPaymentsEnabled" in llamada.update, false, "el update no toca el interruptor");
+});
+
+test("RECONEXIÓN de una clínica que lo tenía ENCENDIDO → sigue encendido", async () => {
+  const filas: any[] = [{ clinicId: "c1", mpUserId: "999", accessToken: "v1:viejo", portalPaymentsEnabled: true }];
+  await conectarDeVerdad(filas, "c1");
+  assert.equal(filas[0].portalPaymentsEnabled, true);
 });
 
 test("APAGARLO → el portal dice «Paga en tu clínica» y la ruta RECHAZA el link (409), sin tocar Mercado Pago", async () => {
