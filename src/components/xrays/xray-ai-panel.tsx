@@ -260,6 +260,9 @@ export function XrayAiPanel({
         if (res.status === 429) {
           toast.error("Sin créditos de IA. Contacta a tu administrador para recargar");
           setRemaining(0);
+        } else if (res.status === 403 && data?.funcionApagada) {
+          // La clínica apagó el análisis en Saldo de IA: no es un permiso.
+          toast.error(String(data.error));
         } else if (res.status === 401 || res.status === 403) {
           toast.error("No tienes permiso para usar este feature");
         } else if (res.status === 502 || res.status === 503) {

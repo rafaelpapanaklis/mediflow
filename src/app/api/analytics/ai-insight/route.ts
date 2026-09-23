@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { chat } from "@/lib/integrations/claude";
 import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
+import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { AI_FEATURE_AI_INSIGHT } from "@/lib/ai-billing/types";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +23,13 @@ export const dynamic = "force-dynamic";
  * Costo aproximado: ~$0.005 por insight con Sonnet 4.6 (input ~500 tokens
  * + output ~200 tokens). Negligible para el caso de uso pero la clínica
  * podrá desactivar IA en BASIC plan en el futuro (no implementado aún).
+ *
+ * Gasto (ws1-t1): descuenta del cupo del plan (addAiTokens) como siempre y
+ * además deja su AiUsageEvent con el costo real (billedCents = 0) para que la
+ * Tesorería lo vea. La clínica puede apagarlo en Saldo de IA.
  */
+const MODEL = "claude-sonnet-4-6";
+
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
@@ -37,10 +46,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
+  // Interruptor de la clínica: ANTES de gastar, en el servidor.
+  const apagada = await cortarSiIaApagada(user.clinicId, "ai_insight");
+  if (apagada) return apagada;
+
   const aiErr = await aiTokenLimitError(user.clinicId);
   if (aiErr) return NextResponse.json(aiErr, { status: 429 });
 
   const result = await chat({
+    model: MODEL,
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -56,6 +70,20 @@ export async function POST(req: NextRequest) {
   }
 
   await addAiTokens(user.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0), "ai_insight", user.id);
+
+  // Costo real para la Tesorería. No cobra nada (el cupo ya se movió arriba) y
+  // se traga sus fallos: la respuesta sigue aunque no se registre.
+  if (!result.mock) {
+    await recordUsageNoCharge({
+      clinicId: user.clinicId,
+      feature: AI_FEATURE_AI_INSIGHT,
+      model: MODEL,
+      inputTokens: result.inputTokens ?? 0,
+      outputTokens: result.outputTokens ?? 0,
+      cacheTokens: result.cacheRead ?? 0,
+      cacheWriteTokens: result.cacheCreation ?? 0,
+    });
+  }
 
   return NextResponse.json({
     insight: result.text,

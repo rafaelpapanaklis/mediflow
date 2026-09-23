@@ -7,6 +7,7 @@ import {
   normalizeAiFeature,
   type AiFeature,
 } from "@/lib/ai-tokens";
+import { AI_FEATURES_FUERA_DEL_CUPO } from "@/lib/ai-billing/types";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -112,7 +113,15 @@ export async function GET() {
     try {
       const rows = await prisma.aiUsageEvent.groupBy({
         by: ["feature"],
-        where: { clinicId: ctx.clinicId, createdAt: { gte: monthStart }, billedCents: { lte: 0 } },
+        // Y fuera lo que DaleControl absorbe sin tocar el cupo (el resumen
+        // semanal, ws1-t1): pintarlo aquí sería enseñarle a la clínica un
+        // consumo de su cupo que nunca le descontó.
+        where: {
+          clinicId: ctx.clinicId,
+          createdAt: { gte: monthStart },
+          billedCents: { lte: 0 },
+          feature: { notIn: [...AI_FEATURES_FUERA_DEL_CUPO] },
+        },
         _sum: { inputTokens: true, outputTokens: true, cacheTokens: true },
       });
 

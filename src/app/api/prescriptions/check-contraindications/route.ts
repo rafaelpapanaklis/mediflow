@@ -7,6 +7,7 @@ import { persistentRateLimit } from "@/lib/failban";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { AI_FEATURE_PRESCRIPTION_CHECK } from "@/lib/ai-billing/types";
 
 export const dynamic = "force-dynamic";
@@ -160,6 +161,11 @@ export async function POST(req: NextRequest) {
   // modal, override incluido (antes capa por rol).
   const denied = denyIfMissingPermission(ctx, "prescription.create");
   if (denied) return denied;
+
+  // Interruptor de la clínica (Saldo de IA → Funciones de IA): ANTES de gastar.
+  // La receta se emite igual: esta revisión es un botón aparte y opcional.
+  const apagada = await cortarSiIaApagada(ctx.clinicId, "contraindications");
+  if (apagada) return apagada;
 
   // Freno de gasto POR CLÍNICA (no por IP: todo el consultorio comparte IP) y
   // persistente en Upstash — el Map en memoria no limita en serverless.

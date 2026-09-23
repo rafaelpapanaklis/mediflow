@@ -65,6 +65,8 @@ export function AiConsultPanel({ patientId, currentInput, value, onApply, onRemo
       if (res.status === 403) {
         const body = await res.json().catch(() => null);
         if (body?.noPlan) { setNoPlan({ isAdmin: body.isAdmin === true }); return; }
+        // La clínica apagó el análisis en Saldo de IA: el servidor dice dónde.
+        if (body?.funcionApagada) { setError(String(body.error)); return; }
         setError(t("clinical.aiConsult.genericError"));
         return;
       }

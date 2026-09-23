@@ -293,6 +293,17 @@ export function DictationMic({ onText, disabled }: Props) {
         );
         return;
       }
+      if (res.status === 403) {
+        // La clínica apagó el dictado en Saldo de IA: reintentar no ayuda, y
+        // el servidor ya dice dónde se enciende.
+        const body = await res.json().catch(() => null);
+        if (body?.funcionApagada) {
+          retryBlobRef.current = null;
+          setPhase("idle");
+          toast.error(String(body.error));
+          return;
+        }
+      }
       if (!res.ok) {
         retryBlobRef.current = { blob, filename };
         setPhase("error");

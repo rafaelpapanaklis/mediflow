@@ -33,13 +33,42 @@ export const AI_FEATURE_PRESCRIPTION_CHECK = "prescription_check";
  */
 export const AI_FEATURE_LANDING_COPY = "landing_copy";
 
-/** Las 4 features que el plan absorbe (nunca se cobran al monedero). */
+/**
+ * Las cinco que llamaban a Claude sin dejar AiUsageEvent (ws1-t1, hallazgo H5):
+ * la Tesorería no las veía y el margen salía inflado. Ahora registran su costo
+ * con `recordUsageNoCharge`, igual que las cuatro de arriba. NO cambia quién
+ * paga: las cuatro de la analítica/agenda/homeopatía siguen descontando del
+ * cupo del plan (addAiTokens) y el resumen semanal no descuenta de nada.
+ *
+ * Los slugs coinciden a propósito con los del cupo (`AI_FEATURES` en
+ * `@/lib/ai-tokens`), así normalizeAiFeature los reconoce sin alias.
+ */
+export const AI_FEATURE_WEEKLY_INSIGHTS = "weekly_insights";
+export const AI_FEATURE_AI_INSIGHT = "ai_insight";
+export const AI_FEATURE_NO_SHOW_PREDICTION = "no_show_prediction";
+export const AI_FEATURE_CLINIC_LAYOUT = "clinic_layout";
+export const AI_FEATURE_HOMEOPATHY = "homeopathy";
+
+/** Las features que el plan absorbe (nunca se cobran al monedero). */
 export const AI_INCLUDED_FEATURES = [
   AI_FEATURE_CHAT_ASSISTANT,
   AI_FEATURE_CONSULT_ANALYSIS,
   AI_FEATURE_XRAY_ANALYSIS,
   AI_FEATURE_PRESCRIPTION_CHECK,
+  AI_FEATURE_WEEKLY_INSIGHTS,
+  AI_FEATURE_AI_INSIGHT,
+  AI_FEATURE_NO_SHOW_PREDICTION,
+  AI_FEATURE_CLINIC_LAYOUT,
+  AI_FEATURE_HOMEOPATHY,
 ] as const;
+
+/**
+ * Las que NO salen del cupo del plan aunque se registren con billedCents = 0:
+ * DaleControl las absorbe enteras. El desglose del cupo que ve la clínica
+ * (/api/ai/usage, plan B por eventos) las excluye para no pintarle un consumo
+ * que nunca le descontó.
+ */
+export const AI_FEATURES_FUERA_DEL_CUPO = [AI_FEATURE_WEEKLY_INSIGHTS] as const;
 
 /**
  * Etiquetas legibles de `AiUsageEvent.feature`. En español fijo a propósito:
@@ -53,6 +82,11 @@ export const AI_BILLING_FEATURE_LABEL_ES: Record<string, string> = {
   [AI_FEATURE_CONSULT_ANALYSIS]: "Análisis de consulta",
   [AI_FEATURE_XRAY_ANALYSIS]: "Análisis de radiografías",
   [AI_FEATURE_PRESCRIPTION_CHECK]: "Revisión de recetas",
+  [AI_FEATURE_WEEKLY_INSIGHTS]: "Resumen semanal",
+  [AI_FEATURE_AI_INSIGHT]: "Análisis de datos",
+  [AI_FEATURE_NO_SHOW_PREDICTION]: "Predicción de inasistencias",
+  [AI_FEATURE_CLINIC_LAYOUT]: "Distribución de la clínica",
+  [AI_FEATURE_HOMEOPATHY]: "Homeopatía",
   // AI_FEATURE_SABINA vive en src/lib/sabina/engine-catalog.ts (server-only);
   // test:sabina-cobro comprueba que el slug y esta clave coinciden.
   sabina: "Sabina",

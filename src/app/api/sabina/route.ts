@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { persistentRateLimit } from "@/lib/failban";
 import { chargeUsage, estimarCostoCents, liberarReserva, reservarSaldo, type ReservaSaldo } from "@/lib/ai-billing/wallet";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { tokensPorTexto, type LlamadaEstimada } from "@/lib/ai-billing/reserva-core";
 import { isAiHistoryStorageMissing } from "@/lib/ai-assistant/conversations";
 import { ejecutarSabina } from "@/lib/sabina/engine";
@@ -92,6 +93,11 @@ export async function POST(req: NextRequest) {
     if (sabinaCtx.sabina?.apagada) {
       return NextResponse.json({ error: FRASE_SABINA_APAGADA, sabinaApagada: true }, { status: 403 });
     }
+
+    /* ── 1c. Apagada para TODA la clínica (Saldo de IA → Funciones de IA,
+          ws1-t1). Mismo sitio y misma razón: antes de gastar nada ──────── */
+    const apagadaEnClinica = await cortarSiIaApagada(ctx.clinicId, "sabina");
+    if (apagadaEnClinica) return apagadaEnClinica;
 
     /* ── 2. Freno de gasto por CLÍNICA (no por IP: el consultorio la
           comparte), igual que /api/consult/ai-assist ─────────────────── */

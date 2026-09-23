@@ -9,6 +9,7 @@ import { persistentRateLimit } from "@/lib/failban";
 import { BUCKETS, extractStoragePath } from "@/lib/storage";
 import { getModeConfig, isValidMode } from "@/lib/xray/analysis-modes";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { AI_FEATURE_XRAY_ANALYSIS } from "@/lib/ai-billing/types";
 import type { XrayAnalysisMode } from "@prisma/client";
 
@@ -321,6 +322,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       });
     }
   }
+
+  // Interruptor de la clínica (Saldo de IA → Funciones de IA): ANTES de gastar.
+  // Va DESPUÉS del atajo de caché a propósito: devolver un análisis ya hecho no
+  // llama a la IA ni cuesta nada, y apagar la función no debe esconderlo.
+  const apagada = await cortarSiIaApagada(ctx.clinicId, "xray_analysis");
+  if (apagada) return apagada;
 
   // Check AI token limit (y reset mensual)
   const clinic = await prisma.clinic.findUnique({

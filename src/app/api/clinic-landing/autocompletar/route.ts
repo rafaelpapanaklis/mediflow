@@ -4,6 +4,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { chat } from "@/lib/integrations/claude";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { canSpend, chargeUsage, estimarCostoCents, liberarReserva, reservarSaldo, type ReservaSaldo } from "@/lib/ai-billing/wallet";
 import { tokensPorTexto } from "@/lib/ai-billing/reserva-core";
 import { getPricingConfig } from "@/lib/ai-billing/pricing";
@@ -148,6 +149,10 @@ export async function POST(req: NextRequest) {
     const paso = await entrar();
     if (paso instanceof NextResponse) return paso;
     const { clinicId, isAdmin } = paso;
+
+    // Interruptor de la clínica (Saldo de IA → Funciones de IA): ANTES de gastar.
+    const apagada = await cortarSiIaApagada(clinicId, "landing_copy");
+    if (apagada) return apagada;
 
     // Freno de gasto por CLÍNICA: cada intento cuesta saldo.
     const rl = await persistentRateLimit(req, { id: `landing-autocompletar:${clinicId}`, limit: 6, windowSec: 600 });

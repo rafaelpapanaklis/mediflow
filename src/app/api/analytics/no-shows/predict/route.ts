@@ -4,6 +4,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { chat } from "@/lib/integrations/claude";
 import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
+import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { AI_FEATURE_NO_SHOW_PREDICTION } from "@/lib/ai-billing/types";
+import { funcionIaApagada } from "@/lib/ai-billing/interruptores.server";
+import type { ChatResult } from "@/lib/integrations/claude";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +23,15 @@ export const dynamic = "force-dynamic";
  *
  * Multi-tenant: validamos que el appointment pertenezca a la clínica del
  * usuario antes de tocar IA o persistir.
+ *
+ * Gasto (ws1-t1): la IA descuenta del cupo del plan como siempre y deja su
+ * AiUsageEvent con el costo real (billedCents = 0). Si la clínica apagó la
+ * función en Saldo de IA, NO se llama a Claude ni se mira el cupo: la
+ * predicción sale de la heurística de abajo, la misma que ya era el respaldo
+ * cuando la IA fallaba.
  */
+const AI_MODEL = "claude-sonnet-4-6";
+
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!["SUPER_ADMIN", "ADMIN", "DOCTOR", "RECEPTIONIST"].includes(user.role)) {
@@ -160,11 +172,15 @@ export async function POST(req: NextRequest) {
   baselineProb = Math.min(0.95, Math.max(0.02, baselineProb));
 
   // IA refinement (opcional, si key disponible). Si Claude falla
-  // mantenemos baseline.
-  const aiErr = await aiTokenLimitError(clinicId);
-  if (aiErr) return NextResponse.json(aiErr, { status: 429 });
+  // mantenemos baseline. Apagada por la clínica = baseline sin llamar.
+  const iaApagada = await funcionIaApagada(clinicId, "no_show_prediction");
+  if (!iaApagada) {
+    const aiErr = await aiTokenLimitError(clinicId);
+    if (aiErr) return NextResponse.json(aiErr, { status: 429 });
+  }
 
-  const aiResult = await chat({
+  const aiResult: ChatResult = iaApagada ? { text: "", error: "ia_apagada" } : await chat({
+    model: AI_MODEL,
     system: AI_SYSTEM_PROMPT,
     messages: [
       {
@@ -195,6 +211,20 @@ export async function POST(req: NextRequest) {
   });
 
   await addAiTokens(clinicId, (aiResult.inputTokens ?? 0) + (aiResult.outputTokens ?? 0), "no_show_prediction", user.id);
+
+  // Costo real para la Tesorería (no cobra; se traga sus fallos). Sin tokens
+  // —apagada, mock o error— no escribe nada.
+  if (!aiResult.mock) {
+    await recordUsageNoCharge({
+      clinicId,
+      feature: AI_FEATURE_NO_SHOW_PREDICTION,
+      model: AI_MODEL,
+      inputTokens: aiResult.inputTokens ?? 0,
+      outputTokens: aiResult.outputTokens ?? 0,
+      cacheTokens: aiResult.cacheRead ?? 0,
+      cacheWriteTokens: aiResult.cacheCreation ?? 0,
+    });
+  }
 
   let probability = baselineProb;
   let aiFactors: Array<{ label: string; weight: number; reason: string }> = [];
@@ -230,6 +260,8 @@ export async function POST(req: NextRequest) {
     probability,
     factors: finalFactors,
     aiUsed: !aiResult.error && !aiResult.mock,
+    // La clínica apagó la IA de esta función: la predicción es la heurística.
+    aiDisabled: iaApagada,
     predictedAt: persisted.predictedAt.toISOString(),
   });
 }

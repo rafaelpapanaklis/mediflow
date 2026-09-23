@@ -665,3 +665,38 @@ test("un contexto basura no tumba la pregunta", async () => {
     assert.ok(!estado.peticiones[0].system.includes("DÓNDE ESTÁ QUIEN PREGUNTA"));
   }
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * La clínica apagó a Sabina en Saldo de IA (ws1-t1)
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/** La base de siempre, pero la clínica guarda `aiSettings` con estas funciones apagadas. */
+function conFuncionesApagadas(...apagadas: string[]) {
+  const real = estado.db!;
+  const clinic = {
+    ...(real as any).clinic,
+    findUnique: async (args: any) =>
+      args?.select?.aiSettings ? { aiSettings: { apagadas } } : (real as any).clinic.findUnique(args),
+  };
+  estado.db = new Proxy(real as any, { get: (t, k) => (k === "clinic" ? clinic : t[k]) });
+}
+
+test("la clínica apagó a Sabina: 403 `funcionApagada`, sin llamar al modelo ni reservar ni cobrar", async () => {
+  conFuncionesApagadas("sabina");
+  estado.guion = () => contesta("No debería llegar aquí.");
+  const res = await preguntar("¿cuántas citas tengo hoy?");
+  const json = await res.json();
+  assert.equal(res.status, 403);
+  assert.equal(json.funcionApagada, "sabina");
+  assert.ok(!json.sabinaApagada, "no es el apagado del Super Admin: la pantalla dice otra cosa");
+  assert.equal(estado.peticiones.length, 0, "no salió ni una llamada a Anthropic");
+  assert.equal(estado.cobros.length, 0);
+});
+
+test("apagar OTRA función de la clínica no toca a Sabina", async () => {
+  conFuncionesApagadas("weekly_insights", "whatsapp_bot");
+  estado.guion = () => contesta("Tienes 3 citas.");
+  const res = await preguntar("¿cuántas citas tengo hoy?");
+  assert.equal(res.status, 200);
+  assert.equal(estado.peticiones.length, 1);
+});

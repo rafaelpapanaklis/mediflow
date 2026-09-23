@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { chat, type ChatInput, type ChatResult } from "@/lib/integrations/claude";
+import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { AI_FEATURE_WEEKLY_INSIGHTS } from "@/lib/ai-billing/types";
+import { funcionIaApagada } from "@/lib/ai-billing/interruptores.server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min (límite duro de Vercel).
@@ -31,7 +34,13 @@ const SOFT_DEADLINE_MS = 270_000; // 4.5 de 5 min
  * Concurrencia: procesa las clínicas en lotes (CONCURRENCY en paralelo) con
  * corte blando antes de maxDuration; lo pendiente se reanuda por idempotencia.
  *
- * Response: { processed, skipped, failed, stoppedEarly, remaining, weekStart, weekEnd }
+ * Gasto (ws1-t1): cada llamada real a Claude deja su AiUsageEvent con el
+ * costo y billedCents = 0 — lo absorbe DaleControl, NO descuenta del cupo ni
+ * del Saldo IA de la clínica (igual que antes; solo que ahora se ve en la
+ * Tesorería). Y la clínica puede apagarlo: el interruptor se lee POR CLÍNICA,
+ * justo antes de su llamada, no una vez al arrancar.
+ *
+ * Response: { processed, skipped, disabled, failed, stoppedEarly, remaining, weekStart, weekEnd }
  */
 export async function GET(req: NextRequest) {
   // Auth check — Vercel inyecta Authorization: Bearer <CRON_SECRET>.
@@ -71,6 +80,7 @@ export async function GET(req: NextRequest) {
 
   let processed = 0;
   let skipped = 0;
+  let disabled = 0;
   let failed = 0;
   let stoppedEarly = false;
   let remaining = 0;
@@ -80,7 +90,7 @@ export async function GET(req: NextRequest) {
   // lanza, para que un fallo de IA no aborte el resto del lote.
   async function processClinic(
     clinic: { id: string; name: string },
-  ): Promise<"processed" | "skipped" | "failed"> {
+  ): Promise<"processed" | "skipped" | "disabled" | "failed"> {
     try {
       // Idempotencia = progreso reanudable: si ya existe insight para
       // (clinicId, weekStart) lo saltamos. Ese row ES la marca por clínica de
@@ -116,7 +126,13 @@ export async function GET(req: NextRequest) {
       const weekStats = summarize(weekAppts, weekTimelines);
       const prevStats = summarize(prevWeekAppts, []);
 
-      const aiResult = await chatWithRetry({
+      // Interruptor de la clínica, leído AQUÍ y no al arrancar el cron: la
+      // corrida dura minutos y quien lo apagó a media corrida ya no quiere
+      // que se gaste en su clínica. Apagado = sin insight de esta semana (ni
+      // el de IA ni el de respaldo): «no lo quiero» es no recibirlo.
+      if (await funcionIaApagada(clinic.id, "weekly_insights")) return "disabled";
+
+      const aiResult = await chatWithRetry(clinic.id, {
         system: WEEKLY_SYSTEM_PROMPT,
         messages: [
           {
@@ -180,6 +196,7 @@ export async function GET(req: NextRequest) {
     for (const r of results) {
       if (r === "processed") processed += 1;
       else if (r === "skipped") skipped += 1;
+      else if (r === "disabled") disabled += 1;
       else failed += 1;
     }
   }
@@ -190,6 +207,7 @@ export async function GET(req: NextRequest) {
     totalClinics: clinics.length,
     processed,
     skipped,
+    disabled,
     failed,
     stoppedEarly,
     remaining,
@@ -214,22 +232,49 @@ function isRetryableError(error: string): boolean {
   );
 }
 
+/** Modelo que usa chat() cuando no se le pasa uno; el costo se calcula con él. */
+const WEEKLY_MODEL = "claude-sonnet-4-6";
+
 /**
  * chat() con reintentos acotados (backoff exponencial + jitter) SOLO ante
  * errores transitorios. No cambia el contenido del insight: misma llamada,
  * solo más resiliente. chat() no lanza — devuelve { error } — así que
  * inspeccionamos ese campo en vez de un try/catch.
+ *
+ * Cada intento que Anthropic contestó con tokens deja su AiUsageEvent: si un
+ * intento cobró y aun así se reintentó, ese gasto también existió.
  */
-async function chatWithRetry(input: ChatInput, maxRetries = 2): Promise<ChatResult> {
-  let result = await chat(input);
+async function chatWithRetry(clinicId: string, input: ChatInput, maxRetries = 2): Promise<ChatResult> {
+  const conModelo: ChatInput = { ...input, model: input.model ?? WEEKLY_MODEL };
+  let result = await chat(conModelo);
+  await registrarGasto(clinicId, conModelo.model!, result);
   let attempt = 0;
   while (result.error && isRetryableError(result.error) && attempt < maxRetries) {
     attempt += 1;
     const backoff = Math.min(1000 * 2 ** (attempt - 1), 8000) + Math.floor(Math.random() * 250);
     await sleep(backoff);
-    result = await chat(input);
+    result = await chat(conModelo);
+    await registrarGasto(clinicId, conModelo.model!, result);
   }
   return result;
+}
+
+/**
+ * Costo real de una llamada, sin cobrarle a nadie (billedCents = 0). Solo si
+ * fue de verdad (no mock) y trae tokens; recordUsageNoCharge ya ignora las de
+ * cero tokens y se traga sus fallos, así que registrar nunca tumba el cron.
+ */
+async function registrarGasto(clinicId: string, model: string, result: ChatResult): Promise<void> {
+  if (result.mock) return;
+  await recordUsageNoCharge({
+    clinicId,
+    feature: AI_FEATURE_WEEKLY_INSIGHTS,
+    model,
+    inputTokens: result.inputTokens ?? 0,
+    outputTokens: result.outputTokens ?? 0,
+    cacheTokens: result.cacheRead ?? 0,
+    cacheWriteTokens: result.cacheCreation ?? 0,
+  });
 }
 
 interface WeekSummary {

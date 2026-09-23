@@ -57,7 +57,12 @@ export function ProceduresClient({ rediseno = false }: { rediseno?: boolean } = 
           question: "Analiza los tiempos promedio de procedimientos vs benchmark. Detecta el más fuera de rango y sugiere 1-2 acciones concretas.",
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        // La clínica apagó el análisis en Saldo de IA: el servidor dice dónde.
+        const e = await res.json().catch(() => null);
+        if (e?.funcionApagada) { toast.error(String(e.error)); return; }
+        throw new Error();
+      }
       const j = await res.json();
       setAiInsight(j.insight ?? "");
     } catch {

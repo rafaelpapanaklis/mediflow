@@ -6,6 +6,7 @@ import styles from "./sabina-widgets.module.css";
 const ICON_BY_KIND: Record<SabinaErrorKind, typeof AlertTriangle> = {
   auth: LogIn,
   apagada: PowerOff,
+  apagada_clinica: PowerOff,
   no_balance: Wallet,
   rate_limited: Hourglass,
   plan_limit: Hourglass,
@@ -49,9 +50,9 @@ export function SabinaErrorNotice({
         <div className={c.errorTitle}>{copy.title}</div>
         <div className={c.errorMessage}>{copy.message}</div>
         <div className={c.errorActions}>
-          {kind === "no_balance" && (
+          {(kind === "no_balance" || kind === "apagada_clinica") && (
             <Link href="/dashboard/whatsapp/bot/saldo" className={c.errorLink}>
-              <Wallet size={12} aria-hidden /> Ir al monedero
+              <Wallet size={12} aria-hidden /> {kind === "no_balance" ? "Ir al monedero" : "Ir a Saldo de IA"}
             </Link>
           )}
           {copy.retryable && onRetry && (

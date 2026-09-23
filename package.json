@@ -294,7 +294,9 @@
     "test:admin-soporte-lectura": "tsx --test src/app/admin/soporte/__tests__/lectura-clinica.test.ts",
     "test:zona-admin": "tsx --test src/lib/admin/zona-horaria.test.ts",
     "test:dias-en-utc": "tsx --test src/lib/admin/__tests__/dias-en-utc.test.ts",
-    "test:recarga-stripe": "tsx --test src/lib/ai-billing/__tests__/recarga-stripe.test.ts"
+    "test:recarga-stripe": "tsx --test src/lib/ai-billing/__tests__/recarga-stripe.test.ts",
+    "//test:ia-interruptor": "ws1-t1: las cinco rutas que llamaban a Claude sin rastro (weekly-insights, ai-insight, no-shows, clinic-layout, homeopatía) dejan su AiUsageEvent con billedCents 0 sin cambiar quién paga, y registrar nunca tumba la respuesta. Con la función apagada en Saldo de IA no sale ni un fetch (13 funciones; el cron lo lee por clínica a mitad de corrida). Todo encendido de fábrica y si no se puede leer, encendido.",
+    "test:ia-interruptor": "tsx --test src/lib/ai-billing/__tests__/fugas-e-interruptor.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

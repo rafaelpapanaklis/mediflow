@@ -9,6 +9,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { buildConsultContext } from "@/lib/ai/consult-context";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { AI_FEATURE_CONSULT_ANALYSIS } from "@/lib/ai-billing/types";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,10 @@ export async function POST(req: NextRequest) {
   // firmar" del modal, override incluido (antes capa por rol, medicalRecord.create).
   const denied = denyIfMissingPermission(ctx, "medicalRecord.edit");
   if (denied) return denied;
+
+  // Interruptor de la clínica (Saldo de IA → Funciones de IA): ANTES de gastar.
+  const apagada = await cortarSiIaApagada(ctx.clinicId, "consult_assist");
+  if (apagada) return apagada;
 
   // Freno de gasto POR CLÍNICA (no por IP: todo el consultorio comparte IP) y
   // persistente en Upstash — el Map en memoria no limita en serverless.

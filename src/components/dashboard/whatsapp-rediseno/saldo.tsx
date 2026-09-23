@@ -2,11 +2,13 @@
 
 import { ArrowLeft, Wallet, CreditCard, Building2, Upload, X, CheckCircle2 } from "lucide-react";
 import type { SpeiPaso, SpeiTicket, WalletData } from "@/app/dashboard/whatsapp/bot/saldo/saldo-client";
+import type { FuncionesIaVM } from "@/app/dashboard/whatsapp/bot/saldo/funciones-ia";
 import { useT } from "@/i18n/i18n-provider";
 import { montoMxn } from "@/lib/ai-wallet/spei-montos";
 import { aiBillingFeatureLabel } from "@/lib/ai-billing/types";
 import { fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { RaizWhatsApp } from "./raiz";
+import { FuncionesIaRediseno } from "./funciones-ia";
 import { Boton, BotonEnlace, Cabecera, Campo, Cargando, Etiqueta, Interruptor, Nota, Tarjeta } from "./piezas";
 import s from "./whatsapp-rediseno.module.css";
 
@@ -55,6 +57,8 @@ export type SaldoVM = {
   setAutoAmountPesos: (v: string) => void;
   savingAuto: boolean;
   saveAuto: () => Promise<void>;
+  /** Interruptores de IA (ws1-t1): estado y manejador de SaldoClient. */
+  funcionesIa: FuncionesIaVM;
   textos: {
     presetAmountsCents: readonly number[];
     rechargeAnchor: string;
@@ -75,7 +79,7 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
     data, loading, loadError, amountCents, setAmountCents, customPesos, setCustomPesos, payBusy,
     startCheckout, mercadoPago, speiOpen, setSpeiOpen, cerrarSpei, speiPaso, setSpeiPaso, speiPesos, setSpeiPesos,
     setSpeiFile, speiBusy, speiError, speiTicket, openSpei, solicitarSpei, submitSpei, autoOn, setAutoOn, thresholdPesos, setThresholdPesos, autoAmountPesos,
-    setAutoAmountPesos, savingAuto, saveAuto, textos,
+    setAutoAmountPesos, savingAuto, saveAuto, funcionesIa, textos,
   } = vm;
 
   if (loading) {
@@ -311,6 +315,9 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
                 <p className={s.vacio}>Solo administradores pueden recargar o configurar la recarga automática.</p>
               </Tarjeta>
             )}
+
+            {/* ── Funciones de IA: qué se puede apagar y qué gasta cada una (ws1-t1) ── */}
+            <FuncionesIaRediseno vm={funcionesIa} />
           </div>
 
           <div className={s.columna}>

@@ -81,7 +81,12 @@ export function CostsClient({ rediseno = false }: { rediseno?: boolean } = {}) {
           question: "Identifica el sillón menos rentable y sugiere 1-2 acciones (subir precios, reasignar, reducir horario, renegociar renta).",
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        // La clínica apagó el análisis en Saldo de IA: el servidor dice dónde.
+        const e = await res.json().catch(() => null);
+        if (e?.funcionApagada) { toast.error(String(e.error)); return; }
+        throw new Error();
+      }
       const j = await res.json();
       setAiInsight(j.insight ?? "");
     } catch {

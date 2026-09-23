@@ -1,6 +1,7 @@
 import { type ChatMessage } from "@/lib/integrations/claude";
 import { chatMetered } from "@/lib/ai-billing/meter";
 import { canSpend } from "@/lib/ai-billing/wallet";
+import { funcionIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { BotIntent } from "./types";
 import type {
   BotConfigDTO,
@@ -51,6 +52,11 @@ export const generateAiReply: GenerateAiReply = async (input, config, faqs) => {
 
     const system = buildSystemPrompt(input, config, faqs);
     const messages = buildMessages(input.history, incoming);
+
+    // La clínica apagó la respuesta libre en Saldo de IA (ws1-t1): no llamamos
+    // a Claude. Igual que sin saldo: el motor deriva a una persona y la FAQ por
+    // reglas y la agenda siguen, que no gastan IA.
+    if (await funcionIaApagada(input.clinicId, "whatsapp_bot")) return null;
 
     // Cobro de IA: si la clínica no tiene saldo (ni auto-recarga con tarjeta), no
     // llamamos a Claude — el motor cae a handoff y la FAQ por reglas sigue gratis.
