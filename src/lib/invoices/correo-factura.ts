@@ -34,6 +34,11 @@ export interface CorreoFacturaInput {
   balance: number;
   items: unknown;
   condiciones?: CondicionesPago | null;
+  /**
+   * Link de Mercado Pago para pagar el saldo (ws1-t1). Con él, el correo dice
+   * cuánto y dónde pagar en línea; sin él, sale el correo de siempre.
+   */
+  linkPago?: { url: string; monto: number } | null;
 }
 
 export interface CorreoFactura {
@@ -82,12 +87,18 @@ export function buildCorreoFactura(input: CorreoFacturaInput): CorreoFactura {
   const lineas = conceptos(input.items);
   const frase = fraseCondiciones(input.total, input.condiciones);
   const telefono = (input.clinicPhone ?? "").trim();
-  // A una factura ya pagada no se le invita a pagar.
+  // A una factura ya pagada no se le invita a pagar (ni se le manda link).
+  const link = input.balance > 0 && input.linkPago?.url ? input.linkPago : null;
   const cierre = !(input.balance > 0)
     ? "Tu nota está pagada. ¡Gracias!"
-    : telefono
-      ? `Puedes pagar en la clínica o llamarnos al ${telefono} para coordinarlo.`
-      : "Puedes pagar en la clínica.";
+    : link
+      ? telefono
+        ? `También puedes pagar en la clínica o llamarnos al ${telefono}.`
+        : "También puedes pagar en la clínica."
+      : telefono
+        ? `Puedes pagar en la clínica o llamarnos al ${telefono} para coordinarlo.`
+        : "Puedes pagar en la clínica.";
+  const lineaLink = link ? `Paga ${dinero(link.monto)} en línea con Mercado Pago:` : null;
 
   const subject = `Tu nota ${input.invoiceNumber} — ${input.clinicName}`;
 
@@ -101,6 +112,7 @@ export function buildCorreoFactura(input: CorreoFacturaInput): CorreoFactura {
     ...(input.paid > 0 ? [`Pagado: ${dinero(input.paid)}`] : []),
     `Saldo: ${dinero(input.balance)}`,
     ...(frase ? ["", `Forma de pago acordada: ${frase}`] : []),
+    ...(link ? ["", lineaLink as string, link.url] : []),
     "",
     cierre,
     "",
@@ -124,6 +136,7 @@ export function buildCorreoFactura(input: CorreoFacturaInput): CorreoFactura {
     ${input.paid > 0 ? `<p style="font-size: 13px; margin: 0 0 2px 0; text-align: right;">Pagado: ${e(dinero(input.paid))}</p>` : ""}
     <p style="font-size: 13px; margin: 0 0 16px 0; text-align: right;">Saldo: ${e(dinero(input.balance))}</p>
     ${frase ? `<p style="font-size: 14px; font-weight: 600; line-height: 1.5; margin: 0 0 16px 0;">Forma de pago acordada: ${e(frase)}</p>` : ""}
+    ${link ? `<p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">${e(lineaLink)}<br /><a href="${e(link.url)}" style="font-weight: 700; text-decoration: underline; word-break: break-all;">${e(link.url)}</a></p>` : ""}
     <p style="font-size: 14px; line-height: 1.6; margin: 0 0 22px 0;">${e(cierre)}</p>
     <p style="font-size: 11px; line-height: 1.5; margin: 0;">Este correo es informativo: no es un comprobante fiscal (CFDI).<br />Enviado con DaleControl</p>
   </div>

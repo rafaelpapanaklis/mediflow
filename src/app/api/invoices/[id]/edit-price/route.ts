@@ -10,6 +10,7 @@ import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vige
 import {
   sumInvoiceItems, computeInvoiceTotal, round2, PRICE_ADJUST_FLAG,
 } from "@/lib/invoice-totals";
+import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -158,6 +159,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     after:  { subtotal: newSubtotal, discount: newDiscount, total: newTotal, balance: Math.max(0, newBalance) },
   });
 
+  // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
+  // un monto viejo y se cierran. Nunca lanza.
+  await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });

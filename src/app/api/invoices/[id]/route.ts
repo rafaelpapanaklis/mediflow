@@ -11,6 +11,8 @@ import { stripNestedPatientSecrets } from "@/lib/patient-secrets";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { CASH_METHOD } from "@/lib/caja";
 import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
+import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
+import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -93,6 +95,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (denied) return denied;
   }
   const { amount: rawAmount, method, reference, notes, paidAt } = await req.json();
+  // Un pago de Mercado Pago lo registra SOLO el webhook, con la referencia del
+  // pago de MP (lib/factura-mp): tecleado a mano aquí, el webhook lo sumaría otra
+  // vez al acreditarse. Mismo candado en mark-paid.
+  if (method === METODO_MERCADO_PAGO) {
+    return NextResponse.json({ error: "Los pagos de Mercado Pago se registran solos al acreditarse. Comparte el link de pago de la factura." }, { status: 400 });
+  }
   // El dinero se redondea a centavos EN LA PUERTA, igual que el pago en línea
   // del portal (online-payment.ts): un monto con más decimales arrastra el ruido
   // a paid, de paid a balance y de ahí al saldo fantasma.
@@ -161,6 +169,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     after: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus, payment: { amount, method }, ...(cashWarning ? { cashWarning } : {}) },
   });
 
+  // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
+  // un monto viejo y se cierran. Nunca lanza.
+  await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true, ...(cashWarning ? { warning: cashWarning } : {}) });
@@ -293,6 +304,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       entityType: "invoice", entityId: params.id, action: "delete",
       before: { status: invoice.status, invoiceNumber: invoice.invoiceNumber, total: invoice.total },
     });
+    // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
+    // un monto viejo y se cierran. Nunca lanza.
+    await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
     revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${invoice.patientId}`);
     return NextResponse.json({ success: true, cancelled: true });

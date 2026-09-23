@@ -129,6 +129,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     // Sin esta clave el fallback de abajo imprimía "refund" en inglés en el
     // corte, en el resumen impreso y en el CSV.
     refund:   t("cashRegister.methodRefund"),
+    // Pago de factura con link de Mercado Pago (ws1-t1): lo registra el webhook.
+    mercadopago: t("cashRegister.methodMercadoPago"),
   };
   const methodLabel = (m: string) => METHOD_LABEL[m] ?? m;
 

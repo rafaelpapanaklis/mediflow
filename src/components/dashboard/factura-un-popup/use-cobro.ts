@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 // Las mismas dos funciones que usa «Registrar pago» (billing/payment-modal).
 import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
 import { useT } from "@/i18n/i18n-provider";
-import type { PaymentMethod } from "@/components/dashboard/billing/payment-modal";
+import type { MetodoDelCobro } from "@/components/dashboard/billing/payment-modal";
 
 /**
  * EL COBRO DENTRO DEL DETALLE DE LA FACTURA (ws1-t2, solo con `menu-dos-niveles`).
@@ -50,7 +50,7 @@ export interface OpcionesCobro {
 export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar }: OpcionesCobro) {
   const t = useT();
   const [amount, setAmount]       = useState("");
-  const [method, setMethod]       = useState<PaymentMethod>("cash");
+  const [method, setMethod]       = useState<MetodoDelCobro>("cash");
   const [paidAt, setPaidAt]       = useState(() => todayLocalISO());
   const [reference, setReference] = useState("");
   const [notes, setNotes]         = useState("");

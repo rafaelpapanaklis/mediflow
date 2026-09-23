@@ -10,6 +10,7 @@ import { todayLocalISO } from "@/lib/billing/paid-at";
 import { useT } from "@/i18n/i18n-provider";
 import { METHODS } from "@/components/dashboard/billing/payment-modal";
 import { CLASES_CALENDARIO_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
+import { BotonMercadoPago, LinkMercadoPago } from "@/components/dashboard/billing/link-mercado-pago";
 import type { Cobro } from "./use-cobro";
 import u from "./un-popup.module.css";
 
@@ -39,7 +40,7 @@ export function enfocarMontoAlAbrir(e: Event) {
  * «Registrar pago» va en el pie del detalle, donde hoy está «Cobrar ahora».
  * Se viste con las clases de `factura-rediseno` (cuelga de su `.raiz`).
  */
-export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto }: {
+export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto, mercadoPago }: {
   cobro: Cobro;
   /** El detalle está ocupado con otra acción (o cobrando): campos quietos. */
   bloqueado: boolean;
@@ -47,14 +48,23 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto }: {
   descuento?: ReactNode;
   /** Lo que se enseña justo debajo del monto: a qué cuota del plan va (ws1-t2). */
   bajoElMonto?: ReactNode;
+  /**
+   * Mercado Pago (ws1-t1). Solo se pasa si la clínica tiene la cuenta conectada:
+   * entonces sale el método, y al elegirlo el link ocupa el lugar del monto, la
+   * fecha, la referencia y las notas (el servidor cobra el saldo y el pago se
+   * registra solo).
+   */
+  mercadoPago?: { invoiceId: string; alCambiar?: (link: unknown) => void } | null;
 }) {
   const t = useT();
+  const esMercadoPago = !!mercadoPago && cobro.method === "mercadopago";
   return (
     <section className={u.cobro} aria-label={t("clinical.paymentModal.title")}>
       <h3 className={u.cobroTitulo}>{t("clinical.paymentModal.title")}</h3>
 
       {descuento}
 
+      {!esMercadoPago && (
       <div className={c.campo}>
         <Label>{t("clinical.paymentModal.amountToCharge")}</Label>
         <Input
@@ -74,6 +84,7 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto }: {
         )}
         {bajoElMonto}
       </div>
+      )}
 
       <div className={c.campo}>
         <Label>{t("clinical.paymentModal.paymentMethod")}</Label>
@@ -95,9 +106,21 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto }: {
               </button>
             );
           })}
+          {mercadoPago && (
+            <BotonMercadoPago
+              activo={esMercadoPago}
+              alElegir={() => cobro.setMethod("mercadopago")}
+              disabled={bloqueado}
+              className={`${c.metodo} ${esMercadoPago ? c.metodoActivo : ""}`}
+            />
+          )}
         </div>
       </div>
 
+      {esMercadoPago ? (
+        <LinkMercadoPago invoiceId={mercadoPago.invoiceId} modo="cobro" bloqueado={bloqueado} alCambiar={mercadoPago.alCambiar} />
+      ) : (
+      <>
       <div className={c.rejilla2}>
         <div className={c.campo}>
           <Label>{t("common.date")}</Label>
@@ -126,6 +149,8 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto }: {
           disabled={bloqueado}
         />
       </div>
+      </>
+      )}
     </section>
   );
 }

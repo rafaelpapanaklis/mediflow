@@ -86,6 +86,28 @@ export async function createPreference(
   return { id: data.id, initPoint: data.init_point };
 }
 
+/**
+ * Cierra una preferencia para que deje de aceptar pagos (ws1-t1: el saldo de la
+ * factura cambió y se hizo otro link). PUT con `expiration_date_to` = ahora.
+ * Lanza si MP no lo acepta; quien llama decide si eso importa.
+ */
+export async function expirePreference(
+  accessToken: string,
+  preferenceId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  if (!/^[\w-]+$/.test(preferenceId)) throw new Error("preferencia inválida");
+  const res = await fetch(`${MP_API}/checkout/preferences/${preferenceId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ expires: true, expiration_date_to: now.toISOString() }),
+  });
+  if (!res.ok) throw new Error(`MercadoPago error ${res.status}`);
+}
+
 export interface MercadoPagoPayment {
   id: string;
   status: string;

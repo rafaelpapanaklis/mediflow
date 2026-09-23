@@ -3018,7 +3018,8 @@
       "descuento": "Descuento",
       "descargarExcel": "Descargar Excel",
       "sugerido": "Efectivo de hoy aún sin cuadrar:"
-    }
+    },
+    "methodMercadoPago": "Mercado Pago"
   },
   "billing": {
     "billingClient": {
@@ -8093,7 +8094,8 @@
       "cfdiStampedToast": "CFDI timbrado correctamente ante el SAT",
       "cfdiMonthCounter": "CFDI este mes: {used}/{included}",
       "cfdiOverageToast": "Esta factura es adicional ({price})",
-      "cfdiDownloadError": "No se pudo obtener el CFDI para descargar"
+      "cfdiDownloadError": "No se pudo obtener el CFDI para descargar",
+      "methodMercadoPago": "Mercado Pago"
     },
     "paymentModal": {
       "methodCash": "Efectivo",
@@ -8118,7 +8120,8 @@
       "refCheck": "# cheque",
       "refAuthorization": "# autorización",
       "registering": "Registrando…",
-      "registerPaymentBtn": "Registrar pago{amount}"
+      "registerPaymentBtn": "Registrar pago{amount}",
+      "methodMercadoPago": "Mercado Pago"
     },
     "emptyStates": {
       "patientsTitle": "Sin pacientes todavía",
@@ -9679,7 +9682,8 @@
       "credit": "Tarjeta crédito",
       "transfer": "Transferencia",
       "check": "Cheque",
-      "other": "Otro"
+      "other": "Otro",
+      "mercadopago": "Mercado Pago"
     },
     "enganche": "Enganche",
     "cuantosPagos": "Cuántos pagos",
@@ -9992,5 +9996,25 @@
       "ask": "Por favor, envíennos por este ticket los datos para transferir (banco, CLABE y beneficiario). Cuando hagamos la transferencia, subiremos el comprobante desde la pantalla de Saldo de IA.",
       "thanks": "Gracias."
     }
+  },
+  "facturaMp": {
+    "metodo": "Mercado Pago",
+    "titulo": "Link de pago de Mercado Pago",
+    "texto": "El paciente paga el saldo de {monto} con este link. El pago se registra solo al acreditarse.",
+    "textoSinLink": "Genera el link y compártelo con el paciente: paga el saldo de {monto} y el pago se registra solo.",
+    "generar": "Generar link",
+    "generando": "Generando link…",
+    "copiar": "Copiar link",
+    "copiado": "Link copiado",
+    "copiarFallo": "No se pudo copiar. Selecciona el link y cópialo a mano.",
+    "abrir": "Abrir",
+    "vigente": "Vigente hasta el {fecha}",
+    "errorGenerar": "No se pudo generar el link de Mercado Pago",
+    "cargando": "Buscando el link…",
+    "noRegistraAqui": "Con Mercado Pago no se registra el pago aquí: se registra solo cuando el paciente paga.",
+    "creadaConLink": "Link de Mercado Pago listo por {monto}",
+    "creadaSinLink": "La factura quedó creada, pero el link de Mercado Pago no salió:",
+    "avisoForma": "Se le manda al paciente un link de Mercado Pago por el saldo. Cuando paga, el pago se registra solo.",
+    "enviadoSinLink": "Se envió sin el link de Mercado Pago:"
   }
 }

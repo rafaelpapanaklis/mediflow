@@ -4,17 +4,20 @@ import { prisma } from "@/lib/prisma";
 import { getPayment } from "@/lib/mercadopago";
 import { verifyAndCreditMpTopup } from "@/lib/ai-wallet/mercadopago";
 import { aplicarPagoDeAnticipo } from "@/lib/anticipos/servicio.server";
+import { aplicarPagoDeFactura } from "@/lib/factura-mp/servicio.server";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Webhook COMPARTIDO labs + proveedores + recargas del monedero IA + anticipos
-// de cita por WhatsApp. MercadoPago llama el notification_url con
-// `?ref=lab:<orderId>` / `?ref=sup:<orderId>` / `?ref=aitopup:<topupId>` /
-// `?ref=anticipo:<depositId>` + el id del pago en el body `data.id` (o `id`).
+// de cita por WhatsApp + links de pago de facturas. MercadoPago llama el
+// notification_url con `?ref=lab:<orderId>` / `?ref=sup:<orderId>` /
+// `?ref=aitopup:<topupId>` / `?ref=anticipo:<depositId>` /
+// `?ref=factura:<linkId>` + el id del pago en el body `data.id` (o `id`).
 // Cada vendedor cobra a su propia cuenta, así que el token con el que
 // consultamos el pago sale de la orden (lab/supplier) o de la clínica
-// (anticipo), nunca del body.
+// (anticipo, factura), nunca del body.
 //
 // Códigos de respuesta (MercadoPago SOLO reintenta si NO respondemos 2xx):
 //  · 200 — procesado O descartado por causa DETERMINISTA (ref/payload inválido,
@@ -73,6 +76,25 @@ export async function POST(req: NextRequest) {
     if (kind === "anticipo") {
       if (orderId && paymentId) {
         await aplicarPagoDeAnticipo(orderId, paymentId);
+      }
+      return NextResponse.json({ received: true });
+    }
+
+    // ── Link de pago de una factura (ws1-t1) ─────────────────────────────────
+    // Mismo rail que el anticipo: cobra la CLÍNICA con su token OAuth, el pago se
+    // re-consulta a MP y se registra UNA vez como Payment "mercadopago" (dedup
+    // por la referencia del pago bajo FOR UPDATE de la factura). Lanza solo en
+    // lo transitorio → 500.
+    if (kind === "factura") {
+      if (orderId && paymentId) {
+        const r = await aplicarPagoDeFactura(orderId, paymentId);
+        if (r.aplicado) {
+          try {
+            revalidateAfter("invoices");
+          } catch {
+            // Refrescar la caché de Caja no puede tumbar un pago ya registrado.
+          }
+        }
       }
       return NextResponse.json({ received: true });
     }

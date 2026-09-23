@@ -23,7 +23,7 @@ import { useMemo } from "react";
 import { CalendarDays, CreditCard, Mail, MessageCircle, Send } from "lucide-react";
 import {
   calcularCalendario, dinero, fechaEnPalabras, frasePlan,
-  FRECUENCIAS_PAGO, MAX_PAGOS, METODOS_PAGO, MIN_PAGOS, PAGOS_SUGERIDOS,
+  FRECUENCIAS_PAGO, MAX_PAGOS, METODO_MERCADO_PAGO, METODOS_PAGO, MIN_PAGOS, PAGOS_SUGERIDOS,
   type CondicionesPago, type FrecuenciaPago, type ModoPago,
 } from "@/lib/quotes/condiciones-pago";
 import { clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
@@ -41,20 +41,24 @@ function hoyLocal(): string {
 }
 
 /** El cambio de condiciones, con la misma regla que el editor de presupuestos:
- *  «lo difiere con su banco» solo vive en un pago con tarjeta de crédito. */
+ *  «lo difiere con su banco» solo vive en un pago con tarjeta de crédito. Y
+ *  Mercado Pago (ws1-t1) solo en un pago: su link cobra el saldo entero. */
 export function parchearCondiciones(prev: CondicionesPago, cambio: Partial<CondicionesPago>): CondicionesPago {
   const sig = { ...prev, ...cambio };
   if (sig.modo !== "unico" || sig.metodo !== "credit") sig.difiereConSuBanco = false;
+  if (sig.modo === "plazos" && sig.metodo === METODO_MERCADO_PAGO) sig.metodo = null;
   return sig;
 }
 
 export function FormaDePagoFactura({
-  cond, total, onChange,
+  cond, total, onChange, mercadoPago = false,
 }: {
   cond: CondicionesPago;
   /** El TOTAL en vivo del popup: el mismo número que se va a guardar. */
   total: number;
   onChange: (sig: CondicionesPago) => void;
+  /** La clínica tiene Mercado Pago conectado (ws1-t1). Sin él, el método no sale. */
+  mercadoPago?: boolean;
 }) {
   const t = useT();
   const parchear = (cambio: Partial<CondicionesPago>) => onChange(parchearCondiciones(cond, cambio));
@@ -110,7 +114,21 @@ export function FormaDePagoFactura({
               {t(`presupuestoNuevo.metodos.${m}`)}
             </button>
           ))}
+          {/* Mercado Pago: solo con la cuenta conectada y en un solo pago. Si ya
+              viene elegido (un duplicado) se enseña igual, para poder quitarlo. */}
+          {(mercadoPago || cond.metodo === METODO_MERCADO_PAGO) && cond.modo === "unico" && (
+            <button
+              type="button"
+              aria-pressed={cond.metodo === METODO_MERCADO_PAGO}
+              className={`${s.metodo} ${cond.metodo === METODO_MERCADO_PAGO ? s.metodoActivo : ""}`}
+              onClick={() => parchear({ metodo: cond.metodo === METODO_MERCADO_PAGO ? null : METODO_MERCADO_PAGO })}
+              data-metodo="mercadopago"
+            >
+              {t("presupuestoNuevo.metodos.mercadopago")}
+            </button>
+          )}
         </div>
+        {cond.metodo === METODO_MERCADO_PAGO && <p className={s.aviso}>{t("facturaMp.avisoForma")}</p>}
       </div>
 
       {cond.modo === "plazos" && (

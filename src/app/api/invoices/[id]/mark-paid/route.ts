@@ -8,6 +8,8 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { round2 } from "@/lib/invoice-totals";
 import { CASH_METHOD } from "@/lib/caja";
+import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
+import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -49,6 +51,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { method } = await req.json().catch(() => ({ method: undefined }));
   const payMethod = (method ?? "cash") as string;
+  // Mercado Pago lo registra el webhook, no este atajo (ver POST /api/invoices/[id]).
+  if (payMethod === METODO_MERCADO_PAGO) {
+    return NextResponse.json({ error: "Los pagos de Mercado Pago se registran solos al acreditarse. Comparte el link de pago de la factura." }, { status: 400 });
+  }
 
   // Visibilidad por paciente (barrido Ola 3): cobrar la factura de un paciente
   // restringido exige poder verlo (el GET de facturas ya filtra la lista).
@@ -132,6 +138,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     },
   });
 
+  // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
+  // un monto viejo y se cierran. Nunca lanza.
+  await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true, ...(cashWarning && amount > 0 ? { warning: cashWarning } : {}) });

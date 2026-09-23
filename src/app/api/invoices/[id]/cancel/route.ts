@@ -7,6 +7,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
+import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 
 // Multi-tenant: clinicId siempre desde la sesión, nunca del body. Mismo
 // patrón que /api/invoices/[id]/route.ts.
@@ -74,6 +75,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     after:  { status: "CANCELLED", reason: reasonText || undefined },
   });
 
+  // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
+  // un monto viejo y se cierran. Nunca lanza.
+  await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });

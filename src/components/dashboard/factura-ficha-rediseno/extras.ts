@@ -94,15 +94,28 @@ const RUTA: Record<ViaEnvio, string> = { correo: "send-email", whatsapp: "send-w
  *  Un solo tipo, sin unión: el repo no compila en `strict` y no estrecha por `ok`. */
 export interface Resultado { ok: boolean; error: string | null }
 
-/** Manda la factura al paciente. Nunca lanza: devuelve el motivo del servidor. */
-export async function enviarFactura(invoiceId: string, via: ViaEnvio): Promise<Resultado> {
+/**
+ * Manda la factura al paciente. Nunca lanza: devuelve el motivo del servidor.
+ * `linkPago` (ws1-t1): la factura se cobra por Mercado Pago y el mensaje debe
+ * llevar el link; `avisoLink` dice por qué no lo llevó, si no lo llevó.
+ */
+export async function enviarFactura(
+  invoiceId: string,
+  via: ViaEnvio,
+  opciones: { linkPago?: boolean } = {},
+): Promise<Resultado & { avisoLink: string | null }> {
   try {
-    const res = await fetch(`/api/invoices/${invoiceId}/${RUTA[via]}`, { method: "POST" });
+    const res = await fetch(`/api/invoices/${invoiceId}/${RUTA[via]}`, {
+      method: "POST",
+      ...(opciones.linkPago
+        ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkPago: true }) }
+        : {}),
+    });
     const out = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: typeof out?.error === "string" ? out.error : null };
-    return { ok: true, error: null };
+    if (!res.ok) return { ok: false, error: typeof out?.error === "string" ? out.error : null, avisoLink: null };
+    return { ok: true, error: null, avisoLink: typeof out?.avisoLink === "string" && out.avisoLink ? out.avisoLink : null };
   } catch {
-    return { ok: false, error: null };
+    return { ok: false, error: null, avisoLink: null };
   }
 }
 
