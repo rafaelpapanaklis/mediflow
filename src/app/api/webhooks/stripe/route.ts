@@ -24,6 +24,8 @@ import {
   setWalletCardIfEmpty,
   recordFailedTopup,
   saveCardFromSetupIntent,
+  saveCardFromTopupIntent,
+  topupFromCheckoutSession,
   AI_TOPUP_KIND,
   AI_SETUP_KIND,
 } from "@/lib/ai-billing/recharge";
@@ -102,6 +104,21 @@ export async function POST(req: NextRequest) {
               amountMxn: (session.amount_total ?? 0) / 100,
               reference: (typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id) || session.id,
             });
+          }
+          break;
+        }
+
+        // Recarga del monedero de IA pagada por Checkout (kind = ai-topup). Es la
+        // RED DE SEGURIDAD de payment_intent.succeeded: el 22-sep-2026 ese evento
+        // no estaba suscrito en Stripe, este sí llegó y se descartaba aquí, y
+        // $200 MXN se cobraron sin abonarse. Los dos eventos son el MISMO pago:
+        // el candado es el id del PaymentIntent (nunca el de la sesión), así que
+        // solo uno acredita. Y solo con el pago hecho (payment_status "paid").
+        if (session.metadata?.kind === AI_TOPUP_KIND) {
+          const topup = topupFromCheckoutSession(session);
+          if (topup) {
+            await creditWalletFromStripe(topup);
+            await saveCardFromTopupIntent(topup.clinicId, topup.paymentIntentId);
           }
           break;
         }
@@ -636,7 +653,14 @@ export async function POST(req: NextRequest) {
         if (!clinicId) break;
 
         const amountCents = pi.amount_received || Number(pi.metadata?.amountCents) || pi.amount;
-        await creditWalletFromStripe({ clinicId, amountCents, paymentIntentId: pi.id });
+        // topupId: la reserva PENDING de una auto-recarga (chargeOffSession); así
+        // esta acreditación y la inline transicionan la misma fila.
+        await creditWalletFromStripe({
+          clinicId,
+          amountCents,
+          paymentIntentId: pi.id,
+          topupId: pi.metadata?.topupId || null,
+        });
 
         // Si la recarga guardó tarjeta (setup_future_usage) y el monedero no
         // tenía una, la dejamos lista para auto-recarga off-session.
@@ -655,7 +679,12 @@ export async function POST(req: NextRequest) {
         if (pi.metadata?.kind !== AI_TOPUP_KIND) break;
         const clinicId = pi.metadata?.clinicId;
         if (!clinicId) break;
-        await recordFailedTopup(clinicId, Number(pi.metadata?.amountCents) || pi.amount, pi.id);
+        await recordFailedTopup(
+          clinicId,
+          Number(pi.metadata?.amountCents) || pi.amount,
+          pi.id,
+          pi.metadata?.topupId || null,
+        );
         break;
       }
 
