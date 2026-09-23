@@ -349,8 +349,8 @@ export function getAppointmentEventSettings(clinic: { reminderSettings?: unknown
 //   · `bot` (decir el saldo por WhatsApp): esto no cuesta dinero, cuesta algo
 //     peor — es soltar cuánto debe un paciente a quien tenga el teléfono. Que
 //     el bot hable de dinero es una decisión deliberada de la clínica, nunca
-//     un default. Ver `src/lib/whatsapp/bot/saldo-core.ts` para lo que exige
-//     ANTES de decir un peso.
+//     un default. Ver `src/lib/whatsapp/bot/saldo-core.ts` para cuándo contesta
+//     y cuándo no.
 // ════════════════════════════════════════════════════════════════════
 
 export interface CobranzaSettings {
@@ -358,7 +358,7 @@ export interface CobranzaSettings {
   enabled: boolean;
   /** Cuántos días ANTES del vencimiento sale el aviso. */
   diasAntes: number;
-  /** El bot puede decir la próxima mensualidad (tras verificar identidad). */
+  /** El bot puede decir la próxima mensualidad (ver whatsapp/bot/saldo-core.ts). */
   bot: boolean;
   /** Plantilla con {nombre} {clinica} {importe} {fecha} {cuota} {total}. */
   message: string;

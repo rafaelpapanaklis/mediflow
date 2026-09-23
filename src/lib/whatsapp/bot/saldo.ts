@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // «¿Cuánto debo?» — shell del flujo de saldo (ws1-t3).
 //
-// La máquina de estados y TODAS las reglas de seguridad viven en `saldo-core.ts`,
-// pura y testeable. Aquí solo se cablean las dependencias reales y se inyectan,
+// El flujo y TODAS las reglas de seguridad viven en `saldo-core.ts`, puro y
+// testeable. Aquí solo se cablean las dependencias reales y se inyectan,
 // exactamente como hace `booking.ts` con `booking-core.ts`.
 //
 // ── El rastro ─────────────────────────────────────────────────────────────
@@ -30,9 +30,11 @@ import { resumenDeSaldoDePaciente } from "@/lib/whatsapp/cobranza/datos";
 import { fechaLarga, hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { getCobranzaSettings } from "@/lib/reminders/config";
 import {
-  MAX_INTENTOS,
+  MAX_FALLOS,
+  RESULTADOS_FALLIDOS,
   VENTANA_FALLOS_MS,
   runSaldoTurn,
+  sufijoDelRastro,
   type PacienteSaldo,
   type RastroConsulta,
   type SaldoDeps,
@@ -43,14 +45,19 @@ export { isSaldoInProgress } from "./saldo-core";
 
 /** Cómo se lee cada resultado en la nota interna, en cristiano. */
 const COMO_SE_CUENTA: Record<RastroConsulta["resultado"], string> = {
-  verificacionPedida: "preguntó por su saldo; se le pidió la fecha de nacimiento",
-  verificacionFallida: "la fecha de nacimiento no coincidió",
-  verificacionAgotada: "no acertó la fecha de nacimiento; se derivó a la clínica",
-  saldoEntregado: "verificó su identidad y el bot le dijo su próxima mensualidad y su saldo",
-  sinPlan: "verificó su identidad; no tiene mensualidades pendientes",
+  saldoEntregado: "el bot le dijo su próxima mensualidad y lo pendiente",
+  sinPlan: "no tiene mensualidades pendientes; se le dijo así",
   pacienteNoEncontrado: "preguntó por su saldo desde un número sin paciente; se derivó",
-  telefonoCompartido: "ese número es de más de un paciente; NO se dijo nada y se derivó",
-  sinFechaDeNacimiento: "no hay fecha de nacimiento en su expediente; se derivó",
+  pacienteDeBaja: "el paciente está dado de baja; NO se dijo nada y se derivó",
+  fechaPedida:
+    "ese número es de más de un paciente; se le pidió la fecha de nacimiento para saber de cuál",
+  fechaIlegible: "lo que respondió no es una fecha; se le pidió otra vez",
+  fechaSinCoincidencia:
+    "la fecha no es de ninguno de los pacientes de ese número; NO se dijo nada y el bot se pausó en este hilo",
+  fechaAmbigua:
+    "la fecha es de más de un paciente de ese número; NO se dijo nada y el bot se pausó en este hilo",
+  intentosAgotados:
+    "dos fallos con la fecha en 24 h (o no se pudieron contar); NO se dijo nada y el bot se pausó en este hilo",
 };
 
 /**
@@ -82,7 +89,7 @@ export async function registrarConsultaDeSaldo(datos: RastroConsulta): Promise<v
         // Claude de toda la clínica, y un puñado de ellas dejaría al bot sin
         // contestar FAQ ni agendar a nadie. El resultado va dentro del id para
         // poder CONTAR los fallos sin parsear el texto de la nota.
-        externalId: `${buildSystemExternalId("system")}:saldo-${datos.resultado}`,
+        externalId: `${buildSystemExternalId("system")}${sufijoDelRastro(datos.resultado)}`,
       },
     });
     // Que la nota suba el hilo en el Inbox: un rastro que nadie ve no es un
@@ -97,20 +104,19 @@ export async function registrarConsultaDeSaldo(datos: RastroConsulta): Promise<v
 }
 
 /**
- * Cuántas verificaciones han fallado ya en este hilo en las últimas 24 h.
+ * Cuántas desambiguaciones han fallado ya en este hilo en las últimas 24 h.
  *
  * Se cuenta sobre las notas que deja `registrarConsultaDeSaldo`, no sobre el
- * `botState`: ese caduca a los 10 minutos y esperar once sería un modo gratis
- * de reiniciar el contador y seguir probando fechas de nacimiento. El resultado
- * viaja en el `externalId` justamente para poder contarlo con un `count` y no
- * leyendo el texto.
+ * `botState`: ese caduca a los 10 minutos, y cada «¿cuánto debo?» nuevo
+ * empieza sin él. El resultado viaja en el `externalId` justamente para poder
+ * contarlo con un `count` y no leyendo el texto.
  */
 export async function fallosRecientesDeSaldo(
   clinicId: string,
   threadId: string,
 ): Promise<number> {
   try {
-    if (!clinicId || !threadId) return MAX_INTENTOS; // ante la duda, no se contesta
+    if (!clinicId || !threadId) return MAX_FALLOS; // ante la duda, no se contesta
     return await prisma.inboxMessage.count({
       where: {
         threadId,
@@ -118,26 +124,15 @@ export async function fallosRecientesDeSaldo(
         thread: { clinicId },
         isInternal: true,
         sentAt: { gte: new Date(Date.now() - VENTANA_FALLOS_MS) },
-        OR: [
-          { externalId: { contains: `${SYSTEM_EXTERNAL_ID_PREFIX}system:` } },
-        ],
-        AND: [
-          {
-            OR: [
-              { externalId: { endsWith: "saldo-verificacionFallida" } },
-              { externalId: { endsWith: "saldo-telefonoCompartido" } },
-              { externalId: { endsWith: "saldo-pacienteNoEncontrado" } },
-              { externalId: { endsWith: "saldo-sinFechaDeNacimiento" } },
-            ],
-          },
-        ],
+        externalId: { startsWith: `${SYSTEM_EXTERNAL_ID_PREFIX}system:` },
+        OR: RESULTADOS_FALLIDOS.map((r) => ({ externalId: { endsWith: sufijoDelRastro(r) } })),
       },
     });
   } catch (e) {
     console.error("[whatsapp/saldo] no se pudieron contar los fallos:", e);
     // Si no se puede contar, se corta: mejor derivar de más que convertir el
     // bot en un oráculo por un fallo de la base.
-    return MAX_INTENTOS;
+    return MAX_FALLOS;
   }
 }
 
@@ -158,16 +153,16 @@ export function realSaldoDeps(timezone: string): SaldoDeps {
           clinicId,
           id: { in: encontrados.map((p) => p.id) },
           deletedAt: null,
-          // Coherencia con el aviso (`cobranza/core.ts` descarta al paciente
-          // dado de baja): si la clínica decidió que a esta persona no se le
-          // cobra por WhatsApp, el bot tampoco le habla de dinero.
-          status: "ACTIVE",
+          // SIN filtrar por `status`: el dado de baja cuenta para saber si el
+          // número es compartido (si no, su mamá parecería la única paciente
+          // del número y él recibiría la deuda de ella). Que no se le conteste
+          // a él lo decide el núcleo con `activo`.
         },
-        select: { id: true, firstName: true, dob: true, status: true },
+        select: { id: true, status: true, dob: true },
       });
       return filas.map((p) => ({
         id: p.id,
-        firstName: p.firstName,
+        activo: p.status === "ACTIVE",
         // La columna es `date`: se lee en UTC para que el 1 de octubre no se
         // vuelva el 30 de septiembre en México (mismo criterio que
         // condiciones-pago-db.ts).

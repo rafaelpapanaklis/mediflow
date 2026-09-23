@@ -174,10 +174,10 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
     if (booking) return booking;
   }
 
-  // 0b) Verificación de saldo a medias: igual que el agendado, se continúa
-  //     antes que nada. El paciente ya recibió «dime tu fecha de nacimiento» y
-  //     lo que escriba ahora es la respuesta a ESO, no una pregunta nueva; si
-  //     cayera en FAQ o en la IA, el flujo se rompería a media verificación.
+  // 0b) Saldo a medias en un número compartido: igual que el agendado, se
+  //     continúa antes que nada. El paciente ya recibió «¿de quién me
+  //     preguntas? dime su fecha de nacimiento» y lo que escriba ahora es la
+  //     respuesta a ESO; si cayera en FAQ o en la IA, se quedaría sin respuesta.
   if (config.canAnswerBalance && isSaldoInProgress(input.botState)) {
     const saldo = await handleSaldoTurn(input, config);
     if (saldo) return saldo;

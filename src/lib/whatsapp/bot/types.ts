@@ -41,8 +41,9 @@ export interface BotConfigDTO {
   canAnswerFaq: boolean;
   canBookAppointments: boolean;
   /**
-   * ws1-t3 — el bot puede decir la próxima mensualidad y lo pendiente, SIEMPRE
-   * tras verificar la identidad (ver bot/saldo-core.ts). Apagado de fábrica.
+   * ws1-t3 — el bot puede decir la próxima mensualidad y lo pendiente, sin
+   * adivinar nunca de qué paciente se trata (ver bot/saldo-core.ts). Apagado
+   * de fábrica.
    *
    * A diferencia de los otros dos, NO es una columna de `whatsapp_bot_configs`:
    * vive en `Clinic.reminderSettings.cobranza.bot`, el mismo Json donde ya

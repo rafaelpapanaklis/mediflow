@@ -5254,7 +5254,7 @@
       "duesRemindLabel": "Remind about the upcoming installment",
       "duesRemindDesc": "A WhatsApp a few days before the next payment-plan installment falls due, to those it can reach (see the note below). Paid or cancelled invoices are never chased, nor are discharged patients, and the same installment never goes out twice.",
       "duesBotLabel": "Let the bot state the next installment",
-      "duesBotDesc": "If the patient asks “how much do I owe?”, the bot asks for their date of birth and only then gives the next installment and the outstanding balance. If that number belongs to more than one patient it does not guess — it hands over to a person. Every lookup is noted in the conversation.",
+      "duesBotDesc": "If the patient asks “how much do I owe?”, the bot replies right away with the next installment and the outstanding balance, and nothing else. If that number belongs to more than one patient it does not guess: it asks for the date of birth only to tell which one it is, and if it does not match, it hands over to a person. Every lookup is noted in the conversation.",
       "summaryDues": "Installment due",
       "summaryDuesBot": "Balance via bot",
       "recentKindPaymentDue": "Installment",
