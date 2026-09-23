@@ -119,7 +119,9 @@ export function interpretarRespuestaAgenda(
   }
 
   // Las reglas de #248 traen su frase en `reason`, escrita para enseñarse tal cual.
-  if (["missing_reason", "appointment_in_past", "patient_archived", "appointment_not_movable"].includes(error)) {
+  // `blocked_slot_not_allowed` (WS1-T5): la clínica prohíbe agendar sobre un
+  // bloqueo y alguien lo puso entre la propuesta y la confirmación.
+  if (["missing_reason", "appointment_in_past", "patient_archived", "appointment_not_movable", "blocked_slot_not_allowed"].includes(error)) {
     const frase = typeof b.reason === "string" && b.reason ? b.reason : "La cita no cumple las reglas de la agenda.";
     return r("regla", `${frase} No se guardó.`, { falloDeSabina: error === "missing_reason" });
   }

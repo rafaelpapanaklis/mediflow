@@ -43,13 +43,18 @@ export type BookingRuleCode =
   | "missing_reason"
   | "appointment_in_past"
   | "patient_archived"
-  | "appointment_not_movable";
+  | "appointment_not_movable"
+  // WS1-T5: la clínica eligió «No» en «¿Recepción puede agendar sobre un día
+  // bloqueado?». Quién queda fuera lo decide `puedeAgendarEncima`
+  // (agenda-bloqueos/core.ts); la frase, `fraseBloqueoProhibido`.
+  | "blocked_slot_not_allowed";
 
 const BOOKING_RULE_CODES: readonly BookingRuleCode[] = [
   "missing_reason",
   "appointment_in_past",
   "patient_archived",
   "appointment_not_movable",
+  "blocked_slot_not_allowed",
 ];
 
 /**
@@ -174,6 +179,14 @@ export function rescheduleRuleViolation(input: {
     inPast(next.startsAt, input.now, input.slotMinutes, "mover") ??
     archived(input.patientStatus)
   );
+}
+
+/**
+ * Agendar o mover encima de un bloqueo con la clínica en «No». 422 y no 403:
+ * no es que falte un permiso de agenda, es una regla que la clínica puso.
+ */
+export function blockedSlotNotAllowed(reason: string): BookingRuleViolation {
+  return { httpStatus: 422, error: "blocked_slot_not_allowed", reason };
 }
 
 /** Cuerpo JSON de la violación, con la misma forma `{ error, reason }` que `invalid_transition`. */

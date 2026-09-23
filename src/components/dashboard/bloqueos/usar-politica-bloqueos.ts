@@ -11,9 +11,9 @@
  * sobrevive a cambiar de clínica activa sin recargar, y una administradora
  * con dos clínicas vería en la segunda la regla de la primera.
  *
- * Devuelve `null` mientras pregunta. Ante cualquier fallo —red, 403, el
- * endpoint que todavía no existe (ver `politica.ts`), o un servidor que no
- * contesta en `ESPERA_MAXIMA_MS`— devuelve `true`: se comporta EXACTAMENTE
+ * Devuelve `null` mientras pregunta. Ante cualquier fallo —red, 403, el SQL
+ * del ajuste sin aplicar (ver `politica.ts`), o un servidor que no contesta
+ * en `ESPERA_MAXIMA_MS`— devuelve `true`: se comporta EXACTAMENTE
  * como antes de este ajuste, y si la clínica dijo «No» el servidor rechaza la
  * cita con su frase. Una ventana que se queda «comprobando» para siempre es
  * peor que las dos cosas.

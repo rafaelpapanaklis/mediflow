@@ -17,6 +17,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import toast from "react-hot-toast";
+import { bookingRuleMessage } from "@/lib/agenda/booking-rules";
 import { CalendarClock, Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
@@ -137,6 +138,16 @@ export function ChangeRequestsPanel(props: { onResolved?: () => void }): JSX.Ele
           onResolved?.();
         }
         return;
+      }
+      if (res.status === 422) {
+        // Una regla de la agenda (p. ej. la clínica prohíbe agendar sobre un
+        // día bloqueado): su frase, no el código. La solicitud sigue pendiente.
+        const err = await res.json().catch(() => null);
+        const frase = bookingRuleMessage(err);
+        if (frase) {
+          toast.error(frase, { duration: 6000 });
+          return;
+        }
       }
       if (!res.ok) throw new Error(`resolve_failed_${res.status}`);
 

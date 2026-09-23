@@ -25,6 +25,7 @@ import {
   avisoDeBloqueo,
   trazaDeBloqueo,
 } from "@/lib/agenda-bloqueos/core";
+import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 // El GET solo LEE: se importa del lector y no de `service.ts` (que escribe
 // y lleva `server-only`), para que esta ruta siga siendo montable desde
 // `tsx --test` con mocks de módulo, como hace reglas-servidor.test.ts.
@@ -289,6 +290,17 @@ export async function POST(req: NextRequest) {
   const avisoHorario = bloqueoEncima
     ? avisoDeBloqueo(bloqueoEncima)
     : hoursWarning ?? (fueraDelDoctor ? avisoDeHorarioDoctor(fueraDelDoctor) : null);
+
+  // WS1-T5 — …SALVO QUE LA CLÍNICA HAYA DICHO «NO». En Configuración →
+  // Horarios y bloqueos se puede prohibir agendar encima; con «No», solo
+  // quien edita la configuración de la clínica pasa (`puedeAgendarEncima`).
+  // Con «Sí» —de fábrica, y sin fila en la base— esto no hace nada.
+  const bloqueoProhibido = await rechazoPorBloqueo(bloqueoEncima, session.clinic.id, session.user);
+  if (bloqueoProhibido) {
+    return NextResponse.json(bookingRuleBody(bloqueoProhibido), {
+      status: bloqueoProhibido.httpStatus,
+    });
+  }
 
   // 🔴 ESTE GATE, Y ESTA COLUMNA, SE QUEDAN EXACTAMENTE COMO ESTABAN.
   //

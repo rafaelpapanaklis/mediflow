@@ -25,6 +25,8 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { avisoDeBloqueo, bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
+import { bookingRuleBody } from "@/lib/agenda/booking-rules";
 import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
@@ -225,6 +227,25 @@ export async function POST(
       { status: 409 },
     );
   };
+
+  // WS1-T5 — con la clínica en «No», aprobar un cambio que cae sobre un
+  // bloqueo es agendar encima: mismo candado que el PATCH de la cita. Va ANTES
+  // de mover nada, y la solicitud se queda PENDIENTE (se puede rechazar con
+  // su motivo). Con «Sí» no hace nada y solo se avisa abajo, como siempre.
+  const bloqueoPrevio = bloqueaEsteHueco(
+    await leerBloqueosDelRango(session.clinic.id, proposedStartsAt, proposedEndsAt, {
+      doctorIds: [appointment.doctorId],
+    }),
+    proposedStartsAt,
+    proposedEndsAt,
+    appointment.doctorId,
+  );
+  const bloqueoProhibido = await rechazoPorBloqueo(bloqueoPrevio, session.clinic.id, session.user);
+  if (bloqueoProhibido) {
+    return NextResponse.json(bookingRuleBody(bloqueoProhibido), {
+      status: bloqueoProhibido.httpStatus,
+    });
+  }
 
   let free = false;
   try {

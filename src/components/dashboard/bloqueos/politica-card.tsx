@@ -11,9 +11,8 @@
  * arrastrar dejan de ofrecer «Agendar de todas formas» y dicen por qué.
  *
  * Solo la ve quien administra: el doctor entra a esta pestaña recortado y
- * esto no es suyo. El contrato —y que el endpoint lo pone ws1-t2— está en
- * `politica.ts`. Mientras no exista, la tarjeta dice que no pudo leer el
- * ajuste y no deja tocar nada: no finge guardar.
+ * esto no es suyo. El contrato y el endpoint están en `politica.ts`. Si no
+ * se puede leer, la tarjeta lo dice y no deja tocar nada: no finge guardar.
  */
 
 import { useEffect, useState } from "react";

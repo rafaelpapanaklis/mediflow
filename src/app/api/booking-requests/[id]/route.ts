@@ -20,6 +20,9 @@ import {
   horarioPropio,
 } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
+import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
@@ -152,7 +155,29 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // elegido no atiende, la respuesta lo dice en `scheduleWarning`.
   const horarios = await leerHorariosDeDoctores(clinicId, { doctorIds: pedidos.map(d => d.id) });
   const atiende = (id: string) => !doctorNoAtiende(horarios, startsAt, endsAt, id, tz);
-  const candidatos = [...pedidos.filter(d => atiende(d.id)), ...pedidos.filter(d => !atiende(d.id))];
+  let candidatos = [...pedidos.filter(d => atiende(d.id)), ...pedidos.filter(d => !atiende(d.id))];
+
+  // WS1-T5 — con la clínica en «No» («¿Recepción puede agendar sobre un día
+  // bloqueado?»), aceptar sobre un bloqueo es agendar encima: los doctores
+  // tapados salen de la lista, y si no queda ninguno se dice por qué. Con
+  // «Sí» —de fábrica— no cambia nada. Mismo candado que POST /api/appointments.
+  const bloqueosDelPedido = await leerBloqueosDelRango(clinicId, startsAt, endsAt, {
+    doctorIds: candidatos.map(c => c.id),
+  });
+  const bloqueoDe = (id: string) => bloqueaEsteHueco(bloqueosDelPedido, startsAt, endsAt, id);
+  const primerBloqueo = candidatos.map(c => bloqueoDe(c.id)).find(Boolean) ?? null;
+  const bloqueoProhibido = await rechazoPorBloqueo(primerBloqueo, clinicId, session.user);
+  if (bloqueoProhibido) {
+    candidatos = candidatos.filter(c => !bloqueoDe(c.id));
+    if (candidatos.length === 0) {
+      // Esta ruta pinta `error` tal cual (ver booking-requests-panel.tsx): la
+      // frase va ahí, y el código estable en `code`, como SLOT_TAKEN.
+      return NextResponse.json(
+        { error: bloqueoProhibido.reason, code: bloqueoProhibido.error, reason: bloqueoProhibido.reason },
+        { status: bloqueoProhibido.httpStatus },
+      );
+    }
+  }
 
   const { firstName, lastName } = partirNombre(solicitud.patientName);
 
