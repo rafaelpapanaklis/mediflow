@@ -13,11 +13,12 @@
  * ═══════════════════════════════════════════════════════════════════════
  *
  * ═══════════════════════════════════════════════════════════════════════
- * ⚠️ PENDIENTE DE ws1-t2 — ESTE ENDPOINT TODAVÍA NO EXISTE
+ * EL ENDPOINT — `src/app/api/settings/bloqueos/politica/route.ts` (WS1-T5)
  *
- * No hay ningún campo en la base para esto, ni en `Clinic` ni en la lista
- * blanca de `/api/settings`, y esta pantalla NO lo inventa (no toca
- * `prisma/`). Lo que la pantalla pide, y contra lo que está hecha:
+ * Hasta WS1-T5 no existía: «politica» caía en `[id]`, que lo tomaba por el
+ * id de un bloqueo, y la tarjeta salía con «No se pudo leer este ajuste». El
+ * valor vive en `agenda_block_policies` (una fila por clínica; sin fila =
+ * «Sí»), y lo lee y guarda `src/lib/agenda-bloqueos/politica.server.ts`.
  *
  *     GET  /api/settings/bloqueos/politica          (agenda.view)
  *       → { recepcionPuedeAgendar: boolean, puedoAgendarEncima: boolean }
@@ -31,13 +32,13 @@
  *   · `puedoAgendarEncima` — lo que vale PARA QUIEN PREGUNTA, resuelto en el
  *     servidor. Es lo que lee la ventana de confirmar: la pantalla no sabe el
  *     rol de quien agenda y no lo vuelve a razonar (mismo criterio que
- *     `puedoRetirarlo` en `BloqueoDTO`). A quién alcanza el «No» —recepción y
- *     la IA seguro; doctor y administración, lo que decida el servidor— se
- *     decide allí, en un solo sitio.
+ *     `puedoRetirarlo` en `BloqueoDTO`). A quién alcanza el «No» se decide
+ *     allí, en un solo sitio (`puedeAgendarEncima`, agenda-bloqueos/core.ts):
+ *     a todo el que no tenga `settings.edit` — recepción, doctores y Sabina.
  *
  * Y el candado de verdad es el servidor: con «No», el POST/PATCH de la cita
- * sobre un bloqueo tiene que rechazarse con su `mensaje`. Esconder el botón
- * no es prohibir.
+ * sobre un bloqueo se rechaza con 422 `blocked_slot_not_allowed` y su frase
+ * en `reason`. Esconder el botón no es prohibir.
  * ═══════════════════════════════════════════════════════════════════════
  */
 

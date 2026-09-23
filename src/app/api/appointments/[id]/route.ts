@@ -34,6 +34,7 @@ import {
   avisoDeBloqueo,
   trazaDeBloqueo,
 } from "@/lib/agenda-bloqueos/core";
+import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
@@ -276,6 +277,26 @@ export async function PATCH(
   const avisoHorario = bloqueoEncima
     ? avisoDeBloqueo(bloqueoEncima)
     : hoursWarning ?? (fueraDelDoctor ? avisoDeHorarioDoctor(fueraDelDoctor) : null);
+
+  // WS1-T5 — con la clínica en «No», MOVER una cita encima de un bloqueo se
+  // rechaza (ver el gemelo en el POST). Solo si la cita se mueve de verdad:
+  // corregir las notas de una que YA estaba sobre un bloqueo —puesto después,
+  // o agendada con «Sí»— reenvía la misma hora y tiene que seguir guardando.
+  // Al MINUTO, como `rescheduleRuleViolation`: los formularios reenvían la
+  // hora sin segundos, y una cita importada con segundos no se «mueve» por eso.
+  const minuto = (d: Date) => Math.floor(d.getTime() / 60_000);
+  const seMueve =
+    minuto(newStarts) !== minuto(existing.startsAt) ||
+    minuto(newEnds) !== minuto(existing.endsAt) ||
+    doctorEfectivo !== existing.doctorId;
+  const bloqueoProhibido = seMueve
+    ? await rechazoPorBloqueo(bloqueoEncima, session.clinic.id, session.user)
+    : null;
+  if (bloqueoProhibido) {
+    return NextResponse.json(bookingRuleBody(bloqueoProhibido), {
+      status: bloqueoProhibido.httpStatus,
+    });
+  }
 
   // Resource working-hours validation. Applies if the appointment ends up with
   // a resourceId (either explicitly set in this PATCH or inherited from the

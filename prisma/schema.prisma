@@ -387,6 +387,9 @@ model Clinic {
   // Bloqueos de agenda (WS1-T2): los días y las horas en que NO entra nada.
   // Ver `model AgendaBlock` al final de este archivo.
   agendaBlocks AgendaBlock[]
+  // ¿Se puede agendar sobre un bloqueo? (WS1-T5). Sin fila = «Sí», como
+  // siempre. Ver `model AgendaBlockPolicy`.
+  agendaBlockPolicy AgendaBlockPolicy?
 
   // Horario propio de cada doctor (WS1-T2 · horario). Ver `model DoctorSchedule`
   // al final de este archivo.
@@ -18216,6 +18219,41 @@ model AgendaBlock {
   @@index([clinicId, startsAt, endsAt], map: "agenda_blocks_rango_idx")
   @@index([clinicId, doctorId, startsAt], map: "agenda_blocks_doctor_idx")
   @@map("agenda_blocks")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ¿SE PUEDE AGENDAR SOBRE UN BLOQUEO? — el ajuste de la clínica (WS1-T5).
+//
+// Configuración → Horarios y bloqueos → «¿Recepción puede agendar sobre un día
+// bloqueado?». UNA fila por clínica, y solo si alguien tocó el ajuste.
+//
+// 🔴 SIN FILA = «SÍ, AVISANDO Y DEJANDO REGISTRO», que es el comportamiento de
+// siempre. Ninguna clínica cambia de comportamiento el día que esto entra: la
+// tabla nace vacía.
+//
+// Tabla aparte y NO una columna en `clinics`, a propósito: el SQL se aplica A
+// MANO, y si el código llegara antes, cada `prisma.clinic.findUnique` sin
+// `select` pediría una columna que no existe y se caería el panel entero. Una
+// tabla que falta se lee como «Sí» (`politica.server.ts`), igual que
+// `agenda_blocks`.
+//
+// SQL: sql/agenda-bloqueos-politica.sql. ⛔ NUNCA `prisma migrate`.
+// ═══════════════════════════════════════════════════════════════════════
+
+model AgendaBlockPolicy {
+  /// Una fila por clínica: la clínica ES la llave.
+  clinicId              String   @id
+  /// `false` = con «No», solo quien puede editar la configuración de la
+  /// clínica agenda encima de un bloqueo. De fábrica `true`.
+  recepcionPuedeAgendar Boolean  @default(true)
+  /// Quién lo cambió por última vez. Sin relación a `users` a propósito: el
+  /// rastro completo va a `AuditLog`, y así borrar a esa persona no toca esto.
+  updatedById           String?
+  updatedAt             DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("agenda_block_policies")
 }
 
 

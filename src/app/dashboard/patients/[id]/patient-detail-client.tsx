@@ -1512,9 +1512,11 @@ export function PatientDetailClient({
       {/* Visibilidad restringida — señal discreta SOLO para admin (el resto del
           equipo no debería ni enterarse de que la lista existe; quien no está
           en ella nunca llega a esta página). El conteo excluye a los admins,
-          que ven todo sin estar en la lista. */}
+          que ven todo sin estar en la lista. Sin -mt-2: la subía bajo el
+          borde de la tarjeta de arriba (el mismo fallo que los chips de
+          pediatría). */}
       {isVisibilityAdmin && editVisibleUserIds.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 px-1 -mt-2 mb-2">
+        <div className="flex flex-wrap items-center gap-2 px-1 mb-2">
           <BadgeNew tone="warning" dot>
             <Lock size={11} style={{ marginRight: 4 }} />
             {t("shell.patientVisibility.restrictedBadge", { count: editVisibleUserIds.length })}

@@ -39,6 +39,9 @@ let existingPatientStatus: string;
 let created: any[];
 let updated: any[];
 let reschedules: any[];
+/** Bloqueos de agenda y el ajuste «¿se puede agendar encima?» (WS1-T5), por clínica. */
+let bloqueos: any[];
+let politicas: { clinicId: string; recepcionPuedeAgendar: boolean }[];
 
 beforeEach(() => {
   patientRow = { id: "p1", status: "ACTIVE" };
@@ -47,6 +50,10 @@ beforeEach(() => {
   created = [];
   updated = [];
   reschedules = [];
+  bloqueos = [];
+  politicas = [];
+  session.user.role = "RECEPTIONIST";
+  session.user.permissionsOverride = [];
 });
 
 function apptRow(data: any) {
@@ -86,6 +93,22 @@ const prismaStub: any = {
     findUnique: async () => null,
     findMany: async () => [],
   },
+  // Aplica el `where` de verdad (clínica + solape), para que la prueba del
+  // candado dependa del bloqueo que el servidor LEE y no de un doble que
+  // devuelve siempre lo mismo.
+  agendaBlock: {
+    findMany: async ({ where }: any) =>
+      bloqueos.filter(
+        (b) =>
+          b.clinicId === where.clinicId &&
+          b.startsAt < where.startsAt.lt &&
+          b.endsAt > where.endsAt.gt,
+      ),
+  },
+  agendaBlockPolicy: {
+    findUnique: async ({ where }: any) =>
+      politicas.find((p) => p.clinicId === where.clinicId) ?? null,
+  },
   $transaction: async (fn: any) =>
     fn({
       appointment: {
@@ -112,7 +135,7 @@ const session = {
     role: "RECEPTIONIST",
     clinicId: "c1",
     displayName: "Recepción",
-    permissionsOverride: [],
+    permissionsOverride: [] as string[],
   },
   clinic: {
     id: "c1",
@@ -519,4 +542,148 @@ test("pantallas · el modal Nueva cita y el arrastre de la Agenda muestran la fr
   assert.ok(/bookingRuleMessage\(/.test(bloqueResto), "Nueva cita: el 400 de motivo debe mostrar su frase");
   const agenda = codigo("app/dashboard/agenda/agenda-page-client.tsx");
   assert.ok(/bookingRuleMessage\(/.test(agenda), "arrastre: debe traducir el error de regla a su frase");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WS1-T5 · «¿Recepción puede agendar sobre un día bloqueado?» — el candado
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Un bloqueo de TODA la clínica que cubre el día entero de `dia`. */
+function bloqueoSobre(dia: Date, clinicId = "c1") {
+  const b = {
+    id: `b-${clinicId}`,
+    clinicId,
+    doctorId: null,
+    kind: "VACACIONES",
+    reason: "Operación de rodilla de la doctora",
+    startsAt: new Date(dia.getTime() - 12 * 60 * MIN),
+    endsAt: new Date(dia.getTime() + 12 * 60 * MIN),
+    holidayKey: null,
+  };
+  bloqueos.push(b);
+  return b;
+}
+
+test("bloqueo · control: con «Sí» (de fábrica, sin fila) recepción agenda encima como siempre, con aviso", async () => {
+  const body = futureBody();
+  bloqueoSobre(new Date(body.startsAt));
+  const r = await post(body);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(created.length, 1);
+  assert.match(r.body.scheduleWarning?.message ?? "", /bloqueada/);
+});
+
+test("bloqueo · con «No», recepción NO agenda encima: 422 con su frase, y no se crea nada", async () => {
+  const body = futureBody();
+  bloqueoSobre(new Date(body.startsAt));
+  politicas.push({ clinicId: "c1", recepcionPuedeAgendar: false });
+  const r = await post({ ...body, bloqueoConfirmado: true });
+  assertRuleError(r, 422, "blocked_slot_not_allowed", "POST con «No»");
+  assert.equal(created.length, 0);
+  // La frase no enseña el motivo escrito: puede ser el de una compañera.
+  assert.doesNotMatch(r.body.reason, /rodilla/);
+  assert.match(r.body.reason, /Configuración/);
+});
+
+test("bloqueo · con «No», quien edita la configuración (ADMIN) sí agenda encima", async () => {
+  session.user.role = "ADMIN";
+  const body = futureBody();
+  bloqueoSobre(new Date(body.startsAt));
+  politicas.push({ clinicId: "c1", recepcionPuedeAgendar: false });
+  const r = await post({ ...body, bloqueoConfirmado: true });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(created.length, 1);
+});
+
+test("bloqueo · con «No», manda el PERMISO y no el rol: recepción con settings.edit concedido pasa", async () => {
+  session.user.permissionsOverride = ["agenda.view", "agenda.create", "agenda.edit", "settings.edit"];
+  const body = futureBody();
+  bloqueoSobre(new Date(body.startsAt));
+  politicas.push({ clinicId: "c1", recepcionPuedeAgendar: false });
+  const r = await post(body);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+});
+
+test("bloqueo · el «No» de OTRA clínica no alcanza a ésta", async () => {
+  const body = futureBody();
+  bloqueoSobre(new Date(body.startsAt));
+  politicas.push({ clinicId: "c2", recepcionPuedeAgendar: false });
+  const r = await post(body);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+});
+
+test("bloqueo · con «No», sin bloqueo encima se agenda normal", async () => {
+  politicas.push({ clinicId: "c1", recepcionPuedeAgendar: false });
+  const body = futureBody();
+  bloqueoSobre(new Date(new Date(body.startsAt).getTime() + 3 * DAY));
+  const r = await post(body);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+});
+
+test("bloqueo · con «No», MOVER una cita encima de un bloqueo → 422, y no se toca", async () => {
+  existing("SCHEDULED", atMinute(1 * DAY));
+  const to = atMinute(4 * DAY);
+  bloqueoSobre(to);
+  politicas.push({ clinicId: "c1", recepcionPuedeAgendar: false });
+  const r = await patch({
+    startsAt: to.toISOString(),
+    endsAt: new Date(to.getTime() + 30 * MIN).toISOString(),
+  });
+  assertRuleError(r, 422, "blocked_slot_not_allowed", "PATCH con «No»");
+  assert.equal(updated.length, 0);
+  assert.equal(reschedules.length, 0);
+});
+
+test("bloqueo · con «No», corregir las notas de una cita que YA estaba sobre un bloqueo sigue guardando", async () => {
+  const dia = atMinute(2 * DAY);
+  existing("SCHEDULED", dia);
+  bloqueoSobre(dia);
+  politicas.push({ clinicId: "c1", recepcionPuedeAgendar: false });
+  const r = await patch({
+    startsAt: existingRow.startsAt.toISOString(),
+    endsAt: existingRow.endsAt.toISOString(),
+    notes: "trae radiografía",
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+});
+
+test("bloqueo · la pantalla muestra la FRASE del rechazo, no el código", async () => {
+  const { bookingRuleMessage } = await import("@/lib/agenda/booking-rules");
+  const body = futureBody();
+  bloqueoSobre(new Date(body.startsAt));
+  politicas.push({ clinicId: "c1", recepcionPuedeAgendar: false });
+  const r = await post(body);
+  const frase = bookingRuleMessage(r.body);
+  assert.ok(frase, "bookingRuleMessage no reconoce el código: el modal enseñaría el genérico o el código");
+  assert.equal(frase, r.body.reason);
+});
+
+test("bloqueo · con «No», una cita guardada CON SEGUNDOS (importada) sobre un bloqueo: corregir notas con la hora al minuto sigue guardando", async () => {
+  const dia = new Date(atMinute(2 * DAY).getTime() + 37_000); // 10:00:37
+  existing("SCHEDULED", dia);
+  bloqueoSobre(dia);
+  politicas.push({ clinicId: "c1", recepcionPuedeAgendar: false });
+  const alMinuto = (d: Date) => new Date(Math.floor(d.getTime() / MIN) * MIN).toISOString();
+  const r = await patch({
+    startsAt: alMinuto(existingRow.startsAt),
+    endsAt: alMinuto(existingRow.endsAt),
+    notes: "trae radiografía",
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+});
+
+test("bloqueo · Sabina enseña la frase del rechazo, no «el sistema rechazó los datos»", async () => {
+  const { interpretarRespuestaAgenda } = await import("@/lib/sabina/tools/agenda-respuestas");
+  const body = futureBody();
+  bloqueoSobre(new Date(body.startsAt));
+  politicas.push({ clinicId: "c1", recepcionPuedeAgendar: false });
+  const r = await post(body);
+  const dicho = interpretarRespuestaAgenda(
+    { accion: "agendar_cita", frase: "Agendar a Ana", permiso: "agenda.create" } as any,
+    r.status,
+    r.body,
+  );
+  assert.equal(dicho.ok, false);
+  assert.equal(dicho.motivo, "regla");
+  assert.ok(dicho.frase.startsWith(r.body.reason), dicho.frase);
 });

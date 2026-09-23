@@ -740,3 +740,46 @@ export function bloqueoQueTapa(
   }
   return null;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 8 · ¿QUIÉN PUEDE AGENDAR ENCIMA DE UN BLOQUEO? (WS1-T5)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * El ajuste de la clínica («¿Recepción puede agendar sobre un día
+ * bloqueado?») resuelto PARA QUIEN PREGUNTA. Una sola función para las tres
+ * puertas que lo necesitan: el GET de la política (lo que lee la ventana de
+ * confirmar), el POST y el PATCH de la cita (el candado de verdad).
+ *
+ *   · «Sí» (de fábrica) → todo el que ya podía agendar, como siempre: aviso,
+ *     confirmación y rastro en `AuditLog`.
+ *   · «No» → solo quien puede editar la configuración de la clínica
+ *     (`settings.edit`). Es quien decide el ajuste: prohibírselo a él solo le
+ *     obligaría a apagarlo, agendar y volver a encenderlo. Recepción, los
+ *     doctores sin esa llave y Sabina —que agenda con los permisos de quien
+ *     la usa— quedan fuera.
+ */
+export function puedeAgendarEncima(
+  recepcionPuedeAgendar: boolean,
+  puedeEditarAjustes: boolean,
+): boolean {
+  return recepcionPuedeAgendar || puedeEditarAjustes;
+}
+
+/**
+ * La frase del rechazo. Es la que pinta la pantalla: el código no se enseña
+ * nunca.
+ *
+ * Dice el TIPO y el alcance, y no el motivo escrito: el rechazo le puede
+ * llegar a un doctor que agenda para una compañera con un bloqueo personal, y
+ * `listarBloqueos` ya decidió no enseñarle ese motivo («operación de
+ * rodilla»). Quien sí puede verlo ya lo vio en la ventana de confirmar.
+ */
+export function fraseBloqueoProhibido(b: BloqueoLike): string {
+  const tipo = b.kind ? BLOQUEO_KIND_LABELS[b.kind].toLowerCase() : "bloqueo";
+  const alcance = b.doctorId === null ? "toda la clínica" : "ese doctor";
+  return (
+    `Esa hora está bloqueada para ${alcance} (${tipo}) y la clínica no permite agendar encima. ` +
+    "Elige otro día u hora; lo decide la administración en Configuración → Horarios y bloqueos."
+  );
+}
