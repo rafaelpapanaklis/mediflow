@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { getAdminMrr, mrrBreakdownHint, EMPTY_MRR } from "@/lib/admin/mrr";
+import { getAdminMrr, includedBranchesHint, mrrBreakdownHint, EMPTY_MRR } from "@/lib/admin/mrr";
 import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
 import { isInTrial, isPlanExpired } from "@/lib/plan-status";
 import { PaymentsClient } from "./payments-client";
@@ -211,7 +211,7 @@ async function renderPaymentsPage() {
         trialClinics,
         expiredClinics,
         currentMRR: mrr.total,
-        mrrBreakdown: mrrBreakdownHint(mrr),
+        mrrBreakdown: [mrrBreakdownHint(mrr), includedBranchesHint(mrr.includedBranches)].filter(Boolean).join(" · "),
         thisMonthRevenue: thisMonth,
         thisMonthPayments,
         prevMonthRevenue: prevMonth,

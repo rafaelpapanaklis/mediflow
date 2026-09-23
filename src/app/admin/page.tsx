@@ -6,7 +6,7 @@ import {
   CalendarCheck, Coins,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { computeMrr, loadPlanPrices, mrrBreakdownHint } from "@/lib/admin/mrr";
+import { computeMrr, includedBranchesHint, loadIncludedBranchIds, loadPlanPrices, mrrBreakdownHint } from "@/lib/admin/mrr";
 import { comparePaymentDateDesc, paymentDate, importedLaterAt } from "@/lib/admin/payment-date";
 import { formatCurrency } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
@@ -212,7 +212,9 @@ async function renderAdminDashboard() {
   // Tanda 3 — cuánto ha HECHO cada clínica. Se traen las filas crudas de 60
   // días y se reparten en memoria entre la ventana actual y la anterior: son
   // pocos cientos de filas, y hacerlo en la base costaría tres consultas más.
-  const [citasRows, facturasRows, notasRows] = await Promise.all([
+  // Y las sedes incluidas en el plan de su madre (2 consultas más: 5 en vuelo),
+  // que valen $0 en el MRR con el mismo criterio que Clínicas y Clientes.
+  const [citasRows, facturasRows, notasRows, sedesIncluidas] = await Promise.all([
     prisma.appointment
       .findMany({
         // `lt: now` a propósito: el rótulo dice "en los últimos 30 días" y una
@@ -227,7 +229,12 @@ async function renderAdminDashboard() {
     prisma.medicalRecord
       .findMany({ where: { createdAt: { gte: desdePrevia } }, select: { clinicId: true, createdAt: true } })
       .catch((e) => { console.error("[admin] notas por ventana:", e); return null; }),
+    loadIncludedBranchIds()
+      .catch((e) => { console.error("[admin] sedes incluidas:", e); return null; }),
   ]);
+  if (!sedesIncluidas) {
+    avisos.push("No se pudieron identificar las sedes incluidas: el MRR las cuenta a precio de lista.");
+  }
 
   if (!ultimaCitaRows) avisos.push("No se pudo leer la última cita de cada clínica.");
   if (!pagadasRows) avisos.push("No se pudo leer el histórico de pagos por clínica.");
@@ -286,10 +293,12 @@ async function renderAdminDashboard() {
   const activeClinics  = allClinics.filter(c => c.subscriptionStatus === "active");
 
   // MRR por la MISMA función que /admin/payments (@/lib/admin/mrr): precio
-  // negociado de la clínica si lo tiene, si no el del plan en plan_configs.
-  // Reusa las filas ya cargadas arriba en vez de volver a consultar.
-  const mrrActive    = computeMrr(activeClinics, planPrices);
-  const mrrTrial     = computeMrr(trialClinics, planPrices);
+  // negociado de la clínica si lo tiene, $0 si es una sede incluida en el plan
+  // de su madre, y si no el del plan en plan_configs. Reusa las filas ya
+  // cargadas arriba en vez de volver a consultar.
+  const conSede = <T extends { id: string }>(c: T) => ({ ...c, includedBranch: !!sedesIncluidas?.has(c.id) });
+  const mrrActive    = computeMrr(activeClinics.map(conSede), planPrices);
+  const mrrTrial     = computeMrr(trialClinics.map(conSede), planPrices);
   const mrr          = mrrActive.total;
   const mrrPotential = mrr + mrrTrial.total;
   // "Por cobrar" = pendientes (registradas a mano) + FALLIDAS de Stripe. Un
@@ -402,7 +411,7 @@ async function renderAdminDashboard() {
 
       <div className="pa-kpis pa-kpis--3">
         <KpiCard label="MRR Activo" value={formatCurrency(mrr)} icon={DollarSign}
-          hint={mrrBreakdownHint(mrrActive)}
+          hint={[mrrBreakdownHint(mrrActive), includedBranchesHint(mrrActive.includedBranches)].filter(Boolean).join(" · ")}
           delta={{ value: `${activeClinics.length} clínicas`, direction: "up" }} />
         <KpiCard label="MRR Potencial" value={formatCurrency(mrrPotential)} icon={TrendingUp}
           delta={{ value: `+${trialClinics.length} en trial`, direction: "up" }} />

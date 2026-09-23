@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
-import { computeMrr, EMPTY_MRR, type AdminMrr } from "./mrr-core";
+import { computeMrr, EMPTY_MRR, findIncludedBranchIds, type AdminMrr } from "./mrr-core";
 
 /**
  * FUENTE ÚNICA del MRR del panel /admin.
@@ -36,20 +36,57 @@ export async function loadPlanPrices(): Promise<Record<PlanId, number>> {
 }
 
 /**
+ * Los ids de las sedes incluidas en el plan de su clínica madre (valen $0 en
+ * el MRR). El criterio es `findIncludedBranchIds` (@/lib/admin/mrr-core); aquí
+ * sólo se cargan sus dos entradas, para TODO el sistema y no por pantalla: una
+ * sede es incluida o no lo es, mire quien mire.
+ *
+ * Se cargan TODAS las clínicas, archivadas incluidas, porque cualquiera puede
+ * ser la madre de una sede viva. Dueño = fila User `SUPER_ADMIN` activa, la
+ * misma definición que `countOwnedClinics` (@/lib/branches), que es la que
+ * deja crear la sede.
+ */
+export async function loadIncludedBranchIds(): Promise<Set<string>> {
+  const [clinics, owners] = await Promise.all([
+    prisma.clinic.findMany({
+      select: {
+        id: true,
+        createdAt: true,
+        subscriptionStatus: true,
+        monthlyPrice: true,
+        stripeSubscriptionId: true,
+        paypalSubscriptionId: true,
+        subscriptionId: true,
+        nextBillingDate: true,
+      },
+    }),
+    prisma.user.findMany({
+      where: { role: "SUPER_ADMIN", isActive: true },
+      select: { supabaseId: true, clinicId: true },
+    }),
+  ]);
+  return findIncludedBranchIds(clinics, owners);
+}
+
+/**
  * MRR de las clínicas activas, para páginas que no cargan las clínicas por su
  * cuenta. Nunca lanza: si la consulta falla devuelve el MRR vacío y la página
  * se sigue renderizando.
  */
 export async function getAdminMrr(): Promise<AdminMrr> {
   try {
-    const [clinics, planPrices] = await Promise.all([
+    const [clinics, planPrices, sedes] = await Promise.all([
       prisma.clinic.findMany({
         where: { subscriptionStatus: "active" },
-        select: { plan: true, monthlyPrice: true, subscriptionStatus: true },
+        select: { id: true, plan: true, monthlyPrice: true, subscriptionStatus: true },
       }),
       loadPlanPrices(),
+      loadIncludedBranchIds(),
     ]);
-    return computeMrr(clinics, planPrices);
+    return computeMrr(
+      clinics.map((c) => ({ ...c, includedBranch: sedes.has(c.id) })),
+      planPrices,
+    );
   } catch (e) {
     console.error("[admin/mrr] no se pudo calcular el MRR:", e);
     return EMPTY_MRR;

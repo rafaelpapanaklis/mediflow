@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { loadPlanPrices, computeMrr, type AdminMrr } from "@/lib/admin/mrr";
+import { loadPlanPrices, loadIncludedBranchIds, computeMrr, type AdminMrr } from "@/lib/admin/mrr";
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import { AdminClinicsClient, type FilaClinica } from "./clinics-client";
@@ -33,8 +33,9 @@ export default async function AdminClinicsPage() {
   const desdePrevia  = inicioDeHaceDias(DIAS_VENTANA_ACTIVIDAD * 2, ahora);
   const desdeEnLinea = new Date(ahora.getTime() - MINUTOS_EN_LINEA * 60_000);
 
-  // Fuera del Promise.all: loadPlanPrices ya hace su propio Promise.all de 3.
-  const planPrices = await loadPlanPrices();
+  // Fuera del Promise.all de abajo: loadPlanPrices hace su propio Promise.all
+  // de 3 y loadIncludedBranchIds el suyo de 2 (5 en vuelo, bajo el tope de 7).
+  const [planPrices, sedesIncluidas] = await Promise.all([loadPlanPrices(), loadIncludedBranchIds()]);
 
   const [clinics, citasPasadas, citasVentana, citasPrevias, citasFuturas, accesos] = await Promise.all([
     prisma.clinic.findMany({
@@ -171,14 +172,18 @@ export default async function AdminClinicsPage() {
     pagosRegistrados: mPagos.get(c.id)?._count._all ?? 0,
     ultimoPagoAt:    mPagos.get(c.id)?._max.paidAt ?? null,
     totalPagado:     mPagos.get(c.id)?._sum.amount ?? 0,
+    sedeIncluida:    sedesIncluidas.has(c.id),
   }));
 
   // MRR por la FUENTE ÚNICA (@/lib/admin/mrr), no por una suma propia: sólo
-  // cuentan las de subscriptionStatus "active" y manda el precio negociado
-  // cuando lo hay. Antes esta pantalla sumaba el precio de lista de TODAS las
-  // clínicas (trials y vencidas incluidas) desde la tabla de fallback.
+  // cuentan las de subscriptionStatus "active", manda el precio negociado
+  // cuando lo hay y una sede incluida en el plan de su madre vale $0. Antes
+  // esta pantalla sumaba el precio de lista de TODAS las clínicas (trials y
+  // vencidas incluidas) desde la tabla de fallback.
   const mrr: AdminMrr = computeMrr(
-    clinics.filter((c) => c.subscriptionStatus === "active"),
+    filas
+      .filter((c) => c.subscriptionStatus === "active")
+      .map((c) => ({ ...c, includedBranch: c.sedeIncluida })),
     planPrices,
   );
 

@@ -15,7 +15,7 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
-import { mrrBreakdownHint, type AdminMrr } from "@/lib/admin/mrr-core";
+import { includedBranchesHint, mrrBreakdownHint, type AdminMrr } from "@/lib/admin/mrr-core";
 import {
   evaluarSaludClinica,
   resumirCartera,
@@ -66,6 +66,8 @@ export interface FilaClinica {
   pagosRegistrados: number;
   ultimoPagoAt: Date | string | null;
   totalPagado: number;
+  /** Sede incluida en el plan de su clínica madre: no paga aparte, vale $0. */
+  sedeIncluida: boolean;
 }
 
 interface Props {
@@ -487,18 +489,20 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
           <div className={css.cifraEtiqueta}>MRR</div>
           <div className={css.cifraValor}>{formatCurrency(mrr.total, "MXN")}</div>
           <div className={css.cifraPie}>{mrrBreakdownHint(mrr)}</div>
+          {mrr.includedBranches > 0 && (
+            <div className={css.cifraPie}>{includedBranchesHint(mrr.includedBranches)}</div>
+          )}
           {/* A QUIÉN cuenta. Esta cifra y la de /admin/clientes usan los mismos
               precios (plan_configs) y la misma regla de cobro, pero NO el mismo
               universo, y sin decirlo las dos pantallas parecen contradecirse.
               El criterio no se unifica: cada una mide lo suyo y está bien. */}
           <div
             className={css.cifraUniverso}
-            title="Toda clínica no archivada con subscriptionStatus = active, tenga o no una cuenta dueña viva. /admin/clientes cuenta menos: allí una clínica cuyo dueño se dio de baja no aparece. Y ojo con las sedes: una sucursal incluida en el plan de la madre (POST /api/clinics la crea con subscriptionStatus=active y monthlyPrice=0) se valora a precio de lista aunque no se le cobre nada. Un CLINIC con 2 sedes incluidas suma 3 veces el precio de lista. Pasa igual en las dos pantallas."
+            title="Toda clínica no archivada con subscriptionStatus = active, tenga o no una cuenta dueña viva. /admin/clientes cuenta menos: allí una clínica cuyo dueño se dio de baja no aparece. Las sedes incluidas en el plan de su madre (mismo dueño, sin cobro propio: ni Stripe, ni PayPal, ni fecha de renovación, ni precio negociado) valen $0: ya están pagadas dentro de la suscripción de la madre. Una clínica con su propia suscripción sí suma aunque comparta dueño. Mismo criterio en las dos pantallas."
           >
             Cuenta toda clínica activa no archivada, tenga cuenta dueña o no.
             En Clientes sale menos: allí hace falta un dueño activo.
-            Una sede incluida en el plan de la madre suma precio de lista
-            aunque no se le cobre.
+            Una sede incluida en el plan de la madre vale $0: no suma.
           </div>
         </div>
         <div className={`${css.cifra} ${resumen.porActividad.apagada > 0 ? css.cifraAlerta : ""}`}>
@@ -598,6 +602,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
                 // Precio de lista de plan_configs, o el negociado si lo tiene.
                 const listPrice = planPrices[clinic.plan] ?? 0;
                 const negociado = Number(clinic.monthlyPrice ?? 0) > 0 ? Number(clinic.monthlyPrice) : null;
+                // La sede incluida no paga aparte: $0, no la lista (mrr-core).
+                const incluida  = clinic.sedeIncluida && negociado === null;
 
                 return (
                   <tr key={clinic.id}>
@@ -744,8 +750,9 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
                           {clinic.plan}
                         </BadgeNew>
                         <span className={`mono ${css.meta} ${css.num}`}>
-                          {formatCurrency(negociado ?? listPrice, "MXN")}/mes
+                          {formatCurrency(incluida ? 0 : negociado ?? listPrice, "MXN")}/mes
                           {negociado !== null && <span title="Precio negociado de esta clínica; manda sobre el del plan"> · negociado</span>}
+                          {incluida && <span title="Sede incluida en el plan de su clínica madre: no paga aparte y no suma al MRR"> · incluida</span>}
                         </span>
                         <select
                           value={clinic.plan}
