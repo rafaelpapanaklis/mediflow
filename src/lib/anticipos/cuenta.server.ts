@@ -96,13 +96,16 @@ export async function guardarConexion(
     connectedAt: ahora,
     connectedById: args.userId,
     disconnectedAt: null,
-    // Conectar ya es decir «quiero cobrar en línea»: el pago del portal se
-    // enciende (también al reconectar después de haberlo apagado).
-    portalPaymentsEnabled: true,
   };
   await db.clinicMercadoPago.upsert({
     where: { clinicId: args.clinicId },
-    create: { clinicId: args.clinicId, ...datos },
+    // PRIMERA conexión: el pago en línea del portal nace encendido (conectar
+    // ya es decir «quiero cobrar en línea»).
+    create: { clinicId: args.clinicId, ...datos, portalPaymentsEnabled: true },
+    // RECONEXIÓN (la fila ya existe): el interruptor se queda como la clínica
+    // lo dejó. Si lo apagó a propósito, reconectar —p. ej. porque caducó el
+    // permiso de Mercado Pago— no lo vuelve a encender. `datos` NO lleva
+    // portalPaymentsEnabled a propósito.
     update: datos,
   });
 }

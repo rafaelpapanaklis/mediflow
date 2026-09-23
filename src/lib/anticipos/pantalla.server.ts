@@ -37,7 +37,7 @@ export interface PantallaAnticipos {
   /**
    * Pago en línea desde el portal del paciente (ws1-t2), APARTE del anticipo.
    * `activo` solo puede ser true con cuenta conectada; la columna arranca en
-   * true (DEFAULT) y se vuelve a encender al conectar.
+   * true (DEFAULT, y en la primera conexión); reconectar no lo cambia.
    */
   portal: { activo: boolean };
   /** Solo lectura para la clínica: la fija DaleControl. Arranca en 0. */
