@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { transcribeAudio } from "@/lib/integrations/whisper";
 import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -81,6 +82,10 @@ export async function POST(req: NextRequest) {
   // se asocia a datos del paciente: entra, se transcribe y se descarta.
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Interruptor de la clínica (Saldo de IA → Funciones de IA): ANTES de gastar.
+  const apagada = await cortarSiIaApagada(ctx.clinicId, "dictation");
+  if (apagada) return apagada;
 
   let formData: FormData;
   try {

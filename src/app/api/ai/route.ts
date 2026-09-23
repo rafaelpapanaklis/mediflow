@@ -5,6 +5,7 @@ import { addAiTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
 import { AI_CHAT_MODEL } from "@/lib/ai/models";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { AI_FEATURE_CHAT_ASSISTANT } from "@/lib/ai-billing/types";
 
 const AI_SYSTEM_PROMPT = `Eres un asistente clínico de apoyo para médicos en México. 
@@ -26,6 +27,10 @@ IMPORTANTE:
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Interruptor de la clínica (Saldo de IA → Funciones de IA): ANTES de gastar.
+  const apagada = await cortarSiIaApagada(ctx.clinicId, "chat");
+  if (apagada) return apagada;
 
   // Freno de gasto (la factura es de Anthropic) POR CLÍNICA, no por IP: la
   // clínica entera sale por la misma IP y se pisaban entre sí. Persistente

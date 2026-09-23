@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { addAiTokens, aiTokenLimitError } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
+import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { AI_FEATURE_HOMEOPATHY } from "@/lib/ai-billing/types";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
+
+const MODEL = "claude-haiku-4-5-20251001";
 
 const SYSTEM_PROMPT = `Eres un homeópata experto basado en Boericke, Kent y el Organon de Hahnemann. Dado un conjunto de síntomas rúbricos (mentales, generales y locales), sugieres los remedios más probables con su score de coincidencia (0-100) y la potencia inicial recomendada.
 
@@ -19,6 +24,10 @@ Formato de salida:
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Interruptor de la clínica (Saldo de IA): ANTES de gastar, en el servidor.
+  const apagada = await cortarSiIaApagada(ctx.clinicId, "homeopathy");
+  if (apagada) return apagada;
 
   // Freno de gasto POR CLÍNICA (no por IP: todo el consultorio comparte IP) y
   // persistente en Upstash — el Map en memoria no limita en serverless.
@@ -56,7 +65,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: MODEL,
         max_tokens: 800,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: userMsg }],
@@ -67,6 +76,18 @@ export async function POST(req: NextRequest) {
 
     const totalTokens = (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0);
     await addAiTokens(ctx.clinicId, totalTokens, "homeopathy", ctx.userId);
+
+    // Costo real para la Tesorería (ws1-t1). No cobra nada —el cupo ya se
+    // movió arriba— y se traga sus fallos: la sugerencia sale igual.
+    await recordUsageNoCharge({
+      clinicId: ctx.clinicId,
+      feature: AI_FEATURE_HOMEOPATHY,
+      model: MODEL,
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+      cacheTokens: data.usage?.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: data.usage?.cache_creation_input_tokens ?? 0,
+    });
 
     const text = data.content?.[0]?.text ?? "{}";
     const match = text.match(/\{[\s\S]*\}/);

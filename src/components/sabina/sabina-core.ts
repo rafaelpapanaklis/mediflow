@@ -75,6 +75,7 @@ export function formatToolsUsed(tools: readonly string[] | null | undefined): st
 export type SabinaErrorKind =
   | "auth" // 401 sin sesión
   | "apagada" // 403 `sabinaApagada`: el Super Admin apagó a Sabina para este usuario
+  | "apagada_clinica" // 403 `funcionApagada: "sabina"`: la clínica la apagó en Saldo de IA
   | "no_balance" // 402 sin saldo en el monedero
   | "rate_limited" // 429 pasado el límite
   | "plan_limit" // 429 del cupo del plan (`limitReached: true`): reintentar no lo arregla
@@ -99,7 +100,9 @@ export function classifySabinaError(status: number | null, body?: unknown): Sabi
       return "no_balance";
     case 403:
       // Solo el 403 que lo dice: otro 403 no es «te la apagaron».
-      return (body as { sabinaApagada?: unknown } | null)?.sabinaApagada === true ? "apagada" : "unknown";
+      if ((body as { sabinaApagada?: unknown } | null)?.sabinaApagada === true) return "apagada";
+      if ((body as { funcionApagada?: unknown } | null)?.funcionApagada === "sabina") return "apagada_clinica";
+      return "unknown";
     case 429:
       return (body as { limitReached?: unknown } | null)?.limitReached === true ? "plan_limit" : "rate_limited";
     case 503:
@@ -126,6 +129,12 @@ export const SABINA_ERROR_COPY: Record<SabinaErrorKind, SabinaErrorCopy> = {
     title: "Sabina está apagada para tu usuario",
     message:
       "El Super Admin de la clínica apagó a Sabina para ti, así que no puede consultar ni hacer nada en tu nombre. Si crees que es un error, pídele que la vuelva a activar en Equipo.",
+    retryable: false,
+  },
+  apagada_clinica: {
+    title: "La clínica apagó a Sabina",
+    message:
+      "Un administrador apagó a Sabina para toda la clínica, para que no gaste Saldo de IA. Se vuelve a encender en Saldo de IA → Funciones de IA.",
     retryable: false,
   },
   no_balance: {

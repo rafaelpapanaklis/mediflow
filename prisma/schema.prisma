@@ -220,6 +220,12 @@ model Clinic {
   // null = fallback a los campos legacy waReminderActive/waReminder24h/waReminder1h/waReminderMsg.
   reminderSettings Json?
 
+  // Interruptores de IA por clínica — { apagadas: ["weekly_insights", …] }.
+  // Guarda lo APAGADO: null = todo encendido (el comportamiento de siempre).
+  // Saneador, catálogo y valores por defecto en src/lib/ai-billing/interruptores.ts;
+  // el corte, en el servidor, antes de llamar a la IA. SQL: sql/ws1-t1-interruptores-ia.sql.
+  aiSettings Json?
+
   users                     User[]
   patients                  Patient[]
   appointments              Appointment[]

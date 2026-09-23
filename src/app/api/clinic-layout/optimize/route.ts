@@ -6,6 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { chat } from "@/lib/integrations/claude";
 import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
+import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { AI_FEATURE_CLINIC_LAYOUT } from "@/lib/ai-billing/types";
+import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
@@ -61,7 +64,13 @@ interface OptimizerResult {
  * Devuelve sugerencias de Claude (Sonnet 4.6) para reorganizar la agenda
  * del día. NUNCA expone la API key — el cliente solo recibe el JSON
  * estructurado.
+ *
+ * Gasto (ws1-t1): descuenta del cupo del plan como siempre y deja su
+ * AiUsageEvent con el costo real (billedCents = 0). Si la clínica la apagó en
+ * Saldo de IA, se corta antes de leer la agenda y de llamar a Claude.
  */
+const OPTIMIZER_MODEL = "claude-sonnet-4-6";
+
 export async function POST(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
@@ -70,6 +79,10 @@ export async function POST(req: NextRequest) {
     // mismos que dejaba pasar la lista de roles que había aquí), con override.
     const denied = denyIfMissingPermission(dbUser, "clinicLayout.edit");
     if (denied) return denied;
+
+    // Interruptor de la clínica: ANTES de gastar, en el servidor.
+    const apagada = await cortarSiIaApagada(dbUser.clinicId, "clinic_layout");
+    if (apagada) return apagada;
 
     // Freno de gasto POR CLÍNICA (no por IP: los admins de la clínica salen
     // por la misma) y persistente en Upstash — el Map en memoria no limita en
@@ -189,7 +202,7 @@ Responde SOLO con un JSON válido (sin markdown, sin texto extra) con esta estru
     if (aiErr) return NextResponse.json(aiErr, { status: 429 });
 
     const result = await chat({
-      model: "claude-sonnet-4-6",
+      model: OPTIMIZER_MODEL,
       maxTokens: 2000,
       messages: [{ role: "user", content: prompt }],
     });
@@ -202,6 +215,19 @@ Responde SOLO con un JSON válido (sin markdown, sin texto extra) con esta estru
     }
 
     await addAiTokens(dbUser.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0), "clinic_layout", dbUser.id);
+
+    // Costo real para la Tesorería (no cobra; se traga sus fallos).
+    if (!result.mock) {
+      await recordUsageNoCharge({
+        clinicId: dbUser.clinicId,
+        feature: AI_FEATURE_CLINIC_LAYOUT,
+        model: OPTIMIZER_MODEL,
+        inputTokens: result.inputTokens ?? 0,
+        outputTokens: result.outputTokens ?? 0,
+        cacheTokens: result.cacheRead ?? 0,
+        cacheWriteTokens: result.cacheCreation ?? 0,
+      });
+    }
 
     if (result.mock) {
       return NextResponse.json({

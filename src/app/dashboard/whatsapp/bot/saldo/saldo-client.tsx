@@ -18,6 +18,7 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { aiBillingFeatureLabel } from "@/lib/ai-billing/types";
 import { fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { SaldoRediseno } from "@/components/dashboard/whatsapp-rediseno/saldo";
+import { FuncionesIaCard, useFuncionesIa } from "./funciones-ia";
 import { useT } from "@/i18n/i18n-provider";
 import { montoMxn, SPEI_MAX_CENTS, SPEI_MIN_CENTS } from "@/lib/ai-wallet/spei-montos";
 
@@ -184,6 +185,10 @@ export function SaldoClient({
   const [thresholdPesos, setThresholdPesos] = useState("");
   const [autoAmountPesos, setAutoAmountPesos] = useState("");
   const [savingAuto, setSavingAuto] = useState(false);
+
+  // Funciones de IA (ws1-t1): qué puede apagar la clínica. Se carga aparte del
+  // monedero —su fallo no tumba la pantalla— y va a las dos vistas.
+  const funcionesIa = useFuncionesIa();
 
   // ── Carga inicial ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -378,7 +383,7 @@ export function SaldoClient({
           data, loading, loadError, amountCents, setAmountCents, customPesos, setCustomPesos, payBusy,
           startCheckout, mercadoPago, speiOpen, setSpeiOpen, cerrarSpei, speiPaso, setSpeiPaso, speiPesos, setSpeiPesos,
           setSpeiFile, speiBusy, speiError, speiTicket, openSpei, solicitarSpei, submitSpei, autoOn, setAutoOn, thresholdPesos, setThresholdPesos, autoAmountPesos,
-          setAutoAmountPesos, savingAuto, saveAuto,
+          setAutoAmountPesos, savingAuto, saveAuto, funcionesIa,
           textos: {
             presetAmountsCents: PRESET_AMOUNTS_CENTS,
             rechargeAnchor: RECHARGE_ANCHOR,
@@ -699,6 +704,9 @@ export function SaldoClient({
             </div>
           </CardNew>
         )}
+
+        {/* ── Funciones de IA: qué se puede apagar y qué gasta cada una (ws1-t1) ── */}
+        <FuncionesIaCard vm={funcionesIa} />
 
         {/* ── Historial de consumo ── */}
         <CardNew title="Consumo de IA" sub="Detalle de lo que ha consumido tu asistente." noPad>

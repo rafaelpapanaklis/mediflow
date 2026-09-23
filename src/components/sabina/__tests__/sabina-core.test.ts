@@ -54,6 +54,16 @@ test("classifySabinaError — mapea cada código del contrato, y null a 'network
   assert.equal(classifySabinaError(200), "unknown");
 });
 
+test("classifySabinaError — el 403 de la CLÍNICA que apagó a Sabina no es el del Super Admin", () => {
+  // Cuerpo real de /api/sabina cuando la clínica la apagó en Saldo de IA (ws1-t1).
+  assert.equal(classifySabinaError(403, { error: "…", funcionApagada: "sabina" }), "apagada_clinica");
+  assert.equal(SABINA_ERROR_COPY.apagada_clinica.retryable, false);
+  // El del Super Admin sigue siendo el suyo, y otro 403 no es ninguno de los dos.
+  assert.equal(classifySabinaError(403, { sabinaApagada: true }), "apagada");
+  assert.equal(classifySabinaError(403, { funcionApagada: "chat" }), "unknown");
+  assert.equal(classifySabinaError(403, { error: "forbidden" }), "unknown");
+});
+
 test("classifySabinaError — el 429 del CUPO DEL PLAN no es el de «muchas preguntas seguidas»", () => {
   // Cuerpo real de /api/sabina cuando aiTokenLimitError corta (plan sin IA o cupo agotado).
   const cupo = { error: "Tu plan no incluye esta función de IA o agotaste el cupo mensual. Sube de plan.", limitReached: true };
