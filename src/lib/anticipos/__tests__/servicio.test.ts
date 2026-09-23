@@ -143,6 +143,8 @@ function escenario(opts: {
         externalReference: refDeAnticipo(depositId),
         transactionAmount: 300,
         currencyId: "MXN",
+        // Lo añadió el arreglo de reembolsos (H3): un pago sin devolver lleva 0.
+        transactionAmountRefunded: 0,
         dateApproved: reloj.toISOString(),
         collectorId: "999",
         payerEmail: "paciente@correo.test",
