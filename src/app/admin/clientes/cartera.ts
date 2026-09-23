@@ -83,6 +83,11 @@ export interface ClinicaDeCliente {
   totalPagado: number;
   aiTokensUsed: number;
   aiTokensLimit: number;
+  /**
+   * Sede incluida en el plan de su clínica madre (`findIncludedBranchIds`,
+   * @/lib/admin/mrr-core): no paga aparte y vale $0 en el MRR. Ausente = no.
+   */
+  sedeIncluida?: boolean;
 }
 
 /** El cliente tal cual sale de la base, antes de valorarlo. */
@@ -227,7 +232,12 @@ function aEntradaSalud(c: ClinicaDeCliente): EntradaSaludClinica {
 
 /** Lo que `computeMrr` necesita de una clínica. */
 function aFilaMrr(c: ClinicaDeCliente): MrrClinicRow {
-  return { plan: c.plan, monthlyPrice: c.monthlyPrice, subscriptionStatus: c.subscriptionStatus };
+  return {
+    plan: c.plan,
+    monthlyPrice: c.monthlyPrice,
+    subscriptionStatus: c.subscriptionStatus,
+    includedBranch: !!c.sedeIncluida,
+  };
 }
 
 /**
@@ -419,6 +429,11 @@ export interface ResumenClientes {
    * clínica cuyo dueño quedó `isActive: false` suma allá y no aquí.
    */
   mrrTotal: number;
+  /**
+   * Sedes activas que NO suman a `mrrTotal` porque van incluidas en el plan de
+   * su clínica madre. Mismo universo que `mrrTotal` (todas las filas).
+   */
+  sedesIncluidas: number;
   /** Clínicas vigentes de clientes reales. */
   clinicas: number;
 }
@@ -453,6 +468,7 @@ export function resumirClientes(filas: FilaCliente[]): ResumenClientes {
     // `reales` (sólo las que no son prueba). Con una cuenta de prueba que
     // aporte dinero, el promedio sale alto.
     mrrTotal: filas.reduce((s, f) => s + f.mrr.total, 0),
+    sedesIncluidas: filas.reduce((s, f) => s + f.mrr.includedBranches, 0),
     clinicas: reales.reduce((s, f) => s + f.vigentes.length, 0),
   };
 }

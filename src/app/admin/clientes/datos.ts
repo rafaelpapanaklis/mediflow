@@ -24,7 +24,7 @@ import "server-only";
  * Yucatán la actividad del día ya se contaba en el día siguiente.
  */
 import { prisma } from "@/lib/prisma";
-import { loadPlanPrices } from "@/lib/admin/mrr";
+import { loadIncludedBranchIds, loadPlanPrices } from "@/lib/admin/mrr";
 import { getPatientQuotaMany } from "@/lib/patient-quota";
 import type { PatientQuota } from "@/lib/patient-quota-shared";
 import {
@@ -101,7 +101,7 @@ const iso = (d: Date | null | undefined): string | null => (d ? d.toISOString() 
  * Los agregados de actividad, pago y cupo de un conjunto de clínicas.
  * Devuelve una función que arma la parte "medida" de cada clínica.
  */
-async function medirClinicas(clinicIds: string[], ahora: Date) {
+async function medirClinicas(clinicIds: string[], ahora: Date, sedesIncluidas: Set<string>) {
   const desdeVentana = inicioDeHaceDias(DIAS_VENTANA_ACTIVIDAD, ahora);
   const desdePrevia  = inicioDeHaceDias(DIAS_VENTANA_ACTIVIDAD * 2, ahora);
   const desdeEnLinea = new Date(ahora.getTime() - MINUTOS_EN_LINEA * 60_000);
@@ -238,6 +238,7 @@ async function medirClinicas(clinicIds: string[], ahora: Date) {
       totalPagado:   mPagos.get(c.id)?._sum.amount ?? 0,
       aiTokensUsed:  c.aiTokensUsed ?? 0,
       aiTokensLimit: c.aiTokensLimit ?? 0,
+      sedeIncluida:  sedesIncluidas.has(c.id),
     };
   };
 }
@@ -299,8 +300,11 @@ function agrupar(filas: FilaDueno[], medida: (c: NonNullable<FilaDueno["clinic"]
  */
 export async function cargarClientes(): Promise<DatosClientes> {
   const ahora = new Date();
-  // Fuera del Promise.all: loadPlanPrices ya hace su propio Promise.all de 3.
-  const planPrices = await loadPlanPrices();
+  // Fuera de las tandas de medirClinicas: loadPlanPrices hace su propio
+  // Promise.all de 3 y loadIncludedBranchIds el suyo de 2 (5 en vuelo).
+  // Las sedes incluidas se deciden sobre TODO el sistema, no sobre esta lista:
+  // así el criterio es exactamente el de /admin/clinics.
+  const [planPrices, sedesIncluidas] = await Promise.all([loadPlanPrices(), loadIncludedBranchIds()]);
 
   const filas = (await prisma.user.findMany({
     where: { role: "SUPER_ADMIN", isActive: true, clinic: { archivedAt: null } },
@@ -313,7 +317,7 @@ export async function cargarClientes(): Promise<DatosClientes> {
     return { clientes: [], planPrices, ahoraISO: ahora.toISOString() };
   }
 
-  const medida = await medirClinicas(clinicIds, ahora);
+  const medida = await medirClinicas(clinicIds, ahora, sedesIncluidas);
   return { clientes: agrupar(filas, medida), planPrices, ahoraISO: ahora.toISOString() };
 }
 
@@ -349,7 +353,7 @@ export interface DatosCliente {
  */
 export async function cargarCliente(supabaseId: string): Promise<DatosCliente> {
   const ahora = new Date();
-  const planPrices = await loadPlanPrices();
+  const [planPrices, sedesIncluidas] = await Promise.all([loadPlanPrices(), loadIncludedBranchIds()]);
 
   const comoDuena = (await prisma.user.findMany({
     where: { role: "SUPER_ADMIN", supabaseId, isActive: true },
@@ -382,7 +386,7 @@ export async function cargarCliente(supabaseId: string): Promise<DatosCliente> {
   }
 
   // En serie con medirClinicas, no en paralelo: esa ya abre sus dos tandas.
-  const medida = await medirClinicas(clinicIds, ahora);
+  const medida = await medirClinicas(clinicIds, ahora, sedesIncluidas);
   const ingresos = await medirIngresos(clinicIds, ahora);
   const clientes = agrupar(filas, medida);
   return {

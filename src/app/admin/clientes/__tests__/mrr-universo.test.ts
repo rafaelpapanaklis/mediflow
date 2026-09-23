@@ -27,13 +27,29 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { computeMrr, type MrrClinicRow } from "@/lib/admin/mrr-core";
+import { computeMrr, findIncludedBranchIds, type MrrClinicRow } from "@/lib/admin/mrr-core";
+import { resumirClientes, valorarCliente, type ClinicaDeCliente } from "../cartera";
 
 const ADMIN = join(__dirname, "..", "..");
 const PRECIOS = { FREE: 0, PRO: 1899, CLINIC: 3499 };
 
 const fila = (over: Partial<MrrClinicRow> = {}): MrrClinicRow =>
   ({ plan: "PRO", subscriptionStatus: "active", monthlyPrice: null, ...over } as MrrClinicRow);
+
+/** Una clínica de /admin/clientes con lo mínimo; el resto, en neutro. */
+function clinicaDeCliente(id: string, monthlyPrice: number | null, sedeIncluida: boolean): ClinicaDeCliente {
+  return {
+    id, nombre: id, slug: id, plan: "CLINIC", monthlyPrice, subscriptionStatus: "active",
+    trialEndsAt: null, nextBillingDate: null, cancelRequested: false,
+    createdAt: "2026-01-01T00:00:00.000Z", archivada: false,
+    cupo: { used: 0, max: null, remaining: null, unlimited: true, canCreate: true },
+    citasPasadas: 0, citasVentana: 0, citasVentanaPrevia: 0, citasFuturas: 0,
+    facturasVentana: 0, facturasVentanaPrevia: 0, notasVentana: 0, notasVentanaPrevia: 0,
+    ultimaCitaAt: null, proximaCitaAt: null, ultimoAccesoAt: null, enLinea: false,
+    pagosRegistrados: 0, ultimoPagoAt: null, totalPagado: 0, aiTokensUsed: 0, aiTokensLimit: 0,
+    sedeIncluida,
+  };
+}
 
 // ── 1. Mismos precios, misma regla ─────────────────────────────────────────
 
@@ -49,9 +65,9 @@ test("las dos pantallas valoran una clínica exactamente igual", () => {
 
 test("el precio negociado manda sobre el de lista, en los dos caminos", () => {
   assert.equal(computeMrr([fila({ plan: "CLINIC", monthlyPrice: 2500 })], PRECIOS).total, 2500);
-  // 0 y null significan "sin negociar": cae al de lista. Está fijado así a
-  // propósito en salud-clinica.test.ts; ver el punto 6 del reporte de ws1-t1,
-  // porque tiene una consecuencia con las sedes incluidas.
+  // 0 y null significan "sin negociar": cae al de lista. El OTRO cero —la
+  // sede incluida en el plan de su madre— no lo decide el 0 sino la marca
+  // `includedBranch` (ver «las dos pantallas valoran igual una sede incluida»).
   assert.equal(computeMrr([fila({ plan: "CLINIC", monthlyPrice: 0 })], PRECIOS).total, 3499);
 });
 
@@ -115,15 +131,58 @@ test("cada rótulo nombra SU criterio, no una frase genérica", () => {
   assert.match(CLIENTES, /suma en Clínicas y no aquí/);
 });
 
-test("las dos avisan de las sedes incluidas, que inflan las DOS cifras", () => {
-  // Una sucursal creada por POST /api/clinics nace `active` con
-  // `monthlyPrice: 0`, y `mrr-core` lee ese 0 como «sin precio negociado» y
-  // cae al de lista. Un CLINIC con 2 sedes incluidas paga 1 y suma 3. No se
-  // corrige aquí —haría falta un campo que marque la sede en el schema, y eso
-  // es decisión de Rafael— pero la pantalla no puede callarlo.
+test("las dos dicen, debajo del MRR, cuántas sedes incluidas NO cuentan", () => {
+  // Antes el rótulo avisaba de que las sedes inflaban las DOS cifras. Ya no las
+  // inflan (valen $0) y lo que cada pantalla dice es a quién deja fuera.
   for (const [nombre, texto] of [["clinics", CLINICS], ["clientes", CLIENTES]] as const) {
-    assert.match(texto, /sede incluida en el plan de la madre/, `${nombre} no lo avisa`);
+    const i = texto.indexOf("cifraEtiqueta}>MRR<");
+    const bloque = texto.slice(i, i + 1600);
+    assert.match(bloque, /includedBranchesHint\(/, `${nombre}: no dice cuántas sedes deja fuera`);
+    assert.match(texto, /sede incluida en el plan de la madre vale \$0/, `${nombre}: el rótulo no lo explica`);
+    assert.doesNotMatch(texto, /suma precio de lista\s+aunque no se le cobre/, `${nombre}: volvió el aviso viejo`);
   }
+});
+
+test("las dos pantallas deciden las sedes con la MISMA función, sobre todo el sistema", () => {
+  const PAGE_CLINICS = readFileSync(join(ADMIN, "clinics", "page.tsx"), "utf8");
+  const DATOS_CLIENTES = readFileSync(join(ADMIN, "clientes", "datos.ts"), "utf8");
+  for (const [nombre, texto] of [["clinics/page.tsx", PAGE_CLINICS], ["clientes/datos.ts", DATOS_CLIENTES]] as const) {
+    assert.match(texto, /loadIncludedBranchIds\(\)/, `${nombre} no carga las sedes incluidas`);
+  }
+});
+
+test("las dos pantallas valoran igual una madre con sedes incluidas", () => {
+  // /admin/clinics: computeMrr sobre las active, marcadas por findIncludedBranchIds.
+  // /admin/clientes: valorarCliente → resumirClientes, con `sedeIncluida` en cada clínica.
+  const clinicas = [
+    { id: "madre", createdAt: "2026-01-01", monthlyPrice: null, stripeSubscriptionId: "sub_1" },
+    { id: "sede-1", createdAt: "2026-02-01", monthlyPrice: 0 },
+    { id: "sede-2", createdAt: "2026-03-01", monthlyPrice: 0 },
+  ].map((c) => ({ ...c, plan: "CLINIC", subscriptionStatus: "active" }));
+  const sedes = findIncludedBranchIds(
+    clinicas,
+    clinicas.map((c) => ({ supabaseId: "duena", clinicId: c.id })),
+  );
+
+  const comoClinics = computeMrr(
+    clinicas.map((c) => ({ ...c, includedBranch: sedes.has(c.id) })),
+    PRECIOS,
+  );
+
+  const fila = valorarCliente(
+    {
+      supabaseId: "duena", nombre: "Dueña", email: "d@x.mx", telefono: null, afiliado: null,
+      altaAt: "2026-01-01T00:00:00.000Z",
+      clinicas: clinicas.map((c) => clinicaDeCliente(c.id, c.monthlyPrice, sedes.has(c.id))),
+    },
+    PRECIOS,
+  );
+  const comoClientes = resumirClientes([fila]);
+
+  assert.equal(comoClinics.total, 3499, "sólo la madre");
+  assert.equal(comoClientes.mrrTotal, comoClinics.total, "las dos dicen lo mismo del mismo dinero");
+  assert.equal(comoClinics.includedBranches, 2);
+  assert.equal(comoClientes.sedesIncluidas, comoClinics.includedBranches);
 });
 
 test("el universo se pinta con tokens, sin un solo color a mano", () => {
