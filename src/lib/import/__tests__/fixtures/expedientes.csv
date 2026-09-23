@@ -1,0 +1,6 @@
+nombre,apellido,telefono,alergias,padecimientos,medicamentos,antecedentes heredofamiliares,antecedentes no patologicos
+María,Hernández,5551234567,"Penicilina; Látex",Hipertensión,Losartán 50 mg,Madre con diabetes tipo 2,No fuma
+Jorge,López,55 5987 6543,Ninguna,"Diabetes tipo 2, Asma",Metformina,,
+Pedro,Inventado,5550000000,Ibuprofeno,,,,
+Jorge,López,5559876543,,,,,
+María,Hernández,5551234567,penicilina,,,,

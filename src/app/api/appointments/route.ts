@@ -31,6 +31,11 @@ import {
 import { ctxDeSesion } from "@/lib/agenda-bloqueos/core-ctx";
 import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
+import {
+  horariosComoObjeto,
+  leerHorariosDeDoctores,
+} from "@/lib/horario-doctor/consulta.server";
 import {
   bookingRuleBody,
   newAppointmentRuleViolation,
@@ -58,6 +63,7 @@ import type {
   AppointmentStatus,
   CreateAppointmentInput,
 } from "@/lib/agenda/types";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -154,6 +160,14 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+  // WS1-T2 · horario — el horario propio de los doctores de la clínica, para
+  // que ws1-t3 pinte las horas en que cada uno no atiende. Fuera del
+  // `Promise.all` de arriba porque ése ya lleva seis consultas y el tope de la
+  // casa son menos de siete. Degrada a `{}` si la tabla aún no existe.
+  const horariosDoctores = horariosComoObjeto(
+    await leerHorariosDeDoctores(session.clinic.id),
+  );
+
   const response: AgendaDayResponse = {
     range: {
       from: range.startUtc.toISOString(),
@@ -171,6 +185,7 @@ export async function GET(req: NextRequest) {
     pendingValidation,
     waitlistCount,
     bloqueos,
+    horariosDoctores,
   };
 
   return NextResponse.json(response, {
@@ -249,14 +264,31 @@ export async function POST(req: NextRequest) {
   // staff ya leen ese campo y sacan el toast, y esas pantallas son de ws1-t3.
   // Si hay bloqueo Y fuera-de-horario, manda el bloqueo: lleva escrito el
   // motivo, y el otro solo dice una hora.
-  const bloqueosDelHueco = await leerBloqueosDelRango(
-    session.clinic.id,
+  //
+  // WS1-T2 · horario — y el horario PROPIO del doctor, con el mismo criterio:
+  // aviso, no 422. Orden de los avisos: el bloqueo (trae el motivo escrito),
+  // luego la clínica (si la clínica cierra, eso es lo que hay que decir), y
+  // por último el doctor. Un doctor sin horario propio nunca avisa de nada.
+  const [bloqueosDelHueco, horariosDelHueco] = await Promise.all([
+    leerBloqueosDelRango(
+      session.clinic.id,
+      startsAt,
+      endsAt,
+      { doctorIds: [body.doctorId] },
+    ),
+    leerHorariosDeDoctores(session.clinic.id, { doctorIds: [body.doctorId] }),
+  ]);
+  const bloqueoEncima = bloqueaEsteHueco(bloqueosDelHueco, startsAt, endsAt, body.doctorId);
+  const fueraDelDoctor = doctorNoAtiende(
+    horariosDelHueco,
     startsAt,
     endsAt,
-    { doctorIds: [body.doctorId] },
+    body.doctorId,
+    session.clinic.timezone,
   );
-  const bloqueoEncima = bloqueaEsteHueco(bloqueosDelHueco, startsAt, endsAt, body.doctorId);
-  const avisoHorario = bloqueoEncima ? avisoDeBloqueo(bloqueoEncima) : hoursWarning;
+  const avisoHorario = bloqueoEncima
+    ? avisoDeBloqueo(bloqueoEncima)
+    : hoursWarning ?? (fueraDelDoctor ? avisoDeHorarioDoctor(fueraDelDoctor) : null);
 
   // 🔴 ESTE GATE, Y ESTA COLUMNA, SE QUEDAN EXACTAMENTE COMO ESTABAN.
   //
@@ -596,6 +628,8 @@ async function findConflictingAppointment(
       overrideReason: null,
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt },
+      // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+      AND: [sinApartadoVencido()],
     },
     include: { patient: { select: { firstName: true, lastName: true, visibleUserIds: true } } },
     take: 1,

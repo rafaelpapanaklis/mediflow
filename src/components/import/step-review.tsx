@@ -1,10 +1,15 @@
 "use client";
 
 // Paso 6 · Revisar — stat-cards (Válidos/Errores/Duplicados) + tabla con motivo
-// de error en hover/foco + switch "Omitir duplicados".
-import { Check, AlertCircle, Copy } from "lucide-react";
+// de error en hover/foco + switch "Omitir duplicados". En presupuestos, además,
+// los procedimientos que no casaron con el tarifario: cada uno entra «solo con
+// su importe» salvo que aquí se elija su equivalente.
+import { Check, AlertCircle, Copy, Link2 } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
-import type { PreviewResult, PreviewRow } from "./import-client";
+import { CLINICAL_ENTITIES, VALUE_UNLINKED, type Entity, type PreviewResult, type PreviewRow } from "./import-client";
+
+/** Entidades cuya tercera columna es el saldo; las demás enseñan un resumen de la fila. */
+const WITH_BALANCE: ReadonlySet<Entity> = new Set<Entity>(["patients", "balances", "appointments"]);
 
 function StatusBadge({ t, row }: { t: TFunction; row: PreviewRow }) {
   const badge =
@@ -27,13 +32,62 @@ function StatusBadge({ t, row }: { t: TFunction; row: PreviewRow }) {
 
 interface Props {
   t: TFunction;
+  /** La entidad de esta vista previa (decide la tercera columna). */
+  entity: Entity;
   preview: PreviewResult;
   skipDup: boolean;
   onToggleSkip: () => void;
+  /** Equivalente elegido por procedimiento sin casar (clave → id o VALUE_UNLINKED). */
+  decisions: Record<string, string>;
+  onDecide: (key: string, id: string) => void;
 }
 
-export function StepReview({ t, preview, skipDup, onToggleSkip }: Props) {
+/** Procedimientos que no están en el tarifario: uno por fila, con su selector. */
+function Unresolved({ t, preview, decisions, onDecide }: Pick<Props, "t" | "preview" | "decisions" | "onDecide">) {
+  const items = (preview.unresolved ?? []).filter((u) => u.field === "procedure");
+  if (items.length === 0) return null;
+  const options = preview.options?.procedure ?? [];
+  return (
+    <div className="imp-callout imp-callout--warn" style={{ marginTop: 14, alignItems: "flex-start" }}>
+      <span className="imp-callout__ic" aria-hidden><Link2 size={21} /></span>
+      <div className="imp-callout__txt" style={{ flex: 1, minWidth: 0 }}>
+        <b>{t("shell.importClinic.step6.unresolvedTitle", { count: items.length })}</b>
+        <p>{t("shell.importClinic.step6.unresolvedDesc")}</p>
+        <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0, display: "grid", gap: 8 }}>
+          {items.map((u, i) => {
+            const id = `imp-eq-${i}`;
+            return (
+              <li key={u.key} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                <label htmlFor={id} style={{ flex: "1 1 180px", minWidth: 0, fontWeight: 500, overflowWrap: "anywhere" }}>
+                  {u.value}{" "}
+                  <span style={{ color: "var(--text-3)", fontWeight: 400, fontSize: 12 }}>
+                    {t("shell.importClinic.step6.unresolvedRows", { count: u.rows })}
+                  </span>
+                </label>
+                <select
+                  id={id}
+                  className="input-new imp-select"
+                  style={{ flex: "1 1 220px", minWidth: 0, maxWidth: "100%" }}
+                  value={decisions[u.key] ?? VALUE_UNLINKED}
+                  onChange={(e) => onDecide(u.key, e.target.value)}
+                >
+                  <option value={VALUE_UNLINKED}>{t("shell.importClinic.step6.unresolvedUnlinked")}</option>
+                  {options.map((o) => (
+                    <option key={o.id} value={o.id}>{o.label}</option>
+                  ))}
+                </select>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+export function StepReview({ t, entity, preview, skipDup, onToggleSkip, decisions, onDecide }: Props) {
   const { stats, rows } = preview;
+  const withBalance = WITH_BALANCE.has(entity);
   return (
     <div>
       <h2 className="imp-title">{t("shell.importClinic.step6.title")}</h2>
@@ -64,19 +118,28 @@ export function StepReview({ t, preview, skipDup, onToggleSkip }: Props) {
       </div>
 
       <div className="imp-review-toolbar">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={skipDup}
-          className={`switch${skipDup ? " switch--on" : ""}`}
-          onClick={onToggleSkip}
-          aria-label={t("shell.importClinic.step6.skipDup")}
-        >
-          <span className="switch__thumb" />
-        </button>
-        <span className="imp-switch-lbl">{t("shell.importClinic.step6.skipDup")}</span>
+        {CLINICAL_ENTITIES.has(entity) ? (
+          // Lo clínico nunca reimporta un duplicado: no hay interruptor que ofrecer.
+          <span className="imp-switch-lbl">{t("shell.importClinic.step6.dupNever")}</span>
+        ) : (
+          <>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={skipDup}
+              className={`switch${skipDup ? " switch--on" : ""}`}
+              onClick={onToggleSkip}
+              aria-label={t("shell.importClinic.step6.skipDup")}
+            >
+              <span className="switch__thumb" />
+            </button>
+            <span className="imp-switch-lbl">{t("shell.importClinic.step6.skipDup")}</span>
+          </>
+        )}
         <span className="imp-hint">{t("shell.importClinic.step6.hoverHint")}</span>
       </div>
+
+      <Unresolved t={t} preview={preview} decisions={decisions} onDecide={onDecide} />
 
       <div className="table-wrap" style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
@@ -86,7 +149,7 @@ export function StepReview({ t, preview, skipDup, onToggleSkip }: Props) {
                 <th style={{ width: 56 }}>{t("shell.importClinic.step6.colRow")}</th>
                 <th>{t("shell.importClinic.step6.colName")}</th>
                 <th>{t("shell.importClinic.step6.colPhone")}</th>
-                <th>{t("shell.importClinic.step6.colBalance")}</th>
+                <th>{t(withBalance ? "shell.importClinic.step6.colBalance" : "shell.importClinic.step6.colDetail")}</th>
                 <th>{t("common.status")}</th>
               </tr>
             </thead>
@@ -96,9 +159,9 @@ export function StepReview({ t, preview, skipDup, onToggleSkip }: Props) {
                   <td className="mono">{r.row}</td>
                   <td>{r.name}</td>
                   <td className="mono">{r.phone}</td>
-                  <td className="mono">
+                  <td className={withBalance ? "mono" : undefined}>
                     <span style={r.kind === "credit" ? { color: "var(--success)", fontWeight: 600 } : undefined}>
-                      {r.balance}
+                      {withBalance ? r.balance : (r.detail ?? "—")}
                     </span>
                     {r.kind && (
                       <span

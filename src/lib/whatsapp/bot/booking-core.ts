@@ -12,6 +12,7 @@ import {
   toISODate,
 } from "./booking-parse";
 import { BotIntent } from "./types";
+import { textoAvisoAnticipo, textoLinkDePago } from "@/lib/anticipos/core";
 import type { BotConfigDTO, BotJson, BotTurnInput, BotTurnResult } from "./types";
 import type {
   CreateErrorCode,
@@ -74,6 +75,12 @@ export interface BookingState {
   updatedAt?: number;
   /** Copia de config.fallbackToHuman al iniciar (para decidir el handoff). */
   fallbackToHuman?: boolean;
+  /**
+   * WS1-T5 — el anticipo que se ANUNCIA en el «¿confirmas?». Solo es texto: el
+   * monto que se cobra lo vuelve a calcular el servidor al crear el link, y
+   * nada de lo que haya aquí llega a Mercado Pago.
+   */
+  anticipo?: { monto: number; minutos: number } | null;
 }
 
 interface UpcomingAppt {
@@ -109,7 +116,19 @@ export interface BookingDeps {
     time: string;
     durationMin: number;
     reason?: string | null;
+    /** WS1-T5 — para el precio del anticipo (catálogo) y el teléfono del aviso. */
+    serviceId?: string | null;
+    threadId?: string | null;
   }): Promise<CreateResult>;
+  /**
+   * WS1-T5 — ¿esta clínica pide anticipo para este servicio? Cuánto y en
+   * cuánto tiempo, para decirlo ANTES de que el paciente confirme. Opcional:
+   * sin él (o si devuelve null) el flujo es exactamente el de siempre.
+   */
+  anticipoParaAnunciar?(
+    clinicId: string,
+    serviceId: string | null | undefined,
+  ): Promise<{ monto: number; minutos: number } | null>;
   rescheduleBotAppointment(params: {
     clinicId: string;
     appointmentId: string;
@@ -462,6 +481,16 @@ async function presentSlots(
         state,
       );
     }
+    // WS1-T2 · horario — la clínica abre, pero ESTE doctor no atiende ese día.
+    // Se dice con su nombre (la persona lo eligió en este mismo chat) y sin
+    // explicar su horario: basta con que ese día no, y con pedir otra fecha.
+    if (res.reason === "doctor_off") {
+      return step(
+        `${prefix}${state.doctorName ?? "El profesional"} no atiende ese día (${human}). ¿Qué otra fecha te acomoda?`,
+        state.mode,
+        state,
+      );
+    }
     return step(`${prefix}Ese día (${human}) no hay atención. ¿Qué otra fecha te acomoda?`, state.mode, state);
   }
   if (res.slots.length === 0) {
@@ -518,7 +547,25 @@ async function stepSlot(
   }
 
   state.step = "confirm";
+  await prepararAnticipo(input, state, deps);
   return step(confirmText(state, await deps.getClinicTimezone(input.clinicId)), state.mode, state);
+}
+
+/**
+ * WS1-T5 — antes del «¿confirmas?» de una cita NUEVA se pregunta si la clínica
+ * pide anticipo, para que el paciente lo sepa antes de decir que sí. Si la
+ * consulta falla, se sigue sin anunciarlo: el servidor decide igual al crear.
+ */
+async function prepararAnticipo(input: BotTurnInput, state: BookingState, deps: BookingDeps): Promise<void> {
+  if (state.mode !== "create" || !deps.anticipoParaAnunciar) {
+    state.anticipo = null;
+    return;
+  }
+  try {
+    state.anticipo = await deps.anticipoParaAnunciar(input.clinicId, state.serviceId ?? null);
+  } catch {
+    state.anticipo = null;
+  }
 }
 
 async function stepName(
@@ -541,6 +588,7 @@ async function stepName(
   }
   state.patientId = patient.id;
   state.step = "confirm";
+  await prepararAnticipo(input, state, deps);
   return step(confirmText(state, await deps.getClinicTimezone(input.clinicId)), state.mode, state);
 }
 
@@ -552,6 +600,9 @@ function confirmText(state: BookingState, tz: string): string {
   ];
   if (state.serviceName) lines.push(`🦷 ${state.serviceName}`);
   if (state.doctorName) lines.push(`👩‍⚕️ ${state.doctorName}`);
+  if (state.mode === "create" && state.anticipo) {
+    lines.push("", textoAvisoAnticipo(state.anticipo.monto, state.anticipo.minutos));
+  }
   lines.push("", "¿Confirmas? Responde *sí* o *no*.");
   return lines.join("\n");
 }
@@ -604,8 +655,28 @@ async function stepConfirm(
     time: state.time,
     durationMin: state.durationMin ?? 0,
     reason: state.serviceName ?? null,
+    serviceId: state.serviceId ?? null,
+    threadId: input.threadId,
   });
   if (!c.ok) return createError(c.error ?? "failed", input, state, tz, deps);
+  // WS1-T5 — la cita quedó APARTADA esperando el anticipo: se manda el link.
+  // El monto y el plazo son los que decidió el servidor al crearlo, no los que
+  // se anunciaron antes (si la clínica los cambió en medio, manda el de ahora).
+  if (c.anticipo) {
+    return done(
+      textoLinkDePago({
+        fechaHumana: formatDateHuman(state.dateISO, tz),
+        hora: state.time,
+        doctor: state.doctorName ?? null,
+        monto: c.anticipo.monto,
+        url: c.anticipo.url,
+        venceA: new Date(c.anticipo.venceA),
+        minutos: c.anticipo.minutos,
+        tz,
+      }),
+      state.mode,
+    );
+  }
   const clinicName = await deps.getClinicName(input.clinicId);
   return done(
     `¡Listo! Registré tu cita para el ${formatDateHuman(state.dateISO, tz)} a las ${state.time}${state.doctorName ? ` con ${state.doctorName}` : ""}. ${clinicName} la confirmará en breve. ✅`,
@@ -662,6 +733,29 @@ function createError(
     state.step = "slot";
     return presentSlots(input, state, tz, deps, "Ese horario acaba de cerrarse en la agenda. 😅");
   }
+  // WS1-T2 · horario — esa hora ya no está en el horario del doctor (lo cambió
+  // mientras se elegía). Se vuelve a la lista del mismo día, que ya sale
+  // recortada a su horario.
+  if (error === "doctor_off") {
+    state.step = "slot";
+    return presentSlots(input, state, tz, deps, "A esa hora el profesional no atiende. 😅");
+  }
+  // WS1-T5 — la clínica pide anticipo y el link no salió. La cita NO quedó
+  // apartada (el servidor lo deshizo): se dice tal cual y pasa a una persona,
+  // en vez de agendar sin el anticipo que la clínica pidió.
+  if (error === "pago_no_disponible") {
+    const reply =
+      "No pude generar el link de pago del anticipo en este momento, así que el horario NO quedó apartado. " +
+      "Le paso tu solicitud al equipo para que te ayude. 🙏";
+    if (state.fallbackToHuman !== false) {
+      return { reply, intent: BotIntent.HANDOFF, handoff: true, newBotState: null };
+    }
+    return done(
+      "No pude generar el link de pago del anticipo en este momento, así que el horario NO quedó apartado. " +
+        "Intenta en unos minutos o llama al consultorio.",
+      state.mode,
+    );
+  }
   return done("No pude registrar la cita ahora. Intenta más tarde o llama al consultorio.", state.mode);
 }
 
@@ -687,6 +781,11 @@ function rescheduleError(
   if (error === "blocked") {
     state.step = "slot";
     return presentSlots(input, state, tz, deps, "Ese horario acaba de cerrarse en la agenda. 😅");
+  }
+  // WS1-T2 · horario — ver createError.
+  if (error === "doctor_off") {
+    state.step = "slot";
+    return presentSlots(input, state, tz, deps, "A esa hora el profesional no atiende. 😅");
   }
   return done("No pude reagendar la cita ahora. Intenta más tarde o llama al consultorio.", state.mode);
 }

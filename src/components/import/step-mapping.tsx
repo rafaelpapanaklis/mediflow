@@ -2,7 +2,9 @@
 
 // Paso 5 · Mapear — empareja cada columna del archivo con un campo de DaleControl.
 // Con perfil: columnas pre-resueltas (Automático). Sin perfil: manual, marcando
-// en ámbar las columnas "Sin mapear".
+// en ámbar las columnas "Sin mapear". Si falta una columna obligatoria (un
+// archivo con encabezados que no reconocemos), el backend lo dice en
+// `mappingError` y aquí se pide emparejarla: el flujo no se rompe, pide ayuda.
 import { Sparkles, AlertCircle, Check, X, ArrowRight } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { type Origin, type PreviewResult, type ColumnMapping } from "./import-client";
@@ -48,6 +50,16 @@ export function StepMapping({ t, origin, preview, mapping, hasSecondary, onChang
           <div className="imp-callout__txt">
             <b>{t("shell.importClinic.step5.bannerManualTitle")}</b>
             <p>{t("shell.importClinic.step5.bannerManualDesc", { name: origin.name })}</p>
+          </div>
+        </div>
+      )}
+
+      {preview.mappingError && (
+        <div className="imp-callout imp-callout--warn" role="alert" style={{ marginTop: 10 }}>
+          <span className="imp-callout__ic" aria-hidden><AlertCircle size={21} /></span>
+          <div className="imp-callout__txt">
+            <b>{t("shell.importClinic.step5.mappingErrorTitle")}</b>
+            <p>{preview.mappingError}. {t("shell.importClinic.step5.mappingErrorDesc")}</p>
           </div>
         </div>
       )}

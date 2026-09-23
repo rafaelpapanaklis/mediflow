@@ -10,6 +10,10 @@ import { isValidDateISO } from "@/lib/agenda/time-utils";
 import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
 import { ctxDeSesion } from "@/lib/agenda-bloqueos/core-ctx";
 import { hasPermission } from "@/lib/auth/permissions";
+import {
+  horariosComoObjeto,
+  leerHorariosDeDoctores,
+} from "@/lib/horario-doctor/consulta.server";
 import { calendarRangeUtc } from "@/lib/agenda/date-ranges";
 import type { AppointmentStatus } from "@/lib/agenda/types";
 
@@ -94,7 +98,7 @@ export async function GET(req: Request) {
     "agenda.view",
   );
 
-  const [appointments, doctors, resources, waitlistCount, bloqueos] = await Promise.all([
+  const [appointments, doctors, resources, waitlistCount, bloqueos, horarios] = await Promise.all([
     fetchAppointmentsForRange(fromUtc, toUtc, {
       clinicId: session.clinic.id,
       clinicCategory: session.clinic.category,
@@ -132,6 +136,10 @@ export async function GET(req: Request) {
           hasta: toUtc.toISOString(),
         })
       : Promise.resolve([]),
+    // WS1-T2 · horario — el horario propio de los doctores (semanal, no
+    // depende del rango). Es la jornada, no un motivo privado: viaja igual que
+    // `schedules`. Seis consultas, por debajo del tope de siete.
+    leerHorariosDeDoctores(session.clinic.id),
   ]);
 
   return NextResponse.json({
@@ -147,5 +155,6 @@ export async function GET(req: Request) {
     pendingValidation: [],
     waitlistCount,
     bloqueos,
+    horariosDoctores: horariosComoObjeto(horarios),
   });
 }

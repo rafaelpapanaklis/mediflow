@@ -815,7 +815,22 @@
         "date": "Date",
         "time": "Time",
         "type": "Type / Reason",
-        "duration": "Duration (min)"
+        "duration": "Duration (min)",
+        "allergies": "Allergies",
+        "chronicConditions": "Conditions",
+        "currentMedications": "Medications",
+        "familyHistory": "Family history",
+        "nonPathologicalHistory": "Non-pathological history",
+        "title": "Title",
+        "text": "Note text",
+        "folio": "Estimate number",
+        "procedure": "Procedure",
+        "tooth": "Tooth",
+        "quantity": "Quantity",
+        "price": "Unit price",
+        "discount": "Discount",
+        "total": "Line amount",
+        "quoteStatus": "Original status"
       },
       "launch": "Import my clinic",
       "assistedCta": "Assisted migration",
@@ -857,7 +872,7 @@
         "subProfile": "Follow these steps to get the file from {name}.",
         "subExcel": "Use our template to arrange your data. That makes mapping faster.",
         "templateTitle": "DaleControl template (.xlsx)",
-        "templateDesc": "Three tabs: Patients, Balances and Appointments. Copy and paste your data into the indicated columns.",
+        "templateDesc": "One tab per data type: Patients, Balances, Appointments, Medical history, Notes and Estimates. Copy and paste your data into the indicated columns.",
         "templateBtn": "Download template",
         "ownFileNote": "Already have your own file? That works too. Just make sure the first row has the column names.",
         "dentalink": {
@@ -894,10 +909,13 @@
         "balancesMeta": "Debts and credits per patient",
         "appointments": "Upcoming appointments",
         "appointmentsMeta": "Future schedule so you don't miss any",
-        "treatments": "Treatments",
-        "treatmentsMeta": "Plans and procedures per patient",
-        "history": "Clinical history",
-        "historyMeta": "Notes and progress (requires more mapping)"
+        "medicalHistory": "Medical history",
+        "medicalHistoryMeta": "Allergies, conditions, medications and history of existing patients",
+        "clinicalNotes": "Progress notes",
+        "clinicalNotesMeta": "Brought in marked as migrated, with their original date and author",
+        "quotes": "Estimates",
+        "quotesMeta": "Patient history: they don't create invoices or charges",
+        "soloNote": "Medical history, notes and estimates are imported one at a time, each with its own review."
       },
       "step4": {
         "title": "Upload your file",
@@ -923,7 +941,7 @@
         "bannerAutoDesc": "We matched {matched} of {total} columns automatically. Check that they line up.",
         "bannerManualTitle": "Manual mapping",
         "bannerManualDesc": "Since your source is «{name}», pick the field for each column by hand.",
-        "autoDetectNote": "Balance or appointment columns (Balance, Type, Date…) are detected automatically on import; leave anything that isn't patient data as «Don't import».",
+        "autoDetectNote": "Columns for the other data types you chose (Balance, Appointment date, Allergies…) are detected automatically on import; leave anything that isn't this type as «Don't import».",
         "colYour": "Your column",
         "colTarget": "DaleControl field",
         "statusAuto": "Automatic",
@@ -933,7 +951,10 @@
         "loading": "Reading your file…",
         "errorTitle": "We couldn't read your file",
         "errorDesc": "Check that it's a valid .xlsx or .csv and try again.",
-        "retry": "Try again"
+        "retry": "Try again",
+        "needMapping": "Match the missing columns",
+        "mappingErrorTitle": "A column still needs matching",
+        "mappingErrorDesc": "Pick on the right what each column of your file is, then press Continue."
       },
       "step6": {
         "title": "Review before importing",
@@ -955,7 +976,19 @@
         "importBtn": {
           "one": "Import {count} record",
           "other": "Import {count} records"
-        }
+        },
+        "colDetail": "Detail",
+        "unresolvedTitle": {
+          "one": "{count} procedure isn't in your catalog",
+          "other": "{count} procedures aren't in your catalog"
+        },
+        "unresolvedDesc": "They come in with their name and amount, not linked to a procedure. If your catalog has an equivalent, pick it.",
+        "unresolvedUnlinked": "Amount only, not linked",
+        "unresolvedRows": {
+          "one": "({count} row)",
+          "other": "({count} rows)"
+        },
+        "dupNever": "Anything already migrated is never imported again."
       },
       "upload": {
         "uploading": "Uploading file… {pct}%",
@@ -970,7 +1003,10 @@
         "ent": {
           "patients": "Patients",
           "balances": "Balances",
-          "appointments": "Appointments"
+          "appointments": "Appointments",
+          "medicalHistory": "Medical history",
+          "clinicalNotes": "Notes",
+          "quotes": "Estimates"
         }
       },
       "result": {
@@ -989,7 +1025,10 @@
         "downloadReport": "Download report",
         "reportSoon": "The error report will be available once the backend is connected.",
         "goPatients": "View patients",
-        "importAnother": "Import something else"
+        "importAnother": "Import something else",
+        "pillMedicalHistory": "histories completed",
+        "pillClinicalNotes": "notes migrated",
+        "pillQuotes": "estimates"
       },
       "assisted": {
         "title": "Assisted migration · free",
@@ -1601,7 +1640,11 @@
         "cerradaPara": "The agenda is closed for the bot, the website and the patient portal.",
         "tuSiPuedes": "You can still book from here, and it will be recorded.",
         "agendarIgual": "Book anyway",
-        "guardando": "Saving…"
+        "guardando": "Saving…",
+        "prohibido": "The clinic doesn't allow booking over a blocked day.",
+        "prohibidoQueHacer": "Pick another day or time. The administration sets this in Settings → Hours & blocks.",
+        "elegirOtra": "Pick another date",
+        "comprobando": "Checking…"
       },
       "aviso": {
         "etiquetaClinica": "{motivo}",
@@ -3922,7 +3965,8 @@
       "deactivateTitle": "Deactivate",
       "activateTitle": "Activate",
       "addDoctorTitle": "Add doctor",
-      "editTitle": "Edit — {name}"
+      "editTitle": "Edit — {name}",
+      "horario": "Schedule"
     },
     "permissions": {
       "useRoleDefault": "Use role default",
@@ -4053,7 +4097,70 @@
         "one": "1 active",
         "other": "{count} active"
       },
-      "listaVaciaAyuda": "Days and hours you close will show up here. While it is empty, the calendar accepts bookings across the whole weekly schedule."
+      "listaVaciaAyuda": "Days and hours you close will show up here. While it is empty, the calendar accepts bookings across the whole weekly schedule.",
+      "politica": {
+        "titulo": "Can the front desk book over a blocked day?",
+        "sub": "What happens when someone tries to book on a day or time that is closed.",
+        "si": "Yes, with a warning and an audit record",
+        "siAyuda": "A warning shows the reason for the block; whoever books confirms it and it's logged.",
+        "deFabrica": "Default",
+        "no": "No, it's not allowed",
+        "noAyuda": "Neither the front desk nor the AI can book over it: they have to pick another day or time.",
+        "guardadoToast": "Setting saved",
+        "guardarError": "Couldn't save the setting.",
+        "cargaError": "Couldn't load this setting.",
+        "cargando": "Loading setting…"
+      }
+    },
+    "horarioDoctor": {
+      "modalTitulo": "{name}'s schedule",
+      "miHorarioTitulo": "My schedule",
+      "miHorarioSub": "The days and hours you see patients. You won't be offered appointments outside them.",
+      "heredaTitulo": "Follows the clinic's hours",
+      "heredaTituloYo": "You follow the clinic's hours",
+      "heredaNota": "A doctor without their own schedule follows the clinic's.",
+      "propioTitulo": "Own schedule",
+      "propioNota": "Appointments are only offered within these hours.",
+      "propioNotaYo": "You're only offered appointments within these hours.",
+      "darPropio": "Give them their own schedule",
+      "darPropioYo": "Set my own schedule",
+      "volverClinica": "Go back to the clinic's hours",
+      "volviendo": "Going back…",
+      "borradorNota": "Until you save it, they keep following the clinic's hours.",
+      "borradorNotaYo": "Until you save it, you keep following the clinic's hours.",
+      "clinicaSinHorario": "The clinic has no business hours yet.",
+      "clinicaSinDias": "The clinic has no open days.",
+      "guardarPropio": "Save own schedule",
+      "guardadoToast": "Schedule saved",
+      "guardarError": "Couldn't save the schedule.",
+      "volverConfirmTitulo": "Go back to the clinic's hours?",
+      "volverConfirmDesc": "{name}'s own schedule is deleted and they follow the clinic's hours again.",
+      "volverConfirmDescYo": "Your own schedule is deleted and you follow the clinic's hours again.",
+      "volverConfirmBtn": "Use the clinic's hours",
+      "volvioToast": "Back to the clinic's hours",
+      "volverError": "Couldn't go back to the clinic's hours.",
+      "cargando": "Loading schedule…",
+      "cargaError": "Couldn't load the schedule.",
+      "rangoInvalido": "The end time has to be after the start time.",
+      "avisoCierra": "The clinic closes at {hora}; those hours won't be offered.",
+      "avisoAbre": "The clinic opens at {hora}; those hours won't be offered.",
+      "avisoAbreYCierra": "The clinic is open {abre}–{cierra}; hours outside that won't be offered.",
+      "avisoCerrada": "The clinic is closed this day; it won't be offered.",
+      "sinDiasAbiertos": "With every day closed, no appointments will be offered.",
+      "sinDiasAbiertosYo": "With every day closed, you won't be offered any appointments.",
+      "entradaAria": "Start time, {dia}",
+      "salidaAria": "End time, {dia}",
+      "diaCorto": {
+        "lun": "Mon",
+        "mar": "Tue",
+        "mie": "Wed",
+        "jue": "Thu",
+        "vie": "Fri",
+        "sab": "Sat",
+        "dom": "Sun"
+      },
+      "tramoUno": "{dia} {abre}-{cierra}",
+      "tramoVarios": "{desde}-{hasta} {abre}-{cierra}"
     }
   },
   "procurement": {

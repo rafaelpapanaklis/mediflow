@@ -1,7 +1,7 @@
 "use client";
 
 // Paso 3 · Qué importar — checkboxes con badges Recomendado / Fácil / Avanzado.
-import { Users, CircleDollarSign, CalendarDays, Layers, FileText, Check } from "lucide-react";
+import { Users, CircleDollarSign, CalendarDays, Layers, FileText, ClipboardList, Check } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { DATA_TYPES, type DataType } from "./import-client";
@@ -12,6 +12,7 @@ const ICONS: Record<DataType["icon"], LucideIcon> = {
   calendar: CalendarDays,
   stack: Layers,
   file: FileText,
+  clipboard: ClipboardList,
 };
 
 function Badge({ t, kind }: { t: TFunction; kind: DataType["badge"] }) {
@@ -57,6 +58,7 @@ export function StepWhat({ t, selected, onToggle }: Props) {
           );
         })}
       </div>
+      <p className="imp-hint" style={{ marginTop: 12 }}>{t("shell.importClinic.step3.soloNote")}</p>
     </div>
   );
 }

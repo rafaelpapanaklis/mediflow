@@ -188,6 +188,20 @@ export interface AgendaDayResponse {
    * es el comportamiento anterior a esta tarea.
    */
   bloqueos?: BloqueoDTO[];
+  /**
+   * EL HORARIO PROPIO DE LOS DOCTORES (WS1-T2 · horario): `doctorId → sus 7
+   * días` (0=Lunes … 6=Domingo, como `schedules`). SOLO vienen los doctores
+   * que tienen horario propio; un id ausente = sigue el de la clínica.
+   *
+   * Es lo que ws1-t3 necesita para pintar, columna a columna, las horas en que
+   * ese doctor no atiende (y para avisar antes de soltar una cita ahí). No
+   * depende del rango: el horario es semanal. Para decidir si un hueco cae
+   * fuera, `doctorNoAtiende` de src/lib/horario-doctor/core.ts (con
+   * `horariosDesdeObjeto`); no se compara a mano en un componente.
+   *
+   * Opcional: sin él, nadie tiene horario propio = la agenda de siempre.
+   */
+  horariosDoctores?: Record<string, ScheduleDay[]>;
 }
 
 export interface CreateAppointmentInput {
@@ -316,6 +330,11 @@ export interface AgendaStoreState {
    * navegar rápido entre días la banda se queda un día atrás.
    */
   bloqueos: BloqueoDTO[];
+  /**
+   * EL HORARIO PROPIO DE LOS DOCTORES (WS1-T2 · horario). Ver
+   * `AgendaDayResponse.horariosDoctores`. Vacío = nadie tiene horario propio.
+   */
+  horariosDoctores: Record<string, ScheduleDay[]>;
 
   drag: AgendaDragState;
   waitlistOpen: boolean;

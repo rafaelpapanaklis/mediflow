@@ -13,6 +13,14 @@ import {
 } from "@/lib/booking-requests/server";
 import { findPatientsByWhatsAppPhone } from "@/lib/whatsapp/inbox-log";
 import { pickExistingPatientForBooking } from "@/lib/patients/patient-search-core";
+import {
+  avisoDeHorarioDoctor,
+  doctorNoAtiende,
+  doctorNoAtiendeSlot,
+  horarioPropio,
+} from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
 
@@ -132,9 +140,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: "La clínica no tiene doctores activos" }, { status: 409 });
   }
   const forzado = body.doctorId ?? solicitud.doctorId ?? null;
-  const candidatos = forzado && todos.some(d => d.id === forzado)
+  const pedidos = forzado && todos.some(d => d.id === forzado)
     ? todos.filter(d => d.id === forzado)
     : todos;
+
+  // WS1-T2 · horario — con «cualquiera», primero los que ATIENDEN a esa hora:
+  // el `find` de la transacción se queda con el primero libre, así que sin
+  // este orden podía caer en un doctor que ese día no trabaja teniendo a otro
+  // libre. Nadie se descarta — esto es el mostrador, y al staff se le avisa,
+  // no se le prohíbe (mismo criterio que POST /api/appointments) —; si el
+  // elegido no atiende, la respuesta lo dice en `scheduleWarning`.
+  const horarios = await leerHorariosDeDoctores(clinicId, { doctorIds: pedidos.map(d => d.id) });
+  const atiende = (id: string) => !doctorNoAtiende(horarios, startsAt, endsAt, id, tz);
+  const candidatos = [...pedidos.filter(d => atiende(d.id)), ...pedidos.filter(d => !atiende(d.id))];
 
   const { firstName, lastName } = partirNombre(solicitud.patientName);
 
@@ -200,6 +218,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           overrideReason: null,
           startsAt: { lt: endsAt },
           endsAt: { gt: startsAt },
+          // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+          AND: [sinApartadoVencido()],
         },
         select: { doctorId: true },
       });
@@ -291,6 +311,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     revalidateAfter("appointments");
 
+    const fueraDelDoctor = doctorNoAtiende(horarios, startsAt, endsAt, creado.doctor.id, tz);
     return NextResponse.json({
       ok: true,
       status: "ACEPTADA",
@@ -298,19 +319,45 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       patientReused: creado.reusado,
       appointmentId: creado.cita.id,
       doctorName: `${creado.doctor.firstName} ${creado.doctor.lastName}`,
+      // WS1-T2 · horario — la misma forma que el aviso de POST /api/appointments.
+      scheduleWarning: fueraDelDoctor ? avisoDeHorarioDoctor(fueraDelDoctor) : null,
     });
   } catch (err: any) {
     // El hueco se lo ganaron mientras la solicitud esperaba. No es un error
     // del sistema: se responde con los horarios que SÍ quedan libres ese día.
     if (err?.message === "SLOT_TAKEN" || isOverlapError(err)) {
-      const libres = await freeSlotsForDay({
+      // WS1-T2 · horario — las alternativas también se recortan al horario de
+      // cada doctor. `freeSlotsForDay` (src/lib/booking-requests/server.ts,
+      // fuera de esta tarea) devuelve la UNIÓN de los libres de todos, así que
+      // no se puede filtrar a posteriori sin saber de quién es cada hora: los
+      // doctores SIN horario propio se preguntan juntos, como siempre (sin
+      // ninguno con horario, es exactamente la llamada de antes), y cada uno
+      // CON horario, aparte, quitándole las horas en que no atiende.
+      // Secuencial: cada llamada son dos consultas y el pooler manda.
+      const base = {
         clinicId,
         dateISO,
         timezone: tz,
         durationMin: duracion,
-        doctorIds: candidatos.map(c => c.id),
         schedules: session.clinic.schedules,
-      }).catch(() => [] as string[]);
+      };
+      const sinHorario = candidatos.filter(c => !horarioPropio(horarios, c.id));
+      const conHorario = candidatos.filter(c => horarioPropio(horarios, c.id));
+      const juntas = new Set<string>();
+      try {
+        if (sinHorario.length > 0) {
+          for (const s of await freeSlotsForDay({ ...base, doctorIds: sinHorario.map(c => c.id) })) juntas.add(s);
+        }
+        for (const c of conHorario) {
+          for (const s of await freeSlotsForDay({ ...base, doctorIds: [c.id] })) {
+            const [hh, mm] = s.split(":").map(Number);
+            if (!doctorNoAtiendeSlot(horarios, tzLocalToUtc(dateISO, hh, mm, tz), duracion, c.id, tz)) juntas.add(s);
+          }
+        }
+      } catch {
+        // Igual que antes: sin alternativas antes que un 500 en el 409.
+      }
+      const libres = [...juntas].sort();
 
       return NextResponse.json({
         error: `Las ${hora} ya se ocuparon.`,

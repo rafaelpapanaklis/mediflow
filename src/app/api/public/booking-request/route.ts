@@ -4,6 +4,8 @@ import { persistentRateLimit } from "@/lib/failban";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiende, MENSAJE_PUBLICO_FUERA_DE_HORARIO } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 
 /**
@@ -187,6 +189,34 @@ export async function POST(req: NextRequest) {
         { error: "La clínica tiene cerrada la agenda en ese horario. Elige otro, por favor." },
         { status: 400 },
       );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WS1-T2 · horario — NI UNA SOLICITUD A UNA HORA EN QUE NO ATIENDE NADIE.
+    //
+    // Misma familia que el bloqueo y el horario de la clínica: no es «¿está
+    // libre?» (eso no se mira, la solicitud no reserva), es «¿se atiende?».
+    //   · Con doctor pedido: tiene que atender ÉL a esa hora.
+    //   · Con «cualquiera»: basta con que atienda UNO. Solo se rechaza si
+    //     TODOS los doctores activos tienen horario propio y ninguno cubre esa
+    //     hora; un doctor sin horario propio sigue el de la clínica, que ya se
+    //     validó arriba, así que con uno solo así la hora es buena.
+    // ═══════════════════════════════════════════════════════════════════
+    const candidatosHorario = doctorPedido
+      ? [doctorPedido.id]
+      : (await prisma.user.findMany({
+          where: { clinicId: clinic.id, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
+          select: { id: true },
+        })).map(u => u.id);
+    if (candidatosHorario.length > 0) {
+      const horarios = await leerHorariosDeDoctores(clinic.id, { doctorIds: candidatosHorario });
+      const alguienAtiende = candidatosHorario.some(
+        id => !doctorNoAtiende(horarios, requestedAt, finPedido, id, clinic.timezone),
+      );
+      if (!alguienAtiende) {
+        // Sin el horario de nadie: el formulario es público.
+        return NextResponse.json({ error: MENSAJE_PUBLICO_FUERA_DE_HORARIO }, { status: 400 });
+      }
     }
 
     const servicio = typeof service === "string" && service.trim() ? service.trim().slice(0, 160) : null;

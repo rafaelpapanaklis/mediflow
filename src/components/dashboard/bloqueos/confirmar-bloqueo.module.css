@@ -190,6 +190,21 @@
   border-color: var(--warning-strong);
 }
 
+/* Con la clínica en «No» es la ÚNICA salida (volver a elegir fecha), así que
+   no puede leerse como un «cancelar» de trámite: borde y texto plenos. Y sigue
+   sin ser amarillo: no es seguir adelante. */
+.volver {
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
+/* «La clínica no permite agendar sobre un día bloqueado.» — el porqué, en la
+   voz de la explicación pero con el peso de lo que manda. */
+.prohibido {
+  font-weight: 650;
+  color: var(--text-1);
+}
+
 .cancelar:disabled,
 .confirmar:disabled {
   opacity: 0.6;

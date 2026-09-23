@@ -15,7 +15,10 @@
  *  · pasado                → no se ofrece nada que ya empezó;
  *  · BLOQUEADO (WS1-T2)    → `bloqueaEsteHueco`, la única función que decide
  *    si un bloqueo de agenda tapa un hueco, compartida con los otros nueve
- *    consumidores de disponibilidad del repo.
+ *    consumidores de disponibilidad del repo;
+ *  · HORARIO DEL DOCTOR (WS1-T2 · horario) → `doctorNoAtiende`, igual: la
+ *    única función que decide si el doctor atiende ese hueco. Sin horario
+ *    propio no cambia nada; con él, se ofrece la intersección con la clínica.
  *
  * Una diferencia a propósito con la constraint: aquí ocupa TODA cita no
  * cancelada ni «no asistió», también las que tienen `overrideReason`. La
@@ -36,6 +39,7 @@ import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import { slotOverlapsBusy, type BusyInterval } from "@/lib/public-booking/slots";
 import { bloqueaEsteHueco, type BloqueoLike } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiende, horarioPropio, ventanaDelDoctor } from "@/lib/horario-doctor/core";
 import { ventanaDelDia } from "./fechas";
 import {
   fechaLarga,
@@ -46,6 +50,7 @@ import {
   type DatosAccionAgenda,
 } from "./agenda-comun";
 import type { SabinaCtx } from "../tipos";
+import { apartadoVencido } from "@/lib/agenda/apartado";
 
 /** Cuántas horas se ofrecen como mucho: las más cercanas, no la rejilla entera. */
 export const TOPE_HUECOS = 5;
@@ -112,7 +117,9 @@ export type Veredicto =
         | "sillon_no_disponible"
         | "sin_sillon_libre"
         /** WS1-T2 — hay un bloqueo de agenda encima. */
-        | "bloqueado";
+        | "bloqueado"
+        /** WS1-T2 · horario — la clínica abre, pero el doctor no atiende a esa hora. */
+        | "doctor_no_atiende";
       /** El motivo escrito del bloqueo, solo cuando `causa` es "bloqueado". */
       motivoBloqueo?: string;
     };
@@ -147,6 +154,13 @@ export function evaluarHora(args: {
   if (desde < ventana.abre || desde + duracion > ventana.cierra) return { ok: false, causa: "fuera_de_horario" };
   if (scheduleViolation(inicio, fin, clinica.timezone, clinica, clinica.schedules) !== null) {
     return { ok: false, causa: "fuera_de_horario" };
+  }
+
+  // WS1-T2 · horario — después de la clínica: si la clínica cierra, eso es lo
+  // que hay que decir, no el horario de un doctor. Sin horario propio esto da
+  // `null` siempre y Sabina ofrece lo mismo que antes.
+  if (doctorNoAtiende(clinica.horariosDoctores, inicio, fin, ocupacion.doctorId, clinica.timezone)) {
+    return { ok: false, causa: "doctor_no_atiende" };
   }
 
   // WS1-T2 — ANTES que el solape con citas y que el sillón: si el día está
@@ -191,6 +205,23 @@ export interface Hueco {
  * un horario nuevo: si la franja cae fuera de la ventana de atención, no hay
  * huecos y ya, el día sigue sin estar "cerrado" (`ventana` no cambia).
  */
+/**
+ * La ventana del DOCTOR ese día: la de la clínica recortada a su horario
+ * propio. `null` = la clínica abre pero él no atiende (o sus horas no se
+ * cruzan). Sin horario propio, la de la clínica tal cual.
+ */
+export function ventanaDelDoctorEnFecha(
+  fecha: string,
+  clinica: ConfigClinica,
+  doctorId: string | null,
+): { abre: number; cierra: number } | null {
+  return ventanaDelDoctor(
+    ventanaDeAtencion(fecha, clinica),
+    horarioPropio(clinica.horariosDoctores, doctorId),
+    scheduleDayOfISO(fecha, clinica.timezone),
+  );
+}
+
 export function buscarHuecos(args: {
   fecha: string;
   duracion: number;
@@ -202,8 +233,20 @@ export function buscarHuecos(args: {
   franja?: { desde: number | null; hasta: number | null } | null;
   tope?: number;
 }): { huecos: Hueco[]; total: number; ventana: { abre: string; cierra: string } | null } {
-  const ventana = ventanaDeAtencion(args.fecha, args.clinica);
-  if (!ventana) return { huecos: [], total: 0, ventana: null };
+  const deLaClinica = ventanaDeAtencion(args.fecha, args.clinica);
+  // `ventana: null` sigue significando «la clínica cierra ese día», y nada más:
+  // `proponer-horarios` lo lee así y lo dice así.
+  if (!deLaClinica) return { huecos: [], total: 0, ventana: null };
+
+  // WS1-T2 · horario — se barre la ventana DEL DOCTOR (clínica ∩ su horario),
+  // no la de la clínica: así el primer hueco cae en su hora de entrada y no en
+  // la de apertura. Si ese día no atiende, no hay huecos, pero la ventana que
+  // se devuelve es la de la clínica: el día NO está cerrado, solo él no viene.
+  const delDoctor = ventanaDelDoctorEnFecha(args.fecha, args.clinica, args.ocupacion.doctorId);
+  if (!delDoctor) {
+    return { huecos: [], total: 0, ventana: { abre: hhmm(deLaClinica.abre), cierra: hhmm(deLaClinica.cierra) } };
+  }
+  const ventana = delDoctor;
 
   const abre = args.franja?.desde != null ? Math.max(ventana.abre, args.franja.desde) : ventana.abre;
   const cierra = args.franja?.hasta != null ? Math.min(ventana.cierra, args.franja.hasta) : ventana.cierra;
@@ -253,7 +296,7 @@ export function respuestaNoDisponible(args: {
   ahora: Date;
 }): DatosAccionAgenda {
   const { causa, fecha, hora, duracion, clinica, doctor, sillon } = args;
-  const { huecos, ventana } = buscarHuecos({
+  const { huecos } = buscarHuecos({
     fecha,
     duracion,
     clinica,
@@ -263,20 +306,35 @@ export function respuestaNoDisponible(args: {
     horaPreferida: hora,
   });
   const dia = fechaLarga(tzLocalToUtc(fecha, 12, 0, clinica.timezone), clinica.timezone);
+  // La de la CLÍNICA para «fuera del horario de la clínica», y la del DOCTOR
+  // para «el doctor no atiende»: cada frase dice el horario de quien la causa.
+  const ventana = ventanaDeAtencion(fecha, clinica);
+  const delDoctor = ventanaDelDoctorEnFecha(fecha, clinica, args.ocupacion.doctorId);
   const frases: Record<typeof causa, string> = {
     ocupado: `A las ${hora} del ${dia}, ${doctor} ya tiene otra cita.`,
     // WS1-T2 — el motivo lo escribió la clínica y se repite tal cual: es la
     // diferencia entre «no se puede» y «está cerrado por el congreso».
     bloqueado: `La agenda está cerrada a las ${hora} del ${dia}${args.motivoBloqueo ? `: ${args.motivoBloqueo}` : ""}.`,
-    fuera_de_horario: `Las ${hora} (${duracion} min) queda fuera del horario de la clínica el ${dia}${ventana ? ` (${ventana.abre}–${ventana.cierra})` : ""}.`,
+    fuera_de_horario: `Las ${hora} (${duracion} min) queda fuera del horario de la clínica el ${dia}${ventana ? ` (${hhmm(ventana.abre)}–${hhmm(ventana.cierra)})` : ""}.`,
+    // WS1-T2 · horario — el horario del doctor se dice YA RECORTADO a la
+    // clínica: es lo que de verdad se le puede agendar.
+    doctor_no_atiende: delDoctor
+      ? `${doctor} atiende el ${dia} de ${hhmm(delDoctor.abre)} a ${hhmm(delDoctor.cierra)}; las ${hora} (${duracion} min) quedan fuera.`
+      : `${doctor} no atiende el ${dia}.`,
     dia_cerrado: `La clínica está cerrada el ${dia}.`,
     pasado: `El ${dia} a las ${hora} ya pasó.`,
     sillon_no_disponible: `${sillon?.nombre ?? "Ese sillón"} no está disponible a las ${hora} del ${dia} (fuera de su horario u ocupado).`,
     sin_sillon_libre: `A las ${hora} del ${dia} no queda ningún sillón libre.`,
   };
+  // Un día en que el doctor no viene no «se quedó sin huecos»: nunca los tuvo.
+  // Vale para cualquier causa (p. ej. «fuera de horario» a las 20:00 de su día
+  // libre): se dice que ese día no atiende, no que la agenda está llena.
+  const diaSinDoctor = ventana !== null && !delDoctor;
   const sinHuecos =
     huecos.length === 0 && causa !== "dia_cerrado"
-      ? ` Ese día ya no quedan huecos de ${duracion} min con ${doctor}${sillon ? ` en ${sillon.nombre}` : ""}.`
+      ? diaSinDoctor
+        ? causa === "doctor_no_atiende" ? "" : ` Además, ${doctor} no atiende ese día.`
+        : ` Ese día ya no quedan huecos de ${duracion} min con ${doctor}${sillon ? ` en ${sillon.nombre}` : ""}.`
       : "";
   return {
     estado: "no_disponible",
@@ -330,7 +388,10 @@ export async function leerOcupacion(
         endsAt: { gt: desde },
         ...(args.excluirCitaId ? { id: { not: args.excluirCitaId } } : {}),
       },
-      select: { doctorId: true, resourceId: true, startsAt: true, endsAt: true },
+      // `status` y `holdExpiresAt` solo para descartar abajo la cita apartada
+      // cuyo anticipo venció (WS1-T5). Se filtra en memoria con la misma regla
+      // que el resto de la agenda.
+      select: { doctorId: true, resourceId: true, startsAt: true, endsAt: true, status: true, holdExpiresAt: true },
     }),
     // WS1-T2 — los bloqueos del día. Se piden los de ESTE doctor y los de toda
     // la clínica; el alcance lo aplica `bloqueaEsteHueco` en `evaluarHora`.
@@ -352,16 +413,19 @@ export async function leerOcupacion(
     : [];
 
   const intervalo = (c: any): BusyInterval => ({ startsAt: new Date(c.startsAt), endsAt: new Date(c.endsAt) });
+  // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+  const ahora = new Date();
+  const vivas = citas.filter((c: any) => !apartadoVencido(c, ahora));
 
   return {
     doctorId: args.doctorId,
     bloqueos,
-    doctor: citas.filter((c: any) => c.doctorId === args.doctorId).map(intervalo),
+    doctor: vivas.filter((c: any) => c.doctorId === args.doctorId).map(intervalo),
     sillones: recursos.map((r: any) => ({
       id: r.id,
       nombre: r.name,
       horario: horarioDeSillon(filasHorario.filter((f: any) => f.resourceId === r.id)),
-      ocupado: citas.filter((c: any) => c.resourceId === r.id).map(intervalo),
+      ocupado: vivas.filter((c: any) => c.resourceId === r.id).map(intervalo),
     })),
   };
 }

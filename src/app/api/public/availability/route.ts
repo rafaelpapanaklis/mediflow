@@ -5,6 +5,9 @@ import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
 import { partitionSlotsByOverlap, slotOverlapsBusy } from "@/lib/public-booking/slots";
 import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiendeSlot } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 // GET /api/public/availability?slug=my-clinic&date=2026-04-10&doctorId=xxx
 // No authentication required — public endpoint
@@ -116,7 +119,7 @@ export async function GET(req: NextRequest) {
   const dayStartUtc = tzLocalToUtc(dateStr, 0, 0, clinic.timezone);
   const dayEndUtc = new Date(dayStartUtc.getTime() + 86_400_000);
 
-  const [busy, bloqueos] = await Promise.all([
+  const [busy, bloqueos, horarios] = await Promise.all([
     prisma.appointment.findMany({
       where: {
         clinicId: clinic.id,
@@ -125,6 +128,8 @@ export async function GET(req: NextRequest) {
         status:   { notIn: ["CANCELLED","NO_SHOW"] },
         overrideReason: null,
         ...(doctorId ? { doctorId } : {}),
+        // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+        AND: [sinApartadoVencido()],
       },
       // doctorId hace falta para el modo "cualquiera": hay que saber de QUIÉN es
       // cada cita ocupada, no solo que la clínica está ocupada a esa hora.
@@ -135,6 +140,12 @@ export async function GET(req: NextRequest) {
     // para poder descartarlos uno a uno más abajo. Un festivo de la clínica
     // (doctorId null) entra siempre.
     leerBloqueosDelRango(clinic.id, dayStartUtc, dayEndUtc),
+    // WS1-T2 · horario — el horario PROPIO de los doctores que se consultan
+    // (el pedido, o todos en el modo "cualquiera"). Quien no tiene horario
+    // propio no sale en el mapa y sigue el de la clínica, como siempre.
+    leerHorariosDeDoctores(clinic.id, {
+      doctorIds: doctorId ? [doctorId] : clinic.users.map(u => u.id),
+    }),
   ]);
 
   let available: string[];
@@ -143,6 +154,23 @@ export async function GET(req: NextRequest) {
   let slotDoctors: Record<string, string[]> | undefined;
 
   if (doctorId) {
+    // WS1-T2 · horario — con un doctor concreto la rejilla es la SUYA: las
+    // horas en que no atiende no se pintan en gris como «tomadas», se quitan.
+    // Un gris dice «ya lo reservó alguien»; aquí la verdad es que ese doctor
+    // nunca atiende a esa hora. Sin horario propio no se quita nada.
+    const suyas = slots.filter(hhmm => {
+      const [h, mn] = hhmm.split(":").map(Number);
+      return !doctorNoAtiendeSlot(horarios, tzLocalToUtc(dateStr, h, mn, clinic.timezone), 30, doctorId, clinic.timezone);
+    });
+    if (slots.length > 0 && suyas.length === 0) {
+      // Mismo formato que «La clínica no atiende este día» de arriba, que la
+      // página de reserva ya sabe pintar. Solo si fue SU horario el que vació
+      // una rejilla que tenía horas: una rejilla que ya venía vacía (ventana de
+      // menos de 30 min) sigue respondiendo exactamente como antes.
+      return NextResponse.json({ slots: [], reason: "El doctor no atiende este día" });
+    }
+    slots.splice(0, slots.length, ...suyas);
+
     // Un doctor concreto: comportamiento de siempre, intacto.
     const partition = partitionSlotsByOverlap(slots, dateStr, clinic.timezone, 30, busy);
     // WS1-T2 — y encima, fuera los bloqueados. Van a `bookedSlots` y no
@@ -188,6 +216,10 @@ export async function GET(req: NextRequest) {
         // compañero atiende. Un bloqueo de toda la clínica cae sobre todos y el
         // horario se apaga entero, que es lo correcto.
         .filter(u => !bloqueaEsteSlot(bloqueos, slotStart, 30, u.id))
+        // WS1-T2 · horario — y que a esa hora atienda. Doctor a doctor, con el
+        // mismo «libre si al menos uno»: que la doctora no trabaje los
+        // miércoles no cierra el miércoles si su compañero sí viene.
+        .filter(u => !doctorNoAtiendeSlot(horarios, slotStart, 30, u.id, clinic.timezone))
         .map(u => u.id);
       if (free.length > 0) {
         available.push(hhmm);

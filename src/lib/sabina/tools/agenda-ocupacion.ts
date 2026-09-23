@@ -49,6 +49,14 @@
  *     (`doctorId` null), que cierran los sillones de verdad;
  *   · midiendo UN DOCTOR  → descuentan los suyos y los de la clínica, porque
  *     ahí el denominador es su propio tiempo y la cuenta sí es exacta.
+ *
+ * ── WS1-T2 · horario · EL HORARIO DEL DOCTOR TAMBIÉN ─────────────────
+ * Por el mismo razonamiento: midiendo a UN doctor, su tiempo disponible es el
+ * de la clínica RECORTADO a su horario propio (la intersección). Un doctor que
+ * no trabaja los miércoles no tiene «los miércoles vacíos»: no los tiene. Sin
+ * horario propio, la cuenta sale idéntica a la de antes. Midiendo la clínica
+ * no se aplica: el denominador son sillones, y el horario de un doctor no se
+ * traduce a sillones sin inventar un número.
  */
 
 import { z } from "zod";
@@ -68,6 +76,8 @@ import { ESTADOS_ACTIVOS } from "./estados";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { bloqueoAlcanzaDoctor, type BloqueoLike } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { ventanaDelDoctor, type DiaHorario } from "@/lib/horario-doctor/core";
+import { leerHorarioDeDoctor } from "@/lib/horario-doctor/consulta.server";
 import type { SabinaCtx } from "../tipos";
 
 const parametros = esquemaRango.extend({
@@ -88,7 +98,10 @@ export interface OcupacionDia {
   /** 0 = lunes … 6 = domingo (convención de ClinicSchedule y de la vista Semana). */
   dia: number;
   nombre: string;
-  /** El día está cerrado según el horario de la clínica. */
+  /**
+   * El día está cerrado según el horario de la clínica — o, midiendo a UN
+   * doctor con horario propio, ese día él no atiende (WS1-T2 · horario).
+   */
   cerrado: boolean;
   /** Cuántas veces cae este día de la semana dentro del rango. */
   veces: number;
@@ -146,6 +159,9 @@ export const agendaOcupacion = definirHerramienta<ParamsOcupacion, DatosOcupacio
     // Un DOCTOR mide SU agenda, así que su denominador es su propio tiempo: una
     // unidad, no los sillones de la casa. Lo mismo si se pide un doctor concreto.
     const unDoctor = ctx.role === "DOCTOR" || !!doctorPedido;
+    // Midiendo a UN doctor, el suyo; midiendo la clínica, `null` y entonces
+    // solo descuentan los bloqueos de toda la clínica.
+    const doctorMedido = unDoctor ? (doctorPedido ?? ctx.userId ?? null) : null;
 
     const where = buildAppointmentWhere(auth, {
       startsAt: { gte: desde, lt: hasta },
@@ -153,7 +169,7 @@ export const agendaOcupacion = definirHerramienta<ParamsOcupacion, DatosOcupacio
       ...(doctorPedido ? { doctorId: doctorPedido } : {}),
     });
 
-    const [clinica, horarios, sillones, citas, bloqueos] = await Promise.all([
+    const [clinica, horarios, sillones, citas, bloqueos, horarioDoctor] = await Promise.all([
       db.clinic.findFirst({
         where: { id: ctx.clinicId },
         select: { agendaDayStart: true, agendaDayEnd: true },
@@ -175,6 +191,11 @@ export const agendaOcupacion = definirHerramienta<ParamsOcupacion, DatosOcupacio
       // decide cuáles descuentan según se esté midiendo la clínica o a uno solo
       // (ver la cabecera). Con el `db` de la sesión, como las cuatro de arriba.
       leerBloqueosDelRango(ctx.clinicId, desde, hasta, { db: db as any }),
+      // WS1-T2 · horario — el horario propio del doctor medido. Seis consultas
+      // en total, por debajo del tope de siete de la casa.
+      doctorMedido
+        ? leerHorarioDeDoctor(ctx.clinicId, doctorMedido, { db: db as any })
+        : Promise.resolve(null),
     ]);
 
     const calculado = calcularOcupacion({
@@ -189,9 +210,8 @@ export const agendaOcupacion = definirHerramienta<ParamsOcupacion, DatosOcupacio
       hastaISO: rango.hastaISO,
       timezone: ctx.timezone,
       bloqueos,
-      // Midiendo a UN doctor, el suyo; midiendo la clínica, `null` y entonces
-      // solo descuentan los bloqueos de toda la clínica.
-      doctorMedido: unDoctor ? (doctorPedido ?? ctx.userId ?? null) : null,
+      doctorMedido,
+      horarioDoctor,
     });
 
     return {
@@ -245,8 +265,15 @@ export function calcularOcupacion(input: {
    * solo descuentan los bloqueos de toda la clínica. Ver la cabecera.
    */
   doctorMedido?: string | null;
+  /**
+   * WS1-T2 · horario — el horario PROPIO del doctor medido. Solo se aplica si
+   * `doctorMedido` no es `null` (ver la cabecera). Ausente o `null` = hereda
+   * el de la clínica = la cuenta de siempre.
+   */
+  horarioDoctor?: readonly DiaHorario[] | null;
 }): Omit<DatosOcupacion, "desde" | "hasta" | "alcance" | "unidades"> {
   const { citas, horarios, horarioGeneral, unidades, desdeISO, hastaISO, timezone } = input;
+  const horarioDoctor = input.doctorMedido ? input.horarioDoctor ?? null : null;
 
   const utilizables = (horarios ?? []).filter((d) => {
     const abre = minutosHHMM(d.openTime);
@@ -281,7 +308,7 @@ export function calcularOcupacion(input: {
     veces[d]++;
 
     if (aplicables.length > 0) {
-      const v = ventanaDelDiaSemana(d, utilizables, horarioGeneral, fuenteHorario);
+      const v = ventanaEfectiva(d, utilizables, horarioGeneral, fuenteHorario, horarioDoctor);
       if (!v.cerrado) {
         const abreUtc = tzLocalToUtc(cursor, Math.floor(v.abre / 60), v.abre % 60, timezone);
         const cierraUtc = tzLocalToUtc(cursor, Math.floor(v.cierra / 60), v.cierra % 60, timezone);
@@ -309,7 +336,7 @@ export function calcularOcupacion(input: {
 
   const porDia: OcupacionDia[] = [];
   for (let d = 0; d < 7; d++) {
-    const ventana = ventanaDelDiaSemana(d, utilizables, horarioGeneral, fuenteHorario);
+    const ventana = ventanaEfectiva(d, utilizables, horarioGeneral, fuenteHorario, horarioDoctor);
     const abiertoMin = ventana.cerrado ? 0 : ventana.cierra - ventana.abre;
     // WS1-T2 — los minutos bloqueados salen del numerador de tiempo abierto
     // ANTES de multiplicar por sillones: un cierre de clínica se lleva los
@@ -368,6 +395,24 @@ function ventanaDelDiaSemana(
   const fila = utilizables.find((f) => f.dayOfWeek === dia);
   if (!fila || !fila.enabled) return { abre: 0, cierra: 0, cerrado: true };
   return { abre: minutosHHMM(fila.openTime)!, cierra: minutosHHMM(fila.closeTime)!, cerrado: false };
+}
+
+/**
+ * La ventana del día de la semana que CUENTA como capacidad: la de la clínica
+ * y, si se mide a un doctor con horario propio, recortada a él (WS1-T2 ·
+ * horario). Sin horario propio devuelve la de la clínica tal cual.
+ */
+function ventanaEfectiva(
+  dia: number,
+  utilizables: FilaHorario[],
+  general: { agendaDayStart: number; agendaDayEnd: number },
+  fuente: DatosOcupacion["fuenteHorario"],
+  horarioDoctor: readonly DiaHorario[] | null,
+): { abre: number; cierra: number; cerrado: boolean } {
+  const v = ventanaDelDiaSemana(dia, utilizables, general, fuente);
+  if (v.cerrado || !horarioDoctor || horarioDoctor.length === 0) return v;
+  const recortada = ventanaDelDoctor({ abre: v.abre, cierra: v.cierra }, horarioDoctor, dia);
+  return recortada ? { ...recortada, cerrado: false } : { abre: 0, cierra: 0, cerrado: true };
 }
 
 /**

@@ -1,0 +1,8 @@
+paciente,telefono,folio,fecha,prestacion,valor
+María Hernández,5551234567,501,05/02/2024,Profilaxis,600
+,,501,,Resina simple,850
+,,501,,Extracción simple,700
+Jorge López,5559876543,502,06/02/2024,Profilaxis,500
+María Hernández,5551234567,502,06/02/2024,Resina simple,850
+Pedro Inventado,5550000000,503,07/02/2024,Profilaxis,500
+,,503,,Resina simple,850

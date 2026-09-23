@@ -4,6 +4,9 @@ import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { applyReminderReschedule } from "@/lib/reminders/reschedule.server";
 import { bloqueaEsteSlot, bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiende, doctorNoAtiendeSlot, ventanaDelDoctor } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
+import { apartadoVencido, sinApartadoVencido } from "@/lib/agenda/apartado";
 
 /**
  * Servicio server-side reutilizable para que el bot de WhatsApp agende y
@@ -63,6 +66,10 @@ async function hasConflict(
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt },
       ...(excludeId ? { id: { not: excludeId } } : {}),
+      // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+      // Al crear encima, el trigger appt_liberar_apartado_vencido la cancela
+      // antes de que la constraint mire.
+      AND: [sinApartadoVencido()],
     },
     select: { id: true },
   });
@@ -81,6 +88,14 @@ export interface SlotResult {
   mensajeBloqueo?: string;
 }
 
+/*
+ * `reason` de un día cerrado (`closed: true`):
+ *  · "closed_day"  — la clínica no abre ese día (ClinicSchedule).
+ *  · "blocked"     — un bloqueo de agenda tapa el día entero (WS1-T2).
+ *  · "doctor_off"  — la clínica abre pero ESTE doctor no atiende ese día, o su
+ *                    horario no coincide con el de la clínica (WS1-T2 · horario).
+ */
+
 /**
  * Calcula horarios libres "HH:MM" (hora local de la clínica) para un doctor en
  * una fecha. Respeta a la vez el horario por día (ClinicSchedule) y la ventana
@@ -94,18 +109,23 @@ export async function getAvailableSlots(params: {
   durationMin: number;
 }): Promise<SlotResult> {
   const { clinicId, doctorId, dateISO } = params;
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: clinicId },
-    select: {
-      timezone: true,
-      agendaDayStart: true,
-      agendaDayEnd: true,
-      defaultSlotMinutes: true,
-      schedules: {
-        select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+  const [clinic, horarios] = await Promise.all([
+    prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: {
+        timezone: true,
+        agendaDayStart: true,
+        agendaDayEnd: true,
+        defaultSlotMinutes: true,
+        schedules: {
+          select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+        },
       },
-    },
-  });
+    }),
+    // WS1-T2 · horario — el horario PROPIO del doctor, si lo tiene. Sin filas
+    // el mapa sale vacío y todo lo de abajo se calcula exactamente como antes.
+    leerHorariosDeDoctores(clinicId, { doctorIds: [doctorId] }),
+  ]);
   if (!clinic) return { closed: true, reason: "clinic_not_found", slots: [] };
 
   const tz = clinic.timezone;
@@ -126,6 +146,20 @@ export async function getAvailableSlots(params: {
     openMin = Math.max(openMin, oH * 60 + oM);
     closeMin = Math.min(closeMin, cH * 60 + cM);
   }
+
+  // WS1-T2 · horario — la ventana del día se RECORTA al horario del doctor:
+  // abre la clínica ∩ atiende el doctor. Sin horario propio, `ventanaDelDoctor`
+  // devuelve la de la clínica tal cual. Si ese día el doctor no atiende (o su
+  // horario no se cruza con el de la clínica), el día está cerrado PARA ÉL y
+  // se dice así: «no quedan horarios» invitaría a insistir ese mismo día.
+  const ventana = ventanaDelDoctor(
+    { abre: openMin, cierra: closeMin },
+    horarios.get(doctorId),
+    scheduleDay,
+  );
+  if (!ventana) return { closed: true, reason: "doctor_off", slots: [] };
+  openMin = ventana.abre;
+  closeMin = ventana.cierra;
   if (closeMin - openMin < duration) return { closed: false, slots: [] };
 
   const dayStartUtc = tzLocalToUtc(dateISO, 0, 0, tz);
@@ -138,6 +172,8 @@ export async function getAvailableSlots(params: {
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
         startsAt: { lt: dayEndUtc },
         endsAt: { gt: dayStartUtc },
+        // WS1-T5 — el hueco de un anticipo que no se pagó a tiempo vuelve a ofrecerse.
+        AND: [sinApartadoVencido()],
       },
       select: { startsAt: true, endsAt: true },
     }),
@@ -163,6 +199,10 @@ export async function getAvailableSlots(params: {
     // alternativas más cercanas fuera del bloqueo: si se cerró la mañana, el
     // bot lista la tarde en vez de contestar que no hay nada.
     if (bloqueaEsteSlot(bloqueos, inicio, duration, doctorId)) continue;
+    // WS1-T2 · horario — el mismo criterio que el alta de abajo, hueco a hueco.
+    // Con la ventana ya recortada no debería saltar nunca; está para que la
+    // oferta y el alta digan SIEMPRE lo mismo aunque alguien toque el bucle.
+    if (doctorNoAtiendeSlot(horarios, inicio, duration, doctorId, tz)) continue;
     slots.push(`${pad(h)}:${pad(mn)}`);
   }
 
@@ -191,16 +231,53 @@ export type CreateErrorCode =
   | "outside_hours"
   /** WS1-T2 — el hueco está cerrado por un bloqueo de agenda. */
   | "blocked"
+  /** WS1-T2 · horario — el doctor no atiende a esa hora (su horario propio). */
+  | "doctor_off"
   | "overlap"
   | "doctor_not_found"
   | "patient_not_found"
   | "invalid"
+  /**
+   * WS1-T5 — la clínica pide anticipo y no se pudo generar el link de pago.
+   * La cita NO quedó apartada (se deshizo): el bot lo dice y pasa a humano.
+   */
+  | "pago_no_disponible"
   | "failed";
+
+/** WS1-T5 — el link de pago que el bot manda cuando la cita lleva anticipo. */
+export interface AnticipoCreado {
+  url: string;
+  /** Pesos, calculado en el servidor. */
+  monto: number;
+  /** ISO: hasta cuándo queda apartado el hueco. */
+  venceA: string;
+  minutos: number;
+}
 
 export interface CreateResult {
   ok: boolean;
   appointmentId?: string;
   error?: CreateErrorCode;
+  /** WS1-T5 — id del AppointmentDeposit creado junto con la cita apartada. */
+  depositId?: string;
+  /** WS1-T5 — presente solo si la cita quedó apartada esperando el anticipo. */
+  anticipo?: AnticipoCreado;
+}
+
+/**
+ * WS1-T5 — la cita nace APARTADA: ocupa el hueco solo hasta `vence` y, en la
+ * MISMA escritura, nace su anticipo pendiente. Lo arma
+ * src/lib/anticipos/servicio.server.ts; el monto ya viene decidido por el
+ * servidor.
+ */
+export interface ApartadoConAnticipo {
+  vence: Date;
+  anticipo: {
+    amount: number;
+    marketplaceFee: number;
+    mpCollectorId: string;
+    waPhone: string | null;
+  };
 }
 
 /** Crea una cita desde el bot replicando las validaciones de POST /api/appointments. */
@@ -212,8 +289,10 @@ export async function createBotAppointment(params: {
   time: string;
   durationMin: number;
   reason?: string | null;
+  /** WS1-T5 — solo lo pasa el servicio de anticipos. Ausente = la cita de siempre. */
+  apartado?: ApartadoConAnticipo;
 }): Promise<CreateResult> {
-  const { clinicId, patientId, doctorId, dateISO, time, reason } = params;
+  const { clinicId, patientId, doctorId, dateISO, time, reason, apartado } = params;
   const [hh, mm] = time.split(":").map(Number);
   if (Number.isNaN(hh) || Number.isNaN(mm)) return { ok: false, error: "invalid" };
 
@@ -255,6 +334,14 @@ export async function createBotAppointment(params: {
     return { ok: false, error: "blocked" };
   }
 
+  // WS1-T2 · horario — el candado del ALTA, por lo mismo que el del bloqueo:
+  // entre la oferta y el «sí» pueden pasar minutos, y la oferta no es la
+  // única forma de llegar aquí (el paciente puede teclear una hora).
+  const horarios = await leerHorariosDeDoctores(clinicId, { doctorIds: [doctorId] });
+  if (doctorNoAtiende(horarios, startsAt, endsAt, doctorId, clinic.timezone)) {
+    return { ok: false, error: "doctor_off" };
+  }
+
   try {
     const created = await prisma.appointment.create({
       data: {
@@ -268,12 +355,35 @@ export async function createBotAppointment(params: {
         type: reason && reason.trim() ? reason.trim() : "Consulta general",
         mode: "IN_PERSON",
         source: "WHATSAPP",
-        requiresValidation: true,
+        // WS1-T5 — la cita apartada NO entra a la cola «por validar»: la valida
+        // el pago (y si no llega, se libera sola). Con ella en la cola, el
+        // «Aprobar» de rutina la confirmaba sin anticipo.
+        requiresValidation: !apartado,
         overrideReason: null,
+        holdExpiresAt: apartado?.vence ?? null,
+        ...(apartado
+          ? {
+              deposits: {
+                create: {
+                  clinicId,
+                  patientId,
+                  amount: apartado.anticipo.amount,
+                  marketplaceFee: apartado.anticipo.marketplaceFee,
+                  expiresAt: apartado.vence,
+                  mpCollectorId: apartado.anticipo.mpCollectorId,
+                  waPhone: apartado.anticipo.waPhone,
+                },
+              },
+            }
+          : {}),
       },
-      select: { id: true },
+      select: { id: true, deposits: { select: { id: true } } },
     });
-    return { ok: true, appointmentId: created.id };
+    return {
+      ok: true,
+      appointmentId: created.id,
+      ...(apartado && created.deposits[0] ? { depositId: created.deposits[0].id } : {}),
+    };
   } catch (err) {
     if (isOverlapError(err)) return { ok: false, error: "overlap" };
     console.error("[bot-booking-service] create failed", err);
@@ -286,6 +396,8 @@ export type RescheduleErrorCode =
   | "outside_hours"
   /** WS1-T2 — el hueco de destino está cerrado por un bloqueo de agenda. */
   | "blocked"
+  /** WS1-T2 · horario — el doctor no atiende a la hora de destino. */
+  | "doctor_off"
   | "overlap"
   | "invalid"
   | "failed";
@@ -309,9 +421,12 @@ export async function rescheduleBotAppointment(params: {
 
   const existing = await prisma.appointment.findFirst({
     where: { id: appointmentId, clinicId },
-    select: { id: true, doctorId: true, startsAt: true, endsAt: true },
+    select: { id: true, doctorId: true, startsAt: true, endsAt: true, status: true, holdExpiresAt: true },
   });
   if (!existing) return { ok: false, error: "not_found" };
+  // WS1-T5 — una cita apartada cuyo anticipo venció ya no es de nadie: moverla
+  // la «reviviría» vencida y la agenda seguiría tratándola como hueco libre.
+  if (apartadoVencido(existing)) return { ok: false, error: "not_found" };
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
@@ -339,6 +454,13 @@ export async function rescheduleBotAppointment(params: {
   });
   if (bloqueaEsteHueco(bloqueos, startsAt, endsAt, existing.doctorId)) {
     return { ok: false, error: "blocked" };
+  }
+
+  // WS1-T2 · horario — igual: se mira el DESTINO. Una cita que quedó fuera del
+  // horario porque el doctor lo cambió después se puede mover sin estorbo.
+  const horarios = await leerHorariosDeDoctores(clinicId, { doctorIds: [existing.doctorId] });
+  if (doctorNoAtiende(horarios, startsAt, endsAt, existing.doctorId, clinic.timezone)) {
+    return { ok: false, error: "doctor_off" };
   }
 
   try {
@@ -409,6 +531,8 @@ export async function getUpcomingAppointmentsForPatient(clinicId: string, patien
       patientId,
       status: { in: ["PENDING", "SCHEDULED", "CONFIRMED"] },
       startsAt: { gte: new Date() },
+      // WS1-T5 — la cita cuyo anticipo venció ya no es suya: no se ofrece reagendarla.
+      AND: [sinApartadoVencido()],
     },
     orderBy: { startsAt: "asc" },
     take: 5,

@@ -1,0 +1,11 @@
+paciente,telefono,fecha,doctor,titulo,nota
+María Hernández,5551234567,12/03/2024,Dra. Ana López,Resina en 16,"Refiere sensibilidad al frío.
+Se coloca resina oclusal en 16. <b>Sin</b> complicaciones."
+Jorge López,5559876543,2023-11-05,Dr. Juan Viejo,,Profilaxis y revisión general.
+Ana Ruiz,,pendiente,Dra. Ana López,Control,La fecha de esta fila está rota
+Pedro Inventado,5550000000,01/01/2024,Dra. Ana López,Control,El paciente no existe en la clínica
+María Hernández,5551234567,01/01/2099,Dra. Ana López,Futuro,Una nota del futuro
+María Hernández,5551234567,12/03/2024,Dra. Ana López,Resina en 16,"Refiere sensibilidad al frío.
+Se coloca resina oclusal en 16. <b>Sin</b> complicaciones."
+Ana Ruiz,,15/08/2022,,Primera visita,Paciente nueva. Sin antecedentes relevantes.
+María Hernández,5551234567,31/02/2024,Dra. Ana López,Fecha imposible,El 31 de febrero no existe

@@ -35,6 +35,9 @@ import {
 import { tzLocalToUtc, todayInTz } from "@/lib/agenda/time-utils";
 import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiendeSlot } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export const dynamic = "force-dynamic";
 
@@ -117,7 +120,7 @@ export async function GET(
   // de la clínica, overlap para atrapar también citas que cruzan medianoche).
   const dayStartUtc = tzLocalToUtc(dateStr, 0, 0, timezone);
   const dayEndUtc = new Date(dayStartUtc.getTime() + 86_400_000);
-  const [busy, bloqueos] = await Promise.all([
+  const [busy, bloqueos, horarios] = await Promise.all([
     prisma.appointment.findMany({
       where: {
         clinicId: appt.clinicId,
@@ -126,6 +129,8 @@ export async function GET(
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
         startsAt: { lt: dayEndUtc },
         endsAt: { gt: dayStartUtc },
+        // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+        AND: [sinApartadoVencido()],
       },
       select: { startsAt: true, endsAt: true },
     }),
@@ -136,6 +141,10 @@ export async function GET(
     leerBloqueosDelRango(appt.clinicId, dayStartUtc, dayEndUtc, {
       doctorIds: [appt.doctorId],
     }),
+    // WS1-T2 · horario — el horario propio del doctor de la cita, si lo tiene.
+    // Como con el bloqueo, se filtra el DESTINO: que la cita actual haya
+    // quedado fuera de su horario no impide moverla.
+    leerHorariosDeDoctores(appt.clinicId, { doctorIds: [appt.doctorId] }),
   ]);
 
   const [closeH, closeM] = daySchedule.closeTime.split(":").map(Number);
@@ -160,6 +169,8 @@ export async function GET(
     if (taken) continue;
     // WS1-T2 — y sin bloqueo encima.
     if (bloqueaEsteSlot(bloqueos, slotStart, durationMin, appt.doctorId)) continue;
+    // WS1-T2 · horario — y dentro del horario del doctor.
+    if (doctorNoAtiendeSlot(horarios, slotStart, durationMin, appt.doctorId, timezone)) continue;
     slots.push(hhmm);
   }
 

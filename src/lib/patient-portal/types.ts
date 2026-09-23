@@ -171,6 +171,11 @@ export interface PacienteCita {
    * /api/paciente/appointments en `upcoming`; otros endpoints (summary) la omiten.
    */
   pendingChange?: PacienteCambioPendiente | null;
+  /**
+   * WS1-T5 — la cita está apartada esperando el anticipo por WhatsApp. No se
+   * ofrece «confirmar asistencia»: se confirma sola cuando se acredita el pago.
+   */
+  esperaAnticipo?: boolean;
 }
 
 /** Consulta paciente-safe: solo que hubo visita y con quién. CERO SOAP. */

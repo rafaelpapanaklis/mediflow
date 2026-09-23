@@ -35,6 +35,8 @@ import {
   trazaDeBloqueo,
 } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import {
   bookingRuleBody,
   rescheduleRuleViolation,
@@ -48,6 +50,7 @@ import type {
   AppointmentStatus,
   UpdateAppointmentInput,
 } from "@/lib/agenda/types";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el include para que appointmentToDTO pueda enmascarar
@@ -249,15 +252,30 @@ export async function PATCH(
   // Se mira el DESTINO con el doctor efectivo del PATCH (el nuevo si se
   // cambió, el de siempre si no): mover una cita FUERA de un bloqueo no puede
   // avisar de nada, y moverla DENTRO sí.
+  //
+  // WS1-T2 · horario — y el horario propio del doctor efectivo, igual: aviso,
+  // mismo orden que en el POST (bloqueo → clínica → doctor).
   const doctorEfectivo = body.doctorId || existing.doctorId;
-  const bloqueosDelHueco = await leerBloqueosDelRango(
-    session.clinic.id,
+  const [bloqueosDelHueco, horariosDelHueco] = await Promise.all([
+    leerBloqueosDelRango(
+      session.clinic.id,
+      newStarts,
+      newEnds,
+      { doctorIds: [doctorEfectivo] },
+    ),
+    leerHorariosDeDoctores(session.clinic.id, { doctorIds: [doctorEfectivo] }),
+  ]);
+  const bloqueoEncima = bloqueaEsteHueco(bloqueosDelHueco, newStarts, newEnds, doctorEfectivo);
+  const fueraDelDoctor = doctorNoAtiende(
+    horariosDelHueco,
     newStarts,
     newEnds,
-    { doctorIds: [doctorEfectivo] },
+    doctorEfectivo,
+    session.clinic.timezone,
   );
-  const bloqueoEncima = bloqueaEsteHueco(bloqueosDelHueco, newStarts, newEnds, doctorEfectivo);
-  const avisoHorario = bloqueoEncima ? avisoDeBloqueo(bloqueoEncima) : hoursWarning;
+  const avisoHorario = bloqueoEncima
+    ? avisoDeBloqueo(bloqueoEncima)
+    : hoursWarning ?? (fueraDelDoctor ? avisoDeHorarioDoctor(fueraDelDoctor) : null);
 
   // Resource working-hours validation. Applies if the appointment ends up with
   // a resourceId (either explicitly set in this PATCH or inherited from the
@@ -649,6 +667,8 @@ async function findConflictingAppointment(
       overrideReason: null,
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt },
+      // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+      AND: [sinApartadoVencido()],
     },
     include: { patient: { select: { firstName: true, lastName: true, visibleUserIds: true } } },
     take: 1,

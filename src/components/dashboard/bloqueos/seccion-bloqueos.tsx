@@ -28,6 +28,7 @@ import { useT, useLocale } from "@/i18n/i18n-provider";
 import { FestivosCard } from "./festivos-card";
 import { FormularioBloqueo, type DoctorOpcion } from "./formulario-bloqueo";
 import { ListaBloqueos } from "./lista-bloqueos";
+import { PoliticaCard } from "./politica-card";
 import { mensajeDeError, parseBloqueos, type BloqueoDTO } from "./tipos";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import s from "./bloqueos.module.css";
@@ -190,6 +191,11 @@ export function SeccionBloqueos({
         error={error}
         onCambio={recargar}
       />
+
+      {/* «¿Recepción puede agendar sobre un día bloqueado?» — ajuste de la
+          clínica, así que tampoco es del doctor. Va al final: es la regla de
+          qué pasa con TODO lo de arriba. */}
+      {!modoDoctor && <PoliticaCard />}
     </section>
   );
 }

@@ -9,6 +9,9 @@ import { getPatientPortalContext } from "@/lib/patient-portal/guard";
 import { resolveBookingPatient } from "@/lib/patient-portal/link";
 import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { doctorNoAtiende, MENSAJE_PUBLICO_FUERA_DE_HORARIO } from "@/lib/horario-doctor/core";
+import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 export async function POST(req: NextRequest) {
   try {
@@ -143,9 +146,15 @@ export async function POST(req: NextRequest) {
   // el bloqueo no es una carrera (no lo gana otro reservando a la vez), así
   // que releerlo en cada reintento no aportaría nada.
   // ═══════════════════════════════════════════════════════════════════════
-  const bloqueosDelHueco = await leerBloqueosDelRango(clinic.id, startsAtBook, endsAtBook, {
-    doctorIds: candidates.map(c => c.id),
-  });
+  const [bloqueosDelHueco, horarios] = await Promise.all([
+    leerBloqueosDelRango(clinic.id, startsAtBook, endsAtBook, {
+      doctorIds: candidates.map(c => c.id),
+    }),
+    // WS1-T2 · horario — el horario propio de los candidatos, por lo mismo que
+    // el bloqueo: una pestaña vieja puede traer una hora que el doctor dejó de
+    // atender. Quien no tiene horario propio no sale en el mapa y no se descarta.
+    leerHorariosDeDoctores(clinic.id, { doctorIds: candidates.map(c => c.id) }),
+  ]);
   const libresDeBloqueo = candidates.filter(
     c => !bloqueaEsteHueco(bloqueosDelHueco, startsAtBook, endsAtBook, c.id),
   );
@@ -156,6 +165,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       error: "La clínica cerró la agenda en ese horario. Elige otro horario, por favor.",
     }, { status: 409 });
+  }
+
+  // WS1-T2 · horario — y de los que quedan, solo los que ATIENDEN a esa hora
+  // (abre la clínica ∩ atiende el doctor ∩ no hay bloqueo). Con "cualquiera"
+  // basta con que uno atienda; con un doctor concreto, tiene que ser él. Mismo
+  // 409 que el bloqueo, y tampoco sale el horario de nadie al público.
+  const atienden = libresDeBloqueo.filter(
+    c => !doctorNoAtiende(horarios, startsAtBook, endsAtBook, c.id, clinic.timezone),
+  );
+  if (atienden.length === 0) {
+    return NextResponse.json({ error: MENSAJE_PUBLICO_FUERA_DE_HORARIO }, { status: 409 });
   }
 
   /**
@@ -171,16 +191,18 @@ export async function POST(req: NextRequest) {
       const conflicts = await tx.appointment.findMany({
         where: {
           clinicId:  clinic!.id,
-          doctorId:  { in: libresDeBloqueo.map(c => c.id) },
+          doctorId:  { in: atienden.map(c => c.id) },
           status:    { notIn: ["CANCELLED","NO_SHOW"] },
           overrideReason: null,
           startsAt:  { lt: endsAtBook },
           endsAt:    { gt: startsAtBook },
+          // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
+          AND: [sinApartadoVencido()],
         },
         select: { doctorId: true },
       });
       const ocupados = new Set(conflicts.map(c => c.doctorId));
-      const elegido = libresDeBloqueo.find(c => !ocupados.has(c.id));
+      const elegido = atienden.find(c => !ocupados.has(c.id));
       if (!elegido) throw new Error("SLOT_TAKEN");
 
       const created = await tx.appointment.create({

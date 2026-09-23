@@ -121,6 +121,7 @@ export async function processWhatsAppQueue(opts?: {
           id: true,
           startsAt: true,
           status: true,
+          holdExpiresAt: true,
           patient: {
             select: { firstName: true, lastName: true, phone: true, email: true },
           },
@@ -169,6 +170,10 @@ export async function processWhatsAppQueue(opts?: {
         (["CANCELLED", "COMPLETED", "CHECKED_OUT", "NO_SHOW"].includes(
           (r.appointment as any).status,
         ) ||
+          // WS1-T5 — una cita APARTADA (esperando el anticipo, o ya vencida) no
+          // recibe recordatorio: el recordatorio trae «confirmar», y confirmar
+          // aquí se saltaría el anticipo. Al pagarse deja de estar apartada.
+          ((r.appointment as any).status === "SCHEDULED" && r.appointment.holdExpiresAt != null) ||
           r.appointment.startsAt <= new Date())
       ) {
         await prisma.whatsAppReminder
