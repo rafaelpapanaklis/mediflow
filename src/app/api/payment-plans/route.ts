@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { PLAN_FREQUENCY, PLAN_FREQUENCY_DAYS, PLAN_STATUS } from "@/lib/payment-plans/status";
+import { PLAN_STATUS } from "@/lib/payment-plans/status";
+import { calcularLetras } from "@/lib/payment-plans/letras";
+import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
+import { todayInTz, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
@@ -62,6 +65,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
   }
 
+  // Montos, número de letras, frecuencia y fechas se validan y reparten en
+  // centavos enteros ANTES de tocar la base (lib/payment-plans/letras.ts): antes
+  // un enganche mayor al total o $1 en 150 letras dejaban letras negativas.
+  const tz = (ctx.clinic?.timezone as string | null | undefined) || DEFAULT_INVOICE_TZ;
+  const calculo = calcularLetras({ totalAmount, downPayment, installments, frequency, startDate }, todayInTz(tz));
+  if (calculo.error || !calculo.plan) {
+    return NextResponse.json({ error: calculo.error ?? "Datos inválidos" }, { status: 400 });
+  }
+  const letras = calculo.plan;
+
   // Multi-tenant verification: ensure patient belongs to this clinic
   const patient = await prisma.patient.findFirst({
     where:  { id: patientId, clinicId: ctx.clinicId },
@@ -89,14 +102,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const remaining    = totalAmount - (downPayment ?? 0);
-  const baseInstall  = Math.round((remaining / installments) * 100) / 100;
-  // status/frequency son TEXT en prod: normaliza la frecuencia entrante para
-  // no escribir valores fuera del set canónico (el enum de Prisma ya no valida).
-  const freq         = PLAN_FREQUENCY[frequency as keyof typeof PLAN_FREQUENCY] ?? PLAN_FREQUENCY.MONTHLY;
-  const freqDays     = PLAN_FREQUENCY_DAYS[freq];
-  const start        = startDate ? new Date(startDate) : new Date();
-
   const plan = await prisma.$transaction(async (tx) => {
     const created = await tx.paymentPlan.create({
       data: {
@@ -104,24 +109,25 @@ export async function POST(req: NextRequest) {
         patientId,
         invoiceId:    invoiceId ?? null,
         name,
-        totalAmount,
-        downPayment:  downPayment ?? 0,
-        installments,
-        frequency:    freq,
-        startDate:    startDate ? new Date(startDate) : new Date(),
+        totalAmount:  letras.totalAmount,
+        downPayment:  letras.downPayment,
+        installments: letras.installments,
+        frequency:    letras.frequency,
+        // Día → 00:00 de ESE día en la zona de la clínica (mismo criterio que el
+        // «Vence el» de las facturas): `new Date("2026-10-01")` en Vercel es el
+        // 30 de septiembre a las 18:00 en México.
+        startDate:    tzLocalToUtc(letras.startDate, 0, 0, tz),
         notes:        notes ?? null,
         status:       PLAN_STATUS.ACTIVE,
       },
     });
 
-    const installmentData = Array.from({ length: installments }, (_, i) => {
-      const dueDate = new Date(start);
-      dueDate.setDate(dueDate.getDate() + freqDays * (i + 1));
-      const amount = i === installments - 1
-        ? Math.round((remaining - baseInstall * (installments - 1)) * 100) / 100
-        : baseInstall;
-      return { planId: created.id, installment: i + 1, amount, dueDate };
-    });
+    const installmentData = letras.letras.map((l) => ({
+      planId:      created.id,
+      installment: l.installment,
+      amount:      l.amount,
+      dueDate:     tzLocalToUtc(l.fecha, 0, 0, tz),
+    }));
 
     await tx.planPayment.createMany({ data: installmentData });
     return created;

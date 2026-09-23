@@ -34,15 +34,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { installmentId, method, notes } = body;
 
   if (!installmentId) return NextResponse.json({ error: "installmentId requerido" }, { status: 400 });
+  if (plan.status === PLAN_STATUS.CANCELLED) {
+    return NextResponse.json({ error: "El plan está cancelado" }, { status: 400 });
+  }
 
   // Mark installment as paid — scoped to THIS plan (ya verificado por clínica)
   // para evitar IDOR cross-tenant: sin planId, un usuario podría marcar pagada
   // la cuota de OTRA clínica pasando su installmentId.
+  // `paidAt: null` en el where: una cuota ya cobrada no se vuelve a «cobrar».
+  // Antes un segundo clic le pisaba la fecha y el método del cobro real.
   const res = await prisma.planPayment.updateMany({
-    where: { id: installmentId, planId: params.id },
+    where: { id: installmentId, planId: params.id, paidAt: null },
     data:  { paidAt: new Date(), method: method ?? null, notes: notes ?? null },
   });
-  if (res.count === 0) return NextResponse.json({ error: "Cuota no encontrada" }, { status: 404 });
+  if (res.count === 0) {
+    const existe = plan.payments.some((p) => p.id === installmentId);
+    return existe
+      ? NextResponse.json({ error: "Esta cuota ya está pagada" }, { status: 409 })
+      : NextResponse.json({ error: "Cuota no encontrada" }, { status: 404 });
+  }
 
   // Check if all installments are paid → complete the plan
   const updated = await prisma.planPayment.findMany({ where: { planId: params.id } });

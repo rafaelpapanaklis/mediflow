@@ -37,10 +37,6 @@ export const PLAN_OPEN_STATUSES: string[] = [
   PLAN_STATUS.OVERDUE,
 ];
 
-// Días entre cuotas por frecuencia (MONTHLY se aproxima a 30 días, igual
-// que el cálculo histórico de installments).
-export const PLAN_FREQUENCY_DAYS: Record<string, number> = {
-  [PLAN_FREQUENCY.WEEKLY]: 7,
-  [PLAN_FREQUENCY.BIWEEKLY]: 14,
-  [PLAN_FREQUENCY.MONTHLY]: 30,
-};
+// Las fechas de las letras NO se sacan de «días por frecuencia»: MONTHLY es el
+// MISMO día de cada mes (sumarPeriodos, vía lib/payment-plans/letras.ts). El
+// «+30 días» de antes adelantaba el plan 5 días al año.

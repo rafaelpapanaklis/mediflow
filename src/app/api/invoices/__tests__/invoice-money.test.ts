@@ -763,3 +763,56 @@ test("N1 · un reembolso solo sigue rechazando lo mismo que antes", async () => 
   assert.equal(db.payments.length, 0, "ningún rechazo escribe un movimiento");
   assert.equal(db.invoice.paid, 1000, "ningún rechazo toca la factura");
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MÉTODO DE COBRO — solo los seis del selector (auditoría de facturación, ws1-t2)
+// ═══════════════════════════════════════════════════════════════════════════
+test("método · un cobro con method \"refund\" se rechaza y no escribe nada", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/route");
+  setInvoice({ total: 1000, balance: 1000, subtotal: 1000 });
+
+  // Antes: 200, paid = 400 y un Payment "refund" que Caja, la cobranza y el
+  // CFDI leían como dinero DEVUELTO → paid ≠ Σcobros − Σreembolsos.
+  const res = await readJson(await quiet(() => POST(req({ amount: 400, method: "refund" }), P)));
+  assert.equal(res.status, 400);
+  assert.match(res.body.error, /Método de pago inválido/);
+  assert.equal(db.payments.length, 0);
+  assert.equal(db.invoice.paid, 0);
+  assert.equal(db.invoice.status, "PENDING");
+});
+
+test("método · valores fuera del selector (CARD, CASH, vacío) se rechazan", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/route");
+  for (const method of ["CARD", "CASH", "credit_card", "online", "", undefined, null, 7]) {
+    setInvoice({ total: 1000, balance: 1000, subtotal: 1000 });
+    const res = await readJson(await quiet(() => POST(req({ amount: 100, method }), P)));
+    assert.equal(res.status, 400, `method=${JSON.stringify(method)} no debió pasar`);
+    assert.equal(db.payments.length, 0);
+  }
+});
+
+test("método · los seis del selector siguen cobrando", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/route");
+  for (const method of ["cash", "debit", "credit", "transfer", "check", "other"]) {
+    setInvoice({ total: 1000, balance: 1000, subtotal: 1000 });
+    db.register = { openedAt: new Date() };
+    const res = await readJson(await quiet(() => POST(req({ amount: 100, method }), P)));
+    assert.equal(res.status, 200, `${method}: ${res.body?.error}`);
+    assert.equal(db.payments[0].method, method);
+    assert.equal(db.invoice.paid, 100);
+  }
+});
+
+test("método · mark-paid con \"refund\" se rechaza; sin método sigue siendo efectivo", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/mark-paid/route");
+  setInvoice({ total: 1000, paid: 400, balance: 600, status: "PARTIAL" });
+  const malo = await readJson(await quiet(() => POST(req({ method: "refund" }), P)));
+  assert.equal(malo.status, 400);
+  assert.equal(db.payments.length, 0);
+  assert.equal(db.invoice.status, "PARTIAL");
+
+  const bueno = await readJson(await quiet(() => POST(req({}), P)));
+  assert.equal(bueno.status, 200, bueno.body?.error);
+  assert.equal(db.payments[0].method, "cash");
+  assert.equal(db.invoice.status, "PAID");
+});

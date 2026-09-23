@@ -11,6 +11,7 @@ import { stripNestedPatientSecrets } from "@/lib/patient-secrets";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { CASH_METHOD } from "@/lib/caja";
 import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
+import { esMetodoPago, METODOS_PAGO } from "@/lib/quotes/condiciones-pago";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -98,6 +99,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // a paid, de paid a balance y de ahí al saldo fantasma.
   const amount = round2(Number(rawAmount));
   if (!isFinite(amount) || amount <= 0) return NextResponse.json({ error: "El monto debe ser mayor a 0" }, { status: 400 });
+  // El método sale del selector de cobro (los seis de METODOS_PAGO) y de ningún
+  // otro sitio. Sin esta puerta cualquier texto se guardaba tal cual: un
+  // `method: "refund"` sumaba a `paid` mientras Caja, Finanzas, la cobranza y el
+  // CFDI lo leían como un REEMBOLSO (dinero que sale), y valores como "CARD" o
+  // "CASH" en mayúsculas no entran al arqueo de efectivo ni a la forma de pago SAT.
+  if (!esMetodoPago(method)) {
+    return NextResponse.json({ error: `Método de pago inválido. Usa uno de: ${METODOS_PAGO.join(", ")}` }, { status: 400 });
+  }
   // paidAt es opcional. Permite back-date para registrar pagos pasados; si
   // viene inválido, ignoramos y usamos default(now()).
   const paidAtDate = paidAt ? new Date(paidAt) : null;
