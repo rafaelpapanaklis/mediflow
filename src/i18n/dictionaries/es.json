@@ -5254,7 +5254,7 @@
       "duesRemindLabel": "Avisar de la mensualidad por vencer",
       "duesRemindDesc": "Un WhatsApp unos días antes de que venza la próxima mensualidad del plan de pagos, a quien se pueda alcanzar (ver el aviso de abajo). Nunca se avisa de una factura pagada ni cancelada, ni de un paciente dado de baja, y nunca sale dos veces por la misma cuota.",
       "duesBotLabel": "El bot puede decir la próxima mensualidad",
-      "duesBotDesc": "Si el paciente escribe «¿cuánto debo?», el bot le pide su fecha de nacimiento y solo entonces le dice la próxima cuota y lo que le falta. Si ese número es de más de un paciente, no adivina: lo pasa a una persona. Cada consulta queda anotada en la conversación.",
+      "duesBotDesc": "Si el paciente escribe «¿cuánto debo?», el bot le contesta de una la próxima cuota y lo que le falta, sin nada más. Si ese número es de más de un paciente, no adivina: le pide la fecha de nacimiento solo para saber de cuál se trata, y si no cuadra, lo pasa a una persona. Cada consulta queda anotada en la conversación.",
       "summaryDues": "Mensualidad por vencer",
       "summaryDuesBot": "Saldo por el bot",
       "recentKindPaymentDue": "Mensualidad",

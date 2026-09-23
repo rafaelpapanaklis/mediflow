@@ -1,17 +1,20 @@
 /**
- * EL BOT NO DICE UN PESO SIN SABER CON QUIÉN HABLA — ws1-t3.
+ * «¿CUÁNTO DEBO?» POR WHATSAPP — ws1-t3, rehecho en ws1-t5.
  *
  * Run: npm run test:bot-saldo
  *
- * El cliente lo pidió con estas palabras: «consultar de forma segura la próxima
- * mensualidad del paciente». El «de forma segura» es suyo y es la mitad del
- * encargo, así que esto prueba, sobre todo, lo que el bot se NIEGA a contestar:
+ * Desde el 23-sep-2026 (decisión de producto de Rafael, explicada en la
+ * cabecera de `saldo-core.ts`) la fecha de nacimiento ya no es un control para
+ * todos: solo desambigua un número con varios pacientes. Lo que esto prueba:
  *
- *   · con el interruptor de la clínica apagado, ni se entera de la pregunta;
- *   · no dice un peso hasta que la fecha de nacimiento cuadra;
- *   · no se reintenta en bucle: a los dos fallos, deriva;
- *   · un teléfono con DOS pacientes no se adivina: deriva;
- *   · cada consulta deja rastro de quién preguntó y qué se contestó.
+ *   · con el interruptor de la clínica apagado, el bot no dice nada de dinero;
+ *   · un número con UN paciente: pregunta y respuesta en un mensaje;
+ *   · un número con DOS o más no se adivina: se pide la fecha para saber de
+ *     cuál, y si no cuadra se deriva a una persona; nunca se enseña la deuda
+ *     del otro, tampoco la de la mamá al hijo dado de baja;
+ *   · no se reintenta en bucle: dos fallos al día y se deriva;
+ *   · cada consulta deja rastro de quién preguntó y qué se contestó;
+ *   · se contesta lo mínimo.
  *
  * El núcleo es puro y recibe sus dependencias, así que aquí no hay base de
  * datos ni red: los dobles son objetos planos. ⛔ No sale ni un WhatsApp.
@@ -19,44 +22,55 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
-  MAX_INTENTOS,
+  MAX_FALLOS,
+  RESULTADOS_FALLIDOS,
   TEXTOS,
   detectaIntencionDeSaldo,
+  elegirPorFecha,
   parseFechaNacimiento,
   runSaldoTurn,
+  sufijoDelRastro,
   textoDelSaldo,
   type PacienteSaldo,
   type RastroConsulta,
   type ResumenSaldo,
   type SaldoDeps,
 } from "../saldo-core";
+import { BotIntent } from "../types";
 import type { BotConfigDTO, BotJson, BotTurnInput } from "../types";
 
-const DOB = "1990-03-15";
+const ANA: PacienteSaldo = { id: "p1", activo: true, dob: "1990-03-15" };
+const LUIS: PacienteSaldo = { id: "p2", activo: true, dob: "2015-06-01" };
+const SOFIA: PacienteSaldo = { id: "p3", activo: true, dob: "2018-11-20" };
 
 /* ── Dobles ────────────────────────────────────────────────────────────── */
 let pacientes: PacienteSaldo[];
-let resumen: ResumenSaldo | null;
+/** El saldo de cada paciente: así se ve DE QUIÉN es el que se contestó. */
+let saldos: Record<string, ResumenSaldo | null>;
 /** Todo lo que se registró. ESTE es el rastro. */
 let rastro: RastroConsulta[];
-/** Cuántas veces se preguntó por el dinero del paciente. */
-let lecturasDeSaldo: number;
+/** De quién se leyó el dinero, en orden. */
+let lecturas: string[];
 /** Los fallos que «ya había» registrados en el hilo (sobreviven al TTL). */
 let fallosPrevios: number;
 
-beforeEach(() => {
-  pacientes = [{ id: "p1", firstName: "Ana", dob: DOB }];
-  resumen = {
+function resumenCon(importeCuota: number, pendiente: number): ResumenSaldo {
+  return {
     vencimiento: "2026-03-03",
-    importeCuota: 2000,
+    importeCuota,
     numeroCuota: 7,
     esEnganche: false,
     totalCuotas: 24,
-    pendiente: 18000,
+    pendiente,
     tieneVencidas: false,
   };
+}
+
+beforeEach(() => {
+  pacientes = [ANA];
+  saldos = { p1: resumenCon(2000, 18000), p2: resumenCon(750, 4500), p3: resumenCon(990, 8910) };
   rastro = [];
-  lecturasDeSaldo = 0;
+  lecturas = [];
   fallosPrevios = 0;
 });
 
@@ -66,24 +80,18 @@ const deps = (): SaldoDeps => ({
     assert.ok(phone, "y con un teléfono");
     return pacientes;
   },
-  async resumenDeSaldo() {
-    lecturasDeSaldo++;
-    return resumen;
+  async resumenDeSaldo(clinicId, patientId) {
+    assert.equal(clinicId, "c1", "el saldo también se lee dentro de la clínica");
+    lecturas.push(patientId);
+    return saldos[patientId] ?? null;
   },
   async registrarConsulta(datos) {
     rastro.push(datos);
   },
   async fallosRecientes() {
-    // El contador REAL: lo ya registrado más lo que lleve esta tanda. Así el
-    // doble se comporta como la base, donde las notas no caducan con la sesión.
-    return (
-      fallosPrevios +
-      rastro.filter((r) =>
-        ["verificacionFallida", "telefonoCompartido", "pacienteNoEncontrado", "sinFechaDeNacimiento"].includes(
-          r.resultado,
-        ),
-      ).length
-    );
+    // Como la base: lo ya registrado de antes más lo de esta tanda, contado
+    // con la MISMA lista que usa el shell.
+    return fallosPrevios + rastro.filter((r) => RESULTADOS_FALLIDOS.includes(r.resultado)).length;
   },
   formatearImporte: (n) => `$${n.toLocaleString("en-US")}.00`,
   formatearFecha: (iso) => iso,
@@ -122,247 +130,300 @@ function turno(texto: string, botState: BotJson | null = null): BotTurnInput {
 const correr = (texto: string, estado: BotJson | null = null, cfg = config()) =>
   runSaldoTurn(turno(texto, estado), cfg, deps());
 
-/**
- * Ninguna respuesta del bot puede llevar un IMPORTE si no se verificó.
- *
- * Se busca dinero, no dígitos: el texto que pide la fecha de nacimiento lleva
- * un ejemplo («15/03/1990») y eso es justo lo que tiene que llevar.
- */
-function sinCifras(texto: string | undefined, mensaje: string) {
+/** Pregunta y contesta: el segundo turno recibe el estado del primero. */
+async function preguntaYFecha(fecha: string) {
+  const primero = await correr("¿cuánto debo?");
+  const segundo = await correr(fecha, primero!.newBotState ?? null);
+  return { primero: primero!, segundo: segundo! };
+}
+
+/** Ninguna de estas respuestas puede llevar un importe. */
+function sinDinero(texto: string | undefined, mensaje: string) {
   assert.ok(texto, "el bot contestó algo");
-  assert.doesNotMatch(texto!, /\$|\bpesos\b|2[.,]?000|18[.,]?000/i, mensaje);
+  assert.doesNotMatch(texto!, /\$|\bpesos\b|pendiente/i, mensaje);
 }
 
 /* ═══ 1. EL INTERRUPTOR DE LA CLÍNICA ══════════════════════════════════ */
 
-test("con el interruptor apagado, el bot ni se entera de la pregunta", async () => {
-  const r = await correr("¿cuánto debo?", null, config({ canAnswerBalance: false }));
-  assert.equal(r, null, "devuelve null y el motor sigue con FAQ/agenda/IA como hoy");
+test("con el interruptor apagado, el bot no dice nada de dinero", async () => {
+  for (const frase of ["¿cuánto debo?", "mi saldo", "¿cuándo vence mi mensualidad?"]) {
+    const r = await correr(frase, null, config({ canAnswerBalance: false }));
+    assert.equal(r, null, `${frase}: devuelve null y el motor sigue con FAQ/agenda/IA como hoy`);
+  }
   assert.equal(rastro.length, 0, "no se consulta ni se registra nada: no ha pasado nada");
-  assert.equal(lecturasDeSaldo, 0);
+  assert.deepEqual(lecturas, [], "ni se lee el saldo");
 });
 
-test("apagado, ni siquiera con una verificación a medias en el hilo", async () => {
-  const estado = { flow: "saldo", patientId: "p1", intentos: 0, updatedAt: Date.now() };
-  const r = await correr("15/03/1990", estado as unknown as BotJson, config({ canAnswerBalance: false }));
+test("apagado, ni siquiera con una pregunta de desambiguación a medias", async () => {
+  pacientes = [ANA, LUIS];
+  const estado = { flow: "saldo", updatedAt: Date.now() } as unknown as BotJson;
+  const r = await correr("15/03/1990", estado, config({ canAnswerBalance: false }));
   assert.equal(r, null);
-  assert.equal(lecturasDeSaldo, 0);
+  assert.deepEqual(lecturas, []);
 });
 
-/* ═══ 2. NI UN PESO SIN VERIFICAR ══════════════════════════════════════ */
+test("un DTO sin el campo cuenta como apagado", async () => {
+  const { canAnswerBalance: _fuera, ...sinCampo } = config();
+  const r = await runSaldoTurn(turno("¿cuánto debo?"), sinCampo as BotConfigDTO, deps());
+  assert.equal(r, null);
+  assert.deepEqual(lecturas, []);
+});
 
-test("a la primera pregunta NO dice dinero: pide la fecha de nacimiento", async () => {
+/* ═══ 2. UN PACIENTE: PREGUNTA Y RESPUESTA EN UN MENSAJE ═══════════════ */
+
+test("contesta la próxima mensualidad al primer mensaje, sin pedir nada", async () => {
   const r = await correr("¿cuánto debo?");
-  assert.ok(r, "el flujo sí toma la pregunta");
-  assert.equal(r!.reply, TEXTOS.pideFecha);
-  sinCifras(r!.reply, "no puede haberse escapado ni un importe");
-  assert.equal(lecturasDeSaldo, 0, "ni siquiera se CONSULTA el saldo antes de verificar");
-  assert.equal(rastro[0].resultado, "verificacionPedida");
-});
-
-test("con la fecha correcta, y solo entonces, dice la mensualidad", async () => {
-  const primero = await correr("¿cuánto debo?");
-  const r = await correr("15/03/1990", primero!.newBotState ?? null);
   assert.ok(r!.reply!.includes("$2,000.00"), "la cuota");
   assert.ok(r!.reply!.includes("$18,000.00"), "y lo pendiente");
   assert.ok(r!.reply!.includes("7 de 24"), "por qué cuota va");
-  assert.equal(lecturasDeSaldo, 1);
-  assert.equal(r!.newBotState, null, "la verificación no se queda guardada");
+  assert.doesNotMatch(r!.reply!, /nacimiento/i, "no se pide ningún dato");
+  assert.deepEqual(lecturas, ["p1"]);
+  assert.equal(r!.newBotState, null, "no queda nada esperando un segundo mensaje");
+  assert.equal(r!.handoff, undefined, "y el bot sigue activo en el hilo");
 });
 
-test("con la fecha EQUIVOCADA no dice nada de dinero", async () => {
-  const primero = await correr("¿cuánto debo?");
-  const r = await correr("01/01/1980", primero!.newBotState ?? null);
-  sinCifras(r!.reply, "una fecha que no cuadra no puede sacar un importe");
-  assert.equal(r!.reply, TEXTOS.noCuadra);
-  assert.equal(lecturasDeSaldo, 0, "el saldo no se consulta siquiera");
-  assert.equal(rastro[1].resultado, "verificacionFallida");
+test("sin fecha de nacimiento en el expediente, igual: no se le pide nada", async () => {
+  pacientes = [{ ...ANA, dob: null }];
+  const r = await correr("¿cuánto debo?");
+  assert.ok(r!.reply!.includes("$2,000.00"));
 });
 
-test("no se reintenta en bucle: a los dos fallos, se deriva a una persona", async () => {
-  let estado: BotJson | null = (await correr("¿cuánto debo?"))!.newBotState ?? null;
-  for (let i = 0; i < MAX_INTENTOS - 1; i++) {
-    const r = await correr("01/01/1980", estado);
-    estado = r!.newBotState ?? null;
-  }
-  const ultimo = await correr("02/02/1970", estado);
-  assert.equal(ultimo!.reply, TEXTOS.derivar);
-  assert.equal(ultimo!.handoff, true, "el hilo se pausa y lo toma el equipo");
-  assert.equal(ultimo!.newBotState, null, "y el intento se cierra: no se sigue probando");
-  assert.equal(lecturasDeSaldo, 0);
-  assert.equal(rastro.at(-1)!.resultado, "verificacionAgotada");
+test("sin plan a plazos también contesta a la primera", async () => {
+  saldos.p1 = null;
+  const r = await correr("¿cuánto debo?");
+  assert.equal(r!.reply, TEXTOS.sinPlan);
+  assert.equal(r!.newBotState, null);
 });
 
-test("un texto que no es una fecha cuenta como intento fallido, no como pregunta nueva", async () => {
-  const primero = await correr("¿cuánto debo?");
-  const r = await correr("no me acuerdo", primero!.newBotState ?? null);
-  sinCifras(r!.reply, "no hay atajo por no contestar");
-  assert.equal(r!.reply, TEXTOS.noCuadra);
+test("un hilo que se quedó esperando la fecha con las reglas viejas se contesta ya", async () => {
+  // Estado de antes del 23-sep-2026, a media verificación, en un número de
+  // UN paciente: lo que escriba se contesta, porque ya no hay nada que pedir.
+  const viejo = { flow: "saldo", patientId: "p1", intentos: 1, updatedAt: Date.now() } as unknown as BotJson;
+  const r = await correr("15/03/1990", viejo);
+  assert.ok(r!.reply!.includes("$2,000.00"));
+  assert.equal(r!.newBotState, null, "y el estado viejo se barre");
+
+  // Y si lo que escribe no es ni fecha ni dinero, no se le contesta el saldo.
+  assert.equal(await correr("quiero agendar una limpieza", viejo), null);
 });
 
-test("la verificación NO se hereda: la siguiente pregunta vuelve a pedir la fecha", async () => {
-  const primero = await correr("¿cuánto debo?");
-  const ok = await correr("15/03/1990", primero!.newBotState ?? null);
-  assert.ok(ok!.reply!.includes("$2,000.00"));
-  // El teléfono puede cambiar de manos entre una pregunta y la siguiente.
-  const otraVez = await correr("¿y mi saldo?", ok!.newBotState ?? null);
-  assert.equal(otraVez!.reply, TEXTOS.pideFecha, "se verifica otra vez, desde cero");
+test("un número sin paciente se deriva sin decir nada, y sin callar al bot", async () => {
+  pacientes = [];
+  const r = await correr("¿cuánto debo?");
+  assert.equal(r!.reply, TEXTOS.derivar);
+  assert.equal(r!.handoff, undefined, "no ha hecho nada que una persona tenga que mirar");
+  assert.deepEqual(lecturas, []);
+  assert.deepEqual(rastro.map((x) => [x.resultado, x.patientId]), [["pacienteNoEncontrado", null]]);
 });
 
-test("una verificación caducada no sirve para saltarse el paso", async () => {
-  const viejo = {
-    flow: "saldo",
-    patientId: "p1",
-    intentos: 0,
-    updatedAt: Date.now() - 60 * 60 * 1000, // una hora
-  };
-  const r = await correr("15/03/1990", viejo as unknown as BotJson);
-  // Caducado, deja de ser «estoy esperando una fecha»: «15/03/1990» ya no es
-  // una pregunta de saldo, así que el flujo devuelve null y sigue el motor.
-  assert.equal(r, null);
-  assert.equal(lecturasDeSaldo, 0);
+test("a un paciente dado de baja no se le habla de dinero", async () => {
+  pacientes = [{ ...ANA, activo: false }];
+  const r = await correr("¿cuánto debo?");
+  assert.equal(r!.reply, TEXTOS.derivar);
+  assert.deepEqual(lecturas, [], "ni se lee su saldo");
+  assert.deepEqual(rastro.map((x) => [x.resultado, x.patientId]), [["pacienteDeBaja", "p1"]]);
 });
 
-/* ═══ 3. EL TELÉFONO NO ES LA IDENTIDAD ════════════════════════════════ */
+/* ═══ 3. NÚMERO COMPARTIDO: SE DESAMBIGUA, NO SE ADIVINA ═══════════════ */
 
-const DOS_PACIENTES: PacienteSaldo[] = [
-  { id: "p1", firstName: "Ana", dob: DOB },
-  { id: "p2", firstName: "Luis", dob: "2015-06-01" },
-];
-
-test("un teléfono con DOS pacientes no se adivina: nunca se dice un saldo", async () => {
+test("con DOS pacientes, se pide la fecha y no se dice un peso", async () => {
   // Una mamá con dos hijos en la misma clínica es el caso NORMAL.
-  pacientes = DOS_PACIENTES;
-  const primero = await correr("¿cuánto debo?");
-  sinCifras(primero!.reply, "el primer turno no puede soltar un importe");
+  pacientes = [ANA, LUIS];
+  const r = await correr("¿cuánto debo?");
+  assert.equal(r!.reply, TEXTOS.pideFecha);
+  sinDinero(r!.reply, "antes de saber de quién, ni un importe");
+  assert.deepEqual(lecturas, [], "ni se consulta: elegir a uno sería enseñarle la deuda del otro");
+  assert.deepEqual(rastro.map((x) => [x.resultado, x.patientId]), [["fechaPedida", null]]);
+  assert.ok(r!.newBotState, "queda esperando la fecha");
+});
 
-  // Ni acertando la fecha de uno de los dos se contesta.
-  const segundo = await correr("15/03/1990", primero!.newBotState ?? null);
-  sinCifras(segundo!.reply, "no se dice el saldo de ninguno de los dos");
-  assert.equal(lecturasDeSaldo, 0, "ni se consulta: elegir a uno sería enseñarle la deuda del otro");
-  assert.ok(
-    rastro.some((r) => r.resultado === "telefonoCompartido"),
-    "y en el rastro consta POR QUÉ, aunque el paciente no lo vea",
+test("con la fecha, identifica a cuál y le contesta a ESE, no al otro", async () => {
+  pacientes = [ANA, LUIS];
+  const { segundo } = await preguntaYFecha("01/06/2015"); // la de Luis
+  assert.ok(segundo.reply!.includes("$750.00"), "la cuota de Luis");
+  assert.ok(segundo.reply!.includes("$4,500.00"), "y lo pendiente de Luis");
+  assert.doesNotMatch(segundo.reply!, /2,000|18,000/, "nada de lo de Ana");
+  assert.deepEqual(lecturas, ["p2"], "solo se leyó el dinero de Luis");
+  assert.equal(segundo.newBotState, null);
+  assert.deepEqual(rastro.at(-1), {
+    clinicId: "c1", threadId: "t1", patientId: "p2", telefono: "+52 999 260 2093",
+    resultado: "saldoEntregado",
+  });
+});
+
+test("con tres, igual: la fecha elige a uno", async () => {
+  pacientes = [ANA, LUIS, SOFIA];
+  const { segundo } = await preguntaYFecha("20 de noviembre de 2018");
+  assert.ok(segundo.reply!.includes("$990.00"));
+  assert.deepEqual(lecturas, ["p3"]);
+});
+
+test("si la fecha no cuadra con ninguno, deriva a una persona", async () => {
+  pacientes = [ANA, LUIS];
+  const { segundo } = await preguntaYFecha("01/01/1980");
+  assert.equal(segundo.reply, TEXTOS.derivar);
+  assert.equal(segundo.handoff, true, "el bot se calla en el hilo: lo que siga lo lee una persona");
+  assert.equal(segundo.intent, BotIntent.HANDOFF);
+  assert.deepEqual(lecturas, []);
+  assert.equal(rastro.at(-1)!.resultado, "fechaSinCoincidencia");
+  assert.equal(segundo.newBotState, null, "no se deja seguir probando fechas en el acto");
+});
+
+test("si la fecha es de dos (gemelos), no elige a ninguno: deriva", async () => {
+  pacientes = [ANA, { ...LUIS, dob: ANA.dob }];
+  const { segundo } = await preguntaYFecha("15/03/1990");
+  assert.equal(segundo.reply, TEXTOS.derivar);
+  assert.equal(segundo.handoff, true);
+  assert.deepEqual(lecturas, []);
+  assert.equal(rastro.at(-1)!.resultado, "fechaAmbigua");
+});
+
+test("un paciente sin fecha en el expediente no se elige nunca por fecha", async () => {
+  pacientes = [{ ...ANA, dob: null }, LUIS];
+  const { segundo } = await preguntaYFecha("15/03/1990");
+  assert.equal(segundo.reply, TEXTOS.derivar);
+  assert.deepEqual(lecturas, []);
+});
+
+test("algo que no es una fecha: se vuelve a pedir una vez, y a la segunda deriva", async () => {
+  pacientes = [ANA, LUIS];
+  const { segundo } = await preguntaYFecha("no me acuerdo");
+  assert.equal(segundo.reply, TEXTOS.fechaIlegible);
+  assert.ok(segundo.newBotState, "sigue esperando la fecha");
+  const tercero = await correr("la de mi hijo", segundo.newBotState ?? null);
+  assert.equal(tercero!.reply, TEXTOS.derivar, "falló dos veces: se acabó");
+  assert.equal(tercero!.handoff, true);
+  assert.equal(tercero!.newBotState, null);
+  assert.deepEqual(lecturas, []);
+  assert.deepEqual(
+    rastro.map((x) => x.resultado),
+    ["fechaPedida", "fechaIlegible", "intentosAgotados"],
+    "y la nota dice que se derivó, no solo que no era una fecha",
   );
 });
 
-test("con dos pacientes se agotan los intentos y ahí sí lo ve una persona", async () => {
-  pacientes = DOS_PACIENTES;
-  // Insistir no sirve de nada: cada respuesta cuenta como intento gastado y al
-  // segundo se acaba, igual que para cualquier otro que no acierte.
-  const t1 = await correr("¿cuánto debo?");
-  const t2 = await correr("15/03/1990", t1!.newBotState ?? null);
-  assert.equal(t2!.reply, TEXTOS.noCuadra, "primer intento gastado");
-  const t3 = await correr("15/03/1990", t2!.newBotState ?? null);
-  assert.equal(t3!.reply, TEXTOS.derivar, "segundo: se acabó");
-  assert.equal(t3!.handoff, true, "el hilo pasa al equipo");
-  assert.equal(lecturasDeSaldo, 0, "y nunca se consultó el dinero de ninguno de los dos");
+test("tras el reintento, una fecha buena sí contesta", async () => {
+  pacientes = [ANA, LUIS];
+  const { segundo } = await preguntaYFecha("no sé");
+  const tercero = await correr("15/03/1990", segundo.newBotState ?? null);
+  assert.ok(tercero!.reply!.includes("$2,000.00"));
+  assert.deepEqual(lecturas, ["p1"]);
 });
 
-test("si el número pasa a ser de dos pacientes A MEDIA verificación, la fecha ya no basta", async () => {
-  const primero = await correr("¿cuánto debo?");
-  pacientes = DOS_PACIENTES;
-  const r = await correr("15/03/1990", primero!.newBotState ?? null);
-  sinCifras(r!.reply, "la fecha correcta ya no basta");
-  assert.equal(lecturasDeSaldo, 0);
-});
-
-test("un número que no es de ningún paciente no se entera de que no lo es", async () => {
-  pacientes = [];
+test("pedir la fecha no calla al bot: es una pregunta, no una derivación", async () => {
+  pacientes = [ANA, LUIS];
   const r = await correr("¿cuánto debo?");
-  assert.equal(r!.reply, TEXTOS.pideFecha, "se le pide la fecha igual que a todo el mundo");
-  assert.equal(rastro[0].resultado, "verificacionPedida");
-  assert.equal(rastro[0].patientId, null, "pero no se atribuye a nadie");
+  assert.equal(r!.handoff, undefined);
+  assert.notEqual(r!.intent, BotIntent.HANDOFF);
 });
 
-test("sin fecha de nacimiento en el expediente no se inventa otra pregunta más débil", async () => {
-  pacientes = [{ id: "p1", firstName: "Ana", dob: null }];
+test("si a media pregunta el número se queda con UN paciente, la fecha de otro NO saca su deuda", async () => {
+  // Ana responde con SU fecha, pero entretanto su teléfono cambió en la ficha
+  // y en el número solo queda Luis.
+  pacientes = [ANA, LUIS];
   const primero = await correr("¿cuánto debo?");
+  pacientes = [LUIS];
   const r = await correr("15/03/1990", primero!.newBotState ?? null);
-  sinCifras(r!.reply, "sin con qué verificar, no se contesta");
-  assert.equal(lecturasDeSaldo, 0);
-  assert.ok(rastro.some((x) => x.resultado === "sinFechaDeNacimiento"));
+  assert.equal(r!.reply, TEXTOS.derivar, "Ana no puede recibir lo de Luis");
+  assert.deepEqual(lecturas, []);
 });
 
-test("EL ORÁCULO: el primer mensaje es idéntico exista o no el paciente", async () => {
-  // Si el bot contestara «esto lo ve una persona» solo cuando el número NO es
-  // de un paciente, cualquiera averiguaría con UN mensaje si el número que
-  // acaba de heredar pertenece a un paciente de la clínica.
-  const respuestas = new Set<string>();
+test("…y la fecha del que queda, sí", async () => {
+  pacientes = [ANA, LUIS];
+  const primero = await correr("¿cuánto debo?");
+  pacientes = [LUIS];
+  const r = await correr("01/06/2015", primero!.newBotState ?? null);
+  assert.ok(r!.reply!.includes("$750.00"));
+  assert.deepEqual(lecturas, ["p2"]);
+});
 
-  pacientes = [{ id: "p1", firstName: "Ana", dob: DOB }];
-  respuestas.add((await correr("¿cuánto debo?"))!.reply!);
+/* ═══ 3a. LOS DADOS DE BAJA CUENTAN PARA DESAMBIGUAR ═══════════════════ */
+
+test("mamá activa + hijo dado de baja en el mismo número: NO es un número de un paciente", async () => {
+  // Si solo contaran los activos, el hijo que escribe «¿cuánto debo?» desde
+  // el teléfono de su mamá recibiría la deuda de ella como si fuera suya.
+  pacientes = [ANA, { ...LUIS, activo: false }];
+  const r = await correr("¿cuánto debo?");
+  assert.equal(r!.reply, TEXTOS.pideFecha, "se pregunta de quién se trata");
+  assert.deepEqual(lecturas, []);
+});
+
+test("con la fecha del hijo dado de baja, no se dice nada de nadie", async () => {
+  pacientes = [ANA, { ...LUIS, activo: false }];
+  const { segundo } = await preguntaYFecha("01/06/2015");
+  assert.equal(segundo.reply, TEXTOS.derivar);
+  assert.deepEqual(lecturas, []);
+  assert.equal(rastro.at(-1)!.resultado, "pacienteDeBaja");
+});
+
+test("con la fecha de la mamá, se le contesta a ella", async () => {
+  pacientes = [ANA, { ...LUIS, activo: false }];
+  const { segundo } = await preguntaYFecha("15/03/1990");
+  assert.ok(segundo.reply!.includes("$2,000.00"));
+  assert.deepEqual(lecturas, ["p1"]);
+});
+
+/* ═══ 3b. NO SE REINTENTA EN BUCLE ═════════════════════════════════════ */
+
+test("preguntar otra vez NO regala intentos nuevos: el tope es por día", async () => {
+  // Si el contador viviera solo en la sesión, cada «¿cuánto debo?» nuevo
+  // daría otros dos intentos y se podrían probar fechas sin fin.
+  pacientes = [ANA, LUIS];
+  await preguntaYFecha("01/01/1980"); // fallo 1 (deriva)
+  const otra = await preguntaYFecha("02/02/1970"); // fallo 2 (deriva)
+  assert.equal(otra.segundo.reply, TEXTOS.derivar);
+  const tercera = await correr("¿cuánto debo?");
+  assert.equal(tercera!.reply, TEXTOS.derivar, "ya ni se le pregunta la fecha");
+  assert.equal(tercera!.handoff, true);
+  assert.equal(rastro.at(-1)!.resultado, "intentosAgotados");
+  assert.deepEqual(lecturas, []);
+});
+
+test("con los fallos del día agotados, ni la fecha buena sirve", async () => {
+  pacientes = [ANA, LUIS];
+  fallosPrevios = MAX_FALLOS;
+  const r = await correr("15/03/1990", { flow: "saldo", updatedAt: Date.now() } as unknown as BotJson);
+  assert.equal(r!.reply, TEXTOS.derivar);
+  assert.deepEqual(lecturas, []);
+});
+
+test("pero un paciente que acierta a la primera no paga por un fallo ajeno", async () => {
+  pacientes = [ANA, LUIS];
+  fallosPrevios = MAX_FALLOS - 1;
+  const { segundo } = await preguntaYFecha("15/03/1990");
+  assert.ok(segundo.reply!.includes("$2,000.00"));
+});
+
+test("el tope no toca al número de un solo paciente: ahí no hay nada que adivinar", async () => {
+  fallosPrevios = MAX_FALLOS;
+  const r = await correr("¿cuánto debo?");
+  assert.ok(r!.reply!.includes("$2,000.00"));
+});
+
+test("las respuestas que no contestan no delatan por qué", async () => {
+  // Sin paciente, fecha de nadie, gemelos, intentos agotados: el mismo texto.
+  const respuestas = new Set<string>();
   pacientes = [];
   respuestas.add((await correr("¿cuánto debo?"))!.reply!);
-  pacientes = [{ id: "p1", firstName: "Ana", dob: null }];
+  pacientes = [ANA, LUIS];
+  respuestas.add((await preguntaYFecha("01/01/1980")).segundo.reply!);
+  pacientes = [ANA, { ...LUIS, dob: ANA.dob }];
+  respuestas.add((await preguntaYFecha("15/03/1990")).segundo.reply!);
+  pacientes = [ANA, LUIS];
+  fallosPrevios = MAX_FALLOS;
   respuestas.add((await correr("¿cuánto debo?"))!.reply!);
-  pacientes = DOS_PACIENTES;
-  respuestas.add((await correr("¿cuánto debo?"))!.reply!);
-
-  assert.equal(respuestas.size, 1, "un solo texto para los cuatro casos");
+  assert.deepEqual([...respuestas], [TEXTOS.derivar]);
 });
 
-test("y el segundo mensaje tampoco distingue: quien no es paciente «falla la fecha»", async () => {
-  const respuestas = new Set<string>();
-  for (const caso of [
-    [{ id: "p1", firstName: "Ana", dob: DOB }] as PacienteSaldo[], // paciente real, fecha mal
-    [] as PacienteSaldo[],
-    [{ id: "p1", firstName: "Ana", dob: null }] as PacienteSaldo[],
-    DOS_PACIENTES,
-  ]) {
-    rastro = [];
-    fallosPrevios = 0;
-    pacientes = caso;
-    const primero = await correr("¿cuánto debo?");
-    respuestas.add((await correr("01/01/1980", primero!.newBotState ?? null))!.reply!);
-  }
-  assert.equal(respuestas.size, 1, "todos reciben el mismo «esa fecha no me coincide»");
-});
+/* ═══ 3c. EL RASTRO ════════════════════════════════════════════════════ */
 
-/* ═══ 3b. EL CONTADOR NO SE REINICIA SOLO ══════════════════════════════ */
-
-test("esperar a que caduque la sesión NO regala intentos nuevos", async () => {
-  // El agujero: el estado del hilo caduca a los 10 min. Si el contador viviera
-  // solo ahí, bastaría esperar once minutos entre intento e intento para
-  // probar fechas indefinidamente — 144 al día, para siempre.
-  fallosPrevios = 1; // ya falló una vez hace rato; la sesión ya caducó
-  const r = await correr("¿cuánto debo?"); // pregunta NUEVA, sin estado
-  assert.equal(r!.reply, TEXTOS.noCuadra === r!.reply ? TEXTOS.noCuadra : TEXTOS.pideFecha);
-  // Falla otra vez: con el previo ya son dos, y se acabó.
-  const segundo = await correr("01/01/1980", r!.newBotState ?? null);
-  assert.equal(segundo!.reply, TEXTOS.derivar, "el fallo viejo SÍ contaba");
-  assert.equal(segundo!.handoff, true);
-  assert.equal(lecturasDeSaldo, 0);
-});
-
-test("con los intentos ya agotados no se vuelve ni a preguntar", async () => {
-  fallosPrevios = MAX_INTENTOS;
-  const r = await correr("¿cuánto debo?");
-  assert.equal(r!.reply, TEXTOS.derivar, "no se le da otra oportunidad de probar");
-  assert.equal(r!.handoff, true);
-  assert.equal(lecturasDeSaldo, 0);
-});
-
-test("pero un paciente que acierta a la primera no paga por fallos ajenos", async () => {
-  fallosPrevios = MAX_INTENTOS - 1;
-  const primero = await correr("¿cuánto debo?");
-  const r = await correr("15/03/1990", primero!.newBotState ?? null);
-  assert.ok(r!.reply!.includes("$2,000.00"), "acertar sigue funcionando");
-});
-
-/* ═══ 4. EL RASTRO ═════════════════════════════════════════════════════ */
-
-test("la consulta de saldo deja rastro de quién preguntó y qué se contestó", async () => {
-  const primero = await correr("¿cuánto debo?");
-  await correr("15/03/1990", primero!.newBotState ?? null);
-
-  assert.equal(rastro.length, 2, "se anota el intento y la entrega");
-  const entrega = rastro[1];
-  assert.equal(entrega.resultado, "saldoEntregado", "consta que SÍ se dijo el saldo");
-  assert.equal(entrega.patientId, "p1", "de quién");
-  assert.equal(entrega.clinicId, "c1");
-  assert.equal(entrega.threadId, "t1", "y en qué conversación");
-  assert.ok(entrega.telefono, "desde qué número");
+test("contestar el saldo deja rastro de quién preguntó y qué se contestó", async () => {
+  await correr("¿cuánto debo?");
+  assert.equal(rastro.length, 1, "un acceso, una nota");
+  assert.deepEqual(rastro[0], {
+    clinicId: "c1", threadId: "t1", patientId: "p1", telefono: "+52 999 260 2093",
+    resultado: "saldoEntregado",
+  });
 });
 
 test("el rastro se escribe ANTES de soltar el dato, no después", async () => {
@@ -379,24 +440,43 @@ test("el rastro se escribe ANTES de soltar el dato, no después", async () => {
       return d.registrarConsulta(datos);
     },
   };
-  const cfg = config();
-  const primero = await runSaldoTurn(turno("¿cuánto debo?"), cfg, espia);
-  await runSaldoTurn(turno("15/03/1990", primero!.newBotState ?? null), cfg, espia);
-  assert.deepEqual(orden, ["registra:verificacionPedida", "lee", "registra:saldoEntregado"]);
+  pacientes = [ANA, LUIS];
+  const primero = await runSaldoTurn(turno("¿cuánto debo?"), config(), espia);
+  await runSaldoTurn(turno("15/03/1990", primero!.newBotState ?? null), config(), espia);
+  assert.deepEqual(orden, ["registra:fechaPedida", "lee", "registra:saldoEntregado"]);
 });
 
 test("también queda rastro cuando NO hay nada que cobrar", async () => {
-  resumen = null;
-  const primero = await correr("¿cuánto debo?");
-  const r = await correr("15/03/1990", primero!.newBotState ?? null);
-  assert.equal(r!.reply, TEXTOS.sinPlan);
-  assert.equal(rastro[1].resultado, "sinPlan");
+  saldos.p1 = null;
+  await correr("¿cuánto debo?");
+  assert.deepEqual(rastro.map((x) => [x.resultado, x.patientId]), [["sinPlan", "p1"]]);
 });
 
-/* ═══ 5. SE CONTESTA LO MÍNIMO ═════════════════════════════════════════ */
+test("los sufijos del rastro que cuentan como fallo no se confunden con otros", () => {
+  // El shell cuenta con `endsWith(sufijoDelRastro(r))`: si el sufijo de un
+  // resultado cualquiera terminara igual que el de un fallo, contaría de más
+  // (o, al revés, un fallo no contaría).
+  const todos = [
+    "saldoEntregado", "sinPlan", "pacienteNoEncontrado", "pacienteDeBaja", "fechaPedida",
+    "fechaIlegible", "fechaSinCoincidencia", "fechaAmbigua", "intentosAgotados",
+  ] as const;
+  for (const fallo of RESULTADOS_FALLIDOS) {
+    const cuentan = todos.filter((r) => `sys:system:x${sufijoDelRastro(r)}`.endsWith(sufijoDelRastro(fallo)));
+    assert.deepEqual(cuentan, [fallo]);
+  }
+});
+
+test("elegirPorFecha: los cuatro desenlaces", () => {
+  assert.deepEqual(elegirPorFecha([ANA, LUIS], "15/03/1990"), { tipo: "uno", paciente: ANA });
+  assert.deepEqual(elegirPorFecha([ANA, LUIS], "01/01/1980"), { tipo: "ninguno" });
+  assert.deepEqual(elegirPorFecha([ANA, { ...LUIS, dob: ANA.dob }], "15/03/1990"), { tipo: "varios" });
+  assert.deepEqual(elegirPorFecha([ANA, LUIS], "no sé"), { tipo: "ilegible" });
+});
+
+/* ═══ 4. SE CONTESTA LO MÍNIMO ═════════════════════════════════════════ */
 
 test("la respuesta lleva la cuota y lo pendiente, y nada más", async () => {
-  const texto = textoDelSaldo(resumen!, { importe: (n) => `$${n}`, fecha: (f) => f });
+  const texto = textoDelSaldo(saldos.p1!, { importe: (n) => `$${n}`, fecha: (f) => f });
   assert.ok(texto.includes("$2000"), "la cuota");
   assert.ok(texto.includes("$18000"), "lo pendiente");
   // Ni historial, ni tratamientos, ni procedimientos.
@@ -405,7 +485,7 @@ test("la respuesta lleva la cuota y lo pendiente, y nada más", async () => {
 
 test("si va atrasado se le dice, sin regañarlo", async () => {
   const texto = textoDelSaldo(
-    { ...resumen!, tieneVencidas: true },
+    { ...saldos.p1!, tieneVencidas: true },
     { importe: (n) => `$${n}`, fecha: (f) => f },
   );
   assert.match(texto, /atrasado/);
@@ -413,14 +493,14 @@ test("si va atrasado se le dice, sin regañarlo", async () => {
 
 test("el enganche se llama enganche, no «mensualidad 0»", async () => {
   const texto = textoDelSaldo(
-    { ...resumen!, esEnganche: true, numeroCuota: 0 },
+    { ...saldos.p1!, esEnganche: true, numeroCuota: 0 },
     { importe: (n) => `$${n}`, fecha: (f) => f },
   );
   assert.match(texto, /enganche/);
   assert.doesNotMatch(texto, /mensualidad 0/);
 });
 
-/* ═══ 6. CUÁNDO SE DA POR ALUDIDO ══════════════════════════════════════ */
+/* ═══ 5. CUÁNDO SE DA POR ALUDIDO ══════════════════════════════════════ */
 
 test("reconoce las formas normales de preguntar por dinero", async () => {
   for (const frase of [
@@ -438,8 +518,8 @@ test("reconoce las formas normales de preguntar por dinero", async () => {
 });
 
 test("NO secuestra una conversación normal", async () => {
-  // Un falso positivo aquí le pide a un paciente su fecha de nacimiento sin
-  // venir a cuento, en mitad de otra cosa.
+  // Un falso positivo aquí le suelta a un paciente su deuda sin que la haya
+  // pedido, en mitad de otra cosa.
   for (const frase of [
     "hola",
     "quiero una cita para el lunes",
@@ -458,7 +538,7 @@ test("una pregunta que no es de saldo devuelve null y el motor sigue", async () 
   assert.equal(rastro.length, 0);
 });
 
-/* ═══ 7. LA FECHA DE NACIMIENTO, ESTRICTA ══════════════════════════════ */
+/* ═══ 6. LA FECHA DE NACIMIENTO, ESTRICTA ══════════════════════════════ */
 
 test("acepta las formas en que la gente escribe una fecha", async () => {
   assert.equal(parseFechaNacimiento("15/03/1990"), "1990-03-15");
@@ -468,7 +548,7 @@ test("acepta las formas en que la gente escribe una fecha", async () => {
   assert.equal(parseFechaNacimiento("nací el 15 de Marzo de 1990"), "1990-03-15");
 });
 
-test("exige el año completo: sin él no hay verificación que valga", async () => {
+test("exige el año completo: sin él no hay fecha que elija a nadie", async () => {
   // `parseDateInput` (el de agendar) rellenaría el año actual y daría por buena
   // una fecha que el paciente nunca quiso decir.
   assert.equal(parseFechaNacimiento("15/03"), null);
