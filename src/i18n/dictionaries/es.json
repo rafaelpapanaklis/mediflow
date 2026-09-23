@@ -10049,5 +10049,20 @@
       "sin_mp": "Esta clínica aún no acepta pagos en línea. Paga directamente en tu clínica.",
       "mp_fallo": "Mercado Pago no respondió. Intenta de nuevo en unos minutos."
     }
+  },
+  "anticiposPortal": {
+    "titulo": "Pago en línea en el portal del paciente",
+    "subtitulo": "Tus pacientes pagan el saldo de sus facturas desde su portal, con un botón y un QR de Mercado Pago. El pago se registra solo en la factura.",
+    "interruptor": "Ofrecer pagar con Mercado Pago en el portal",
+    "interruptorAyuda": "Se enciende solo al conectar la cuenta. Apagado, el portal dice «Paga en tu clínica» y los links que se abrieron desde el portal dejan de aceptar pagos. Los links que mandes tú por WhatsApp o correo no cambian.",
+    "insigniaEncendido": "Encendido",
+    "insigniaApagado": "Apagado",
+    "confirmarTitulo": "¿Apagar el pago en línea del portal?",
+    "confirmarTexto": "Tus pacientes verán «Paga en tu clínica» en sus facturas, y los links de pago que abrieron desde el portal se cierran en Mercado Pago. Lo puedes volver a encender cuando quieras.",
+    "confirmarBoton": "Apagar",
+    "encendido": "Listo: tus pacientes pueden pagar sus facturas desde el portal.",
+    "apagado": "Apagado. El portal dice «Paga en tu clínica».",
+    "errorGuardar": "No se pudo guardar. Intenta de nuevo.",
+    "conectadaAviso": "El pago en línea del portal del paciente quedó encendido."
   }
 }

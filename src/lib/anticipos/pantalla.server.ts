@@ -34,6 +34,12 @@ export interface PantallaAnticipos {
   plataforma: PlataformaAnticipos;
   cuenta: EstadoCuentaMp;
   config: { activo: boolean; modo: ModoAnticipo; monto: number; porcentaje: number; minutos: number };
+  /**
+   * Pago en línea desde el portal del paciente (ws1-t2), APARTE del anticipo.
+   * `activo` solo puede ser true con cuenta conectada; la columna arranca en
+   * true (DEFAULT) y se vuelve a encender al conectar.
+   */
+  portal: { activo: boolean };
   /** Solo lectura para la clínica: la fija DaleControl. Arranca en 0. */
   comision: { modo: ModoComision; valor: number };
   recientes: AnticipoReciente[];
@@ -55,6 +61,7 @@ function vacia(plataforma: PlataformaAnticipos, tablasListas: boolean): Pantalla
     plataforma,
     cuenta: SIN_CUENTA,
     config: { activo: false, modo: "fixed", monto: 0, porcentaje: 0, minutos: MINUTOS_DEFAULT },
+    portal: { activo: false },
     comision: { modo: "fixed", valor: 0 },
     recientes: [],
   };
@@ -72,6 +79,7 @@ const SELECT_CUENTA = {
   depositAmount: true,
   depositPercent: true,
   holdMinutes: true,
+  portalPaymentsEnabled: true,
   marketplaceFeeMode: true,
   marketplaceFeeValue: true,
   // ¿Hay token? Se pregunta por la fecha, no se lee el token.
@@ -159,6 +167,7 @@ export async function leerPantallaAnticipos(
         porcentaje: fila?.depositPercent ?? 0,
         minutos: fila?.holdMinutes ?? MINUTOS_DEFAULT,
       },
+      portal: { activo: conectada && plataforma.lista && fila?.portalPaymentsEnabled !== false },
       comision: {
         modo: (fila?.marketplaceFeeMode as ModoComision) ?? "fixed",
         valor: fila?.marketplaceFeeValue ?? 0,

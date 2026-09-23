@@ -96,6 +96,9 @@ export async function guardarConexion(
     connectedAt: ahora,
     connectedById: args.userId,
     disconnectedAt: null,
+    // Conectar ya es decir «quiero cobrar en línea»: el pago del portal se
+    // enciende (también al reconectar después de haberlo apagado).
+    portalPaymentsEnabled: true,
   };
   await db.clinicMercadoPago.upsert({
     where: { clinicId: args.clinicId },
