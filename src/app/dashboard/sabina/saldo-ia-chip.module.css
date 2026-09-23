@@ -1,0 +1,60 @@
+/* El chip «Saldo IA» de la cabecera de Sabina (ws1-t5).
+   Solo tokens de globals.css: se ve igual con las dos pieles y en oscuro
+   (`--brand-soft` sube sola su opacidad en `.dark`). Ni un hexadecimal. */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, transparent);
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .chip:hover {
+    background: color-mix(in srgb, var(--brand) 16%, transparent);
+    border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+  }
+}
+
+/* En oscuro el violeta de marca sobre el fondo casi negro no se lee (medido
+   en arnés). El texto sube a la rampa clara del panel —`--brand-300`, que
+   dentro de `.dashboard-shell` es violeta—; el fondo y el borde siguen
+   saliendo de `--brand`/`--brand-soft`. */
+:global(.dark) .chip {
+  color: hsl(var(--brand-300));
+  border-color: color-mix(in srgb, var(--brand) 55%, transparent);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.icono {
+  flex-shrink: 0;
+}
+
+.importe {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* Con la cifra delante, en un teléfono la etiqueta sobra: queda el monedero
+   y el importe. Sin cifra (aún cargando, o sin dato) la etiqueta se queda. */
+@media (max-width: 480px) {
+  .chip:has(.importe) .texto {
+    display: none;
+  }
+}

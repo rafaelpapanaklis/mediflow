@@ -336,10 +336,16 @@
   white-space: nowrap;
 }
 
-/* ── EL DÍA BLOQUEADO, EN EL TÍTULO (ws1-t3) ────────────────────────────
+/* ── EL DÍA BLOQUEADO, EN SU PROPIA LÍNEA (ws1-t3 → ws1-t5) ─────────────
    «que diga mantenimiento… un tipo fondo amarillo… con un icono como el del
    buzón para que la persona sepa que ese día hay mantenimiento o está
    cerrada la clínica».
+
+   En ws1-t3 el aviso iba DENTRO del título de la barra; a 1400 px se cortaba
+   justo el motivo, que es lo que hace útil el aviso. Ahora es una franja
+   debajo de la barra, a todo lo ancho de la agenda: el motivo tiene sitio
+   (hasta dos líneas) a cualquier ancho, y la barra recupera los ~60 px que
+   le quitaba.
 
    Los colores salen de los `--ag-ambar-*` de esta misma hoja, que ya tienen
    su pareja en el bloque `:global(.dark)` de arriba: en claro el texto es
@@ -347,64 +353,57 @@
    amarillo al 18 % de opacidad. Ni un hexadecimal.
 
    🔴 Y el amarillo NO es lo único que lo dice: va el triángulo delante y el
-   MOTIVO escrito al lado. Sin ver un solo color se entiende igual.
+   MOTIVO escrito. Sin ver un solo color se entiende igual.
 
    ⛔ Esto NO se pone cuando el día está cerrado por el HORARIO SEMANAL: eso
    sigue siendo el «Cerrado» gris de siempre. Ver `barra-herramientas.tsx`. */
-.tituloBloqueado,
-.tituloBloqueadoDoctor {
-  padding: 5px 10px;
-  border-radius: var(--ag-r-9);
-  /* Ahora sí puede ceder: con el motivo dentro, el título es lo más ancho de
-     la barra y a 1280 px o menos tiene que poder encogerse. */
-  flex-shrink: 1;
-  min-width: 0;
+.avisoBloqueo {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 24px;
+  border-bottom: 1px solid var(--ag-borde-divisor);
+  color: var(--ag-ambar-texto);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  position: relative;
+  z-index: 5;
 }
 
 /* TODA LA CLÍNICA — cierra a todo el mundo: el amarillo va lleno. */
-.tituloBloqueado {
+.avisoBloqueoClinica {
   background: var(--ag-ambar-fondo);
-  box-shadow: inset 0 0 0 1px var(--ag-ambar-borde);
+  box-shadow: inset 0 -1px 0 var(--ag-ambar-borde);
 }
 
-/* UN DOCTOR — los demás siguen atendiendo, así que NO se pinta la barra
+/* UN DOCTOR — los demás siguen atendiendo, así que NO se pinta la franja
    entera del mismo amarillo: fondo apenas teñido y el filete a la izquierda.
    La diferencia se ve de un vistazo sin tener que leer de quién es. */
-.tituloBloqueadoDoctor {
+.avisoBloqueoDoctor {
   background: var(--ag-ambar-claro);
   box-shadow: inset 3px 0 0 var(--ag-ambar-icono);
 }
 
-.tituloBloqueoIcono {
+.avisoBloqueoIcono {
   flex: none;
   color: var(--ag-ambar-icono);
+  margin-top: 1px;
 }
 
-.tituloBloqueado .tituloTexto,
-.tituloBloqueadoDoctor .tituloTexto {
-  color: var(--ag-ambar-texto);
-}
-
-.tituloBloqueoSep {
-  color: var(--ag-ambar-texto);
-  opacity: 0.5;
-  flex: none;
-}
-
-.tituloBloqueoMotivo {
-  font-size: 13.5px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--ag-ambar-texto);
-  /* Un motivo de 200 caracteres no puede empujar la barra: se recorta y el
-     completo queda en el `title`. */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.avisoBloqueoTexto {
   min-width: 0;
+  /* Un motivo de 200 caracteres cabe en dos líneas a casi cualquier ancho;
+     si aun así sobra, se recorta y el completo queda en el `title`. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.tituloBloqueoMas {
+.avisoBloqueoMas {
   font-size: 11px;
   font-weight: 700;
   padding: 2px 6px;
@@ -413,6 +412,7 @@
   color: var(--ag-ambar-texto-2);
   flex: none;
   white-space: nowrap;
+  margin-top: 1px;
 }
 
 /* Solo para lectores de pantalla. No `display:none`: eso lo esconde también
@@ -427,20 +427,6 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-/* A 390 px la barra ya hace scroll horizontal (ver «Pantallas estrechas»),
-   pero el motivo no puede comerse el título: por debajo de 900 px se recorta
-   antes él, y el chip «+N» desaparece —el `title` y el lector siguen
-   diciéndolo—. */
-@media (max-width: 900px) {
-  .tituloBloqueoMotivo {
-    max-width: 38vw;
-  }
-
-  .tituloBloqueoMas {
-    display: none;
-  }
 }
 
 /* ── Filtro doctores + unidades ── */
@@ -707,6 +693,16 @@
 }
 
 .etiquetaBoton {
+  display: inline;
+}
+
+/* El salto de fila de la barra: no existe en escritorio. Por debajo de
+   1024 px (ver «Pantallas estrechas») ocupa toda la fila y parte la barra. */
+.salto {
+  display: none;
+}
+
+.etiquetaValidar {
   display: inline;
 }
 
@@ -2052,15 +2048,74 @@ a.panelNombre:hover {
   }
 }
 
-@media (max-width: 1023px) {
+/* ═══ La barra en dos filas (ws1-t5) ═══════════════════════════════════
+   Medido: la barra entera pide ~1 154 px (y ~1 214 con el bloqueo dentro).
+   Por debajo de 1024 px el menú es un cajón y no hay sitio ni con los
+   botones en icono, así que hasta ahora desbordaba y hacía scroll a lo
+   ancho —ya antes de los bloqueos—. Lo que hace una recepcionista con el
+   teléfono es VER EL DÍA y AGENDAR: eso va en la primera fila (flechas,
+   Hoy, el título y «Nueva cita»); las vistas, «por validar», el filtro y
+   «Buscar espacio» bajan a la segunda. El orden del árbol no cambia (el
+   escritorio se pinta igual, byte por byte): aquí solo se reordena con
+   `order` y se abre la fila con `.salto`. Sin `overflow-x: auto`: ya no
+   hace falta y, de paso, dejaba de recortar el desplegable del filtro. */
+@media (max-width: 1023.98px) {
   .barra {
+    height: auto;
+    flex-wrap: wrap;
     gap: 8px;
-    padding: 0 12px;
-    overflow-x: auto;
+    padding: 8px 12px;
   }
 
   .tituloTexto {
     font-size: 16px;
+  }
+
+  .navFecha {
+    order: 1;
+  }
+
+  .titulo {
+    order: 2;
+    flex: 1 1 0;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .botonNuevaCita {
+    order: 3;
+  }
+
+  .salto {
+    order: 4;
+    display: block;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .segmentado {
+    order: 5;
+  }
+
+  .espaciador {
+    order: 6;
+  }
+
+  .botonValidar {
+    order: 7;
+  }
+
+  .filtroCaja {
+    order: 8;
+  }
+
+  .botonHuecos {
+    order: 9;
+  }
+
+  .avisoBloqueo {
+    padding: 6px 12px;
+    font-size: 13px;
   }
 
   /* El ancho mínimo lo decide cada vista con `anchoMinimoColumna` (Semana lo
@@ -2093,6 +2148,14 @@ a.panelNombre:hover {
     width: 34px;
     padding: 0;
     justify-content: center;
+  }
+}
+
+/* Teléfono: «3 por validar» se queda en «3» con su escudo; el nombre entero
+   sigue en el botón para el lector (aria) y el número se lee solo. */
+@media (max-width: 479.98px) {
+  .etiquetaValidar {
+    display: none;
   }
 }
 

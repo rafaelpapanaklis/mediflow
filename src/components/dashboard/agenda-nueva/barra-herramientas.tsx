@@ -11,6 +11,13 @@
  * La fecha NO vive aquí: se navega con `setDay` del provider de siempre, que
  * cambia el `?date=` de la URL. Así un enlace a un día concreto sigue
  * funcionando y el botón «atrás» del navegador hace lo que se espera.
+ *
+ * ws1-t5: el aviso del día bloqueado ya no va DENTRO del título (a 1400 px se
+ * cortaba justo el motivo, que es lo útil): va en su propia línea, debajo de
+ * la barra y a todo lo ancho. Y por debajo de 1024 px la barra se parte en
+ * dos filas (fecha + Nueva cita arriba; vistas, validar, filtro y Buscar
+ * espacio abajo) en vez de desbordar a lo ancho: eso lo hace el CSS con
+ * `order` y el `salto`, sin cambiar el orden del árbol ni el escritorio.
  */
 
 import { useMemo } from "react";
@@ -95,6 +102,7 @@ export function BarraHerramientas() {
   );
 
   return (
+    <>
     <div className={s.barra}>
       {/* ── Día / Semana / Mes ── */}
       <div className={s.segmentado} role="tablist" aria-label="Vista de la agenda">
@@ -139,64 +147,19 @@ export function BarraHerramientas() {
         </button>
       </div>
 
-      {/* ── Título del periodo ──
-          Con un bloqueo encima, el propio título se convierte en el aviso:
-          fondo amarillo, triángulo y el motivo escrito al lado. No es una
-          fila nueva a propósito — la barra mide 64 px y a 390 px una segunda
-          fila empujaría la rejilla fuera de la pantalla. */}
-      <div
-        className={[
-          s.titulo,
-          avisoBloqueo
-            ? avisoBloqueo.principal.doctorId === null
-              ? s.tituloBloqueado
-              : s.tituloBloqueadoDoctor
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
-        {/* El icono va ANTES del texto y no es decorativo: junto al motivo
-            escrito, el aviso se entiende sin ver un solo color. */}
-        {avisoBloqueo && (
-          <AlertTriangle
-            size={17}
-            strokeWidth={2.3}
-            className={s.tituloBloqueoIcono}
-            aria-hidden
-          />
-        )}
+      {/* ── Título del periodo ── El aviso del día bloqueado ya no va aquí
+          dentro (ws1-t5): tiene su franja debajo de la barra, ver abajo. */}
+      <div className={s.titulo}>
         <h1 className={s.tituloTexto}>{titulo}</h1>
-        {avisoBloqueo && textoBloqueo && (
-          <>
-            <span className={s.tituloBloqueoSep} aria-hidden>
-              ·
-            </span>
-            <span
-              className={s.tituloBloqueoMotivo}
-              // El motivo puede medir 200 caracteres y en la barra se recorta
-              // con puntos suspensivos: el completo queda al pasar el ratón.
-              title={textoBloqueo}
-            >
-              {textoBloqueo}
-            </span>
-            {avisoBloqueo.otros > 0 && (
-              <span className={s.tituloBloqueoMas}>
-                {t("agenda.bloqueos.aviso.yMas", { count: avisoBloqueo.otros })}
-              </span>
-            )}
-            {/* Para lector de pantalla: el aviso completo, sin depender del
-                recorte visual ni del color. */}
-            <span className={s.soloLectores} role="status">
-              {t("agenda.bloqueos.aviso.aria", { detalle: textoBloqueo })}
-            </span>
-          </>
-        )}
         {/* El chip «Hoy» es del diseño solo para la vista Día. */}
         {ag.vista === "dia" && hoy && <span className={s.chipHoy}>Hoy</span>}
       </div>
 
       <div className={s.espaciador} />
+
+      {/* Salto de fila: solo existe por debajo de 1024 px (CSS). Parte la
+          barra en dos filas en vez de dejar que desborde a lo ancho. */}
+      <div className={s.salto} aria-hidden />
 
       {/* ── Por validar ── abre la cola de la agenda de siempre, arriba. */}
       {porValidar > 0 && (
@@ -204,10 +167,13 @@ export function BarraHerramientas() {
           type="button"
           className={`${s.botonValidar} ${state.pendingSectionOpen ? s.botonValidarAbierto : ""}`}
           aria-expanded={state.pendingSectionOpen}
+          // En teléfono la palabra se esconde (CSS) y queda «3»: el nombre
+          // completo va aquí para que el lector no se quede con un número.
+          aria-label={`${porValidar} por validar`}
           onClick={() => togglePendingPanel()}
         >
           <ShieldAlert size={18} strokeWidth={2.2} />
-          {porValidar} por validar
+          {porValidar} <span className={s.etiquetaValidar}>por validar</span>
         </button>
       )}
 
@@ -240,5 +206,39 @@ export function BarraHerramientas() {
         </button>
       )}
     </div>
+
+    {/* ── El día bloqueado, en su propia línea (ws1-t5) ──
+        Antes iba dentro del título y a 1400 px se cortaba justo el motivo
+        («Jueves 12 de noviem… · Congreso de Odontolo…»): «Jueves 12» sin el
+        porqué no sirve de nada. Aquí tiene todo el ancho de la agenda y
+        hasta dos líneas; el completo sigue en `title` y para el lector. Solo
+        en la vista Día (ver `avisoBloqueo`). Amarillo lleno si cierra a
+        toda la clínica; teñido y con filete si es de un solo doctor. */}
+    {avisoBloqueo && textoBloqueo && (
+      <div
+        className={`${s.avisoBloqueo} ${
+          avisoBloqueo.principal.doctorId === null ? s.avisoBloqueoClinica : s.avisoBloqueoDoctor
+        }`}
+        data-aviso-bloqueo
+      >
+        {/* El icono va ANTES del texto y no es decorativo: junto al motivo
+            escrito, el aviso se entiende sin ver un solo color. */}
+        <AlertTriangle size={16} strokeWidth={2.3} className={s.avisoBloqueoIcono} aria-hidden />
+        <span className={s.avisoBloqueoTexto} title={textoBloqueo}>
+          {textoBloqueo}
+        </span>
+        {avisoBloqueo.otros > 0 && (
+          <span className={s.avisoBloqueoMas}>
+            {t("agenda.bloqueos.aviso.yMas", { count: avisoBloqueo.otros })}
+          </span>
+        )}
+        {/* Para lector de pantalla: el aviso completo, sin depender del
+            recorte visual ni del color. */}
+        <span className={s.soloLectores} role="status">
+          {t("agenda.bloqueos.aviso.aria", { detalle: textoBloqueo })}
+        </span>
+      </div>
+    )}
+    </>
   );
 }

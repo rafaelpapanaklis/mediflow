@@ -11,6 +11,9 @@
  *  - Los conteos del inventario del menú (PAQUETE-MENU.md, medidos sobre main):
  *    dueño 23, administrador 23, doctor 9, recepción 10, solo lectura 15; con
  *    plan Básico 20/20/8/9/14. Si el filtro cambiara al moverlo, esto falla.
+ *    (Desde entonces se sumaron Plantillas y, en ws1-t5, Saldo IA —solo
+ *    dueño y administrador, `adminOnly` + `whatsapp.view`—; los números de
+ *    abajo son los de hoy.)
  *  - Todo ícono que usa el menú está dentro de la fuente recortada (si no, se
  *    vería la palabra «point_of_sale» en vez del dibujo).
  *  - El interruptor falla cerrado: sin tabla, sin fila o con error sin respuesta
@@ -113,30 +116,58 @@ test("conteos por tipo de usuario — clínica dental, plan Profesional o en pru
   const cuenta = (role: UserRole, mods: string[]) => opcionesVisibles(persona(role), "DENTAL", mods).length;
   assert.deepEqual(
     ROLES.slice(0, 5).map((r) => cuenta(r, MODULOS_PRO)),
-    [24, 24, 10, 10, 15],
+    [25, 25, 10, 10, 15],
     "Profesional: dueño, administrador, doctor, recepción, solo lectura",
   );
   assert.deepEqual(
     ROLES.slice(0, 5).map((r) => cuenta(r, MODULOS_BASICO)),
-    [21, 21, 9, 9, 14],
+    [22, 22, 9, 9, 14],
     "Básico",
   );
 });
 
-test("dueño, plan Profesional: dónde acaba cada una de las 24 opciones", () => {
+test("dueño, plan Profesional: dónde acaba cada una de las 25 opciones", () => {
   const menu = armarMenu(opcionesVisibles(persona("SUPER_ADMIN"), "DENTAL", MODULOS_PRO));
   assert.deepEqual(menu.nivel1.map((it) => it.id), ["home", "appointments", "patients", "inbox", "billing", "sabina"]);
   assert.deepEqual(
     menu.grupos.map((g) => [g.id, g.items.map((it) => it.id)]),
     [
-      ["dinero", ["finanzas", "analytics", "reports"]],
+      // Saldo IA debajo de Analítica (ws1-t5).
+      ["dinero", ["finanzas", "analytics", "saldo-ia", "reports"]],
       ["clinica", ["team", "resources", "inventory", "procedures", "plantillas", "clinic-layout"]],
       ["pacientes", ["landing", "resenas", "tv-modes", "messages"]],
       ["sistema", ["settings", "auditoria", "soporte"]],
       ["mas", ["ai", "marketplace"]],
     ],
   );
-  assert.equal(idsDe(menu).length, 24);
+  assert.equal(idsDe(menu).length, 25);
+});
+
+// ── Saldo IA (ws1-t5) ────────────────────────────────────────────────
+
+test("Saldo IA: en Dinero, debajo de Analítica, y con el permiso de su pantalla", () => {
+  const saldo = NAV_ITEMS.find((it) => it.id === "saldo-ia");
+  assert.ok(saldo, "existe en NAV_ITEMS");
+  assert.equal(saldo!.href, "/dashboard/whatsapp/bot/saldo");
+  // La pantalla exige whatsapp.view; el menú pide LO MISMO para no rebotar.
+  assert.equal(saldo!.permission, "whatsapp.view");
+  assert.equal(saldo!.adminOnly, true, "es dinero: como Finanzas y Analítica");
+  assert.equal(saldo!.moduleKey, undefined, "Sabina es core y gasta este saldo: no se gatea por módulo");
+
+  // Dueño y administrador lo ven; recepción, doctor y solo lectura no.
+  const ve = (role: UserRole, ov: string[] = []) =>
+    opcionesVisibles(persona(role, ov), "DENTAL", MODULOS_PRO).some((it) => it.id === "saldo-ia");
+  assert.equal(ve("SUPER_ADMIN"), true);
+  assert.equal(ve("ADMIN"), true);
+  assert.equal(ve("RECEPTIONIST"), false, "recepción tiene whatsapp.view pero no es admin");
+  assert.equal(ve("DOCTOR"), false);
+  assert.equal(ve("READONLY"), false);
+  // Un administrador al que le quitaron WhatsApp tampoco lo ve (rebotaría).
+  assert.equal(ve("ADMIN", ["today.view", "analytics.view"]), false);
+
+  // Y con el plan Básico (sin módulo analytics) sigue debajo de Finanzas.
+  const basico = armarMenu(opcionesVisibles(persona("SUPER_ADMIN"), "DENTAL", MODULOS_BASICO));
+  assert.deepEqual(basico.grupos.find((g) => g.id === "dinero")!.items.map((it) => it.id), ["finanzas", "saldo-ia", "reports"]);
 });
 
 test("doctor, plan Profesional: primer nivel sin «WhatsApp y recordatorios» y segundo nivel con lo suyo", () => {

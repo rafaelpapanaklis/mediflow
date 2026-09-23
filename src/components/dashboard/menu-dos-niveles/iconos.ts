@@ -14,7 +14,7 @@
 // (pedida con un User-Agent de Chrome, que es el que recibe woff2).
 
 export const ICONOS_EN_FUENTE = [
-  "add", "add_business", "anchor", "apps", "arrow_back", "arrow_downward", "arrow_upward",
+  "account_balance_wallet", "add", "add_business", "anchor", "apps", "arrow_back", "arrow_downward", "arrow_upward",
   "assignment", "auto_awesome", "bolt", "calendar_month", "chair", "chat", "check",
   "chevron_right", "child_care", "close", "compare", "create_new_folder", "credit_card",
   "dark_mode", "dashboard_customize", "delete", "dentistry", "drag_indicator", "edit",

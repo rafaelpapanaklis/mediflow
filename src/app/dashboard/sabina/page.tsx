@@ -1,11 +1,14 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { getCurrentUser } from "@/lib/auth";
+import { hasPermission } from "@/lib/auth/permissions";
 import { ACCIONES_SABINA } from "@/lib/sabina/engine-catalog";
 import { leerAjustesSabina } from "@/lib/sabina/ajustes-sabina";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { SabinaClient } from "./sabina-client";
+import { SaldoIaImporte } from "./saldo-ia-importe";
 
 export const metadata: Metadata = { title: "Sabina — DaleControl" };
 
@@ -37,6 +40,16 @@ export default async function SabinaPage() {
       .catch(() => false),
     menuDosNivelesEncendido(user.clinicId),
   ]);
+  // SALDO IA (ws1-t5): el acceso al monedero que Sabina gasta. Lo ve quien
+  // puede abrir esa pantalla —el MISMO permiso que ella exige
+  // (`requirePermissionOrRedirect(user, "whatsapp.view")`)—, para no enseñar
+  // un chip que rebote. El importe NO entra en el Promise.all de arriba: va en
+  // un Suspense y llega por streaming cuando la base contesta, así que ni la
+  // página ni la conversación esperan por él.
+  const puedeVerSaldo = hasPermission(
+    { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
+    "whatsapp.view",
+  );
   return (
     <SabinaClient
       key={user.clinicId}
@@ -45,6 +58,14 @@ export default async function SabinaPage() {
       puedeProponer={ACCIONES_SABINA.length > 0}
       apagada={apagada}
       rediseno={rediseno}
+      puedeVerSaldo={puedeVerSaldo}
+      saldoIa={
+        puedeVerSaldo ? (
+          <Suspense fallback={null}>
+            <SaldoIaImporte clinicId={user.clinicId} />
+          </Suspense>
+        ) : null
+      }
     />
   );
 }

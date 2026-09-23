@@ -14,7 +14,7 @@
  * preguntaste. Es literalmente el mismo objeto en memoria.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Sparkles, Plus, History, X, Loader2, CloudOff } from "lucide-react";
 import { SabinaConversacion } from "@/components/sabina/sabina-conversacion";
 import {
@@ -30,6 +30,7 @@ import { useSabinaEstado } from "@/components/sabina/use-sabina-chat";
 import styles from "./sabina.module.css";
 import piel from "@/components/dashboard/sabina-rx-ia-rediseno/rediseno.module.css";
 import { CLASES_REDISENO_LOTE } from "@/components/dashboard/sabina-rx-ia-rediseno/raiz";
+import { SaldoIaChip } from "./saldo-ia-chip";
 
 /**
  * REDISEÑO (interruptor `menu-dos-niveles`) — «dos pieles, un esqueleto».
@@ -124,6 +125,8 @@ export function SabinaClient({
   puedeProponer = false,
   apagada: apagadaAlEntrar = false,
   rediseno = false,
+  puedeVerSaldo = false,
+  saldoIa = null,
 }: {
   /** La clínica de la sesión: si cambia (switcher de sedes), la conversación se reinicia. */
   clinicId: string;
@@ -133,6 +136,10 @@ export function SabinaClient({
   apagada?: boolean;
   /** Interruptor `menu-dos-niveles` de la clínica: viste la pantalla con el rediseño. */
   rediseno?: boolean;
+  /** Puede abrir /dashboard/whatsapp/bot/saldo (lo decide el servidor con el permiso de esa pantalla). */
+  puedeVerSaldo?: boolean;
+  /** El importe del saldo, pintado en el servidor dentro de un Suspense (ver `saldo-ia-importe.tsx`). */
+  saldoIa?: ReactNode;
 }) {
   // Un solo juego de clases por render: el de siempre o el del rediseño.
   const c: Record<string, string> = rediseno ? CLASES_REDISENO : styles;
@@ -243,6 +250,10 @@ export function SabinaClient({
             </div>
             <div className={c.headerSubtitle}>{estado.conversationTitle ?? `Hola, ${firstName || "doctor"}`}</div>
           </div>
+          {/* Saldo IA (ws1-t5): el acceso al monedero que Sabina gasta, con la
+              cifra cuando llega. Discreto y en la cabecera: la conversación
+              no se toca. Con su propia hoja, igual en las dos pieles. */}
+          {puedeVerSaldo && <SaldoIaChip importe={saldoIa} />}
           <button
             type="button"
             className={c.iconBtn}

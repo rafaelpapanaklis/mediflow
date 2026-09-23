@@ -196,8 +196,42 @@ test("una opción nueva aparece sola, en el sitio que le daría el menú de fáb
   const armado = aplicarDiseno(viejo, visibles);
   const admin = armado.entradas.find((e) => e.tipo === "submenu") as Extract<(typeof armado.entradas)[number], { tipo: "submenu" }>;
   const dinero = admin.secciones.find((s) => s.id === "dinero");
-  // Entre sus vecinas de fábrica: finanzas, analytics, reports.
-  assert.deepEqual(ids(dinero!.items), ["finanzas", "analytics", "reports"]);
+  // Entre sus vecinas de fábrica: finanzas, analytics, saldo-ia, reports.
+  assert.deepEqual(ids(dinero!.items), ["finanzas", "analytics", "saldo-ia", "reports"]);
+});
+
+// Saldo IA (ws1-t5) llegó al panel DESPUÉS de que muchas clínicas guardaran su
+// menú. Nadie tiene que tocarlo: aplicarDiseno la mete sola debajo de Analítica,
+// sin duplicarla y sin mover lo que la persona ordenó a mano.
+test("un menú guardado SIN «saldo-ia» la enseña sola, debajo de Analítica", () => {
+  const visibles = visiblesDe("SUPER_ADMIN");
+  assert.ok(ids(visibles).includes("saldo-ia"), "el dueño ve Saldo IA");
+  const fabrica = disenoDesdeArmado(aplicarDiseno(null, visibles));
+  const guardadoAntes: DisenoMenu = normalizarDiseno(
+    JSON.parse(
+      JSON.stringify({
+        v: VERSION_DISENO,
+        entradas: fabrica.entradas.map((e) =>
+          e.tipo === "opcion"
+            ? e
+            : {
+                ...e,
+                secciones: e.secciones.map((s) => ({
+                  ...s,
+                  // Orden a mano en Dinero: Reportes arriba. Y sin saldo-ia.
+                  opciones: s.id === "dinero" ? ["reports", "finanzas", "analytics"] : s.opciones,
+                })),
+              },
+        ),
+      }),
+    ),
+  )!;
+  const armado = aplicarDiseno(guardadoAntes, visibles);
+  const admin = armado.entradas.find((e) => e.tipo === "submenu") as Extract<(typeof armado.entradas)[number], { tipo: "submenu" }>;
+  const dinero = admin.secciones.find((s) => s.id === "dinero");
+  assert.deepEqual(ids(dinero!.items), ["reports", "finanzas", "analytics", "saldo-ia"]);
+  const todas = armado.entradas.flatMap((e) => (e.tipo === "opcion" ? [e.item.id] : e.secciones.flatMap((s) => ids(s.items))));
+  assert.equal(todas.filter((id) => id === "saldo-ia").length, 1, "una sola vez");
 });
 
 // El caso medido el 19-sep-2026: un menú guardado el 17-sep enumera sus ids uno a

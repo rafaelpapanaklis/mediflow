@@ -37,6 +37,7 @@ import {
 } from "@/lib/menu-personalizado/diseno";
 import {
   ICONO_DE,
+  OPCIONES_REALZADAS,
   opcionesSuspendida,
   opcionesVisibles,
 } from "./estructura";
@@ -297,7 +298,9 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
     const compacto = !!opts.compacto;
     const texto = etiqueta(item.id);
     const icono = ICONO_DE[item.id] ?? "chevron_right";
-    const claseBase = cx(s.item, opts.segundo && s.itemSegundo);
+    // El realce (halo morado) es solo del segundo nivel: en la barra estrecha
+    // no hay "vecinas" de las que destacar y el halo se cortaría al encoger.
+    const claseBase = cx(s.item, opts.segundo && s.itemSegundo, opts.segundo && OPCIONES_REALZADAS.has(item.id) && s.itemRealzado);
 
     if (item.comingSoon) {
       return (
