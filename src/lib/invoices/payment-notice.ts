@@ -7,6 +7,13 @@
 // tarjeta seguiría prometiendo el mensaje viejo.
 //
 // PURO: sin Prisma ni red.
+//
+// ws1-t1: si la factura se cobra por Mercado Pago, el texto libre lleva además
+// el link y el monto (`linkPago`). La PLANTILLA no cambia: sus cuatro huecos los
+// aprobó Meta y no admiten un link, así que con la ventana cerrada el link no
+// viaja (la ruta lo dice y la pantalla ofrece copiarlo).
+
+import { lineaLinkWhatsApp } from "@/lib/factura-mp/core";
 
 function fmtMXN(n: number): string {
   const v = new Intl.NumberFormat("es-MX", {
@@ -36,6 +43,8 @@ export interface PaymentNoticeInput {
   /** La columna `balance` de la factura: es lo que el aviso siempre ha dicho. */
   balance: number;
   items: unknown;
+  /** Link de Mercado Pago de la factura (ws1-t1). Sin él, el texto de siempre. */
+  linkPago?: { url: string; monto: number } | null;
 }
 
 export interface PaymentNotice {
@@ -57,7 +66,11 @@ export function buildPaymentNotice(input: PaymentNoticeInput): PaymentNotice {
     `Hola ${patientName}, te saludamos de ${input.clinicName}. ` +
     `Tienes un saldo pendiente de ${amount} de tu nota ${input.invoiceNumber}` +
     `${conceptos ? ` (${conceptos})` : ""}. ` +
-    `Puedes pagar en la clínica o llamarnos al ${input.clinicPhone} para coordinarlo. ¡Gracias!`;
+    (input.linkPago
+      // El link en su propia línea: pegado a un punto, WhatsApp lo corta mal.
+      ? `\n\n${lineaLinkWhatsApp(input.linkPago.url, input.linkPago.monto)}\n\n` +
+        `También puedes pagar en la clínica o llamarnos al ${input.clinicPhone}. ¡Gracias!`
+      : `Puedes pagar en la clínica o llamarnos al ${input.clinicPhone} para coordinarlo. ¡Gracias!`);
   // Orden del spec dc_aviso_saldo: paciente, clínica, monto, teléfono.
   return { patientName, amount, body, templateParams: [patientName, input.clinicName, amount, input.clinicPhone] };
 }

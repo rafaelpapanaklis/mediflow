@@ -30,6 +30,7 @@ const METHOD_LABELS: Record<string, string> = {
   cash: "Efectivo", debit: "Tarjeta de débito", credit: "Tarjeta de crédito",
   transfer: "Transferencia", check: "Cheque", refund: "Reembolso",
   other: "Otro", online: "Pago en línea (tarjeta)",
+  mercadopago: "Mercado Pago",
 };
 
 function fmtMXN(n: number): string {

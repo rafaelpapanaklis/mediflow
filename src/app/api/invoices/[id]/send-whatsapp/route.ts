@@ -4,8 +4,14 @@
 // saldo y conceptos) + el comprobante PDF adjunto en el mismo hilo. Con la
 // ventana cerrada, sendWhatsAppLogged resuelve la plantilla `payment_notice`
 // (dc_aviso_saldo) o bloquea con un motivo legible que aquí se propaga tal
-// cual al panel. NO existe pago online: el aviso dirige a pagar EN la clínica
-// o por teléfono, por eso el teléfono de la clínica es obligatorio.
+// cual al panel. El aviso dirige a pagar EN la clínica o por teléfono, por eso
+// el teléfono de la clínica es obligatorio.
+//
+// ws1-t1 · Mercado Pago: con body `{ linkPago: true }` (y permiso de cobrar), el
+// texto libre lleva además el link y el monto. Sin pedirlo, el aviso de siempre:
+// es el que Sabina enseña antes de confirmar. La plantilla no lo admite: con la ventana
+// cerrada el aviso sale sin link y la respuesta lo dice (`linkPago.enMensaje`
+// = false) para que la pantalla ofrezca copiarlo.
 //
 // Multi-tenant: clinicId de la sesión; la factura se verifica contra él y las
 // credenciales de WhatsApp son las de ESA clínica.
@@ -21,6 +27,9 @@ import { buildInvoicePrintPdf } from "@/lib/invoices/print-pdf";
 import { sendWhatsAppLogged, type WhatsAppOutboundAttachment } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { buildPaymentNotice } from "@/lib/invoices/payment-notice";
+import { linkParaEnviar } from "@/lib/factura-mp/envio.server";
+import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
+import { isWithin24hWindow } from "@/lib/inbox/send-core";
 
 export const runtime = "nodejs"; // genera el PDF con @react-pdf
 export const dynamic = "force-dynamic";
@@ -96,6 +105,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
 
+  // Link de Mercado Pago (ws1-t1). Nunca lanza: sin link, el aviso de siempre.
+  const pedido = await req.json().catch(() => null);
+  const { link, aviso: avisoLink } = await linkParaEnviar({
+    clinicId: ctx.clinicId,
+    invoiceId: invoice.id,
+    userId: ctx.userId,
+    pedido: pedido?.linkPago === true,
+    puedeCobrar: denyIfMissingPermission(ctx, "billing.charge") === null,
+  });
+  // ¿Viajará el link? Solo en texto libre (ventana de 24 h abierta). Es el mismo
+  // criterio con el que sendWhatsAppLogged elige entre texto y plantilla.
+  const enMensaje = link
+    ? isWithin24hWindow(await lastInboundAtForPhone(clinic.id, patientPhone).catch(() => null), new Date())
+    : false;
+
   // El texto sale de lib/invoices/payment-notice: Sabina enseña ESE MISMO texto en
   // su tarjeta antes de que alguien confirme el envío.
   const { body, templateParams } = buildPaymentNotice({
@@ -105,6 +129,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     invoiceNumber: invoice.invoiceNumber,
     balance: invoice.balance,
     items: invoice.items,
+    linkPago: link,
   });
 
   // Comprobante PDF — solo sale con la ventana abierta (en modo plantilla el
@@ -145,5 +170,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, patientId: invoice.patientId ?? null });
+  return NextResponse.json({
+    ok: true,
+    patientId: invoice.patientId ?? null,
+    linkPago: link ? { ...link, enMensaje } : null,
+    avisoLink: link && !enMensaje
+      ? "El aviso salió con la plantilla de WhatsApp (el paciente no ha escrito en 24 h), que no admite el link. Cópialo y compártelo por otro medio."
+      : avisoLink,
+  });
 }

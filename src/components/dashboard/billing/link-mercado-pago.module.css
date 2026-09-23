@@ -1,0 +1,106 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   El link de Mercado Pago de una factura (ws1-t1).
+
+   Sale en dos sitios: dentro del cobro (cuando se elige el método «Mercado
+   Pago») y en el detalle de la factura (ver / copiar el link). Los dos con
+   el interruptor `menu-dos-niveles` encendido o apagado, así que no declara
+   tokens: LEE los `--m2-*` del diseño nuevo y cae a los semánticos de
+   globals.css (`--text-*`, `--border-soft`, `--bg-elev`, `--brand`).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--m2-tarjeta-borde, var(--border-soft));
+  border-radius: 12px;
+  background: var(--m2-tarjeta, var(--bg-elev));
+  color: var(--m2-texto, var(--text-1));
+  font-variant-numeric: tabular-nums;
+}
+
+.titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m2-texto, var(--text-1));
+}
+
+.texto {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--m2-texto-2, var(--text-2));
+}
+
+.cifra {
+  font-weight: 700;
+  color: var(--m2-texto, var(--text-1));
+}
+
+/* El link se lee entero y se puede seleccionar a mano (si el portapapeles
+   falla). Rompe donde haga falta: a 390 px no empuja la ventana. */
+.url {
+  display: block;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--m2-borde, var(--border-soft));
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--m2-texto, var(--text-1));
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  user-select: all;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.acciones > * {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.ayuda {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--m2-texto-3, var(--text-3));
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--m2-peligro, var(--danger));
+}
+
+/* El método «Mercado Pago» en la rejilla del cobro de siempre (sin el
+   interruptor). Con el interruptor, el botón usa `.metodo` del rediseño. */
+.metodoClasico {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.metodoClasicoActivo {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}

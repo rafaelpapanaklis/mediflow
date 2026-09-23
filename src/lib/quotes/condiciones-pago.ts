@@ -34,6 +34,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { invoiceFieldsFromQuote, type QuoteForInvoice } from "./invoice-from-quote-core";
+import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
 
 /* ── Vocabulario ──────────────────────────────────────────────────────── */
 
@@ -57,7 +58,15 @@ export const FRECUENCIAS_PAGO: FrecuenciaPago[] = ["WEEKLY", "BIWEEKLY", "MONTHL
  * comprueba que las dos y la del modal siguen diciendo lo mismo.
  */
 export const METODOS_PAGO = ["cash", "debit", "credit", "transfer", "check", "other"] as const;
-export type MetodoPago = (typeof METODOS_PAGO)[number];
+/**
+ * Mercado Pago (ws1-t1) es un método más del TRATO de una factura, pero NO entra
+ * en `METODOS_PAGO`: esa lista es la del cobro tecleado en caja y la del editor
+ * de presupuestos, y Mercado Pago no se teclea — se cobra con un link y se
+ * registra solo (lib/factura-mp). El popup de Nueva factura lo añade aparte, y
+ * solo si la clínica tiene la cuenta conectada.
+ */
+export { METODO_MERCADO_PAGO };
+export type MetodoPago = (typeof METODOS_PAGO)[number] | typeof METODO_MERCADO_PAGO;
 
 /** Cuántos pagos admite un plan. Más de 60 no es un presupuesto, es otra cosa. */
 export const MIN_PAGOS = 2;
@@ -132,7 +141,7 @@ export function aPesos(centavos: number): number {
 }
 
 export function esMetodoPago(v: unknown): v is MetodoPago {
-  return typeof v === "string" && (METODOS_PAGO as readonly string[]).includes(v);
+  return typeof v === "string" && ((METODOS_PAGO as readonly string[]).includes(v) || v === METODO_MERCADO_PAGO);
 }
 
 /** "YYYY-MM-DD" válido, o null. Acepta también un ISO completo y se queda con el día. */
@@ -166,7 +175,9 @@ export function normalizarCondiciones(raw: unknown, total: number): CondicionesP
   const o = raw as Record<string, unknown>;
 
   const modo: ModoPago = o.modo === "plazos" ? "plazos" : "unico";
-  const metodo = esMetodoPago(o.metodo) ? o.metodo : null;
+  // Mercado Pago cobra el SALDO entero con un link: en un plan a plazos le
+  // pediría al paciente todo de golpe. Ahí no se guarda.
+  const metodo = esMetodoPago(o.metodo) && !(modo === "plazos" && o.metodo === METODO_MERCADO_PAGO) ? o.metodo : null;
 
   const totalC = Math.max(0, aCentavos(total));
   const engancheC = modo === "plazos"
@@ -475,6 +486,7 @@ export const ETIQUETA_METODO_ES: Record<MetodoPago, string> = {
   transfer: "Transferencia",
   check: "Cheque",
   other: "Otro",
+  mercadopago: "Mercado Pago",
 };
 
 /** Una cuota tal como se imprime: etiqueta, fecha en palabras e importe. */

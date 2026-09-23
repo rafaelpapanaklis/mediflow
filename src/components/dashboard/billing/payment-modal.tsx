@@ -19,8 +19,17 @@ import { useT } from "@/i18n/i18n-provider";
 // A qué cuota va lo que se cobra (solo informa; el POST no cambia). ws1-t2.
 import { DestinoDelAbono } from "@/components/dashboard/plan-de-pagos/destino-abono";
 import { CLASES_FACTURA_REDISENO, CLASES_CALENDARIO_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
+// Mercado Pago (ws1-t1): un método más, pero NO se teclea: genera el link y el
+// pago se registra solo. Sin cuenta conectada, el botón ni sale.
+import { BotonMercadoPago, LinkMercadoPago, clasesMetodoClasico, useCobroMercadoPago } from "./link-mercado-pago";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
+/**
+ * Lo que se puede ELEGIR en la rejilla del cobro: los seis de arriba (se
+ * teclean y se registran aquí) + Mercado Pago (ws1-t1), que no se teclea: genera
+ * el link y el pago lo registra el webhook. Por eso no entra en `PaymentMethod`.
+ */
+export type MetodoDelCobro = PaymentMethod | "mercadopago";
 
 // labelKey resolved via t() at render time.
 export const METHODS: { value: PaymentMethod; labelKey: string; icon: typeof CreditCard }[] = [
@@ -58,11 +67,13 @@ interface PaymentModalProps {
 export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = false }: PaymentModalProps) {
   const t = useT();
   const [amount, setAmount]       = useState("");
-  const [method, setMethod]       = useState<PaymentMethod>("cash");
+  const [method, setMethod]       = useState<MetodoDelCobro>("cash");
   const [paidAt, setPaidAt]       = useState(() => todayLocalISO());
   const [reference, setReference] = useState("");
   const [notes, setNotes]         = useState("");
   const [saving, setSaving]       = useState(false);
+  const mpDisponible = useCobroMercadoPago(open);
+  const esMercadoPago = method === "mercadopago";
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de siempre sin él.
   // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
   // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
@@ -145,6 +156,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
             </div>
           </div>
 
+          {!esMercadoPago && (
           <div className={cx("space-y-1.5", c.campo)}>
             <Label>{t("clinical.paymentModal.amountToCharge")}</Label>
             <Input
@@ -167,6 +179,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
               <DestinoDelAbono invoiceId={invoice.id} total={invoice.total} pagado={invoice.paid} importe={isOverpay ? 0 : amountNum || 0} activo={open} />
             )}
           </div>
+          )}
 
           <div className={cx("space-y-1.5", c.campo)}>
             <Label>{t("clinical.paymentModal.paymentMethod")}</Label>
@@ -193,9 +206,20 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
                   </button>
                 );
               })}
+              {mpDisponible && (
+                <BotonMercadoPago
+                  activo={esMercadoPago}
+                  alElegir={() => setMethod("mercadopago")}
+                  className={rediseno ? `${c.metodo} ${esMercadoPago ? c.metodoActivo : ""}` : clasesMetodoClasico(esMercadoPago)}
+                />
+              )}
             </div>
           </div>
 
+          {esMercadoPago ? (
+            <LinkMercadoPago invoiceId={invoice.id} modo="cobro" />
+          ) : (
+          <>
           <div className={cx("grid grid-cols-2 gap-3", c.rejilla2)}>
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("common.date")}</Label>
@@ -225,13 +249,18 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+          </>
+          )}
         </div>
 
         <DialogFooter className={rediseno ? c.pie : undefined}>
           <ButtonNew variant="ghost" onClick={onClose} disabled={saving}>{t("common.cancel")}</ButtonNew>
+          {/* Con Mercado Pago no se registra nada aquí: el webhook lo registra al acreditarse. */}
+          {!esMercadoPago && (
           <ButtonNew variant="primary" onClick={submit} disabled={isInvalid || saving}>
             {saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: amountNum ? " · " + fmtMXNdec(amountNum) : "" })}
           </ButtonNew>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

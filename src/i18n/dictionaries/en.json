@@ -3026,7 +3026,8 @@
       "descuento": "Discount",
       "descargarExcel": "Download Excel",
       "sugerido": "Today's cash not yet reconciled:"
-    }
+    },
+    "methodMercadoPago": "Mercado Pago"
   },
   "billing": {
     "billingClient": {
@@ -8102,7 +8103,8 @@
       "cfdiStampedToast": "CFDI stamped successfully with SAT",
       "cfdiMonthCounter": "CFDI this month: {used}/{included}",
       "cfdiOverageToast": "This invoice is additional ({price})",
-      "cfdiDownloadError": "Could not retrieve the CFDI to download"
+      "cfdiDownloadError": "Could not retrieve the CFDI to download",
+      "methodMercadoPago": "Mercado Pago"
     },
     "paymentModal": {
       "methodCash": "Cash",
@@ -8127,7 +8129,8 @@
       "refCheck": "# check",
       "refAuthorization": "# authorization",
       "registering": "Recording…",
-      "registerPaymentBtn": "Record payment{amount}"
+      "registerPaymentBtn": "Record payment{amount}",
+      "methodMercadoPago": "Mercado Pago"
     },
     "emptyStates": {
       "patientsTitle": "No patients yet",
@@ -9688,7 +9691,8 @@
       "credit": "Credit card",
       "transfer": "Bank transfer",
       "check": "Check",
-      "other": "Other"
+      "other": "Other",
+      "mercadopago": "Mercado Pago"
     },
     "enganche": "Down payment",
     "cuantosPagos": "How many payments",
@@ -10001,5 +10005,25 @@
       "ask": "Please send us the transfer details (bank, CLABE and beneficiary) through this ticket. Once we make the transfer, we'll upload the receipt from the AI balance screen.",
       "thanks": "Thank you."
     }
+  },
+  "facturaMp": {
+    "metodo": "Mercado Pago",
+    "titulo": "Mercado Pago payment link",
+    "texto": "The patient pays the {monto} balance with this link. The payment is recorded automatically once it clears.",
+    "textoSinLink": "Create the link and share it with the patient: they pay the {monto} balance and the payment is recorded automatically.",
+    "generar": "Create link",
+    "generando": "Creating link…",
+    "copiar": "Copy link",
+    "copiado": "Link copied",
+    "copiarFallo": "Couldn't copy. Select the link and copy it manually.",
+    "abrir": "Open",
+    "vigente": "Valid until {fecha}",
+    "errorGenerar": "Couldn't create the Mercado Pago link",
+    "cargando": "Looking up the link…",
+    "noRegistraAqui": "With Mercado Pago you don't record the payment here: it's recorded automatically when the patient pays.",
+    "creadaConLink": "Mercado Pago link ready for {monto}",
+    "creadaSinLink": "The invoice was created, but the Mercado Pago link didn't go through:",
+    "avisoForma": "The patient gets a Mercado Pago link for the balance. When they pay, the payment is recorded automatically.",
+    "enviadoSinLink": "Sent without the Mercado Pago link:"
   }
 }

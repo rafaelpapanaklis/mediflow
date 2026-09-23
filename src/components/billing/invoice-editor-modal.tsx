@@ -25,6 +25,10 @@ import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashbo
 // y envío al paciente. Ver dashboard/factura-ficha-rediseno/.
 import { condicionesPorDefecto, hayCondiciones, type CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { FormaDePagoFactura, EnvioFactura, FraseDelTrato, type EnvioAlCrear } from "@/components/dashboard/factura-ficha-rediseno/forma-de-pago";
+// Mercado Pago como método de pago (ws1-t1): el método en «Forma de pago» (solo
+// con la cuenta conectada) y, al crear, el link del saldo listo para copiar.
+import { copiarAlPortapapeles, pedirLinkDePago, useCobroMercadoPago } from "@/components/dashboard/billing/link-mercado-pago";
+import { METODO_MERCADO_PAGO } from "@/lib/quotes/condiciones-pago";
 import { enviarFactura, guardarCondiciones, useContactoDePaciente } from "@/components/dashboard/factura-ficha-rediseno/extras";
 import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 
@@ -194,6 +198,9 @@ function InvoiceEditorBody({
   // apaga. Con el interruptor apagado nunca deja de ser false.
   const [despuesDeCrear, setDespuesDeCrear] = useState(false);
   const contacto = useContactoDePaciente(effectivePatientId, rediseno);
+  const mpDisponible = useCobroMercadoPago(rediseno);
+  // Si la cuenta no está (o se desconectó con el popup abierto), el método no vale.
+  const cobraConMercadoPago = rediseno && mpDisponible && cond.metodo === METODO_MERCADO_PAGO;
   // Si se cambia a un paciente sin correo (o sin teléfono), la opción elegida
   // deja de valer: no se manda nada a quien no se le puede mandar.
   const envio: EnvioAlCrear =
@@ -375,11 +382,38 @@ function InvoiceEditorBody({
         if (r.ok) creada = { ...out, condicionesPago: r.condiciones };
         else toast.error(r.error ?? t("facturaFicha.errorCondiciones"), { duration: 10000 });
       }
+      // Mercado Pago: el link del saldo se crea ya (el servidor decide el monto),
+      // así el correo/WhatsApp de abajo y el botón «copiar» reparten el MISMO.
+      if (cobraConMercadoPago && out?.id) {
+        const r = await pedirLinkDePago(out.id);
+        if (r.link) {
+          const url = r.link.url;
+          toast.success(
+            <span>
+              {t("facturaMp.creadaConLink", { monto: money(r.link.monto) })}{" "}
+              <button
+                type="button"
+                className="underline font-bold"
+                onClick={async () => {
+                  if (await copiarAlPortapapeles(url)) toast.success(t("facturaMp.copiado"));
+                  else toast.error(t("facturaMp.copiarFallo"));
+                }}
+              >
+                {t("facturaMp.copiar")}
+              </button>
+            </span>,
+            { duration: 15000 },
+          );
+        } else {
+          toast.error(`${t("facturaMp.creadaSinLink")} ${r.error ?? t("facturaMp.errorGenerar")}`, { duration: 10000 });
+        }
+      }
       if (rediseno && out?.id && envio) {
-        const r = await enviarFactura(out.id, envio);
+        const r = await enviarFactura(out.id, envio, { linkPago: cobraConMercadoPago });
         if (r.ok) toast.success(t(envio === "correo" ? "facturaFicha.correoEnviado" : "facturaFicha.whatsAppEnviado"));
         // Sin motivo del servidor no se sabe si salió: no se afirma que no.
         else toast.error(r.error ? `${t("facturaFicha.creadaSinEnviar")} ${r.error}` : t("facturaFicha.creadaEnvioSinConfirmar"), { duration: 10000 });
+        if (r.ok && r.avisoLink) toast(`${t("facturaMp.enviadoSinLink")} ${r.avisoLink}`, { duration: 10000 });
       }
       ocupado.current = false;
       onCreated(creada);
@@ -633,7 +667,7 @@ function InvoiceEditorBody({
         </div>
 
         {/* Lo que viene de Presupuestos: forma de pago y envío al paciente. */}
-        {rediseno && <FormaDePagoFactura cond={cond} total={grandTotal} onChange={setCond} />}
+        {rediseno && <FormaDePagoFactura cond={cond} total={grandTotal} onChange={setCond} mercadoPago={mpDisponible} />}
         {rediseno && (
           <EnvioFactura
             envio={envio}

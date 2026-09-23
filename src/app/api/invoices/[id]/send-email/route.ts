@@ -14,7 +14,8 @@
 //    `delivered: false`, y aquí eso es un error.
 //
 // El correo lleva el detalle en el cuerpo (conceptos, total, saldo y la frase
-// del trato). No adjunta el PDF: `lib/email` no admite adjuntos y ese archivo
+// del trato) y, con body `{ linkPago: true }` y permiso de cobrar (ws1-t1:
+// la factura se cobra por Mercado Pago), el link y el monto. No adjunta el PDF: `lib/email` no admite adjuntos y ese archivo
 // es compartido — queda anotado en el reporte.
 
 import { NextResponse, type NextRequest } from "next/server";
@@ -28,6 +29,7 @@ import { sendEmail } from "@/lib/email";
 import { CHARGEABLE_INVOICE_STATUSES } from "@/components/dashboard/billing/invoice-status";
 import { buildCorreoFactura } from "@/lib/invoices/correo-factura";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
+import { linkParaEnviar } from "@/lib/factura-mp/envio.server";
 
 export const dynamic = "force-dynamic";
 
@@ -96,6 +98,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     invoiceIds: [invoice.id],
   });
 
+  // Link de Mercado Pago (ws1-t1). Nunca lanza: sin link, el correo de siempre.
+  const pedido = await req.json().catch(() => null);
+  const { link, aviso: avisoLink } = await linkParaEnviar({
+    clinicId: ctx.clinicId,
+    invoiceId: invoice.id,
+    userId: ctx.userId,
+    pedido: pedido?.linkPago === true,
+    puedeCobrar: denyIfMissingPermission(ctx, "billing.charge") === null,
+  });
+
   const { subject, html, text } = buildCorreoFactura({
     patient: invoice.patient,
     clinicName: invoice.clinic?.name ?? "",
@@ -106,6 +118,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     balance: invoice.balance,
     items: invoice.items,
     condiciones: porFactura.get(invoice.id) ?? null,
+    linkPago: link,
   });
 
   const { delivered } = await sendEmail({ to: correo, subject, html, text });
@@ -124,8 +137,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     entityId: invoice.id,
     action: "update",
     before: { sentVia: null },
-    after: { sentVia: "email" },
+    after: { sentVia: "email", ...(link ? { paymentLink: "mercadopago" } : {}) },
   });
 
-  return NextResponse.json({ ok: true, patientId: invoice.patientId ?? null });
+  return NextResponse.json({
+    ok: true,
+    patientId: invoice.patientId ?? null,
+    linkPago: link ? { ...link, enMensaje: true } : null,
+    avisoLink,
+  });
 }

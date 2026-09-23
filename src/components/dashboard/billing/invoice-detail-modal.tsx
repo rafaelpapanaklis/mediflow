@@ -36,6 +36,9 @@ import { DestinoDelAbono } from "@/components/dashboard/plan-de-pagos/destino-ab
 import { useCondicionesDeFactura } from "@/components/dashboard/plan-de-pagos/use-condiciones";
 import { SeccionCobro, DescuentoEnLinea, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
+// Mercado Pago como método de pago (ws1-t1): el método en el cobro y el bloque
+// «ver / copiar link». Sin cuenta conectada no se monta nada.
+import { LinkMercadoPago, useCobroMercadoPago } from "./link-mercado-pago";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
@@ -43,6 +46,7 @@ import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoi
 const METHOD_LABEL_KEYS: Record<string, string> = {
   cash: "clinical.invoiceDetail.methodCash", debit: "clinical.invoiceDetail.methodDebit", credit: "clinical.invoiceDetail.methodCredit",
   transfer: "clinical.invoiceDetail.methodTransfer", check: "clinical.invoiceDetail.methodCheck", refund: "clinical.invoiceDetail.methodRefund", other: "clinical.invoiceDetail.methodOther",
+  mercadopago: "clinical.invoiceDetail.methodMercadoPago",
 };
 
 interface Invoice {
@@ -204,6 +208,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // Solo con el diseño nuevo: con el interruptor apagado este modal es, byte
   // por byte, el de siempre, y ni siquiera se pregunta por las condiciones.
   const condicionesPago = useCondicionesDeFactura(invoice?.id, open && rediseno);
+  // ¿La clínica cobra con Mercado Pago? (ws1-t1) Sin cuenta: false, y nada cambia.
+  const mpDisponible = useCobroMercadoPago(open);
+  // Hay un link vigente de esta factura (lo avisa el bloque del link): entonces
+  // «Enviar por WhatsApp» lo pide y el aviso lo lleva.
+  const [hayLinkMp, setHayLinkMp] = useState(false);
+  useEffect(() => { setHayLinkMp(false); }, [invoice?.id, open]);
   // El descuento en línea arranca con el de la factura, igual que openSub()
   // al abrir su diálogo. Solo en el diseño nuevo.
   useEffect(() => {
@@ -236,7 +246,10 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // Escrito pero sin aplicar: cobrar así lo ignoraría, así que «Registrar
   // pago» espera a que se aplique (o se deje como estaba).
   const descuentoPendiente = admiteDescuento && Number(discountAmt || 0) !== (invoice.discount ?? 0);
-  const botonRegistrarPago = (
+  // Con Mercado Pago elegido no hay «Registrar pago»: el link está en la sección
+  // y el pago lo registra el webhook al acreditarse (ws1-t1).
+  const cobroPorMercadoPago = cobrable && mpDisponible && cobro.method === "mercadopago";
+  const botonRegistrarPago = cobroPorMercadoPago ? null : (
     <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={cobro.submit} disabled={busy || cobro.saving || cobro.isInvalid || descuentoPendiente}>
       {cobro.saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: cobro.amountNum ? " · " + fmtMXNdec(cobro.amountNum) : "" })}
     </ButtonNew>
@@ -451,9 +464,17 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     if (!invoice) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/invoices/${invoice.id}/send-whatsapp`, { method: "POST" });
+      // Se cobra por Mercado Pago (trato, método o link vigente): el aviso lleva el link (ws1-t1).
+      const pedirLink = mpDisponible && (hayLinkMp || condicionesPago?.metodo === "mercadopago" || invoice.paymentMethod === "mercadopago");
+      const res = await fetch(`/api/invoices/${invoice.id}/send-whatsapp`, pedirLink
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkPago: true }) }
+        : { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? t("clinical.invoiceDetail.operationError"));
+      // Iba con link de Mercado Pago y el link no viajó (ventana cerrada, MP caído…).
+      if (typeof data.avisoLink === "string" && data.avisoLink) {
+        toast(`${t("facturaMp.enviadoSinLink")} ${data.avisoLink}`, { duration: 10000 });
+      }
       const inboxHref = `/dashboard/inbox${(data.patientId ?? invoice.patientId) ? `?patientId=${data.patientId ?? invoice.patientId}` : ""}`;
       toast.success(
         <span>
@@ -613,6 +634,20 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               )}
             </div>
 
+            {/* Ver / copiar el link de Mercado Pago (ws1-t1): solo si la clínica
+                cobra con Mercado Pago y la factura ya tiene link o su trato dice
+                Mercado Pago. Con el método elegido en el cobro, el link ya está ahí. */}
+            {mpDisponible && isPending && !cobroPorMercadoPago && (
+              <LinkMercadoPago
+                key={invoice.id}
+                invoiceId={invoice.id}
+                modo="detalle"
+                sugerido={condicionesPago?.metodo === "mercadopago" || invoice.paymentMethod === "mercadopago"}
+                bloqueado={busy}
+                alCambiar={(l) => setHayLinkMp(!!l)}
+              />
+            )}
+
             {/* Conceptos */}
             {Array.isArray(invoice.items) && invoice.items.length > 0 && (
               <div>
@@ -673,6 +708,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               <SeccionCobro
                 cobro={cobro}
                 bloqueado={busy}
+                mercadoPago={mpDisponible ? { invoiceId: invoice.id, alCambiar: (l) => setHayLinkMp(!!l) } : null}
                 bajoElMonto={
                   <DestinoDelAbono invoiceId={invoice.id} total={invoice.total} pagado={invoice.paid} importe={cobro.isOverpay ? 0 : cobro.amountNum || 0} activo={open} condiciones={condicionesPago} />
                 }

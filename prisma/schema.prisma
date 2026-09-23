@@ -245,6 +245,8 @@ model Clinic {
   // OAuth + la configuración del anticipo, y cada anticipo pedido.
   mercadoPago               ClinicMercadoPago?
   appointmentDeposits       AppointmentDeposit[]
+  // Links de Mercado Pago para cobrar facturas (ws1-t1), con la misma cuenta.
+  invoicePaymentLinks       InvoicePaymentLink[]
   patientNotifications      PatientNotification[]
   consentForms              ConsentForm[]
   periodontalRecords        PeriodontalRecord[]
@@ -1619,6 +1621,44 @@ model AppointmentDeposit {
   @@map("appointment_deposits")
 }
 
+/// Un link de Mercado Pago para cobrar el SALDO de una factura (ws1-t1). Cobra la
+/// clínica, con la cuenta que ya conectó para los anticipos (ClinicMercadoPago);
+/// DaleControl no cobra comisión (marketplace_fee 0). El monto lo fija el
+/// servidor con el saldo de la factura al crear el link. El pago se registra
+/// solo, como un Payment con method "mercadopago" y reference = id del pago de
+/// MP (src/lib/factura-mp/servicio.server.ts).
+/// status: PENDING (esperando pago; vigente mientras no pase expiresAt) · PAID
+/// (entró un pago aprobado) · REPLACED (el saldo cambió y se hizo otro link).
+model InvoicePaymentLink {
+  id                 String    @id @default(cuid())
+  clinicId           String
+  invoiceId          String
+  amount             Float // pesos que pide el link — lo decide el servidor
+  status             String    @default("PENDING")
+  expiresAt          DateTime  @db.Timestamptz(6)
+  mpPreferenceId     String?
+  checkoutUrl        String?
+  /// Cuenta de MP que cobra (user_id al crear el link). El pago se verifica contra ella.
+  mpCollectorId      String?
+  mpPaymentId        String? // el primer pago aprobado que entró por este link
+  paidAmount         Float?
+  paidAt             DateTime? @db.Timestamptz(6)
+  /// Último estado que MP reportó sin aprobar (rejected, in_process…).
+  lastMpStatus       String?
+  lastMpStatusDetail String?
+  // Sin relación Prisma: FK (SET NULL) en el SQL.
+  createdById        String?
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(6)
+
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, createdAt])
+  @@index([invoiceId, status])
+  @@map("invoice_payment_links")
+}
+
 /// Cada pago APROBADO de Mercado Pago que se aplicó a un anticipo. `mpPaymentId`
 /// es ÚNICO: es lo que hace idempotente al webhook (MP reintenta y el mismo pago
 /// puede llegar tres veces; solo la primera crea el saldo a favor).
@@ -2224,6 +2264,8 @@ model Invoice {
   patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id])
   payments    Payment[]
+  // Links de Mercado Pago con los que el paciente paga el saldo (ws1-t1).
+  paymentLinks InvoicePaymentLink[]
 
   @@unique([clinicId, invoiceNumber])
   @@index([clinicId, status, createdAt(sort: Desc)])

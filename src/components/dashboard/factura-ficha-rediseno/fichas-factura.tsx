@@ -180,12 +180,15 @@ function Ficha({
     setEnviando(via);
     setMensaje(null);
     setEnviado(null);
-    const r = await enviarFactura(inv.id, via);
+    // El trato dice Mercado Pago: el mensaje lleva el link del saldo (ws1-t1).
+    const r = await enviarFactura(inv.id, via, { linkPago: condiciones?.metodo === "mercadopago" });
     if (r.ok) setEnviado(via);
     // Con motivo del servidor, se enseña tal cual. SIN motivo (se cortó la red o
     // la función) no se sabe si salió: no se afirma que no, para que nadie
     // reenvíe a ciegas y el paciente reciba dos mensajes.
     else setMensaje(r.error ?? t("facturaFicha.envioSinConfirmar"));
+    // Salió, pero sin el link de Mercado Pago que debía llevar (ws1-t1): se dice.
+    if (r.ok && r.avisoLink) setMensaje(`${t("facturaMp.enviadoSinLink")} ${r.avisoLink}`);
     setEnviando(null);
   }
 
