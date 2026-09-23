@@ -62,6 +62,13 @@ export interface MercadoPagoPayment {
   transactionAmount: number | null;
   /** Moneda del pago (currency_id de MP, ej. "MXN"). null si MP no la manda. */
   currencyId: string | null;
+  /**
+   * Lo ya devuelto al comprador (transaction_amount_refunded de MP, MXN). Un
+   * reembolso PARCIAL deja el pago `approved` con esto > 0. null si no viene.
+   */
+  transactionAmountRefunded: number | null;
+  /** status_detail de MP (p. ej. `reimbursed` en un contracargo que MP nos cubrió). */
+  statusDetail: string | null;
 }
 
 /**
@@ -103,5 +110,10 @@ export async function getPayment(
         ? data.transaction_amount
         : null,
     currencyId: typeof data.currency_id === "string" ? data.currency_id : null,
+    transactionAmountRefunded:
+      typeof data.transaction_amount_refunded === "number" && Number.isFinite(data.transaction_amount_refunded)
+        ? data.transaction_amount_refunded
+        : null,
+    statusDetail: typeof data.status_detail === "string" ? data.status_detail : null,
   };
 }

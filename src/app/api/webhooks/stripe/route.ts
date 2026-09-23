@@ -29,6 +29,7 @@ import {
   AI_TOPUP_KIND,
   AI_SETUP_KIND,
 } from "@/lib/ai-billing/recharge";
+import { paymentIntentDeEvento, revertirRecargaStripe } from "@/lib/ai-billing/reversion";
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
 import { CFDI_OVERAGE_KIND, reconcileOverageFromWebhook } from "@/lib/cfdi-overage";
 import { getPlanLimits } from "@/lib/plans";
@@ -661,6 +662,10 @@ export async function POST(req: NextRequest) {
           paymentIntentId: pi.id,
           topupId: pi.metadata?.topupId || null,
         });
+        // Si este aviso llega tarde (Stripe reintenta durante días) y el pago ya
+        // se reembolsó o se disputó entretanto, el reembolso llegó ANTES que el
+        // abono y no encontró nada que descontar. Se cuadra aquí también.
+        await revertirRecargaStripe(stripe, pi.id);
 
         // Si la recarga guardó tarjeta (setup_future_usage) y el monedero no
         // tenía una, la dejamos lista para auto-recarga off-session.
@@ -685,6 +690,39 @@ export async function POST(req: NextRequest) {
           pi.id,
           pi.metadata?.topupId || null,
         );
+        break;
+      }
+
+      // ── Reembolsos y contracargos de recargas del monedero (H3). Sin esto,
+      //    una clínica recargaba, pedía el reembolso o disputaba el cargo, y se
+      //    quedaba con el dinero Y con el saldo. Todos estos eventos hacen lo
+      //    mismo: le preguntan a Stripe cómo está HOY ese PaymentIntent
+      //    (reembolsado, disputado, disputa ganada…) y cuadran el saldo contra
+      //    eso con un movimiento REFUND. Idempotente: el mismo evento dos veces,
+      //    o dos eventos del mismo reembolso, descuentan una sola vez. Si el
+      //    PaymentIntent no es una recarga del monedero, no hace nada.
+      //    🔴 Estos eventos hay que SUSCRIBIRLOS en el panel de Stripe.
+      case "charge.refunded":
+      case "charge.refund.updated":
+      case "refund.created":
+      case "refund.updated":
+      case "refund.failed":
+      case "charge.dispute.created":
+      case "charge.dispute.updated":
+      case "charge.dispute.closed":
+      case "charge.dispute.funds_withdrawn":
+      case "charge.dispute.funds_reinstated": {
+        const piId = paymentIntentDeEvento(event.data.object);
+        if (!piId) break;
+        const r = await revertirRecargaStripe(stripe, piId);
+        if (r.aplicado) {
+          console.info("[ai-wallet] reembolso/contracargo cuadrado", {
+            evento: event.type,
+            clinicId: r.clinicId,
+            deltaCents: r.deltaCents,
+            balanceAfterCents: r.balanceAfterCents,
+          });
+        }
         break;
       }
 

@@ -233,7 +233,14 @@ before(async () => {
   });
   mock.module("@/lib/failban", { namedExports: { persistentRateLimit: async () => null } });
   mock.module("@/lib/ai-billing/wallet", {
-    namedExports: { canSpend: async () => true, chargeUsage: async () => ({ billedCents: 1, balanceAfterCents: 1, eventId: "ev" }) },
+    namedExports: {
+      canSpend: async () => true,
+      chargeUsage: async () => ({ billedCents: 1, balanceAfterCents: 1, eventId: "ev" }),
+      // La ruta reserva el costo de la pregunta antes de llamar (H6) y la suelta al final.
+      reservarSaldo: async () => ({ id: "res", clinicId: "c", amountCents: 1 }),
+      liberarReserva: async () => {},
+      estimarCostoCents: async () => 1,
+    },
   });
   mock.module("@/lib/ai-assistant/conversations", { namedExports: { isAiHistoryStorageMissing: () => false } });
   mock.module("@/lib/sabina/engine-historial", {

@@ -75,6 +75,15 @@ const monedero = {
     },
   },
   $transaction: async (fn: (tx: unknown) => unknown) => fn(prismaDoble),
+  // La reserva de saldo (H6): la ruta reserva el techo de la pregunta con el
+  // monedero bloqueado (FOR UPDATE) y la suelta al final. Aquí no hay otras
+  // llamadas en curso: nada reservado.
+  $queryRaw: async () => [],
+  aiWalletHold: {
+    deleteMany: async () => ({ count: 0 }),
+    aggregate: async () => ({ _sum: { amountCents: 0 } }),
+    create: async ({ data }: any) => ({ id: "hold_1", ...data }),
+  },
 };
 
 const prismaDoble: any = new Proxy(

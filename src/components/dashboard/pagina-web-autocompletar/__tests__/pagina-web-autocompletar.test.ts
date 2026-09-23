@@ -84,7 +84,7 @@ test("PROPONE, NO PUBLICA: ni la ruta ni el núcleo ni el panel escriben en la b
 test("la ruta pide sesión, landing.edit y saldo ANTES de gastar, y el clinicId sale de la sesión", () => {
   assert.match(ruta, /denyIfMissingPermission\(ctx, "landing\.edit"\)/);
   const post = ruta.slice(ruta.indexOf("export async function POST"));
-  const orden = ["await entrar()", "persistentRateLimit(", "canSpend(clinicId)", "await chat("].map((x) => post.indexOf(x));
+  const orden = ["await entrar()", "persistentRateLimit(", "canSpend(clinicId)", "reservarSaldo(", "await chat("].map((x) => post.indexOf(x));
   assert.ok(orden.every((i) => i >= 0), "falta un paso del POST");
   assert.deepEqual([...orden].sort((a, b) => a - b), orden, "el POST gasta antes de comprobar");
   assert.ok(!/body\??\.clinicId|clinicId:\s*body/.test(ruta), "el clinicId no puede venir del navegador");
