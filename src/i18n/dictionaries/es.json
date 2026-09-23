@@ -10030,5 +10030,24 @@
     "creadaSinLink": "La factura quedó creada, pero el link de Mercado Pago no salió:",
     "avisoForma": "Se le manda al paciente un link de Mercado Pago por el saldo. Cuando paga, el pago se registra solo.",
     "enviadoSinLink": "Se envió sin el link de Mercado Pago:"
+  },
+  "portalPagoMp": {
+    "pagar": "Pagar con Mercado Pago",
+    "preparando": "Preparando tu link…",
+    "titulo": "Paga {monto} con Mercado Pago",
+    "abrir": "Abrir Mercado Pago",
+    "qrAyuda": "¿Estás en una computadora? Escanea este código con la cámara de tu celular.",
+    "qrAlt": "Código QR del link de pago de Mercado Pago",
+    "seRegistraSolo": "Cuando Mercado Pago acredite tu pago, esta factura se marca como pagada sola.",
+    "vence": "El link vale hasta el {fecha}.",
+    "ocultar": "Ocultar",
+    "errores": {
+      "peticion": "No se pudo preparar el pago. Intenta de nuevo.",
+      "no_encontrada": "Factura no encontrada o sin saldo pendiente.",
+      "sin_saldo": "Esta factura ya no tiene saldo por pagar.",
+      "bajo_minimo": "El saldo es menor al mínimo para pagar en línea ({minimo}). Paga en tu clínica.",
+      "sin_mp": "Esta clínica aún no acepta pagos en línea. Paga directamente en tu clínica.",
+      "mp_fallo": "Mercado Pago no respondió. Intenta de nuevo en unos minutos."
+    }
   }
 }

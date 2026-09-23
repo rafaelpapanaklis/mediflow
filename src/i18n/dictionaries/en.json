@@ -10030,5 +10030,24 @@
     "creadaSinLink": "The invoice was created, but the Mercado Pago link didn't go through:",
     "avisoForma": "The patient gets a Mercado Pago link for the balance. When they pay, the payment is recorded automatically.",
     "enviadoSinLink": "Sent without the Mercado Pago link:"
+  },
+  "portalPagoMp": {
+    "pagar": "Pay with Mercado Pago",
+    "preparando": "Preparing your link…",
+    "titulo": "Pay {monto} with Mercado Pago",
+    "abrir": "Open Mercado Pago",
+    "qrAyuda": "On a computer? Scan this code with your phone's camera.",
+    "qrAlt": "QR code for the Mercado Pago payment link",
+    "seRegistraSolo": "Once Mercado Pago confirms your payment, this invoice is marked as paid automatically.",
+    "vence": "The link is valid until {fecha}.",
+    "ocultar": "Hide",
+    "errores": {
+      "peticion": "We couldn't prepare the payment. Please try again.",
+      "no_encontrada": "Invoice not found or nothing left to pay.",
+      "sin_saldo": "This invoice has nothing left to pay.",
+      "bajo_minimo": "The balance is below the minimum for online payment ({minimo}). Please pay at your clinic.",
+      "sin_mp": "This clinic doesn't accept online payments yet. Please pay at your clinic.",
+      "mp_fallo": "Mercado Pago didn't respond. Please try again in a few minutes."
+    }
   }
 }

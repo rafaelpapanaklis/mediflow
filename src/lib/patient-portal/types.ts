@@ -27,6 +27,9 @@
 //   · GET  /api/paciente/history      → 200 PacienteHistorialResponse | 401
 //   · GET  /api/paciente/payments     → 200 PacientePagosResponse | 401
 //   · POST /api/paciente/payments/checkout → 200 { url } | 400 | 401 | 404 | 409 | 429
+//   · POST /api/paciente/payments/mercadopago (ws1-t2, aditivo) body { invoiceId }
+//       → 200 { url, monto, venceA } | 400 | 401 | 404 | 409 | 429 | 502,
+//         errores con { error, code }. El link de factura-mp; el QR sale de `url`.
 //   · GET  /api/paciente/invoices/[id]/receipt → 200 PDF | 400 | 401 | 404
 //
 //   Documentos (WS1-T6, aditivo):
@@ -140,6 +143,12 @@ export interface PacienteClinica {
   patientNumber: string;
   /** true si la clínica acepta pago en línea desde el portal (WS1-T4). */
   onlinePaymentEnabled?: boolean;
+  /**
+   * Con qué se paga en línea (ws1-t2): Mercado Pago primero, Stripe Connect si
+   * no hay Mercado Pago, null = «Paga en tu clínica». Solo lo manda
+   * GET /api/paciente/payments.
+   */
+  onlinePaymentMethod?: "mercadopago" | "stripe" | null;
 }
 
 /** Solicitud de cambio PENDING de una cita (reagendar/cancelar, WS1-T5). */

@@ -9,14 +9,19 @@
 //   kind="factura", total/paid/balance (formatMxn). Pendientes resaltadas.
 // · Estados vacíos. Responsive: tabla fluida desktop / cards móvil, sin
 //   anchos fijos con scroll cortado.
-// · Acciones por factura (A3): "Pagar ahora" → POST /api/paciente/payments/
-//   checkout {invoiceId} → redirige a {url} (solo si la clínica tiene
-//   onlinePaymentEnabled); si no, "Paga en tu clínica". "Recibo (PDF)" si
-//   paid > 0 → GET /api/paciente/invoices/[id]/receipt en pestaña nueva.
+// · Acciones por factura (A3), según onlinePaymentMethod de la clínica:
+//   - "mercadopago" (ws1-t2, va PRIMERO si la clínica tiene los dos): "Pagar
+//     con Mercado Pago" → POST /api/paciente/payments/mercadopago {invoiceId}
+//     → botón al link + QR del mismo link (components/paciente/pago-mercadopago).
+//   - "stripe": "Pagar ahora" → POST /api/paciente/payments/checkout
+//     {invoiceId} → redirige a {url}.
+//   - null: "Paga en tu clínica".
+//   "Recibo (PDF)" si paid > 0 → GET /api/paciente/invoices/[id]/receipt en
+//   pestaña nueva.
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { usePacienteData } from "@/lib/patient-portal/use-paciente";
-import type { PacienteFactura, PacientePagosResponse } from "@/lib/patient-portal/types";
+import type { PacienteClinica, PacienteFactura, PacientePagosResponse } from "@/lib/patient-portal/types";
 import {
   PacienteCard,
   PacienteEmptyState,
@@ -26,6 +31,12 @@ import {
   formatMxn,
   formatFecha,
 } from "@/components/paciente/ui";
+import { MINIMO_LINK_MXN } from "@/lib/factura-mp/core";
+import {
+  BotonMercadoPago,
+  PanelMercadoPago,
+  usePagoMercadoPago,
+} from "@/components/paciente/pago-mercadopago";
 
 const GREEN = "#34d399";
 const AMBER = "#fbbf24";
@@ -48,6 +59,7 @@ const summaryGrid: CSSProperties = {
 const facturaRowCss = `
 .a8FacturaRow{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px;align-items:center;padding:12px 2px}
 @media (min-width:768px){.a8FacturaRow{grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)) minmax(0,1.2fr)}}
+@media (max-width:767px){.a8FacturaAcciones{grid-column:1/-1}}
 `;
 
 const breakdownBox: CSSProperties = {
@@ -174,10 +186,7 @@ export default function PacientePagosPage() {
                 factura={f}
                 first={i === 0}
                 clinicLabel={multiClinic ? clinicName(clinics, f.clinicId) : null}
-                onlinePaymentEnabled={
-                  clinics.find((c) => c.clinicId === f.clinicId)?.onlinePaymentEnabled ===
-                  true
-                }
+                metodo={metodoDeLaClinica(clinics.find((c) => c.clinicId === f.clinicId))}
               />
             ))}
           </div>
@@ -185,6 +194,16 @@ export default function PacientePagosPage() {
       )}
     </PageShell>
   );
+}
+
+/**
+ * Con qué paga en línea esta clínica. Una respuesta sin `onlinePaymentMethod`
+ * (versión anterior del API) cuenta como Stripe si decía onlinePaymentEnabled.
+ */
+function metodoDeLaClinica(c: PacienteClinica | undefined): "mercadopago" | "stripe" | null {
+  if (!c) return null;
+  if (c.onlinePaymentMethod !== undefined) return c.onlinePaymentMethod;
+  return c.onlinePaymentEnabled === true ? "stripe" : null;
 }
 
 /** Título + layout vertical común a todos los estados de la página. */
@@ -201,16 +220,20 @@ function FacturaRow({
   factura: f,
   first,
   clinicLabel,
-  onlinePaymentEnabled,
+  metodo,
 }: {
   factura: PacienteFactura;
   first: boolean;
   clinicLabel: string | null;
-  onlinePaymentEnabled: boolean;
+  metodo: "mercadopago" | "stripe" | null;
 }) {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const saldoPendiente = f.balance > 0 && f.status !== "CANCELLED";
+  // Bajo el mínimo en línea (el mismo $10 de Stripe y de Mercado Pago) el botón
+  // solo daría error: se dice «Paga en tu clínica».
+  const pagableEnLinea = metodo !== null && f.balance >= MINIMO_LINK_MXN;
+  const pagoMp = usePagoMercadoPago(f);
 
   async function handlePagar() {
     setPaying(true);
@@ -257,6 +280,7 @@ function FacturaRow({
         color={saldoPendiente ? AMBER : MUTED}
       />
       <div
+        className="a8FacturaAcciones"
         style={{
           minWidth: 0,
           display: "flex",
@@ -266,7 +290,9 @@ function FacturaRow({
         }}
       >
         {saldoPendiente &&
-          (onlinePaymentEnabled ? (
+          (pagableEnLinea && metodo === "mercadopago" ? (
+            <BotonMercadoPago pago={pagoMp} />
+          ) : pagableEnLinea && metodo === "stripe" ? (
             <div style={{ minWidth: 0, maxWidth: "100%" }}>
               <button
                 type="button"
@@ -322,6 +348,9 @@ function FacturaRow({
           </a>
         )}
       </div>
+      {saldoPendiente && pagableEnLinea && metodo === "mercadopago" && (
+        <PanelMercadoPago pago={pagoMp} invoiceNumber={f.invoiceNumber} />
+      )}
     </div>
   );
 }
