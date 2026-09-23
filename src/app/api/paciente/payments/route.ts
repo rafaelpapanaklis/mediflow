@@ -8,10 +8,15 @@
 // · totals: paidTotal = sum(paid) de todas; pendingTotal = sum(balance) de
 //   status PENDING|PARTIAL|OVERDUE. byClinic: mismas sumas agrupadas por
 //   clinicId (en JS está bien). Montos MXN tal cual (Float del schema).
+// · onlinePaymentMethod por clínica (ws1-t2): "mercadopago" si la clínica
+//   cobra facturas con Mercado Pago (el criterio de factura-mp), si no
+//   "stripe" si tiene Stripe Connect, si no null («Paga en tu clínica»).
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { getClinicConnectAccounts } from "@/lib/patient-portal/online-payment";
+import { cobroMpDisponible } from "@/lib/factura-mp/servicio.server";
+import { metodoDePagoEnLinea } from "@/lib/patient-portal/pago-mercadopago";
 import type {
   PacienteClinica,
   PacienteFactura,
@@ -92,17 +97,37 @@ export async function GET() {
       getClinicConnectAccounts(clinicIds),
     ]);
 
-    const clinics: PacienteClinica[] = links.map((l) => ({
-      clinicId: l.patient.clinic.id,
-      clinicName: l.patient.clinic.name,
-      clinicSlug: l.patient.clinic.slug,
-      logoUrl: l.patient.clinic.logoUrl,
-      city: l.patient.clinic.city,
-      phone: l.patient.clinic.phone,
-      patientId: l.patient.id,
-      patientNumber: l.patient.patientNumber,
-      onlinePaymentEnabled: connectAccounts.has(l.patient.clinic.id),
-    }));
+    // ¿Qué clínicas cobran con Mercado Pago? Una a una y FUERA del Promise.all
+    // de arriba (el pooler): una cuenta de paciente tiene una o dos clínicas.
+    // Si la consulta falla, esa clínica cae a Stripe o a «Paga en tu clínica»:
+    // nada de un botón que da error, y la lista de pagos no se cae por esto.
+    const conMercadoPago = new Set<string>();
+    for (const clinicId of clinicIds) {
+      try {
+        if (await cobroMpDisponible(clinicId)) conMercadoPago.add(clinicId);
+      } catch (err) {
+        console.error(`[paciente/payments] no se pudo saber si ${clinicId} cobra con Mercado Pago:`, err);
+      }
+    }
+
+    const clinics: PacienteClinica[] = links.map((l) => {
+      const onlinePaymentMethod = metodoDePagoEnLinea({
+        mercadoPago: conMercadoPago.has(l.patient.clinic.id),
+        stripe: connectAccounts.has(l.patient.clinic.id),
+      });
+      return {
+        clinicId: l.patient.clinic.id,
+        clinicName: l.patient.clinic.name,
+        clinicSlug: l.patient.clinic.slug,
+        logoUrl: l.patient.clinic.logoUrl,
+        city: l.patient.clinic.city,
+        phone: l.patient.clinic.phone,
+        patientId: l.patient.id,
+        patientNumber: l.patient.patientNumber,
+        onlinePaymentEnabled: onlinePaymentMethod !== null,
+        onlinePaymentMethod,
+      };
+    });
 
     // Solo facturas de expedientes visibles (paciente no soft-deleted),
     // para que la lista sea consistente con `clinics`.
