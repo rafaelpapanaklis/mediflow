@@ -32,14 +32,19 @@ type UsageRow = {
   createdAt: string;
 };
 
-type TransactionRow = {
+// Un renglón de «Recargas de saldo»: SOLO dinero que ENTRA. Lo decide el
+// servidor (api/ai-wallet/recargas.ts): TOPUP, REFUND, ADJUSTMENT positivo y
+// las SPEI en revisión. Los consumos (CHARGE) no vienen aquí: van en `usage`.
+type RecargaRow = {
   id: string;
-  type: "TOPUP" | "CHARGE" | "REFUND" | "ADJUSTMENT";
+  tipo: "TOPUP" | "REFUND" | "ADJUSTMENT" | "SPEI_EN_REVISION";
+  via: "STRIPE" | "MERCADOPAGO" | "SPEI" | "ADMIN" | null;
   amountCents: number;
-  balanceAfterCents: number;
-  source: "STRIPE" | "MERCADOPAGO" | "SPEI" | "USAGE" | "ADMIN";
+  /** null mientras está en revisión: todavía no tocó el saldo. */
+  balanceAfterCents: number | null;
   note: string | null;
   createdAt: string;
+  enRevision: boolean;
 };
 
 // (Exportado solo como TIPO: lo usa la vista del rediseño, whatsapp-rediseno/saldo.tsx.)
@@ -52,7 +57,7 @@ export type WalletData = {
   hasPaymentMethod: boolean;
   isAdmin: boolean;
   usage: UsageRow[];
-  transactions: TransactionRow[];
+  recargas: RecargaRow[];
 };
 
 // Montos preestablecidos para recargar (en centavos).
@@ -74,48 +79,55 @@ export type SpeiTicket = { id: string; folioLabel: string; amountCents: number }
 // sin que haya que tocar dos archivos si algún día se cobra otra función.
 const featureLabel = aiBillingFeatureLabel;
 
-function txTypeLabel(type: TransactionRow["type"]): string {
-  switch (type) {
-    case "TOPUP":
-      return "Recarga";
-    case "CHARGE":
-      return "Consumo";
+// «Recargas de saldo» se traduce con t() en las dos pantallas (la de siempre y
+// el rediseño); aquí solo se decide QUÉ clave le toca a cada renglón, para que
+// las dos digan lo mismo. Claves en `monederoIa.recargas.*` (es y en).
+function recargaTipoClave(tipo: RecargaRow["tipo"]): string {
+  switch (tipo) {
     case "REFUND":
-      return "Reembolso";
+      return "monederoIa.recargas.tipoDevolucion";
     case "ADJUSTMENT":
-      return "Ajuste";
+      return "monederoIa.recargas.tipoAbono";
+    case "SPEI_EN_REVISION":
+      return "monederoIa.recargas.tipoSpeiRevision";
+    case "TOPUP":
     default:
-      return type;
+      return "monederoIa.recargas.tipoRecarga";
   }
 }
 
-function txSourceLabel(source: TransactionRow["source"]): string {
-  switch (source) {
+function recargaViaClave(via: RecargaRow["via"]): string | null {
+  switch (via) {
     case "STRIPE":
-      return "Tarjeta";
+      return "monederoIa.recargas.viaTarjeta";
     case "MERCADOPAGO":
-      return "MercadoPago";
+      return "monederoIa.recargas.viaMercadoPago";
     case "SPEI":
-      return "Transferencia";
-    case "USAGE":
-      return "Uso de IA";
+      return "monederoIa.recargas.viaSpei";
     case "ADMIN":
-      return "Ajuste manual";
+      return "monederoIa.recargas.viaAdmin";
     default:
-      return source;
+      return null;
   }
 }
 
-// ── Por qué un $0.00 aquí es CORRECTO ───────────────────────────────────────
-// El saldo SOLO se gasta cuando el bot contesta con IA (lib/whatsapp/bot/ai.ts
-// llama a chatMetered, y únicamente si canSpend() da true: monedero ACTIVE con
-// saldo, o sobregiro con tarjeta). Con el monedero en cero o pausado el bot ni
-// siquiera llama al modelo: cae a la FAQ por reglas o al handoff, que son
-// gratis. Y los recordatorios y las plantillas de WhatsApp NO consumen IA: los
-// cobra Meta a la tarjeta de la clínica. Sin decirlo, el cero parece un error
-// de cobro o una pantalla rota.
-const SPEND_SCOPE_NOTE =
-  "Tu saldo se usa solo cuando el bot responde con IA. Los recordatorios y las plantillas de WhatsApp los cobra Meta a la tarjeta de tu clínica: no salen de aquí.";
+// ── Qué se paga con este saldo ───────────────────────────────────────────────
+// Un cliente real pagó $200 de saldo sin tener claro qué compraba: la pantalla
+// no lo decía. Lo que de verdad descuenta del monedero (chargeUsage → asiento
+// CHARGE), comprobado en el código el 22-sep-2026:
+//   · el bot de WhatsApp en su respuesta LIBRE (lib/whatsapp/bot/ai.ts →
+//     chatMetered), y solo si canSpend() da true: monedero ACTIVE con saldo,
+//     o sobregiro con tarjeta. Con el monedero en cero ni llama al modelo;
+//   · Sabina, el asistente del panel (api/sabina/route.ts);
+//   · la redacción de la página web con IA (api/clinic-landing/autocompletar).
+// NO descuentan: agendar o mover citas (booking.ts), confirmar o cancelar
+// respondiendo al recordatorio (reminder-reply.ts, antes del bot), los
+// recordatorios, la FAQ por reglas (engine.ts) ni las funciones de IA clínica
+// (recordUsageNoCharge, billedCents = 0: las absorbe el plan). Y los mensajes
+// de WhatsApp los cobra Meta aparte, a la cuenta de la clínica. Se dice en la
+// pantalla con las claves `monederoIa.queGasta.*` (es y en), en las dos vistas.
+// El texto anterior («tu saldo se usa solo cuando el bot responde con IA»)
+// era falso: Sabina también cobra.
 
 const IDLE_CONSEQUENCE_NOTE =
   "El bot no está usando IA: responde solo las preguntas frecuentes que tengas configuradas o pasa la conversación a una persona.";
@@ -370,11 +382,10 @@ export function SaldoClient({
           textos: {
             presetAmountsCents: PRESET_AMOUNTS_CENTS,
             rechargeAnchor: RECHARGE_ANCHOR,
-            spendScopeNote: SPEND_SCOPE_NOTE,
             idleConsequenceNote: IDLE_CONSEQUENCE_NOTE,
             idleTitle,
-            txTypeLabel,
-            txSourceLabel,
+            recargaTipoClave,
+            recargaViaClave,
           },
         }}
       />
@@ -497,9 +508,6 @@ export function SaldoClient({
                 {idleTitle(data.status)}
               </div>
               {IDLE_CONSEQUENCE_NOTE} Mientras tanto no se te cobra nada.
-              {/* La tarjeta "Consumo de IA" explica lo mismo, pero queda al final de
-                  la página: quien mira el $0.00 lo tiene aquí arriba. */}
-              <div style={{ marginTop: 8, color: "var(--text-3)" }}>{SPEND_SCOPE_NOTE}</div>
               <RechargeCta isAdmin={data.isAdmin} />
             </div>
           ) : showLowWarning ? (
@@ -507,6 +515,38 @@ export function SaldoClient({
               Saldo bajo — recarga para que tu bot siga respondiendo.
             </div>
           ) : null}
+
+          {/* ── Qué se paga con este saldo: siempre visible, antes de recargar ── */}
+          <div
+            style={{
+              marginTop: 14,
+              padding: "12px 14px",
+              borderRadius: 10,
+              border: "1px solid var(--border-soft)",
+              background: "var(--bg-elev-2)",
+              fontSize: 12.5,
+              lineHeight: 1.6,
+              color: "var(--text-2)",
+            }}
+          >
+            <div style={{ fontWeight: 600, color: "var(--text-1)", marginBottom: 6 }}>
+              {t("monederoIa.queGasta.titulo")}
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4 }}>
+              <li>
+                <strong style={{ fontWeight: 600, color: "var(--text-1)" }}>{t("monederoIa.queGasta.siEtiqueta")}</strong>{" "}
+                {t("monederoIa.queGasta.si")}
+              </li>
+              <li>
+                <strong style={{ fontWeight: 600, color: "var(--text-1)" }}>{t("monederoIa.queGasta.noEtiqueta")}</strong>{" "}
+                {t("monederoIa.queGasta.no")}
+              </li>
+              <li>
+                <strong style={{ fontWeight: 600, color: "var(--text-1)" }}>{t("monederoIa.queGasta.metaEtiqueta")}</strong>{" "}
+                {t("monederoIa.queGasta.meta")}
+              </li>
+            </ul>
+          </div>
         </CardNew>
 
         {/* ── Recargar (solo admin) ── */}
@@ -670,17 +710,6 @@ export function SaldoClient({
               <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
                 gastado en IA hasta hoy
               </div>
-              <p
-                style={{
-                  maxWidth: 520,
-                  margin: "12px auto 0",
-                  fontSize: 12.5,
-                  lineHeight: 1.6,
-                  color: "var(--text-2)",
-                }}
-              >
-                {SPEND_SCOPE_NOTE}
-              </p>
               {walletIdle && (
                 <p
                   style={{
@@ -723,37 +752,60 @@ export function SaldoClient({
           )}
         </CardNew>
 
-        {/* ── Historial de movimientos ── */}
-        <CardNew title="Recargas y movimientos" sub="Tus recargas, consumos y ajustes de saldo." noPad>
-          {data.transactions.length === 0 ? (
+        {/* ── Recargas de saldo: SOLO el dinero que entra (lo que se gasta ya
+            está en «Consumo de IA», justo arriba) ── */}
+        <CardNew title={t("monederoIa.recargas.titulo")} sub={t("monederoIa.recargas.sub")} noPad>
+          {data.recargas.length === 0 ? (
             <div style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: "var(--text-3)" }}>
-              Aún no hay movimientos.
+              {t("monederoIa.recargas.vacio")}
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="table-new">
                 <thead>
                   <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Origen</th>
-                    <th className="mono">Monto</th>
-                    <th className="mono">Saldo</th>
+                    <th>{t("monederoIa.recargas.colFecha")}</th>
+                    <th>{t("monederoIa.recargas.colTipo")}</th>
+                    <th>{t("monederoIa.recargas.colVia")}</th>
+                    <th className="mono">{t("monederoIa.recargas.colMonto")}</th>
+                    <th className="mono">{t("monederoIa.recargas.colSaldo")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.transactions.map((t) => {
-                    const positive = t.amountCents >= 0;
+                  {data.recargas.map((r) => {
+                    const via = recargaViaClave(r.via);
+                    // Una devolución es dinero que SALE; una SPEI en revisión
+                    // todavía no entró: ni verde ni «+» hasta que se acredite.
+                    const sale = r.amountCents < 0;
+                    const color = r.enRevision ? "var(--text-3)" : sale ? "var(--danger)" : "var(--success)";
                     return (
-                      <tr key={t.id}>
-                        <td>{formatRelativeDate(t.createdAt)}</td>
-                        <td>{txTypeLabel(t.type)}</td>
-                        <td>{txSourceLabel(t.source)}</td>
-                        <td className="mono" style={{ color: positive ? "#16a34a" : "#dc2626" }}>
-                          {positive ? "+" : ""}
-                          {fmtMXNdec(t.amountCents / 100)}
+                      <tr key={r.id}>
+                        <td>{formatRelativeDate(r.createdAt)}</td>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            {t(recargaTipoClave(r.tipo))}
+                            {r.enRevision && (
+                              <BadgeNew tone="warning" dot style={{ whiteSpace: "nowrap" }}>
+                                {t("monederoIa.recargas.enRevision")}
+                              </BadgeNew>
+                            )}
+                          </div>
+                          {r.enRevision && (
+                            <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>
+                              {t("monederoIa.recargas.enRevisionNota")}
+                            </div>
+                          )}
                         </td>
-                        <td className="mono">{fmtMXNdec(t.balanceAfterCents / 100)}</td>
+                        <td>{via ? t(via) : ""}</td>
+                        <td className="mono" style={{ color }}>
+                          {r.enRevision || sale ? "" : "+"}
+                          {fmtMXNdec(r.amountCents / 100)}
+                        </td>
+                        <td className="mono">
+                          {r.balanceAfterCents == null
+                            ? t("monederoIa.recargas.sinSaldo")
+                            : fmtMXNdec(r.balanceAfterCents / 100)}
+                        </td>
                       </tr>
                     );
                   })}

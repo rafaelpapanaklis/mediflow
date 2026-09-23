@@ -9455,6 +9455,38 @@
       "other": "y {count} pagos más del plan"
     }
   },
+  "monederoIa": {
+    "queGasta": {
+      "titulo": "¿En qué se gasta este saldo?",
+      "siEtiqueta": "Sí lo gasta:",
+      "si": "Sabina (el asistente del panel), el bot de WhatsApp cuando responde con IA a una pregunta libre (algo que no es agendar ni cancelar) y la redacción de tu página web con IA.",
+      "noEtiqueta": "No lo gasta:",
+      "no": "agendar o mover citas, confirmar o cancelar respondiendo al recordatorio, los recordatorios y las preguntas frecuentes. Eso lo resuelve el bot con reglas, sin IA.",
+      "metaEtiqueta": "Los mensajes de WhatsApp van aparte:",
+      "meta": "los cobra Meta a la cuenta de tu clínica. Este saldo no paga los mensajes; paga pensar la respuesta."
+    },
+    "recargas": {
+      "titulo": "Recargas de saldo",
+      "sub": "El dinero que ha entrado a tu saldo de IA. Lo que se gasta está en «Consumo de IA».",
+      "vacio": "Aún no hay recargas.",
+      "colFecha": "Fecha",
+      "colTipo": "Recarga",
+      "colVia": "Método",
+      "colMonto": "Monto",
+      "colSaldo": "Saldo después",
+      "tipoRecarga": "Recarga",
+      "tipoDevolucion": "Devolución",
+      "tipoAbono": "Abono de DaleControl",
+      "tipoSpeiRevision": "Transferencia",
+      "enRevision": "En revisión",
+      "enRevisionNota": "Se acredita cuando confirmamos el pago.",
+      "viaTarjeta": "Tarjeta",
+      "viaMercadoPago": "Mercado Pago",
+      "viaSpei": "Transferencia SPEI",
+      "viaAdmin": "Registrado por DaleControl",
+      "sinSaldo": "—"
+    }
+  },
   "presupuestoNuevo": {
     "listaTitulo": "Presupuestos",
     "listaSubtitulo": "Lo que se le cotizó al paciente y cómo lo va a pagar.",

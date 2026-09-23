@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/ai-billing/wallet";
+import { filtroRecargas, filtroSpeiEnRevision, juntarRecargas } from "./recargas";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Monedero de IA (vista de la clínica). Devuelve saldo, config de auto-recarga
- * y los últimos movimientos/consumos. La clínica SOLO ve MXN (centavos):
+ * Monedero de IA (vista de la clínica). Devuelve saldo, config de auto-recarga,
+ * los últimos consumos (`usage`) y las últimas recargas (`recargas`: solo el
+ * dinero que ENTRA, ver ./recargas.ts). La clínica SOLO ve MXN (centavos):
  * nunca exponemos costUsdMicros, fxRate ni feePct. clinicId SIEMPRE de la
  * sesión, jamás del body.
  */
@@ -21,7 +23,7 @@ export async function GET() {
     // Asegura que exista el monedero (alta perezosa, saldo 0).
     const wallet = await getOrCreateWallet(ctx.clinicId);
 
-    const [usageEvents, txns] = await Promise.all([
+    const [usageEvents, asientos, speiEnRevision] = await Promise.all([
       // SOLO consumo que salió del monedero (billedCents > 0). Desde que la IA
       // clínica también registra AiUsageEvent — con billedCents 0, porque el
       // plan la incluye — un findMany sin filtro llenaría este historial de
@@ -32,10 +34,21 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
         take: 20,
       }),
+      // SOLO recargas (TOPUP, REFUND, ADJUSTMENT > 0). Los CHARGE ya se ven en
+      // «Consumo de IA»; listarlos aquí también repetía el gasto y, con 20
+      // renglones, veinte respuestas del bot escondían la única recarga.
       prisma.aiWalletTransaction.findMany({
-        where: { clinicId: ctx.clinicId },
+        where: filtroRecargas(ctx.clinicId),
         orderBy: { createdAt: "desc" },
         take: 20,
+      }),
+      // SPEI con comprobante subido y todavía sin confirmar: la clínica ya
+      // transfirió y quiere ver que lo sabemos.
+      prisma.aiTopup.findMany({
+        where: filtroSpeiEnRevision(ctx.clinicId),
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: { id: true, amountCents: true, createdAt: true },
       }),
     ]);
 
@@ -56,14 +69,15 @@ export async function GET() {
         billedCents: e.billedCents,
         createdAt: e.createdAt,
       })),
-      transactions: txns.map((t) => ({
-        id: t.id,
-        type: t.type,
-        amountCents: t.amountCents,
-        balanceAfterCents: t.balanceAfterCents,
-        source: t.source,
-        note: t.note,
-        createdAt: t.createdAt,
+      recargas: juntarRecargas(asientos, speiEnRevision).map((r) => ({
+        id: r.id,
+        tipo: r.tipo,
+        via: r.via,
+        amountCents: r.amountCents,
+        balanceAfterCents: r.balanceAfterCents,
+        note: r.note,
+        createdAt: r.createdAt,
+        enRevision: r.enRevision,
       })),
     });
   } catch {

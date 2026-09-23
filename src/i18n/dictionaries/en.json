@@ -9455,6 +9455,38 @@
       "other": "and {count} more plan payments"
     }
   },
+  "monederoIa": {
+    "queGasta": {
+      "titulo": "What does this balance pay for?",
+      "siEtiqueta": "It does pay for:",
+      "si": "Sabina (the dashboard assistant), the WhatsApp bot when it answers a free-form question with AI (anything that isn't booking or cancelling), and writing your website with AI.",
+      "noEtiqueta": "It does not pay for:",
+      "no": "booking or moving appointments, confirming or cancelling by replying to a reminder, reminders and FAQs. The bot handles those with rules, no AI.",
+      "metaEtiqueta": "WhatsApp messages are billed separately:",
+      "meta": "Meta charges them to your clinic's own account. This balance doesn't pay for messages; it pays for thinking up the reply."
+    },
+    "recargas": {
+      "titulo": "Balance top-ups",
+      "sub": "Money that has come into your AI balance. What you spend is under \"AI usage\".",
+      "vacio": "No top-ups yet.",
+      "colFecha": "Date",
+      "colTipo": "Top-up",
+      "colVia": "Method",
+      "colMonto": "Amount",
+      "colSaldo": "Balance after",
+      "tipoRecarga": "Top-up",
+      "tipoDevolucion": "Refund",
+      "tipoAbono": "Credit from DaleControl",
+      "tipoSpeiRevision": "Transfer",
+      "enRevision": "Under review",
+      "enRevisionNota": "Credited once we confirm the payment.",
+      "viaTarjeta": "Card",
+      "viaMercadoPago": "Mercado Pago",
+      "viaSpei": "SPEI transfer",
+      "viaAdmin": "Registered by DaleControl",
+      "sinSaldo": "—"
+    }
+  },
   "presupuestoNuevo": {
     "listaTitulo": "Quotes",
     "listaSubtitulo": "What the patient was quoted, and how they will pay for it.",
