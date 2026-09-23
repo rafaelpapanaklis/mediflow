@@ -134,11 +134,36 @@ export function renderReminderTemplate(template: string, vars: ReminderTemplateV
     .replaceAll("{hora}", vars.hora)
     .replaceAll("{doctor}", vars.doctor)
     .replaceAll("{doctorName}", vars.doctor)
-    .replaceAll("{link}", vars.link);
+    .replaceAll("{link}", vars.link)
+    // `doctor` ya viene como "Dr/a. Nombre", pero el texto por defecto de
+    // /dashboard/whatsapp (y muchos guardados en waReminderMsg) dicen
+    // "Dr/a. {doctor}": sin esto el paciente leía "Dr/a. Dr/a. Nombre".
+    .replaceAll("Dr/a. Dr/a.", "Dr/a.");
   if (vars.link && !body.includes(vars.link)) {
     body += `\n\nConfirma tu asistencia aquí: ${vars.link}`;
   }
   return body.trim();
+}
+
+/** Marcadores que renderReminderTemplate sustituye (alias legacy incluidos). */
+export const REMINDER_TEMPLATE_VARS = [
+  "paciente", "nombre", "clinica", "clinicName", "fecha", "hora", "doctor", "doctorName", "link",
+] as const;
+
+/**
+ * Todo lo que renderReminderTemplate dejaría con llaves hacia el paciente:
+ * marcadores que no conoce (`{precio}`, `{ nombre }`, `{Nombre}`), dobles
+ * llaves (`{{fecha}}` saldría «{lunes…}»; `{{1}}` es de las plantillas de
+ * Meta, no del texto libre) y llaves sueltas (`{` o `}` que no cierran).
+ * Sin repetidos, en el orden en que aparecen.
+ */
+export function findUnknownReminderVars(template: string): string[] {
+  const known = new Set<string>(REMINDER_TEMPLATE_VARS.map((v) => `{${v}}`));
+  const bloque = /\{+[^{}\n]{0,40}\}+/g;
+  const found = (template.match(bloque) ?? []).filter((m) => !known.has(m));
+  const resto = template.replace(bloque, "");
+  for (const llave of ["{", "}"]) if (resto.includes(llave)) found.push(llave);
+  return Array.from(new Set(found));
 }
 
 /** Fecha y hora locales de la clínica (es-MX), mismo patrón que el queue-worker. */

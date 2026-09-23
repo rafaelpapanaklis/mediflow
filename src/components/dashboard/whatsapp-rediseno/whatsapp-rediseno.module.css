@@ -913,6 +913,65 @@
   overflow-wrap: anywhere;
 }
 
+/* ── Variables del mensaje del recordatorio ─────────────────────── */
+.vistaPreviaPista {
+  margin: -4px 0 8px;
+}
+
+.variablesLista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.variablesFila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.variablesFila .pista {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.variablesCodigos {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.variablesCodigo {
+  padding: 1px 6px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 6px;
+  background: var(--m2-tarjeta);
+  font-size: 11px;
+  color: var(--m2-texto);
+}
+
+.variablesDesconocidas {
+  margin: 10px 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--danger-strong, #991b1b);
+  overflow-wrap: anywhere;
+}
+
+.variablesDesconocidas svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--danger, #dc2626);
+}
+
 /* ── Estado de la conexión ───────────────────────────────────────── */
 
 .estadoLista {

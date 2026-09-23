@@ -129,6 +129,7 @@
     "test:nota-ligada-a-cita": "tsx --test --experimental-test-module-mocks src/app/api/clinical/__tests__/nota-ligada-a-cita.test.ts",
     "test:clinical-reminders": "tsx --test src/lib/clinical-shared/reminders/__tests__/worker-encola.test.ts",
     "test:wa-manual-reminder": "tsx --test src/lib/whatsapp/__tests__/manual-reminder-access.test.ts",
+    "test:wa-recordatorio-manual": "tsx --test --experimental-test-module-mocks src/app/api/whatsapp/send/__tests__/variables.test.ts src/lib/reminders/__tests__/plantilla-variables.test.ts",
     "test:inbox": "tsx --test src/lib/inbox/__tests__/inbox-send.test.ts",
     "test:inbox-drafts": "tsx --test src/lib/inbox/__tests__/composer-drafts.test.ts",
     "test:inbox-templates": "tsx --test src/lib/inbox/__tests__/composer-templates.test.ts",

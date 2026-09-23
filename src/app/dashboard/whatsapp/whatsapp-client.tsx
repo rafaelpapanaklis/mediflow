@@ -18,6 +18,7 @@ import { EmbeddedSignupButton } from "./embedded-signup-button";
 import type { RecentReminderDTO } from "@/lib/whatsapp/recent-reminders";
 import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
 import type { AppointmentEventSettings, CobranzaSettings } from "@/lib/reminders/config";
+import { REMINDER_VARS_HELP, previewReminderMessage } from "@/lib/reminders/preview";
 import { ConexionRediseno } from "@/components/dashboard/whatsapp-rediseno/conexion";
 import s from "./whatsapp.module.css";
 
@@ -132,7 +133,9 @@ export function WhatsAppClient({
   const [loading,    setLoading]    = useState(false);
   const [showToken,  setShowToken]  = useState(false);
   const [form,       setForm]       = useState({ phoneNumberId: initPhone, accessToken: "", wabaId: initWabaId });
-  const defaultMsg = `Hola {nombre} 👋, te recordamos tu cita en *${clinicName}* el *{fecha}* a las *{hora}h*.\n\nDr/a. {doctor}\n\n_Responde este mensaje si necesitas cambiarla._`;
+  // {clinica} y no el nombre ya puesto: una llave en el nombre de la clínica
+  // dejaba el texto por defecto con una «variable desconocida» y sin poder guardar.
+  const defaultMsg = "Hola {nombre} 👋, te recordamos tu cita en *{clinica}* el *{fecha}* a las *{hora}h*.\n\nDr/a. {doctor}\n\n_Responde este mensaje si necesitas cambiarla._";
   const [msg,        setMsg]        = useState(initMsg || defaultMsg);
   const [r24h,       setR24h]       = useState(init24h);
   const [r1h,        setR1h]        = useState(init1h);
@@ -395,6 +398,13 @@ export function WhatsAppClient({
     { titleKey: "inbox.whatsapp.needFacebookTitle", descKey: "inbox.whatsapp.needFacebookDesc" },
   ];
 
+  // Vista previa y variables desconocidas del mensaje del recordatorio: el
+  // MISMO render que usa el envío (ver @/lib/reminders/preview).
+  const vistaPrevia = previewReminderMessage(msg, {
+    clinica: clinicName,
+    fecha: t("inbox.whatsapp.previewSampleDate"),
+  });
+
   // REDISEÑO (ws1-t5): con el interruptor encendido se pinta la vista nueva
   // con ESTE mismo estado y ESTOS mismos manejadores; el JSX de siempre, de
   // aquí para abajo, no cambia ni un nodo.
@@ -403,7 +413,7 @@ export function WhatsAppClient({
       <ConexionRediseno
         vm={{
           t, connected, step, setStep, loading, showToken, setShowToken, form, setForm,
-          msg, setMsg, defaultMsg, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
+          msg, setMsg, defaultMsg, vistaPrevia, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
           connect, disconnect, saveSettings, saveToggle, connChip, remindersOn,
           avisosEvento, avisosCobranza, cobranzaOn: cobranza.enabled, resumenAvisos,
           esAvailable: ES_AVAILABLE,
@@ -781,19 +791,35 @@ export function WhatsAppClient({
                 {t("inbox.whatsapp.resetDefaultMessage")}
               </button>
 
+              {vistaPrevia.unknown.length > 0 && (
+                <p className={s.varsUnknown} role="alert">
+                  <AlertTriangle size={13} />
+                  <span>{t("inbox.whatsapp.unknownVars", { vars: vistaPrevia.unknown.join(", ") })}</span>
+                </p>
+              )}
+
+              <div className={s.varsBox}>
+                <div className={s.previewLabel}>{t("inbox.whatsapp.varsTitle")}</div>
+                <ul className={s.varsList}>
+                  {REMINDER_VARS_HELP.map((v) => (
+                    <li key={v.labelKey} className={s.varsRow}>
+                      <span className={s.varsCodes}>
+                        {v.vars.map((code) => <code key={code} className={s.varsCode}>{code}</code>)}
+                      </span>
+                      <span className={s.varsDesc}>{t(v.labelKey)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
               <div className={s.previewBox}>
                 <div className={s.previewLabel}>{t("inbox.whatsapp.preview")}</div>
-                <div className={s.previewBubble}>
-                  {msg
-                    .replace("{nombre}", "María")
-                    .replace("{fecha}", t("inbox.whatsapp.previewSampleDate"))
-                    .replace("{hora}", "10:00")
-                    .replace("{doctor}", "García")}
-                </div>
+                <p className={s.previewHint}>{t("inbox.whatsapp.previewHint")}</p>
+                <div className={s.previewBubble}>{vistaPrevia.preview}</div>
               </div>
 
               <div className={s.doneActions}>
-                <ButtonNew variant="primary" onClick={saveSettings} disabled={savingMsg}>
+                <ButtonNew variant="primary" onClick={saveSettings} disabled={savingMsg || vistaPrevia.unknown.length > 0}>
                   {savingMsg ? t("inbox.whatsapp.saving") : t("inbox.whatsapp.saveSettings")}
                 </ButtonNew>
                 <ButtonNew variant="danger" onClick={disconnect} disabled={loading}>

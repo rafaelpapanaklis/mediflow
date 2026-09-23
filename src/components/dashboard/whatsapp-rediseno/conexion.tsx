@@ -9,6 +9,7 @@ import {
 import type { TFunction } from "@/i18n/t";
 import type { RecentReminderDTO } from "@/lib/whatsapp/recent-reminders";
 import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
+import { REMINDER_VARS_HELP } from "@/lib/reminders/preview";
 import { EmbeddedSignupButton } from "@/app/dashboard/whatsapp/embedded-signup-button";
 import { RaizWhatsApp } from "./raiz";
 import { Boton, BotonEnlace, Cabecera, Campo, Etiqueta, FilaInterruptor, Nota, Tarjeta, type Tono } from "./piezas";
@@ -67,6 +68,8 @@ export type ConexionVM = {
   msg: string;
   setMsg: (v: string) => void;
   defaultMsg: string;
+  /** Mensaje ya renderizado con datos de ejemplo + variables que no existen. */
+  vistaPrevia: { preview: string; unknown: string[] };
   r24h: boolean;
   r1h: boolean;
   setR24h: (v: boolean) => void;
@@ -132,7 +135,7 @@ function NotaFacturacion({ t }: { t: TFunction }) {
 export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
   const {
     t, connected, step, setStep, loading, showToken, setShowToken, form, setForm,
-    msg, setMsg, defaultMsg, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
+    msg, setMsg, defaultMsg, vistaPrevia, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
     connect, disconnect, saveSettings, saveToggle, connChip, remindersOn, esAvailable,
     avisosEvento, avisosCobranza, cobranzaOn, resumenAvisos,
     onEmbeddedConnected, refrescar, recentReminders, recentRemindersFailed, sinPlantilla30d = 0,
@@ -448,19 +451,35 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
                 {t("inbox.whatsapp.resetDefaultMessage")}
               </button>
 
+              {vistaPrevia.unknown.length > 0 && (
+                <p className={s.variablesDesconocidas} role="alert">
+                  <AlertTriangle size={13} />
+                  <span>{t("inbox.whatsapp.unknownVars", { vars: vistaPrevia.unknown.join(", ") })}</span>
+                </p>
+              )}
+
+              <div className={s.vistaPrevia}>
+                <div className={s.vistaPreviaEtiqueta}>{t("inbox.whatsapp.varsTitle")}</div>
+                <ul className={s.variablesLista}>
+                  {REMINDER_VARS_HELP.map((v) => (
+                    <li key={v.labelKey} className={s.variablesFila}>
+                      <span className={s.variablesCodigos}>
+                        {v.vars.map((codigo) => <code key={codigo} className={s.variablesCodigo}>{codigo}</code>)}
+                      </span>
+                      <span className={s.pista}>{t(v.labelKey)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
               <div className={s.vistaPrevia}>
                 <div className={s.vistaPreviaEtiqueta}>{t("inbox.whatsapp.preview")}</div>
-                <div className={s.burbuja}>
-                  {msg
-                    .replace("{nombre}", "María")
-                    .replace("{fecha}", t("inbox.whatsapp.previewSampleDate"))
-                    .replace("{hora}", "10:00")
-                    .replace("{doctor}", "García")}
-                </div>
+                <p className={`${s.pista} ${s.vistaPreviaPista}`}>{t("inbox.whatsapp.previewHint")}</p>
+                <div className={s.burbuja}>{vistaPrevia.preview}</div>
               </div>
 
               <div className={`${s.accionesFormulario} ${s.arribaMas}`}>
-                <Boton variante="principal" onClick={saveSettings} disabled={savingMsg}>
+                <Boton variante="principal" onClick={saveSettings} disabled={savingMsg || vistaPrevia.unknown.length > 0}>
                   {savingMsg ? t("inbox.whatsapp.saving") : t("inbox.whatsapp.saveSettings")}
                 </Boton>
                 <Boton variante="peligro" onClick={disconnect} disabled={loading}>
