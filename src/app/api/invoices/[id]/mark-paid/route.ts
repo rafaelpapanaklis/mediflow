@@ -8,6 +8,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { round2 } from "@/lib/invoice-totals";
 import { CASH_METHOD } from "@/lib/caja";
+import { esMetodoPago, METODOS_PAGO } from "@/lib/quotes/condiciones-pago";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -49,6 +50,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { method } = await req.json().catch(() => ({ method: undefined }));
   const payMethod = (method ?? "cash") as string;
+  // Mismo filtro que el cobro normal (POST /api/invoices/[id]): un "refund" aquí
+  // saldaría la factura con un Payment que todo lo demás lee como reembolso.
+  if (!esMetodoPago(payMethod)) {
+    return NextResponse.json({ error: `Método de pago inválido. Usa uno de: ${METODOS_PAGO.join(", ")}` }, { status: 400 });
+  }
 
   // Visibilidad por paciente (barrido Ola 3): cobrar la factura de un paciente
   // restringido exige poder verlo (el GET de facturas ya filtra la lista).

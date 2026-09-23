@@ -294,8 +294,9 @@ export function sumarPeriodos(fecha: string, frecuencia: FrecuenciaPago, n: numb
  * El residuo (0..n−1 centavos) se suma de a uno a los PRIMEROS pagos, no al
  * último: así la cola del plan es el número parejo que se le dice al paciente
  * («…y los demás de $3,333.33») y el centavo de más lo paga quien todavía no ha
- * pagado nada. `POST /api/payment-plans` lo hace al revés (todo el residuo en la
- * última cuota, `route.ts:120-122`); no se copia a propósito y queda anotado.
+ * pagado nada. `POST /api/payment-plans` usa esta misma función desde
+ * `lib/payment-plans/letras.ts` (antes echaba todo el residuo a la última letra
+ * y con montos chicos esa letra salía negativa).
  */
 export function repartirCentavos(totalCentavos: number, n: number): number[] {
   const cuantos = Math.max(0, Math.floor(n));
