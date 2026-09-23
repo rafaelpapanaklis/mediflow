@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AlertTriangle, Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles, XCircle } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import type { ApiPlan, BillingInvoiceRow, ClinicData } from "@/components/dashboard/subscription-tab";
+import { textosDeFila } from "@/lib/billing/historial-facturas";
 import { Boton, Insignia, Aviso, type Tono } from "@/components/dashboard/configuracion-rediseno/piezas";
 import { Seccion } from "@/components/dashboard/configuracion-rediseno/piezas";
 import { useT } from "@/i18n/i18n-provider";
@@ -328,12 +329,19 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
               <tbody>
                 {m.facturas.map((inv) => {
                   const estado = TONO_FACTURA[inv.status];
+                  const textos = textosDeFila(inv, t);
                   return (
                     <tr key={inv.id}>
                       <td className={s.fecha}>
                         {new Date(inv.date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
                       </td>
-                      <td>{inv.description}</td>
+                      <td>
+                        <div>{textos.concepto}</div>
+                        <div className={s.facturaTipo}>
+                          <span className={s.facturaEtiqueta} data-tipo={inv.kind}>{textos.etiqueta}</span>
+                          {textos.detalle && <span>{textos.detalle}</span>}
+                        </div>
+                      </td>
                       <td className={s.num}>{m.formatMoney(inv.amount, inv.currency)}</td>
                       <td>
                         <Insignia tono={estado.tono}>{t(estado.labelKey)}</Insignia>
@@ -350,6 +358,18 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
                             >
                               <Download size={11} aria-hidden />
                               PDF
+                            </a>
+                          )}
+                          {inv.receiptUrl && (
+                            <a
+                              href={inv.receiptUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={s.enlaceBoton}
+                              title={t("shell.subscriptionTab.viewReceipt")}
+                            >
+                              <ExternalLink size={11} aria-hidden />
+                              {t("shell.subscriptionTab.receipt")}
                             </a>
                           )}
                           {inv.paymentUrl && (

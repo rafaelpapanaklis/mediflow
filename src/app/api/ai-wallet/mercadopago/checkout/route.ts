@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { env } from "@/env";
 import { createPreference } from "@/lib/mercadopago";
 import { buildMpTopupRef } from "@/lib/ai-wallet/mercadopago";
+import { mercadoPagoConfigurado } from "@/lib/ai-wallet/metodos-recarga";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,15 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
 
+  // Sin token de plataforma, Mercado Pago no es un método disponible (la
+  // pantalla ni lo ofrece): se dice así, antes de tocar nada, en vez de un 500.
+  if (!mercadoPagoConfigurado()) {
+    return NextResponse.json(
+      { error: "Mercado Pago no está disponible por ahora.", code: "MP_NO_DISPONIBLE" },
+      { status: 503 },
+    );
+  }
+
   let body: { amountCents?: unknown };
   try {
     body = await req.json();
@@ -40,10 +50,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const token = env.MERCADOPAGO_ACCESS_TOKEN;
-  if (!token) {
-    return NextResponse.json({ error: "MercadoPago no está configurado." }, { status: 500 });
-  }
+  const token = env.MERCADOPAGO_ACCESS_TOKEN as string; // presente: lo comprobó mercadoPagoConfigurado()
 
   // MercadoPago exige back_urls/notification_url absolutas (auto_return=approved).
   // Sin base configurada produciríamos URLs relativas y MP rechazaría la

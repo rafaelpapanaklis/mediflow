@@ -1133,7 +1133,16 @@
       "cfdiCollectMonthly": "Charged with your next monthly bill.",
       "cfdiCollectAnnual": "Charged on the 1st of next month.",
       "cfdiCollectManual": "Recorded as an amount due at month-end.",
-      "cfdiDebt": "Amount due: {amount}"
+      "cfdiDebt": "Amount due: {amount}",
+      "kindSubscription": "Subscription",
+      "kindAiTopup": "AI balance",
+      "aiTopupConcept": "AI balance top-up",
+      "topupViaCard": "Card",
+      "topupViaMercadopago": "Mercado Pago",
+      "topupViaSpei": "SPEI transfer",
+      "topupViaManual": "Credit recorded by DaleControl",
+      "receipt": "Receipt",
+      "viewReceipt": "View the Stripe receipt"
     },
     "onboardingChecklist": {
       "title": "First steps",
@@ -9771,6 +9780,47 @@
       "hintDoctor": "The patient has signed. The doctor's signature is still missing for the letter to be complete.",
       "hintComplete": "The letter is complete. You can download it, print it or send it to the patient.",
       "hintRevoked": "This letter is revoked: it stays in the record, but it is no longer sent."
+    }
+  },
+  "saldoIa": {
+    "spei": {
+      "title": "Bank transfer (SPEI)",
+      "requestIntro": "We send you the transfer details through a support ticket: we open it with the message already written and our team replies there.",
+      "amountLabel": "Amount to top up ($)",
+      "ticketNote": "The ticket includes your clinic's name and this amount.",
+      "requestCta": "Request transfer details",
+      "requesting": "Opening ticket…",
+      "alreadyPaid": "Already transferred? Upload your receipt",
+      "cancel": "Cancel",
+      "close": "Close",
+      "doneTitle": "Done: we opened ticket {folio}",
+      "doneBody": "You asked to top up {monto}. Here's what happens next:",
+      "doneStep1": "Our team writes to you in that ticket with the transfer details.",
+      "doneStep2": "You make the transfer for {monto}.",
+      "doneStep3": "You come back here, open “Bank transfer (SPEI)” and upload your receipt. Your balance is credited once we confirm the payment.",
+      "viewTicket": "View the ticket",
+      "gotIt": "Got it",
+      "errAmount": "Enter an amount between {min} and {max}.",
+      "errTicket": "We couldn't open the ticket. Try again or write to us from Support.",
+      "proofIntro": "Enter the amount you transferred and attach your receipt.",
+      "proofAmountLabel": "Amount ($)",
+      "proofFileLabel": "Receipt",
+      "proofSubmit": "Send receipt",
+      "proofSending": "Sending…",
+      "proofMissing": "Attach your receipt.",
+      "proofSent": "Receipt sent. We'll review it and credit your balance.",
+      "proofError": "We couldn't send the receipt. Please try again.",
+      "back": "Back"
+    },
+    "speiTicket": {
+      "subject": "AI balance top-up via SPEI — {monto}",
+      "greeting": "Hi, DaleControl team:",
+      "intro": "We'd like to top up our AI balance by SPEI bank transfer.",
+      "clinic": "· Clinic: {clinica}",
+      "amount": "· Amount to top up: {monto}",
+      "requester": "· Requested by: {persona}",
+      "ask": "Please send us the transfer details (bank, CLABE and beneficiary) through this ticket. Once we make the transfer, we'll upload the receipt from the AI balance screen.",
+      "thanks": "Thank you."
     }
   }
 }

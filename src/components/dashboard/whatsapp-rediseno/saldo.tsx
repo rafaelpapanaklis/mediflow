@@ -1,7 +1,9 @@
 "use client";
 
-import { ArrowLeft, Wallet, CreditCard, Building2, Upload, X } from "lucide-react";
-import type { WalletData } from "@/app/dashboard/whatsapp/bot/saldo/saldo-client";
+import { ArrowLeft, Wallet, CreditCard, Building2, Upload, X, CheckCircle2 } from "lucide-react";
+import type { SpeiPaso, SpeiTicket, WalletData } from "@/app/dashboard/whatsapp/bot/saldo/saldo-client";
+import { useT } from "@/i18n/i18n-provider";
+import { montoMxn } from "@/lib/ai-wallet/spei-montos";
 import { aiBillingFeatureLabel } from "@/lib/ai-billing/types";
 import { fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { RaizWhatsApp } from "./raiz";
@@ -14,6 +16,8 @@ import s from "./whatsapp-rediseno.module.css";
  * vivían allí (por qué un $0.00 es correcto, qué significa «pausado», los
  * montos preestablecidos, el ancla de la tarjeta de recarga). Se pasan por
  * aquí en vez de copiarlos para que las dos pantallas digan lo mismo siempre.
+ * Los textos del diálogo SPEI salen de i18n (`saldoIa.spei.*`), las mismas
+ * claves en las dos pantallas.
  */
 export type SaldoVM = {
   data: WalletData | null;
@@ -25,13 +29,22 @@ export type SaldoVM = {
   setCustomPesos: (v: string) => void;
   payBusy: boolean;
   startCheckout: (path: string) => Promise<void>;
+  /** ¿Se ofrece Mercado Pago? Lo decide el servidor (token de plataforma). */
+  mercadoPago: boolean;
   speiOpen: boolean;
   setSpeiOpen: (v: boolean) => void;
+  /** Cierra el diálogo SPEI, salvo con una petición en vuelo. */
+  cerrarSpei: () => void;
+  speiPaso: SpeiPaso;
+  setSpeiPaso: (v: SpeiPaso) => void;
   speiPesos: string;
   setSpeiPesos: (v: string) => void;
   setSpeiFile: (f: File | null) => void;
   speiBusy: boolean;
+  speiError: string | null;
+  speiTicket: SpeiTicket | null;
   openSpei: () => void;
+  solicitarSpei: () => Promise<void>;
   submitSpei: () => Promise<void>;
   autoOn: boolean;
   setAutoOn: (v: boolean) => void;
@@ -55,10 +68,11 @@ export type SaldoVM = {
 const VOLVER = "/dashboard/whatsapp/bot";
 
 export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
+  const t = useT();
   const {
     data, loading, loadError, amountCents, setAmountCents, customPesos, setCustomPesos, payBusy,
-    startCheckout, speiOpen, setSpeiOpen, speiPesos, setSpeiPesos, setSpeiFile, speiBusy, openSpei,
-    submitSpei, autoOn, setAutoOn, thresholdPesos, setThresholdPesos, autoAmountPesos,
+    startCheckout, mercadoPago, speiOpen, setSpeiOpen, cerrarSpei, speiPaso, setSpeiPaso, speiPesos, setSpeiPesos,
+    setSpeiFile, speiBusy, speiError, speiTicket, openSpei, solicitarSpei, submitSpei, autoOn, setAutoOn, thresholdPesos, setThresholdPesos, autoAmountPesos,
     setAutoAmountPesos, savingAuto, saveAuto, textos,
   } = vm;
 
@@ -214,15 +228,17 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
                       >
                         Tarjeta
                       </Boton>
-                      <Boton
-                        icono={<Wallet size={15} />}
-                        disabled={payBusy}
-                        onClick={() => startCheckout("/api/ai-wallet/mercadopago/checkout")}
-                      >
-                        MercadoPago
-                      </Boton>
+                      {mercadoPago && (
+                        <Boton
+                          icono={<Wallet size={15} />}
+                          disabled={payBusy}
+                          onClick={() => startCheckout("/api/ai-wallet/mercadopago/checkout")}
+                        >
+                          MercadoPago
+                        </Boton>
+                      )}
                       <Boton icono={<Building2 size={15} />} disabled={payBusy} onClick={openSpei}>
-                        Transferencia (SPEI)
+                        {t("saldoIa.spei.title")}
                       </Boton>
                     </div>
                   </div>
@@ -370,47 +386,112 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
         </div>
       </div>
 
-      {/* ── Diálogo SPEI ── */}
+      {/* ── Diálogo SPEI: pedir datos (ticket) → listo → comprobante ── */}
       {speiOpen && (
-        <div role="dialog" aria-modal="true" className={s.velo} onClick={() => setSpeiOpen(false)}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="spei-titulo"
+          className={s.velo}
+          onClick={cerrarSpei}
+        >
           <div className={s.dialogo} onClick={(e) => e.stopPropagation()}>
             <div className={s.dialogoCabeza}>
-              <div>
-                <div className={s.dialogoTitulo}>Transferencia (SPEI)</div>
-                <div className={s.dialogoSub}>Indica el monto que transferiste y adjunta tu comprobante.</div>
-              </div>
-              <button type="button" aria-label="Cerrar" className={s.cerrar} onClick={() => setSpeiOpen(false)}>
+              <div id="spei-titulo" className={s.dialogoTitulo}>{t("saldoIa.spei.title")}</div>
+              <button type="button" aria-label={t("saldoIa.spei.close")} className={s.cerrar} onClick={cerrarSpei} disabled={speiBusy}>
                 <X size={18} />
               </button>
             </div>
 
-            <div className={s.campos}>
-              <Campo etiqueta="Monto ($)">
-                <input
-                  className={s.entrada}
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={speiPesos}
-                  onChange={(e) => setSpeiPesos(e.target.value)}
-                />
-              </Campo>
-              <Campo etiqueta="Comprobante">
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(e) => setSpeiFile(e.target.files?.[0] ?? null)}
-                />
-              </Campo>
-              <div className={`${s.accionesFormulario} ${s.accionesDerecha}`}>
-                <Boton variante="suave" onClick={() => setSpeiOpen(false)} disabled={speiBusy}>
-                  Cancelar
-                </Boton>
-                <Boton variante="principal" icono={<Upload size={15} />} onClick={submitSpei} disabled={speiBusy}>
-                  {speiBusy ? "Enviando…" : "Enviar comprobante"}
-                </Boton>
+            {speiPaso === "solicitar" && (
+              <div className={s.campos}>
+                <p className={s.parrafo}>{t("saldoIa.spei.requestIntro")}</p>
+                <Campo etiqueta={t("saldoIa.spei.amountLabel")} pista={t("saldoIa.spei.ticketNote")}>
+                  <input
+                    className={s.entrada}
+                    type="number"
+                    min={0}
+                    step="1"
+                    aria-label={t("saldoIa.spei.amountLabel")}
+                    value={speiPesos}
+                    onChange={(e) => setSpeiPesos(e.target.value)}
+                  />
+                </Campo>
+                {speiError && (
+                  <p role="alert" className={s.errorCampo} style={{ marginTop: 0 }}>
+                    {speiError}
+                  </p>
+                )}
+                <div className={`${s.accionesFormulario} ${s.accionesDerecha}`}>
+                  <Boton variante="suave" onClick={cerrarSpei} disabled={speiBusy}>
+                    {t("saldoIa.spei.cancel")}
+                  </Boton>
+                  <Boton variante="principal" icono={<Building2 size={15} />} onClick={solicitarSpei} disabled={speiBusy}>
+                    {speiBusy ? t("saldoIa.spei.requesting") : t("saldoIa.spei.requestCta")}
+                  </Boton>
+                </div>
+                <div className={s.speiOtroPaso}>
+                  <button type="button" className={s.enlace} onClick={() => setSpeiPaso("comprobante")} disabled={speiBusy}>
+                    {t("saldoIa.spei.alreadyPaid")}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
+
+            {speiPaso === "enviado" && speiTicket && (
+              <div className={s.campos}>
+                <div role="status" className={s.speiListo}>
+                  <CheckCircle2 size={20} aria-hidden className={s.speiListoIcono} />
+                  <div className={s.filaTitulo}>{t("saldoIa.spei.doneTitle", { folio: speiTicket.folioLabel })}</div>
+                </div>
+                <p className={s.parrafo}>{t("saldoIa.spei.doneBody", { monto: montoMxn(speiTicket.amountCents) })}</p>
+                <ol className={s.listaNumerada} style={{ marginBottom: 0 }}>
+                  <li>{t("saldoIa.spei.doneStep1")}</li>
+                  <li>{t("saldoIa.spei.doneStep2", { monto: montoMxn(speiTicket.amountCents) })}</li>
+                  <li>{t("saldoIa.spei.doneStep3")}</li>
+                </ol>
+                <div className={`${s.accionesFormulario} ${s.accionesDerecha}`}>
+                  <BotonEnlace href={`/dashboard/soporte/${speiTicket.id}`}>{t("saldoIa.spei.viewTicket")}</BotonEnlace>
+                  <Boton variante="principal" onClick={() => setSpeiOpen(false)}>
+                    {t("saldoIa.spei.gotIt")}
+                  </Boton>
+                </div>
+              </div>
+            )}
+
+            {speiPaso === "comprobante" && (
+              <div className={s.campos}>
+                <p className={s.parrafo}>{t("saldoIa.spei.proofIntro")}</p>
+                <Campo etiqueta={t("saldoIa.spei.proofAmountLabel")}>
+                  <input
+                    className={s.entrada}
+                    type="number"
+                    min={0}
+                    step="1"
+                    aria-label={t("saldoIa.spei.proofAmountLabel")}
+                    value={speiPesos}
+                    onChange={(e) => setSpeiPesos(e.target.value)}
+                  />
+                </Campo>
+                <Campo etiqueta={t("saldoIa.spei.proofFileLabel")}>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    aria-label={t("saldoIa.spei.proofFileLabel")}
+                    className={s.speiArchivo}
+                    onChange={(e) => setSpeiFile(e.target.files?.[0] ?? null)}
+                  />
+                </Campo>
+                <div className={`${s.accionesFormulario} ${s.accionesDerecha}`}>
+                  <Boton variante="suave" icono={<ArrowLeft size={15} />} onClick={() => setSpeiPaso("solicitar")} disabled={speiBusy}>
+                    {t("saldoIa.spei.back")}
+                  </Boton>
+                  <Boton variante="principal" icono={<Upload size={15} />} onClick={submitSpei} disabled={speiBusy}>
+                    {speiBusy ? t("saldoIa.spei.proofSending") : t("saldoIa.spei.proofSubmit")}
+                  </Boton>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

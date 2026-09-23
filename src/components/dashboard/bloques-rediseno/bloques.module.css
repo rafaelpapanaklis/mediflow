@@ -579,6 +579,37 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Segunda línea del concepto: QUÉ es el renglón (suscripción o recarga de
+   saldo IA) y, en una recarga, por dónde entró el dinero. La etiqueta va solo
+   con contorno para no confundirse con la insignia de estado, que va rellena. */
+.facturaTipo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--m2-texto-3);
+}
+
+.facturaEtiqueta {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--m2-texto-2);
+}
+
+.facturaEtiqueta[data-tipo="aiTopup"] {
+  border-color: currentColor;
+  color: var(--m2-iniciales-texto);
+}
+
 .filaAcciones {
   display: inline-flex;
   justify-content: flex-end;

@@ -199,6 +199,8 @@
     "test:receta-verify": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/pdf/__tests__/receta-verificacion-publica.test.ts",
     "test:quote-parity": "tsx --test src/lib/quotes/__tests__/quote-invoice-parity.test.ts",
     "test:presupuesto-factura": "tsx --test --experimental-test-module-mocks src/app/api/quotes/__tests__/presupuesto-factura.test.ts",
+    "test:historial-facturas": "tsx --test --experimental-test-module-mocks src/app/api/billing/__tests__/historial-facturas.test.ts",
+    "test:saldo-opciones-de-pago": "tsx --test --experimental-test-module-mocks src/app/api/ai-wallet/__tests__/opciones-de-pago.test.ts",
     "test:cfdi-dinero": "tsx --test src/lib/__tests__/cfdi-dinero.test.ts",
     "test:cfdi-timbrado-alerta": "tsx --test src/lib/__tests__/cfdi-timbrado-alerta.test.ts",
     "test:cfdi-cuadre": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/cuadre-renglones.test.ts",

@@ -8,6 +8,8 @@ import {
   Building2,
   Upload,
   X,
+  CheckCircle2,
+  ArrowLeft,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -16,6 +18,8 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { aiBillingFeatureLabel } from "@/lib/ai-billing/types";
 import { fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { SaldoRediseno } from "@/components/dashboard/whatsapp-rediseno/saldo";
+import { useT } from "@/i18n/i18n-provider";
+import { montoMxn, SPEI_MAX_CENTS, SPEI_MIN_CENTS } from "@/lib/ai-wallet/spei-montos";
 
 // ── Tipos de la API (GET /api/ai-wallet) ──────────────────────────────────────
 type UsageRow = {
@@ -53,6 +57,16 @@ export type WalletData = {
 
 // Montos preestablecidos para recargar (en centavos).
 const PRESET_AMOUNTS_CENTS = [20000, 50000, 100000, 200000];
+
+// ── SPEI: tres pasos ─────────────────────────────────────────────────────────
+// DaleControl todavía no publica una cuenta para transferir, así que el punto
+// de entrada ya no es subir un comprobante: es abrir un ticket de soporte con
+// el mensaje ya escrito (`/api/ai-wallet/spei/ticket`) para que el equipo pase
+// los datos. «enviado» dice qué acaba de pasar y qué sigue. El comprobante
+// (`/api/ai-wallet/spei/topup`) sigue ahí, como segundo paso: es lo que crea
+// la recarga que administración confirma para acreditar.
+export type SpeiPaso = "solicitar" | "enviado" | "comprobante";
+export type SpeiTicket = { id: string; folioLabel: string; amountCents: number };
 
 // ── Etiquetas en español neutro ───────────────────────────────────────────────
 // El historial de esta pantalla ya viene filtrado a consumo prepago, así que en
@@ -127,9 +141,14 @@ export function SaldoClient({
   // Rediseño (ws1-t5): el MISMO interruptor por clínica que enciende el menú
   // de dos niveles. Apagado, esta pantalla se pinta tal cual.
   rediseno = false,
+  // ¿Se ofrece Mercado Pago? Lo decide el servidor (¿hay token de plataforma?);
+  // sin la prop, no se ofrece.
+  mercadoPago = false,
 }: {
   rediseno?: boolean;
+  mercadoPago?: boolean;
 } = {}) {
+  const t = useT();
   const [data, setData] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -141,9 +160,12 @@ export function SaldoClient({
 
   // Modal SPEI.
   const [speiOpen, setSpeiOpen] = useState(false);
+  const [speiPaso, setSpeiPaso] = useState<SpeiPaso>("solicitar");
   const [speiPesos, setSpeiPesos] = useState("");
   const [speiFile, setSpeiFile] = useState<File | null>(null);
   const [speiBusy, setSpeiBusy] = useState(false);
+  const [speiError, setSpeiError] = useState<string | null>(null);
+  const [speiTicket, setSpeiTicket] = useState<SpeiTicket | null>(null);
 
   // Recarga automática.
   const [autoOn, setAutoOn] = useState(false);
@@ -214,12 +236,54 @@ export function SaldoClient({
   function openSpei() {
     setSpeiPesos(String(amountCents / 100));
     setSpeiFile(null);
+    setSpeiError(null);
+    setSpeiTicket(null);
+    setSpeiPaso("solicitar");
     setSpeiOpen(true);
   }
 
+  // No se cierra con una petición en vuelo: el ticket se crearía y la clínica
+  // no vería su número (y al reabrir podría abrir otro).
+  function cerrarSpei() {
+    if (!speiBusy) setSpeiOpen(false);
+  }
+
+  // Paso 1: abre el ticket. El asunto y el mensaje los redacta el servidor
+  // (nombre de la clínica de la sesión + este monto); aquí solo va el monto.
+  async function solicitarSpei() {
+    const pesos = parseFloat(speiPesos);
+    const cents = Math.round((Number.isNaN(pesos) ? 0 : pesos) * 100);
+    const errMonto = t("saldoIa.spei.errAmount", { min: montoMxn(SPEI_MIN_CENTS), max: montoMxn(SPEI_MAX_CENTS) });
+    if (cents < SPEI_MIN_CENTS || cents > SPEI_MAX_CENTS) {
+      setSpeiError(errMonto);
+      return;
+    }
+    setSpeiError(null);
+    setSpeiBusy(true);
+    try {
+      const res = await fetch("/api/ai-wallet/spei/ticket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amountCents: cents }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ticket?.id) {
+        setSpeiError(json?.code === "MONTO_INVALIDO" ? errMonto : t("saldoIa.spei.errTicket"));
+        return;
+      }
+      setSpeiTicket({ id: json.ticket.id, folioLabel: json.ticket.folioLabel, amountCents: cents });
+      setSpeiPaso("enviado");
+    } catch {
+      setSpeiError(t("saldoIa.spei.errTicket"));
+    } finally {
+      setSpeiBusy(false);
+    }
+  }
+
+  // Paso 3 (cuando ya transfirió): el comprobante de siempre.
   async function submitSpei() {
     if (!speiFile) {
-      toast.error("Adjunta tu comprobante.");
+      toast.error(t("saldoIa.spei.proofMissing"));
       return;
     }
     setSpeiBusy(true);
@@ -231,13 +295,14 @@ export function SaldoClient({
       fd.append("file", speiFile);
       const res = await fetch("/api/ai-wallet/spei/topup", { method: "POST", body: fd });
       if (!res.ok) {
-        toast("El pago por transferencia estará disponible muy pronto.");
+        const json = await res.json().catch(() => null);
+        toast.error(typeof json?.error === "string" ? json.error : t("saldoIa.spei.proofError"));
         return;
       }
-      toast.success("Comprobante enviado. Lo revisaremos y acreditaremos tu saldo.");
+      toast.success(t("saldoIa.spei.proofSent"));
       setSpeiOpen(false);
     } catch {
-      toast("El pago por transferencia estará disponible muy pronto.");
+      toast.error(t("saldoIa.spei.proofError"));
     } finally {
       setSpeiBusy(false);
     }
@@ -299,8 +364,8 @@ export function SaldoClient({
       <SaldoRediseno
         vm={{
           data, loading, loadError, amountCents, setAmountCents, customPesos, setCustomPesos, payBusy,
-          startCheckout, speiOpen, setSpeiOpen, speiPesos, setSpeiPesos, setSpeiFile, speiBusy, openSpei,
-          submitSpei, autoOn, setAutoOn, thresholdPesos, setThresholdPesos, autoAmountPesos,
+          startCheckout, mercadoPago, speiOpen, setSpeiOpen, cerrarSpei, speiPaso, setSpeiPaso, speiPesos, setSpeiPesos,
+          setSpeiFile, speiBusy, speiError, speiTicket, openSpei, solicitarSpei, submitSpei, autoOn, setAutoOn, thresholdPesos, setThresholdPesos, autoAmountPesos,
           setAutoAmountPesos, savingAuto, saveAuto,
           textos: {
             presetAmountsCents: PRESET_AMOUNTS_CENTS,
@@ -510,21 +575,23 @@ export function SaldoClient({
                   >
                     Tarjeta
                   </ButtonNew>
-                  <ButtonNew
-                    variant="secondary"
-                    icon={<Wallet size={15} />}
-                    disabled={payBusy}
-                    onClick={() => startCheckout("/api/ai-wallet/mercadopago/checkout")}
-                  >
-                    MercadoPago
-                  </ButtonNew>
+                  {mercadoPago && (
+                    <ButtonNew
+                      variant="secondary"
+                      icon={<Wallet size={15} />}
+                      disabled={payBusy}
+                      onClick={() => startCheckout("/api/ai-wallet/mercadopago/checkout")}
+                    >
+                      MercadoPago
+                    </ButtonNew>
+                  )}
                   <ButtonNew
                     variant="secondary"
                     icon={<Building2 size={15} />}
                     disabled={payBusy}
                     onClick={openSpei}
                   >
-                    Transferencia (SPEI)
+                    {t("saldoIa.spei.title")}
                   </ButtonNew>
                 </div>
               </div>
@@ -702,7 +769,8 @@ export function SaldoClient({
         <div
           role="dialog"
           aria-modal="true"
-          onClick={() => setSpeiOpen(false)}
+          aria-labelledby="spei-titulo"
+          onClick={cerrarSpei}
           style={{
             position: "fixed",
             inset: 0,
@@ -734,18 +802,14 @@ export function SaldoClient({
                 marginBottom: 14,
               }}
             >
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-                  Transferencia (SPEI)
-                </div>
-                <div style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 4 }}>
-                  Indica el monto que transferiste y adjunta tu comprobante.
-                </div>
+              <div id="spei-titulo" style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
+                {t("saldoIa.spei.title")}
               </div>
               <button
                 type="button"
-                aria-label="Cerrar"
-                onClick={() => setSpeiOpen(false)}
+                aria-label={t("saldoIa.spei.close")}
+                onClick={cerrarSpei}
+                disabled={speiBusy}
                 style={{
                   border: "none",
                   background: "transparent",
@@ -759,40 +823,135 @@ export function SaldoClient({
               </button>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div className="field-new">
-                <label className="field-new__label">Monto ($)</label>
-                <input
-                  className="input-new mono"
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={speiPesos}
-                  onChange={(e) => setSpeiPesos(e.target.value)}
-                />
+            {speiPaso === "solicitar" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)" }}>
+                  {t("saldoIa.spei.requestIntro")}
+                </p>
+                <div className="field-new">
+                  <label className="field-new__label" htmlFor="spei-monto">{t("saldoIa.spei.amountLabel")}</label>
+                  <input
+                    id="spei-monto"
+                    className="input-new mono"
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={speiPesos}
+                    onChange={(e) => setSpeiPesos(e.target.value)}
+                  />
+                  <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 6 }}>
+                    {t("saldoIa.spei.ticketNote")}
+                  </div>
+                </div>
+                {speiError && (
+                  <div role="alert" style={{ fontSize: 12.5, color: "var(--danger, #dc2626)" }}>
+                    {speiError}
+                  </div>
+                )}
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
+                  <ButtonNew variant="ghost" onClick={cerrarSpei} disabled={speiBusy}>
+                    {t("saldoIa.spei.cancel")}
+                  </ButtonNew>
+                  <ButtonNew variant="primary" icon={<Building2 size={15} />} onClick={solicitarSpei} disabled={speiBusy}>
+                    {speiBusy ? t("saldoIa.spei.requesting") : t("saldoIa.spei.requestCta")}
+                  </ButtonNew>
+                </div>
+                <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => setSpeiPaso("comprobante")}
+                    disabled={speiBusy}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      padding: 0,
+                      cursor: "pointer",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      color: "var(--brand)",
+                      textAlign: "left",
+                    }}
+                  >
+                    {t("saldoIa.spei.alreadyPaid")}
+                  </button>
+                </div>
               </div>
-              <div className="field-new">
-                <label className="field-new__label">Comprobante</label>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(e) => setSpeiFile(e.target.files?.[0] ?? null)}
-                />
+            )}
+
+            {speiPaso === "enviado" && speiTicket && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div role="status" style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <CheckCircle2 size={20} aria-hidden style={{ color: "var(--success, #059669)", flexShrink: 0, marginTop: 1 }} />
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
+                    {t("saldoIa.spei.doneTitle", { folio: speiTicket.folioLabel })}
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)" }}>
+                  {t("saldoIa.spei.doneBody", { monto: montoMxn(speiTicket.amountCents) })}
+                </p>
+                <ol style={{ margin: 0, paddingLeft: 20, fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)", display: "grid", gap: 4 }}>
+                  <li>{t("saldoIa.spei.doneStep1")}</li>
+                  <li>{t("saldoIa.spei.doneStep2", { monto: montoMxn(speiTicket.amountCents) })}</li>
+                  <li>{t("saldoIa.spei.doneStep3")}</li>
+                </ol>
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
+                  <Link href={`/dashboard/soporte/${speiTicket.id}`} className="btn-new btn-new--secondary">
+                    {t("saldoIa.spei.viewTicket")}
+                  </Link>
+                  <ButtonNew variant="primary" onClick={() => setSpeiOpen(false)}>
+                    {t("saldoIa.spei.gotIt")}
+                  </ButtonNew>
+                </div>
               </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <ButtonNew variant="ghost" onClick={() => setSpeiOpen(false)} disabled={speiBusy}>
-                  Cancelar
-                </ButtonNew>
-                <ButtonNew
-                  variant="primary"
-                  icon={<Upload size={15} />}
-                  onClick={submitSpei}
-                  disabled={speiBusy}
-                >
-                  {speiBusy ? "Enviando…" : "Enviar comprobante"}
-                </ButtonNew>
+            )}
+
+            {speiPaso === "comprobante" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)" }}>
+                  {t("saldoIa.spei.proofIntro")}
+                </p>
+                <div className="field-new">
+                  <label className="field-new__label" htmlFor="spei-monto-comprobante">{t("saldoIa.spei.proofAmountLabel")}</label>
+                  <input
+                    id="spei-monto-comprobante"
+                    className="input-new mono"
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={speiPesos}
+                    onChange={(e) => setSpeiPesos(e.target.value)}
+                  />
+                </div>
+                <div className="field-new">
+                  <label className="field-new__label" htmlFor="spei-comprobante">{t("saldoIa.spei.proofFileLabel")}</label>
+                  <input
+                    id="spei-comprobante"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    style={{ maxWidth: "100%" }}
+                    onChange={(e) => setSpeiFile(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
+                  <ButtonNew
+                    variant="ghost"
+                    icon={<ArrowLeft size={15} />}
+                    onClick={() => setSpeiPaso("solicitar")}
+                    disabled={speiBusy}
+                  >
+                    {t("saldoIa.spei.back")}
+                  </ButtonNew>
+                  <ButtonNew
+                    variant="primary"
+                    icon={<Upload size={15} />}
+                    onClick={submitSpei}
+                    disabled={speiBusy}
+                  >
+                    {speiBusy ? t("saldoIa.spei.proofSending") : t("saldoIa.spei.proofSubmit")}
+                  </ButtonNew>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

@@ -1270,6 +1270,33 @@
   color: var(--m2-texto-3);
 }
 
+/* SPEI: el enlace al comprobante, separado de la acción principal. */
+.speiOtroPaso {
+  padding-top: 12px;
+  border-top: 1px solid var(--m2-borde);
+}
+
+/* SPEI: el ticket ya se abrió. */
+.speiListo {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.speiListoIcono {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--success, #059669);
+}
+
+/* El <input type="file"> trae un ancho de fábrica que a 390 px se sale. */
+.speiArchivo {
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--m2-texto-2);
+}
+
 .cerrar {
   display: grid;
   place-items: center;

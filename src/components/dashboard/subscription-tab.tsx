@@ -10,6 +10,7 @@ import { daysUntil, isInTrial as inTrialNow, isPlanExpired, isSubscriptionActive
 import { PaymentMethodModal } from "./payment-method-modal";
 import { CfdiUsageCard } from "./cfdi-usage-card";
 import { useT } from "@/i18n/i18n-provider";
+import { textosDeFila, type BillingInvoiceRow } from "@/lib/billing/historial-facturas";
 import { ROPA_DESGLOSE, SuscripcionRediseno, type RopaDesglose } from "./bloques-rediseno/suscripcion";
 
 export interface ClinicData {
@@ -39,17 +40,8 @@ interface Props {
   rediseno?: boolean;
 }
 
-export interface BillingInvoiceRow {
-  id: string;
-  date: string;
-  amount: number;
-  currency: string;
-  status: "paid" | "pending" | "overdue" | "failed" | "void";
-  description: string;
-  source: "stripe" | "local";
-  downloadUrl: string | null;
-  paymentUrl: string | null;
-}
+// Un solo tipo para la ruta y la pantalla (antes había dos copias a mano).
+export type { BillingInvoiceRow };
 
 interface InvoicesResponse {
   invoices: BillingInvoiceRow[];
@@ -842,10 +834,18 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {invoices.map((inv) => (
+                {invoices.map((inv) => {
+                  const textos = textosDeFila(inv, t);
+                  return (
                   <tr key={inv.id} style={{ borderBottom: "1px solid var(--border-soft, hsl(var(--border)))" }}>
                     <td style={tdStyle}>{new Date(inv.date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}</td>
-                    <td style={tdStyle}>{inv.description}</td>
+                    <td style={tdStyle}>
+                      <div>{textos.concepto}</div>
+                      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 3, fontSize: 11, color: "var(--text-3)" }}>
+                        <span style={inv.kind === "aiTopup" ? tagRecargaStyle : tagSuscripcionStyle}>{textos.etiqueta}</span>
+                        {textos.detalle && <span>{textos.detalle}</span>}
+                      </div>
+                    </td>
                     <td style={{ ...tdStyle, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
                       {formatMoney(inv.amount, inv.currency)}
                     </td>
@@ -867,6 +867,19 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
                             PDF
                           </a>
                         )}
+                        {inv.receiptUrl && (
+                          <a
+                            href={inv.receiptUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-new btn-new--ghost btn-new--sm"
+                            style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 8px", fontSize: 11 }}
+                            title={t("shell.subscriptionTab.viewReceipt")}
+                          >
+                            <ExternalLink size={11} aria-hidden />
+                            {t("shell.subscriptionTab.receipt")}
+                          </a>
+                        )}
                         {inv.paymentUrl && (
                           <a
                             href={inv.paymentUrl}
@@ -882,7 +895,8 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -998,6 +1012,30 @@ const tdStyle: React.CSSProperties = {
   fontSize: 12,
   color: "var(--text-1)",
   verticalAlign: "middle",
+};
+
+// Etiqueta de «qué es» cada renglón del historial: la recarga de saldo IA con
+// el color de marca, la suscripción en neutro. Solo contorno, para no
+// confundirse con las insignias de estado, que van rellenas.
+const tagBaseStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "0 7px",
+  borderRadius: 100,
+  fontSize: 10.5,
+  fontWeight: 600,
+  lineHeight: "16px",
+  whiteSpace: "nowrap",
+};
+const tagRecargaStyle: React.CSSProperties = {
+  ...tagBaseStyle,
+  border: "1px solid var(--brand)",
+  color: "var(--brand)",
+};
+const tagSuscripcionStyle: React.CSSProperties = {
+  ...tagBaseStyle,
+  border: "1px solid var(--border-soft, hsl(var(--border)))",
+  color: "var(--text-2)",
 };
 
 function StatusBadge({ status }: { status: BillingInvoiceRow["status"] }) {

@@ -1133,7 +1133,16 @@
       "cfdiCollectMonthly": "Se cobra con tu próxima mensualidad.",
       "cfdiCollectAnnual": "Se cobra el 1.º del próximo mes.",
       "cfdiCollectManual": "Se registrará como adeudo a fin de mes.",
-      "cfdiDebt": "Adeudo pendiente: {amount}"
+      "cfdiDebt": "Adeudo pendiente: {amount}",
+      "kindSubscription": "Suscripción",
+      "kindAiTopup": "Saldo IA",
+      "aiTopupConcept": "Recarga de saldo IA",
+      "topupViaCard": "Tarjeta",
+      "topupViaMercadopago": "Mercado Pago",
+      "topupViaSpei": "Transferencia SPEI",
+      "topupViaManual": "Abono registrado por DaleControl",
+      "receipt": "Recibo",
+      "viewReceipt": "Ver el recibo de Stripe"
     },
     "onboardingChecklist": {
       "title": "Primeros pasos",
@@ -9771,6 +9780,47 @@
       "hintDoctor": "El paciente ya firmó. Falta la firma del doctor para que la carta esté completa.",
       "hintComplete": "La carta está completa. Puedes descargarla, imprimirla o mandársela al paciente.",
       "hintRevoked": "Esta carta está revocada: se conserva en el expediente, pero ya no se envía."
+    }
+  },
+  "saldoIa": {
+    "spei": {
+      "title": "Transferencia (SPEI)",
+      "requestIntro": "Los datos para transferir te los damos por un ticket de soporte: lo abrimos con el mensaje ya escrito y nuestro equipo te responde ahí.",
+      "amountLabel": "Monto a recargar ($)",
+      "ticketNote": "El ticket lleva el nombre de tu clínica y este monto.",
+      "requestCta": "Solicitar datos para transferir",
+      "requesting": "Abriendo ticket…",
+      "alreadyPaid": "¿Ya transferiste? Sube tu comprobante",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "doneTitle": "Listo: abrimos el ticket {folio}",
+      "doneBody": "Pediste recargar {monto}. Esto es lo que sigue:",
+      "doneStep1": "Nuestro equipo te escribe por ese ticket con los datos para transferir.",
+      "doneStep2": "Haces la transferencia por {monto}.",
+      "doneStep3": "Vuelves aquí, abres «Transferencia (SPEI)» y subes tu comprobante. Tu saldo se acredita cuando confirmamos el pago.",
+      "viewTicket": "Ver el ticket",
+      "gotIt": "Entendido",
+      "errAmount": "Escribe un monto entre {min} y {max}.",
+      "errTicket": "No pudimos abrir el ticket. Inténtalo de nuevo o escríbenos desde Soporte.",
+      "proofIntro": "Indica el monto que transferiste y adjunta tu comprobante.",
+      "proofAmountLabel": "Monto ($)",
+      "proofFileLabel": "Comprobante",
+      "proofSubmit": "Enviar comprobante",
+      "proofSending": "Enviando…",
+      "proofMissing": "Adjunta tu comprobante.",
+      "proofSent": "Comprobante enviado. Lo revisaremos y acreditaremos tu saldo.",
+      "proofError": "No se pudo enviar el comprobante. Inténtalo de nuevo.",
+      "back": "Volver"
+    },
+    "speiTicket": {
+      "subject": "Recarga de saldo IA por SPEI — {monto}",
+      "greeting": "Hola, equipo de DaleControl:",
+      "intro": "Queremos recargar saldo de IA por transferencia SPEI.",
+      "clinic": "· Clínica: {clinica}",
+      "amount": "· Monto a recargar: {monto}",
+      "requester": "· Lo solicita: {persona}",
+      "ask": "Por favor, envíennos por este ticket los datos para transferir (banco, CLABE y beneficiario). Cuando hagamos la transferencia, subiremos el comprobante desde la pantalla de Saldo de IA.",
+      "thanks": "Gracias."
     }
   }
 }
