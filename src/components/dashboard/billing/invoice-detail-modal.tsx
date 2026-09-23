@@ -211,7 +211,10 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // por byte, el de siempre, y ni siquiera se pregunta por las condiciones.
   const condicionesPago = useCondicionesDeFactura(invoice?.id, open && rediseno);
   // ¿La clínica cobra con Mercado Pago? (ws1-t1) Sin cuenta: false, y nada cambia.
-  const mpDisponible = useCobroMercadoPago(open);
+  // `true`, no `open`: se pregunta al montar la ficha, no al abrir el modal.
+  // Preguntarlo al abrir hacía que el botón de Mercado Pago apareciera de golpe
+  // cuando el usuario ya estaba eligiendo método (23-sep-2026).
+  const mpDisponible = useCobroMercadoPago(true);
   // Hay un link vigente de esta factura (lo avisa el bloque del link): entonces
   // «Enviar por WhatsApp» lo pide y el aviso lo lleva.
   const [hayLinkMp, setHayLinkMp] = useState(false);

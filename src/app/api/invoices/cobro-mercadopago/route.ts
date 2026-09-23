@@ -18,7 +18,11 @@ export async function GET() {
   const ctx = await getAuthContext();
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   try {
-    return NextResponse.json({ disponible: await cobroMpDisponible(ctx.clinicId) });
+    // `clinicId` va en la respuesta para que el cliente pueda GUARDARLA con su
+    // llave: sin ella, un «sí» de la clínica A se enseñaría en la B al cambiar
+    // de clínica (que no recarga la página). No es un dato sensible: el cliente
+    // ya sabe en qué clínica está.
+    return NextResponse.json({ disponible: await cobroMpDisponible(ctx.clinicId), clinicId: ctx.clinicId });
   } catch (e) {
     // Sin respuesta de la base no se ofrece: el lado seguro es no enseñarlo.
     console.error("[invoices/cobro-mercadopago] no se pudo leer la cuenta:", (e as Error).message);

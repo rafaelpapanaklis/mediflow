@@ -29,27 +29,52 @@ export interface LinkDePago {
   venceA: string;
 }
 
-// Se pregunta en CADA apertura, sin guardarlo en el módulo: cambiar de clínica
-// no recarga la página (router.push), y un «sí» de la clínica A no puede
-// enseñar el método en la clínica B. Tampoco si desconectan la cuenta.
-function preguntarDisponible(): Promise<boolean> {
+/**
+ * ¿Puede esta clínica cobrar con Mercado Pago?
+ *
+ * Se guarda la última respuesta CON LA CLÍNICA A LA QUE PERTENECE. El motivo de
+ * guardarla: el botón salía tarde —la pantalla se pintaba y sólo después llegaba
+ * esta respuesta—, así que aparecía de golpe delante de quien ya estaba eligiendo
+ * método. Rafael lo vio el 23-sep-2026: «el botón de mercadopago tarda en aparecer».
+ *
+ * 🔴 El motivo de guardarla CON LLAVE: cambiar de clínica NO recarga la página
+ * (router.push). Un «sí» de la clínica A no puede enseñar el método en la B. Por
+ * eso la llave es el `clinicId` que devuelve el SERVIDOR, no uno que ponga el
+ * cliente, y mientras no coincida con la respuesta nueva se trata como «no sé».
+ * Y se revalida siempre en segundo plano, por si desconectan la cuenta.
+ */
+let recordado: { clinicId: string; disponible: boolean } | null = null;
+
+function preguntarDisponible(): Promise<{ clinicId: string; disponible: boolean } | null> {
   return fetch("/api/invoices/cobro-mercadopago")
     .then((r) => (r.ok ? r.json() : null))
-    .then((d) => d?.disponible === true)
-    .catch(() => false);
+    .then((d) => {
+      if (!d || typeof d.clinicId !== "string") return null;
+      recordado = { clinicId: d.clinicId, disponible: d.disponible === true };
+      return recordado;
+    })
+    .catch(() => null);
 }
 
-/** `true` solo si el servidor dijo que sí. Mientras tanto (y ante cualquier fallo), `false`. */
+/**
+ * `true` sólo si el servidor dijo que sí. Arranca con lo último que contestó
+ * (si es de esta misma clínica) y lo confirma en segundo plano.
+ *
+ * `activo` existe para no preguntar donde no hace falta. Pásalo `true` al MONTAR
+ * la pantalla, no al abrir el modal: preguntarlo tarde es justo lo que hacía que
+ * el botón apareciera con retraso.
+ */
 export function useCobroMercadoPago(activo: boolean): boolean {
-  const [disponible, setDisponible] = useState(false);
+  const [estado, setEstado] = useState<{ clinicId: string; disponible: boolean } | null>(recordado);
   useEffect(() => {
-    setDisponible(false);
     if (!activo) return;
     let vivo = true;
-    preguntarDisponible().then((v) => { if (vivo) setDisponible(v); });
+    preguntarDisponible().then((v) => { if (vivo) setEstado(v); });
     return () => { vivo = false; };
   }, [activo]);
-  return disponible;
+  // Sin respuesta, o de otra clínica: no se ofrece. El lado seguro es no enseñarlo.
+  if (!estado || (recordado && recordado.clinicId !== estado.clinicId)) return false;
+  return estado.disponible;
 }
 
 /** Pide (o reutiliza) el link. Nunca lanza: `error` trae el motivo del servidor. */
