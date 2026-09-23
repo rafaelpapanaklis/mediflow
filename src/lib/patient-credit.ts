@@ -1,6 +1,8 @@
-// Saldo a favor (crédito) del paciente. v1 SIN consumo: el saldo a favor =
-// SUM(amount) de patient_credits; NO se descuenta de los adeudos (facturas).
-// Aislamiento por clínica SIEMPRE vía where clinicId.
+// Saldo a favor (crédito) del paciente: SUM(amount) de patient_credits, que es
+// un libro de movimientos. Al emitir una factura NUEVA el saldo se aplica como
+// un Payment «anticipo» más una fila NEGATIVA aquí (patient-credit-aplicar.ts),
+// así que esta suma ya sale descontada. Las facturas anteriores al cambio no se
+// tocaron. Aislamiento por clínica SIEMPRE vía where clinicId.
 //
 // Resiliencia: la tabla patient_credits se aplica a MANO (sql/patient-credits.sql)
 // y puede ir por detrás del deploy. Si aún no existe (P2021) o le falta una

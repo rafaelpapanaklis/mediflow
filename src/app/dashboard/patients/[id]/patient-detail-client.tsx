@@ -686,6 +686,20 @@ export function PatientDetailClient({
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error ?? t("clinical.invoiceDetail.confirmError"));
         }
+        // Al confirmarse recibió el saldo a favor del paciente: se avisa y se
+        // refresca en vez de abrir el cobro con el total del borrador.
+        const confirmada = await res.json().catch(() => ({}));
+        if (confirmada?.anticipoAplicado > 0) {
+          toast(t("clinical.invoiceDetail.anticipoAplicadoAlConfirmar", {
+            monto: formatCurrency(confirmada.anticipoAplicado),
+            resta: formatCurrency(confirmada.balance ?? 0),
+          }), { duration: 10000 });
+          setInvoices((prev: any[]) => prev.map((i: any) => (i.id === inv.id
+            ? { ...i, status: confirmada.status ?? "PARTIAL", balance: confirmada.balance ?? i.balance }
+            : i)));
+          router.refresh();
+          return;
+        }
         target = { ...inv, status: "PENDING" };
         setInvoices((prev: any[]) => prev.map((i: any) => (i.id === inv.id ? { ...i, status: "PENDING" } : i)));
       } catch (err: any) {

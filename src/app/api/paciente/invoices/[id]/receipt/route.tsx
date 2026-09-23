@@ -35,6 +35,7 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   check: "Cheque",
   other: "Otro",
   online: "Pago en línea (tarjeta)",
+  anticipo: "Anticipo",
 };
 
 const STATUS_LABELS: Record<string, string> = {

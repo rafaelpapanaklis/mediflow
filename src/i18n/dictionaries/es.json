@@ -2989,6 +2989,7 @@
     "methodCheck": "Cheque",
     "methodOther": "Otro",
     "methodRefund": "Reembolso",
+    "methodAnticipo": "Anticipo (saldo a favor)",
     "toastOpened": "Caja abierta",
     "toastWithdrawal": "Retiro registrado",
     "toastClosed": "Caja cerrada",
@@ -3132,7 +3133,8 @@
       "errorNoPatient": "Elige un paciente.",
       "errorNoItems": "Agrega al menos un concepto.",
       "errorCreate": "No se pudo crear la factura",
-      "createdToast": "Factura creada: {number}"
+      "createdToast": "Factura creada: {number}",
+      "anticipoAplicadoToast": "Se descontaron {monto} del saldo a favor del paciente. Queda por cobrar {resta}."
     }
   },
   "presupuestosEnFacturacion": {
@@ -8004,6 +8006,7 @@
       "methodTransfer": "Transferencia",
       "methodCheck": "Cheque",
       "methodRefund": "Reembolso",
+      "methodAnticipo": "Anticipo (saldo a favor)",
       "methodOther": "Otro",
       "operationError": "Error en la operación",
       "operationSuccess": "Operación exitosa",
@@ -8013,6 +8016,7 @@
       "waSentToast": "Enviado — míralo en el Inbox",
       "waViewInbox": "Ver en Inbox",
       "cancelSuccess": "Factura cancelada",
+      "cancelSuccessAnticipo": "Factura cancelada. {monto} volvieron al saldo a favor del paciente.",
       "invalidAmount": "Monto inválido",
       "exceedsPaid": "Excede lo pagado",
       "refundSuccess": "Reembolso registrado",
@@ -8021,6 +8025,7 @@
       "invalidDiscount": "Descuento inválido",
       "discountApplied": "Descuento aplicado",
       "confirmError": "No se pudo confirmar la factura",
+      "anticipoAplicadoAlConfirmar": "Se aplicaron {monto} del saldo a favor del paciente. Queda por cobrar {resta}: revisa el monto antes de cobrar.",
       "deleteDraftConfirm": "¿Eliminar el borrador {number}? Esta acción no se puede deshacer.",
       "draftDeleted": "Borrador eliminado",
       "patient": "Paciente",

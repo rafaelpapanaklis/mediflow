@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { fmtMXNdec } from "@/lib/format";
 // Fecha del cobro: "hoy" en LOCAL (no en UTC) y el instante que se guarda.
 // Las mismas dos funciones que usa «Registrar pago» (billing/payment-modal).
 import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
@@ -88,6 +89,18 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar 
           throw new Error(err.error ?? t("clinical.invoiceDetail.confirmError"));
         }
         confirmadaRef.current = invoice.id;
+        // Al confirmarse recibió el saldo a favor del paciente: el monto que se
+        // tecleó era sobre el total del borrador. No se cobra a ciegas; se
+        // avisa y se refresca para cobrar sobre lo que de verdad queda.
+        const confirmada = await confirmacion.json().catch(() => ({}));
+        if (confirmada?.anticipoAplicado > 0) {
+          toast(t("clinical.invoiceDetail.anticipoAplicadoAlConfirmar", {
+            monto: fmtMXNdec(confirmada.anticipoAplicado),
+            resta: fmtMXNdec(confirmada.balance ?? 0),
+          }), { duration: 10000 });
+          alCobrar();
+          return;
+        }
       }
       const res = await fetch(`/api/invoices/${invoice.id}`, {
         method: "POST",

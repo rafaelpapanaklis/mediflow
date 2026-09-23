@@ -204,7 +204,8 @@ test("las acciones que tocan dinero y SAT siguen cableadas igual", () => {
     'callApi("/refund", "POST", { amount, reason: refundReason.trim() || undefined }, t("clinical.invoiceDetail.refundSuccess"))',
     'callApi("/edit-price", "POST", { total }, t("clinical.invoiceDetail.priceUpdated"))',
     'callApi("/edit-price", "POST", { discount }, t("clinical.invoiceDetail.discountApplied"))',
-    'callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, t("clinical.invoiceDetail.cancelSuccess"))',
+    // Mismo endpoint y mismo cuerpo; el mensaje dice si el anticipo volvió a favor (WS1-T4).
+    'callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, mensajeCancelada)',
     'fetch(`/api/invoices/${invoice.id}/confirm`, { method: "POST" })',
     'fetch("/api/cfdi", {',
     "confirmUnpaidPue: pueOk === true ? true : undefined,",

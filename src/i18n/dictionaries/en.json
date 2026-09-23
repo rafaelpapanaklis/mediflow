@@ -2989,6 +2989,7 @@
     "methodCheck": "Check",
     "methodOther": "Other",
     "methodRefund": "Refund",
+    "methodAnticipo": "Deposit (patient credit)",
     "toastOpened": "Register opened",
     "toastWithdrawal": "Withdrawal recorded",
     "toastClosed": "Register closed",
@@ -3132,7 +3133,8 @@
       "errorNoPatient": "Choose a patient.",
       "errorNoItems": "Add at least one line item.",
       "errorCreate": "The invoice could not be created",
-      "createdToast": "Invoice created: {number}"
+      "createdToast": "Invoice created: {number}",
+      "anticipoAplicadoToast": "{monto} was taken from the patient's credit. {resta} is left to collect."
     }
   },
   "presupuestosEnFacturacion": {
@@ -8004,6 +8006,7 @@
       "methodTransfer": "Transfer",
       "methodCheck": "Check",
       "methodRefund": "Refund",
+      "methodAnticipo": "Deposit (patient credit)",
       "methodOther": "Other",
       "operationError": "Operation error",
       "operationSuccess": "Operation successful",
@@ -8013,6 +8016,7 @@
       "waSentToast": "Sent — see it in the Inbox",
       "waViewInbox": "View in Inbox",
       "cancelSuccess": "Invoice cancelled",
+      "cancelSuccessAnticipo": "Invoice cancelled. {monto} went back to the patient's credit.",
       "invalidAmount": "Invalid amount",
       "exceedsPaid": "Exceeds amount paid",
       "refundSuccess": "Refund recorded",
@@ -8021,6 +8025,7 @@
       "invalidDiscount": "Invalid discount",
       "discountApplied": "Discount applied",
       "confirmError": "Could not confirm the invoice",
+      "anticipoAplicadoAlConfirmar": "{monto} of the patient's credit was applied. {resta} is left to collect: check the amount before charging.",
       "deleteDraftConfirm": "Delete draft {number}? This action cannot be undone.",
       "draftDeleted": "Draft deleted",
       "patient": "Patient",

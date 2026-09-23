@@ -31,6 +31,7 @@ import {
   type LinkedInvoiceLock,
 } from "./invoice-from-quote-core";
 import { doctorDeLaFactura } from "./doctor-de-la-factura";
+import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
 import type {
   BillingInvoiceItem,
   BillingInvoiceLite,
@@ -252,7 +253,24 @@ export async function createInvoiceFromQuote(
     throw e;
   }
   if (result.already) return { invoice: serializeInvoice(result.row), already: true };
-  const created = result.row;
+  let created = result.row;
+
+  // Saldo a favor del paciente (anticipo): la factura nace con él ya
+  // descontado. Solo la factura NUEVA (el camino idempotente de arriba devuelve
+  // la que ya existía sin tocarla). Propia transacción, no lanza.
+  const saldo = await aplicarSaldoAFavor({
+    clinicId: ctx.clinicId,
+    invoiceId: created.id,
+    userId: ctx.userId,
+    origen: "creada",
+  });
+  if (saldo.aplicado > 0) {
+    const releida = await prisma.invoice.findFirst({
+      where: { id: created.id, clinicId: ctx.clinicId },
+      include: { payments: true },
+    });
+    if (releida) created = releida;
+  }
 
   await logAudit({
     clinicId: ctx.clinicId,
@@ -260,7 +278,10 @@ export async function createInvoiceFromQuote(
     entityType: "invoice",
     entityId: created.id,
     action: "create",
-    changes: { fromQuote: { before: null, after: quote.folio } },
+    changes: {
+      fromQuote: { before: null, after: quote.folio },
+      ...(saldo.aplicado > 0 ? { anticipoAplicado: { before: null, after: saldo.aplicado } } : {}),
+    },
   });
 
   return { invoice: serializeInvoice(created), already: false };

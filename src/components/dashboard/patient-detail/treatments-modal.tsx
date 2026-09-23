@@ -99,6 +99,13 @@ export function TreatmentsModal({
       }
       const data = await res.json();
       toast.success(t("patients.treatmentsModal.invoiceCreated", { number: data.invoice.invoiceNumber }));
+      // Nació con el saldo a favor del paciente (anticipo) ya descontado.
+      if (data.anticipoAplicado > 0) {
+        toast(t("billing.invoiceEditor.anticipoAplicadoToast", {
+          monto: formatCurrency(data.anticipoAplicado),
+          resta: formatCurrency(data.invoice.balance ?? 0),
+        }), { duration: 10000 });
+      }
       onInvoiced?.(data.invoice);
       onClose();
     } catch (err) {

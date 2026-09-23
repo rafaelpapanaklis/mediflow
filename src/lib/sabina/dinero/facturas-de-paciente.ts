@@ -86,6 +86,7 @@ const SELECT = {
 
 function metodoLegible(m: unknown): string {
   if (m === "refund") return "Reembolso";
+  if (m === "anticipo") return "Anticipo (saldo a favor)";
   return esMetodoCobro(m) ? ETIQUETA_METODO[m] : String(m ?? "");
 }
 

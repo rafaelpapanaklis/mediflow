@@ -8,6 +8,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { round2 } from "@/lib/invoice-totals";
 import { CASH_METHOD } from "@/lib/caja";
+import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -49,6 +50,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { method } = await req.json().catch(() => ({ method: undefined }));
   const payMethod = (method ?? "cash") as string;
+  // «anticipo» solo lo escribe la aplicación del saldo a favor (patient-credit-aplicar.ts).
+  if (payMethod === METODO_ANTICIPO) return NextResponse.json({ error: "El anticipo se aplica solo al emitir la factura; cobra con el método real" }, { status: 400 });
 
   // Visibilidad por paciente (barrido Ola 3): cobrar la factura de un paciente
   // restringido exige poder verlo (el GET de facturas ya filtra la lista).

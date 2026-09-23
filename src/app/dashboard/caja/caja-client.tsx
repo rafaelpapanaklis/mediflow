@@ -129,6 +129,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     // Sin esta clave el fallback de abajo imprimía "refund" en inglés en el
     // corte, en el resumen impreso y en el CSV.
     refund:   t("cashRegister.methodRefund"),
+    // Saldo a favor (anticipo) aplicado al emitir la factura: no entra al cajón.
+    anticipo: t("cashRegister.methodAnticipo"),
   };
   const methodLabel = (m: string) => METHOD_LABEL[m] ?? m;
 

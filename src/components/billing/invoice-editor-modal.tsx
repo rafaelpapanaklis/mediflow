@@ -15,6 +15,7 @@
 import { useState, useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { Plus, Loader2, Trash2, Check, Search, User } from "lucide-react";
 import toast from "react-hot-toast";
+import { fmtMXNdec } from "@/lib/format";
 import { computeTotals, round2 } from "@/lib/quotes/compute";
 import { clinicInvoiceTaxDefaults, cfdiTotalBreakdown, IVA_RATE_PCT, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -365,6 +366,13 @@ function InvoiceEditorBody({
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error || t("billing.invoiceEditor.errorCreate"));
       toast.success(t("billing.invoiceEditor.createdToast", { number: out.invoiceNumber ?? "" }));
+      // Nació con el saldo a favor del paciente (anticipo) ya descontado.
+      if (out?.anticipoAplicado > 0) {
+        toast(t("billing.invoiceEditor.anticipoAplicadoToast", {
+          monto: fmtMXNdec(out.anticipoAplicado),
+          resta: fmtMXNdec(out.balance ?? 0),
+        }), { duration: 10000 });
+      }
       // Diseño nuevo: el trato y el envío van DESPUÉS de crear y por rutas
       // aparte — crear la factura no cambia. Si alguno falla se DICE, con el
       // motivo del servidor y dejando claro que la factura sí existe.

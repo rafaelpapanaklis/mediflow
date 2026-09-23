@@ -19,6 +19,7 @@ import {
   nextInvoiceNumber,
   withInvoiceNumberRetry,
 } from "@/lib/invoices/next-invoice-number";
+import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
 
 export const dynamic = "force-dynamic";
 
@@ -183,9 +184,25 @@ export async function POST(req: NextRequest) {
         },
       }),
     );
+    // Saldo a favor del paciente (anticipo): la factura nace con él ya
+    // descontado. Propia transacción, no lanza (patient-credit-aplicar.ts).
+    const saldo = await aplicarSaldoAFavor({
+      clinicId: session.clinic.id,
+      invoiceId: invoice.id,
+      userId: session.user.id,
+      origen: "creada",
+    });
     revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${appt.patientId}`);
-    return NextResponse.json({ invoice }, { status: 201 });
+    return NextResponse.json(
+      {
+        invoice: saldo.factura
+          ? { ...invoice, paid: saldo.factura.paid, balance: saldo.factura.balance, status: saldo.factura.status }
+          : invoice,
+        anticipoAplicado: saldo.aplicado,
+      },
+      { status: 201 },
+    );
   } catch (err) {
     // Carrera de folio agotada (ya reintentó recalculando el máximo).
     if (err instanceof InvoiceNumberExhaustedError) {

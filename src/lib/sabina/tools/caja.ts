@@ -92,6 +92,7 @@ const METODO: Record<string, string> = {
   check: "cheque",
   other: "otro",
   refund: "reembolso",
+  anticipo: "anticipo (saldo a favor)",
 };
 
 export interface RetiroFila {
