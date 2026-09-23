@@ -26,6 +26,7 @@ import assert from "node:assert/strict";
 
 import { CL_NORTE, TZ_NORTE, U_ADMIN_N, U_RECEP_N, adminNorte, base } from "../tools/__tests__/siembra";
 import type { BaseDoble } from "../tools/__tests__/doble-base";
+import { baseConMercadoPago, encenderPlataforma } from "../tools/__tests__/mp-siembra";
 
 /* ── Estado que leen los dobles ─────────────────────────────────────── */
 
@@ -255,7 +256,7 @@ function preguntar(pregunta: string, extra: Record<string, unknown> = {}) {
  * pruebas; el suelo de abajo solo impide que el catálogo encoja sin que alguien
  * venga a decirlo aquí.
  */
-const SUELO_DEL_CATALOGO = 31;
+const SUELO_DEL_CATALOGO = 33;
 
 test("el modelo recibe el catálogo ENTERO de Sabina —ni una de más, ni una de menos—, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
@@ -699,4 +700,87 @@ test("apagar OTRA función de la clínica no toca a Sabina", async () => {
   const res = await preguntar("¿cuántas citas tengo hoy?");
   assert.equal(res.status, 200);
   assert.equal(estado.peticiones.length, 1);
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * «Sabina sabe del panel» (ws1-t4): datos de Mercado Pago, ayuda del panel,
+ * y la pregunta que no sabe
+ * ══════════════════════════════════════════════════════════════════════ */
+
+test("pregunta de DATOS: «¿tengo Mercado Pago conectado y cuánto pido?» — el estado de SU clínica llega al modelo", async () => {
+  const apagar = encenderPlataforma();
+  try {
+    estado.db = baseConMercadoPago();
+    estado.guion = ({ n, messages }) => {
+      if (n === 1) return pideHerramienta("estado_mercado_pago", {});
+      const r = ultimoToolResult(messages);
+      assert.equal(r?.ok, true, JSON.stringify(r));
+      return contesta(r.resumen);
+    };
+    const res = await preguntar("¿Tengo Mercado Pago conectado y cuánto pido de anticipo?");
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.deepEqual(json.herramientasUsadas, ["estado_mercado_pago"]);
+    assert.match(json.respuesta, /conectada \(«NORTE_MP»/);
+    assert.match(json.respuesta, /monto fijo de \$200/);
+    assert.match(json.respuesta, /45 minutos para pagar/);
+    assert.doesNotMatch(json.respuesta, /SUR_MP/);
+  } finally {
+    apagar();
+  }
+});
+
+test("pregunta de AYUDA: «¿dónde bloqueo la agenda de un doctor?» — solo ese tema viaja, y solo cuando se pide", async () => {
+  estado.guion = ({ n, messages }) => {
+    if (n === 1) return pideHerramienta("ayuda_del_panel", { tema: "bloquear_agenda" });
+    const r = ultimoToolResult(messages);
+    assert.equal(r?.ok, true, JSON.stringify(r));
+    return contesta(r.resumen);
+  };
+  const res = await preguntar("¿Dónde bloqueo la agenda de un doctor?");
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.deepEqual(json.herramientasUsadas, ["ayuda_del_panel"]);
+  assert.match(json.respuesta, /Configuración → pestaña «Horarios y bloqueos»/);
+  assert.match(json.respuesta, /«Crear bloqueo»/);
+
+  // 🔴 El gasto: los pasos NO van en el prompt ni en la descripción. Solo el tema pedido,
+  // en el tool_result de la segunda llamada.
+  const primera = estado.peticiones[0];
+  const ayuda = primera.tools!.find((t: any) => t.name === "ayuda_del_panel");
+  for (const pedazo of ["Crear bloqueo", "Conectar con Mercado Pago", "Importar mi clínica"]) {
+    assert.ok(!primera.system.includes(pedazo), `el prompt trae «${pedazo}»`);
+    assert.ok(!ayuda.description.includes(pedazo), `la descripción trae «${pedazo}»`);
+  }
+  assert.deepEqual(ayuda.input_schema.properties.tema.enum.slice(0, 4), [
+    "mercado_pago",
+    "bloquear_agenda",
+    "horario_doctor",
+    "importar_pacientes",
+  ]);
+});
+
+test("🔴 la que NO sabe: un tema que no existe vuelve como error SIN pasos, y el prompt manda admitirlo", async () => {
+  let resultado: any = null;
+  estado.guion = ({ n, messages }) => {
+    if (n === 1) return pideHerramienta("ayuda_del_panel", { tema: "timbrar_cfdi_global" });
+    resultado = ultimoToolResult(messages);
+    return contesta("No tengo una guía para eso; pregúntale a soporte.");
+  };
+  const res = await preguntar("¿Cómo timbro una factura global?");
+  assert.equal(res.status, 200);
+  const json = await res.json();
+
+  // Lo que el modelo recibió: un error de parámetros, no un texto de ayuda que citar.
+  assert.equal(resultado?.ok, false, JSON.stringify(resultado));
+  assert.equal(resultado.motivo, "error");
+  assert.match(resultado.detalle, /Parámetros inválidos para «ayuda_del_panel»: tema/);
+  assert.ok(!/Configuración →|pestaña/.test(JSON.stringify(resultado)), "el error trae pasos");
+  assert.equal(json.respuesta, "No tengo una guía para eso; pregúntale a soporte.");
+
+  // Lo que le ordena admitirlo, en las dos piezas que ve el modelo.
+  const primera = estado.peticiones[0];
+  assert.match(primera.system, /Si no está ahí, di que no tienes esa guía: nunca inventes pasos, botones ni pantallas/);
+  const ayuda = primera.tools!.find((t: any) => t.name === "ayuda_del_panel");
+  assert.match(ayuda.description, /NO inventes pasos, botones ni pantallas/);
 });

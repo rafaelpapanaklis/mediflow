@@ -21,6 +21,8 @@ import { odontograma } from "./tools/odontograma";
 import { cumpleanos } from "./tools/cumpleanos";
 import { pacientesConEtiqueta } from "./tools/pacientes-con-etiqueta";
 import { proximasCitas } from "./tools/proximas-citas";
+import { estadoMercadoPago } from "./tools/estado-mercado-pago";
+import { ayudaDelPanel } from "./tools/ayuda-del-panel";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -55,7 +57,12 @@ import { proximasCitas } from "./tools/proximas-citas";
    filtros»): `cumpleanos`, `pacientes_con_etiqueta` y `proximas_citas`, que
    contestan lo que contestaban las chips «Cumple esta semana», «VIP» y
    «Próxima cita» de /dashboard/patients antes de quitarlas. Solo leen; sus
-   pruebas están en tools/__tests__/lista-pacientes.test.ts. */
+   pruebas están en tools/__tests__/lista-pacientes.test.ts. Y las dos de
+   «Sabina sabe del panel» (ws1-t4, 23-sep-2026): `estado_mercado_pago`, que lee
+   lo mismo que pinta Configuración → Anticipos por WhatsApp —no conecta, no
+   cambia ajustes, no manda links—, y `ayuda_del_panel`, que no lee la base:
+   devuelve los pasos en pantalla de UN tema de ./ayuda-del-panel. Pruebas en
+   tools/__tests__/sabe-del-panel.test.ts. */
 const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   ...CATALOGO_SABINA,
   proponerHorarios,
@@ -75,6 +82,8 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   cumpleanos,
   pacientesConEtiqueta,
   proximasCitas,
+  estadoMercadoPago,
+  ayudaDelPanel,
 ];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────

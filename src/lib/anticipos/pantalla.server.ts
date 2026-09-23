@@ -3,6 +3,7 @@
 // Sin secretos: de la cuenta de Mercado Pago salen apodo, correo, el id
 // enmascarado y fechas. Nunca el token, ni un trozo.
 
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { enmascarar, plataformaAnticipos, type EstadoCuentaMp, type PlataformaAnticipos } from "./cuenta.server";
 import { MINUTOS_DEFAULT, type ModoAnticipo, type ModoComision } from "./core";
@@ -59,51 +60,80 @@ function vacia(plataforma: PlataformaAnticipos, tablasListas: boolean): Pantalla
   };
 }
 
-export async function leerPantallaAnticipos(clinicId: string): Promise<PantallaAnticipos> {
+const SELECT_CUENTA = {
+  mpUserId: true,
+  mpNickname: true,
+  mpEmail: true,
+  liveMode: true,
+  connectedAt: true,
+  disconnectedAt: true,
+  depositEnabled: true,
+  depositMode: true,
+  depositAmount: true,
+  depositPercent: true,
+  holdMinutes: true,
+  marketplaceFeeMode: true,
+  marketplaceFeeValue: true,
+  // ¿Hay token? Se pregunta por la fecha, no se lee el token.
+  tokenExpiresAt: true,
+} satisfies Prisma.ClinicMercadoPagoSelect;
+
+const SELECT_RECIENTE = {
+  id: true,
+  createdAt: true,
+  amount: true,
+  status: true,
+  paidAmount: true,
+  mpPaymentId: true,
+  appointmentConfirmed: true,
+  lastMpStatus: true,
+  lastMpStatusDetail: true,
+  noticeError: true,
+  patient: { select: { firstName: true, lastName: true } },
+  appointment: { select: { startsAt: true } },
+  payments: { where: { anomaly: { not: null } }, select: { anomaly: true, mpPaymentId: true } },
+} satisfies Prisma.AppointmentDepositSelect;
+
+/**
+ * Lo único que esta lectura le pide a la base. Existe para que Sabina
+ * (`estado_mercado_pago`) lea EXACTAMENTE lo que pinta esta pantalla pasando su
+ * propio cliente —el de solo lectura, o el doble de sus pruebas— en vez de
+ * reescribir la consulta. Por defecto es el `prisma` del repo.
+ */
+export interface DbPantallaAnticipos {
+  clinicMercadoPago: {
+    findUnique(args: { where: { clinicId: string }; select: typeof SELECT_CUENTA }): Promise<
+      Prisma.ClinicMercadoPagoGetPayload<{ select: typeof SELECT_CUENTA }> | null
+    >;
+  };
+  appointmentDeposit: {
+    findMany(args: {
+      where: { clinicId: string };
+      orderBy: { createdAt: "desc" };
+      take: number;
+      select: typeof SELECT_RECIENTE;
+    }): Promise<Array<Prisma.AppointmentDepositGetPayload<{ select: typeof SELECT_RECIENTE }>>>;
+  };
+}
+
+export async function leerPantallaAnticipos(
+  clinicId: string,
+  db: DbPantallaAnticipos = prisma,
+): Promise<PantallaAnticipos> {
   const plataforma = plataformaAnticipos();
   if (!clinicId) return vacia(plataforma, true);
 
   try {
     const [fila, recientes] = await Promise.all([
-      prisma.clinicMercadoPago.findUnique({
+      db.clinicMercadoPago.findUnique({
         where: { clinicId },
-        select: {
-          mpUserId: true,
-          mpNickname: true,
-          mpEmail: true,
-          liveMode: true,
-          connectedAt: true,
-          disconnectedAt: true,
-          depositEnabled: true,
-          depositMode: true,
-          depositAmount: true,
-          depositPercent: true,
-          holdMinutes: true,
-          marketplaceFeeMode: true,
-          marketplaceFeeValue: true,
-          // ¿Hay token? Se pregunta por la fecha, no se lee el token.
-          tokenExpiresAt: true,
-        },
+        select: SELECT_CUENTA,
       }),
-      prisma.appointmentDeposit.findMany({
+      db.appointmentDeposit.findMany({
         where: { clinicId },
         orderBy: { createdAt: "desc" },
         take: 20,
-        select: {
-          id: true,
-          createdAt: true,
-          amount: true,
-          status: true,
-          paidAmount: true,
-          mpPaymentId: true,
-          appointmentConfirmed: true,
-          lastMpStatus: true,
-          lastMpStatusDetail: true,
-          noticeError: true,
-          patient: { select: { firstName: true, lastName: true } },
-          appointment: { select: { startsAt: true } },
-          payments: { where: { anomaly: { not: null } }, select: { anomaly: true, mpPaymentId: true } },
-        },
+        select: SELECT_RECIENTE,
       }),
     ]);
 

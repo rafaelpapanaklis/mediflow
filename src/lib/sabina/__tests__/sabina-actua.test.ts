@@ -394,8 +394,8 @@ test("el motor ve las cinco nuevas y la confirmación ejecuta las cuatro que esc
   assert.equal(new Set(nombres).size, nombres.length, "hay nombres repetidos en el catálogo del motor");
   assert.equal(
     nombres.length,
-    31,
-    "diez de consulta + proponer_horarios + facturas_de_paciente + caja + comparar_sedes + oportunidades_perdidas + tres de clínico (recetas, estudios_del_paciente, analisis_y_notas_de_estudio) + odontograma + dos de la clínica (procedimientos_y_precios, equipo_clinica) + tres de la lista de pacientes (cumpleanos, pacientes_con_etiqueta, proximas_citas) + siete acciones",
+    33,
+    "diez de consulta + proponer_horarios + facturas_de_paciente + caja + comparar_sedes + oportunidades_perdidas + tres de clínico (recetas, estudios_del_paciente, analisis_y_notas_de_estudio) + odontograma + dos de la clínica (procedimientos_y_precios, equipo_clinica) + tres de la lista de pacientes (cumpleanos, pacientes_con_etiqueta, proximas_citas) + dos del panel (estado_mercado_pago, ayuda_del_panel) + siete acciones",
   );
 
   const keys = Object.fromEntries(catalogo.ACCIONES_SABINA.map((a) => [a.nombre, a.permiso]));

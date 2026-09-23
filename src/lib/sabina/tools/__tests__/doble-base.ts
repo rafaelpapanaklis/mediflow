@@ -65,6 +65,10 @@ export interface Datos {
    * paciente de la otra clínica igual que Prisma.
    */
   odontogramEntries?: Fila[];
+  /** ws1-t4 («Sabina sabe del panel»): la cuenta de Mercado Pago y los anticipos. */
+  clinicMercadoPagos?: Fila[];
+  appointmentDeposits?: Fila[];
+  appointmentDepositPayments?: Fila[];
 }
 
 interface Relacion {
@@ -114,6 +118,11 @@ const RELACIONES: Record<string, Record<string, Relacion>> = {
   treatmentSession: {
     treatment: { modelo: "treatmentPlans", via: (s, t) => s.treatmentId === t.id, lista: false },
   },
+  appointmentDeposit: {
+    patient: { modelo: "patients", via: (d, p) => d.patientId === p.id, lista: false },
+    appointment: { modelo: "appointments", via: (d, a) => d.appointmentId === a.id, lista: false },
+    payments: { modelo: "appointmentDepositPayments", via: (d, g) => g.depositId === d.id, lista: true },
+  },
   appointmentChangeRequest: {
     patient: { modelo: "patients", via: (r, p) => r.patientId === p.id, lista: false },
     appointment: { modelo: "appointments", via: (r, a) => r.appointmentId === a.id, lista: false },
@@ -149,6 +158,9 @@ const MODELO_DE: Record<string, string> = {
   bookingRequest: "bookingRequests",
   appointmentChangeRequest: "appointmentChangeRequests",
   odontogramEntry: "odontogramEntries",
+  clinicMercadoPago: "clinicMercadoPagos",
+  appointmentDeposit: "appointmentDeposits",
+  appointmentDepositPayment: "appointmentDepositPayments",
 };
 
 /** Cuántas consultas se han hecho, por modelo y operación. Para vigilar el pooler. */
@@ -188,6 +200,9 @@ export function crearBase(datos: Datos): BaseDoble {
     bookingRequests: datos.bookingRequests ?? [],
     appointmentChangeRequests: datos.appointmentChangeRequests ?? [],
     odontogramEntries: datos.odontogramEntries ?? [],
+    clinicMercadoPagos: datos.clinicMercadoPagos ?? [],
+    appointmentDeposits: datos.appointmentDeposits ?? [],
+    appointmentDepositPayments: datos.appointmentDepositPayments ?? [],
   };
   const contador: Contador = { llamadas: [] };
 
@@ -295,6 +310,8 @@ export function crearBase(datos: Datos): BaseDoble {
     bookingRequest: delegado("bookingRequest") as any,
     appointmentChangeRequest: delegado("appointmentChangeRequest") as any,
     odontogramEntry: delegado("odontogramEntry") as any,
+    clinicMercadoPago: delegado("clinicMercadoPago") as any,
+    appointmentDeposit: delegado("appointmentDeposit") as any,
     /**
      * A propósito LANZA. El doble no habla SQL, y eso ejercita el camino
      * DEGRADADO del buscador —el `contains` de siempre— que es el que el repo
