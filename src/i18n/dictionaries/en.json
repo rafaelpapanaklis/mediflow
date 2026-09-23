@@ -315,6 +315,7 @@
       "billing": "Cash register",
       "finanzas": "Finances",
       "analytics": "Analytics",
+      "saldo-ia": "AI balance",
       "tv-modes": "TV displays",
       "reports": "Reports",
       "team": "Team",
@@ -400,6 +401,7 @@
       "sabina": "Sabina",
       "finanzas": "Finances",
       "analytics": "Analytics",
+      "saldo-ia": "AI balance",
       "reports": "Reports",
       "team": "Team",
       "resources": "Resources",
@@ -9651,6 +9653,12 @@
       "alternativa": "Alternative offered",
       "notas": "Notes",
       "por": "for:"
+    }
+  },
+  "sabina": {
+    "saldoIa": {
+      "etiqueta": "AI balance",
+      "titulo": "See the AI balance and top up"
     }
   },
   "auditoria": {

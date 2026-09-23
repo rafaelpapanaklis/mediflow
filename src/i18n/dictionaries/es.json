@@ -315,6 +315,7 @@
       "billing": "Caja",
       "finanzas": "Finanzas",
       "analytics": "Analytics",
+      "saldo-ia": "Saldo IA",
       "tv-modes": "Pantallas TV",
       "reports": "Reportes",
       "team": "Equipo",
@@ -400,6 +401,7 @@
       "sabina": "Sabina",
       "finanzas": "Finanzas",
       "analytics": "Analítica",
+      "saldo-ia": "Saldo IA",
       "reports": "Reportes",
       "team": "Equipo",
       "resources": "Recursos",
@@ -9651,6 +9653,12 @@
       "alternativa": "Alternativa ofrecida",
       "notas": "Notas",
       "por": "por:"
+    }
+  },
+  "sabina": {
+    "saldoIa": {
+      "etiqueta": "Saldo IA",
+      "titulo": "Ver el saldo de IA y recargar"
     }
   },
   "auditoria": {

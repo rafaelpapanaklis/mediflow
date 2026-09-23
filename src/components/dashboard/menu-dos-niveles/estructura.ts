@@ -45,7 +45,9 @@ export const NIVEL1_IDS: readonly string[] = [
  * que no son dentales; van al final de «clinica» / «catalogo».
  */
 export const GRUPOS: readonly { id: GrupoId; ids: readonly string[] }[] = [
-  { id: "dinero", ids: ["finanzas", "analytics", "reports"] },
+  // Saldo IA va debajo de Analítica (Rafael, ws1-t5). Es una opción más de
+  // NAV_ITEMS: el permiso lo decide `shouldShowItem`, aquí solo el sitio.
+  { id: "dinero", ids: ["finanzas", "analytics", "saldo-ia", "reports"] },
   {
     id: "clinica",
     ids: ["team", "resources", "inventory", "procedures", "plantillas", "clinic-layout", "before-after", "formulas", "exercises", "orthotics"],
@@ -67,6 +69,7 @@ export const ICONO_DE: Readonly<Record<string, string>> = {
   sabina: "auto_awesome",
   finanzas: "savings",
   analytics: "monitoring",
+  "saldo-ia": "account_balance_wallet",
   reports: "summarize",
   team: "groups",
   resources: "chair",
@@ -118,6 +121,14 @@ export const ICONOS_CHROME = [
   "search",
   "unfold_more",    // tarjetas de clínica y de usuario
 ] as const;
+
+/**
+ * Opciones del segundo nivel que se pintan con un realce (un halo suave en el
+ * morado de marca, `itemRealzado` en la hoja del menú). Hoy solo Saldo IA:
+ * Rafael quiere que se encuentre de un vistazo entre las de Dinero. No cambia
+ * quién la ve ni dónde va; es solo la pinta.
+ */
+export const OPCIONES_REALZADAS: ReadonlySet<string> = new Set(["saldo-ia"]);
 
 export interface GrupoArmado {
   id: GrupoId;

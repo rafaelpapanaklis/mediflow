@@ -370,6 +370,47 @@ button.tarjeta {
   min-height: clamp(34px, 4vh, 44px);
 }
 
+/* ── Opción realzada (Saldo IA) ─────────────────────────────────────
+   «Un borde como morado, así como se ve ultraview en Claude»: no es una
+   línea plana, es un RESPLANDOR. Un aro de 1 px en el morado de marca al
+   40 % y, fuera, un halo difuso al 22 %; dentro, el fondo apenas teñido.
+   Todo sale de `--brand` y `--brand-soft` (globals.css) pasados por
+   color-mix, ni un hex: en oscuro los mismos tokens ya suben su opacidad
+   y el halo se ve igual de suave sobre el fondo del segundo nivel.
+   Es un realce, no un semáforo: sin animación y sin cambiar el texto. */
+.itemRealzado {
+  background: var(--brand-soft);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--brand) 40%, transparent),
+    0 0 12px 1px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+/* En oscuro el mismo 22 % se pierde sobre el fondo casi negro del segundo
+   nivel (medido en arnés: el halo no se distinguía). Mismos tokens, más
+   proporción: sigue siendo un halo suave, no un neón. */
+:global(.dark) .itemRealzado {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--brand) 60%, transparent),
+    0 0 14px 1px color-mix(in srgb, var(--brand) 42%, transparent);
+}
+
+@media (hover: hover) {
+  .itemRealzado:hover {
+    background: color-mix(in srgb, var(--brand) 16%, transparent);
+  }
+}
+
+/* Activa (estás en Saldo IA): el relleno morado de siempre manda y el halo
+   se queda de acompañante, para que no haya dos "activas" distintas. */
+.itemRealzado.itemActivo,
+.itemRealzado.itemActivo:hover {
+  background: var(--m2-activo);
+}
+
+.itemRealzado:focus-visible {
+  box-shadow: var(--m2-foco);
+}
+
 .itemTexto {
   flex: 1;
   min-width: 0;
@@ -619,6 +660,10 @@ button.tarjeta {
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: 8px;
+  /* El halo de `.itemRealzado` sale 13 px de la fila; con el recorte
+     horizontal se cortaría a ras. Aire a los lados, sin mover las filas. */
+  padding-inline: 14px;
+  margin-inline: -14px;
 }
 
 .grupo {

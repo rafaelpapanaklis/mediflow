@@ -192,6 +192,13 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "billing",        section: "admin", label: "Caja",              href: "/dashboard/caja",          icon: Wallet,         permission: "billing.view" },
   { id: "finanzas",       section: "admin", label: "Finanzas",          href: "/dashboard/finanzas",      icon: PiggyBank, adminOnly: true, permission: "analytics.view" },
   { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true, permission: "analytics.view", moduleKey: "analytics" },
+  // Saldo IA: el monedero prepago que gastan Sabina y el bot de WhatsApp
+  // (/dashboard/whatsapp/bot/saldo). Es dinero, así que vive con Finanzas y
+  // Analítica: `adminOnly` como ellas, y `permission` la MISMA que exige la
+  // pantalla (`requirePermissionOrRedirect(user, "whatsapp.view")`), para que
+  // nadie vea una opción que le rebote. Sin `moduleKey`: Sabina es área core
+  // y consume este saldo aunque la clínica no tenga el módulo de WhatsApp.
+  { id: "saldo-ia",       section: "admin", label: "Saldo IA",          href: "/dashboard/whatsapp/bot/saldo", icon: Wallet, adminOnly: true, permission: "whatsapp.view" },
   { id: "tv-modes",       section: "admin", label: "Pantallas TV",      href: "/dashboard/tv-modes",      icon: Monitor, adminOnly: true, permission: "tvModes.view", moduleKey: "tv-modes" },
   { id: "reports",        section: "admin", label: "Reportes",          href: "/dashboard/reports",       icon: BarChart3,     permission: "reports.view", moduleKey: "reports" },
   // Recursos (sillones / consultorios): vive en ADMINISTRACIÓN, justo arriba de
