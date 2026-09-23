@@ -135,6 +135,10 @@ export async function middleware(request: NextRequest) {
 
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-pathname", pathname);
+    // x-method: la caché de 10 s de la sesión resuelta solo sirve LECTURAS
+    // (@/lib/auth/sesion-en-cache); una escritura resuelve fresco. Se
+    // re-escribe siempre, igual que x-pathname.
+    requestHeaders.set("x-method", request.method);
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 

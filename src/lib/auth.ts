@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
+import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
 import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
@@ -109,15 +110,13 @@ export const getCurrentUser = cache(async () => {
   // más nueva (ws1-t1). Antes eran la de la cookie, después —si fallaba— esta
   // misma lista, y encima la pregunta de 2FA por las hermanas: hasta tres
   // viajes seguidos a la base en cada ruta que entra por aquí. Mismo criterio
-  // que getAuthContext (@/lib/auth-context).
-  const candidates = await prisma.user.findMany({
-    where: { supabaseId: supabaseUser.id, isActive: true },
-    include: { clinic: true },
-    orderBy: { createdAt: "asc" },
-  });
+  // que getAuthContext (@/lib/auth-context), y la misma caché de 10 s en las
+  // lecturas de /api, con llave persona + clínica de la cookie
+  // (@/lib/auth/sesion-en-cache). Los gates siguen corriendo en cada petición.
+  const { filas: candidates, deLaCookie } = await resolverSesion(supabaseUser.id, activeClinicId);
 
   if (activeClinicId) {
-    const user = candidates.find((c) => c.clinicId === activeClinicId);
+    const user = deLaCookie;
     if (user) {
       // ORDEN: 2FA antes que plan. El 2FA es autenticación; el plan, comercial.
       const conDosFactores = conDosFactoresDeLaPersona(user, candidates);

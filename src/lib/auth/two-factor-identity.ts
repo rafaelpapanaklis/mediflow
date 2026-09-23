@@ -19,6 +19,7 @@
    ============================================================ */
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { marcarEscritura } from "@/lib/auth/sesion-en-cache";
 import { resolverDosFactores, type DosFactoresDeLaPersona } from "./two-factor-identity-core";
 
 export {
@@ -92,5 +93,8 @@ export async function propagarDosFactores(
 ): Promise<number> {
   if (!supabaseId) return 0;
   const { count } = await prisma.user.updateMany({ where: { supabaseId }, data });
+  // La sesión resuelta de esta persona puede estar en caché con el 2FA de
+  // antes: sus lecturas siguientes, frescas (@/lib/auth/sesion-en-cache).
+  marcarEscritura(supabaseId);
   return count;
 }

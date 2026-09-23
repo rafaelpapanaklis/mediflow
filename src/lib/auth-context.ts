@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
+import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
 import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
@@ -56,21 +56,16 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     // clínica que se elige es la MISMA que antes: el filtro por clinicId que
     // hacía el WHERE ahora lo hace el `find`, contra filas que ya son todas de
     // este supabaseId.
-    const filas = await prisma.user.findMany({
-      where: { supabaseId: user.id, isActive: true },
-      include: { clinic: true },
-      orderBy: { createdAt: "asc" },
-    });
-
-    const dbUser = activeClinicId
-      ? filas.find((f) => f.clinicId === activeClinicId) ?? null
-      : null;
+    // En las lecturas de /api esa resolución va en caché 10 s, con llave
+    // persona + clínica de la cookie: ver @/lib/auth/sesion-en-cache. Los gates
+    // de abajo (2FA, plan) NO se cachean: corren en cada petición.
+    const { filas, deLaCookie: dbUser, elegida } = await resolverSesion(user.id, activeClinicId);
 
     if (dbUser) {
       console.log("[AUTH-DEBUG getAuthContext] cookie OK", JSON.stringify({ picked: dbUser.clinicId }));
     }
 
-    const finalUser = dbUser ?? filas[0] ?? null;
+    const finalUser = elegida;
 
     if (!finalUser || !finalUser.isActive) return null;
 
