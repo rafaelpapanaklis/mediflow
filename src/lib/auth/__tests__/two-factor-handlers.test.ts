@@ -338,7 +338,10 @@ test("el sidebar de la sesión buena sigue trayendo sus cuentas", async () => {
   const cuerpo = await res.json();
   assert.equal(res.status, 200);
   assert.equal(cuerpo.inboxUnread, 7);
-  assert.equal(cuerpo.clinicalDrafts, 3);
+  // ws1-t1: el conteo de borradores clínicos ya no se hace (ningún menú lo
+  // pinta); la clave sigue en el contrato, en 0.
+  assert.equal(cuerpo.clinicalDrafts, 0);
+  assert.equal(llamadas.includes("medicalRecord.count"), false);
 });
 
 // ════════════════════════════════════════════════════════════════════

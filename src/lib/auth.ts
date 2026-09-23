@@ -4,10 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
+import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
 import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
-import { personaTieneDosFactores } from "@/lib/auth/two-factor-identity";
 import { TWO_FA_CHALLENGE_PATH } from "@/lib/auth/two-factor-constants";
 
 // getSession/getCurrentUser/getUserClinics van memoizadas por request con
@@ -46,13 +46,17 @@ function normalizeUser<T extends { permissionsOverride?: string[] | null } & obj
  * enrolamiento y las ~30 rutas de agenda que entran por loadClinicSession leen
  * `user.totpEnabled` y todas reciben ya el valor bueno.
  *
- * Si la fila activa ya lo tiene puesto no se consulta nada.
+ * Si la fila activa ya lo tiene puesto no se mira nada más. Las hermanas
+ * llegan ya leídas desde getCurrentUser (ws1-t1): antes eran otra consulta.
  */
-async function conDosFactoresDeLaPersona<T extends { supabaseId: string; totpEnabled?: boolean | null }>(
+function conDosFactoresDeLaPersona<T extends { supabaseId: string; totpEnabled?: boolean | null }>(
   u: T,
-): Promise<T> {
+  filasDeLaPersona: ReadonlyArray<{ totpEnabled?: boolean | null }>,
+): T {
   if (u.totpEnabled) return u;
-  return (await personaTieneDosFactores(u.supabaseId)) ? { ...u, totpEnabled: true } : u;
+  // Las filas ya vienen leídas (todas las activas de este supabaseId): es la
+  // misma pregunta que hacía personaTieneDosFactores, sin otra consulta.
+  return filasDeLaPersona.some((f) => !!f.totpEnabled) ? { ...u, totpEnabled: true } : u;
 }
 
 // Gate de plan vencido para los route handlers que autentican vía
@@ -102,25 +106,25 @@ export const getCurrentUser = cache(async () => {
   const supabaseUser = await requireAuth();
   const activeClinicId = readActiveClinicCookie();
 
+  // UNA lectura: todas las filas ACTIVAS de la persona, de la más antigua a la
+  // más nueva (ws1-t1). Antes eran la de la cookie, después —si fallaba— esta
+  // misma lista, y encima la pregunta de 2FA por las hermanas: hasta tres
+  // viajes seguidos a la base en cada ruta que entra por aquí. Mismo criterio
+  // que getAuthContext (@/lib/auth-context), y la misma caché de 10 s en las
+  // lecturas de /api, con llave persona + clínica de la cookie
+  // (@/lib/auth/sesion-en-cache). Los gates siguen corriendo en cada petición.
+  const { filas: candidates, deLaCookie } = await resolverSesion(supabaseUser.id, activeClinicId);
+
   if (activeClinicId) {
-    const user = await prisma.user.findFirst({
-      where: { supabaseId: supabaseUser.id, clinicId: activeClinicId, isActive: true },
-      include: { clinic: true },
-    });
+    const user = deLaCookie;
     if (user) {
       // ORDEN: 2FA antes que plan. El 2FA es autenticación; el plan, comercial.
-      const conDosFactores = await conDosFactoresDeLaPersona(user);
+      const conDosFactores = conDosFactoresDeLaPersona(user, candidates);
       enforceApiTwoFactorGate(conDosFactores);
       enforceApiPlanGate(conDosFactores.clinic);
       return normalizeUser(conDosFactores);
     }
   }
-
-  const candidates = await prisma.user.findMany({
-    where: { supabaseId: supabaseUser.id, isActive: true },
-    include: { clinic: true },
-    orderBy: { createdAt: "asc" },
-  });
 
   const user = candidates[0];
   if (!user) {
@@ -209,7 +213,7 @@ export const getCurrentUser = cache(async () => {
   // mismo orden. Este es el camino de fallback (primer User por createdAt asc):
   // si se le olvida el gate a UNA de las dos ramas, el agujero sigue abierto por
   // ahí para cualquier sesión sin cookie de clínica válida.
-  const conDosFactores = await conDosFactoresDeLaPersona(user);
+  const conDosFactores = conDosFactoresDeLaPersona(user, candidates);
   enforceApiTwoFactorGate(conDosFactores);
   enforceApiPlanGate(conDosFactores.clinic);
   return normalizeUser(conDosFactores);

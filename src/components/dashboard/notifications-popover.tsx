@@ -6,6 +6,7 @@ import { Bell, Banknote, UserPlus, CheckCircle2, CalendarClock } from "lucide-re
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { isAbortError } from "@/lib/fetch-safe";
+import { useSondeo } from "@/hooks/use-sondeo";
 import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { vestidor, type AparienciaTopbar } from "@/components/dashboard/topbar-rediseno/apariencia";
@@ -68,26 +69,17 @@ export function NotificationsPopover({ apariencia }: { apariencia?: AparienciaTo
     }
   }
 
-  useEffect(() => {
+  // Cada 60 s solo con la pestaña visible, y al volver a ella solo si lo
+  // último tiene más de 30 s (useSondeo). Una respuesta que llega con el
+  // componente desmontado se aborta.
+  const ctrlRef = useRef<AbortController | null>(null);
+  useSondeo(() => {
+    ctrlRef.current?.abort();
     const ctrl = new AbortController();
-    fetchActivity(ctrl.signal);
-    // Pausa polling cuando la pestaña no está visible — el bell no
-    // necesita actualizarse si el usuario no está mirando.
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    const start = () => { if (intervalId === null) intervalId = setInterval(() => fetchActivity(), 60_000); };
-    const stop = () => { if (intervalId !== null) { clearInterval(intervalId); intervalId = null; } };
-    const onVis = () => {
-      if (document.visibilityState === "visible") { fetchActivity(); start(); }
-      else stop();
-    };
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      stop();
-      ctrl.abort();
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, []);
+    ctrlRef.current = ctrl;
+    return fetchActivity(ctrl.signal);
+  }, 60_000);
+  useEffect(() => () => ctrlRef.current?.abort(), []);
 
   useEffect(() => {
     if (!open) return;

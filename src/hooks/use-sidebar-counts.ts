@@ -1,6 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isAbortError } from "@/lib/fetch-safe";
+import { useSondeo } from "@/hooks/use-sondeo";
+import { conFresco, escucharCambioArmazon } from "@/lib/armazon/refrescar";
 
 export interface SidebarCounts {
   messagesUnread: number;
@@ -20,71 +22,45 @@ const REVALIDATE_MS = 60_000;
 
 /**
  * Hook que lee contadores agregados del sidebar.
- * - Fetch inicial al montar.
- * - Revalida cada 60s, PERO solo mientras la pestaña está visible (mismo
- *   patrón que InsightsPopover/NotificationsPopover/WaitingRoomAlert): una
- *   pestaña de fondo no tiene por qué seguir preguntando cada minuto (ver
- *   ~/gerentes/salidas/MAPA-conexiones.md §6.1).
- * - Revalida al recuperar foco de ventana.
+ * - Fetch inicial al montar y cada 60 s SOLO con la pestaña visible; al
+ *   volver a ella, solo si lo último tiene más de 30 s (ver useSondeo).
+ * - Cuando Mensajes cambia el estado de un hilo (leer, archivar, posponer,
+ *   marcar no leído), recarga YA y con `?fresco=1`, así la insignia no se
+ *   queda con el número de antes (ver @/lib/armazon/refrescar).
  * - Degradación limpia: si falla, counts = {0,0,0}.
  */
 export function useSidebarCounts(): SidebarCounts {
   const [counts, setCounts] = useState<SidebarCounts>(ZERO);
+  const ac = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    let ac: AbortController | null = null;
-    let intervalId: number | null = null;
-
-    const fetchCounts = () => {
-      ac?.abort();
-      ac = new AbortController();
-      fetch("/api/dashboard/sidebar-counts", {
-        signal: ac.signal,
+  const fetchCounts = useCallback(async () => {
+    ac.current?.abort();
+    const ctrl = new AbortController();
+    ac.current = ctrl;
+    try {
+      const r = await fetch(conFresco("/api/dashboard/sidebar-counts", "contadores"), {
+        signal: ctrl.signal,
         credentials: "include",
         headers: { Accept: "application/json" },
-      })
-        .then((r) => (r.ok ? r.json() : ZERO))
-        .then((data: Partial<SidebarCounts>) => {
-          if (cancelled) return;
-          setCounts({
-            messagesUnread: Number(data.messagesUnread ?? 0) | 0,
-            clinicalDrafts: Number(data.clinicalDrafts ?? 0) | 0,
-            xraysUnanalyzed: Number(data.xraysUnanalyzed ?? 0) | 0,
-            inboxUnread: Number(data.inboxUnread ?? 0) | 0,
-          });
-        })
-        .catch((err) => {
-          if (cancelled || isAbortError(err)) return;
-          setCounts(ZERO);
-        });
-    };
-
-    const start = () => {
-      if (intervalId === null) intervalId = window.setInterval(fetchCounts, REVALIDATE_MS);
-    };
-    const stop = () => {
-      if (intervalId !== null) { window.clearInterval(intervalId); intervalId = null; }
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") { fetchCounts(); start(); }
-      else stop();
-    };
-    const onFocus = () => fetchCounts();
-
-    fetchCounts();
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("focus", onFocus);
-
-    return () => {
-      cancelled = true;
-      ac?.abort();
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("focus", onFocus);
-    };
+      });
+      const data: Partial<SidebarCounts> = r.ok ? await r.json() : ZERO;
+      if (ctrl.signal.aborted) return;
+      setCounts({
+        messagesUnread: Number(data.messagesUnread ?? 0) | 0,
+        clinicalDrafts: Number(data.clinicalDrafts ?? 0) | 0,
+        xraysUnanalyzed: Number(data.xraysUnanalyzed ?? 0) | 0,
+        inboxUnread: Number(data.inboxUnread ?? 0) | 0,
+      });
+    } catch (err) {
+      if (ctrl.signal.aborted || isAbortError(err)) return;
+      setCounts(ZERO);
+    }
   }, []);
+
+  const refrescar = useSondeo(fetchCounts, REVALIDATE_MS);
+
+  useEffect(() => escucharCambioArmazon("contadores", refrescar), [refrescar]);
+  useEffect(() => () => ac.current?.abort(), []);
 
   return counts;
 }

@@ -158,22 +158,30 @@ function validarComoPrisma(data: any) {
 
 let creados: any[] = [];
 
+// La fila de `users` tal como la devuelve Prisma con include: { clinic }.
+function filaDe(supabaseId: string) {
+  const u = Object.values(usuarios).find((x) => `sb_${x.id}` === supabaseId);
+  if (!u) return null;
+  return {
+    ...u,
+    supabaseId: `sb_${u.id}`,
+    isActive: true,
+    color: null,
+    totpEnabled: false,
+    permissionsOverride: [],
+    clinic: { id: u.clinicId, category: "DENTAL", require2fa: false },
+  };
+}
+
 const prismaFalso: any = {
   user: {
-    findFirst: async ({ where }: any) => {
-      const u = Object.values(usuarios).find((x) => `sb_${x.id}` === where.supabaseId);
-      if (!u) return null;
-      return {
-        ...u,
-        supabaseId: `sb_${u.id}`,
-        isActive: true,
-        color: null,
-        totpEnabled: false,
-        permissionsOverride: [],
-        clinic: { id: u.clinicId, category: "DENTAL", require2fa: false },
-      };
+    findFirst: async ({ where }: any) => filaDe(where.supabaseId),
+    // getAuthContext lee TODAS las filas activas de la persona en una sola
+    // consulta (ws1-t1): aquí cada persona tiene una.
+    findMany: async ({ where }: any = {}) => {
+      const f = where?.supabaseId ? filaDe(where.supabaseId) : null;
+      return f ? [f] : [];
     },
-    findMany: async () => [],
   },
   patient: {
     findMany: async ({ where, select }: any) =>

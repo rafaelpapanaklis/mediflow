@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Sparkles, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { useT } from "@/i18n/i18n-provider";
+import { useSondeo } from "@/hooks/use-sondeo";
+import { avisarCambioArmazon, conFresco, escucharCambioArmazon } from "@/lib/armazon/refrescar";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { vestidor, type AparienciaTopbar } from "@/components/dashboard/topbar-rediseno/apariencia";
 import c from "@/components/dashboard/topbar-rediseno/piezas-topbar.module.css";
@@ -44,7 +46,10 @@ const TONO_NUEVO: Record<string, string> = {
 
 /**
  * InsightsPopover — campanita Sparkles con badge unread + dropdown.
- * Pollea /api/notifications/insights cada 60s con visibility pause.
+ * Pollea /api/notifications/insights cada 5 min, solo con la pestaña
+ * visible (useSondeo). Antes era cada 60 s, para un dato que un cron crea
+ * UNA vez por semana (lunes 04:00 UTC): lo único que cambia entre semana es
+ * el «leído», y ese lo cambia quien abre el popover —que ve el 0 en el acto—.
  * Multi-tenant: el endpoint usa clinicId desde getCurrentUser.
  *
  * Pensado para ir junto a NotificationsPopover en el topbar (reusable).
@@ -63,41 +68,23 @@ export function InsightsPopover({ apariencia }: { apariencia?: AparienciaTopbar 
   const [selected, setSelected] = useState<InsightItem | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Polling con visibility pause.
+  // Sondeo (ver el comentario de arriba). `cancelado` protege el setData de
+  // una respuesta que llega con el componente ya desmontado.
+  const cancelado = useRef(false);
   useEffect(() => {
-    let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    const fetchData = async () => {
-      try {
-        const res = await fetch("/api/notifications/insights", { cache: "no-store" });
-        if (!res.ok) return;
-        const json = await res.json();
-        if (!cancelled) setData(json);
-      } catch {/* silent */}
-    };
-
-    const start = () => {
-      if (interval !== null) return;
-      interval = setInterval(fetchData, 60_000);
-    };
-    const stop = () => {
-      if (interval !== null) { clearInterval(interval); interval = null; }
-    };
-    const onVis = () => {
-      if (document.visibilityState === "visible") { fetchData(); start(); }
-      else stop();
-    };
-
-    fetchData();
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      cancelled = true;
-      stop();
-      document.removeEventListener("visibilitychange", onVis);
-    };
+    cancelado.current = false;
+    return () => { cancelado.current = true; };
   }, []);
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch(conFresco("/api/notifications/insights", "insights"), { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!cancelado.current) setData(json);
+    } catch {/* silent */}
+  }, []);
+  const refrescar = useSondeo(fetchData, 5 * 60_000);
+  useEffect(() => escucharCambioArmazon("insights", refrescar), [refrescar]);
 
   // Click outside cierra dropdown (no el modal de insight).
   useEffect(() => {
@@ -131,6 +118,9 @@ export function InsightsPopover({ apariencia }: { apariencia?: AparienciaTopbar 
           body: JSON.stringify({ all: true }),
         });
         setData((prev) => prev ? { ...prev, unreadCount: 0, insights: prev.insights.map((i) => ({ ...i, read: true })) } : prev);
+        // Las siguientes lecturas de este navegador saltan la caché del
+        // servidor: si cayeran en otra instancia, volvería el punto.
+        avisarCambioArmazon("insights");
       } catch {/* silent */}
     }
   }

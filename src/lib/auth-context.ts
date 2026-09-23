@@ -1,12 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
-import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
+import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
 import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
-import { personaTieneDosFactores } from "@/lib/auth/two-factor-identity";
 
 export interface AuthContext {
   userId:       string;
@@ -45,22 +44,28 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 
     const activeClinicId = readActiveClinicCookie();
 
-    const dbUser = activeClinicId
-      ? await prisma.user.findFirst({
-          where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
-          include: { clinic: true },
-        })
-      : null;
+    // UNA lectura: todas las filas ACTIVAS de la persona (una por sede, casi
+    // siempre una sola), de la más antigua a la más nueva. De ahí salen las
+    // tres cosas que antes eran hasta tres consultas en serie:
+    //   · la fila de la clínica activa (la de la cookie), si existe;
+    //   · si no, la primera por createdAt — el fallback de siempre;
+    //   · y si ALGUNA tiene 2FA (EQ-02), que es exactamente lo que preguntaba
+    //     personaTieneDosFactores: { supabaseId, isActive: true, totpEnabled: true }.
+    // Cada `/api` pagaba un viaje de ida y vuelta a la base de más por esto
+    // (medido el 23-sep-2026: ~190 ms por viaje desde el servidor de QA). La
+    // clínica que se elige es la MISMA que antes: el filtro por clinicId que
+    // hacía el WHERE ahora lo hace el `find`, contra filas que ya son todas de
+    // este supabaseId.
+    // En las lecturas de /api esa resolución va en caché 10 s, con llave
+    // persona + clínica de la cookie: ver @/lib/auth/sesion-en-cache. Los gates
+    // de abajo (2FA, plan) NO se cachean: corren en cada petición.
+    const { filas, deLaCookie: dbUser, elegida } = await resolverSesion(user.id, activeClinicId);
 
     if (dbUser) {
       console.log("[AUTH-DEBUG getAuthContext] cookie OK", JSON.stringify({ picked: dbUser.clinicId }));
     }
 
-    const finalUser = dbUser ?? await prisma.user.findFirst({
-      where: { supabaseId: user.id, isActive: true },
-      include: { clinic: true },
-      orderBy: { createdAt: "asc" },
-    });
+    const finalUser = elegida;
 
     if (!finalUser || !finalUser.isActive) return null;
 
@@ -120,9 +125,10 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     // o con un login nuevo— y el panel no le pedía nada, porque esa otra fila
     // tiene totpEnabled=false. El `||` corta antes: si la fila activa ya lo
     // tiene puesto, no se pregunta por las hermanas.
+    // (La pregunta por las hermanas ya no es otra consulta: sale de `filas`.)
     const enrolado =
       !!(finalUser as { totpEnabled?: boolean | null }).totpEnabled ||
-      await personaTieneDosFactores(finalUser.supabaseId);
+      filas.some((f) => !!(f as { totpEnabled?: boolean | null }).totpEnabled);
 
     if (needsTwoFactor({
       totpEnabled: enrolado,

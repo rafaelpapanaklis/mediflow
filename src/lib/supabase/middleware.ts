@@ -13,6 +13,10 @@ export async function updateSession(request: NextRequest) {
   // no tienen acceso a la URL y no pueden hacer redirects condicionales
   // (ej. bloqueo total cuando la clínica tiene plan/trial expirado).
   request.headers.set("x-pathname", request.nextUrl.pathname);
+  // x-method solo lo pone el middleware en /api. En una página (o su server
+  // action) no puede llegar del cliente: con él, una escritura podría usar la
+  // sesión en caché de @/lib/auth/sesion-en-cache.
+  request.headers.delete("x-method");
   let response = NextResponse.next({ request: { headers: request.headers } });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
