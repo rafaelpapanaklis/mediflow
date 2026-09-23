@@ -12,7 +12,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cachedByKey, invalidateCachedKey } from "../route-cache";
+import { cachedByKey, claveDeClinica, invalidateCachedKey } from "../route-cache";
 
 test("dentro del TTL, dos llamadas con la misma clave solo cargan una vez", async () => {
   let calls = 0;
@@ -73,4 +73,34 @@ test("una carga que falla no queda cacheada: la siguiente llamada reintenta", as
 
   assert.equal(b, 2);
   assert.equal(calls, 2);
+});
+
+// ── ws1-t1 (23-sep-2026): quien escribe lee fresco, y la clave lleva clínica ──
+
+test("fresco: salta la entrada vigente, carga de nuevo y deja el valor nuevo para los demás", async () => {
+  let calls = 0;
+  const load = async () => { calls++; return calls; };
+
+  await cachedByKey("clinic-5", 10_000, load);
+  const fresca = await cachedByKey("clinic-5", 10_000, load, { fresco: true });
+  const siguiente = await cachedByKey("clinic-5", 10_000, load);
+
+  assert.equal(fresca, 2, "quien acaba de escribir no ve lo de antes");
+  assert.equal(siguiente, 2, "el resto recibe ya el valor nuevo, sin otra consulta");
+  assert.equal(calls, 2);
+});
+
+test("claveDeClinica: sin clínica no hay clave (lanza), nunca una clave compartida", () => {
+  assert.throws(() => claveDeClinica("sidebar-counts", ""));
+  assert.throws(() => claveDeClinica("sidebar-counts", "   "));
+  assert.throws(() => claveDeClinica("sidebar-counts", undefined as unknown as string));
+  assert.throws(() => claveDeClinica("sidebar-counts", null as unknown as string));
+});
+
+test("claveDeClinica: la clínica y cada parte extra cambian la clave", () => {
+  const a = claveDeClinica("activity-recent", "cli_a", "usr_1", "DOCTOR");
+  assert.equal(a, "activity-recent:cli_a:usr_1:DOCTOR");
+  assert.notEqual(a, claveDeClinica("activity-recent", "cli_b", "usr_1", "DOCTOR"));
+  assert.notEqual(a, claveDeClinica("activity-recent", "cli_a", "usr_2", "DOCTOR"));
+  assert.notEqual(a, claveDeClinica("activity-recent", "cli_a", "usr_1", "ADMIN"));
 });

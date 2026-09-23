@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { patientVisibilityFilter } from "@/lib/patient-visibility";
-import { cachedByKey } from "@/lib/route-cache";
+import { cachedByKey, claveDeClinica } from "@/lib/route-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,7 @@ const CACHE_TTL_MS = 30_000;
 
 /**
  * GET /api/analytics/waiting-room?from=&to=&threshold=20
+ * GET /api/analytics/waiting-room?solo=alerta  → { threshold, longWaitsCount }
  *
  * Reportes de tiempo de espera basados en AppointmentTimeline:
  *  - byHour[]: avg waitMin por hora del día (heatmap data).
@@ -37,6 +38,35 @@ export async function GET(req: NextRequest) {
   const toParam = url.searchParams.get("to");
   const thresholdParam = url.searchParams.get("threshold");
   const threshold = thresholdParam ? Number(thresholdParam) : 20;
+
+  // ── La pastilla del topbar (WaitingRoomAlert) solo necesita CUÁNTOS ──────
+  // Pedía el reporte entero: la clínica, TODOS los timelines de 30 días para
+  // el mapa de calor y la lista con nombres… y de todo eso usaba
+  // `longWaits.length`. Medido el 23-sep-2026 contra producción: 2,5 s en frío.
+  // Con `?solo=alerta` es un conteo con el MISMO filtro que longWaits (clínica
+  // + visibilidad por paciente de quien pregunta), sin nombres en la
+  // respuesta. La pantalla de analítica sigue pidiendo el reporte completo.
+  //
+  // CUÁNTO PUEDE ENVEJECER: 30 s, contra un umbral de 20 min de espera.
+  if (url.searchParams.get("solo") === "alerta") {
+    const umbralAtras = new Date(Date.now() - threshold * 60_000);
+    const visAlerta = patientVisibilityFilter({ userId: user.id, role: user.role, clinicId });
+    const longWaitsCount = await cachedByKey(
+      // userId Y rol: el conteo depende de la visibilidad por paciente.
+      claveDeClinica("waiting-room-alerta", clinicId, user.id, user.role, threshold),
+      CACHE_TTL_MS,
+      () =>
+        prisma.appointmentTimeline.count({
+          where: {
+            appointment: { clinicId, ...(visAlerta ? { patient: visAlerta } : {}) },
+            arrivedAt: { lte: umbralAtras, not: null },
+            inChairAt: null,
+            consultStartAt: null,
+          },
+        }),
+    );
+    return NextResponse.json({ threshold, longWaitsCount });
+  }
 
   const to = toParam ? new Date(toParam) : new Date();
   const from = fromParam
@@ -62,7 +92,7 @@ export async function GET(req: NextRequest) {
   // clave llevara el `to` ya resuelto nunca repetiría (cambia cada milisegundo)
   // y el TTL nunca acertaría.
   const timelines = await cachedByKey(
-    `waiting-room-timelines:${clinicId}:${fromParam ?? "-"}:${toParam ?? "-"}`,
+    claveDeClinica("waiting-room-timelines", clinicId, fromParam ?? "-", toParam ?? "-"),
     CACHE_TTL_MS,
     () =>
       prisma.appointmentTimeline.findMany({
@@ -152,7 +182,7 @@ export async function GET(req: NextRequest) {
   // clínica. No depende de from/to (longWaits usa `now`, no el rango del
   // reporte histórico), así que esos parámetros no entran en la clave.
   const longWaits = await cachedByKey(
-    `waiting-room-longwaits:${clinicId}:${user.id}:${threshold}`,
+    claveDeClinica("waiting-room-longwaits", clinicId, user.id, user.role, threshold),
     CACHE_TTL_MS,
     () =>
       prisma.appointmentTimeline.findMany({

@@ -50,6 +50,7 @@ import {
 import toast from "react-hot-toast";
 import { instrumentSans } from "@/fonts/menu";
 import { useT } from "@/i18n/i18n-provider";
+import { avisarCambioArmazon } from "@/lib/armazon/refrescar";
 import type { TFunction } from "@/i18n/t";
 import { parseSystemKind } from "@/lib/whatsapp/system-message";
 import type { WaDeliveryStatus } from "@/lib/whatsapp/delivery-status";
@@ -373,6 +374,26 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  // La insignia de «Mensajes» del menú cuenta los hilos sin leer, y el servidor
+  // la guarda en caché. Cuando aquí cambia cuántos hay sin leer —se abre uno,
+  // se marca no leído, llega uno nuevo— avisamos: el menú recarga YA y sin
+  // caché, y no se queda con el número de antes (@/lib/armazon/refrescar).
+  // Las acciones de abajo tocan `threads` cuando su PATCH ya terminó. Mientras
+  // la lista se está recargando (abrir Mensajes, cambiar de carpeta, canal o
+  // búsqueda) el cambio no es de nadie: solo se toma como punto de partida.
+  const sinLeer = useMemo(() => threads.reduce((n, th) => n + (th.status === "UNREAD" ? 1 : 0), 0), [threads]);
+  const sinLeerAntes = useRef<number | null>(null);
+  const vistaAntes = useRef<string | null>(null);
+  useEffect(() => {
+    const vista = `${folder}|${activeChannel ?? ""}|${search}|${patientIdFilter ?? ""}`;
+    const mismaVista = vistaAntes.current === vista;
+    vistaAntes.current = vista;
+    if (loadingList) { sinLeerAntes.current = null; return; }
+    if (mismaVista && sinLeerAntes.current !== null && sinLeerAntes.current !== sinLeer) {
+      avisarCambioArmazon("contadores");
+    }
+    sinLeerAntes.current = sinLeer;
+  }, [sinLeer, folder, activeChannel, search, patientIdFilter, loadingList]);
   // ── Ancho REAL del panel (no del viewport) ────────────────────────────────
   // El <main> del dashboard mide 1031 px a viewport 1280 con el sidebar del
   // panel abierto, así que el @media (max-width:1199px) del CSS nunca disparaba

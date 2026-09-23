@@ -6,13 +6,18 @@ import { prisma } from "@/lib/prisma";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { dateISOInTz } from "@/lib/agenda/legacy-helpers";
-import { cachedByKey } from "@/lib/route-cache";
+import { cachedByKey, claveDeClinica } from "@/lib/route-cache";
 
 export const dynamic = "force-dynamic";
 
 // La campana de actividad pollea esto cada 60s en todas las pantallas (ver
 // ~/gerentes/salidas/MAPA-conexiones.md §6.1), mismo patrón que sidebar-counts
 // e insights. 30s = la mitad del intervalo de polling.
+//
+// CUÁNTO PUEDE ENVEJECER (ws1-t1): 30 s la lista de eventos. El punto de «hay
+// algo nuevo» NO envejece nada: se calcula DESPUÉS de la caché contra la cookie
+// notifLastSeen de quien pregunta, así que marcar leído (mark-read) lo apaga en
+// la siguiente petición, caiga en la instancia que caiga.
 const CACHE_TTL_MS = 30_000;
 
 interface ActivityEvent {
@@ -47,31 +52,10 @@ export async function GET(req: NextRequest) {
   // Solo depende de clinicId (sin visibilidad por paciente: no hay expediente
   // todavía), así que el TTL puede compartirse entre todos los usuarios de la
   // clínica sin riesgo de fuga.
-  const solicitudes = await cachedByKey(
-    `activity-solicitudes:${ctx.clinicId}`,
-    CACHE_TTL_MS,
-    () =>
-      prisma.bookingRequest
-        .findMany({
-          // requestedAt futuro: una solicitud cuyo horario ya pasó está vencida
-          // (la bandeja de la agenda la marca EXPIRADA al abrirse) y no debe seguir
-          // sonando en la campana como si alguien pudiera contestarla.
-          where: { clinicId: ctx.clinicId, status: "PENDIENTE", requestedAt: { gte: new Date() } },
-          select: {
-            id: true, patientName: true, requestedAt: true, serviceName: true, createdAt: true,
-            // La hora pedida se muestra en la zona de la CLÍNICA: el servidor corre
-            // en UTC y sin esto una solicitud de las 9:00 salía como las 15:00.
-            clinic: { select: { timezone: true } },
-          },
-          orderBy: { createdAt: "desc" },
-          take: 10,
-        })
-        .catch((err: { code?: string }) => {
-          if (err?.code === "P2021" || err?.code === "42P01") return [];
-          throw err;
-        }),
-  );
-
+  //
+  // Solicitudes, eventos recientes e interruptor van en PARALELO (ws1-t1):
+  // antes las solicitudes se esperaban solas y los otros tres arrancaban
+  // después, un viaje de ida y vuelta a la base más en cada fallo de caché.
   // A dónde mandan los avisos de cita. Con el interruptor por clínica
   // `menu-dos-niveles` la clínica ve la agenda NUEVA (/dashboard/agenda), así
   // que la campana manda ahí: «Cita completada» abre el panel de esa cita
@@ -83,12 +67,38 @@ export async function GET(req: NextRequest) {
   //
   // 🔴 patientVis/relatedVis dependen de ctx.userId (visibilidad por
   // paciente: un doctor sin acceso a un paciente no debe ver su pago/alta/cita
-  // aquí). Por eso esta clave lleva clinicId Y userId — cachear solo por
+  // aquí). Por eso esta clave lleva clinicId, userId Y rol — cachear solo por
   // clínica haría que un doctor viera lo que ve otro doctor de la misma
-  // clínica (o al revés, que un admin viera la lista recortada de un doctor).
-  const [[paidInvoices, newPatients, doneAppointments], agendaNueva] = await Promise.all([
+  // clínica (o al revés, que un admin viera la lista recortada de un doctor);
+  // el rol, porque la visibilidad cambia con él y un cambio de rol no puede
+  // heredar la lista del rol anterior.
+  const [solicitudes, [paidInvoices, newPatients, doneAppointments], agendaNueva] = await Promise.all([
     cachedByKey(
-      `activity-recent:${ctx.clinicId}:${ctx.userId}`,
+      claveDeClinica("activity-solicitudes", ctx.clinicId),
+      CACHE_TTL_MS,
+      () =>
+        prisma.bookingRequest
+          .findMany({
+            // requestedAt futuro: una solicitud cuyo horario ya pasó está vencida
+            // (la bandeja de la agenda la marca EXPIRADA al abrirse) y no debe seguir
+            // sonando en la campana como si alguien pudiera contestarla.
+            where: { clinicId: ctx.clinicId, status: "PENDIENTE", requestedAt: { gte: new Date() } },
+            select: {
+              id: true, patientName: true, requestedAt: true, serviceName: true, createdAt: true,
+              // La hora pedida se muestra en la zona de la CLÍNICA: el servidor corre
+              // en UTC y sin esto una solicitud de las 9:00 salía como las 15:00.
+              clinic: { select: { timezone: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 10,
+          })
+          .catch((err: { code?: string }) => {
+            if (err?.code === "P2021" || err?.code === "42P01") return [];
+            throw err;
+          }),
+    ),
+    cachedByKey(
+      claveDeClinica("activity-recent", ctx.clinicId, ctx.userId, ctx.role),
       CACHE_TTL_MS,
       () =>
         Promise.all([

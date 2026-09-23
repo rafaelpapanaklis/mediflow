@@ -1,17 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { useSondeo } from "@/hooks/use-sondeo";
 import type { AparienciaTopbar } from "@/components/dashboard/topbar-rediseno/apariencia";
 import c from "@/components/dashboard/topbar-rediseno/piezas-topbar.module.css";
 
 /**
  * WaitingRoomAlert — pill que el dashboard layout/topbar puede renderizar
- * para roles RECEPTIONIST/ADMIN. Pollea /api/analytics/waiting-room cada
- * 60s con visibility pause y muestra "X pacientes esperan >Y min" si
- * detecta long waits activos.
+ * para roles RECEPTIONIST/ADMIN. Pregunta a /api/analytics/waiting-room
+ * con `?solo=alerta` —un conteo, no el reporte de 30 días con mapa de calor
+ * que pedía antes para quedarse con `longWaits.length`— cada 60 s, solo
+ * con la pestaña visible (useSondeo), y muestra "X pacientes esperan >Y min"
+ * si hay esperas largas. Se queda en 60 s a propósito: cuando recepción pasa
+ * al paciente al sillón, la pastilla tiene que irse tan rápido como hoy.
  *
  * Multi-tenant: el endpoint usa getCurrentUser().clinicId, así que el
  * cliente solo recibe data de su propia clínica.
@@ -27,42 +31,26 @@ export function WaitingRoomAlert({ apariencia }: { apariencia?: AparienciaTopbar
   const [count, setCount] = useState(0);
   const [threshold, setThreshold] = useState(20);
 
+  const cancelado = useRef(false);
   useEffect(() => {
-    let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    const fetchAlerts = async () => {
-      try {
-        const res = await fetch("/api/analytics/waiting-room", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        setCount(Array.isArray(data.longWaits) ? data.longWaits.length : 0);
-        setThreshold(data.threshold ?? 20);
-      } catch {/* silent */}
-    };
-
-    const start = () => {
-      if (interval !== null) return;
-      interval = setInterval(fetchAlerts, 60_000);
-    };
-    const stop = () => {
-      if (interval !== null) { clearInterval(interval); interval = null; }
-    };
-    const onVis = () => {
-      if (document.visibilityState === "visible") { fetchAlerts(); start(); }
-      else stop();
-    };
-
-    fetchAlerts();
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      cancelled = true;
-      stop();
-      document.removeEventListener("visibilitychange", onVis);
-    };
+    cancelado.current = false;
+    return () => { cancelado.current = true; };
   }, []);
+  const fetchAlerts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/analytics/waiting-room?solo=alerta", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (cancelado.current) return;
+      // `longWaits` por si responde una instancia de antes del cambio
+      // (durante un despliegue): sin esto la pastilla se quedaba en 0.
+      setCount(
+        Number(data.longWaitsCount ?? (Array.isArray(data.longWaits) ? data.longWaits.length : 0)) || 0,
+      );
+      setThreshold(data.threshold ?? 20);
+    } catch {/* silent */}
+  }, []);
+  useSondeo(fetchAlerts, 60_000);
 
   if (count === 0) return null;
 

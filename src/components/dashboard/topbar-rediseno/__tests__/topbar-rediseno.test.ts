@@ -123,7 +123,8 @@ test("la barra nueva no monta el aviso de sala de espera, y por eso tampoco sond
   // El sondeo sigue viviendo solo dentro del componente: si alguien lo saca a
   // un hook compartido, este test obliga a volver a mirar la barra nueva.
   const aviso = leer("components/dashboard/waiting-room-alert.tsx");
-  assert.match(aviso, /fetch\("\/api\/analytics\/waiting-room"/, "el sondeo vive dentro del componente");
+  // (ws1-t1: con `?solo=alerta`, el conteo ligero en vez del reporte entero.)
+  assert.match(aviso, /fetch\("\/api\/analytics\/waiting-room(\?solo=alerta)?"/, "el sondeo vive dentro del componente");
   // Y la barra de siempre no pierde nada.
   assert.match(leer(BARRA_VIEJA), /<WaitingRoomAlert \/>/, "la barra de siempre lo monta igual que hoy");
 });

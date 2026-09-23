@@ -26,18 +26,34 @@ export async function GET() {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: ctx.clinicId },
-    select: {
-      aiTokensUsed: true,
-      aiTokensLimit: true,
-      aiLastResetAt: true,
-      locale: true,
-    },
-  });
+  const now = new Date();
+  const monthStart = aiMonthStart(now);
+
+  // La clínica y el desglose del cupo NO dependen uno del otro: van en
+  // paralelo (ws1-t1). Antes eran dos viajes de ida y vuelta seguidos a la
+  // base. El desglose es fail-open: su error se captura aquí y se registra
+  // abajo, igual que antes.
+  const [clinic, desgloseCupo] = await Promise.all([
+    prisma.clinic.findUnique({
+      where: { id: ctx.clinicId },
+      select: {
+        aiTokensUsed: true,
+        aiTokensLimit: true,
+        aiLastResetAt: true,
+        locale: true,
+      },
+    }),
+    prisma.aiQuotaUsage
+      .groupBy({
+        by: ["feature"],
+        where: { clinicId: ctx.clinicId, createdAt: { gte: monthStart } },
+        _sum: { tokens: true },
+      })
+      .then((rows) => ({ rows, err: null as unknown }))
+      .catch((err: unknown) => ({ rows: null, err })),
+  ]);
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
 
-  const now = new Date();
   const lastReset = new Date(clinic.aiLastResetAt);
   // Misma aritmética que aiTokenLimitError: mes de calendario con getters
   // locales. Aquí NO escribimos el reseteo (un GET no debe mutar) — solo
@@ -57,8 +73,6 @@ export async function GET() {
   let byFeature: { feature: AiFeature; label: string; tokens: number; percent: number }[] = [];
   let byFeatureTotal = 0;
 
-  const monthStart = aiMonthStart(now);
-
   // Da forma al desglose a partir de {slug normalizado: tokens}.
   const shapeBreakdown = (totals: Record<string, number>) => {
     const keys = Object.keys(totals);
@@ -76,11 +90,8 @@ export async function GET() {
   };
 
   try {
-    const rows = await prisma.aiQuotaUsage.groupBy({
-      by: ["feature"],
-      where: { clinicId: ctx.clinicId, createdAt: { gte: monthStart } },
-      _sum: { tokens: true },
-    });
+    if (desgloseCupo.err !== null) throw desgloseCupo.err;
+    const rows = desgloseCupo.rows ?? [];
 
     // Agrupa por slug normalizado (un slug viejo/desconocido cae en "other").
     const totals: Record<string, number> = {};
