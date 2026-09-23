@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { triggerAutoRechargeIfNeeded } from "@/lib/ai-billing/recharge";
+import { lastAutoRechargeFailedRecently, triggerAutoRechargeIfNeeded } from "@/lib/ai-billing/recharge";
 import { GRACE_OVERDRAFT_CENTS } from "@/lib/ai-billing/types";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   }
 
   const now = new Date();
-  let scanned = 0, recharged = 0, paused = 0, reactivated = 0;
+  let scanned = 0, recharged = 0, rechargeFailed = 0, paused = 0, reactivated = 0;
   let alerted = 0, waSent = 0, waFailed = 0, cleared = 0, errors = 0;
 
   // Monederos (1 por clínica, filas pequeñas): se traen todos y se decide en
@@ -74,12 +74,15 @@ export async function GET(req: NextRequest) {
     try {
       let balance = w.balanceCents;
       let status = w.status;
+      // La tarjeta guardada no cobró (rechazada, caducada, 3DS) hace <24 h: el
+      // aviso a la clínica tiene que decirlo, no solo "saldo bajo".
+      let cardFailed = false;
 
       // (a) Backstop de auto-recarga. triggerAutoRechargeIfNeeded se auto-protege
-      // (no hace nada si falta config, el monedero está pausado, el saldo ya
-      // supera el umbral o hay una recarga Stripe reciente — respeta el mismo
-      // cooldown anti doble-cobro), así que es seguro llamarlo. Releemos el
-      // saldo después.
+      // (no hace nada si falta config o el monedero está pausado; el cooldown
+      // anti doble-cobro y el backoff tras un fallo viven en la reserva de
+      // chargeOffSession, bajo el candado del monedero), así que es seguro
+      // llamarlo. Releemos el saldo después.
       if (w.autoRecharge && balance < w.autoRechargeThresholdCents) {
         await triggerAutoRechargeIfNeeded(w.clinicId);
         const fresh = await prisma.aiWallet.findUnique({
@@ -90,6 +93,10 @@ export async function GET(req: NextRequest) {
           if (fresh.balanceCents > balance) recharged++;
           balance = fresh.balanceCents;
           status = fresh.status;
+        }
+        if (balance < w.autoRechargeThresholdCents && w.stripePaymentMethodId) {
+          cardFailed = await lastAutoRechargeFailedRecently(prisma, w.clinicId, now.getTime());
+          if (cardFailed) rechargeFailed++;
         }
       }
 
@@ -128,8 +135,9 @@ export async function GET(req: NextRequest) {
           // el WhatsApp es un extra que jamás debe romper la corrida.
           const c = clinicById.get(w.clinicId);
           if (c?.waConnected && c.waPhoneNumberId && c.waAccessToken && c.phone) {
-            const msg =
-              status === "PAUSED"
+            const msg = cardFailed
+              ? `⚠️ *${c.name}*: no pudimos cobrar la recarga automática de tu asistente de IA con la tarjeta guardada (saldo ${fmtMXN(balance)}). Revisa la tarjeta o recarga a mano en tu panel, en *Saldo de IA*, para que el bot de WhatsApp ${status === "PAUSED" ? "vuelva a responder solo" : "siga respondiendo automáticamente"}.`
+              : status === "PAUSED"
                 ? `⚠️ *${c.name}*: tu asistente de IA se pausó por falta de saldo (${fmtMXN(balance)}). Recarga en tu panel, en *Saldo de IA*, para que el bot de WhatsApp vuelva a responder solo.`
                 : `⚠️ *${c.name}*: el saldo de tu asistente de IA está bajo (${fmtMXN(balance)}). Recárgalo en tu panel, en *Saldo de IA*, para que el bot de WhatsApp siga respondiendo automáticamente.`;
             try {
@@ -162,7 +170,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    scanned, recharged, paused, reactivated,
+    scanned, recharged, rechargeFailed, paused, reactivated,
     alerted, waSent, waFailed, cleared, errors,
     timestamp: now.toISOString(),
   });
