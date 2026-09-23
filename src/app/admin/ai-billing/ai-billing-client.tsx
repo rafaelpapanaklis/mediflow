@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Wallet, Gauge, TrendingUp, AlertTriangle, RefreshCw, Plus, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatCurrency } from "@/lib/utils";
@@ -10,6 +10,9 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { AiWalletStatusBadge } from "@/components/admin/ai-wallet-status-badge";
+import { MAX_ADJUST_ABS_CENTS, MAX_RECHARGE_USD_CENTS, RECHARGE_WARN_USD_CENTS } from "@/lib/ai-billing/topes";
 
 // ---- Tipos del GET /api/admin/ai-billing ----
 type ModelPriceKey = "inputUsdPerMtok" | "outputUsdPerMtok" | "cacheWriteUsdPerMtok" | "cacheReadUsdPerMtok";
@@ -125,7 +128,14 @@ const labelStyle = { fontSize: 11, color: "var(--text-3)", fontWeight: 600 } as 
 // Espeja MAX_ROWS del endpoint; solo se usa para el texto de "tope alcanzado".
 const MAX_ROWS_UI = 500;
 
+/** Clave de idempotencia de un ajuste: una por modal abierto. */
+function nuevaClaveDeAjuste(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
 export function AiBillingClient() {
+  const askConfirm = useConfirm();
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,11 +146,22 @@ export function AiBillingClient() {
   const [rechargeUsd, setRechargeUsd] = useState("");
   const [rechargeNote, setRechargeNote] = useState("");
   const [savingRecharge, setSavingRecharge] = useState(false);
+  // Un `useState` no frena un doble clic que llega antes del re-render: el
+  // ref sí. El botón deshabilitado es la capa visible; esto, la que manda.
+  const rechargeInFlight = useRef(false);
 
   const [adjustClinic, setAdjustClinic] = useState<ClinicRow | null>(null);
   const [adjustPesos, setAdjustPesos] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
   const [savingAdjust, setSavingAdjust] = useState(false);
+  // Clave de idempotencia del ajuste abierto: el servidor guarda la misma
+  // petición una sola vez aunque llegue repetida (reintento, pestaña vieja).
+  // Nace al ABRIR el modal y muere al aplicar con éxito; NO cambia al teclear:
+  // si un envío se aplicó pero la respuesta se perdió y el admin corrige la
+  // cifra, el reenvío lleva la misma clave y el servidor lo frena (409
+  // CLAVE_REUTILIZADA) en vez de aplicar los dos.
+  const [adjustRequestId, setAdjustRequestId] = useState("");
+  const adjustInFlight = useRef(false);
 
   const [topups, setTopups] = useState<Topup[] | null>(null);
   const [topupsAvailable, setTopupsAvailable] = useState(true);
@@ -215,6 +236,24 @@ export function AiBillingClient() {
       toast.error("Monto inválido");
       return;
     }
+    const usdCents = Math.round(usd * 100);
+    // Mismo tope que el servidor (@/lib/ai-billing/topes): aquí se avisa
+    // antes de mandar; allí se rechaza de todos modos.
+    if (usdCents > MAX_RECHARGE_USD_CENTS) {
+      toast.error(`El tope por recarga es ${fmtUSD(MAX_RECHARGE_USD_CENTS / 100)}. Si es correcto, regístrala en varias.`);
+      return;
+    }
+    if (usdCents >= RECHARGE_WARN_USD_CENTS) {
+      const ok = await askConfirm({
+        title: `¿Registrar ${fmtUSD(usd)} en Anthropic?`,
+        description: `Es una cifra fuera de lo normal (a partir de ${fmtUSD(RECHARGE_WARN_USD_CENTS / 100)} se pide confirmar). Un dedazo aquí descuadra el margen y el runway.`,
+        variant: "warning",
+        confirmText: "Sí, registrar",
+      });
+      if (!ok) return;
+    }
+    if (rechargeInFlight.current) return;
+    rechargeInFlight.current = true;
     setSavingRecharge(true);
     try {
       const res = await fetch("/api/admin/ai-billing/anthropic-recharge", {
@@ -230,17 +269,60 @@ export function AiBillingClient() {
     } catch (e: any) {
       toast.error(e?.message ?? "Error");
     } finally {
+      rechargeInFlight.current = false;
       setSavingRecharge(false);
     }
   }
 
+  /** Lo que la pantalla sabe del ajuste tecleado, antes de mandarlo. */
+  function leerAjuste() {
+    if (!adjustClinic) return null;
+    const pesos = Number(adjustPesos);
+    if (adjustPesos === "" || !Number.isFinite(pesos) || pesos === 0) return null;
+    const amountCents = Math.round(pesos * 100);
+    const saldoActual = adjustClinic.balanceCents;
+    const nuevoSaldo = (saldoActual ?? 0) + amountCents;
+    return {
+      amountCents,
+      nuevoSaldo,
+      fueraDeTope: Math.abs(amountCents) > MAX_ADJUST_ABS_CENTS,
+      // Sin monedero no se crea uno en negativo: el servidor lo rechaza y aquí ni se manda.
+      sinMonederoYNegativo: !adjustClinic.hasWallet && amountCents < 0,
+      dejaEnNegativo: nuevoSaldo < 0,
+    };
+  }
+
   async function submitAdjust() {
     if (!adjustClinic) return;
-    const pesos = Number(adjustPesos);
-    if (!Number.isFinite(pesos) || pesos === 0) {
+    const ajuste = leerAjuste();
+    if (!ajuste) {
       toast.error("Monto inválido (puede ser negativo)");
       return;
     }
+    if (ajuste.fueraDeTope) {
+      toast.error(`El tope por ajuste es ±${fmtMXNdec(MAX_ADJUST_ABS_CENTS / 100)}`);
+      return;
+    }
+    if (ajuste.sinMonederoYNegativo) {
+      toast.error("La clínica no tiene monedero: no se crea uno en negativo. Abona primero.");
+      return;
+    }
+    // Dejar a alguien en negativo puede ser a propósito (una deuda), pero no
+    // sin decirlo: se pide confirmar.
+    if (ajuste.dejaEnNegativo) {
+      const ok = await askConfirm({
+        title: `¿Dejar a ${adjustClinic.name} en negativo?`,
+        description: `El saldo quedaría en ${fmtMXNdec(ajuste.nuevoSaldo / 100)}. Con saldo en 0 o negativo la IA del bot de WhatsApp se detiene y pasa la conversación a una persona (con auto-recarga y tarjeta solo hay un pequeño margen de gracia).`,
+        variant: "warning",
+        confirmText: "Sí, dejar en negativo",
+      });
+      if (!ok) return;
+    }
+    // Candado de pantalla: un doble clic que llegue antes del re-render se
+    // frena aquí. No basta (una pestaña vieja se lo salta): el servidor tiene
+    // el suyo, con la misma clave `requestId`.
+    if (adjustInFlight.current) return;
+    adjustInFlight.current = true;
     setSavingAdjust(true);
     try {
       const res = await fetch("/api/admin/ai-billing/adjust", {
@@ -248,19 +330,23 @@ export function AiBillingClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clinicId: adjustClinic.clinicId,
-          amountCents: Math.round(pesos * 100),
+          amountCents: ajuste.amountCents,
           note: adjustNote || undefined,
+          requestId: adjustRequestId || undefined,
         }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Error");
-      toast.success("Saldo ajustado");
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error ?? "Error");
+      toast.success(json?.repeated ? "Ese ajuste ya estaba aplicado; no se repitió" : "Saldo ajustado");
       setAdjustClinic(null);
       setAdjustPesos("");
       setAdjustNote("");
+      setAdjustRequestId("");
       await fetchData();
     } catch (e: any) {
       toast.error(e?.message ?? "Error");
     } finally {
+      adjustInFlight.current = false;
       setSavingAdjust(false);
     }
   }
@@ -608,25 +694,8 @@ export function AiBillingClient() {
                     {c.costSharePct.toFixed(1)}%
                   </td>
                   <td>
-                    {!c.hasWallet ? (
-                      <BadgeNew tone="neutral">Sin monedero</BadgeNew>
-                    ) : c.status === "PAUSED" ? (
-                      <BadgeNew tone="danger" dot>
-                        Pausado
-                      </BadgeNew>
-                    ) : (bal ?? 0) < 0 ? (
-                      <BadgeNew tone="danger" dot>
-                        Negativo
-                      </BadgeNew>
-                    ) : c.lowBalance ? (
-                      <BadgeNew tone="warning" dot>
-                        Saldo bajo
-                      </BadgeNew>
-                    ) : (
-                      <BadgeNew tone="success" dot>
-                        Activo
-                      </BadgeNew>
-                    )}
+                    {/* Misma pastilla y misma regla que la ficha de la clínica. */}
+                    <AiWalletStatusBadge monedero={{ hasWallet: c.hasWallet, status: c.status, balanceCents: bal }} />
                     {c.autoRecharge && <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 3 }}>auto-recarga</div>}
                   </td>
                   <td>
@@ -638,6 +707,7 @@ export function AiBillingClient() {
                           setAdjustClinic(c);
                           setAdjustPesos("");
                           setAdjustNote("");
+                          setAdjustRequestId(nuevaClaveDeAjuste());
                         }}
                       >
                         Ajustar saldo
@@ -734,7 +804,7 @@ export function AiBillingClient() {
               title={`Ajustar saldo · ${adjustClinic.name}`}
               sub={
                 adjustClinic.balanceCents == null
-                  ? "Sin monedero: el ajuste le crea uno con este saldo"
+                  ? "Sin monedero: un abono le crea uno con ese saldo; un cargo no (no se crea en negativo)"
                   : `Saldo actual: ${fmtMXNdec(adjustClinic.balanceCents / 100)}`
               }
               action={
@@ -766,19 +836,40 @@ export function AiBillingClient() {
                   style={{ marginTop: 4 }}
                 />
               </label>
-              {adjustPesos !== "" && Number.isFinite(Number(adjustPesos)) && (
-                <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-3)" }}>
-                  Nuevo saldo:{" "}
-                  <span className="mono" style={{ color: "var(--text-1)" }}>
-                    {fmtMXNdec(((adjustClinic.balanceCents ?? 0) + Math.round(Number(adjustPesos) * 100)) / 100)}
-                  </span>
-                </div>
-              )}
+              {(() => {
+                const ajuste = leerAjuste();
+                if (!ajuste) return null;
+                return (
+                  <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-3)" }}>
+                    Nuevo saldo:{" "}
+                    <span className="mono" style={{ color: ajuste.dejaEnNegativo ? "var(--danger)" : "var(--text-1)" }}>
+                      {fmtMXNdec(ajuste.nuevoSaldo / 100)}
+                    </span>
+                    {ajuste.sinMonederoYNegativo ? (
+                      <div role="alert" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--danger)", background: "var(--danger-soft)", color: "var(--danger)" }}>
+                        Esta clínica no tiene monedero: no se crea uno en negativo. Abona primero.
+                      </div>
+                    ) : ajuste.dejaEnNegativo ? (
+                      <div role="alert" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--warning)", background: "var(--warning-soft)", color: "var(--warning)" }}>
+                        Deja el saldo en negativo (una deuda). Se te pedirá confirmarlo.
+                      </div>
+                    ) : ajuste.fueraDeTope ? (
+                      <div role="alert" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--danger)", background: "var(--danger-soft)", color: "var(--danger)" }}>
+                        Excede el tope de ±{fmtMXNdec(MAX_ADJUST_ABS_CENTS / 100)} por ajuste.
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
               <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <ButtonNew variant="ghost" onClick={() => setAdjustClinic(null)} disabled={savingAdjust}>
                   Cancelar
                 </ButtonNew>
-                <ButtonNew variant="primary" onClick={submitAdjust} disabled={savingAdjust}>
+                <ButtonNew
+                  variant="primary"
+                  onClick={submitAdjust}
+                  disabled={savingAdjust || !!leerAjuste()?.sinMonederoYNegativo || !!leerAjuste()?.fueraDeTope}
+                >
                   {savingAdjust ? "Aplicando…" : "Aplicar ajuste"}
                 </ButtonNew>
               </div>

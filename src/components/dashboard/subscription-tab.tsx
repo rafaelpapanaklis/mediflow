@@ -8,6 +8,8 @@ import { type PlanId, isPlanId } from "@/lib/billing/plans";
 import { cfdiBullet } from "@/lib/plan-shared";
 import { daysUntil, isInTrial as inTrialNow, isPlanExpired, isSubscriptionActive } from "@/lib/plan-status";
 import { PaymentMethodModal } from "./payment-method-modal";
+import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
+import { resolverMetodoPago, textosMetodoPago, avisoMetodoPago } from "@/lib/billing/metodo-de-pago-vista";
 import { CfdiUsageCard } from "./cfdi-usage-card";
 import { useT } from "@/i18n/i18n-provider";
 import { ROPA_DESGLOSE, SuscripcionRediseno, type RopaDesglose } from "./bloques-rediseno/suscripcion";
@@ -133,6 +135,9 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
   const [previewFailed, setPreviewFailed] = useState(false);
   // Descarta respuestas de previews que ya no corresponden al plan abierto.
   const previewReq = useRef(0);
+  // Método de pago VIGENTE en Stripe (la misma lectura que /admin). null =
+  // aún no contestó. `clinic.paymentMethodCollected` solo describe el alta.
+  const [livePaymentMethod, setLivePaymentMethod] = useState<StripeLivePaymentMethod | null>(null);
 
   const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
   const now = new Date();
@@ -185,6 +190,34 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
       cancelled = true;
     };
   }, []);
+
+  // Método de pago vigente en Stripe. Si la ruta falla, "unavailable": la
+  // pantalla no afirma nada (nunca «no tienes método» por un timeout).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/billing/payment-method")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { paymentMethod: StripeLivePaymentMethod }) => {
+        if (!cancelled && data?.paymentMethod?.state) setLivePaymentMethod(data.paymentMethod);
+        else if (!cancelled) setLivePaymentMethod({ state: "unavailable", reason: "respuesta sin método" });
+      })
+      .catch(() => {
+        if (!cancelled) setLivePaymentMethod({ state: "unavailable", reason: "sin respuesta" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const metodoPago = resolverMetodoPago({
+    live: livePaymentMethod,
+    alta: {
+      collected: !!clinic.paymentMethodCollected,
+      type: clinic.paymentMethodType ?? null,
+      last4: clinic.paymentMethodLast4 ?? null,
+    },
+    subscriptionActive,
+  });
 
   // Intervalo REAL de la suscripción (mensual/anual) + próxima fecha de cobro.
   // Sin esto el tab mostraba SIEMPRE el precio mensual, así que a una clínica
@@ -478,6 +511,7 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
           cambiando: changingPlan,
           onElegirPlan: openConfirm,
           onCambiarMetodo: () => setPaymentModalOpen(true),
+          metodoPago,
           cancelacionPedida: localCancelRequested,
           onPedirCancelar: () => setCancelOpen(true),
           facturas: invoices,
@@ -718,51 +752,31 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
           {t("shell.subscriptionTab.paymentMethodTitle")}
         </h2>
 
-        {clinic.paymentMethodCollected ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-soft, hsl(var(--border)))", borderRadius: 10 }}>
-            {clinic.paymentMethodType === "card" ? (
-              <>
-                <div style={{ width: 40, height: 26, borderRadius: 4, background: "linear-gradient(135deg, #1a1f3a, #0d1026)", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 700, color: "#a78bfa" }}>
-                  CARD
+        {/* Lo que Stripe dice HOY (mismo resolutor que el rediseño). Antes se
+            preguntaba por paymentMethodCollected, que solo describe el alta. */}
+        {(() => {
+          const textos = textosMetodoPago(metodoPago, t, isAnnualBilling);
+          if (textos) {
+            return (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
+                <div style={{ width: 40, height: 26, borderRadius: 4, background: "var(--brand-soft)", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 700, color: "var(--brand)", letterSpacing: "0.02em" }}>
+                  {textos.marca}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>
-                    {t("shell.subscriptionTab.cardEndingIn", { last4: clinic.paymentMethodLast4 ?? "••••" })}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                    {t(isAnnualBilling ? "shell.subscriptionTab.autoAnnualCharge" : "shell.subscriptionTab.autoMonthlyCharge")}
-                  </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>{textos.titulo}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>{textos.sub}</div>
                 </div>
-              </>
-            ) : clinic.paymentMethodType === "paypal" ? (
-              <>
-                <div style={{ width: 40, height: 26, borderRadius: 4, background: "#003087", display: "grid", placeItems: "center", fontSize: 9, fontWeight: 800, color: "#fff", letterSpacing: "0.02em" }}>
-                  PayPal
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>PayPal</div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>{t("shell.subscriptionTab.recurringSubscription")}</div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ width: 40, height: 26, borderRadius: 4, background: "rgba(251,191,36,0.2)", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, color: "#fbbf24" }}>
-                  SPEI
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>
-                    {t("shell.subscriptionTab.bankTransfer")}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>{t("shell.subscriptionTab.manualPaymentConfirmation")}</div>
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <div style={{ padding: 14, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, fontSize: 13, color: "#fcd34d" }}>
-            {t("shell.subscriptionTab.noPaymentMethod")}
-          </div>
-        )}
+              </div>
+            );
+          }
+          const aviso = avisoMetodoPago(metodoPago);
+          const alarma = aviso.tono === "alerta";
+          return (
+            <div style={{ padding: 14, background: alarma ? "var(--warning-soft)" : "var(--bg-elev)", border: `1px solid ${alarma ? "var(--warning)" : "var(--border-soft)"}`, borderRadius: 10, fontSize: 13, color: alarma ? "var(--warning-strong)" : "var(--text-2)" }}>
+              {t(aviso.clave)}
+            </div>
+          );
+        })()}
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button

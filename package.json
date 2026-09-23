@@ -143,6 +143,8 @@
     "test:invoice-number": "tsx --test src/lib/invoices/__tests__/next-invoice-number-core.test.ts",
     "test:proration": "tsx --test src/lib/billing/proration.test.ts",
     "test:ai-precio-modelo": "tsx --test src/lib/ai-billing/__tests__/precio-por-modelo.test.ts",
+    "test:ajuste-candado": "tsx --test --experimental-test-module-mocks src/app/api/admin/ai-billing/__tests__/ajuste-candado.test.ts",
+    "test:metodo-de-pago": "tsx --test --experimental-test-module-mocks src/app/api/billing/__tests__/metodo-de-pago.test.ts",
     "test:subscription-lapse": "tsx --test src/lib/billing/__tests__/manual-subscription-lapse.test.ts",
     "test:click-guard": "tsx --test src/lib/affiliates/__tests__/click-guard-core.test.ts",
     "test:afiliados": "tsx --test src/lib/affiliates/payout-core.test.ts",

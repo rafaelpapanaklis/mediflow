@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdminAuthed } from "@/lib/admin-auth";
 import { getPricingConfig, modelPriceRows } from "@/lib/ai-billing/pricing";
 import { unpricedModelsFromUsage } from "@/lib/ai-billing/pricing-core";
+import { esSaldoBajo } from "@/lib/ai-billing/saldo-estado";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,7 +22,8 @@ export const runtime = "nodejs";
 //     otra tabla. Meterlo en el margen lo pintaría negativo y mentiroso.
 // El cheque a Anthropic (consumo, runway, costo total) SÍ suma los dos.
 
-const LOW_BALANCE_CENTS = 5000; // saldo bajo de una clínica: < $50 MXN
+// «Saldo bajo» vive en @/lib/ai-billing/saldo-estado (esSaldoBajo): la
+// tabla de Tesorería y la ficha de la clínica leen el mismo umbral.
 const BURN_WINDOW_DAYS = 30; // ventana para la quema diaria promedio (runway)
 const MAX_ROWS = 500; // tope defensivo de filas en la tabla (multi-tenant global)
 
@@ -185,7 +187,7 @@ export async function GET(_req: NextRequest) {
           costSharePct:
             totalCostMicros > 0 ? ((prepaidMicros + absorbedMicros) / totalCostMicros) * 100 : 0,
           // Solo tiene sentido con monedero; sin él no hay saldo que se agote.
-          lowBalance: !!w && w.balanceCents < LOW_BALANCE_CENTS,
+          lowBalance: esSaldoBajo({ hasWallet: !!w, status: w?.status ?? null, balanceCents: w ? w.balanceCents : null }),
         };
       })
       // Primero los monederos (ahí está el dinero que se puede agotar): saldo

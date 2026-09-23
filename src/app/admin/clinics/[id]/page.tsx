@@ -10,6 +10,7 @@ import { getResolvedPlan } from "@/lib/plans";
 import { loadPlanPrices } from "@/lib/admin/mrr";
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
+import { leerSaldoIaClinica, type SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia-clinica";
 import type { ClinicRecurringCharge } from "@/components/admin/clinic-payment-method-card";
 import { AdminClinicDetailClient, type PlatformPayments } from "./clinic-detail-client";
 
@@ -168,6 +169,16 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     console.warn("[admin/clinics/:id] pagos de suscripción no disponibles:", e);
   }
 
+  // Saldo de IA de la clínica (ai_wallets + ai_wallet_transactions + SPEI en
+  // revisión), de lectura. En try/catch: si algo falla, la ficha se sigue
+  // viendo entera y el bloque lo dice.
+  let saldoIa: SaldoIaClinicaDTO | null = null;
+  try {
+    saldoIa = await leerSaldoIaClinica(params.id);
+  } catch (e) {
+    console.warn("[admin/clinics/:id] saldo de IA no disponible:", e);
+  }
+
   // Método de pago e importe VIGENTES en Stripe (solo lectura, una sola
   // consulta). El campo del alta (paymentMethodCollected) no se actualiza nunca,
   // así que no sirve para saber qué tarjeta se va a cobrar.
@@ -240,6 +251,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       livePaymentMethod={livePaymentMethod}
       recurringCharge={recurringCharge}
       platformPayments={platformPayments}
+      saldoIa={saldoIa}
       planPrices={planPrices}
       ahoraISO={ahora.toISOString()}
       actividad={{

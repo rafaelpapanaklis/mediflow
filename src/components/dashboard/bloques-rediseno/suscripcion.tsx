@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AlertTriangle, Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles, XCircle } from "lucide-react";
+import { AlertTriangle, Check, CreditCard, Download, ExternalLink, Info, Loader2, Receipt, Sparkles, XCircle } from "lucide-react";
+import { textosMetodoPago, avisoMetodoPago, type MetodoPagoVista } from "@/lib/billing/metodo-de-pago-vista";
 import type { PlanId } from "@/lib/billing/plans";
 import type { ApiPlan, BillingInvoiceRow, ClinicData } from "@/components/dashboard/subscription-tab";
 import { Boton, Insignia, Aviso, type Tono } from "@/components/dashboard/configuracion-rediseno/piezas";
@@ -59,6 +60,8 @@ export interface ModeloSuscripcion {
 
   /* Método de pago */
   onCambiarMetodo: () => void;
+  /** Lo que Stripe dice HOY, ya resuelto (@/lib/billing/metodo-de-pago-vista). */
+  metodoPago: MetodoPagoVista;
   cancelacionPedida: boolean;
   onPedirCancelar: () => void;
 
@@ -232,43 +235,39 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
         titulo={t("shell.subscriptionTab.paymentMethodTitle")}
         icono={<CreditCard size={16} strokeWidth={1.75} aria-hidden />}
       >
-        {m.clinic.paymentMethodCollected ? (
-          <div className={s.metodo}>
-            {m.clinic.paymentMethodType === "card" ? (
-              <>
-                <div className={s.metodoMarca} aria-hidden>CARD</div>
+        {/* Lo que Stripe dice HOY, no lo que eligió el formulario de alta.
+            Mismo resolutor que la pestaña de siempre; sin respuesta de Stripe
+            no se afirma nada. Claves: cardEndingIn, cardBrandEndingIn,
+            autoMonthlyCharge, autoAnnualCharge, recurringSubscription,
+            bankTransfer, manualPaymentConfirmation, noPaymentMethod,
+            noPaymentMethodActive, paymentMethodLoading, paymentMethodUnknown. */}
+        {(() => {
+          const textos = textosMetodoPago(m.metodoPago, t, m.anual);
+          if (textos) {
+            return (
+              <div className={s.metodo}>
+                <div className={s.metodoMarca} aria-hidden>{textos.marca}</div>
                 <div className={s.metodoTextos}>
-                  <div className={s.metodoTitulo}>
-                    {t("shell.subscriptionTab.cardEndingIn", { last4: m.clinic.paymentMethodLast4 ?? "••••" })}
-                  </div>
-                  <div className={s.metodoSub}>
-                    {t(m.anual ? "shell.subscriptionTab.autoAnnualCharge" : "shell.subscriptionTab.autoMonthlyCharge")}
-                  </div>
+                  <div className={s.metodoTitulo}>{textos.titulo}</div>
+                  <div className={s.metodoSub}>{textos.sub}</div>
                 </div>
-              </>
-            ) : m.clinic.paymentMethodType === "paypal" ? (
-              <>
-                <div className={s.metodoMarca} aria-hidden>PayPal</div>
-                <div className={s.metodoTextos}>
-                  <div className={s.metodoTitulo}>PayPal</div>
-                  <div className={s.metodoSub}>{t("shell.subscriptionTab.recurringSubscription")}</div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={s.metodoMarca} aria-hidden>SPEI</div>
-                <div className={s.metodoTextos}>
-                  <div className={s.metodoTitulo}>{t("shell.subscriptionTab.bankTransfer")}</div>
-                  <div className={s.metodoSub}>{t("shell.subscriptionTab.manualPaymentConfirmation")}</div>
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <Aviso tono="alerta" icono={<AlertTriangle size={14} strokeWidth={1.75} aria-hidden />}>
-            {t("shell.subscriptionTab.noPaymentMethod")}
-          </Aviso>
-        )}
+              </div>
+            );
+          }
+          const aviso = avisoMetodoPago(m.metodoPago);
+          return (
+            <Aviso
+              tono={aviso.tono}
+              icono={
+                aviso.tono === "alerta"
+                  ? <AlertTriangle size={14} strokeWidth={1.75} aria-hidden />
+                  : <Info size={14} strokeWidth={1.75} aria-hidden />
+              }
+            >
+              {t(aviso.clave)}
+            </Aviso>
+          );
+        })()}
 
         <div className={s.acciones}>
           <Boton corto onClick={m.onCambiarMetodo}>
