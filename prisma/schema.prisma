@@ -7371,6 +7371,9 @@ model AiUsageEvent {
   createdAt     DateTime @default(now())
 
   @@index([clinicId, createdAt])
+  /// Tesorería consulta sin clinicId (quema 30 días, mes). SQL a mano:
+  /// sql/ws1-t3-ai-usage-events-indice-createdAt.sql
+  @@index([createdAt])
   @@map("ai_usage_events")
 }
 

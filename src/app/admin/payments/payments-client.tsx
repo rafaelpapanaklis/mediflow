@@ -12,6 +12,10 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { fmtMXN } from "@/lib/format";
 import { paymentDate, importedLaterAt, type PaymentDateFields } from "@/lib/admin/payment-date";
+import { fmtMXNdec } from "@/lib/format";
+import { fechaHoraAdmin } from "@/lib/admin/zona-horaria";
+import { ETIQUETA_VIA_RECARGA } from "@/lib/ai-billing/recargas";
+import type { PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 
@@ -82,6 +86,8 @@ interface Props {
   pendingTransfers: any[];
   overdueClinics: any[];
   clinics: any[];
+  /** Recargas de saldo IA de todas las clínicas: otro dinero que la suscripción. */
+  aiTopups: PagoSaldoIaGlobalDTO[];
 }
 
 /* ── Component ────────────────────────────────────────────────────────────── */
@@ -92,12 +98,13 @@ export function PaymentsClient({
   pendingTransfers: initPending,
   overdueClinics: initOverdue,
   clinics,
+  aiTopups,
 }: Props) {
   const router = useRouter();
   const askConfirm = useConfirm();
 
   /* State */
-  const [tab, setTab] = useState<"pending" | "all" | "overdue">("pending");
+  const [tab, setTab] = useState<"pending" | "all" | "overdue" | "ai">("pending");
   const [importingStripe, setImportingStripe] = useState(false);
   const [payments, setPayments] = useState(initPayments);
   const [pending, setPending] = useState(initPending);
@@ -383,6 +390,7 @@ export function PaymentsClient({
     { key: "pending" as const, label: "Pendientes de verificar", count: pending.length },
     { key: "all"     as const, label: "Todos los pagos",         count: payments.length },
     { key: "overdue" as const, label: "Clínicas vencidas",       count: overdue.length },
+    { key: "ai"      as const, label: "Saldo IA",                count: aiTopups.length },
   ];
 
   const statusFilters = [
@@ -656,8 +664,8 @@ export function PaymentsClient({
       )}
 
       {/* ── Tabs ────────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 18 }}>
-        <div className="segment-new" style={{ display: "inline-flex", gap: 2 }}>
+      <div style={{ marginBottom: 18, maxWidth: "100%", overflowX: "auto" }}>
+        <div className="segment-new" style={{ display: "inline-flex", gap: 2, whiteSpace: "nowrap" }}>
           {tabs.map(t => (
             <button
               key={t.key}
@@ -879,6 +887,78 @@ export function PaymentsClient({
                   ))}
                 </tbody>
               </table>
+            )}
+          </CardNew>
+        </div>
+      )}
+
+      {/* ── Tab: Saldo IA ────────────────────────────────────────────────── */}
+      {/* Recargas del monedero de IA. Una recarga es un CARGO de Stripe
+          (checkout mode "payment"), no una factura: por eso no está en
+          subscription_invoices ni en «Todos los pagos». Mismo criterio que la
+          ficha de la clínica y que el historial que ve la clínica
+          (@/lib/ai-billing/recargas). */}
+      {tab === "ai" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ fontSize: 12, color: "var(--text-3)" }}>
+            Recargas de saldo IA (por pasarela y abonos a mano) más las SPEI con comprobante en revisión.
+            Son otro dinero que la suscripción: no suman en «Cobrado este mes» ni en el MRR.
+          </div>
+          <CardNew noPad>
+            {aiTopups.length === 0 ? (
+              <div style={{ padding: "60px 0", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+                Sin recargas de saldo IA
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="table-new" style={{ minWidth: 640 }}>
+                  <thead>
+                    <tr>
+                      <th>Clínica</th>
+                      <th>Monto</th>
+                      <th>Vía</th>
+                      <th>Estado</th>
+                      <th>Referencia</th>
+                      <th>Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiTopups.map((p) => (
+                      <tr key={p.id}>
+                        <td style={{ fontWeight: 500 }}>
+                          <Link href={`/admin/clinics/${p.clinic.id}`} style={{ color: "var(--text-1)", textDecoration: "none" }}>
+                            {p.clinic.name}
+                          </Link>
+                        </td>
+                        <td className="mono" style={{ color: "var(--success)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                          {fmtMXNdec(p.amountCents / 100)}
+                        </td>
+                        <td style={{ color: "var(--text-2)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <BadgeNew tone="brand">Saldo IA</BadgeNew>
+                            {ETIQUETA_VIA_RECARGA[p.via]}
+                          </div>
+                        </td>
+                        <td>
+                          {p.status === "paid" ? (
+                            <BadgeNew tone="success" dot>Pagada</BadgeNew>
+                          ) : (
+                            <BadgeNew tone="warning" dot>Pendiente</BadgeNew>
+                          )}
+                        </td>
+                        <td style={{ fontSize: 11, color: "var(--text-3)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.note ?? p.reference ?? undefined}>
+                          {p.proofUrl ? (
+                            <a href={p.proofUrl} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>Ver comprobante</a>
+                          ) : p.note ?? (p.reference ? <span className="mono">{p.reference}</span> : "—")}
+                        </td>
+                        <td className="mono" style={{ fontSize: 12, color: "var(--text-3)", whiteSpace: "nowrap" }}>
+                          {fechaHoraAdmin(p.createdAt) ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardNew>
         </div>

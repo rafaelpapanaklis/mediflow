@@ -6,6 +6,7 @@ import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
 import { isInTrial, isPlanExpired } from "@/lib/plan-status";
 import { PaymentsClient } from "./payments-client";
 import { inicioDelMes, inicioDelMesAnterior } from "@/lib/admin/zona-horaria";
+import { leerPagosSaldoIaRecientes, type PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
 
 /** Tope de la pestaña "Todos los pagos". */
 const RECENT_PAYMENTS_LIMIT = 100;
@@ -156,7 +157,10 @@ async function renderPaymentsPage() {
     .sort((a, b) => new Date(b.trialEndsAt).getTime() - new Date(a.trialEndsAt).getTime())
     .slice(0, 50);
 
-  const [thisMonthRev, prevMonthRev] =
+  // Recargas de saldo IA: un cargo de Stripe (checkout `mode: "payment"`), no
+  // una factura, así que no están en subscription_invoices. Van en su propia
+  // pestaña y NO suman en «Cobrado este mes» ni en el MRR, que son suscripción.
+  const [thisMonthRev, prevMonthRev, aiTopups] =
     await Promise.all([
       safe(prisma.subscriptionInvoice.aggregate({
         where: { status: "paid", paidAt: { gte: firstOfMonth } },
@@ -167,6 +171,7 @@ async function renderPaymentsPage() {
         where: { status: "paid", paidAt: { gte: firstOfPrevMonth, lt: firstOfMonth } },
         _sum: { amount: true },
       }), { _sum: { amount: 0 } } as any),
+      safe(leerPagosSaldoIaRecientes(), [] as PagoSaldoIaGlobalDTO[]),
     ]);
 
   // MRR compartido con /admin. Antes esta página sumaba Clinic.monthlyPrice,
@@ -219,6 +224,7 @@ async function renderPaymentsPage() {
       pendingTransfers={serialized.pendingTransfers}
       overdueClinics={serialized.overdueClinics}
       clinics={serialized.clinics}
+      aiTopups={aiTopups}
     />
   );
 }

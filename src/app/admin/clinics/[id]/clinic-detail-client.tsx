@@ -28,7 +28,8 @@ import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method"
 import { daysUntil, getPlanStatus } from "@/lib/plan-status";
 import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
 import { evaluarSaludClinica, ETIQUETA_ESTADO_OPERATIVO } from "@/lib/admin/salud-clinica";
-import { SaludPanel } from "./salud-panel";
+import { ClinicAiWalletCard, ClinicAiPaymentsCard } from "@/components/admin/clinic-ai-wallet-card";
+import type { SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia-clinica";
 
 /** Lo que ESTA clínica nos ha pagado por su suscripción (subscription_invoices). */
 export interface PlatformPayments {
@@ -101,6 +102,8 @@ interface Props {
   /** Importe recurrente de Stripe ya contrastado con el precio del plan. */
   recurringCharge:      ClinicRecurringCharge | null;
   platformPayments:     PlatformPayments;
+  /** Saldo de IA de la clínica (monedero, movimientos y recargas). null = no se pudo leer. */
+  saldoIa:              SaldoIaClinicaDTO | null;
   /** Precios de lista por plan, desde plan_configs. Nunca un literal. */
   planPrices:           Record<string, number>;
   /** "Ahora" del servidor: SSR e hidratación cuentan los mismos días. */
@@ -142,6 +145,7 @@ export function AdminClinicDetailClient({
   livePaymentMethod,
   recurringCharge,
   platformPayments,
+  saldoIa,
   planPrices,
   ahoraISO,
   actividad,
@@ -196,11 +200,13 @@ export function AdminClinicDetailClient({
       : 0;
   const owner     = clinic.users[0];
 
-  // ── Salud de la cuenta ───────────────────────────────────────────────────
-  // Mismo cálculo que la lista de clínicas y el dashboard. Aquí sólo se le da
-  // de comer: lo de la clínica + los agregados de citas que trae el servidor.
+  // ── Estado operativo ─────────────────────────────────────────────────────
+  // Mismo cálculo que la lista de clínicas y el dashboard
+  // (@/lib/admin/salud-clinica). Aquí sólo se le da de comer: lo de la
+  // clínica + los agregados de citas que trae el servidor. En la ficha se
+  // usa para la pastilla de la cabecera; el bloque «Salud de la cuenta» que
+  // lo desglosaba se quitó.
   const ahora = new Date(ahoraISO);
-  const usuarios: any[] = clinic.users ?? [];
 
   const salud = evaluarSaludClinica({
     id: clinic.id,
@@ -225,10 +231,6 @@ export function AdminClinicDetailClient({
     ultimoPagoAt: platformPayments.lastPaidAt,
   }, ahora);
 
-  // Lo que aporta al mes. El precio NEGOCIADO de la clínica manda sobre el de
-  // lista del plan; es la misma precedencia que el MRR (@/lib/admin/mrr).
-  const negociado = Number(clinic.monthlyPrice ?? 0);
-  const mensual   = negociado > 0 ? negociado : (planPrices[clinic.plan] ?? 0);
   // Dueño-cliente (cuenta SUPER_ADMIN) para enlazar al CRM de clientes.
   const clienteOwner = (clinic.users || []).find((u: any) => u.role === "SUPER_ADMIN") || owner;
 
@@ -499,24 +501,9 @@ export function AdminClinicDetailClient({
       {/* TAB: OVERVIEW */}
       {tab === "overview" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Lo primero que se lee: qué exige atención en ESTA clínica, y su
-              actividad, su gente, su dinero y sus avisos en un solo sitio.
-              Es de lectura: no mueve nada. */}
-          <SaludPanel
-            salud={salud}
-            gente={{
-              total:   usuarios.length,
-              activos: usuarios.filter((u: any) => u.isActive).length,
-            }}
-            dinero={{
-              mensual,
-              esNegociado:  negociado > 0,
-              totalPagado:  platformPayments.total,
-              pagos:        platformPayments.count,
-              ultimoPagoAt: platformPayments.lastPaidAt,
-              ultimoMetodo: platformPayments.lastMethod,
-            }}
-          />
+          {/* Saldo de IA: lo que antes había que ir a buscar a /admin/ai-billing.
+              Es de lectura: «Ajustar saldo» sigue en Tesorería IA. */}
+          <ClinicAiWalletCard saldo={saldoIa} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {/* Clinic info */}
@@ -795,9 +782,14 @@ export function AdminClinicDetailClient({
             </div>
             <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-3)" }}>
               Pagos de suscripción con estado «paid» (tabla subscription_invoices). Es lo que la
-              clínica te paga a ti; no tiene relación con los KPIs de arriba.
+              clínica te paga a ti por su plan; no tiene relación con los KPIs de arriba. Las
+              recargas de saldo IA son otro dinero y van en su propia tarjeta, abajo.
             </div>
           </CardNew>
+
+          {/* Recargas de saldo IA: un cargo de Stripe, no una factura, así que
+              no está en subscription_invoices ni lo devuelve invoices.list. */}
+          <ClinicAiPaymentsCard saldo={saldoIa} />
 
           <ClinicPaymentMethodCard
             stripeCustomerId={clinic.stripeCustomerId ?? null}
