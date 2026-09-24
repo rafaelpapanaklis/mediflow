@@ -170,6 +170,9 @@
 .odo-app .odo-3d-stage canvas { display: block; width: 100% !important; height: 100% !important; }
 .odo-app .odo-3d-hint { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--ink-3); font-weight: 600; pointer-events: none; }
 .odo-app .odo-3d-reset { position: absolute; top: 8px; right: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, .8); font-size: 11px; font-weight: 600; color: var(--ink-2); padding: 5px 9px; border-radius: 8px; z-index: 2; }
+/* Modelos reales (CC BY 4.0): el crédito visible es obligatorio; discreto, arriba a la izquierda */
+.odo-app .odo-3d-credit { position: absolute; top: 8px; left: 10px; max-width: 62%; font-size: 9px; line-height: 1.25; font-weight: 600; color: var(--ink-3); opacity: .85; pointer-events: none; }
+.odo-app .odo-3d-loading { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--ink-3); pointer-events: none; }
 
 .odo-app .odo-2d-stage { display: grid; place-items: center; padding: 14px; background: radial-gradient(120% 120% at 50% 20%, #f6f8fc, #eef2f8); border-radius: 12px; border: 1px solid var(--line); }
 
