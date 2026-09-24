@@ -12,7 +12,7 @@ export function Testimonials() {
   return (
     <section aria-label="Testimonios" style={{ background: "#ffffff", overflow: "hidden" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(56px,7vw,88px) 20px 0" }}>
-        <h2 data-reveal="" className="dcv4-balance" style={{ textAlign: "center", fontSize: "clamp(26px,3.2vw,40px)", lineHeight: 1.1, letterSpacing: "-0.032em", fontWeight: 800 }}>
+        <h2 data-reveal="" className="dcv4-balance" style={{ textAlign: "center", fontSize: "clamp(26px,3.2vw,40px)", lineHeight: 1.1, letterSpacing: "-0.032em", fontWeight: 700 }}>
           {TESTIMONIALS.title}
         </h2>
       </div>

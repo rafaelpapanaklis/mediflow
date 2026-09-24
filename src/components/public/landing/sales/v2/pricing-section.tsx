@@ -48,7 +48,7 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
           <span style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #dbeafe", color: "#1d4ed8", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.1em", borderRadius: 999, padding: "7px 15px", textTransform: "uppercase" }}>
             {PRICING_COPY.eyebrow}
           </span>
-          <h2 className="dcv4-balance" style={{ marginTop: 18, fontSize: "clamp(27px,3.4vw,42px)", lineHeight: 1.08, letterSpacing: "-0.035em", fontWeight: 800 }}>
+          <h2 className="dcv4-balance" style={{ marginTop: 18, fontSize: "clamp(27px,3.4vw,42px)", lineHeight: 1.08, letterSpacing: "-0.035em", fontWeight: 700 }}>
             {PRICING_COPY.title}
           </h2>
           {/* precio dinámico: plan_configs */}
@@ -104,7 +104,7 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
                 {p.badge}
               </span>
 
-              <h3 style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.08em", color: "#1d4ed8", textTransform: "uppercase" }}>{p.name}</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, letterSpacing: "0.08em", color: "#1d4ed8", textTransform: "uppercase" }}>{p.name}</h3>
               <p style={{ marginTop: 6, fontSize: 14, color: "#475569" }}>{p.tagline}</p>
 
               {/* precio dinámico: plan_configs */}

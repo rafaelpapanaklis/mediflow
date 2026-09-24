@@ -27,7 +27,7 @@ export function FinalCta({ firstMonthFrom }: { firstMonthFrom: string }) {
     >
       <div aria-hidden="true" style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(rgba(255,255,255,0.09) 1px,transparent 1px)", backgroundSize: "26px 26px", opacity: 0.5 }} />
       <div style={{ position: "relative", maxWidth: 900, margin: "0 auto", padding: "clamp(60px,7.5vw,104px) 20px", textAlign: "center" }}>
-        <h2 data-reveal="" className="dcv4-balance" style={{ fontSize: "clamp(28px,3.8vw,48px)", lineHeight: 1.06, letterSpacing: "-0.035em", fontWeight: 800, color: "#ffffff" }}>
+        <h2 data-reveal="" className="dcv4-balance" style={{ fontSize: "clamp(28px,3.8vw,48px)", lineHeight: 1.06, letterSpacing: "-0.035em", fontWeight: 700, color: "#ffffff" }}>
           {FINAL_CTA.title}
         </h2>
         {/* precio dinámico: plan_configs */}

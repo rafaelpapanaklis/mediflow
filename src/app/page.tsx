@@ -3,6 +3,7 @@ import { inter } from "@/fonts/inter-400-800";
 import {
   Hero, SocialProofBar, Funciones, PricingSection, WhatsappCta, ModulesTrio, FeaturesGrid,
   ModulePages, Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, TawkChat,
+  SabinaSection, WhatsappMpSection, RecorridoSection,
 } from "@/components/public/landing/sales/v2";
 import { buildPlanCards, cheapestFirstMonthLabel, headlineYearlyDiscount } from "@/components/public/landing/sales/v2/plan-cards";
 import { FAQ_ITEMS } from "@/components/public/landing/sales/v2/landing-data";
@@ -136,6 +137,13 @@ export default async function HomePage() {
       <main id="mfh-main">
         <Hero firstMonthFrom={firstMonthFrom} />
         <SocialProofBar />
+        {/* Rediseño 24-sep-2026: lo que la portada no enseñaba. Alternan
+            clara (Sabina) → oscura (WhatsApp + Mercado Pago) → clara
+            (recorrido, con su tarjeta central oscura), y siguen las
+            «Funciones» de siempre. */}
+        <SabinaSection />
+        <WhatsappMpSection />
+        <RecorridoSection />
         <Funciones />
         <PricingSection cards={cards} firstMonthFrom={firstMonthFrom} yearlyDiscountPct={yearlyDiscountPct} />
         <WhatsappCta />

@@ -85,7 +85,7 @@ export function WhatsappCta() {
                 <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#128C7E", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                   {WHATSAPP_CTA.eyebrow}
                 </span>
-                <h2 className="dcv4-balance" style={{ marginTop: 6, fontSize: "clamp(22px,3vw,30px)", lineHeight: 1.2, letterSpacing: "-0.028em", fontWeight: 800, color: "#0f172a" }}>
+                <h2 className="dcv4-balance" style={{ marginTop: 6, fontSize: "clamp(22px,3vw,30px)", lineHeight: 1.2, letterSpacing: "-0.028em", fontWeight: 700, color: "#0f172a" }}>
                   {WHATSAPP_CTA.title}
                 </h2>
                 <p className="dcv4-pretty" style={{ marginTop: 8, fontSize: 15.5, lineHeight: 1.55, color: "#475569" }}>

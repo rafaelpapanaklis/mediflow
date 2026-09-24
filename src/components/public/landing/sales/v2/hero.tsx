@@ -248,7 +248,7 @@ export function Hero({ firstMonthFrom }: { firstMonthFrom: string }) {
           {HERO.badge}
         </span>
 
-        <h1 className="dcv4-balance" style={{ marginTop: 20, fontSize: "clamp(34px,4.8vw,60px)", lineHeight: 1.03, letterSpacing: "-0.042em", fontWeight: 800, color: "#ffffff", maxWidth: "17em" }}>
+        <h1 className="dcv4-balance" style={{ marginTop: 20, fontSize: "clamp(34px,4.8vw,60px)", lineHeight: 1.03, letterSpacing: "-0.042em", fontWeight: 700, color: "#ffffff", maxWidth: "17em" }}>
           {HERO.titleLead}{" "}
           <span style={{ background: "linear-gradient(100deg,#60a5fa,#a78bfa)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>{HERO.titleAccent}</span>
         </h1>

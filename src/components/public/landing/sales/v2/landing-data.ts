@@ -15,6 +15,7 @@ import type { ProductoSlug } from '@/lib/producto/types';
 export const NAV = {
   links: [
     { label: 'Funciones', href: '#funciones' },
+    { label: 'Sabina', href: '#sabina' },
     { label: 'Precios', href: '#precios' },
     { label: 'Comparativa', href: '#comparativa' },
     { label: 'FAQ', href: '#faq' },
@@ -309,6 +310,14 @@ export const FAQ_ITEMS: { q: string; a: string | ((firstMonthFrom: string) => st
   {
     q: '¿Cómo funciona el bot de WhatsApp?',
     a: 'Conectas el WhatsApp de tu clínica y el bot atiende 24/7: agenda citas en los espacios realmente libres, manda recordatorios, registra confirmaciones y hace recall de pacientes inactivos. Tú ves todo en el inbox del panel.',
+  },
+  {
+    q: '¿Qué es Sabina y qué puede hacer?',
+    a: 'Sabina es la asistente que vive dentro del panel. Responde 26 consultas de solo lectura sobre tu clínica (deudas, huecos, ausencias, ingresos por tratamiento…) con cifras reales y la lista de lo que miró, y puede proponer 7 acciones —agendar, reagendar, cancelar, registrar paciente, cobrar o crear factura, avisar un saldo por WhatsApp— que solo se ejecutan cuando tú pulsas el botón de la tarjeta. No puede más que el usuario que le escribe, no inventa cifras y se paga con Saldo de IA en todos los planes.',
+  },
+  {
+    q: '¿Cómo funciona el anticipo por Mercado Pago?',
+    a: 'Cuando un paciente pide cita por WhatsApp, el bot le manda un link de Mercado Pago con el anticipo. El hueco sigue libre hasta que el pago entra; entonces la cita queda agendada. El dinero cae en la cuenta de Mercado Pago de tu clínica, no en la de DaleControl, y el anticipo se descuenta de la factura del tratamiento.',
   },
   {
     q: '¿La IA hace diagnósticos por mí?',

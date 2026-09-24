@@ -47,7 +47,7 @@ export function Funciones() {
           <span style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #dbeafe", color: "#1d4ed8", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.1em", borderRadius: 999, padding: "7px 15px", textTransform: "uppercase" }}>
             {FUNCIONES_HEADER.eyebrow}
           </span>
-          <h2 className="dcv4-balance" style={{ marginTop: 18, fontSize: "clamp(28px,3.6vw,46px)", lineHeight: 1.08, letterSpacing: "-0.035em", fontWeight: 800 }}>
+          <h2 className="dcv4-balance" style={{ marginTop: 18, fontSize: "clamp(28px,3.6vw,46px)", lineHeight: 1.08, letterSpacing: "-0.035em", fontWeight: 700 }}>
             {FUNCIONES_HEADER.title}
           </h2>
           <p className="dcv4-pretty" style={{ marginTop: 16, fontSize: "clamp(16px,1.5vw,18.5px)", lineHeight: 1.6, color: "#475569" }}>
@@ -58,7 +58,7 @@ export function Funciones() {
         <div style={{ marginTop: "clamp(36px,4.5vw,58px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,400px),1fr))", gap: 14 }}>
           {FUNCIONES.map((f) => (
             <article key={f.id} data-reveal="" style={f.dark ? cardDark : cardLight}>
-              <h3 className="dcv4-balance" style={{ fontSize: "clamp(23px,2.4vw,30px)", fontWeight: 800, letterSpacing: "-0.03em", color: f.dark ? "#ffffff" : "#0f172a" }}>
+              <h3 className="dcv4-balance" style={{ fontSize: "clamp(23px,2.4vw,30px)", fontWeight: 700, letterSpacing: "-0.03em", color: f.dark ? "#ffffff" : "#0f172a" }}>
                 {f.title}
               </h3>
               <p className="dcv4-pretty" style={{ margin: "10px auto 0", fontSize: "clamp(14.5px,1.3vw,16.5px)", lineHeight: 1.55, color: f.dark ? "#cbd5e1" : "#475569", maxWidth: "44ch" }}>

@@ -20,7 +20,7 @@ export function TrustFaq({ firstMonthFrom }: { firstMonthFrom: string }) {
           <span style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #dbeafe", color: "#1d4ed8", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.1em", borderRadius: 999, padding: "7px 15px", textTransform: "uppercase" }}>
             {FAQ_HEADER.eyebrow}
           </span>
-          <h2 className="dcv4-balance" style={{ marginTop: 18, fontSize: "clamp(25px,3.1vw,38px)", lineHeight: 1.12, letterSpacing: "-0.032em", fontWeight: 800 }}>
+          <h2 className="dcv4-balance" style={{ marginTop: 18, fontSize: "clamp(25px,3.1vw,38px)", lineHeight: 1.12, letterSpacing: "-0.032em", fontWeight: 700 }}>
             {FAQ_HEADER.title}
           </h2>
         </div>
