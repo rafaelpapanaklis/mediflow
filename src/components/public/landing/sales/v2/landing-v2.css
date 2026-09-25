@@ -792,6 +792,13 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
    oscuro casi de golpe (suavizado por una transición de color de 250 ms), así
    nunca se quedan gris sobre gris a medias. */
 .dcv4-pvsec { --cine: 0; --cine-t: clamp(0, calc((var(--cine) - 0.48) * 25), 1); position: relative; background: #fff; }
+/* ws1-t5 (25-sep-2026): antes de que la sección entre en pantalla el
+   escenario del panel está inclinado (`.dcv4-tilt__stage` sin `.is-in`) y su
+   proyección asoma 2–11 px por la derecha entre 900 y 1180 px de ancho
+   (iPad Pro 1024, tableta apaisada 1180): la página nacía con scroll
+   horizontal de unos píxeles hasta que uno bajaba. `clip` recorta sin crear
+   un contexto de scroll, así que el cine (absolute) y el reveal siguen igual. */
+.dcv4-pvsec { overflow-x: clip; }
 .dcv4-cine { position: absolute; inset: 0; z-index: 0; pointer-events: none; background: linear-gradient(180deg, #0a0c14, #05060a); opacity: var(--cine); will-change: opacity; }
 .dcv4-pvsec__in { position: relative; z-index: 1; }
 /* Textos y tarjetas coordinados con la misma variable (color-mix). Sin
