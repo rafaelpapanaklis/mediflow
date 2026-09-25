@@ -53,8 +53,13 @@ export function HeroStage({ children }: { children: ReactNode }) {
         width: "100%",
         maxWidth: 760,
         /* 370 px en el teléfono (antes 330): la cara frontal, con la perspectiva
-           y el rotateX, asomaba por debajo y el pie del prisma la pisaba. */
-        minHeight: "clamp(370px,50vw,430px)",
+           y el rotateX, asomaba por debajo y el pie del prisma la pisaba.
+           25-sep-2026 (ws1-t5): medido girando el prisma en las 12 resoluciones,
+           la cara frontal seguía pisando el pie hasta 20 px entre 600 y 1024 px
+           (iPad vertical, móvil apaisado) y 7 px en PC. Como el prisma va
+           centrado, cada px de más se reparte mitad arriba y mitad abajo:
+           sube a 410/60vw/480 para dejar ≥ 8 px de aire en todos los anchos. */
+        minHeight: "clamp(410px,60vw,480px)",
         marginTop: "clamp(14px,2vw,26px)",
         display: "grid",
         placeItems: "center",
