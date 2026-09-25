@@ -743,3 +743,129 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   .dcv4-wafact__d { font-size: 15px; }
   .dcv4-wasec__pie { font-size: 14.5px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AJUSTE 4 (25-sep-2026): cine en «El panel» (fondo que se oscurece con el
+   scroll y vuelve a blanco), WhatsApp + Mercado Pago en fondo claro, y el
+   rediseño de precios con la misma paleta.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Cine (cine-fondo.tsx): `--cine` va de 0 (claro) a 1 (sala a oscuras) ── */
+/* `--cine` mueve la capa oscura de forma gradual; `--cine-t` es la misma señal
+   pero concentrada entre 0.48 y 0.52: textos y tarjetas conmutan de claro a
+   oscuro casi de golpe (suavizado por una transición de color de 250 ms), así
+   nunca se quedan gris sobre gris a medias. */
+.dcv4-pvsec { --cine: 0; --cine-t: clamp(0, calc((var(--cine) - 0.48) * 25), 1); position: relative; background: #fff; }
+.dcv4-cine { position: absolute; inset: 0; z-index: 0; pointer-events: none; background: linear-gradient(180deg, #0a0c14, #05060a); opacity: var(--cine); will-change: opacity; }
+.dcv4-pvsec__in { position: relative; z-index: 1; }
+/* Textos y tarjetas coordinados con la misma variable (color-mix). Sin
+   soporte de color-mix la capa no se pinta y todo queda claro y legible. */
+.dcv4-pvsec .dcv4-h2, .dcv4-pvsec .dcv4-lead, .dcv4-pvsec .dcv4-eyebrow--violet, .dcv4-pvsec .dcv4-pv__line, .dcv4-pvsec .dcv4-pv__ico { transition: color .25s ease, background-color .25s ease, border-color .25s ease; }
+.dcv4-pvsec .dcv4-h2 { color: color-mix(in srgb, #ffffff calc(var(--cine-t) * 100%), #0f172a); }
+.dcv4-pvsec .dcv4-lead { color: color-mix(in srgb, #b9b6c9 calc(var(--cine-t) * 100%), #475569); }
+.dcv4-pvsec .dcv4-eyebrow--violet {
+  background: color-mix(in srgb, rgba(124,58,237,.24) calc(var(--cine-t) * 100%), #f5f3ff);
+  border-color: color-mix(in srgb, rgba(167,139,250,.55) calc(var(--cine-t) * 100%), #ddd6fe);
+  color: color-mix(in srgb, #c4b5fd calc(var(--cine-t) * 100%), #6d28d9);
+}
+.dcv4-pvsec .dcv4-pv__card {
+  background: color-mix(in srgb, rgba(255,255,255,.07) calc(var(--cine-t) * 100%), #f8fafc);
+  border-color: color-mix(in srgb, rgba(255,255,255,.16) calc(var(--cine-t) * 100%), #e8edf4);
+  color: color-mix(in srgb, #ffffff calc(var(--cine-t) * 100%), #0f172a);
+}
+.dcv4-pvsec .dcv4-pv__line { color: color-mix(in srgb, #b9b6c9 calc(var(--cine-t) * 100%), #64748b); }
+.dcv4-pvsec .dcv4-pv__ico {
+  background: color-mix(in srgb, rgba(255,255,255,.12) calc(var(--cine-t) * 100%), #ede9fe);
+  color: color-mix(in srgb, #c4b5fd calc(var(--cine-t) * 100%), #4d3fc6);
+}
+.dcv4-pvsec .dcv4-pv__card.is-on { background: #4d3fc6; border-color: #4d3fc6; color: #fff; }
+.dcv4-pvsec .dcv4-pv__card.is-on .dcv4-pv__ico { background: rgba(255,255,255,.16); color: #fff; }
+.dcv4-pvsec .dcv4-pv__card.is-on .dcv4-pv__line { color: #e0dcff; }
+.dcv4-pvsec .dcv4-pv__card:hover { border-color: #c4b5fd; }
+.dcv4-pvsec .dcv4-pv__frame { box-shadow: 0 50px 90px -40px rgba(15,23,42,.55), 0 0 0 1px color-mix(in srgb, rgba(255,255,255,.22) calc(var(--cine-t) * 100%), rgba(15,23,42,.9)); }
+@supports not (color: color-mix(in srgb, red 50%, blue)) { .dcv4-cine { display: none; } }
+@media (prefers-reduced-motion: reduce) { .dcv4-cine { display: none; } .dcv4-pvsec { --cine: 0 !important; } }
+
+/* ── WhatsApp + Mercado Pago, ahora en fondo CLARO ───────────────────────── */
+.dcv4-wasec {
+  background:
+    radial-gradient(760px 520px at 90% 8%, rgba(37,211,102,.16), rgba(37,211,102,0) 62%),
+    radial-gradient(900px 560px at 0% 100%, rgba(37,99,235,.10), rgba(37,99,235,0) 60%),
+    #f8fafc;
+}
+.dcv4-wasec .dcv4-dots { background-image: radial-gradient(rgba(15,23,42,.09) 1px, transparent 1px); opacity: .6; }
+.dcv4-wasec .dcv4-eyebrow--green { background: #dcfce7; border-color: #86efac; color: #15803d; }
+.dcv4-wasec .dcv4-h2--light { color: #0f172a; }
+.dcv4-wasec .dcv4-lead--light { color: #475569; }
+.dcv4-wafact__i { background: #fff; border-color: #e2e8f0; box-shadow: 0 1px 2px rgba(15,23,42,.06); }
+.dcv4-wafact__i--wa { color: #128C7E; }
+.dcv4-wafact__i--cal { color: #6d28d9; }
+.dcv4-wafact__i--lock { color: #b45309; }
+.dcv4-wafact__i--mp { color: #0284c7; }
+.dcv4-wafact__i--inv { color: #be185d; }
+.dcv4-wafact__i--db { color: #1d4ed8; }
+.dcv4-wafact__t { color: #0f172a; }
+.dcv4-wafact__d { color: #475569; }
+.dcv4-wasec__pie { color: #64748b; }
+.dcv4-waesc__card { background: #fff; border-color: #e2e8f0; color: #0f172a; box-shadow: 0 24px 44px -28px rgba(15,23,42,.35); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.dcv4-waesc__card span span { color: #475569; }
+.dcv4-waesc__card u { color: #15803d; }
+.dcv4-waesc__ico { background: #f1f5f9; }
+.dcv4-waesc__ico--luna { color: #b45309; }
+.dcv4-waesc__ico--mp { background: #009EE3; }
+.dcv4-waesc__ico--ag { background: #4d3fc6; }
+.dcv4-phone { box-shadow: 0 50px 90px -34px rgba(15,23,42,.5), inset 0 0 0 2px #2b2b34; }
+
+/* ── Precios (pricing-section.tsx): misma paleta, mejor jerarquía ────────── */
+.dcv4-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.dcv4-price { background: radial-gradient(900px 480px at 50% 0%, #eff6ff, rgba(239,246,255,0) 70%), #f8fafc; }
+.dcv4-price__head { text-align: center; max-width: 720px; margin: 0 auto; }
+.dcv4-price__sub { margin-top: 14px; font-size: clamp(15.5px, 1.45vw, 18px); line-height: 1.55; color: #475569; min-height: 2.4em; }
+.dcv4-price__sub strong { color: #1d4ed8; font-weight: 800; }
+.dcv4-price__toggle { margin-top: 22px; display: inline-flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 5px; box-shadow: 0 8px 22px -14px rgba(15,23,42,.3); }
+.dcv4-price__tbtn { display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 700; border-radius: 999px; padding: 9px 18px; background: transparent; color: #475569; transition: background .18s, color .18s; }
+.dcv4-price__tbtn.is-on { background: #2563eb; color: #fff; }
+.dcv4-price__tbtn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.dcv4-price__tpill { font-size: 12px; font-weight: 800; color: #15803d; background: #dcfce7; border-radius: 999px; padding: 3px 8px; line-height: 1.2; }
+.dcv4-price__tbtn.is-on .dcv4-price__tpill { color: #15803d; background: #dcfce7; }
+
+.dcv4-price__grid { margin-top: clamp(38px, 4.4vw, 56px); display: grid; grid-template-columns: repeat(auto-fit, minmax(292px, 1fr)); gap: clamp(16px, 2vw, 24px); align-items: stretch; }
+.dcv4-price__card { position: relative; display: flex; flex-direction: column; background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 30px 26px 26px; box-shadow: 0 24px 48px -36px rgba(15,23,42,.45); }
+.dcv4-price__card.is-featured { border: 2px solid #2563eb; background: linear-gradient(180deg, #f5f9ff, #fff 34%); box-shadow: 0 34px 64px -36px rgba(37,99,235,.6); }
+.dcv4-price__badge { position: absolute; top: -14px; left: 26px; font-size: 12px; font-weight: 700; color: #fff; border-radius: 999px; padding: 6px 13px; white-space: nowrap; box-shadow: 0 8px 18px -8px rgba(15,23,42,.45); letter-spacing: .01em; }
+.dcv4-price__card.is-featured .dcv4-price__badge { left: 50%; transform: translateX(-50%); }
+.dcv4-price__name { font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #1d4ed8; text-transform: uppercase; }
+.dcv4-price__tagline { margin-top: 6px; font-size: 14.5px; color: #475569; min-height: 1.5em; }
+.dcv4-price__amount { margin-top: 18px; display: flex; align-items: flex-start; gap: 4px; line-height: 1; color: #0f172a; }
+.dcv4-price__cur { font-size: 24px; font-weight: 700; margin-top: 6px; color: #334155; }
+.dcv4-price__num { font-size: clamp(44px, 4vw, 52px); font-weight: 800; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.dcv4-price__per { display: flex; flex-direction: column; justify-content: center; margin-left: 6px; margin-top: 6px; font-size: 12.5px; font-weight: 600; line-height: 1.25; color: #64748b; }
+.dcv4-price__line { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; min-height: 44px; }
+.dcv4-price__l1 { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #0f172a; white-space: nowrap; }
+.dcv4-price__l2 { font-size: 12.5px; color: #64748b; white-space: nowrap; }
+.dcv4-price__save { font-size: 12px; font-weight: 800; color: #15803d; background: #dcfce7; border-radius: 999px; padding: 4px 9px; line-height: 1.2; white-space: nowrap; }
+.dcv4-price__nocontract { margin-top: 6px; font-size: 12.5px; color: #64748b; }
+.dcv4-price__caps { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dcv4-price__cap { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: #f8fafc; border: 1px solid #eef2f7; }
+.dcv4-price__card.is-featured .dcv4-price__cap { background: #eff6ff; border-color: #dbeafe; }
+.dcv4-price__caplabel { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
+.dcv4-price__capvalue { font-size: 16px; font-weight: 800; color: #1d4ed8; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.dcv4-price__cap.is-off { background: #f1f5f9; border-color: #e2e8f0; }
+.dcv4-price__cap.is-off .dcv4-price__capvalue { color: #64748b; font-weight: 700; }
+.dcv4-price__addendum { margin-top: 18px; font-size: 13.5px; font-weight: 800; color: #0f172a; }
+.dcv4-price__feats { margin-top: 12px; display: flex; flex-direction: column; gap: 9px; }
+.dcv4-price__feat { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45; color: #334155; }
+.dcv4-price__feat.is-off { color: #64748b; }
+.dcv4-price__chk { flex: 0 0 auto; margin-top: 2px; width: 18px; height: 18px; padding: 2px; border-radius: 50%; color: #64748b; background: #f1f5f9; }
+.dcv4-price__chk--on { color: #15803d; background: #dcfce7; }
+.dcv4-price__spacer { display: block; min-height: 22px; flex: 1 1 auto; }
+.dcv4-price__cta { margin-top: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 60px; background: #2563eb; color: #fff; border-radius: 12px; font-weight: 700; font-size: 15.5px; padding: 8px 14px; text-align: center; }
+.dcv4-price__ctasub { font-size: 12px; font-weight: 600; color: #dbeafe; min-height: 1.2em; white-space: nowrap; }
+.dcv4-price__chips { margin-top: clamp(28px, 3.6vw, 44px); display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; }
+.dcv4-price__chips li { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: #334155; background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 8px 14px; }
+.dcv4-price__chips svg { color: #15803d; flex: 0 0 auto; }
+@media (max-width: 480px) {
+  .dcv4-price__card { padding: 26px 18px 20px; }
+  .dcv4-price__badge { left: 18px; }
+  .dcv4-price__tbtn { padding: 9px 13px; font-size: 14px; }
+}

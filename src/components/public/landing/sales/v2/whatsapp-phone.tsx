@@ -98,7 +98,7 @@ export function WhatsappPhone({ onPaso }: { onPaso?: (visibles: number) => void 
   // Arranque: al entrar en pantalla la charla se vacía y empieza de cero.
   useEffect(() => {
     if (!started || reduced) return;
-    const t = window.setTimeout(() => setSt({ visibles: 0, typed: 0, escribiendo: false, leidos: 0 }), 400);
+    const t = window.setTimeout(() => setSt({ visibles: 0, typed: 0, escribiendo: false, leidos: 0 }), 300);
     return () => window.clearTimeout(t);
   }, [started, reduced]);
 
@@ -110,8 +110,8 @@ export function WhatsappPhone({ onPaso }: { onPaso?: (visibles: number) => void 
   useEffect(() => {
     if (!started || reduced) return;
     if (st.visibles === GUION.length) {
-      // Charla completa: pausa larga y vuelta a empezar.
-      const t = window.setTimeout(() => setSt({ visibles: 0, typed: 0, escribiendo: false, leidos: 0 }), 6500);
+      // Charla completa: ~2 s para leerla y vuelta a empezar.
+      const t = window.setTimeout(() => setSt({ visibles: 0, typed: 0, escribiendo: false, leidos: 0 }), 2000);
       return () => window.clearTimeout(t);
     }
     const paso = GUION[st.visibles];
@@ -121,17 +121,18 @@ export function WhatsappPhone({ onPaso }: { onPaso?: (visibles: number) => void 
       if (st.typed < paso.texto.length) {
         // Un tecleo humano: algo irregular, más lento en los espacios.
         const ch = paso.texto[st.typed];
-        const pausa = ch === " " ? 90 : 40 + Math.round(Math.random() * 40);
-        t = window.setTimeout(() => setSt((s) => ({ ...s, typed: s.typed + 1 })), st.typed === 0 ? 900 : pausa);
+        // Ritmo del ajuste 4: la charla completa cabe en ~10 s.
+        const pausa = ch === " " ? 42 : 22 + Math.round(Math.random() * 16);
+        t = window.setTimeout(() => setSt((s) => ({ ...s, typed: s.typed + 1 })), st.typed === 0 ? 350 : pausa);
       } else {
         // Enviar: sale con palomita gris.
-        t = window.setTimeout(() => setSt((s) => ({ ...s, visibles: s.visibles + 1, typed: 0 })), 450);
+        t = window.setTimeout(() => setSt((s) => ({ ...s, visibles: s.visibles + 1, typed: 0 })), 250);
       }
     } else if (!st.escribiendo) {
       // El bot lo lee (palomitas azules) y se pone a escribir.
-      t = window.setTimeout(() => setSt((s) => ({ ...s, escribiendo: true, leidos: s.visibles })), 750);
+      t = window.setTimeout(() => setSt((s) => ({ ...s, escribiendo: true, leidos: s.visibles })), 350);
     } else {
-      t = window.setTimeout(() => setSt((s) => ({ ...s, visibles: s.visibles + 1, escribiendo: false, leidos: s.visibles + 1 })), paso.mp ? 2300 : 1800);
+      t = window.setTimeout(() => setSt((s) => ({ ...s, visibles: s.visibles + 1, escribiendo: false, leidos: s.visibles + 1 })), paso.mp ? 1000 : 850);
     }
     return () => window.clearTimeout(t);
   }, [started, reduced, st]);
