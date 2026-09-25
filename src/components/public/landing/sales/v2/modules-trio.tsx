@@ -23,7 +23,7 @@ export function ModulesTrio() {
           </h2>
           <p style={{ marginTop: 14, fontSize: "clamp(15.5px,1.4vw,18px)", color: "#cbd5e1" }}>{MODULES_TRIO.subtitle}</p>
         </div>
-        <div style={{ marginTop: "clamp(30px,4vw,48px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(272px,1fr))", gap: "clamp(16px,2vw,24px)" }}>
+        <div className="dcv4-trio__grid" style={{ marginTop: "clamp(30px,4vw,48px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(272px,1fr))", gap: "clamp(16px,2vw,24px)" }}>
           {MODULES_TRIO.items.map((m) => (
             <article key={m.id} data-reveal="" className="dcv4-trio" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: "clamp(18px,2.2vw,24px)" }}>
               <div aria-hidden="true">{MINI[m.id]}</div>
