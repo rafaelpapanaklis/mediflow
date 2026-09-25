@@ -10,20 +10,42 @@ import { FUNCIONES, FUNCIONES_HEADER, type Funcion } from "./landing-data";
  * ⚠️ Aquí tampoco vive ningún precio.
  */
 
+/**
+ * Ajuste 1 (Rafael: «hay mucho texto»): la sección se entiende mirando. Sin
+ * subtítulo, sin párrafos; cada tarjeta lleva título corto + una línea de
+ * cinco o seis palabras, y la web gratuita dice sus cuatro hechos como
+ * píldoras con ícono. Las dos notas legales de la IA se funden en UNA línea
+ * al pie (`NOTA_IA`).
+ */
 export const FUNCIONES_V3_HEADER = {
   eyebrow: FUNCIONES_HEADER.eyebrow,
   title: FUNCIONES_HEADER.title,
-  subtitle: "Todo lo que tu clínica necesita, en un solo panel. Y tu página web, gratis.",
 };
 
 export const PAGINA_WEB = {
-  title: "Tu página web gratuita",
-  desc:
-    "Con DaleControl tu clínica tiene su página web gratis: elige una de 8 plantillas, personalízala al 100 % y deja que tus pacientes agenden desde ahí. La cita aparece sola en la agenda de tu panel.",
-  chips: ["Gratis en cualquier plan", "8 plantillas", "100 % personalizable", "Citas directo a tu agenda"],
+  title: "Tu página web, gratis",
+  linea: "Tus pacientes agendan desde tu web y la cita cae en tu agenda.",
+  /** Los cuatro hechos de Rafael, en dos o tres palabras cada uno. */
+  hechos: [
+    { icono: "dashboard_customize", label: "8 plantillas" },
+    { icono: "edit", label: "100 % personalizable" },
+    { icono: "language", label: "Agendan desde tu web" },
+    { icono: "calendar_month", label: "La cita cae en tu agenda" },
+  ],
   cta: "Ver planes",
   href: "#precios",
 };
+
+/** Una línea por tarjeta estrella (recorte de la descripción de siempre). */
+export const LINEA: Record<string, string> = {
+  "whatsapp-ia": "Agenda citas 24/7 y redacta notas",
+  agenda: "Recordatorios que sí leen",
+  cbct: "DICOM y STL, en tu navegador",
+  finanzas: "Del presupuesto a la factura",
+};
+
+/** Las dos notas legales de la IA (FUNCIONES cbct + whatsapp-ia), en una línea. */
+export const NOTA_IA = "La IA asiste; la lectura, el diagnóstico y el criterio clínico son siempre del doctor.";
 
 function porId(id: string): Funcion {
   const f = FUNCIONES.find((x) => x.id === id);
@@ -39,7 +61,7 @@ export const BENTO: { funcion: Funcion; ilustracion: "whatsapp" | "agenda" | "cb
   { funcion: porId("finanzas"), ilustracion: "finanzas" },
 ];
 
-export const REJILLA_TITULO = "Y también, dentro del mismo panel";
+export const REJILLA_TITULO = "Y también";
 
 /**
  * Rejilla de íconos: el resto de funciones. Cada etiqueta ya está en la
@@ -56,8 +78,4 @@ export const REJILLA: { icono: string; label: string }[] = [
   { icono: "inventory_2", label: "Inventario e insumos" },
   { icono: "add_business", label: "Multi-sucursal" },
   { icono: "monitoring", label: "Reportes e indicadores" },
-  { icono: "credit_card", label: "Pagos en línea" },
-  { icono: "groups", label: "Equipo con roles y permisos" },
-  { icono: "tv", label: "TV para sala de espera" },
-  { icono: "lock", label: "2FA y bitácora de auditoría" },
 ];
