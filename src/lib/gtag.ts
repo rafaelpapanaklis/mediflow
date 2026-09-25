@@ -36,8 +36,9 @@ export function trackSignupConversionAndRedirect(redirectUrl: string): void {
 // /dashboard/suspended/success, solo cuando el servidor confirmó que la sesión
 // de Stripe está pagada, es de la clínica de la sesión y es el PRIMER pago que
 // saca a la cuenta de pending_payment (ver conversion-pago.ts junto a esa
-// página). El importe es lo cobrado de verdad, en pesos, y transaction_id es
-// el id de la sesión de Stripe: Google deduplica por ahí.
+// página). El importe es lo cobrado SIN IVA (amount_total − amount_tax, cupón
+// ya descontado), en pesos, y transaction_id es el id de la sesión de Stripe:
+// Google deduplica por ahí.
 //
 // ⚠️ LA ETIQUETA LA CREA RAFAEL en Google Ads → Objetivos → Conversiones →
 // «+ Nueva acción de conversión» → Sitio web → categoría «Compra», nombre
@@ -52,7 +53,7 @@ const GADS_ACCOUNT_ID = "AW-18276007996";
 export interface PaymentCompletedConversion {
   /** Id de la sesión de Checkout de Stripe (cs_…): Google deduplica por él. */
   transactionId: string;
-  /** Importe realmente cobrado, en pesos (centavos de Stripe / 100). */
+  /** Importe cobrado SIN IVA y con el cupón ya descontado, en pesos (centavos / 100). */
   valueMxn: number;
   /** ISO-4217 en mayúsculas; por defecto MXN. */
   currency?: string;

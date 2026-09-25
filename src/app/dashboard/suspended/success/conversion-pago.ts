@@ -24,9 +24,14 @@
  *      jamás). Renovaciones, reactivaciones y cambios de plan llevan "0" o no
  *      llevan la marca, y no disparan. Ver checkout/route.ts.
  *
- * IMPORTE: `amount_total` de la sesión (centavos → pesos), que ya descuenta el
- * cupón del primer mes y suma el IVA si Stripe Tax está encendido. Es lo que se
- * cobró de verdad, no el precio de lista.
+ * IMPORTE (decisión de Rafael, 25-sep): lo cobrado SIN impuestos y CON el cupón
+ * del primer mes ya descontado:
+ *     valor = amount_total − total_details.amount_tax   (centavos → pesos)
+ * `amount_total` es lo cobrado de verdad (cupón aplicado, IVA sumado si Stripe
+ * Tax está encendido) y `amount_tax` es solo el impuesto; la resta deja la base.
+ * NO se usa `amount_subtotal`: es ANTES del cupón y sobrecontaría el primer mes.
+ * Si `total_details` no viene, el impuesto es 0 (hoy Stripe Tax está apagado
+ * salvo STRIPE_AUTOMATIC_TAX=true).
  */
 
 export const PLATFORM_SUBSCRIPTION_KIND = "platform-subscription";
@@ -36,6 +41,8 @@ export interface SesionCheckoutMinima {
   id: string;
   payment_status: string;
   amount_total: number | null;
+  /** Desglose del total; `amount_tax` es el impuesto incluido en amount_total. */
+  total_details?: { amount_tax?: number | null } | null;
   currency: string | null;
   metadata: Record<string, string> | null;
 }
@@ -57,6 +64,17 @@ export function esSessionIdValido(sessionId: string | null | undefined): session
 export function centavosAPesos(centavos: number | null | undefined): number {
   if (!centavos || !Number.isFinite(centavos) || centavos < 0) return 0;
   return Math.round(centavos) / 100;
+}
+
+/**
+ * Centavos cobrados SIN impuesto: amount_total − total_details.amount_tax. Sin
+ * `total_details` (Stripe Tax apagado) el impuesto cuenta como 0. Nunca negativo.
+ */
+export function centavosSinImpuesto(sesion: Pick<SesionCheckoutMinima, "amount_total" | "total_details">): number {
+  const total = sesion.amount_total ?? 0;
+  const impuesto = sesion.total_details?.amount_tax ?? 0;
+  if (!Number.isFinite(total) || !Number.isFinite(impuesto)) return 0;
+  return Math.max(0, total - impuesto);
 }
 
 export function decidirConversionPago(input: {
@@ -83,7 +101,7 @@ export function decidirConversionPago(input: {
 
   return {
     transactionId: sesion.id,
-    valueMxn: centavosAPesos(sesion.amount_total),
+    valueMxn: centavosAPesos(centavosSinImpuesto(sesion)),
     currency: (sesion.currency ?? "mxn").toUpperCase(),
   };
 }

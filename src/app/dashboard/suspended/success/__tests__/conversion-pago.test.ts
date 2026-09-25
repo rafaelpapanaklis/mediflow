@@ -7,7 +7,8 @@
  * Fija tres cosas sin Stripe ni navegador:
  *   1. El núcleo de decisión (conversion-pago.ts): solo dispara con la clínica
  *      activada, la sesión pagada, de la clínica de la SESIÓN del usuario y
- *      marcada como primera contratación; con el importe real en pesos.
+ *      marcada como primera contratación; con el importe en pesos SIN IVA y
+ *      con el cupón del primer mes ya descontado.
  *   2. gtag.ts: sin etiqueta no sale nada (ni un send_to a medias); sin gtag
  *      cargado tampoco; con las dos, UN evento con value, currency y
  *      transaction_id. La conversión de registro queda como estaba.
@@ -20,6 +21,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   centavosAPesos,
+  centavosSinImpuesto,
   claveMarcaLocal,
   decidirConversionPago,
   esSessionIdValido,
@@ -47,18 +49,39 @@ const base = { clinicId: CLINICA, sessionId: SESSION_ID, activada: true };
 
 // ── Núcleo de decisión ───────────────────────────────────────────────────────
 
-test("primer pago confirmado: conversión con el importe real en pesos y el id de la sesión", () => {
+test("primer pago confirmado: conversión con el importe en pesos y el id de la sesión", () => {
   const c = decidirConversionPago({ ...base, sesion: sesion() });
   assert.deepEqual(c, { transactionId: SESSION_ID, valueMxn: 419, currency: "MXN" });
 });
 
-test("el importe es lo cobrado (amount_total, con cupón y IVA), no el precio de lista", () => {
-  // Promo 1er mes: $19 + IVA = 2204 centavos.
-  const c = decidirConversionPago({ ...base, sesion: sesion({ amount_total: 2204 }) });
-  assert.equal(c?.valueMxn, 22.04);
+test("el importe va SIN IVA: amount_total − total_details.amount_tax (Stripe Tax encendido)", () => {
+  // $419 + 16 % IVA = 48604 centavos cobrados; el impuesto son 6704 → base 41900.
+  const c = decidirConversionPago({ ...base, sesion: sesion({ amount_total: 48604, total_details: { amount_tax: 6704 } }) });
+  assert.equal(c?.valueMxn, 419);
+  assert.equal(centavosSinImpuesto({ amount_total: 48604, total_details: { amount_tax: 6704 } }), 41900);
+});
+
+test("sin total_details (Stripe Tax apagado, hoy) el impuesto es 0 y el valor es amount_total", () => {
+  const c = decidirConversionPago({ ...base, sesion: sesion({ amount_total: 41900, total_details: undefined }) });
+  assert.equal(c?.valueMxn, 419);
+  const nulo = decidirConversionPago({ ...base, sesion: sesion({ amount_total: 41900, total_details: null }) });
+  assert.equal(nulo?.valueMxn, 419);
+  const vacio = decidirConversionPago({ ...base, sesion: sesion({ amount_total: 41900, total_details: {} }) });
+  assert.equal(vacio?.valueMxn, 419);
+});
+
+test("cupón del primer mes + IVA: se descuenta el cupón (amount_total, no amount_subtotal) y se quita el impuesto", () => {
+  // Plan $419, promo 1er mes $19: amount_subtotal 41900 (antes del cupón),
+  // amount_total 2204 ($19 + 16 % IVA), amount_tax 304 → base 1900 = $19.
+  const c = decidirConversionPago({
+    ...base,
+    sesion: { ...sesion({ amount_total: 2204, total_details: { amount_tax: 304 } }), amount_subtotal: 41900 } as SesionCheckoutMinima,
+  });
+  assert.equal(c?.valueMxn, 19);
   assert.equal(centavosAPesos(41900), 419);
   assert.equal(centavosAPesos(null), 0);
   assert.equal(centavosAPesos(-5), 0);
+  assert.equal(centavosSinImpuesto({ amount_total: 100, total_details: { amount_tax: 150 } }), 0, "nunca negativo");
 });
 
 test("sin activación en la BD no hay conversión aunque Stripe diga pagada", () => {
