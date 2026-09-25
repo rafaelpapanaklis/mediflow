@@ -57,6 +57,14 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   .dcv4-reveal-on { transition: none; }
 }
 
+/* ── Skip link ───────────────────────────────────────────────────────────
+   globals.css lo esconde con `top:-40px`, pero mide 41,4 px de alto: el borde
+   inferior asomaba 1,4 px como una raya morada arriba a la izquierda en TODAS
+   las resoluciones. Aquí se esconde entero; al recibir foco sigue bajando. */
+.dcv4-root .mf-skip-link { top: -60px; }
+.dcv4-root .mf-skip-link:focus,
+.dcv4-root .mf-skip-link:focus-visible { top: 12px; }
+
 /* ── Nav ─────────────────────────────────────────────────────────────────── */
 .dcv2-navlink {
   text-decoration: none;
@@ -83,8 +91,11 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv2-nav-ghost:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 
 /* En pantallas chicas las anclas se ocultan (siguen en el footer);
-   quedan logo + sesión/CTA en una sola fila. */
-@media (max-width: 760px) {
+   quedan logo + sesión/CTA en una sola fila. Medido el 25-sep-2026 (ws1-t5):
+   entre 761 y 940 px (iPad vertical, móvil apaisado) marca + 6 anclas + 3
+   accesos no cabían y la barra se partía en dos filas (116 px de alto), así
+   que el corte sube de 760 a 960. */
+@media (max-width: 960px) {
   .dcv2-nav-anchors { display: none !important; }
 }
 /* A 375px no caben marca + «Soy paciente» + «Iniciar sesión» + CTA en una
@@ -101,8 +112,22 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 @media (max-width: 480px) {
   .dcv4-navbar { padding-left: 14px !important; padding-right: 14px !important; gap: 8px !important; }
   .dcv4-navbar .dcv4-brandtext { font-size: 15px !important; }
-  .dcv4-navbar .dcv2-btn-primary { padding: 9px 12px !important; font-size: 13px !important; }
-  .dcv4-navbar .dcv2-nav-ghost { padding: 8px 6px !important; font-size: 13px !important; }
+  .dcv4-navbar .dcv2-btn-primary { padding: 9px 12px !important; font-size: 13px !important; min-height: 40px; display: inline-flex; align-items: center; }
+  .dcv4-navbar .dcv2-nav-ghost { padding: 8px 6px !important; font-size: 13px !important; min-height: 40px; display: inline-flex; align-items: center; }
+}
+/* Táctil a cualquier ancho (móvil apaisado, tableta): los accesos miden 37 px
+   de alto; se les da 40 sin tocar el padding. */
+@media (pointer: coarse) {
+  .dcv4-navbar .dcv2-nav-ghost, .dcv4-navbar .dcv2-btn-primary { min-height: 40px; display: inline-flex; align-items: center; }
+}
+/* 360–400 px (Galaxy, iPhone SE/8): con el padding de arriba los tres accesos
+   medían 362 px y la barra se partía en dos filas (glifo solo arriba, botones
+   abajo). Se aprieta el grupo de sesión para que quepa en una fila. */
+@media (max-width: 400px) {
+  .dcv4-navbar { padding-left: 10px !important; padding-right: 10px !important; gap: 6px !important; }
+  .dcv4-navbar > div:last-child { gap: 4px !important; }
+  .dcv4-navbar .dcv2-btn-primary { padding: 9px 9px !important; }
+  .dcv4-navbar .dcv2-nav-ghost { padding: 8px 4px !important; }
 }
 
 /* ── Botones ─────────────────────────────────────────────────────────────── */
@@ -228,6 +253,12 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .dcv2-footer-link { color: #94a3b8; text-decoration: none; transition: color .15s; }
+/* Táctil (móvil y tableta, también apaisados): cada enlace medía 23 px de
+   alto; con padding llegan a ~35 px sin cambiar el aspecto (gap de la columna
+   sin tocar). */
+@media (max-width: 760px), (pointer: coarse) {
+  .dcv2-footer-link { display: inline-block; padding: 6px 0; margin: -3px 0; }
+}
 .dcv2-footer-link:hover { color: #fff; }
 .dcv2-footer-link:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 
@@ -868,4 +899,19 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   .dcv4-price__card { padding: 26px 18px 20px; }
   .dcv4-price__badge { left: 18px; }
   .dcv4-price__tbtn { padding: 9px 13px; font-size: 14px; }
+}
+
+/* ── Comparativa en móvil (comparison.tsx) ───────────────────────────────
+   La rejilla tenía `min-width:640px` dentro de un contenedor con scroll
+   propio: en 360–430 px se veía SOLO la columna «Papel / Excel» y la de
+   DaleControl —la que importa— quedaba fuera de pantalla sin ninguna pista
+   de que se podía deslizar. Hasta 640 px la rejilla se ajusta al ancho con
+   columnas más estrechas y letra un punto menor. Los `!important` pisan los
+   estilos inline del componente. */
+@media (max-width: 640px) {
+  .dcv4-cmp__inner { min-width: 0 !important; }
+  .dcv4-cmp__row { grid-template-columns: 1.3fr .5fr .95fr .7fr !important; }
+  .dcv4-cmp__label { padding: 11px 10px !important; font-size: 13px !important; line-height: 1.35; }
+  .dcv4-cmp__head { padding: 12px 4px !important; font-size: 12px !important; line-height: 1.25; }
+  .dcv4-cmp__cell { padding: 4px; font-size: 12.5px !important; line-height: 1.3; }
 }
