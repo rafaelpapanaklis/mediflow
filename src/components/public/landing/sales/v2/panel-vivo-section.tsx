@@ -1,15 +1,15 @@
 import { materialSymbols } from "@/fonts/menu";
 import { PanelVivo } from "./panel-vivo";
 import { Tilt3D } from "./tilt-3d";
-import { ADMIN_SECCIONES, ADMIN_TOTAL, PANEL_VIVO_COPY } from "./panel-vivo-data";
-import { IconoPanel } from "./icono-panel";
+import { PANEL_VIVO_COPY } from "./panel-vivo-data";
 
 /**
  * Sección «El panel, en vivo» (sustituye a la demo de Sabina). Sección CLARA
  * entre la banda oscura de cifras y el bloque oscuro de WhatsApp.
  *
- * Los íconos de las tarjetas y de los chips son los del menú real del panel
- * (Material Symbols Rounded recortado, `src/fonts/menu.ts`, sin precarga).
+ * Los íconos de las tarjetas son los del menú real del panel (Material
+ * Symbols Rounded recortado, `src/fonts/menu.ts`, sin precarga). El recuadro
+ * con las secciones de Administración se quitó en el ajuste 3 (Rafael).
  */
 export function PanelVivoSection() {
   return (
@@ -30,29 +30,6 @@ export function PanelVivoSection() {
           </Tilt3D>
         </div>
 
-        {/* Administración: las secciones reales, de un vistazo */}
-        <div data-reveal="" className="dcv4-admin">
-          <div className="dcv4-admin__head">
-            <span className="dcv4-admin__ico"><IconoPanel nombre="apps" size={20} /></span>
-            <span>
-              <span className="dcv4-admin__t">{PANEL_VIVO_COPY.adminTitle}</span>
-              <span className="dcv4-admin__s">{PANEL_VIVO_COPY.adminSub}</span>
-            </span>
-            <span className="dcv4-admin__n">{ADMIN_TOTAL}</span>
-          </div>
-          <div className="dcv4-admin__grupos">
-            {ADMIN_SECCIONES.map((g) => (
-              <div key={g.grupo} className="dcv4-admin__grupo">
-                <span className="dcv4-admin__g">{g.grupo}</span>
-                <span className="dcv4-admin__chips">
-                  {g.items.map((it) => (
-                    <span key={it} className="dcv4-admin__chip">{it}</span>
-                  ))}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </section>
   );

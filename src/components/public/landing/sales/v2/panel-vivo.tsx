@@ -135,6 +135,7 @@ export function PanelVivo() {
 function Tarjeta({ f, activa, onPick }: { f: FuncionVideo; activa: boolean; onPick: () => void }) {
   return (
     <button type="button" role="tab" aria-selected={activa} className={`dcv4-pv__card${activa ? " is-on" : ""}`} onClick={onPick}>
+      {f.etiqueta && <span className="dcv4-pv__tag">{f.etiqueta}</span>}
       <span className="dcv4-pv__ico"><IconoPanel nombre={f.icono} size={22} /></span>
       <span className="dcv4-pv__name">{f.nombre}</span>
       <span className="dcv4-pv__line">{f.linea}</span>
