@@ -1,87 +1,93 @@
 import Link from "next/link";
-import type { CSSProperties } from "react";
-import { FUNCIONES, FUNCIONES_HEADER } from "./landing-data";
-import { LazyMockup } from "./lazy-mockup";
+import type { ReactNode } from "react";
+import { instrumentSans, materialSymbols } from "@/fonts/menu";
+import { BENTO, FUNCIONES_V3_HEADER, PAGINA_WEB, REJILLA, REJILLA_TITULO } from "./funciones-v3-data";
+import { IluAgenda, IluCbct, IluFinanzas, IluPaginaWeb, IluWhatsapp } from "./funciones-ilustraciones";
+import { IconoPanel } from "./icono-panel";
+import "./funciones-v3.css";
 
 /**
- * Sección "Funciones": 6 tarjetas grandes, alternando fondo claro y oscuro,
- * cada una con su mockup del panel asomando por el borde inferior.
+ * Sección «Funciones» v3 (rediseño 25-sep-2026, ws1-t4).
  *
- * Los 6 mockups van DIFERIDOS (todos caen por debajo del pliegue): el hueco lo
- * reserva `.dcv2-lazy--<name>` con el alto exacto medido en Chrome, así que el
- * montaje no mueve nada — ver lazy-mockup.tsx y landing-v2.css.
+ * Antes: 6 tarjetas grandes alternas claro/oscuro con un mockup completo del
+ * panel cada una (2.474 px de alto a 1440). Ahora: un BENTO de 5 tarjetas
+ * blancas —título, una frase y UNA ilustración de interfaz limpia sobre un
+ * lavado de color— y debajo una REJILLA de íconos con el resto de funciones.
+ * La primera tarjeta, la más grande, es «Tu página web gratuita» (pedido de
+ * Rafael).
+ *
+ * Todo es server component: las ilustraciones son marcado puro y pesan una
+ * fracción de los mockups de antes, así que ya no hace falta diferirlas
+ * (mockups.tsx / lazy-mockup.tsx quedan en el repo sin montar desde aquí).
+ *
+ * Las fuentes del panel (Instrument Sans + Material Symbols) van sin
+ * precarga: el navegador las pide cuando la sección entra en pantalla.
  */
 
-const pillBase: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  minHeight: 38,
-  padding: "0 18px",
-  fontWeight: 700,
-  fontSize: 13.5,
-  borderRadius: 999,
-};
-
-const cardLight: CSSProperties = {
-  position: "relative",
-  overflow: "hidden",
-  borderRadius: 20,
-  background: "linear-gradient(180deg,#eef5ff,#f8fafc 60%)",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  textAlign: "center",
-  padding: "clamp(30px,3.6vw,46px) clamp(18px,2.4vw,30px) 0",
-};
-
-const cardDark: CSSProperties = {
-  ...cardLight,
-  background: "radial-gradient(420px 260px at 50% 0%,rgba(37,99,235,0.3),transparent 70%),#0b1220",
+const ILUSTRACION: Record<(typeof BENTO)[number]["ilustracion"], ReactNode> = {
+  whatsapp: <IluWhatsapp />,
+  agenda: <IluAgenda />,
+  cbct: <IluCbct />,
+  finanzas: <IluFinanzas />,
 };
 
 export function Funciones() {
   return (
-    <section id="funciones" style={{ scrollMarginTop: 72, background: "linear-gradient(180deg,#f8fafc,#ffffff 26%)" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(56px,7vw,100px) 20px" }}>
-        <div data-reveal="" style={{ textAlign: "center", maxWidth: 760, margin: "0 auto" }}>
-          <span style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #dbeafe", color: "#1d4ed8", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.1em", borderRadius: 999, padding: "7px 15px", textTransform: "uppercase" }}>
-            {FUNCIONES_HEADER.eyebrow}
-          </span>
-          <h2 className="dcv4-balance" style={{ marginTop: 18, fontSize: "clamp(28px,3.6vw,46px)", lineHeight: 1.08, letterSpacing: "-0.035em", fontWeight: 700 }}>
-            {FUNCIONES_HEADER.title}
-          </h2>
-          <p className="dcv4-pretty" style={{ marginTop: 16, fontSize: "clamp(16px,1.5vw,18.5px)", lineHeight: 1.6, color: "#475569" }}>
-            {FUNCIONES_HEADER.subtitle}
-          </p>
+    <section id="funciones" className={`dcf3-sec ${instrumentSans.variable} ${materialSymbols.variable}`}>
+      <div className="dcf3-wrap">
+        <div data-reveal="" className="dcf3-head">
+          <span className="dcf3-eyebrow">{FUNCIONES_V3_HEADER.eyebrow}</span>
+          <h2 className="dcv4-balance dcv4-h2">{FUNCIONES_V3_HEADER.title}</h2>
+          <p className="dcv4-pretty dcv4-lead">{FUNCIONES_V3_HEADER.subtitle}</p>
         </div>
 
-        <div style={{ marginTop: "clamp(36px,4.5vw,58px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,400px),1fr))", gap: 14 }}>
-          {FUNCIONES.map((f) => (
-            <article key={f.id} data-reveal="" style={f.dark ? cardDark : cardLight}>
-              <h3 className="dcv4-balance" style={{ fontSize: "clamp(23px,2.4vw,30px)", fontWeight: 700, letterSpacing: "-0.03em", color: f.dark ? "#ffffff" : "#0f172a" }}>
-                {f.title}
-              </h3>
-              <p className="dcv4-pretty" style={{ margin: "10px auto 0", fontSize: "clamp(14.5px,1.3vw,16.5px)", lineHeight: 1.55, color: f.dark ? "#cbd5e1" : "#475569", maxWidth: "44ch" }}>
-                {f.desc}
-              </p>
-              <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 9, justifyContent: "center" }}>
-                <Link href={f.href} className="dcv4-pill-solid" style={{ ...pillBase, background: "#2563eb", color: "#ffffff" }}>
-                  Más información
-                </Link>
-                <a
-                  href="#precios"
-                  className={f.dark ? "dcv4-pill-ghost-dark" : "dcv4-pill-ghost"}
-                  style={{ ...pillBase, background: "transparent", color: f.dark ? "#93c5fd" : "#1d4ed8", border: `1px solid ${f.dark ? "rgba(147,197,253,0.5)" : "#93c5fd"}` }}
-                >
-                  Ver planes
-                </a>
+        <div className="dcf3-bento">
+          {/* ★ 1 · Tu página web gratuita — la primera y la más destacada */}
+          <article data-reveal="" className="dcf3-card dcf3-card--web">
+            <div className="dcf3-card__tx">
+              <h3 className="dcv4-balance dcf3-card__h3">{PAGINA_WEB.title}</h3>
+              <p className="dcv4-pretty dcf3-card__p">{PAGINA_WEB.desc}</p>
+              <div className="dcf3-chips">
+                {PAGINA_WEB.chips.map((c) => (
+                  <span key={c} className="dcf3-chip"><IconoPanel nombre="check" size={14} />{c}</span>
+                ))}
               </div>
-              {f.note && <p style={{ marginTop: 12, fontSize: 12, color: "#94a3b8" }}>{f.note}</p>}
-              <div aria-hidden="true" style={{ width: "100%" }}>
-                <LazyMockup name={f.mockup} />
+              <a href={PAGINA_WEB.href} className="dcf3-card__cta">{PAGINA_WEB.cta}</a>
+            </div>
+            <div className="dcf3-card__ilu" aria-hidden="true">
+              <IluPaginaWeb />
+            </div>
+          </article>
+
+          {/* 2–5 · Las funciones estrella, con sus textos de siempre */}
+          {BENTO.map(({ funcion: f, ilustracion }) => (
+            <article key={f.id} data-reveal="" className={`dcf3-card dcf3-card--${ilustracion}`}>
+              <div className="dcf3-card__tx">
+                <h3 className="dcv4-balance dcf3-card__h3">{f.title}</h3>
+                <p className="dcv4-pretty dcf3-card__p">{f.desc}</p>
+                {f.note && <p className="dcf3-card__note">{f.note}</p>}
+                <Link href={f.href} className="dcf3-card__more">
+                  Más información <IconoPanel nombre="chevron_right" size={18} />
+                </Link>
+              </div>
+              <div className="dcf3-card__ilu" aria-hidden="true">
+                {ILUSTRACION[ilustracion]}
               </div>
             </article>
           ))}
+        </div>
+
+        {/* Rejilla de íconos: el resto, de un vistazo */}
+        <div data-reveal="" className="dcf3-grid">
+          <h3 className="dcv4-balance dcf3-grid__h3">{REJILLA_TITULO}</h3>
+          <ul className="dcf3-grid__list">
+            {REJILLA.map((it) => (
+              <li key={it.label} className="dcf3-grid__it">
+                <span className="dcf3-grid__ico" aria-hidden="true"><IconoPanel nombre={it.icono} size={28} /></span>
+                <span className="dcf3-grid__label">{it.label}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>
