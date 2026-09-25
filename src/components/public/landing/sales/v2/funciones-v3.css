@@ -235,6 +235,11 @@
   .dcf3-ag { max-width: 280px; }
   .dcf3-ag__toast { right: 0; width: 230px; max-width: 100%; }
 }
+/* Táctil (teléfono, tableta, también apaisados): «Más información» medía
+   25 px de alto; pasa a 44 sin cambiar la letra. */
+@media (max-width: 720px), (pointer: coarse) {
+  .dcf3-card__more { min-height: 44px; margin-top: 4px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .dcf3-card, .dcf3-card:hover { transition: none; transform: none; }
 }
