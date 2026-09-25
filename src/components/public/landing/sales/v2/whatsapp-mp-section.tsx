@@ -1,24 +1,34 @@
 import { WhatsappEscena } from "./whatsapp-escena";
 
 /**
- * «El bot de WhatsApp con anticipo por Mercado Pago». Bloque OSCURO (#0b1220,
- * como el hero) entre la sección clara de Sabina y la clara del recorrido.
- * Todo lo que afirma sale de material/sabina-y-whatsapp.md.
+ * «Cobra tratamientos por WhatsApp con Mercado Pago». Sección clara (desde el
+ * ajuste 4) después de «El panel, en vivo».
+ *
+ * Ajuste 5 (Rafael): la historia del teléfono ya no es el anticipo de una
+ * cita, es la CLÍNICA cobrando tratamientos y mensualidades. Todo lo que se
+ * afirma está comprobado en el código:
+ *  · desde una factura se envía por WhatsApp el link de Mercado Pago con el
+ *    monto (src/app/api/invoices/[id]/send-whatsapp/route.ts, `linkPago`);
+ *  · el pago entra en la cuenta de Mercado Pago DE LA CLÍNICA y el webhook
+ *    (kind "factura") lo registra solo en la factura como pago «mercadopago»;
+ *  · existen planes de pago en mensualidades (PaymentPlan, 12 por defecto,
+ *    con su calendario);
+ *  · el anticipo del bot de WhatsApp queda como saldo a favor (ajuste 1).
  */
 export const WHATSAPP_MP = {
   eyebrow: "WhatsApp + Mercado Pago",
-  title: "Tu clínica cierra a las 8. Tu WhatsApp agenda a las 11 de la noche.",
+  title: "Cobra tratamientos y mensualidades por WhatsApp. El dinero cae en tu cuenta.",
   subtitle:
-    "El bot contesta en el número de siempre de tu clínica, ofrece solo huecos reales y aparta la cita con un anticipo por Mercado Pago que cae directo en tu cuenta. Sin recepcionista de guardia y sin sobreagendar.",
+    "Desde la factura mandas el link de pago al WhatsApp del paciente. Paga desde su celular, el dinero entra en la cuenta de Mercado Pago de tu clínica y el pago se registra solo en la factura.",
   facts: [
+    { icon: "inv", t: "El link de pago sale de la factura", d: "Un botón en la factura envía por WhatsApp el link de Mercado Pago con el monto exacto." },
+    { icon: "mp", t: "El dinero cae en TU Mercado Pago", d: "En la cuenta de la clínica, no en la de DaleControl." },
+    { icon: "db", t: "El pago se registra solo", d: "Al aprobarse, queda en la factura como pago «Mercado Pago», sin capturar nada a mano." },
+    { icon: "cal", t: "Mensualidades con plan de pago", d: "Ortodoncia y tratamientos largos en 12 mensualidades (o las que definas), con su calendario." },
+    { icon: "lock", t: "Anticipos para apartar citas", d: "El bot de WhatsApp aparta la cita con un anticipo que queda como saldo a favor y se descuenta de la factura." },
     { icon: "wa", t: "API oficial de WhatsApp (Meta)", d: "En el número de tu clínica, el que tus pacientes ya tienen guardado." },
-    { icon: "cal", t: "Solo ofrece huecos reales", d: "Lee el horario de cada doctor, sus días libres y los cierres de la clínica." },
-    { icon: "lock", t: "El hueco se aparta al pagar", d: "Hasta que el anticipo no está pagado, el espacio sigue libre para otro paciente." },
-    { icon: "mp", t: "El dinero cae en TU Mercado Pago", d: "En la cuenta de la clínica, no en la de DaleControl. El anticipo queda como saldo a favor del paciente y se descuenta solo de su factura." },
-    { icon: "inv", t: "El anticipo se descuenta de la factura", d: "Tratamiento de $1,000 menos $200 de anticipo: el paciente debe $800." },
-    { icon: "db", t: "Sobreagendar es imposible", d: "La base de datos rechaza dos citas al mismo doctor a la misma hora." },
   ],
-  pie: "El bot se paga con Saldo de IA y está en todos los planes.",
+  pie: "Sin terminal ni datáfono: el paciente paga desde su celular.",
 };
 
 function Icono({ k }: { k: string }) {

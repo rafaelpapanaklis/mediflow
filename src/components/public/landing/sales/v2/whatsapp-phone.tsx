@@ -4,59 +4,98 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /**
  * Un teléfono con WhatsApp DE VERDAD (cabecera verde, globos con pico,
- * palomitas azules, «escribiendo…», el paciente tecleando abajo) que recorre
- * el guion del material: son las 11 de la noche, la clínica está cerrada y el
- * bot agenda la cita con un anticipo por Mercado Pago.
+ * palomitas azules, «escribiendo…», el paciente tecleando abajo). Es el
+ * teléfono del PACIENTE: lo que él escribe sale en verde a la derecha y lo que
+ * manda la clínica llega en blanco a la izquierda.
  *
- * Es el teléfono del PACIENTE: lo que él escribe sale en verde a la derecha y
- * lo que contesta el bot de la clínica llega en blanco a la izquierda.
+ * Ajuste 5 (Rafael): el teléfono ya no aparta una cita con anticipo; enseña
+ * cómo la clínica COBRA TRATAMIENTOS por WhatsApp con Mercado Pago. Dos
+ * historias que se alternan, una por vuelta (~10 s cada una):
+ *   a) el pago de un implante dental;
+ *   b) una mensualidad de ortodoncia (pago 4 de 12, plan de pago).
+ * En las dos: la clínica manda el cobro con el link de Mercado Pago desde la
+ * factura → el paciente paga → llega la confirmación.
  *
- * El guion es fijo (no hay servidor detrás) y el servidor pinta la charla
- * completa, así que sin JS se ve todo. El cliente sólo la reproduce paso a
- * paso y vuelve a empezar. Con prefers-reduced-motion se queda completa y
- * quieta.
+ * Hechos en los que se apoya (comprobados en el código): el link de pago sale
+ * de la factura (api/invoices/[id]/send-whatsapp, `linkPago`); el pago cae en
+ * la cuenta de Mercado Pago de la clínica y el webhook (kind "factura") lo
+ * registra solo en la factura; existen planes de pago en mensualidades
+ * (PaymentPlan, 12 por defecto).
+ *
+ * El guion es fijo (no hay servidor detrás) y el servidor pinta la primera
+ * historia completa, así que sin JS se ve todo. Con prefers-reduced-motion se
+ * queda completa y quieta.
  */
 
 type Paso =
   | { de: "paciente"; texto: string; hora: string }
-  | { de: "bot"; texto: ReactNode; hora: string; mp?: boolean };
+  | { de: "clinica"; texto: ReactNode; hora: string; mp?: { concepto: string; monto: string } };
 
-const GUION: Paso[] = [
-  { de: "paciente", texto: "Hola, me duele una muela desde ayer 😣", hora: "23:04" },
+export interface Historia {
+  id: "implante" | "ortodoncia";
+  pasos: Paso[];
+}
+
+const MP = ({ children }: { children: ReactNode }) => <span className="dcv4-wa__link">{children}</span>;
+
+export const HISTORIAS: Historia[] = [
   {
-    de: "bot",
-    hora: "23:04",
-    texto: (
-      <>
-        Lo siento 😕 ¿Te viene bien mañana? Me quedan <b>10:30 con la Dra. Ruiz</b> y <b>17:00 con el Dr. Marín</b>.
-      </>
-    ),
+    id: "implante",
+    pasos: [
+      { de: "paciente", texto: "Hola, ¿me mandan el cobro del implante? Quiero pagarlo hoy", hora: "10:12" },
+      {
+        de: "clinica",
+        hora: "10:12",
+        mp: { concepto: "Implante dental · Factura P-1024", monto: "$18,500.00 MXN" },
+        texto: (
+          <>
+            ¡Claro, Arturo! Tu tratamiento: <b>Implante dental · $18,500</b>. Puedes pagarlo aquí: <MP>mpago.la/dc-5120</MP>
+          </>
+        ),
+      },
+      { de: "paciente", texto: "Listo, ya pagué ✅", hora: "10:14" },
+      {
+        de: "clinica",
+        hora: "10:14",
+        texto: (
+          <>
+            ¡Recibido! 🦷 Tu factura <b>P-1024</b> quedó al día. Te esperamos el jueves a las 10:30.
+          </>
+        ),
+      },
+    ],
   },
-  { de: "paciente", texto: "Mañana a las 10:30 está bien", hora: "23:05" },
   {
-    de: "bot",
-    hora: "23:05",
-    mp: true,
-    texto: (
-      <>
-        Perfecto. Para apartarla te dejo el anticipo de <b>$200</b>: <span className="dcv4-wa__link">mpago.la/dc-8241</span>
-      </>
-    ),
-  },
-  { de: "paciente", texto: "Listo, ya pagué ✅", hora: "23:07" },
-  {
-    de: "bot",
-    hora: "23:07",
-    texto: (
-      <>
-        ¡Gracias! Quedó agendada para <b>mañana 10:30</b> con la Dra. Ruiz 🦷 Te recuerdo un día antes.
-      </>
-    ),
+    id: "ortodoncia",
+    pasos: [
+      { de: "paciente", texto: "Hola, ¿cuánto me toca este mes de la ortodoncia?", hora: "09:04" },
+      {
+        de: "clinica",
+        hora: "09:05",
+        mp: { concepto: "Ortodoncia · Mensualidad 4 de 12", monto: "$1,250.00 MXN" },
+        texto: (
+          <>
+            Hola, Sofía 👋 Toca tu mensualidad de ortodoncia: <b>pago 4 de 12 · $1,250</b>. Link: <MP>mpago.la/dc-7733</MP>
+          </>
+        ),
+      },
+      { de: "paciente", texto: "Pagado ✅ ¿cuántas me quedan?", hora: "09:07" },
+      {
+        de: "clinica",
+        hora: "09:07",
+        texto: (
+          <>
+            ¡Gracias! <b>Mensualidad 4 de 12</b> registrada; te quedan 8. Te espero el 15 de octubre para el ajuste.
+          </>
+        ),
+      },
+    ],
   },
 ];
 
 /** Cuántos mensajes van pintados y qué está pasando ahora mismo. */
 interface Estado {
+  historia: number;
   visibles: number;
   /** El paciente teclea el paso `visibles` (letras ya escritas). */
   typed: number;
@@ -65,18 +104,19 @@ interface Estado {
   leidos: number;
 }
 
-const COMPLETO: Estado = { visibles: GUION.length, typed: 0, escribiendo: false, leidos: GUION.length };
+const completa = (h: number): Estado => ({ historia: h, visibles: HISTORIAS[h].pasos.length, typed: 0, escribiendo: false, leidos: HISTORIAS[h].pasos.length });
+const vacia = (h: number): Estado => ({ historia: h, visibles: 0, typed: 0, escribiendo: false, leidos: 0 });
 
 function reducedMotion(): boolean {
   return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export function WhatsappPhone({ onPaso }: { onPaso?: (visibles: number) => void }) {
+export function WhatsappPhone({ onPaso }: { onPaso?: (historia: number, visibles: number) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const [started, setStarted] = useState(false);
   const [reduced, setReduced] = useState(false);
-  const [st, setSt] = useState<Estado>(COMPLETO);
+  const [st, setSt] = useState<Estado>(() => completa(0));
 
   useEffect(() => {
     setReduced(reducedMotion());
@@ -95,44 +135,41 @@ export function WhatsappPhone({ onPaso }: { onPaso?: (visibles: number) => void 
     return () => io.disconnect();
   }, []);
 
-  // Arranque: al entrar en pantalla la charla se vacía y empieza de cero.
+  // Arranque: al entrar en pantalla la charla se vacía y empieza la primera historia.
   useEffect(() => {
     if (!started || reduced) return;
-    const t = window.setTimeout(() => setSt({ visibles: 0, typed: 0, escribiendo: false, leidos: 0 }), 300);
+    const t = window.setTimeout(() => setSt(vacia(0)), 300);
     return () => window.clearTimeout(t);
   }, [started, reduced]);
 
   useEffect(() => {
-    onPaso?.(st.visibles);
-  }, [st.visibles, onPaso]);
+    onPaso?.(st.historia, st.visibles);
+  }, [st.historia, st.visibles, onPaso]);
 
-  // La máquina de estados del guion.
+  // La máquina de estados del guion (ritmo del ajuste 4: ~10 s por historia).
   useEffect(() => {
     if (!started || reduced) return;
-    if (st.visibles === GUION.length) {
-      // Charla completa: ~2 s para leerla y vuelta a empezar.
-      const t = window.setTimeout(() => setSt({ visibles: 0, typed: 0, escribiendo: false, leidos: 0 }), 2000);
+    const pasos = HISTORIAS[st.historia].pasos;
+    if (st.visibles === pasos.length) {
+      // Historia completa: ~2 s para leerla y pasa a la OTRA historia.
+      const t = window.setTimeout(() => setSt(vacia((st.historia + 1) % HISTORIAS.length)), 2200);
       return () => window.clearTimeout(t);
     }
-    const paso = GUION[st.visibles];
+    const paso = pasos[st.visibles];
     let t = 0;
-    if (!paso) return;
     if (paso.de === "paciente") {
       if (st.typed < paso.texto.length) {
-        // Un tecleo humano: algo irregular, más lento en los espacios.
         const ch = paso.texto[st.typed];
-        // Ritmo del ajuste 4: la charla completa cabe en ~10 s.
-        const pausa = ch === " " ? 42 : 22 + Math.round(Math.random() * 16);
+        const pausa = ch === " " ? 46 : 26 + Math.round(Math.random() * 18);
         t = window.setTimeout(() => setSt((s) => ({ ...s, typed: s.typed + 1 })), st.typed === 0 ? 350 : pausa);
       } else {
-        // Enviar: sale con palomita gris.
-        t = window.setTimeout(() => setSt((s) => ({ ...s, visibles: s.visibles + 1, typed: 0 })), 250);
+        t = window.setTimeout(() => setSt((s) => ({ ...s, visibles: s.visibles + 1, typed: 0 })), 350);
       }
     } else if (!st.escribiendo) {
-      // El bot lo lee (palomitas azules) y se pone a escribir.
-      t = window.setTimeout(() => setSt((s) => ({ ...s, escribiendo: true, leidos: s.visibles })), 350);
+      // La clínica lo lee (palomitas azules) y se pone a escribir.
+      t = window.setTimeout(() => setSt((s) => ({ ...s, escribiendo: true, leidos: s.visibles })), st.visibles === 0 ? 600 : 450);
     } else {
-      t = window.setTimeout(() => setSt((s) => ({ ...s, visibles: s.visibles + 1, escribiendo: false, leidos: s.visibles + 1 })), paso.mp ? 1000 : 850);
+      t = window.setTimeout(() => setSt((s) => ({ ...s, visibles: s.visibles + 1, escribiendo: false, leidos: s.visibles + 1 })), paso.mp ? 1300 : 1000);
     }
     return () => window.clearTimeout(t);
   }, [started, reduced, st]);
@@ -143,8 +180,11 @@ export function WhatsappPhone({ onPaso }: { onPaso?: (visibles: number) => void 
     if (el) el.scrollTop = el.scrollHeight;
   }, [st.visibles, st.escribiendo]);
 
-  const paso = GUION[st.visibles];
+  const pasos = HISTORIAS[st.historia].pasos;
+  const paso = pasos[st.visibles];
   const tecleando = paso && paso.de === "paciente" ? paso.texto.slice(0, st.typed) : "";
+  const ultimo = pasos[Math.max(0, st.visibles - 1)];
+  const horaStatus = (st.visibles > 0 ? ultimo.hora : pasos[0].hora).replace(/^0/, "");
 
   return (
     <div ref={box} className="dcv4-phone" aria-hidden="true">
@@ -152,7 +192,7 @@ export function WhatsappPhone({ onPaso }: { onPaso?: (visibles: number) => void 
       <div className="dcv4-phone__screen">
         {/* Barra de estado */}
         <div className="dcv4-wa__status">
-          <span>23:0{st.visibles >= 4 ? "7" : st.visibles >= 2 ? "5" : "4"}</span>
+          <span>{horaStatus}</span>
           <span className="dcv4-wa__statusr">
             <svg width="14" height="10" viewBox="0 0 14 10" fill="currentColor" aria-hidden="true"><rect x="0" y="6" width="2.4" height="4" rx=".6" /><rect x="3.8" y="4" width="2.4" height="6" rx=".6" /><rect x="7.6" y="2" width="2.4" height="8" rx=".6" /><rect x="11.4" y="0" width="2.4" height="10" rx=".6" /></svg>
             <svg width="22" height="10" viewBox="0 0 22 10" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true"><rect x=".6" y=".6" width="18" height="8.8" rx="2.2" /><rect x="2.2" y="2.2" width="14" height="5.6" rx="1" fill="currentColor" stroke="none" /><rect x="19.6" y="3.2" width="1.8" height="3.6" rx=".6" fill="currentColor" stroke="none" /></svg>
@@ -175,18 +215,18 @@ export function WhatsappPhone({ onPaso }: { onPaso?: (visibles: number) => void 
         <div ref={scroll} className="dcv4-wa__chat">
           <span className="dcv4-wa__day">Hoy</span>
           <span className="dcv4-wa__sys">🔒 Los mensajes están cifrados de extremo a extremo. Esta es una cuenta de empresa.</span>
-          {GUION.slice(0, st.visibles).map((p, i) => (
-            <div key={i} className={`dcv4-wa__row${p.de === "paciente" ? " is-out" : ""}`}>
+          {pasos.slice(0, st.visibles).map((p, i) => (
+            <div key={`${st.historia}-${i}`} className={`dcv4-wa__row${p.de === "paciente" ? " is-out" : ""}`}>
               <span className={`dcv4-wa__bubble${p.de === "paciente" ? " is-out" : " is-in"}`}>
                 <span className="dcv4-wa__text">{p.texto}</span>
-                {p.de === "bot" && p.mp && (
+                {p.de === "clinica" && p.mp && (
                   <span className="dcv4-wa__mp">
                     <span className="dcv4-wa__mplogo">
                       <svg width="30" height="20" viewBox="0 0 30 20" aria-hidden="true"><ellipse cx="15" cy="10" rx="14" ry="9.2" fill="#fff" /><path d="M6 10c3-3.6 6-3.6 9 0s6 3.6 9 0" fill="none" stroke="#009EE3" strokeWidth="2" strokeLinecap="round" /><path d="M4.5 12.5c3.5 4.2 7 4.2 10.5 0" fill="none" stroke="#009EE3" strokeWidth="1.6" strokeLinecap="round" /></svg>
                     </span>
                     <span className="dcv4-wa__mptx">
-                      <b>Anticipo de cita · $200.00 MXN</b>
-                      <span>Pagas a: Clínica Altabrisa</span>
+                      <b>{p.mp.concepto}</b>
+                      <span>{p.mp.monto} · Pagas a: Clínica Altabrisa</span>
                       <span className="dcv4-wa__mpdom">mpago.la</span>
                     </span>
                   </span>

@@ -55,12 +55,13 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
           </p>
 
           <div role="group" aria-label="Periodo de facturación" className="dcv4-price__toggle">
+            {/* Mensual a la izquierda y Anual a la derecha (con su −%), como estaba; ANUAL sigue seleccionado por defecto. */}
+            <button type="button" className={`dcv4-price__tbtn${!anual ? " is-on" : ""}`} onClick={() => setAnual(false)} aria-pressed={!anual}>
+              {PRICING_COPY.toggleMonthly}
+            </button>
             <button type="button" className={`dcv4-price__tbtn${anual ? " is-on" : ""}`} onClick={() => setAnual(true)} aria-pressed={anual}>
               {PRICING_COPY.toggleYearly}
               <span className="dcv4-price__tpill">−{yearlyDiscountPct}%</span>
-            </button>
-            <button type="button" className={`dcv4-price__tbtn${!anual ? " is-on" : ""}`} onClick={() => setAnual(false)} aria-pressed={!anual}>
-              {PRICING_COPY.toggleMonthly}
             </button>
           </div>
         </div>

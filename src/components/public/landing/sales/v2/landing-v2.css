@@ -961,3 +961,6 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   .dcv4-waesc__card { width: 100%; transform: none !important; opacity: 1; margin: 0 !important; }
 }
 
+
+/* ── Ajuste 5: tarjeta «origen del cobro» junto al teléfono ─────────────── */
+.dcv4-waesc__ico--fact { background: #eff6ff; color: #1d4ed8; }
