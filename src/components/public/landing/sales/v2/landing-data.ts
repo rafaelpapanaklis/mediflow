@@ -15,7 +15,7 @@ import type { ProductoSlug } from '@/lib/producto/types';
 export const NAV = {
   links: [
     { label: 'Funciones', href: '#funciones' },
-    { label: 'Sabina', href: '#sabina' },
+    { label: 'El panel', href: '#panel' },
     { label: 'Precios', href: '#precios' },
     { label: 'Comparativa', href: '#comparativa' },
     { label: 'FAQ', href: '#faq' },

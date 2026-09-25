@@ -12,6 +12,5 @@ export { TrustFaq } from "./trust-faq";
 export { FinalCta } from "./final-cta";
 export { ScrollReveal } from "./scroll-reveal";
 export { TawkChat } from "./tawk-chat";
-export { SabinaSection } from "./sabina-section";
 export { WhatsappMpSection } from "./whatsapp-mp-section";
-export { RecorridoSection } from "./recorrido-section";
+export { PanelVivoSection } from "./panel-vivo-section";
