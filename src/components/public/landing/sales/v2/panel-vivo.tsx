@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconoPanel } from "./icono-panel";
+import { Tilt3D } from "./tilt-3d";
 import { FUNCIONES_VIDEO, type FuncionVideo } from "./panel-vivo-data";
 
 /**
@@ -94,7 +95,11 @@ export function PanelVivo() {
 
   return (
     <div ref={raiz} className="dcv4-pv">
-      {/* El marco del navegador con la pantalla del panel */}
+      {/* El marco del navegador con la pantalla del panel. SOLO el marco va en el
+          escenario inclinado (Tilt3D): las tarjetas se quedan planas, porque un
+          botón que se mueve bajo el puntero mientras el escenario gira puede
+          perder el toque (medido: fallaban las tarjetas de los extremos). */}
+      <Tilt3D max={3} className="dcv4-tilt--panel">
       <div className="dcv4-pv__frame" role="img" aria-label={`Grabación del panel: ${f.ve}`}>
         <div className="dcv4-pv__chrome" aria-hidden="true">
           <span className="dcv4-pv__dots"><i /><i /><i /></span>
@@ -121,6 +126,7 @@ export function PanelVivo() {
           ))}
         </div>
       </div>
+      </Tilt3D>
 
       {/* Las tarjetas: una por función. La activa va resaltada, sin barra ni iconos de reproducción. */}
       <div className="dcv4-pv__cards" role="tablist" aria-label="Funciones del panel">

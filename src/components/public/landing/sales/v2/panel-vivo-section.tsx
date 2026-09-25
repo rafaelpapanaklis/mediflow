@@ -1,6 +1,5 @@
 import { materialSymbols } from "@/fonts/menu";
 import { PanelVivo } from "./panel-vivo";
-import { Tilt3D } from "./tilt-3d";
 import { PANEL_VIVO_COPY } from "./panel-vivo-data";
 import { CineFondo } from "./cine-fondo";
 
@@ -28,9 +27,7 @@ export function PanelVivoSection() {
         </div>
 
         <div data-reveal="" style={{ marginTop: "clamp(30px,4vw,52px)" }}>
-          <Tilt3D max={3} className="dcv4-tilt--panel">
-            <PanelVivo />
-          </Tilt3D>
+          <PanelVivo />
         </div>
 
       </div>
