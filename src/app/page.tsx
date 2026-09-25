@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { inter } from "@/fonts/inter-400-800";
 import {
-  Hero, SocialProofBar, Funciones, PricingSection, WhatsappCta, ModulesTrio, FeaturesGrid,
-  ModulePages, Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, TawkChat,
+  Hero, SocialProofBar, Funciones, PricingSection, WhatsappCta,
+  Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, TawkChat,
   PanelVivoSection, WhatsappMpSection,
 } from "@/components/public/landing/sales/v2";
 import { buildPlanCards, cheapestFirstMonthLabel, headlineYearlyDiscount } from "@/components/public/landing/sales/v2/plan-cards";
@@ -10,6 +10,7 @@ import { FAQ_ITEMS } from "@/components/public/landing/sales/v2/landing-data";
 import { SalesFooter } from "@/components/public/landing/sales/footer";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { getResolvedPlans } from "@/lib/plans";
+import { TodoElPanel } from "@/components/public/landing/sales/v2/todo-el-panel";
 import "@/components/public/landing/sales/v2/landing-v2.css";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
@@ -147,9 +148,11 @@ export default async function HomePage() {
         <Funciones />
         <PricingSection cards={cards} firstMonthFrom={firstMonthFrom} yearlyDiscountPct={yearlyDiscountPct} />
         <WhatsappCta />
-        <ModulesTrio />
-        <FeaturesGrid />
-        <ModulePages />
+        {/* Ajuste 1 (25-sep-2026, ws1-t4): el trío oscuro, «Y todo lo demás,
+            incluido» y «Conoce cada módulo a fondo» se juntan en UNA sección
+            (la laptop con el panel grabado). modules-trio, features-grid y
+            module-pages siguen en el repo sin montar. */}
+        <TodoElPanel />
         <Comparison />
         <Testimonials />
         <TrustFaq firstMonthFrom={firstMonthFrom} />
