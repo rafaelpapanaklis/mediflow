@@ -44,9 +44,10 @@ export function trackSignupConversionAndRedirect(redirectUrl: string): void {
 // «+ Nueva acción de conversión» → Sitio web → categoría «Compra», nombre
 // «Pago completado», valor «usar valores distintos», recuento «Una». Google
 // le da la etiqueta (la parte DESPUÉS de "AW-18276007996/"); se pega aquí y
-// el cambio es solo esta línea. Mientras esté vacía NO se envía nada a Google
-// (ni con un send_to incompleto) y en desarrollo queda un console.info.
-export const GADS_PAGO_COMPLETADO_LABEL = "";
+// el cambio es solo esta línea. Configurada el 25-sep-2026. Si algún día se
+// vacía, NO se envía nada a Google (ni con un send_to incompleto) y en
+// desarrollo queda un console.info.
+export const GADS_PAGO_COMPLETADO_LABEL = "tujfCLaJlIUdELyA14pE";
 
 const GADS_ACCOUNT_ID = "AW-18276007996";
 

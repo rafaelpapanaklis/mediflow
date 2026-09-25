@@ -31,6 +31,7 @@ import {
   GADS_PAGO_COMPLETADO_LABEL,
   paymentCompletedSendTo,
   sendPaymentCompletedConversion,
+  trackPaymentCompletedConversion,
 } from "@/lib/gtag";
 
 const CLINICA = "clinic_abc";
@@ -178,9 +179,22 @@ test("fuera del navegador (SSR) no hace nada", () => {
 const SRC = join(__dirname, "..", "..", "..", "..", "..");
 const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
+test("la etiqueta configurada: send_to completo AW-18276007996/tujfCLaJlIUdELyA14pE", () => {
+  assert.equal(GADS_PAGO_COMPLETADO_LABEL, "tujfCLaJlIUdELyA14pE");
+  assert.equal(GADS_PAGO_COMPLETADO_LABEL.length, 20);
+  assert.equal(paymentCompletedSendTo(GADS_PAGO_COMPLETADO_LABEL), "AW-18276007996/tujfCLaJlIUdELyA14pE");
+  // La función pública usa esa constante: con gtag cargado sale con ese send_to.
+  const llamadas: Llamada[] = [];
+  conVentana((...a) => llamadas.push(a), () => {
+    assert.equal(trackPaymentCompletedConversion({ transactionId: SESSION_ID, valueMxn: 19 }), true);
+  });
+  assert.equal(llamadas.length, 1);
+  assert.equal((llamadas[0][2] as { send_to: string }).send_to, "AW-18276007996/tujfCLaJlIUdELyA14pE");
+});
+
 test("la etiqueta vive en UNA constante de gtag.ts y la conversión de registro no cambió", () => {
   const gtag = leer("lib/gtag.ts");
-  assert.match(gtag, /export const GADS_PAGO_COMPLETADO_LABEL = "[^"]*";/);
+  assert.match(gtag, /export const GADS_PAGO_COMPLETADO_LABEL = "tujfCLaJlIUdELyA14pE";/);
   assert.equal(typeof GADS_PAGO_COMPLETADO_LABEL, "string");
   // Registro completado: mismo destino, mismo value, misma función.
   assert.ok(gtag.includes('const GADS_SIGNUP_SEND_TO = "AW-18276007996/YXdlCM-xtMccELyA14pE";'));
