@@ -46,7 +46,7 @@ export function WhatsappEscena() {
             </span>
             <span>
               <b>Agenda · mañana 10:30 · Dra. Ruiz</b>
-              <span>Confirmada. Anticipo $200 aplicado a la factura.</span>
+              <span>Confirmada. Los $200 quedan como saldo a favor del paciente.</span>
             </span>
           </div>
         </div>

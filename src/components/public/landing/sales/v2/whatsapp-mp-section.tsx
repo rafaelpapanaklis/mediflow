@@ -14,7 +14,7 @@ export const WHATSAPP_MP = {
     { icon: "wa", t: "API oficial de WhatsApp (Meta)", d: "En el número de tu clínica, el que tus pacientes ya tienen guardado." },
     { icon: "cal", t: "Solo ofrece huecos reales", d: "Lee el horario de cada doctor, sus días libres y los cierres de la clínica." },
     { icon: "lock", t: "El hueco se aparta al pagar", d: "Hasta que el anticipo no está pagado, el espacio sigue libre para otro paciente." },
-    { icon: "mp", t: "El dinero cae en TU Mercado Pago", d: "En la cuenta de la clínica, no en la de DaleControl. Tú lo ves al momento en Caja." },
+    { icon: "mp", t: "El dinero cae en TU Mercado Pago", d: "En la cuenta de la clínica, no en la de DaleControl. El anticipo queda como saldo a favor del paciente y se descuenta solo de su factura." },
     { icon: "inv", t: "El anticipo se descuenta de la factura", d: "Tratamiento de $1,000 menos $200 de anticipo: el paciente debe $800." },
     { icon: "db", t: "Sobreagendar es imposible", d: "La base de datos rechaza dos citas al mismo doctor a la misma hora." },
   ],

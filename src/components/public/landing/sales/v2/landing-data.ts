@@ -317,7 +317,7 @@ export const FAQ_ITEMS: { q: string; a: string | ((firstMonthFrom: string) => st
   },
   {
     q: '¿Cómo funciona el anticipo por Mercado Pago?',
-    a: 'Cuando un paciente pide cita por WhatsApp, el bot le manda un link de Mercado Pago con el anticipo. El hueco sigue libre hasta que el pago entra; entonces la cita queda agendada. El dinero cae en la cuenta de Mercado Pago de tu clínica, no en la de DaleControl, y el anticipo se descuenta de la factura del tratamiento.',
+    a: 'Cuando un paciente pide cita por WhatsApp, el bot le manda un link de Mercado Pago con el anticipo. El hueco sigue libre hasta que el pago entra; entonces la cita queda agendada. El dinero cae en la cuenta de Mercado Pago de tu clínica, no en la de DaleControl, y el anticipo queda como saldo a favor del paciente: se descuenta solo de su factura.',
   },
   {
     q: '¿La IA hace diagnósticos por mí?',
