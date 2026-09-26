@@ -53,7 +53,9 @@ export function DatosTransferencia({
         <span className={`${s.datoV} ${s.datoVGrande}`}>{centavosAMxn(importe.totalCents)}</span>
         <BotonCopiar valor={centavosADecimal(importe.totalCents)} etiqueta="el importe" />
         <span className={s.datoDesglose}>
-          {`Plan ${periodo}: ${centavosAMxn(importe.subtotalCents)} + IVA 16 % ${centavosAMxn(importe.ivaCents)}`}
+          {importe.ivaCents > 0
+            ? `Plan ${periodo}: ${centavosAMxn(importe.subtotalCents)} + IVA 16 % ${centavosAMxn(importe.ivaCents)}`
+            : `Plan ${periodo}, renovación de tu plan actual.`}
         </span>
       </div>
       <div className={s.dato}>

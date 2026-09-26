@@ -6,7 +6,7 @@ import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
 import type { PlanCardData } from "@/app/dashboard/suspended/suspended-client";
 import { centavosAMxn, importeSpei, type CuentaBancaria } from "@/lib/billing/spei-directo-core";
-import { desgloseConIva } from "@/lib/billing/iva-cobro";
+import { desgloseConIva, desgloseSinIva, ivaAplica } from "@/lib/billing/iva-cobro";
 import { DatosTransferencia } from "./datos-transferencia";
 import s from "./pago.module.css";
 
@@ -55,6 +55,8 @@ export interface VistaPlanes {
   referenciaSpei: string | null;
   /** El checkout tiene el IVA 16 % configurado (STRIPE_IVA_TAX_RATE_ID o Stripe Tax). Sin él, tarjeta/OXXO no cobran. */
   cobroConIvaListo: boolean;
+  /** Plan que esta clínica (de las de antes) paga por OXXO/SPEI SIN IVA; null = todo lleva IVA. */
+  planSinIva: PlanId | null;
   declarandoSpei: boolean;
   handleDeclararSpei: (plan: PlanId) => void;
 }
@@ -75,8 +77,12 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
   const [mostrarTodos, setMostrarTodos] = useState(!v.resumenInicial);
   const resumen = !mostrarTodos && v.selected ? v.selected : null;
   const anual = v.billing === "annual";
-  // Todo pago nuevo lleva IVA 16 % (tarjeta, OXXO y SPEI): cada importe lo dice.
-  const iva = " + IVA";
+  // Todo pago lleva IVA 16 % (tarjeta, OXXO y SPEI), salvo OXXO/SPEI del plan que una clínica de las de
+  // antes ya paga a mano: cada importe dice «+ IVA» solo si lleva.
+  const ivaDe = (planId: PlanId) => ivaAplica({ metodo: v.method, plan: planId, planExento: v.planSinIva });
+  const ivaSel = ivaDe(v.selectedPlan);
+  const iva = ivaSel ? " + IVA" : "";
+  const ivaPlan = (planId: PlanId) => (ivaDe(planId) ? " + IVA" : "");
 
   // LO QUE SE COBRA: mensual = el precio del plan; anual = el TOTAL del año
   // (priceMxnAnnual), no el mensual por doce. Es el unitAmount del checkout.
@@ -94,10 +100,11 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
   const cobroNuevo = desgloseConIva(
     v.selected ? (v.ctaPromo ? FIRST_MONTH_PROMO_MXN[v.selected.id] * 100 : cobrado(v.selected) * 100) : 0,
   );
+  const cobroMostrado = ivaSel ? cobroNuevo : desgloseSinIva(cobroNuevo.subtotalCents);
 
   const esSpei = v.method === "spei" && v.cuentaSpei !== null && v.selected !== undefined;
   const importe = esSpei && v.selected
-    ? importeSpei({ plan: v.selected, billing: v.billing })
+    ? importeSpei({ plan: v.selected, billing: v.billing, conIva: ivaSel })
     : null;
 
   return (
@@ -216,7 +223,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
                   <span className={s.precioCifra}>{fmt(cobrado(plan))}</span>
                   <span className={s.precioUnidad}>
                     {unidad}
-                    {iva}
+                    {ivaPlan(plan.id)}
                   </span>
                 </div>
                 <div className={s.precioNota}>{notaPrecio(plan)}</div>
@@ -319,20 +326,22 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
               <div className={s.desglose} data-testid="desglose-iva">
                 <div className={s.desgloseFila}>
                   <span>{v.ctaPromo ? "Primer mes con tarjeta" : anual ? "Plan anual" : "Plan mensual"}</span>
-                  <span>{centavosAMxn(cobroNuevo.subtotalCents)}</span>
+                  <span>{centavosAMxn(cobroMostrado.subtotalCents)}</span>
                 </div>
-                <div className={s.desgloseFila}>
-                  <span>IVA 16 %</span>
-                  <span>{centavosAMxn(cobroNuevo.ivaCents)}</span>
-                </div>
+                {ivaSel && (
+                  <div className={s.desgloseFila}>
+                    <span>IVA 16 %</span>
+                    <span>{centavosAMxn(cobroMostrado.ivaCents)}</span>
+                  </div>
+                )}
                 <div className={`${s.desgloseFila} ${s.desgloseTotal}`}>
                   <span>Total a pagar</span>
-                  <span>{centavosAMxn(cobroNuevo.totalCents)}</span>
+                  <span>{centavosAMxn(cobroMostrado.totalCents)}</span>
                 </div>
               </div>
             )}
 
-            {!v.cobroConIvaListo && (
+            {!v.cobroConIvaListo && ivaSel && (
               <p className={`${s.aviso} ${s.avisoPeligro}`} role="alert">
                 El pago con tarjeta y OXXO no está disponible por ahora. Puedes pagar por transferencia SPEI o escribirnos a soporte.
               </p>
@@ -341,7 +350,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
             <button
               type="button"
               onClick={() => v.handleStripeCheckout(v.selectedPlan)}
-              disabled={v.isRedirecting || !v.cobroConIvaListo}
+              disabled={v.isRedirecting || (!v.cobroConIvaListo && ivaSel)}
               className={s.cta}
             >
               {v.isRedirecting ? <Loader2 size={17} className={s.girando} aria-hidden /> : <Lock size={16} aria-hidden />}
@@ -350,9 +359,9 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
               ) : v.selected ? (
                 <span>
                   {v.ctaPromo
-                    ? `Pagar ${v.selected.name} — ${centavosAMxn(cobroNuevo.totalCents)} el primer mes`
-                    : `Pagar ${v.selected.name} — ${centavosAMxn(cobroNuevo.totalCents)} ${unidad}`}
-                  <span className={s.ctaIva}> (IVA incluido)</span>
+                    ? `Pagar ${v.selected.name} — ${centavosAMxn(cobroMostrado.totalCents)} el primer mes`
+                    : `Pagar ${v.selected.name} — ${centavosAMxn(cobroMostrado.totalCents)} ${unidad}`}
+                  {ivaSel && <span className={s.ctaIva}> (IVA incluido)</span>}
                 </span>
               ) : (
                 ""
