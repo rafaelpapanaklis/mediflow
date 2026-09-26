@@ -6,6 +6,7 @@ import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlan } from "@/lib/plans";
 import { ensureFirstMonthCoupon, isFirstContract } from "@/lib/billing/first-month-promo";
+import { ivaParaCobro } from "@/lib/billing/iva-cobro";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -105,13 +106,6 @@ export async function POST(req: NextRequest) {
   const method = parsed.data.method;
   const billing = parsed.data.billing;
 
-  // Rail de IVA (Stripe Tax): SOLO se activa si el env STRIPE_AUTOMATIC_TAX === "true".
-  // Sin el env, el comportamiento es idéntico al actual (no se cobra IVA; se cobra
-  // el precio anunciado tal cual). Stripe exige dirección del cliente para calcular
-  // el impuesto — ya la recolectamos con `customer_update: { address: "auto" }` en
-  // ambas sesiones. Antes de prender el flag, ver la guía de Stripe Tax en ORQUESTA.
-  const automaticTax = process.env.STRIPE_AUTOMATIC_TAX === "true";
-
   // Tarjeta: si la clínica YA tiene una suscripción de tarjeta viva en Stripe,
   // NO crear una segunda (evita doble cobro recurrente). La mandamos al billing
   // portal para gestionar la existente (cambiar tarjeta, plan o cancelar).
@@ -147,6 +141,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // IVA 16 % de este cobro NUEVO (ver lib/billing/iva-cobro.ts): tasa de impuesto manual de
+  // Stripe en la línea del plan (env STRIPE_IVA_TAX_RATE_ID), o Stripe Tax si STRIPE_AUTOMATIC_TAX
+  // es "true" (nunca las dos). Sin ninguna NO se cobra sin IVA en silencio: 503 claro. Va DESPUÉS
+  // del desvío al portal de arriba: quien ya tiene suscripción de tarjeta viva no pasa por aquí.
+  const iva = ivaParaCobro(process.env);
+  if (iva.ok === false) {
+    return NextResponse.json({ error: iva.error, code: iva.codigo }, { status: 503 });
+  }
+
   // Anual = 35% de descuento (priceMxnAnnual, fuente única de planes). El
   // PERIODO lo fija el webhook (nextBillingDate +1 año / +1 mes según billing).
   const unitAmount = (billing === "annual" ? plan.priceMxnAnnual : plan.priceMxn) * 100;
@@ -178,7 +181,7 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       customer: customerId,
       customer_update: { address: "auto" },
-      ...(automaticTax ? { automatic_tax: { enabled: true } } : {}),
+      ...iva.sesion,
       payment_method_types: ["card"],
       line_items: [
         {
@@ -192,6 +195,7 @@ export async function POST(req: NextRequest) {
             },
           },
           quantity: 1,
+          ...iva.linea,
         },
       ],
       metadata: meta,
@@ -218,7 +222,7 @@ export async function POST(req: NextRequest) {
       mode: "payment",
       customer: customerId,
       customer_update: { address: "auto" },
-      ...(automaticTax ? { automatic_tax: { enabled: true } } : {}),
+      ...iva.sesion,
       payment_method_types: [isSpei ? "customer_balance" : "oxxo"],
       ...(isSpei
         ? {
@@ -241,6 +245,7 @@ export async function POST(req: NextRequest) {
             },
           },
           quantity: 1,
+          ...iva.linea,
         },
       ],
       metadata: meta,
@@ -269,7 +274,7 @@ export async function POST(req: NextRequest) {
     changes: {
       _created: {
         before: null,
-        after: { plan: plan.id, priceMxn: plan.priceMxn, billing, amountMxn: unitAmount / 100, firstMonthCoupon: promoCouponId, sessionId: session.id },
+        after: { plan: plan.id, priceMxn: plan.priceMxn, billing, amountMxn: unitAmount / 100, ivaModo: iva.modo, firstMonthCoupon: promoCouponId, sessionId: session.id },
       },
     },
     ipAddress,
