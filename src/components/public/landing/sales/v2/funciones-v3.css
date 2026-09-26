@@ -74,32 +74,22 @@
 .dcf3-flip { transform: scaleX(-1); }
 
 /* ── 1 · Página web → agenda ─────────────────────────────────────────────── */
-.dcf3-web { display: grid; grid-template-columns: minmax(0, 1.15fr) 72px minmax(0, 1fr); align-items: center; gap: 6px; width: 100%; max-width: 760px; }
+.dcf3-web { display: grid; grid-template-columns: minmax(0, 1.3fr) 64px minmax(0, 1fr); align-items: center; gap: 6px; width: 100%; max-width: 780px; }
 .dcf3-web__site { border-radius: 14px; background: #fff; border: 1px solid #e6e4ee; box-shadow: 0 24px 40px -28px rgba(26, 24, 38, .45); overflow: hidden; }
 .dcf3-web__chrome { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; background: #f4f3f8; border-bottom: 1px solid #ebeaf0; }
 .dcf3-web__dots { display: inline-flex; gap: 4px; }
 .dcf3-web__dots i { width: 8px; height: 8px; border-radius: 50%; background: #d6d3e0; display: block; }
 .dcf3-web__url { flex: 1; display: flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 6px; background: #fff; color: #858295; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dcf3-web__page { padding: 12px 14px 14px; }
-.dcf3-web__nav { display: flex; align-items: center; justify-content: space-between; }
-.dcf3-web__brand { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: #1a1826; white-space: nowrap; }
-.dcf3-web__brand i { width: 14px; height: 14px; border-radius: 4px; background: #4d3fc6; display: block; }
-.dcf3-web__links { display: inline-flex; gap: 6px; }
-.dcf3-web__links b { width: 22px; height: 5px; border-radius: 3px; background: #e2e0ea; display: block; }
-.dcf3-web__hero { margin-top: 14px; display: flex; flex-direction: column; align-items: flex-start; }
-.dcf3-web__h { font-size: 17px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; color: #1a1826; }
-.dcf3-web__p { margin-top: 5px; font-size: 10.5px; line-height: 1.4; color: #6f6c80; max-width: 30ch; }
-.dcf3-web__btn { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; height: 28px; padding: 0 12px; border-radius: 8px; background: #4d3fc6; color: #fff; font-size: 11.5px; font-weight: 600; box-shadow: 0 8px 18px -8px rgba(77, 63, 198, .8); position: relative; }
-.dcf3-web__btn::after {
-  /* el cursor del paciente sobre el botón */
-  content: ""; position: absolute; right: -9px; bottom: -11px; width: 14px; height: 18px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 18'%3E%3Cpath d='M1 1l12 9.5-5 .6 3 5.4-2.3 1.2-3-5.4L1 15.6z' fill='%231a1826' stroke='%23fff' stroke-width='1.2'/%3E%3C/svg%3E") no-repeat center / contain;
-}
+/* Ajuste 2: la ventana enseña la plantilla real (una captura de la página
+   entera) y la desplaza despacio de arriba abajo y vuelta. Solo `transform`. */
+.dcf3-web__page { position: relative; height: 240px; overflow: hidden; background: #060b1a; }
+.dcf3-web__shot { display: block; width: 100%; height: auto; animation: dcf3Scroll 26s ease-in-out infinite; will-change: transform; }
+@keyframes dcf3Scroll { 0%, 22% { transform: translateY(0); } 58%, 68% { transform: translateY(calc(-100% + 240px)); } 100% { transform: translateY(0); } }
 .dcf3-web__templates { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-top: 1px solid #ebeaf0; background: #fafafc; }
 .dcf3-web__tlabel { font-size: 10.5px; font-weight: 600; color: #4d3fc6; white-space: nowrap; }
 .dcf3-web__tlist { display: flex; gap: 4px; flex: 1; min-width: 0; }
-.dcf3-web__tlist i { flex: 1; height: 18px; border-radius: 4px; display: block; border: 1px solid rgba(26, 24, 38, .08); }
-.dcf3-web__tlist i.is-on { outline: 2px solid #4d3fc6; outline-offset: 1px; }
+.dcf3-web__tlist img { flex: 1; min-width: 0; width: auto; height: 26px; object-fit: cover; border-radius: 4px; display: block; border: 1px solid rgba(26, 24, 38, .1); }
+.dcf3-web__tlist img.is-on { outline: 2px solid #4d3fc6; outline-offset: 1px; }
 .dcf3-web__arrow { width: 72px; height: 30px; display: block; }
 .dcf3-web__agenda { border-radius: 14px; background: #fff; border: 1px solid #e6e4ee; box-shadow: 0 24px 40px -28px rgba(26, 24, 38, .45); overflow: hidden; }
 .dcf3-web__ahead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #ebeaf0; }
@@ -240,6 +230,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .dcf3-card, .dcf3-card:hover { transition: none; transform: none; }
+  .dcf3-web__shot { animation: none; }
 }
 
 /* ── Ajuste 1: menos texto, ilustración protagonista ────────────────────── */
