@@ -254,3 +254,67 @@ test("el 0 sin marca de sede sigue valiendo la lista: computeMrr no adivina", ()
   // Y un precio negociado manda incluso si alguien la marcara como sede.
   assert.equal(computeMrr([{ ...clinic("CLINIC", 500), includedBranch: true }], PRICES).total, 500);
 });
+
+// ── Precio conservado (PR #425) ─────────────────────────────────────────────
+// La lista ya dice CLINIC $1,489 (planes nuevos); una Clínica de antes conserva $1,719.
+
+const PRECIOS_NUEVOS = { BASIC: 419, PRO: 689, CLINIC: 1489 };
+const conservada = (plan: string, precio: number, over: Partial<MrrClinicRow> = {}): MrrClinicRow => ({
+  plan,
+  monthlyPrice: 0,
+  subscriptionStatus: "active",
+  planOverrideFor: plan,
+  priceMxnMonthlyOverride: precio,
+  ...over,
+});
+
+test("una Clínica de antes vale su precio CONSERVADO ($1,719), no el de lista ($1,489)", () => {
+  const mrr = computeMrr([conservada("CLINIC", 1719)], PRECIOS_NUEVOS);
+  assert.equal(mrr.total, 1719);
+  assert.equal(mrr.byPlan[0].conserved, 1, "se marca para poder auditar por qué no cuadra con lista × clínicas");
+  assert.equal(mrr.byPlan[0].listPrice, 1489, "el desglose sigue enseñando la lista");
+  assert.equal(mrr.byPlan[0].negotiated, 0);
+});
+
+test("una Clínica NUEVA (sin overrides) vale la lista nueva", () => {
+  const mrr = computeMrr([clinic("CLINIC")], PRECIOS_NUEVOS);
+  assert.equal(mrr.total, 1489);
+  assert.equal(mrr.byPlan[0].conserved, 0);
+});
+
+test("precedencia: precio negociado > sede incluida ($0) > precio conservado > lista", () => {
+  // Negociado manda sobre el conservado (es lo que de verdad se le cobra).
+  const neg = computeMrr([conservada("CLINIC", 1719, { monthlyPrice: 1200 })], PRECIOS_NUEVOS);
+  assert.equal(neg.total, 1200);
+  assert.equal(neg.byPlan[0].negotiated, 1);
+  assert.equal(neg.byPlan[0].conserved, 0, "no se cuenta como conservada si la gana un negociado");
+  // Una sede incluida NO suma su copia del precio conservado (el SQL 1 se lo pone a las sedes también).
+  const sede = computeMrr([conservada("CLINIC", 1719), conservada("CLINIC", 1719, { includedBranch: true })], PRECIOS_NUEVOS);
+  assert.equal(sede.total, 1719);
+  assert.equal(sede.includedBranches, 1);
+  assert.equal(sede.byPlan[0].conserved, 1);
+});
+
+test("guarda planOverrideFor: si la clínica ya cambió de plan, su precio conservado NO viaja al plan nuevo", () => {
+  // Conservó $1,719 de CLINIC, pero hoy está en PRO: vale la lista de PRO.
+  const mrr = computeMrr([{ plan: "PRO", monthlyPrice: 0, subscriptionStatus: "active", planOverrideFor: "CLINIC", priceMxnMonthlyOverride: 1719 }], PRECIOS_NUEVOS);
+  assert.equal(mrr.total, 689);
+  assert.equal(mrr.byPlan[0].conserved, 0);
+});
+
+test("un precio conservado ≤ 0 o ausente se ignora: nunca «gratis» por accidente", () => {
+  assert.equal(computeMrr([conservada("PRO", 0)], PRECIOS_NUEVOS).total, 689);
+  assert.equal(computeMrr([conservada("PRO", -1)], PRECIOS_NUEVOS).total, 689);
+  assert.equal(computeMrr([{ plan: "PRO", monthlyPrice: 0, planOverrideFor: "PRO", priceMxnMonthlyOverride: null }], PRECIOS_NUEVOS).total, 689);
+});
+
+test("mezcla real: 5 Clínica de antes ($1,719) + 1 nueva ($1,489) + Pro sin overrides suma lo que de verdad se cobra", () => {
+  const filas = [
+    ...Array.from({ length: 5 }, () => conservada("CLINIC", 1719)),
+    clinic("CLINIC"),
+    clinic("PRO"),
+  ];
+  const mrr = computeMrr(filas, PRECIOS_NUEVOS);
+  assert.equal(mrr.total, 5 * 1719 + 1489 + 689);
+  assert.equal(mrr.byPlan.find((l) => l.plan === "CLINIC")!.conserved, 5);
+});

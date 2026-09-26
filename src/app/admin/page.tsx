@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { computeMrr, loadIncludedBranchIds, loadPlanPrices } from "@/lib/admin/mrr";
+import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { comparePaymentDateDesc, paymentDate } from "@/lib/admin/payment-date";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { daysUntil, getPlanStatus, isInTrial, isPlanExpired } from "@/lib/plan-status";
@@ -132,6 +133,8 @@ async function renderAdminDashboard() {
         id: true, name: true, plan: true, createdAt: true, trialEndsAt: true, subscriptionStatus: true,
         nextBillingDate: true, archivedAt: true, cancelRequested: true, cancelRequestedAt: true, timezone: true,
         monthlyPrice: true, aiTokensUsed: true, aiTokensLimit: true, aiLastResetAt: true,
+        // Precio que conserva la clínica (PR #425): el MRR la valúa con él, no con la lista.
+        ...CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT,
         paymentMethodType: true, paymentMethodLast4: true, preferredPaymentMethod: true,
         stripeCustomerId: true, stripeSubscriptionId: true, paypalSubscriptionId: true,
         _count: { select: { patients: true, appointments: true } },

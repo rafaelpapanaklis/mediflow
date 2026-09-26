@@ -1,6 +1,7 @@
 import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import {
   type AffiliateFunnel,
   activeClinicWhere,
@@ -162,7 +163,7 @@ export async function GET() {
         // `id` se selecciona para cruzar con los términos congelados del motor.
         prisma.clinic.findMany({
           where: { affiliateId: { not: null }, ...payingClinicWhere() },
-          select: { id: true, affiliateId: true, plan: true, monthlyPrice: true },
+          select: { id: true, affiliateId: true, plan: true, monthlyPrice: true, ...CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT },
         }),
         // activeClinicWhere() devuelve { OR: [...] }: va dentro de AND para
         // no pisar el filtro de affiliateId al combinarlos.
@@ -222,7 +223,7 @@ export async function GET() {
     const payingByAff = new Map<string, number>();
     let mrrReferredMxn = 0;
     for (const c of payingClinics) {
-      mrrReferredMxn += clinicMonthlyMxn(c.plan, c.monthlyPrice);
+      mrrReferredMxn += clinicMonthlyMxn(c.plan, c.monthlyPrice, c);
       if (c.affiliateId) payingByAff.set(c.affiliateId, (payingByAff.get(c.affiliateId) ?? 0) + 1);
     }
 

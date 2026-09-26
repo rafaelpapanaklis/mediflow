@@ -103,6 +103,26 @@ export function activeOverrides(clinic: ClinicOverrideFields | null | undefined)
   return Object.keys(out).length > 0 ? out : null;
 }
 
+/**
+ * Lo mínimo que hay que leer de una clínica para valuarla con su precio mensual
+ * conservado (MRR de /admin, cartera de clientes, afiliados). Va junto a `plan`.
+ * Para cobrar o aplicar topes se usa `CLINIC_OVERRIDE_SELECT`, que es el completo.
+ */
+export const CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT = {
+  planOverrideFor: true,
+  priceMxnMonthlyOverride: true,
+} as const;
+
+/**
+ * El precio MENSUAL que esta clínica conserva (Clínica de antes: $1,719), o `null`
+ * si no conserva ninguno vigente (sin override, o ya cambió de plan). Es lo que de
+ * verdad paga cuando `monthlyPrice` no lo dice (Stripe Checkout nunca lo escribe),
+ * así que es lo que debe valuar el MRR: el precio de lista lo infravalora.
+ */
+export function conservedMonthlyPrice(clinic: ClinicOverrideFields | null | undefined): number | null {
+  return activeOverrides(clinic)?.priceMxnMonthly ?? null;
+}
+
 /** ¿Esta clínica conserva algo distinto de lo que dice su plan? (para la pantalla de /admin). */
 export function hasActiveOverrides(clinic: ClinicOverrideFields | null | undefined): boolean {
   return activeOverrides(clinic) !== null;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
+import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import {
   type AffiliateStatsResponse,
   type AffiliateRefRow,
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
       where: { affiliateId, ...payingClinicWhere() },
       // `id` solo para cruzar los términos congelados; NUNCA sale en la
       // respuesta (privacidad: el afiliado ve conteos, no clínicas).
-      select: { id: true, plan: true, monthlyPrice: true },
+      select: { id: true, plan: true, monthlyPrice: true, ...CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT },
     }),
     prisma.affiliateCommission.groupBy({
       by: ["status"],
@@ -155,7 +156,7 @@ export async function GET(req: NextRequest) {
   }
 
   const mrrMxn = roundMxn(
-    payingList.reduce((acc, c) => acc + clinicMonthlyMxn(c.plan, c.monthlyPrice), 0),
+    payingList.reduce((acc, c) => acc + clinicMonthlyMxn(c.plan, c.monthlyPrice, c), 0),
   );
   const commissionPct = ctx.affiliate.commissionPct;
 

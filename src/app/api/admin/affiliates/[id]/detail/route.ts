@@ -2,6 +2,7 @@ import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResolvedPlans } from "@/lib/plans";
+import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { getAffiliateLevelInfo, type LevelInfo } from "@/lib/affiliate-levels";
 // El SEGUNDO NIVEL del programa: quién lo invitó y a quién invitó él. Los dos
 // helpers degradan a null/[] por su cuenta, así que la ficha nunca se rompe por
@@ -300,6 +301,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
             name: true,
             plan: true,
             monthlyPrice: true,
+            ...CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT,
             subscriptionStatus: true,
             createdAt: true,
           },
@@ -311,6 +313,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
               name: string;
               plan: string;
               monthlyPrice: number | null;
+              planOverrideFor: string | null;
+              priceMxnMonthlyOverride: number | null;
               subscriptionStatus: string | null;
               createdAt: Date;
             }>,
@@ -435,7 +439,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       let mrrMxn = 0;
       for (const c of clinicRows) {
         if (c.subscriptionStatus !== "active") continue;
-        mrrMxn += clinicMonthlyMxn(c.plan, c.monthlyPrice);
+        mrrMxn += clinicMonthlyMxn(c.plan, c.monthlyPrice, c);
       }
       projectedMonthlyMxn = mrrMxn * (level.pct / 100);
     }

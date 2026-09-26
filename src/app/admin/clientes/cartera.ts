@@ -58,6 +58,9 @@ export interface ClinicaDeCliente {
   plan: string;
   /** Precio NEGOCIADO. Manda sobre el de lista en el MRR; 0/null = sin negociar. */
   monthlyPrice: number | null;
+  /** Condiciones conservadas (PR #425): el precio mensual que sigue pagando mientras no cambie de plan. Ausentes = sin dato. */
+  planOverrideFor?: string | null;
+  priceMxnMonthlyOverride?: number | null;
   subscriptionStatus: string | null;
   trialEndsAt: string | null;
   nextBillingDate: string | null;
@@ -258,6 +261,8 @@ function aFilaMrr(c: ClinicaDeCliente): MrrClinicRow {
   return {
     plan: c.plan,
     monthlyPrice: c.monthlyPrice,
+    planOverrideFor: c.planOverrideFor ?? null,
+    priceMxnMonthlyOverride: c.priceMxnMonthlyOverride ?? null,
     subscriptionStatus: c.subscriptionStatus,
     includedBranch: !!c.sedeIncluida,
   };

@@ -11,6 +11,9 @@
  */
 
 import { createHash } from "crypto";
+// Precios de respaldo y precio conservado por clínica (puros, sin Prisma: siguen siendo client-safe).
+import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
+import { conservedMonthlyPrice, type ClinicOverrideFields } from "@/lib/billing/plan-overrides";
 // Matemática PURA del motor de comisiones (sin Prisma → este archivo sigue
 // siendo importable desde client components).
 import {
@@ -144,14 +147,22 @@ export function activeClinicWhere(now: Date = new Date()) {
 // ── MRR ──────────────────────────────────────────────────────────────────
 // Fallback de precios por plan (mismos montos que el dashboard de admin).
 
-export const PLAN_PRICES_MXN: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
+export const PLAN_PRICES_MXN: Record<string, number> = FALLBACK_PLAN_PRICES_MXN;
 
+/**
+ * Lo que vale al mes una clínica pagando: su `monthlyPrice` (negociado) si lo hay; si no, el
+ * precio que CONSERVA (PR #425: Clínica de antes $1,719) mientras siga en el plan al que se le
+ * conservó; si no, el precio de respaldo del plan (plan-shared, ya el vigente). Sin `conservadas`
+ * vale como antes.
+ */
 export function clinicMonthlyMxn(
   plan: string | null | undefined,
   monthlyPrice: number | null | undefined,
+  conservadas?: Omit<ClinicOverrideFields, "plan"> | null,
 ): number {
   if (typeof monthlyPrice === "number" && monthlyPrice > 0) return monthlyPrice;
-  return PLAN_PRICES_MXN[plan ?? ""] ?? 0;
+  const conservado = conservadas ? conservedMonthlyPrice({ ...conservadas, plan }) : null;
+  return conservado ?? PLAN_PRICES_MXN[plan ?? ""] ?? 0;
 }
 
 export function roundMxn(n: number): number {

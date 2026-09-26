@@ -13,6 +13,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
+import { conservedMonthlyPrice, type ClinicOverrideFields } from "@/lib/billing/plan-overrides";
 import { isPlanExpired } from "@/lib/plan-status";
 import { getPatientQuotaMany } from "@/lib/patient-quota";
 import { aggregatePatientQuotas, type PatientQuota } from "@/lib/patient-quota-shared";
@@ -89,6 +90,9 @@ export interface ClienteClinica {
   trialEndsAt: string | null;
   createdAt: string;
   monthlyPrice: number;
+  /** Condiciones conservadas (PR #425): el precio mensual que sigue pagando si no cambió de plan. */
+  planOverrideFor?: string | null;
+  priceMxnMonthlyOverride?: number | null;
   patients: number;             // = patientQuota.used (excluye borrados ARCO)
   /** Cupo de ESTA sede (su propio plan): used / max / unlimited. */
   patientQuota: PatientQuota;
@@ -140,10 +144,18 @@ export interface ClienteDetalle {
 
 // ───────────────────────── Helpers puros ─────────────────────────
 
-/** Precio mensual del plan (usa monthlyPrice si está, si no plans.ts). */
-export function planPriceMxn(plan: string, monthlyPrice?: number | null): number {
+/**
+ * Precio mensual de una clínica: `monthlyPrice` (negociado / activación manual) si está;
+ * si no, el precio que CONSERVA (PR #425: Clínica de antes $1,719) mientras siga en ese
+ * plan; si no, el de respaldo del plan. Con `clinica` ausente vale como antes.
+ */
+export function planPriceMxn(
+  plan: string,
+  monthlyPrice?: number | null,
+  clinica?: Omit<ClinicOverrideFields, "plan"> | null,
+): number {
   if (monthlyPrice && monthlyPrice > 0) return monthlyPrice;
-  return FALLBACK_PLAN_PRICES_MXN[plan] ?? 0;
+  return conservedMonthlyPrice(clinica ? { ...clinica, plan } : null) ?? FALLBACK_PLAN_PRICES_MXN[plan] ?? 0;
 }
 
 function clinicStatus(subscriptionStatus: string | null, trialEndsAt: Date | null): ClinicNormStatus {
@@ -245,6 +257,8 @@ type OwnerClinicRow = {
     slug: string;
     plan: string;
     monthlyPrice: number | null;
+    planOverrideFor: string | null;
+    priceMxnMonthlyOverride: number | null;
     subscriptionStatus: string | null;
     trialEndsAt: Date | null;
     createdAt: Date;
@@ -280,6 +294,8 @@ const OWNER_CLINIC_SELECT = {
       slug: true,
       plan: true,
       monthlyPrice: true,
+      planOverrideFor: true,
+      priceMxnMonthlyOverride: true,
       subscriptionStatus: true,
       trialEndsAt: true,
       createdAt: true,
@@ -327,7 +343,7 @@ export async function getClientesList(): Promise<ClienteRow[]> {
 
     let mrr = 0;
     clinics.forEach((c, i) => {
-      if (norms[i] === "active") mrr += planPriceMxn(c.plan, c.monthlyPrice);
+      if (norms[i] === "active") mrr += planPriceMxn(c.plan, c.monthlyPrice, c);
     });
 
     let lastAccess: Date | null = null;
@@ -484,7 +500,7 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
 
   let mrr = 0;
   clinicsRaw.forEach((c, i) => {
-    if (norms[i] === "active") mrr += planPriceMxn(c.plan, c.monthlyPrice);
+    if (norms[i] === "active") mrr += planPriceMxn(c.plan, c.monthlyPrice, c);
   });
 
   let lastAccess: Date | null = null;
@@ -510,12 +526,14 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
     name: c.name,
     slug: c.slug,
     plan: c.plan,
-    planPrice: planPriceMxn(c.plan, c.monthlyPrice),
+    planPrice: planPriceMxn(c.plan, c.monthlyPrice, c),
     status: norms[i],
     subscriptionStatus: c.subscriptionStatus,
     trialEndsAt: c.trialEndsAt ? c.trialEndsAt.toISOString() : null,
     createdAt: c.createdAt.toISOString(),
     monthlyPrice: c.monthlyPrice || 0,
+    planOverrideFor: c.planOverrideFor,
+    priceMxnMonthlyOverride: c.priceMxnMonthlyOverride,
     patients: clinicQuota(c.id).used,
     patientQuota: clinicQuota(c.id),
     appointments: c._count.appointments,
@@ -537,7 +555,7 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
   clinicsRaw.forEach((c, i) => {
     if (!planDistMap[c.plan]) planDistMap[c.plan] = { plan: c.plan, count: 0, mrr: 0 };
     planDistMap[c.plan].count += 1;
-    if (norms[i] === "active") planDistMap[c.plan].mrr += planPriceMxn(c.plan, c.monthlyPrice);
+    if (norms[i] === "active") planDistMap[c.plan].mrr += planPriceMxn(c.plan, c.monthlyPrice, c);
   });
   const planDistribution = Object.keys(planDistMap).map((k) => planDistMap[k]);
 

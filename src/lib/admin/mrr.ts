@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
+import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { computeMrr, EMPTY_MRR, findIncludedBranchIds, type AdminMrr } from "./mrr-core";
 
 /**
@@ -78,7 +79,8 @@ export async function getAdminMrr(): Promise<AdminMrr> {
     const [clinics, planPrices, sedes] = await Promise.all([
       prisma.clinic.findMany({
         where: { subscriptionStatus: "active" },
-        select: { id: true, plan: true, monthlyPrice: true, subscriptionStatus: true },
+        // + el precio que conserva (PR #425): una Clínica de antes vale $1,719, no la lista.
+        select: { id: true, plan: true, monthlyPrice: true, subscriptionStatus: true, ...CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT },
       }),
       loadPlanPrices(),
       loadIncludedBranchIds(),

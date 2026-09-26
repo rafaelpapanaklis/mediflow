@@ -100,7 +100,16 @@ function nextBillingLabel(iso: string | null, ahora: Date): string {
  * la misma tarjeta en cuanto Rafael tocara los precios en /admin/settings.
  */
 function precioMensual(clinic: ClienteClinica, planPrices: Record<string, number>): number {
-  return computeMrr([{ plan: clinic.plan, monthlyPrice: clinic.monthlyPrice }], planPrices).total;
+  return computeMrr(
+    [{
+      plan: clinic.plan,
+      monthlyPrice: clinic.monthlyPrice,
+      // El precio que conserva (PR #425), o lo que paga de verdad una clínica de antes no coincide con la lista.
+      planOverrideFor: clinic.planOverrideFor ?? null,
+      priceMxnMonthlyOverride: clinic.priceMxnMonthlyOverride ?? null,
+    }],
+    planPrices,
+  ).total;
 }
 
 async function postJson(url: string, body: any): Promise<any> {

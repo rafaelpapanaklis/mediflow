@@ -166,7 +166,7 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
             {d.negocio.mrr.byPlan.filter((p) => p.clinics > 0).map((p) => (
-              <Chip key={p.plan} tono={p.plan === "CLINIC" ? "brand" : p.plan === "PRO" ? "info" : "neutral"} title={`${p.clinics} × ${formatCurrency(p.listPrice)}${p.negotiated ? ` · ${p.negotiated} con precio negociado` : ""}`}>
+              <Chip key={p.plan} tono={p.plan === "CLINIC" ? "brand" : p.plan === "PRO" ? "info" : "neutral"} title={`${p.clinics} × ${formatCurrency(p.listPrice)}${p.negotiated ? ` · ${p.negotiated} con precio negociado` : ""}${p.conserved ? ` · ${p.conserved} con precio conservado` : ""}`}>
                 {p.plan} · {p.clinics} · {formatCurrency(p.total)}
               </Chip>
             ))}

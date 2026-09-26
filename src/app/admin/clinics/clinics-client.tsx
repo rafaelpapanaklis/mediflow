@@ -22,6 +22,7 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
 import { includedBranchesHint, mrrBreakdownHint, type AdminMrr } from "@/lib/admin/mrr-core";
+import { conservedMonthlyPrice } from "@/lib/billing/plan-overrides";
 import {
   evaluarSaludClinica,
   resumirCartera,
@@ -54,6 +55,9 @@ export interface FilaClinica {
   subscriptionStatus: string | null;
   nextBillingDate: Date | string | null;
   monthlyPrice: number | null;
+  /** Condiciones conservadas (PR #425): el precio mensual que sigue pagando si no cambió de plan. */
+  planOverrideFor?: string | null;
+  priceMxnMonthlyOverride?: number | null;
   aiTokensUsed: number | null;
   aiTokensLimit: number | null;
   cancelRequested: boolean | null;
@@ -526,6 +530,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
                 const listPrice = planPrices[clinic.plan] ?? 0;
                 const negociado = Number(clinic.monthlyPrice ?? 0) > 0 ? Number(clinic.monthlyPrice) : null;
                 const incluida  = clinic.sedeIncluida && negociado === null;
+                // Lo mismo que vale en el MRR: negociado > sede incluida ($0) > precio conservado > lista.
+                const conservado = negociado === null && !incluida ? conservedMonthlyPrice(clinic) : null;
                 const compra    = ultimaCompra(clinic);
                 const pago      = metodoDePago(clinic);
                 // Una fecha de cobro ya pasada no es una renovación: se calla (la vencida ya lo dice su estado).
@@ -579,8 +585,9 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
                       <div className={css.pila}>
                         <Chip tono={planTono(clinic.plan)}>{clinic.plan}</Chip>
                         <span className={`${css.meta} ${css.num}`}>
-                          {formatCurrency(incluida ? 0 : negociado ?? listPrice, "MXN")}/mes
+                          {formatCurrency(incluida ? 0 : negociado ?? conservado ?? listPrice, "MXN")}/mes
                           {negociado !== null && <span title="Precio negociado de esta clínica; manda sobre el del plan"> · negociado</span>}
+                          {conservado !== null && <span title="Precio que esta clínica ya tenía antes de los planes nuevos y conserva mientras siga en este plan"> · conservado</span>}
                           {incluida && <span title="Sede incluida en el plan de su clínica madre: no paga aparte y no suma al MRR"> · incluida</span>}
                         </span>
                         <select

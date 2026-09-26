@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { loadPlanPrices, loadIncludedBranchIds, computeMrr, type AdminMrr } from "@/lib/admin/mrr";
+import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
@@ -54,6 +55,8 @@ export default async function AdminClinicsPage() {
         subscriptionStatus: true, nextBillingDate: true,
         // monthlyPrice: el precio NEGOCIADO. Manda sobre el del plan en el MRR.
         monthlyPrice: true,
+        // El precio que conserva (PR #425): va entre el negociado y el de lista.
+        ...CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT,
         paymentMethodCollected: true, paymentMethodType: true, paymentMethodLast4: true,
         // Para «cómo paga» (@/lib/admin/uso-core.metodoDePago) y el periodo CFDI.
         preferredPaymentMethod: true, stripeCustomerId: true, stripeSubscriptionId: true, paypalSubscriptionId: true, timezone: true,

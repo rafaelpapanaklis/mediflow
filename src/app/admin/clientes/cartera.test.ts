@@ -466,3 +466,22 @@ test("un cobro sin fecha suma al histórico y no inventa un día", () => {
   assert.equal(r.mes, 0);
   assert.equal(r.anio, 0);
 });
+
+// ── Precio conservado (PR #425) ────────────────────────────────────────────
+
+test("el MRR del cliente y de cada clínica usa el precio CONSERVADO, no el de lista", () => {
+  // Lista de CLINIC = 300 (inyectada); esta clínica conserva 500.
+  const c = clinica({ plan: "CLINIC", planOverrideFor: "CLINIC", priceMxnMonthlyOverride: 500 });
+  const nueva = clinica({ id: "c2", plan: "CLINIC" });
+  const fila = valorarCliente(cliente([c, nueva]), PRECIOS, AHORA);
+  assert.equal(fila.mrr.total, 500 + 300);
+  const porClinica = Object.fromEntries(fila.clinicas.map((v) => [v.clinica.id, v.mrr]));
+  assert.equal(porClinica["c1"], 500);
+  assert.equal(porClinica["c2"], 300);
+  assert.equal(fila.mrr.byPlan[0].conserved, 1);
+});
+
+test("un precio negociado sigue mandando sobre el conservado", () => {
+  const c = clinica({ plan: "CLINIC", monthlyPrice: 450, planOverrideFor: "CLINIC", priceMxnMonthlyOverride: 500 });
+  assert.equal(valorarCliente(cliente([c]), PRECIOS, AHORA).mrr.total, 450);
+});

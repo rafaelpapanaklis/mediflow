@@ -60,6 +60,9 @@ const SELECT_DUENO = {
       slug: true,
       plan: true,
       monthlyPrice: true,
+      // Precio que conserva la clínica (PR #425): el MRR de la cartera la valúa con él.
+      planOverrideFor: true,
+      priceMxnMonthlyOverride: true,
       subscriptionStatus: true,
       trialEndsAt: true,
       nextBillingDate: true,
@@ -94,6 +97,8 @@ type FilaDueno = {
     slug: string;
     plan: string;
     monthlyPrice: number | null;
+    planOverrideFor: string | null;
+    priceMxnMonthlyOverride: number | null;
     subscriptionStatus: string | null;
     trialEndsAt: Date;
     nextBillingDate: Date | null;
@@ -241,6 +246,8 @@ async function medirClinicas(
       slug: c.slug,
       plan: c.plan,
       monthlyPrice: c.monthlyPrice,
+      planOverrideFor: c.planOverrideFor,
+      priceMxnMonthlyOverride: c.priceMxnMonthlyOverride,
       subscriptionStatus: c.subscriptionStatus,
       trialEndsAt: iso(c.trialEndsAt),
       nextBillingDate: iso(c.nextBillingDate),

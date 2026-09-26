@@ -7,11 +7,20 @@
  * le añade la consulta a Prisma y los precios de plan_configs.
  */
 
+import { conservedMonthlyPrice } from "@/lib/billing/plan-overrides";
+
 /** Lo mínimo que hace falta de una clínica para valuarla. */
 export interface MrrClinicRow {
   plan: string | null;
   monthlyPrice: number | null;
   subscriptionStatus?: string | null;
+  /**
+   * Condiciones conservadas (PR #425): si la clínica sigue en el plan que conservó
+   * (`planOverrideFor === plan`) y tiene un precio mensual conservado, ESE es su valor,
+   * no el de lista. Opcionales: una fila sin estos campos se valúa con la lista.
+   */
+  planOverrideFor?: string | null;
+  priceMxnMonthlyOverride?: number | null;
   /**
    * Sede incluida en la suscripción de su clínica madre: vale $0 y no suma.
    * Lo decide `findIncludedBranchIds` (abajo), nunca el llamador a ojo.
@@ -26,6 +35,8 @@ export interface MrrPlanLine {
   clinics: number;
   /** Cuántas de esas clínicas cobran un precio negociado (monthlyPrice > 0). */
   negotiated: number;
+  /** Cuántas valen su precio CONSERVADO de antes de los planes nuevos (no el de lista). */
+  conserved: number;
   /** Suma real aportada por ese plan. */
   total: number;
 }
@@ -63,7 +74,10 @@ export function isMrrBillable(clinic: { subscriptionStatus?: string | null }): b
  *      es lo que de verdad se le cobra y manda sobre la lista de precios.
  *   2) sede incluida en el plan de su madre → $0. Ya está pagada dentro de la
  *      suscripción de la madre (CLINIC incluye hasta `maxClinics` sedes).
- *   3) el precio del plan en plan_configs — el caso normal, porque Stripe
+ *   3) el precio que CONSERVA la clínica (planes nuevos, sep-2026), mientras siga
+ *      en el plan al que se le conservó: es lo que de verdad paga (Clínica de
+ *      antes: $1,719 aunque la lista ya diga $1,489).
+ *   4) el precio del plan en plan_configs — el caso normal, porque Stripe
  *      Checkout nunca escribe monthlyPrice.
  * Un plan desconocido vale 0 en vez de inventar un precio.
  *
@@ -75,7 +89,12 @@ function clinicMonthlyValue(clinic: MrrClinicRow, listPrice: number): number {
   const negotiated = Number(clinic.monthlyPrice ?? 0);
   if (negotiated > 0) return negotiated;
   if (clinic.includedBranch) return 0;
-  return listPrice;
+  return conservedMonthlyPrice(clinic) ?? listPrice;
+}
+
+/** ¿Vale su precio conservado y no el de lista? (solo si no la gana un precio negociado ni es sede incluida). */
+function isConserved(clinic: MrrClinicRow): boolean {
+  return !(Number(clinic.monthlyPrice ?? 0) > 0) && !clinic.includedBranch && conservedMonthlyPrice(clinic) !== null;
 }
 
 /** Una sede incluida que de verdad no paga: sin precio propio. */
@@ -121,12 +140,13 @@ export function computeMrr(
 
     let line = lines.get(plan);
     if (!line) {
-      line = { plan, listPrice, clinics: 0, negotiated: 0, total: 0 };
+      line = { plan, listPrice, clinics: 0, negotiated: 0, conserved: 0, total: 0 };
       lines.set(plan, line);
     }
     line.clinics += 1;
     line.total += value;
     if (Number(clinic.monthlyPrice ?? 0) > 0) line.negotiated += 1;
+    else if (isConserved(clinic)) line.conserved += 1;
     total += value;
   }
 
