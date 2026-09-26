@@ -49,11 +49,13 @@ export function IluPaginaWeb() {
           <span className="dcf3-web__url"><IconoPanel nombre="lock" size={11} /> clinica-altabrisa.dalecontrol.com</span>
         </div>
         <div className="dcf3-web__page">
-          {/* `loading="eager"`: con la carga perezosa de next/image esta imagen
-              NUNCA recibía su `src` (medido el 26-sep: `currentSrc` vacío y la
-              ventana negra todo el tiempo). Está dentro de una caja recortada
-              y animada con transform, y el observador de Next no la daba por
-              visible. Pesa 40 KB: se pide de entrada y ya. */}
+          {/* `unoptimized` + `loading="eager"`: la ventana se veía NEGRA porque el
+              optimizador de next/image se colgaba generando la versión WebP de
+              esta imagen (1120 × 5991) para ciertos anchos (medido el 26-sep:
+              `/_next/image?…&w=640` con Accept image/webp no contesta nunca y
+              el <img> se queda con `complete: false`). El archivo ya viene
+              optimizado (WebP, 221 KB): se sirve tal cual, sin pasar por el
+              optimizador, y se pide de entrada. */}
           <Image
             src="/landing/web/altabrisa-especialistas.webp"
             alt=""
@@ -61,6 +63,7 @@ export function IluPaginaWeb() {
             height={ALTO_WEB}
             sizes="(max-width: 720px) 90vw, 380px"
             loading="eager"
+            unoptimized
             className="dcf3-web__shot"
           />
         </div>
