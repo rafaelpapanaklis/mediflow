@@ -396,14 +396,18 @@ function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValora
             : <span className="ad-uso--sin">Tokens IA: sin cupo en el plan</span>}
           {u.cfdiUsados !== null && u.cfdiIncluidos > 0
             ? <BarraUso label="CFDI del mes" usado={u.cfdiUsados} tope={u.cfdiIncluidos} fmt={(n) => String(n)} compacta />
-            : <span className="ad-uso--sin">CFDI: sin dato</span>}
+            : u.cfdiUsados !== null
+              ? <span className="ad-uso--sin">CFDI del mes: {u.cfdiUsados} · el plan no incluye timbres</span>
+              : <span className="ad-uso--sin">CFDI: sin dato</span>}
           {u.usuarios !== null
             ? <BarraUso label="Usuarios" usado={u.usuarios} tope={u.usuariosTope} fmt={(n) => String(n)} compacta />
             : <span className="ad-uso--sin">Usuarios: sin dato</span>}
           <span className="ad-uso__linea" style={{ gridColumn: "1 / -1" }}>
             <span className="ad-uso__label">Saldo IA</span>
             <span className="ad-num">
-              {u.saldoIaCents === null ? <span className="ad-suave">sin monedero</span> : <strong style={{ color: u.saldoIaCents < 0 ? "var(--danger)" : undefined }}>{fmtMXNdec(u.saldoIaCents / 100)}</strong>}
+              {u.saldoIaCents === null
+                ? <span className="ad-suave">{u.saldoIaStatus === "SIN_DATO" ? "sin dato" : "sin monedero"}</span>
+                : <strong style={{ color: u.saldoIaCents < 0 ? "var(--danger)" : undefined }}>{fmtMXNdec(u.saldoIaCents / 100)}</strong>}
               {u.sedes !== null && <span className="ad-suave"> · {u.sedes}{u.sedesTope !== null ? `/${u.sedesTope}` : ""} sedes del dueño</span>}
             </span>
           </span>

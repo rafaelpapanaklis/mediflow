@@ -10,7 +10,9 @@
  *    `storageQuotaError` (@/lib/storage-quota) decide si una subida cabe en el
  *    plan; el tope es `plan_configs.storageBytes`. Subestima el uso real:
  *    varias rutas suben a Storage sin registrar tamaño (ver ese archivo).
- *  · Tokens IA = Clinic.aiTokensUsed / aiTokensLimit (se reinician el día 1).
+ *  · Tokens IA = Clinic.aiTokensUsed / aiTokensLimit, con el contador puesto a
+ *    0 si `aiLastResetAt` es de un mes anterior (`tokensVigentes`), igual que
+ *    /api/ai/usage: el reseteo real sólo ocurre en la primera llamada del mes.
  *  · CFDI del mes = cfdi_usage.stamped del periodo «YYYY-MM» de la clínica;
  *    incluidos = plan_configs.cfdiMonthly. Misma lectura que /api/cfdi/usage.
  *  · Usuarios = filas User activas de la clínica; tope = plan_configs.maxUsers.
@@ -20,6 +22,21 @@
  *    @/lib/ai-billing/saldo-estado.
  */
 import { LOW_BALANCE_CENTS } from "@/lib/ai-billing/saldo-estado";
+
+/**
+ * Tokens IA consumidos ESTE mes. `aiTokensUsed` sólo se pone a cero en la
+ * primera llamada de IA del mes (@/lib/ai-tokens), así que un contador de
+ * agosto que nadie ha tocado en septiembre sigue diciendo «200k». Misma
+ * aritmética que /api/ai/usage (mes de calendario con getters locales): si el
+ * último reseteo es de un mes anterior, este mes lleva 0.
+ */
+export function tokensVigentes(usados: number, ultimoReseteo: Date | string | null | undefined, ahora: Date): number {
+  if (!ultimoReseteo) return usados;
+  const r = ultimoReseteo instanceof Date ? ultimoReseteo : new Date(ultimoReseteo);
+  if (Number.isNaN(r.getTime())) return usados;
+  const meses = (ahora.getFullYear() - r.getFullYear()) * 12 + (ahora.getMonth() - r.getMonth());
+  return meses >= 1 ? 0 : usados;
+}
 
 export type NivelCupo = "ok" | "aviso" | "lleno";
 
@@ -56,6 +73,7 @@ export interface UsoClinica {
   sedesTope: number | null;
   /** null = sin monedero (no es saldo 0). */
   saldoIaCents: number | null;
+  /** ACTIVE | PAUSED; `SIN_DATO` si la consulta de monederos falló. */
   saldoIaStatus: string | null;
 }
 
@@ -86,6 +104,8 @@ export function tokensCortos(n: number): string {
 // ── Método de pago ─────────────────────────────────────────────────────────
 
 export interface DatosMetodoPago {
+  /** Suscripción viva en Stripe: cobra sola, mande lo que mande el alta. */
+  stripeSubscriptionId?: string | null;
   paymentMethodType?: string | null;
   paymentMethodLast4?: string | null;
   preferredPaymentMethod?: string | null;
@@ -99,18 +119,28 @@ const METODO: Record<string, string> = {
 };
 
 /**
- * Cómo paga la clínica, en dos palabras. Misma lectura que la ficha del
- * cliente: los campos paymentMethod* los escribe el alta y nadie los
- * actualiza, así que cuando hay cliente en Stripe se dice «Stripe» aunque el
- * alta no capturara tarjeta. «No registrado» no es «no paga».
+ * Cómo paga la clínica, en dos palabras, y si el cobro es MANUAL (alguien
+ * tiene que transferir y Rafael verificar) o automático.
+ *
+ * Manda lo que cobra HOY: una suscripción viva en Stripe o PayPal cobra sola
+ * aunque en el alta se eligiera «transferencia» (los campos paymentMethod* los
+ * escribe el registro y nadie los actualiza: el alta arranca en «transfer» por
+ * defecto). Sólo sin suscripción se mira lo del alta. «No registrado» no es
+ * «no paga».
  */
 export function metodoDePago(c: DatosMetodoPago): { etiqueta: string; manual: boolean } {
+  if (c.stripeSubscriptionId) {
+    return {
+      etiqueta: c.paymentMethodType === "card" && c.paymentMethodLast4 ? `Tarjeta ••${c.paymentMethodLast4}` : "Stripe",
+      manual: false,
+    };
+  }
+  if (c.paypalSubscriptionId || c.paymentMethodType === "paypal") return { etiqueta: "PayPal", manual: false };
   if (c.paymentMethodType === "card") {
     return { etiqueta: `Tarjeta ••${c.paymentMethodLast4 ?? "••••"}`, manual: false };
   }
-  if (c.paymentMethodType === "paypal" || c.paypalSubscriptionId) return { etiqueta: "PayPal", manual: false };
   if (c.paymentMethodType === "transfer") return { etiqueta: "Transferencia", manual: true };
-  if (c.preferredPaymentMethod) {
+  if (c.preferredPaymentMethod && c.preferredPaymentMethod !== "none") {
     const m = c.preferredPaymentMethod;
     return { etiqueta: METODO[m] ?? m, manual: m !== "stripe" && m !== "paypal" && m !== "mercadopago" };
   }
@@ -179,6 +209,22 @@ export interface SenalCupo {
   dato: string;
   /** Dinero en juego (0 si no es de dinero). */
   monto: number;
+  /** Cuántas cosas son (pagos por verificar); 1 si no aplica. */
+  cantidad: number;
+}
+
+/**
+ * ¿Algún cupo al 80 % o más, CFDI por encima de lo incluido, usuarios al tope
+ * o saldo IA en problemas? La MISMA regla que `senalesDeCupo`, para que el
+ * filtro «Cerca del tope» de Clínicas y la tarjeta del Dashboard cuenten a
+ * las mismas clínicas.
+ */
+export function cercaDelTope(u: UsoClinica | null | undefined): boolean {
+  if (!u) return false;
+  return senalesDeCupo({
+    id: "", nombre: "", uso: u, diasHastaRenovacion: null, suscripcionActiva: false, metodoManual: false,
+    pagosPorVerificar: { cuantos: 0, monto: 0 },
+  }).length > 0;
 }
 
 export interface EntradaSenalCupo {
@@ -212,7 +258,7 @@ function pctTexto(usado: number, tope: number): string {
 export function senalesDeCupo(e: EntradaSenalCupo): SenalCupo[] {
   const out: SenalCupo[] = [];
   const u = e.uso;
-  const base = { clinicaId: e.id, clinicaNombre: e.nombre, monto: 0 };
+  const base = { clinicaId: e.id, clinicaNombre: e.nombre, monto: 0, cantidad: 1 };
 
   if (e.pagosPorVerificar.cuantos > 0) {
     out.push({
@@ -220,6 +266,7 @@ export function senalesDeCupo(e: EntradaSenalCupo): SenalCupo[] {
       titulo: TITULO_MOTIVO_CUPO["pago-por-verificar"],
       dato: e.pagosPorVerificar.cuantos === 1 ? "1 pago" : `${e.pagosPorVerificar.cuantos} pagos`,
       monto: e.pagosPorVerificar.monto,
+      cantidad: e.pagosPorVerificar.cuantos,
     });
   }
 
@@ -269,13 +316,16 @@ export function senalesDeCupo(e: EntradaSenalCupo): SenalCupo[] {
     });
   }
 
-  if (u.saldoIaCents !== null) {
+  // Saldo IA: en negativo es un problema; por debajo del umbral de Tesorería,
+  // un aviso. Un monedero en $0 exacto NO avisa: se crea con sólo abrir la
+  // pantalla del saldo, sin haber recargado nunca, y no hay nada que agotar.
+  if (u.saldoIaCents !== null && u.saldoIaStatus !== "SIN_DATO") {
     if (u.saldoIaCents < 0) {
       out.push({
         ...base, clave: `${e.id}:saldo-ia`, motivo: "saldo-ia", severidad: "alto",
         titulo: "Saldo IA en negativo", dato: `$${(u.saldoIaCents / 100).toFixed(2)}`, monto: 0,
       });
-    } else if (u.saldoIaCents < LOW_BALANCE_CENTS) {
+    } else if (u.saldoIaCents > 0 && u.saldoIaCents < LOW_BALANCE_CENTS) {
       out.push({
         ...base, clave: `${e.id}:saldo-ia`, motivo: "saldo-ia", severidad: "medio",
         titulo: "Saldo IA bajo", dato: `$${(u.saldoIaCents / 100).toFixed(2)}`,

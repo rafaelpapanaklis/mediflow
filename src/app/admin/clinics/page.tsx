@@ -56,7 +56,7 @@ export default async function AdminClinicsPage() {
         monthlyPrice: true,
         paymentMethodCollected: true, paymentMethodType: true, paymentMethodLast4: true,
         // Para «cómo paga» (@/lib/admin/uso-core.metodoDePago) y el periodo CFDI.
-        preferredPaymentMethod: true, stripeCustomerId: true, paypalSubscriptionId: true, timezone: true,
+        preferredPaymentMethod: true, stripeCustomerId: true, stripeSubscriptionId: true, paypalSubscriptionId: true, timezone: true,
         cancelRequested: true, cancelRequestedAt: true,
         state: true, clinicSize: true,
         _count: { select: { patients: true, users: true, appointments: true } },

@@ -12,7 +12,7 @@ import {
 } from "@/components/admin/portada/atencion-core";
 import { contarTiles, unirPendientes } from "@/components/admin/portada/pendientes";
 import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
-import { metodoDePago, senalesDeCupo, DIAS_RENOVACION_PROXIMA, type SenalCupo } from "@/lib/admin/uso-core";
+import { metodoDePago, senalesDeCupo, DIAS_RENOVACION_PROXIMA, USO_VACIO, type SenalCupo } from "@/lib/admin/uso-core";
 import { conteoMensual, serieNegocio, sumaPorPeriodo, ultimosMesesAdmin, type CobroCrudo } from "@/lib/admin/serie-negocio";
 import { CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
 import { listarPendientesAdmin } from "@/lib/billing/spei-directo";
@@ -131,9 +131,9 @@ async function renderAdminDashboard() {
       select: {
         id: true, name: true, plan: true, createdAt: true, trialEndsAt: true, subscriptionStatus: true,
         nextBillingDate: true, archivedAt: true, cancelRequested: true, cancelRequestedAt: true, timezone: true,
-        monthlyPrice: true, aiTokensUsed: true, aiTokensLimit: true,
+        monthlyPrice: true, aiTokensUsed: true, aiTokensLimit: true, aiLastResetAt: true,
         paymentMethodType: true, paymentMethodLast4: true, preferredPaymentMethod: true,
-        stripeCustomerId: true, paypalSubscriptionId: true,
+        stripeCustomerId: true, stripeSubscriptionId: true, paypalSubscriptionId: true,
         _count: { select: { patients: true, appointments: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -147,10 +147,10 @@ async function renderAdminDashboard() {
     }),
   ]);
 
-  // Tanda 2 — 5 consultas agregadas. Cada una con su .catch: un timeout no
+  // Tanda 2 — 6 consultas agregadas. Cada una con su .catch: un timeout no
   // tumba la portada, pero lo que falla se dice (`avisos`).
   const avisos: string[] = [];
-  const [ultimaCitaRows, pagadasRows, cobros12mRows, accesoRows, cfdiRows] = await Promise.all([
+  const [ultimaCitaRows, pagadasRows, cobros12mRows, accesoRows, cfdiRows, pendientesRows] = await Promise.all([
     prisma.appointment
       .groupBy({ by: ["clinicId"], where: { startsAt: { lte: now } }, _max: { startsAt: true } })
       .catch((e) => { console.error("[admin] última cita por clínica:", e); return null; }),
@@ -176,6 +176,12 @@ async function renderAdminDashboard() {
     prisma.cfdiUsage
       .findMany({ where: { period: { in: periodosSpark } }, select: { period: true, stamped: true } })
       .catch((e) => { console.error("[admin] CFDI por mes:", e); return null; }),
+    // TODOS los pagos de suscripción en «pendiente», sin ventana: la misma lista
+    // que /admin/payments verifica. Los de la ventana de dos meses (subInvoices)
+    // no bastan: una transferencia registrada en julio seguía sin verificar.
+    prisma.subscriptionInvoice
+      .findMany({ where: { status: "pending" }, select: { clinicId: true, amount: true, method: true } })
+      .catch((e) => { console.error("[admin] pagos pendientes:", e); return null; }),
   ]);
 
   // Tanda 3 — cuánto ha HECHO cada clínica (filas crudas de 60 días).
@@ -207,6 +213,7 @@ async function renderAdminDashboard() {
   if (!accesoRows) avisos.push("accesos al panel");
   if (!cobros12mRows) avisos.push("ingresos del año");
   if (!cfdiRows) avisos.push("CFDI por mes");
+  if (!pendientesRows) avisos.push("pagos pendientes de verificar");
   if (!speiPendientes) avisos.push("transferencias SPEI por confirmar");
   if (!citasRows || !facturasRows || !notasRows) avisos.push(`actividad de los últimos ${DIAS_ACTIVIDAD} días`);
   avisos.push(...uso.avisos);
@@ -234,6 +241,7 @@ async function renderAdminDashboard() {
     anio: suma(anio0),
     porCobrar: subInvoices.filter((i) => i.status === "pending" || i.status === "failed").reduce((s, i) => s + i.amount, 0),
     fallidos: subInvoices.filter((i) => i.status === "failed").length,
+    medido: cobros12mRows !== null,
   };
   const altas = allClinics.map((c) => c.createdAt);
   const bajas = allClinics.flatMap((c) => (c.archivedAt ? [c.archivedAt] : []));
@@ -259,21 +267,23 @@ async function renderAdminDashboard() {
   const mrrActive = computeMrr(activeClinics.map(conSede), planPrices);
   const mrrTrial  = computeMrr(trialClinics.map(conSede), planPrices);
 
-  // ── Deuda y pagos por verificar, por clínica, de las mismas filas que el KPI ──
+  // ── Deuda por clínica, de las mismas filas que el KPI «por cobrar» ─────────
   const deudaPorClinica = new Map<string, { fallidos: number; monto: number }>();
-  const porVerificar = new Map<string, { cuantos: number; monto: number }>();
   for (const inv of subInvoices) {
     if (inv.status !== "pending" && inv.status !== "failed") continue;
     const acc = deudaPorClinica.get(inv.clinicId) ?? { fallidos: 0, monto: 0 };
     if (inv.status === "failed") acc.fallidos += 1;
     acc.monto += inv.amount;
     deudaPorClinica.set(inv.clinicId, acc);
-    if (inv.status === "pending" && !METODOS_AUTOMATICOS.has(inv.method ?? "")) {
-      const v = porVerificar.get(inv.clinicId) ?? { cuantos: 0, monto: 0 };
-      v.cuantos += 1;
-      v.monto += inv.amount;
-      porVerificar.set(inv.clinicId, v);
-    }
+  }
+  // ── Pagos por verificar: pendientes con método manual (sin ventana) ────────
+  const porVerificar = new Map<string, { cuantos: number; monto: number }>();
+  for (const inv of pendientesRows ?? []) {
+    if (METODOS_AUTOMATICOS.has(inv.method ?? "")) continue;
+    const v = porVerificar.get(inv.clinicId) ?? { cuantos: 0, monto: 0 };
+    v.cuantos += 1;
+    v.monto += inv.amount;
+    porVerificar.set(inv.clinicId, v);
   }
 
   // Las SPEI directas pendientes se suman a «pagos por verificar» de su clínica.
@@ -311,12 +321,25 @@ async function renderAdminDashboard() {
   const portada = construirPortada(filasPortada, now);
   const trabajando = rankingActividad(filasPortada, now);
 
-  // ── Señales de cupo y cobro, sólo de las clínicas reales ──────────────────
+  // ── Señales de cupo y cobro ───────────────────────────────────────────────
+  // De las clínicas reales, todas. De las apartadas (cuentas de prueba y
+  // archivadas), SÓLO el pago por verificar: una clínica recién registrada que
+  // manda su transferencia tiene 0 pacientes y 0 citas —es «de prueba» para
+  // salud-clinica— y aun así su pago es lo primero que hay que atender.
   const apartadas = new Set([...portada.cuentasDePrueba, ...portada.archivadas].map((c) => c.id));
   const cupos: SenalCupo[] = [];
   let renovacionesStripe = 0;
-  for (const c of vivas) {
-    if (apartadas.has(c.id)) continue;
+  for (const c of allClinics) {
+    if (apartadas.has(c.id)) {
+      const v = porVerificar.get(c.id);
+      if (v && v.cuantos > 0) {
+        cupos.push(...senalesDeCupo({
+          id: c.id, nombre: c.name, uso: USO_VACIO, diasHastaRenovacion: null, suscripcionActiva: false, metodoManual: true,
+          pagosPorVerificar: v,
+        }));
+      }
+      continue;
+    }
     const u = uso.porClinica.get(c.id);
     if (!u) continue;
     const { manual } = metodoDePago(c);

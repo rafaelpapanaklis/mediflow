@@ -28,6 +28,8 @@ export interface Pendiente {
   /** La cifra o el porqué, corto. */
   dato: string;
   monto: number;
+  /** Cuántas cosas son (pagos por verificar); 1 si no aplica. */
+  cantidad: number;
   /** A dónde lleva la fila. */
   href: string;
 }
@@ -65,8 +67,8 @@ const PESO: Record<Severidad, number> = { critico: 0, alto: 1, medio: 2 };
 export const MOTIVOS_TOPE: ReadonlySet<MotivoPendiente> = new Set(["almacenamiento", "tokens", "cfdi", "usuarios", "saldo-ia"]);
 
 export interface ConteosTiles {
-  /** Pagos registrados a mano que nadie ha verificado. */
-  porVerificar: { clinicas: number; monto: number };
+  /** Pagos registrados a mano que nadie ha verificado: cuántos pagos, de cuántas clínicas, cuánto dinero. */
+  porVerificar: { pagos: number; clinicas: number; monto: number };
   /** Cobros fallidos + clínicas usando sin plan vigente (lo crítico). */
   cobrosRotos: number;
   /** Trials que vencen y renovaciones (manuales o no) en ≤ 7 días. */
@@ -88,6 +90,7 @@ export function unirPendientes(portada: Portada, cupos: SenalCupo[]): Pendiente[
         titulo: TITULO_MOTIVO_ATENCION[s.motivo],
         dato: s.dato ?? s.porQue,
         monto: s.montoEnRiesgo,
+        cantidad: 1,
         href: `/admin/clinics/${s.clinicaId}`,
       });
     }
@@ -102,6 +105,7 @@ export function unirPendientes(portada: Portada, cupos: SenalCupo[]): Pendiente[
       titulo: c.titulo,
       dato: c.dato,
       monto: c.monto,
+      cantidad: c.cantidad,
       href: c.motivo === "pago-por-verificar" ? "/admin/payments" : `/admin/clinics/${c.clinicaId}`,
     });
   }
@@ -123,6 +127,7 @@ export function contarTiles(pendientes: Pendiente[], renovacionesStripe: number)
   const verificar = pendientes.filter((p) => p.motivo === "pago-por-verificar");
   return {
     porVerificar: {
+      pagos: verificar.reduce((s, p) => s + p.cantidad, 0),
       clinicas: new Set(verificar.map((p) => p.clinicaId)).size,
       monto: verificar.reduce((s, p) => s + p.monto, 0),
     },

@@ -73,8 +73,10 @@ const SELECT_DUENO = {
       paymentMethodLast4: true,
       preferredPaymentMethod: true,
       stripeCustomerId: true,
+      stripeSubscriptionId: true,
       paypalSubscriptionId: true,
       timezone: true,
+      aiLastResetAt: true,
       affiliate: { select: { name: true } },
     },
   },
@@ -104,8 +106,10 @@ type FilaDueno = {
     paymentMethodLast4: string | null;
     preferredPaymentMethod: string | null;
     stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
     paypalSubscriptionId: string | null;
     timezone: string | null;
+    aiLastResetAt: Date | null;
     affiliate: { name: string } | null;
   } | null;
 };
@@ -268,6 +272,7 @@ async function medirClinicas(
       paymentMethodLast4: c.paymentMethodLast4 ?? null,
       preferredPaymentMethod: c.preferredPaymentMethod ?? null,
       stripeCustomerId: c.stripeCustomerId ?? null,
+      stripeSubscriptionId: c.stripeSubscriptionId ?? null,
       paypalSubscriptionId: c.paypalSubscriptionId ?? null,
     };
   };

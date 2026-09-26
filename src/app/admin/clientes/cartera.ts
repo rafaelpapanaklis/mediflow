@@ -96,6 +96,7 @@ export interface ClinicaDeCliente {
   paymentMethodLast4?: string | null;
   preferredPaymentMethod?: string | null;
   stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
   paypalSubscriptionId?: string | null;
 }
 
@@ -211,10 +212,16 @@ export interface FilaCliente {
   tendencia: TendenciaCliente;
   /**
    * ÚLTIMA COMPRA del cliente: el pago de suscripción cobrado más reciente de
-   * cualquiera de sus clínicas vigentes. null = nunca ha pagado por ninguna.
+   * cualquiera de sus clínicas, archivadas incluidas (lo cobrado a un cliente
+   * que cerró una sede sigue siendo su historia, igual que `ingresos`).
+   * null = nunca ha pagado por ninguna.
    */
   ultimaCompraAt: Date | null;
-  /** La próxima renovación más cercana de sus clínicas vigentes. */
+  /**
+   * La próxima renovación más cercana de sus clínicas vigentes con suscripción
+   * `active` y fecha por delante. Una fecha de cobro ya pasada de una sede
+   * vencida no es una renovación.
+   */
   proximaRenovacionAt: Date | null;
 }
 
@@ -367,10 +374,15 @@ export function valorarCliente(
   for (const v of vigentes) {
     const acceso = v.salud.actividad.ultimoAccesoAt;
     if (acceso && (!ultimoAccesoAt || acceso > ultimoAccesoAt)) ultimoAccesoAt = acceso;
+    const renueva = v.clinica.nextBillingDate ? new Date(v.clinica.nextBillingDate) : null;
+    if (
+      v.clinica.subscriptionStatus === "active" && renueva && !Number.isNaN(renueva.getTime()) && renueva >= ahora &&
+      (!proximaRenovacionAt || renueva < proximaRenovacionAt)
+    ) proximaRenovacionAt = renueva;
+  }
+  for (const v of valoradas) {
     const pago = v.clinica.ultimoPagoAt ? new Date(v.clinica.ultimoPagoAt) : null;
     if (pago && !Number.isNaN(pago.getTime()) && (!ultimaCompraAt || pago > ultimaCompraAt)) ultimaCompraAt = pago;
-    const renueva = v.clinica.nextBillingDate ? new Date(v.clinica.nextBillingDate) : null;
-    if (renueva && !Number.isNaN(renueva.getTime()) && (!proximaRenovacionAt || renueva < proximaRenovacionAt)) proximaRenovacionAt = renueva;
   }
 
   // Las clínicas del cliente, ordenadas como se atienden: primero la que arde.

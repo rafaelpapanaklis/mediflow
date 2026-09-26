@@ -307,6 +307,9 @@
   .ad-datos { gap: 2px 12px; }
   .ad-card__head, .ad-card__body { padding-left: 14px; padding-right: 14px; }
 
+}
+
+@media (max-width: 900px) {
   /* La tabla se apila: cada fila es una tarjeta y cada celda lleva su rótulo. */
   .ad-tabla--apilada .ad-tabla__scroll { overflow-x: visible; }
   .ad-tabla--apilada table, .ad-tabla--apilada tbody, .ad-tabla--apilada tr, .ad-tabla--apilada td { display: block; width: 100%; }

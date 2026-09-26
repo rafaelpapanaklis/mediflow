@@ -35,7 +35,7 @@ import {
   type NivelActividad,
 } from "@/lib/admin/salud-clinica";
 import {
-  bytesCortos, compararUltimaCompraDesc, metodoDePago, tokensCortos, ultimaCompra, type UsoClinica,
+  bytesCortos, cercaDelTope, compararUltimaCompraDesc, metodoDePago, tokensCortos, ultimaCompra, type UsoClinica,
 } from "@/lib/admin/uso-core";
 import { fechaAdmin } from "@/lib/admin/zona-horaria";
 import { BarraUso, Chip, Vacio, type TonoChip } from "@/components/admin/rediseno/piezas";
@@ -62,6 +62,7 @@ export interface FilaClinica {
   paymentMethodLast4?: string | null;
   preferredPaymentMethod?: string | null;
   stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
   paypalSubscriptionId?: string | null;
   _count: { patients: number; users: number; appointments: number };
   users: Array<{ email: string | null; firstName: string | null; lastName: string | null }>;
@@ -144,19 +145,6 @@ function gateDiscrepa(salud: SaludClinica): boolean {
 
 function planTono(plan: string): TonoChip {
   return plan === "CLINIC" ? "brand" : plan === "PRO" ? "info" : "neutral";
-}
-
-/** ¿Algún cupo de esta clínica está al 80 % o más, o el saldo IA anda mal? */
-function cercaDelTope(u: UsoClinica | undefined): boolean {
-  if (!u) return false;
-  const al80 = (usado: number | null, tope: number | null) => usado !== null && tope !== null && tope > 0 && usado / tope >= 0.8;
-  return (
-    al80(u.storageUsado, u.storageTope) ||
-    (u.tokensTope > 0 && u.tokensUsados / u.tokensTope >= 0.8) ||
-    (u.cfdiUsados !== null && u.cfdiIncluidos > 0 && u.cfdiUsados > u.cfdiIncluidos) ||
-    al80(u.usuarios, u.usuariosTope) ||
-    (u.saldoIaCents !== null && u.saldoIaCents < 5000)
-  );
 }
 
 export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO, avisosUso = [] }: Props) {
@@ -279,7 +267,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
         case "pacientes":  return c._count.patients;
         case "alta":       return new Date(c.createdAt).getTime();
         case "plan":       return planPrices[c.plan] ?? 0;
-        case "renueva":    return c.nextBillingDate ? new Date(c.nextBillingDate).getTime() : Number.POSITIVE_INFINITY * signo;
+        // Sin fecha, al final en cualquier sentido.
+        case "renueva":    return c.nextBillingDate ? new Date(c.nextBillingDate).getTime() : Number.POSITIVE_INFINITY * -signo;
         case "atencion":   return s.prioridad;
         default:           return 0;
       }
@@ -502,7 +491,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
         </div>
         <div className="ad-orden">
           <label htmlFor="orden-clinicas">Ordenar</label>
-          <select id="orden-clinicas" className="input-new" value={orden} onChange={(e) => { setOrden(e.target.value as ClaveOrden); setDesc(e.target.value !== "nombre"); }}>
+          {/* Nombre de la A a la Z y renovación de la más cercana a la más lejana; lo demás, de mayor a menor. */}
+          <select id="orden-clinicas" className="input-new" value={orden} onChange={(e) => { setOrden(e.target.value as ClaveOrden); setDesc(e.target.value !== "nombre" && e.target.value !== "renueva"); }}>
             {ORDENES.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
           <button type="button" className="icon-btn-new" onClick={() => setDesc((d) => !d)} title={desc ? "De mayor a menor" : "De menor a mayor"} aria-label="Invertir el orden">
@@ -538,6 +528,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
                 const incluida  = clinic.sedeIncluida && negociado === null;
                 const compra    = ultimaCompra(clinic);
                 const pago      = metodoDePago(clinic);
+                // Una fecha de cobro ya pasada no es una renovación: se calla (la vencida ya lo dice su estado).
+                const renueva   = clinic.nextBillingDate && new Date(clinic.nextBillingDate) >= ahora ? clinic.nextBillingDate : null;
                 const u         = clinic.uso;
                 const vol       = salud.actividad.volumen;
 
@@ -621,7 +613,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
 
                     <td data-col="Renueva">
                       <div className={css.celda}>
-                        <span className={`ad-fuerte ${css.num}`}>{clinic.nextBillingDate ? fechaAdmin(clinic.nextBillingDate) : "—"}</span>
+                        <span className={`ad-fuerte ${css.num}`}>{renueva ? fechaAdmin(renueva) : "—"}</span>
                         <span className={css.meta}>{pago.etiqueta}</span>
                       </div>
                     </td>

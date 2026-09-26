@@ -41,6 +41,7 @@ function pie(usado: number | null, tope: number | null, fmt: (n: number) => stri
 export function ResumenClinica(p: ResumenClinicaProps) {
   const u = p.uso;
   const pago = metodoDePago(p.metodo);
+  const saldoSinDato = u?.saldoIaStatus === "SIN_DATO";
   const saldo = u && u.saldoIaCents !== null
     ? { hasWallet: true, status: u.saldoIaStatus, balanceCents: u.saldoIaCents }
     : { hasWallet: false, status: null, balanceCents: null };
@@ -65,7 +66,7 @@ export function ResumenClinica(p: ResumenClinicaProps) {
       <DatoCaja
         label="Saldo IA" icono={Coins}
         n={saldo.hasWallet ? fmtMXNdec((saldo.balanceCents ?? 0) / 100) : "—"}
-        pie={saldo.hasWallet ? ETIQUETA_ESTADO_MONEDERO[estadoSaldo] : "sin monedero (no aplica)"}
+        pie={saldo.hasWallet ? ETIQUETA_ESTADO_MONEDERO[estadoSaldo] : saldoSinDato ? "no se pudo leer" : "sin monedero (no aplica)"}
         nivel={estadoSaldo === "negativo" || estadoSaldo === "pausado" ? "lleno" : estadoSaldo === "saldo-bajo" ? "aviso" : "ok"}
       />
       <DatoCaja

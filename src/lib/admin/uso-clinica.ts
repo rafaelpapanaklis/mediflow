@@ -4,7 +4,7 @@ import { getPlanLimits } from "@/lib/plans";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import type { PlanLimits } from "@/lib/plan-shared";
 import { cfdiPeriodFor } from "@/lib/cfdi-quota";
-import { USO_VACIO, type UsoClinica } from "./uso-core";
+import { tokensVigentes, USO_VACIO, type UsoClinica } from "./uso-core";
 
 /**
  * Lo MEDIDO de cada clínica para /admin (almacenamiento, CFDI del mes, usuarios,
@@ -26,6 +26,8 @@ export interface ClinicaParaUso {
   timezone?: string | null;
   aiTokensUsed?: number | null;
   aiTokensLimit?: number | null;
+  /** Para poner el contador a 0 si es de un mes anterior (ver `tokensVigentes`). */
+  aiLastResetAt?: Date | string | null;
 }
 
 export interface UsoMedido {
@@ -119,7 +121,7 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
         ? (mArchivos.get(c.id) ?? 0) + (mFotos.get(c.id) ?? 0) + (mSubidas.get(c.id) ?? 0)
         : null,
       storageTope: lim?.storageBytes ?? null,
-      tokensUsados: c.aiTokensUsed ?? 0,
+      tokensUsados: tokensVigentes(c.aiTokensUsed ?? 0, c.aiLastResetAt, ahora),
       tokensTope: c.aiTokensLimit ?? 0,
       cfdiUsados: cfdi === null ? null : (mCfdi.get(c.id) ?? 0),
       cfdiIncluidos: lim?.cfdiMonthly ?? 0,
@@ -128,7 +130,7 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
       sedes: duenos === null ? null : dueno ? (sedesPorDueno.get(dueno) ?? 1) : null,
       sedesTope: lim?.maxClinics ?? null,
       saldoIaCents: monederos === null ? null : (w?.balanceCents ?? null),
-      saldoIaStatus: w?.status ?? null,
+      saldoIaStatus: monederos === null ? "SIN_DATO" : (w?.status ?? null),
     });
   }
 

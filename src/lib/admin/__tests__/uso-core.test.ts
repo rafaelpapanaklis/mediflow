@@ -6,8 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  bytesCortos, compararUltimaCompraDesc, metodoDePago, nivelCupo, pctCupo, senalesDeCupo,
-  tokensCortos, ultimaCompra, USO_VACIO, type UsoClinica,
+  bytesCortos, cercaDelTope, compararUltimaCompraDesc, metodoDePago, nivelCupo, pctCupo, senalesDeCupo,
+  tokensCortos, tokensVigentes, ultimaCompra, USO_VACIO, type UsoClinica,
 } from "../uso-core";
 import { conteoMensual, serieNegocio, sumaMensual, sumaPorPeriodo, ultimosMesesAdmin } from "../serie-negocio";
 
@@ -41,11 +41,23 @@ test("bytes y tokens en corto", () => {
   assert.equal(tokensCortos(1_250_000), "1.3M");
 });
 
-test("metodoDePago: la tarjeta manda; transferencia es manual; Stripe sin alta capturada también cuenta", () => {
+test("metodoDePago: manda lo que cobra hoy, no lo que se eligió en el alta", () => {
   assert.deepEqual(metodoDePago({ paymentMethodType: "card", paymentMethodLast4: "4242" }), { etiqueta: "Tarjeta ••4242", manual: false });
   assert.deepEqual(metodoDePago({ paymentMethodType: "transfer" }), { etiqueta: "Transferencia", manual: true });
+  // Eligió transferencia al registrarse y luego pagó con tarjeta en Stripe Checkout: cobra sola.
+  assert.deepEqual(metodoDePago({ paymentMethodType: "transfer", stripeSubscriptionId: "sub_1" }), { etiqueta: "Stripe", manual: false });
+  assert.deepEqual(metodoDePago({ paymentMethodType: "card", paymentMethodLast4: "1111", stripeSubscriptionId: "sub_1" }), { etiqueta: "Tarjeta ••1111", manual: false });
+  assert.deepEqual(metodoDePago({ paypalSubscriptionId: "I-1", paymentMethodType: "transfer" }), { etiqueta: "PayPal", manual: false });
   assert.deepEqual(metodoDePago({ stripeCustomerId: "cus_1" }), { etiqueta: "Stripe", manual: false });
+  assert.deepEqual(metodoDePago({ preferredPaymentMethod: "none" }), { etiqueta: "No registrado", manual: true });
   assert.deepEqual(metodoDePago({}), { etiqueta: "No registrado", manual: true });
+});
+
+test("tokensVigentes: un contador de un mes anterior vale 0 este mes", () => {
+  const ahora = new Date(2026, 8, 26, 12); // 26-sep-2026 local
+  assert.equal(tokensVigentes(200_000, new Date(2026, 7, 3), ahora), 0, "reseteado en agosto: septiembre arranca en 0");
+  assert.equal(tokensVigentes(150_000, new Date(2026, 8, 2), ahora), 150_000, "reseteado este mes: cuenta");
+  assert.equal(tokensVigentes(9, null, ahora), 9, "sin fecha no se toca");
 });
 
 test("última compra: el pago manda; sin pago se usa el alta y se dice", () => {
@@ -97,9 +109,17 @@ test("tokens, CFDI, usuarios y saldo IA", () => {
   assert.equal(senalesDeCupo(entrada({ tokensUsados: 1_000_000, tokensTope: 1_000_000 }))[0].severidad, "alto");
   assert.equal(s[1].dato, "11 timbres extra");
   assert.equal(s[3].titulo, "Saldo IA en negativo");
-  // Saldo bajo pero positivo: aviso medio. Sin monedero: nada.
+  // Saldo bajo pero positivo: aviso medio. Sin monedero: nada. En $0 exacto
+  // tampoco: el monedero se crea con sólo abrir la pantalla del saldo.
   assert.equal(senalesDeCupo(entrada({ saldoIaCents: 1500 }))[0].severidad, "medio");
   assert.deepEqual(senalesDeCupo(entrada({ saldoIaCents: null })), []);
+  assert.deepEqual(senalesDeCupo(entrada({ saldoIaCents: 0 })), []);
+  assert.deepEqual(senalesDeCupo(entrada({ saldoIaCents: -5, saldoIaStatus: "SIN_DATO" })), [], "si la consulta falló no se inventa");
+  // cercaDelTope es la MISMA regla que las señales.
+  assert.equal(cercaDelTope({ ...USO_VACIO, usuarios: 5, usuariosTope: 6 }), false, "usuarios al 83 % no es «al tope»");
+  assert.equal(cercaDelTope({ ...USO_VACIO, usuarios: 6, usuariosTope: 6 }), true);
+  assert.equal(cercaDelTope({ ...USO_VACIO, storageUsado: 13 * GB, storageTope: 15 * GB }), true);
+  assert.equal(cercaDelTope(null), false);
   // Tokens sin cupo (BASIC) no avisan aunque used > 0.
   assert.deepEqual(senalesDeCupo(entrada({ tokensUsados: 500, tokensTope: 0 })), []);
 });
@@ -121,6 +141,7 @@ test("pagos por verificar van primero y con su dinero", () => {
   assert.equal(s[0].motivo, "pago-por-verificar");
   assert.equal(s[0].monto, 1378);
   assert.equal(s[0].dato, "2 pagos");
+  assert.equal(s[0].cantidad, 2);
 });
 
 // ── Series ─────────────────────────────────────────────────────────────────

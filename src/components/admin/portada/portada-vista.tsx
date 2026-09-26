@@ -52,7 +52,8 @@ export interface DatosPortada {
     /** null = no se pudo leer cfdi_usage. */
     cfdiMedido: boolean;
   };
-  facturacion: { hoy: number; mes: number; anio: number; porCobrar: number; fallidos: number };
+  /** `medido` false = la consulta de cobros falló: se pinta «—», no $0. */
+  facturacion: { hoy: number; mes: number; anio: number; porCobrar: number; fallidos: number; medido: boolean };
   negocio: {
     mrr: AdminMrr;
     mrrPotencial: number;
@@ -111,9 +112,9 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
 
       {/* ── 1. Lo accionable, en cuatro números ── */}
       <div className="ad-tiles">
-        <Tile href="/admin/payments" tono={d.tiles.porVerificar.clinicas > 0 ? "warning" : "quieto"} icono={ReceiptText}
-          n={d.tiles.porVerificar.clinicas} label={d.tiles.porVerificar.monto > 0 ? `Pagos por verificar · ${formatCurrency(d.tiles.porVerificar.monto)}` : "Pagos por verificar"}
-          title="Pagos de suscripción registrados a mano (transferencia, depósito…) que siguen en «pendiente»" />
+        <Tile href="/admin/payments" tono={d.tiles.porVerificar.pagos > 0 ? "warning" : "quieto"} icono={ReceiptText}
+          n={d.tiles.porVerificar.pagos} label={d.tiles.porVerificar.monto > 0 ? `Pagos por verificar · ${formatCurrency(d.tiles.porVerificar.monto)}` : "Pagos por verificar"}
+          title="Pagos de suscripción registrados a mano (transferencia, depósito…) y transferencias SPEI directas que siguen en «pendiente»" />
         <Tile href="/admin/clinics" tono={d.tiles.cobrosRotos > 0 ? "danger" : "quieto"} icono={AlertTriangle}
           n={d.tiles.cobrosRotos} label="Cobros fallidos o usando sin plan"
           title="Stripe no pudo cobrar, o el periodo venció y la clínica sigue trabajando" />
@@ -122,7 +123,7 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
           title="Trials que terminan y suscripciones que renuevan en los próximos 7 días" />
         <Tile href="/admin/clinics" tono={d.tiles.cercaDelTope > 0 ? "info" : "quieto"} icono={Gauge}
           n={d.tiles.cercaDelTope} label="Clínicas cerca de un tope"
-          title="Almacenamiento, tokens IA o usuarios al 80 % o más, CFDI por encima del cupo, saldo IA bajo" />
+          title="Almacenamiento o tokens IA al 80 % o más, usuarios al tope, CFDI por encima del cupo, saldo IA bajo o en negativo" />
       </div>
 
       {/* ── 2 + 3. Gráfica y sparklines ── */}
@@ -136,17 +137,19 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
               <Sparkline valores={d.sparks.altas} tono="info" label="Altas" n={ultimoDe(d.sparks.altas)} />
               <Sparkline valores={d.sparks.bajas} tono="danger" label="Bajas" n={ultimoDe(d.sparks.bajas)} />
               <Sparkline valores={d.sparks.cfdi} tono="warning" label="CFDI timbrados" n={d.sparks.cfdiMedido ? ultimoDe(d.sparks.cfdi) : "—"} />
-              <Sparkline valores={d.sparks.pagos} tono="success" label="Pagos cobrados" n={ultimoDe(d.sparks.pagos)} />
+              <Sparkline valores={d.sparks.pagos} tono="success" label="Pagos cobrados" n={d.facturacion.medido ? ultimoDe(d.sparks.pagos) : "—"} />
             </div>
           </Tarjeta>
           <Tarjeta title="Facturación">
             <div className="ad-cifras">
-              <Cifra label="Hoy" n={formatCurrency(d.facturacion.hoy)} tono="success" />
-              <Cifra label="Este mes" n={formatCurrency(d.facturacion.mes)} tono="brand"
-                pie={d.facturacion.porCobrar > 0
-                  ? `${formatCurrency(d.facturacion.porCobrar)} por cobrar${d.facturacion.fallidos ? ` · ${d.facturacion.fallidos} fallido${d.facturacion.fallidos === 1 ? "" : "s"}` : ""}`
-                  : "nada por cobrar"} />
-              <Cifra label="Este año" n={formatCurrency(d.facturacion.anio)} />
+              <Cifra label="Hoy" n={d.facturacion.medido ? formatCurrency(d.facturacion.hoy) : "—"} tono="success" />
+              <Cifra label="Este mes" n={d.facturacion.medido ? formatCurrency(d.facturacion.mes) : "—"} tono="brand"
+                pie={!d.facturacion.medido
+                  ? "no se pudieron leer los cobros"
+                  : d.facturacion.porCobrar > 0
+                    ? `${formatCurrency(d.facturacion.porCobrar)} por cobrar${d.facturacion.fallidos ? ` · ${d.facturacion.fallidos} fallido${d.facturacion.fallidos === 1 ? "" : "s"}` : ""}`
+                    : "nada por cobrar"} />
+              <Cifra label="Este año" n={d.facturacion.medido ? formatCurrency(d.facturacion.anio) : "—"} />
             </div>
           </Tarjeta>
         </div>
@@ -304,7 +307,7 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
                         </span>
                         <span style={{ minWidth: 58, textAlign: "right" }}>
                           {f.cambioPct === null
-                            ? <Chip sm tono="neutral">nuevo</Chip>
+                            ? <Chip sm tono="neutral">{total > 0 ? "nuevo" : "—"}</Chip>
                             : <Chip sm tono={f.cambioPct > 0 ? "success" : f.cambioPct < 0 ? "danger" : "neutral"}>{f.cambioPct > 0 ? "+" : ""}{f.cambioPct}%</Chip>}
                         </span>
                       </Link>

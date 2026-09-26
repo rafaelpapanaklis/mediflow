@@ -26,7 +26,7 @@ function fila(over: Partial<FilaPortada>): FilaPortada {
 
 const cupo = (over: Partial<SenalCupo>): SenalCupo => ({
   clave: "c:almacenamiento", motivo: "almacenamiento", severidad: "medio", clinicaId: "c", clinicaNombre: "C",
-  titulo: "Almacenamiento", dato: "87% de 15 GB", monto: 0, ...over,
+  titulo: "Almacenamiento", dato: "87% de 15 GB", monto: 0, cantidad: 1, ...over,
 });
 
 test("los pendientes juntan negocio y cupos, lo crítico arriba y el dinero después", () => {
@@ -55,11 +55,11 @@ test("las cuatro tarjetas cuentan CLÍNICAS, no señales, y las renovaciones de 
   const pend = unirPendientes(portada, [
     cupo({ clave: "c:1", clinicaId: "c", clinicaNombre: "C" }),
     cupo({ clave: "c:2", clinicaId: "c", clinicaNombre: "C", motivo: "tokens", titulo: "Tokens IA" }),
-    cupo({ clave: "d:pago", clinicaId: "d", clinicaNombre: "D", motivo: "pago-por-verificar", severidad: "alto", titulo: "Pago por verificar", dato: "2 pagos", monto: 1378 }),
+    cupo({ clave: "d:pago", clinicaId: "d", clinicaNombre: "D", motivo: "pago-por-verificar", severidad: "alto", titulo: "Pago por verificar", dato: "2 pagos", monto: 1378, cantidad: 2 }),
     cupo({ clave: "e:ren", clinicaId: "e", clinicaNombre: "E", motivo: "renovacion-manual", severidad: "alto", titulo: "Renovación manual", dato: "en 2 d" }),
   ]);
   const tiles = contarTiles(pend, 3);
-  assert.deepEqual(tiles.porVerificar, { clinicas: 1, monto: 1378 });
+  assert.deepEqual(tiles.porVerificar, { pagos: 2, clinicas: 1, monto: 1378 }, "la tarjeta cuenta PAGOS; dos de la misma clínica son 2");
   assert.equal(tiles.cobrosRotos, 1);
   assert.equal(tiles.renovaciones, 1 + 1 + 3, "trial que vence + renovación manual + 3 de Stripe");
   assert.equal(tiles.cercaDelTope, 1, "dos señales de la misma clínica cuentan una vez");
@@ -68,5 +68,5 @@ test("las cuatro tarjetas cuentan CLÍNICAS, no señales, y las renovaciones de 
 test("sin nada, todo a cero", () => {
   const portada = construirPortada([fila({ id: "ok", nombre: "OK" })], AHORA);
   const tiles = contarTiles(unirPendientes(portada, []), 0);
-  assert.deepEqual(tiles, { porVerificar: { clinicas: 0, monto: 0 }, cobrosRotos: 0, renovaciones: 0, cercaDelTope: 0 });
+  assert.deepEqual(tiles, { porVerificar: { pagos: 0, clinicas: 0, monto: 0 }, cobrosRotos: 0, renovaciones: 0, cercaDelTope: 0 });
 });

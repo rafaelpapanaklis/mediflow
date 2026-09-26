@@ -186,10 +186,15 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
   // si algo falla, el resumen dice «sin medir» y la ficha se sigue viendo.
   let uso: UsoClinica | null = null;
   let pacientesTope: number | null = null;
+  // Pacientes VIVOS (deletedAt null): el mismo conteo con el que el cupo decide
+  // si se puede crear otro (@/lib/patient-quota); `_count.patients` incluye
+  // los borrados por ARCO y daría «505 de 500» a una clínica que puede crear.
+  let pacientesVivos: number = clinic._count.patients;
   try {
     const medido = await medirUsoClinicas([clinic], ahora);
     uso = medido.porClinica.get(clinic.id) ?? null;
     pacientesTope = medido.limites[clinic.plan]?.maxPatients ?? null;
+    pacientesVivos = await prisma.patient.count({ where: { clinicId: clinic.id, deletedAt: null } });
   } catch (e) {
     console.warn("[admin/clinics/:id] consumo no disponible:", e);
   }
@@ -269,6 +274,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       saldoIa={saldoIa}
       uso={uso}
       pacientesTope={pacientesTope}
+      pacientesVivos={pacientesVivos}
       planPrices={planPrices}
       ahoraISO={ahora.toISOString()}
       actividad={{

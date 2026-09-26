@@ -17,6 +17,8 @@ import { ETIQUETA_RANGO, type PuntoNegocio, type Rango } from "@/lib/admin/serie
 import { formatCurrency } from "@/lib/utils";
 
 const RANGOS: Rango[] = ["semana", "mes", "anio"];
+/** Lo que abarca cada rango: son ventanas móviles, no meses ni años de calendario. */
+const TRAMO: Record<Rango, string> = { semana: "últimos 7 días", mes: "últimos 30 días", anio: "últimos 12 meses" };
 
 const TOOLTIP_STYLE = {
   background: "var(--bg-elev)",
@@ -45,6 +47,7 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
         <div className="ad-leyenda">
           <span><i style={{ background: "var(--brand)" }} /> Ingresos · <strong className="ad-num" style={{ color: "var(--text-1)" }}>{formatCurrency(totalIngresos)}</strong></span>
           <span><i style={{ background: "var(--info)" }} /> Altas · <strong className="ad-num" style={{ color: "var(--text-1)" }}>{totalAltas}</strong></span>
+          <span className="ad-suave">{TRAMO[rango]}</span>
         </div>
         <div className="ad-conmutador" role="group" aria-label="Rango de la gráfica">
           {RANGOS.map((r) => (

@@ -111,6 +111,8 @@ interface Props {
   uso:                  UsoClinica | null;
   /** Tope de pacientes del plan (plan_configs.maxPatients); null = ilimitado. */
   pacientesTope:        number | null;
+  /** Pacientes sin borrar (deletedAt null): el mismo conteo que el cupo. */
+  pacientesVivos:       number;
   /** Precios de lista por plan, desde plan_configs. Nunca un literal. */
   planPrices:           Record<string, number>;
   /** "Ahora" del servidor: SSR e hidratación cuentan los mismos días. */
@@ -155,6 +157,7 @@ export function AdminClinicDetailClient({
   saldoIa,
   uso,
   pacientesTope,
+  pacientesVivos,
   planPrices,
   ahoraISO,
   actividad,
@@ -466,7 +469,7 @@ export function AdminClinicDetailClient({
       {/* Resumen: cupos, saldo, renovación y acceso, de un vistazo. */}
       <ResumenClinica
         uso={uso}
-        pacientes={clinic._count?.patients ?? 0}
+        pacientes={pacientesVivos}
         pacientesTope={pacientesTope}
         nextBillingDate={clinic.nextBillingDate ?? null}
         periodoHasta={planStatus.periodEnd}

@@ -103,20 +103,31 @@ function tituloSede(v: ClinicaValorada): string {
   return partes.join(" · ");
 }
 
-/** El consumo SUMADO de las sedes vigentes con dato, para la barra de la fila. */
-function usoAgregado(vigentes: ClinicaValorada[]) {
-  let storageUsado = 0, storageTope = 0, tokensUsados = 0, tokensTope = 0, medidas = 0, sinTope = false;
+/**
+ * El consumo que se enseña en la fila: el de la sede PEOR (mayor porcentaje)
+ * en disco y en tokens, con su nombre. Sumar sedes escondía una llena: una al
+ * 100 % de 15 GB y otra al 10 % daban «55 %».
+ */
+function usoPeorSede(vigentes: ClinicaValorada[]) {
+  const pct = (usado: number | null, tope: number | null) =>
+    usado === null ? -1 : tope === null || tope <= 0 ? 0 : usado / tope;
+  let disco: { nombre: string; usado: number; tope: number | null } | null = null;
+  let ia: { nombre: string; usado: number; tope: number } | null = null;
+  let pDisco = -1, pIa = -1;
   for (const v of vigentes) {
     const u = v.clinica.uso;
-    if (!u || u.storageUsado === null) continue;
-    medidas += 1;
-    storageUsado += u.storageUsado;
-    if (u.storageTope === null) sinTope = true; else storageTope += u.storageTope;
-    tokensUsados += u.tokensUsados;
-    tokensTope += u.tokensTope;
+    if (!u) continue;
+    if (u.storageUsado !== null && pct(u.storageUsado, u.storageTope) > pDisco) {
+      pDisco = pct(u.storageUsado, u.storageTope);
+      disco = { nombre: v.clinica.nombre, usado: u.storageUsado, tope: u.storageTope };
+    }
+    if (u.tokensTope > 0 && pct(u.tokensUsados, u.tokensTope) > pIa) {
+      pIa = pct(u.tokensUsados, u.tokensTope);
+      ia = { nombre: v.clinica.nombre, usado: u.tokensUsados, tope: u.tokensTope };
+    }
   }
-  if (medidas === 0) return null;
-  return { storageUsado, storageTope: sinTope ? null : storageTope, tokensUsados, tokensTope };
+  if (!disco && !ia) return null;
+  return { disco, ia, varias: vigentes.length > 1 };
 }
 
 export function ClientesClient({ clientes, planPrices, ahoraISO }: Props) {
@@ -198,7 +209,8 @@ export function ClientesClient({ clientes, planPrices, ahoraISO }: Props) {
         case "actividad": return f.tendencia.actual.total;
         case "pacientes": return f.cupo.used;
         case "alta":      return f.altaAt.getTime();
-        case "renueva":   return f.proximaRenovacionAt ? f.proximaRenovacionAt.getTime() : Number.POSITIVE_INFINITY * signo;
+        // Sin fecha, al final en cualquier sentido.
+        case "renueva":   return f.proximaRenovacionAt ? f.proximaRenovacionAt.getTime() : Number.POSITIVE_INFINITY * -signo;
         case "atencion":  return f.prioridad;
         default:          return 0;
       }
@@ -361,7 +373,8 @@ export function ClientesClient({ clientes, planPrices, ahoraISO }: Props) {
         </div>
         <div className="ad-orden">
           <label htmlFor="orden-clientes">Ordenar</label>
-          <select id="orden-clientes" className="input-new" value={orden} onChange={(e) => { setOrden(e.target.value as ClaveOrden); setDesc(e.target.value !== "nombre"); }}>
+          {/* Nombre de la A a la Z y renovación de la más cercana a la más lejana; lo demás, de mayor a menor. */}
+          <select id="orden-clientes" className="input-new" value={orden} onChange={(e) => { setOrden(e.target.value as ClaveOrden); setDesc(e.target.value !== "nombre" && e.target.value !== "renueva"); }}>
             {ORDENES.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
           <button type="button" className="icon-btn-new" onClick={() => setDesc((d) => !d)} title={desc ? "De mayor a menor" : "De menor a mayor"} aria-label="Invertir el orden">
@@ -413,7 +426,7 @@ function FilaTabla({ fila, ahora }: { fila: FilaCliente; ahora: Date }) {
   // Una sola sede: la insignia del gate (plan-status) es exacta. Con varias
   // no existe "el" estado de plan del cliente: lo dice la tira de sedes.
   const unica = fila.vigentes.length === 1 ? fila.vigentes[0] : null;
-  const uso = usoAgregado(fila.vigentes);
+  const uso = usoPeorSede(fila.vigentes);
   const pago = unica ? metodoDePago(unica.clinica) : null;
   const tend = fila.tendencia;
 
@@ -479,10 +492,13 @@ function FilaTabla({ fila, ahora }: { fila: FilaCliente; ahora: Date }) {
         <div className={css.celda} style={{ minWidth: 132, gap: 6 }}>
           {uso ? (
             <>
-              <BarraUso label="Disco" usado={uso.storageUsado} tope={uso.storageTope} fmt={bytesCortos} compacta />
-              {uso.tokensTope > 0
-                ? <BarraUso label="IA" usado={uso.tokensUsados} tope={uso.tokensTope} fmt={tokensCortos} compacta />
+              {uso.disco
+                ? <BarraUso label="Disco" usado={uso.disco.usado} tope={uso.disco.tope} fmt={bytesCortos} compacta title={uso.varias ? `La sede que más ocupa: ${uso.disco.nombre}` : undefined} />
+                : <span className={css.sinDato}>Disco: sin dato</span>}
+              {uso.ia
+                ? <BarraUso label="IA" usado={uso.ia.usado} tope={uso.ia.tope} fmt={tokensCortos} compacta title={uso.varias ? `La sede que más gasta: ${uso.ia.nombre}` : undefined} />
                 : <span className={`${css.meta} ${css.num}`}>IA · sin cupo</span>}
+              {uso.varias && <span className={css.meta}>peor sede de {fila.vigentes.length}</span>}
             </>
           ) : (
             <span className={css.sinDato}>sin medir</span>
