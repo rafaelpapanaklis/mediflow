@@ -64,12 +64,13 @@ export interface PlanCard {
   capacity: CapacityRow[];
   /**
    * Lista de la tarjeta, en el MISMO orden en los tres planes (ajuste 10):
-   * (1) seis funciones base en ✓ (las más vendedoras, las mismas en las tres);
+   * (1) ocho funciones base en ✓ (las más vendedoras, las mismas en las tres;
+   * seis hasta el ajuste 12, que sumó soporte y onboarding);
    * (2) lo que cambia entre planes con ✓/✗ calculado (asistente IA ·
    * radiografías con IA · analytics + TV); (3) lo exclusivo de un plan SOLO en
    * ese plan, como ✓ normales al final (ajuste 10b: sin rótulo ni separador;
-   * nunca como ✗ en los demás). Básico queda con 6 ✓ y 3 ✗; Profesional 9 ✓;
-   * Clínica 12 ✓.
+   * nunca como ✗ en los demás). Tras el ajuste 12: Básico 8 ✓ y 3 ✗;
+   * Profesional 11 ✓; Clínica 12 ✓ (reportes entre sedes).
    */
   features: FeatureRow[];
   /**
@@ -184,7 +185,7 @@ const hasModule = (p: ResolvedPlan, key: string) => p.moduleFeatures?.[key] !== 
 const COMMON_CANDIDATES: {
   text: string;
   included: (p: ResolvedPlan) => boolean;
-  /** Abre la lista de CADA tarjeta en ✓ (ajuste 10: 6 filas positivas antes de las que cambian). */
+  /** Abre la lista de CADA tarjeta en ✓ (ajuste 10: filas positivas antes de las que cambian; 8 desde el ajuste 12). */
   lead?: boolean;
   /** Texto en la tarjeta cuando lleva cifra del plan (CFDI); en el bloque común va el genérico. */
   cardText?: (p: ResolvedPlan) => string;
@@ -195,6 +196,9 @@ const COMMON_CANDIDATES: {
   { text: 'Facturación CFDI (timbres incluidos según plan)', included: () => true, lead: true, cardText: (p) => cfdiBullet(p) },
   { text: 'Portal del paciente y recetas digitales', included: () => true, lead: true },
   { text: 'Página web de la clínica', included: (p) => hasModule(p, 'landing'), lead: true },
+  // Ajuste 12 (Rafael): soporte y onboarding son de los TRES planes (antes, exclusivos de Clínica).
+  { text: 'Soporte prioritario', included: () => true, lead: true },
+  { text: 'Onboarding y migración dedicados', included: () => true, lead: true },
   { text: 'Presupuestos, cobros y factura automática', included: () => true },
   { text: 'Inbox de mensajes', included: (p) => hasModule(p, 'inbox') },
   { text: 'Reportes de la clínica', included: (p) => hasModule(p, 'reports') },
@@ -240,13 +244,15 @@ function analyticsRows(p: ResolvedPlan): FeatureRow[] {
 /**
  * EXCLUSIVO de un plan (ajuste 10): se pinta SOLO en el plan que lo tiene, como
  * ✓ normales al final de su lista (10b: sin rótulo); nunca como ✗ en los
- * demás. Sin puerta en el código: es el compromiso comercial del plan Clínica
- * (como decían las tarjetas antes del ajuste 9).
+ * demás.
+ * Ajuste 12 (Rafael): fuera «Roles y permisos avanzados» (los roles no tienen
+ * límite en ningún plan: no es diferencia); soporte y onboarding pasan a
+ * funciones base. Queda «Reportes consolidados y comparación entre sedes»,
+ * que Rafael decidió anunciar: solo en planes con más de una sede, leído de
+ * plan_configs.maxClinics (NULL = ilimitadas).
  */
 const EXCLUSIVE_ROWS: { text: string; included: (p: ResolvedPlan) => boolean }[] = [
-  { text: 'Roles y permisos avanzados', included: (p) => p.id === 'CLINIC' },
-  { text: 'Soporte prioritario', included: (p) => p.id === 'CLINIC' },
-  { text: 'Onboarding y migración dedicados', included: (p) => p.id === 'CLINIC' },
+  { text: 'Reportes consolidados y comparación entre sedes', included: (p) => p.maxClinics == null || p.maxClinics > 1 },
 ];
 
 /**
