@@ -33,6 +33,7 @@ export default async function SignupPage() {
   return (
     <AuthShell
       split="45/55"
+      visualVariant="navy"
       visual={<SignupVisual />}
       form={
         <Suspense fallback={<FormFallback />}>

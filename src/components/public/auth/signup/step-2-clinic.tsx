@@ -6,6 +6,7 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { FormField } from "../form-field";
 import { SPECIALTIES, SPECIALTY_SLUGS } from "@/lib/specialty-data";
 import { mxTenDigits } from "@/lib/phone-mx";
+import { botonFantasma, botonPrimario } from "./estilos";
 
 // El campo se pide como teléfono de contacto (no como WhatsApp), así que el
 // error también: MX_PHONE_ERROR habla de WhatsApp y lo usan otras superficies.
@@ -173,7 +174,7 @@ function ThemedSelect({
               >
                 <Select.ItemText>{opt.label}</Select.ItemText>
                 <Select.ItemIndicator style={{ position: "absolute", right: 10, display: "inline-flex" }}>
-                  <Check size={14} style={{ color: "#6d28d9" }} />
+                  <Check size={14} style={{ color: "#2563eb" }} />
                 </Select.ItemIndicator>
               </Select.Item>
             ))}
@@ -197,19 +198,19 @@ function ThemedSelect({
     </Select.Root>
     <style jsx global>{`
       .themed-select-trigger:focus-visible {
-        border-color: rgba(124, 58, 237, 0.65) !important;
-        box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.16);
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
       }
       .themed-select-item[data-highlighted] {
-        background: rgba(124, 58, 237, 0.08);
-        color: #4c1d95;
+        background: #eff6ff;
+        color: #1e3a8a;
       }
       .themed-select-item[data-state="checked"] {
-        background: rgba(124, 58, 237, 0.06);
+        background: #eff6ff;
       }
       .themed-select-viewport {
         scrollbar-width: thin;
-        scrollbar-color: rgba(124, 58, 237, 0.35) rgba(15, 23, 42, 0.05);
+        scrollbar-color: rgba(37, 99, 235, 0.35) rgba(15, 23, 42, 0.05);
       }
       .themed-select-viewport::-webkit-scrollbar {
         width: 10px;
@@ -220,12 +221,12 @@ function ThemedSelect({
         margin: 4px 0;
       }
       .themed-select-viewport::-webkit-scrollbar-thumb {
-        background: rgba(124, 58, 237, 0.35);
+        background: rgba(37, 99, 235, 0.35);
         border-radius: 10px;
         border: 2px solid #ffffff;
       }
       .themed-select-viewport::-webkit-scrollbar-thumb:hover {
-        background: rgba(124, 58, 237, 0.55);
+        background: rgba(37, 99, 235, 0.55);
       }
     `}</style>
     </>
@@ -312,13 +313,7 @@ export function Step2Clinic({
         />
       </FormField>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-        }}
-      >
+      <div className="dca-2col">
         <FormField
           label="Ciudad"
           placeholder="Guadalajara"
@@ -336,56 +331,23 @@ export function Step2Clinic({
         </FormField>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginTop: 8,
-          gap: 12,
-        }}
-      >
-        <button
-          type="button"
-          onClick={onBack}
-          style={{
-            background: "transparent",
-            border: "1px solid var(--ld-border)",
-            color: "var(--ld-fg-muted)",
-            fontSize: 13,
-            fontWeight: 500,
-            padding: "0 18px",
-            height: 44,
-            borderRadius: 10,
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          ← Atrás
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+        <button type="button" onClick={onBack} className="dca-btn-ghost" style={botonFantasma()}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M19 12H5M11 6l-6 6 6 6" />
+          </svg>
+          Atrás
         </button>
         <button
           type="submit"
           disabled={!canContinue}
-          style={{
-            flex: 1,
-            height: 44,
-            borderRadius: 10,
-            background: !canContinue
-              ? "#ede9fe"
-              : "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-            color: !canContinue ? "#8b5cf6" : "#fff",
-            fontSize: 14,
-            fontWeight: 600,
-            border: "none",
-            cursor: !canContinue ? "not-allowed" : "pointer",
-            boxShadow: !canContinue
-              ? "none"
-              : "0 8px 20px -6px rgba(124,58,237,0.5), inset 0 1px 0 rgba(255,255,255,0.15)",
-            fontFamily: "inherit",
-            transition: "all .15s",
-          }}
+          className="dca-btn-primary"
+          style={botonPrimario(!canContinue, { flex: 1 })}
         >
-          Continuar →
+          Continuar
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
         </button>
       </div>
     </form>

@@ -1,7 +1,5 @@
 "use client";
 
-import { Fragment } from "react";
-
 interface StepperProps {
   step: 1 | 2 | 3;
 }
@@ -9,130 +7,43 @@ interface StepperProps {
 const STEPS: Array<{ n: 1 | 2 | 3; label: string }> = [
   { n: 1, label: "Tu cuenta" },
   { n: 2, label: "Tu clínica" },
-  { n: 3, label: "Elige tu plan" },
+  { n: 3, label: "Tu plan" },
 ];
 
+/**
+ * Progreso del alta en tres tramos: cada paso es una barra con su número y
+ * su nombre. Hecho = verde con palomita, actual = azul→violeta de la
+ * portada, pendiente = gris. Es una lista ordenada con `aria-current` para
+ * que el lector de pantalla diga en qué paso va. Estilos en auth-v4.css.
+ */
 export function Stepper({ step }: StepperProps) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 0,
-        width: "100%",
-      }}
-    >
-      {STEPS.map((s, i) => {
-        const state = s.n < step ? "done" : s.n === step ? "active" : "pending";
-        const isActive = state === "active";
-        const isDone = state === "done";
-
-        const circleBg = isActive
-          ? "linear-gradient(180deg, #8b5cf6, #7c3aed)"
-          : isDone
-            ? "rgba(5,150,105,0.1)"
-            : "#f8fafc";
-
-        const circleBorder = isActive
-          ? "1px solid rgba(124,58,237,0.6)"
-          : isDone
-            ? "1px solid rgba(5,150,105,0.35)"
-            : "1px solid var(--ld-border)";
-
-        const circleColor = isActive
-          ? "#fff"
-          : isDone
-            ? "#059669"
-            : "var(--ld-fg-muted)";
-
-        return (
-          <Fragment key={s.n}>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 6,
-                flex: "0 0 auto",
-              }}
-            >
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 30,
-                  display: "grid",
-                  placeItems: "center",
-                  fontFamily:
-                    "var(--font-mono, ui-monospace, monospace)",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: circleBg,
-                  color: circleColor,
-                  border: circleBorder,
-                  boxShadow: isActive
-                    ? "0 0 0 4px rgba(124,58,237,0.15)"
-                    : "none",
-                  transition: "all 0.25s",
-                }}
-              >
-                {isDone ? (
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <path
-                      d="M2 6 L5 9 L10 3"
-                      stroke="#059669"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                ) : (
-                  s.n
-                )}
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: isActive ? "var(--ld-fg)" : "var(--ld-fg-muted)",
-                  fontWeight: isActive ? 500 : 400,
-                  letterSpacing: "-0.005em",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {s.label}
-              </div>
-            </div>
-
-            {i < STEPS.length - 1 && (
-              <div
-                aria-hidden="true"
-                style={{
-                  flex: 1,
-                  height: 2,
-                  margin: "0 8px",
-                  marginBottom: 22,
-                  borderRadius: 2,
-                  position: "relative",
-                  overflow: "hidden",
-                  background: "rgba(15,23,42,0.08)",
-                }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    background:
-                      s.n < step
-                        ? "linear-gradient(90deg, #059669, #7c3aed)"
-                        : "transparent",
-                    transition: "all 0.3s",
-                  }}
-                />
-              </div>
-            )}
-          </Fragment>
-        );
-      })}
-    </div>
+    <nav aria-label="Progreso del registro">
+      <p className="dca-stepper__sr">Paso {step} de {STEPS.length}</p>
+      <ol className="dca-stepper">
+        {STEPS.map((s) => {
+          const state = s.n < step ? "is-done" : s.n === step ? "is-active" : "";
+          return (
+            <li key={s.n} className={`dca-step ${state}`} aria-current={s.n === step ? "step" : undefined}>
+              <span className="dca-step__bar" aria-hidden="true">
+                <span className="dca-step__fill" />
+              </span>
+              <span className="dca-step__row">
+                <span className="dca-step__n" aria-hidden="true">
+                  {s.n < step ? (
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6 L5 9 L10 3" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    s.n
+                  )}
+                </span>
+                <span className="dca-step__label">{s.label}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }

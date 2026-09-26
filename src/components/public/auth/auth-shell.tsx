@@ -3,6 +3,9 @@
 import type { ReactNode } from "react";
 import { Glow } from "../landing/primitives/glow";
 import { GridBg } from "../landing/primitives/grid-bg";
+import { Logo } from "../landing/primitives/logo";
+import { inter } from "@/fonts/inter-400-800";
+import "./auth-v4.css";
 
 interface AuthShellProps {
   /** Visual panel (left). Incluye glow, logo, testimonial, mockup. */
@@ -12,11 +15,14 @@ interface AuthShellProps {
   /** Proporción del split — "50/50" (login), "60/40" o "45/55" (signup) */
   split?: "50/50" | "60/40" | "45/55";
   /**
-   * Fondo del panel visual. "brand" = violeta profundo (default, sin cambios
-   * para signup). "dark" = casi negro, para el login con escena 3D. Solo
-   * cambia el valor de background: el esqueleto 50/50 es el mismo.
+   * Fondo del panel visual. "brand" = violeta profundo (default). "dark" =
+   * casi negro, para el login con escena 3D. Solo cambia el valor de
+   * background: el esqueleto 50/50 es el mismo. "navy" = la marca de la
+   * portada v4 (navy con trama de puntos, azul de acción, Inter): la usa
+   * /signup y se pinta con las clases `dca-` de auth-v4.css, sin tocar el
+   * esqueleto de las otras dos.
    */
-  visualVariant?: "brand" | "dark";
+  visualVariant?: "brand" | "dark" | "navy";
 }
 
 /**
@@ -33,6 +39,28 @@ export function AuthShell({ visual, form, split = "50/50", visualVariant = "bran
     ["1fr", "1fr"];
 
   const isDark = visualVariant === "dark";
+
+  if (visualVariant === "navy") {
+    return (
+      <div className={`landing-theme dca-shell ${inter.variable}`} data-mode="light">
+        <div className="dca-visual">
+          <div className="dca-visual__dots" aria-hidden="true" />
+          <Glow x="70%" y="-10%" size={900} opacity={0.18} color="124,58,237" />
+          {visual}
+        </div>
+        <div className="dca-form">
+          {/* Franja de marca: sólo cuando el panel navy se esconde (≤ 1024). */}
+          <div className="dca-mobilebar">
+            <Logo size={22} color="#c4b5fd" />
+            <span className="dca-mobilebar__tag">Alta en 3 pasos</span>
+          </div>
+          <div className="dca-form__center">
+            <div className="dca-card">{form}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const visualBackground = isDark
     ? "radial-gradient(80% 60% at 80% -10%, rgba(124,58,237,0.16), transparent 60%), " +

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PlanCard, type Billing, type PlanId } from "./plan-card";
 import { cfdiBullet } from "@/lib/plan-shared";
+import { botonFantasma, botonPrimario } from "./estilos";
 
 interface ApiPlan {
   id: PlanId;
@@ -72,13 +73,24 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }
       {/* Selector de plan — los 3 planes, sin encimar: colapsan por ANCHO real
           (auto-fit) y nunca por viewport, así caben 1/2/3 columnas según haya. */}
       <div
+        role="radiogroup"
+        aria-label="Elige tu plan"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-          gap: 12,
+          gap: 14,
           alignItems: "stretch",
+          paddingTop: 10,
         }}
       >
+        {plans === null &&
+          [0, 1, 2].map((i) => (
+            <div
+              key={i}
+              aria-hidden="true"
+              style={{ height: 300, borderRadius: 20, background: "#f1f5f9", border: "1px solid #e2e8f0" }}
+            />
+          ))}
         {(plans ?? []).map((p) => (
           <PlanCard
             key={p.id}
@@ -97,8 +109,15 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }
         ))}
       </div>
 
-      <p style={{ fontSize: 12, color: "var(--ld-fg-muted)", margin: 0, lineHeight: 1.5 }}>
-        El pago lo haces dentro del panel: al activar tu plan podrás elegir tarjeta, SPEI u OXXO.
+      <p className="dca-note" style={{ margin: 0 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="4" y="10.5" width="16" height="10.5" rx="2.5" />
+          <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
+        </svg>
+        <span>
+          Aquí no se cobra nada. El pago lo haces en el siguiente paso, dentro del panel, con tarjeta, SPEI u OXXO
+          en la página segura de Stripe.
+        </span>
       </p>
 
       {/* Términos */}
@@ -107,15 +126,15 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }
           type="checkbox"
           checked={values.acceptedTerms}
           onChange={(e) => onChange({ acceptedTerms: e.target.checked })}
-          style={{ marginTop: 2, width: 16, height: 16, accentColor: "#7c3aed" }}
+          style={{ marginTop: 1, flexShrink: 0 }}
         />
-        <span style={{ fontSize: 12, color: "var(--ld-fg-muted)", lineHeight: 1.5 }}>
+        <span style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.5 }}>
           Acepto los{" "}
-          <Link href="/legal/terminos" style={{ color: "var(--ld-brand-light)", textDecoration: "none" }}>
+          <Link href="/legal/terminos" className="dca-link">
             términos
           </Link>{" "}
           y la{" "}
-          <Link href="/legal/privacy" style={{ color: "var(--ld-brand-light)", textDecoration: "none" }}>
+          <Link href="/legal/privacy" className="dca-link">
             política de privacidad
           </Link>
           .
@@ -124,50 +143,30 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }
 
       {/* Acciones */}
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={loading}
-          style={{
-            height: 46,
-            padding: "0 18px",
-            borderRadius: 12,
-            border: "1px solid var(--ld-border)",
-            background: "transparent",
-            color: "var(--ld-fg-muted)",
-            fontWeight: 500,
-            cursor: loading ? "default" : "pointer",
-            fontFamily: "inherit",
-            fontSize: 14,
-          }}
-        >
+        <button type="button" onClick={onBack} disabled={loading} className="dca-btn-ghost" style={botonFantasma(loading)}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M19 12H5M11 6l-6 6 6 6" />
+          </svg>
           Atrás
         </button>
         <button
           type="button"
           onClick={onSubmit}
           disabled={!canSubmit}
-          style={{
-            flex: 1,
-            height: 46,
-            borderRadius: 12,
-            border: "none",
-            background: canSubmit ? "linear-gradient(180deg, #8b5cf6, #7c3aed)" : "#eef1f6",
-            color: canSubmit ? "#fff" : "#94a3b8",
-            boxShadow: canSubmit
-              ? "0 8px 20px -6px rgba(124,58,237,0.5), inset 0 1px 0 rgba(255,255,255,0.15)"
-              : "none",
-            fontWeight: 700,
-            fontSize: 15,
-            cursor: canSubmit ? "pointer" : "not-allowed",
-            fontFamily: "inherit",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-          }}
+          className="dca-btn-primary"
+          style={botonPrimario(!canSubmit, { flex: 1, fontSize: 15.5 })}
         >
-          {loading ? "Creando cuenta…" : "Crear cuenta →"}
+          {loading && (
+            <svg className="dca-spin" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-6.2-8.56" />
+            </svg>
+          )}
+          {loading ? "Creando cuenta…" : "Crear cuenta"}
+          {!loading && (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          )}
         </button>
       </div>
     </div>

@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 export type PlanId = "BASIC" | "PRO" | "CLINIC";
 export type Billing = "monthly" | "annual";
 
@@ -19,6 +17,13 @@ interface PlanCardProps {
   onSelect: () => void;
 }
 
+/**
+ * Tarjeta de plan del paso 3, con la misma ropa que las tarjetas de precios
+ * de la portada: nombre en versalitas con su punto, cifra grande tabular,
+ * la popular en navy con borde azul→violeta. Es un botón-radio: la elegida
+ * lleva anillo azul y la palomita en el radio. Estilos en ../auth-v4.css.
+ * Precio y tachado se muestran exactamente como antes (misma expresión).
+ */
 export function PlanCard({
   name,
   description,
@@ -31,216 +36,53 @@ export function PlanCard({
   selected,
   onSelect,
 }: PlanCardProps) {
-  const [hover, setHover] = useState(false);
   const price = billing === "annual" ? priceAnnual : priceMonthly;
-
-  const borderColor = selected
-    ? "rgba(124,58,237,0.6)"
-    : popular
-      ? "rgba(124,58,237,0.3)"
-      : "var(--ld-border)";
-
-  const background = selected
-    ? "linear-gradient(180deg, rgba(124,58,237,0.1), rgba(124,58,237,0.02))"
-    : popular
-      ? "linear-gradient(180deg, rgba(124,58,237,0.05), #ffffff)"
-      : "#ffffff";
-
-  const boxShadow = selected
-    ? "0 0 30px rgba(124,58,237,0.16), 0 0 0 3px rgba(124,58,237,0.12)"
-    : popular
-      ? "0 8px 30px -8px rgba(124,58,237,0.2)"
-      : hover
-        ? "0 10px 30px rgba(15,23,42,0.1)"
-        : "0 1px 3px rgba(15,23,42,0.04)";
 
   return (
     <button
       type="button"
+      role="radio"
+      aria-checked={selected}
       onClick={onSelect}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        position: "relative",
-        padding: 22,
-        borderRadius: 16,
-        textAlign: "left",
-        background,
-        border: `1px solid ${borderColor}`,
-        boxShadow,
-        transform: hover && !selected ? "translateY(-2px)" : "none",
-        transition: "all 0.2s",
-        cursor: "pointer",
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-        color: "var(--ld-fg)",
-        fontFamily: "inherit",
-        width: "100%",
-      }}
+      className={["dca-plan", popular ? "is-featured" : "", selected ? "is-selected" : ""].filter(Boolean).join(" ")}
     >
-      {popular && (
-        <div
-          style={{
-            position: "absolute",
-            top: -10,
-            left: 18,
-            padding: "3px 10px",
-            borderRadius: 100,
-            background: "linear-gradient(90deg, #a78bfa, #7c3aed)",
-            color: "#fff",
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            fontFamily: "var(--font-mono, ui-monospace, monospace)",
-          }}
-        >
-          Más popular
-        </div>
-      )}
-      {mostComplete && (
-        <div
-          style={{
-            position: "absolute",
-            top: -10,
-            right: 18,
-            padding: "3px 10px",
-            borderRadius: 100,
-            background: "rgba(5,150,105,0.08)",
-            color: "#047857",
-            border: "1px solid rgba(5,150,105,0.3)",
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            fontFamily: "var(--font-mono, ui-monospace, monospace)",
-          }}
-        >
-          Más completa
-        </div>
-      )}
+      {popular && <span className="dca-plan__badge">★ Más popular</span>}
+      {mostComplete && <span className="dca-plan__badge dca-plan__badge--complete">Más completa</span>}
 
-      {selected && (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            top: 12,
-            right: 12,
-            width: 22,
-            height: 22,
-            borderRadius: 22,
-            background: "#059669",
-            display: "grid",
-            placeItems: "center",
-            boxShadow: "0 4px 12px rgba(5,150,105,0.35)",
-          }}
-        >
+      <div className="dca-plan__head">
+        <span className="dca-plan__name">{name}</span>
+        <span className="dca-plan__radio" aria-hidden="true">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path
-              d="M2 6 L5 9 L10 3"
-              stroke="white"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <path d="M2 6 L5 9 L10 3" stroke={popular ? "#0f172a" : "#fff"} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
+        </span>
+      </div>
+
+      <div className="dca-plan__desc">{description}</div>
+
+      <div className="dca-plan__amount">
+        <span className="dca-plan__cur">$</span>
+        <span className="dca-plan__num">{price}</span>
+        <span className="dca-plan__per">
+          <span>MXN</span>
+          <span>/ mes</span>
+        </span>
+      </div>
+      {billing === "annual" && priceAnnual < priceMonthly && (
+        <div className="dca-plan__was" style={{ marginTop: -6 }}>
+          ${priceMonthly}
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div
-          aria-hidden="true"
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: 18,
-            flexShrink: 0,
-            border: `2px solid ${selected ? "var(--ld-brand-light)" : "#cbd5e1"}`,
-            background: selected
-              ? "radial-gradient(circle, var(--ld-brand-light) 45%, transparent 50%)"
-              : "transparent",
-          }}
-        />
-        <div
-          style={{
-            fontFamily: "var(--font-sans, system-ui, sans-serif)",
-            fontWeight: 600,
-            fontSize: 15,
-            letterSpacing: "0.08em",
-            color: selected || popular ? "var(--ld-brand-light)" : "var(--ld-fg)",
-          }}
-        >
-          {name}
-        </div>
-      </div>
+      <div className="dca-plan__hair" />
 
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-        <span
-          style={{
-            fontFamily: "var(--font-sans, system-ui, sans-serif)",
-            fontWeight: 700,
-            fontSize: 34,
-            letterSpacing: "-0.04em",
-            color: "var(--ld-fg)",
-          }}
-        >
-          ${price}
-        </span>
-        <span style={{ fontSize: 13, color: "var(--ld-fg-muted)" }}>MXN/mes</span>
-        {billing === "annual" && priceAnnual < priceMonthly && (
-          <span
-            style={{
-              textDecoration: "line-through",
-              color: "var(--ld-fg-muted)",
-              fontSize: 12,
-              fontFamily:
-                "var(--font-mono, ui-monospace, monospace)",
-              marginLeft: 2,
-            }}
-          >
-            ${priceMonthly}
-          </span>
-        )}
-      </div>
-      <div style={{ fontSize: 12.5, color: "var(--ld-fg-muted)", marginTop: -6 }}>
-        {description}
-      </div>
-
-      <div style={{ height: 1, background: "var(--ld-border)" }} />
-
-      <ul
-        style={{
-          listStyle: "none",
-          padding: 0,
-          margin: 0,
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-        }}
-      >
+      <ul className="dca-plan__feats">
         {features.map((f, i) => (
-          <li
-            key={i}
-            style={{
-              display: "flex",
-              gap: 9,
-              fontSize: 12.5,
-              color: "var(--ld-fg-muted)",
-              lineHeight: 1.4,
-            }}
-          >
-            <span
-              aria-hidden="true"
-              style={{
-                color: selected ? "#059669" : popular ? "#7c3aed" : "var(--ld-fg-muted)",
-                flexShrink: 0,
-                fontSize: 12,
-                marginTop: 1,
-              }}
-            >
-              ✓
+          <li key={i} className="dca-plan__feat">
+            <span className="dca-plan__chk" aria-hidden="true">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6 L5 9 L10 3" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </span>
             <span>{f}</span>
           </li>
