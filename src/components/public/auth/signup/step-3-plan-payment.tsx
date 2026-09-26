@@ -45,6 +45,14 @@ interface Step3Props {
   onBack: () => void;
   onSubmit: () => void;
   loading: boolean;
+  /**
+   * El plan ya venía elegido en la portada (?plan=). Entonces el paso arranca
+   * con un RESUMEN del plan (nombre, precio + IVA, mensual/anual) y un
+   * «Cambiar plan» que despliega las tres tarjetas. Sin él, se elige como
+   * siempre. Solo cambia qué se enseña: el plan y el periodo que se mandan
+   * siguen siendo `values.plan` / `values.billing`.
+   */
+  planFijo?: boolean;
 }
 
 // Descripción corta por plan (display). Features y precios viven en plans.ts.
@@ -54,8 +62,19 @@ const PLAN_DESC: Record<PlanId, string> = {
   CLINIC: "Para clínicas con varios consultorios.",
 };
 
-export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }: Step3Props) {
+// Misma forma que `fmt` de suspended-client: separador de miles de es-MX.
+const fmt = (n: number) => Math.round(n).toLocaleString("es-MX");
+
+// Viñetas en el mismo orden que siempre (el cupo CFDI en tercer lugar), y
+// solo las tres primeras: el paso tiene que caber en una pantalla.
+function vinetas(p: ApiPlan): string[] {
+  const todas = p.features.length < 2 ? [...p.features, cfdiBullet(p)] : [...p.features.slice(0, 2), cfdiBullet(p), ...p.features.slice(2)];
+  return todas.slice(0, 3);
+}
+
+export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, planFijo = false }: Step3Props) {
   const canSubmit = values.acceptedTerms && !loading;
+  const [mostrarPlanes, setMostrarPlanes] = useState(!planFijo);
 
   // Planes (precio/nombre/features) desde el endpoint público — sin hardcodear.
   const [plans, setPlans] = useState<ApiPlan[] | null>(null);
@@ -68,46 +87,78 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }
     return () => { cancelled = true; };
   }, []);
 
+  const elegido = plans?.find((p) => p.id === values.plan) ?? null;
+  const anual = values.billing === "annual";
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {/* Selector de plan — los 3 planes, sin encimar: colapsan por ANCHO real
-          (auto-fit) y nunca por viewport, así caben 1/2/3 columnas según haya. */}
-      <div
-        role="radiogroup"
-        aria-label="Elige tu plan"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-          gap: 14,
-          alignItems: "stretch",
-          paddingTop: 10,
-        }}
-      >
-        {plans === null &&
-          [0, 1, 2].map((i) => (
-            <div
-              key={i}
-              aria-hidden="true"
-              style={{ height: 300, borderRadius: 20, background: "#f1f5f9", border: "1px solid #e2e8f0" }}
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {!mostrarPlanes ? (
+        /* Resumen del plan elegido en la portada. Precio: el mensual tal cual
+           (priceMxn) o el total anual (priceMxnAnnual), los dos + IVA como en
+           Precios. */
+        elegido ? (
+          <div className="dca-resumen" role="status">
+            <span className="dca-resumen__ico" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </span>
+            <span className="dca-resumen__body">
+              <span className="dca-resumen__k">Tu plan elegido</span>
+              <span className="dca-resumen__name">{elegido.name}</span>
+              <span className="dca-resumen__price">
+                <strong>${fmt(anual ? elegido.priceMxnAnnual : elegido.priceMxn)}</strong>
+                <span>MXN {anual ? "al año" : "al mes"} · + IVA</span>
+                <span className="dca-resumen__pill">{anual ? "Pago anual" : "Pago mensual"}</span>
+              </span>
+            </span>
+            <button type="button" className="dca-resumen__cambiar" onClick={() => setMostrarPlanes(true)}>
+              Cambiar plan
+            </button>
+          </div>
+        ) : (
+          <div aria-hidden="true" style={{ height: 88, borderRadius: 16, background: "#f1f5f9", border: "1px solid #e2e8f0" }} />
+        )
+      ) : (
+        /* Selector de plan — los 3 planes, sin encimar: colapsan por ANCHO real
+           (auto-fit) y nunca por viewport, así caben 1/2/3 columnas según haya. */
+        <div
+          role="radiogroup"
+          aria-label="Elige tu plan"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 12,
+            alignItems: "stretch",
+            paddingTop: 10,
+          }}
+        >
+          {plans === null &&
+            [0, 1, 2].map((i) => (
+              <div
+                key={i}
+                aria-hidden="true"
+                style={{ height: 220, borderRadius: 18, background: "#f1f5f9", border: "1px solid #e2e8f0" }}
+              />
+            ))}
+          {(plans ?? []).map((p) => (
+            <PlanCard
+              key={p.id}
+              plan={p.id}
+              name={p.name}
+              description={PLAN_DESC[p.id] ?? ""}
+              priceMonthly={p.priceMxn}
+              priceAnnual={p.priceMxnAnnual}
+              billing="monthly"
+              features={vinetas(p)}
+              popular={p.id === "PRO"}
+              mostComplete={p.id === "CLINIC"}
+              selected={values.plan === p.id}
+              onSelect={() => onChange({ plan: p.id })}
             />
           ))}
-        {(plans ?? []).map((p) => (
-          <PlanCard
-            key={p.id}
-            plan={p.id}
-            name={p.name}
-            description={PLAN_DESC[p.id] ?? ""}
-            priceMonthly={p.priceMxn}
-            priceAnnual={p.priceMxnAnnual}
-            billing="monthly"
-            features={p.features.length < 2 ? [...p.features, cfdiBullet(p)] : [...p.features.slice(0, 2), cfdiBullet(p), ...p.features.slice(2)]}
-            popular={p.id === "PRO"}
-            mostComplete={p.id === "CLINIC"}
-            selected={values.plan === p.id}
-            onSelect={() => onChange({ plan: p.id })}
-          />
-        ))}
-      </div>
+        </div>
+      )}
 
       <p className="dca-note" style={{ margin: 0 }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
