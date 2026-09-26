@@ -111,11 +111,21 @@
 @keyframes dctpCinta { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 /* ── Tableta y móvil ────────────────────────────────────────────────────── */
+/* PC estrecho (1081–1280, ws1-t5 ajuste 2): el hueco entre la laptop y la
+   columna derecha baja a 22–26 px y el teléfono (14 px fuera + el giro) rozaba
+   «Radiografías 3D y CBCT» 5–9 px. Se mete 2 px hacia dentro; a ≥ 1281 igual. */
+@media (min-width: 1081px) and (max-width: 1280px) {
+  .dctp__phone { right: 2px; }
+}
 @media (max-width: 1080px) {
   .dctp__stage { grid-template-columns: minmax(0, 1fr); gap: 22px; }
   /* Ojo: `margin: 0 auto` en un ítem de grid lo encoge a su contenido y la
      laptop (sin ancho intrínseco) desaparecía; se centra con justify-self. */
-  .dctp__center { width: 100%; max-width: 720px; justify-self: center; padding-bottom: 60px; }
+  /* ws1-t5 (ajuste 2): el teléfono colgaba 22 px por debajo del centro y,
+     girado −4°, pisaba la fila de tarjetas unos 5 px en 768–1024. Sube a
+     −8 px y el centro crece 14 px para que quede igual respecto a la laptop. */
+  .dctp__center { width: 100%; max-width: 720px; justify-self: center; padding-bottom: 74px; }
+  .dctp__phone { bottom: -8px; }
   .dctp__col { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .dctp__col--izq { order: 2; }
   .dctp__col--der { order: 3; }
