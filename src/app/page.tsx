@@ -153,7 +153,7 @@ export default async function HomePage() {
             (la laptop con el panel grabado). modules-trio, features-grid y
             module-pages siguen en el repo sin montar. */}
         <TodoElPanel />
-        <Comparison />
+        <Comparison firstMonthFrom={firstMonthFrom} />
         <Testimonials />
         <TrustFaq firstMonthFrom={firstMonthFrom} />
         <FinalCta firstMonthFrom={firstMonthFrom} />

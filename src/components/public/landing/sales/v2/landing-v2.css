@@ -1049,12 +1049,62 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   .dcv4-price__caps { gap: 8px; }
   .dcv4-price__cap { padding: 10px 10px; }
   .dcv4-price__capvalue { font-size: 16px; }
+  /* Ajuste 11: «Todo lo de Profesional + lo esencial» cabe en una línea a 1024 (265 px útiles). */
+  .dcv4-price__all { font-size: 11.5px; letter-spacing: -.01em; gap: 6px; padding: 5px 10px 5px 7px; }
 }
 @media (max-width: 480px) {
   .dcv4-price__card { padding: 28px 18px 22px; border-radius: 20px; }
   .dcv4-price__badge { left: 18px; }
   .dcv4-price__tbtn { padding: 9px 14px; font-size: 14px; }
 }
+
+/* ── Comparativa (comparison.tsx) — ajuste 11: cuatro razones con ícono del
+   panel sobre la tabla, tabla con la columna DaleControl destacada y cierre
+   con píldoras. Mismos materiales que Precios (papel blanco, brillo interior,
+   sombra en dos capas). Los tonos por razón son los del panel: azul #2563eb,
+   verde #15803d, violeta #4d3fc6, ámbar #b45309 (todos ≥ 4.5:1 sobre su fondo). */
+.dcv4-cmp { position: relative; isolation: isolate; overflow: clip; background: #fff; }
+.dcv4-cmp__bg { position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(780px 440px at 50% -40px, rgba(77,63,198,.09), rgba(77,63,198,0) 70%), radial-gradient(640px 420px at 100% 100%, rgba(37,99,235,.07), rgba(37,99,235,0) 70%); }
+.dcv4-cmp__headblock { text-align: center; max-width: 720px; margin: 0 auto; }
+.dcv4-cmp__reasons { margin-top: clamp(30px, 3.6vw, 44px); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.dcv4-cmp__reason { --tono: #2563eb; --tono-bg: #eff6ff; position: relative; display: flex; flex-direction: column; gap: 12px; padding: 20px 20px 22px; background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(15,23,42,.04), 0 22px 44px -32px rgba(15,23,42,.35); transition: transform .28s cubic-bezier(.2,.7,.2,1), box-shadow .28s ease, border-color .28s ease, opacity .6s ease; }
+.dcv4-cmp__reason::after { content: ""; position: absolute; left: 20px; right: 20px; top: 0; height: 3px; border-radius: 0 0 3px 3px; background: var(--tono); opacity: .9; }
+.dcv4-cmp__reason:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--tono) 35%, #e2e8f0); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 2px 4px rgba(15,23,42,.04), 0 30px 56px -34px color-mix(in srgb, var(--tono) 45%, transparent); }
+.dcv4-cmp__reason--verde { --tono: #15803d; --tono-bg: #dcfce7; }
+.dcv4-cmp__reason--violeta { --tono: #4d3fc6; --tono-bg: #ede9fe; }
+.dcv4-cmp__reason--ambar { --tono: #b45309; --tono-bg: #fef3c7; }
+.dcv4-cmp__ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; color: var(--tono); background: var(--tono-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tono) 18%, transparent); }
+.dcv4-cmp__rtitle { font-size: 16.5px; font-weight: 800; letter-spacing: -.015em; line-height: 1.2; color: #0f172a; }
+.dcv4-cmp__rline { font-size: 14px; line-height: 1.5; color: #475569; }
+
+.dcv4-cmp__table { margin-top: clamp(22px, 2.6vw, 30px); border: 1px solid #e2e8f0; border-radius: 22px; overflow: hidden; background: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 26px 56px -36px rgba(15,23,42,.4); }
+.dcv4-cmp__row { display: grid; grid-template-columns: 1.7fr 1fr 1.25fr 1fr; align-items: center; border-bottom: 1px solid #f1f5f9; transition: background .18s; }
+.dcv4-cmp__row:last-child { border-bottom: 0; }
+.dcv4-cmp__row:not(.dcv4-cmp__row--head):hover { background: #fafbfd; }
+.dcv4-cmp__row--head { background: #f8fafc; border-bottom: 1px solid #e8edf4; }
+.dcv4-cmp__label { padding: 14px 20px; font-size: 14.5px; font-weight: 600; color: #0f172a; line-height: 1.35; }
+.dcv4-cmp__head { padding: 16px 10px; font-size: 13px; font-weight: 700; color: #475569; text-align: center; }
+.dcv4-cmp__head--dc { display: grid; place-items: center; align-self: stretch; background: #eff6ff; border-left: 1px solid #dbeafe; }
+.dcv4-cmp__head--dc > span { display: inline-block; background: linear-gradient(180deg, #172242, #0f172a); color: #fff; font-size: 13px; font-weight: 800; letter-spacing: .01em; border-radius: 999px; padding: 7px 14px; box-shadow: 0 8px 18px -10px rgba(15,23,42,.6); }
+.dcv4-cmp__cell { text-align: center; font-size: 12.5px; color: #64748b; padding: 6px; }
+.dcv4-cmp__cell--no, .dcv4-cmp__cell--na { font-size: 14px; font-weight: 700; }
+.dcv4-cmp__dc { align-self: stretch; display: grid; place-items: center; background: #eff6ff; border-left: 1px solid #dbeafe; }
+.dcv4-cmp__dc svg { width: 22px; height: 22px; padding: 4px; border-radius: 50%; color: #15803d; background: #dcfce7; }
+.dcv4-cmp__closing { margin-top: clamp(20px, 2.4vw, 28px); display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.dcv4-cmp__closing li { font-size: 13px; font-weight: 600; color: #334155; background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 8px 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 8px 18px -14px rgba(15,23,42,.3); }
+.dcv4-cmp__closing li:first-child { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+@media (max-width: 1000px) { .dcv4-cmp__reasons { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .dcv4-cmp__reasons { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .dcv4-cmp__reason { padding: 16px 16px 18px; border-radius: 16px; gap: 10px; }
+  .dcv4-cmp__ico { width: 40px; height: 40px; border-radius: 12px; }
+}
+@media (max-width: 640px) {
+  .dcv4-cmp__head--dc > span { font-size: 11px; padding: 5px 8px; }
+  .dcv4-cmp__dc svg { width: 20px; height: 20px; }
+}
+@media (prefers-reduced-motion: reduce) { .dcv4-cmp__reason:hover { transform: none; } }
 
 /* ── Comparativa en móvil (comparison.tsx) ───────────────────────────────
    La rejilla tenía `min-width:640px` dentro de un contenedor con scroll

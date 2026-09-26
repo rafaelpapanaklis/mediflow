@@ -79,6 +79,12 @@ export interface PlanCard {
    * si un día un módulo se apaga en algún plan, deja de ser «común» solo.
    */
   includedInAll: string[];
+  /**
+   * Etiqueta del plan anterior (plan_configs.label) para el chip verde de la
+   * tarjeta (ajuste 11): Básico «Todo lo esencial incluido»; los demás «Todo lo
+   * de <anterior> + lo esencial». null en el primero.
+   */
+  previousPlanLabel: string | null;
 }
 
 const SIGNUP_PARAM: Record<PlanId, PlanCard['signupParam']> = {
@@ -271,7 +277,7 @@ function splitFeatures(plans: ResolvedPlan[]): { includedInAll: string[]; rowsFo
 
 export function buildPlanCards(plans: ResolvedPlan[]): PlanCard[] {
   const { includedInAll, rowsFor } = splitFeatures(plans);
-  return plans.map((p) => {
+  return plans.map((p, i) => {
     const copy = CARD_COPY[p.id];
     const yearlyFull = p.priceMxnMonthly * 12;
     return {
@@ -299,6 +305,7 @@ export function buildPlanCards(plans: ResolvedPlan[]): PlanCard[] {
       ],
       features: rowsFor(p),
       includedInAll,
+      previousPlanLabel: i > 0 ? plans[i - 1].label : null,
     };
   });
 }

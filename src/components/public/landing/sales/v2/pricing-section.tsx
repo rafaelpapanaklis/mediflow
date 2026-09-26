@@ -43,6 +43,8 @@ const num = (n: number) => n.toLocaleString("es-MX");
 const PRICING_ALL_TITLE = "Incluido en todos los planes";
 const PRICING_ALL_SUB = "Las funciones base van en Básico, Profesional y Clínica. Las tarjetas muestran solo lo que cambia.";
 const PRICING_ALL_CHIP = "Todo lo esencial incluido";
+/** Ajuste 11: en Profesional y Clínica el chip nombra al plan anterior (label de plan_configs). */
+const chipText = (previous: string | null) => (previous ? `Todo lo de ${previous} + lo esencial` : PRICING_ALL_CHIP);
 
 function Check({ on }: { on: boolean }) {
   return on ? (
@@ -144,7 +146,7 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
               {/* Ajuste 9: lo base está en los tres planes; el chip salta al bloque común de abajo. */}
               <a href="#precios-incluido" className="dcv4-price__all">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7" /></svg>
-                <span>{PRICING_ALL_CHIP}</span>
+                <span>{chipText(p.previousPlanLabel)}</span>
               </a>
 
               {p.addendum && <p className="dcv4-price__addendum">{p.addendum}</p>}

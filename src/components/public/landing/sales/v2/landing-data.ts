@@ -260,6 +260,39 @@ export const MODULE_PAGES: { slug: ProductoSlug; glyph: string; color: string; t
   { slug: 'software-multiclinica-dental', glyph: '⧉', color: '#1e3a8a', title: 'Multi-sede, roles y permisos', desc: 'Varias sucursales en una sola cuenta' },
 ];
 
+/**
+ * Ajuste 11 (Rafael): cuatro razones nuevas sobre la tabla, con ícono del panel
+ * (Material Symbols, `IconoPanel`), título corto y una línea. SOLO hechos que la
+ * portada ya afirma o que existen en el producto:
+ *  - Página web: 8 plantillas = las 8 claves de TEMPLATE_MANIFESTS
+ *    (src/app/[slug]/_shared/template-manifest.ts); «gratis» = módulo `landing`
+ *    true en los tres planes y píldora «Página web gratuita incluida en
+ *    cualquier plan»; el resto, tarjeta «Tu página web, gratis» (funciones-v3-data).
+ *  - Mercado Pago: sección «WhatsApp + Mercado Pago» (whatsapp-mp-section.tsx):
+ *    link desde la factura, tratamientos y mensualidades, dinero en la cuenta de la clínica.
+ *  - Sabina: sección «Sabina · dentro del panel» (sabina-data.ts): lee datos
+ *    reales, deudas/huecos/ingresos; se monta en todo el panel (dashboard/layout.tsx).
+ *  - Importar: función «Importa tu clínica en 1 clic» (FUNCIONES) y FAQ
+ *    «¿Tengo que capturar…?»; pantalla real en src/app/dashboard/import.
+ * Sin cifras nuevas, sin certificaciones, sin integraciones que no existan.
+ */
+export const SWITCH_REASONS: { icono: string; tono: 'azul' | 'verde' | 'violeta' | 'ambar'; title: string; line: string }[] = [
+  { icono: 'language', tono: 'azul', title: 'Tu página web, gratis', line: '8 plantillas, 100 % personalizable. La cita que piden desde tu web cae en tu agenda.' },
+  { icono: 'point_of_sale', tono: 'verde', title: 'Cobra por WhatsApp con Mercado Pago', line: 'Tratamientos y mensualidades: el link sale de la factura y el dinero cae en tu cuenta.' },
+  { icono: 'auto_awesome', tono: 'violeta', title: 'Sabina, tu asistente en el panel', line: 'Pregúntale por deudas, huecos o ingresos y contesta con los datos reales de tu clínica.' },
+  { icono: 'folder', tono: 'ambar', title: 'Importa tu clínica en 1 clic', line: 'Desde Excel o tu panel anterior, con migración asistida gratis por nuestro equipo.' },
+];
+
+/**
+ * Cierre de la comparativa (ajuste 11). El 1.º lleva el precio del primer mes,
+ * que se inyecta en el componente desde plan_configs (`firstMonthFrom`); aquí
+ * no se escribe ninguna cifra. «CFDI 4.0» es lo que ya dice el pie de página.
+ */
+export const COMPARISON_CLOSING = {
+  firstMonthPrefix: 'Primer mes desde ',
+  chips: ['Sin permanencia', 'Facturación CFDI 4.0', 'Precios en MXN + IVA'],
+};
+
 export const COMPARISON = {
   eyebrow: 'Comparativa',
   title: '¿Por qué cambiarte a DaleControl?',
