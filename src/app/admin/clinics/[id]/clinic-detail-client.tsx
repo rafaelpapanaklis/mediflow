@@ -30,6 +30,9 @@ import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
 import { evaluarSaludClinica, ETIQUETA_ESTADO_OPERATIVO } from "@/lib/admin/salud-clinica";
 import { ClinicAiWalletCard, ClinicAiPaymentsCard } from "@/components/admin/clinic-ai-wallet-card";
 import type { SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia-clinica";
+import type { UsoClinica } from "@/lib/admin/uso-core";
+import { Chip } from "@/components/admin/rediseno/piezas";
+import { ResumenClinica } from "./resumen-clinica";
 
 /** Lo que ESTA clínica nos ha pagado por su suscripción (subscription_invoices). */
 export interface PlatformPayments {
@@ -104,6 +107,10 @@ interface Props {
   platformPayments:     PlatformPayments;
   /** Saldo de IA de la clínica (monedero, movimientos y recargas). null = no se pudo leer. */
   saldoIa:              SaldoIaClinicaDTO | null;
+  /** Consumo y cupos (@/lib/admin/uso-clinica). null = no se pudo medir. */
+  uso:                  UsoClinica | null;
+  /** Tope de pacientes del plan (plan_configs.maxPatients); null = ilimitado. */
+  pacientesTope:        number | null;
   /** Precios de lista por plan, desde plan_configs. Nunca un literal. */
   planPrices:           Record<string, number>;
   /** "Ahora" del servidor: SSR e hidratación cuentan los mismos días. */
@@ -146,6 +153,8 @@ export function AdminClinicDetailClient({
   recurringCharge,
   platformPayments,
   saldoIa,
+  uso,
+  pacientesTope,
   planPrices,
   ahoraISO,
   actividad,
@@ -389,90 +398,87 @@ export function AdminClinicDetailClient({
   ];
 
   return (
-    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Header */}
-      <CardNew noPad>
-        <div style={{ padding: 20, display: "flex", alignItems: "flex-start", gap: 16 }}>
-          <Link
-            href="/admin/clinics"
-            style={{
-              padding: 8,
-              borderRadius: 8,
-              display: "grid",
-              placeItems: "center",
-              color: "var(--text-3)",
-              border: "1px solid var(--border-soft)",
-              background: "var(--bg-elev)",
-              flexShrink: 0,
-            }}
-            aria-label="Volver"
-          >
-            <ArrowLeft size={14} />
-          </Link>
-          <AvatarNew name={clinic.name} size="xl" />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-              <h1 style={{ fontSize: 20, margin: 0, color: "var(--text-1)", fontWeight: 600 }}>{clinic.name}</h1>
-              <BadgeNew tone={planTone(clinic.plan)}>{clinic.plan}</BadgeNew>
-              {/* El estado COMERCIAL, que es el que manda para operar. */}
-              <BadgeNew tone={ESTADO_TONO[salud.estadoOperativo] ?? "neutral"} dot>
-                {ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}
-              </BadgeNew>
-              {/* Y el del gate de acceso, sólo cuando no dice lo mismo. */}
-              {!(ESTADO_ESPERADO[salud.plan.kind] ?? []).includes(salud.estadoOperativo) && (
-                <span title="Lo que ve la clínica: el gate de acceso todavía la deja entrar">
-                  <PlanStatusBadge clinic={clinic} now={ahora} />
-                </span>
-              )}
-            </div>
-            <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-2)", flexWrap: "wrap" }}>
-              <span>{clinic.specialty}</span>
-              <span>{clinic.city ?? "—"}, {clinic.country}</span>
-              {clinic.phone && <span>{clinic.phone}</span>}
-              <span className="mono">/{clinic.slug}</span>
-              {clienteOwner?.supabaseId && (
-                <Link
-                  href={`/admin/clientes/${clienteOwner.supabaseId}`}
-                  style={{ color: "var(--brand)", textDecoration: "none", fontWeight: 500 }}
-                >
-                  Cliente: {`${clienteOwner.firstName ?? ""} ${clienteOwner.lastName ?? ""}`.trim() || clienteOwner.email}
-                </Link>
-              )}
-            </div>
+    <div className="ad-pagina" style={{ gap: 16 }}>
+      {/* Header (rediseño ws1-t2: mismos datos y mismos botones, menos ruido) */}
+      <div className="ad-ficha-cabecera">
+        <Link href="/admin/clinics" className="ad-volver" aria-label="Volver">
+          <ArrowLeft size={14} />
+        </Link>
+        <AvatarNew name={clinic.name} size="lg" />
+        <div className="ad-ficha-cabecera__texto">
+          <div className="ad-ficha-cabecera__nombre">
+            <h1>{clinic.name}</h1>
+            <Chip tono={planTone(clinic.plan) === "brand" ? "brand" : planTone(clinic.plan) === "info" ? "info" : "neutral"}>{clinic.plan}</Chip>
+            {/* El estado COMERCIAL, que es el que manda para operar. */}
+            <Chip tono={(ESTADO_TONO[salud.estadoOperativo] ?? "neutral") as "success" | "warning" | "danger" | "info" | "brand" | "neutral"} punto>
+              {ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}
+            </Chip>
+            {/* Y el del gate de acceso, sólo cuando no dice lo mismo. */}
+            {!(ESTADO_ESPERADO[salud.plan.kind] ?? []).includes(salud.estadoOperativo) && (
+              <span title="Lo que ve la clínica: el gate de acceso todavía la deja entrar">
+                <PlanStatusBadge clinic={clinic} now={ahora} />
+              </span>
+            )}
+            {salud.riesgos[0] && (
+              <Chip tono={salud.riesgos[0].severidad === "critico" ? "danger" : salud.riesgos[0].severidad === "alto" ? "warning" : "info"} sm title={salud.riesgos[0].detalle}>
+                {salud.riesgos[0].titulo}
+              </Chip>
+            )}
+            {actividad.enLinea && <span className="ad-online" title="En el panel ahora" />}
           </div>
-          <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <ButtonNew variant="secondary" icon={<MessageCircle size={14} />} onClick={() => setModalChannel("whatsapp")}>
-              WhatsApp
-            </ButtonNew>
-            <ButtonNew variant="secondary" icon={<Mail size={14} />} onClick={() => setModalChannel("email")}>
-              Email
-            </ButtonNew>
-            <a
-              href={`/api/admin/clinics/${clinic.id}/export`}
-              target="_blank"
-              style={{ textDecoration: "none" }}
-              title="Descargar ZIP con CSVs + manifest"
-            >
-              <ButtonNew variant="secondary" icon={<Download size={14} />}>
-                Exportar
-              </ButtonNew>
-            </a>
-            <a
-              href={`/api/admin/impersonate?clinicId=${clinic.id}`}
-              target="_blank"
-              style={{ textDecoration: "none" }}
-            >
-              <ButtonNew variant="primary" icon={<Eye size={14} />}>
-                Impersonar
-              </ButtonNew>
-            </a>
+          <div className="ad-datos">
+            <span>{clinic.specialty}</span>
+            <span>{clinic.city ?? "—"}, {clinic.country}</span>
+            {clinic.phone && <span>{clinic.phone}</span>}
+            <span>/{clinic.slug}</span>
+            <span>Alta <strong>{fechaAdmin(clinic.createdAt) ?? "—"}</strong></span>
+            {clienteOwner?.supabaseId && (
+              <Link href={`/admin/clientes/${clienteOwner.supabaseId}`}>
+                Cliente: {`${clienteOwner.firstName ?? ""} ${clienteOwner.lastName ?? ""}`.trim() || clienteOwner.email}
+              </Link>
+            )}
           </div>
         </div>
-      </CardNew>
+        <div className="ad-acciones">
+          <ButtonNew variant="secondary" icon={<MessageCircle size={14} />} onClick={() => setModalChannel("whatsapp")}>
+            WhatsApp
+          </ButtonNew>
+          <ButtonNew variant="secondary" icon={<Mail size={14} />} onClick={() => setModalChannel("email")}>
+            Email
+          </ButtonNew>
+          <a
+            href={`/api/admin/clinics/${clinic.id}/export`}
+            target="_blank"
+            title="Descargar ZIP con CSVs + manifest"
+          >
+            <ButtonNew variant="secondary" icon={<Download size={14} />}>
+              Exportar
+            </ButtonNew>
+          </a>
+          <a href={`/api/admin/impersonate?clinicId=${clinic.id}`} target="_blank">
+            <ButtonNew variant="primary" icon={<Eye size={14} />}>
+              Impersonar
+            </ButtonNew>
+          </a>
+        </div>
+      </div>
 
-      {/* KPIs */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-        <KpiCard label="Pacientes"   value={String(clinic._count.patients)}     icon={Users}    />
+      {/* Resumen: cupos, saldo, renovación y acceso, de un vistazo. */}
+      <ResumenClinica
+        uso={uso}
+        pacientes={clinic._count?.patients ?? 0}
+        pacientesTope={pacientesTope}
+        nextBillingDate={clinic.nextBillingDate ?? null}
+        periodoHasta={planStatus.periodEnd}
+        metodo={clinic}
+        ultimoAccesoAt={actividad.ultimoAccesoAt}
+        enLinea={actividad.enLinea}
+        ultimoPagoAt={platformPayments.lastPaidAt}
+        ultimoPagoMonto={platformPayments.lastAmount}
+      />
+
+      {/* KPIs de volumen (los de siempre, sin el de pacientes, que ya está en el resumen) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
         <KpiCard label="Citas"       value={String(clinic._count.appointments)} icon={Clock}    />
         <KpiCard label="Expedientes" value={String(clinic._count.records)}      icon={FileText} />
         {/* Ojo: estos dos salen de prisma.invoice = la facturación de la
