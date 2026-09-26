@@ -212,7 +212,7 @@ export const MODULES_TRIO = {
     {
       id: 'web',
       title: 'Tu página web, lista en minutos',
-      desc: 'Elige entre 4 plantillas, publica con un clic y capta pacientes con tu link propio y reseñas post-cita.',
+      desc: 'Elige entre 8 plantillas, publica con un clic y capta pacientes con tu link propio y reseñas post-cita.',
     },
   ],
 };
