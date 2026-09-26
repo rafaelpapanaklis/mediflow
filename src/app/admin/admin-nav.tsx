@@ -185,7 +185,7 @@ export function AdminSidebar({
       )}
 
       <aside
-        className="sidebar-new"
+        className={`sidebar-new${mobileOpen ? " ad-sidebar--abierta" : ""}`}
         style={{
           zIndex: 41,
           position: mobileOpen ? "fixed" : undefined,
@@ -197,10 +197,9 @@ export function AdminSidebar({
         <div className="sidebar-new__brand">
           <div
             className="sidebar-new__logo"
-            style={{
-              background: "linear-gradient(135deg, #dc2626, #7c3aed)",
-              boxShadow: "0 0 20px rgba(124,58,237,0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
-            }}
+            // Rediseño (ws1-t2): el cuadro de marca en el violeta del menú, sin
+            // glow neón ni hex sueltos.
+            style={{ background: "var(--brand)", color: "var(--m2-activo-texto)", boxShadow: "none" }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
