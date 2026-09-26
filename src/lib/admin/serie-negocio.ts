@@ -38,6 +38,12 @@ export interface PuntoNegocio {
   ingresos: number;
   altas: number;
   pagos: number;
+  /**
+   * El tramo AÚN NO HA LLEGADO (mañana, el mes que viene…). Sus cifras son 0
+   * por definición; la gráfica no lo pinta (ni punto ni caída), sólo lo deja
+   * en el eje. Ajuste 1b.
+   */
+  futuro: boolean;
 }
 
 const DIA_MS = 86_400_000;
@@ -131,19 +137,26 @@ export function serieNegocio(cobros: CobroCrudo[], altas: Date[], ahora: Date, r
   const porMeses = rango === "anio";
   const tramos = porMeses ? anioEnCurso(ahora) : rango === "semana" ? semanaEnCurso(ahora) : mesEnCurso(ahora);
   const claveDe = (d: Date) => (porMeses ? mesDe(d) : diaAdmin(d));
+  // Las claves son "YYYY-MM-DD" / "YYYY-MM": comparan bien como texto.
+  const hoyClave = claveDe(ahora);
 
   const mapa = new Map<string, PuntoNegocio>();
-  for (const t of tramos) mapa.set(t.clave, { clave: t.clave, label: t.label, ingresos: 0, altas: 0, pagos: 0 });
+  for (const t of tramos) {
+    mapa.set(t.clave, { clave: t.clave, label: t.label, ingresos: 0, altas: 0, pagos: 0, futuro: t.clave > hoyClave });
+  }
 
+  // Un cobro o un alta con fecha por delante (existen: cobros fechados a
+  // futuro) SÍ se suma y saca al tramo de «futuro»: esconderlo sería mentir.
   for (const c of cobros) {
     const p = mapa.get(claveDe(c.cuando));
     if (!p) continue;
     p.ingresos += c.monto || 0;
     p.pagos += 1;
+    p.futuro = false;
   }
   for (const a of altas) {
     const p = mapa.get(claveDe(a));
-    if (p) p.altas += 1;
+    if (p) { p.altas += 1; p.futuro = false; }
   }
   return tramos.map((t) => mapa.get(t.clave)!);
 }

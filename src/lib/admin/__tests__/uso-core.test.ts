@@ -164,6 +164,20 @@ test("serieNegocio por semana: lunes a domingo de la semana EN CURSO de Mérida,
   assert.equal(s.reduce((a, p) => a + p.altas, 0), 2, "el alta del 17 es de la semana pasada");
 });
 
+test("serieNegocio: los tramos que aún no llegan van marcados como futuro, y hoy no", () => {
+  const semana = serieNegocio([], [], AHORA, "semana"); // sábado 26
+  assert.deepEqual(semana.map((p) => p.futuro), [false, false, false, false, false, false, true], "sólo el domingo 27 es futuro");
+  const anio = serieNegocio([], [], AHORA, "anio");
+  assert.deepEqual(anio.map((p) => p.futuro), [false, false, false, false, false, false, false, false, false, true, true, true], "oct, nov y dic");
+  const mes = serieNegocio([], [], AHORA, "mes");
+  assert.equal(mes.filter((p) => p.futuro).length, 4, "27, 28, 29 y 30 de septiembre");
+  assert.equal(mes[25].futuro, false, "hoy 26 no es futuro");
+  // Un cobro fechado por delante existe y se enseña: ese tramo deja de ser futuro.
+  const conFuturo = serieNegocio([{ monto: 10, cuando: new Date("2026-11-10T16:00:00.000Z") }], [], AHORA, "anio");
+  assert.equal(conFuturo[10].futuro, false);
+  assert.equal(conFuturo[10].ingresos, 10);
+});
+
 test("serieNegocio por semana: un lunes la semana empieza ese mismo día", () => {
   const lunes = new Date("2026-09-21T16:00:00.000Z");
   const s = serieNegocio([], [], lunes, "semana");

@@ -34,9 +34,14 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
   inicial?: Rango;
 }) {
   const [rango, setRango] = useState<Rango>(inicial);
-  const datos = series[rango];
-  const totalIngresos = datos.reduce((s, p) => s + p.ingresos, 0);
-  const totalAltas = datos.reduce((s, p) => s + p.altas, 0);
+  // Los tramos que aún no llegan van a null: recharts no pinta ni punto ni
+  // barra y la línea termina en el periodo actual, sin desplomarse a $0.
+  // Los totales salen de la serie tal cual (los futuros valen 0).
+  const datos = series[rango].map((p) => (p.futuro
+    ? { ...p, ingresos: null as number | null, altas: null as number | null, pagos: null as number | null }
+    : p));
+  const totalIngresos = series[rango].reduce((s, p) => s + p.ingresos, 0);
+  const totalAltas = series[rango].reduce((s, p) => s + p.altas, 0);
   // En el mes (28–31 tramos) el eje muestra un día de cada cuatro para que no se pise.
   const intervalo = rango === "mes" ? 3 : 0;
 
@@ -82,7 +87,7 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
             {/* Línea recta entre puntos y un punto por tramo: cada día (o mes) es
                 una cifra real, y la curva suave inventaba dinero entre dos días. */}
             <Area yAxisId="ingresos" type="linear" dataKey="ingresos" name="Ingresos" stroke="var(--brand)" strokeWidth={2} fill="url(#ad-ingresos)"
-              dot={rango === "mes" ? false : { r: 3, fill: "var(--brand)", strokeWidth: 0 }} activeDot={{ r: 4 }} />
+              connectNulls={false} dot={rango === "mes" ? false : { r: 3, fill: "var(--brand)", strokeWidth: 0 }} activeDot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
