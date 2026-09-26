@@ -69,56 +69,76 @@ test("desglose: total = subtotal + IVA, en enteros, para los planes de hoy y las
   }
 });
 
-/* ── Ajuste 1b: «clínica ya registrada» (renueva a mano sin IVA) ─────────────── */
+/* ── Ajuste 1c: la regla final de «clínica ya creada» ────────────────────────── */
 import {
   IVA_FECHA_CORTE,
   ivaAplica,
   ivaParaPagoDeClinica,
-  planConPagoManualSinIva,
+  exencionDeIva,
+  senalDeTarjetaEnLaFila,
   desgloseSinIva,
 } from "./iva-cobro";
 
-const DE_ANTES = { createdAt: new Date("2025-11-03T12:00:00Z"), plan: "PRO", nextBillingDate: new Date("2026-09-30"), stripeSubscriptionId: null, subscriptionId: null };
+const DE_ANTES = { createdAt: new Date("2025-11-03T12:00:00Z"), plan: "PRO", stripeSubscriptionId: null, subscriptionId: null };
+const NUEVA = { ...DE_ANTES, createdAt: new Date("2026-10-05T12:00:00Z") };
 
 test("el corte es el 26-sep-2026 00:00 de México (06:00 UTC): una constante del código, sin SQL", () => {
   assert.equal(IVA_FECHA_CORTE.toISOString(), "2026-09-26T06:00:00.000Z");
 });
 
-test("«ya registrada» = creada ANTES del corte Y ya había pagado; devuelve su plan", () => {
-  assert.equal(planConPagoManualSinIva(DE_ANTES), "PRO");
-  // ya pagó por cualquiera de las tres señales (mismas que «no es primera contratación»)
-  assert.equal(planConPagoManualSinIva({ ...DE_ANTES, nextBillingDate: null, stripeSubscriptionId: "sub_x" }), "PRO");
-  assert.equal(planConPagoManualSinIva({ ...DE_ANTES, nextBillingDate: null, subscriptionId: "legacy_1" }), "PRO");
-  // registrada antes pero NUNCA pagó → compra nueva → con IVA
-  assert.equal(planConPagoManualSinIva({ ...DE_ANTES, nextBillingDate: null }), null);
-  // registrada en/después del corte → nueva, aunque ya haya pagado
-  assert.equal(planConPagoManualSinIva({ ...DE_ANTES, createdAt: IVA_FECHA_CORTE }), null);
-  assert.equal(planConPagoManualSinIva({ ...DE_ANTES, createdAt: "2026-10-01T00:00:00Z" }), null);
-  assert.equal(planConPagoManualSinIva({ ...DE_ANTES, createdAt: new Date(IVA_FECHA_CORTE.getTime() - 1000) }), "PRO");
-  // datos que faltan → se trata como nueva (con IVA): nunca se regala el IVA por un dato ausente
+test("(a) creada en/después del corte → NUNCA exenta; (b) antes → exenta de SU plan, haya pagado o no", () => {
+  assert.deepEqual(exencionDeIva(DE_ANTES), { plan: "PRO", tarjeta: true }, "aunque nunca haya pagado");
+  assert.deepEqual(exencionDeIva({ ...DE_ANTES, nextBillingDate: new Date() } as any), { plan: "PRO", tarjeta: true });
+  assert.equal(exencionDeIva(NUEVA), null);
+  assert.equal(exencionDeIva({ ...DE_ANTES, createdAt: IVA_FECHA_CORTE }), null, "justo en el corte = nueva");
+  assert.deepEqual(exencionDeIva({ ...DE_ANTES, createdAt: new Date(IVA_FECHA_CORTE.getTime() - 1000) }), { plan: "PRO", tarjeta: true });
+  // datos que faltan → con IVA: nunca se regala por un dato ausente
   for (const mala of [null, undefined, {}, { ...DE_ANTES, createdAt: null }, { ...DE_ANTES, createdAt: "no-es-fecha" }, { ...DE_ANTES, plan: null }]) {
-    assert.equal(planConPagoManualSinIva(mala as any), null);
+    assert.equal(exencionDeIva(mala as any), null);
   }
 });
 
-test("la excepción es solo OXXO/SPEI del MISMO plan; tarjeta y otro plan llevan IVA", () => {
-  const a = (metodo: "card" | "spei" | "oxxo", plan: string, planExento: string | null) => ivaAplica({ metodo, plan, planExento });
-  assert.equal(a("oxxo", "PRO", "PRO"), false);
-  assert.equal(a("spei", "PRO", "PRO"), false);
-  assert.equal(a("card", "PRO", "PRO"), true, "tarjeta = suscripción nueva");
-  assert.equal(a("oxxo", "CLINIC", "PRO"), true, "otro plan = condición nueva");
-  assert.equal(a("spei", "BASIC", "PRO"), true);
-  assert.equal(a("oxxo", "PRO", null), true, "clínica nueva: todo con IVA");
+test("tuvo tarjeta y la canceló → la exención NO cubre la tarjeta (reactivar = con IVA); OXXO/SPEI siguen exentos", () => {
+  const e = exencionDeIva({ ...DE_ANTES, tuvoTarjeta: true });
+  assert.deepEqual(e, { plan: "PRO", tarjeta: false });
+  assert.equal(ivaAplica({ metodo: "card", plan: "PRO", exencion: e }), true);
+  assert.equal(ivaAplica({ metodo: "oxxo", plan: "PRO", exencion: e }), false);
+  assert.equal(ivaAplica({ metodo: "spei", plan: "PRO", exencion: e }), false);
 });
 
-test("ivaParaPagoDeClinica: exento no exige el env; el resto sí", () => {
+test("señales de tarjeta en la fila: stripeSubscriptionId o subscriptionId; `subscriptionStatus` NO cuenta", () => {
+  assert.equal(senalDeTarjetaEnLaFila({ stripeSubscriptionId: "sub_x" }), true);
+  assert.equal(senalDeTarjetaEnLaFila({ subscriptionId: "legacy_1" }), true);
+  assert.equal(senalDeTarjetaEnLaFila({}), false);
+  assert.equal(senalDeTarjetaEnLaFila({ stripeSubscriptionId: null, subscriptionId: null, subscriptionStatus: "cancelled" } as any), false);
+});
+
+test("tabla de decisión: método × plan × exención", () => {
+  const a = (metodo: "card" | "spei" | "oxxo", plan: string, e: any) => ivaAplica({ metodo, plan, exencion: e });
+  const sinTarjetaPrevia = { plan: "PRO", tarjeta: true };
+  const conTarjetaPrevia = { plan: "PRO", tarjeta: false };
+  // clínica de antes, mismo plan
+  assert.equal(a("oxxo", "PRO", sinTarjetaPrevia), false);
+  assert.equal(a("spei", "PRO", sinTarjetaPrevia), false);
+  assert.equal(a("card", "PRO", sinTarjetaPrevia), false, "su contratación con tarjeta, aunque nunca haya pagado");
+  assert.equal(a("card", "PRO", conTarjetaPrevia), true, "reactivar tarjeta tras cancelar");
+  // clínica de antes, OTRO plan = cambio de plan
+  for (const m of ["card", "oxxo", "spei"] as const) {
+    assert.equal(a(m, "CLINIC", sinTarjetaPrevia), true, m);
+    assert.equal(a(m, "BASIC", conTarjetaPrevia), true, m);
+  }
+  // clínica nueva: todo con IVA
+  for (const m of ["card", "oxxo", "spei"] as const) assert.equal(a(m, "PRO", null), true, m);
+});
+
+test("ivaParaPagoDeClinica: exento no exige el env; con IVA sí", () => {
   const sinEnv = {};
-  const exento = ivaParaPagoDeClinica(sinEnv, { metodo: "oxxo", plan: "PRO", clinica: DE_ANTES });
-  assert.deepEqual(exento, { ok: true, modo: "exento", sesion: {}, linea: {} });
-  assert.equal(ivaParaPagoDeClinica(sinEnv, { metodo: "card", plan: "PRO", clinica: DE_ANTES }).ok, false);
-  assert.equal(ivaParaPagoDeClinica(sinEnv, { metodo: "oxxo", plan: "PRO", clinica: { ...DE_ANTES, createdAt: "2026-10-01" } }).ok, false);
-  const conEnv = { STRIPE_IVA_TAX_RATE_ID: TASA };
-  const r = ivaParaPagoDeClinica(conEnv, { metodo: "oxxo", plan: "CLINIC", clinica: DE_ANTES });
+  const ex = { plan: "PRO", tarjeta: true };
+  assert.deepEqual(ivaParaPagoDeClinica(sinEnv, { metodo: "oxxo", plan: "PRO", exencion: ex }), { ok: true, modo: "exento", sesion: {}, linea: {} });
+  assert.deepEqual(ivaParaPagoDeClinica(sinEnv, { metodo: "card", plan: "PRO", exencion: ex }), { ok: true, modo: "exento", sesion: {}, linea: {} });
+  assert.equal(ivaParaPagoDeClinica(sinEnv, { metodo: "card", plan: "PRO", exencion: { plan: "PRO", tarjeta: false } }).ok, false);
+  assert.equal(ivaParaPagoDeClinica(sinEnv, { metodo: "oxxo", plan: "PRO", exencion: null }).ok, false);
+  const r = ivaParaPagoDeClinica({ STRIPE_IVA_TAX_RATE_ID: TASA }, { metodo: "oxxo", plan: "CLINIC", exencion: ex });
   assert.deepEqual(r.ok && r.linea, { tax_rates: [TASA] });
 });
 

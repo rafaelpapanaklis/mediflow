@@ -301,7 +301,7 @@ test("el botón y los precios dicen LO QUE SE COBRA: el total del año en anual,
   assert.match(planes, /const cobrado = \(plan: PlanCardData\) => \(anual \? plan\.priceMxnAnnual : plan\.priceMxn\);/, "anual = priceMxnAnnual (el unitAmount del checkout)");
   // «+ IVA» sale de la MISMA regla que el servidor (ivaAplica): solo se omite en OXXO/SPEI del plan que una
   // clínica de las de antes ya paga a mano (Ajuste 1b).
-  assert.match(planes, /const ivaDe = \(planId: PlanId\) => ivaAplica\(\{ metodo: v\.method, plan: planId, planExento: v\.planSinIva \}\);/);
+  assert.match(planes, /const ivaDe = \(planId: PlanId\) => ivaAplica\(\{ metodo: v\.method, plan: planId, exencion: v\.exencionIva \}\);/);
   assert.match(planes, /const iva = ivaSel \? " \+ IVA" : "";/, "cada importe dice «+ IVA» cuando lleva");
   // El desglose sale de la MISMA función que el importe SPEI y que el cálculo de Stripe.
   assert.match(planes, /desgloseConIva\(/);

@@ -98,6 +98,7 @@ const prismaDoble: any = {
     },
   },
   subscriptionInvoice: {
+    findFirst: async () => null,
     create: async ({ data }: any) => {
       if (facturas.some((f) => f.reference === data.reference)) throw Object.assign(new Error("dup"), { code: "P2002" });
       const f = { id: `fac${facturas.length + 1}`, ...data };
@@ -427,9 +428,9 @@ test("referenciaDeClinica: formato válido, sin ambiguos, y casi sin colisiones"
   assert.ok(vistas.size >= 1995, `colisiones de más: ${2000 - vistas.size}`);
 });
 
-test("clínica de antes que renueva su MISMO plan por SPEI: precio tal cual, sin IVA; otro plan, con IVA", async () => {
+test("clínica creada ANTES del corte (haya pagado o no): SPEI de su MISMO plan sin IVA; otro plan, con IVA", async () => {
   const { crearSolicitudSpei, rechazarSolicitudSpei } = lib;
-  Object.assign(clinicas.get("cA"), { createdAt: new Date("2025-11-03"), plan: "PRO", nextBillingDate: new Date("2026-09-30") });
+  Object.assign(clinicas.get("cA"), { createdAt: new Date("2025-11-03"), plan: "PRO", nextBillingDate: null });
   const igual = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
   assert.deepEqual([igual.solicitud.subtotalCents, igual.solicitud.ivaCents, igual.solicitud.amountCents], [70000, 0, 70000]);
   await rechazarSolicitudSpei(igual.solicitud.id, "admin1", "prueba");
@@ -437,7 +438,14 @@ test("clínica de antes que renueva su MISMO plan por SPEI: precio tal cual, sin
   assert.deepEqual([otro.solicitud.subtotalCents, otro.solicitud.ivaCents, otro.solicitud.amountCents], [120000, 19200, 139200]);
 });
 
-test("la excepción de SPEI no depende de lo que mande el cliente: una clínica nueva paga IVA aunque pida el mismo plan", async () => {
+test("SPEI de una clínica que tuvo tarjeta y la canceló: sigue sin IVA (la exención de tarjeta no aplica a SPEI)", async () => {
+  const { crearSolicitudSpei } = lib;
+  Object.assign(clinicas.get("cA"), { createdAt: new Date("2025-11-03"), plan: "PRO", stripeSubscriptionId: "sub_cancelada" });
+  const r = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
+  assert.equal(r.solicitud.ivaCents, 0);
+});
+
+test("clínica creada DESPUÉS del corte: SPEI siempre con IVA, aunque sea su mismo plan y ya haya pagado", async () => {
   const { crearSolicitudSpei } = lib;
   Object.assign(clinicas.get("cB"), { createdAt: new Date("2026-10-10"), plan: "BASIC", nextBillingDate: new Date("2026-11-01") });
   const r = await crearSolicitudSpei({ clinicId: "cB", plan: "BASIC", billing: "monthly" });

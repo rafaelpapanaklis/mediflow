@@ -65,10 +65,18 @@ const PLANES: Record<string, any> = {
   CLINIC: { id: "CLINIC", name: "Clínica", priceMxn: 1719, priceMxnMonthly: 1719, priceMxnAnnual: 13404 },
 };
 
+let facturasStripe: any[];
+let consultasFacturas: any[];
 const prismaDoble: any = {
   clinic: {
     findUnique: async () => clinica,
     update: async ({ data }: any) => Object.assign(clinica, data),
+  },
+  subscriptionInvoice: {
+    findFirst: async ({ where }: any) => {
+      consultasFacturas.push(where);
+      return facturasStripe.find((f) => f.clinicId === where.clinicId && f.method === where.method && f.status === where.status) ?? null;
+    },
   },
 };
 
@@ -117,6 +125,8 @@ beforeEach(() => {
   auditorias = [];
   llamadasProhibidas = [];
   suscripcionViva = null;
+  facturasStripe = [];
+  consultasFacturas = [];
   // Clínica NUEVA (registrada después del corte de IVA, 26-sep-2026): todo lleva IVA.
   clinica = {
     id: "cA", name: "Clínica A", email: "a@ejemplo.mx", stripeCustomerId: "cus_a", stripeSubscriptionId: null,
@@ -250,66 +260,142 @@ test("el checkout nunca modifica, cancela ni crea suscripciones ni tasas por API
   assert.deepEqual(llamadasProhibidas, [], "ni subscriptions.update/cancel/create ni taxRates.create");
 });
 
-/* ── Ajuste 1b: las clínicas de antes que pagan a mano siguen SIN IVA ──────────── */
+/* ── Ajuste 1c: las clínicas YA CREADAS no cambian; las nuevas pagan IVA en todo ── */
 
-/** Clínica de las de antes: registrada antes del corte y que ya había pagado (tiene periodo activado). */
+/** Clínica creada ANTES del corte. Haya pagado o no: ya está creada. */
 function deLasDeAntes(extra: object = {}) {
-  clinica = { ...clinica, createdAt: new Date("2025-11-03"), plan: "PRO", nextBillingDate: new Date("2026-09-30"), ...extra };
+  clinica = { ...clinica, createdAt: new Date("2025-11-03"), plan: "PRO", nextBillingDate: null, stripeSubscriptionId: null, subscriptionId: null, ...extra };
 }
+const sinTasa = (s: any) => s.line_items[0].tax_rates === undefined && s.automatic_tax === undefined;
 
-test("clínica de antes + OXXO del MISMO plan: sin IVA (como hoy) y sin depender del env de IVA", async () => {
+test("(b) clínica de antes que NUNCA pagó: OXXO de su plan sin IVA, aunque falte el env de IVA", async () => {
   deLasDeAntes();
   delete process.env.STRIPE_IVA_TAX_RATE_ID;
   const { res } = await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
-  assert.equal(res.status, 200, "no se bloquea aunque falte el env: esas clínicas no lo necesitan");
-  const s = sesiones[0];
-  assert.equal(s.line_items[0].tax_rates, undefined);
-  assert.equal(s.automatic_tax, undefined);
-  assert.equal(s.line_items[0].price_data.unit_amount, 68900, "el precio de hoy, sin IVA");
+  assert.equal(res.status, 200, "no se bloquea: esas clínicas no necesitan el env");
+  assert.ok(sinTasa(sesiones[0]));
+  assert.equal(sesiones[0].line_items[0].price_data.unit_amount, 68900, "el precio de hoy, sin IVA");
   assert.equal(auditorias[0].changes._created.after.ivaModo, "exento");
 });
 
-test("clínica de antes + OXXO anual del mismo plan y «spei» de Stripe del mismo plan: también sin IVA", async () => {
-  deLasDeAntes();
+test("(b) clínica de antes que ya pagaba a mano: OXXO mensual/anual y «spei» de Stripe del mismo plan, sin IVA", async () => {
+  deLasDeAntes({ nextBillingDate: new Date("2026-09-30") });
+  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
   await pagar({ plan: "PRO", method: "oxxo", billing: "annual" });
   await pagar({ plan: "PRO", method: "spei", billing: "monthly" });
-  for (const s of sesiones) assert.equal(s.line_items[0].tax_rates, undefined);
-  assert.equal(sesiones.length, 2);
+  assert.equal(sesiones.length, 3);
+  for (const s of sesiones) assert.ok(sinTasa(s));
 });
 
-test("clínica de antes: con TARJETA (suscripción nueva) SÍ lleva IVA", async () => {
+test("(b) su PRIMERA contratación con TARJETA, mismo plan: sin IVA (aunque nunca haya pagado) y con la promo tal cual", async () => {
   deLasDeAntes();
+  delete process.env.STRIPE_IVA_TAX_RATE_ID;
+  const { res } = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(res.status, 200);
+  const s = sesiones[0];
+  assert.equal(s.mode, "subscription");
+  assert.ok(sinTasa(s), "la suscripción nace sin IVA y sus renovaciones también");
+  assert.equal(cupones.length, 1, "la promo del primer mes sigue aplicando (la clínica nunca pagó)");
+  assert.equal(consultasFacturas.length, 1, "se comprobó que no tuvo tarjeta");
+});
+
+test("con TARJETA anual del mismo plan, sin IVA también", async () => {
+  deLasDeAntes();
+  await pagar({ plan: "PRO", method: "card", billing: "annual" });
+  assert.ok(sinTasa(sesiones[0]));
+});
+
+test("cambio de plan (OTRO plan) de una clínica de antes: con IVA, en los tres métodos", async () => {
+  deLasDeAntes();
+  for (const method of ["card", "oxxo", "spei"]) {
+    sesiones = [];
+    await pagar({ plan: "CLINIC", method, billing: "monthly" });
+    assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA], method);
+  }
+});
+
+test("REACTIVAR con tarjeta tras haber tenido y cancelado una suscripción: con IVA (señal en la fila: stripeSubscriptionId)", async () => {
+  deLasDeAntes({ stripeSubscriptionId: "sub_cancelada", subscriptionStatus: "cancelled" });
+  suscripcionViva = { status: "canceled" }; // Stripe la devuelve, pero ya no está viva
+  await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
+  assert.equal(consultasFacturas.length, 0, "con señal en la fila no hace falta consultar facturas");
+});
+
+test("REACTIVAR con tarjeta cuando el admin canceló (stripeSubscriptionId en null): se detecta por una factura de Stripe pagada", async () => {
+  deLasDeAntes({ id: "cA", subscriptionStatus: "cancelled" });
+  facturasStripe = [{ clinicId: "cA", method: "stripe", status: "paid" }];
+  await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
+  assert.deepEqual(consultasFacturas[0], { clinicId: "cA", method: "stripe", status: "paid" }, "filtra por la clínica de la sesión");
+});
+
+test("suscripción legacy (subscriptionId) también cuenta como «tuvo tarjeta»", async () => {
+  deLasDeAntes({ subscriptionId: "legacy_9" });
   await pagar({ plan: "PRO", method: "card", billing: "monthly" });
   assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
 });
 
-test("clínica de antes: OXXO de OTRO plan (cambio de plan) SÍ lleva IVA", async () => {
-  deLasDeAntes();
-  await pagar({ plan: "CLINIC", method: "oxxo", billing: "monthly" });
-  await pagar({ plan: "BASIC", method: "oxxo", billing: "monthly" });
-  for (const s of sesiones) assert.deepEqual(s.line_items[0].tax_rates, [TASA]);
+test("una clínica de antes que pagó a mano y suspendida por un admin (status cancelled) NO cuenta como «tuvo tarjeta»", async () => {
+  deLasDeAntes({ subscriptionStatus: "cancelled", nextBillingDate: new Date("2026-08-01") });
+  await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.ok(sinTasa(sesiones[0]), "sin suscripción de tarjeta previa: su tarjeta sigue exenta");
 });
 
-test("clínica de antes que NUNCA pagó: es una compra nueva, lleva IVA", async () => {
-  deLasDeAntes({ nextBillingDate: null, stripeSubscriptionId: null, subscriptionId: null });
+test("tuvo tarjeta y la canceló: pero OXXO/SPEI de su plan siguen SIN IVA", async () => {
+  deLasDeAntes({ stripeSubscriptionId: "sub_cancelada" });
   await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
-  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
+  await pagar({ plan: "PRO", method: "spei", billing: "monthly" });
+  for (const s of sesiones) assert.ok(sinTasa(s));
 });
 
-test("clínica registrada DESPUÉS del corte: todo lleva IVA aunque ya haya pagado", async () => {
+test("(a) clínica creada DESPUÉS del corte: IVA en todo, todos los métodos, aunque ya haya pagado y sea su mismo plan", async () => {
   clinica.createdAt = new Date("2026-09-26T06:00:00.000Z"); // justo en el corte = nueva
-  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
-  clinica.createdAt = new Date("2026-09-26T05:59:59.000Z"); // un segundo antes = de antes
-  clinica.nextBillingDate = new Date("2026-09-30");
-  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
-  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
-  assert.equal(sesiones[1].line_items[0].tax_rates, undefined);
+  clinica.nextBillingDate = new Date("2026-10-30");
+  for (const method of ["card", "oxxo", "spei"]) {
+    sesiones = [];
+    await pagar({ plan: "PRO", method, billing: "monthly" });
+    assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA], method);
+  }
+  assert.equal(consultasFacturas.length, 0, "a una clínica nueva no se le consulta nada más");
 });
 
-test("la excepción la decide el servidor con la clínica de la sesión: el body no puede pedirla", async () => {
-  // Una clínica nueva que manda campos extra en el body sigue pagando IVA.
-  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly", sinIva: true, createdAt: "2020-01-01", planExento: "PRO" });
+test("un segundo antes del corte es «de antes»; sin `createdAt` (dato ausente) es con IVA", async () => {
+  deLasDeAntes({ createdAt: new Date("2026-09-26T05:59:59.000Z") });
+  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
+  deLasDeAntes({ createdAt: null });
+  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
+  assert.ok(sinTasa(sesiones[0]));
+  assert.deepEqual(sesiones[1].line_items[0].tax_rates, [TASA]);
+});
+
+test("la exención la decide el servidor con la clínica de la sesión: el body no puede pedirla", async () => {
+  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly", sinIva: true, createdAt: "2020-01-01", exencion: { plan: "PRO", tarjeta: true } });
   assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
+});
+
+test("si no se puede saber si tuvo tarjeta (falla la consulta de facturas), NO se regala el IVA de la tarjeta", async () => {
+  deLasDeAntes();
+  const original = prismaDoble.subscriptionInvoice.findFirst;
+  prismaDoble.subscriptionInvoice.findFirst = async () => { throw new Error("pooler saturado"); };
+  try {
+    await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+    await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
+  } finally {
+    prismaDoble.subscriptionInvoice.findFirst = original;
+  }
+  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA], "tarjeta: con IVA por prudencia");
+  assert.ok(sinTasa(sesiones[1]), "OXXO de su plan no depende de esa consulta");
+});
+
+test("una clínica de antes con suscripción de tarjeta VIVA va al portal, como siempre (sin sesión y sin consultar IVA)", async () => {
+  deLasDeAntes({ stripeSubscriptionId: "sub_viva" });
+  suscripcionViva = { status: "active" };
+  delete process.env.STRIPE_IVA_TAX_RATE_ID;
+  const { json } = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(json.portal, true);
+  assert.equal(sesiones.length, 0);
+  assert.deepEqual(llamadasProhibidas, []);
 });
 
 /* ── contratos de código: ninguna renovación ni suscripción existente pasa por lo nuevo ── */
@@ -340,6 +426,7 @@ test("el IVA nuevo solo lo usan los sitios que crean cobros nuevos por plan (che
     "src/app/api/billing/change-plan/preview/route.ts",
     "src/app/api/billing/change-plan/route.ts",
     "src/app/api/billing/checkout/route.ts",
+    "src/lib/billing/iva-clinica.ts",
     "src/lib/stripe-subscriptions.ts",
   ]);
 });
