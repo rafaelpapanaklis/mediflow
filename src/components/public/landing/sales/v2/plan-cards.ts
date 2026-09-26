@@ -66,8 +66,8 @@ export interface PlanCard {
    * Lista de la tarjeta, en el MISMO orden en los tres planes (ajuste 10):
    * (1) ocho funciones base en ✓ (las más vendedoras, las mismas en las tres;
    * seis hasta el ajuste 12, que sumó soporte y onboarding);
-   * (2) lo que cambia entre planes con ✓/✗ calculado (asistente IA ·
-   * radiografías con IA · analytics + TV); (3) lo exclusivo de un plan SOLO en
+   * (2) lo que cambia entre planes con ✓/✗ calculado (asistente clínico con
+   * IA · IA en radiografías e inasistencias · analytics + TV; ajuste 13); (3) lo exclusivo de un plan SOLO en
    * ese plan, como ✓ normales al final (ajuste 10b: sin rótulo ni separador;
    * nunca como ✗ en los demás). Tras el ajuste 12: Básico 8 ✓ y 3 ✗;
    * Profesional 11 ✓; Clínica 12 ✓ (reportes entre sedes).
@@ -195,7 +195,7 @@ const COMMON_CANDIDATES: {
   { text: 'Expediente clínico + odontograma', included: () => true, lead: true },
   { text: 'Facturación CFDI (timbres incluidos según plan)', included: () => true, lead: true, cardText: (p) => cfdiBullet(p) },
   { text: 'Portal del paciente y recetas digitales', included: () => true, lead: true },
-  { text: 'Página web de la clínica', included: (p) => hasModule(p, 'landing'), lead: true },
+  { text: 'Página web de la clínica gratuita', included: (p) => hasModule(p, 'landing'), lead: true },
   // Ajuste 12 (Rafael): soporte y onboarding son de los TRES planes (antes, exclusivos de Clínica).
   { text: 'Soporte prioritario', included: () => true, lead: true },
   { text: 'Onboarding y migración dedicados', included: () => true, lead: true },
@@ -213,24 +213,44 @@ const COMMON_CANDIDATES: {
  * los tres planes, con ✓/✗ calculado desde el plan. Los números se COMPONEN
  * con plan_configs; ninguno se escribe a mano.
  *
+ * IA (ajuste 13, Rafael: «la IA no solo analiza radiografías, que se vea TODO»).
+ * Las OCHO funciones de IA que descuentan el cupo de tokens del plan, cada una
+ * con su ruta (todas llaman a `addAiTokens` y se cortan con `cortarSiIaApagada`;
+ * ver también FUNCIONES_IA en lib/ai-billing/interruptores.ts, `gasta: "cupo"`):
+ *   chat              /api/ai                                 asistente clínico (diagnósticos diferenciales, dosis, notas SOAP, estudios, interacciones)
+ *   dictation         /api/ai/transcribe                      dictado por voz → texto
+ *   consult_assist    /api/consult/ai-assist                  análisis de la consulta (hallazgos, alertas, plan)
+ *   contraindications /api/prescriptions/check-contraindications  revisión de recetas contra alergias y padecimientos
+ *   xray_analysis     /api/xrays/[id]/analyze                 lectura de radiografías 2D
+ *   no_show_prediction /api/analytics/no-shows/predict        predicción de inasistencias
+ *   ai_insight        /api/analytics/ai-insight               explicación de reportes en palabras
+ *   clinic_layout     /api/clinic-layout/optimize             acomodo de las citas del día entre sillones
+ * (homeopathy → /api/homeopatia/suggest-remedies también gasta cupo, pero no es
+ * dental y no se anuncia.) Sabina NO va aquí: se paga con Saldo IA (funciones base).
+ * Texto FINAL aprobado por Rafael (dos filas, para no multiplicar ✗ en Básico):
+ *   1. «Asistente clínico con IA: notas SOAP, dictado por voz y revisión de
+ *      recetas» + cupo de tokens del plan (chat + dictation + contraindications).
+ *   2. «IA en radiografías y predicción de inasistencias» (xray_analysis +
+ *      no_show_prediction).
+ * consult_assist, ai_insight y clinic_layout existen y también gastan cupo,
+ * pero no se nombran en el texto aprobado. Con 0 tokens (Básico) los endpoints
+ * responden «Límite mensual de IA alcanzado» → ✗; el módulo `ai-assistant`
+ * (chat) además está apagado ahí.
+ *
  * ⚠️ CBCT/3D vs. IA: la IA de imagen SOLO procesa radiografías 2D
  * (/api/xrays/[id]/analyze rechaza lo que no sea image/*). El visor CBCT es
- * cortes + mediciones, sin IA. No volver a fusionar esos dos conceptos: el
- * visor va en las funciones base y la lectura con IA aquí.
- *  - Asistente IA: módulo `ai-assistant` (apagado en Básico) y gasta el cupo
- *    de tokens del plan (interruptores.ts: «chat» → cupo).
- *  - Radiografías con IA: gasta el cupo del plan; con 0 tokens el endpoint
- *    responde «Límite mensual de IA alcanzado» → no disponible en Básico.
+ * cortes + mediciones, sin IA: va en las funciones base, no aquí.
  *  - Analytics y Pantallas TV: módulos `analytics` / `tv-modes`; hoy van
  *    juntos (ambos apagados en Básico), por eso son UNA fila. Si algún día
- *    divergieran en un plan, `compareRows` los separa en dos.
+ *    divergieran en un plan, `analyticsRows` los separa en dos.
  */
+const AI_CLINICAL_TEXT = 'Asistente clínico con IA: notas SOAP, dictado por voz y revisión de recetas';
 const COMPARE_ROWS: { text: (p: ResolvedPlan) => string; included: (p: ResolvedPlan) => boolean }[] = [
   {
-    text: (p) => (p.aiTokensDefault > 0 ? `Asistente clínico con IA · ${aiTokensPerMonth(p.aiTokensDefault)}` : 'Asistente clínico con IA'),
+    text: (p) => (p.aiTokensDefault > 0 ? `${AI_CLINICAL_TEXT} · ${aiTokensPerMonth(p.aiTokensDefault)}` : AI_CLINICAL_TEXT),
     included: (p) => hasModule(p, 'ai-assistant') && p.aiTokensDefault > 0,
   },
-  { text: () => 'Análisis de radiografías con IA', included: (p) => p.aiTokensDefault > 0 },
+  { text: () => 'IA en radiografías y predicción de inasistencias', included: (p) => p.aiTokensDefault > 0 },
 ];
 
 function analyticsRows(p: ResolvedPlan): FeatureRow[] {
