@@ -101,6 +101,7 @@ export default async function SuspendedPage({
             currentPlan={currentPlan}
             firstMonthEligible={firstMonthEligible}
             rediseno
+            resumenInicial={!isReactivation && currentPlan !== null}
           />
           <VolverAlLogin texto={t("pages.suspended.backToLogin")} />
         </PaginaSuspendida>

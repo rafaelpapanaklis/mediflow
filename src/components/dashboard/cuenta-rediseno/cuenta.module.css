@@ -490,6 +490,76 @@
   color: var(--success, #059669);
 }
 
+/* ── Resumen del plan elegido en el alta (+ «Cambiar plan») ──────── */
+
+.resumen {
+  max-width: 640px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-activo);
+  border-radius: 18px;
+  box-shadow: 0 0 0 3px var(--m2-iniciales-fondo), var(--m2-sombra);
+}
+
+.resumenCuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resumenBeneficios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 2px;
+}
+
+.cambiarPlan {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 9px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  box-shadow: var(--m2-sombra);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.cambiarPlan:hover {
+  background: var(--m2-tarjeta-hover);
+  color: var(--m2-texto);
+}
+
+.cambiarPlan:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+@media (max-width: 480px) {
+  .resumen {
+    flex-direction: column;
+    padding: 18px 16px;
+  }
+  .cambiarPlan {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 /* ── Pago: método + CTA + confianza ──────────────────────────────── */
 
 .pago {

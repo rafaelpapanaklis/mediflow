@@ -1,7 +1,7 @@
 "use client";
 
-import type { KeyboardEvent, MutableRefObject } from "react";
-import { Check, CreditCard, Landmark, Loader2, Lock, ShieldCheck, Store } from "lucide-react";
+import { useState, type KeyboardEvent, type MutableRefObject } from "react";
+import { Check, CreditCard, Landmark, Loader2, Lock, RefreshCw, ShieldCheck, Store } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
 import type { PlanCardData } from "@/app/dashboard/suspended/suspended-client";
@@ -43,6 +43,8 @@ export interface VistaPlanes {
   setMethod: (m: PayMethod) => void;
   onCardKeyDown: (e: KeyboardEvent<HTMLDivElement>, index: number) => void;
   onMethodKeyDown: (e: KeyboardEvent<HTMLButtonElement>, index: number) => void;
+  /** Compra nueva con plan del alta: arrancar en resumen (ver suspended-client). */
+  resumenInicial: boolean;
   handleStripeCheckout: (plan: PlanId) => void;
 }
 
@@ -56,6 +58,11 @@ function vinetas(plan: PlanCardData): string[] {
 
 export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
   const { t, fmt } = v;
+  // Solo qué se enseña: con el plan del alta se arranca en resumen y
+  // «Cambiar plan» abre las tres tarjetas de siempre (misma rejilla, mismo
+  // radiogroup). El plan seleccionado y el checkout no cambian.
+  const [mostrarTodos, setMostrarTodos] = useState(!v.resumenInicial);
+  const resumen = !mostrarTodos && v.selected ? v.selected : null;
 
   return (
     <div>
@@ -84,7 +91,43 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
         </span>
       </div>
 
+      {/* === Resumen del plan elegido en el alta (con «Cambiar plan») === */}
+      {resumen && (
+        <div className={s.resumen} role="status">
+          <div className={s.resumenCuerpo}>
+            <div className={s.planEtiquetas}>
+              <span className={`${s.etiqueta} ${s.etiquetaExito}`}>{t("pages.suspended.currentPlanBadge")}</span>
+            </div>
+            <div className={s.planNombre}>{resumen.name}</div>
+            <div className={s.precio}>
+              <span className={s.precioCifra}>{fmt(v.perMonth(resumen))}</span>
+              <span className={s.precioUnidad}>{t("pages.suspended.perMonth")}</span>
+            </div>
+            <div className={s.precioNota}>
+              {v.billing === "annual"
+                ? `${fmt(resumen.priceMxnAnnual)} al año · ahorras ${fmt(v.annualSavings(resumen))} (35%)`
+                : v.firstMonthEligible
+                  ? `Tu primer mes: solo ${fmt(FIRST_MONTH_PROMO_MXN[resumen.id])} con tarjeta · luego ${fmt(resumen.priceMxn)}/mes`
+                  : "Facturación mensual · cancela cuando quieras"}
+            </div>
+            <div className={s.resumenBeneficios}>
+              {vinetas(resumen).slice(0, 3).map((f) => (
+                <span key={f} className={s.beneficio}>
+                  <Check size={18} strokeWidth={3} className={s.beneficioIcono} aria-hidden />
+                  {f}
+                </span>
+              ))}
+            </div>
+          </div>
+          <button type="button" className={s.cambiarPlan} onClick={() => setMostrarTodos(true)}>
+            <RefreshCw size={14} aria-hidden />
+            Cambiar plan
+          </button>
+        </div>
+      )}
+
       {/* === Las tres tarjetas de plan (radiogroup) === */}
+      {!resumen && (
       <div role="radiogroup" aria-label={t("pages.suspended.choosePlanTitle")} className={s.planes}>
         {v.plans.map((plan, i) => {
           const isRecommended = plan.id === v.recommendedPlan;
@@ -173,6 +216,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
           );
         })}
       </div>
+      )}
 
       {/* === Pago: método + CTA + señales de confianza === */}
       <div className={s.pago}>

@@ -36,6 +36,13 @@ interface Props {
    * Apagado (por defecto), el marcado de siempre, sin un nodo de más.
    */
   rediseno?: boolean;
+  /**
+   * Rediseño: arrancar con el plan elegido en el alta como RESUMEN (más
+   * «Cambiar plan», que abre la rejilla) en vez de las tres tarjetas. Lo
+   * decide la página (compra nueva con plan); solo cambia qué se enseña, el
+   * plan seleccionado y el checkout son los mismos.
+   */
+  resumenInicial?: boolean;
 }
 
 // Upsell: qué plan sugerir según el actual. CLINIC es el tope (sin sugerencia).
@@ -49,7 +56,7 @@ export function fmt(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-MX");
 }
 
-export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligible = false, rediseno = false }: Props) {
+export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligible = false, rediseno = false, resumenInicial = false }: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
   const [method, setMethod] = useState<PayMethod>("card");
@@ -196,6 +203,7 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
           isRedirecting, ctaPrice, ctaPromo, cardRefs, methodRefs,
           priceOf, perMonth, annualSavings, upsellBenefit,
           setSelectedPlan, setBilling, setMethod, onCardKeyDown, onMethodKeyDown,
+          resumenInicial,
           handleStripeCheckout,
         }}
       />
