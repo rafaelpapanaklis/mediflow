@@ -20,6 +20,7 @@ import {
   subscriptionItemInterval,
 } from "@/lib/billing/proration";
 import { buildManualUpgradeQuote } from "@/lib/billing/manual-upgrade";
+import { desgloseConIva, ivaParaCobro } from "@/lib/billing/iva-cobro";
 import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
 
 export const runtime = "nodejs";
@@ -227,6 +228,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
     }
 
+    // IVA 16 % del diferencial (Ajuste 1b): un cambio de plan voluntario ya es una condición NUEVA, así que
+    // lo lleva TODA clínica sin tarjeta (también las de antes). Misma tasa manual de Stripe que el checkout;
+    // sin IVA configurado no se cobra el diferencial sin IVA en silencio (503). Solo esta rama: la de
+    // suscripción de tarjeta (abajo) no se toca.
+    const iva = ivaParaCobro(process.env);
+    if (iva.ok === false) {
+      return NextResponse.json({ error: iva.error, code: iva.codigo }, { status: 503 });
+    }
+    const desglose = desgloseConIva(quote.diffCents);
+
     let customerId = clinic.stripeCustomerId;
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -245,7 +256,6 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_APP_URL ??
       process.env.NEXTAUTH_URL ??
       new URL(req.url).origin;
-    const automaticTax = process.env.STRIPE_AUTOMATIC_TAX === "true";
 
     const meta = {
       kind: PLAN_UPGRADE_DIFF_KIND,
@@ -262,7 +272,7 @@ export async function POST(req: NextRequest) {
       mode: "payment",
       customer: customerId,
       customer_update: { address: "auto" },
-      ...(automaticTax ? { automatic_tax: { enabled: true } } : {}),
+      ...iva.sesion,
       // "card" abre también OXXO para que una clínica que paga en efectivo pueda
       // liquidar la diferencia sin tarjeta. SPEI necesita su propio bloque de
       // opciones, así que va sola (mismo patrón que /api/billing/checkout).
@@ -292,6 +302,7 @@ export async function POST(req: NextRequest) {
             },
           },
           quantity: 1,
+          ...iva.linea,
         },
       ],
       metadata: meta,
@@ -304,7 +315,9 @@ export async function POST(req: NextRequest) {
     // cambio, Stripe devuelve LA MISMA sesión en vez de crear un segundo cobro
     // por la misma diferencia. La clave incluye los días restantes, así que si el
     // importe cambia (pasó un día) sí se crea una sesión nueva.
-    const idemBase = `plan-upgrade-diff:${clinic.id}:${targetPlan.id}:${quote.interval}:${quote.daysRemaining}:${method}`;
+    // `:iva16`: las sesiones del diferencial de ANTES del IVA (sin tasa) usaron la clave sin sufijo; Stripe
+    // rechaza reusar una clave con otros parámetros, así que el IVA lleva su propia clave.
+    const idemBase = `plan-upgrade-diff:${clinic.id}:${targetPlan.id}:${quote.interval}:${quote.daysRemaining}:${method}:iva16`;
 
     let session: Stripe.Checkout.Session | null = null;
     try {
@@ -360,6 +373,9 @@ export async function POST(req: NextRequest) {
             interval: quote.interval,
             daysRemaining: quote.daysRemaining,
             diffMxn: quote.diffCents / 100,
+            ivaMxn: desglose.ivaCents / 100,
+            totalMxn: desglose.totalCents / 100,
+            ivaModo: iva.modo,
             method,
             sessionId: session.id,
           },
@@ -375,6 +391,8 @@ export async function POST(req: NextRequest) {
       url: session.url,
       plan: targetPlanId,
       amountMxn: quote.diffCents / 100,
+      ivaMxn: desglose.ivaCents / 100,
+      totalMxn: desglose.totalCents / 100,
       daysRemaining: quote.daysRemaining,
     });
   }
