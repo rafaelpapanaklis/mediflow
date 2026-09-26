@@ -884,7 +884,8 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv4-price__num { font-size: clamp(44px, 4vw, 52px); font-weight: 800; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
 .dcv4-price__per { display: flex; flex-direction: column; justify-content: center; margin-left: 6px; margin-top: 6px; font-size: 12.5px; font-weight: 600; line-height: 1.25; color: #64748b; }
 .dcv4-price__line { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; min-height: 44px; }
-.dcv4-price__l1 { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #0f172a; white-space: nowrap; }
+.dcv4-price__l1 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 14px; font-weight: 700; color: #0f172a; }
+.dcv4-price__l1 > span:last-child { white-space: nowrap; }
 .dcv4-price__l2 { font-size: 12.5px; color: #64748b; white-space: nowrap; }
 .dcv4-price__save { font-size: 12px; font-weight: 800; color: #15803d; background: #dcfce7; border-radius: 999px; padding: 4px 9px; line-height: 1.2; white-space: nowrap; }
 .dcv4-price__nocontract { margin-top: 6px; font-size: 12.5px; color: #64748b; }
@@ -964,3 +965,36 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 
 /* ── Ajuste 5: tarjeta «origen del cobro» junto al teléfono ─────────────── */
 .dcv4-waesc__ico--fact { background: #eff6ff; color: #1d4ed8; }
+
+/* ── Ajuste 7: menú de la portada (Inicio · Precios · Blog · FAQ) y su menú móvil ──
+   El botón de menú aparece exactamente donde se ocultan las anclas
+   (`.dcv2-nav-anchors`, corte en 960 px, ver arriba): así nunca hay un tramo
+   sin menú. Solo se pinta con la bandera `portada` (nav.tsx). */
+.dcv4-navburger { display: none; width: 38px; height: 38px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; color: #0f172a; cursor: pointer; place-items: center; flex: 0 0 auto; padding: 0; }
+.dcv4-navburger:hover { background: #f1f5f9; }
+.dcv4-navburger:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.dcv4-menumovil { display: none; }
+@media (max-width: 960px) {
+  .dcv4-navburger { display: grid; }
+  .dcv4-menumovil { display: flex; flex-direction: column; border-top: 1px solid #e8edf4; background: #fff; padding: 6px 12px 10px; }
+  .dcv4-menumovil[hidden] { display: none; }
+  .dcv4-menumovil__link { display: block; padding: 13px 10px; border-radius: 10px; font-size: 16px; font-weight: 600; color: #0f172a; text-decoration: none; }
+  .dcv4-menumovil__link:hover { background: #f1f5f9; }
+  .dcv4-menumovil__link:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+}
+/* La barra de la portada lleva además el botón de menú: a ≤ 400 px la fila
+   sumaba 394 px (botón 34 + glifo 26 + accesos 302 + huecos) y se partía en
+   dos. Solo en la portada (clase propia) se aprietan letra y huecos para que
+   glifo + Soy paciente + Iniciar sesión + Crear cuenta + menú quepan en UNA
+   fila a 390 y a 360. */
+@media (max-width: 400px) {
+  .dcv4-navbar--portada { gap: 4px !important; padding-left: 8px !important; padding-right: 8px !important; }
+  .dcv4-navbar--portada > div:last-child { gap: 2px !important; }
+  .dcv4-navbar--portada .dcv4-navburger { width: 30px; height: 30px; border-radius: 8px; }
+  .dcv4-navbar--portada .dcv2-nav-ghost { font-size: 12.5px !important; padding: 8px 4px !important; }
+  .dcv4-navbar--portada .dcv2-btn-primary { font-size: 12.5px !important; padding: 9px 9px !important; }
+}
+@media (max-width: 370px) {
+  .dcv4-navbar--portada .dcv2-nav-ghost { font-size: 12px !important; padding: 8px 3px !important; }
+  .dcv4-navbar--portada .dcv2-btn-primary { font-size: 12px !important; padding: 9px 8px !important; }
+}

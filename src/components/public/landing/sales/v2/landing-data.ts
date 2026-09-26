@@ -27,6 +27,19 @@ export const NAV = {
 };
 
 /**
+ * Menú de la BARRA en la portada (ajuste 7, Rafael), en este orden exacto.
+ * «Inicio» sube arriba del todo; Precios y FAQ son secciones de la portada;
+ * Blog es la única ruta (vuelve al menú a petición de Rafael; el pie de la
+ * portada sigue sin él). Fuera: Funciones, El panel y Comparativa.
+ */
+export const NAV_PORTADA: { label: string; href: string }[] = [
+  { label: 'Inicio', href: '#inicio' },
+  { label: 'Precios', href: '#precios' },
+  { label: 'Blog', href: '/blog' },
+  { label: 'FAQ', href: '#faq' },
+];
+
+/**
  * NAV.links mezcla anclas de la landing ("#precios") con rutas ("/blog").
  * Las anclas se sirven desde cualquier ruta como "/#precios"; las rutas van tal
  * cual — prefijarlas daría "//blog", que el navegador lee como URL

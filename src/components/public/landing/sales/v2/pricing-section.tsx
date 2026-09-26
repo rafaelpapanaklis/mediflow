@@ -12,8 +12,7 @@ import type { PlanCard } from "./plan-cards";
  * y cupos salen todos de la base de datos; `firstMonthFrom` es
  * cheapestFirstMonthLabel(cards) y `yearlyDiscountPct` headlineYearlyDiscount(cards).
  *
- * Ajuste 4 (Rafael): rediseño con la MISMA paleta; el conmutador arranca en
- * ANUAL y el subtítulo depende del modo — la promo del primer mes NO aplica al
+ * Ajuste 4 (Rafael): rediseño con la MISMA paleta; el subtítulo depende del modo — la promo del primer mes NO aplica al
  * anual (lib/billing/first-month-promo.ts), así que en anual no se anuncia.
  * Los bloques que cambian entre modos (línea bajo el precio, subtexto del CTA)
  * tienen alto reservado para que el cambio no mueva la maquetación.
@@ -32,7 +31,8 @@ function Check({ on }: { on: boolean }) {
 }
 
 export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { cards: PlanCard[]; firstMonthFrom: string; yearlyDiscountPct: number }) {
-  const [anual, setAnual] = useState(true);
+  // Ajuste 7 (Rafael): arranca en MENSUAL (antes, ajuste 4, arrancaba en anual).
+  const [anual, setAnual] = useState(false);
 
   return (
     <section id="precios" className="dcv4-price" style={{ scrollMarginTop: 72 }}>
@@ -55,7 +55,7 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
           </p>
 
           <div role="group" aria-label="Periodo de facturación" className="dcv4-price__toggle">
-            {/* Mensual a la izquierda y Anual a la derecha (con su −%), como estaba; ANUAL sigue seleccionado por defecto. */}
+            {/* Mensual a la izquierda y Anual a la derecha (con su −%); MENSUAL seleccionado por defecto (ajuste 7). */}
             <button type="button" className={`dcv4-price__tbtn${!anual ? " is-on" : ""}`} onClick={() => setAnual(false)} aria-pressed={!anual}>
               {PRICING_COPY.toggleMonthly}
             </button>
@@ -85,9 +85,10 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
               </p>
               {/* Una sola ranura de DOS renglones para ambos modos: mismo alto, sin saltos al conmutar. */}
               <p className="dcv4-price__line">
+                {/* Mensual (Rafael, ajuste 7): la píldora verde dice «Primer mes pagas» y en negro «solo $19 MXN» (importe del plan). */}
                 <span className="dcv4-price__l1">
-                  <span className="dcv4-price__save">{anual ? `−${p.yearlyDiscountPct}%` : "1.er mes"}</span>
-                  {anual ? `${fmtMXN(p.yearly)} al año` : `solo ${fmtMXN(p.firstMonth)}`}
+                  <span className="dcv4-price__save">{anual ? `−${p.yearlyDiscountPct}%` : "Primer mes pagas"}</span>
+                  <span>{anual ? `${fmtMXN(p.yearly)} al año` : `solo ${fmtMXN(p.firstMonth)} MXN`}</span>
                 </span>
                 <span className="dcv4-price__l2">{anual ? `Ahorras ${fmtMXN(p.yearlySavings)} frente al mes a mes` : `Ahorras ${fmtMXN(p.monthly - p.firstMonth)} el primer mes`}</span>
               </p>
