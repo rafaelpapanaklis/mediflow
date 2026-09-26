@@ -5,7 +5,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
-import { getResolvedPlan } from "@/lib/plans";
+import { getResolvedPlan, getResolvedPlanForClinic } from "@/lib/plans";
+import { CLINIC_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import {
   buildPreviewSubscriptionItems,
   changeDirection,
@@ -165,6 +166,8 @@ export async function POST(req: NextRequest) {
       nextBillingDate: true,
       stripeCustomerId: true,
       stripeSubscriptionId: true,
+      // Mismo criterio que el POST que cobra (ver change-plan/route.ts).
+      ...CLINIC_OVERRIDE_SELECT,
     },
   });
   if (!clinic) {
@@ -175,7 +178,7 @@ export async function POST(req: NextRequest) {
   }
 
   const targetPlan = await getResolvedPlan(targetPlanId);
-  const currentPlan = await getResolvedPlan(clinic.plan);
+  const currentPlan = await getResolvedPlanForClinic(clinic);
 
   // ── Sin suscripción de tarjeta ────────────────────────────────────────────
   if (!clinic.stripeSubscriptionId) {

@@ -30,6 +30,7 @@ import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
 import { evaluarSaludClinica, ETIQUETA_ESTADO_OPERATIVO } from "@/lib/admin/salud-clinica";
 import { ClinicAiWalletCard, ClinicAiPaymentsCard } from "@/components/admin/clinic-ai-wallet-card";
 import type { SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia-clinica";
+import { PlanOverridesCard, type PlanOverridesDTO } from "./plan-overrides-card";
 
 /** Lo que ESTA clínica nos ha pagado por su suscripción (subscription_invoices). */
 export interface PlatformPayments {
@@ -106,6 +107,8 @@ interface Props {
   saldoIa:              SaldoIaClinicaDTO | null;
   /** Precios de lista por plan, desde plan_configs. Nunca un literal. */
   planPrices:           Record<string, number>;
+  /** Condiciones conservadas de la clínica (planes nuevos, sep-2026). */
+  planOverrides:        PlanOverridesDTO;
   /** "Ahora" del servidor: SSR e hidratación cuentan los mismos días. */
   ahoraISO:             string;
   /** Agregados de citas de ESTA clínica (3 consultas, ninguna por fila). */
@@ -147,6 +150,7 @@ export function AdminClinicDetailClient({
   platformPayments,
   saldoIa,
   planPrices,
+  planOverrides,
   ahoraISO,
   actividad,
 }: Props) {
@@ -618,6 +622,8 @@ export function AdminClinicDetailClient({
                 </ButtonNew>
               </div>
             </CardNew>
+
+            <PlanOverridesCard clinicId={clinic.id} plan={clinic.plan} initial={planOverrides} />
           </div>
 
           {/* Manager de cuenta — a quién le escribe esta clínica por WhatsApp.

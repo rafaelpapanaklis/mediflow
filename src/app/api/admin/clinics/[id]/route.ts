@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
+import { clearOverridesData } from "@/lib/billing/plan-overrides";
 
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -19,6 +20,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     where: { id: params.id },
     data: {
       ...(body.plan        ? { plan: body.plan as any } : {}),
+      // Cambiar el plan desde /admin lo deja en las condiciones vigentes del plan
+      // nuevo (y no reaparecen si después vuelve al de origen). Mandar el MISMO
+      // plan (p. ej. «Activar plan + 1 mes») no toca lo conservado.
+      ...(body.plan && before && body.plan !== before.plan ? clearOverridesData() : {}),
       ...(body.trialEndsAt ? { trialEndsAt: new Date(body.trialEndsAt) } : {}),
       ...(body.name        ? { name: body.name } : {}),
     },

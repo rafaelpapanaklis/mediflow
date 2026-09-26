@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { refundPayment } from "@/lib/stripe-subscriptions";
 import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
-import { getPlanLimits } from "@/lib/plans";
+import { getResolvedPlan } from "@/lib/plans";
+import { CLINIC_OVERRIDE_SELECT, applyClinicOverrides, clearOverridesData, planToLimits } from "@/lib/billing/plan-overrides";
 import { getAdminMrr } from "@/lib/admin/mrr";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
@@ -169,20 +170,24 @@ export async function POST(req: NextRequest) {
     const { clinicId, plan, months } = body;
     const nextBilling = new Date();
     nextBilling.setMonth(nextBilling.getMonth() + (months ?? 1));
-    // Precio mensual desde plan_configs (fallback plan-shared) — misma fuente
-    // que el checkout; un plan inválido coacciona a PRO.
-    const { monthlyPrice } = await getPlanLimits(plan);
-
     // Misma regla que verify_payment: las dos fechas se mueven juntas.
     const current = await prisma.clinic.findUnique({
       where: { id: clinicId },
-      select: { trialEndsAt: true },
+      select: { trialEndsAt: true, ...CLINIC_OVERRIDE_SELECT },
     });
+
+    // Precio mensual desde plan_configs (fallback plan-shared) — misma fuente
+    // que el checkout; un plan inválido coacciona a PRO. Si se activa el MISMO
+    // plan que la clínica ya tiene, va con el precio que conserva (Clínica de
+    // antes de los planes nuevos: $1,719); con otro plan, el vigente de ese plan.
+    const { monthlyPrice } = planToLimits(applyClinicOverrides(await getResolvedPlan(plan), current));
     await prisma.clinic.update({
       where: { id: clinicId },
       data: {
         subscriptionStatus: "active",
         plan: plan as any,
+        // Otro plan = condiciones vigentes de ese plan; el mismo, conserva lo suyo.
+        ...(current && plan !== current.plan ? clearOverridesData() : {}),
         ...manualPeriodFields(current, nextBilling),
         monthlyPrice,
       },

@@ -5,7 +5,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
-import { getResolvedPlan, getPlanLimits } from "@/lib/plans";
+import { getResolvedPlan, getResolvedPlanForClinic, getPlanLimits } from "@/lib/plans";
+import { CLINIC_OVERRIDE_SELECT, clearOverridesData } from "@/lib/billing/plan-overrides";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 import {
   PLAN_UPGRADE_DIFF_KIND,
@@ -108,6 +109,10 @@ export async function POST(req: NextRequest) {
       nextBillingDate: true,
       stripeCustomerId: true,
       stripeSubscriptionId: true,
+      // Condiciones conservadas: el plan ACTUAL se valúa con lo que la clínica
+      // de verdad paga (base del crédito/diferencial); el DESTINO, con las
+      // condiciones vigentes de ese plan (cambiar de plan = condiciones nuevas).
+      ...CLINIC_OVERRIDE_SELECT,
     },
   });
   if (!clinic) {
@@ -121,7 +126,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const currentPlan = await getResolvedPlan(clinic.plan);
+  const currentPlan = await getResolvedPlanForClinic(clinic);
   const { ipAddress, userAgent } = extractAuditMeta(req);
 
   /** Aplica el plan en la BD sin cobrar (preferencia / diferencial nulo). */
@@ -132,6 +137,9 @@ export async function POST(req: NextRequest) {
       data: {
         plan: targetPlanId,
         aiTokensLimit: planLimits.aiTokensDefault,
+        // Cambió de plan por decisión propia: deja las condiciones de antes y
+        // pasa a las del plan nuevo (y no las recupera si vuelve al anterior).
+        ...clearOverridesData(),
       },
     });
     await logAudit({
@@ -539,6 +547,8 @@ export async function POST(req: NextRequest) {
       plan: targetPlanId,
       subscriptionStatus: updated.status,
       aiTokensLimit: planLimits.aiTokensDefault,
+      // Igual que en applyInPlace: condiciones nuevas del plan elegido.
+      ...clearOverridesData(),
     },
   });
 
