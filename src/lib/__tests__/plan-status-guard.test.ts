@@ -194,7 +194,9 @@ test("los permitidos siguen siendo exactamente los declarados (contador)", () =>
 
 // ── /admin: la misma insignia y la misma regla, no una copia ────────────────
 const ADMIN_CON_ESTADO = [
-  { ruta: "src/app/admin/page.tsx", insignia: true },
+  // La portada carga en page.tsx y pinta en portada-vista.tsx (rediseño 26-sep-2026).
+  { ruta: "src/app/admin/page.tsx", insignia: false },
+  { ruta: "src/components/admin/portada/portada-vista.tsx", insignia: true },
   { ruta: "src/app/admin/clinics/clinics-client.tsx", insignia: true },
   { ruta: "src/app/admin/clinics/[id]/clinic-detail-client.tsx", insignia: true },
   { ruta: "src/app/admin/payments/page.tsx", insignia: false },
