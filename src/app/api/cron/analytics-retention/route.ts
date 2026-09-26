@@ -8,6 +8,12 @@ import {
   purgeInBatches,
   type BatchDeleter,
 } from "./purge";
+import {
+  ADS_CLICK_RETENTION_MONTHS,
+  cutoffMonthsAgo,
+  purgeAdsClicks,
+  type AdsClicksResult,
+} from "./ads-clicks";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,6 +37,11 @@ export const maxDuration = 300;
  * documentados en ./purge.ts):
  *  - analytics_events   > EVENT_RETENTION_DAYS (90)   → borrar
  *  - analytics_sessions > SESSION_RETENTION_DAYS (365) → borrar
+ *  - clinic_ads_clicks  > ADS_CLICK_RETENTION_MONTHS (12 meses desde el registro
+ *    de la cuenta, "createdAt" de la fila) → borrar. SQL crudo, tolera que la
+ *    tabla no exista (42P01). Ver ./ads-clicks.ts. Es lo que promete la sección 8
+ *    de /privacidad; si cambia el plazo, cambia también ese texto. Corre PRIMERO
+ *    y no depende de las otras dos: es una tabla de una fila por alta.
  *
  * Por LOTES, nunca de un golpe: es la tabla donde escribe el panel de todas las
  * clínicas en cada click. Ver el comentario de cabecera de ./purge.ts.
@@ -94,8 +105,25 @@ export async function GET(req: NextRequest) {
     /** Por qué no se tocaron las sesiones, si no se tocaron. No es un error:
      *  una corrida de puesta al día que se queda sin lotes es lo esperado. */
     sessionsSkipped: null as string | null,
+    /** Clics de anuncios con más de 12 meses. `skipped` != null = la tabla no
+     *  existe (no es un error). Solo cuentas: nunca se registra un gclid. */
+    adsClicks: {
+      cutoff: cutoffMonthsAgo(ADS_CLICK_RETENTION_MONTHS, now).toISOString(),
+      deleted: 0,
+      batches: 0,
+      done: false,
+      skipped: null,
+    } as AdsClicksResult,
     errors: [] as string[],
   };
+
+  // Clic de anuncios: primero, porque es minúsculo y es una promesa de privacidad
+  // con fecha; no debe quedarse sin tiempo detrás de los eventos.
+  try {
+    summary.adsClicks = await purgeAdsClicks(prismaAdmin, now, { deadlineAt });
+  } catch (e) {
+    summary.errors.push(`adsClicks: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   // Eventos primero: son el 99 % del volumen. Si se come el presupuesto de
   // tiempo, las sesiones esperan a mañana sin pasar nada — son 36 filas al día.
