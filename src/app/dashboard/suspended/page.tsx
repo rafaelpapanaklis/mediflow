@@ -14,7 +14,7 @@ import {
   referenciaDeClinica,
   solicitudPendienteDe,
 } from "@/lib/billing/spei-directo";
-import { ivaEnCobro } from "@/lib/billing/spei-directo-core";
+import { ivaParaCobro } from "@/lib/billing/iva-cobro";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
 import { EsperaTransferencia } from "@/components/dashboard/cuenta-rediseno/espera-transferencia";
 import {
@@ -101,7 +101,9 @@ export default async function SuspendedPage({
     rechazoReciente(user.clinicId).catch(() => null),
   ]);
   const sinAcceso = isPlanExpired(clinic);
-  const conIva = ivaEnCobro(process.env);
+  // ¿Hay IVA configurado para cobrar con tarjeta/OXXO? Sin él, el checkout responde 503 (no cobra sin IVA):
+  // la pantalla lo dice y no deja pulsar. SPEI no depende de esto (siempre suma el 16 %).
+  const cobroConIvaListo = ivaParaCobro(process.env).ok;
 
   // Con `?pending=oxxo|spei` (vuelta de un pago de Stripe) NO se enseña la espera: pediría transferir
   // otra vez a quien acaba de generar su voucher.
@@ -112,7 +114,6 @@ export default async function SuspendedPage({
         <EsperaTransferencia
           solicitud={pendienteSpei}
           planNombre={plan?.name ?? pendienteSpei.plan}
-          conIva={pendienteSpei.ivaCents > 0}
           hrefTarjeta="/dashboard/suspended?ver=pago"
         />
       </RaizCuenta>
@@ -162,7 +163,7 @@ export default async function SuspendedPage({
             resumenInicial={!isReactivation && currentPlan !== null}
             cuentaSpei={cuentaSpei}
             referenciaSpei={cuentaSpei ? referenciaDeClinica(user.clinicId) : null}
-            ivaEnCobro={conIva}
+            cobroConIvaListo={cobroConIvaListo}
           />
           <VolverAlLogin texto={t("pages.suspended.backToLogin")} />
         </PaginaSuspendida>

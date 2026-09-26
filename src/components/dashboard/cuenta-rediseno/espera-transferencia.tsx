@@ -28,12 +28,10 @@ const CADA_MS = 15_000;
 export function EsperaTransferencia({
   solicitud,
   planNombre,
-  conIva,
   hrefTarjeta,
 }: {
   solicitud: SolicitudSpeiDTO;
   planNombre: string;
-  conIva: boolean;
   hrefTarjeta: string;
 }) {
   const consultando = useRef(false);
@@ -95,7 +93,6 @@ export function EsperaTransferencia({
           importe={{ subtotalCents: solicitud.subtotalCents, ivaCents: solicitud.ivaCents, totalCents: solicitud.amountCents }}
           referencia={solicitud.reference}
           periodo={anual ? "anual" : "mensual"}
-          conIva={conIva}
         />
 
         <div className={s.esperaAcciones}>

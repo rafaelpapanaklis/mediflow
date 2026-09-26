@@ -467,6 +467,21 @@
 .confianzaItem { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--pg-texto-2); }
 .confianzaPunto { color: var(--pg-borde-fuerte); }
 
+/* ── Desglose del cobro con IVA (tarjeta y OXXO) ────────────────────── */
+.desglose {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--pg-borde);
+  background: var(--pg-relleno);
+  font-size: 13.5px;
+  color: var(--pg-texto-2);
+}
+.desgloseFila { display: flex; justify-content: space-between; gap: 12px; }
+.desgloseTotal { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--pg-borde); font-size: 15px; font-weight: 800; color: var(--pg-texto); }
+
 /* ── Datos de la transferencia (SPEI directo) ───────────────────────── */
 .datos {
   display: flex;

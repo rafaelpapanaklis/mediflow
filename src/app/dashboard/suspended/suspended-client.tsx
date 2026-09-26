@@ -49,12 +49,12 @@ interface Props {
    * SPEI por transferencia directa (solo en el rediseño): la cuenta que el
    * admin configuró en /admin/settings → Datos banco, o null si no hay una
    * utilizable — entonces SPEI NO se ofrece. `referenciaSpei` es el folio de la
-   * clínica para el concepto; `ivaEnCobro` dice si el cobro de hoy suma IVA
-   * (mismo interruptor que el checkout). Los tres los decide la página.
+   * clínica para el concepto; `cobroConIvaListo` dice si el checkout tiene el IVA
+   * configurado (sin él tarjeta/OXXO no cobran). Los tres los decide la página.
    */
   cuentaSpei?: CuentaBancaria | null;
   referenciaSpei?: string | null;
-  ivaEnCobro?: boolean;
+  cobroConIvaListo?: boolean;
 }
 
 // Upsell: qué plan sugerir según el actual. CLINIC es el tope (sin sugerencia).
@@ -76,7 +76,7 @@ export function SuspendedPlanCards({
   resumenInicial = false,
   cuentaSpei = null,
   referenciaSpei = null,
-  ivaEnCobro = false,
+  cobroConIvaListo = true,
 }: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
@@ -187,7 +187,7 @@ export function SuspendedPlanCards({
   // Carga completa: el layout y la página vuelven a leer el estado en el servidor.
   function importeMostrado(plan: PlanId): number | undefined {
     const p = plans.find((x) => x.id === plan);
-    return p ? importeSpei({ plan: p, billing, conIva: ivaEnCobro }).totalCents : undefined;
+    return p ? importeSpei({ plan: p, billing }).totalCents : undefined;
   }
   async function handleDeclararSpei(plan: PlanId) {
     if (declarandoSpei) return;
@@ -272,7 +272,7 @@ export function SuspendedPlanCards({
           handleStripeCheckout,
           cuentaSpei: speiDisponible ? cuentaSpei : null,
           referenciaSpei,
-          ivaEnCobro,
+          cobroConIvaListo,
           declarandoSpei,
           handleDeclararSpei,
         }}

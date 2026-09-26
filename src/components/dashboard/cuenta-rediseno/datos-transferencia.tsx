@@ -23,15 +23,12 @@ export function DatosTransferencia({
   importe,
   referencia,
   periodo,
-  conIva,
 }: {
   cuenta: CuentaBancaria;
   importe: ImporteSpei;
   referencia: string;
   /** «mensual» / «anual»: para el pie del importe. */
   periodo: "mensual" | "anual";
-  /** El cobro de hoy suma IVA: se enseña el desglose. */
-  conIva: boolean;
 }) {
   return (
     <div className={s.datos} data-testid="datos-transferencia">
@@ -56,9 +53,7 @@ export function DatosTransferencia({
         <span className={`${s.datoV} ${s.datoVGrande}`}>{centavosAMxn(importe.totalCents)}</span>
         <BotonCopiar valor={centavosADecimal(importe.totalCents)} etiqueta="el importe" />
         <span className={s.datoDesglose}>
-          {conIva
-            ? `Plan ${periodo}: ${centavosAMxn(importe.subtotalCents)} + IVA ${centavosAMxn(importe.ivaCents)}`
-            : `Plan ${periodo}, tal como se cobra con tarjeta.`}
+          {`Plan ${periodo}: ${centavosAMxn(importe.subtotalCents)} + IVA 16 % ${centavosAMxn(importe.ivaCents)}`}
         </span>
       </div>
       <div className={s.dato}>
