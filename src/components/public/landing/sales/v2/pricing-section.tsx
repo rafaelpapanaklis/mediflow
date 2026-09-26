@@ -96,8 +96,10 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
                 {/* `key` por modo: al conmutar, la cifra entra con un fundido corto (CSS). */}
                 <span key={anual ? "a" : "m"} className="dcv4-price__num">{num(anual ? p.yearlyPerMonth : p.monthly)}</span>
                 <span className="dcv4-price__per">
-                  <span>MXN</span>
-                  <span>/ mes</span>
+                  <span className="dcv4-price__mxn">MXN</span>
+                  <span className="dcv4-price__mes">/ mes</span>
+                  {/* Ajuste 8b (Rafael): «+ IVA» junto a cada precio, en ambos modos. */}
+                  <span className="dcv4-price__iva">+ IVA</span>
                 </span>
               </p>
               {/* Una sola ranura de DOS renglones para ambos modos: mismo alto, sin saltos al conmutar. */}
