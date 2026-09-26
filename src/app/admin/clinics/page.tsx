@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { loadPlanPrices, loadIncludedBranchIds, computeMrr, type AdminMrr } from "@/lib/admin/mrr";
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
+import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
 import { AdminClinicsClient, type FilaClinica } from "./clinics-client";
 
 export const metadata: Metadata = { title: "Clínicas — Admin DaleControl" };
@@ -14,8 +15,9 @@ export const metadata: Metadata = { title: "Clínicas — Admin DaleControl" };
  *
  * COSTE: 1 consulta de precios (plan_configs, con caché) + 11 consultas de
  * datos, TODAS agregadas, en DOS tandas de 6 y 5 (el pooler se satura por
- * encima de 7 por Promise.all). Ni una consulta por clínica: con 500 clínicas
- * son las mismas 11.
+ * encima de 7 por Promise.all), más las 7 del consumo (medirUsoClinicas, en
+ * dos tandas de 4 y 3). Ni una consulta por clínica: con 500 clínicas son
+ * las mismas 18.
  *
  * /admin es la vista del dueño de la plataforma: sus consultas son
  * deliberadamente CROSS-TENANT (no llevan clinicId) y lo que las protege es el
@@ -53,6 +55,8 @@ export default async function AdminClinicsPage() {
         // monthlyPrice: el precio NEGOCIADO. Manda sobre el del plan en el MRR.
         monthlyPrice: true,
         paymentMethodCollected: true, paymentMethodType: true, paymentMethodLast4: true,
+        // Para «cómo paga» (@/lib/admin/uso-core.metodoDePago) y el periodo CFDI.
+        preferredPaymentMethod: true, stripeCustomerId: true, stripeSubscriptionId: true, paypalSubscriptionId: true, timezone: true,
         cancelRequested: true, cancelRequestedAt: true,
         state: true, clinicSize: true,
         _count: { select: { patients: true, users: true, appointments: true } },
@@ -137,6 +141,11 @@ export default async function AdminClinicsPage() {
     }),
   ]);
 
+  // ── Tercera tanda (dos internas de 4 y 3): consumo y cupos ──────────────
+  // Almacenamiento, CFDI del mes, usuarios, sedes y saldo IA, con el mismo
+  // criterio que los gates que bloquean subidas y altas (@/lib/admin/uso-core).
+  const uso = await medirUsoClinicas(clinics, ahora);
+
   const porClinica = <T extends { clinicId: string | null }>(filas: T[]) =>
     new Map(filas.filter((f) => f.clinicId !== null).map((f) => [f.clinicId as string, f]));
 
@@ -173,6 +182,7 @@ export default async function AdminClinicsPage() {
     ultimoPagoAt:    mPagos.get(c.id)?._max.paidAt ?? null,
     totalPagado:     mPagos.get(c.id)?._sum.amount ?? 0,
     sedeIncluida:    sedesIncluidas.has(c.id),
+    uso:             uso.porClinica.get(c.id),
   }));
 
   // MRR por la FUENTE ÚNICA (@/lib/admin/mrr), no por una suma propia: sólo
@@ -193,6 +203,7 @@ export default async function AdminClinicsPage() {
       planPrices={planPrices}
       mrr={mrr}
       ahoraISO={ahora.toISOString()}
+      avisosUso={uso.avisos}
     />
   );
 }

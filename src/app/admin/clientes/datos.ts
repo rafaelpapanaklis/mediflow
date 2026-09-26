@@ -11,9 +11,10 @@ import "server-only";
  * pantalla y viva en la otra.
  *
  * COSTE: 1 consulta de precios (plan_configs, con caché) + 1 de dueños + dos
- * tandas de 5 consultas AGREGADAS + 2 del cupo de pacientes. Ni una consulta
- * por clínica: con 500 clínicas son las mismas 13. Las tandas van de 5 porque
- * por encima de 7 en paralelo el pooler se satura.
+ * tandas de 5 consultas AGREGADAS + 2 del cupo de pacientes + 7 del consumo
+ * (medirUsoClinicas, en dos tandas). Ni una consulta por clínica: con 500
+ * clínicas son las mismas 20. Las tandas van de ≤5 porque por encima de 7 en
+ * paralelo el pooler se satura.
  *
  * /admin es la vista del dueño de la plataforma: estas consultas son
  * deliberadamente CROSS-TENANT (no llevan clinicId) y lo que las protege es el
@@ -33,6 +34,7 @@ import {
   SUPERFICIE_PANEL,
 } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
+import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
 import { repartirIngresos, INGRESOS_VACIOS } from "./cartera";
 import type { ClienteCrudo, ClinicaDeCliente, IngresosCliente } from "./cartera";
 
@@ -66,6 +68,15 @@ const SELECT_DUENO = {
       archivedAt: true,
       aiTokensUsed: true,
       aiTokensLimit: true,
+      // Para «cómo paga» y el periodo CFDI (rediseño ws1-t2).
+      paymentMethodType: true,
+      paymentMethodLast4: true,
+      preferredPaymentMethod: true,
+      stripeCustomerId: true,
+      stripeSubscriptionId: true,
+      paypalSubscriptionId: true,
+      timezone: true,
+      aiLastResetAt: true,
       affiliate: { select: { name: true } },
     },
   },
@@ -91,6 +102,14 @@ type FilaDueno = {
     archivedAt: Date | null;
     aiTokensUsed: number;
     aiTokensLimit: number;
+    paymentMethodType: string | null;
+    paymentMethodLast4: string | null;
+    preferredPaymentMethod: string | null;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
+    paypalSubscriptionId: string | null;
+    timezone: string | null;
+    aiLastResetAt: Date | null;
     affiliate: { name: string } | null;
   } | null;
 };
@@ -101,7 +120,12 @@ const iso = (d: Date | null | undefined): string | null => (d ? d.toISOString() 
  * Los agregados de actividad, pago y cupo de un conjunto de clínicas.
  * Devuelve una función que arma la parte "medida" de cada clínica.
  */
-async function medirClinicas(clinicIds: string[], ahora: Date, sedesIncluidas: Set<string>) {
+async function medirClinicas(
+  clinicas: NonNullable<FilaDueno["clinic"]>[],
+  ahora: Date,
+  sedesIncluidas: Set<string>,
+) {
+  const clinicIds = clinicas.map((c) => c.id);
   const desdeVentana = inicioDeHaceDias(DIAS_VENTANA_ACTIVIDAD, ahora);
   const desdePrevia  = inicioDeHaceDias(DIAS_VENTANA_ACTIVIDAD * 2, ahora);
   const desdeEnLinea = new Date(ahora.getTime() - MINUTOS_EN_LINEA * 60_000);
@@ -188,6 +212,10 @@ async function medirClinicas(clinicIds: string[], ahora: Date, sedesIncluidas: S
   // Cupo de pacientes: 2 consultas para todas las clínicas, no 2 por clínica.
   const cupos = await getPatientQuotaMany(clinicIds);
 
+  // Consumo y cupos (almacenamiento, CFDI, usuarios, sedes, saldo IA): dos
+  // tandas más de 4 y 3, el mismo cálculo que /admin/clinics.
+  const uso = await medirUsoClinicas(clinicas, ahora);
+
   const porClinica = <T extends { clinicId: string | null }>(filas: T[]) =>
     new Map(filas.filter((f) => f.clinicId !== null).map((f) => [f.clinicId as string, f]));
 
@@ -239,6 +267,13 @@ async function medirClinicas(clinicIds: string[], ahora: Date, sedesIncluidas: S
       aiTokensUsed:  c.aiTokensUsed ?? 0,
       aiTokensLimit: c.aiTokensLimit ?? 0,
       sedeIncluida:  sedesIncluidas.has(c.id),
+      uso:           uso.porClinica.get(c.id),
+      paymentMethodType: c.paymentMethodType ?? null,
+      paymentMethodLast4: c.paymentMethodLast4 ?? null,
+      preferredPaymentMethod: c.preferredPaymentMethod ?? null,
+      stripeCustomerId: c.stripeCustomerId ?? null,
+      stripeSubscriptionId: c.stripeSubscriptionId ?? null,
+      paypalSubscriptionId: c.paypalSubscriptionId ?? null,
     };
   };
 }
@@ -312,12 +347,12 @@ export async function cargarClientes(): Promise<DatosClientes> {
     select: SELECT_DUENO,
   })) as unknown as FilaDueno[];
 
-  const clinicIds = filas.map((f) => f.clinic?.id).filter((id): id is string => !!id);
-  if (clinicIds.length === 0) {
+  const clinicas = filas.map((f) => f.clinic).filter((c): c is NonNullable<FilaDueno["clinic"]> => !!c);
+  if (clinicas.length === 0) {
     return { clientes: [], planPrices, ahoraISO: ahora.toISOString() };
   }
 
-  const medida = await medirClinicas(clinicIds, ahora, sedesIncluidas);
+  const medida = await medirClinicas(clinicas, ahora, sedesIncluidas);
   return { clientes: agrupar(filas, medida), planPrices, ahoraISO: ahora.toISOString() };
 }
 
@@ -374,7 +409,8 @@ export async function cargarCliente(supabaseId: string): Promise<DatosCliente> {
     soloComoUsuario = filas.length > 0;
   }
 
-  const clinicIds = filas.map((f) => f.clinic!.id);
+  const clinicas = filas.map((f) => f.clinic!);
+  const clinicIds = clinicas.map((c) => c.id);
   if (clinicIds.length === 0) {
     return {
       cliente: null,
@@ -386,7 +422,7 @@ export async function cargarCliente(supabaseId: string): Promise<DatosCliente> {
   }
 
   // En serie con medirClinicas, no en paralelo: esa ya abre sus dos tandas.
-  const medida = await medirClinicas(clinicIds, ahora, sedesIncluidas);
+  const medida = await medirClinicas(clinicas, ahora, sedesIncluidas);
   const ingresos = await medirIngresos(clinicIds, ahora);
   const clientes = agrupar(filas, medida);
   return {

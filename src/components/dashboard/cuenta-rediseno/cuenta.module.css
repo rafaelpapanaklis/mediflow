@@ -88,10 +88,16 @@
   box-shadow: var(--m2-foco);
 }
 
-/* ═══ Clínica suspendida: planes y pago ═══════════════════════════════ */
+/* ═══ Clínica suspendida: planes y pago ═══════════════════════════════
+   Ajuste 3 (ws1-t5, 26-sep-2026): misma lógica y mismos textos, con la
+   jerarquía del recorrido de alta rediseñado: recorrido de tres pasos en la
+   cabecera, la tarjeta ELEGIDA es la protagonista (anillo del color activo),
+   el bloque de pago es una tarjeta con título propio y el botón de pagar
+   pesa como el «Crear cuenta» del alta. Sigue sin un color a mano: todo sale
+   de los tokens del menú y de los semánticos de globals. */
 
 .pagina {
-  max-width: 1000px;
+  max-width: 1040px;
   margin: 0 auto;
   padding: clamp(12px, 1.6vw, 24px) 0 56px;
 }
@@ -114,7 +120,7 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  margin-bottom: 26px;
+  margin-bottom: 28px;
   text-align: center;
 }
 
@@ -145,10 +151,10 @@
 
 .titulo {
   margin: 0;
-  font-size: clamp(26px, 2.6vw, 34px);
+  font-size: clamp(26px, 2.8vw, 36px);
   font-weight: 700;
-  letter-spacing: -0.6px;
-  line-height: 1.15;
+  letter-spacing: -0.7px;
+  line-height: 1.12;
   color: var(--m2-texto);
 }
 
@@ -158,6 +164,59 @@
   font-size: 14.5px;
   line-height: 1.5;
   color: var(--m2-texto-2);
+}
+
+/* Recorrido del alta: cuenta ✓, clínica ✓, pago ●. Solo en la compra nueva
+   (la reactivación no viene del alta). */
+.recorrido {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(88px, 132px));
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
+.recorridoPaso {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.recorridoBarra {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--m2-borde);
+}
+
+.recorridoPasoHecho .recorridoBarra {
+  background: var(--success, #059669);
+}
+
+.recorridoPasoActual .recorridoBarra {
+  background: var(--m2-activo);
+}
+
+.recorridoTexto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--m2-texto-3);
+  white-space: nowrap;
+}
+
+.recorridoPasoHecho .recorridoTexto {
+  color: var(--success-strong, #047857);
+}
+
+.recorridoPasoActual .recorridoTexto {
+  color: var(--m2-texto);
 }
 
 /* ── Ciclo: mensual / anual ──────────────────────────────────────── */
@@ -187,31 +246,30 @@
   left: 4px;
   width: calc(50% - 4px);
   border-radius: 999px;
-  background: var(--m2-tarjeta);
-  border: 1px solid var(--m2-tarjeta-borde);
-  box-shadow: var(--m2-sombra);
-  transition: transform 0.25s;
+  background: var(--m2-activo);
+  box-shadow: 0 8px 16px -8px color-mix(in srgb, var(--m2-activo) 80%, transparent);
+  transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .conmutadorOpcion {
   position: relative;
   z-index: 1;
-  min-width: 112px;
-  height: 36px;
-  padding: 0 16px;
+  min-width: 118px;
+  height: 38px;
+  padding: 0 18px;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--m2-texto-3);
+  color: var(--m2-texto-2);
   font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
-  transition: color 0.12s;
+  transition: color 0.16s;
 }
 
 .conmutadorOpcionActiva {
-  color: var(--m2-texto);
+  color: var(--m2-activo-texto);
 }
 
 .conmutadorOpcion:focus-visible {
@@ -223,11 +281,11 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 24px;
-  padding: 0 10px;
+  height: 26px;
+  padding: 0 11px;
   border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -256,6 +314,7 @@
   align-items: stretch;
   gap: 16px;
   margin-bottom: 22px;
+  padding-top: 10px;
 }
 
 @media (max-width: 767.98px) {
@@ -270,20 +329,22 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  padding: 20px;
+  padding: 22px 20px 20px;
   background: var(--m2-tarjeta);
   border: 1px solid var(--m2-tarjeta-borde);
-  border-radius: 14px;
-  box-shadow: var(--m2-sombra);
+  border-radius: 18px;
+  box-shadow: var(--m2-sombra), 0 22px 44px -36px color-mix(in srgb, var(--m2-texto) 35%, transparent);
   cursor: pointer;
   user-select: none;
   outline: none;
-  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+  transition: border-color 0.16s, box-shadow 0.16s, background 0.16s, transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 @media (hover: hover) {
   .plan:hover {
     background: var(--m2-tarjeta-hover);
+    border-color: color-mix(in srgb, var(--m2-activo) 40%, var(--m2-tarjeta-borde));
+    transform: translateY(-3px);
   }
 }
 
@@ -294,7 +355,8 @@
 .planSeleccionado,
 .planSeleccionado:hover {
   border-color: var(--m2-activo);
-  box-shadow: 0 0 0 3px var(--m2-iniciales-fondo), var(--m2-sombra);
+  background: var(--m2-tarjeta);
+  box-shadow: 0 0 0 3px var(--m2-activo), 0 26px 52px -30px color-mix(in srgb, var(--m2-activo) 55%, transparent);
 }
 
 .plan:focus-visible {
@@ -316,58 +378,74 @@
 }
 
 .radio {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
   border-radius: 50%;
   border: 2px solid var(--m2-borde);
   display: grid;
   place-items: center;
+  transition: border-color 0.16s, background 0.16s;
 }
 
 .radioActivo {
   border-color: var(--m2-activo);
+  background: var(--m2-activo);
 }
 
 .radioPunto {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--m2-activo);
+  background: var(--m2-activo-texto);
 }
 
 .planNombre {
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.2px;
-  color: var(--m2-texto);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--m2-activo);
+}
+
+.planNombre::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--m2-activo);
+  box-shadow: 0 0 0 3px var(--m2-iniciales-fondo);
 }
 
 .precio {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 5px;
 }
 
 .precioCifra {
-  font-size: 32px;
+  font-size: 40px;
   font-weight: 700;
-  letter-spacing: -0.8px;
+  letter-spacing: -1.4px;
   line-height: 1;
   color: var(--m2-texto);
   font-variant-numeric: tabular-nums;
 }
 
 .precioUnidad {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--m2-texto-3);
 }
 
 .precioNota {
-  margin-top: -4px;
-  font-size: 12px;
-  color: var(--m2-texto-3);
+  margin-top: -2px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--m2-texto-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -378,6 +456,7 @@
   color: var(--m2-iniciales-texto);
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 
@@ -394,31 +473,129 @@
 
 .beneficio {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 9px;
   font-size: 13px;
+  line-height: 1.4;
   color: var(--m2-texto-2);
 }
 
 .beneficioIcono {
   flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--success-soft, rgba(5, 150, 105, 0.1));
   color: var(--success, #059669);
+}
+
+/* ── Resumen del plan elegido en el alta (+ «Cambiar plan») ──────── */
+
+.resumen {
+  max-width: 640px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-activo);
+  border-radius: 18px;
+  box-shadow: 0 0 0 3px var(--m2-iniciales-fondo), var(--m2-sombra);
+}
+
+.resumenCuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resumenBeneficios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 2px;
+}
+
+.cambiarPlan {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 9px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  box-shadow: var(--m2-sombra);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.cambiarPlan:hover {
+  background: var(--m2-tarjeta-hover);
+  color: var(--m2-texto);
+}
+
+.cambiarPlan:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+@media (max-width: 480px) {
+  .resumen {
+    flex-direction: column;
+    padding: 18px 16px;
+  }
+  .cambiarPlan {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 /* ── Pago: método + CTA + confianza ──────────────────────────────── */
 
 .pago {
-  max-width: 560px;
+  max-width: 640px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 14px;
-  padding: 20px;
+  padding: 22px 22px 20px;
   background: var(--m2-tarjeta);
   border: 1px solid var(--m2-tarjeta-borde);
-  border-radius: 14px;
-  box-shadow: var(--m2-sombra);
+  border-radius: 18px;
+  box-shadow: var(--m2-sombra), 0 30px 60px -40px color-mix(in srgb, var(--m2-texto) 45%, transparent);
+}
+
+.pagoTitulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--m2-texto);
+}
+
+.pagoTituloIcono {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  flex-shrink: 0;
 }
 
 .metodos {
@@ -439,9 +616,9 @@
   width: calc((100% - 8px) / 3);
   border-radius: 9px;
   background: var(--m2-tarjeta);
-  border: 1px solid var(--m2-tarjeta-borde);
-  box-shadow: var(--m2-sombra);
-  transition: transform 0.25s;
+  border: 1px solid color-mix(in srgb, var(--m2-activo) 45%, var(--m2-tarjeta-borde));
+  box-shadow: var(--m2-sombra), 0 6px 14px -8px color-mix(in srgb, var(--m2-activo) 50%, transparent);
+  transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .metodo {
@@ -452,20 +629,20 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 38px;
+  height: 42px;
   border: 0;
   border-radius: 9px;
   background: transparent;
   color: var(--m2-texto-3);
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: color 0.12s;
+  transition: color 0.16s;
 }
 
 .metodoActivo {
-  color: var(--m2-texto);
+  color: var(--m2-activo);
 }
 
 .metodo:focus-visible {
@@ -475,8 +652,12 @@
 
 .notaMetodo {
   margin: -4px 0 0;
+  padding: 9px 12px;
+  border-radius: 10px;
   text-align: center;
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
   color: var(--warning-strong, #a85a05);
 }
 
@@ -484,29 +665,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  height: 46px;
-  padding: 0 18px;
+  min-height: 52px;
+  padding: 10px 18px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--m2-activo);
   color: var(--m2-activo-texto);
-  box-shadow: var(--m2-sombra);
+  box-shadow: 0 14px 30px -12px color-mix(in srgb, var(--m2-activo) 75%, transparent);
   font: inherit;
-  font-size: 14.5px;
-  font-weight: 600;
+  font-size: 15.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
-  transition: filter 0.12s, opacity 0.12s;
+  transition: filter 0.16s, opacity 0.16s, transform 0.18s;
 }
 
 .cta:hover:not(:disabled) {
   filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
 .cta:disabled {
-  opacity: 0.6;
+  opacity: 0.7;
   cursor: not-allowed;
 }
 
@@ -520,7 +704,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px 8px;
   font-size: 12px;
   font-weight: 500;
   color: var(--m2-texto-3);
@@ -530,6 +714,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  color: var(--m2-texto-2);
+  font-weight: 600;
 }
 
 .confianzaPunto {
@@ -544,6 +730,9 @@
 }
 
 .volver a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: inherit;
   text-decoration: none;
   transition: color 0.12s;
@@ -553,13 +742,19 @@
   color: var(--m2-texto);
 }
 
+.volver a:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+  border-radius: 6px;
+}
+
 /* ── Vuelta de Stripe: pago confirmado / confirmando ─────────────── */
 
 .resultado {
   max-width: 560px;
   min-height: 60vh;
   margin: 0 auto;
-  padding: 48px 0;
+  padding: 24px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -567,11 +762,24 @@
   text-align: center;
 }
 
+.resultadoTarjeta {
+  width: 100%;
+  padding: 44px 28px 32px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 22px;
+  box-shadow: var(--m2-sombra), 0 40px 70px -44px color-mix(in srgb, var(--m2-texto) 50%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .resultadoIcono {
-  width: 72px;
-  height: 72px;
-  margin-bottom: 20px;
-  border-radius: 18px;
+  position: relative;
+  width: 84px;
+  height: 84px;
+  margin-bottom: 22px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
 }
@@ -579,18 +787,30 @@
 .resultadoIconoExito {
   background: var(--success-soft, rgba(5, 150, 105, 0.1));
   color: var(--success, #059669);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--success, #059669) 10%, transparent);
 }
 
 .resultadoIconoEspera {
-  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
-  color: var(--warning, #d97706);
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-activo);
+}
+
+/* Anillo que gira alrededor del ícono de espera. */
+.resultadoIconoEspera::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 3px solid var(--m2-borde);
+  border-top-color: var(--m2-activo);
+  animation: cuentaGirar 1.1s linear infinite;
 }
 
 .resultadoTitulo {
   margin: 0 0 10px;
-  font-size: clamp(24px, 2.4vw, 30px);
+  font-size: clamp(24px, 2.6vw, 32px);
   font-weight: 700;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.6px;
   line-height: 1.15;
   color: var(--m2-texto);
 }
@@ -599,7 +819,7 @@
   margin: 0 0 26px;
   max-width: 440px;
   font-size: 14.5px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--m2-texto-2);
 }
 
@@ -608,6 +828,7 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
+  width: 100%;
 }
 
 .boton {
@@ -615,19 +836,19 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 44px;
-  padding: 0 18px;
+  min-height: 46px;
+  padding: 0 20px;
   border: 1px solid var(--m2-tarjeta-borde);
-  border-radius: 10px;
+  border-radius: 11px;
   background: var(--m2-tarjeta);
   color: var(--m2-texto);
   box-shadow: var(--m2-sombra);
   font: inherit;
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-  transition: background 0.12s, filter 0.12s;
+  transition: background 0.12s, filter 0.12s, transform 0.18s;
 }
 
 .boton:hover {
@@ -644,14 +865,20 @@
   background: var(--m2-activo);
   border-color: var(--m2-activo);
   color: var(--m2-activo-texto);
+  box-shadow: 0 14px 30px -12px color-mix(in srgb, var(--m2-activo) 75%, transparent);
 }
 
 .botonPrincipal:hover {
   filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
 .referencia {
-  margin-top: 32px;
+  margin-top: 26px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--m2-buscador-fondo);
+  border: 1px solid var(--m2-borde);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -669,12 +896,37 @@
   }
 }
 
+@media (max-width: 480px) {
+  .pago {
+    padding: 18px 16px 16px;
+  }
+  .metodo {
+    font-size: 13px;
+    gap: 5px;
+  }
+  .resultadoTarjeta {
+    padding: 36px 18px 26px;
+  }
+  .resultadoAcciones > * {
+    flex: 1 1 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .girando {
+  .girando,
+  .resultadoIconoEspera::after {
     animation: none;
   }
   .conmutadorDeslizante,
-  .metodosDeslizante {
+  .metodosDeslizante,
+  .plan,
+  .cta,
+  .botonPrincipal {
     transition: none;
+  }
+  .plan:hover,
+  .cta:hover:not(:disabled),
+  .botonPrincipal:hover {
+    transform: none;
   }
 }

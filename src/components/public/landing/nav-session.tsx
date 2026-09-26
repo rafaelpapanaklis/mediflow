@@ -46,10 +46,11 @@ function useHasSupabaseSession(): boolean {
   return isLoggedIn;
 }
 
-export function SalesNavSession({ affiliate = false }: { affiliate?: boolean } = {}) {
+export function SalesNavSession({ affiliate = false, portada = false }: { affiliate?: boolean; portada?: boolean } = {}) {
   // `affiliate` sólo lo pasa /afiliados: cambia el grupo de la derecha por los
-  // destinos del programa. Sin la bandera, el nav es el de siempre.
-  return <SalesNav isLoggedIn={useHasSupabaseSession()} affiliate={affiliate} />;
+  // destinos del programa. `portada` sólo lo pasa la home: sin enlaces a
+  // páginas secundarias (ver nav.tsx). Sin banderas, el nav es el de siempre.
+  return <SalesNav isLoggedIn={useHasSupabaseSession()} affiliate={affiliate} portada={portada} />;
 }
 
 export function HeaderSession() {

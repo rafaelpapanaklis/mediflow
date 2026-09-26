@@ -12,6 +12,8 @@ import { loadPlanPrices } from "@/lib/admin/mrr";
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import { leerSaldoIaClinica, type SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia-clinica";
+import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
+import type { UsoClinica } from "@/lib/admin/uso-core";
 import type { ClinicRecurringCharge } from "@/components/admin/clinic-payment-method-card";
 import { AdminClinicDetailClient, type PlatformPayments } from "./clinic-detail-client";
 import type { PlanOverridesDTO } from "./plan-overrides-card";
@@ -181,6 +183,24 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     console.warn("[admin/clinics/:id] saldo de IA no disponible:", e);
   }
 
+  // Consumo y cupos para el resumen de la ficha (rediseño ws1-t2): mismo
+  // cálculo que la lista de Clínicas (@/lib/admin/uso-clinica). En try/catch:
+  // si algo falla, el resumen dice «sin medir» y la ficha se sigue viendo.
+  let uso: UsoClinica | null = null;
+  let pacientesTope: number | null = null;
+  // Pacientes VIVOS (deletedAt null): el mismo conteo con el que el cupo decide
+  // si se puede crear otro (@/lib/patient-quota); `_count.patients` incluye
+  // los borrados por ARCO y daría «505 de 500» a una clínica que puede crear.
+  let pacientesVivos: number = clinic._count.patients;
+  try {
+    const medido = await medirUsoClinicas([clinic], ahora);
+    uso = medido.porClinica.get(clinic.id) ?? null;
+    pacientesTope = medido.limites[clinic.plan]?.maxPatients ?? null;
+    pacientesVivos = await prisma.patient.count({ where: { clinicId: clinic.id, deletedAt: null } });
+  } catch (e) {
+    console.warn("[admin/clinics/:id] consumo no disponible:", e);
+  }
+
   // Método de pago e importe VIGENTES en Stripe (solo lectura, una sola
   // consulta). El campo del alta (paymentMethodCollected) no se actualiza nunca,
   // así que no sirve para saber qué tarjeta se va a cobrar.
@@ -274,6 +294,9 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       recurringCharge={recurringCharge}
       platformPayments={platformPayments}
       saldoIa={saldoIa}
+      uso={uso}
+      pacientesTope={pacientesTope}
+      pacientesVivos={pacientesVivos}
       planPrices={planPrices}
       planOverrides={planOverrides}
       ahoraISO={ahora.toISOString()}

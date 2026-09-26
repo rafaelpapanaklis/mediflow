@@ -2,10 +2,18 @@ import Image from "next/image";
 import type { CSSProperties, ReactNode } from "react";
 import { HERO } from "./landing-data";
 import { HeroStage } from "./hero-stage";
+import { IconoPanel } from "./icono-panel";
+import { instrumentSans, materialSymbols } from "@/fonts/menu";
+import "./hero-3d-v2.css";
 
 /**
  * Hero del diseño v4: degradado oscuro con trama de puntos + prisma 3D de 5
  * caras girando (CSS puro, sin WebGL ni librerías).
+ *
+ * v2 de las caras (25-sep-2026): estética del panel real (tokens, Instrument
+ * Sans, íconos Material Symbols). Las dos fuentes van SIN precarga en
+ * `src/fonts/menu.ts`, así que no pesan en el LCP: el navegador las pide al
+ * pintar el prisma.
  *
  * SE QUEDA EN SSR: es el bloque LCP. El único JS que trae es el paralaje del
  * mouse (hero-stage.tsx), que recibe estas tarjetas como children ya
@@ -28,89 +36,42 @@ function Face({ deg, children }: { deg: number; children: ReactNode }) {
   );
 }
 
-const cardLight: CSSProperties = {
-  position: "absolute",
-  inset: 0,
-  display: "flex",
-  flexDirection: "column",
-  background: "#ffffff",
-  borderRadius: 14,
-  boxShadow: "0 26px 46px -22px rgba(2,6,23,0.9)",
-  overflow: "hidden",
-};
+/*
+ * Las cinco caras, v2 (25-sep-2026): cada una es una ventanita del panel
+ * real —cabecera con ícono Material Symbols, título y línea gris, cuerpo
+ * #f4f3f8 con tarjetas blancas— en Instrument Sans. Los estilos viven en
+ * hero-3d-v2.css (prefijo `dch3-`). Son decorativas: el escenario entero va
+ * `aria-hidden` (hero-stage.tsx).
+ */
 
-const cardDark: CSSProperties = {
-  ...cardLight,
-  background: "#0b1220",
-  border: "1px solid rgba(103,232,249,0.45)",
-};
-
-const headLight: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 7,
-  padding: "9px 11px",
-  background: "linear-gradient(90deg,#f8fafc,#ffffff)",
-  borderBottom: "1px solid #eef2f7",
-};
-
-const headDark: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 7,
-  padding: "9px 11px",
-  borderBottom: "1px solid rgba(255,255,255,0.12)",
-};
-
-function Glyph({ bg, children }: { bg: string; children: ReactNode }) {
+function Top({ icono, tono, title, sub }: { icono: string; tono?: "cyan" | "violet"; title: string; sub: string }) {
   return (
-    <span
-      aria-hidden="true"
-      style={{ width: 22, height: 22, borderRadius: 6, background: bg, color: "#ffffff", fontSize: 9.5, fontWeight: 800, display: "grid", placeItems: "center", flex: "0 0 auto" }}
-    >
-      {children}
-    </span>
+    <div className="dch3-top">
+      <span className={`dch3-ico${tono ? ` dch3-ico--${tono}` : ""}`}><IconoPanel nombre={icono} size={15} /></span>
+      <span className="dch3-ttl">
+        <span className="dch3-t">{title}</span>
+        <span className="dch3-s">{sub}</span>
+      </span>
+    </div>
   );
 }
-
-function Titles({ title, sub, dark }: { title: string; sub: string; dark?: boolean }) {
-  return (
-    <span style={{ minWidth: 0 }}>
-      <span style={{ display: "block", fontSize: 10.5, fontWeight: 800, color: dark ? "#ffffff" : "#0f172a" }}>{title}</span>
-      <span style={{ display: "block", fontSize: 8, color: dark ? "#94a3b8" : "#475569" }}>{sub}</span>
-    </span>
-  );
-}
-
-const body: CSSProperties = { display: "block", flex: 1, padding: "9px 10px" };
-const slot: CSSProperties = { display: "flex", gap: 5, alignItems: "center" };
 
 function AgendaFace() {
-  const rows: [string, string, string, string][] = [
-    ["10:00", "#dcfce7", "#166534", "Ana Torres · Limpieza ✓"],
-    ["11:30", "#dbeafe", "#1e40af", "J. Medina · Endodoncia"],
-    ["12:15", "#ede9fe", "#5b21b6", "L. Paredes · Ortodoncia"],
-  ];
   return (
-    <div style={cardLight}>
-      <div style={headLight}>
-        <Glyph bg="#7c3aed">▦</Glyph>
-        <Titles title="Agenda inteligente" sub="Citas por doctor y sillón" />
-      </div>
-      <div style={body}>
-        {rows.map(([hour, bg, fg, label], i) => (
-          <div key={hour} style={{ ...slot, marginTop: i === 0 ? 0 : 5 }}>
-            <span style={{ fontSize: 8, color: "#64748b" }}>{hour}</span>
-            <span style={{ flex: 1, background: bg, borderRadius: 4, padding: "4px 6px", fontSize: 8, fontWeight: 700, color: fg }}>{label}</span>
-          </div>
-        ))}
-        <div style={{ ...slot, marginTop: 5 }}>
-          <span style={{ fontSize: 8, color: "#64748b" }}>13:00</span>
-          <span style={{ flex: 1, border: "1px dashed #c4b5fd", borderRadius: 4, padding: "4px 6px", fontSize: 8, fontWeight: 700, color: "#6d28d9" }}>Hueco libre · lista de espera</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 8, background: "#f0fdf4", border: "1px solid #dcfce7", borderRadius: 6, padding: "5px 7px" }}>
-          <span aria-hidden="true" style={{ width: 13, height: 13, borderRadius: "50%", background: "#dcfce7", color: "#15803d", fontSize: 7, fontWeight: 800, display: "grid", placeItems: "center", flex: "0 0 auto" }}>✓</span>
-          <span style={{ fontSize: 7.5, color: "#334155" }}><strong>Recordatorio enviado</strong> · hace 1 min</span>
+    <div className="dch3-face">
+      <Top icono="calendar_month" title="Agenda" sub="Jueves 26 · Dra. Ruiz · Sillón 1" />
+      <div className="dch3-body">
+        <div className="dch3-row"><span className="dch3-hora">10:00</span><span className="dch3-cita dch3-cita--ok">Ana Torres<b>Limpieza · confirmada</b></span></div>
+        <div className="dch3-row"><span className="dch3-hora">11:30</span><span className="dch3-cita dch3-cita--blue">J. Medina<b>Endodoncia</b></span></div>
+        <div className="dch3-row"><span className="dch3-hora">12:15</span><span className="dch3-cita dch3-cita--pink">L. Paredes<b>Ortodoncia</b></span></div>
+        <div className="dch3-row"><span className="dch3-hora">13:00</span><span className="dch3-cita dch3-cita--free">Hueco libre · lista de espera</span></div>
+        <div className="dch3-row"><span className="dch3-hora">14:00</span><span className="dch3-cita dch3-cita--amber">S. Ruiz<b>Pediatría · reserva en línea</b></span></div>
+        <div className="dch3-toast">
+          <span className="dch3-toast__wa">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm4.5 12.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.5l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.9 11.9 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.2c0-.2-.2-.2-.4-.3Z" /></svg>
+          </span>
+          <span className="dch3-toast__tx"><b>Recordatorio enviado</b> · hace 1 min</span>
+          <span className="dch3-toast__ok"><IconoPanel nombre="check" size={12} /></span>
         </div>
       </div>
     </div>
@@ -119,16 +80,24 @@ function AgendaFace() {
 
 function WhatsappFace() {
   return (
-    <div style={cardDark}>
-      <div style={headDark}>
-        <Glyph bg="#15803d">W</Glyph>
-        <Titles dark title="WhatsApp con bot IA" sub="Agenda y confirma 24/7" />
+    <div className="dch3-face dch3-wa">
+      <div className="dch3-top">
+        <span className="dch3-wa__avatar">CA</span>
+        <span className="dch3-ttl">
+          <span className="dch3-t">Clínica Altabrisa</span>
+          <span className="dch3-s">Cuenta de empresa · el bot contesta 24/7</span>
+        </span>
       </div>
-      <div style={body}>
-        <span style={{ display: "block", background: "rgba(255,255,255,0.1)", borderRadius: "8px 8px 8px 2px", padding: "5px 7px", fontSize: 8, color: "#e2e8f0", width: "92%" }}>Hola, ¿tienen espacio para limpieza esta semana?</span>
-        <span style={{ display: "block", background: "#dcfce7", borderRadius: "8px 8px 2px 8px", padding: "5px 7px", fontSize: 8, color: "#14532d", marginTop: 4, width: "86%", marginLeft: "auto" }}>¡Claro! Jueves 12:00 o viernes 10:30 🦷</span>
-        <span style={{ display: "block", background: "rgba(255,255,255,0.1)", borderRadius: "8px 8px 8px 2px", padding: "5px 7px", fontSize: 8, color: "#e2e8f0", marginTop: 4, width: "56%" }}>Viernes 10:30 👍</span>
-        <span style={{ display: "block", marginTop: 8, fontSize: 7.5, fontWeight: 700, color: "#15803d", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 999, padding: "4px 7px", textAlign: "center" }}>✓ El bot agendó: viernes 10:30 · Limpieza</span>
+      <div className="dch3-body">
+        <span className="dch3-wa__b is-in">Hola, ¿tienen espacio para limpieza esta semana?<span className="dch3-wa__meta">22:41</span></span>
+        <span className="dch3-wa__b is-out">¡Claro! Jueves 12:00 o viernes 10:30. ¿Cuál prefieres?<span className="dch3-wa__meta">22:41 <i className="dch3-wa__ticks">✓✓</i></span></span>
+        <span className="dch3-wa__b is-in">Viernes 10:30<span className="dch3-wa__meta">22:42</span></span>
+        <span className="dch3-wa__b is-out">Listo, quedó agendada. Te recuerdo un día antes.<span className="dch3-wa__meta">22:42 <i className="dch3-wa__ticks">✓✓</i></span></span>
+        <span className="dch3-chip dch3-chip--ok dch3-wa__sys"><IconoPanel nombre="check" size={11} /> El bot agendó · vie 10:30 · Limpieza</span>
+        <div className="dch3-wa__input">
+          <span className="dch3-wa__field">Escribe un mensaje</span>
+          <span className="dch3-wa__send"><IconoPanel nombre="arrow_upward" size={12} /></span>
+        </div>
       </div>
     </div>
   );
@@ -136,28 +105,32 @@ function WhatsappFace() {
 
 function Modelos3dFace() {
   return (
-    <div style={{ ...cardDark, boxShadow: "0 26px 46px -22px rgba(2,6,23,0.9),0 0 26px -6px rgba(34,211,238,0.5)" }}>
-      <div style={headDark}>
-        <Glyph bg="#0e7490">3D</Glyph>
-        <Titles dark title="Modelos 3D" sub="CBCT y escáner en tu navegador" />
-      </div>
-      <div style={body}>
-        {/* Cara 3 de 5: arranca girada hacia atrás, así que NO es el LCP y no
-            lleva `priority` (compite con el H1). Al estar dentro del viewport,
-            el lazy de next/image la pide igual desde el primer frame. */}
-        <Image
-          src="/landing/rx-3d.webp"
-          alt=""
-          width={349}
-          height={316}
-          sizes="240px"
-          style={{ width: "100%", aspectRatio: "16 / 10", height: "auto", objectFit: "cover", display: "block", borderRadius: 8 }}
-        />
-        <span style={{ display: "flex", gap: 3, marginTop: 6, alignItems: "center" }}>
-          {["STL", "PLY", "OBJ"].map((f) => (
-            <span key={f} style={{ fontSize: 7, fontWeight: 700, color: "#0e7490", background: "#ecfeff", border: "1px solid #a5f3fc", borderRadius: 4, padding: "2px 6px" }}>{f}</span>
+    <div className="dch3-face dch3-face--dark dch3-face--glow dch3-3d">
+      <Top icono="dentistry" tono="cyan" title="Modelos 3D" sub="CBCT y escáner en tu navegador" />
+      <div className="dch3-body">
+        {/* ⛔ La imagen del CBCT es LA MISMA de siempre (src, medidas, sizes);
+            sólo cambia el marco. Cara 3 de 5: arranca girada hacia atrás, así
+            que NO es el LCP y no lleva `priority`. */}
+        <span className="dch3-3d__view">
+          <Image
+            src="/landing/rx-3d.webp"
+            alt=""
+            width={349}
+            height={316}
+            sizes="240px"
+            style={{ width: "100%", aspectRatio: "16 / 10", height: "auto", objectFit: "cover", display: "block" }}
+          />
+        </span>
+        <span className="dch3-3d__views">
+          {["Axial", "Coronal", "Sagital", "3D"].map((v) => (
+            <span key={v} className={`dch3-3d__view${v === "3D" ? " is-on" : ""}`}>{v}</span>
           ))}
-          <span style={{ fontSize: 7, fontWeight: 700, color: "#15803d", marginLeft: "auto" }}>● Auto-rotar</span>
+        </span>
+        <span className="dch3-3d__foot">
+          {["STL", "PLY", "OBJ"].map((f) => (
+            <span key={f} className="dch3-fmt">{f}</span>
+          ))}
+          <span className="dch3-live">Auto-rotar</span>
         </span>
       </div>
     </div>
@@ -166,51 +139,48 @@ function Modelos3dFace() {
 
 function CobrosFace() {
   return (
-    <div style={cardLight}>
-      <div style={headLight}>
-        <Glyph bg="#1d4ed8">$</Glyph>
-        <Titles title="Cobros y facturación" sub="Del presupuesto al pago" />
-      </div>
-      <div style={body}>
-        <span style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#334155", borderBottom: "1px solid #f1f5f9", paddingBottom: 4 }}>
-          <span>Corona zirconia ×2</span><strong style={{ color: "#0f172a" }}>$9,600</strong>
+    <div className="dch3-face">
+      <Top icono="point_of_sale" title="Caja" sub="Presupuesto #1042 · Ana Torres" />
+      <div className="dch3-body">
+        <span className="dch3-card">
+          <span className="dch3-line"><span>Corona zirconia ×2</span><b>$9,600</b></span>
+          <span className="dch3-line dch3-line--disc"><span>Descuento 10 %</span><b>−$1,340</b></span>
+          <span className="dch3-total"><span>Total · 3 pagos</span><b>$12,060 MXN</b></span>
+          <span className="dch3-bar"><i /></span>
         </span>
-        <span style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#15803d", borderBottom: "1px solid #f1f5f9", padding: "4px 0" }}>
-          <span>Descuento 10%</span><strong>−$1,340</strong>
+        <span className="dch3-card dch3-estado">
+          <span className="dch3-estado__r"><span>Pagado</span><b>$8,040</b></span>
+          <span className="dch3-estado__r is-dim"><span>Saldo pendiente</span><b>$4,020</b></span>
         </span>
-        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 5, fontSize: 8, color: "#475569" }}>
-          <span>Total · 3 pagos</span><strong style={{ fontSize: 10.5, color: "#0f172a" }}>$12,060 MXN</strong>
-        </span>
-        <span aria-hidden="true" style={{ display: "block", marginTop: 7, height: 5, borderRadius: 999, background: "linear-gradient(90deg,#15803d 66%,#e2e8f0 66%)" }} />
-        <span style={{ display: "block", marginTop: 8, textAlign: "center", fontSize: 8, fontWeight: 700, color: "#ffffff", background: "#7c3aed", borderRadius: 6, padding: "6px 0" }}>Facturar automático</span>
+        <span className="dch3-chip dch3-chip--ok"><IconoPanel nombre="check" size={11} /> Firmado por el paciente</span>
+        <span className="dch3-btn"><IconoPanel nombre="summarize" size={12} /> Facturar automático</span>
       </div>
     </div>
   );
 }
 
 function AsistenteFace() {
-  const prompts: [string, string][] = [
-    ["⌁ Diagnóstico diferencial", "Síntomas X/Y/Z → dame DDx"],
-    ["▤ Redactar nota SOAP", "Estructura la nota de evolución"],
+  const prompts: [string, string, string][] = [
+    ["monitor_heart", "Diagnóstico diferencial", "Síntomas X/Y/Z, dame DDx"],
+    ["assignment", "Redactar nota SOAP", "Estructura la nota de evolución"],
+    ["history", "Resumir historia", "Lo relevante del expediente, en 5 líneas"],
   ];
   return (
-    <div style={cardDark}>
-      <div style={headDark}>
-        <Glyph bg="#6d28d9">✦</Glyph>
-        <Titles dark title="Asistente IA" sub="Trabaja mientras atiendes" />
-      </div>
-      <div style={body}>
-        {prompts.map(([title, sub], i) => (
-          <span key={title} style={{ display: "block", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 7, padding: "6px 8px", marginTop: i === 0 ? 0 : 5 }}>
-            <span style={{ display: "block", fontSize: 8, fontWeight: 700, color: "#fff" }}>{title}</span>
-            <span style={{ display: "block", fontSize: 7, color: "#94a3b8" }}>{sub}</span>
+    <div className="dch3-face dch3-face--dark dch3-face--violet">
+      <Top icono="auto_awesome" tono="violet" title="Asistente IA" sub="Trabaja mientras atiendes" />
+      <div className="dch3-body">
+        {prompts.map(([icono, title, sub]) => (
+          <span key={title} className="dch3-card">
+            <span className="dch3-ia__t"><IconoPanel nombre={icono} size={12} /> {title}</span>
+            <span className="dch3-ia__s">{sub}</span>
           </span>
         ))}
-        <span style={{ display: "flex", gap: 3, marginTop: 6 }}>
-          <span style={{ fontSize: 7, fontWeight: 700, color: "#6d28d9", background: "#ede9fe", borderRadius: 4, padding: "2px 6px" }}>/soap</span>
-          <span style={{ fontSize: 7, fontWeight: 700, color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, padding: "2px 6px" }}>/receta</span>
+        <span className="dch3-ia__chips">
+          <span className="dch3-chip dch3-chip--ia">/soap</span>
+          <span className="dch3-chip dch3-chip--ia">/receta</span>
         </span>
-        <span style={{ display: "block", marginTop: 7, fontSize: 7.5, color: "#94a3b8", background: "rgba(124,58,237,0.16)", borderRadius: 6, padding: "5px 7px" }}>La IA asiste, el doctor decide</span>
+        <span className="dch3-ia__input"><span>Pregúntame o escribe /</span><i><IconoPanel nombre="arrow_upward" size={11} /></i></span>
+        <span className="dch3-ia__note">La IA asiste, el doctor decide</span>
       </div>
     </div>
   );
@@ -231,6 +201,7 @@ export function Hero({ firstMonthFrom }: { firstMonthFrom: string }) {
   return (
     <section
       id="inicio"
+      className={`${instrumentSans.variable} ${materialSymbols.variable}`}
       style={{
         position: "relative",
         overflow: "hidden",
@@ -248,7 +219,7 @@ export function Hero({ firstMonthFrom }: { firstMonthFrom: string }) {
           {HERO.badge}
         </span>
 
-        <h1 className="dcv4-balance" style={{ marginTop: 20, fontSize: "clamp(34px,4.8vw,60px)", lineHeight: 1.03, letterSpacing: "-0.042em", fontWeight: 800, color: "#ffffff", maxWidth: "17em" }}>
+        <h1 className="dcv4-balance" style={{ marginTop: 20, fontSize: "clamp(34px,4.8vw,60px)", lineHeight: 1.03, letterSpacing: "-0.042em", fontWeight: 700, color: "#ffffff", maxWidth: "17em" }}>
           {HERO.titleLead}{" "}
           <span style={{ background: "linear-gradient(100deg,#60a5fa,#a78bfa)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>{HERO.titleAccent}</span>
         </h1>

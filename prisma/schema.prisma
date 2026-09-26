@@ -7707,6 +7707,53 @@ model PlanConfig {
   @@map("plan_configs")
 }
 
+/// SPEI por transferencia directa (sql/spei-transferencia-directa.sql). La cuenta
+/// de la PLATAFORMA a la que las clínicas transfieren; una sola fila (id "spei"),
+/// editable solo desde /admin/settings → Datos banco. Sin fila válida, la pantalla
+/// de pago no ofrece SPEI. Requiere ese SQL aplicado antes de usarse; sin él, el
+/// lector (src/lib/billing/spei-directo.ts) trata «no existe» como «no hay cuenta».
+model PlatformBankAccount {
+  id           String   @id
+  banco        String
+  beneficiario String
+  clabe        String
+  updatedBy    String?
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@map("platform_bank_accounts")
+}
+
+/// «Ya hice la transferencia» de una clínica: queda `pending` hasta que un admin
+/// la confirma (→ factura pagada + clínica activa) o la rechaza. SIN relación
+/// declarada con Clinic a propósito (igual que ClinicFeatureFlag): el modelo
+/// Clinic no cambia. La FK con ON DELETE CASCADE vive en el SQL, y ahí también
+/// el índice único parcial «una pendiente por clínica».
+model SpeiTransferRequest {
+  id            String    @id @default(cuid())
+  clinicId      String
+  requestedBy   String?
+  plan          String
+  billing       String // "monthly" | "annual"
+  subtotalCents Int
+  ivaCents      Int
+  amountCents   Int
+  /// Folio estable de la clínica (referenciaDeClinica): el concepto de la transferencia.
+  reference     String
+  status        String    @default("pending") // pending | confirmed | rejected
+  /// Cuenta que se le mostró a la clínica en ese momento.
+  bankSnapshot  Json
+  createdAt     DateTime  @default(now())
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  rejectReason  String?
+  invoiceId     String?
+
+  @@index([status, createdAt])
+  @@index([clinicId, createdAt])
+  @@index([reference])
+  @@map("spei_transfer_requests")
+}
+
 /// Saldo central que Rafael carga en Anthropic (USD, centavos). El dashboard de
 /// tesorería calcula consumido (sum costUsdMicros) vs cargado.
 model AnthropicRecharge {

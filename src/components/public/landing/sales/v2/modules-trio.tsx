@@ -18,12 +18,12 @@ export function ModulesTrio() {
     <section aria-label="Más módulos del panel" style={{ background: "#0f172a" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(56px,7vw,92px) 20px" }}>
         <div data-reveal="" style={{ textAlign: "center", maxWidth: 720, margin: "0 auto" }}>
-          <h2 className="dcv4-balance" style={{ fontSize: "clamp(26px,3.2vw,40px)", lineHeight: 1.1, letterSpacing: "-0.032em", fontWeight: 800, color: "#ffffff" }}>
+          <h2 className="dcv4-balance" style={{ fontSize: "clamp(26px,3.2vw,40px)", lineHeight: 1.1, letterSpacing: "-0.032em", fontWeight: 700, color: "#ffffff" }}>
             {MODULES_TRIO.title}
           </h2>
           <p style={{ marginTop: 14, fontSize: "clamp(15.5px,1.4vw,18px)", color: "#cbd5e1" }}>{MODULES_TRIO.subtitle}</p>
         </div>
-        <div style={{ marginTop: "clamp(30px,4vw,48px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(272px,1fr))", gap: "clamp(16px,2vw,24px)" }}>
+        <div className="dcv4-trio__grid" style={{ marginTop: "clamp(30px,4vw,48px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(272px,1fr))", gap: "clamp(16px,2vw,24px)" }}>
           {MODULES_TRIO.items.map((m) => (
             <article key={m.id} data-reveal="" className="dcv4-trio" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: "clamp(18px,2.2vw,24px)" }}>
               <div aria-hidden="true">{MINI[m.id]}</div>

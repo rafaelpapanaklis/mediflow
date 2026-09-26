@@ -24,6 +24,7 @@ import {
   type ChangePlanPreviewLine,
 } from "@/lib/billing/proration";
 import { buildManualUpgradeQuote } from "@/lib/billing/manual-upgrade";
+import { desgloseConIva } from "@/lib/billing/iva-cobro";
 import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
 
 export const runtime = "nodejs";
@@ -208,12 +209,15 @@ export async function POST(req: NextRequest) {
       currentPlan,
       targetPlan,
     });
+    // El diferencial lleva IVA 16 % (Ajuste 1b): lo que se cobra ahora es subtotal + IVA, desglosado en líneas
+    // (la pantalla ya pinta `lines` y `amountDueNow` como total). Mismo cálculo que el POST que cobra.
+    const desglose = desgloseConIva(quote.diffCents);
     const payload: ChangePlanPreview = {
       mode: "manual",
       direction: quote.direction,
       interval: quote.interval,
       currency: "MXN",
-      amountDueNow: quote.chargeable ? quote.diffCents / 100 : 0,
+      amountDueNow: quote.chargeable ? desglose.totalCents / 100 : 0,
       daysRemaining: quote.daysRemaining,
       nextBillingDate: quote.periodEnd?.toISOString() ?? null,
       nextAmount: quote.targetCents / 100,
@@ -221,8 +225,9 @@ export async function POST(req: NextRequest) {
         ? [
             {
               description: `Diferencia al plan ${targetPlan.name} por ${quote.daysRemaining} día(s) restantes`,
-              amount: quote.diffCents / 100,
+              amount: desglose.subtotalCents / 100,
             },
+            { description: "IVA 16 %", amount: desglose.ivaCents / 100 },
           ]
         : [],
       unavailable: false,

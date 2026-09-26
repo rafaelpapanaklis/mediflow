@@ -5,7 +5,7 @@ export function FeaturesGrid() {
   return (
     <section aria-label="Todo lo demás incluido" style={{ background: "#f8fafc" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(56px,7vw,92px) 20px" }}>
-        <h2 data-reveal="" className="dcv4-balance" style={{ textAlign: "center", fontSize: "clamp(26px,3.2vw,40px)", lineHeight: 1.1, letterSpacing: "-0.032em", fontWeight: 800 }}>
+        <h2 data-reveal="" className="dcv4-balance" style={{ textAlign: "center", fontSize: "clamp(26px,3.2vw,40px)", lineHeight: 1.1, letterSpacing: "-0.032em", fontWeight: 700 }}>
           {GRID_TITLE}
         </h2>
         <div style={{ marginTop: "clamp(28px,3.6vw,44px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(248px,1fr))", gap: 12 }}>

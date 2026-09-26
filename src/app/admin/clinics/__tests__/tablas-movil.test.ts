@@ -34,6 +34,9 @@ import { join } from "node:path";
 const ADMIN = join(__dirname, "..", "..");
 const CLINICS  = readFileSync(join(ADMIN, "clinics", "clinics.module.css"), "utf8");
 const CLIENTES = readFileSync(join(ADMIN, "clientes", "clientes.module.css"), "utf8");
+// Desde el rediseño (26-sep-2026) el apilado de la tabla y las píldoras de
+// estado viven en la hoja COMPARTIDA de /admin; el candado la mira también.
+const REDISENO = readFileSync(join(ADMIN, "..", "..", "components", "admin", "rediseno", "admin-rediseno.css"), "utf8");
 
 /** El cuerpo de una regla, sin comentarios (que aquí citan las propiedades). */
 function regla(css: string, selector: string): string {
@@ -82,10 +85,31 @@ test("las dos hojas: en móvil el resumen de volumen puede envolver", () => {
   }
 });
 
+test("rediseño: la tabla se apila en móvil y cada celda lleva su rótulo", () => {
+  const sinComentarios = REDISENO.replace(/\/\*[\s\S]*?\*\//g, "");
+  const i = sinComentarios.indexOf("@media (max-width: 900px)");
+  assert.notEqual(i, -1, "falta el corte de 900 px del apilado");
+  const movil = sinComentarios.slice(i);
+  assert.match(movil, /\.ad-tabla--apilada thead \{ display: none; \}/, "el thead no se esconde");
+  assert.match(movil, /\.ad-tabla--apilada tbody td::before \{[^}]*content: attr\(data-col\)/, "las celdas no llevan su rótulo");
+  assert.match(movil, /\.ad-tabla--apilada tbody td \{[^}]*min-width: 0/, "la celda apilada no puede encogerse");
+  assert.match(movil, /\.ad-tabla--apilada \.ad-meta \{[^}]*white-space: normal/, "el metadato no envuelve en móvil");
+});
+
+test("rediseño: una píldora larga se recorta DENTRO del chip", () => {
+  const sinComentarios = REDISENO.replace(/\/\*[\s\S]*?\*\//g, "");
+  const i = sinComentarios.indexOf(".ad-chip {");
+  assert.notEqual(i, -1, "no existe .ad-chip");
+  const cuerpo = sinComentarios.slice(i, sinComentarios.indexOf("}", i));
+  assert.match(cuerpo, /max-width: 100%/);
+  assert.match(cuerpo, /overflow: hidden/);
+  assert.match(cuerpo, /text-overflow: ellipsis/);
+});
+
 test("ningún color escrito a mano en lo que se tocó", () => {
   // Regla (d) de la casa aplicada al CSS: sólo tokens. Se mira lo NUEVO: si
   // alguna de las dos hojas gana un hex, que se sepa aquí.
-  for (const [nombre, css] of [["clinics", CLINICS], ["clientes", CLIENTES]] as const) {
+  for (const [nombre, css] of [["clinics", CLINICS], ["clientes", CLIENTES], ["rediseno", REDISENO]] as const) {
     const sinComentarios = css.replace(/\/\*[\s\S]*?\*\//g, "");
     const hexes = sinComentarios.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
     assert.deepEqual(hexes, [], `${nombre} tiene colores a mano: ${hexes.join(", ")}`);

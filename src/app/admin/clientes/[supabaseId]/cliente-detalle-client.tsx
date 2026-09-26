@@ -1,16 +1,13 @@
 "use client";
 
 /**
- * Ficha de un cliente — /admin/clientes/[supabaseId].
+ * Ficha de un cliente — /admin/clientes/[supabaseId] (rediseño ws1-t2).
  *
- * Qué cambió: la ficha vieja abría con seis KPIs y un "Health 0-100", y las
- * tarjetas de clínica decían "Activa / En trial / Trial expirado" con una
- * tabla de estados propia. Eso escondía lo mismo que la lista: una sede
- * apagada o con el trial caducado se veía igual de verde que una sana.
- *
- * Ahora abre con lo que hay que atender, sede por sede, y el veredicto sale de
- * `evaluarSaludClinica` (@/lib/admin/salud-clinica) y de `../cartera` — no de
- * una tabla de estados de esta pantalla.
+ * Abre con lo que hay que atender, sede por sede, y el veredicto sale de
+ * `evaluarSaludClinica` (@/lib/admin/salud-clinica) y de `../cartera`, no de
+ * una tabla de estados de esta pantalla. El consumo (disco, tokens, CFDI,
+ * usuarios, saldo IA) sale de `@/lib/admin/uso-clinica`, el mismo cálculo que
+ * Clínicas.
  *
  * REDISEÑO DE LECTURA: aquí no se escribe nada. Los botones que mueven dinero
  * viven, como vivían, en la pestaña Facturación (./cliente-billing), con el
@@ -19,14 +16,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowLeft, Mail, MessageCircle, Eye, CheckCircle2, AlertOctagon, AlertTriangle,
-  Info, Flame, Snowflake, PowerOff, Sprout, CircleSlash, Archive,
-  TrendingUp, TrendingDown, Minus,
-} from "lucide-react";
+import { ArrowLeft, Mail, MessageCircle, Eye, Archive } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
 import { RevenueAreaChart } from "@/components/dashboard/revenue-area-chart";
@@ -41,6 +33,9 @@ import {
 } from "@/lib/admin/salud-clinica";
 import { fechaAdmin, fechaHoraAdmin } from "@/lib/admin/zona-horaria";
 import { formatPatientQuota, patientQuotaLevel } from "@/lib/patient-quota-shared";
+import { bytesCortos, metodoDePago, tokensCortos, ultimaCompra } from "@/lib/admin/uso-core";
+import { BarraUso, Chip, DatoCaja, Vacio, type TonoChip } from "@/components/admin/rediseno/piezas";
+import { fmtMXNdec } from "@/lib/format";
 import type { ClienteDetalle } from "@/lib/admin/clientes";
 
 import {
@@ -55,36 +50,13 @@ import { PlanDonut, ActivityBars } from "./cliente-charts";
 import { ClienteBilling } from "./cliente-billing";
 import css from "./ficha.module.css";
 
-const ICONO_SEVERIDAD: Record<Severidad, typeof AlertOctagon> = {
-  critico: AlertOctagon,
-  alto:    AlertTriangle,
-  medio:   Info,
-};
-const CLASE_MARCA: Record<Severidad, string> = {
-  critico: css.marcaCritico,
-  alto:    css.marcaAlto,
-  medio:   css.marcaMedio,
-};
-const CLASE_RIESGO: Record<Severidad, string> = {
-  critico: css.riesgoCritico,
-  alto:    css.riesgoAlto,
-  medio:   css.riesgoMedio,
-};
-const CLASE_BORDE: Record<Severidad, string> = {
-  critico: css.sedeCritica,
-  alto:    css.sedeAlta,
-  medio:   "",
+const TONO_SEVERIDAD: Record<Severidad, TonoChip> = { critico: "danger", alto: "warning", medio: "info" };
+
+const ETIQUETA_ACTIVIDAD: Record<NivelActividad, string> = {
+  "activa": "Activa", "nueva": "Nueva", "enfriandose": "Enfriándose", "apagada": "Apagada", "sin-estrenar": "Sin estrenar",
 };
 
-const ACTIVIDAD: Record<NivelActividad, { etiqueta: string; icono: typeof Flame }> = {
-  "activa":       { etiqueta: "Activa",       icono: Flame },
-  "nueva":        { etiqueta: "Nueva",        icono: Sprout },
-  "enfriandose":  { etiqueta: "Enfriándose",  icono: Snowflake },
-  "apagada":      { etiqueta: "Apagada",      icono: PowerOff },
-  "sin-estrenar": { etiqueta: "Sin estrenar", icono: CircleSlash },
-};
-
-const TONO_ESTADO_CLIENTE: Record<EstadoCliente, "success" | "warning" | "danger" | "info" | "neutral"> = {
+const TONO_ESTADO_CLIENTE: Record<EstadoCliente, TonoChip> = {
   "pagando":   "success",
   "mixto":     "warning",
   "en-trial":  "info",
@@ -92,11 +64,17 @@ const TONO_ESTADO_CLIENTE: Record<EstadoCliente, "success" | "warning" | "danger
   "prueba":    "neutral",
 };
 
-const ICONO_TENDENCIA = { sube: TrendingUp, baja: TrendingDown, igual: Minus } as const;
-const CLASE_TENDENCIA: Record<string, string> = {
-  sube:  css.tendenciaSube,
-  baja:  css.tendenciaBaja,
-  igual: css.tendenciaIgual,
+const TONO_ESTADO: Record<string, TonoChip> = {
+  "pagando": "success", "cobro-fallido": "danger", "trial-vigente": "info", "trial-vencido": "danger",
+  "pago-pendiente": "warning", "vencida": "danger", "prueba": "neutral",
+};
+
+/** Estado operativo que se espera de cada veredicto del gate; si no coinciden se enseña también el del gate. */
+const ESTADO_ESPERADO: Record<string, string[]> = {
+  active:   ["pagando"],
+  past_due: ["cobro-fallido"],
+  trial:    ["trial-vigente", "pago-pendiente", "prueba"],
+  expired:  ["vencida", "prueba"],
 };
 
 export function ClienteDetalleClient({
@@ -128,95 +106,72 @@ export function ClienteDetalleClient({
   const fila = useMemo(() => valorarCliente(cartera, planPrices, ahora), [cartera, planPrices, ahora]);
 
   const actividadPorSede = useMemo(
-    () => fila.vigentes.map((v) => ({
-      name: v.clinica.nombre,
-      pacientes: v.clinica.cupo.used,
-      citas: v.clinica.citasPasadas,
-    })),
+    () => fila.vigentes.map((v) => ({ name: v.clinica.nombre, pacientes: v.clinica.cupo.used, citas: v.clinica.citasPasadas })),
     [fila.vigentes],
   );
 
   const waPhone = cliente.ownerPhone ? cliente.ownerPhone.replace(/[^\d]/g, "") : "";
   const criticos = fila.riesgos.filter((r) => r.riesgo.severidad === "critico").length;
-  const claseBandeja = criticos > 0
-    ? css.bandejaCritica
-    : fila.riesgos.length > 0 ? css.bandejaAlta : "";
-
   // LTV estimado: el MRR de HOY por 24 meses. Es una estimación, y se dice.
   const ltv = fila.mrr.total * 24;
   const nivelCupo = patientQuotaLevel(fila.cupo);
+  const unica = fila.vigentes.length === 1 ? fila.vigentes[0] : null;
+  const pago = unica ? metodoDePago(unica.clinica) : null;
 
   return (
-    <div className={css.pagina}>
+    <div className={`${css.pagina} ad-pagina`}>
       {/* ── Cabecera ────────────────────────────────────────────────────── */}
-      <div className={css.cabecera}>
-        <Link href="/admin/clientes" className={css.volver} aria-label="Volver a clientes">
+      <div className="ad-ficha-cabecera">
+        <Link href="/admin/clientes" className="ad-volver" aria-label="Volver a clientes">
           <ArrowLeft size={14} />
         </Link>
-        <AvatarNew name={fila.nombre} size="xl" />
-
-        <div className={css.identidad}>
-          <div className={css.insignias}>
-            <h1 className={css.nombre}>{fila.nombre}</h1>
+        <AvatarNew name={fila.nombre} size="lg" />
+        <div className="ad-ficha-cabecera__texto">
+          <div className="ad-ficha-cabecera__nombre">
+            <h1>{fila.nombre}</h1>
             {!fila.sinSedesVigentes && (
-              <BadgeNew tone={TONO_ESTADO_CLIENTE[fila.estado]} dot>
-                {ETIQUETA_ESTADO_CLIENTE[fila.estado]}
-              </BadgeNew>
+              <Chip tono={TONO_ESTADO_CLIENTE[fila.estado]} punto>{ETIQUETA_ESTADO_CLIENTE[fila.estado]}</Chip>
             )}
-            {/* "Sin sedes vigentes" y "cuenta de prueba" son cosas distintas:
-                un cliente que pagó un año y archivó su clínica también se queda
-                sin sedes, y llamarle prueba sería mentir sobre su historia. */}
+            {/* «Sin sedes vigentes» y «cuenta de prueba» son cosas distintas: un
+                cliente que pagó un año y archivó su clínica también se queda sin
+                sedes, y llamarle prueba sería mentir sobre su historia. */}
             {fila.sinSedesVigentes
-              ? <BadgeNew tone="neutral">Sin sedes vigentes</BadgeNew>
-              : !fila.esReal && <BadgeNew tone="neutral">Cuenta de prueba</BadgeNew>}
-            {fila.enLinea && (
-              <span className={css.enLinea} title={`Alguien en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`}>
-                <span className={css.enLineaPunto} aria-hidden="true" />
-                en línea
-              </span>
+              ? <Chip tono="neutral">Sin sedes vigentes</Chip>
+              : !fila.esReal && <Chip tono="neutral">Cuenta de prueba</Chip>}
+            {fila.riesgos[0] && (
+              <Chip tono={TONO_SEVERIDAD[fila.riesgos[0].riesgo.severidad]} sm title={`${fila.riesgos[0].clinicaNombre}: ${fila.riesgos[0].riesgo.detalle}`}>
+                {fila.riesgos[0].riesgo.titulo}{fila.riesgos.length > 1 ? ` +${fila.riesgos.length - 1}` : ""}
+              </Chip>
             )}
+            {fila.enLinea && <span className="ad-online" title={`Alguien en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
           </div>
-
-          <div className={css.datos}>
-            <span className={css.dato}>{fila.email}</span>
-            {fila.telefono && <span className={css.dato}>{fila.telefono}</span>}
-            <span className={css.dato}>
-              Alta <strong>{fechaAdmin(fila.altaAt) ?? "—"}</strong>
-            </span>
-            <span className={css.dato}>
+          <div className="ad-datos">
+            <span>{fila.email}</span>
+            {fila.telefono && <span>{fila.telefono}</span>}
+            <span>Alta <strong>{fechaAdmin(fila.altaAt) ?? "—"}</strong></span>
+            <span>
               Último acceso{" "}
               {fila.ultimoAccesoAt
                 ? <strong>{fechaHoraAdmin(fila.ultimoAccesoAt)}</strong>
-                : <span className={css.sinDato}>sin registro</span>}
+                : <span title="Sin sesión registrada: la analítica de sesiones es reciente y no cubre a las clínicas antiguas">sin registro</span>}
             </span>
-            {fila.afiliado && <span className={css.dato}>Traído por <strong>{fila.afiliado}</strong></span>}
+            {fila.afiliado && <span>Traído por <strong>{fila.afiliado}</strong></span>}
           </div>
-
           {soloComoUsuario && (
             <p className={css.aclaracion}>
-              <strong>Esta cuenta no es dueña de ninguna clínica.</strong> Lo que se
-              enseña abajo son las clínicas en las que tiene usuario, así que las cifras
-              de dinero son las de esas clínicas y no las suyas. Suele pasar cuando el
-              dueño se dio de baja y queda el personal.
-            </p>
-          )}
-
-          {!fila.ultimoAccesoAt && (
-            <p className={css.aclaracion}>
-              «Sin registro» no quiere decir que nadie haya entrado: el acceso sale de la
-              analítica de sesiones del panel, que es reciente y no cubre a las clínicas
-              antiguas.
+              <strong>Esta cuenta no es dueña de ninguna clínica.</strong> Lo que se enseña abajo son las
+              clínicas en las que tiene usuario, así que las cifras de dinero son las de esas clínicas y
+              no las suyas. Suele pasar cuando el dueño se dio de baja y queda el personal.
             </p>
           )}
         </div>
-
         {/* Contacto: lo que ya estaba, donde estaba. */}
-        <div className={css.acciones}>
-          <a href={`mailto:${fila.email}`} style={{ textDecoration: "none" }}>
+        <div className="ad-acciones">
+          <a href={`mailto:${fila.email}`}>
             <ButtonNew variant="secondary" icon={<Mail size={14} />}>Email</ButtonNew>
           </a>
           {waPhone && (
-            <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+            <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noreferrer">
               <ButtonNew variant="secondary" icon={<MessageCircle size={14} />}>WhatsApp</ButtonNew>
             </a>
           )}
@@ -224,64 +179,52 @@ export function ClienteDetalleClient({
       </div>
 
       {/* ── Lo que hay que atender, antes que ninguna cifra ─────────────── */}
-      <section className={`${css.bandeja} ${claseBandeja}`} aria-label="Lo que hay que atender de este cliente">
-        <div className={css.bandejaCabecera}>
-          <h2 className={css.bandejaTitulo}>Atender</h2>
-          <span className={css.bandejaCuenta}>
-            {fila.riesgos.length === 0
-              ? "sin pendientes"
-              : `${fila.riesgos.length} en ${new Set(fila.riesgos.map((r) => r.clinicaId)).size} de ${fila.vigentes.length} sedes`}
-          </span>
-        </div>
-
+      <section className="ad-card" aria-label="Lo que hay que atender de este cliente">
+        <header className="ad-card__head">
+          <div>
+            <h2 className="ad-card__title">Atender</h2>
+            <div className="ad-card__sub">
+              {fila.riesgos.length === 0
+                ? "sin pendientes"
+                : `${fila.riesgos.length} en ${new Set(fila.riesgos.map((r) => r.clinicaId)).size} de ${fila.vigentes.length} sedes · ${criticos} crítico${criticos === 1 ? "" : "s"}`}
+            </div>
+          </div>
+        </header>
         {fila.riesgos.length === 0 ? (
-          <p className={css.bandejaVacia}>
-            <CheckCircle2 size={15} style={{ color: "var(--success)" }} />
+          <Vacio>
             {fila.sinSedesVigentes
               ? "No le queda ninguna clínica vigente: todas están archivadas."
               : fila.esReal
                 ? "Ninguna de sus clínicas está en riesgo ahora mismo."
                 : "Es una cuenta de prueba: sin pacientes, sin citas y sin un solo pago."}
-          </p>
+          </Vacio>
         ) : (
-          fila.riesgos.map((r, i) => {
-            const Icono = ICONO_SEVERIDAD[r.riesgo.severidad];
-            return (
-              <div key={`${r.clinicaId}-${r.riesgo.clave}-${i}`} className={css.aviso}>
-                <span className={`${css.marca} ${css.avisoMarca} ${CLASE_MARCA[r.riesgo.severidad]}`} aria-hidden="true">
-                  <Icono size={15} strokeWidth={2} />
-                </span>
-                <Link href={`/admin/clinics/${r.clinicaId}`} className={css.avisoSede}>
-                  {r.clinicaNombre}
+          <ul className="ad-pend">
+            {fila.riesgos.map((r, i) => (
+              <li key={`${r.clinicaId}-${r.riesgo.clave}-${i}`}>
+                <Link href={`/admin/clinics/${r.clinicaId}`} className="ad-pend__fila" title={r.riesgo.detalle}>
+                  <span className={`ad-sev ad-sev--${r.riesgo.severidad}`} aria-hidden />
+                  <span className="ad-pend__texto">
+                    <span className="ad-pend__clinica">{r.clinicaNombre}</span>
+                    <Chip tono={TONO_SEVERIDAD[r.riesgo.severidad]} sm>{r.riesgo.titulo}</Chip>
+                  </span>
+                  <span className="ad-pend__dato" style={{ whiteSpace: "normal", maxWidth: 360 }}>{r.riesgo.detalle}</span>
                 </Link>
-                <span className={css.avisoTexto}>
-                  <strong>{r.riesgo.titulo}.</strong> {r.riesgo.detalle}
-                </span>
-              </div>
-            );
-          })
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 
       {/* ── Pestañas ────────────────────────────────────────────────────── */}
-      <div className="segment-new" style={{ display: "inline-flex", gap: 2 }}>
-        <button
-          type="button"
-          onClick={() => setTab("resumen")}
-          className={`segment-new__btn ${tab === "resumen" ? "segment-new__btn--active" : ""}`}
-        >
+      <div className="segment-new" style={{ display: "inline-flex", gap: 2, alignSelf: "flex-start" }}>
+        <button type="button" onClick={() => setTab("resumen")} className={`segment-new__btn ${tab === "resumen" ? "segment-new__btn--active" : ""}`}>
           Resumen
         </button>
-        <button
-          type="button"
-          onClick={() => setTab("facturacion")}
-          className={`segment-new__btn ${tab === "facturacion" ? "segment-new__btn--active" : ""}`}
-        >
+        <button type="button" onClick={() => setTab("facturacion")} className={`segment-new__btn ${tab === "facturacion" ? "segment-new__btn--active" : ""}`}>
           Facturación
           {cliente.pendingPaymentsCount > 0 && (
-            <span style={{ marginLeft: 6, fontSize: 10, color: "var(--warning)", fontWeight: 700 }}>
-              {cliente.pendingPaymentsCount}
-            </span>
+            <span style={{ marginLeft: 6, fontSize: 10, color: "var(--warning)", fontWeight: 700 }}>{cliente.pendingPaymentsCount}</span>
           )}
         </button>
       </div>
@@ -299,90 +242,51 @@ export function ClienteDetalleClient({
 
       {tab === "resumen" && (
         <>
-          {/* ── Cifras ─────────────────────────────────────────────────── */}
-          <div className={css.cifras}>
-            <div className={css.cifra}>
-              <div className={css.cifraEtiqueta}>MRR</div>
-              <div className={css.cifraValor}>{formatCurrency(fila.mrr.total, "MXN")}</div>
-              <div className={css.cifraPie}>
-                {fila.mrr.total > 0 ? mrrBreakdownHint(fila.mrr) : "no cobra nada al mes"}
-              </div>
-            </div>
-            <div className={css.cifra}>
-              <div className={css.cifraEtiqueta}>Sedes</div>
-              <div className={css.cifraValor}>{fila.vigentes.length}</div>
-              <div className={css.cifraPie}>
-                {fila.resumen.porEstado.pagando} pagando
-                {fila.archivadas.length > 0 && ` · ${fila.archivadas.length} archivada${fila.archivadas.length === 1 ? "" : "s"}`}
-              </div>
-            </div>
-            {/* Cobrado HOY, este MES y este AÑO. Los cortes son los del
-                calendario de Mérida (@/lib/admin/zona-horaria), no los del
-                servidor: con el día del servidor, a partir de las 18:00 de
-                Yucatán lo cobrado hoy ya se sumaba a mañana. */}
-            <div className={css.cifra}>
-              <div className={css.cifraEtiqueta}>Cobrado hoy</div>
-              <div className={css.cifraValor}>{formatCurrency(ingresos.hoy, "MXN")}</div>
-              <div className={css.cifraPie}>día de Mérida · {formatCurrency(ingresos.mes, "MXN")} este mes</div>
-            </div>
-            <div className={css.cifra}>
-              <div className={css.cifraEtiqueta}>Cobrado este año</div>
-              <div className={css.cifraValor}>{formatCurrency(ingresos.anio, "MXN")}</div>
-              <div className={css.cifraPie}>
-                {ingresos.cobros > 0
-                  ? `${formatCurrency(ingresos.historico, "MXN")} desde el alta · ${ingresos.cobros} cobros`
-                  : "sin un solo cobro registrado"}
-              </div>
-            </div>
-            <div className={css.cifra}>
-              <div className={css.cifraEtiqueta}>LTV estimado</div>
-              <div className={css.cifraValor}>{formatCurrency(ltv, "MXN")}</div>
-              <div className={css.cifraPie}>estimación: MRR × 24 meses</div>
-            </div>
-            <div className={`${css.cifra} ${nivelCupo === "full" ? css.cifraAlerta : nivelCupo === "warn" ? css.cifraAviso : ""}`}>
-              <div className={css.cifraEtiqueta}>Pacientes</div>
-              <div className={css.cifraValor}>{formatPatientQuota(fila.cupo)}</div>
-              <div className={css.cifraPie}>
-                {fila.cupo.unlimited
-                  ? "alguna sede sin tope de plan"
-                  : `${(fila.cupo.remaining ?? 0).toLocaleString("es-MX")} de cupo libre`}
-              </div>
-            </div>
-            <div className={css.cifra}>
-              <div className={css.cifraEtiqueta}>Trabajo · {DIAS_VENTANA_ACTIVIDAD} d</div>
-              <div className={css.cifraValor}>{fila.tendencia.actual.total.toLocaleString("es-MX")}</div>
-              <div className={css.cifraPie}>
-                {fila.tendencia.actual.citas} citas · {fila.tendencia.actual.facturas} facturas · {fila.tendencia.actual.notas} notas
-              </div>
-            </div>
+          {/* ── Resumen ────────────────────────────────────────────────── */}
+          <div className="ad-resumen">
+            <DatoCaja label="MRR" n={formatCurrency(fila.mrr.total, "MXN")} pie={fila.mrr.total > 0 ? mrrBreakdownHint(fila.mrr) : "no cobra nada al mes"} />
+            <DatoCaja
+              label="Última compra"
+              n={fila.ultimaCompraAt ? fechaAdmin(fila.ultimaCompraAt) ?? "—" : "—"}
+              pie={fila.ultimaCompraAt
+                ? `${ingresos.cobros} cobro${ingresos.cobros === 1 ? "" : "s"} · ${formatCurrency(ingresos.historico, "MXN")} desde el alta`
+                : "sin un solo cobro registrado"}
+            />
+            <DatoCaja
+              label="Próxima renovación"
+              n={fila.proximaRenovacionAt ? fechaAdmin(fila.proximaRenovacionAt) ?? "—" : "—"}
+              pie={pago ? pago.etiqueta : fila.vigentes.length > 1 ? "la más cercana de sus sedes" : "sin fecha"}
+            />
+            {/* Cobrado HOY, este MES y este AÑO con los cortes del calendario de Mérida. */}
+            <DatoCaja label="Cobrado este mes" n={formatCurrency(ingresos.mes, "MXN")} pie={`hoy ${formatCurrency(ingresos.hoy, "MXN")} · año ${formatCurrency(ingresos.anio, "MXN")}`} />
+            <DatoCaja label="Sedes" n={String(fila.vigentes.length)} pie={`${fila.resumen.porEstado.pagando} pagando${fila.archivadas.length > 0 ? ` · ${fila.archivadas.length} archivada${fila.archivadas.length === 1 ? "" : "s"}` : ""}`} />
+            <DatoCaja
+              label="Pacientes"
+              n={formatPatientQuota(fila.cupo)}
+              pie={fila.cupo.unlimited ? "alguna sede sin tope de plan" : `${(fila.cupo.remaining ?? 0).toLocaleString("es-MX")} de cupo libre`}
+              nivel={nivelCupo === "full" ? "lleno" : nivelCupo === "warn" ? "aviso" : "ok"}
+            />
+            <DatoCaja label={`Trabajo · ${DIAS_VENTANA_ACTIVIDAD} d`} n={fila.tendencia.actual.total.toLocaleString("es-MX")} pie={`${fila.tendencia.actual.citas} citas · ${fila.tendencia.actual.facturas} facturas · ${fila.tendencia.actual.notas} notas`} />
+            <DatoCaja label="LTV estimado" n={formatCurrency(ltv, "MXN")} pie="MRR × 24 meses" />
           </div>
 
           {/* ── Sedes ──────────────────────────────────────────────────── */}
-          <div className={css.seccion}>
-            <h2 className={css.seccionTitulo}>Clínicas del cliente</h2>
-            <span className={css.seccionNota}>
+          <div className="ad-seccion">
+            <h2 className="ad-seccion__titulo">Clínicas del cliente</h2>
+            <span className="ad-seccion__nota">
               {fila.vigentes.length} vigente{fila.vigentes.length === 1 ? "" : "s"}
               {fila.archivadas.length > 0 && ` · ${fila.archivadas.length} archivada${fila.archivadas.length === 1 ? "" : "s"}`}
-              {" · ordenadas por lo que hay que atender"}
+              {" · primero la que hay que atender"}
             </span>
           </div>
-          <div className={css.sedes}>
+          <div className="ad-sedes">
             {fila.clinicas.map((v) => (
-              <TarjetaSede
-                key={v.clinica.id}
-                valorada={v}
-                ahora={ahora}
-                variasSedes={fila.vigentes.length > 1}
-              />
+              <TarjetaSede key={v.clinica.id} valorada={v} ahora={ahora} variasSedes={fila.vigentes.length > 1} />
             ))}
           </div>
 
           {/* ── Historia ───────────────────────────────────────────────── */}
           <div className={css.graficas}>
-            {/* La serie se rehace en meses de MÉRIDA sobre los mismos cobros
-                que las cifras de arriba: la de la capa vieja agrupaba por el
-                mes del servidor, así que un cobro del 30 a las 19:00 de
-                Yucatán caía en el mes siguiente. */}
             <CardNew title="Ingresos de suscripción" sub="Últimos 12 meses (pagos cobrados, meses de Mérida)">
               <RevenueAreaChart data={ingresos.serie} />
             </CardNew>
@@ -390,17 +294,11 @@ export function ClienteDetalleClient({
               {cliente.planDistribution.length > 0 ? (
                 <PlanDonut data={cliente.planDistribution} />
               ) : (
-                <div style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
-                  Sin datos
-                </div>
+                <div style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>Sin datos</div>
               )}
             </CardNew>
           </div>
 
-          {/* Las citas de la gráfica salen de las clínicas MEDIDAS, no de
-              `cliente.activityPerClinic`: aquel contaba también las citas
-              futuras, así que una sede con 20 agendadas por delante salía con
-              900 en la lista y 920 aquí. Mismo número en las dos pantallas. */}
           <CardNew title="Actividad por clínica" sub={`Pacientes y citas ya ocurridas · ${fila.vigentes.length} sede${fila.vigentes.length === 1 ? "" : "s"} vigente${fila.vigentes.length === 1 ? "" : "s"}`}>
             <ActivityBars data={actividadPorSede} />
           </CardNew>
@@ -412,159 +310,118 @@ export function ClienteDetalleClient({
 
 // ── La tarjeta de una sede ─────────────────────────────────────────────────
 
-function TarjetaSede({
-  valorada,
-  ahora,
-  variasSedes,
-}: {
-  valorada: ClinicaValorada;
-  ahora: Date;
-  variasSedes: boolean;
-}) {
+function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValorada; ahora: Date; variasSedes: boolean }) {
   const { clinica, salud, mrr } = valorada;
   const riesgo = salud.riesgos[0];
-  const nivel = ACTIVIDAD[salud.actividad.nivel];
-  const IconoNivel = nivel.icono;
   const nivelCupo = patientQuotaLevel(clinica.cupo);
-  const Tendencia = ICONO_TENDENCIA[salud.actividad.tendencia.direccion];
   const deltaPct = salud.actividad.tendencia.deltaPct;
+  const u = clinica.uso;
+  const pago = metodoDePago(clinica);
+  const compra = ultimaCompra({ ultimoPagoAt: clinica.ultimoPagoAt, createdAt: clinica.createdAt });
+  const gateDiscrepa = !(ESTADO_ESPERADO[salud.plan.kind] ?? []).includes(salud.estadoOperativo);
 
-  const tokenPct = clinica.aiTokensLimit > 0
-    ? Math.min(100, Math.round((clinica.aiTokensUsed / clinica.aiTokensLimit) * 100))
-    : 0;
-
-  const borde = clinica.archivada
-    ? css.sedeArchivada
-    : riesgo ? CLASE_BORDE[riesgo.severidad] : "";
+  const borde = clinica.archivada ? " ad-sede--archivada" : riesgo && riesgo.severidad !== "medio" ? ` ad-sede--${riesgo.severidad}` : "";
 
   return (
-    <div className={`${css.sede} ${borde}`}>
-      <div className={css.sedeCabecera}>
+    <div className={`ad-sede${borde}`}>
+      <div className="ad-sede__cabecera">
         <AvatarNew name={clinica.nombre} size="sm" />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <Link href={`/admin/clinics/${clinica.id}`} className={css.sedeNombre}>
-            {clinica.nombre}
-          </Link>
-          <div className={css.sedeSlug}>/{clinica.slug}</div>
+          <Link href={`/admin/clinics/${clinica.id}`} className="ad-sede__nombre">{clinica.nombre}</Link>
+          <div className="ad-meta">/{clinica.slug} · alta {fechaAdmin(clinica.createdAt)}</div>
         </div>
-        {salud.actividad.enLinea && (
-          <span className={css.enLinea} title={`Sesión en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`}>
-            <span className={css.enLineaPunto} aria-hidden="true" />
-            en línea
-          </span>
-        )}
+        {salud.actividad.enLinea && <span className="ad-online" title={`Sesión en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
       </div>
 
-      <div className={css.sedeInsignias}>
-        <BadgeNew tone="neutral">{clinica.plan}</BadgeNew>
-        {/* El estado del PLAN tal y como lo ve el gate: una sola lectura de
-            plan-status, no una tabla de estados de esta pantalla. */}
-        <PlanStatusBadge clinic={clinica} now={ahora} />
-        {/* Y el estado COMERCIAL, que es otra pregunta: un trial caducado con
-            acceso sigue siendo "al corriente" para el gate. */}
-        <BadgeNew tone={salud.estadoOperativo === "pagando" ? "success" : salud.estadoOperativo === "prueba" ? "neutral" : "warning"}>
-          {ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}
-        </BadgeNew>
-        {clinica.archivada && (
-          <BadgeNew tone="neutral">
-            <Archive size={10} style={{ marginRight: 3 }} aria-hidden="true" />
-            Archivada
-          </BadgeNew>
-        )}
+      <div className="ad-sede__chips">
+        <Chip tono={clinica.plan === "CLINIC" ? "brand" : clinica.plan === "PRO" ? "info" : "neutral"}>{clinica.plan}</Chip>
+        <Chip tono={TONO_ESTADO[salud.estadoOperativo] ?? "neutral"} punto>{ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}</Chip>
+        {/* El estado del PLAN tal como lo ve el gate, sólo cuando no dice lo mismo. */}
+        {gateDiscrepa && <PlanStatusBadge clinic={clinica} now={ahora} />}
+        <Chip tono="neutral" sm title={salud.actividad.diasSinCita === null ? "Nunca ha tenido una cita" : `Última cita hace ${salud.actividad.diasSinCita} días`}>
+          {ETIQUETA_ACTIVIDAD[salud.actividad.nivel]}
+        </Chip>
+        {clinica.archivada && <Chip tono="neutral" sm><Archive size={10} aria-hidden /> Archivada</Chip>}
       </div>
 
       {riesgo && (
-        <div className={`${css.sedeRiesgo} ${CLASE_RIESGO[riesgo.severidad]}`}>
-          <span aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }}>
-            {(() => { const I = ICONO_SEVERIDAD[riesgo.severidad]; return <I size={14} />; })()}
-          </span>
-          <span>
-            <strong>{riesgo.titulo}.</strong> {riesgo.detalle}
-            {salud.riesgos.length > 1 && ` (+${salud.riesgos.length - 1} más)`}
-          </span>
+        <div className={`ad-sede__riesgo${riesgo.severidad !== "medio" ? ` ad-sede__riesgo--${riesgo.severidad}` : ""}`}>
+          <span><strong>{riesgo.titulo}.</strong> {riesgo.detalle}{salud.riesgos.length > 1 && ` (+${salud.riesgos.length - 1} más)`}</span>
         </div>
       )}
 
-      <div className={css.metricas}>
+      <div className="ad-sede__metricas">
         <div>
-          <div className={css.metricaEtiqueta}>Actividad</div>
-          <div className={css.metricaValor} title={
-            salud.actividad.diasSinCita === null
-              ? "Nunca ha tenido una cita"
-              : `Última cita hace ${salud.actividad.diasSinCita} días`
-          }>
-            <IconoNivel size={12} style={{ marginRight: 4 }} aria-hidden="true" />
-            {nivel.etiqueta}
+          <div className="ad-sede__metrica-label">Al mes</div>
+          <div className="ad-sede__metrica-n">{mrr > 0 ? formatCurrency(mrr, "MXN") : <span className="ad-suave">no cobra</span>}</div>
+        </div>
+        <div>
+          <div className="ad-sede__metrica-label">Última compra</div>
+          <div className="ad-sede__metrica-n" title={compra.esAlta ? "Nunca ha pagado: es la fecha de alta" : `${clinica.pagosRegistrados} pagos · ${formatCurrency(clinica.totalPagado, "MXN")}`}>
+            {compra.fecha ? fechaAdmin(compra.fecha) : "—"}{compra.esAlta && <span className="ad-suave"> · alta</span>}
           </div>
         </div>
         <div>
-          <div className={css.metricaEtiqueta}>Pacientes</div>
-          <div className={`${css.metricaValor} ${nivelCupo === "full" ? css.metricaLleno : nivelCupo === "warn" ? css.metricaAviso : ""}`}
-            title={clinica.cupo.unlimited
-              ? "Plan sin tope de pacientes"
-              : `${clinica.plan} · ${clinica.cupo.remaining ?? 0} de cupo libre`}>
+          <div className="ad-sede__metrica-label">Renueva</div>
+          <div className="ad-sede__metrica-n">{clinica.nextBillingDate ? fechaAdmin(clinica.nextBillingDate) : "—"}</div>
+          <div className="ad-meta" title={pago.etiqueta}>{pago.etiqueta}</div>
+        </div>
+        <div>
+          <div className="ad-sede__metrica-label">Pacientes</div>
+          <div className="ad-sede__metrica-n" style={{ color: nivelCupo === "full" ? "var(--danger)" : nivelCupo === "warn" ? "var(--warning)" : undefined }}
+            title={clinica.cupo.unlimited ? "Plan sin tope de pacientes" : `${clinica.plan} · ${clinica.cupo.remaining ?? 0} de cupo libre`}>
             {variasSedes ? formatPatientQuota(clinica.cupo) : clinica.cupo.used.toLocaleString("es-MX")}
           </div>
         </div>
         <div>
-          <div className={css.metricaEtiqueta}>Al mes</div>
-          <div className={css.metricaValor}>
-            {mrr > 0 ? `${formatCurrency(mrr, "MXN")}` : <span className={css.sinDato}>no cobra</span>}
-          </div>
-        </div>
-      </div>
-
-      <div className={css.metricas}>
-        <div>
-          <div className={css.metricaEtiqueta}>Trabajo · {DIAS_VENTANA_ACTIVIDAD} d</div>
-          <div className={css.metricaValor}>
+          <div className="ad-sede__metrica-label">Trabajo · {DIAS_VENTANA_ACTIVIDAD} d</div>
+          <div className="ad-sede__metrica-n">
             {salud.actividad.volumen.total.toLocaleString("es-MX")}
-            <span className={`${css.tendencia} ${CLASE_TENDENCIA[salud.actividad.tendencia.direccion]}`} style={{ marginLeft: 6 }}>
-              <Tendencia size={12} aria-hidden="true" />
-              {deltaPct === null ? "—" : `${deltaPct > 0 ? "+" : ""}${deltaPct}%`}
-            </span>
+            {deltaPct !== null && <span className="ad-suave"> · {deltaPct > 0 ? "+" : ""}{deltaPct}%</span>}
           </div>
         </div>
         <div>
-          <div className={css.metricaEtiqueta}>Próxima cita</div>
-          <div className={css.metricaValor}>
-            {salud.actividad.proximaCitaAt
-              ? fechaAdmin(salud.actividad.proximaCitaAt)
-              : <span className={css.sinDato}>ninguna</span>}
-          </div>
-        </div>
-        <div>
-          <div className={css.metricaEtiqueta}>Cobrado</div>
-          <div className={css.metricaValor}>
-            {formatCurrency(clinica.totalPagado, "MXN")}
+          <div className="ad-sede__metrica-label">Último acceso</div>
+          <div className="ad-sede__metrica-n">
+            {salud.actividad.enLinea ? "Ahora" : salud.actividad.ultimoAccesoAt ? fechaAdmin(salud.actividad.ultimoAccesoAt) : <span className="ad-suave">sin registro</span>}
           </div>
         </div>
       </div>
 
-      <div>
-        <div className={css.barraCabecera}>
-          <span>Tokens IA</span>
-          <span>{tokenPct}%</span>
+      {u ? (
+        <div className="ad-sede__usos">
+          <BarraUso label="Disco" usado={u.storageUsado} tope={u.storageTope} fmt={bytesCortos} compacta />
+          {u.tokensTope > 0
+            ? <BarraUso label="Tokens IA" usado={u.tokensUsados} tope={u.tokensTope} fmt={tokensCortos} compacta />
+            : <span className="ad-uso--sin">Tokens IA: sin cupo en el plan</span>}
+          {u.cfdiUsados !== null && u.cfdiIncluidos > 0
+            ? <BarraUso label="CFDI del mes" usado={u.cfdiUsados} tope={u.cfdiIncluidos} fmt={(n) => String(n)} compacta />
+            : u.cfdiUsados !== null
+              ? <span className="ad-uso--sin">CFDI del mes: {u.cfdiUsados} · el plan no incluye timbres</span>
+              : <span className="ad-uso--sin">CFDI: sin dato</span>}
+          {u.usuarios !== null
+            ? <BarraUso label="Usuarios" usado={u.usuarios} tope={u.usuariosTope} fmt={(n) => String(n)} compacta />
+            : <span className="ad-uso--sin">Usuarios: sin dato</span>}
+          <span className="ad-uso__linea" style={{ gridColumn: "1 / -1" }}>
+            <span className="ad-uso__label">Saldo IA</span>
+            <span className="ad-num">
+              {u.saldoIaCents === null
+                ? <span className="ad-suave">{u.saldoIaStatus === "SIN_DATO" ? "sin dato" : "sin monedero"}</span>
+                : <strong style={{ color: u.saldoIaCents < 0 ? "var(--danger)" : undefined }}>{fmtMXNdec(u.saldoIaCents / 100)}</strong>}
+              {u.sedes !== null && <span className="ad-suave"> · {u.sedes}{u.sedesTope !== null ? `/${u.sedesTope}` : ""} sedes del dueño</span>}
+            </span>
+          </span>
         </div>
-        <div className={css.barra}>
-          <div
-            className={`${css.barraRelleno} ${tokenPct >= 90 ? css.barraAlerta : tokenPct >= 70 ? css.barraAviso : css.barraOk}`}
-            style={{ width: `${tokenPct}%` }}
-          />
-        </div>
-      </div>
+      ) : (
+        <span className="ad-uso--sin">Consumo sin medir.</span>
+      )}
 
       {/* Los dos botones que ya estaban, con el mismo texto y el mismo destino. */}
-      <div className={css.botones}>
-        <Link href={`/admin/clinics/${clinica.id}`} className={css.boton}>
+      <div className="ad-sede__botones">
+        <Link href={`/admin/clinics/${clinica.id}`}>
           <ButtonNew size="sm" variant="secondary" icon={<Eye size={13} />}>Ver detalle</ButtonNew>
         </Link>
-        <a
-          href={`/api/admin/impersonate?clinicId=${clinica.id}`}
-          target="_blank"
-          rel="noreferrer"
-          className={css.boton}
-        >
+        <a href={`/api/admin/impersonate?clinicId=${clinica.id}`} target="_blank" rel="noreferrer">
           <ButtonNew size="sm" variant="primary" icon={<Eye size={13} />}>Impersonar</ButtonNew>
         </a>
       </div>

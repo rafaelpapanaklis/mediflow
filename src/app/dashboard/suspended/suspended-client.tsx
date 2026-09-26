@@ -6,7 +6,10 @@ import { CreditCard, Loader2, Lock, Check } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
 import { useT } from "@/i18n/i18n-provider";
+import { borrarEleccionAlta, leerEleccionAlta } from "@/lib/billing/eleccion-alta";
 import { PlanesSuspendida } from "@/components/dashboard/cuenta-rediseno/planes-suspendida";
+import { importeSpei, type CuentaBancaria } from "@/lib/billing/spei-directo-core";
+import { ivaAplica, type ExencionIva } from "@/lib/billing/iva-cobro";
 
 export interface PlanCardData {
   id: PlanId;
@@ -36,6 +39,25 @@ interface Props {
    * Apagado (por defecto), el marcado de siempre, sin un nodo de más.
    */
   rediseno?: boolean;
+  /**
+   * Rediseño: arrancar con el plan elegido en el alta como RESUMEN (más
+   * «Cambiar plan», que abre la rejilla) en vez de las tres tarjetas. Lo
+   * decide la página (compra nueva con plan); solo cambia qué se enseña, el
+   * plan seleccionado y el checkout son los mismos.
+   */
+  resumenInicial?: boolean;
+  /**
+   * SPEI por transferencia directa (solo en el rediseño): la cuenta que el
+   * admin configuró en /admin/settings → Datos banco, o null si no hay una
+   * utilizable — entonces SPEI NO se ofrece. `referenciaSpei` es el folio de la
+   * clínica para el concepto; `cobroConIvaListo` dice si el checkout tiene el IVA
+   * configurado (sin él tarjeta/OXXO no cobran). Los tres los decide la página.
+   */
+  cuentaSpei?: CuentaBancaria | null;
+  referenciaSpei?: string | null;
+  cobroConIvaListo?: boolean;
+  /** Qué paga SIN IVA esta clínica (creada antes del corte): su plan y si la tarjeta entra; null = todo lleva IVA. */
+  exencionIva?: ExencionIva | null;
 }
 
 // Upsell: qué plan sugerir según el actual. CLINIC es el tope (sin sugerencia).
@@ -49,9 +71,20 @@ export function fmt(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-MX");
 }
 
-export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligible = false, rediseno = false }: Props) {
+export function SuspendedPlanCards({
+  plans,
+  currentPlan = null,
+  firstMonthEligible = false,
+  rediseno = false,
+  resumenInicial = false,
+  cuentaSpei = null,
+  referenciaSpei = null,
+  cobroConIvaListo = true,
+  exencionIva = null,
+}: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
+  const [declarandoSpei, setDeclarandoSpei] = useState(false);
   const [method, setMethod] = useState<PayMethod>("card");
   const [billing, setBilling] = useState<Billing>("monthly");
   // Plan elegido por el usuario: las tarjetas son un radiogroup. Preselección =
@@ -80,6 +113,17 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
     };
   }, []);
 
+  // Periodo elegido en el alta (guardado en el navegador por signup-form, no
+  // en la base): en compra nueva el conmutador arranca ahí en vez de volver a
+  // preguntarlo. Sigue visible y se puede cambiar; sin dato o caducado (7
+  // días), Mensual como siempre. En reactivación (resumenInicial=false) no se
+  // mira. Va en un efecto y no en el useState para no desalinear la hidratación.
+  useEffect(() => {
+    if (!resumenInicial) return;
+    const eleccion = leerEleccionAlta();
+    if (eleccion && eleccion.plan === currentPlan && eleccion.billing === "annual") setBilling("annual");
+  }, [resumenInicial, currentPlan]);
+
   // Plan recomendado (upsell). Sin plan actual válido, sugiere PRO (popular).
   const recommendedPlan: PlanId | null = currentPlan ? NEXT_PLAN[currentPlan] : "PRO";
 
@@ -98,13 +142,16 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
     return Math.max(0, plan.priceMxn * 12 - plan.priceMxnAnnual);
   }
 
+  // SPEI solo se ofrece en el rediseño y con una cuenta bancaria utilizable y
+  // un folio de clínica: sin ellos, nunca datos vacíos ni una opción muerta.
+  const speiDisponible = rediseno && cuentaSpei !== null && !!referenciaSpei;
   const methods: Array<{ id: PayMethod; label: string }> = [
     { id: "card", label: t("pages.suspended.methodCard") },
-    { id: "spei", label: t("pages.suspended.methodSpei") },
+    ...(!rediseno || speiDisponible ? [{ id: "spei" as PayMethod, label: t("pages.suspended.methodSpei") }] : []),
     { id: "oxxo", label: t("pages.suspended.methodOxxo") },
   ];
   const methodIndex: Record<PayMethod, number> = { card: 0, spei: 1, oxxo: 2 };
-  const methodOrder: PayMethod[] = ["card", "spei", "oxxo"];
+  const methodOrder: PayMethod[] = methods.map((m) => m.id);
 
   function upsellBenefit(planId: PlanId): string {
     if (planId === "CLINIC") return t("pages.suspended.upsellBenefitClinic");
@@ -130,10 +177,39 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
       if (!res.ok || !data.url) {
         throw new Error(data.error ?? t("pages.suspended.checkoutError"));
       }
+      // Pago iniciado: la elección del alta ya cumplió; fuera del navegador.
+      borrarEleccionAlta();
       window.location.href = data.url;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("pages.suspended.checkoutError"));
       setPendingPlan(null);
+    }
+  }
+
+  // «Ya hice la transferencia»: el servidor registra la solicitud (con el
+  // importe que él mismo calcula) y la página pasa a la pantalla de espera.
+  // Carga completa: el layout y la página vuelven a leer el estado en el servidor.
+  function importeMostrado(plan: PlanId): number | undefined {
+    const p = plans.find((x) => x.id === plan);
+    return p ? importeSpei({ plan: p, billing, conIva: ivaAplica({ metodo: "spei", plan, exencion: exencionIva }) }).totalCents : undefined;
+  }
+  async function handleDeclararSpei(plan: PlanId) {
+    if (declarandoSpei) return;
+    setDeclarandoSpei(true);
+    try {
+      const res = await fetch("/api/billing/spei-transferencia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // amountCents: lo que la pantalla enseñó; si el precio cambió mientras tanto, el servidor da 409.
+        body: JSON.stringify({ plan, billing, amountCents: importeMostrado(plan) }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? t("pages.suspended.checkoutError"));
+      borrarEleccionAlta();
+      window.location.assign("/dashboard/suspended");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("pages.suspended.checkoutError"));
+      setDeclarandoSpei(false);
     }
   }
 
@@ -192,11 +268,18 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
       <PlanesSuspendida
         v={{
           t, fmt, plans, currentPlan, firstMonthEligible, recommendedPlan,
-          selectedPlan, selected, billing, method, methods, methodIndex,
+          selectedPlan, selected, billing, method, methods,
           isRedirecting, ctaPrice, ctaPromo, cardRefs, methodRefs,
           priceOf, perMonth, annualSavings, upsellBenefit,
           setSelectedPlan, setBilling, setMethod, onCardKeyDown, onMethodKeyDown,
+          resumenInicial,
           handleStripeCheckout,
+          cuentaSpei: speiDisponible ? cuentaSpei : null,
+          referenciaSpei,
+          cobroConIvaListo,
+          exencionIva,
+          declarandoSpei,
+          handleDeclararSpei,
         }}
       />
     );

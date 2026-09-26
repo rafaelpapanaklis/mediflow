@@ -7,6 +7,8 @@ import { getAdminMrr, includedBranchesHint, mrrBreakdownHint, EMPTY_MRR } from "
 import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
 import { isInTrial, isPlanExpired } from "@/lib/plan-status";
 import { PaymentsClient } from "./payments-client";
+import { SpeiPendientes } from "./spei-pendientes";
+import { listarPendientesAdmin, type PendienteAdminDTO } from "@/lib/billing/spei-directo";
 import { inicioDelMes, inicioDelMesAnterior } from "@/lib/admin/zona-horaria";
 import { leerPagosSaldoIaRecientes, type PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
 
@@ -221,7 +223,13 @@ async function renderPaymentsPage() {
     recentPayments, pendingTransfers, overdueClinics, clinics,
   }));
 
+  // Transferencias SPEI directas por confirmar: van ARRIBA y destacadas. Con su
+  // propio try/catch: sin el SQL aplicado la lista queda vacía y la página sigue.
+  const speiPendientes = await safe(listarPendientesAdmin(), [] as PendienteAdminDTO[]);
+
   return (
+    <>
+    <SpeiPendientes items={JSON.parse(JSON.stringify(speiPendientes))} />
     <PaymentsClient
       metrics={{
         totalClinics,
@@ -244,5 +252,6 @@ async function renderPaymentsPage() {
       clinics={serialized.clinics}
       aiTopups={aiTopups}
     />
+    </>
   );
 }

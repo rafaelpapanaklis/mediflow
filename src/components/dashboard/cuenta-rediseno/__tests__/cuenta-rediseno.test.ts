@@ -24,6 +24,7 @@ const archivosNuevos = readdirSync(CARPETA)
   .map((f) => ({ nombre: f, texto: readFileSync(join(CARPETA, f), "utf8") }));
 
 const css = archivosNuevos.find((a) => a.nombre === "cuenta.module.css")!.texto;
+const cssPago = archivosNuevos.find((a) => a.nombre === "pago.module.css")!.texto;
 
 // Las tres pantallas del lote, tal como quedan cableadas.
 const PANTALLAS = [
@@ -69,10 +70,13 @@ test("cuenta.module.css no declara ninguna variable CSS propia", () => {
   assert.match(raiz, /from "@\/components\/dashboard\/menu-dos-niveles\/clases"/, "CLASES_MENU sale de clases.ts, no de una copia");
 });
 
-test("ni un color a mano: todo hexadecimal va como respaldo dentro de var()", () => {
+test("ni un color a mano: todo hexadecimal va como respaldo dentro de var() (salvo la hoja de la marca del pago)", () => {
   // El gate del gerente: `grep '#[0-9a-f]{6}' | grep -v 'var(--'`. Aquí se
-  // aplica a cada línea de la carpeta nueva, no solo a la hoja.
-  for (const a of archivosNuevos) {
+  // aplica a cada línea de la carpeta nueva, no solo a la hoja. Única excepción:
+  // pago.module.css, la pantalla de PAGO, que se viste con la marca del registro
+  // (navy + azul→violeta, los mismos hexadecimales de auth-v4.css) y los
+  // declara UNA vez como tokens `--pg-*` — ver el test de la marca, más abajo.
+  for (const a of archivosNuevos.filter((x) => x.nombre !== "pago.module.css")) {
     const malas = a.texto
       .split("\n")
       .filter((l) => /#[0-9a-f]{6}\b/i.test(l) && !/var\(--/.test(l));
@@ -93,15 +97,17 @@ test("ni un color a mano: todo hexadecimal va como respaldo dentro de var()", ()
 // Las tres leyes: nada detrás de un clic, ni escondido por ancho
 // ═══════════════════════════════════════════════════════════════════════════
 test("nada se esconde por ancho ni se pliega detrás de un clic", () => {
-  assert.ok(!/display:\s*none/.test(css), "la hoja no esconde nada (display: none)");
-  assert.ok(!/visibility:\s*hidden/.test(css), "la hoja no esconde nada (visibility: hidden)");
+  for (const hoja of [css, cssPago]) {
+    assert.ok(!/display:\s*none/.test(hoja), "la hoja no esconde nada (display: none)");
+    assert.ok(!/visibility:\s*hidden/.test(hoja), "la hoja no esconde nada (visibility: hidden)");
+  }
   for (const a of archivosNuevos) {
     assert.ok(!/<details|<summary|Collapsible|Accordion|md:hidden|lg:hidden|sm:hidden/.test(a.texto), `${a.nombre} pliega o esconde algo`);
   }
   // Las tres tarjetas de plan siguen en tres columnas desde el mismo corte que
   // hoy (md = 768 px): en iPad y en cualquier computadora se ven las tres.
-  assert.match(css, /\.planes\s*\{[^}]*grid-template-columns:\s*repeat\(3,/, "tres columnas de planes");
-  assert.match(css, /@media \(max-width: 767\.98px\)\s*\{\s*\.planes/, "una sola columna solo por debajo de 768 px, como hoy");
+  assert.match(cssPago, /\.planes\s*\{[^}]*grid-template-columns:\s*repeat\(3,/, "tres columnas de planes");
+  assert.match(cssPago, /@media \(max-width: 767\.98px\)\s*\{\s*\.planes/, "una sola columna solo por debajo de 768 px, como hoy");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -172,7 +178,7 @@ test("suspended: el marcado de siempre sigue en su sitio y la vista nueva recibe
   const iReturnViejo = cliente.indexOf("{/* === Toggle Mensual / Anual === */}");
   const iUltimoHook = Math.max(cliente.lastIndexOf("useState"), cliente.lastIndexOf("useRef"), cliente.lastIndexOf("useEffect"), cliente.lastIndexOf("useT()"));
   assert.ok(iRediseno > iUltimoHook && iRediseno < iReturnViejo, "la vista nueva va después de los hooks y antes del marcado viejo");
-  assert.match(cliente, /handleStripeCheckout,\s*\}\}/, "la vista nueva paga con el MISMO handleStripeCheckout");
+  assert.match(cliente, /handleStripeCheckout,\s*cuentaSpei/, "la vista nueva paga con el MISMO handleStripeCheckout");
   assert.equal((cliente.match(/fetch\("\/api\/billing\/checkout"/g) ?? []).length, 1, "un solo sitio llama al checkout");
 
   // Success: el <a> duro al panel y el correo de soporte, en las dos caras.
@@ -192,7 +198,7 @@ test("la vista nueva de planes enseña lo MISMO que la de siempre: viñetas, pro
     '"Anual"',
     '"Anual: 35% de descuento"',
     '"Tu primer mes desde $19"',
-    "al año · ahorras",
+    "ahorras ${fmt(",
     "Tu primer mes: solo",
     '"Facturación mensual · cancela cuando quieras"',
     "el primer mes`",
@@ -244,9 +250,13 @@ test('todas las claves t("…") del rediseño existen en es.json y en en.json', 
 // ═══════════════════════════════════════════════════════════════════════════
 // Rendimiento: ni una consulta nueva, ni polling nuevo
 // ═══════════════════════════════════════════════════════════════════════════
-test("sin consultas nuevas ni polling nuevo en las tres pantallas", () => {
+test("sin consultas nuevas ni polling nuevo en las tres pantallas (salvo la espera de la transferencia)", () => {
   for (const a of archivosNuevos) {
-    assert.ok(!/prisma|setInterval|fetch\(/.test(a.texto), `${a.nombre} consulta o sondea por su cuenta`);
+    assert.ok(!/prisma/.test(a.texto), `${a.nombre} toca la base`);
+    // Único sondeo autorizado: la pantalla de ESPERA de una transferencia SPEI,
+    // que pregunta cada 15 s si ya la confirmaron (ver más abajo).
+    if (a.nombre === "espera-transferencia.tsx") continue;
+    assert.ok(!/setInterval|fetch\(/.test(a.texto), `${a.nombre} consulta o sondea por su cuenta`);
   }
   for (const rel of PANTALLAS) {
     assert.ok(!/setInterval/.test(leer(rel)), `${rel} añade polling`);
@@ -256,4 +266,94 @@ test("sin consultas nuevas ni polling nuevo en las tres pantallas", () => {
   for (const rel of PANTALLAS.filter((r) => r.endsWith("page.tsx"))) {
     assert.equal((leer(rel).match(/menuDosNivelesEncendido\(/g) ?? []).length, 1, `${rel}: una sola lectura del interruptor`);
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PAGO (ws1-t3): la marca del registro, lo que se cobra, SPEI directo y la espera
+// ═══════════════════════════════════════════════════════════════════════════
+test("la pantalla de pago usa la MARCA DEL REGISTRO: los mismos valores de auth-v4.css, una sola vez", () => {
+  const registro = readFileSync(join(SRC, "components", "public", "auth", "auth-v4.css"), "utf8");
+  // Los cuatro valores que hacen «navy + azul→violeta» en /signup…
+  for (const [token, hex] of [
+    ["--pg-navy-1", "#172242"],
+    ["--pg-navy-2", "#0f172a"],
+    ["--pg-azul", "#2563eb"],
+    ["--pg-violeta", "#7c3aed"],
+  ] as const) {
+    assert.match(cssPago, new RegExp(`${token}:\\s*${hex}`), `${token} ya no es ${hex}`);
+    assert.ok(registro.toLowerCase().includes(hex), `${hex} ya no está en auth-v4.css: la marca del registro cambió`);
+  }
+  // …y la tarjeta navy del resumen es la del registro (mismo degradado, mismos rótulos).
+  assert.match(cssPago, /\.resumen\s*\{[^}]*linear-gradient\(180deg, var\(--pg-navy-1\) 0%, var\(--pg-navy-2\) 100%\)/);
+  const planes = leer("components/dashboard/cuenta-rediseno/planes-suspendida.tsx");
+  assert.ok(planes.includes("Tu plan elegido") && planes.includes("Cambiar plan"), "resumen «Tu plan elegido» con «Cambiar plan»");
+  assert.ok(planes.includes("¿Cómo quieres pagar?"), "sigue el bloque «¿Cómo quieres pagar?»");
+  // La pantalla de pago ya no viste con la hoja del menú.
+  for (const f of ["planes-suspendida.tsx", "suspendida.tsx"]) {
+    assert.ok(!/cuenta\.module\.css/.test(leer(`components/dashboard/cuenta-rediseno/${f}`)), `${f} sigue con la hoja lila`);
+  }
+  // Los tokens de la marca se declaran en la hoja del pago, y los usa con var().
+  assert.ok((cssPago.match(/var\(--pg-/g) ?? []).length > 100, "la hoja lee sus tokens");
+});
+
+test("el botón y los precios dicen LO QUE SE COBRA: el total del año en anual, «+ IVA» siempre y el desglose con el total real", () => {
+  const planes = leer("components/dashboard/cuenta-rediseno/planes-suspendida.tsx");
+  assert.match(planes, /const cobrado = \(plan: PlanCardData\) => \(anual \? plan\.priceMxnAnnual : plan\.priceMxn\);/, "anual = priceMxnAnnual (el unitAmount del checkout)");
+  // «+ IVA» sale de la MISMA regla que el servidor (ivaAplica): solo se omite en OXXO/SPEI del plan que una
+  // clínica de las de antes ya paga a mano (Ajuste 1b).
+  assert.match(planes, /const ivaDe = \(planId: PlanId\) => ivaAplica\(\{ metodo: v\.method, plan: planId, exencion: v\.exencionIva \}\);/);
+  assert.match(planes, /const iva = ivaSel \? " \+ IVA" : "";/, "cada importe dice «+ IVA» cuando lleva");
+  // El desglose sale de la MISMA función que el importe SPEI y que el cálculo de Stripe.
+  assert.match(planes, /desgloseConIva\(/);
+  assert.match(planes, /FIRST_MONTH_PROMO_MXN\[v\.selected\.id\] \* 100/, "con la promo, el IVA va sobre lo que se cobra");
+  assert.ok(planes.includes("IVA 16 %") && planes.includes("Total a pagar"), "subtotal + IVA = total a la vista");
+  assert.match(planes, /Pagar \$\{v\.selected\.name\} — \$\{centavosAMxn\(cobroMostrado\.totalCents\)\} \$\{unidad\}/, "el botón dice el TOTAL con IVA y su periodo");
+  assert.ok(!/ctaPrice\)\}\/mes/.test(planes), "el botón ya no dice «$X/mes» en anual");
+  // Sin IVA configurado la pantalla lo dice y no deja pulsar.
+  assert.match(planes, /disabled=\{v\.isRedirecting \|\| \(!v\.cobroConIvaListo && ivaSel\)\}/);
+  const page = leer("app/dashboard/suspended/page.tsx");
+  assert.match(page, /const cobroConIvaListo = ivaParaCobro\(process\.env\)\.ok;/);
+});
+
+test("SPEI directo: se ofrece solo con cuenta utilizable, con datos, importe y referencia copiables", () => {
+  const cliente = leer("app/dashboard/suspended/suspended-client.tsx");
+  assert.match(cliente, /const speiDisponible = rediseno && cuentaSpei !== null && !!referenciaSpei;/);
+  assert.match(cliente, /\.\.\.\(!rediseno \|\| speiDisponible \? \[\{ id: "spei"/, "sin cuenta no hay opción SPEI en el rediseño");
+  assert.match(cliente, /cuentaSpei: speiDisponible \? cuentaSpei : null/);
+  // «Ya hice la transferencia» va al endpoint propio, no al checkout de Stripe.
+  assert.match(cliente, /fetch\("\/api\/billing\/spei-transferencia"/);
+  assert.match(cliente, /body: JSON\.stringify\(\{ plan, billing, amountCents: importeMostrado\(plan\) \}\)/, "plan, periodo y lo que se le enseñó (el servidor recalcula y da 409 si difiere)");
+  const datos = leer("components/dashboard/cuenta-rediseno/datos-transferencia.tsx");
+  for (const etiqueta of ["el beneficiario", "la CLABE", "el importe", "la referencia"]) {
+    assert.ok(datos.includes(`etiqueta="${etiqueta}"`), `falta el botón de copiar ${etiqueta}`);
+  }
+  assert.ok(datos.includes("Banco") && datos.includes("Beneficiario"), "banco y beneficiario a la vista");
+  // La pantalla de pago muestra ese bloque SOLO con SPEI elegido y datos completos.
+  const planes = leer("components/dashboard/cuenta-rediseno/planes-suspendida.tsx");
+  assert.match(planes, /esSpei && v\.cuentaSpei && importe && v\.referenciaSpei \?/);
+  assert.match(planes, /"Ya hice la transferencia"/);
+});
+
+test("la espera de la transferencia: ruedita, datos, tarjeta en su lugar, y entra sola al confirmar", () => {
+  const espera = leer("components/dashboard/cuenta-rediseno/espera-transferencia.tsx");
+  assert.ok(espera.includes("s.rueda"), "la ruedita");
+  assert.ok(espera.includes("<DatosTransferencia"), "los datos de la transferencia por si le faltan");
+  assert.ok(espera.includes("Pagar con tarjeta en su lugar"), "la opción de tarjeta");
+  assert.ok(espera.includes('hrefTarjeta'), "…que lleva a la pantalla de pago");
+  assert.match(espera, /const CADA_MS = 15_000;/, "sondeo cada 15 s");
+  assert.match(espera, /if \(d\.activa\) window\.location\.href = "\/dashboard";/, "confirmada → panel con carga completa");
+  assert.match(espera, /else if \(d\.pendiente === false\) window\.location\.reload\(\);/, "rechazada → recarga y ve el motivo");
+  assert.match(cssPago, /\.rueda\s*\{[^}]*animation:\s*girar/, "la ruedita gira");
+  assert.match(cssPago, /prefers-reduced-motion/, "y se calma con movimiento reducido");
+  // La página la monta para TODA clínica sin acceso con una pendiente, tenga o no el rediseño.
+  const page = leer("app/dashboard/suspended/page.tsx");
+  const iEspera = page.indexOf("<EsperaTransferencia");
+  const iRediseno = page.indexOf("if (rediseno) {");
+  assert.ok(iEspera > 0 && iEspera < iRediseno, "la espera va antes de la bifurcación del rediseño");
+  assert.match(page, /pendienteSpei && sinAcceso && searchParams\?\.ver !== "pago"/);
+  assert.match(page, /const sinAcceso = isPlanExpired\(clinic\);/, "«sin acceso» es el gate de siempre");
+  // La consulta del sondeo sale de la sesión.
+  const api = leer("app/api/billing/spei-transferencia/route.ts");
+  assert.match(api, /solicitudPendienteDe\(user\.clinicId\)/);
+  assert.ok(!/clinicId.*req\.|body\.clinicId|searchParams/.test(api), "el clinicId nunca sale del cliente");
 });

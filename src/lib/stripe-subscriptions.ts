@@ -1,6 +1,7 @@
 import getStripe from "./stripe";
 import { getResolvedPlan } from "@/lib/plans";
 import { applyClinicOverrides, type ClinicOverrideFields } from "@/lib/billing/plan-overrides";
+import { ivaParaCobro } from "@/lib/billing/iva-cobro";
 
 export async function createCustomer(email: string, clinicName: string): Promise<string> {
   const stripe = getStripe();
@@ -27,10 +28,15 @@ export async function createCheckoutForSubscription(params: {
 }): Promise<string> {
   const stripe = getStripe();
   const amount = applyClinicOverrides(await getResolvedPlan(params.plan), params.clinic).priceMxn;
+  // Suscripción NUEVA: lleva el IVA 16 % como el checkout de la clínica. Sin IVA configurado no se
+  // genera el enlace (no se cobra sin IVA en silencio). No toca ninguna suscripción existente.
+  const iva = ivaParaCobro(process.env);
+  if (iva.ok === false) throw new Error(iva.error);
 
   const session = await stripe.checkout.sessions.create({
     customer: params.customerId,
     mode: "subscription",
+    ...iva.sesion,
     payment_method_types: ["card"],
     line_items: [{
       price_data: {
@@ -40,6 +46,7 @@ export async function createCheckoutForSubscription(params: {
         product_data: { name: `DaleControl Plan ${params.plan}` },
       },
       quantity: 1,
+      ...iva.linea,
     }],
     metadata: { clinicId: params.clinicId, plan: params.plan },
     success_url: params.successUrl,

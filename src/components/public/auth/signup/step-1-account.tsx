@@ -6,6 +6,7 @@ import { FormField } from "../form-field";
 import { PasswordInput } from "../password-input";
 import { PasswordStrength, scorePassword } from "../password-strength";
 import { mxTenDigits } from "@/lib/phone-mx";
+import { botonPrimario } from "./estilos";
 
 // El campo se pide como teléfono de contacto (no como WhatsApp), así que el
 // error también: MX_PHONE_ERROR habla de WhatsApp y lo usan otras superficies.
@@ -141,48 +142,29 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
       <button
         type="submit"
         disabled={buttonDisabled}
-        style={{
-          width: "100%",
-          height: 44,
-          borderRadius: 10,
-          background: buttonDisabled
-            ? "#ede9fe"
-            : "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-          color: buttonDisabled ? "#8b5cf6" : "#fff",
-          fontSize: 14,
-          fontWeight: 600,
-          border: "none",
-          cursor: buttonDisabled ? "not-allowed" : "pointer",
-          boxShadow: buttonDisabled
-            ? "none"
-            : "0 8px 20px -6px rgba(124,58,237,0.5), inset 0 1px 0 rgba(255,255,255,0.15)",
-          fontFamily: "inherit",
-          transition: "all .15s",
-          marginTop: 4,
-        }}
+        className="dca-btn-primary"
+        style={botonPrimario(buttonDisabled, { width: "100%", marginTop: 4 })}
       >
-        {checking ? "Verificando…" : "Continuar →"}
+        {checking ? "Verificando…" : "Continuar"}
+        {!checking && (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        )}
       </button>
 
       <div
         style={{
-          fontSize: 12.5,
-          color: "var(--ld-fg-muted)",
+          fontSize: 13.5,
+          color: "#475569",
           textAlign: "center",
-          paddingTop: 10,
-          borderTop: "1px solid var(--ld-border)",
+          paddingTop: 14,
+          borderTop: "1px solid #e8edf4",
         }}
       >
         ¿Ya tienes cuenta?{" "}
-        <Link
-          href="/login"
-          style={{
-            color: "var(--ld-brand-light)",
-            fontWeight: 500,
-            textDecoration: "none",
-          }}
-        >
-          Inicia sesión →
+        <Link href="/login" className="dca-link">
+          Inicia sesión
         </Link>
       </div>
     </form>

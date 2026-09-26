@@ -12,6 +12,11 @@ import { useRef, type ReactNode } from "react";
  *
  * El alto se reserva con `min-height` (igual que el diseño), así que el prisma
  * no puede mover nada al montar: CLS 0.
+ *
+ * Es decorativo (`aria-hidden`): las caras son maquetas del panel, no texto
+ * que un lector de pantalla deba leer. `.dch3-stage` (hero-3d-v2.css) pausa
+ * el giro mientras el ratón está encima; con prefers-reduced-motion no gira
+ * ni sigue al ratón (landing-v2.css + `isReduced`).
  */
 export function HeroStage({ children }: { children: ReactNode }) {
   const stage = useRef<HTMLDivElement>(null);
@@ -29,6 +34,8 @@ export function HeroStage({ children }: { children: ReactNode }) {
 
   return (
     <div
+      className="dch3-stage"
+      aria-hidden="true"
       onMouseMove={(e) => {
         const el = stage.current;
         if (!el || isReduced()) return;
@@ -45,7 +52,14 @@ export function HeroStage({ children }: { children: ReactNode }) {
         position: "relative",
         width: "100%",
         maxWidth: 760,
-        minHeight: "clamp(330px,48vw,430px)",
+        /* 370 px en el teléfono (antes 330): la cara frontal, con la perspectiva
+           y el rotateX, asomaba por debajo y el pie del prisma la pisaba.
+           25-sep-2026 (ws1-t5): medido girando el prisma en las 12 resoluciones,
+           la cara frontal seguía pisando el pie hasta 20 px entre 600 y 1024 px
+           (iPad vertical, móvil apaisado) y 7 px en PC. Como el prisma va
+           centrado, cada px de más se reparte mitad arriba y mitad abajo:
+           sube a 410/60vw/480 para dejar ≥ 8 px de aire en todos los anchos. */
+        minHeight: "clamp(410px,60vw,480px)",
         marginTop: "clamp(14px,2vw,26px)",
         display: "grid",
         placeItems: "center",

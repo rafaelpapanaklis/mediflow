@@ -15,6 +15,7 @@ import type { ProductoSlug } from '@/lib/producto/types';
 export const NAV = {
   links: [
     { label: 'Funciones', href: '#funciones' },
+    { label: 'El panel', href: '#panel' },
     { label: 'Precios', href: '#precios' },
     { label: 'Comparativa', href: '#comparativa' },
     { label: 'FAQ', href: '#faq' },
@@ -24,6 +25,19 @@ export const NAV = {
   login: 'Iniciar sesión',
   signup: 'Crear cuenta',
 };
+
+/**
+ * Menú de la BARRA en la portada (ajuste 7, Rafael), en este orden exacto.
+ * «Inicio» sube arriba del todo; Precios y FAQ son secciones de la portada;
+ * Blog es la única ruta (vuelve al menú a petición de Rafael; el pie de la
+ * portada sigue sin él). Fuera: Funciones, El panel y Comparativa.
+ */
+export const NAV_PORTADA: { label: string; href: string }[] = [
+  { label: 'Inicio', href: '#inicio' },
+  { label: 'Precios', href: '#precios' },
+  { label: 'Blog', href: '/blog' },
+  { label: 'FAQ', href: '#faq' },
+];
 
 /**
  * NAV.links mezcla anclas de la landing ("#precios") con rutas ("/blog").
@@ -198,7 +212,7 @@ export const MODULES_TRIO = {
     {
       id: 'web',
       title: 'Tu página web, lista en minutos',
-      desc: 'Elige entre 4 plantillas, publica con un clic y capta pacientes con tu link propio y reseñas post-cita.',
+      desc: 'Elige entre 8 plantillas, publica con un clic y capta pacientes con tu link propio y reseñas post-cita.',
     },
   ],
 };
@@ -245,6 +259,39 @@ export const MODULE_PAGES: { slug: ProductoSlug; glyph: string; color: string; t
   { slug: 'reportes-clinica-dental', glyph: '▲', color: '#b45309', title: 'Reportes e indicadores', desc: 'Ingresos, ocupación y productividad' },
   { slug: 'software-multiclinica-dental', glyph: '⧉', color: '#1e3a8a', title: 'Multi-sede, roles y permisos', desc: 'Varias sucursales en una sola cuenta' },
 ];
+
+/**
+ * Ajuste 11 (Rafael): cuatro razones nuevas sobre la tabla, con ícono del panel
+ * (Material Symbols, `IconoPanel`), título corto y una línea. SOLO hechos que la
+ * portada ya afirma o que existen en el producto:
+ *  - Página web: 8 plantillas = las 8 claves de TEMPLATE_MANIFESTS
+ *    (src/app/[slug]/_shared/template-manifest.ts); «gratis» = módulo `landing`
+ *    true en los tres planes y píldora «Página web gratuita incluida en
+ *    cualquier plan»; el resto, tarjeta «Tu página web, gratis» (funciones-v3-data).
+ *  - Mercado Pago: sección «WhatsApp + Mercado Pago» (whatsapp-mp-section.tsx):
+ *    link desde la factura, tratamientos y mensualidades, dinero en la cuenta de la clínica.
+ *  - Sabina: sección «Sabina · dentro del panel» (sabina-data.ts): lee datos
+ *    reales, deudas/huecos/ingresos; se monta en todo el panel (dashboard/layout.tsx).
+ *  - Importar: función «Importa tu clínica en 1 clic» (FUNCIONES) y FAQ
+ *    «¿Tengo que capturar…?»; pantalla real en src/app/dashboard/import.
+ * Sin cifras nuevas, sin certificaciones, sin integraciones que no existan.
+ */
+export const SWITCH_REASONS: { icono: string; tono: 'azul' | 'verde' | 'violeta' | 'ambar'; title: string; line: string }[] = [
+  { icono: 'language', tono: 'azul', title: 'Tu página web, gratis', line: '8 plantillas, 100 % personalizable. La cita que piden desde tu web cae en tu agenda.' },
+  { icono: 'point_of_sale', tono: 'verde', title: 'Cobra por WhatsApp con Mercado Pago', line: 'Tratamientos y mensualidades: el link sale de la factura y el dinero cae en tu cuenta.' },
+  { icono: 'auto_awesome', tono: 'violeta', title: 'Sabina, tu asistente en el panel', line: 'Pregúntale por deudas, huecos o ingresos y contesta con los datos reales de tu clínica.' },
+  { icono: 'folder', tono: 'ambar', title: 'Importa tu clínica en 1 clic', line: 'Desde Excel o tu panel anterior, con migración asistida gratis por nuestro equipo.' },
+];
+
+/**
+ * Cierre de la comparativa (ajuste 11). El 1.º lleva el precio del primer mes,
+ * que se inyecta en el componente desde plan_configs (`firstMonthFrom`); aquí
+ * no se escribe ninguna cifra. «CFDI 4.0» es lo que ya dice el pie de página.
+ */
+export const COMPARISON_CLOSING = {
+  firstMonthPrefix: 'Primer mes desde ',
+  chips: ['Sin permanencia', 'Facturación CFDI 4.0', 'Precios en MXN + IVA'],
+};
 
 export const COMPARISON = {
   eyebrow: 'Comparativa',
@@ -309,6 +356,14 @@ export const FAQ_ITEMS: { q: string; a: string | ((firstMonthFrom: string) => st
   {
     q: '¿Cómo funciona el bot de WhatsApp?',
     a: 'Conectas el WhatsApp de tu clínica y el bot atiende 24/7: agenda citas en los espacios realmente libres, manda recordatorios, registra confirmaciones y hace recall de pacientes inactivos. Tú ves todo en el inbox del panel.',
+  },
+  {
+    q: '¿Qué es Sabina y qué puede hacer?',
+    a: 'Sabina es la asistente que vive dentro del panel. Responde 26 consultas de solo lectura sobre tu clínica (deudas, huecos, ausencias, ingresos por tratamiento…) con cifras reales y la lista de lo que miró, y puede proponer 7 acciones —agendar, reagendar, cancelar, registrar paciente, cobrar o crear factura, avisar un saldo por WhatsApp— que solo se ejecutan cuando tú pulsas el botón de la tarjeta. No puede más que el usuario que le escribe, no inventa cifras y se paga con Saldo de IA en todos los planes.',
+  },
+  {
+    q: '¿Cómo funciona el anticipo por Mercado Pago?',
+    a: 'Cuando un paciente pide cita por WhatsApp, el bot le manda un link de Mercado Pago con el anticipo. El hueco sigue libre hasta que el pago entra; entonces la cita queda agendada. El dinero cae en la cuenta de Mercado Pago de tu clínica, no en la de DaleControl, y el anticipo queda como saldo a favor del paciente: se descuenta solo de su factura.',
   },
   {
     q: '¿La IA hace diagnósticos por mí?',

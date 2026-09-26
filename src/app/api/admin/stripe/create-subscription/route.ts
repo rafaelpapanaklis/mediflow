@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, getPriceIdForPlan, stripeUnavailableResponse } from "@/lib/stripe";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
+import { ivaParaCobro } from "@/lib/billing/iva-cobro";
 
 
 export async function POST(req: NextRequest) {
@@ -28,6 +29,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Suscripción NUEVA con IVA 16 % (ver lib/billing/iva-cobro.ts). Sin IVA configurado no se genera.
+  const iva = ivaParaCobro(process.env);
+  if (iva.ok === false) return NextResponse.json({ error: iva.error, code: iva.codigo }, { status: 503 });
+
   const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
 
@@ -47,7 +52,8 @@ export async function POST(req: NextRequest) {
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
+    ...iva.sesion,
+    line_items: [{ price: priceId, quantity: 1, ...iva.linea }],
     success_url: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dalecontrol.com"}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url:  `${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dalecontrol.com"}/dashboard/billing/cancel`,
     metadata: { clinicId: clinic.id, plan },

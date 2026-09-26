@@ -44,6 +44,7 @@ import {
   type PatientQuota,
 } from "@/lib/patient-quota-shared";
 import { cortesAdmin, diaAdmin, LOCALE_ADMIN, ZONA_ADMIN } from "@/lib/admin/zona-horaria";
+import type { UsoClinica } from "@/lib/admin/uso-core";
 
 // ── Lo que baja del servidor ───────────────────────────────────────────────
 // Fechas en ISO (string) a propósito: es lo que sobrevive al paso de un server
@@ -88,6 +89,15 @@ export interface ClinicaDeCliente {
    * @/lib/admin/mrr-core): no paga aparte y vale $0 en el MRR. Ausente = no.
    */
   sedeIncluida?: boolean;
+  /** Consumo y cupos (@/lib/admin/uso-clinica). Ausente = no se midió. */
+  uso?: UsoClinica;
+  /** Para «cómo paga» (@/lib/admin/uso-core.metodoDePago). Ausentes = no se cargaron. */
+  paymentMethodType?: string | null;
+  paymentMethodLast4?: string | null;
+  preferredPaymentMethod?: string | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  paypalSubscriptionId?: string | null;
 }
 
 /** El cliente tal cual sale de la base, antes de valorarlo. */
@@ -200,6 +210,19 @@ export interface FilaCliente {
   citasPasadas: number;
   /** Trabajo de sus clínicas en la ventana, contra la ventana anterior. */
   tendencia: TendenciaCliente;
+  /**
+   * ÚLTIMA COMPRA del cliente: el pago de suscripción cobrado más reciente de
+   * cualquiera de sus clínicas, archivadas incluidas (lo cobrado a un cliente
+   * que cerró una sede sigue siendo su historia, igual que `ingresos`).
+   * null = nunca ha pagado por ninguna.
+   */
+  ultimaCompraAt: Date | null;
+  /**
+   * La próxima renovación más cercana de sus clínicas vigentes con suscripción
+   * `active` y fecha por delante. Una fecha de cobro ya pasada de una sede
+   * vencida no es una renovación.
+   */
+  proximaRenovacionAt: Date | null;
 }
 
 // ── El cálculo ─────────────────────────────────────────────────────────────
@@ -346,9 +369,20 @@ export function valorarCliente(
   const cupo = aggregatePatientQuotas(vigentes.map((v) => v.clinica.cupo));
 
   let ultimoAccesoAt: Date | null = null;
+  let ultimaCompraAt: Date | null = null;
+  let proximaRenovacionAt: Date | null = null;
   for (const v of vigentes) {
     const acceso = v.salud.actividad.ultimoAccesoAt;
     if (acceso && (!ultimoAccesoAt || acceso > ultimoAccesoAt)) ultimoAccesoAt = acceso;
+    const renueva = v.clinica.nextBillingDate ? new Date(v.clinica.nextBillingDate) : null;
+    if (
+      v.clinica.subscriptionStatus === "active" && renueva && !Number.isNaN(renueva.getTime()) && renueva >= ahora &&
+      (!proximaRenovacionAt || renueva < proximaRenovacionAt)
+    ) proximaRenovacionAt = renueva;
+  }
+  for (const v of valoradas) {
+    const pago = v.clinica.ultimoPagoAt ? new Date(v.clinica.ultimoPagoAt) : null;
+    if (pago && !Number.isNaN(pago.getTime()) && (!ultimaCompraAt || pago > ultimaCompraAt)) ultimaCompraAt = pago;
   }
 
   // Las clínicas del cliente, ordenadas como se atienden: primero la que arde.
@@ -380,6 +414,8 @@ export function valorarCliente(
     ultimoAccesoAt,
     citasPasadas: vigentes.reduce((s, v) => s + v.clinica.citasPasadas, 0),
     tendencia: tendenciaDeCliente(vigentes),
+    ultimaCompraAt,
+    proximaRenovacionAt,
   };
 }
 

@@ -16,6 +16,7 @@ import { isPlanId } from "@/lib/billing/plans";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { trackSignupConversionAndRedirect } from "@/lib/gtag";
 import { trackGa4SignUp } from "@/lib/analytics/ga4";
+import { guardarEleccionAlta } from "@/lib/billing/eleccion-alta";
 
 interface SignupState {
   // Step 1
@@ -240,6 +241,10 @@ export function SignupForm() {
       // pantalla de activación: mandamos DIRECTO a /dashboard/suspended (no a
       // /dashboard, así no pasa por el gating ni ve modal alguno) donde elige
       // plan, método y paga. El webhook activa la cuenta al confirmar el pago.
+      // Plan y periodo elegidos aquí, en el navegador (el alta no persiste el
+      // periodo): la pantalla de pago arranca con ese periodo en vez de
+      // volver a preguntarlo. Caduca a los 7 días y se borra al iniciar el pago.
+      guardarEleccionAlta({ plan: form.plan, billing: form.billing });
       toast.success("¡Cuenta creada! Elige cómo pagar para activar tu plan.");
       // GA4 `sign_up` (WS1-T6): mismo momento, ANTES de la conversión de Ads y sin
       // callback propio → la redirección espera lo mismo que antes. Evento aparte.
@@ -255,11 +260,11 @@ export function SignupForm() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <RefClickTracker refCode={ref} />
-      {/* Logo */}
-      <div>
-        <Logo size={22} color="var(--ld-brand-light)" />
+      {/* Logo sólo en móvil/tableta: en PC ya está en el panel de marca. */}
+      <div className="dca-logo-movil">
+        <Logo size={22} color="#2563eb" />
       </div>
 
       {/* Title */}
@@ -268,23 +273,26 @@ export function SignupForm() {
           style={{
             margin: 0,
             marginBottom: 6,
-            fontFamily: "var(--font-sans, system-ui, sans-serif)",
-            fontSize: 26,
-            fontWeight: 600,
-            letterSpacing: "-0.025em",
-            color: "var(--ld-fg)",
+            fontSize: "clamp(22px, 2vw, 26px)",
+            fontWeight: 700,
+            letterSpacing: "-0.035em",
+            lineHeight: 1.1,
+            color: "#0f172a",
           }}
         >
           {step === 1 && "Crea tu cuenta"}
-          {step === 2 && "Cuéntanos de tu clínica"}
+          {step === 2 && "Cuéntanos de tu clínica dental"}
           {step === 3 && "Elige tu plan"}
         </h1>
-        <p style={{ margin: 0, fontSize: 13.5, color: "var(--ld-fg-muted)" }}>
-          {step === 1 && "Crea tu cuenta para empezar."}
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.45, color: "#475569" }}>
+          {step === 1 && "Tu nombre, tu correo y una contraseña. Un minuto."}
           {step === 2 &&
-            "Configuramos tu espacio basado en tu especialidad."}
-          {step === 3 &&
-            "Confirma el plan con el que quieres empezar. El pago lo haces dentro del panel."}
+            "Con tu especialidad y tamaño dejamos tu panel listo desde el primer día."}
+          {step === 3 && initialPlan
+            ? "Este es el plan que elegiste. El pago lo haces en el siguiente paso, dentro del panel."
+            : step === 3
+              ? "Confirma el plan con el que quieres empezar. El pago lo haces en el siguiente paso, dentro del panel."
+              : null}
         </p>
       </div>
 
@@ -298,21 +306,11 @@ export function SignupForm() {
 
       {/* OAuth banner (si vino de Google/Microsoft) */}
       {isOAuthFlow && step === 2 && (
-        <div
-          style={{
-            padding: "10px 14px",
-            borderRadius: 10,
-            background: "rgba(5,150,105,0.07)",
-            border: "1px solid rgba(5,150,105,0.3)",
-            fontSize: 12,
-            color: "#047857",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <span aria-hidden="true">✓</span>
-          Cuenta verificada como <strong>{form.email || "usuario OAuth"}</strong>. Solo faltan los datos de tu clínica.
+        <div className="dca-banner-ok">
+          <span aria-hidden="true" style={{ color: "#16a34a", fontWeight: 800 }}>✓</span>
+          <span>
+            Cuenta verificada como <strong>{form.email || "usuario OAuth"}</strong>. Solo faltan los datos de tu clínica.
+          </span>
         </div>
       )}
 
@@ -372,6 +370,7 @@ export function SignupForm() {
           onBack={() => setStep(2)}
           onSubmit={handleSubmit}
           loading={loading}
+          planFijo={initialPlan !== null}
         />
       )}
 

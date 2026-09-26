@@ -58,9 +58,34 @@ export interface PlanCard {
   yearlyDiscountPct: number;
   /** Precio TOTAL del primer mes (promo). */
   firstMonth: number;
+  /** Cabecera de la lista comparable (la misma en los tres planes desde el ajuste 9). */
   addendum: string | null;
+  /** Pacientes · Usuarios · Sedes · Almacenamiento · Tokens IA (todo de plan_configs). */
   capacity: CapacityRow[];
+  /**
+   * Lista de la tarjeta, en el MISMO orden en los tres planes (ajuste 10):
+   * (1) ocho funciones base en ✓ (las más vendedoras, las mismas en las tres;
+   * seis hasta el ajuste 12, que sumó soporte y onboarding);
+   * (2) lo que cambia entre planes con ✓/✗ calculado (asistente clínico con
+   * IA · IA en radiografías e inasistencias · analytics + TV; ajuste 13); (3) lo exclusivo de un plan SOLO en
+   * ese plan, como ✓ normales al final (ajuste 10b: sin rótulo ni separador;
+   * nunca como ✗ en los demás). Tras el ajuste 12: Básico 8 ✓ y 3 ✗;
+   * Profesional 11 ✓; Clínica 12 ✓ (reportes entre sedes).
+   */
   features: FeatureRow[];
+  /**
+   * Funciones base que van en los TRES planes («Incluido en todos los planes»).
+   * Es la misma lista en las tres tarjetas: la sección la pinta una sola vez.
+   * Se deriva de los flags de módulo de plan_configs (ver COMMON_CANDIDATES):
+   * si un día un módulo se apaga en algún plan, deja de ser «común» solo.
+   */
+  includedInAll: string[];
+  /**
+   * Etiqueta del plan anterior (plan_configs.label) para el chip verde de la
+   * tarjeta (ajuste 11): Básico «Todo lo esencial incluido»; los demás «Todo lo
+   * de <anterior> + lo esencial». null en el primero.
+   */
+  previousPlanLabel: string | null;
 }
 
 const SIGNUP_PARAM: Record<PlanId, PlanCard['signupParam']> = {
@@ -68,6 +93,12 @@ const SIGNUP_PARAM: Record<PlanId, PlanCard['signupParam']> = {
   PRO: 'pro',
   CLINIC: 'clinic',
 };
+
+/**
+ * Cabecera de la lista comparable, la misma en las tres tarjetas (ajuste 9):
+ * lo base va aparte, en «Incluido en todos los planes».
+ */
+const COMPARE_HEADING = 'Qué incluye';
 
 /** Copy SIN cifras. Todo lo numérico se deriva de plan_configs más abajo. */
 const CARD_COPY: Record<PlanId, { tagline: string; badge: string; badgeColor: string; recommended: boolean; addendum: string | null }> = {
@@ -77,21 +108,21 @@ const CARD_COPY: Record<PlanId, { tagline: string; badge: string; badgeColor: st
     // emerald-700, no teal-600: el blanco sobre #0d9488 se queda en 3.74:1.
     badgeColor: '#047857',
     recommended: false,
-    addendum: null,
+    addendum: COMPARE_HEADING,
   },
   PRO: {
     tagline: 'La favorita de las clínicas dentales',
     badge: '★ Más popular',
     badgeColor: '#2563eb',
     recommended: true,
-    addendum: 'Todo lo de Básico, y además:',
+    addendum: COMPARE_HEADING,
   },
   CLINIC: {
     tagline: 'Para clínicas con varios consultorios',
     badge: 'Clínica Grande',
     badgeColor: '#1e3a8a',
     recommended: false,
-    addendum: 'Todo lo de Profesional, y además:',
+    addendum: COMPARE_HEADING,
   },
 };
 
@@ -120,54 +151,161 @@ function storage(bytes: number): string {
 }
 
 /**
- * Bullets de cada plan. Los que llevan número (CFDI, tokens IA) se COMPONEN con
- * los valores reales del plan; ninguno se escribe a mano.
+ * Valor de la ficha «Sedes»: "1" · "Hasta 3" · "Ilimitadas" — a partir de
+ * maxClinics de plan_configs (NULL = ilimitadas). Va sin la palabra «sedes»
+ * porque la ficha ya la lleva de rótulo (como «Usuarios · 2»); «Hasta 4 sedes»
+ * no cabía en una línea a 1440 y desalineaba las tres tarjetas.
+ */
+export function formatSedes(maxClinics: number | null): string {
+  if (maxClinics == null) return 'Ilimitadas';
+  if (maxClinics <= 1) return '1';
+  return `Hasta ${maxClinics.toLocaleString('es-MX')}`;
+}
+
+/** true salvo que plan_configs.features[key] sea explícitamente false (misma regla que el sidebar). */
+const hasModule = (p: ResolvedPlan, key: string) => p.moduleFeatures?.[key] !== false;
+
+/**
+ * FUNCIONES BASE — candidatas a «Incluido en todos los planes» (ajuste 9).
+ *
+ * Cada una lleva la condición REAL con la que el panel la habilita:
+ *  - `always`: no tiene puerta de plan en el código (agenda, expediente,
+ *    odontograma, presupuestos/cobros, portal, CBCT, 3D: solo exigen rol).
+ *  - módulo: `plan_configs.features[key]` (lo que oculta el sidebar, ver
+ *    get-active-clinic-modules.ts). Hoy whatsapp/inbox/landing/reports son
+ *    true en los tres planes (seed y fallback), por eso salen como comunes.
+ *  - Sabina: se monta en TODAS las pantallas del panel (dashboard/layout.tsx,
+ *    SabinaLanzador sin moduleKey) y se paga con el Saldo IA de la clínica,
+ *    NO con el cupo de tokens del plan (api/sabina/route.ts §6c). Por eso está
+ *    en Básico aunque sus tokens sean «0 · Sin IA».
+ *
+ * Si una candidata NO se cumple en algún plan, no se pierde: baja a la lista
+ * comparable de cada tarjeta con ✓/✗ (ver splitFeatures).
+ */
+const COMMON_CANDIDATES: {
+  text: string;
+  included: (p: ResolvedPlan) => boolean;
+  /** Abre la lista de CADA tarjeta en ✓ (ajuste 10: filas positivas antes de las que cambian; 8 desde el ajuste 12). */
+  lead?: boolean;
+  /** Texto en la tarjeta cuando lleva cifra del plan (CFDI); en el bloque común va el genérico. */
+  cardText?: (p: ResolvedPlan) => string;
+}[] = [
+  { text: 'Agenda + recordatorios por WhatsApp', included: (p) => hasModule(p, 'whatsapp'), lead: true },
+  { text: 'Sabina, tu asistente del panel (con Saldo IA)', included: () => true, lead: true },
+  { text: 'Expediente clínico + odontograma', included: () => true, lead: true },
+  { text: 'Facturación CFDI (timbres incluidos según plan)', included: () => true, lead: true, cardText: (p) => cfdiBullet(p) },
+  { text: 'Portal del paciente y recetas digitales', included: () => true, lead: true },
+  { text: 'Página web de la clínica gratuita', included: (p) => hasModule(p, 'landing'), lead: true },
+  // Ajuste 12 (Rafael): soporte y onboarding son de los TRES planes (antes, exclusivos de Clínica).
+  { text: 'Soporte prioritario', included: () => true, lead: true },
+  { text: 'Onboarding y migración dedicados', included: () => true, lead: true },
+  { text: 'Presupuestos, cobros y factura automática', included: () => true },
+  { text: 'Inbox de mensajes', included: (p) => hasModule(p, 'inbox') },
+  { text: 'Reportes de la clínica', included: (p) => hasModule(p, 'reports') },
+  // Ajuste 12b: CBCT y modelos 3D en UNA entrada (mismos hechos: nube, cortes y
+  // mediciones, modelos, clínica virtual) para que el bloque común quede en 12 y
+  // la rejilla cuadre en 3 y en 2 columnas. Sigue sin mezclarse con la IA.
+  { text: 'CBCT y modelos 3D en el navegador · cortes, mediciones y clínica virtual', included: () => true },
+];
+
+/**
+ * LO QUE CAMBIA — filas comparables, SIEMPRE las mismas y en el MISMO orden en
+ * los tres planes, con ✓/✗ calculado desde el plan. Los números se COMPONEN
+ * con plan_configs; ninguno se escribe a mano.
+ *
+ * IA (ajuste 13, Rafael: «la IA no solo analiza radiografías, que se vea TODO»).
+ * Las OCHO funciones de IA que descuentan el cupo de tokens del plan, cada una
+ * con su ruta (todas llaman a `addAiTokens` y se cortan con `cortarSiIaApagada`;
+ * ver también FUNCIONES_IA en lib/ai-billing/interruptores.ts, `gasta: "cupo"`):
+ *   chat              /api/ai                                 asistente clínico (diagnósticos diferenciales, dosis, notas SOAP, estudios, interacciones)
+ *   dictation         /api/ai/transcribe                      dictado por voz → texto
+ *   consult_assist    /api/consult/ai-assist                  análisis de la consulta (hallazgos, alertas, plan)
+ *   contraindications /api/prescriptions/check-contraindications  revisión de recetas contra alergias y padecimientos
+ *   xray_analysis     /api/xrays/[id]/analyze                 lectura de radiografías 2D
+ *   no_show_prediction /api/analytics/no-shows/predict        predicción de inasistencias
+ *   ai_insight        /api/analytics/ai-insight               explicación de reportes en palabras
+ *   clinic_layout     /api/clinic-layout/optimize             acomodo de las citas del día entre sillones
+ * (homeopathy → /api/homeopatia/suggest-remedies también gasta cupo, pero no es
+ * dental y no se anuncia.) Sabina NO va aquí: se paga con Saldo IA (funciones base).
+ * Texto FINAL aprobado por Rafael (dos filas, para no multiplicar ✗ en Básico):
+ *   1. «Asistente clínico con IA: notas SOAP, dictado por voz y revisión de
+ *      recetas» + cupo de tokens del plan (chat + dictation + contraindications).
+ *   2. «IA en radiografías y predicción de inasistencias» (xray_analysis +
+ *      no_show_prediction).
+ * consult_assist, ai_insight y clinic_layout existen y también gastan cupo,
+ * pero no se nombran en el texto aprobado. Con 0 tokens (Básico) los endpoints
+ * responden «Límite mensual de IA alcanzado» → ✗; el módulo `ai-assistant`
+ * (chat) además está apagado ahí.
  *
  * ⚠️ CBCT/3D vs. IA: la IA de imagen SOLO procesa radiografías 2D
  * (/api/xrays/[id]/analyze rechaza lo que no sea image/*). El visor CBCT es
- * cortes + mediciones, sin IA. No volver a fusionar esos dos bullets.
- * El visor 3D y "Mi Clínica Visual" NO tienen gate de plan hoy (solo exigen rol
- * ADMIN), por eso salen incluidos también en Básico.
+ * cortes + mediciones, sin IA: va en las funciones base, no aquí.
+ *  - Analytics y Pantallas TV: módulos `analytics` / `tv-modes`; hoy van
+ *    juntos (ambos apagados en Básico), por eso son UNA fila. Si algún día
+ *    divergieran en un plan, `analyticsRows` los separa en dos.
  */
-function featuresFor(id: PlanId, p: ResolvedPlan): FeatureRow[] {
-  const cfdi = cfdiBullet(p);
-  if (id === 'BASIC') {
-    return [
-      { text: 'Agenda + recordatorios por WhatsApp', included: true },
-      { text: 'Expediente clínico + odontograma', included: true },
-      { text: cfdi, included: true },
-      { text: 'Presupuestos, cobros y factura automática', included: true },
-      { text: 'Portal del paciente y recetas digitales', included: true },
-      { text: 'CBCT 3D en la nube · visor con cortes y mediciones', included: true },
-      { text: 'Análisis de radiografías 2D con IA', included: false },
-      { text: 'Modelos 3D y clínica virtual', included: true },
-      { text: 'Varias sucursales', included: false },
-    ];
-  }
-  if (id === 'PRO') {
-    return [
-      { text: 'CBCT 3D en la nube · visor con cortes y mediciones', included: true },
-      { text: 'Análisis de radiografías 2D con IA', included: true },
-      { text: `Asistente clínico con IA · ${aiTokensPerMonth(p.aiTokensDefault)}`, included: true },
-      { text: cfdi, included: true },
-      { text: 'Modelos 3D dentales y clínica virtual 3D', included: true },
-      { text: 'Analytics, reportes y TV de sala de espera', included: true },
-      { text: 'Varias sucursales en una cuenta', included: false },
-      { text: 'Roles avanzados y soporte prioritario', included: false },
-    ];
-  }
+const AI_CLINICAL_TEXT = 'Asistente clínico con IA: notas SOAP, dictado por voz y revisión de recetas';
+const COMPARE_ROWS: { text: (p: ResolvedPlan) => string; included: (p: ResolvedPlan) => boolean }[] = [
+  {
+    text: (p) => (p.aiTokensDefault > 0 ? `${AI_CLINICAL_TEXT} · ${aiTokensPerMonth(p.aiTokensDefault)}` : AI_CLINICAL_TEXT),
+    included: (p) => hasModule(p, 'ai-assistant') && p.aiTokensDefault > 0,
+  },
+  { text: () => 'IA en radiografías y predicción de inasistencias', included: (p) => p.aiTokensDefault > 0 },
+];
+
+function analyticsRows(p: ResolvedPlan): FeatureRow[] {
+  const analytics = hasModule(p, 'analytics');
+  const tv = hasModule(p, 'tv-modes');
+  if (analytics === tv) return [{ text: 'Analytics y pantallas TV de sala de espera', included: analytics }];
   return [
-    { text: 'Varias sucursales en una cuenta', included: true },
-    { text: 'Roles y permisos avanzados', included: true },
-    { text: cfdi, included: true },
-    { text: `IA ampliada · ${aiTokensPerMonth(p.aiTokensDefault)}`, included: true },
-    { text: 'Soporte prioritario', included: true },
-    { text: 'Onboarding y migración dedicados', included: true },
+    { text: 'Analytics de la clínica', included: analytics },
+    { text: 'Pantallas TV de sala de espera', included: tv },
   ];
 }
 
+/**
+ * EXCLUSIVO de un plan (ajuste 10): se pinta SOLO en el plan que lo tiene, como
+ * ✓ normales al final de su lista (10b: sin rótulo); nunca como ✗ en los
+ * demás.
+ * Ajuste 12 (Rafael): fuera «Roles y permisos avanzados» (los roles no tienen
+ * límite en ningún plan: no es diferencia); soporte y onboarding pasan a
+ * funciones base. Queda «Reportes consolidados y comparación entre sedes»,
+ * que Rafael decidió anunciar: solo en planes con más de una sede, leído de
+ * plan_configs.maxClinics (NULL = ilimitadas).
+ */
+const EXCLUSIVE_ROWS: { text: string; included: (p: ResolvedPlan) => boolean }[] = [
+  { text: 'Reportes consolidados y comparación entre sedes', included: (p) => p.maxClinics == null || p.maxClinics > 1 },
+];
+
+/**
+ * Arma la lista de cada tarjeta (ver PlanCard.features) y la lista común.
+ *  - Las candidatas que cumplen en TODOS los planes van a «Incluido en todos»;
+ *    las marcadas `lead` abren además cada tarjeta en ✓.
+ *  - Las que NO cumplen en algún plan no se pierden: van con ✓/✗ tras las
+ *    filas comparables.
+ */
+function splitFeatures(plans: ResolvedPlan[]): { includedInAll: string[]; rowsFor: (p: ResolvedPlan) => FeatureRow[] } {
+  const inAll = COMMON_CANDIDATES.filter((c) => plans.every((p) => c.included(p)));
+  const lead = inAll.filter((c) => c.lead);
+  const notInAll = COMMON_CANDIDATES.filter((c) => !inAll.includes(c));
+  return {
+    includedInAll: inAll.map((c) => c.text),
+    rowsFor: (p) => {
+      const exclusive: FeatureRow[] = EXCLUSIVE_ROWS.filter((r) => r.included(p)).map((r) => ({ text: r.text, included: true }));
+      return [
+        ...lead.map((c) => ({ text: c.cardText ? c.cardText(p) : c.text, included: true })),
+        ...COMPARE_ROWS.map((r) => ({ text: r.text(p), included: r.included(p) })),
+        ...analyticsRows(p),
+        ...notInAll.map((c) => ({ text: c.cardText ? c.cardText(p) : c.text, included: c.included(p) })),
+        ...exclusive,
+      ];
+    },
+  };
+}
+
 export function buildPlanCards(plans: ResolvedPlan[]): PlanCard[] {
-  return plans.map((p) => {
+  const { includedInAll, rowsFor } = splitFeatures(plans);
+  return plans.map((p, i) => {
     const copy = CARD_COPY[p.id];
     const yearlyFull = p.priceMxnMonthly * 12;
     return {
@@ -188,10 +326,14 @@ export function buildPlanCards(plans: ResolvedPlan[]): PlanCard[] {
       capacity: [
         { text: 'Pacientes', value: unlimited(p.maxPatients), included: true },
         { text: 'Usuarios', value: unlimited(p.maxUsers), included: true },
+        // Sedes (ajuste 9): maxClinics de plan_configs (NULL = ilimitadas).
+        { text: 'Sedes', value: formatSedes(p.maxClinics), included: true },
         { text: 'Almacenamiento', value: storage(p.storageBytes), included: true },
         { text: 'Tokens IA', value: formatAiTokens(p.aiTokensDefault), included: p.aiTokensDefault > 0 },
       ],
-      features: featuresFor(p.id, p),
+      features: rowsFor(p),
+      includedInAll,
+      previousPlanLabel: i > 0 ? plans[i - 1].label : null,
     };
   });
 }
