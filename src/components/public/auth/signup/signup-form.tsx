@@ -15,6 +15,7 @@ import type { Billing, PlanId } from "./plan-card";
 import { isPlanId } from "@/lib/billing/plans";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { trackSignupConversionAndRedirect } from "@/lib/gtag";
+import { guardarEleccionAlta } from "@/lib/billing/eleccion-alta";
 
 interface SignupState {
   // Step 1
@@ -239,6 +240,10 @@ export function SignupForm() {
       // pantalla de activación: mandamos DIRECTO a /dashboard/suspended (no a
       // /dashboard, así no pasa por el gating ni ve modal alguno) donde elige
       // plan, método y paga. El webhook activa la cuenta al confirmar el pago.
+      // Plan y periodo elegidos aquí, en el navegador (el alta no persiste el
+      // periodo): la pantalla de pago arranca con ese periodo en vez de
+      // volver a preguntarlo. Caduca a los 7 días y se borra al iniciar el pago.
+      guardarEleccionAlta({ plan: form.plan, billing: form.billing });
       toast.success("¡Cuenta creada! Elige cómo pagar para activar tu plan.");
       trackSignupConversionAndRedirect("/dashboard/suspended");
       return;

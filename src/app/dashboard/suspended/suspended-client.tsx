@@ -6,6 +6,7 @@ import { CreditCard, Loader2, Lock, Check } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
 import { useT } from "@/i18n/i18n-provider";
+import { borrarEleccionAlta, leerEleccionAlta } from "@/lib/billing/eleccion-alta";
 import { PlanesSuspendida } from "@/components/dashboard/cuenta-rediseno/planes-suspendida";
 
 export interface PlanCardData {
@@ -87,6 +88,17 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
     };
   }, []);
 
+  // Periodo elegido en el alta (guardado en el navegador por signup-form, no
+  // en la base): en compra nueva el conmutador arranca ahí en vez de volver a
+  // preguntarlo. Sigue visible y se puede cambiar; sin dato o caducado (7
+  // días), Mensual como siempre. En reactivación (resumenInicial=false) no se
+  // mira. Va en un efecto y no en el useState para no desalinear la hidratación.
+  useEffect(() => {
+    if (!resumenInicial) return;
+    const eleccion = leerEleccionAlta();
+    if (eleccion && eleccion.plan === currentPlan && eleccion.billing === "annual") setBilling("annual");
+  }, [resumenInicial, currentPlan]);
+
   // Plan recomendado (upsell). Sin plan actual válido, sugiere PRO (popular).
   const recommendedPlan: PlanId | null = currentPlan ? NEXT_PLAN[currentPlan] : "PRO";
 
@@ -137,6 +149,8 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
       if (!res.ok || !data.url) {
         throw new Error(data.error ?? t("pages.suspended.checkoutError"));
       }
+      // Pago iniciado: la elección del alta ya cumplió; fuera del navegador.
+      borrarEleccionAlta();
       window.location.href = data.url;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("pages.suspended.checkoutError"));
