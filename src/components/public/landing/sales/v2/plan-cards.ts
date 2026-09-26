@@ -34,8 +34,6 @@ export interface CapacityRow {
 export interface FeatureRow {
   text: string;
   included: boolean;
-  /** Rótulo de grupo que se pinta ANTES de esta fila («Y además, solo en Clínica»). */
-  groupLabel?: string;
 }
 
 export interface PlanCard {
@@ -69,8 +67,9 @@ export interface PlanCard {
    * (1) seis funciones base en ✓ (las más vendedoras, las mismas en las tres);
    * (2) lo que cambia entre planes con ✓/✗ calculado (asistente IA ·
    * radiografías con IA · analytics + TV); (3) lo exclusivo de un plan SOLO en
-   * ese plan, en ✓, bajo el rótulo «Y además, solo en …» (nunca como ✗ en los
-   * demás). Básico queda con 6 ✓ y 3 ✗; Profesional 9 ✓; Clínica 12 ✓.
+   * ese plan, como ✓ normales al final (ajuste 10b: sin rótulo ni separador;
+   * nunca como ✗ en los demás). Básico queda con 6 ✓ y 3 ✗; Profesional 9 ✓;
+   * Clínica 12 ✓.
    */
   features: FeatureRow[];
   /**
@@ -233,10 +232,10 @@ function analyticsRows(p: ResolvedPlan): FeatureRow[] {
 }
 
 /**
- * EXCLUSIVO de un plan (ajuste 10): se pinta SOLO en el plan que lo tiene, en
- * ✓ y bajo «Y además, solo en <plan>»; nunca como ✗ en los demás. Sin puerta
- * en el código: es el compromiso comercial del plan Clínica (como decían las
- * tarjetas antes del ajuste 9).
+ * EXCLUSIVO de un plan (ajuste 10): se pinta SOLO en el plan que lo tiene, como
+ * ✓ normales al final de su lista (10b: sin rótulo); nunca como ✗ en los
+ * demás. Sin puerta en el código: es el compromiso comercial del plan Clínica
+ * (como decían las tarjetas antes del ajuste 9).
  */
 const EXCLUSIVE_ROWS: { text: string; included: (p: ResolvedPlan) => boolean }[] = [
   { text: 'Roles y permisos avanzados', included: (p) => p.id === 'CLINIC' },
@@ -259,7 +258,6 @@ function splitFeatures(plans: ResolvedPlan[]): { includedInAll: string[]; rowsFo
     includedInAll: inAll.map((c) => c.text),
     rowsFor: (p) => {
       const exclusive: FeatureRow[] = EXCLUSIVE_ROWS.filter((r) => r.included(p)).map((r) => ({ text: r.text, included: true }));
-      if (exclusive.length > 0) exclusive[0].groupLabel = `Y además, solo en ${p.label}`;
       return [
         ...lead.map((c) => ({ text: c.cardText ? c.cardText(p) : c.text, included: true })),
         ...COMPARE_ROWS.map((r) => ({ text: r.text(p), included: r.included(p) })),

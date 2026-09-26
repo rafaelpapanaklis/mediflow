@@ -27,7 +27,7 @@ import type { PlanCard } from "./plan-cards";
  * Ajuste 9/10 (Rafael): las funciones se leen de un vistazo y se comparan.
  * Cada tarjeta abre con seis funciones base en ✓ (las mismas y en el mismo
  * orden), sigue con lo que cambia entre planes (✓/✗ calculado) y cierra con
- * lo exclusivo del plan bajo «Y además, solo en …» (plan-cards.ts →
+ * lo exclusivo del plan como ✓ normales (10b: sin rótulo; plan-cards.ts →
  * splitFeatures). Las funciones base completas van UNA sola vez debajo de las
  * tarjetas, en «Incluido en todos los planes»
  * (`includedInAll`, derivado de los flags de módulo de plan_configs). Cada
@@ -151,9 +151,7 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
 
               <ul className="dcv4-price__feats">
                 {p.features.map((f) => (
-                  <li key={f.text} className={`dcv4-price__feat${f.included ? "" : " is-off"}${f.groupLabel ? " has-group" : ""}`}>
-                    {/* Ajuste 10: rótulo «Y además, solo en Clínica» antes de lo exclusivo del plan. */}
-                    {f.groupLabel && <span className="dcv4-price__group">{f.groupLabel}</span>}
+                  <li key={f.text} className={`dcv4-price__feat${f.included ? "" : " is-off"}`}>
                     <Check on={f.included} />
                     <span className="dcv4-sr">{f.included ? "Incluido:" : "No incluido:"}</span>
                     <span>{f.text}</span>
