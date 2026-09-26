@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { instrumentSans, materialSymbols } from "@/fonts/menu";
 import { BENTO, FUNCIONES_V3_HEADER, LINEA, NOTA_IA, PAGINA_WEB, REJILLA, REJILLA_TITULO } from "./funciones-v3-data";
@@ -27,6 +26,11 @@ import "./funciones-v3.css";
  * web gratuita dice sus cuatro hechos como píldoras con ícono; las cuatro
  * estrella llevan la ilustración ARRIBA, protagonista, y debajo título +
  * una línea; la rejilla vuelve a 4 × 2 como la referencia A.
+ *
+ * Ajuste 2 (Rafael): SIN enlaces a páginas secundarias. Fuera los cuatro
+ * «Más información» a las páginas de módulo; el único CTA es «Ver planes»,
+ * al ancla #precios de esta misma página. Las páginas de módulo siguen
+ * existiendo; solo dejan de enlazarse desde aquí.
  */
 
 const ILUSTRACION: Record<(typeof BENTO)[number]["ilustracion"], ReactNode> = {
@@ -76,9 +80,6 @@ export function Funciones() {
               <div className="dcf3-card__tx">
                 <h3 className="dcv4-balance dcf3-card__h3">{f.title}</h3>
                 <p className="dcf3-card__p">{LINEA[f.id] ?? f.desc}</p>
-                <Link href={f.href} className="dcf3-card__more">
-                  Más información <IconoPanel nombre="chevron_right" size={18} />
-                </Link>
               </div>
             </article>
           ))}
