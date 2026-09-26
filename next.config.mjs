@@ -142,6 +142,21 @@ const nextConfig = {
           },
         ],
       },
+      // Dientes 3D del odontograma y su decodificador Draco: caché de un año, inmutable.
+      // Sin esto Vercel sirve `public/` con `max-age=0, must-revalidate` y el navegador
+      // revalida cada .glb (un viaje por diente). Es seguro porque el contenido va versionado:
+      //   · los .glb se piden con `?v=MODEL_VERSION` (tooth3d-model.ts): al cambiarlos se sube la versión;
+      //   · el decodificador no admite query: si cambia, se renombra la carpeta public/odontograma/draco/.
+      // Dos entradas exactas (no `/odontograma/:path*`): solo estas dos carpetas son inmutables.
+      // Se suman a la de `/:path*` de arriba (CSP y demás), no la sustituyen: aquí solo va Cache-Control.
+      {
+        source: "/odontograma/dientes-3d/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+      {
+        source: "/odontograma/draco/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
 };
