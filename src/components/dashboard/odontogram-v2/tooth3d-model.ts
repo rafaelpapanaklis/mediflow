@@ -12,19 +12,37 @@
    - Cara vestibular hacia +Z.
    - Lado derecho del paciente (cuadrantes 1, 4, 5, 8) = espejo del izquierdo.
 
-   Los .glb NO viajan en git (91 MB): viven en public/odontograma/dientes-3d/
-   sin seguimiento. Si un modelo no carga, Tooth3D cae al diente procedural.
+   Los .glb SÍ viajan en git, comprimidos (12.5 MB los 52; los originales
+   de Dundee pesaban 94.5 MB y NO están en el repo): geometría con Draco
+   (KHR_draco_mesh_compression, posiciones a 14 bits, normales a 10, UV a
+   12, color a 8 — la malla no se simplifica: mismos triángulos) y texturas
+   en WebP a 1024 px (EXT_texture_webp). Se eligió Draco y no meshopt
+   porque Vercel NO comprime `model/gltf-binary` con gzip/brotli (no está en
+   su lista de MIME comprimibles), así que cuenta el byte crudo: Draco deja
+   un molar en 0.26 MB y meshopt en 0.39 MB. El decodificador (wasm + wrapper
+   de three, 250 KB) se sirve desde public/odontograma/draco/ y se baja una
+   sola vez por sesión. Si un modelo no carga, Tooth3D cae al diente
+   procedural.
+
+   Caché HTTP: la URL lleva ?v=MODEL_VERSION. Súbela cuando cambien los .glb
+   para que un navegador con caché larga (immutable) pida los nuevos. El
+   decodificador no admite query: si cambia, cambia el nombre de su carpeta.
    ============================================================ */
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import type { ToothMeta } from "./types";
 import { classifyFaces, type FaceInfo } from "./tooth3d-faces";
 
 export const MODEL_BASE = "/odontograma/dientes-3d";
+/** Versión de los .glb (cambia → nueva URL → se invalida la caché del navegador/CDN). */
+export const MODEL_VERSION = "2026-09-26";
+/** Carpeta con draco_wasm_wrapper.js + draco_decoder.wasm (copiados de three r184). */
+export const DRACO_DECODER_PATH = "/odontograma/draco/";
 export const MODEL_CREDIT = "Modelos 3D: University of Dundee, School of Dentistry — CC BY 4.0";
 
 export function modelUrl(fdi: number): string {
-  return `${MODEL_BASE}/${fdi >= 51 ? "temporales" : "permanentes"}/${fdi}.glb`;
+  return `${MODEL_BASE}/${fdi >= 51 ? "temporales" : "permanentes"}/${fdi}.glb?v=${MODEL_VERSION}`;
 }
 
 /* Longitud de corona (mm, Wheeler) por diente: la fuente del cuello
@@ -122,6 +140,15 @@ export function acquireTooth(meta: ToothMeta, onProgress?: (pct: number) => void
   if (!e) {
     if (!loader) {
       loader = new GLTFLoader();
+      // Geometría Draco: el decodificador corre en Web Workers que
+      // DRACOLoader crea desde un blob: (la CSP ya permite worker-src blob:)
+      // y sus dos archivos se piden a DRACO_DECODER_PATH ('self'). Solo se
+      // sirve la variante wasm; sin WebAssembly el modelo falla y Tooth3D
+      // cae al procedural.
+      const draco = new DRACOLoader();
+      draco.setDecoderPath(DRACO_DECODER_PATH);
+      draco.setDecoderConfig({ type: "wasm" });
+      loader.setDRACOLoader(draco);
       // Las texturas van embebidas en el .glb y GLTFLoader las saca por un
       // blob: URL. Su ImageBitmapLoader las pide con fetch(), y la CSP de la
       // app (connect-src 'self' https: wss:) bloquea blob: → modelo sin
