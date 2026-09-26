@@ -7,8 +7,18 @@ import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
-import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
+import { isPlanExpired } from "@/lib/plan-status";
 import {
+  leerCuentaSpei,
+  rechazoReciente,
+  referenciaDeClinica,
+  solicitudPendienteDe,
+} from "@/lib/billing/spei-directo";
+import { ivaEnCobro } from "@/lib/billing/spei-directo-core";
+import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
+import { EsperaTransferencia } from "@/components/dashboard/cuenta-rediseno/espera-transferencia";
+import {
+  AVISO_ENLACE,
   CabeceraSuspendida,
   PaginaSuspendida,
   VolverAlLogin,
@@ -19,7 +29,7 @@ export const dynamic = "force-dynamic";
 export default async function SuspendedPage({
   searchParams,
 }: {
-  searchParams: { pending?: string };
+  searchParams: { pending?: string; ver?: string };
 }) {
   // Vuelta de un Checkout SPEI/OXXO (asíncrono): el pago aún no se acredita.
   const pending = searchParams?.pending;
@@ -76,7 +86,38 @@ export default async function SuspendedPage({
   // clínica en este mismo request: la lectura de aquí comparte esa consulta en
   // vuelo o cae en la caché de 60 s del interruptor. No es un viaje más a la
   // base. Falla cerrado: apagado, sin tabla o con error → la pantalla de hoy.
-  const rediseno = await menuDosNivelesEncendido(user.clinicId);
+  //
+  // SPEI por transferencia directa: en la MISMA ronda se leen la transferencia
+  // que la clínica ya declaró (pendiente de confirmar), la cuenta bancaria que
+  // el admin configuró y el último rechazo reciente. Los tres por el clinicId
+  // de la sesión. Con una pendiente y la clínica aún sin acceso, se enseña la
+  // pantalla de espera en vez de la de pago (`?ver=pago` deja pagar con tarjeta).
+  const [rediseno, pendienteSpei, cuentaSpei, rechazoSpei] = await Promise.all([
+    menuDosNivelesEncendido(user.clinicId),
+    // Un fallo de estas tres lecturas (timeout del pooler) NO puede tumbar la única pantalla de pago:
+    // sin ellas se ve la pantalla de siempre, con tarjeta y OXXO.
+    solicitudPendienteDe(user.clinicId).catch(() => null),
+    leerCuentaSpei().catch(() => null),
+    rechazoReciente(user.clinicId).catch(() => null),
+  ]);
+  const sinAcceso = isPlanExpired(clinic);
+  const conIva = ivaEnCobro(process.env);
+
+  // Con `?pending=oxxo|spei` (vuelta de un pago de Stripe) NO se enseña la espera: pediría transferir
+  // otra vez a quien acaba de generar su voucher.
+  if (pendienteSpei && sinAcceso && searchParams?.ver !== "pago" && !showPending) {
+    const plan = resolvedPlans.find((p) => p.id === pendienteSpei.plan);
+    return (
+      <RaizCuenta>
+        <EsperaTransferencia
+          solicitud={pendienteSpei}
+          planNombre={plan?.name ?? pendienteSpei.plan}
+          conIva={pendienteSpei.ivaCents > 0}
+          hrefTarjeta="/dashboard/suspended?ver=pago"
+        />
+      </RaizCuenta>
+    );
+  }
 
   if (rediseno) {
     // Mismos textos, mismo orden y mismos elementos que abajo: aviso de pago
@@ -91,6 +132,23 @@ export default async function SuspendedPage({
                 ? t("pages.suspended.pendingPaymentBanner", { method: (pending ?? "").toUpperCase() })
                 : null
             }
+            avisoRechazo={
+              rechazoSpei && !pendienteSpei && sinAcceso
+                ? `Tu transferencia (${rechazoSpei.reference}) no se pudo confirmar${
+                    rechazoSpei.rejectReason ? `: ${rechazoSpei.rejectReason}` : "."
+                  } Puedes intentarlo de nuevo o pagar con tarjeta.`
+                : null
+            }
+            avisoTransferencia={
+              pendienteSpei && sinAcceso ? (
+                <>
+                  Tienes una transferencia esperando confirmación.{" "}
+                  <Link href="/dashboard/suspended" className={AVISO_ENLACE}>
+                    Ver mi transferencia
+                  </Link>
+                </>
+              ) : null
+            }
             reactivacion={isReactivation}
             pildora={pillText}
             titulo={heading}
@@ -102,6 +160,9 @@ export default async function SuspendedPage({
             firstMonthEligible={firstMonthEligible}
             rediseno
             resumenInicial={!isReactivation && currentPlan !== null}
+            cuentaSpei={cuentaSpei}
+            referenciaSpei={cuentaSpei ? referenciaDeClinica(user.clinicId) : null}
+            ivaEnCobro={conIva}
           />
           <VolverAlLogin texto={t("pages.suspended.backToLogin")} />
         </PaginaSuspendida>

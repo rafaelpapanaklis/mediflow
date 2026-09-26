@@ -1,12 +1,13 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowLeft, Check, CheckCircle2, Loader2, Lock, Sparkles } from "lucide-react";
-import s from "./cuenta.module.css";
+import s from "./pago.module.css";
 
 /**
- * Piezas de SERVIDOR de la pantalla de Clínica suspendida rediseñada: el
- * encabezado (aviso de pago pendiente + píldora + título + texto), el enlace
- * de vuelta al login, y las dos caras de la vuelta de Stripe (/success).
+ * Piezas de SERVIDOR de la pantalla de pago (Clínica suspendida) rediseñada con
+ * la marca del registro (pago.module.css): el encabezado (avisos + píldora +
+ * título + texto + recorrido del alta), el enlace de vuelta al login, y las dos
+ * caras de la vuelta de Stripe (/success).
  *
  * Los TEXTOS los decide la página, igual que hoy (`suspended/page.tsx` elige
  * el tono según el estado de la suscripción y `success/page.tsx` traduce con
@@ -16,6 +17,8 @@ import s from "./cuenta.module.css";
 
 export function CabeceraSuspendida({
   avisoPendiente,
+  avisoRechazo = null,
+  avisoTransferencia = null,
   reactivacion,
   pildora,
   titulo,
@@ -23,6 +26,10 @@ export function CabeceraSuspendida({
 }: {
   /** Texto del aviso de SPEI/OXXO pendiente, o null si no aplica. */
   avisoPendiente: string | null;
+  /** «Tu transferencia no se pudo confirmar: …» (SPEI directo rechazado), o null. */
+  avisoRechazo?: string | null;
+  /** «Tienes una transferencia esperando confirmación» + enlace para volver a ella, o null. */
+  avisoTransferencia?: ReactNode;
   /** Cuenta que ya tuvo acceso y se pausó (candado) vs. compra nueva (destello). */
   reactivacion: boolean;
   pildora: string;
@@ -32,8 +39,18 @@ export function CabeceraSuspendida({
   return (
     <>
       {avisoPendiente && (
-        <div className={s.avisoPendiente} role="status">
+        <div className={s.aviso} role="status">
           {avisoPendiente}
+        </div>
+      )}
+      {avisoRechazo && (
+        <div className={`${s.aviso} ${s.avisoPeligro}`} role="alert">
+          {avisoRechazo}
+        </div>
+      )}
+      {avisoTransferencia && (
+        <div className={`${s.aviso} ${s.avisoInfo}`} role="status">
+          {avisoTransferencia}
         </div>
       )}
       <div className={s.cabecera}>
@@ -82,7 +99,7 @@ export function VolverAlLogin({ texto }: { texto: string }) {
   );
 }
 
-/** Contenedor de la pantalla de planes: mismo ancho máximo que hoy (1000 px). */
+/** Contenedor de la pantalla de planes: mismo ancho máximo que hoy (1000 px) y los tokens de la marca. */
 export function PaginaSuspendida({ children }: { children: ReactNode }) {
   return <div className={s.pagina}>{children}</div>;
 }
@@ -124,6 +141,9 @@ export function ResultadoPago({
     </div>
   );
 }
+
+/** Clase del enlace dentro de un aviso (lo monta la página). */
+export const AVISO_ENLACE = s.avisoEnlace;
 
 /** Clases de botón para lo que la página monta dentro de `acciones`. */
 export const CLASE_BOTON = s.boton;
