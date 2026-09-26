@@ -182,26 +182,21 @@ test("sin cuenta bancaria (o con CLABE mala) no se crea ninguna solicitud", asyn
   assert.equal(solicitudes.length, 0);
 });
 
-test("el importe lo pone el servidor: precio del plan, mensual o total anual", async () => {
+test("el importe lo pone el servidor: precio del plan + IVA 16 %, mensual o total anual", async () => {
   const { crearSolicitudSpei } = lib;
+  const m = await crearSolicitudSpei({ clinicId: "cA", userId: "u1", plan: "PRO", billing: "monthly" });
+  assert.equal(m.creada, true);
+  assert.deepEqual([m.solicitud.subtotalCents, m.solicitud.ivaCents, m.solicitud.amountCents], [70000, 11200, 81200]);
+  assert.equal(solicitudes[0].bankSnapshot.clabe, CLABE_DE_PRUEBA, "guarda la cuenta que se le mostró");
+  const a = await crearSolicitudSpei({ clinicId: "cB", plan: "CLINIC", billing: "annual" });
+  assert.deepEqual([a.solicitud.subtotalCents, a.solicitud.ivaCents, a.solicitud.amountCents], [936000, 149760, 1085760], "el TOTAL del año + IVA");
+  // No importa el env de Stripe Tax: el IVA se suma igual.
   const antes = process.env.STRIPE_AUTOMATIC_TAX;
-  delete process.env.STRIPE_AUTOMATIC_TAX;
+  process.env.STRIPE_AUTOMATIC_TAX = "true";
   try {
-    const m = await crearSolicitudSpei({ clinicId: "cA", userId: "u1", plan: "PRO", billing: "monthly" });
-    assert.equal(m.creada, true);
-    assert.equal(m.solicitud.amountCents, 70000);
-    assert.equal(m.solicitud.ivaCents, 0);
-    assert.equal(solicitudes[0].bankSnapshot.clabe, CLABE_DE_PRUEBA, "guarda la cuenta que se le mostró");
-    const a = await crearSolicitudSpei({ clinicId: "cB", plan: "CLINIC", billing: "annual" });
-    assert.equal(a.solicitud.amountCents, 936000, "el TOTAL del año");
-    // Con IVA en el cobro (STRIPE_AUTOMATIC_TAX=true), se suma el 16 %.
-    process.env.STRIPE_AUTOMATIC_TAX = "true";
     clinicas.set("cC", { id: "cC" });
-    const conIva = await crearSolicitudSpei({ clinicId: "cC", plan: "BASIC", billing: "monthly" });
-    assert.deepEqual(
-      [conIva.solicitud.subtotalCents, conIva.solicitud.ivaCents, conIva.solicitud.amountCents],
-      [30000, 4800, 34800],
-    );
+    const c = await crearSolicitudSpei({ clinicId: "cC", plan: "BASIC", billing: "monthly" });
+    assert.deepEqual([c.solicitud.subtotalCents, c.solicitud.ivaCents, c.solicitud.amountCents], [30000, 4800, 34800]);
   } finally {
     if (antes === undefined) delete process.env.STRIPE_AUTOMATIC_TAX;
     else process.env.STRIPE_AUTOMATIC_TAX = antes;
@@ -221,13 +216,12 @@ test("una pendiente por clínica: el doble clic devuelve la misma y no avisa dos
 
 test("declarar de nuevo con OTRO periodo actualiza la pendiente: la solicitud dice lo que la clínica ve y copió", async () => {
   const { crearSolicitudSpei } = lib;
-  delete process.env.STRIPE_AUTOMATIC_TAX;
   const a = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
   const b = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "annual" });
   assert.equal(b.solicitud.id, a.solicitud.id, "sigue siendo UNA fila");
   assert.equal(solicitudes.length, 1);
   assert.equal(b.solicitud.billing, "annual");
-  assert.equal(b.solicitud.amountCents, 546000, "el importe del anual, no el viejo");
+  assert.equal(b.solicitud.amountCents, 633360, "el importe del anual (+ IVA), no el viejo");
   assert.equal(b.creada, true);
   const c = await crearSolicitudSpei({ clinicId: "cA", plan: "CLINIC", billing: "annual" });
   assert.equal(c.solicitud.plan, "CLINIC");
@@ -247,13 +241,12 @@ test("una pendiente vieja (>30 días) ya no tapa la pantalla de pago y declarar 
 
 test("si el precio cambió mientras la clínica miraba la pantalla, 409 y no se crea nada", async () => {
   const { crearSolicitudSpei } = lib;
-  delete process.env.STRIPE_AUTOMATIC_TAX;
   await assert.rejects(
     () => crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly", amountCentsEsperado: 60000 }),
     (e: any) => e.codigo === "precio-cambio",
   );
   assert.equal(solicitudes.length, 0);
-  const ok = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly", amountCentsEsperado: 70000 });
+  const ok = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly", amountCentsEsperado: 81200 });
   assert.equal(ok.creada, true);
 });
 
@@ -356,7 +349,7 @@ test("confirmar un anual extiende UN AÑO", async () => {
   const r = await confirmarSolicitudSpei(solicitud.id, "admin1");
   const dias = Math.round((r.periodEnd.getTime() - Date.now()) / 86_400_000);
   assert.ok(dias >= 364 && dias <= 366, `un año (${dias} días)`);
-  assert.equal(facturas[0].amount, 2340);
+  assert.equal(facturas[0].amount, 2714.4, "la factura guarda el total con IVA");
 });
 
 test("confirmar por adelantado SUMA los días que le quedaban", async () => {

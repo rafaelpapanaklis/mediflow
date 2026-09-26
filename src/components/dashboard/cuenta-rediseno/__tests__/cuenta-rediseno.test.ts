@@ -296,16 +296,20 @@ test("la pantalla de pago usa la MARCA DEL REGISTRO: los mismos valores de auth-
   assert.ok((cssPago.match(/var\(--pg-/g) ?? []).length > 100, "la hoja lee sus tokens");
 });
 
-test("el botón y los precios dicen LO QUE SE COBRA: el total del año en anual, y «+ IVA» solo si el cobro lo suma", () => {
+test("el botón y los precios dicen LO QUE SE COBRA: el total del año en anual, «+ IVA» siempre y el desglose con el total real", () => {
   const planes = leer("components/dashboard/cuenta-rediseno/planes-suspendida.tsx");
   assert.match(planes, /const cobrado = \(plan: PlanCardData\) => \(anual \? plan\.priceMxnAnnual : plan\.priceMxn\);/, "anual = priceMxnAnnual (el unitAmount del checkout)");
-  assert.match(planes, /const iva = v\.ivaEnCobro \? " \+ IVA" : "";/, "«+ IVA» depende del interruptor real del cobro");
-  assert.match(planes, /Pagar \$\{v\.selected\.name\} — \$\{fmt\(cobrado\(v\.selected\)\)\} \$\{unidad\}/, "el botón dice el total y su periodo");
-  // Ya no se pinta el mensual equivalente como si fuera lo que se cobra.
+  assert.match(planes, /const iva = " \+ IVA";/, "todo pago nuevo lleva IVA: cada importe lo dice");
+  // El desglose sale de la MISMA función que el importe SPEI y que el cálculo de Stripe.
+  assert.match(planes, /desgloseConIva\(/);
+  assert.match(planes, /FIRST_MONTH_PROMO_MXN\[v\.selected\.id\] \* 100/, "con la promo, el IVA va sobre lo que se cobra");
+  assert.ok(planes.includes("IVA 16 %") && planes.includes("Total a pagar"), "subtotal + IVA = total a la vista");
+  assert.match(planes, /Pagar \$\{v\.selected\.name\} — \$\{centavosAMxn\(cobroNuevo\.totalCents\)\} \$\{unidad\}/, "el botón dice el TOTAL con IVA y su periodo");
   assert.ok(!/ctaPrice\)\}\/mes/.test(planes), "el botón ya no dice «$X/mes» en anual");
-  // La página decide el IVA con la MISMA condición del checkout.
+  // Sin IVA configurado la pantalla lo dice y no deja pulsar.
+  assert.match(planes, /disabled=\{v\.isRedirecting \|\| !v\.cobroConIvaListo\}/);
   const page = leer("app/dashboard/suspended/page.tsx");
-  assert.match(page, /ivaEnCobro\(process\.env\)/);
+  assert.match(page, /const cobroConIvaListo = ivaParaCobro\(process\.env\)\.ok;/);
 });
 
 test("SPEI directo: se ofrece solo con cuenta utilizable, con datos, importe y referencia copiables", () => {

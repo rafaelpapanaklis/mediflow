@@ -1,0 +1,313 @@
+/**
+ * COBRO NUEVO CON IVA 16 % — la ruta de checkout DE VERDAD (ws1-t3, ajuste 1).
+ *
+ * Run: npm run test:iva-cobro
+ *
+ * Se ejecuta el handler real de POST /api/billing/checkout con un Stripe
+ * SIMULADO (⛔ nada sale contra Stripe: el doble apunta lo que habría mandado) y
+ * un doble de prisma. Se prueba:
+ *   · tarjeta mensual y anual, OXXO y el «spei» de Stripe: la línea del plan lleva
+ *     la tasa manual de IVA (`tax_rates`) y el precio sigue siendo el de siempre;
+ *   · la promo del primer mes y el IVA sobre ella;
+ *   · sin IVA configurado NO se crea ninguna sesión (503) y NO se crea nada más;
+ *   · con Stripe Tax (env) se usa `automatic_tax` y NUNCA la tasa manual;
+ *   · quien YA tiene suscripción de tarjeta viva va al portal como siempre, sin
+ *     sesión nueva y sin depender del env de IVA;
+ *   · las suscripciones existentes NO se tocan: ni renovaciones, ni webhook, ni
+ *     `subscriptions.update` con tasas.
+ */
+import Module from "node:module";
+import path from "node:path";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { test, before, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { desgloseConIva } from "@/lib/billing/iva-cobro";
+
+const RAIZ = path.resolve(__dirname, "../../../../..");
+const TASA = "txr_1PabcdefghijklmnOP";
+
+/* ── doble de Stripe ───────────────────────────────────────────────────── */
+let sesiones: any[];
+let cupones: any[];
+let llamadasProhibidas: string[];
+let suscripcionViva: any;
+
+const stripeDoble: any = {
+  customers: { create: async () => ({ id: "cus_falso" }) },
+  checkout: {
+    sessions: {
+      create: async (p: any) => {
+        sesiones.push(p);
+        return { id: "cs_falso", url: "https://checkout.stripe.test/cs_falso" };
+      },
+    },
+  },
+  subscriptions: {
+    retrieve: async () => suscripcionViva,
+    update: async () => { llamadasProhibidas.push("subscriptions.update"); return {}; },
+    cancel: async () => { llamadasProhibidas.push("subscriptions.cancel"); return {}; },
+    create: async () => { llamadasProhibidas.push("subscriptions.create"); return {}; },
+  },
+  billingPortal: { sessions: { create: async () => ({ url: "https://portal.stripe.test/x" }) } },
+  coupons: {
+    retrieve: async () => { const e: any = new Error("no existe"); e.statusCode = 404; throw e; },
+    create: async (c: any) => { cupones.push(c); return c; },
+  },
+  taxRates: { create: async () => { llamadasProhibidas.push("taxRates.create"); return {}; } },
+};
+
+/* ── doble de prisma y de las dependencias ─────────────────────────────── */
+let clinica: any;
+let auditorias: any[];
+const PLANES: Record<string, any> = {
+  BASIC: { id: "BASIC", name: "Básico", priceMxn: 419, priceMxnMonthly: 419, priceMxnAnnual: 3264 },
+  PRO: { id: "PRO", name: "Profesional", priceMxn: 689, priceMxnMonthly: 689, priceMxnAnnual: 5376 },
+  CLINIC: { id: "CLINIC", name: "Clínica", priceMxn: 1719, priceMxnMonthly: 1719, priceMxnAnnual: 13404 },
+};
+
+const prismaDoble: any = {
+  clinic: {
+    findUnique: async () => clinica,
+    update: async ({ data }: any) => Object.assign(clinica, data),
+  },
+};
+
+const dobles = new Map<string, unknown>();
+type M = typeof Module & {
+  _load: (req: string, parent: unknown, isMain: boolean) => unknown;
+  _resolveFilename: (req: string, parent: unknown, isMain: boolean) => string;
+};
+const Mod = Module as M;
+const cargaOriginal = Mod._load;
+Mod._load = function (req, parent, isMain) {
+  if (req === "server-only" || req === "client-only") return {};
+  let resuelto: string | null = null;
+  try {
+    resuelto = Mod._resolveFilename(req, parent, isMain);
+  } catch {
+    resuelto = null;
+  }
+  if (resuelto && dobles.has(resuelto)) return dobles.get(resuelto);
+  return cargaOriginal.call(this, req, parent, isMain);
+};
+
+let POST: (req: any) => Promise<Response>;
+
+before(async () => {
+  dobles.set(path.join(RAIZ, "src/lib/prisma.ts"), { prisma: prismaDoble });
+  dobles.set(path.join(RAIZ, "src/lib/auth.ts"), {
+    getCurrentUser: async () => ({ id: "u1", email: "u@ejemplo.mx", clinicId: "cA" }),
+  });
+  dobles.set(path.join(RAIZ, "src/lib/stripe.ts"), {
+    getStripeSafe: () => stripeDoble,
+    stripeUnavailableResponse: () => ({ error: "Stripe no configurado" }),
+  });
+  dobles.set(path.join(RAIZ, "src/lib/plans.ts"), { getResolvedPlan: async (id: string) => PLANES[id] });
+  dobles.set(path.join(RAIZ, "src/lib/audit.ts"), {
+    logAudit: async (a: any) => { auditorias.push(a); },
+    extractAuditMeta: () => ({ ipAddress: "10.0.0.1", userAgent: "prueba" }),
+  });
+  ({ POST } = await import("@/app/api/billing/checkout/route"));
+});
+
+const ENV_ANTES = { ...process.env };
+beforeEach(() => {
+  sesiones = [];
+  cupones = [];
+  auditorias = [];
+  llamadasProhibidas = [];
+  suscripcionViva = null;
+  clinica = {
+    id: "cA", name: "Clínica A", email: "a@ejemplo.mx", stripeCustomerId: "cus_a", stripeSubscriptionId: null,
+    subscriptionId: null, nextBillingDate: new Date("2026-01-01"),
+  };
+  delete process.env.STRIPE_AUTOMATIC_TAX;
+  process.env.STRIPE_IVA_TAX_RATE_ID = TASA;
+  process.env.NEXT_PUBLIC_APP_URL = "https://app.test";
+});
+test.after?.(() => { process.env = ENV_ANTES; });
+
+async function pagar(body: object) {
+  const req: any = { json: async () => body, url: "https://app.test/api/billing/checkout", headers: new Headers() };
+  const res = await POST(req);
+  return { res, json: (await res.json().catch(() => ({}))) as any };
+}
+
+/* ── tarjeta, OXXO y el «spei» de Stripe ───────────────────────────────── */
+
+for (const plan of ["BASIC", "PRO", "CLINIC"] as const) {
+  for (const billing of ["monthly", "annual"] as const) {
+    test(`tarjeta ${plan} ${billing}: suscripción NUEVA con la tasa de IVA en la línea y el precio de siempre`, async () => {
+      const { res, json } = await pagar({ plan, method: "card", billing });
+      assert.equal(res.status, 200);
+      assert.ok(json.url);
+      assert.equal(sesiones.length, 1);
+      const s = sesiones[0];
+      assert.equal(s.mode, "subscription");
+      assert.equal(s.line_items.length, 1);
+      const linea = s.line_items[0];
+      assert.deepEqual(linea.tax_rates, [TASA], "el IVA 16 % va desglosado por Stripe");
+      const precio = billing === "annual" ? PLANES[plan].priceMxnAnnual : PLANES[plan].priceMxn;
+      assert.equal(linea.price_data.unit_amount, precio * 100, "el subtotal es el de siempre: el IVA va APARTE");
+      assert.equal(linea.price_data.recurring.interval, billing === "annual" ? "year" : "month");
+      assert.equal(s.automatic_tax, undefined, "no Stripe Tax");
+      // Y el desglose que la pantalla enseña coincide con lo que Stripe calculará (16 % del subtotal).
+      const d = desgloseConIva(precio * 100);
+      assert.equal(d.totalCents, precio * 100 + Math.round(precio * 16));
+    });
+  }
+}
+
+test("OXXO: pago único con la tasa de IVA en la línea", async () => {
+  const { res } = await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
+  assert.equal(res.status, 200);
+  const s = sesiones[0];
+  assert.equal(s.mode, "payment");
+  assert.deepEqual(s.payment_method_types, ["oxxo"]);
+  assert.deepEqual(s.line_items[0].tax_rates, [TASA]);
+  assert.equal(s.line_items[0].price_data.unit_amount, 68900);
+});
+
+test("OXXO anual: el total del año, con IVA aparte", async () => {
+  await pagar({ plan: "CLINIC", method: "oxxo", billing: "annual" });
+  assert.equal(sesiones[0].line_items[0].price_data.unit_amount, 1340400);
+  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
+});
+
+test("el «spei» de Stripe (por API, en curso o antiguo) también lleva IVA: todo cobro nuevo por plan", async () => {
+  await pagar({ plan: "BASIC", method: "spei", billing: "monthly" });
+  const s = sesiones[0];
+  assert.deepEqual(s.payment_method_types, ["customer_balance"]);
+  assert.deepEqual(s.line_items[0].tax_rates, [TASA]);
+});
+
+/* ── promo del primer mes ──────────────────────────────────────────────── */
+
+test("promo del primer mes: el cupón baja el SUBTOTAL a $29 y el IVA se calcula sobre lo que se cobra ($33.64)", async () => {
+  clinica.nextBillingDate = null; // primera contratación
+  await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  const s = sesiones[0];
+  assert.equal(cupones.length, 1);
+  assert.equal(cupones[0].amount_off, 68900 - 2900, "cupón por importe fijo: descuenta antes del impuesto");
+  assert.deepEqual(s.discounts, [{ coupon: cupones[0].id }]);
+  assert.deepEqual(s.line_items[0].tax_rates, [TASA]);
+  assert.equal(s.line_items[0].price_data.unit_amount, 68900, "la línea sigue al precio de lista; el cupón la deja en $29");
+  assert.deepEqual(desgloseConIva(2900), { subtotalCents: 2900, ivaCents: 464, totalCents: 3364 });
+});
+
+/* ── sin IVA configurado ───────────────────────────────────────────────── */
+
+test("sin STRIPE_IVA_TAX_RATE_ID ni Stripe Tax: 503 claro y NO se crea ninguna sesión", async () => {
+  delete process.env.STRIPE_IVA_TAX_RATE_ID;
+  for (const method of ["card", "oxxo", "spei"]) {
+    const { res, json } = await pagar({ plan: "PRO", method, billing: "monthly" });
+    assert.equal(res.status, 503, method);
+    assert.equal(json.code, "IVA_NO_CONFIGURADO");
+    assert.match(json.error, /no está disponible por ahora/);
+  }
+  assert.equal(sesiones.length, 0, "jamás se cobra sin IVA en silencio");
+  assert.equal(cupones.length, 0, "ni siquiera se crea el cupón");
+  assert.equal(auditorias.length, 0);
+});
+
+test("con un id que no es una tasa (p. ej. un price_…) tampoco se cobra", async () => {
+  process.env.STRIPE_IVA_TAX_RATE_ID = "price_1Pabcdefghijk";
+  const { res } = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(res.status, 503);
+  assert.equal(sesiones.length, 0);
+});
+
+/* ── Stripe Tax en el futuro ───────────────────────────────────────────── */
+
+test("con STRIPE_AUTOMATIC_TAX=true: Stripe Tax y NUNCA las dos cosas (no se suma doble)", async () => {
+  process.env.STRIPE_AUTOMATIC_TAX = "true";
+  for (const method of ["card", "oxxo"]) {
+    sesiones = [];
+    await pagar({ plan: "PRO", method, billing: "monthly" });
+    const s = sesiones[0];
+    assert.deepEqual(s.automatic_tax, { enabled: true }, method);
+    assert.equal(s.line_items[0].tax_rates, undefined, method);
+  }
+});
+
+/* ── los que ya pagan ─────────────────────────────────────────────────── */
+
+test("quien YA tiene suscripción de tarjeta viva va al portal como siempre: sin sesión nueva y sin depender del env de IVA", async () => {
+  delete process.env.STRIPE_IVA_TAX_RATE_ID;
+  clinica.stripeSubscriptionId = "sub_viva";
+  suscripcionViva = { status: "active" };
+  const { res, json } = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(res.status, 200);
+  assert.equal(json.portal, true);
+  assert.equal(sesiones.length, 0, "no se crea una segunda suscripción ni se toca la existente");
+  assert.deepEqual(llamadasProhibidas, []);
+});
+
+test("el checkout nunca modifica, cancela ni crea suscripciones ni tasas por API", async () => {
+  await pagar({ plan: "PRO", method: "card", billing: "annual" });
+  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
+  assert.deepEqual(llamadasProhibidas, [], "ni subscriptions.update/cancel/create ni taxRates.create");
+});
+
+/* ── contratos de código: ninguna renovación ni suscripción existente pasa por lo nuevo ── */
+
+const leer = (rel: string) => readFileSync(path.join(RAIZ, rel), "utf8");
+const sinComentarios = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
+function archivosSrc(dir: string, acc: string[] = []): string[] {
+  for (const n of readdirSync(dir)) {
+    const p = path.join(dir, n);
+    const st = statSync(p);
+    if (st.isDirectory()) {
+      if (n === "node_modules" || n === "__tests__") continue;
+      archivosSrc(p, acc);
+    } else if (/\.(ts|tsx)$/.test(n) && !/\.test\./.test(n)) acc.push(p);
+  }
+  return acc;
+}
+
+test("el IVA nuevo solo lo usan los TRES sitios que crean cobros nuevos por plan (checkout, admin×2)", () => {
+  const usan = archivosSrc(path.join(RAIZ, "src"))
+    .filter((f) => /iva-cobro/.test(sinComentarios(readFileSync(f, "utf8"))))
+    .map((f) => path.relative(RAIZ, f).replace(/\\/g, "/"))
+    .filter((f) => !f.startsWith("src/lib/billing/iva-cobro") && !f.startsWith("src/lib/billing/spei-directo") && !f.startsWith("src/components/") && !f.startsWith("src/app/dashboard/suspended/"))
+    .sort();
+  assert.deepEqual(usan, [
+    "src/app/api/admin/stripe/create-subscription/route.ts",
+    "src/app/api/billing/checkout/route.ts",
+    "src/lib/stripe-subscriptions.ts",
+  ]);
+});
+
+test("`tax_rates` solo se escribe en el helper: ni webhooks, ni change-plan, ni pagos manuales lo tocan", () => {
+  const con = archivosSrc(path.join(RAIZ, "src"))
+    .filter((f) => /tax_rates|taxRates|default_tax_rates/.test(sinComentarios(readFileSync(f, "utf8"))))
+    .map((f) => path.relative(RAIZ, f).replace(/\\/g, "/"))
+    .sort();
+  assert.deepEqual(con, ["src/lib/billing/iva-cobro.ts"]);
+});
+
+test("el webhook de Stripe, change-plan y los pagos manuales del admin NO importan el IVA nuevo", () => {
+  for (const rel of [
+    "src/app/api/webhooks/stripe/route.ts",
+    "src/app/api/billing/change-plan/route.ts",
+    "src/app/api/billing/change-plan/preview/route.ts",
+    "src/app/api/admin/billing/route.ts",
+    "src/app/api/admin/subscriptions/route.ts",
+    "src/lib/billing/proration.ts",
+    "src/lib/billing/record-stripe-invoice.ts",
+  ]) {
+    const t = sinComentarios(leer(rel));
+    assert.ok(!/iva-cobro|IVA_TASA|STRIPE_IVA_TAX_RATE_ID/.test(t), `${rel} no debe conocer el IVA nuevo`);
+  }
+});
+
+test("ningún camino de renovación crea sesiones: `subscriptions.update` solo está en change-plan y en pausar/reanudar", () => {
+  const con = archivosSrc(path.join(RAIZ, "src"))
+    .filter((f) => /\.subscriptions\s*\.update\(/.test(sinComentarios(readFileSync(f, "utf8"))))
+    .map((f) => path.relative(RAIZ, f).replace(/\\/g, "/"))
+    .filter((f) => !f.startsWith("src/lib/realty/") && !f.startsWith("src/lib/barber/"))
+    .sort();
+  // Ninguno de esos toca precios/tasas con este ajuste (el test anterior lo garantiza para tax_rates).
+  assert.deepEqual(con, ["src/app/api/billing/change-plan/route.ts", "src/lib/stripe-subscriptions.ts"]);
+});

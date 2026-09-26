@@ -23,6 +23,7 @@ import { FALLBACK_PLAN_CONFIG } from "@/lib/plan-shared";
 import { PLAN_IDS } from "@/lib/billing/plans";
 import { isPlanExpired } from "@/lib/plan-status";
 import { manualPeriodFields } from "@/lib/billing/proration";
+import { ivaDeSubtotalCents } from "./iva-cobro";
 import {
   centavosADecimal,
   centavosAMxn,
@@ -30,7 +31,6 @@ import {
   clabeValida,
   cuentaUsable,
   importeSpei,
-  ivaEnCobro,
   periodoPagado,
   referenciaValida,
   subtotalCentavos,
@@ -71,9 +71,11 @@ test("el importe SPEI es el unitAmount del checkout, por plan y periodo", () => 
     for (const billing of ["monthly", "annual"] as const) {
       const unitAmountDelCheckout = (billing === "annual" ? p.priceMxnAnnual : p.priceMxn) * 100;
       assert.equal(subtotalCentavos(p, billing), unitAmountDelCheckout, `${p.id} ${billing}`);
-      // Sin IVA en el cobro de hoy: se transfiere exactamente el unitAmount.
-      const sinIva = importeSpei({ plan: p, billing, conIva: false });
-      assert.deepEqual(sinIva, { subtotalCents: unitAmountDelCheckout, ivaCents: 0, totalCents: unitAmountDelCheckout });
+      // El subtotal SPEI es exactamente el unitAmount; el IVA 16 % va aparte y siempre.
+      const r = importeSpei({ plan: p, billing });
+      assert.equal(r.subtotalCents, unitAmountDelCheckout);
+      assert.equal(r.ivaCents, ivaDeSubtotalCents(unitAmountDelCheckout));
+      assert.equal(r.totalCents, r.subtotalCents + r.ivaCents);
     }
   }
 });
@@ -92,28 +94,46 @@ test("la promo del primer mes NO aplica a SPEI: ni con IVA ni sin él baja del p
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 2 · El IVA, cuando y como lo suma el checkout
+// 2 · El IVA: SIEMPRE 16 %, sobre el subtotal, redondeado al centavo
 // ═══════════════════════════════════════════════════════════════════════════
-test("el IVA se suma bajo la MISMA condición que el checkout (STRIPE_AUTOMATIC_TAX === 'true')", () => {
-  const checkout = leer("app/api/billing/checkout/route.ts");
-  assert.ok(checkout.includes('const automaticTax = process.env.STRIPE_AUTOMATIC_TAX === "true";'), "la condición del checkout cambió");
-  assert.equal(ivaEnCobro({ STRIPE_AUTOMATIC_TAX: "true" }), true);
-  for (const v of [undefined, "", "false", "TRUE", "1"]) assert.equal(ivaEnCobro({ STRIPE_AUTOMATIC_TAX: v }), false, String(v));
+/** Los planes de hoy (plan_configs de producción): precio mensual y total anual. */
+const HOY = {
+  BASIC: { priceMxn: 419, priceMxnAnnual: 3264 },
+  PRO: { priceMxn: 689, priceMxnAnnual: 5376 },
+  CLINIC: { priceMxn: 1719, priceMxnAnnual: 13404 },
+} as const;
+
+test("SPEI ya no depende de STRIPE_AUTOMATIC_TAX: siempre precio + 16 %", () => {
+  const core = leer("lib/billing/spei-directo-core.ts");
+  assert.ok(!/STRIPE_AUTOMATIC_TAX/.test(core.replace(/\/\*[\s\S]*?\*\//g, "")), "el núcleo SPEI no lee el env");
+  assert.ok(!/conIva/.test(core), "sin interruptor de IVA");
 });
 
-test("con IVA: subtotal + 16 %, en centavos enteros", () => {
-  const i = importeSpei({ plan: { priceMxn: 689, priceMxnAnnual: 5378 }, billing: "monthly", conIva: true });
-  assert.deepEqual(i, { subtotalCents: 68900, ivaCents: 11024, totalCents: 79924 });
-  const a = importeSpei({ plan: { priceMxn: 689, priceMxnAnnual: 5378 }, billing: "annual", conIva: true });
-  assert.equal(a.subtotalCents, 537800);
-  assert.equal(a.totalCents, a.subtotalCents + a.ivaCents);
-  assert.ok(Number.isInteger(a.ivaCents));
-  for (const p of planes) {
-    for (const billing of ["monthly", "annual"] as const) {
-      const r = importeSpei({ plan: p, billing, conIva: true });
-      assert.ok(Number.isInteger(r.totalCents) && r.totalCents > r.subtotalCents, `${p.id} ${billing}`);
-    }
+test("tabla de importes con IVA: los 3 planes, mensual y anual", () => {
+  const esperado: Record<string, [number, number, number, number, number, number]> = {
+    // subtotal mensual, iva mensual, total mensual, subtotal anual, iva anual, total anual — en centavos
+    BASIC: [41900, 6704, 48604, 326400, 52224, 378624],
+    PRO: [68900, 11024, 79924, 537600, 86016, 623616],
+    CLINIC: [171900, 27504, 199404, 1340400, 214464, 1554864],
+  };
+  for (const [id, plan] of Object.entries(HOY)) {
+    const m = importeSpei({ plan, billing: "monthly" });
+    const a = importeSpei({ plan, billing: "annual" });
+    assert.deepEqual([m.subtotalCents, m.ivaCents, m.totalCents, a.subtotalCents, a.ivaCents, a.totalCents], esperado[id], id);
   }
+});
+
+test("redondeo al centavo como Stripe (mitad hacia arriba) y aritmética entera", () => {
+  assert.equal(ivaDeSubtotalCents(2900), 464, "promo PRO $29 → $4.64");
+  assert.equal(ivaDeSubtotalCents(1900), 304);
+  assert.equal(ivaDeSubtotalCents(3900), 624);
+  assert.equal(ivaDeSubtotalCents(3), 0, "0.48 → 0");
+  assert.equal(ivaDeSubtotalCents(4), 1, "0.64 → 1");
+  assert.equal(ivaDeSubtotalCents(3125), 500, "500.0 exacto");
+  assert.equal(ivaDeSubtotalCents(3128), 500, "500.48 → 500");
+  assert.equal(ivaDeSubtotalCents(3129), 501, "500.64 → 501");
+  assert.equal(ivaDeSubtotalCents(0), 0);
+  for (let c = 0; c < 20000; c += 7) assert.ok(Number.isInteger(ivaDeSubtotalCents(c)));
 });
 
 test("formatos: decimal para copiar, MXN para mostrar", () => {
