@@ -1,0 +1,470 @@
+[
+ {
+  "fdi": 11,
+  "tipo": "permanente",
+  "nombre": "Incisivo central superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 23.5,
+  "archivo": "permanentes/11.glb"
+ },
+ {
+  "fdi": 12,
+  "tipo": "permanente",
+  "nombre": "Incisivo lateral superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 22,
+  "archivo": "permanentes/12.glb"
+ },
+ {
+  "fdi": 13,
+  "tipo": "permanente",
+  "nombre": "Canino superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 27,
+  "archivo": "permanentes/13.glb"
+ },
+ {
+  "fdi": 14,
+  "tipo": "permanente",
+  "nombre": "Primer premolar superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 22.5,
+  "archivo": "permanentes/14.glb"
+ },
+ {
+  "fdi": 15,
+  "tipo": "permanente",
+  "nombre": "Segundo premolar superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 22.5,
+  "archivo": "permanentes/15.glb"
+ },
+ {
+  "fdi": 16,
+  "tipo": "permanente",
+  "nombre": "Primer molar superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 20.5,
+  "archivo": "permanentes/16.glb"
+ },
+ {
+  "fdi": 17,
+  "tipo": "permanente",
+  "nombre": "Segundo molar superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 19,
+  "archivo": "permanentes/17.glb"
+ },
+ {
+  "fdi": 18,
+  "tipo": "permanente",
+  "nombre": "Tercer molar superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 17,
+  "archivo": "permanentes/18.glb"
+ },
+ {
+  "fdi": 21,
+  "tipo": "permanente",
+  "nombre": "Incisivo central superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 23.5,
+  "archivo": "permanentes/21.glb"
+ },
+ {
+  "fdi": 22,
+  "tipo": "permanente",
+  "nombre": "Incisivo lateral superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 22,
+  "archivo": "permanentes/22.glb"
+ },
+ {
+  "fdi": 23,
+  "tipo": "permanente",
+  "nombre": "Canino superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 27,
+  "archivo": "permanentes/23.glb"
+ },
+ {
+  "fdi": 24,
+  "tipo": "permanente",
+  "nombre": "Primer premolar superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 22.5,
+  "archivo": "permanentes/24.glb"
+ },
+ {
+  "fdi": 25,
+  "tipo": "permanente",
+  "nombre": "Segundo premolar superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 22.5,
+  "archivo": "permanentes/25.glb"
+ },
+ {
+  "fdi": 26,
+  "tipo": "permanente",
+  "nombre": "Primer molar superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 20.5,
+  "archivo": "permanentes/26.glb"
+ },
+ {
+  "fdi": 27,
+  "tipo": "permanente",
+  "nombre": "Segundo molar superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 19,
+  "archivo": "permanentes/27.glb"
+ },
+ {
+  "fdi": 28,
+  "tipo": "permanente",
+  "nombre": "Tercer molar superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 17,
+  "archivo": "permanentes/28.glb"
+ },
+ {
+  "fdi": 31,
+  "tipo": "permanente",
+  "nombre": "Incisivo central inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 21.5,
+  "archivo": "permanentes/31.glb"
+ },
+ {
+  "fdi": 32,
+  "tipo": "permanente",
+  "nombre": "Incisivo lateral inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 23.5,
+  "archivo": "permanentes/32.glb"
+ },
+ {
+  "fdi": 33,
+  "tipo": "permanente",
+  "nombre": "Canino inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 27,
+  "archivo": "permanentes/33.glb"
+ },
+ {
+  "fdi": 34,
+  "tipo": "permanente",
+  "nombre": "Primer premolar inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 22.5,
+  "archivo": "permanentes/34.glb"
+ },
+ {
+  "fdi": 35,
+  "tipo": "permanente",
+  "nombre": "Segundo premolar inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 22.5,
+  "archivo": "permanentes/35.glb"
+ },
+ {
+  "fdi": 36,
+  "tipo": "permanente",
+  "nombre": "Primer molar inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 21.5,
+  "archivo": "permanentes/36.glb"
+ },
+ {
+  "fdi": 37,
+  "tipo": "permanente",
+  "nombre": "Segundo molar inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 20,
+  "archivo": "permanentes/37.glb"
+ },
+ {
+  "fdi": 38,
+  "tipo": "permanente",
+  "nombre": "Tercer molar inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 18,
+  "archivo": "permanentes/38.glb"
+ },
+ {
+  "fdi": 41,
+  "tipo": "permanente",
+  "nombre": "Incisivo central inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 21.5,
+  "archivo": "permanentes/41.glb"
+ },
+ {
+  "fdi": 42,
+  "tipo": "permanente",
+  "nombre": "Incisivo lateral inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 23.5,
+  "archivo": "permanentes/42.glb"
+ },
+ {
+  "fdi": 43,
+  "tipo": "permanente",
+  "nombre": "Canino inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 27,
+  "archivo": "permanentes/43.glb"
+ },
+ {
+  "fdi": 44,
+  "tipo": "permanente",
+  "nombre": "Primer premolar inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 22.5,
+  "archivo": "permanentes/44.glb"
+ },
+ {
+  "fdi": 45,
+  "tipo": "permanente",
+  "nombre": "Segundo premolar inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 22.5,
+  "archivo": "permanentes/45.glb"
+ },
+ {
+  "fdi": 46,
+  "tipo": "permanente",
+  "nombre": "Primer molar inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 21.5,
+  "archivo": "permanentes/46.glb"
+ },
+ {
+  "fdi": 47,
+  "tipo": "permanente",
+  "nombre": "Segundo molar inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 20,
+  "archivo": "permanentes/47.glb"
+ },
+ {
+  "fdi": 48,
+  "tipo": "permanente",
+  "nombre": "Tercer molar inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 18,
+  "archivo": "permanentes/48.glb"
+ },
+ {
+  "fdi": 51,
+  "tipo": "temporal",
+  "nombre": "Incisivo central superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 16,
+  "archivo": "temporales/51.glb"
+ },
+ {
+  "fdi": 52,
+  "tipo": "temporal",
+  "nombre": "Incisivo lateral superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 15.8,
+  "archivo": "temporales/52.glb"
+ },
+ {
+  "fdi": 53,
+  "tipo": "temporal",
+  "nombre": "Canino superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 19,
+  "archivo": "temporales/53.glb"
+ },
+ {
+  "fdi": 54,
+  "tipo": "temporal",
+  "nombre": "Primer molar superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 15.2,
+  "archivo": "temporales/54.glb"
+ },
+ {
+  "fdi": 55,
+  "tipo": "temporal",
+  "nombre": "Segundo molar superior derecho",
+  "arcada": "superior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 17.5,
+  "archivo": "temporales/55.glb"
+ },
+ {
+  "fdi": 61,
+  "tipo": "temporal",
+  "nombre": "Incisivo central superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 16,
+  "archivo": "temporales/61.glb"
+ },
+ {
+  "fdi": 62,
+  "tipo": "temporal",
+  "nombre": "Incisivo lateral superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 15.8,
+  "archivo": "temporales/62.glb"
+ },
+ {
+  "fdi": 63,
+  "tipo": "temporal",
+  "nombre": "Canino superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 19,
+  "archivo": "temporales/63.glb"
+ },
+ {
+  "fdi": 64,
+  "tipo": "temporal",
+  "nombre": "Primer molar superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 15.2,
+  "archivo": "temporales/64.glb"
+ },
+ {
+  "fdi": 65,
+  "tipo": "temporal",
+  "nombre": "Segundo molar superior izquierdo",
+  "arcada": "superior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 17.5,
+  "archivo": "temporales/65.glb"
+ },
+ {
+  "fdi": 71,
+  "tipo": "temporal",
+  "nombre": "Incisivo central inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 14,
+  "archivo": "temporales/71.glb"
+ },
+ {
+  "fdi": 72,
+  "tipo": "temporal",
+  "nombre": "Incisivo lateral inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 15,
+  "archivo": "temporales/72.glb"
+ },
+ {
+  "fdi": 73,
+  "tipo": "temporal",
+  "nombre": "Canino inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 17.5,
+  "archivo": "temporales/73.glb"
+ },
+ {
+  "fdi": 74,
+  "tipo": "temporal",
+  "nombre": "Primer molar inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 15.8,
+  "archivo": "temporales/74.glb"
+ },
+ {
+  "fdi": 75,
+  "tipo": "temporal",
+  "nombre": "Segundo molar inferior izquierdo",
+  "arcada": "inferior",
+  "lado_paciente": "izquierdo",
+  "longitud_mm": 18.8,
+  "archivo": "temporales/75.glb"
+ },
+ {
+  "fdi": 81,
+  "tipo": "temporal",
+  "nombre": "Incisivo central inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 14,
+  "archivo": "temporales/81.glb"
+ },
+ {
+  "fdi": 82,
+  "tipo": "temporal",
+  "nombre": "Incisivo lateral inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 15,
+  "archivo": "temporales/82.glb"
+ },
+ {
+  "fdi": 83,
+  "tipo": "temporal",
+  "nombre": "Canino inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 17.5,
+  "archivo": "temporales/83.glb"
+ },
+ {
+  "fdi": 84,
+  "tipo": "temporal",
+  "nombre": "Primer molar inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 15.8,
+  "archivo": "temporales/84.glb"
+ },
+ {
+  "fdi": 85,
+  "tipo": "temporal",
+  "nombre": "Segundo molar inferior derecho",
+  "arcada": "inferior",
+  "lado_paciente": "derecho",
+  "longitud_mm": 18.8,
+  "archivo": "temporales/85.glb"
+ }
+]
