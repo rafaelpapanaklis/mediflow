@@ -202,8 +202,10 @@ const COMMON_CANDIDATES: {
   { text: 'Presupuestos, cobros y factura automática', included: () => true },
   { text: 'Inbox de mensajes', included: (p) => hasModule(p, 'inbox') },
   { text: 'Reportes de la clínica', included: (p) => hasModule(p, 'reports') },
-  { text: 'CBCT 3D en la nube · visor con cortes y mediciones', included: () => true },
-  { text: 'Modelos 3D y clínica virtual', included: () => true },
+  // Ajuste 12b: CBCT y modelos 3D en UNA entrada (mismos hechos: nube, cortes y
+  // mediciones, modelos, clínica virtual) para que el bloque común quede en 12 y
+  // la rejilla cuadre en 3 y en 2 columnas. Sigue sin mezclarse con la IA.
+  { text: 'CBCT y modelos 3D en el navegador · cortes, mediciones y clínica virtual', included: () => true },
 ];
 
 /**
