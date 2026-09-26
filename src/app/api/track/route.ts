@@ -10,7 +10,7 @@ import { resolveGeo } from "@/lib/analytics/geo";
 import { parseUserAgent } from "@/lib/analytics/ua";
 import { classifyReferrer } from "@/lib/analytics/referrer";
 import { resolveIdentity } from "@/lib/analytics/identity";
-import { surfaceFromPath, MAX_BATCH } from "@/lib/analytics/constants";
+import { surfaceFromPath, isTrackingIgnored, MAX_BATCH } from "@/lib/analytics/constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,6 +78,12 @@ export async function POST(req: NextRequest) {
   } catch {
     return NO_CONTENT(); // payload inválido → silenciar
   }
+
+  // Lo que ve un paciente (y admin/live) no se registra aunque llegue: un cliente
+  // viejo en caché seguiría mandándolo. Se descarta evento por evento, antes de
+  // tocar la base: ni sesión, ni identidad, ni filas.
+  payload = { ...payload, events: payload.events.filter((e) => !isTrackingIgnored(e.path)) };
+  if (payload.events.length === 0) return NO_CONTENT();
 
   try {
     await ingest(req, payload);
