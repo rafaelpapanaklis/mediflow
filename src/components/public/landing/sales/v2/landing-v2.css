@@ -1004,6 +1004,16 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   .dcv4-price__num, .dcv4-price__line { animation: none; }
   .dcv4-price__thumb { transition: none; }
 }
+/* 1001–1180 px (tres tarjetas de ~313–363 px): las fichas de cupos con menos
+   aire para que «0 · Sin IA» siga en una línea junto a «ALMACENAMIENTO»
+   (a 1024 la columna derecha se quedaba en 97 px y el valor se partía). */
+@media (min-width: 1001px) and (max-width: 1180px) {
+  .dcv4-price__card { padding: 30px 24px 26px; }
+  .dcv4-price__badge { left: 24px; }
+  .dcv4-price__caps { gap: 8px; }
+  .dcv4-price__cap { padding: 10px 10px; }
+  .dcv4-price__capvalue { font-size: 16px; }
+}
 @media (max-width: 480px) {
   .dcv4-price__card { padding: 28px 18px 22px; border-radius: 20px; }
   .dcv4-price__badge { left: 18px; }
