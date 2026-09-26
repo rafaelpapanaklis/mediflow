@@ -1,5 +1,4 @@
-import { GRID_FEATURES, GRID_TITLE, MODULES_TRIO, MODULE_PAGES } from "./landing-data";
-import type { ProductoSlug } from "@/lib/producto/types";
+import { GRID_FEATURES, GRID_TITLE, MODULES_TRIO } from "./landing-data";
 
 /**
  * «Todo el panel» (ajuste 1, 25-sep-2026, ws1-t4): UNA sección que junta el
@@ -15,17 +14,18 @@ import type { ProductoSlug } from "@/lib/producto/types";
 export const TODO_PANEL_COPY = {
   eyebrow: "Todo el panel",
   title: GRID_TITLE,
-  subtitle: "Toca una tarjeta y conoce el módulo a fondo.",
-  /** Lo que se ve en el vídeo de la laptop (alt/aria y reporte). */
-  video: {
-    src: "/landing/videos/panel-recorrido.mp4",
-    poster: "/landing/videos/panel-recorrido.webp",
-    ve: "Recorrido por Administración del panel real: Página web (las 8 plantillas), Equipo, Inventario y Finanzas.",
-  },
+  /**
+   * Los vídeos de la laptop, que se alternan (añadido 2b de Rafael). `ve` es
+   * lo que enseñan (aria-label y reporte).
+   */
+  videos: [
+    { src: "/landing/videos/panel-recorrido.mp4", poster: "/landing/videos/panel-recorrido.webp" },
+    { src: "/landing/videos/panel-recorrido-2.mp4", poster: "/landing/videos/panel-recorrido-2.webp" },
+  ],
+  ve: "Recorrido por el panel real: Página web con la plantilla Especialistas, Equipo y sus permisos, Finanzas; Mi Clínica Visual en 3D y el portal del paciente.",
 };
 
 export interface TarjetaPanel {
-  slug: ProductoSlug;
   /** Ícono de Material Symbols Rounded (recorte del menú del panel). */
   icono: string;
   /** Dos o tres palabras. */
@@ -34,24 +34,17 @@ export interface TarjetaPanel {
   lado: "izq" | "der";
 }
 
-/**
- * Las 8 tarjetas flotantes = las 8 páginas de producto (MODULE_PAGES). El
- * slug va tipado: si alguien inventa uno, no compila.
- */
+/** Las 8 tarjetas flotantes: los 8 módulos (los mismos que tenían página en «Conoce cada módulo»). */
 export const TARJETAS: TarjetaPanel[] = [
-  { slug: "software-agenda-dental", icono: "calendar_month", label: "Agenda + WhatsApp", lado: "izq" },
-  { slug: "expediente-clinico-dental", icono: "assignment", label: "Expediente y odontograma", lado: "izq" },
-  { slug: "portal-del-paciente-dental", icono: "person", label: "Portal del paciente", lado: "izq" },
-  { slug: "caja-y-cobros-clinica-dental", icono: "point_of_sale", label: "Caja y cobros", lado: "izq" },
-  { slug: "facturacion-dental-cfdi", icono: "summarize", label: "Facturación CFDI", lado: "der" },
-  { slug: "radiografias-3d-cbct-dental", icono: "dentistry", label: "Radiografías 3D y CBCT", lado: "der" },
-  { slug: "reportes-clinica-dental", icono: "monitoring", label: "Reportes e indicadores", lado: "der" },
-  { slug: "software-multiclinica-dental", icono: "add_business", label: "Multi-sede y roles", lado: "der" },
+  { icono: "calendar_month", label: "Agenda + WhatsApp", lado: "izq" },
+  { icono: "assignment", label: "Expediente y odontograma", lado: "izq" },
+  { icono: "person", label: "Portal del paciente", lado: "izq" },
+  { icono: "point_of_sale", label: "Caja y cobros", lado: "izq" },
+  { icono: "summarize", label: "Facturación CFDI", lado: "der" },
+  { icono: "dentistry", label: "Radiografías 3D y CBCT", lado: "der" },
+  { icono: "monitoring", label: "Reportes e indicadores", lado: "der" },
+  { icono: "add_business", label: "Multi-sede y roles", lado: "der" },
 ];
-
-// Comprobación en tiempo de módulo: las 8 páginas de producto siguen enlazadas.
-const faltan = MODULE_PAGES.filter((m) => !TARJETAS.some((t) => t.slug === m.slug));
-if (faltan.length) throw new Error(`todo-el-panel: faltan enlaces a ${faltan.map((m) => m.slug).join(", ")}`);
 
 /** Ícono del menú del panel para cada función de la rejilla vieja. */
 function iconos(): Record<string, string> {
