@@ -6,7 +6,7 @@ import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
 import type { PlanCardData } from "@/app/dashboard/suspended/suspended-client";
 import { centavosAMxn, importeSpei, type CuentaBancaria } from "@/lib/billing/spei-directo-core";
-import { desgloseConIva, desgloseSinIva, ivaAplica } from "@/lib/billing/iva-cobro";
+import { desgloseConIva, desgloseSinIva, ivaAplica, type ExencionIva } from "@/lib/billing/iva-cobro";
 import { DatosTransferencia } from "./datos-transferencia";
 import s from "./pago.module.css";
 
@@ -55,8 +55,8 @@ export interface VistaPlanes {
   referenciaSpei: string | null;
   /** El checkout tiene el IVA 16 % configurado (STRIPE_IVA_TAX_RATE_ID o Stripe Tax). Sin él, tarjeta/OXXO no cobran. */
   cobroConIvaListo: boolean;
-  /** Plan que esta clínica (de las de antes) paga por OXXO/SPEI SIN IVA; null = todo lleva IVA. */
-  planSinIva: PlanId | null;
+  /** Qué paga SIN IVA esta clínica (creada antes del corte): su plan y si la tarjeta entra; null = todo lleva IVA. */
+  exencionIva: ExencionIva | null;
   declarandoSpei: boolean;
   handleDeclararSpei: (plan: PlanId) => void;
 }
@@ -77,9 +77,9 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
   const [mostrarTodos, setMostrarTodos] = useState(!v.resumenInicial);
   const resumen = !mostrarTodos && v.selected ? v.selected : null;
   const anual = v.billing === "annual";
-  // Todo pago lleva IVA 16 % (tarjeta, OXXO y SPEI), salvo OXXO/SPEI del plan que una clínica de las de
-  // antes ya paga a mano: cada importe dice «+ IVA» solo si lleva.
-  const ivaDe = (planId: PlanId) => ivaAplica({ metodo: v.method, plan: planId, planExento: v.planSinIva });
+  // Todo pago lleva IVA 16 %, salvo lo que la exención de una clínica creada antes del corte cubre (su
+  // plan, por OXXO/SPEI y por tarjeta): cada importe dice «+ IVA» solo si lleva.
+  const ivaDe = (planId: PlanId) => ivaAplica({ metodo: v.method, plan: planId, exencion: v.exencionIva });
   const ivaSel = ivaDe(v.selectedPlan);
   const iva = ivaSel ? " + IVA" : "";
   const ivaPlan = (planId: PlanId) => (ivaDe(planId) ? " + IVA" : "");

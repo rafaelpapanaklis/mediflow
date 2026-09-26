@@ -9,7 +9,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { borrarEleccionAlta, leerEleccionAlta } from "@/lib/billing/eleccion-alta";
 import { PlanesSuspendida } from "@/components/dashboard/cuenta-rediseno/planes-suspendida";
 import { importeSpei, type CuentaBancaria } from "@/lib/billing/spei-directo-core";
-import { ivaAplica } from "@/lib/billing/iva-cobro";
+import { ivaAplica, type ExencionIva } from "@/lib/billing/iva-cobro";
 
 export interface PlanCardData {
   id: PlanId;
@@ -56,8 +56,8 @@ interface Props {
   cuentaSpei?: CuentaBancaria | null;
   referenciaSpei?: string | null;
   cobroConIvaListo?: boolean;
-  /** Plan que esta clínica (de las de antes) puede pagar por OXXO/SPEI SIN IVA; null = todo lleva IVA. */
-  planSinIva?: PlanId | null;
+  /** Qué paga SIN IVA esta clínica (creada antes del corte): su plan y si la tarjeta entra; null = todo lleva IVA. */
+  exencionIva?: ExencionIva | null;
 }
 
 // Upsell: qué plan sugerir según el actual. CLINIC es el tope (sin sugerencia).
@@ -80,7 +80,7 @@ export function SuspendedPlanCards({
   cuentaSpei = null,
   referenciaSpei = null,
   cobroConIvaListo = true,
-  planSinIva = null,
+  exencionIva = null,
 }: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
@@ -191,7 +191,7 @@ export function SuspendedPlanCards({
   // Carga completa: el layout y la página vuelven a leer el estado en el servidor.
   function importeMostrado(plan: PlanId): number | undefined {
     const p = plans.find((x) => x.id === plan);
-    return p ? importeSpei({ plan: p, billing, conIva: ivaAplica({ metodo: "spei", plan, planExento: planSinIva }) }).totalCents : undefined;
+    return p ? importeSpei({ plan: p, billing, conIva: ivaAplica({ metodo: "spei", plan, exencion: exencionIva }) }).totalCents : undefined;
   }
   async function handleDeclararSpei(plan: PlanId) {
     if (declarandoSpei) return;
@@ -277,7 +277,7 @@ export function SuspendedPlanCards({
           cuentaSpei: speiDisponible ? cuentaSpei : null,
           referenciaSpei,
           cobroConIvaListo,
-          planSinIva,
+          exencionIva,
           declarandoSpei,
           handleDeclararSpei,
         }}

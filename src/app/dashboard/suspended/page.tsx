@@ -14,7 +14,8 @@ import {
   referenciaDeClinica,
   solicitudPendienteDe,
 } from "@/lib/billing/spei-directo";
-import { ivaParaCobro, planConPagoManualSinIva } from "@/lib/billing/iva-cobro";
+import { ivaParaCobro } from "@/lib/billing/iva-cobro";
+import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
 import { EsperaTransferencia } from "@/components/dashboard/cuenta-rediseno/espera-transferencia";
 import {
@@ -92,22 +93,21 @@ export default async function SuspendedPage({
   // el admin configuró y el último rechazo reciente. Los tres por el clinicId
   // de la sesión. Con una pendiente y la clínica aún sin acceso, se enseña la
   // pantalla de espera en vez de la de pago (`?ver=pago` deja pagar con tarjeta).
-  const [rediseno, pendienteSpei, cuentaSpei, rechazoSpei] = await Promise.all([
+  const [rediseno, pendienteSpei, cuentaSpei, rechazoSpei, exencionIva] = await Promise.all([
     menuDosNivelesEncendido(user.clinicId),
     // Un fallo de estas tres lecturas (timeout del pooler) NO puede tumbar la única pantalla de pago:
     // sin ellas se ve la pantalla de siempre, con tarjeta y OXXO.
     solicitudPendienteDe(user.clinicId).catch(() => null),
     leerCuentaSpei().catch(() => null),
     rechazoReciente(user.clinicId).catch(() => null),
+    // Exención de IVA de una clínica creada antes del corte (Ajuste 1c). El servidor la vuelve a decidir
+    // al cobrar; aquí solo se refleja en pantalla (si falla la lectura, se muestra con IVA: lo prudente).
+    exencionIvaDeClinica(clinic).catch(() => null),
   ]);
   const sinAcceso = isPlanExpired(clinic);
   // ¿Hay IVA configurado para cobrar con tarjeta/OXXO? Sin él, el checkout responde 503 (no cobra sin IVA):
   // la pantalla lo dice y no deja pulsar. SPEI no depende de esto (siempre suma el 16 %).
   const cobroConIvaListo = ivaParaCobro(process.env).ok;
-  // Clínica de las de antes que paga a mano: su MISMO plan por OXXO/SPEI sigue sin IVA (Ajuste 1b). El
-  // servidor lo vuelve a decidir al cobrar; aquí solo se refleja en pantalla.
-  const planSinIva = planConPagoManualSinIva(clinic) as PlanId | null;
-
   // Con `?pending=oxxo|spei` (vuelta de un pago de Stripe) NO se enseña la espera: pediría transferir
   // otra vez a quien acaba de generar su voucher.
   if (pendienteSpei && sinAcceso && searchParams?.ver !== "pago" && !showPending) {
@@ -167,7 +167,7 @@ export default async function SuspendedPage({
             cuentaSpei={cuentaSpei}
             referenciaSpei={cuentaSpei ? referenciaDeClinica(user.clinicId) : null}
             cobroConIvaListo={cobroConIvaListo}
-            planSinIva={planSinIva}
+            exencionIva={exencionIva}
           />
           <VolverAlLogin texto={t("pages.suspended.backToLogin")} />
         </PaginaSuspendida>
