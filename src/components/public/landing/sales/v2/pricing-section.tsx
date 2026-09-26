@@ -59,6 +59,14 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
   const [anual, setAnual] = useState(false);
   // La lista común es la misma en las tres tarjetas (plan-cards.ts la calcula una vez).
   const includedInAll = cards[0]?.includedInAll ?? [];
+  // Ajuste 14 (Rafael, «que esté alineado»): en escritorio cada tarjeta es un
+  // subgrid de filas del grid de tarjetas, así la misma función queda a la misma
+  // altura en las tres y los botones en la misma línea. Pistas por tarjeta =
+  // 8 bloques de cabecera (nombre, eslogan, precio, línea, sin permanencia,
+  // cupos, chip, «Qué incluye») + tantas filas como la lista más larga +
+  // espaciador + botón. El CSS coloca espaciador y botón en las dos últimas.
+  const HEAD_TRACKS = 8;
+  const rowTracks = HEAD_TRACKS + Math.max(0, ...cards.map((c) => c.features.length)) + 2;
 
   return (
     <section id="precios" className="dcv4-price" style={{ scrollMarginTop: 72 }}>
@@ -96,7 +104,7 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
           </div>
         </div>
 
-        <div className="dcv4-price__grid">
+        <div className="dcv4-price__grid" style={{ "--rows": rowTracks } as CSSProperties}>
           {cards.map((p) => (
             <article
               key={p.id}
@@ -151,7 +159,8 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
 
               {p.addendum && <p className="dcv4-price__addendum">{p.addendum}</p>}
 
-              <ul className="dcv4-price__feats">
+              {/* role="list": con `display: contents` (subgrid) algunos navegadores pierden la semántica de lista. */}
+              <ul className="dcv4-price__feats" role="list">
                 {p.features.map((f) => (
                   <li key={f.text} className={`dcv4-price__feat${f.included ? "" : " is-off"}`}>
                     <Check on={f.included} />
