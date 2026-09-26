@@ -5,20 +5,19 @@
  * (barras, eje izquierdo, clínicas nuevas) con conmutador Semana / Mes / Año.
  *
  * Recibe las tres series YA calculadas por el servidor
- * (`@/lib/admin/serie-negocio`, cortes de Mérida, datos reales de
- * subscription_invoices y Clinic.createdAt): aquí sólo se elige cuál pintar.
+ * (`@/lib/admin/serie-negocio`: semana / mes / año EN CURSO del calendario de
+ * Mérida, datos reales de subscription_invoices y Clinic.createdAt): aquí sólo
+ * se elige cuál pintar. Los totales de la leyenda son del mismo periodo.
  * recharts ya estaba en el repo; no se añade ninguna dependencia.
  */
 import { useState } from "react";
 import {
   Area, Bar, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { ETIQUETA_RANGO, type PuntoNegocio, type Rango } from "@/lib/admin/serie-negocio";
+import { ETIQUETA_RANGO, TRAMO_RANGO, type PuntoNegocio, type Rango } from "@/lib/admin/serie-negocio";
 import { formatCurrency } from "@/lib/utils";
 
 const RANGOS: Rango[] = ["semana", "mes", "anio"];
-/** Lo que abarca cada rango: son ventanas móviles, no meses ni años de calendario. */
-const TRAMO: Record<Rango, string> = { semana: "últimos 7 días", mes: "últimos 30 días", anio: "últimos 12 meses" };
 
 const TOOLTIP_STYLE = {
   background: "var(--bg-elev)",
@@ -38,8 +37,8 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
   const datos = series[rango];
   const totalIngresos = datos.reduce((s, p) => s + p.ingresos, 0);
   const totalAltas = datos.reduce((s, p) => s + p.altas, 0);
-  // En el mes (30 tramos) el eje muestra un día de cada cinco para que no se pise.
-  const intervalo = rango === "mes" ? 4 : 0;
+  // En el mes (28–31 tramos) el eje muestra un día de cada cuatro para que no se pise.
+  const intervalo = rango === "mes" ? 3 : 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
@@ -47,7 +46,7 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
         <div className="ad-leyenda">
           <span><i style={{ background: "var(--brand)" }} /> Ingresos · <strong className="ad-num" style={{ color: "var(--text-1)" }}>{formatCurrency(totalIngresos)}</strong></span>
           <span><i style={{ background: "var(--info)" }} /> Altas · <strong className="ad-num" style={{ color: "var(--text-1)" }}>{totalAltas}</strong></span>
-          <span className="ad-suave">{TRAMO[rango]}</span>
+          <span className="ad-suave">{TRAMO_RANGO[rango]}</span>
         </div>
         <div className="ad-conmutador" role="group" aria-label="Rango de la gráfica">
           {RANGOS.map((r) => (
@@ -72,7 +71,7 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
             <YAxis yAxisId="altas" allowDecimals={false} tick={{ fontSize: 11, fill: "var(--text-3)" }} axisLine={false} tickLine={false} width={28} />
             <YAxis
               yAxisId="ingresos" orientation="right" tick={{ fontSize: 11, fill: "var(--text-3)" }} axisLine={false} tickLine={false} width={56}
-              tickFormatter={(v: number) => (v >= 1000 ? `$${Math.round(v / 1000)}k` : `$${v}`)}
+              tickFormatter={(v: number) => (v >= 1000 ? `$${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : `$${v}`)}
             />
             <Tooltip
               contentStyle={TOOLTIP_STYLE}
@@ -80,7 +79,10 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
               formatter={(v: number, nombre: string) => [nombre === "Ingresos" ? formatCurrency(v) : v, nombre]}
             />
             <Bar yAxisId="altas" dataKey="altas" name="Altas" fill="var(--info)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-            <Area yAxisId="ingresos" type="monotone" dataKey="ingresos" name="Ingresos" stroke="var(--brand)" strokeWidth={2} fill="url(#ad-ingresos)" dot={false} activeDot={{ r: 4 }} />
+            {/* Línea recta entre puntos y un punto por tramo: cada día (o mes) es
+                una cifra real, y la curva suave inventaba dinero entre dos días. */}
+            <Area yAxisId="ingresos" type="linear" dataKey="ingresos" name="Ingresos" stroke="var(--brand)" strokeWidth={2} fill="url(#ad-ingresos)"
+              dot={rango === "mes" ? false : { r: 3, fill: "var(--brand)", strokeWidth: 0 }} activeDot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

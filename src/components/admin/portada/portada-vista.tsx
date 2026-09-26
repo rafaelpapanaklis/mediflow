@@ -128,7 +128,7 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
 
       {/* ── 2 + 3. Gráfica y sparklines ── */}
       <div className="ad-grid-2">
-        <Tarjeta title="Ingresos y altas" sub="Pagos de suscripción cobrados y clínicas nuevas · calendario de Mérida">
+        <Tarjeta title="Ingresos y altas" sub="Pagos de suscripción cobrados y clínicas nuevas · semana, mes o año en curso, calendario de Mérida">
           <GraficaNegocio series={d.series} />
         </Tarjeta>
         <div className="ad-columna">

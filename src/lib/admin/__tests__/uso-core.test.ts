@@ -146,34 +146,57 @@ test("pagos por verificar van primero y con su dinero", () => {
 
 // ── Series ─────────────────────────────────────────────────────────────────
 
-test("serieNegocio por semana: 7 días de Mérida, hoy al final, ceros donde no hubo nada", () => {
+test("serieNegocio por semana: lunes a domingo de la semana EN CURSO de Mérida, con los días por venir a 0", () => {
+  // 26-sep-2026 es sábado: la semana va del lunes 21 al domingo 27.
   const s = serieNegocio(
-    [{ monto: 1719, cuando: AHORA }, { monto: 689, cuando: hace(2) }, { monto: 999, cuando: hace(40) }],
+    [{ monto: 1719, cuando: AHORA }, { monto: 689, cuando: hace(2) }, { monto: 999, cuando: hace(6) }],
     [hace(1), hace(1), hace(9)],
     AHORA, "semana",
   );
-  assert.equal(s.length, 7);
-  assert.equal(s[6].clave, "2026-09-26");
-  assert.equal(s[6].ingresos, 1719);
-  assert.equal(s[6].pagos, 1);
-  assert.equal(s[5].altas, 2);
-  assert.equal(s[4].ingresos, 689);
-  assert.equal(s.reduce((a, p) => a + p.ingresos, 0), 1719 + 689, "el cobro de hace 40 días queda fuera");
-  assert.equal(s.reduce((a, p) => a + p.altas, 0), 2);
+  assert.deepEqual(s.map((p) => p.clave), ["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27"]);
+  assert.match(s[0].label, /^lun 21$/);
+  assert.equal(s[5].ingresos, 1719, "hoy sábado");
+  assert.equal(s[5].pagos, 1);
+  assert.equal(s[3].ingresos, 689, "el jueves");
+  assert.equal(s[6].ingresos, 0, "el domingo aún no llega");
+  assert.equal(s.reduce((a, p) => a + p.ingresos, 0), 1719 + 689, "el cobro del domingo 20 queda fuera: es la semana pasada");
+  assert.equal(s[4].altas, 2);
+  assert.equal(s.reduce((a, p) => a + p.altas, 0), 2, "el alta del 17 es de la semana pasada");
 });
 
-test("serieNegocio por año: 12 meses y el corte es el de Mérida", () => {
-  // 1-sep 02:00 UTC = 31-ago 21:00 en Mérida: cae en AGOSTO, no en septiembre.
-  const s = serieNegocio([{ monto: 100, cuando: new Date("2026-09-01T02:00:00.000Z") }], [], AHORA, "anio");
+test("serieNegocio por semana: un lunes la semana empieza ese mismo día", () => {
+  const lunes = new Date("2026-09-21T16:00:00.000Z");
+  const s = serieNegocio([], [], lunes, "semana");
+  assert.equal(s[0].clave, "2026-09-21");
+  assert.equal(s[6].clave, "2026-09-27");
+});
+
+test("serieNegocio por mes: el mes en curso entero, del 1 al 30", () => {
+  const s = serieNegocio([{ monto: 100, cuando: new Date("2026-09-01T02:00:00.000Z") }, { monto: 50, cuando: hace(10) }], [], AHORA, "mes");
+  assert.equal(s.length, 30);
+  assert.equal(s[0].clave, "2026-09-01");
+  assert.equal(s[0].label, "1");
+  assert.equal(s[29].clave, "2026-09-30");
+  // 1-sep 02:00 UTC = 31-ago 21:00 en Mérida: cae en AGOSTO, fuera del mes.
+  assert.equal(s[0].ingresos, 0);
+  assert.equal(s.reduce((a, p) => a + p.ingresos, 0), 50);
+  assert.equal(serieNegocio([], [], new Date("2026-02-10T12:00:00.000Z"), "mes").length, 28);
+});
+
+test("serieNegocio por año: enero a diciembre del año en curso, y el corte es el de Mérida", () => {
+  const s = serieNegocio([
+    { monto: 100, cuando: new Date("2026-09-01T02:00:00.000Z") },
+    { monto: 7, cuando: new Date("2025-12-31T23:00:00.000Z") },
+    { monto: 300, cuando: new Date("2026-01-01T08:00:00.000Z") },
+  ], [], AHORA, "anio");
   assert.equal(s.length, 12);
-  assert.equal(s[11].clave, "2026-09");
-  assert.equal(s[11].ingresos, 0);
-  assert.equal(s[10].clave, "2026-08");
-  assert.equal(s[10].ingresos, 100);
-});
-
-test("serieNegocio por mes: 30 días", () => {
-  assert.equal(serieNegocio([], [], AHORA, "mes").length, 30);
+  assert.equal(s[0].clave, "2026-01");
+  assert.equal(s[0].label, "ene");
+  assert.equal(s[11].clave, "2026-12");
+  assert.equal(s[7].ingresos, 100, "agosto en Mérida");
+  assert.equal(s[8].ingresos, 0);
+  assert.equal(s[0].ingresos, 300);
+  assert.equal(s.reduce((a, p) => a + p.ingresos, 0), 400, "el cobro de 2025 queda fuera");
 });
 
 test("conteos y sumas mensuales para los sparklines", () => {
