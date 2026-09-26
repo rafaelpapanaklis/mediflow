@@ -999,6 +999,13 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv4-price__card.is-featured .dcv4-price__chk { color: #94a3b8; background: rgba(255,255,255,.08); }
 .dcv4-price__card.is-featured .dcv4-price__chk--on { color: #86efac; background: rgba(74,222,128,.16); }
 .dcv4-price__spacer { display: block; min-height: 22px; flex: 1 1 auto; }
+/* Ajuste 10: rótulo de grupo dentro de la lista («Y además, solo en Clínica»):
+   la fila que lo lleva se parte en dos líneas (rótulo arriba, a lo ancho). */
+.dcv4-price__feat.has-group { flex-wrap: wrap; margin-top: 6px; }
+.dcv4-price__feat.has-group > span:last-child { flex: 1 1 0; min-width: 0; }
+.dcv4-price__group { flex: 1 0 100%; display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--plan-accent, #1d4ed8); }
+.dcv4-price__group::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--hair); }
+.dcv4-price__card.is-featured .dcv4-price__group { color: #93c5fd; }
 
 /* Botón: degradado azul con brillo interior y halo; en la recomendada es
    blanco sobre el navy (más contraste que azul sobre azul oscuro). */

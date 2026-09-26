@@ -24,10 +24,12 @@ import type { PlanCard } from "./plan-cards";
  * ya venía de plan-cards) y las capas decorativas del fondo. Todo lo visual
  * está en landing-v2.css bajo «Precios (ajuste 8)».
  *
- * Ajuste 9 (Rafael): las funciones se leen de un vistazo y se comparan. Cada
- * tarjeta lista SOLO lo que cambia entre planes (mismas filas, mismo orden en
- * las tres: plan-cards.ts → COMPARE_ROWS) y las funciones base van UNA sola
- * vez debajo de las tarjetas, en «Incluido en todos los planes»
+ * Ajuste 9/10 (Rafael): las funciones se leen de un vistazo y se comparan.
+ * Cada tarjeta abre con seis funciones base en ✓ (las mismas y en el mismo
+ * orden), sigue con lo que cambia entre planes (✓/✗ calculado) y cierra con
+ * lo exclusivo del plan bajo «Y además, solo en …» (plan-cards.ts →
+ * splitFeatures). Las funciones base completas van UNA sola vez debajo de las
+ * tarjetas, en «Incluido en todos los planes»
  * (`includedInAll`, derivado de los flags de módulo de plan_configs). Cada
  * tarjeta lleva un chip que salta a ese bloque. Cupos: se añade «Sedes»
  * (maxClinics); la quinta ficha ocupa el ancho completo.
@@ -149,7 +151,9 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
 
               <ul className="dcv4-price__feats">
                 {p.features.map((f) => (
-                  <li key={f.text} className={`dcv4-price__feat${f.included ? "" : " is-off"}`}>
+                  <li key={f.text} className={`dcv4-price__feat${f.included ? "" : " is-off"}${f.groupLabel ? " has-group" : ""}`}>
+                    {/* Ajuste 10: rótulo «Y además, solo en Clínica» antes de lo exclusivo del plan. */}
+                    {f.groupLabel && <span className="dcv4-price__group">{f.groupLabel}</span>}
                     <Check on={f.included} />
                     <span className="dcv4-sr">{f.included ? "Incluido:" : "No incluido:"}</span>
                     <span>{f.text}</span>
