@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits, getResolvedPlan } from "@/lib/plans";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
-import { CLINIC_OVERRIDE_SELECT, applyClinicOverrides } from "@/lib/billing/plan-overrides";
+import { CLINIC_OVERRIDE_SELECT, applyClinicOverrides, clearOverridesData } from "@/lib/billing/plan-overrides";
 import { manualPeriodFields } from "@/lib/billing/proration";
 import { ivaAplica } from "@/lib/billing/iva-cobro";
 import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
@@ -398,7 +398,7 @@ export async function confirmarSolicitudSpei(id: string, adminId: string): Promi
 
   const clinica = await prisma.clinic.findUnique({
     where: { id: sol.clinicId },
-    select: { trialEndsAt: true, nextBillingDate: true, subscriptionStatus: true, stripeSubscriptionId: true },
+    select: { trialEndsAt: true, nextBillingDate: true, subscriptionStatus: true, stripeSubscriptionId: true, plan: true },
   });
   if (!clinica) throw new SpeiError("no-encontrada", "La clínica ya no existe");
   // Una suscripción de tarjeta CANCELADA deja su id en la clínica (el webhook no lo limpia). Si se
@@ -443,6 +443,10 @@ export async function confirmarSolicitudSpei(id: string, adminId: string): Promi
             subscriptionStatus: "active",
             plan,
             aiTokensLimit: aiTokensDefault,
+            // Igual que el pago manual de /admin (admin/billing → verify_payment / activate_clinic): pagar OTRO plan
+            // es pasar a las condiciones vigentes de ese plan y se limpian las que conservaba (PR #425); el MISMO plan
+            // conserva lo suyo. Sin esto, un pago de otro plan las dejaba dormidas y revivían al volver al plan de origen.
+            ...(plan !== clinica.plan ? clearOverridesData() : {}),
             ...(suscripcionMuerta ? { stripeSubscriptionId: null } : {}),
             ...manualPeriodFields(clinica, hasta),
           },

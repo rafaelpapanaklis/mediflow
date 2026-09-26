@@ -506,3 +506,25 @@ test("integración #425: override de OTRO plan (la clínica ya cambió de plan) 
   const r = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
   assert.equal(r.solicitud.subtotalCents, 70000, "la guarda planOverrideFor la neutraliza");
 });
+
+test("integración #425: confirmar un SPEI de OTRO plan limpia las condiciones conservadas; del MISMO plan las conserva", async () => {
+  const { crearSolicitudSpei, confirmarSolicitudSpei } = lib;
+  const conservadas = { createdAt: new Date("2025-11-03"), planOverrideFor: "CLINIC", maxUsersOverride: -1, maxClinicsOverride: 4, priceMxnMonthlyOverride: 1719, priceMxnAnnualOverride: 13404 };
+  // Mismo plan (renovación): conserva.
+  Object.assign(clinicas.get("cA"), { plan: "CLINIC", ...conservadas });
+  const igual = await crearSolicitudSpei({ clinicId: "cA", plan: "CLINIC", billing: "monthly" });
+  await confirmarSolicitudSpei(igual.solicitud.id, "admin1");
+  assert.equal(clinicas.get("cA").plan, "CLINIC");
+  assert.equal(clinicas.get("cA").planOverrideFor, "CLINIC");
+  assert.equal(clinicas.get("cA").priceMxnMonthlyOverride, 1719);
+  // Otro plan: pasa a las condiciones vigentes de ese plan y no las recupera si vuelve.
+  Object.assign(clinicas.get("cB"), { plan: "CLINIC", ...conservadas });
+  const otro = await crearSolicitudSpei({ clinicId: "cB", plan: "PRO", billing: "monthly" });
+  await confirmarSolicitudSpei(otro.solicitud.id, "admin1");
+  const b = clinicas.get("cB");
+  assert.equal(b.plan, "PRO");
+  assert.deepEqual(
+    [b.planOverrideFor, b.maxUsersOverride, b.maxClinicsOverride, b.priceMxnMonthlyOverride, b.priceMxnAnnualOverride],
+    [null, null, null, null, null],
+  );
+});
