@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { instrumentSans, materialSymbols } from "@/fonts/menu";
 import { IconoPanel } from "./icono-panel";
 import { LaptopVideo } from "./laptop-video";
@@ -13,11 +12,13 @@ import "./todo-el-panel.css";
  * incluido» y «Conoce cada módulo a fondo»— por UNA sola, oscura:
  *
  *   · en el centro, una LAPTOP en 3D (CSS, sin librerías) cuya pantalla
- *     reproduce en bucle una grabación real del panel (panel-recorrido.mp4,
- *     grabada con el arnés de t1 contra panel.108: Página web, Equipo,
- *     Inventario, Finanzas);
+ *     alterna dos grabaciones reales del panel (panel-recorrido.mp4 y
+ *     panel-recorrido-2.mp4, grabadas con el arnés de t1 contra panel.108:
+ *     Página web con «Especialistas», Equipo y sus permisos, Finanzas; Mi
+ *     Clínica Visual en 3D y el portal del paciente);
  *   · alrededor, 8 tarjetitas del panel (ícono del menú + dos o tres palabras)
- *     que flotan y enlazan a las 8 páginas de módulo (SEO intacto);
+ *     que flotan; desde el ajuste 2 NO enlazan a nada (Rafael no quiere
+ *     enlaces a páginas secundarias);
  *   · asomando por la esquina, un teléfono con el PORTAL DEL PACIENTE
  *     reconstruido en código (portal-paciente-mock.tsx);
  *   · debajo, la cinta con el resto de funciones, en bucle.
@@ -30,11 +31,10 @@ export function TodoElPanel() {
   const izq = TARJETAS.filter((t) => t.lado === "izq");
   const der = TARJETAS.filter((t) => t.lado === "der");
   const tarjeta = (t: (typeof TARJETAS)[number], i: number) => (
-    <Link key={t.slug} href={`/${t.slug}`} className="dctp-card" style={{ animationDelay: `${(i * 0.7).toFixed(1)}s` }}>
+    <span key={t.label} className="dctp-card" style={{ animationDelay: `${(i * 0.7).toFixed(1)}s` }}>
       <span className="dctp-card__ico" aria-hidden="true"><IconoPanel nombre={t.icono} size={22} /></span>
       <span className="dctp-card__label">{t.label}</span>
-      <IconoPanel nombre="chevron_right" size={18} className="dctp-card__chev" />
-    </Link>
+    </span>
   );
 
   return (
@@ -43,7 +43,6 @@ export function TodoElPanel() {
         <div data-reveal="" className="dctp__head">
           <span className="dctp__eyebrow">{TODO_PANEL_COPY.eyebrow}</span>
           <h2 className="dcv4-balance dcv4-h2 dcv4-h2--light">{TODO_PANEL_COPY.title}</h2>
-          <p className="dcv4-pretty dcv4-lead dcv4-lead--light">{TODO_PANEL_COPY.subtitle}</p>
         </div>
 
         <div data-reveal="" className="dctp__stage">
@@ -56,7 +55,7 @@ export function TodoElPanel() {
                 <div className="dctp-laptop__lid">
                   <span className="dctp-laptop__cam" aria-hidden="true" />
                   <div className="dctp-laptop__screen">
-                    <LaptopVideo src={TODO_PANEL_COPY.video.src} poster={TODO_PANEL_COPY.video.poster} label={TODO_PANEL_COPY.video.ve} />
+                    <LaptopVideo videos={TODO_PANEL_COPY.videos} label={TODO_PANEL_COPY.ve} />
                   </div>
                 </div>
                 <div className="dctp-laptop__base" aria-hidden="true"><span /></div>
