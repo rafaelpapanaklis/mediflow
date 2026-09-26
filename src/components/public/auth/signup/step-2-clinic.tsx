@@ -70,10 +70,10 @@ const ESTADOS_MX = [
 ];
 
 const CLINIC_SIZES: Array<{ value: string; label: string }> = [
-  { value: "1", label: "1 doctor · consultorio individual" },
-  { value: "2-5", label: "2–5 doctores · clínica pequeña" },
-  { value: "6-15", label: "6–15 doctores · clínica mediana" },
-  { value: "16+", label: "16+ doctores · multi-sucursal" },
+  { value: "1", label: "1 dentista · consultorio individual" },
+  { value: "2-5", label: "2–5 dentistas · clínica pequeña" },
+  { value: "6-15", label: "6–15 dentistas · clínica mediana" },
+  { value: "16+", label: "16+ dentistas · multi-sucursal" },
 ];
 
 interface ThemedSelectProps {
@@ -247,7 +247,11 @@ export function Step2Clinic({
   const canContinue =
     clinicValid && !!values.specialty && !!values.state && phoneValid;
 
-  const specialtyOptions = SPECIALTY_SLUGS.map(slug => ({
+  // Solo odontología por ahora: el software es dental. Se filtra AQUÍ (no en
+  // specialty-data, que usan otras pantallas); el valor sigue siendo el mismo
+  // slug que el alta acepta hoy (odontologia-general, ortodoncia, endodoncia,
+  // periodoncia → categoría DENTAL en signup-form).
+  const specialtyOptions = SPECIALTY_SLUGS.filter(slug => SPECIALTIES[slug].category === "Dental").map(slug => ({
     value: slug,
     label: SPECIALTIES[slug].name,
   }));
@@ -293,13 +297,13 @@ export function Step2Clinic({
       )}
 
       <FormField
-        label="Especialidad principal"
+        label="Especialidad dental principal"
         hint="Podrás agregar más especialidades después, en la configuración."
       >
         <ThemedSelect
           value={values.specialty}
           onValueChange={v => onChange({ specialty: v })}
-          placeholder="Selecciona una especialidad"
+          placeholder="Selecciona tu especialidad"
           options={specialtyOptions}
         />
       </FormField>
@@ -308,7 +312,7 @@ export function Step2Clinic({
         <ThemedSelect
           value={values.clinicSize}
           onValueChange={v => onChange({ clinicSize: v })}
-          placeholder="¿Cuántos doctores atienden?"
+          placeholder="¿Cuántos dentistas atienden?"
           options={CLINIC_SIZES}
         />
       </FormField>
