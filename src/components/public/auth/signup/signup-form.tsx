@@ -15,6 +15,7 @@ import type { Billing, PlanId } from "./plan-card";
 import { isPlanId } from "@/lib/billing/plans";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { trackSignupConversionAndRedirect } from "@/lib/gtag";
+import { trackGa4SignUp } from "@/lib/analytics/ga4";
 
 interface SignupState {
   // Step 1
@@ -240,6 +241,9 @@ export function SignupForm() {
       // /dashboard, así no pasa por el gating ni ve modal alguno) donde elige
       // plan, método y paga. El webhook activa la cuenta al confirmar el pago.
       toast.success("¡Cuenta creada! Elige cómo pagar para activar tu plan.");
+      // GA4 `sign_up` (WS1-T6): mismo momento, ANTES de la conversión de Ads y sin
+      // callback propio → la redirección espera lo mismo que antes. Evento aparte.
+      trackGa4SignUp(isOAuthFlow ? "google" : "email");
       trackSignupConversionAndRedirect("/dashboard/suspended");
       return;
     } catch (err) {

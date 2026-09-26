@@ -34,6 +34,8 @@
  * salvo STRIPE_AUTOMATIC_TAX=true).
  */
 
+import { PLAN_MARKETING } from "@/lib/plan-shared";
+
 export const PLATFORM_SUBSCRIPTION_KIND = "platform-subscription";
 
 /** Lo mínimo que se lee de una Stripe.Checkout.Session (asignable desde el SDK). */
@@ -51,6 +53,11 @@ export interface ConversionPagoCompletado {
   transactionId: string;
   valueMxn: number;
   currency: string;
+  /**
+   * Plan contratado (metadata.plan del checkout), solo si es uno conocido. Lo usa
+   * el `purchase` de GA4 para `items` (WS1-T6); la conversión de Ads no lo mira.
+   */
+  plan?: { id: string; name: string; billing?: "monthly" | "annual" };
 }
 
 const SESSION_ID_RE = /^cs_(test|live)_[A-Za-z0-9]{8,}$/;
@@ -99,11 +106,22 @@ export function decidirConversionPago(input: {
   if (sesion.payment_status !== "paid") return null;
   if (meta.firstContract !== "1") return null;
 
+  const plan = planDeLaSesion(meta);
   return {
     transactionId: sesion.id,
     valueMxn: centavosAPesos(centavosSinImpuesto(sesion)),
     currency: (sesion.currency ?? "mxn").toUpperCase(),
+    ...(plan ? { plan } : {}),
   };
+}
+
+/** Plan de la metadata del checkout, solo si es un PlanId real (nada de texto libre a GA4). */
+function planDeLaSesion(meta: Record<string, string>): ConversionPagoCompletado["plan"] | null {
+  const id = meta.plan;
+  if (!id || !Object.prototype.hasOwnProperty.call(PLAN_MARKETING, id)) return null;
+  const marketing = PLAN_MARKETING[id as keyof typeof PLAN_MARKETING];
+  const billing = meta.billing === "annual" || meta.billing === "monthly" ? meta.billing : undefined;
+  return { id, name: `DaleControl ${marketing.name}`, ...(billing ? { billing } : {}) };
 }
 
 /**

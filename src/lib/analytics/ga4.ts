@@ -48,3 +48,103 @@ const PRIVATE_PATH_RE = new RegExp(PRIVATE_PATH_PATTERN);
 export function isPrivatePath(pathname: string): boolean {
   return PRIVATE_PATH_RE.test(pathname);
 }
+
+// ── Eventos de negocio (WS1-T6) ─────────────────────────────────────────────
+//
+// `sign_up` y `purchase` son los eventos RECOMENDADOS de GA4; salen junto a las
+// conversiones de Google Ads (@/lib/gtag), que no cambian ni se reemplazan.
+// Todos llevan `send_to: GA4_MEASUREMENT_ID`: sin él gtag los emitiría también
+// al destino de Ads (AW-…), que ya tiene sus propias conversiones.
+//
+// Nunca lanzan ni navegan: sin window o sin gtag devuelven false y la pantalla
+// funciona igual (bloqueador de anuncios).
+
+type GtagFn = (...args: unknown[]) => void;
+
+function gtagDelNavegador(): GtagFn | null {
+  if (typeof window === "undefined") return null;
+  const gtag = (window as unknown as { gtag?: GtagFn }).gtag;
+  return typeof gtag === "function" ? gtag : null;
+}
+
+/**
+ * `sign_up` de GA4. /signup es ruta PÚBLICA: el layout ya configuró GA4 ahí, no
+ * hace falta `config`. Devuelve true solo si el evento salió hacia gtag.
+ */
+export function trackGa4SignUp(method: string = "email"): boolean {
+  const gtag = gtagDelNavegador();
+  if (!gtag) return false;
+  try {
+    gtag("event", "sign_up", { send_to: GA4_MEASUREMENT_ID, method });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface Ga4Purchase {
+  /** Id de la sesión de Checkout de Stripe (cs_…): el MISMO de «Pago completado». */
+  transactionId: string;
+  /** Importe SIN IVA, con el cupón ya descontado, en pesos: el MISMO de «Pago completado». */
+  valueMxn: number;
+  /** ISO-4217 en mayúsculas; por defecto MXN. */
+  currency?: string;
+  /** Plan contratado (BASIC | PRO | CLINIC) y su nombre, para `items`. */
+  item?: { id: string; name: string; variant?: string };
+}
+
+/** `purchase` con la forma exacta que GA4 espera (sin efectos, se prueba solo). */
+export function ga4PurchaseParams(p: Ga4Purchase): Record<string, unknown> {
+  const value = p.valueMxn;
+  return {
+    send_to: GA4_MEASUREMENT_ID,
+    transaction_id: p.transactionId,
+    value,
+    currency: p.currency ?? "MXN",
+    ...(p.item
+      ? {
+          items: [
+            {
+              item_id: p.item.id,
+              item_name: p.item.name,
+              ...(p.item.variant ? { item_variant: p.item.variant } : {}),
+              price: value,
+              quantity: 1,
+            },
+          ],
+        }
+      : {}),
+  };
+}
+
+/**
+ * `purchase` de GA4. Devuelve true solo si el evento salió hacia gtag. La
+ * protección contra repetidos (una vez por session_id) la pone quien llama,
+ * junto con la conversión de Ads; GA4 además deduplica `purchase` por
+ * transaction_id.
+ *
+ * SIN `gtag('config', G-…)`, a propósito, también en la pantalla privada. Un
+ * config es estado de la PESTAÑA: en el panel (SPA, next/link) seguiría vivo
+ * después del pago y la medición mejorada de GA4 mandaría desde ahí page_view
+ * por cada navegación, scroll, descargas y clics salientes (wa.me/<teléfono de
+ * un paciente> incluido). Medido con gtag.js real (26-sep-2026): con config,
+ * tras el purchase salieron page_view/scroll/click del panel; sin config, solo
+ * el purchase. gtag carga el contenedor de GA4 al ver el `send_to`, así que el
+ * evento llega igual. Es comportamiento no documentado de gtag.js: por eso hay
+ * un paso de QA (DebugView) que confirma que el purchase entra.
+ *
+ * `page_location` va sin query: el session_id de Stripe no viaja como URL.
+ */
+export function trackGa4Purchase(p: Ga4Purchase): boolean {
+  const gtag = gtagDelNavegador();
+  if (!gtag) return false;
+  try {
+    gtag("event", "purchase", {
+      ...ga4PurchaseParams(p),
+      page_location: `${window.location.origin}${window.location.pathname}`,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}

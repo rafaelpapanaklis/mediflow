@@ -218,14 +218,16 @@ test("la página monta la conversión en las dos caras, con el clinicId de la se
   assert.ok(!page.includes("searchParams?.clinicId"), "el clinicId nunca sale de la URL");
 });
 
-test("el componente cliente no reenvía si hay marca local y solo marca cuando el ping salió", () => {
+test("el componente cliente delega en medicion-pago.ts, que no reenvía con marca local y solo marca cuando salió un ping", () => {
   const cliente = leer("app/dashboard/suspended/success/conversion-pago-cliente.tsx");
   assert.ok(cliente.startsWith('"use client";'));
-  assert.match(cliente, /if \(window\.localStorage\.getItem\(clave\)\) return;/);
-  assert.match(cliente, /const enviada = trackPaymentCompletedConversion\(/);
-  assert.match(cliente, /if \(!enviada\) return;/);
-  assert.match(cliente, /window\.localStorage\.setItem\(clave,/);
-  assert.equal(cliente.indexOf("getItem"), Math.min(cliente.indexOf("getItem"), cliente.indexOf("setItem")), "primero se lee la marca");
+  assert.match(cliente, /medirPagoCompletado\(/);
+  const medicion = leer("app/dashboard/suspended/success/medicion-pago.ts");
+  assert.match(medicion, /if \(window\.localStorage\.getItem\(clave\)\) return "ya-enviada";/);
+  assert.match(medicion, /const ads = trackPaymentCompletedConversion\(/);
+  assert.match(medicion, /if \(!ads && !ga4\) return "sin-gtag";/);
+  assert.match(medicion, /window\.localStorage\.setItem\(clave,/);
+  assert.equal(medicion.indexOf("getItem"), Math.min(medicion.indexOf("getItem"), medicion.indexOf("setItem")), "primero se lee la marca");
 });
 
 test("el lado servidor nunca lanza: Stripe opcional y try/catch alrededor del retrieve", () => {
