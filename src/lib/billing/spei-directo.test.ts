@@ -103,10 +103,13 @@ const HOY = {
   CLINIC: { priceMxn: 1719, priceMxnAnnual: 13404 },
 } as const;
 
-test("SPEI ya no depende de STRIPE_AUTOMATIC_TAX: siempre precio + 16 %", () => {
+test("SPEI ya no depende de STRIPE_AUTOMATIC_TAX: precio + 16 % por defecto", () => {
   const core = leer("lib/billing/spei-directo-core.ts");
   assert.ok(!/STRIPE_AUTOMATIC_TAX/.test(core.replace(/\/\*[\s\S]*?\*\//g, "")), "el núcleo SPEI no lee el env");
-  assert.ok(!/conIva/.test(core), "sin interruptor de IVA");
+  // Sin decir nada, SIEMPRE con IVA; solo se apaga con `conIva: false` explícito (renovación de una clínica de las de antes).
+  const d = importeSpei({ plan: { priceMxn: 689, priceMxnAnnual: 5376 }, billing: "monthly" });
+  assert.equal(d.ivaCents, 11024);
+  assert.equal(importeSpei({ plan: { priceMxn: 689, priceMxnAnnual: 5376 }, billing: "monthly", conIva: false }).ivaCents, 0);
 });
 
 test("tabla de importes con IVA: los 3 planes, mensual y anual", () => {

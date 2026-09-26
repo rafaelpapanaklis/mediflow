@@ -117,9 +117,10 @@ beforeEach(() => {
   auditorias = [];
   llamadasProhibidas = [];
   suscripcionViva = null;
+  // Clínica NUEVA (registrada después del corte de IVA, 26-sep-2026): todo lleva IVA.
   clinica = {
     id: "cA", name: "Clínica A", email: "a@ejemplo.mx", stripeCustomerId: "cus_a", stripeSubscriptionId: null,
-    subscriptionId: null, nextBillingDate: new Date("2026-01-01"),
+    subscriptionId: null, nextBillingDate: new Date("2026-01-01"), plan: "PRO", createdAt: new Date("2026-10-05"),
   };
   delete process.env.STRIPE_AUTOMATIC_TAX;
   process.env.STRIPE_IVA_TAX_RATE_ID = TASA;
@@ -249,6 +250,68 @@ test("el checkout nunca modifica, cancela ni crea suscripciones ni tasas por API
   assert.deepEqual(llamadasProhibidas, [], "ni subscriptions.update/cancel/create ni taxRates.create");
 });
 
+/* ── Ajuste 1b: las clínicas de antes que pagan a mano siguen SIN IVA ──────────── */
+
+/** Clínica de las de antes: registrada antes del corte y que ya había pagado (tiene periodo activado). */
+function deLasDeAntes(extra: object = {}) {
+  clinica = { ...clinica, createdAt: new Date("2025-11-03"), plan: "PRO", nextBillingDate: new Date("2026-09-30"), ...extra };
+}
+
+test("clínica de antes + OXXO del MISMO plan: sin IVA (como hoy) y sin depender del env de IVA", async () => {
+  deLasDeAntes();
+  delete process.env.STRIPE_IVA_TAX_RATE_ID;
+  const { res } = await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
+  assert.equal(res.status, 200, "no se bloquea aunque falte el env: esas clínicas no lo necesitan");
+  const s = sesiones[0];
+  assert.equal(s.line_items[0].tax_rates, undefined);
+  assert.equal(s.automatic_tax, undefined);
+  assert.equal(s.line_items[0].price_data.unit_amount, 68900, "el precio de hoy, sin IVA");
+  assert.equal(auditorias[0].changes._created.after.ivaModo, "exento");
+});
+
+test("clínica de antes + OXXO anual del mismo plan y «spei» de Stripe del mismo plan: también sin IVA", async () => {
+  deLasDeAntes();
+  await pagar({ plan: "PRO", method: "oxxo", billing: "annual" });
+  await pagar({ plan: "PRO", method: "spei", billing: "monthly" });
+  for (const s of sesiones) assert.equal(s.line_items[0].tax_rates, undefined);
+  assert.equal(sesiones.length, 2);
+});
+
+test("clínica de antes: con TARJETA (suscripción nueva) SÍ lleva IVA", async () => {
+  deLasDeAntes();
+  await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
+});
+
+test("clínica de antes: OXXO de OTRO plan (cambio de plan) SÍ lleva IVA", async () => {
+  deLasDeAntes();
+  await pagar({ plan: "CLINIC", method: "oxxo", billing: "monthly" });
+  await pagar({ plan: "BASIC", method: "oxxo", billing: "monthly" });
+  for (const s of sesiones) assert.deepEqual(s.line_items[0].tax_rates, [TASA]);
+});
+
+test("clínica de antes que NUNCA pagó: es una compra nueva, lleva IVA", async () => {
+  deLasDeAntes({ nextBillingDate: null, stripeSubscriptionId: null, subscriptionId: null });
+  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
+  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
+});
+
+test("clínica registrada DESPUÉS del corte: todo lleva IVA aunque ya haya pagado", async () => {
+  clinica.createdAt = new Date("2026-09-26T06:00:00.000Z"); // justo en el corte = nueva
+  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
+  clinica.createdAt = new Date("2026-09-26T05:59:59.000Z"); // un segundo antes = de antes
+  clinica.nextBillingDate = new Date("2026-09-30");
+  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly" });
+  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
+  assert.equal(sesiones[1].line_items[0].tax_rates, undefined);
+});
+
+test("la excepción la decide el servidor con la clínica de la sesión: el body no puede pedirla", async () => {
+  // Una clínica nueva que manda campos extra en el body sigue pagando IVA.
+  await pagar({ plan: "PRO", method: "oxxo", billing: "monthly", sinIva: true, createdAt: "2020-01-01", planExento: "PRO" });
+  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA]);
+});
+
 /* ── contratos de código: ninguna renovación ni suscripción existente pasa por lo nuevo ── */
 
 const leer = (rel: string) => readFileSync(path.join(RAIZ, rel), "utf8");
@@ -266,7 +329,7 @@ function archivosSrc(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-test("el IVA nuevo solo lo usan los TRES sitios que crean cobros nuevos por plan (checkout, admin×2)", () => {
+test("el IVA nuevo solo lo usan los sitios que crean cobros nuevos por plan (checkout, admin×2) y el diferencial de change-plan (+ su vista previa)", () => {
   const usan = archivosSrc(path.join(RAIZ, "src"))
     .filter((f) => /iva-cobro/.test(sinComentarios(readFileSync(f, "utf8"))))
     .map((f) => path.relative(RAIZ, f).replace(/\\/g, "/"))
@@ -274,6 +337,8 @@ test("el IVA nuevo solo lo usan los TRES sitios que crean cobros nuevos por plan
     .sort();
   assert.deepEqual(usan, [
     "src/app/api/admin/stripe/create-subscription/route.ts",
+    "src/app/api/billing/change-plan/preview/route.ts",
+    "src/app/api/billing/change-plan/route.ts",
     "src/app/api/billing/checkout/route.ts",
     "src/lib/stripe-subscriptions.ts",
   ]);
@@ -287,11 +352,14 @@ test("`tax_rates` solo se escribe en el helper: ni webhooks, ni change-plan, ni 
   assert.deepEqual(con, ["src/lib/billing/iva-cobro.ts"]);
 });
 
-test("el webhook de Stripe, change-plan y los pagos manuales del admin NO importan el IVA nuevo", () => {
+test("el webhook de Stripe y los pagos manuales del admin NO importan el IVA nuevo; y change-plan lo usa SOLO en la rama sin tarjeta", () => {
+  const cp = sinComentarios(leer("src/app/api/billing/change-plan/route.ts"));
+  // Todo lo que va DESPUÉS de la rama manual (la suscripción de tarjeta viva) no sabe de IVA.
+  const iCard = cp.lastIndexOf("const stripe = getStripeSafe();");
+  assert.ok(iCard > cp.indexOf("desgloseConIva("), "la rama de tarjeta viene después de la manual");
+  assert.ok(!/ivaParaCobro|desgloseConIva|tax_rates|automatic_tax|\biva\b/i.test(cp.slice(iCard)), "la rama de suscripción de tarjeta viva no toca IVA ni tasas");
   for (const rel of [
     "src/app/api/webhooks/stripe/route.ts",
-    "src/app/api/billing/change-plan/route.ts",
-    "src/app/api/billing/change-plan/preview/route.ts",
     "src/app/api/admin/billing/route.ts",
     "src/app/api/admin/subscriptions/route.ts",
     "src/lib/billing/proration.ts",

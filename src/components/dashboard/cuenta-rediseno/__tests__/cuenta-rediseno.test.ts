@@ -299,15 +299,18 @@ test("la pantalla de pago usa la MARCA DEL REGISTRO: los mismos valores de auth-
 test("el botón y los precios dicen LO QUE SE COBRA: el total del año en anual, «+ IVA» siempre y el desglose con el total real", () => {
   const planes = leer("components/dashboard/cuenta-rediseno/planes-suspendida.tsx");
   assert.match(planes, /const cobrado = \(plan: PlanCardData\) => \(anual \? plan\.priceMxnAnnual : plan\.priceMxn\);/, "anual = priceMxnAnnual (el unitAmount del checkout)");
-  assert.match(planes, /const iva = " \+ IVA";/, "todo pago nuevo lleva IVA: cada importe lo dice");
+  // «+ IVA» sale de la MISMA regla que el servidor (ivaAplica): solo se omite en OXXO/SPEI del plan que una
+  // clínica de las de antes ya paga a mano (Ajuste 1b).
+  assert.match(planes, /const ivaDe = \(planId: PlanId\) => ivaAplica\(\{ metodo: v\.method, plan: planId, planExento: v\.planSinIva \}\);/);
+  assert.match(planes, /const iva = ivaSel \? " \+ IVA" : "";/, "cada importe dice «+ IVA» cuando lleva");
   // El desglose sale de la MISMA función que el importe SPEI y que el cálculo de Stripe.
   assert.match(planes, /desgloseConIva\(/);
   assert.match(planes, /FIRST_MONTH_PROMO_MXN\[v\.selected\.id\] \* 100/, "con la promo, el IVA va sobre lo que se cobra");
   assert.ok(planes.includes("IVA 16 %") && planes.includes("Total a pagar"), "subtotal + IVA = total a la vista");
-  assert.match(planes, /Pagar \$\{v\.selected\.name\} — \$\{centavosAMxn\(cobroNuevo\.totalCents\)\} \$\{unidad\}/, "el botón dice el TOTAL con IVA y su periodo");
+  assert.match(planes, /Pagar \$\{v\.selected\.name\} — \$\{centavosAMxn\(cobroMostrado\.totalCents\)\} \$\{unidad\}/, "el botón dice el TOTAL con IVA y su periodo");
   assert.ok(!/ctaPrice\)\}\/mes/.test(planes), "el botón ya no dice «$X/mes» en anual");
   // Sin IVA configurado la pantalla lo dice y no deja pulsar.
-  assert.match(planes, /disabled=\{v\.isRedirecting \|\| !v\.cobroConIvaListo\}/);
+  assert.match(planes, /disabled=\{v\.isRedirecting \|\| \(!v\.cobroConIvaListo && ivaSel\)\}/);
   const page = leer("app/dashboard/suspended/page.tsx");
   assert.match(page, /const cobroConIvaListo = ivaParaCobro\(process\.env\)\.ok;/);
 });

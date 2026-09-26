@@ -426,3 +426,20 @@ test("referenciaDeClinica: formato válido, sin ambiguos, y casi sin colisiones"
   }
   assert.ok(vistas.size >= 1995, `colisiones de más: ${2000 - vistas.size}`);
 });
+
+test("clínica de antes que renueva su MISMO plan por SPEI: precio tal cual, sin IVA; otro plan, con IVA", async () => {
+  const { crearSolicitudSpei, rechazarSolicitudSpei } = lib;
+  Object.assign(clinicas.get("cA"), { createdAt: new Date("2025-11-03"), plan: "PRO", nextBillingDate: new Date("2026-09-30") });
+  const igual = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
+  assert.deepEqual([igual.solicitud.subtotalCents, igual.solicitud.ivaCents, igual.solicitud.amountCents], [70000, 0, 70000]);
+  await rechazarSolicitudSpei(igual.solicitud.id, "admin1", "prueba");
+  const otro = await crearSolicitudSpei({ clinicId: "cA", plan: "CLINIC", billing: "monthly" });
+  assert.deepEqual([otro.solicitud.subtotalCents, otro.solicitud.ivaCents, otro.solicitud.amountCents], [120000, 19200, 139200]);
+});
+
+test("la excepción de SPEI no depende de lo que mande el cliente: una clínica nueva paga IVA aunque pida el mismo plan", async () => {
+  const { crearSolicitudSpei } = lib;
+  Object.assign(clinicas.get("cB"), { createdAt: new Date("2026-10-10"), plan: "BASIC", nextBillingDate: new Date("2026-11-01") });
+  const r = await crearSolicitudSpei({ clinicId: "cB", plan: "BASIC", billing: "monthly" });
+  assert.equal(r.solicitud.ivaCents, 4800);
+});
