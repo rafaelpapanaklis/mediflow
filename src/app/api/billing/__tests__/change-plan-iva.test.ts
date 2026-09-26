@@ -17,6 +17,7 @@ import path from "node:path";
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { desgloseConIva } from "@/lib/billing/iva-cobro";
+import { applyClinicOverrides } from "@/lib/billing/plan-overrides";
 
 const RAIZ = path.resolve(__dirname, "../../../../..");
 const TASA = "txr_1PabcdefghijklmnOP";
@@ -29,9 +30,9 @@ let auditorias: any[];
 let clinica: any;
 
 const PLANES: Record<string, any> = {
-  BASIC: { id: "BASIC", name: "Básico", priceMxn: 419, priceMxnAnnual: 3264 },
-  PRO: { id: "PRO", name: "Profesional", priceMxn: 689, priceMxnAnnual: 5376 },
-  CLINIC: { id: "CLINIC", name: "Clínica", priceMxn: 1719, priceMxnAnnual: 13404 },
+  BASIC: { id: "BASIC", name: "Básico", priceMxn: 419, priceMxnMonthly: 419, priceMxnAnnual: 3264 },
+  PRO: { id: "PRO", name: "Profesional", priceMxn: 689, priceMxnMonthly: 689, priceMxnAnnual: 5376 },
+  CLINIC: { id: "CLINIC", name: "Clínica", priceMxn: 1719, priceMxnMonthly: 1719, priceMxnAnnual: 13404 },
 };
 
 const stripeDoble: any = {
@@ -97,6 +98,8 @@ before(async () => {
   });
   dobles.set(path.join(RAIZ, "src/lib/plans.ts"), {
     getResolvedPlan: async (id: string) => PLANES[id] ?? PLANES.PRO,
+    // Igual que el real (plans.ts): el plan de la clínica con sus condiciones conservadas (PR #425).
+    getResolvedPlanForClinic: async (c: any) => applyClinicOverrides(PLANES[c?.plan] ?? PLANES.PRO, c),
     getPlanLimits: async () => ({ aiTokensDefault: 1000 }),
   });
   dobles.set(path.join(RAIZ, "src/lib/audit.ts"), {
@@ -226,4 +229,37 @@ test("clínica con suscripción de TARJETA viva: change-plan NO se toca (mismos 
   assert.deepEqual(u.p.items, [{ id: "si_1", price: "price_nuevo" }], "solo cambia el price del item; nada de tax_rates");
   assert.equal(u.p.proration_behavior, "always_invoice");
   assert.equal(JSON.stringify(u.p).includes("tax"), false);
+});
+
+/* ── Integración #425: el plan ACTUAL se valúa con lo que la clínica paga; el destino, a precio vigente ── */
+
+test("integración #425: una clínica de antes que conserva un precio MENOR paga un diferencial mayor, con IVA; el destino va a precio vigente", async () => {
+  const sinConservar = await subir({ plan: "PRO", method: "oxxo" });
+  assert.equal(sinConservar.res.status, 200);
+  const unitSin = sesiones[0].line_items[0].price_data.unit_amount;
+  sesiones = [];
+  // Básico conservado a $300 (la lista es $419): paga menos hoy, así que la diferencia hasta Profesional ($689) es mayor.
+  Object.assign(clinica, { createdAt: new Date("2025-11-03"), planOverrideFor: "BASIC", priceMxnMonthlyOverride: 300, priceMxnAnnualOverride: 2400 });
+  const conservado = await subir({ plan: "PRO", method: "oxxo" });
+  assert.equal(conservado.res.status, 200);
+  const unitCon = sesiones[0].line_items[0].price_data.unit_amount;
+  assert.ok(unitCon > unitSin, `el crédito se calcula con lo que paga (${unitCon} > ${unitSin})`);
+  assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA], "el cambio de plan lleva IVA también en una clínica de antes");
+  const d = desgloseConIva(unitCon);
+  assert.equal(conservado.json.totalMxn, d.totalCents / 100);
+  // La vista previa dice lo mismo que el POST.
+  const p = (await (await pedir(PREVIEW, { plan: "PRO" })).json()) as any;
+  assert.equal(Math.round(p.lines[0].amount * 100), unitCon);
+  assert.equal(Math.round(p.amountDueNow * 100), d.totalCents);
+});
+
+test("integración #425: al cambiar de plan por decisión propia se limpian las condiciones conservadas", async () => {
+  Object.assign(clinica, { createdAt: new Date("2025-11-03"), planOverrideFor: "BASIC", priceMxnMonthlyOverride: 300, maxUsersOverride: 2 });
+  clinica.subscriptionStatus = "pending_payment"; // sin cobro: se aplica en el acto
+  const { res } = await subir({ plan: "PRO" });
+  assert.equal(res.status, 200);
+  assert.equal(clinica.plan, "PRO");
+  assert.equal(clinica.planOverrideFor, null);
+  assert.equal(clinica.priceMxnMonthlyOverride, null);
+  assert.equal(clinica.maxUsersOverride, null);
 });

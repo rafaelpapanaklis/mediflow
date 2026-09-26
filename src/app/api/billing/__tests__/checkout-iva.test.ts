@@ -466,3 +466,68 @@ test("ningún camino de renovación crea sesiones: `subscriptions.update` solo e
   // Ninguno de esos toca precios/tasas con este ajuste (el test anterior lo garantiza para tax_rates).
   assert.deepEqual(con, ["src/app/api/billing/change-plan/route.ts", "src/lib/stripe-subscriptions.ts"]);
 });
+
+/* ── Integración #425 (condiciones conservadas) × #424/IVA ─────────────────────────────────────── */
+
+test("(d) clínica de antes con Clínica $1,719 conservado: OXXO/tarjeta de su mismo plan cobran SU precio, sin IVA", async () => {
+  // La lista ya es la nueva ($1,489); ella conserva $1,719 / $13,404 (SQL 1 de planes-nuevos).
+  PLANES.CLINIC = { ...PLANES.CLINIC, priceMxn: 1489, priceMxnMonthly: 1489, priceMxnAnnual: 11614 };
+  try {
+    Object.assign(clinica, {
+      plan: "CLINIC", createdAt: new Date("2025-11-03"), planOverrideFor: "CLINIC",
+      priceMxnMonthlyOverride: 1719, priceMxnAnnualOverride: 13404, maxUsersOverride: -1, maxClinicsOverride: 4,
+    });
+    await pagar({ plan: "CLINIC", method: "oxxo", billing: "monthly" });
+    assert.equal(sesiones[0].line_items[0].price_data.unit_amount, 171900, "su precio conservado");
+    assert.equal(sesiones[0].line_items[0].tax_rates, undefined, "sin IVA (exenta)");
+    await pagar({ plan: "CLINIC", method: "oxxo", billing: "annual" });
+    assert.equal(sesiones[1].line_items[0].price_data.unit_amount, 1340400);
+    assert.equal(sesiones[1].line_items[0].tax_rates, undefined);
+    await pagar({ plan: "CLINIC", method: "card", billing: "monthly" });
+    assert.equal(sesiones[2].line_items[0].price_data.unit_amount, 171900);
+    assert.equal(sesiones[2].line_items[0].tax_rates, undefined);
+    // Y el nombre del producto no miente: es el plan de la clínica.
+    assert.match(sesiones[0].line_items[0].price_data.product_data.name, /Clínica/);
+  } finally {
+    PLANES.CLINIC = { id: "CLINIC", name: "Clínica", priceMxn: 1719, priceMxnMonthly: 1719, priceMxnAnnual: 13404 };
+  }
+});
+
+test("(d) esa misma clínica de antes que elige OTRO plan paga el precio VIGENTE de ese plan + IVA (el override no viaja)", async () => {
+  PLANES.CLINIC = { ...PLANES.CLINIC, priceMxn: 1489, priceMxnMonthly: 1489, priceMxnAnnual: 11614 };
+  try {
+    Object.assign(clinica, {
+      plan: "PRO", createdAt: new Date("2025-11-03"), planOverrideFor: "PRO",
+      priceMxnMonthlyOverride: 600, priceMxnAnnualOverride: 5000,
+    });
+    await pagar({ plan: "CLINIC", method: "oxxo", billing: "monthly" });
+    assert.equal(sesiones[0].line_items[0].price_data.unit_amount, 148900, "lista vigente de Clínica, no $600");
+    assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA], "cambio de plan: con IVA");
+  } finally {
+    PLANES.CLINIC = { id: "CLINIC", name: "Clínica", priceMxn: 1719, priceMxnMonthly: 1719, priceMxnAnnual: 13404 };
+  }
+});
+
+test("(d) clínica NUEVA (después del corte): precio de lista + IVA en los tres métodos, sin overrides", async () => {
+  PLANES.CLINIC = { ...PLANES.CLINIC, priceMxn: 1489, priceMxnMonthly: 1489, priceMxnAnnual: 11614 };
+  try {
+    Object.assign(clinica, { plan: "CLINIC", createdAt: new Date("2026-10-05") });
+    for (const method of ["oxxo", "card"] as const) {
+      sesiones = [];
+      await pagar({ plan: "CLINIC", method, billing: "annual" });
+      assert.equal(sesiones[0].line_items[0].price_data.unit_amount, 1161400, method);
+      assert.deepEqual(sesiones[0].line_items[0].tax_rates, [TASA], method);
+    }
+  } finally {
+    PLANES.CLINIC = { id: "CLINIC", name: "Clínica", priceMxn: 1719, priceMxnMonthly: 1719, priceMxnAnnual: 13404 };
+  }
+});
+
+test("(d) la promo del primer mes de una clínica de antes usa su precio conservado como base del cupón", async () => {
+  Object.assign(clinica, {
+    plan: "PRO", createdAt: new Date("2025-11-03"), nextBillingDate: null, planOverrideFor: "PRO", priceMxnMonthlyOverride: 600,
+  });
+  await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(sesiones[0].line_items[0].price_data.unit_amount, 60000);
+  assert.equal(cupones[0].amount_off, 60000 - 2900, "el cupón deja el primer mes en $29 sobre SU precio");
+});
