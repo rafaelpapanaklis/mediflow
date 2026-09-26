@@ -1,10 +1,9 @@
 import { Logo } from "../../landing/primitives/logo";
-import { DashboardMockup } from "../../landing/mockups/dashboard-mockup";
 
 /** Los tres pasos, tal como pasan de verdad (cuenta → clínica → plan y pago). */
 const PASOS = [
   { t: "Crea tu cuenta", s: "Tu nombre, tu correo y una contraseña. Un minuto." },
-  { t: "Cuéntanos de tu clínica", s: "Especialidad y tamaño: con eso dejamos tu panel listo." },
+  { t: "Cuéntanos de tu clínica dental", s: "Especialidad y tamaño: con eso dejamos tu panel listo." },
   { t: "Elige tu plan y paga", s: "Tarjeta, SPEI u OXXO, en la página segura de Stripe." },
 ];
 
@@ -29,11 +28,11 @@ export function SignupVisual() {
 
       <div>
         <h1 className="dca-h1">
-          Tu clínica, en control <span className="dca-h1__accent">desde hoy</span>
+          Tu clínica dental, en control <span className="dca-h1__accent">desde hoy</span>
         </h1>
         <p className="dca-lead">
-          Agenda, expedientes, cobros, WhatsApp y facturación CFDI en un solo panel. Crea tu cuenta
-          y elige el plan que te acomode.
+          Agenda, odontograma, radiografías, cobros, WhatsApp y facturación CFDI en un solo panel.
+          Crea tu cuenta y activa el plan que elegiste.
         </p>
       </div>
 
@@ -54,12 +53,6 @@ export function SignupVisual() {
           <li key={v}>{v}</li>
         ))}
       </ul>
-
-      <div className="dca-mock" aria-hidden="true">
-        <div className="dca-mock__frame">
-          <DashboardMockup scale={0.395} animate={false} />
-        </div>
-      </div>
 
       <figure className="dca-testi" style={{ margin: 0 }}>
         <div className="dca-testi__avatar" aria-hidden="true">AP</div>

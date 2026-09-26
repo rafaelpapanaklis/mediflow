@@ -251,10 +251,10 @@ export function SignupForm() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <RefClickTracker refCode={ref} />
-      {/* Logo (en móvil ya va en la franja navy de arriba) */}
-      <div className="dca-hide-mobile">
+      {/* Logo sólo en móvil/tableta: en PC ya está en el panel de marca. */}
+      <div className="dca-logo-movil">
         <Logo size={22} color="#2563eb" />
       </div>
 
@@ -264,7 +264,7 @@ export function SignupForm() {
           style={{
             margin: 0,
             marginBottom: 6,
-            fontSize: "clamp(24px, 2.2vw, 30px)",
+            fontSize: "clamp(22px, 2vw, 26px)",
             fontWeight: 700,
             letterSpacing: "-0.035em",
             lineHeight: 1.1,
@@ -272,15 +272,18 @@ export function SignupForm() {
           }}
         >
           {step === 1 && "Crea tu cuenta"}
-          {step === 2 && "Cuéntanos de tu clínica"}
+          {step === 2 && "Cuéntanos de tu clínica dental"}
           {step === 3 && "Elige tu plan"}
         </h1>
-        <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.5, color: "#475569" }}>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.45, color: "#475569" }}>
           {step === 1 && "Tu nombre, tu correo y una contraseña. Un minuto."}
           {step === 2 &&
             "Con tu especialidad y tamaño dejamos tu panel listo desde el primer día."}
-          {step === 3 &&
-            "Confirma el plan con el que quieres empezar. El pago lo haces en el siguiente paso, dentro del panel."}
+          {step === 3 && initialPlan
+            ? "Este es el plan que elegiste. El pago lo haces en el siguiente paso, dentro del panel."
+            : step === 3
+              ? "Confirma el plan con el que quieres empezar. El pago lo haces en el siguiente paso, dentro del panel."
+              : null}
         </p>
       </div>
 
@@ -358,6 +361,7 @@ export function SignupForm() {
           onBack={() => setStep(2)}
           onSubmit={handleSubmit}
           loading={loading}
+          planFijo={initialPlan !== null}
         />
       )}
 
