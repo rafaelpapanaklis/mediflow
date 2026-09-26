@@ -14,9 +14,13 @@
  * SOLO aplica a sesiones NUEVAS. Ninguna suscripción existente se toca: ni se
  * actualiza, ni se migra, ni se cancela; sus renovaciones siguen cobrando lo de hoy.
  *
- * EXCEPCIÓN (Ajuste 1b): las clínicas YA registradas que pagan a mano (OXXO/SPEI, sin
- * tarjeta) siguen SIN IVA en la renovación de su MISMO plan — ver `planConPagoManualSinIva`.
- * Cualquier otra cosa (tarjeta, otro plan, clínica nueva, cambio de plan) lleva IVA.
+ * REGLA FINAL (Ajuste 1c, Rafael): «las clínicas que YA ESTÁN CREADAS no cambian; solo las que se
+ * registran desde ahora llevan IVA en todo». Ver `exencionDeIva`:
+ *   · registrada en/después de IVA_FECHA_CORTE → SIEMPRE con IVA (todo método, toda renovación);
+ *   · registrada antes → SIN IVA en OXXO, SPEI y SPEI directo y en su contratación con tarjeta (aunque
+ *     nunca haya pagado), del MISMO plan que ya tiene;
+ *   · con IVA aun siendo de antes: cambio de plan (el diferencial y el plan nuevo) y REACTIVAR con
+ *     tarjeta tras haber tenido y cancelado una suscripción de tarjeta.
  */
 
 /** IVA general en México. Es una tasa fiscal, no un precio de plan. */
@@ -51,32 +55,53 @@ export interface ClinicaParaIva {
   plan?: string | null;
   stripeSubscriptionId?: string | null;
   subscriptionId?: string | null;
-  nextBillingDate?: Date | string | null;
+  /**
+   * ¿Tuvo alguna vez una suscripción de TARJETA (y, si llegamos a cobrarle con tarjeta, ya no está
+   * viva)? Lo calcula `tuvoSuscripcionDeTarjeta` (iva-clinica.ts, con la base). Aquí se acepta ya
+   * resuelto para que esta regla siga siendo pura.
+   */
+  tuvoTarjeta?: boolean;
 }
 
 /**
- * ¿Esta clínica renueva SIN IVA? Devuelve el plan que puede pagar sin IVA por OXXO o
- * SPEI (su plan actual) o `null` si no aplica ninguna excepción. Se exige TODO:
- *   1. registrada ANTES de IVA_FECHA_CORTE (`Clinic.createdAt`, que no cambia nunca), y
- *   2. YA HA PAGADO alguna vez: tiene una suscripción (Stripe o legacy) o un periodo
- *      activado (`nextBillingDate`) — la misma definición que «no es primera
- *      contratación» de la promo del primer mes. Una clínica registrada antes pero que
- *      nunca pagó está comprando por primera vez: paga con IVA.
- * La excepción es SOLO para pagos únicos (OXXO/SPEI) del MISMO plan que ya tiene
- * (ver `ivaAplica`): tarjeta, otro plan y cambios de plan llevan IVA.
+ * Señales que hay EN LA FILA de la clínica de que tuvo una suscripción de tarjeta, sin consultar nada más:
+ * `stripeSubscriptionId` (el webhook de cancelación NO lo limpia) o `subscriptionId` (suscripción legacy
+ * Stripe/MP). Una suscripción de tarjeta VIVA nunca llega a decidirse aquí: el checkout manda a esa
+ * clínica al portal antes; por eso, si un cobro con tarjeta llega a esta regla y hay señal, esa
+ * suscripción ya no está viva (cancelada o borrada en Stripe).
  */
-export function planConPagoManualSinIva(clinica: ClinicaParaIva | null | undefined): string | null {
+export function senalDeTarjetaEnLaFila(c: Pick<ClinicaParaIva, "stripeSubscriptionId" | "subscriptionId">): boolean {
+  return !!(c.stripeSubscriptionId || c.subscriptionId);
+}
+
+/** Qué se le exime de IVA a una clínica de las de antes: SU plan actual, y si la tarjeta entra o no. */
+export interface ExencionIva {
+  /** Único plan exento (el que ya tiene). Otro plan = cambio de plan = con IVA. */
+  plan: string;
+  /** La contratación con tarjeta también va sin IVA (false si ya tuvo tarjeta y la canceló: reactivar = con IVA). */
+  tarjeta: boolean;
+}
+
+/**
+ * ¿Esta clínica va SIN IVA? `null` = todo con IVA. Regla (Ajuste 1c):
+ *   1. registrada ANTES de IVA_FECHA_CORTE (`Clinic.createdAt`, que no cambia nunca); si es en/después
+ *      del corte, o falta el dato, → `null` (con IVA: nunca se regala el IVA por un dato ausente);
+ *   2. la exención es de SU plan actual (`Clinic.plan`), para OXXO, SPEI y SPEI directo, y para la
+ *      tarjeta salvo que ya haya tenido una suscripción de tarjeta (y la haya cancelado).
+ * Ya NO se exige «haber pagado antes»: una clínica creada antes que nunca pagó tampoco cambia.
+ */
+export function exencionDeIva(clinica: ClinicaParaIva | null | undefined): ExencionIva | null {
   if (!clinica || !clinica.plan) return null;
   const creada = clinica.createdAt ? new Date(clinica.createdAt) : null;
   if (!creada || Number.isNaN(creada.getTime()) || creada.getTime() >= IVA_FECHA_CORTE.getTime()) return null;
-  const yaPago = !!(clinica.stripeSubscriptionId || clinica.subscriptionId || clinica.nextBillingDate);
-  return yaPago ? clinica.plan : null;
+  return { plan: clinica.plan, tarjeta: !clinica.tuvoTarjeta };
 }
 
-/** ¿Este pago lleva IVA? No lleva solo si es OXXO/SPEI del plan exento de una clínica de las de antes. */
-export function ivaAplica(args: { metodo: MetodoDePago; plan: string; planExento: string | null | undefined }): boolean {
-  if (args.metodo === "card") return true;
-  return !(args.planExento && args.plan === args.planExento);
+/** ¿Este pago lleva IVA? Solo va sin IVA lo que la exención de la clínica cubre. */
+export function ivaAplica(args: { metodo: MetodoDePago; plan: string; exencion: ExencionIva | null | undefined }): boolean {
+  const e = args.exencion;
+  if (!e || args.plan !== e.plan) return true; // clínica nueva, o cambio de plan
+  return args.metodo === "card" ? !e.tarjeta : false;
 }
 
 export interface DesgloseIva {
@@ -128,18 +153,15 @@ export function ivaParaCobro(env: Record<string, string | undefined>): IvaParaCo
 }
 
 /**
- * IVA de un pago concreto de una clínica concreta: `ivaParaCobro`, salvo que sea la
- * renovación por OXXO/SPEI del mismo plan de una clínica de las de antes — entonces
- * `modo: "exento"`, sin tasa y SIN exigir el env (esas clínicas no dependen de él).
- * La decisión se toma en el servidor con los datos de la clínica de la sesión; el
- * cliente solo la refleja en pantalla.
+ * IVA de un pago concreto de una clínica concreta: `ivaParaCobro`, salvo que la exención de la clínica
+ * cubra ese método y plan — entonces `modo: "exento"`, sin tasa y SIN exigir el env (esas clínicas no
+ * dependen de él). La decisión se toma en el servidor con la clínica de la sesión
+ * (`exencionIvaDeClinica`); el cliente solo la refleja en pantalla.
  */
 export function ivaParaPagoDeClinica(
   env: Record<string, string | undefined>,
-  args: { metodo: MetodoDePago; plan: string; clinica: ClinicaParaIva | null | undefined },
+  args: { metodo: MetodoDePago; plan: string; exencion: ExencionIva | null | undefined },
 ): IvaParaCobro {
-  if (!ivaAplica({ metodo: args.metodo, plan: args.plan, planExento: planConPagoManualSinIva(args.clinica) })) {
-    return { ok: true, modo: "exento", sesion: {}, linea: {} };
-  }
+  if (!ivaAplica(args)) return { ok: true, modo: "exento", sesion: {}, linea: {} };
   return ivaParaCobro(env);
 }

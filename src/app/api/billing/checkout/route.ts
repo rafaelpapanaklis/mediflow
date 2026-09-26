@@ -7,6 +7,7 @@ import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlan } from "@/lib/plans";
 import { ensureFirstMonthCoupon, isFirstContract } from "@/lib/billing/first-month-promo";
 import { ivaParaPagoDeClinica } from "@/lib/billing/iva-cobro";
+import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -148,9 +149,11 @@ export async function POST(req: NextRequest) {
   // Stripe en la línea del plan (env STRIPE_IVA_TAX_RATE_ID), o Stripe Tax si STRIPE_AUTOMATIC_TAX
   // es "true" (nunca las dos). Sin ninguna NO se cobra sin IVA en silencio: 503 claro. Va DESPUÉS
   // del desvío al portal de arriba: quien ya tiene suscripción de tarjeta viva no pasa por aquí.
-  // Excepción (Ajuste 1b): OXXO/SPEI del mismo plan de una clínica registrada ANTES del 26-sep-2026
-  // que ya había pagado = sin IVA, como hoy; decidido aquí con la clínica de la SESIÓN, no con el body.
-  const iva = ivaParaPagoDeClinica(process.env, { metodo: method, plan: planId, clinica: clinic });
+  // Regla del IVA (Ajuste 1c): una clínica creada ANTES del 26-sep-2026 no cambia (sin IVA en OXXO/SPEI
+  // y en su tarjeta, mismo plan; con IVA en cambio de plan y al reactivar tarjeta tras cancelarla);
+  // una creada después paga IVA en todo. Decidido aquí con la clínica de la SESIÓN, no con el body.
+  const exencion = await exencionIvaDeClinica(clinic);
+  const iva = ivaParaPagoDeClinica(process.env, { metodo: method, plan: planId, exencion });
   if (iva.ok === false) {
     return NextResponse.json({ error: iva.error, code: iva.codigo }, { status: 503 });
   }

@@ -14,7 +14,7 @@
  * (getResolvedPlan); aquí no hay ninguno escrito.
  *
  * IVA — precio + 16 % (decisión de Rafael: los tres métodos cobran el mes + IVA; la
- * única excepción es la renovación del mismo plan de una clínica de las de antes).
+ * única excepción es el mismo plan de una clínica creada antes del corte).
  * Se calcula sobre el subtotal y se redondea al centavo, igual que Stripe con una tasa
  * exclusiva (ver iva-cobro.ts): el importe que se muestra es el que se guarda.
  */
@@ -47,7 +47,7 @@ export function subtotalCentavos(plan: PrecioDePlan, billing: PeriodoPago): numb
 
 /**
  * `conIva` es true SIEMPRE, salvo la renovación del mismo plan de una clínica de las de
- * antes (ver planConPagoManualSinIva en iva-cobro.ts): ahí el importe es el precio tal cual.
+ * antes (ver exencionDeIva en iva-cobro.ts): ahí el importe es el precio tal cual.
  */
 export function importeSpei(args: { plan: PrecioDePlan; billing: PeriodoPago; conIva?: boolean }): ImporteSpei {
   const subtotal = subtotalCentavos(args.plan, args.billing);
