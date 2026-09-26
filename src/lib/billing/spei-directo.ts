@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits, getResolvedPlan } from "@/lib/plans";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
+import { CLINIC_OVERRIDE_SELECT, applyClinicOverrides } from "@/lib/billing/plan-overrides";
 import { manualPeriodFields } from "@/lib/billing/proration";
 import { ivaAplica } from "@/lib/billing/iva-cobro";
 import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
@@ -211,23 +212,36 @@ export async function rechazoReciente(
 }
 
 /**
- * EL plan (precio incluido) que SPEI cobra: el único punto donde se decide.
- * Hoy es el de plan_configs, igual que /api/billing/checkout.
+ * EL plan (precio incluido) que SPEI cobra: el único punto donde se decide. Es lo mismo que cobra
+ * /api/billing/checkout (PR #425): `applyClinicOverrides(getResolvedPlan(plan), clinic)`. Una clínica de
+ * antes de los planes de sep-2026 que paga SU MISMO plan transfiere el precio que conserva (Clínica de
+ * antes: $1,719, no $1,489); si elige OTRO plan, el precio vigente de ese plan. La pantalla de pago
+ * muestra este mismo importe (page.tsx aplica los mismos overrides a `planCards`), así que no hay 409
+ * por diferencia.
  *
- * ⚠️ INTEGRACIÓN con feat/planes-nuevos (PR #425): esa rama hace que el checkout
- * cobre `applyClinicOverrides(getResolvedPlan(plan), clinic)` (las clínicas de
- * antes conservan su precio). Al integrarla, ESTA función debe hacer lo mismo
- * —leer la clínica con CLINIC_OVERRIDE_SELECT y aplicar los overrides—, o SPEI
- * cobraría distinto que la tarjeta. La pantalla de pago ya muestra el precio
- * conservado (esa rama también se lo aplica a `planCards` en page.tsx).
+ * Devuelve también la fila de la clínica que se leyó (con lo que necesita la exención de IVA), para no
+ * consultarla dos veces. La clínica se lee por el `clinicId` de la SESIÓN.
  */
-async function planACobrar(_clinicId: string, planId: PlanId) {
-  return getResolvedPlan(planId);
+async function planACobrar(clinicId: string, planId: PlanId) {
+  const [base, clinica] = await Promise.all([
+    getResolvedPlan(planId),
+    prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: {
+        id: true,
+        createdAt: true,
+        stripeSubscriptionId: true,
+        subscriptionId: true,
+        ...CLINIC_OVERRIDE_SELECT,
+      },
+    }),
+  ]);
+  return { plan: applyClinicOverrides(base, clinica), clinica };
 }
 
 /**
  * Registra «Ya hice la transferencia». El importe se calcula AQUÍ, en el
- * servidor, con el precio de plan_configs: lo que mande el cliente (más allá de
+ * servidor, con el precio de plan_configs (o el conservado de la clínica): lo que mande el cliente (más allá de
  * plan y periodo) no cuenta. Si ya hay una pendiente se devuelve esa: doble
  * clic o segunda pestaña no crean dos.
  */
@@ -246,13 +260,10 @@ export async function crearSolicitudSpei(args: {
   const cuenta = await leerCuentaSpei();
   if (!cuenta) throw new SpeiError("no-disponible", "El pago por transferencia no está disponible por ahora.");
 
-  const plan = await planACobrar(clinicId, args.plan);
+  const { plan, clinica: clinicaIva } = await planACobrar(clinicId, args.plan);
   // IVA 16 % salvo el mismo plan de una clínica creada antes del corte (ver iva-cobro.ts).
-  // La clínica se lee por el clinicId de la sesión; sin ella, la clínica cuenta como nueva (con IVA).
-  const clinicaIva = await prisma.clinic.findUnique({
-    where: { id: clinicId },
-    select: { id: true, createdAt: true, plan: true, stripeSubscriptionId: true, subscriptionId: true },
-  });
+  // Sin fila de clínica, cuenta como nueva (con IVA). El importe exento es el `plan` de arriba, o sea el
+  // precio CONSERVADO de la clínica de antes (sin IVA), y el de una nueva es el de lista + IVA.
   const conIva = ivaAplica({ metodo: "spei", plan: plan.id, exencion: await exencionIvaDeClinica(clinicaIva) });
   const importe = importeSpei({ plan, billing: args.billing, conIva });
   if (args.amountCentsEsperado !== undefined && args.amountCentsEsperado !== importe.totalCents) {

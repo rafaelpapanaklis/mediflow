@@ -39,9 +39,10 @@ let consultasSinClinica: number;
 let siguienteId = 1;
 
 const PLANES: Record<string, any> = {
-  BASIC: { id: "BASIC", name: "Básico", priceMxn: 300, priceMxnAnnual: 2340, aiTokensDefault: 1000 },
-  PRO: { id: "PRO", name: "Profesional", priceMxn: 700, priceMxnAnnual: 5460, aiTokensDefault: 5000 },
-  CLINIC: { id: "CLINIC", name: "Clínica", priceMxn: 1200, priceMxnAnnual: 9360, aiTokensDefault: 20000 },
+  // Como el ResolvedPlan real: `priceMxn` y `priceMxnMonthly` van juntos (applyClinicOverrides los reescribe).
+  BASIC: { id: "BASIC", name: "Básico", priceMxn: 300, priceMxnMonthly: 300, priceMxnAnnual: 2340, aiTokensDefault: 1000 },
+  PRO: { id: "PRO", name: "Profesional", priceMxn: 700, priceMxnMonthly: 700, priceMxnAnnual: 5460, aiTokensDefault: 5000 },
+  CLINIC: { id: "CLINIC", name: "Clínica", priceMxn: 1200, priceMxnMonthly: 1200, priceMxnAnnual: 9360, aiTokensDefault: 20000 },
 };
 
 function coincide(fila: any, where: any): boolean {
@@ -450,4 +451,58 @@ test("clínica creada DESPUÉS del corte: SPEI siempre con IVA, aunque sea su mi
   Object.assign(clinicas.get("cB"), { createdAt: new Date("2026-10-10"), plan: "BASIC", nextBillingDate: new Date("2026-11-01") });
   const r = await crearSolicitudSpei({ clinicId: "cB", plan: "BASIC", billing: "monthly" });
   assert.equal(r.solicitud.ivaCents, 4800);
+});
+
+/* ── Integración con PR #425: el SPEI cobra el precio CONSERVADO ─────────────────────────────── */
+
+test("integración #425: clínica de antes con precio conservado transfiere SU precio, sin IVA (mensual y anual)", async () => {
+  const { crearSolicitudSpei, rechazarSolicitudSpei } = lib;
+  // Clínica de antes (Clínica $1,719 mientras la lista ya es $1,200 en el doble): conserva su precio.
+  Object.assign(clinicas.get("cA"), {
+    createdAt: new Date("2025-11-03"), plan: "CLINIC", planOverrideFor: "CLINIC",
+    priceMxnMonthlyOverride: 1719, priceMxnAnnualOverride: 13404, maxUsersOverride: -1, maxClinicsOverride: 4,
+  });
+  const m = await crearSolicitudSpei({ clinicId: "cA", plan: "CLINIC", billing: "monthly" });
+  assert.deepEqual([m.solicitud.subtotalCents, m.solicitud.ivaCents, m.solicitud.amountCents], [171900, 0, 171900], "su precio conservado, sin IVA");
+  await rechazarSolicitudSpei(m.solicitud.id, "admin1", "prueba");
+  const a = await crearSolicitudSpei({ clinicId: "cA", plan: "CLINIC", billing: "annual" });
+  assert.deepEqual([a.solicitud.subtotalCents, a.solicitud.ivaCents, a.solicitud.amountCents], [1340400, 0, 1340400]);
+});
+
+test("integración #425: lo que la pantalla enseña (precio conservado) es lo que el servidor acepta: sin 409", async () => {
+  const { crearSolicitudSpei } = lib;
+  Object.assign(clinicas.get("cA"), {
+    createdAt: new Date("2025-11-03"), plan: "PRO", planOverrideFor: "PRO", priceMxnMonthlyOverride: 689, priceMxnAnnualOverride: 5376,
+  });
+  const r = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly", amountCentsEsperado: 68900 });
+  assert.equal(r.solicitud.amountCents, 68900);
+});
+
+test("integración #425: clínica de antes que elige OTRO plan paga el precio de lista de ese plan + IVA", async () => {
+  const { crearSolicitudSpei } = lib;
+  Object.assign(clinicas.get("cA"), {
+    createdAt: new Date("2025-11-03"), plan: "PRO", planOverrideFor: "PRO", priceMxnMonthlyOverride: 689, priceMxnAnnualOverride: 5376,
+  });
+  const r = await crearSolicitudSpei({ clinicId: "cA", plan: "CLINIC", billing: "monthly" });
+  assert.deepEqual([r.solicitud.subtotalCents, r.solicitud.ivaCents, r.solicitud.amountCents], [120000, 19200, 139200]);
+});
+
+test("integración #425: clínica NUEVA paga lista + IVA; si un admin le dejó un precio propio, ese precio + IVA", async () => {
+  const { crearSolicitudSpei, rechazarSolicitudSpei } = lib;
+  Object.assign(clinicas.get("cB"), { createdAt: new Date("2026-10-10"), plan: "BASIC" });
+  const lista = await crearSolicitudSpei({ clinicId: "cB", plan: "BASIC", billing: "monthly" });
+  assert.deepEqual([lista.solicitud.subtotalCents, lista.solicitud.ivaCents, lista.solicitud.amountCents], [30000, 4800, 34800]);
+  await rechazarSolicitudSpei(lista.solicitud.id, "admin1", "prueba");
+  Object.assign(clinicas.get("cB"), { planOverrideFor: "BASIC", priceMxnMonthlyOverride: 250 });
+  const propio = await crearSolicitudSpei({ clinicId: "cB", plan: "BASIC", billing: "monthly" });
+  assert.deepEqual([propio.solicitud.subtotalCents, propio.solicitud.ivaCents, propio.solicitud.amountCents], [25000, 4000, 29000]);
+});
+
+test("integración #425: override de OTRO plan (la clínica ya cambió de plan) no se aplica: precio de lista", async () => {
+  const { crearSolicitudSpei } = lib;
+  Object.assign(clinicas.get("cA"), {
+    createdAt: new Date("2025-11-03"), plan: "PRO", planOverrideFor: "BASIC", priceMxnMonthlyOverride: 100,
+  });
+  const r = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
+  assert.equal(r.solicitud.subtotalCents, 70000, "la guarda planOverrideFor la neutraliza");
 });
