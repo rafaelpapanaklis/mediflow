@@ -7,12 +7,7 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { PLAN_MODULES, type ResolvedPlan } from "@/lib/plan-shared";
-
-const BANK_INFO = {
-  nombre: "Efthymios Rafail Papanaklis",
-  clabe:  "012910015008025244",
-  banco:  "BBVA",
-};
+import { BancoSpeiEditor, type CuentaGuardada } from "./banco-spei";
 
 interface EnvStatus {
   ADMIN_PASSWORD: boolean;
@@ -199,7 +194,15 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
   );
 }
 
-export function AdminSettingsClient({ envStatus, planConfigs }: { envStatus: EnvStatus; planConfigs: ResolvedPlan[] }) {
+export function AdminSettingsClient({
+  envStatus,
+  planConfigs,
+  cuentaSpei = null,
+}: {
+  envStatus: EnvStatus;
+  planConfigs: ResolvedPlan[];
+  cuentaSpei?: CuentaGuardada | null;
+}) {
   const [tab, setTab]   = useState("empresa");
   const [saving, setSaving] = useState(false);
 
@@ -322,41 +325,8 @@ export function AdminSettingsClient({ envStatus, planConfigs }: { envStatus: Env
             </CardNew>
           )}
 
-          {/* BANCO */}
-          {tab === "banco" && (
-            <CardNew title="Datos bancarios SPEI" sub="Aparecen en el registro, en la página de pago expirado y en el panel de pagos del admin">
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 520 }}>
-                {[
-                  { label: "Nombre del beneficiario", value: BANK_INFO.nombre },
-                  { label: "CLABE interbancaria",     value: BANK_INFO.clabe  },
-                  { label: "Banco",                   value: BANK_INFO.banco  },
-                ].map(f => (
-                  <div key={f.label} className="field-new">
-                    <label className="field-new__label">{f.label}</label>
-                    <input className="input-new mono" defaultValue={f.value} />
-                  </div>
-                ))}
-                <div
-                  style={{
-                    padding: "10px 14px",
-                    background: "rgba(245,158,11,0.08)",
-                    border: "1px solid rgba(245,158,11,0.25)",
-                    borderRadius: 10,
-                    fontSize: 12,
-                    color: "var(--warning)",
-                  }}
-                >
-                  Para que los cambios apliquen en el código, actualiza la constante{" "}
-                  <code className="mono" style={{ background: "var(--bg-elev-2)", padding: "1px 5px", borderRadius: 4 }}>BANK_INFO</code>{" "}
-                  en los archivos{" "}
-                  <code className="mono" style={{ background: "var(--bg-elev-2)", padding: "1px 5px", borderRadius: 4 }}>register-form.tsx</code>,{" "}
-                  <code className="mono" style={{ background: "var(--bg-elev-2)", padding: "1px 5px", borderRadius: 4 }}>payments-client.tsx</code>{" "}
-                  y{" "}
-                  <code className="mono" style={{ background: "var(--bg-elev-2)", padding: "1px 5px", borderRadius: 4 }}>suspended/page.tsx</code>.
-                </div>
-              </div>
-            </CardNew>
-          )}
+          {/* BANCO — la cuenta SPEI de la plataforma, guardada en la base (banco-spei.tsx). */}
+          {tab === "banco" && <BancoSpeiEditor inicial={cuentaSpei} />}
 
           {/* SEGURIDAD */}
           {tab === "seguridad" && (

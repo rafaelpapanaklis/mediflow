@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AdminSettingsClient } from "./settings-client";
 import { getResolvedPlans } from "@/lib/plans";
+import { leerCuentaSpeiParaEditar } from "@/lib/billing/spei-directo";
 
 export const metadata: Metadata = { title: "Configuración — Admin DaleControl" };
 
@@ -21,6 +22,10 @@ export default async function AdminSettingsPage() {
     WHATSAPP_TOKEN:         Boolean(process.env.MEDIFLOW_WHATSAPP_TOKEN),
     WHATSAPP_PHONE_ID:      Boolean(process.env.MEDIFLOW_WHATSAPP_PHONE_ID),
   };
-  const planConfigs = await getResolvedPlans();
-  return <AdminSettingsClient envStatus={envStatus} planConfigs={planConfigs} />;
+  const [planConfigs, cuentaSpei] = await Promise.all([
+    getResolvedPlans(),
+    // Nunca lanza por tabla ausente: sin el SQL aplicado devuelve null.
+    leerCuentaSpeiParaEditar().catch(() => null),
+  ]);
+  return <AdminSettingsClient envStatus={envStatus} planConfigs={planConfigs} cuentaSpei={cuentaSpei} />;
 }
