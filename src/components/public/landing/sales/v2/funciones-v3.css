@@ -267,3 +267,9 @@
   .dcf3-hecho { font-size: 14px; }
   .dcf3-card--ilu-arriba .dcf3-card__ilu { padding-top: 18px; }
 }
+/* Teléfonos de 360–430 (ws1-t5, ajuste 2): a dos columnas cada píldora medía
+   ~135 px y «8 plantillas», «100 % personalizable» y «Agendan desde tu web»
+   se partían en dos o tres líneas. Una columna: cuatro filas de 48 px. */
+@media (max-width: 430px) {
+  .dcf3-hechos { grid-template-columns: minmax(0, 1fr); }
+}
