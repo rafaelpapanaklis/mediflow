@@ -11,7 +11,6 @@ import {
   centavosAMxn,
   cuentaUsable,
   importeSpei,
-  ivaEnCobro,
   periodoPagado,
   type CuentaBancaria,
   type PeriodoPago,
@@ -246,7 +245,7 @@ export async function crearSolicitudSpei(args: {
   if (!cuenta) throw new SpeiError("no-disponible", "El pago por transferencia no está disponible por ahora.");
 
   const plan = await planACobrar(clinicId, args.plan);
-  const importe = importeSpei({ plan, billing: args.billing, conIva: ivaEnCobro(process.env) });
+  const importe = importeSpei({ plan, billing: args.billing });
   if (args.amountCentsEsperado !== undefined && args.amountCentsEsperado !== importe.totalCents) {
     throw new SpeiError("precio-cambio", "El precio cambió mientras tenías la pantalla abierta. Recarga la página y revisa el importe.");
   }

@@ -13,17 +13,16 @@
  * `spei-directo.test.ts` leyendo esa ruta). Los precios salen de `plan_configs`
  * (getResolvedPlan); aquí no hay ninguno escrito.
  *
- * IVA — «tal como se cobra hoy»: el checkout SOLO suma IVA cuando el env
- * STRIPE_AUTOMATIC_TAX === "true" (Stripe Tax, IVA aparte del precio). Aquí se
- * usa la MISMA condición: sin el env el importe es el precio tal cual; con él,
- * precio + 16 %. Si un día el checkout cambia de regla, cambia también
- * `ivaEnCobro` (un único sitio).
+ * IVA — SIEMPRE precio + 16 % (decisión de Rafael: los tres métodos cobran el mes
+ * + IVA). Se calcula sobre el subtotal y se redondea al centavo, igual que Stripe con
+ * una tasa exclusiva (ver iva-cobro.ts): el importe que se muestra es el que se guarda.
  */
+
+import { desgloseConIva } from "./iva-cobro";
 
 export type PeriodoPago = "monthly" | "annual";
 
-/** IVA general en México. Es una tasa fiscal, no un precio de plan. */
-export const IVA_TASA = 0.16;
+export { IVA_TASA } from "./iva-cobro";
 
 /** Lo único que se necesita de un plan resuelto para calcular el importe. */
 export interface PrecioDePlan {
@@ -34,15 +33,10 @@ export interface PrecioDePlan {
 export interface ImporteSpei {
   /** Precio del plan para el periodo, en centavos (= unitAmount del checkout). */
   subtotalCents: number;
-  /** IVA en centavos; 0 cuando el cobro de hoy no lo suma. */
+  /** IVA 16 % sobre el subtotal, redondeado al centavo. */
   ivaCents: number;
   /** Lo que la clínica transfiere: subtotal + IVA. */
   totalCents: number;
-}
-
-/** ¿El cobro de hoy suma IVA? Misma condición que /api/billing/checkout. */
-export function ivaEnCobro(env: Record<string, string | undefined>): boolean {
-  return env.STRIPE_AUTOMATIC_TAX === "true";
 }
 
 /** Precio del plan para el periodo, en centavos: la misma cuenta del checkout. */
@@ -50,10 +44,8 @@ export function subtotalCentavos(plan: PrecioDePlan, billing: PeriodoPago): numb
   return Math.round((billing === "annual" ? plan.priceMxnAnnual : plan.priceMxn) * 100);
 }
 
-export function importeSpei(args: { plan: PrecioDePlan; billing: PeriodoPago; conIva: boolean }): ImporteSpei {
-  const subtotalCents = subtotalCentavos(args.plan, args.billing);
-  const ivaCents = args.conIva ? Math.round(subtotalCents * IVA_TASA) : 0;
-  return { subtotalCents, ivaCents, totalCents: subtotalCents + ivaCents };
+export function importeSpei(args: { plan: PrecioDePlan; billing: PeriodoPago }): ImporteSpei {
+  return desgloseConIva(subtotalCentavos(args.plan, args.billing));
 }
 
 /** 68900 → "689.00" (para copiar al portapapeles: sin símbolo ni separador). */
