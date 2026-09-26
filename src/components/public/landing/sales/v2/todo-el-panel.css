@@ -60,7 +60,10 @@
 }
 .dctp-laptop__cam { position: absolute; top: 4px; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: #0a0a12; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18); }
 .dctp-laptop__screen { position: relative; aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden; background: #f4f3f8; }
-.dctp-laptop__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Ajuste 3: los vídeos van apilados; solo el activo se ve (fundido de opacidad). */
+.dctp-laptop__videos { position: absolute; inset: 0; }
+.dctp-laptop__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .35s ease; }
+.dctp-laptop__video.is-on { opacity: 1; }
 .dctp-laptop__base { position: relative; height: 16px; margin: 0 -3.5%; border-radius: 0 0 14px 14px; background: linear-gradient(180deg, #34324a 0%, #232134 55%, #15131f 100%); box-shadow: 0 30px 50px -20px rgba(2, 6, 23, .9), 0 1px 0 rgba(255, 255, 255, .1) inset; }
 .dctp-laptop__base span { position: absolute; left: 50%; top: 0; width: 120px; height: 6px; margin-left: -60px; border-radius: 0 0 6px 6px; background: #0f0e17; }
 
