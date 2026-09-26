@@ -974,6 +974,18 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv4-price__cap.is-off .dcv4-price__capvalue { color: #64748b; font-weight: 700; }
 .dcv4-price__card.is-featured .dcv4-price__cap.is-off { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.14); }
 .dcv4-price__card.is-featured .dcv4-price__cap.is-off .dcv4-price__capvalue { color: #94a3b8; }
+/* Ajuste 9: cinco fichas (se añade Sedes); la quinta, Tokens IA, ocupa el ancho. */
+.dcv4-price__cap:nth-child(5):last-child { grid-column: 1 / -1; }
+
+/* Ajuste 9: chip «Todo lo esencial incluido» que salta al bloque común. */
+.dcv4-price__all { margin-top: 18px; display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 12.5px; font-weight: 700; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 999px; padding: 6px 12px 6px 8px; text-decoration: none; transition: background .18s, border-color .18s; }
+.dcv4-price__all svg { width: 18px; height: 18px; padding: 3px; border-radius: 50%; color: #15803d; background: #dcfce7; flex: 0 0 auto; }
+.dcv4-price__all:hover { background: #dcfce7; border-color: #86efac; color: #166534; }
+.dcv4-price__all:focus-visible { outline: 2px solid #15803d; outline-offset: 2px; }
+.dcv4-price__card.is-featured .dcv4-price__all { color: #86efac; background: rgba(74,222,128,.1); border-color: rgba(74,222,128,.3); }
+.dcv4-price__card.is-featured .dcv4-price__all svg { color: #86efac; background: rgba(74,222,128,.16); }
+.dcv4-price__card.is-featured .dcv4-price__all:hover { background: rgba(74,222,128,.18); border-color: rgba(74,222,128,.5); color: #bbf7d0; }
+.dcv4-price__card.is-featured .dcv4-price__all:focus-visible { outline-color: #86efac; }
 
 /* Lista de funciones: filas con filo entre ellas, ✓/✗ en ficha redonda de 20 px. */
 .dcv4-price__addendum { margin-top: 22px; display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 800; color: var(--ink); }
@@ -997,6 +1009,26 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv4-price__card.is-featured .dcv4-price__cta:hover { color: #0f172a; background: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 20px 36px -14px rgba(96,165,250,.75); }
 .dcv4-price__card.is-featured .dcv4-price__ctasub { color: #1d4ed8; }
 .dcv4-price__card.is-featured .dcv4-price__cta:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* Ajuste 9: bloque «Incluido en todos los planes», una sola vez bajo las
+   tarjetas. Mismo papel que las tarjetas claras; la lista en 3 columnas
+   (2 en tableta, 1 en móvil), ✓ en ficha verde como en las filas. */
+.dcv4-price__common { margin-top: clamp(22px, 2.6vw, 32px); background: #fff; border: 1px solid #e2e8f0; border-radius: 22px; padding: clamp(22px, 2.6vw, 30px) clamp(20px, 2.4vw, 32px); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(15,23,42,.04), 0 24px 52px -36px rgba(15,23,42,.35); }
+.dcv4-price__commonhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+.dcv4-price__commontitle { display: inline-flex; align-items: center; gap: 10px; font-size: clamp(17px, 1.5vw, 20px); font-weight: 800; letter-spacing: -.015em; color: #0f172a; }
+.dcv4-price__commontitle::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: #15803d; box-shadow: 0 0 0 3px #dcfce7; }
+.dcv4-price__commonsub { font-size: 14px; color: #64748b; }
+.dcv4-price__commonlist { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 22px; }
+.dcv4-price__commonlist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.45; color: #334155; padding: 6px 0; border-top: 1px solid #eef2f7; }
+.dcv4-price__commonlist li:nth-child(-n+3) { border-top: 0; }
+@media (max-width: 1000px) {
+  .dcv4-price__commonlist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dcv4-price__commonlist li:nth-child(3) { border-top: 1px solid #eef2f7; }
+}
+@media (max-width: 620px) {
+  .dcv4-price__commonlist { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .dcv4-price__commonlist li:nth-child(2) { border-top: 1px solid #eef2f7; }
+}
 
 /* Píldoras de confianza: vidrio claro con la ✓ en ficha verde. */
 .dcv4-price__chips { margin-top: clamp(32px, 4vw, 50px); display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }

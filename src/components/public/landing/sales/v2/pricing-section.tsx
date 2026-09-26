@@ -24,10 +24,23 @@ import type { PlanCard } from "./plan-cards";
  * ya venía de plan-cards) y las capas decorativas del fondo. Todo lo visual
  * está en landing-v2.css bajo «Precios (ajuste 8)».
  *
+ * Ajuste 9 (Rafael): las funciones se leen de un vistazo y se comparan. Cada
+ * tarjeta lista SOLO lo que cambia entre planes (mismas filas, mismo orden en
+ * las tres: plan-cards.ts → COMPARE_ROWS) y las funciones base van UNA sola
+ * vez debajo de las tarjetas, en «Incluido en todos los planes»
+ * (`includedInAll`, derivado de los flags de módulo de plan_configs). Cada
+ * tarjeta lleva un chip que salta a ese bloque. Cupos: se añade «Sedes»
+ * (maxClinics); la quinta ficha ocupa el ancho completo.
+ *
  * CTA → /signup?plan=basic|pro|clinic&billing=monthly|annual.
  */
 
 const num = (n: number) => n.toLocaleString("es-MX");
+
+/* Ajuste 9: rótulos del bloque común (sin cifras). */
+const PRICING_ALL_TITLE = "Incluido en todos los planes";
+const PRICING_ALL_SUB = "Las funciones base van en Básico, Profesional y Clínica. Las tarjetas muestran solo lo que cambia.";
+const PRICING_ALL_CHIP = "Todo lo esencial incluido";
 
 function Check({ on }: { on: boolean }) {
   return on ? (
@@ -40,6 +53,8 @@ function Check({ on }: { on: boolean }) {
 export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { cards: PlanCard[]; firstMonthFrom: string; yearlyDiscountPct: number }) {
   // Ajuste 7 (Rafael): arranca en MENSUAL (antes, ajuste 4, arrancaba en anual).
   const [anual, setAnual] = useState(false);
+  // La lista común es la misma en las tres tarjetas (plan-cards.ts la calcula una vez).
+  const includedInAll = cards[0]?.includedInAll ?? [];
 
   return (
     <section id="precios" className="dcv4-price" style={{ scrollMarginTop: 72 }}>
@@ -124,6 +139,12 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
                 ))}
               </ul>
 
+              {/* Ajuste 9: lo base está en los tres planes; el chip salta al bloque común de abajo. */}
+              <a href="#precios-incluido" className="dcv4-price__all">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7" /></svg>
+                <span>{PRICING_ALL_CHIP}</span>
+              </a>
+
               {p.addendum && <p className="dcv4-price__addendum">{p.addendum}</p>}
 
               <ul className="dcv4-price__feats">
@@ -146,6 +167,24 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
             </article>
           ))}
         </div>
+
+        {/* Ajuste 9: funciones base, una sola vez para los tres planes (misma lista en cada tarjeta: plan-cards.ts). */}
+        {includedInAll.length > 0 && (
+          <div id="precios-incluido" data-reveal="" className="dcv4-price__common" style={{ scrollMarginTop: 88 }}>
+            <div className="dcv4-price__commonhead">
+              <h3 className="dcv4-price__commontitle">{PRICING_ALL_TITLE}</h3>
+              <p className="dcv4-price__commonsub">{PRICING_ALL_SUB}</p>
+            </div>
+            <ul className="dcv4-price__commonlist">
+              {includedInAll.map((f) => (
+                <li key={f}>
+                  <svg className="dcv4-price__chk dcv4-price__chk--on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7" /></svg>
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <ul data-reveal="" className="dcv4-price__chips">
           {PRICING_COPY.trustChips.map((chip) => (
