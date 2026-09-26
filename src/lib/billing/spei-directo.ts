@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getPlanLimits, getResolvedPlan } from "@/lib/plans";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
 import { manualPeriodFields } from "@/lib/billing/proration";
+import { ivaAplica, planConPagoManualSinIva } from "@/lib/billing/iva-cobro";
 import { sendEmail, sendPlanActivatedEmail } from "@/lib/email";
 import {
   ALFABETO_REFERENCIA,
@@ -245,7 +246,14 @@ export async function crearSolicitudSpei(args: {
   if (!cuenta) throw new SpeiError("no-disponible", "El pago por transferencia no está disponible por ahora.");
 
   const plan = await planACobrar(clinicId, args.plan);
-  const importe = importeSpei({ plan, billing: args.billing });
+  // IVA 16 % salvo la renovación del mismo plan de una clínica de las de antes (ver iva-cobro.ts).
+  // La clínica se lee por el clinicId de la sesión; sin ella, la clínica cuenta como nueva (con IVA).
+  const clinicaIva = await prisma.clinic.findUnique({
+    where: { id: clinicId },
+    select: { createdAt: true, plan: true, stripeSubscriptionId: true, subscriptionId: true, nextBillingDate: true },
+  });
+  const conIva = ivaAplica({ metodo: "spei", plan: plan.id, planExento: planConPagoManualSinIva(clinicaIva) });
+  const importe = importeSpei({ plan, billing: args.billing, conIva });
   if (args.amountCentsEsperado !== undefined && args.amountCentsEsperado !== importe.totalCents) {
     throw new SpeiError("precio-cambio", "El precio cambió mientras tenías la pantalla abierta. Recarga la página y revisa el importe.");
   }

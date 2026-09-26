@@ -13,12 +13,13 @@
  * `spei-directo.test.ts` leyendo esa ruta). Los precios salen de `plan_configs`
  * (getResolvedPlan); aquí no hay ninguno escrito.
  *
- * IVA — SIEMPRE precio + 16 % (decisión de Rafael: los tres métodos cobran el mes
- * + IVA). Se calcula sobre el subtotal y se redondea al centavo, igual que Stripe con
- * una tasa exclusiva (ver iva-cobro.ts): el importe que se muestra es el que se guarda.
+ * IVA — precio + 16 % (decisión de Rafael: los tres métodos cobran el mes + IVA; la
+ * única excepción es la renovación del mismo plan de una clínica de las de antes).
+ * Se calcula sobre el subtotal y se redondea al centavo, igual que Stripe con una tasa
+ * exclusiva (ver iva-cobro.ts): el importe que se muestra es el que se guarda.
  */
 
-import { desgloseConIva } from "./iva-cobro";
+import { desgloseConIva, desgloseSinIva } from "./iva-cobro";
 
 export type PeriodoPago = "monthly" | "annual";
 
@@ -44,8 +45,13 @@ export function subtotalCentavos(plan: PrecioDePlan, billing: PeriodoPago): numb
   return Math.round((billing === "annual" ? plan.priceMxnAnnual : plan.priceMxn) * 100);
 }
 
-export function importeSpei(args: { plan: PrecioDePlan; billing: PeriodoPago }): ImporteSpei {
-  return desgloseConIva(subtotalCentavos(args.plan, args.billing));
+/**
+ * `conIva` es true SIEMPRE, salvo la renovación del mismo plan de una clínica de las de
+ * antes (ver planConPagoManualSinIva en iva-cobro.ts): ahí el importe es el precio tal cual.
+ */
+export function importeSpei(args: { plan: PrecioDePlan; billing: PeriodoPago; conIva?: boolean }): ImporteSpei {
+  const subtotal = subtotalCentavos(args.plan, args.billing);
+  return args.conIva === false ? desgloseSinIva(subtotal) : desgloseConIva(subtotal);
 }
 
 /** 68900 → "689.00" (para copiar al portapapeles: sin símbolo ni separador). */

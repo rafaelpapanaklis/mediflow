@@ -6,7 +6,7 @@ import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlan } from "@/lib/plans";
 import { ensureFirstMonthCoupon, isFirstContract } from "@/lib/billing/first-month-promo";
-import { ivaParaCobro } from "@/lib/billing/iva-cobro";
+import { ivaParaPagoDeClinica } from "@/lib/billing/iva-cobro";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -78,6 +78,9 @@ export async function POST(req: NextRequest) {
       // último periodo activado — no se limpian al cancelar.
       subscriptionId: true,
       nextBillingDate: true,
+      // Para la excepción de IVA de las clínicas de antes (ver iva-cobro.ts).
+      createdAt: true,
+      plan: true,
     },
   });
   if (!clinic) {
@@ -145,7 +148,9 @@ export async function POST(req: NextRequest) {
   // Stripe en la línea del plan (env STRIPE_IVA_TAX_RATE_ID), o Stripe Tax si STRIPE_AUTOMATIC_TAX
   // es "true" (nunca las dos). Sin ninguna NO se cobra sin IVA en silencio: 503 claro. Va DESPUÉS
   // del desvío al portal de arriba: quien ya tiene suscripción de tarjeta viva no pasa por aquí.
-  const iva = ivaParaCobro(process.env);
+  // Excepción (Ajuste 1b): OXXO/SPEI del mismo plan de una clínica registrada ANTES del 26-sep-2026
+  // que ya había pagado = sin IVA, como hoy; decidido aquí con la clínica de la SESIÓN, no con el body.
+  const iva = ivaParaPagoDeClinica(process.env, { metodo: method, plan: planId, clinica: clinic });
   if (iva.ok === false) {
     return NextResponse.json({ error: iva.error, code: iva.codigo }, { status: 503 });
   }
