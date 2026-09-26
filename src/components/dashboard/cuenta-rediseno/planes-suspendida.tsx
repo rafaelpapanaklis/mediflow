@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyboardEvent, MutableRefObject } from "react";
-import { Check, CreditCard, Loader2, Lock } from "lucide-react";
+import { Check, CreditCard, Landmark, Loader2, Lock, ShieldCheck, Store } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
 import type { PlanCardData } from "@/app/dashboard/suspended/suspended-client";
@@ -164,7 +164,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
               <div className={s.beneficios}>
                 {vinetas(plan).map((f) => (
                   <div key={f} className={s.beneficio}>
-                    <Check size={15} strokeWidth={2.4} className={s.beneficioIcono} aria-hidden />
+                    <Check size={18} strokeWidth={3} className={s.beneficioIcono} aria-hidden />
                     {f}
                   </div>
                 ))}
@@ -176,6 +176,10 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
 
       {/* === Pago: método + CTA + señales de confianza === */}
       <div className={s.pago}>
+        <p className={s.pagoTitulo}>
+          <span className={s.pagoTituloIcono}><ShieldCheck size={16} aria-hidden /></span>
+          ¿Cómo quieres pagar?
+        </p>
         <div role="radiogroup" aria-label={t("pages.suspended.methodCard")} className={s.metodos}>
           <span
             aria-hidden
@@ -199,6 +203,8 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
                 className={`${s.metodo} ${active ? s.metodoActivo : ""}`}
               >
                 {m.id === "card" && <CreditCard size={15} aria-hidden />}
+                {m.id === "spei" && <Landmark size={15} aria-hidden />}
+                {m.id === "oxxo" && <Store size={15} aria-hidden />}
                 {m.label}
               </button>
             );

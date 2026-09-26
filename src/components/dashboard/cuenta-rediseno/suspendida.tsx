@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { CheckCircle2, Loader2, Lock, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, Loader2, Lock, Sparkles } from "lucide-react";
 import s from "./cuenta.module.css";
 
 /**
@@ -45,15 +45,39 @@ export function CabeceraSuspendida({
         </div>
         <h1 className={s.titulo}>{titulo}</h1>
         <p className={s.subtitulo}>{texto}</p>
+        {/* Recorrido del alta (cuenta ✓ → clínica ✓ → pago ●), solo en la
+            compra nueva: la reactivación no viene del registro. Decorativo:
+            el título ya dice en qué paso se está. */}
+        {!reactivacion && (
+          <ol className={s.recorrido} aria-hidden="true">
+            <li className={`${s.recorridoPaso} ${s.recorridoPasoHecho}`}>
+              <span className={s.recorridoBarra} />
+              <span className={s.recorridoTexto}><Check size={13} strokeWidth={3} /> Cuenta</span>
+            </li>
+            <li className={`${s.recorridoPaso} ${s.recorridoPasoHecho}`}>
+              <span className={s.recorridoBarra} />
+              <span className={s.recorridoTexto}><Check size={13} strokeWidth={3} /> Clínica</span>
+            </li>
+            <li className={`${s.recorridoPaso} ${s.recorridoPasoActual}`}>
+              <span className={s.recorridoBarra} />
+              <span className={s.recorridoTexto}>Pago</span>
+            </li>
+          </ol>
+        )}
       </div>
     </>
   );
 }
 
 export function VolverAlLogin({ texto }: { texto: string }) {
+  // El texto traducido ya trae su flecha («← Volver al login»): aquí se
+  // dibuja con el ícono y se quita la del texto para no repetirla.
   return (
     <p className={s.volver}>
-      <Link href="/login">← {texto}</Link>
+      <Link href="/login">
+        <ArrowLeft size={14} aria-hidden />
+        {texto.replace(/^←\s*/, "")}
+      </Link>
     </p>
   );
 }
@@ -84,17 +108,19 @@ export function ResultadoPago({
 }) {
   return (
     <div className={s.resultado}>
-      <div className={`${s.resultadoIcono} ${activada ? s.resultadoIconoExito : s.resultadoIconoEspera}`}>
-        {activada ? (
-          <CheckCircle2 size={36} aria-hidden />
-        ) : (
-          <Loader2 size={36} aria-hidden className={s.girando} />
-        )}
+      <div className={s.resultadoTarjeta}>
+        <div className={`${s.resultadoIcono} ${activada ? s.resultadoIconoExito : s.resultadoIconoEspera}`}>
+          {activada ? (
+            <CheckCircle2 size={40} aria-hidden />
+          ) : (
+            <Loader2 size={36} aria-hidden className={s.girando} />
+          )}
+        </div>
+        <h1 className={s.resultadoTitulo}>{titulo}</h1>
+        <p className={s.resultadoTexto}>{texto}</p>
+        <div className={s.resultadoAcciones}>{acciones}</div>
+        {referencia && <div className={s.referencia}>{referencia}</div>}
       </div>
-      <h1 className={s.resultadoTitulo}>{titulo}</h1>
-      <p className={s.resultadoTexto}>{texto}</p>
-      <div className={s.resultadoAcciones}>{acciones}</div>
-      {referencia && <div className={s.referencia}>{referencia}</div>}
     </div>
   );
 }
