@@ -592,7 +592,7 @@
 }
 @media (max-width: 480px) {
   .dca-stepper { gap: 6px; }
-  .dca-step__label { font-size: 11.5px; }
+  .dca-step__label { font-size: 12px; }
   .dca-plan__num { font-size: 38px; }
 }
 
