@@ -20,13 +20,20 @@ import "./v2/landing-v2.css";
  * "Registrarme gratis" (los destinos del programa) y aparece la píldora
  * "Afiliados" junto al logo, tal como pide el diseño nuevo. Es OPCIONAL y por
  * omisión no cambia nada: el resto del sitio sigue con el nav de siempre.
+ *
+ * `portada`: solo la home (ajuste 6, Rafael): en la portada no hay enlaces a
+ * páginas secundarias. Se quedan las anclas de ESTA página (Blog fuera),
+ * «Soy paciente», «Iniciar sesión», y «Crear cuenta» lleva a #precios (los
+ * botones de cada plan, en Precios, son los que van al registro).
  */
 export function SalesNav({
   isLoggedIn = false,
   affiliate = false,
+  portada = false,
 }: {
   isLoggedIn?: boolean;
   affiliate?: boolean;
+  portada?: boolean;
 }) {
   const cta = { fontSize: "clamp(13px,1.2vw,15px)", padding: "11px 17px", borderRadius: 10, boxShadow: "0 4px 12px -4px rgba(37,99,235,0.5)", whiteSpace: "nowrap" as const, flex: "0 0 auto" };
   return (
@@ -45,8 +52,8 @@ export function SalesNav({
         </Link>
         {!affiliate && (
           <nav aria-label="Principal" className="dcv2-nav-anchors" style={{ flex: "1 1 auto", minWidth: 0, display: "flex", justifyContent: "center", gap: "clamp(10px,1.8vw,26px)", whiteSpace: "nowrap" }}>
-            {NAV.links.map((l) => (
-              <a key={l.href} href={navHref(l.href)} className="dcv2-navlink">{l.label}</a>
+            {NAV.links.filter((l) => !portada || l.href.startsWith("#")).map((l) => (
+              <a key={l.href} href={portada ? l.href : navHref(l.href)} className="dcv2-navlink">{l.label}</a>
             ))}
           </nav>
         )}
@@ -73,7 +80,11 @@ export function SalesNav({
                 Soy paciente
               </Link>
               <Link href="/login" className="dcv2-nav-ghost">{NAV.login}</Link>
-              <Link href="/signup" className="dcv2-btn-primary" style={cta}>{NAV.signup}</Link>
+              {portada ? (
+                <a href="#precios" className="dcv2-btn-primary" style={cta}>{NAV.signup}</a>
+              ) : (
+                <Link href="/signup" className="dcv2-btn-primary" style={cta}>{NAV.signup}</Link>
+              )}
             </>
           )}
         </div>

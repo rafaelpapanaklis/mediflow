@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { CSSProperties } from "react";
 import { FINAL_CTA } from "./landing-data";
 
@@ -36,9 +35,11 @@ export function FinalCta({ firstMonthFrom }: { firstMonthFrom: string }) {
           <strong style={{ color: "#ffffff", fontWeight: 800 }}>{firstMonthFrom}</strong>.
         </p>
         <div data-reveal="" style={{ marginTop: 30, display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
-          <Link href="/signup" className="dcv2-btn-white" style={{ ...cta, background: "#ffffff", color: "#1d4ed8", boxShadow: "0 16px 32px -16px rgba(2,6,23,0.7)" }}>
+          {/* Ajuste 6: en la portada «Crear mi cuenta» lleva a Precios; el registro
+              con el plan elegido sale de los botones de cada plan. */}
+          <a href="#precios" className="dcv2-btn-white" style={{ ...cta, background: "#ffffff", color: "#1d4ed8", boxShadow: "0 16px 32px -16px rgba(2,6,23,0.7)" }}>
             {FINAL_CTA.ctaPrimary}
-          </Link>
+          </a>
           <a href="#funciones" className="dcv4-btn-glass" style={{ ...cta, background: "rgba(255,255,255,0.08)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.4)" }}>
             {FINAL_CTA.ctaSecondary}
           </a>

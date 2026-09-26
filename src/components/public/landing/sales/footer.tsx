@@ -12,11 +12,17 @@ import "./v2/landing-v2.css";
  *  · Funciones = las 8 páginas de producto por módulo (de producto/data.ts)
  *  · Legal / Contacto
  * Las anclas van con "/#…" para funcionar desde cualquier ruta.
+ *
+ * `portada` (ajuste 6, Rafael): en la home no hay enlaces a páginas
+ * secundarias. Producto se queda solo con las anclas de la propia página (sin
+ * Blog, Casos de uso, Herramientas ni Afiliados), la columna Funciones (las 8
+ * páginas de módulo) no se pinta, y Legal y Contacto se quedan tal cual.
  */
 const colTitle = { fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", color: "#cbd5e1", textTransform: "uppercase" as const };
 const col = { marginTop: 14, display: "flex", flexDirection: "column" as const, gap: 9, fontSize: 14 };
 
-export function SalesFooter() {
+export function SalesFooter({ portada = false }: { portada?: boolean } = {}) {
+  const product = portada ? FOOTER.product.filter((l) => l.href.startsWith("#")) : FOOTER.product;
   return (
     <footer style={{ background: "#080d1a" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(40px,5vw,64px) 20px 28px", display: "flex", flexWrap: "wrap", gap: "36px 56px" }}>
@@ -33,20 +39,22 @@ export function SalesFooter() {
         <nav aria-label="Producto" style={{ flex: "1 1 150px", minWidth: 0 }}>
           <h3 style={colTitle}>Producto</h3>
           <div style={col}>
-            {FOOTER.product.map((l) => (
-              <a key={l.href} href={navHref(l.href)} className="dcv2-footer-link">{l.label}</a>
+            {product.map((l) => (
+              <a key={l.href} href={portada ? l.href : navHref(l.href)} className="dcv2-footer-link">{l.label}</a>
             ))}
           </div>
         </nav>
 
-        <nav aria-label="Funciones" style={{ flex: "1 1 150px", minWidth: 0 }}>
-          <h3 style={colTitle}>Funciones</h3>
-          <div style={col}>
-            {FOOTER.funciones.map((l) => (
-              <Link key={l.href} href={l.href} className="dcv2-footer-link">{l.label}</Link>
-            ))}
-          </div>
-        </nav>
+        {!portada && (
+          <nav aria-label="Funciones" style={{ flex: "1 1 150px", minWidth: 0 }}>
+            <h3 style={colTitle}>Funciones</h3>
+            <div style={col}>
+              {FOOTER.funciones.map((l) => (
+                <Link key={l.href} href={l.href} className="dcv2-footer-link">{l.label}</Link>
+              ))}
+            </div>
+          </nav>
+        )}
 
         <nav aria-label="Legal" style={{ flex: "1 1 150px", minWidth: 0 }}>
           <h3 style={colTitle}>Legal</h3>

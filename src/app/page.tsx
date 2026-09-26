@@ -134,7 +134,7 @@ export default async function HomePage() {
       }}
     >
       <a href="#mfh-main" className="mf-skip-link">Saltar al contenido</a>
-      <SalesNavSession />
+      <SalesNavSession portada />
       <main id="mfh-main">
         <Hero firstMonthFrom={firstMonthFrom} />
         <SocialProofBar />
@@ -158,7 +158,7 @@ export default async function HomePage() {
         <TrustFaq firstMonthFrom={firstMonthFrom} />
         <FinalCta firstMonthFrom={firstMonthFrom} />
       </main>
-      <SalesFooter />
+      <SalesFooter portada />
       <ScrollReveal />
       <TawkChat />
       <script
