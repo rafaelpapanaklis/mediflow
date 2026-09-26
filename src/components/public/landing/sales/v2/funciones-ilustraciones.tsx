@@ -26,7 +26,7 @@ import { IconoPanel } from "./icono-panel";
    como las pinta el panel (public/landing/web/plantilla-<id>.webp). */
 
 /** Alto de altabrisa-especialistas.webp a 1120 px de ancho. */
-const ALTO_WEB = 2816;
+const ALTO_WEB = 5991;
 
 const PLANTILLAS: [string, string][] = [
   ["classic", "Clásico"],
@@ -49,12 +49,18 @@ export function IluPaginaWeb() {
           <span className="dcf3-web__url"><IconoPanel nombre="lock" size={11} /> clinica-altabrisa.dalecontrol.com</span>
         </div>
         <div className="dcf3-web__page">
+          {/* `loading="eager"`: con la carga perezosa de next/image esta imagen
+              NUNCA recibía su `src` (medido el 26-sep: `currentSrc` vacío y la
+              ventana negra todo el tiempo). Está dentro de una caja recortada
+              y animada con transform, y el observador de Next no la daba por
+              visible. Pesa 40 KB: se pide de entrada y ya. */}
           <Image
             src="/landing/web/altabrisa-especialistas.webp"
             alt=""
             width={1120}
             height={ALTO_WEB}
             sizes="(max-width: 720px) 90vw, 380px"
+            loading="eager"
             className="dcf3-web__shot"
           />
         </div>
@@ -191,25 +197,46 @@ export function IluAgenda() {
   );
 }
 
-/* ── 4 · Radiografías CBCT y modelos 3D: el volumen, tal cual ──────────────── */
+/* ── 4 · Radiografías CBCT y modelos 3D: las cuatro vistas, rotando ─────────
+   Ajuste 3: el volumen 3D (rx-3d.webp, la imagen de siempre, sin tocar) y los
+   tres cortes reales del estudio (los mismos WebP que usaba el CbctMock viejo)
+   se turnan cada 2.5 s con un fundido, en bucle, y la etiqueta de la barra
+   cambia con ellos. Es CSS puro (keyframes con retardo por vista); con
+   prefers-reduced-motion se queda quieta en la primera (el volumen 3D). */
+
+const VISTAS_CBCT: { src: string; w: number; h: number; label: string }[] = [
+  { src: "/landing/rx-3d.webp", w: 349, h: 316, label: "Volumen 3D" },
+  { src: "/landing/rx-axial.webp", w: 353, h: 316, label: "Axial" },
+  { src: "/landing/rx-coronal.webp", w: 398, h: 267, label: "Coronal" },
+  { src: "/landing/rx-sagital.webp", w: 354, h: 267, label: "Sagital" },
+];
 
 export function IluCbct() {
   return (
     <div className="dcf3-ilu dcf3-cb">
       <div className="dcf3-cb__bar">
         <span className="dcf3-cb__ico"><IconoPanel nombre="dentistry" size={14} /></span>
-        <span className="dcf3-cb__t">Volumen 3D · CBCT</span>
+        <span className="dcf3-cb__t">
+          {VISTAS_CBCT.map((v, i) => (
+            <span key={v.label} className="dcf3-cb__lbl" style={{ animationDelay: `${i * 2.5}s` }}>{v.label} · CBCT</span>
+          ))}
+        </span>
         <span className="dcf3-cb__live">Auto-rotar</span>
       </div>
       <div className="dcf3-cb__view">
-        <Image
-          src="/landing/rx-3d.webp"
-          alt=""
-          width={349}
-          height={316}
-          sizes="(max-width: 640px) 90vw, 360px"
-          style={{ width: "100%", aspectRatio: "16 / 10", height: "auto", objectFit: "cover", display: "block" }}
-        />
+        {VISTAS_CBCT.map((v, i) => (
+          <Image
+            key={v.src}
+            src={v.src}
+            alt=""
+            width={v.w}
+            height={v.h}
+            sizes="(max-width: 640px) 90vw, 360px"
+            loading="eager"
+            className="dcf3-cb__img"
+            style={{ animationDelay: `${i * 2.5}s` }}
+          />
+        ))}
       </div>
       <div className="dcf3-cb__foot">
         {["DICOM", "STL", "PLY", "OBJ"].map((f) => (
