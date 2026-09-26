@@ -119,8 +119,8 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
           n={d.tiles.cobrosRotos} label="Cobros fallidos o usando sin plan"
           title="Stripe no pudo cobrar, o el periodo venció y la clínica sigue trabajando" />
         <Tile href="/admin/clinics" tono={d.tiles.renovaciones > 0 ? "brand" : "quieto"} icono={CalendarClock}
-          n={d.tiles.renovaciones} label="Renovaciones y trials en 7 días"
-          title="Trials que terminan y suscripciones que renuevan en los próximos 7 días" />
+          n={d.tiles.renovaciones} label="Renovaciones manuales en 7 días"
+          title="Clínicas que pagan a mano (transferencia, SPEI, OXXO, depósito) y renuevan en los próximos 7 días. Las de tarjeta en Stripe se cobran solas; si fallan, salen en «Cobros fallidos»." />
         <Tile href="/admin/clinics" tono={d.tiles.cercaDelTope > 0 ? "info" : "quieto"} icono={Gauge}
           n={d.tiles.cercaDelTope} label="Clínicas cerca de un tope"
           title="Almacenamiento o tokens IA al 80 % o más, usuarios al tope, CFDI por encima del cupo, saldo IA bajo o en negativo" />

@@ -12,7 +12,7 @@ import {
 } from "@/components/admin/portada/atencion-core";
 import { contarTiles, unirPendientes } from "@/components/admin/portada/pendientes";
 import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
-import { metodoDePago, senalesDeCupo, DIAS_RENOVACION_PROXIMA, USO_VACIO, type SenalCupo } from "@/lib/admin/uso-core";
+import { metodoDePago, senalesDeCupo, USO_VACIO, type SenalCupo } from "@/lib/admin/uso-core";
 import { conteoMensual, serieNegocio, sumaPorPeriodo, ultimosMesesAdmin, type CobroCrudo } from "@/lib/admin/serie-negocio";
 import { CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
 import { listarPendientesAdmin } from "@/lib/billing/spei-directo";
@@ -328,7 +328,6 @@ async function renderAdminDashboard() {
   // salud-clinica— y aun así su pago es lo primero que hay que atender.
   const apartadas = new Set([...portada.cuentasDePrueba, ...portada.archivadas].map((c) => c.id));
   const cupos: SenalCupo[] = [];
-  let renovacionesStripe = 0;
   for (const c of allClinics) {
     if (apartadas.has(c.id)) {
       const v = porVerificar.get(c.id);
@@ -345,7 +344,6 @@ async function renderAdminDashboard() {
     const { manual } = metodoDePago(c);
     const dias = daysUntil(c.nextBillingDate, now);
     const activa = getPlanStatus(c, now).kind === "active" && c.subscriptionStatus === "active";
-    if (activa && !manual && dias !== null && dias >= 0 && dias <= DIAS_RENOVACION_PROXIMA) renovacionesStripe += 1;
     cupos.push(...senalesDeCupo({
       id: c.id, nombre: c.name, uso: u,
       diasHastaRenovacion: dias, suscripcionActiva: activa, metodoManual: manual,
@@ -353,7 +351,7 @@ async function renderAdminDashboard() {
     }));
   }
   const pendientes = unirPendientes(portada, cupos);
-  const tiles = contarTiles(pendientes, renovacionesStripe);
+  const tiles = contarTiles(pendientes);
 
   // Con el estado de plan de la clínica (la MISMA insignia que Clínicas:
   // PlanStatusBadge sobre plan-status), para saber si ese pago la dejó al día.

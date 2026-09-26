@@ -71,7 +71,13 @@ export interface ConteosTiles {
   porVerificar: { pagos: number; clinicas: number; monto: number };
   /** Cobros fallidos + clínicas usando sin plan vigente (lo crítico). */
   cobrosRotos: number;
-  /** Trials que vencen y renovaciones (manuales o no) en ≤ 7 días. */
+  /**
+   * Renovaciones que se cobran A MANO (transferencia, SPEI, OXXO, depósito,
+   * efectivo, sin método) en ≤ 7 días. Las suscripciones de tarjeta viva en
+   * Stripe o PayPal se cobran solas y, si fallan, ya salen en «Cobros
+   * fallidos» (ajuste 2 de Rafael). Los trials que vencen tampoco entran: no
+   * son una renovación (siguen en la lista como «Trial vence»).
+   */
   renovaciones: number;
   /** Clínicas con al menos un cupo cerca del tope o saldo IA en problemas. */
   cercaDelTope: number;
@@ -116,13 +122,8 @@ export function unirPendientes(portada: Portada, cupos: SenalCupo[]): Pendiente[
   });
 }
 
-/**
- * Los números de las cuatro tarjetas. `renovacionesStripe` son las
- * suscripciones activas con cobro automático en ≤ 7 días: no son un
- * pendiente (Stripe cobra solo) pero sí una renovación que vence, y la
- * tarjeta cuenta renovaciones.
- */
-export function contarTiles(pendientes: Pendiente[], renovacionesStripe: number): ConteosTiles {
+/** Los números de las cuatro tarjetas. Cuentan CLÍNICAS, salvo la de pagos, que cuenta pagos. */
+export function contarTiles(pendientes: Pendiente[]): ConteosTiles {
   const clinicas = (f: (p: Pendiente) => boolean) => new Set(pendientes.filter(f).map((p) => p.clinicaId)).size;
   const verificar = pendientes.filter((p) => p.motivo === "pago-por-verificar");
   return {
@@ -132,7 +133,7 @@ export function contarTiles(pendientes: Pendiente[], renovacionesStripe: number)
       monto: verificar.reduce((s, p) => s + p.monto, 0),
     },
     cobrosRotos: clinicas((p) => p.motivo === "cobro_fallido" || p.motivo === "usando_sin_plan"),
-    renovaciones: clinicas((p) => p.motivo === "trial_por_vencer" || p.motivo === "renovacion-manual") + renovacionesStripe,
+    renovaciones: clinicas((p) => p.motivo === "renovacion-manual"),
     cercaDelTope: clinicas((p) => MOTIVOS_TOPE.has(p.motivo)),
   };
 }
