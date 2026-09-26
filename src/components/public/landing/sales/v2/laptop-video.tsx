@@ -4,78 +4,91 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * La pantalla de la laptop: grabaciones reales del panel, SIN controles
- * (autoplay + muted + playsinline). Igual que «El panel, en vivo»: arranca
- * cuando la sección entra en pantalla, se pausa al salir (batería) y con
- * prefers-reduced-motion no se reproduce: se ve el póster (su primer frame)
- * quieto.
+ * (muted + playsinline, sin play ni barra). Igual que «El panel, en vivo»:
+ * arranca cuando la sección entra en pantalla, se pausa al salir (batería) y
+ * con prefers-reduced-motion no se reproduce: se ve el póster quieto.
  *
- * Añadido 2b (Rafael): la laptop tiene que enseñar más de lo que cabe en un
- * vídeo, así que recibe VARIOS y los ALTERNA: al terminar uno empieza el
- * siguiente y, tras el último, vuelve al primero. Con uno solo, es un bucle.
- *
- * El <video> viene renderizado del servidor con el primer vídeo y su póster;
- * este archivo aporta el observador y el cambio de fuente.
+ * Ajuste 3 (Rafael: «se pone negro después de un rato y no repite»). Antes
+ * había UN <video> que se desmontaba y volvía a montar con otro `src` al
+ * terminar: entre el final de uno y el primer cuadro del siguiente la pantalla
+ * se quedaba en negro, y si el elemento nuevo no arrancaba solo, ahí se
+ * quedaba. Ahora es como el panel en vivo de t1: TODOS los vídeos están
+ * montados y apilados desde el principio (`preload="auto"`), solo el activo
+ * se ve (opacity) y al terminar se enciende el siguiente —que ya está cargado
+ * y en su primer cuadro— con un fundido; tras el último vuelve al primero.
+ * Nunca hay un cuadro negro: debajo siempre está el póster del activo.
  */
 export interface VideoLaptop {
   src: string;
   poster: string;
 }
 
+const FUNDIDO_MS = 350;
+
+function reducedMotion(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export function LaptopVideo({ videos, label }: { videos: VideoLaptop[]; label: string }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  const [i, setI] = useState(0);
-  const visible = useRef(false);
-  const reduced = useRef(false);
+  const raiz = useRef<HTMLDivElement>(null);
+  const refs = useRef<(HTMLVideoElement | null)[]>([]);
+  const [activo, setActivo] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
-    const v = ref.current;
-    if (!v) return;
-    reduced.current = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced.current) {
-      v.removeAttribute("autoplay");
-      v.pause();
+    setReduced(reducedMotion());
+    const el = raiz.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setVisible(true);
       return;
     }
-    if (typeof IntersectionObserver === "undefined") {
-      visible.current = true;
-      v.play().catch(() => {});
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        visible.current = entries.some((e) => e.isIntersecting);
-        if (visible.current) v.play().catch(() => {});
-        else v.pause();
-      },
-      { threshold: 0.2 },
-    );
-    io.observe(v);
+    const io = new IntersectionObserver((entries) => setVisible(entries.some((e) => e.isIntersecting)), { threshold: 0.2 });
+    io.observe(el);
     return () => io.disconnect();
   }, []);
 
-  // Al cambiar de fuente, si la sección se ve, sigue reproduciendo.
+  // Reproduce solo el activo, y solo mientras se ve; los demás quietos en su
+  // primer cuadro, listos para entrar sin hueco.
   useEffect(() => {
-    const v = ref.current;
-    if (!v || reduced.current || !visible.current) return;
-    v.play().catch(() => {});
-  }, [i]);
+    refs.current.forEach((v, i) => {
+      if (!v) return;
+      if (i === activo && visible && !reduced) {
+        v.play().catch(() => {});
+      } else {
+        v.pause();
+        if (i !== activo) {
+          try { v.currentTime = 0; } catch {}
+        }
+      }
+    });
+  }, [activo, visible, reduced]);
 
-  const actual = videos[i] ?? videos[0];
+  const siguiente = () => {
+    if (videos.length < 2) return;
+    setActivo((k) => (k + 1) % videos.length);
+  };
+
   return (
-    <video
-      ref={ref}
-      key={actual.src}
-      className="dctp-laptop__video"
-      src={actual.src}
-      poster={actual.poster}
-      muted
-      loop={videos.length === 1}
-      playsInline
-      autoPlay
-      preload={i === 0 ? "metadata" : "auto"}
-      aria-label={label}
-      disablePictureInPicture
-      onEnded={() => { if (videos.length > 1) setI((k) => (k + 1) % videos.length); }}
-    />
+    <div ref={raiz} className="dctp-laptop__videos" role="img" aria-label={label}>
+      {videos.map((v, i) => (
+        <video
+          key={v.src}
+          ref={(el) => { refs.current[i] = el; }}
+          className={`dctp-laptop__video${i === activo ? " is-on" : ""}`}
+          style={{ transitionDuration: `${FUNDIDO_MS}ms` }}
+          src={v.src}
+          poster={v.poster}
+          muted
+          playsInline
+          preload="auto"
+          loop={videos.length === 1}
+          disablePictureInPicture
+          onEnded={siguiente}
+          // Si un vídeo no puede reproducirse (red, códec), no se queda ahí: pasa al siguiente.
+          onError={siguiente}
+        />
+      ))}
+    </div>
   );
 }
