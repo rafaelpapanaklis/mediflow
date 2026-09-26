@@ -7,6 +7,7 @@ import { sendWelcomeEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/seo";
 import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
+import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
 
 /**
  * Completar registro para usuarios que entraron via OAuth (Google/Microsoft).
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest) {
         ? !!data.paymentMethodLast4
         : paymentMethodType === "paypal" || paymentMethodType === "transfer";
 
-    await prisma.clinic.create({
+    const clinic = await prisma.clinic.create({
       data: {
         name: data.clinicName,
         slug,
@@ -164,6 +165,10 @@ export async function POST(req: NextRequest) {
         },
       },
     });
+
+    // Clic de Google Ads (WS1-T6): mismo guardado que /api/auth/register. Best-effort,
+    // nunca lanza y tolera que la tabla aún no exista.
+    await guardarClickAdsDeLaAlta(clinic.id, (n) => req.cookies.get(n)?.value);
 
     sendWelcomeEmail({
       email,

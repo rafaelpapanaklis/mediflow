@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { isPlanExpired } from "@/lib/plan-status";
 import { ConfirmingPoll } from "./confirming-poll";
+import { conversionPagoConfirmada } from "./conversion-pago.server";
+import { ConversionPagoCompletadoGads } from "./conversion-pago-cliente";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
 import {
@@ -40,6 +42,20 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
   // el layout, sin recalcular la fecha a mano.
   const isActivated = !isPlanExpired(clinic);
 
+  // CONVERSIÓN «Pago completado» de Google Ads (WS1-T3). Solo con la clínica ya
+  // activada en la BD, y con Stripe confirmando server-to-server que ESA sesión
+  // está pagada, es de ESTA clínica (clinicId de la sesión del usuario, no de la
+  // URL) y es su primera contratación (metadata.firstContract del checkout). Si
+  // algo no cuadra devuelve null y esta página se pinta exactamente igual. El
+  // ping lo manda <ConversionPagoCompletadoGads/> una sola vez (marca local +
+  // transaction_id); sin gtag o sin etiqueta, no hace nada.
+  const conversion = await conversionPagoConfirmada({
+    clinicId: user.clinicId,
+    sessionId,
+    activada: isActivated,
+  });
+  const conversionGads = conversion ? <ConversionPagoCompletadoGads {...conversion} /> : null;
+
   // REDISEÑO — mismo interruptor por clínica que el menú de dos niveles (ver
   // ../page.tsx): el layout completo ya lo pidió en este request, esto comparte
   // esa consulta o cae en su caché de 60 s. Falla cerrado → la pantalla de hoy.
@@ -51,6 +67,7 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
     // <ConfirmingPoll/> (router.refresh, sin polling nuevo): solo cambia la ropa.
     return (
       <RaizCuenta>
+        {conversionGads}
         <ResultadoPago
           activada={isActivated}
           titulo={isActivated ? t("pages.suspended.paymentConfirmedTitle") : t("pages.suspended.confirmingPaymentTitle")}
@@ -81,6 +98,7 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
 
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-4 py-16 text-center">
+      {conversionGads}
       {isActivated ? (
         <>
           <div

@@ -155,8 +155,9 @@ export async function POST(req: NextRequest) {
   // contratación de la clínica (reactivaciones y cambios de plan NO aplican;
   // change-plan ni siquiera pasa por aquí). Cupón "once": la 1a factura sale
   // al precio promo y desde la 2a Stripe cobra el precio normal. NO es trial.
+  const firstContract = isFirstContract(clinic);
   const applyFirstMonthPromo =
-    method === "card" && billing === "monthly" && isFirstContract(clinic);
+    method === "card" && billing === "monthly" && firstContract;
   const promoCouponId = applyFirstMonthPromo
     ? await ensureFirstMonthCoupon(stripe, plan)
     : null;
@@ -169,6 +170,13 @@ export async function POST(req: NextRequest) {
     method,
     billing,
     firstMonthPromo: promoCouponId ? "1" : "0",
+    // MEDICIÓN, no cobro (WS1-T3): "1" = esta sesión es la PRIMERA contratación
+    // de la clínica (nunca tuvo suscripción ni periodo activado), estampado
+    // AQUÍ porque es el único momento en que el dato existe: al confirmar el
+    // pago, el webhook fija nextBillingDate/stripeSubscriptionId y ya no se
+    // distingue de una renovación. Lo lee /dashboard/suspended/success para
+    // mandar la conversión «Pago completado» a Google Ads solo esa vez.
+    firstContract: firstContract ? "1" : "0",
   };
 
   let session;
