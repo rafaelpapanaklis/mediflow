@@ -23,6 +23,7 @@ import {
   CLICK_FLUSH_MS,
   MAX_BATCH,
   surfaceFromPath,
+  isTrackingIgnored,
 } from "./constants";
 import type { TrackEvent, TrackPayload } from "./types";
 
@@ -192,6 +193,7 @@ function parseAttribution(): void {
 
 function enqueue(ev: TrackEvent): void {
   if (!ev.path) return; // nunca encolar eventos sin ruta (rechazarían el batch entero en el server)
+  if (isTrackingIgnored(ev.path)) return; // red de seguridad: nada de paciente/admin/live, llegue por donde llegue
   queue.push(ev);
   touch();
   if (queue.length >= MAX_BATCH) flush(false);

@@ -47,10 +47,42 @@ export const LIVE_WINDOW_MS = 150 * 1000;
 /** Prefijos que NUNCA se trackean (uso propio del owner + pantalla en clínica). */
 export const IGNORED_PREFIXES = ["/admin", "/live"];
 
+/** Rutas que ve un PACIENTE: la analítica propia no registra nada en ellas
+ *  (ni pageviews, ni clics, ni pings, ni sesión con identidad). /dashboard NO
+ *  entra: son usuarios de la clínica. Los enlaces con token (cita, consentimiento,
+ *  presupuesto, reseña, share, pago) son del paciente y viajan con datos suyos. */
+export const PATIENT_PREFIXES = [
+  "/paciente",
+  "/portal",
+  "/cita",
+  "/consentimiento",
+  "/presupuesto",
+  "/resena",
+  "/share",
+  "/pago",
+];
+
+/** true si la ruta cae bajo alguno de los prefijos, respetando el límite de
+ *  segmento: "/pago" cubre "/pago" y "/pago/x", pero no "/pagos". Ignora query,
+ *  hash, mayúsculas y barras dobles iniciales. */
+function underPrefix(path: string, prefixes: readonly string[]): boolean {
+  const clean = ("/" + String(path || "").split(/[?#]/)[0].replace(/^\/+/, "")).toLowerCase();
+  return prefixes.some((p) => clean === p || clean.startsWith(p + "/"));
+}
+
+/** true → ruta de paciente: ni el cliente la envía ni el servidor la guarda. */
+export function isPatientPath(path: string): boolean {
+  return underPrefix(path, PATIENT_PREFIXES);
+}
+
+/** true → la analítica propia no registra NADA en esta ruta. */
+export function isTrackingIgnored(path: string): boolean {
+  return underPrefix(path, IGNORED_PREFIXES) || isPatientPath(path);
+}
+
 /** Deriva la superficie a partir del pathname. */
 export function surfaceFromPath(path: string): string {
   if (path.startsWith("/dashboard")) return "dashboard";
-  if (path.startsWith("/paciente")) return "portal";
   if (path.startsWith("/afiliados")) return "affiliate";
   if (path.startsWith("/proveedores")) return "supplier";
   if (path.startsWith("/laboratorios")) return "lab";
