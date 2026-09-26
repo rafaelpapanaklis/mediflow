@@ -859,59 +859,155 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv4-waesc__ico--ag { background: #4d3fc6; }
 .dcv4-phone { box-shadow: 0 50px 90px -34px rgba(15,23,42,.5), inset 0 0 0 2px #2b2b34; }
 
-/* ── Precios (pricing-section.tsx): misma paleta, mejor jerarquía ────────── */
+/* ── Precios (pricing-section.tsx) — ajuste 8: misma estructura y textos, acabado
+   a la altura del resto de la portada. Aquí no hay ninguna cifra: solo
+   materiales, jerarquía y movimiento. Paleta = la de la portada: navy del hero
+   (#0f172a) para la tarjeta recomendada, azul #2563eb/#1d4ed8, violeta del
+   panel (#7c3aed/#a78bfa) en brillos y en el borde de la destacada, verde
+   #15803d en ✓ y ahorros. Los colores «de tarjeta» se resuelven con variables
+   (--ink, --mute, --hair, --tile) que la destacada redefine para su fondo
+   oscuro: así cada regla se escribe una sola vez. Contrastes AA comprobados:
+   #64748b/#fff 4.8, #94a3b8/#0f172a 7.0, #86efac/#0f172a 10, #93c5fd/#0f172a 9. */
 .dcv4-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.dcv4-price { background: radial-gradient(900px 480px at 50% 0%, #eff6ff, rgba(239,246,255,0) 70%), #f8fafc; }
+.dcv4-price { position: relative; isolation: isolate; overflow: clip; background: #f8fafc; }
+.dcv4-price__wrap { position: relative; }
+/* Fondo: brillo azul arriba (continúa el radial de antes), violeta abajo a la
+   derecha, rejilla de puntos como la del hero, atenuada hacia los bordes, y un
+   filo de color en el borde superior. */
+.dcv4-price__bg { position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(820px 460px at 50% -60px, rgba(37,99,235,.16), rgba(37,99,235,0) 70%),
+    radial-gradient(700px 460px at 90% 96%, rgba(124,58,237,.11), rgba(124,58,237,0) 70%),
+    radial-gradient(560px 380px at 6% 72%, rgba(37,99,235,.09), rgba(37,99,235,0) 70%); }
+.dcv4-price__bg::before { content: ""; position: absolute; inset: 0;
+  background-image: radial-gradient(rgba(15,23,42,.11) 1px, transparent 1px); background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse 72% 62% at 50% 42%, #000 20%, transparent 100%);
+  mask-image: radial-gradient(ellipse 72% 62% at 50% 42%, #000 20%, transparent 100%); }
+.dcv4-price__bg::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px;
+  background: linear-gradient(90deg, rgba(37,99,235,0), rgba(37,99,235,.4) 35%, rgba(124,58,237,.4) 65%, rgba(124,58,237,0)); }
+
 .dcv4-price__head { text-align: center; max-width: 720px; margin: 0 auto; }
 .dcv4-price__sub { margin-top: 14px; font-size: clamp(15.5px, 1.45vw, 18px); line-height: 1.55; color: #475569; min-height: 2.4em; }
 .dcv4-price__sub strong { color: #1d4ed8; font-weight: 800; }
-.dcv4-price__toggle { margin-top: 22px; display: inline-flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 5px; box-shadow: 0 8px 22px -14px rgba(15,23,42,.3); }
-.dcv4-price__tbtn { display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 700; border-radius: 999px; padding: 9px 18px; background: transparent; color: #475569; transition: background .18s, color .18s; }
-.dcv4-price__tbtn.is-on { background: #2563eb; color: #fff; }
-.dcv4-price__tbtn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* Conmutador: control segmentado con un deslizador que viaja bajo la opción
+   activa (las dos mitades miden lo mismo para que el recorrido sea exacto). */
+.dcv4-price__toggle { position: relative; margin-top: 24px; display: inline-grid; grid-template-columns: 1fr 1fr; background: #eef2f7; border: 1px solid #e2e8f0; border-radius: 999px; padding: 4px; box-shadow: inset 0 1px 3px rgba(15,23,42,.08), 0 1px 0 rgba(255,255,255,.9); }
+.dcv4-price__thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 999px; background: linear-gradient(180deg, #3b82f6, #2563eb 60%, #1d4ed8); box-shadow: 0 8px 16px -8px rgba(37,99,235,.8), inset 0 1px 0 rgba(255,255,255,.28); transition: transform .32s cubic-bezier(.2,.7,.2,1); }
+.dcv4-price__toggle[data-mode="anual"] .dcv4-price__thumb { transform: translateX(100%); }
+.dcv4-price__tbtn { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 700; border-radius: 999px; padding: 9px 20px; background: transparent; color: #475569; transition: color .22s; }
+.dcv4-price__tbtn.is-on { background: transparent; color: #fff; }
+.dcv4-price__tbtn:hover:not(.is-on) { color: #0f172a; }
+.dcv4-price__tbtn:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
 .dcv4-price__tpill { font-size: 12px; font-weight: 800; color: #15803d; background: #dcfce7; border-radius: 999px; padding: 3px 8px; line-height: 1.2; }
 .dcv4-price__tbtn.is-on .dcv4-price__tpill { color: #15803d; background: #dcfce7; }
 
-.dcv4-price__grid { margin-top: clamp(38px, 4.4vw, 56px); display: grid; grid-template-columns: repeat(auto-fit, minmax(292px, 1fr)); gap: clamp(16px, 2vw, 24px); align-items: stretch; }
-.dcv4-price__card { position: relative; display: flex; flex-direction: column; background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 30px 26px 26px; box-shadow: 0 24px 48px -36px rgba(15,23,42,.45); }
-.dcv4-price__card.is-featured { border: 2px solid #2563eb; background: linear-gradient(180deg, #f5f9ff, #fff 34%); box-shadow: 0 34px 64px -36px rgba(37,99,235,.6); }
-.dcv4-price__badge { position: absolute; top: -14px; left: 26px; font-size: 12px; font-weight: 700; color: #fff; border-radius: 999px; padding: 6px 13px; white-space: nowrap; box-shadow: 0 8px 18px -8px rgba(15,23,42,.45); letter-spacing: .01em; }
-.dcv4-price__card.is-featured .dcv4-price__badge { left: 50%; transform: translateX(-50%); }
-.dcv4-price__name { font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #1d4ed8; text-transform: uppercase; }
-.dcv4-price__tagline { margin-top: 6px; font-size: 14.5px; color: #475569; min-height: 1.5em; }
-.dcv4-price__amount { margin-top: 18px; display: flex; align-items: flex-start; gap: 4px; line-height: 1; color: #0f172a; }
-.dcv4-price__cur { font-size: 24px; font-weight: 700; margin-top: 6px; color: #334155; }
-.dcv4-price__num { font-size: clamp(44px, 4vw, 52px); font-weight: 800; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
-.dcv4-price__per { display: flex; flex-direction: column; justify-content: center; margin-left: 6px; margin-top: 6px; font-size: 12.5px; font-weight: 600; line-height: 1.25; color: #64748b; }
-.dcv4-price__line { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; min-height: 44px; }
-.dcv4-price__l1 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 14px; font-weight: 700; color: #0f172a; }
+.dcv4-price__grid { margin-top: clamp(42px, 4.8vw, 62px); display: grid; grid-template-columns: repeat(auto-fit, minmax(292px, 1fr)); gap: clamp(18px, 2.2vw, 26px); align-items: stretch; }
+
+/* Tarjeta: papel blanco con brillo interior arriba y sombra en dos capas
+   (contacto + ambiente). Al pasar el ratón sube 5 px (antes escalaba, y la
+   escala emborrona el texto). */
+.dcv4-price__card {
+  --ink: #0f172a; --ink-2: #334155; --mute: #64748b; --hair: #e8edf4; --tile: #f8fafc;
+  position: relative; isolation: isolate; display: flex; flex-direction: column; color: var(--ink);
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 24px; padding: 32px 28px 28px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(15,23,42,.04), 0 26px 56px -34px rgba(15,23,42,.38);
+  transition: transform .28s cubic-bezier(.2,.7,.2,1), box-shadow .28s ease, border-color .28s ease, opacity .6s ease;
+}
+.dcv4-price__card:hover { transform: translateY(-5px); border-color: #c7d2fe; box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 2px 4px rgba(15,23,42,.04), 0 38px 72px -36px rgba(37,99,235,.4); }
+/* Recomendada: navy del hero, borde en degradado azul→violeta (dos fondos con
+   distinto clip) y la misma rejilla de puntos del hero desvanecida hacia abajo. */
+.dcv4-price__card.is-featured {
+  --ink: #fff; --ink-2: #e2e8f0; --mute: #94a3b8; --hair: rgba(255,255,255,.1); --tile: rgba(255,255,255,.06);
+  border-color: transparent;
+  background: linear-gradient(180deg, #172242 0%, #0f172a 42%) padding-box, linear-gradient(160deg, #60a5fa, #7c3aed 55%, #2563eb) border-box;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 44px 84px -38px rgba(37,99,235,.7), 0 26px 50px -30px rgba(124,58,237,.4);
+}
+.dcv4-price__card.is-featured::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background-image: radial-gradient(rgba(255,255,255,.1) 1px, transparent 1px); background-size: 22px 22px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 58%); mask-image: linear-gradient(180deg, #000, transparent 58%); }
+.dcv4-price__card.is-featured:hover { transform: translateY(-6px); border-color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 52px 96px -38px rgba(37,99,235,.8), 0 30px 56px -30px rgba(124,58,237,.5); }
+/* En escritorio la recomendada asoma 12 px por encima de las otras dos (margen
+   negativo arriba compensado abajo: misma altura, solo desplazada). */
+@media (min-width: 1001px) { .dcv4-price__card.is-featured { margin-top: -12px; margin-bottom: 12px; } }
+
+.dcv4-price__badge { position: absolute; top: -15px; left: 28px; font-size: 12px; font-weight: 700; color: #fff; border-radius: 999px; padding: 7px 14px; white-space: nowrap; letter-spacing: .02em; box-shadow: 0 8px 18px -8px rgba(15,23,42,.5), inset 0 1px 0 rgba(255,255,255,.22); }
+.dcv4-price__card.is-featured .dcv4-price__badge { left: 50%; transform: translateX(-50%); box-shadow: 0 10px 24px -8px rgba(37,99,235,.85), inset 0 1px 0 rgba(255,255,255,.28); }
+
+/* Nombre del plan con un punto del color de su insignia (--plan-accent viene de
+   plan-cards, el mismo color de la insignia). */
+.dcv4-price__name { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; letter-spacing: .12em; color: var(--plan-accent, #1d4ed8); text-transform: uppercase; }
+.dcv4-price__name::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--plan-accent, #1d4ed8); box-shadow: 0 0 0 3px color-mix(in srgb, var(--plan-accent, #1d4ed8) 18%, transparent); }
+.dcv4-price__card.is-featured .dcv4-price__name { color: #93c5fd; }
+.dcv4-price__card.is-featured .dcv4-price__name::before { background: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,.25); }
+.dcv4-price__tagline { margin-top: 7px; font-size: 14.5px; color: var(--mute); min-height: 1.5em; }
+.dcv4-price__card.is-featured .dcv4-price__tagline { color: #cbd5e1; }
+
+/* Precio: la cifra manda; «$» arriba en gris y «MXN / mes» apilados, alineados
+   a la base de la cifra. Al conmutar, cifra y línea de abajo entran con un
+   fundido corto (key por modo en el TSX). */
+@keyframes dcPriceIn { from { opacity: 0; transform: translateY(10px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+.dcv4-price__amount { margin-top: 22px; display: flex; align-items: flex-start; gap: 3px; line-height: 1; color: var(--ink); }
+.dcv4-price__cur { font-size: 22px; font-weight: 700; margin-top: 8px; color: var(--mute); }
+.dcv4-price__num { font-size: clamp(48px, 4.4vw, 60px); font-weight: 800; letter-spacing: -.045em; font-variant-numeric: tabular-nums; animation: dcPriceIn .34s cubic-bezier(.2,.7,.2,1) both; }
+.dcv4-price__per { display: flex; flex-direction: column; justify-content: flex-end; align-self: stretch; margin-left: 9px; padding-bottom: 10px; line-height: 1.15; }
+.dcv4-price__per > span:first-child { font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--mute); }
+.dcv4-price__per > span:last-child { font-size: 14.5px; font-weight: 700; color: var(--ink-2); }
+.dcv4-price__line { margin-top: 14px; display: flex; flex-direction: column; gap: 5px; min-height: 44px; animation: dcPriceIn .34s .05s cubic-bezier(.2,.7,.2,1) both; }
+.dcv4-price__l1 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 14px; font-weight: 700; color: var(--ink); }
 .dcv4-price__l1 > span:last-child { white-space: nowrap; }
-.dcv4-price__l2 { font-size: 12.5px; color: #64748b; white-space: nowrap; }
-.dcv4-price__save { font-size: 12px; font-weight: 800; color: #15803d; background: #dcfce7; border-radius: 999px; padding: 4px 9px; line-height: 1.2; white-space: nowrap; }
-.dcv4-price__nocontract { margin-top: 6px; font-size: 12.5px; color: #64748b; }
-.dcv4-price__caps { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.dcv4-price__cap { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: #f8fafc; border: 1px solid #eef2f7; }
-.dcv4-price__card.is-featured .dcv4-price__cap { background: #eff6ff; border-color: #dbeafe; }
-.dcv4-price__caplabel { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
-.dcv4-price__capvalue { font-size: 16px; font-weight: 800; color: #1d4ed8; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-.dcv4-price__cap.is-off { background: #f1f5f9; border-color: #e2e8f0; }
+.dcv4-price__l2 { font-size: 12.5px; color: var(--mute); white-space: nowrap; }
+.dcv4-price__save { font-size: 12px; font-weight: 800; color: #15803d; background: #dcfce7; border: 1px solid #bbf7d0; border-radius: 999px; padding: 3px 9px; line-height: 1.2; white-space: nowrap; }
+.dcv4-price__card.is-featured .dcv4-price__save { color: #86efac; background: rgba(74,222,128,.14); border-color: rgba(74,222,128,.32); }
+.dcv4-price__nocontract { margin-top: 8px; font-size: 12.5px; color: var(--mute); }
+
+/* Cupos: cuatro fichas tipo indicador, separadas del precio por un filo. */
+.dcv4-price__caps { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--hair); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dcv4-price__cap { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 11px 13px; border-radius: 14px; background: var(--tile); border: 1px solid var(--hair); box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
+.dcv4-price__card.is-featured .dcv4-price__cap { box-shadow: inset 0 1px 0 rgba(255,255,255,.06); }
+.dcv4-price__caplabel { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+.dcv4-price__capvalue { font-size: 17px; font-weight: 800; color: #1d4ed8; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.dcv4-price__card.is-featured .dcv4-price__capvalue { color: #93c5fd; }
+.dcv4-price__cap.is-off { background: #f1f5f9; border-color: #e2e8f0; border-style: dashed; box-shadow: none; }
 .dcv4-price__cap.is-off .dcv4-price__capvalue { color: #64748b; font-weight: 700; }
-.dcv4-price__addendum { margin-top: 18px; font-size: 13.5px; font-weight: 800; color: #0f172a; }
-.dcv4-price__feats { margin-top: 12px; display: flex; flex-direction: column; gap: 9px; }
-.dcv4-price__feat { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45; color: #334155; }
-.dcv4-price__feat.is-off { color: #64748b; }
-.dcv4-price__chk { flex: 0 0 auto; margin-top: 2px; width: 18px; height: 18px; padding: 2px; border-radius: 50%; color: #64748b; background: #f1f5f9; }
+.dcv4-price__card.is-featured .dcv4-price__cap.is-off { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.14); }
+.dcv4-price__card.is-featured .dcv4-price__cap.is-off .dcv4-price__capvalue { color: #94a3b8; }
+
+/* Lista de funciones: filas con filo entre ellas, ✓/✗ en ficha redonda de 20 px. */
+.dcv4-price__addendum { margin-top: 22px; display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 800; color: var(--ink); }
+.dcv4-price__addendum::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--hair); }
+.dcv4-price__feats { margin-top: 12px; display: flex; flex-direction: column; }
+.dcv4-price__feat { display: flex; gap: 11px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--hair); font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+.dcv4-price__feat:first-child { border-top: 0; }
+.dcv4-price__feat.is-off { color: var(--mute); }
+.dcv4-price__chk { flex: 0 0 auto; margin-top: 1px; width: 20px; height: 20px; padding: 3px; border-radius: 50%; color: #64748b; background: #f1f5f9; }
 .dcv4-price__chk--on { color: #15803d; background: #dcfce7; }
+.dcv4-price__card.is-featured .dcv4-price__chk { color: #94a3b8; background: rgba(255,255,255,.08); }
+.dcv4-price__card.is-featured .dcv4-price__chk--on { color: #86efac; background: rgba(74,222,128,.16); }
 .dcv4-price__spacer { display: block; min-height: 22px; flex: 1 1 auto; }
-.dcv4-price__cta { margin-top: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 60px; background: #2563eb; color: #fff; border-radius: 12px; font-weight: 700; font-size: 15.5px; padding: 8px 14px; text-align: center; }
+
+/* Botón: degradado azul con brillo interior y halo; en la recomendada es
+   blanco sobre el navy (más contraste que azul sobre azul oscuro). */
+.dcv4-price__cta { margin-top: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 62px; color: #fff; border-radius: 14px; font-weight: 700; font-size: 15.5px; padding: 9px 14px; text-align: center; background: linear-gradient(180deg, #2f6df0 0%, #2563eb 55%, #1d4ed8 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 12px 26px -14px rgba(37,99,235,.75); transition: transform .2s, box-shadow .2s, background .2s; }
+.dcv4-price__cta:hover { color: #fff; background: linear-gradient(180deg, #2563eb, #1d4ed8); transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 18px 32px -14px rgba(37,99,235,.85); }
 .dcv4-price__ctasub { font-size: 12px; font-weight: 600; color: #dbeafe; min-height: 1.2em; white-space: nowrap; }
-.dcv4-price__chips { margin-top: clamp(28px, 3.6vw, 44px); display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; }
-.dcv4-price__chips li { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: #334155; background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 8px 14px; }
-.dcv4-price__chips svg { color: #15803d; flex: 0 0 auto; }
+.dcv4-price__card.is-featured .dcv4-price__cta { color: #0f172a; background: linear-gradient(180deg, #fff, #eff6ff); box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 14px 30px -14px rgba(96,165,250,.6); }
+.dcv4-price__card.is-featured .dcv4-price__cta:hover { color: #0f172a; background: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 20px 36px -14px rgba(96,165,250,.75); }
+.dcv4-price__card.is-featured .dcv4-price__ctasub { color: #1d4ed8; }
+.dcv4-price__card.is-featured .dcv4-price__cta:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* Píldoras de confianza: vidrio claro con la ✓ en ficha verde. */
+.dcv4-price__chips { margin-top: clamp(32px, 4vw, 50px); display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.dcv4-price__chips li { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; background: rgba(255,255,255,.86); border: 1px solid #e2e8f0; border-radius: 999px; padding: 8px 15px 8px 10px; box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 8px 18px -14px rgba(15,23,42,.3); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.dcv4-price__chips svg { width: 18px; height: 18px; padding: 3px; border-radius: 50%; color: #15803d; background: #dcfce7; flex: 0 0 auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dcv4-price__card:hover, .dcv4-price__card.is-featured:hover, .dcv4-price__cta:hover { transform: none; }
+  .dcv4-price__num, .dcv4-price__line { animation: none; }
+  .dcv4-price__thumb { transition: none; }
+}
 @media (max-width: 480px) {
-  .dcv4-price__card { padding: 26px 18px 20px; }
+  .dcv4-price__card { padding: 28px 18px 22px; border-radius: 20px; }
   .dcv4-price__badge { left: 18px; }
-  .dcv4-price__tbtn { padding: 9px 13px; font-size: 14px; }
+  .dcv4-price__tbtn { padding: 9px 14px; font-size: 14px; }
 }
 
 /* ── Comparativa en móvil (comparison.tsx) ───────────────────────────────

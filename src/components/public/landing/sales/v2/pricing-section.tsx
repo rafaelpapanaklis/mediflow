@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { PRICING_COPY, fmtMXN } from "./landing-data";
 import type { PlanCard } from "./plan-cards";
@@ -16,6 +16,13 @@ import type { PlanCard } from "./plan-cards";
  * anual (lib/billing/first-month-promo.ts), así que en anual no se anuncia.
  * Los bloques que cambian entre modos (línea bajo el precio, subtexto del CTA)
  * tienen alto reservado para que el cambio no mueva la maquetación.
+ *
+ * Ajuste 8 (Rafael): misma estructura y textos, acabado más cuidado. El TSX solo
+ * aporta ganchos: el deslizador del conmutador (`dcv4-price__thumb`), un `key`
+ * por modo en la cifra y en la línea de abajo (la animación de entrada vive en
+ * el CSS, `dcPriceIn`), la variable `--plan-accent` (color de la insignia, que
+ * ya venía de plan-cards) y las capas decorativas del fondo. Todo lo visual
+ * está en landing-v2.css bajo «Precios (ajuste 8)».
  *
  * CTA → /signup?plan=basic|pro|clinic&billing=monthly|annual.
  */
@@ -36,7 +43,9 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
 
   return (
     <section id="precios" className="dcv4-price" style={{ scrollMarginTop: 72 }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(56px,7vw,92px) 20px" }}>
+      {/* Fondo: rejilla de puntos + dos brillos suaves (puro CSS, sin imágenes). */}
+      <div aria-hidden="true" className="dcv4-price__bg" />
+      <div className="dcv4-price__wrap" style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(56px,7vw,92px) 20px" }}>
         <div data-reveal="" className="dcv4-price__head">
           <span className="dcv4-eyebrow">{PRICING_COPY.eyebrow}</span>
           <h2 className="dcv4-balance dcv4-h2">{PRICING_COPY.title}</h2>
@@ -54,7 +63,9 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
             )}
           </p>
 
-          <div role="group" aria-label="Periodo de facturación" className="dcv4-price__toggle">
+          <div role="group" aria-label="Periodo de facturación" className="dcv4-price__toggle" data-mode={anual ? "anual" : "mensual"}>
+            {/* Deslizador que se mueve bajo la opción activa (ajuste 8). */}
+            <span aria-hidden="true" className="dcv4-price__thumb" />
             {/* Mensual a la izquierda y Anual a la derecha (con su −%); MENSUAL seleccionado por defecto (ajuste 7). */}
             <button type="button" className={`dcv4-price__tbtn${!anual ? " is-on" : ""}`} onClick={() => setAnual(false)} aria-pressed={!anual}>
               {PRICING_COPY.toggleMonthly}
@@ -68,7 +79,12 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
 
         <div className="dcv4-price__grid">
           {cards.map((p) => (
-            <article key={p.id} data-reveal="" className={`dcv4-plan dcv4-price__card${p.recommended ? " dcv4-plan--featured is-featured" : ""}`}>
+            <article
+              key={p.id}
+              data-reveal=""
+              className={`dcv4-plan dcv4-price__card${p.recommended ? " dcv4-plan--featured is-featured" : ""}`}
+              style={{ "--plan-accent": p.badgeColor } as CSSProperties}
+            >
               <span className="dcv4-price__badge" style={{ background: p.badgeColor }}>{p.badge}</span>
 
               <h3 className="dcv4-price__name">{p.name}</h3>
@@ -77,14 +93,15 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
               {/* precio dinámico: plan_configs */}
               <p className="dcv4-price__amount">
                 <span className="dcv4-price__cur">$</span>
-                <span className="dcv4-price__num">{num(anual ? p.yearlyPerMonth : p.monthly)}</span>
+                {/* `key` por modo: al conmutar, la cifra entra con un fundido corto (CSS). */}
+                <span key={anual ? "a" : "m"} className="dcv4-price__num">{num(anual ? p.yearlyPerMonth : p.monthly)}</span>
                 <span className="dcv4-price__per">
                   <span>MXN</span>
                   <span>/ mes</span>
                 </span>
               </p>
               {/* Una sola ranura de DOS renglones para ambos modos: mismo alto, sin saltos al conmutar. */}
-              <p className="dcv4-price__line">
+              <p key={anual ? "a" : "m"} className="dcv4-price__line">
                 {/* Mensual (Rafael, ajuste 7): la píldora verde dice «Primer mes pagas» y en negro «solo $19 MXN» (importe del plan). */}
                 <span className="dcv4-price__l1">
                   <span className="dcv4-price__save">{anual ? `−${p.yearlyDiscountPct}%` : "Primer mes pagas"}</span>
