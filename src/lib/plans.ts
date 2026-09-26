@@ -2,13 +2,16 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import {
-  FALLBACK_PLAN_CONFIG,
-  PLAN_MARKETING,
-  withPatientsBullet,
+  buildResolvedPlan,
   type PlanConfigShape,
   type PlanLimits,
   type ResolvedPlan,
 } from "@/lib/plan-shared";
+import {
+  applyClinicOverrides,
+  planToLimits,
+  type ClinicOverrideFields,
+} from "@/lib/billing/plan-overrides";
 
 /**
  * FUENTE ÚNICA (server) de la config de planes.
@@ -33,43 +36,6 @@ const CACHE_TTL_MS = 60_000;
 
 function coercePlanId(plan: string | null | undefined): PlanId {
   return plan && (PLAN_IDS as readonly string[]).includes(plan) ? (plan as PlanId) : "PRO";
-}
-
-/** Construye el plan resuelto a partir de la fila DB (o el fallback). */
-function buildResolved(planId: PlanId, row: PlanConfigShape | null): ResolvedPlan {
-  const fb = FALLBACK_PLAN_CONFIG[planId];
-  const src = row ?? fb;
-  const moduleFeatures =
-    row && row.features && typeof row.features === "object"
-      ? { ...fb.features, ...row.features }
-      : fb.features;
-  return {
-    id: planId,
-    name: src.label,
-    label: src.label,
-    priceMxn: src.priceMxnMonthly,
-    priceMxnMonthly: src.priceMxnMonthly,
-    priceMxnAnnual: src.priceMxnAnnual,
-    storageBytes: src.storageBytes,
-    aiTokensDefault: src.aiTokensDefault,
-    // whatsappMonthly NO se propaga a propósito: cupo retirado del producto
-    // (ver PlanConfigShape en @/lib/plan-shared). La columna sigue en la DB.
-    cfdiMonthly: src.cfdiMonthly,
-    cfdiOverageCents: src.cfdiOverageCents,
-    maxPatients: src.maxPatients,
-    maxUsers: src.maxUsers,
-    // NULL = ilimitado, igual que maxPatients/maxUsers. Que un NULL accidental
-    // (columna recién agregada, fila sin sembrar) NO abra sucursales infinitas
-    // en BASIC es responsabilidad del DEFAULT 1 de la columna — ver
-    // sql/plan_configs_max_clinics.sql. Aquí un NULL sí es intención explícita
-    // del admin ("Ilimitado" en /admin/settings → Planes).
-    maxClinics: src.maxClinics,
-    // El bullet del cupo de pacientes se DERIVA de maxPatients (número real de
-    // plan_configs, o "Pacientes ilimitados" si es null) en vez de vivir escrito
-    // a mano en PLAN_MARKETING. Ver withPatientsBullet en @/lib/plan-shared.
-    features: withPatientsBullet(PLAN_MARKETING[planId].features, src.maxPatients),
-    moduleFeatures,
-  };
 }
 
 /** Normaliza una fila Prisma de plan_configs a PlanConfigShape (bytes a number). */
@@ -112,7 +78,7 @@ async function loadAll(): Promise<Record<PlanId, ResolvedPlan>> {
   }
 
   const value = {} as Record<PlanId, ResolvedPlan>;
-  for (const id of PLAN_IDS) value[id] = buildResolved(id, byId.get(id) ?? null);
+  for (const id of PLAN_IDS) value[id] = buildResolvedPlan(id, byId.get(id) ?? null);
   cached = { value, at: now };
   return value;
 }
@@ -129,21 +95,39 @@ export async function getResolvedPlan(plan: string | null | undefined): Promise<
   return all[coercePlanId(plan)];
 }
 
-/** Límites efectivos del plan (async; lee de plan_configs con fallback). */
+/**
+ * Límites efectivos del PLAN (async; lee de plan_configs con fallback).
+ *
+ * ⚠️ Esto es lo que dice el PLAN, no lo que tiene una clínica: una clínica dada
+ * de alta antes de los planes de sep-2026 conserva sus propios topes y precio.
+ * Cualquier sitio que aplique un tope de usuarios/sedes o calcule un importe a
+ * cobrar A UNA CLÍNICA debe usar `getPlanLimitsForClinic` / `getResolvedPlanForClinic`.
+ * Este queda para lo que es del plan a secas (storage, IA, pacientes, CFDI, la
+ * lista de precios pública, el alta de una clínica nueva).
+ */
 export async function getPlanLimits(plan: string | null | undefined): Promise<PlanLimits> {
   const all = await loadAll();
-  const r = all[coercePlanId(plan)];
-  return {
-    storageBytes: r.storageBytes,
-    aiTokensDefault: r.aiTokensDefault,
-    cfdiMonthly: r.cfdiMonthly,
-    cfdiOverageCents: r.cfdiOverageCents,
-    monthlyPrice: r.priceMxnMonthly,
-    maxPatients: r.maxPatients,
-    maxUsers: r.maxUsers,
-    maxClinics: r.maxClinics,
-    label: r.label,
-  };
+  return planToLimits(all[coercePlanId(plan)]);
+}
+
+/**
+ * El plan de ESTA clínica con sus condiciones conservadas encima (topes de
+ * usuarios/sedes y precio mensual/anual). Sin overrides vigentes = el plan a
+ * secas. La clínica que se pasa necesita los campos de `CLINIC_OVERRIDE_SELECT`;
+ * si faltan, se entiende «sin override». Lógica en @/lib/billing/plan-overrides.
+ */
+export async function getResolvedPlanForClinic(
+  clinic: ClinicOverrideFields | null | undefined,
+): Promise<ResolvedPlan> {
+  const base = await getResolvedPlan(clinic?.plan);
+  return applyClinicOverrides(base, clinic);
+}
+
+/** Límites de ESTA clínica (mismos que `getPlanLimits` pero con sus overrides). */
+export async function getPlanLimitsForClinic(
+  clinic: ClinicOverrideFields | null | undefined,
+): Promise<PlanLimits> {
+  return planToLimits(await getResolvedPlanForClinic(clinic));
 }
 
 /** Invalida la cache en memoria (tras un update del admin). */

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
-import { getPlanLimits } from "@/lib/plans";
+import { getPlanLimitsForClinic } from "@/lib/plans";
+import { CLINIC_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
@@ -125,8 +126,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // — un error del gate no puede impedirle a un admin reactivar a su equipo.
   if (body.isActive === true && member.isActive === false) {
     try {
-      const clinicPlan = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: { plan: true } });
-      const { maxUsers } = await getPlanLimits(clinicPlan?.plan);
+      const clinicPlan = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: CLINIC_OVERRIDE_SELECT });
+      const { maxUsers } = await getPlanLimitsForClinic(clinicPlan);
       if (maxUsers != null) {
         const activeUsers = await prisma.user.count({ where: { clinicId: ctx!.clinicId, isActive: true } });
         if (activeUsers >= maxUsers) {

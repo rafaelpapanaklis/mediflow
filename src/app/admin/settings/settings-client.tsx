@@ -298,7 +298,7 @@ export function AdminSettingsClient({ envStatus, planConfigs }: { envStatus: Env
 
           {/* PLANES — editor de precio/límites/permisos por plan (plan_configs). */}
           {tab === "precios" && (
-            <CardNew title="Planes" sub="Precio, límites y permisos por módulo de cada plan. Se guardan por plan y aplican sin redeploy.">
+            <CardNew title="Planes" sub="Precio, límites y permisos por módulo de cada plan. Se guardan por plan y aplican sin redeploy. Los topes de usuarios y sedes y los precios rigen a las clínicas NUEVAS: las que ya estaban registradas conservan los suyos (se ven y se editan en la ficha de cada clínica, «Condiciones conservadas»).">
               <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 760 }}>
                 {planConfigs.map((p) => (
                   <PlanCardEditor key={p.id} plan={p} />

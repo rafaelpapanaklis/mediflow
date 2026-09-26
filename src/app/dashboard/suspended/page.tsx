@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Lock, Sparkles } from "lucide-react";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlans } from "@/lib/plans";
+import { applyClinicOverrides } from "@/lib/billing/plan-overrides";
 import { isFirstContract } from "@/lib/billing/first-month-promo";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
@@ -35,7 +36,10 @@ export default async function SuspendedPage({
     getResolvedPlans(),
   ]);
 
-  const planCards: PlanCardData[] = resolvedPlans.map((p) => ({
+  // El plan PROPIO de la clínica sale con lo que conserva (si es de antes de los
+  // planes de sep-2026), porque es lo que /api/billing/checkout le cobrará al
+  // reactivarlo; los demás, con las condiciones vigentes.
+  const planCards: PlanCardData[] = resolvedPlans.map((plan) => applyClinicOverrides(plan, user.clinic)).map((p) => ({
     id: p.id,
     name: p.name,
     priceMxn: p.priceMxn,

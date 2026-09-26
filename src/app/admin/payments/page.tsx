@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getResolvedPlans } from "@/lib/plans";
+import { CLINIC_OVERRIDE_SELECT, applyClinicOverrides } from "@/lib/billing/plan-overrides";
 import { getAdminMrr, includedBranchesHint, mrrBreakdownHint, EMPTY_MRR } from "@/lib/admin/mrr";
 import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
 import { isInTrial, isPlanExpired } from "@/lib/plan-status";
@@ -179,13 +181,29 @@ async function renderPaymentsPage() {
   // Stripe Checkout la tienen en 0 y el KPI marcaba $0 con 5 clínicas activas.
   const mrr = await safe(getAdminMrr(), EMPTY_MRR);
 
-  const clinics = await safe(
+  const clinicRows = await safe(
     prisma.clinic.findMany({
-      select: { id: true, name: true, plan: true, email: true, monthlyPrice: true },
+      select: { id: true, name: true, email: true, monthlyPrice: true, ...CLINIC_OVERRIDE_SELECT },
       orderBy: { name: "asc" },
     }),
     [] as any[],
   );
+  // Importe sugerido en el formulario de pago manual: lo que ESTA clínica paga
+  // al mes (plan_configs + sus condiciones conservadas), no una tabla a mano.
+  // UNA lectura de la config de planes y el resto en memoria (sin una consulta
+  // por clínica).
+  const plansById = new Map((await safe(getResolvedPlans(), [] as any[])).map((p: any) => [p.id, p]));
+  const clinics = clinicRows.map((c: any) => {
+    const base = plansById.get(c.plan);
+    return {
+      id: c.id,
+      name: c.name,
+      plan: c.plan,
+      email: c.email,
+      monthlyPrice: c.monthlyPrice,
+      planPriceMxn: base ? applyClinicOverrides(base, c).priceMxnMonthly : 0,
+    };
+  });
 
   // Prisma tipa `_sum` como `... | null` (puede venir null si 0 filas matchean
   // el where); usamos optional chaining para no explotar con "cannot read

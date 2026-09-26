@@ -1,7 +1,8 @@
 import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getPlanLimits } from "@/lib/plans";
+import { getPlanLimitsForClinic } from "@/lib/plans";
+import { CLINIC_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -13,7 +14,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     select: {
       id: true,
       name: true,
-      plan: true,
+      ...CLINIC_OVERRIDE_SELECT,
       aiTokensUsed: true,
       aiTokensLimit: true,
       aiLastResetAt: true,
@@ -42,7 +43,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     }),
   ]);
 
-  const limits = await getPlanLimits(clinic.plan);
+  const limits = await getPlanLimitsForClinic(clinic);
   const storageUsed = storageAgg._sum.size ?? 0;
   const filesCount  = storageAgg._count.id ?? 0;
 

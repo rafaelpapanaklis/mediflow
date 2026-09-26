@@ -102,17 +102,26 @@ function allModules(value: boolean): Record<string, boolean> {
  * lo que no sea image/*): NO existe IA sobre CBCT/DICOM. Cualquier bullet que
  * junte "3D" con "IA" es una promesa incumplible — mantenerlos separados.
  *
- * ⚠️ El cupo de PACIENTES no se escribe aquí: lo inyecta `getResolvedPlan`
- * (src/lib/plans.ts) con `patientsBullet(maxPatients)` a partir del valor REAL
- * de plan_configs. Antes BASIC decía "500 pacientes" a mano y quedaba mintiendo
- * en cuanto el admin editaba el tope. Igual que el cupo CFDI (cfdiBullet), que
- * las superficies insertan en la posición 3.
+ * ⚠️ Aquí SOLO va el copy que no depende de un número. Los tres cupos que sí lo
+ * hacen — USUARIOS, PACIENTES y SEDES — no se escriben a mano: los inyecta
+ * `planBullets` (abajo) desde el valor REAL de plan_configs, así que "3 usuarios"
+ * / "5 usuarios" / "Usuarios ilimitados" y "1 sede" / "Hasta 3 sedes" salen de
+ * maxUsers / maxClinics y no pueden quedar mintiendo cuando el admin edita el
+ * tope. Antes BASIC decía "2 usuarios" y PRO "6 usuarios" a mano. Igual que el
+ * cupo CFDI (cfdiBullet), que las superficies insertan en la posición 3.
  */
 export const PLAN_MARKETING: Record<PlanId, { name: string; features: string[] }> = {
-  BASIC:  { name: "Básico",      features: ["2 usuarios", "Agenda + WhatsApp", "CFDI + Portal"] },
-  PRO:    { name: "Profesional", features: ["6 usuarios", "IA en radiografías 2D", "Analytics + reportes", "Mi Clínica 3D"] },
-  CLINIC: { name: "Clínica",     features: ["Usuarios ilimitados", "Multi-sucursal", "Soporte prioritario", "Onboarding dedicado"] },
+  BASIC:  { name: "Básico",      features: ["Agenda + WhatsApp", "CFDI + Portal"] },
+  PRO:    { name: "Profesional", features: ["IA en radiografías 2D", "Analytics + reportes", "Mi Clínica 3D"] },
+  CLINIC: { name: "Clínica",     features: ["Soporte prioritario", "Onboarding dedicado"] },
 };
+
+/**
+ * Lo que un plan con más de una sede ofrece POR TENER varias sedes. Solo se
+ * muestra cuando el plan de verdad permite más de una (ver planBullets): un
+ * plan de 1 sede no puede prometer «comparación entre sedes».
+ */
+export const MULTI_SEDE_BULLET = "Reportes consolidados y comparación entre sedes";
 
 /** Forma cruda de un plan (= columnas de plan_configs, storage en bytes). */
 export interface PlanConfigShape {
@@ -143,11 +152,19 @@ export interface PlanConfigShape {
 }
 
 /**
- * FALLBACK = SEED. Precios 419/689/1719 (anual = 35% de descuento →
- * 3264/5376/13404, equivalentes a 272/448/1117 al mes). Límites finales:
- * pacientes 500/∞/∞; usuarios 2/6/∞; sucursales 1/1/3; storage 5/15/75 GB;
- * IA 0/200k/1M; BASIC SIN IA/analytics/tv-modes; PRO y CLINIC con todo.
- * Editable en /admin sin redeploy.
+ * FALLBACK = SEED de las ALTAS NUEVAS (planes de sep-2026). Precios mensuales
+ * 419/689/1489; anual 3264/5376/11614 (35% de descuento sobre 12 meses; el de
+ * CLINIC es 1489 × 12 × 0.65 = 11614.20, entero porque priceMxnAnnual es Int).
+ * Límites: pacientes 500/∞/∞; usuarios
+ * 3/5/∞; sucursales 1/1/3; storage 5/15/75 GB; IA 0/200k/1M; BASIC SIN
+ * IA/analytics/tv-modes; PRO y CLINIC con todo. Editable en /admin sin redeploy.
+ *
+ * Las clínicas dadas de alta ANTES (usuarios 2/6/∞, Clínica $1,719 / $13,404 al
+ * año) NO leen esto: conservan lo suyo en los campos `*Override` de su fila de
+ * Clinic (src/lib/billing/plan-overrides.ts).
+ *
+ * Precio anual de CLINIC confirmado por Rafael el 26-sep-2026: 11614 (+IVA). Los
+ * anuales de BASIC y PRO (3264 y 5376) no se tocan.
  *
  * `whatsappMonthly` está DEPRECADO (ver PlanConfigShape): se conserva solo como
  * relleno del INSERT en plan_configs, no es un límite de nada.
@@ -163,7 +180,7 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     cfdiMonthly: 25,
     cfdiOverageCents: 300,
     maxPatients: 500,
-    maxUsers: 2,
+    maxUsers: 3,
     maxClinics: 1,
     features: { ...allModules(true), "ai-assistant": false, analytics: false, "tv-modes": false },
   },
@@ -177,14 +194,14 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     cfdiMonthly: 50,
     cfdiOverageCents: 200,
     maxPatients: null,
-    maxUsers: 6,
+    maxUsers: 5,
     maxClinics: 1,
     features: allModules(true),
   },
   CLINIC: {
     label: "Clínica",
-    priceMxnMonthly: 1719,
-    priceMxnAnnual: 13404,
+    priceMxnMonthly: 1489,
+    priceMxnAnnual: 11614,
     storageBytes: 75 * GB,
     aiTokensDefault: 1_000_000,
     whatsappMonthly: 6000,
@@ -194,6 +211,7 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     maxUsers: null,
     // Multi-sucursal: el precio de CLINIC incluye hasta 3 sedes bajo el mismo
     // dueño (sin suscripción Stripe propia). La 4.ª+ = add-on aparte (pendiente).
+    // Las clínicas que ya estaban registradas conservan el tope que tenían (override).
     maxClinics: 3,
     features: allModules(true),
   },
@@ -203,7 +221,7 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
 export const FALLBACK_PLAN_PRICES_MXN: Record<string, number> = {
   BASIC: 419,
   PRO: 689,
-  CLINIC: 1719,
+  CLINIC: 1489,
 };
 
 /**
@@ -252,15 +270,84 @@ export function patientsBullet(maxPatients: number | null): string {
 }
 
 /**
- * Inserta el bullet de pacientes en la 2.ª posición de los bullets de marketing
- * (justo tras el de usuarios, que es el otro límite duro del plan).
- *
- * Se aplica en getResolvedPlan, así que las 3 superficies que pintan tarjetas
- * (signup paso 3, ajustes → suscripción, /dashboard/suspended) lo reciben ya
- * puesto y siguen insertando el cupo CFDI en el índice 2 → el bullet de CFDI
- * conserva la posición 3 que fijó el fix de cupos.
+ * Bullet del cupo de USUARIOS. FUENTE ÚNICA del copy: "3 usuarios" con tope,
+ * "Usuarios ilimitados" cuando `maxUsers` es null. Sale de plan_configs.maxUsers.
  */
-export function withPatientsBullet(features: string[], maxPatients: number | null): string[] {
-  const bullet = patientsBullet(maxPatients);
-  return features.length === 0 ? [bullet] : [features[0], bullet, ...features.slice(1)];
+export function usersBullet(maxUsers: number | null): string {
+  return maxUsers == null ? "Usuarios ilimitados" : `${maxUsers} ${maxUsers === 1 ? "usuario" : "usuarios"}`;
+}
+
+/**
+ * Bullet del cupo de SEDES: "1 sede", "Hasta 3 sedes" o "Sedes ilimitadas".
+ * Sale de plan_configs.maxClinics (null = ilimitado).
+ */
+export function branchesBullet(maxClinics: number | null): string {
+  if (maxClinics == null) return "Sedes ilimitadas";
+  return maxClinics <= 1 ? "1 sede" : `Hasta ${maxClinics} sedes`;
+}
+
+/**
+ * Bullets de marketing de un plan ya con sus cupos reales, en el orden que las
+ * superficies esperan:
+ *
+ *   0 usuarios · 1 pacientes · 2 sedes [· multi-sede] · …copy fijo de PLAN_MARKETING
+ *
+ * Las tres superficies que pintan tarjetas (signup paso 3, ajustes →
+ * suscripción, /dashboard/suspended) insertan el cupo CFDI en el índice 2
+ * (`slice(0, 2)` + cfdiBullet + `slice(2)`), así que usuarios y pacientes DEBEN
+ * seguir en 0 y 1: el bullet de CFDI conserva la posición 3 que fijó el fix de
+ * cupos. Las sedes van justo detrás, ya como parte del resto.
+ *
+ * El bullet de «reportes consolidados y comparación entre sedes» solo sale si el
+ * plan de verdad permite más de una sede.
+ */
+export function planBullets(
+  planId: PlanId,
+  limits: { maxPatients: number | null; maxUsers: number | null; maxClinics: number | null },
+): string[] {
+  const multiSede = limits.maxClinics == null || limits.maxClinics > 1;
+  return [
+    usersBullet(limits.maxUsers),
+    patientsBullet(limits.maxPatients),
+    branchesBullet(limits.maxClinics),
+    ...(multiSede ? [MULTI_SEDE_BULLET] : []),
+    ...PLAN_MARKETING[planId].features,
+  ];
+}
+
+/**
+ * Plan resuelto a partir de su fila de plan_configs (o del fallback si no hay
+ * fila). PURO: lo usa `getResolvedPlan` (server, con caché) y los tests.
+ */
+export function buildResolvedPlan(planId: PlanId, row: PlanConfigShape | null): ResolvedPlan {
+  const fb = FALLBACK_PLAN_CONFIG[planId];
+  const src = row ?? fb;
+  const moduleFeatures =
+    row && row.features && typeof row.features === "object"
+      ? { ...fb.features, ...row.features }
+      : fb.features;
+  return {
+    id: planId,
+    name: src.label,
+    label: src.label,
+    priceMxn: src.priceMxnMonthly,
+    priceMxnMonthly: src.priceMxnMonthly,
+    priceMxnAnnual: src.priceMxnAnnual,
+    storageBytes: src.storageBytes,
+    aiTokensDefault: src.aiTokensDefault,
+    // whatsappMonthly NO se propaga a propósito: cupo retirado del producto
+    // (ver PlanConfigShape). La columna sigue en la DB.
+    cfdiMonthly: src.cfdiMonthly,
+    cfdiOverageCents: src.cfdiOverageCents,
+    maxPatients: src.maxPatients,
+    maxUsers: src.maxUsers,
+    // NULL = ilimitado, igual que maxPatients/maxUsers. Que un NULL accidental
+    // (columna recién agregada, fila sin sembrar) NO abra sucursales infinitas
+    // en BASIC es responsabilidad del DEFAULT 1 de la columna — ver
+    // sql/plan_configs_max_clinics.sql. Aquí un NULL sí es intención explícita
+    // del admin ("Ilimitado" en /admin/settings → Planes).
+    maxClinics: src.maxClinics,
+    features: planBullets(planId, src),
+    moduleFeatures,
+  };
 }

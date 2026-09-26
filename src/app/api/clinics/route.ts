@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { getPlanLimits } from "@/lib/plans";
+import { inheritedOverridesData } from "@/lib/billing/plan-overrides";
 import { writeActiveClinicCookie } from "@/lib/active-clinic";
 import {
   getBranchQuota,
@@ -162,6 +163,10 @@ export async function POST(req: NextRequest) {
         subscriptionStatus: "active",
         monthlyPrice: 0,
         aiTokensLimit: planLimits.aiTokensDefault,
+        // Si la madre conserva condiciones de antes de los planes nuevos (tope de
+        // usuarios/sedes), la sede las hereda: si no, leería los topes nuevos y
+        // el cupo de sedes cambiaría según desde cuál mire el dueño.
+        ...inheritedOverridesData(ctx.clinic),
         // Nested write = 1 sola transacción (Prisma envuelve el árbol):
         // Clinic + User dueño + horarios L-V, o nada.
         users: {

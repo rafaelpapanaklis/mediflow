@@ -19,8 +19,6 @@ import type { PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 
-const PLAN_PRICES: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
-
 const PAYMENT_METHODS = [
   { value: "stripe",   label: "Stripe",        icon: "\uD83D\uDCB3" },
   { value: "transfer", label: "Transferencia",  icon: "\uD83C\uDFE6" },
@@ -151,7 +149,9 @@ export function PaymentsClient({
   /* Auto-fill from clinic plan */
   function onClinicChange(clinicId: string) {
     const clinic = clinics.find((c: any) => c.id === clinicId);
-    const price = clinic?.monthlyPrice || PLAN_PRICES[clinic?.plan] || 0;
+    // planPriceMxn: precio del plan de la clínica con sus condiciones conservadas
+    // (lo resuelve el server desde plan_configs; aquí no hay precios escritos a mano).
+    const price = clinic?.monthlyPrice || clinic?.planPriceMxn || 0;
     const now = new Date();
     const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);

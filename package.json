@@ -175,6 +175,7 @@
     "test:analytics-retention": "tsx --test src/app/api/cron/analytics-retention/__tests__/purge.test.ts",
     "test:account-manager": "tsx --test src/lib/account-manager/__tests__/availability.test.ts",
     "test:billing": "tsx --test src/lib/billing/proration.test.ts src/lib/billing/stripe-contract.test.ts src/lib/billing/webhook-decisions.test.ts src/lib/billing/manual-upgrade-diff.test.ts src/lib/billing/billing-guards.test.ts src/lib/billing/renewal-period.test.ts",
+    "test:planes-nuevos": "tsx --test src/lib/billing/__tests__/plan-overrides.test.ts",
     "test:plan-status": "tsx --test src/lib/__tests__/plan-status.test.ts src/lib/__tests__/plan-status-guard.test.ts src/lib/clinical-shared/__tests__/trial-vs-paying.test.ts",
     "test:blog-import": "tsx --test src/lib/blog/__tests__/import-drip.test.ts",
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",
