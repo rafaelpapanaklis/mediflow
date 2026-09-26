@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { getPlanLimits } from "@/lib/plans";
+import { getPlanLimitsForClinic } from "@/lib/plans";
+import type { ClinicOverrideFields } from "@/lib/billing/plan-overrides";
 import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/plan-status";
 import { PATIENT_SHARING_ENABLED, normalizeClinicPair } from "@/lib/branches-shared";
 import type { BranchBlockedReason, BranchQuota } from "@/lib/branches-shared";
@@ -23,7 +24,10 @@ import type { BranchBlockedReason, BranchQuota } from "@/lib/branches-shared";
 
 export type { BranchBlockedReason, BranchQuota } from "@/lib/branches-shared";
 
-type QuotaClinic = { plan?: string | null; subscriptionStatus?: string | null };
+// Además del plan, los campos de condiciones conservadas (ClinicOverrideFields):
+// los dos callers (layout y POST /api/clinics) pasan la fila completa de la
+// clínica activa, que ya los trae. Sin ellos = «sin override» (el plan a secas).
+type QuotaClinic = ClinicOverrideFields & { subscriptionStatus?: string | null };
 
 /**
  * Resuelve el cupo a partir de datos YA cargados por el caller (sin queries
@@ -38,7 +42,7 @@ export async function getBranchQuota(input: {
   isOwner: boolean;
   ownedCount: number;
 }): Promise<BranchQuota> {
-  const { maxClinics } = await getPlanLimits(input.clinic.plan);
+  const { maxClinics } = await getPlanLimitsForClinic(input.clinic);
   const max = maxClinics;
   const planAllowsBranches = max === null || max > 1;
 

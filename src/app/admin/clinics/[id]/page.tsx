@@ -6,13 +6,15 @@ import { isStripeConfigured, STRIPE_SETUP_INSTRUCTIONS } from "@/lib/stripe";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { formatWhatsappDisplay, type AccountManagerDTO } from "@/lib/account-manager/types";
 import { getLiveSubscriptionSnapshot, type StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
-import { getResolvedPlan } from "@/lib/plans";
+import { getResolvedPlan, getResolvedPlanForClinic } from "@/lib/plans";
+import { activeOverrides } from "@/lib/billing/plan-overrides";
 import { loadPlanPrices } from "@/lib/admin/mrr";
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import { leerSaldoIaClinica, type SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia-clinica";
 import type { ClinicRecurringCharge } from "@/components/admin/clinic-payment-method-card";
 import { AdminClinicDetailClient, type PlatformPayments } from "./clinic-detail-client";
+import type { PlanOverridesDTO } from "./plan-overrides-card";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
 
@@ -197,7 +199,9 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
   let recurringCharge: ClinicRecurringCharge | null = null;
   if (stripeSnapshot?.recurring) {
     const r = stripeSnapshot.recurring;
-    const plan = await getResolvedPlan(clinic.plan);
+    // Con las condiciones conservadas: el contraste es contra lo que ESTA clínica
+    // debería pagar (una Clínica de antes: $1,719, no el $1,489 de lista).
+    const plan = await getResolvedPlanForClinic(clinic);
     recurringCharge = {
       amountMxn:     r.amountMxn,
       currency:      r.currency,
@@ -209,6 +213,24 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       planLabel:     plan.label,
     };
   }
+
+  // Condiciones conservadas de la clínica (planes nuevos de sep-2026): lo que
+  // guarda su fila, lo que dice su plan HOY y lo que de verdad le aplica.
+  const listPlan = await getResolvedPlan(clinic.plan);
+  const planOverrides: PlanOverridesDTO = {
+    active: activeOverrides(clinic) !== null,
+    planOverrideFor: clinic.planOverrideFor ?? null,
+    maxUsersOverride: clinic.maxUsersOverride ?? null,
+    maxClinicsOverride: clinic.maxClinicsOverride ?? null,
+    priceMxnMonthlyOverride: clinic.priceMxnMonthlyOverride ?? null,
+    priceMxnAnnualOverride: clinic.priceMxnAnnualOverride ?? null,
+    list: {
+      maxUsers: listPlan.maxUsers,
+      maxClinics: listPlan.maxClinics,
+      priceMxnMonthly: listPlan.priceMxnMonthly,
+      priceMxnAnnual: listPlan.priceMxnAnnual,
+    },
+  };
 
   // Catálogo de módulos del marketplace para el tab "Módulos". Filtramos
   // por isActive=true y category="Dental" (los 6 dentales del seed).
@@ -253,6 +275,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       platformPayments={platformPayments}
       saldoIa={saldoIa}
       planPrices={planPrices}
+      planOverrides={planOverrides}
       ahoraISO={ahora.toISOString()}
       actividad={{
         citasPasadas:  citasPasadas._count._all,

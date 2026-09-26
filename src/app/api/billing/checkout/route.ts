@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlan } from "@/lib/plans";
+import { CLINIC_OVERRIDE_SELECT, applyClinicOverrides } from "@/lib/billing/plan-overrides";
 import { ensureFirstMonthCoupon, isFirstContract } from "@/lib/billing/first-month-promo";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
   }
 
   const planId: PlanId = parsed.data.plan;
-  const plan = await getResolvedPlan(planId);
+  const basePlan = await getResolvedPlan(planId);
 
   // Reusar customer existente si la clínica ya tiene uno. Si no, crear.
   const clinic = await prisma.clinic.findUnique({
@@ -77,11 +78,20 @@ export async function POST(req: NextRequest) {
       // último periodo activado — no se limpian al cancelar.
       subscriptionId: true,
       nextBillingDate: true,
+      // Condiciones conservadas (clínicas de antes de los planes de sep-2026).
+      ...CLINIC_OVERRIDE_SELECT,
     },
   });
   if (!clinic) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
+
+  // PRECIO A COBRAR. Si la clínica contrata (o renueva, o paga por SPEI/OXXO) el
+  // MISMO plan que tiene, paga el precio que conserva (Clínica de antes: $1,719,
+  // no $1,489). Si elige OTRO plan, paga el precio vigente de ese plan: el
+  // override no se aplica a un plan distinto del suyo (ver applyClinicOverrides).
+  // `plan` alimenta el importe, el cupón de primer mes y el nombre del producto.
+  const plan = applyClinicOverrides(basePlan, clinic);
 
   let customerId = clinic.stripeCustomerId;
   if (!customerId) {

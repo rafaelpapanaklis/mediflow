@@ -103,6 +103,20 @@ model Clinic {
   subscriptionId         String? // legacy — Stripe/MP subscription ID
   nextBillingDate        DateTime?
   monthlyPrice           Float?    @default(0)
+  // Condiciones CONSERVADAS (planes nuevos de sep-2026). Las clínicas dadas de
+  // alta ANTES del cambio de planes (usuarios 3/5/∞, sedes 1/1/3, Clínica $1,489)
+  // conservan lo que tenían: estos campos, si tienen valor, MANDAN sobre
+  // plan_configs — pero solo mientras `plan` siga siendo `planOverrideFor` (si la
+  // clínica cambia de plan, dejan de valer solos y pasa a las condiciones nuevas).
+  // NULL = sigue el plan. En los dos límites, -1 = ilimitado a propósito (NULL ya
+  // significa «sin override»). Los precios son MXN + IVA, iguales que plan_configs.
+  // Lógica única y pura: src/lib/billing/plan-overrides.ts. Requiere
+  // sql/planes-nuevos-1-conservar.sql APLICADO antes de deployar.
+  planOverrideFor         Plan?
+  maxUsersOverride        Int?
+  maxClinicsOverride      Int?
+  priceMxnMonthlyOverride Int?
+  priceMxnAnnualOverride  Int?
   // Stripe subscription billing
   stripeCustomerId       String? // Stripe Customer ID for the clinic owner
   stripeSubscriptionId   String? // Stripe Subscription ID (recurring)

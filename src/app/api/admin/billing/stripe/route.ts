@@ -4,6 +4,7 @@ import { createCustomer, createCheckoutForSubscription, cancelSubscription, getC
 import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
 import { getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
+import { CLINIC_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 
 export async function POST(req: NextRequest) {
   const admin = await getAdminSession();
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     const clinic = await prisma.clinic.findUnique({
       where: { id: clinicId },
-      select: { id: true, name: true, email: true, plan: true, stripeCustomerId: true, stripeSubscriptionId: true },
+      select: { id: true, name: true, email: true, stripeCustomerId: true, stripeSubscriptionId: true, ...CLINIC_OVERRIDE_SELECT },
     });
     if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 404 });
 
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
         customerId,
         plan: body.plan ?? clinic.plan,
         clinicId,
+        clinic,
         successUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?stripe=subscription_success`,
         cancelUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?stripe=subscription_cancelled`,
       });

@@ -1,5 +1,6 @@
 import getStripe from "./stripe";
 import { getResolvedPlan } from "@/lib/plans";
+import { applyClinicOverrides, type ClinicOverrideFields } from "@/lib/billing/plan-overrides";
 
 export async function createCustomer(email: string, clinicName: string): Promise<string> {
   const stripe = getStripe();
@@ -17,9 +18,15 @@ export async function createCheckoutForSubscription(params: {
   clinicId: string;
   successUrl: string;
   cancelUrl: string;
+  /**
+   * La clínica con sus campos de condiciones conservadas (CLINIC_OVERRIDE_SELECT).
+   * Si contrata el mismo plan que tiene, el importe es el que conserva; si es
+   * otro plan, el vigente de ese plan. Sin esto se cobraría el precio de lista.
+   */
+  clinic?: ClinicOverrideFields;
 }): Promise<string> {
   const stripe = getStripe();
-  const amount = (await getResolvedPlan(params.plan)).priceMxn;
+  const amount = applyClinicOverrides(await getResolvedPlan(params.plan), params.clinic).priceMxn;
 
   const session = await stripe.checkout.sessions.create({
     customer: params.customerId,

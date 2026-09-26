@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
-import { getPlanLimits } from "@/lib/plans";
+import { getPlanLimitsForClinic } from "@/lib/plans";
+import { CLINIC_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
@@ -91,8 +92,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Tope de usuarios por plan (enforcement). maxUsers null = ilimitado.
-  const clinicPlan = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: { plan: true } });
-  const { maxUsers } = await getPlanLimits(clinicPlan?.plan);
+  // Con las condiciones conservadas de la clínica (una Profesional de antes
+  // sigue con 6 usuarios aunque el plan nuevo diga 5): getPlanLimitsForClinic.
+  const clinicPlan = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: CLINIC_OVERRIDE_SELECT });
+  const { maxUsers } = await getPlanLimitsForClinic(clinicPlan);
   if (maxUsers != null) {
     const activeUsers = await prisma.user.count({ where: { clinicId: ctx!.clinicId, isActive: true } });
     if (activeUsers >= maxUsers) {
