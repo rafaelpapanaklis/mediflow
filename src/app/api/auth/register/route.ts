@@ -13,6 +13,7 @@ import { ensureClinicTerms, effectiveAffiliateMode, getPayoutConfig } from "@/li
 import { sendAffiliateNewReferralEmail } from "@/lib/affiliate-emails";
 import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
+import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
 
 const CATEGORY_MAP: Record<string, string> = {
   dental: "DENTAL", odontologia: "DENTAL",
@@ -258,6 +259,12 @@ export async function POST(req: NextRequest) {
         schedules: { createMany: { data: [0,1,2,3,4].map(day => ({ dayOfWeek: day, enabled: true, openTime: "09:00", closeTime: "18:00" })) } },
       },
     });
+
+    // Clic de Google Ads (WS1-T6): el gclid/gbraid/wbraid con el que llegó, de la
+    // cookie dc_ads (o _gcl_aw), ligado a la clínica que se acaba de crear. Es lo
+    // único que permite atribuir luego el SPEI directo. Best-effort: nunca lanza,
+    // tolera que sql/ws1-t6-ads-clics.sql aún no esté aplicado y no bloquea el alta.
+    await guardarClickAdsDeLaAlta(clinic.id, (n) => req.cookies.get(n)?.value);
 
     // Conversión de afiliado (best-effort): registra la atribución con su
     // campaña y origen. Si la tabla nueva no existe aún, silencio total.
