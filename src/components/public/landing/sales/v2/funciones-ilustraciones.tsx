@@ -14,46 +14,55 @@ import { IconoPanel } from "./icono-panel";
  * Los estilos viven en funciones-v3.css (prefijo `dcf3-`).
  */
 
-/* ── 1 · Tu página web gratuita: la web de la clínica → la agenda del panel ── */
+/* ── 1 · Tu página web gratuita: la web REAL de la clínica → la agenda del panel ──
+   Ajuste 2: la miniatura es una plantilla de verdad —«Especialistas», la que
+   Rafael quiere por defecto (añadido 2b)—, capturada de la vista previa del
+   panel de la clínica de prueba con los nombres cambiados en pantalla
+   (public/landing/web/altabrisa-especialistas.webp, 1280 px de ancho, la
+   página entera: menú, portada, especialistas, valoración y pie), dentro de
+   una ventana de navegador con su URL. La página se desplaza
+   sola, despacio, dentro de la ventana; con prefers-reduced-motion se queda
+   quieta en la portada. La tira de abajo son las 8 miniaturas de plantilla tal
+   como las pinta el panel (public/landing/web/plantilla-<id>.webp). */
+
+/** Alto de altabrisa-especialistas.webp a 1120 px de ancho. */
+const ALTO_WEB = 2816;
 
 const PLANTILLAS: [string, string][] = [
-  ["#4d3fc6", "#e6e9ff"],
-  ["#0f766e", "#ccfbf1"],
-  ["#1a1826", "#f4f3f8"],
-  ["#b45309", "#fef3c7"],
-  ["#be185d", "#fce7f3"],
-  ["#1d4ed8", "#dbeafe"],
-  ["#15803d", "#dcfce7"],
-  ["#7c3aed", "#ede9fe"],
+  ["classic", "Clásico"],
+  ["futurista", "Futurista"],
+  ["healthtech", "Healthtech"],
+  ["calido", "Cálido"],
+  ["equipo", "Equipo"],
+  ["sonrisa", "Sonrisa"],
+  ["consultorio", "Consultorio"],
+  ["especialistas", "Especialistas"],
 ];
 
 export function IluPaginaWeb() {
   return (
     <div className="dcf3-ilu dcf3-web">
-      {/* La web pública de la clínica */}
+      {/* La web pública de la clínica, en su navegador */}
       <div className="dcf3-web__site">
         <div className="dcf3-web__chrome">
           <span className="dcf3-web__dots"><i /><i /><i /></span>
           <span className="dcf3-web__url"><IconoPanel nombre="lock" size={11} /> clinica-altabrisa.dalecontrol.com</span>
         </div>
         <div className="dcf3-web__page">
-          <div className="dcf3-web__nav">
-            <span className="dcf3-web__brand"><i /> Clínica Altabrisa</span>
-            <span className="dcf3-web__links"><b /><b /><b /></span>
-          </div>
-          <div className="dcf3-web__hero">
-            <span className="dcf3-web__h">Sonríe con confianza</span>
-            <span className="dcf3-web__p">Odontología general y estética en Mérida. Agenda en línea, a cualquier hora.</span>
-            <span className="dcf3-web__btn">
-              <IconoPanel nombre="calendar_month" size={14} /> Agendar cita
-            </span>
-          </div>
+          <Image
+            src="/landing/web/altabrisa-especialistas.webp"
+            alt=""
+            width={1120}
+            height={ALTO_WEB}
+            sizes="(max-width: 720px) 90vw, 380px"
+            className="dcf3-web__shot"
+          />
         </div>
         <div className="dcf3-web__templates">
           <span className="dcf3-web__tlabel">8 plantillas</span>
           <span className="dcf3-web__tlist">
-            {PLANTILLAS.map(([a, b], i) => (
-              <i key={a} className={i === 0 ? "is-on" : undefined} style={{ background: `linear-gradient(160deg,${b} 0 46%,${a} 46%)` }} />
+            {PLANTILLAS.map(([id, nombre], i) => (
+              <Image key={id} src={`/landing/web/plantilla-${id}.webp`} alt="" title={nombre} width={284} height={178} sizes="48px" className={id === "especialistas" ? "is-on" : undefined} />
             ))}
           </span>
         </div>
