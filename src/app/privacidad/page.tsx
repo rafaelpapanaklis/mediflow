@@ -85,8 +85,9 @@ export default function PrivacidadPage() {
           <li>
             <b>Datos de navegación (Píxel de Meta y analítica propia):</b> las páginas que
             visita en nuestro sitio, y de su visita datos como su dirección IP, su ubicación
-            aproximada, su dispositivo y navegador. Si ha iniciado sesión, nuestra analítica
-            propia asocia esa visita a su cuenta (correo, nombre, rol, clínica y plan). Se
+            aproximada, su dispositivo y navegador. Si es personal de una clínica y ha iniciado
+            sesión, nuestra analítica propia asocia esa visita a su cuenta (correo, nombre,
+            rol, clínica y plan). Se
             describen en la sección 3. Nuestra analítica propia no lee lo que usted escribe en los
             formularios, y a Meta no le enviamos el contenido de expedientes, recetas ni notas
             clínicas.
@@ -134,9 +135,13 @@ export default function PrivacidadPage() {
             analítica propia, el identificador del clic puede quedar en el registro de esa
             visita, ver más abajo «Analítica propia de DaleControl»).
           </li>
-          {/* Texto C, aprobado tal cual por ws7/Rafael. Google Signals en GA4 está
-              DESACTIVADA (comprobado por Rafael, 26-sep-2026): no se menciona
-              publicidad personalizada. */}
+          {/* Texto C. Google Signals en GA4 está DESACTIVADA (comprobado por Rafael,
+              26-sep-2026): no se menciona publicidad personalizada. Ajuste 1 (ws7):
+              lo que pasa dentro del panel se dice como es. Hechos en #424: gtag.js y
+              gtag('config','AW-…') se cargan en TODAS las rutas (layout.tsx); GA4 no
+              se configura en rutas privadas (PRIVATE_PATH_PATTERN); lo único que sale
+              del panel es la conversión «Pago completado» de Ads y el `purchase` de GA4
+              desde /dashboard/suspended/success (solo el primer pago). */}
           <li>
             <b>Cookies de Google Analytics y de Google Ads.</b> Usamos Google Analytics 4 y
             la etiqueta de Google Ads en el sitio público. Guardan en su navegador cookies
@@ -156,9 +161,13 @@ export default function PrivacidadPage() {
               Nunca enviamos datos de salud, de pacientes ni de expedientes, ni datos de
               tarjeta,
             </b>{" "}
-            y estas herramientas{" "}
-            <b>no se activan dentro del panel de la clínica ni en el portal del paciente</b>.
-            Según Google, Analytics 4 no registra ni almacena direcciones IP completas.
+            y{" "}
+            <b>Google Analytics no mide visitas dentro del panel de la clínica ni en el portal del paciente</b>.
+            La etiqueta de Google Ads sí se carga en todo el sitio, también dentro del panel y
+            del portal, pero allí DaleControl no le envía ningún evento, salvo el aviso del
+            primer pago, que sale desde la pantalla de confirmación del pago (dentro del
+            panel) y llega a Google Ads y también a Google Analytics. Según Google, Analytics
+            4 no registra ni almacena direcciones IP completas.
           </li>
           <li>
             <b>Píxel de Meta (Facebook e Instagram).</b> Usamos el Píxel de Meta en el sitio
@@ -176,6 +185,10 @@ export default function PrivacidadPage() {
               tarjeta,
             </b>{" "}
             y el Píxel <b>no se carga dentro del panel de la clínica ni en el portal del paciente</b>.
+          </li>
+          <li>
+            <b>Vercel Analytics y Speed Insights.</b> Servicios de Vercel, Inc. que usamos
+            para medir las visitas y el rendimiento (velocidad) del sitio.
           </li>
           <li>
             <b>Analítica propia de DaleControl (identificador en el almacenamiento local de su navegador).</b>{" "}
@@ -200,9 +213,8 @@ export default function PrivacidadPage() {
             coordenadas), tipo de dispositivo, navegador, sistema operativo, tamaño de
             pantalla, idioma y zona horaria.
             <br />
-            <b>Si usted ha iniciado sesión</b> (personal de una clínica, o paciente en el
-            portal), asociamos la visita a su cuenta: su correo, su nombre, su rol, la clínica
-            y el plan contratado.
+            <b>Si usted es personal de una clínica y ha iniciado sesión</b>, asociamos la
+            visita a su cuenta: su correo, su nombre, su rol, la clínica y el plan contratado.
             <br />
             <b>Qué no registra:</b> lo que usted escribe en formularios y campos (nunca se
             lee el contenido de un campo) ni el contenido de expedientes, recetas o notas
@@ -210,9 +222,9 @@ export default function PrivacidadPage() {
             interno de un registro.
             <br />
             <b>Dónde funciona:</b> en el sitio público y también dentro del panel de la
-            clínica, del portal del paciente y de los paneles de afiliados, proveedores y
-            laboratorios. No funciona en el panel de administración de DaleControl ni en las
-            pantallas en vivo de la clínica.
+            clínica y de los paneles de afiliados, proveedores y laboratorios.{" "}
+            <b>No mide el portal del paciente</b> (ni sus enlaces de acceso), el panel de
+            administración de DaleControl ni las pantallas en vivo de la clínica.
             <br />
             <b>Cuánto se conserva:</b> ver la sección 8.
           </li>
@@ -295,7 +307,7 @@ export default function PrivacidadPage() {
         </p>
         <ul>
           <li><b>Supabase, Inc.</b> — hosting de base de datos y autenticación.</li>
-          <li><b>Vercel, Inc.</b> — hosting de la aplicación web.</li>
+          <li><b>Vercel, Inc.</b> — hosting de la aplicación web y medición de visitas y rendimiento del sitio (Vercel Analytics y Speed Insights).</li>
           <li><b>Twilio, Inc. / Postmark</b> — envío de WhatsApp, SMS y correos transaccionales.</li>
           <li><b>Stripe, Inc. / PayPal / MercadoPago</b> — procesamiento de pagos cuando aplica.</li>
           <li><b>FacturAPI / Proveedores autorizados de CFDI</b> — emisión de comprobantes fiscales.</li>
