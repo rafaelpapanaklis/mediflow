@@ -3,7 +3,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { DobleInventario } from "./doble-inventario";
-import { consumeFefoTx, createLot, writeOffExpiredLot, InsufficientStockError } from "../lots.server";
+import { consumeFefoTx, createLot, listLotsForItem, writeOffExpiredLot, InsufficientStockError } from "../lots.server";
 import { consumeRecipeForSession, upsertRecipeLine } from "../recipe.server";
 
 const CLINIC = "clinic-1";
@@ -36,6 +36,30 @@ describe("reconciliación: drift fuera del sistema de lotes", () => {
 
     const item = db.tablas.inventoryItem.find(i => i.id === "item-1")!;
     assert.equal(item.quantity, 6);
+  });
+
+  it("Ajuste 1 del gerente: SIN backfill SQL, listar lotes no sale vacío — se crea el sin-lote al vuelo con la cantidad de HOY", async () => {
+    // Simula: estructura SQL aplicada, backfill NO (todavía no se integró a
+    // main). El artículo no tiene ni un lote.
+    db.tablas.inventoryItem.push(itemBase({ quantity: 8 }));
+
+    const lots = await listLotsForItem(CLINIC, "item-1", db as any);
+
+    assert.equal(lots.length, 1);
+    assert.equal(lots[0].lotNumber, null);
+    assert.equal(lots[0].remaining, 8);
+  });
+
+  it("Ajuste 1 del gerente: producción sigue moviendo quantity SIN lotes hasta el push — el sin-lote nace con el valor de HOY, no uno viejo", async () => {
+    // item nace con 20 (antes de integrar). "Producción" (código viejo, sin
+    // lotes) lo sube a 35 con el endpoint manual de siempre, ANTES de que
+    // nadie toque el sistema de lotes por primera vez.
+    db.tablas.inventoryItem.push(itemBase({ quantity: 20 }));
+    db.tablas.inventoryItem.find(i => i.id === "item-1")!.quantity = 35;
+
+    // El primer touch (listar, aquí) ve 35 — no un backfill congelado en 20.
+    const lots = await listLotsForItem(CLINIC, "item-1", db as any);
+    assert.equal(lots[0].remaining, 35);
   });
 
   it("una compra/ajuste externo (t4) sube quantity sin tocar lotes: el consumo lo absorbe en sin-lote antes de descontar", async () => {

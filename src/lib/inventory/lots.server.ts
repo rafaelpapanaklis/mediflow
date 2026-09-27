@@ -95,6 +95,13 @@ export interface LotDTO {
 
 export async function listLotsForItem(clinicId: string, itemId: string, db: Db = prisma): Promise<LotDTO[]> {
   try {
+    // Ajuste 1 del gerente: reconciliar ANTES de listar, no solo antes de
+    // consumir. Así "Lotes" nunca sale vacío mientras el artículo tenga
+    // existencias reales — no hace falta esperar al primer consumo (ni al
+    // backfill SQL, que ahora es opcional) para que el lote "sin lote"
+    // aparezca con la cantidad de HOY.
+    await (db as PrismaClient).$transaction(tx => reconcileAndLock(tx, clinicId, itemId));
+
     const [lots, alertDays] = await Promise.all([
       (db as PrismaClient).inventoryLot.findMany({
         where:   { clinicId, itemId },
@@ -259,7 +266,14 @@ export async function createLot(params: {
       data: { lotId: lot.id, clinicId: params.clinicId, change: qty, reason: "Alta de lote", userId: params.userId ?? null },
     });
     await (tx as PrismaClient).inventoryHistory.create({
-      data: { itemId: params.itemId, change: Math.round(qty), reason: `Alta de lote${params.lotNumber ? ` ${params.lotNumber}` : ""}` },
+      // ws1-t4: clinicId/userId/type — ya los tenías en params, solo faltaba
+      // pasarlos (ver la nota del bloque de InventoryHistory en schema.prisma).
+      data: {
+        itemId: params.itemId, change: Math.round(qty),
+        reason: `Alta de lote${params.lotNumber ? ` ${params.lotNumber}` : ""}`,
+        clinicId: params.clinicId, userId: params.userId ?? null,
+        type: params.purchaseLineId ? "purchase" : "adjust",
+      },
     });
     await syncItemAggregate(tx, params.clinicId, params.itemId);
 
@@ -306,7 +320,12 @@ export async function writeOffExpiredLot(params: {
       },
     });
     await (tx as PrismaClient).inventoryHistory.create({
-      data: { itemId: lot.itemId, change: -Math.round(remaining), reason: params.reason ?? "Caducado — dado de baja" },
+      // ws1-t4: clinicId/userId/type.
+      data: {
+        itemId: lot.itemId, change: -Math.round(remaining),
+        reason: params.reason ?? "Caducado — dado de baja",
+        clinicId: params.clinicId, userId: params.userId ?? null, type: "adjust",
+      },
     });
     await syncItemAggregate(tx, params.clinicId, lot.itemId);
   });
@@ -363,7 +382,12 @@ export async function consumeFefoTx(
     });
   }
   await (tx as PrismaClient).inventoryHistory.create({
-    data: { itemId: params.itemId, change: -Math.round(round3(params.qty)), reason: params.reason },
+    // ws1-t4: clinicId/userId/type — "session" porque este consumo SIEMPRE
+    // viene de una sesión de tratamiento (ver la nota del bloque de arriba).
+    data: {
+      itemId: params.itemId, change: -Math.round(round3(params.qty)), reason: params.reason,
+      clinicId: params.clinicId, userId: params.userId ?? null, type: "session",
+    },
   });
   await syncItemAggregate(tx, params.clinicId, params.itemId);
 

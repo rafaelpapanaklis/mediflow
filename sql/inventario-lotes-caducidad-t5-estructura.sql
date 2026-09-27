@@ -1,6 +1,18 @@
 -- ═══════════════════════════════════════════════════════════════════════
 -- DaleControl DENTAL — ws1-t5 · INVENTARIO B: LOTES, CADUCIDAD Y CONSUMO
--- POR TRATAMIENTO.
+-- POR TRATAMIENTO — SOLO ESTRUCTURA.
+--
+-- ✅ SEGURO DE PEGAR YA, aunque la rama `feat/anticipos-panel` siga sin
+-- integrarse: solo crea columnas/tablas/índices/FKs nuevos, NO toca ni una
+-- fila. El código (lots.server.ts) NO depende de ningún backfill — ver la
+-- nota de "Ajuste 1 del gerente" abajo — así que aplicar esto ya no deja
+-- nada a medias.
+--
+-- ⛔ El backfill masivo (la migración de "existencias de hoy → lote sin
+-- lote" para TODOS los artículos de un jalón) va en un archivo APARTE:
+-- sql/inventario-lotes-caducidad-t5-backfill-post-integracion.sql — y ESE
+-- solo se pega DESPUÉS de que esta rama se integre a `main` y se despliegue
+-- a producción. Ver ese archivo para el porqué.
 --
 -- Ticket de BEVADENT: «lotes, caducidad y consumo por tratamiento»
 -- (REPORTE-ws1-t8.md, «3 · INVENTARIO»). Bloque propio, sobre el trabajo de
@@ -16,12 +28,6 @@
 --                        treatment_sessions.procedureId → procedure_catalog
 --                        (las de procedure_material_recipes van con la
 --                        tabla, en su propio bloque)
---   Backfill          · un InventoryLot "sin lote" (lotNumber NULL) por cada
---                        InventoryItem que todavía no tenga ninguno, con
---                        remaining = su quantity actual. Es la migración de
---                        "las existencias actuales pasan a un lote sin lote"
---                        del prompt. Se puede correr muchas veces: el WHERE
---                        NOT EXISTS hace que la segunda vez no inserte nada.
 --
 -- IDEMPOTENTE Y PLANO — SIN `DO $$` EN NINGÚN SITIO (el SQL Editor de
 -- Supabase no lo digiere de fiar). Para columnas, tablas e índices, los
@@ -30,11 +36,6 @@
 -- "ALTER TABLE ... DROP CONSTRAINT IF EXISTS ..." seguido de
 -- "ALTER TABLE ... ADD CONSTRAINT ...". Quitar y volver a poner una
 -- restricción no toca ni una fila. CERO DROP de tablas o columnas.
---
--- ORDEN: se puede aplicar antes o después de integrar la rama. Sin estas
--- tablas/columnas, el código las detecta (P2021/P2022) y el módulo de
--- lotes/caducidad/receta simplemente no ofrece nada nuevo: el inventario y
--- el consumo manual de hoy siguen funcionando exactamente igual.
 --
 -- Cómo aplicarlo: Supabase → SQL Editor → pegar → Run.
 -- ⛔ NO correr `prisma migrate dev` ni `migrate deploy`.
@@ -155,36 +156,7 @@ ALTER TABLE "treatment_sessions"
   ON DELETE SET NULL ON UPDATE CASCADE;
 
 
--- ── 7. Backfill: existencias de hoy → lote "sin lote" ───────────────────
--- Una fila por InventoryItem que aún no tenga NINGÚN lote (ni "sin lote" ni
--- con nombre). Vuelve a correrse sin duplicar: el WHERE NOT EXISTS excluye
--- los artículos que ya tienen al menos un lote.
-INSERT INTO "inventory_lots" ("id", "clinicId", "itemId", "lotNumber", "expiresAt", "quantity", "remaining", "unitCost", "purchaseLineId", "createdAt", "updatedAt")
-SELECT
-  'sinlote_' || i."id",
-  i."clinicId",
-  i."id",
-  NULL,
-  NULL,
-  i."quantity",
-  i."quantity",
-  i."price",
-  NULL,
-  CURRENT_TIMESTAMP,
-  CURRENT_TIMESTAMP
-FROM "inventory_items" i
-WHERE NOT EXISTS (
-  SELECT 1 FROM "inventory_lots" l WHERE l."itemId" = i."id"
-);
-
-
--- ── 8. Comprobación (solo lee) ────────────────────────────────────────────
--- Debe devolver 0: ningún InventoryItem debería quedar sin al menos un lote
--- tras el backfill.
-SELECT COUNT(*) AS items_sin_lote
-FROM "inventory_items" i
-WHERE NOT EXISTS (SELECT 1 FROM "inventory_lots" l WHERE l."itemId" = i."id");
-
+-- ── 7. Comprobación (solo lee) ────────────────────────────────────────────
 -- Debe devolver 4 filas (una por tabla nueva).
 SELECT table_name
 FROM information_schema.tables
