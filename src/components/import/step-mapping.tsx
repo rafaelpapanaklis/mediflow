@@ -5,7 +5,7 @@
 // en ámbar las columnas "Sin mapear". Si falta una columna obligatoria (un
 // archivo con encabezados que no reconocemos), el backend lo dice en
 // `mappingError` y aquí se pide emparejarla: el flujo no se rompe, pide ayuda.
-import { Sparkles, AlertCircle, Check, X, ArrowRight } from "lucide-react";
+import { Sparkles, AlertCircle, Check, X, ArrowRight, ShieldAlert } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { type Origin, type PreviewResult, type ColumnMapping } from "./import-client";
 
@@ -50,6 +50,16 @@ export function StepMapping({ t, origin, preview, mapping, hasSecondary, onChang
           <div className="imp-callout__txt">
             <b>{t("shell.importClinic.step5.bannerManualTitle")}</b>
             <p>{t("shell.importClinic.step5.bannerManualDesc", { name: origin.name })}</p>
+          </div>
+        </div>
+      )}
+
+      {origin.hasProfile && origin.verified === false && (
+        <div className="imp-callout imp-callout--warn" role="note" style={{ marginTop: 10 }}>
+          <span className="imp-callout__ic" aria-hidden><ShieldAlert size={21} /></span>
+          <div className="imp-callout__txt">
+            <b>{t("shell.importClinic.step2.unverifiedTitle")}</b>
+            <p>{t("shell.importClinic.step2.unverifiedDesc", { name: origin.name })}</p>
           </div>
         </div>
       )}

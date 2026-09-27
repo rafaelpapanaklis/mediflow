@@ -4,9 +4,9 @@
 // de error en hover/foco + switch "Omitir duplicados". En presupuestos, además,
 // los procedimientos que no casaron con el tarifario: cada uno entra «solo con
 // su importe» salvo que aquí se elija su equivalente.
-import { Check, AlertCircle, Copy, Link2 } from "lucide-react";
+import { Check, AlertCircle, Copy, Link2, ShieldAlert, Calculator } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
-import { CLINICAL_ENTITIES, VALUE_UNLINKED, type Entity, type PreviewResult, type PreviewRow } from "./import-client";
+import { CLINICAL_ENTITIES, VALUE_UNLINKED, type Entity, type PreviewResult, type PreviewRow, type ValueOption } from "./import-client";
 
 /** Entidades cuya tercera columna es el saldo; las demás enseñan un resumen de la fila. */
 const WITH_BALANCE: ReadonlySet<Entity> = new Set<Entity>(["patients", "balances", "appointments"]);
@@ -17,6 +17,8 @@ function StatusBadge({ t, row }: { t: TFunction; row: PreviewRow }) {
       <span className="badge-new badge-new--success"><span className="badge-new__dot" />{t("shell.importClinic.step6.badgeOk")}</span>
     ) : row.status === "error" ? (
       <span className="badge-new badge-new--danger">{t("shell.importClinic.step6.badgeError")}</span>
+    ) : row.status === "skipped" ? (
+      <span className="badge-new badge-new--neutral">{t("shell.importClinic.step6.badgeSkipped")}</span>
     ) : (
       <span className="badge-new badge-new--warning">{t("shell.importClinic.step6.badgeDuplicate")}</span>
     );
@@ -30,10 +32,25 @@ function StatusBadge({ t, row }: { t: TFunction; row: PreviewRow }) {
   );
 }
 
+/** Decisión sobre los montos que se pueden leer de dos maneras («45.000»). */
+export interface AmountFormatProps {
+  options: ValueOption[];
+  /** Primer ejemplo del archivo, tal cual. */
+  example: string;
+  rows: number;
+  /** Lo elegido ("" = todavía nada). */
+  value: string;
+  busy: boolean;
+  onChange: (value: string) => void;
+}
+
 interface Props {
   t: TFunction;
   /** La entidad de esta vista previa (decide la tercera columna). */
   entity: Entity;
+  /** Nombre del sistema si su perfil de columnas NO está validado con un export real; si no, null. */
+  unverifiedName: string | null;
+  amountFormat: AmountFormatProps | null;
   preview: PreviewResult;
   skipDup: boolean;
   onToggleSkip: () => void;
@@ -85,13 +102,48 @@ function Unresolved({ t, preview, decisions, onDecide }: Pick<Props, "t" | "prev
   );
 }
 
-export function StepReview({ t, entity, preview, skipDup, onToggleSkip, decisions, onDecide }: Props) {
+/** Montos como «45.000»: no se adivinan, se piden. Sigue visible ya decidido, para poder cambiarlo. */
+function AmountFormat({ t, info }: { t: TFunction; info: AmountFormatProps }) {
+  return (
+    <div className="imp-callout imp-callout--warn" style={{ marginTop: 14, alignItems: "flex-start" }}>
+      <span className="imp-callout__ic" aria-hidden><Calculator size={21} /></span>
+      <div className="imp-callout__txt" style={{ flex: 1, minWidth: 0 }}>
+        <b>{t("shell.importClinic.step6.amountFormatTitle")}</b>
+        <p>{t("shell.importClinic.step6.amountFormatDesc", { count: info.rows, example: info.example })}</p>
+        <select
+          className="input-new imp-select"
+          style={{ marginTop: 10, width: "100%", maxWidth: 460 }}
+          aria-label={t("shell.importClinic.step6.amountFormatTitle")}
+          value={info.value}
+          disabled={info.busy}
+          onChange={(e) => info.onChange(e.target.value)}
+        >
+          <option value="">{t("shell.importClinic.step6.amountFormatPick")}</option>
+          {info.options.map((o) => (
+            <option key={o.id} value={o.id}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+export function StepReview({ t, entity, unverifiedName, amountFormat, preview, skipDup, onToggleSkip, decisions, onDecide }: Props) {
   const { stats, rows } = preview;
   const withBalance = WITH_BALANCE.has(entity);
   return (
     <div>
       <h2 className="imp-title">{t("shell.importClinic.step6.title")}</h2>
       <p className="imp-sub">{t("shell.importClinic.step6.sub")}</p>
+
+      {unverifiedName && (
+        <div className="imp-callout imp-callout--warn" role="note" style={{ marginBottom: 14 }}>
+          <span className="imp-callout__ic" aria-hidden><ShieldAlert size={21} /></span>
+          <div className="imp-callout__txt">
+            <p>{t("shell.importClinic.step6.unverifiedReview", { name: unverifiedName })}</p>
+          </div>
+        </div>
+      )}
 
       <div className="imp-stat-grid">
         <div className="imp-stat-card ok">
@@ -117,6 +169,12 @@ export function StepReview({ t, entity, preview, skipDup, onToggleSkip, decision
         </div>
       </div>
 
+      {(stats.omitted ?? 0) > 0 && (
+        <p className="imp-hint" style={{ margin: "10px 0 0" }}>
+          <b>{t("shell.importClinic.step6.statOmitted")}: {stats.omitted}.</b> {t("shell.importClinic.step6.omittedNote")}
+        </p>
+      )}
+
       <div className="imp-review-toolbar">
         {CLINICAL_ENTITIES.has(entity) ? (
           // Lo clínico nunca reimporta un duplicado: no hay interruptor que ofrecer.
@@ -139,6 +197,7 @@ export function StepReview({ t, entity, preview, skipDup, onToggleSkip, decision
         <span className="imp-hint">{t("shell.importClinic.step6.hoverHint")}</span>
       </div>
 
+      {amountFormat && <AmountFormat t={t} info={amountFormat} />}
       <Unresolved t={t} preview={preview} decisions={decisions} onDecide={onDecide} />
 
       <div className="table-wrap" style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", overflow: "hidden" }}>
@@ -155,7 +214,7 @@ export function StepReview({ t, entity, preview, skipDup, onToggleSkip, decision
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.row} className={r.status === "error" ? "imp-row-err" : r.status === "duplicate" ? "imp-row-dup" : ""}>
+                <tr key={r.row} className={r.status === "error" ? "imp-row-err" : r.status === "duplicate" || r.status === "skipped" ? "imp-row-dup" : ""}>
                   <td className="mono">{r.row}</td>
                   <td>{r.name}</td>
                   <td className="mono">{r.phone}</td>

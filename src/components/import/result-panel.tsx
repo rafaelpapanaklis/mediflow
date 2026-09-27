@@ -25,7 +25,7 @@ interface Props {
 }
 
 export function ResultPanel({ t, result, onGoPatients, onImportAnother, onDownloadReport }: Props) {
-  const { created, errors, summary } = result;
+  const { created, errors, summary, omitted = 0 } = result;
   return (
     <div className="imp-result">
       <div className="imp-seal" aria-hidden><Check size={38} /></div>
@@ -51,6 +51,10 @@ export function ResultPanel({ t, result, onGoPatients, onImportAnother, onDownlo
             <Download size={16} aria-hidden /> {t("shell.importClinic.result.downloadReport")}
           </button>
         </div>
+      )}
+
+      {omitted > 0 && (
+        <p className="imp-hint" style={{ textAlign: "center" }}>{t("shell.importClinic.result.omittedLine", { count: omitted })}</p>
       )}
 
       <div className="imp-result__ctas">

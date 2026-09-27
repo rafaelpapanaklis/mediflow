@@ -3,7 +3,7 @@
 // Paso 2 · Cómo exportar — instrucciones por sistema (con perfil) o descarga de
 // plantilla (Excel/Otro). El Paso 1 reconfigura este paso vía origin.hasProfile.
 import { Fragment } from "react";
-import { Download, FileText } from "lucide-react";
+import { Download, FileText, ShieldAlert } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { type Origin, originGlyph } from "./import-client";
 
@@ -49,6 +49,16 @@ export function StepExport({ t, origin, templateUrl }: Props) {
         </span>
         <span className="imp-src-pill__nm">{origin.name}</span>
       </span>
+
+      {!manual && origin.verified === false && (
+        <div className="imp-callout imp-callout--warn" role="note" style={{ marginTop: 14 }}>
+          <span className="imp-callout__ic" aria-hidden><ShieldAlert size={21} /></span>
+          <div className="imp-callout__txt">
+            <b>{t("shell.importClinic.step2.unverifiedTitle")}</b>
+            <p>{t("shell.importClinic.step2.unverifiedDesc", { name: origin.name })}</p>
+          </div>
+        </div>
+      )}
 
       {manual ? (
         <>

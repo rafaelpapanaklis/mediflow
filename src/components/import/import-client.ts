@@ -37,6 +37,11 @@ export interface Origin {
   color: string;
   /** Con perfil → instrucciones específicas + mapeo automático en paso 5. */
   hasProfile: boolean;
+  /**
+   * El perfil se validó contra un export REAL de ese sistema. `false` (o ausente en un
+   * origen con perfil) = mapeo estimado: la interfaz avisa y exige revisar la vista previa.
+   */
+  verified?: boolean;
   /** Texto del logo cuadrado; si falta, se usa la inicial del nombre. */
   glyph?: string;
 }
@@ -69,8 +74,8 @@ export interface PreviewRow {
   kind?: "debt" | "credit";
   /** Resumen de la fila para las entidades sin saldo (nota: fecha y título; presupuesto: procedimiento e importe). */
   detail?: string;
-  status: "ok" | "error" | "duplicate";
-  /** Motivo del error/duplicado (se muestra en tooltip). */
+  status: "ok" | "error" | "duplicate" | "skipped";
+  /** Motivo del error/duplicado/omisión (se muestra en tooltip). */
   reason?: string;
 }
 
@@ -82,7 +87,7 @@ export interface PreviewResult {
   /** Campos destino disponibles en DaleControl (para los selects del paso 5). */
   targetFields: TargetField[];
   /** Conteos para las stat-cards del paso 6. */
-  stats: { valid: number; errors: number; duplicates: number };
+  stats: { valid: number; errors: number; duplicates: number; omitted?: number };
   /** Muestra de filas validadas para la tabla del paso 6. */
   rows: PreviewRow[];
   /** Falta emparejar una columna obligatoria: el paso 5 lo pide en vez de fallar. */
@@ -97,6 +102,8 @@ export interface CommitResult {
   created: number;
   errors: number;
   duplicates: number;
+  /** Filas dejadas fuera a propósito (citas pasadas, ya importadas). */
+  omitted?: number;
   /** Resumen para las "pills" de la pantalla de resultado: creados por entidad importada. */
   summary: Partial<Record<Entity, number>>;
   /** URL del reporte de errores descargable (TODO(T4): generar real). */
@@ -119,8 +126,12 @@ export interface ImportClient {
     file: File,
     mapping?: ColumnMapping,
     onProgress?: OnUploadProgress,
-    /** `origin`: id del sistema elegido en el paso 1 (el backend aplica su perfil). */
-    opts?: { origin?: string | null },
+    /**
+     * `origin`: id del sistema elegido en el paso 1 (el backend aplica su perfil).
+     * `valueMapping`: decisiones ya tomadas (p. ej. cómo leer los montos ambiguos), para
+     * que la vista previa refleje lo que se va a importar.
+     */
+    opts?: { origin?: string | null; valueMapping?: ValueMapping },
   ): Promise<PreviewResult>;
   commit(
     entity: Entity,
@@ -183,8 +194,11 @@ export const CLINICAL_ENTITIES: ReadonlySet<Entity> = new Set<Entity>(["medicalH
 
 export const DATA_TYPES: DataType[] = [
   { id: "pacientes", labelKey: "patients", descKey: "patientsMeta", icon: "users", badge: "rec", on: true, entity: "patients" },
-  { id: "saldos", labelKey: "balances", descKey: "balancesMeta", icon: "money", badge: "easy", on: true, entity: "balances" },
-  { id: "citas", labelKey: "appointments", descKey: "appointmentsMeta", icon: "calendar", badge: "easy", on: true, entity: "appointments" },
+  // Saldos y citas van SOLOS, con su propia vista previa: son dinero y mensajes a pacientes.
+  // Importados como secundarios de otro archivo se autodetectaban y entraban SIN que nadie
+  // viera una sola fila (la revisión del paso 6 es la de la entidad principal).
+  { id: "saldos", labelKey: "balances", descKey: "balancesMeta", icon: "money", badge: "easy", on: false, entity: "balances", solo: true },
+  { id: "citas", labelKey: "appointments", descKey: "appointmentsMeta", icon: "calendar", badge: "easy", on: false, entity: "appointments", solo: true },
   { id: "expedientes", labelKey: "medicalHistory", descKey: "medicalHistoryMeta", icon: "clipboard", badge: "adv", on: false, entity: "medicalHistory", solo: true },
   { id: "notas", labelKey: "clinicalNotes", descKey: "clinicalNotesMeta", icon: "file", badge: "adv", on: false, entity: "clinicalNotes", solo: true },
   { id: "presupuestos", labelKey: "quotes", descKey: "quotesMeta", icon: "stack", badge: "adv", on: false, entity: "quotes", solo: true },
@@ -252,7 +266,7 @@ export class MockImportClient implements ImportClient {
     _file: File,
     _mapping?: ColumnMapping,
     _onProgress?: OnUploadProgress,
-    _opts?: { origin?: string | null },
+    _opts?: { origin?: string | null; valueMapping?: ValueMapping },
   ): Promise<PreviewResult> {
     return delay({
       totalRows: 1265,

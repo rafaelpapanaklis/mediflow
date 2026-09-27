@@ -830,7 +830,12 @@
         "price": "Unit price",
         "discount": "Discount",
         "total": "Line amount",
-        "quoteStatus": "Original status"
+        "quoteStatus": "Original status",
+        "fullName": "Full name (split automatically)",
+        "patientExternalId": "Patient ID in the source system",
+        "externalId": "ID in the source system",
+        "balanceExternalId": "Balance ID in the source system",
+        "apptStatus": "Appointment status"
       },
       "launch": "Import my clinic",
       "assistedCta": "Assisted migration",
@@ -875,15 +880,17 @@
         "templateDesc": "One tab per data type: Patients, Balances, Appointments, Medical history, Notes and Estimates. Copy and paste your data into the indicated columns.",
         "templateBtn": "Download template",
         "ownFileNote": "Already have your own file? That works too. Just make sure the first row has the column names.",
+        "unverifiedTitle": "Unvalidated profile",
+        "unverifiedDesc": "The column matching for {name} was built from the usual column names but has not been tested with a real export yet. The review step shows every row before importing: check that the columns were recognised correctly and fix the matching by hand if needed.",
         "dentalink": {
-          "s1h": "Open Dentalink",
-          "s1p": "Sign in and open the `Settings` menu in the top right corner.",
-          "s2h": "Go to Export data",
-          "s2p": "In the `Data & Backups` section choose `Export patients`.",
-          "s3h": "Select the range",
-          "s3p": "Check «All patients» and the `Excel (.xlsx)` format.",
-          "s4h": "Download the file",
-          "s4p": "Click `Generate` and save the file to your computer. You'll upload it in the next step."
+          "s1h": "Open Excel Reports",
+          "s1p": "In Dentalink open `Reports` → `Excel Reports`. That feature comes with the Pro and Titanium plans; if your plan does not include it, ask Dentalink support for the listings.",
+          "s2h": "Download one report per data type",
+          "s2p": "Patients: the patient listing with their ID. Appointments: `Citas pacientes` (Agenda category), from today onwards. Balances: `Pacientes morosos` (Patients category).",
+          "s3h": "One file per data type",
+          "s3p": "Each report is uploaded separately, with its own preview. Ask for the patient ID in all of them: that way balances and appointments are matched without guessing by name.",
+          "s4h": "Review before importing",
+          "s4p": "The columns of these reports are not validated against a real export yet. In the preview check that each column was recognised and, if not, match it by hand."
         },
         "generic": {
           "s1h": "Open your system",
@@ -908,14 +915,14 @@
         "balances": "Balances",
         "balancesMeta": "Debts and credits per patient",
         "appointments": "Upcoming appointments",
-        "appointmentsMeta": "Future schedule so you don't miss any",
+        "appointmentsMeta": "Future appointments only (past ones are not imported). Reviewed before importing",
         "medicalHistory": "Medical history",
         "medicalHistoryMeta": "Allergies, conditions, medications and history of existing patients",
         "clinicalNotes": "Progress notes",
         "clinicalNotesMeta": "Brought in marked as migrated, with their original date and author",
         "quotes": "Estimates",
         "quotesMeta": "Patient history: they don't create invoices or charges",
-        "soloNote": "Medical history, notes and estimates are imported one at a time, each with its own review."
+        "soloNote": "Balances, appointments, medical history, notes and estimates are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first."
       },
       "step4": {
         "title": "Upload your file",
@@ -988,7 +995,15 @@
           "one": "({count} row)",
           "other": "({count} rows)"
         },
-        "dupNever": "Anything already migrated is never imported again."
+        "dupNever": "Anything already migrated is never imported again.",
+        "statOmitted": "Skipped",
+        "badgeSkipped": "Skipped",
+        "omittedNote": "Skipped rows are not imported: past or cancelled appointments, or something already imported before.",
+        "amountFormatTitle": "Some amounts can be read two ways",
+        "amountFormatDesc": "{count} rows have an amount like “{example}”. We don't guess: choose how to read it and the rows will be imported that way.",
+        "amountFormatPick": "Choose how to read them…",
+        "amountFormatNeeded": "Confirm how to read the amounts to continue",
+        "unverifiedReview": "The {name} profile has not been validated against a real export yet: check this preview carefully before importing."
       },
       "upload": {
         "uploading": "Uploading file… {pct}%",
@@ -1028,7 +1043,11 @@
         "importAnother": "Import something else",
         "pillMedicalHistory": "histories completed",
         "pillClinicalNotes": "notes migrated",
-        "pillQuotes": "estimates"
+        "pillQuotes": "estimates",
+        "omittedLine": {
+          "one": "{count} row was left out on purpose (past or cancelled appointment, or already imported).",
+          "other": "{count} rows were left out on purpose (past or cancelled appointments, or already imported)."
+        }
       },
       "assisted": {
         "title": "Assisted migration · free",
