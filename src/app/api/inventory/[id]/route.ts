@@ -4,6 +4,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { obtenerInventoryItem, actualizarInventoryItem } from "@/lib/inventory/costo.server";
 import { registrarHistorialInventario } from "@/lib/inventory/historial.server";
+import { providerPerteneceAClinica } from "@/lib/inventory/proveedores.server";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -42,6 +43,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       });
     }
     return NextResponse.json(updated);
+  }
+
+  // ws1-t4: providerId es un id suelto del cliente — se valida que sea de
+  // ESTA clínica antes de guardarlo (ver la nota en POST /api/inventory).
+  if (body.providerId !== undefined) {
+    const providerId = body.providerId || null;
+    if (!(await providerPerteneceAClinica(providerId, ctx.clinicId))) {
+      return NextResponse.json({ error: "Proveedor no encontrado en esta clínica" }, { status: 400 });
+    }
   }
 
   // Update metadata fields

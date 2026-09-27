@@ -59,3 +59,26 @@ export async function crearProveedor(data: DatosNuevoProveedor, db: PrismaClient
     throw e;
   }
 }
+
+/**
+ * clinicId SIEMPRE de la sesión, nunca del body — pero el providerId que
+ * viaja en el body de POST /api/inventory, PATCH /api/inventory/[id] y POST
+ * /api/inventory/purchases sí es un id suelto que el cliente elige de un
+ * <select>. Sin este chequeo, nada impide mandar el providerId de OTRA
+ * clínica y dejarlo guardado (CLAUDE.md, regla c: aislar TODO por clinicId).
+ * null/"" (sin proveedor) siempre se acepta sin consultar la base.
+ */
+export async function providerPerteneceAClinica(
+  providerId: string | null,
+  clinicId: string,
+  db: PrismaClient = prisma,
+): Promise<boolean> {
+  if (!providerId) return true;
+  try {
+    const fila = await db.inventoryProvider.findFirst({ where: { id: providerId, clinicId }, select: { id: true } });
+    return !!fila;
+  } catch (e) {
+    if (faltaTabla(e)) return false; // sin tabla no hay proveedor válido que aceptar
+    throw e;
+  }
+}

@@ -8,6 +8,7 @@ import {
   LineaInvalidaError,
   ArticuloNoEncontradoError,
 } from "@/lib/inventory/compras.server";
+import { providerPerteneceAClinica } from "@/lib/inventory/proveedores.server";
 
 // ═══════════════════════════════════════════════════════════════════
 // COMPRAS / ENTRADAS de inventario (ws1-t4). "Editar inventario" — mismo
@@ -59,10 +60,17 @@ export async function POST(req: NextRequest) {
   const date = parseFecha(body.date);
   if (!date) return NextResponse.json({ error: "Fecha inválida (usa YYYY-MM-DD o ISO)." }, { status: 400 });
 
+  // ws1-t4: providerId es un id suelto del cliente — se valida que sea de
+  // ESTA clínica (ver la misma nota en POST /api/inventory).
+  const providerId = body.providerId ? String(body.providerId) : null;
+  if (!(await providerPerteneceAClinica(providerId, ctx.clinicId))) {
+    return NextResponse.json({ error: "Proveedor no encontrado en esta clínica" }, { status: 400 });
+  }
+
   try {
     const resultado = await registrarCompra({
       clinicId:       ctx.clinicId,
-      providerId:     body.providerId ? String(body.providerId) : null,
+      providerId,
       date,
       receiptRef:     body.receiptRef?.trim() || null,
       createdById:    ctx.userId,

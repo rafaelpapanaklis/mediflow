@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { listarInventario, crearInventoryItem } from "@/lib/inventory/costo.server";
+import { providerPerteneceAClinica } from "@/lib/inventory/proveedores.server";
 
 // EQ-07 — ws1-t4: la página y este GET no tenían NINGUNA puerta (cualquier
 // sesión de la clínica, hasta un DOCTOR sin "inventory.view", leía el
@@ -35,6 +36,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nombre y categoría son requeridos" }, { status: 400 });
   }
 
+  // ws1-t4: providerId es un id suelto que llega del cliente — se valida que
+  // sea un proveedor de ESTA clínica antes de guardarlo (nunca se confía en
+  // el body para el aislamiento por tenant).
+  const providerId = body.providerId?.trim() || null;
+  if (!(await providerPerteneceAClinica(providerId, ctx.clinicId))) {
+    return NextResponse.json({ error: "Proveedor no encontrado en esta clínica" }, { status: 400 });
+  }
+
   // ws1-t4: 0 es un costo válido ("no cuesta nada") y se guarda tal cual —
   // por eso el chequeo es `!== undefined`, no truthy (el mismo bug que tenía
   // `price` aquí abajo, que convertía un 0 capturado en null).
@@ -49,8 +58,7 @@ export async function POST(req: NextRequest) {
     unit:        body.unit ?? "pza",
     price:       body.price !== undefined && body.price !== null && body.price !== "" ? Number(body.price) : null,
     unitCost:    body.unitCost !== undefined && body.unitCost !== null && body.unitCost !== "" ? Number(body.unitCost) : 0,
-    // ws1-t4: proveedor propio, opcional.
-    providerId:  body.providerId?.trim() || null,
+    providerId,
   });
   return NextResponse.json(item, { status: 201 });
 }
