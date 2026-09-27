@@ -26,6 +26,11 @@ export interface Base {
    * "$queryRaw.patientsUpdate"…): así se simula que otra pestaña se adelantó.
    */
   ganchos: Record<string, () => void>;
+  /**
+   * Interruptores de la base falsa. `sinTablaExternos`: import_external_ids NO existe
+   * (el SQL de Rafael aún no se aplicó) → el SQL crudo revienta como en Postgres (42P01).
+   */
+  banderas: { sinTablaExternos: boolean };
 }
 
 class PrismaError extends Error {
@@ -130,6 +135,7 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
   for (const [k, v] of Object.entries(semilla)) tablas[k] = v.map((r) => ({ ...r }));
   const llamadas: Record<string, number> = {};
   const ganchos: Record<string, () => void> = {};
+  const banderas = { sinTablaExternos: false };
   const contar = (k: string) => {
     llamadas[k] = (llamadas[k] ?? 0) + 1;
     ganchos[k]?.();
@@ -151,6 +157,12 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
     if (fila.id && tabla(modelo).some((r) => r.id === fila.id)) {
       throw new PrismaError("P2002", "Unique constraint failed", { target: ["id"] });
     }
+  }
+
+  /** Lo que Prisma lanza cuando el SQL crudo toca una tabla que no existe. */
+  function faltaExternos() {
+    if (!banderas.sinTablaExternos) return;
+    throw new PrismaError("P2010", 'Raw query failed. Code: `42P01`. Message: `relation "import_external_ids" does not exist`', { code: "42P01" });
   }
 
   function modelo(nombre: string) {
@@ -266,7 +278,37 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
                 }
                 return [{ max }];
               }
+              if (/FROM "import_external_ids"/.test(sql)) {
+                contar("$queryRaw.externos");
+                faltaExternos();
+                const [clinicId, source, entity] = values;
+                return tabla("importExternalIds")
+                  .filter((r) => r.clinicId === clinicId && r.source === source && r.entity === entity)
+                  .map((r) => ({ externalId: r.externalId, localId: r.localId }));
+              }
               throw new Error(`$queryRaw sin doble: ${sql.slice(0, 80)}`);
+            });
+        }
+        if (prop === "$executeRaw") {
+          return (strings: TemplateStringsArray, ...values: any[]) =>
+            perezosa(() => {
+              const sql = strings.join("?");
+              if (/INSERT INTO "import_external_ids"/.test(sql)) {
+                contar("$executeRaw.externos");
+                faltaExternos();
+                const [clinicId, source, entity, json] = values;
+                let n = 0;
+                for (const x of JSON.parse(json) as Array<{ id: string; ext: string; loc: string }>) {
+                  const ya = tabla("importExternalIds").some(
+                    (r) => r.clinicId === clinicId && r.source === source && r.entity === entity && r.externalId === x.ext,
+                  );
+                  if (ya) continue; // ON CONFLICT DO NOTHING
+                  tabla("importExternalIds").push({ id: x.id, clinicId, source, entity, externalId: x.ext, localId: x.loc });
+                  n++;
+                }
+                return n;
+              }
+              throw new Error(`$executeRaw sin doble: ${sql.slice(0, 80)}`);
             });
         }
         if (typeof prop === "string" && !prop.startsWith("$")) return modelo(prop);
@@ -275,5 +317,5 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
     },
   );
 
-  return { prisma, tablas, llamadas, ganchos };
+  return { prisma, tablas, llamadas, ganchos, banderas };
 }

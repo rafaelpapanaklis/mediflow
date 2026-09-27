@@ -49,7 +49,19 @@ export type ValueMapping = Record<string, Record<string, string>>;
 /** «Importar solo el importe, sin ligar a un elemento del catálogo». */
 export const VALUE_UNLINKED = "__sin_ligar__";
 
-export type RowStatus = "ok" | "error" | "duplicate";
+/**
+ * Campo del valueMapping con la decisión sobre los montos ambiguos («45.000»):
+ * { amountFormat: { formato: "miles" | "decimales" } }. Ver valores.ts.
+ */
+export const AMOUNT_FORMAT_FIELD = "amountFormat";
+export const AMOUNT_FORMAT_KEY = "formato";
+
+/**
+ * ok = se importa · error = no se puede importar · duplicate = ya está (se importa de
+ * todos modos SOLO si el usuario apaga «omitir duplicados») · skipped = se deja fuera
+ * a propósito y NUNCA se importa (una cita pasada, algo que ya se importó antes).
+ */
+export type RowStatus = "ok" | "error" | "duplicate" | "skipped";
 
 /** Un valor de una fila que no casó con el catálogo de la clínica. */
 export interface UnresolvedRef {
@@ -93,6 +105,8 @@ export interface PreviewResult {
   validos: number;
   invalidos: number;
   duplicados: number;
+  /** Filas que se dejan fuera a propósito (citas pasadas, ya importadas). Ausente = 0. */
+  omitidos?: number;
   /** Headers detectados en el archivo (para construir la UI de mapeo). */
   columns: string[];
   /** Autodetección header -> campo canónico (sugerencia para el mapeo). */
@@ -123,5 +137,7 @@ export interface CommitResult {
   created: number;
   skipped: number;
   duplicates: number;
+  /** Filas dejadas fuera a propósito, ver RowStatus "skipped". Ausente = 0. */
+  omitted?: number;
   errors: { row: number; errors: string[] }[];
 }

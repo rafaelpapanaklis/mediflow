@@ -34,7 +34,9 @@ export type DcField =
   | "rfc"
   | "bloodType"
   | "notes"
-  | "balance";
+  | "balance"
+  /** ID del paciente en el sistema de origen: un reintento no duplica y las citas/saldos se emparejan con él. */
+  | "externalId";
 
 /** Paso de instrucción "cómo exportar" (h = título, p = detalle, admite <code>). */
 export interface OriginInstruction {

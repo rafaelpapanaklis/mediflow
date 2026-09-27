@@ -373,7 +373,7 @@ test("presupuestos: si otro folio se adelanta, se renumera y no quedan líneas h
 test("columnas que no reconocemos: la vista previa pide ayuda en vez de fallar, y con el mapeo manual entra", async () => {
   reiniciar();
   const prev = await correr("clinicalNotes", archivo("columnas-desconocidas.csv"), { dryRun: true });
-  assert.equal(prev.mappingError, "Falta una columna para identificar al paciente (teléfono, correo o nombre)");
+  assert.equal(prev.mappingError, "Falta una columna para identificar al paciente (ID, teléfono, correo o nombre)");
   assert.deepEqual(prev.columns, ["Cliente ID", "Fecha visita", "Observación clínica", "Atendido por"]);
   assert.equal(prev.total, 2);
   assert.deepEqual(prev.preview, []);

@@ -14,15 +14,17 @@ import { Readable } from "stream";
 import { validateSpreadsheet } from "@/lib/validate-upload";
 import { logAudit, type AuditEntityType } from "@/lib/audit";
 import { getOriginProfile, profileMappingFor } from "./profiles";
-import type {
-  ColumnMapping,
-  CommitResult,
-  Entity,
-  PreviewResult,
-  PreviewRow,
-  UnresolvedValue,
-  ValueMapping,
-  ValueOption,
+import { analizarMonto, montoSinConfirmar, separarFechaHora, type HoraDeReloj } from "./valores";
+import {
+  AMOUNT_FORMAT_FIELD,
+  type ColumnMapping,
+  type CommitResult,
+  type Entity,
+  type PreviewResult,
+  type PreviewRow,
+  type UnresolvedValue,
+  type ValueMapping,
+  type ValueOption,
 } from "./types";
 
 export const MAX_BYTES = 5 * 1024 * 1024;
@@ -103,10 +105,28 @@ export function parsePhone(v: any): string | null {
 }
 
 export function parseDate(v: any): Date | null {
-  if (!v) return null;
+  if (v === undefined || v === null || v === "") return null;
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
-  const str = String(v).trim();
+  // Celda de fecha sin formato de fecha: llega el número de serie de Excel
+  // (46300 = 5-oct-2026). Con parte decimal, la hora se ignora aquí (la lee
+  // parseHora). Por debajo de 10000 es un año o un entero cualquiera, no una fecha.
+  if (typeof v === "number") {
+    if (!Number.isFinite(v) || v < 10000 || v >= 80000) return null;
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(v) * 86_400_000);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+  // «05/10/2026 15:30» o «2026-10-05T15:30:00»: aquí solo importa el día.
+  const str = separarFechaHora(String(v)).fecha;
   if (!str) return null;
+  // AAAA-MM-DD a mano: `new Date("2026-10-05")` es la medianoche UTC, que un
+  // servidor al oeste de Greenwich lee como el día 4.
+  const iso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    const y = Number(iso[1]), mo = Number(iso[2]), day = Number(iso[3]);
+    const d = new Date(y, mo - 1, day);
+    if (Number.isNaN(d.getTime()) || d.getDate() !== day || d.getMonth() !== mo - 1) return null;
+    return d;
+  }
   // dd/mm/yyyy, dd-mm-yyyy o dd.mm.yyyy (formato MX más común en exports), y
   // también con año de 2 dígitos: "05/03/21" caía en `new Date(str)`, que lo lee
   // al estilo EE. UU. (3 de mayo). Dos dígitos: hasta el año en curso es 20xx,
@@ -131,31 +151,12 @@ export function parseDate(v: any): Date | null {
 }
 
 /**
- * Parsea un monto monetario tolerante a formato MX: "$1,250.00", "1250", "1.250,50".
- * Devuelve number (puede ser negativo = saldo a favor) o null si no es numérico.
+ * Monto como número (negativo = saldo a favor) o null. Un monto AMBIGUO
+ * («45.000») se lee como miles SIN pedir confirmación: las entidades usan
+ * `crearLectorMontos` (valores.ts), que sí lo marca. Se conserva por compatibilidad.
  */
 export function parseAmount(v: any): number | null {
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  let s = String(v).trim();
-  if (!s) return null;
-  s = s.replace(/[^0-9,.\-]/g, ""); // quita $, "MXN", espacios, etc.
-  if (!s || s === "-" || s === "." || s === ",") return null;
-  const hasComma = s.includes(",");
-  const hasDot = s.includes(".");
-  if (hasComma && hasDot) {
-    // El último separador es el decimal; el otro es de miles.
-    s = s.lastIndexOf(",") > s.lastIndexOf(".")
-      ? s.replace(/\./g, "").replace(",", ".")  // 1.250,50 → 1250.50
-      : s.replace(/,/g, "");                     // 1,250.50 → 1250.50
-  } else if (hasComma) {
-    const parts = s.split(",");
-    // Coma como decimal solo si deja 1-2 dígitos al final (1.250 sería miles).
-    s = parts[parts.length - 1].length <= 2
-      ? parts.slice(0, -1).join("") + "." + parts[parts.length - 1]
-      : s.replace(/,/g, "");
-  }
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : null;
+  return montoSinConfirmar(v);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,12 +171,35 @@ function utcDateToLocal(d: Date): Date {
   return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
+/**
+ * Fecha de una celda de .xlsx SIN perder la hora. exceljs devuelve la celda como
+ * un Date cuyas componentes UTC son el reloj de la hoja (no una zona): «5-oct-2026
+ * 15:30» es 2026-10-05T15:30Z y una celda de solo hora («15:30») es
+ * 1899-12-30T15:30Z. Antes las dos se re-anclaban a la medianoche y la hora
+ * moría en silencio (todas las citas a las 00:00).
+ *
+ * El valor sigue siendo un Date de medianoche local (lo que esperan las demás
+ * entidades); si la celda traía hora, se le pega en `hora` (no enumerable, no
+ * viaja por JSON) y `parseHora`/las citas la leen de ahí.
+ */
+function fechaDeCelda(d: Date): Date {
+  const out = utcDateToLocal(d);
+  const msDelDia = d.getTime() - Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const soloHora = d.getUTCFullYear() < 1900;
+  if (soloHora || msDelDia > 0) {
+    const min = Math.min(1439, Math.round(msDelDia / 60_000));
+    const hora: HoraDeReloj = { h: Math.floor(min / 60), m: min % 60 };
+    Object.defineProperty(out, "hora", { value: hora, enumerable: false });
+  }
+  return out;
+}
+
 function cellToRaw(cell: ExcelJS.Cell): any {
   const v = cell.value as any;
   if (v === null || v === undefined) return "";
-  if (v instanceof Date) return utcDateToLocal(v);
+  if (v instanceof Date) return fechaDeCelda(v);
   if (typeof v === "object") {
-    if (v.result instanceof Date) return utcDateToLocal(v.result);
+    if (v.result instanceof Date) return fechaDeCelda(v.result);
     return cell.text ?? ""; // richText / hyperlink / fórmula → texto renderizado
   }
   return v; // string | number | boolean
@@ -465,6 +489,13 @@ export interface ImportContext {
   role: string;
   /** Nombre del sistema de origen ("Dentalink") si se eligió uno con perfil; si no, null. */
   originName: string | null;
+  /**
+   * Con qué sistema se emparejan los ID externos: el id del perfil («dentalink»). Un ID
+   * «123» de Dentalink no es el «123» de otro. VACÍO si no se eligió un sistema con perfil
+   * («Mi Excel», «Otro»): ahí una columna «id» suele ser un número de fila cualquiera y NO
+   * se usa como ID externo (ni para emparejar ni para recordar).
+   */
+  originId: string;
   fileName: string;
   /** Decisiones del usuario sobre valores sin equivalente (vacío si no mandó ninguna). */
   valueMapping: ValueMapping;
@@ -508,8 +539,13 @@ function columnSamples(columns: string[], rows: Record<string, any>[]): Record<s
     for (const r of rows) {
       const v = r[c];
       if (v === undefined || v === null || String(v).trim() === "") continue;
+      const hora = v instanceof Date ? (v as Date & { hora?: HoraDeReloj }).hora : undefined;
+      const hhmm = hora ? `${String(hora.h).padStart(2, "0")}:${String(hora.m).padStart(2, "0")}` : "";
       const s = v instanceof Date
-        ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`
+        // Una celda de solo hora (año 1899) se enseña como hora; una de fecha y hora, con las dos.
+        ? v.getFullYear() < 1900 && hhmm
+          ? hhmm
+          : `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}${hhmm ? ` ${hhmm}` : ""}`
         : String(v).replace(/\s+/g, " ").trim();
       out[c] = s.length > SAMPLE_MAX ? `${s.slice(0, SAMPLE_MAX)}…` : s;
       break;
@@ -524,6 +560,7 @@ function tally(preview: PreviewRow[]) {
     validos: preview.filter((r) => r.status === "ok").length,
     invalidos: preview.filter((r) => r.status === "error").length,
     duplicados: preview.filter((r) => r.status === "duplicate").length,
+    omitidos: preview.filter((r) => r.status === "skipped").length,
   };
 }
 
@@ -535,8 +572,12 @@ function tally(preview: PreviewRow[]) {
 function aggregateUnresolved(preview: PreviewRow[]): UnresolvedValue[] {
   const byKey = new Map<string, UnresolvedValue>();
   for (const r of preview) {
-    if (r.status === "error" || !r.unresolved) continue;
+    if (!r.unresolved) continue;
     for (const u of r.unresolved) {
+      // Una fila con error no se importa, así que sus procedimientos sin equivalente
+      // no cuentan… salvo el formato de los montos: es justo lo que la deja con error
+      // hasta que el usuario lo confirme.
+      if (r.status === "error" && u.field !== AMOUNT_FORMAT_FIELD) continue;
       const k = `${u.field}\u0000${u.key}`;
       const hit = byKey.get(k);
       if (hit) hit.rows++;
@@ -622,6 +663,7 @@ export async function runImport(
     userId: opts.userId,
     role: opts.role ?? "",
     originName: profile?.hasProfile ? profile.name : null,
+    originId: profile?.hasProfile ? profile.id : "",
     fileName: opts.file.name,
     valueMapping: opts.valueMapping ?? {},
     now: new Date(),
@@ -632,14 +674,26 @@ export async function runImport(
 
   if (opts.dryRun) {
     const unresolved = aggregateUnresolved(preview);
-    const options =
+    let options: Record<string, ValueOption[]> | undefined =
       unresolved.length > 0 && handler.valueOptions ? await handler.valueOptions(opts.clinicId) : undefined;
+    // Montos ambiguos: las dos lecturas posibles, con el primer ejemplo del archivo.
+    const ambiguo = unresolved.find((u) => u.field === AMOUNT_FORMAT_FIELD);
+    if (ambiguo) {
+      const a = analizarMonto(ambiguo.value);
+      const ej = a.tipo === "ambiguo" ? a : null;
+      options = { ...(options ?? {}) };
+      options[AMOUNT_FORMAT_FIELD] = [
+        { id: "miles", label: ej ? `«${ej.raw}» es ${ej.miles.toLocaleString("es-MX")} (el ${ej.separador === "." ? "punto" : "coma"} separa los miles)` : "El separador es de miles" },
+        { id: "decimales", label: ej ? `«${ej.raw}» es ${ej.decimal.toLocaleString("es-MX", { maximumFractionDigits: 3 })} (el ${ej.separador === "." ? "punto" : "coma"} es decimal)` : "El separador es decimal" },
+      ];
+    }
     return {
       entity: handler.entity,
       total: counts.total,
       validos: counts.validos,
       invalidos: counts.invalidos,
       duplicados: counts.duplicados,
+      ...(counts.omitidos > 0 ? { omitidos: counts.omitidos } : {}),
       columns,
       suggestedMapping: suggested,
       samples: columnSamples(columns, rawRows),
@@ -677,6 +731,7 @@ export async function runImport(
     created,
     skipped,
     duplicates: counts.duplicados,
+    ...(counts.omitidos > 0 ? { omitted: counts.omitidos } : {}),
     errors: preview.filter((r) => r.status === "error").slice(0, 50).map((r) => ({ row: r.row, errors: r.errors })),
   };
 }
