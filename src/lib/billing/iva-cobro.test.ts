@@ -39,7 +39,8 @@ test("sin tasa ni Stripe Tax NO se cobra: error claro y código estable (el chec
   if (r.ok === false) {
     assert.equal(r.codigo, CODIGO_IVA_NO_CONFIGURADO);
     assert.match(r.error, /no está disponible por ahora/);
-    assert.match(r.error, /SPEI/, "y le dice a la clínica que SPEI sí funciona");
+    assert.doesNotMatch(r.error, /SPEI/, "no manda a SPEI: puede no estar configurado (el aviso de la pantalla sí lo sabe)");
+    assert.match(r.error, /soporte/);
   }
   assert.equal(ivaParaCobro({ STRIPE_AUTOMATIC_TAX: "false" }).ok, false);
 });
@@ -144,4 +145,24 @@ test("ivaParaPagoDeClinica: exento no exige el env; con IVA sí", () => {
 
 test("desgloseSinIva: total = subtotal", () => {
   assert.deepEqual(desgloseSinIva(68900), { subtotalCents: 68900, ivaCents: 0, totalCents: 68900 });
+});
+
+// ── Promo del primer mes con el IVA dentro (ajuste 2) ─────────────────────────────────────────────
+
+import { desglosePromoConIvaIncluido } from "./iva-cobro";
+
+test("promo con IVA incluido: 19 / 29 / 39 son totales EXACTOS (subtotal + IVA = promo)", () => {
+  assert.deepEqual(desglosePromoConIvaIncluido(1900), { subtotalCents: 1638, ivaCents: 262, totalCents: 1900, exacto: true });
+  assert.deepEqual(desglosePromoConIvaIncluido(2900), { subtotalCents: 2500, ivaCents: 400, totalCents: 2900, exacto: true });
+  assert.deepEqual(desglosePromoConIvaIncluido(3900), { subtotalCents: 3362, ivaCents: 538, totalCents: 3900, exacto: true });
+});
+
+test("promo con IVA incluido: el IVA es el 16 % del subtotal (mismo redondeo que Stripe) para cualquier total exacto", () => {
+  for (let t = 1000; t <= 20000; t += 100) {
+    const d = desglosePromoConIvaIncluido(t);
+    assert.equal(d.subtotalCents + d.ivaCents, d.totalCents);
+    assert.equal(d.ivaCents, Math.floor((d.subtotalCents * 16 + 50) / 100));
+    if (d.exacto) assert.equal(d.totalCents, t);
+    else assert.ok(d.totalCents < t && t - d.totalCents <= 2, `sin total exacto: el más cercano por debajo (${t} → ${d.totalCents})`);
+  }
 });

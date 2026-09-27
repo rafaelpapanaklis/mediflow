@@ -1,9 +1,10 @@
 import type Stripe from "stripe";
 import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN } from "@/lib/plan-shared";
+import { desglosePromoConIvaIncluido } from "@/lib/billing/iva-cobro";
 
 /**
- * PROMO DE PRIMER MES ($19 / $29 / $39 MXN + IVA según plan).
+ * PROMO DE PRIMER MES: el TOTAL del primer mes es $19 / $29 / $39 MXN según plan (IVA INCLUIDO).
  *
  * Reglas de negocio (fuente: matriz de precios jul-2026):
  *  - SOLO suscripciones MENSUALES con tarjeta (Checkout mode "subscription").
@@ -11,7 +12,10 @@ import { FIRST_MONTH_PROMO_MXN } from "@/lib/plan-shared";
  *  - SOLO la PRIMERA contratación de la clínica (ver isFirstContract).
  *    Reactivaciones y cambios de plan (change-plan) NO aplican.
  *  - NO es trial: el primer mes SE COBRA al precio promo; desde el segundo
- *    ciclo Stripe cobra el precio normal (cupón con duration "once").
+ *    ciclo Stripe cobra el precio normal + IVA (cupón con duration "once").
+ *  - El IVA NO se suma encima de la promo (decisión de Rafael, ajuste 2): el total cobrado es exactamente la
+ *    promo. Con IVA, el cupón deja la primera factura en subtotal $25.00 + IVA $4.00 = $29.00 (ver
+ *    `desglosePromoConIvaIncluido`); sin IVA (clínica exenta), en $29.00 a secas.
  */
 
 /**
@@ -29,8 +33,10 @@ export function isFirstContract(clinic: {
 
 /**
  * Garantiza en Stripe un cupón "once" que deja la PRIMERA factura mensual en
- * el precio promo y devuelve su id. El id embebe el monto descontado
- * (p. ej. dc-first-month-basic-40000): los cupones de Stripe son inmutables,
+ * el total promo y devuelve su id. `conIva` = la sesión lleva IVA (tasa manual o Stripe Tax): el cupón
+ * deja la primera factura en el subtotal cuyo total con IVA es EXACTAMENTE la promo; sin IVA, en la promo.
+ * El id embebe el monto descontado (p. ej. dc-first-month-basic-40000; con IVA
+ * dc-first-month-iva-basic-40000): los cupones de Stripe son inmutables,
  * así que si el precio del plan cambia en /admin se genera un cupón nuevo con
  * el monto correcto en vez de reusar uno viejo. Idempotente: retrieve →
  * create si falta; una carrera de doble create (resource_already_exists) se
@@ -39,13 +45,16 @@ export function isFirstContract(clinic: {
 export async function ensureFirstMonthCoupon(
   stripe: Stripe,
   plan: { id: PlanId; name: string; priceMxnMonthly: number },
+  opciones: { conIva?: boolean } = {},
 ): Promise<string | null> {
   const promoMxn = FIRST_MONTH_PROMO_MXN[plan.id];
   if (!promoMxn) return null;
-  const amountOffCents = Math.round((plan.priceMxnMonthly - promoMxn) * 100);
+  const conIva = opciones.conIva === true;
+  const subtotalPromoCents = conIva ? desglosePromoConIvaIncluido(promoMxn * 100).subtotalCents : promoMxn * 100;
+  const amountOffCents = Math.round(plan.priceMxnMonthly * 100) - subtotalPromoCents;
   if (amountOffCents <= 0) return null;
 
-  const id = `dc-first-month-${plan.id.toLowerCase()}-${amountOffCents}`;
+  const id = `dc-first-month-${conIva ? "iva-" : ""}${plan.id.toLowerCase()}-${amountOffCents}`;
 
   try {
     await stripe.coupons.retrieve(id);
@@ -63,7 +72,7 @@ export async function ensureFirstMonthCoupon(
       amount_off: amountOffCents,
       currency: "mxn",
       duration: "once",
-      name: `Primer mes ${plan.name} a $${promoMxn} MXN`,
+      name: `Primer mes ${plan.name} a $${promoMxn} MXN${conIva ? " (IVA incluido)" : ""}`,
     });
   } catch (err: any) {
     if (err?.code !== "resource_already_exists") throw err;

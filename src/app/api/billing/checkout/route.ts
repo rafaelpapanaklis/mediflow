@@ -172,15 +172,16 @@ export async function POST(req: NextRequest) {
   // PERIODO lo fija el webhook (nextBillingDate +1 año / +1 mes según billing).
   const unitAmount = (billing === "annual" ? plan.priceMxnAnnual : plan.priceMxn) * 100;
 
-  // PROMO 1ER MES ($19/$29/$39 + IVA): SOLO tarjeta + ciclo mensual + PRIMERA
+  // PROMO 1ER MES (total $19/$29/$39, IVA INCLUIDO: no se suma encima): SOLO tarjeta + ciclo mensual + PRIMERA
   // contratación de la clínica (reactivaciones y cambios de plan NO aplican;
   // change-plan ni siquiera pasa por aquí). Cupón "once": la 1a factura sale
-  // al precio promo y desde la 2a Stripe cobra el precio normal. NO es trial.
+  // al total promo y desde la 2a Stripe cobra el precio normal + IVA. NO es trial.
   const firstContract = isFirstContract(clinic);
   const applyFirstMonthPromo =
     method === "card" && billing === "monthly" && firstContract;
   const promoCouponId = applyFirstMonthPromo
-    ? await ensureFirstMonthCoupon(stripe, plan)
+    // El IVA va DENTRO de la promo: con IVA el cupón deja subtotal + IVA = total exacto de la promo.
+    ? await ensureFirstMonthCoupon(stripe, plan, { conIva: iva.modo !== "exento" })
     : null;
 
   // metadata compartida: el webhook discrimina por kind y activa según método+billing.

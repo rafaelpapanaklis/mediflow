@@ -194,16 +194,53 @@ test("el «spei» de Stripe (por API, en curso o antiguo) también lleva IVA: to
 
 /* ── promo del primer mes ──────────────────────────────────────────────── */
 
-test("promo del primer mes: el cupón baja el SUBTOTAL a $29 y el IVA se calcula sobre lo que se cobra ($33.64)", async () => {
+/** Lo que Stripe cobrará en la 1.ª factura: (línea − cupón) + IVA exclusivo 16 % sobre ESE subtotal. */
+function primeraFactura(sesion: any, cupon: any): { subtotal: number; iva: number; total: number } {
+  const subtotal = sesion.line_items[0].price_data.unit_amount - (cupon?.amount_off ?? 0);
+  const iva = sesion.line_items[0].tax_rates ? desgloseConIva(subtotal).ivaCents : 0;
+  return { subtotal, iva, total: subtotal + iva };
+}
+
+test("promo del primer mes: el TOTAL cobrado es EXACTAMENTE $29 con el IVA dentro ($25.00 + $4.00), no $33.64", async () => {
   clinica.nextBillingDate = null; // primera contratación
   await pagar({ plan: "PRO", method: "card", billing: "monthly" });
   const s = sesiones[0];
   assert.equal(cupones.length, 1);
-  assert.equal(cupones[0].amount_off, 68900 - 2900, "cupón por importe fijo: descuenta antes del impuesto");
+  assert.equal(cupones[0].amount_off, 68900 - 2500, "el cupón deja el SUBTOTAL en $25.00 (= 29 / 1.16)");
+  assert.match(cupones[0].id, /^dc-first-month-iva-pro-/, "cupón propio de «con IVA»: no reusa el de sin IVA");
   assert.deepEqual(s.discounts, [{ coupon: cupones[0].id }]);
-  assert.deepEqual(s.line_items[0].tax_rates, [TASA]);
-  assert.equal(s.line_items[0].price_data.unit_amount, 68900, "la línea sigue al precio de lista; el cupón la deja en $29");
-  assert.deepEqual(desgloseConIva(2900), { subtotalCents: 2900, ivaCents: 464, totalCents: 3364 });
+  assert.deepEqual(s.line_items[0].tax_rates, [TASA], "la tasa exclusiva de siempre: las renovaciones siguen siendo precio + IVA");
+  assert.equal(s.line_items[0].price_data.unit_amount, 68900, "la línea sigue al precio de lista (la renovación)");
+  assert.deepEqual(primeraFactura(s, cupones[0]), { subtotal: 2500, iva: 400, total: 2900 });
+});
+
+test("promo del primer mes: los tres planes cobran EXACTAMENTE 19 / 29 / 39 de total, IVA desglosado dentro", async () => {
+  const esperado: Record<string, { subtotal: number; iva: number; total: number }> = {
+    BASIC: { subtotal: 1638, iva: 262, total: 1900 },
+    PRO: { subtotal: 2500, iva: 400, total: 2900 },
+    CLINIC: { subtotal: 3362, iva: 538, total: 3900 },
+  };
+  for (const plan of ["BASIC", "PRO", "CLINIC"] as const) {
+    sesiones = [];
+    cupones = [];
+    Object.assign(clinica, { plan, nextBillingDate: null });
+    await pagar({ plan, method: "card", billing: "monthly" });
+    assert.deepEqual(primeraFactura(sesiones[0], cupones[0]), esperado[plan], plan);
+    // La 2.ª factura ya no lleva el cupón (duration once): precio de lista + IVA.
+    assert.equal(cupones[0].duration, "once", plan);
+    const lista = sesiones[0].line_items[0].price_data.unit_amount;
+    assert.equal(desgloseConIva(lista).totalCents, lista + Math.floor((lista * 16 + 50) / 100), plan);
+  }
+});
+
+test("promo del primer mes SIN IVA (clínica exenta): total exactamente la promo, sin tasa", async () => {
+  Object.assign(clinica, { createdAt: new Date("2025-11-03"), plan: "PRO", nextBillingDate: null });
+  delete process.env.STRIPE_IVA_TAX_RATE_ID;
+  await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(sesiones[0].line_items[0].tax_rates, undefined);
+  assert.equal(cupones[0].amount_off, 68900 - 2900);
+  assert.doesNotMatch(cupones[0].id, /-iva-/);
+  assert.deepEqual(primeraFactura(sesiones[0], cupones[0]), { subtotal: 2900, iva: 0, total: 2900 });
 });
 
 /* ── sin IVA configurado ───────────────────────────────────────────────── */
@@ -426,6 +463,7 @@ test("el IVA nuevo solo lo usan los sitios que crean cobros nuevos por plan (che
     "src/app/api/billing/change-plan/preview/route.ts",
     "src/app/api/billing/change-plan/route.ts",
     "src/app/api/billing/checkout/route.ts",
+    "src/lib/billing/first-month-promo.ts", // el cupón del primer mes deja el total exacto con el IVA dentro
     "src/lib/billing/iva-clinica.ts",
     "src/lib/stripe-subscriptions.ts",
   ]);
@@ -529,5 +567,5 @@ test("(d) la promo del primer mes de una clínica de antes usa su precio conserv
   });
   await pagar({ plan: "PRO", method: "card", billing: "monthly" });
   assert.equal(sesiones[0].line_items[0].price_data.unit_amount, 60000);
-  assert.equal(cupones[0].amount_off, 60000 - 2900, "el cupón deja el primer mes en $29 sobre SU precio");
+  assert.equal(cupones[0].amount_off, 60000 - 2900, "el cupón deja el primer mes en $29 (sin IVA, exenta) sobre SU precio");
 });

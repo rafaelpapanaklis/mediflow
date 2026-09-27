@@ -116,6 +116,30 @@ export function desgloseConIva(subtotalCents: number): DesgloseIva {
   return { subtotalCents: s, ivaCents, totalCents: s + ivaCents };
 }
 
+/**
+ * PROMO DEL PRIMER MES CON EL IVA DENTRO (decisión de Rafael, ajuste 2): el TOTAL cobrado es EXACTAMENTE
+ * el de la promo ($19 / $29 / $39), no el de la promo más IVA. Con IVA, ese total se desglosa como
+ * subtotal + IVA 16 % (p. ej. $29.00 = $25.00 + $4.00) para que la factura quede bien; sin IVA (clínica
+ * exenta) el total es la promo y el subtotal es la promo.
+ *
+ * Es el `subtotal` (centavos) que hay que dejar en la primera factura de Stripe —con la tasa exclusiva de
+ * siempre encima— para que subtotal + IVA (`ivaDeSubtotalCents`, mismo redondeo que Stripe) sea el total
+ * exacto. Se busca el subtotal cuyo total cae justo en la promo; si no existiera ninguno (hay totales que el
+ * redondeo salta), `exacto` es false y se devuelve el más cercano por debajo: los tests fijan que los tres
+ * de hoy son exactos.
+ */
+export function desglosePromoConIvaIncluido(totalCents: number): DesgloseIva & { exacto: boolean } {
+  const total = Math.round(totalCents);
+  const base = Math.round((total * 100) / (100 + IVA_TASA_PCT));
+  let mejor: DesgloseIva | null = null;
+  for (let s = Math.max(0, base - 3); s <= base + 3; s++) {
+    const d = desgloseConIva(s);
+    if (d.totalCents === total) return { ...d, exacto: true };
+    if (d.totalCents < total && (!mejor || d.totalCents > mejor.totalCents)) mejor = d;
+  }
+  return { ...(mejor ?? desgloseConIva(base)), exacto: false };
+}
+
 /** Desglose de un cobro que NO lleva IVA (renovación manual de una clínica de las de antes). */
 export function desgloseSinIva(subtotalCents: number): DesgloseIva {
   const s = Math.round(subtotalCents);
@@ -129,7 +153,7 @@ export function esIdDeTasa(v: string | undefined | null): v is string {
 
 export const CODIGO_IVA_NO_CONFIGURADO = "IVA_NO_CONFIGURADO";
 export const MENSAJE_IVA_NO_CONFIGURADO =
-  "El cobro con tarjeta y OXXO no está disponible por ahora (falta configurar el IVA). Paga por transferencia SPEI o escríbenos a soporte.";
+  "El cobro con tarjeta y OXXO no está disponible por ahora (falta configurar el IVA). Escríbenos a soporte@dalecontrol.com.";
 
 /**
  * Qué IVA lleva una sesión nueva de cobro por plan:
