@@ -5,12 +5,23 @@
 // Mientras no se pegue: listar degrada a [] (la pantalla de Inventario sigue
 // cargando, solo sin proveedores que elegir), crear propaga un 503 claro —
 // mismo criterio que src/app/api/gastos/route.ts con la tabla expenses.
+//
+// Además de P2021/P2022, un proceso de `next dev` que ya tenía el singleton
+// de Prisma cargado (`globalForPrisma`, sobrevive el hot-reload a propósito)
+// no reconstruye el cliente solo porque `npx prisma generate` cambió el
+// archivo en disco — con ese cliente viejo, InventoryProvider es un modelo
+// que NO EXISTE como propiedad del cliente (es tabla/modelo nuevo, no
+// columna sobre uno viejo), así que `db.inventoryProvider` es `undefined` y
+// llamar `.findMany` tira un TypeError crudo, no un error de Prisma con
+// `.code`. Medido en vivo por ws1-t5 en este mismo dev.108 (ver su nota en
+// lots.server.ts) — se trata igual: "el SQL/el cliente aún no están al día".
 import type { PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 function faltaTabla(e: unknown): boolean {
   const code = (e as { code?: string })?.code;
-  return code === "P2021" || code === "P2022";
+  if (code === "P2021" || code === "P2022") return true;
+  return e instanceof TypeError && /Cannot read propert(y|ies) of undefined/.test(e.message ?? "");
 }
 
 export const PROVEEDORES_TABLA_FALTANTE_MSG =

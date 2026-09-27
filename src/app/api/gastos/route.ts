@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -61,8 +62,16 @@ function resolveWindow(sp: URLSearchParams): { from: Date; to: Date } | { error:
 }
 
 /** La tabla expenses puede no existir aún (sql/expenses.sql se corre a mano). */
+// ws1-t4: purchaseId y la relación `purchase` (→ InventoryPurchase/
+// InventoryProvider) son campos NUEVOS de un modelo VIEJO (Expense). Además
+// de P2021/P2022 (columna faltante en la base), un `next dev` que ya tenía
+// el singleton de Prisma cargado antes de `npx prisma generate` no lo
+// reconstruye solo (medido en vivo por ws1-t5, ver su nota en
+// lots.server.ts): con ese cliente viejo, pedir un campo que su DMMF no
+// conoce tira `PrismaClientValidationError` (sin `.code`). Se trata igual.
 function isMissingTable(e: any): boolean {
-  return e?.code === "P2021" || e?.code === "P2022";
+  if (e?.code === "P2021" || e?.code === "P2022") return true;
+  return e instanceof Prisma.PrismaClientValidationError;
 }
 
 const TABLA_FALTANTE_MSG = "La tabla expenses no existe aún. Aplica sql/expenses.sql en Supabase.";

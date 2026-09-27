@@ -13,16 +13,25 @@
 // vuelo). @@unique([clinicId, idempotencyKey]) en la base es la garantía de
 // verdad; el pre-check aquí es solo para no abrir una transacción de más en
 // el caso feliz.
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { money } from "@/lib/caja";
 import { validarLineaCompra, montoTotalCompra, type LineaCompra } from "./costo-core";
 import { aplicarEntradaDeCompra } from "./costo.server";
 import { registrarHistorialInventario } from "./historial.server";
 
+// P2021/P2022 (tabla/columna faltante en la base) + los dos casos del
+// cliente de Prisma VIEJO en un `next dev` que no se reinicia solo tras
+// `npx prisma generate` (medido en vivo por ws1-t5 en este dev.108, ver su
+// nota en lots.server.ts): TypeError por un modelo nuevo que no existe como
+// propiedad (inventoryPurchase/inventoryPurchaseLine) y
+// PrismaClientValidationError por un campo nuevo que ese cliente no conoce
+// en un modelo viejo (unitCost al actualizar InventoryItem).
 function faltaTabla(e: unknown): boolean {
   const code = (e as { code?: string })?.code;
-  return code === "P2021" || code === "P2022";
+  if (code === "P2021" || code === "P2022") return true;
+  if (e instanceof Prisma.PrismaClientValidationError) return true;
+  return e instanceof TypeError && /Cannot read propert(y|ies) of undefined/.test(e.message ?? "");
 }
 
 function esViolacionUnica(e: unknown): boolean {

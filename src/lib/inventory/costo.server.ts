@@ -17,14 +17,26 @@
 // src/lib/inventory/lots.server.ts: lecturas degradan en silencio,
 // escrituras que de verdad necesitan la columna nueva SÍ propagan el error
 // (no hay dónde guardar el dato si no existe la columna).
-import type { Prisma, PrismaClient } from "@prisma/client";
+//
+// Además de P2021/P2022 (columna faltante EN LA BASE), hay un segundo caso
+// medido en vivo por ws1-t5 en este mismo dev.108: el proceso de `next dev`
+// que ya tenía el singleton de Prisma cargado (`globalForPrisma` en
+// src/lib/prisma.ts, que sobrevive el hot-reload a propósito) no reconstruye
+// el cliente solo porque `npx prisma generate` cambió el archivo en disco —
+// Next recarga el código de la app, no el singleton ya instanciado. Con ese
+// cliente viejo, pedir un campo que su DMMF no conoce (`select: {unitCost}`
+// contra un InventoryItem SIN unitCost) tira `PrismaClientValidationError`
+// (sin `.code`, no es P2021/P2022) en vez de tocar la base. Se trata igual:
+// "el SQL/el cliente todavía no están al día", nunca tumba la pantalla.
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 type Db = Prisma.TransactionClient | PrismaClient;
 
 export function faltaColumnaCosto(e: unknown): boolean {
   const code = (e as { code?: string })?.code;
-  return code === "P2021" || code === "P2022";
+  if (code === "P2021" || code === "P2022") return true;
+  return e instanceof Prisma.PrismaClientValidationError;
 }
 
 /** Forma de InventoryItem ANTES de ws1-t4 — la que siguen esperando Ejercicios,
