@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdmin } from "@supabase/supabase-js";
-import { getAuthContext, type AuthContext } from "@/lib/auth-context";
+import { getAuthContext, requireRole, type AuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
@@ -68,6 +69,13 @@ export async function POST(req: NextRequest) {
 
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // Mismo gate que abre el asistente «Importar mi clínica» (y que /api/patients/import):
+  // ADMIN o RECEPCIONISTA con "patients.create". Antes cualquier sesión —un doctor, un
+  // rol de solo lectura— podía subir un respaldo entero y abrir un ticket a nombre de la clínica.
+  const roleGate = requireRole(ctx, "ADMIN", "RECEPTIONIST");
+  if (roleGate) return roleGate;
+  const deniedPerm = denyIfMissingPermission(ctx, "patients.create");
+  if (deniedPerm) return deniedPerm;
 
   let formData: FormData;
   try {

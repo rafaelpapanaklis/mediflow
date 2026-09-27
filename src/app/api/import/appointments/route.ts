@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireRole } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseImportForm, runImport, importErrorResponse } from "@/lib/import/engine";
 import { appointmentsHandler } from "@/lib/import/entities";
@@ -16,8 +17,12 @@ export const maxDuration = 60;
  * Mismo contrato que /api/patients/import (FormData + dry-run/commit).
  *
  * Multi-tenant: clinicId SIEMPRE de la sesión (getAuthContext), nunca del body.
- * Acceso: solo ADMIN/RECEPCIONISTA (SUPER_ADMIN incluido); el DOCTOR no importa
- * citas en masa (consistente con quién administra la agenda).
+ * Acceso: solo ADMIN/RECEPCIONISTA (SUPER_ADMIN incluido) y, además, la misma
+ * llave que crear una cita a mano: "agenda.create". Importar citas ES crearlas:
+ * quien tiene ese permiso quitado en Equipo → Permisos no puede saltárselo por aquí.
+ *
+ * Las citas PASADAS no se importan, y ninguna cita importada dispara un
+ * recordatorio atrasado (ver entities.ts).
  */
 export async function POST(req: NextRequest) {
   // 6/min por IP y ruta: el asistente hace vista previa + (si el usuario
@@ -30,6 +35,8 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const roleGate = requireRole(ctx, "ADMIN", "RECEPTIONIST");
   if (roleGate) return roleGate;
+  const deniedPerm = denyIfMissingPermission(ctx, "agenda.create");
+  if (deniedPerm) return deniedPerm;
 
   try {
     const form = await parseImportForm(req);
