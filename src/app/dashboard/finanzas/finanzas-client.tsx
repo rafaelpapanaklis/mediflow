@@ -29,7 +29,12 @@ interface FinanzasResumen {
   porDoctor: DoctorRow[];
   saldos:    { porCobrar: number; vencido: number };
 }
-interface Gasto { id: string; date: string; category: string; amount: number; note: string | null }
+interface Gasto {
+  id: string; date: string; category: string; amount: number; note: string | null;
+  /** ws1-t4 — si el gasto nació de "Registrar compra" en Inventario. */
+  purchaseId?: string | null;
+  providerName?: string | null;
+}
 
 type PeriodKey = "hoy" | "mes" | "mes_anterior" | "custom";
 type TabKey    = "resumen" | "gastos" | "doctores" | "saldos";
@@ -477,6 +482,17 @@ export function FinanzasClient() {
                     }}>
                       {g.category}
                     </span>
+                    {g.purchaseId && (
+                      <span
+                        title={g.providerName ? `Compra de inventario — ${g.providerName}` : "Compra de inventario"}
+                        style={{
+                          flexShrink: 0, fontSize: 11, fontWeight: 500, padding: "2px 9px", borderRadius: 999,
+                          background: "var(--success-soft)", border: "1px solid var(--border-soft)", color: "var(--success-strong)",
+                        }}
+                      >
+                        Compra{g.providerName ? ` · ${g.providerName}` : ""}
+                      </span>
+                    )}
                     <span style={{
                       flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                       color: "var(--text-3)", fontSize: 12.5,

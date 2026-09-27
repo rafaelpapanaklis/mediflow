@@ -4422,6 +4422,7 @@
       "title": "Inventario",
       "subtitle": "{items} artículos registrados · {units} unidades en stock",
       "newItem": "Nuevo artículo",
+      "registerPurchase": "Registrar compra",
       "kpiTotalItems": "Total artículos",
       "kpiLowStock": "Stock bajo",
       "kpiOutOfStock": "Agotados",

@@ -82,13 +82,20 @@ function parseExpenseDate(raw?: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function serializeGasto(g: { id: string; date: Date; category: string; amount: number; note: string | null }) {
+function serializeGasto(g: {
+  id: string; date: Date; category: string; amount: number; note: string | null;
+  purchaseId?: string | null; purchase?: { provider: { name: string } | null } | null;
+}) {
   return {
-    id:       g.id,
-    date:     g.date.toISOString(),
-    category: g.category,
-    amount:   money(g.amount ?? 0),
-    note:     g.note ?? null,
+    id:         g.id,
+    date:       g.date.toISOString(),
+    category:   g.category,
+    amount:     money(g.amount ?? 0),
+    note:       g.note ?? null,
+    // ws1-t4: si el gasto nació de una compra de inventario, lo dice —
+    // purchaseId es columna NUEVA (sql/inventario-proveedores-compras-t4.sql).
+    purchaseId:   g.purchaseId ?? null,
+    providerName: g.purchase?.provider?.name ?? null,
   };
 }
 
@@ -105,14 +112,30 @@ export async function GET(req: NextRequest) {
   // /api/finanzas para la tarjeta y la utilidad): un gasto con fecha futura
   // del mes en curso se lista en cuanto se registra.
   const expenseTo = expenseWindowEnd(new URL(req.url).searchParams.get("period"), new Date(), win.to);
+  const where = { clinicId: ctx.clinicId, date: { gte: win.from, lte: expenseTo } };
+  const orderBy = { date: "desc" as const };
 
   try {
-    const rows = await prisma.expense.findMany({
-      where:   { clinicId: ctx.clinicId, date: { gte: win.from, lte: expenseTo } },
-      orderBy: { date: "desc" },
-      select:  { id: true, date: true, category: true, amount: true, note: true },
-    });
-    return NextResponse.json({ gastos: rows.map(serializeGasto) });
+    try {
+      // ws1-t4: purchaseId/purchase.provider — columna y tabla nuevas. Si el
+      // SQL de compras aún no se pegó, esto truena con P2022/P2021 y cae al
+      // select de siempre (catch de abajo), sin que Gastos deje de listar.
+      const rows = await prisma.expense.findMany({
+        where, orderBy,
+        select: {
+          id: true, date: true, category: true, amount: true, note: true, purchaseId: true,
+          purchase: { select: { provider: { select: { name: true } } } },
+        },
+      });
+      return NextResponse.json({ gastos: rows.map(serializeGasto) });
+    } catch (inner: any) {
+      if (!isMissingTable(inner)) throw inner;
+      const rows = await prisma.expense.findMany({
+        where, orderBy,
+        select: { id: true, date: true, category: true, amount: true, note: true },
+      });
+      return NextResponse.json({ gastos: rows.map(serializeGasto) });
+    }
   } catch (err: any) {
     if (isMissingTable(err)) return NextResponse.json({ gastos: [], tablaFaltante: true });
     console.error("[gastos] GET error:", err?.message ?? err);

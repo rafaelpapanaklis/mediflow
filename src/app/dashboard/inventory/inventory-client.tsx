@@ -24,6 +24,8 @@ import { CLASES_REDISENO_INVENTARIO } from "@/components/dashboard/inventario-re
 import invStyles from "@/components/dashboard/inventario-rediseno/inventario-rediseno.module.css";
 // WS1-T5 — lotes y caducidad: modal propio y aislado, ver el archivo.
 import { LotesModal } from "@/components/dashboard/inventory/lotes-modal";
+// ws1-t4 — "Registrar compra": modal propio y aislado, mismo criterio.
+import { CompraModal, type ResultadoCompra } from "@/components/dashboard/inventory/compra-modal";
 
 const DENTAL_ICONS = [
   { id: "implante-plateado",  src: "/icons/dental/implante-plateado.png",  labelKey: "procurement.inventoryClient.iconImplantePlateado"  },
@@ -225,6 +227,8 @@ export function InventoryClient({
   const [editQty, setEditQty]   = useState<Record<string, string>>({});
   // WS1-T5 — lotes y caducidad.
   const [lotesItem, setLotesItem] = useState<Item | null>(null);
+  // ws1-t4 — "Registrar compra".
+  const [showCompra, setShowCompra] = useState(false);
   const [newItem, setNewItem] = useState({
     name: "", description: "", category: "Instrumental básico",
     customCategory: "", quantity: 0, minQuantity: 5, unit: "pza", iconId: "fresa-jeringa",
@@ -374,6 +378,16 @@ export function InventoryClient({
     } catch { toast.error(t("common.genericError")); }
   }
 
+  // ws1-t4: aplica localmente lo que la transacción del servidor ya hizo
+  // (existencias + costo). Sin refetch — la respuesta trae los valores
+  // finales de cada artículo tocado.
+  function aplicarResultadoCompra(r: ResultadoCompra) {
+    setItems(prev => prev.map(i => {
+      const actualizado = r.items.find(u => u.itemId === i.id);
+      return actualizado ? { ...i, quantity: actualizado.quantity, unitCost: actualizado.unitCost } : i;
+    }));
+  }
+
   async function deleteItem(id: string) {
     const item = items.find(i => i.id === id);
     if (!(await askConfirm({
@@ -400,9 +414,14 @@ export function InventoryClient({
             {t("procurement.inventoryClient.subtitle", { items: items.length, units: kpis.totalQty.toLocaleString("es-MX") })}
           </p>
         </div>
-        <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} />} onClick={() => setShowAdd(true)}>
-          {t("procurement.inventoryClient.newItem")}
-        </ButtonNew>
+        <div style={{ display: "flex", gap: 8 }}>
+          <ButtonNew variant="secondary" onClick={() => setShowCompra(true)}>
+            {t("procurement.inventoryClient.registerPurchase")}
+          </ButtonNew>
+          <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} />} onClick={() => setShowAdd(true)}>
+            {t("procurement.inventoryClient.newItem")}
+          </ButtonNew>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -838,6 +857,16 @@ export function InventoryClient({
           itemName={lotesItem.name}
           unit={lotesItem.unit}
           onClose={() => setLotesItem(null)}
+        />
+      )}
+
+      {/* ws1-t4 — "Registrar compra": suma existencias + costo + gasto ligado. */}
+      {showCompra && (
+        <CompraModal
+          items={items.map(i => ({ id: i.id, name: i.name, unit: i.unit }))}
+          proveedores={proveedores}
+          onRegistrada={aplicarResultadoCompra}
+          onClose={() => setShowCompra(false)}
         />
       )}
     </div>

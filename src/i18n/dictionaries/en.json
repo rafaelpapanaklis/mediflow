@@ -4422,6 +4422,7 @@
       "title": "Inventory",
       "subtitle": "{items} registered items · {units} units in stock",
       "newItem": "New item",
+      "registerPurchase": "Register purchase",
       "kpiTotalItems": "Total items",
       "kpiLowStock": "Low stock",
       "kpiOutOfStock": "Out of stock",
