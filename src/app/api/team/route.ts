@@ -92,8 +92,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Tope de usuarios por plan (enforcement). maxUsers null = ilimitado.
-  // Con las condiciones conservadas de la clínica (una Profesional de antes
-  // sigue con 6 usuarios aunque el plan nuevo diga 5): getPlanLimitsForClinic.
+  // Con las condiciones conservadas de la clínica (una Básica de antes sigue
+  // con 2 usuarios aunque el plan nuevo diga 3): getPlanLimitsForClinic.
   const clinicPlan = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: CLINIC_OVERRIDE_SELECT });
   const { maxUsers } = await getPlanLimitsForClinic(clinicPlan);
   if (maxUsers != null) {

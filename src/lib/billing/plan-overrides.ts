@@ -8,12 +8,12 @@
  * de @/lib/plans).
  *
  * POR QUÉ EXISTE. Los límites y precios viven por PLAN en `plan_configs`, no por
- * clínica. Cambiar `plan_configs` a los planes nuevos (usuarios 3/5/∞, sedes
- * 1/1/3, Clínica $1,489) cambiaría al instante a TODAS las clínicas de ese plan,
- * y las que ya estaban registradas se quedarían con menos de lo que contrataron
- * (los Profesional bajarían de 6 a 5 usuarios) o pagarían otro precio. Cada
- * fila de Clinic guarda entonces lo suyo en cuatro campos que, si tienen valor,
- * mandan sobre el plan:
+ * clínica. Cambiar `plan_configs` a los planes nuevos (usuarios 3/6/∞ — Profesional
+ * se queda en 6, decisión de Rafael del 27-sep-2026, no baja a 5 —, sedes 1/1/3,
+ * Clínica $1,489) cambiaría al instante a TODAS las clínicas de ese plan, y las
+ * que ya estaban registradas pagarían otro precio (las de Clínica bajarían de
+ * $1,719 a $1,489 sin haberlo pedido). Cada fila de Clinic guarda entonces lo
+ * suyo en cuatro campos que, si tienen valor, mandan sobre el plan:
  *
  *   maxUsersOverride · maxClinicsOverride · priceMxnMonthlyOverride ·
  *   priceMxnAnnualOverride
@@ -154,7 +154,7 @@ export function applyClinicOverrides(
     maxUsers,
     maxClinics,
     // Los bullets de usuarios/sedes salen de los topes: con override, de los de
-    // la clínica (una Profesional de antes ve «6 usuarios», no «5»).
+    // la clínica (una Básica de antes ve «2 usuarios», no «3»).
     features: planBullets(plan.id, { maxPatients: plan.maxPatients, maxUsers, maxClinics }),
   };
 }

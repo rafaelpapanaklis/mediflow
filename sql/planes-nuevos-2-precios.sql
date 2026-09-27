@@ -7,7 +7,7 @@
 --   código viejo no sabe conservarlos). Orden: SQL 1 → deploy → SQL 2.
 --
 -- QUÉ HACE (solo la tabla plan_configs, que lee la web, el checkout y el panel)
---   Usuarios : Básico 3 · Profesional 5 · Clínica ilimitados (NULL)
+--   Usuarios : Básico 3 · Profesional 6 · Clínica ilimitados (NULL)
 --   Sedes    : Básico 1 · Profesional 1 · Clínica 3
 --   Clínica  : $1,489/mes  (antes $1,719) y $11,614/año (antes $13,404). + IVA.
 --
@@ -41,7 +41,7 @@ WHERE "planId" = 'BASIC'
   AND EXISTS (SELECT 1 FROM "clinics" WHERE "planOverrideFor" IS NOT NULL);
 
 UPDATE "plan_configs"
-SET "maxUsers"   = 5,
+SET "maxUsers"   = 6,
     "maxClinics" = 1,
     "updatedAt"  = NOW()
 WHERE "planId" = 'PRO'
@@ -59,7 +59,7 @@ WHERE "planId" = 'CLINIC'
 -- Verificación. Debe devolver:
 --   BASIC  3 · 1 · 419  · 3264
 --   CLINIC NULL · 3 · 1489 · 11614
---   PRO    5 · 1 · 689  · 5376
+--   PRO    6 · 1 · 689  · 5376
 SELECT "planId", "maxUsers", "maxClinics", "priceMxnMonthly", "priceMxnAnnual"
 FROM "plan_configs"
 ORDER BY "planId";

@@ -7,7 +7,7 @@
  * Toca COBRO y TOPES, así que se fija lo que importa:
  *  - clínica de antes (con override) → 6 usuarios (Profesional) / 4 sedes (Clínica)
  *    / su precio de hoy ($1,719 · $13,404);
- *  - clínica nueva (sin override)   → 5 usuarios / 3 sedes / $1,489 · $11,616;
+ *  - clínica nueva (sin override)   → 6 usuarios / 3 sedes / $1,489 · $11,616;
  *  - cambiar de plan = condiciones nuevas del plan elegido (guarda planOverrideFor);
  *  - los sitios que aplican un tope usan la variante «ForClinic», no el plan a secas.
  */
@@ -54,9 +54,9 @@ const NUEVA = (plan: "BASIC" | "PRO" | "CLINIC") => ({ plan });
 
 // ── Las condiciones nuevas (clínica sin override) ───────────────────────────
 
-test("el seed nuevo: usuarios 3/5/∞, sedes 1/1/3, Clínica $1,489 · $11,616", () => {
+test("el seed nuevo: usuarios 3/6/∞ (Profesional se queda en 6), sedes 1/1/3, Clínica $1,489 · $11,616", () => {
   assert.equal(NEW.BASIC.maxUsers, 3);
-  assert.equal(NEW.PRO.maxUsers, 5);
+  assert.equal(NEW.PRO.maxUsers, 6);
   assert.equal(NEW.CLINIC.maxUsers, null);
   assert.deepEqual([NEW.BASIC.maxClinics, NEW.PRO.maxClinics, NEW.CLINIC.maxClinics], [1, 1, 3]);
   assert.equal(NEW.CLINIC.priceMxnMonthly, 1489);
@@ -79,9 +79,9 @@ test("lo que NO cambia: CFDI 25/50/150 y su excedente, pacientes, storage, IA", 
   assert.equal(NEW.PRO.priceMxnMonthly, 689);
 });
 
-test("una clínica NUEVA (sin override) sale con 5 / 3 / 1489", () => {
+test("una clínica NUEVA (sin override) sale con 6 / 3 / 1489", () => {
   const pro = applyClinicOverrides(NEW.PRO, NUEVA("PRO"));
-  assert.equal(planToLimits(pro).maxUsers, 5);
+  assert.equal(planToLimits(pro).maxUsers, 6);
   const clinic = applyClinicOverrides(NEW.CLINIC, NUEVA("CLINIC"));
   const limits = planToLimits(clinic);
   assert.equal(limits.maxClinics, 3);
@@ -102,7 +102,7 @@ test("sin datos, sin plan o con un select corto: se entiende «sin override»", 
 
 // ── Las clínicas de antes conservan lo suyo ─────────────────────────────────
 
-test("una Profesional de antes conserva 6 usuarios (no 5) y su precio", () => {
+test("una Profesional de antes conserva 6 usuarios y su precio ($689, igual a la lista de hoy tras el ajuste de Rafael)", () => {
   const pro = applyClinicOverrides(NEW.PRO, LEGACY.PRO);
   assert.equal(planToLimits(pro).maxUsers, 6);
   assert.equal(pro.priceMxn, 689);
@@ -160,7 +160,7 @@ test("si la clínica cambia de plan, los overrides del plan anterior dejan de va
 });
 
 test("los overrides se aplican SOLO al plan propio: el resto de tarjetas muestra lo nuevo", () => {
-  // Una Clínica de antes mirando la tarjeta de Profesional: 5 usuarios y $689.
+  // Una Clínica de antes mirando la tarjeta de Profesional: 6 usuarios y $689.
   const pro = applyClinicOverrides(NEW.PRO, LEGACY.CLINIC);
   assert.equal(pro, NEW.PRO);
   // …y su propia tarjeta de Clínica sale con lo suyo.
@@ -206,9 +206,9 @@ test("una sede de una madre NUEVA (o sin override vigente) no hereda nada", () =
 
 // ── Marketing ───────────────────────────────────────────────────────────────
 
-test("bullets: usuarios 3/5/ilimitados y sedes 1/1/3 salen de los topes reales", () => {
+test("bullets: usuarios 3/6/ilimitados y sedes 1/1/3 salen de los topes reales", () => {
   assert.equal(NEW.BASIC.features[0], "3 usuarios");
-  assert.equal(NEW.PRO.features[0], "5 usuarios");
+  assert.equal(NEW.PRO.features[0], "6 usuarios");
   assert.equal(NEW.CLINIC.features[0], "Usuarios ilimitados");
   assert.ok(NEW.BASIC.features.includes("1 sede"));
   assert.ok(NEW.PRO.features.includes("1 sede"));
@@ -308,7 +308,7 @@ test("SQL: el archivo 1 es idempotente y plano; el 2 fija los valores nuevos", (
   assert.ok(uno.includes('"planOverrideFor" IS NULL'), "el UPDATE no pisa lo ya rellenado");
   assert.ok(/COALESCE\(pc\."maxUsers", -1\)/.test(uno), "NULL (ilimitado) se guarda como -1");
   // Valores del paso 2, incluido el anual de Clínica confirmado por Rafael.
-  assert.ok(/"maxUsers"\s*=\s*3/.test(dos) && /"maxUsers"\s*=\s*5/.test(dos));
+  assert.ok(/"maxUsers"\s*=\s*3/.test(dos) && /"maxUsers"\s*=\s*6/.test(dos));
   assert.ok(/"priceMxnMonthly"\s*=\s*1489/.test(dos));
   assert.ok(/"priceMxnAnnual"\s*=\s*11614/.test(dos));
   assert.ok(!/PENDIENTE/i.test(dos.replace(/^--.*$/gm, "")), "ya no queda marcador pendiente en las sentencias");

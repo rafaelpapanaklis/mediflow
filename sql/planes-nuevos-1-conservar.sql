@@ -7,8 +7,8 @@
 --        3) planes-nuevos-2-precios.sql → DESPUÉS de que el código esté en producción
 --
 --   Si se pegara el 2 antes que el código, todas las clínicas actuales leerían de
---   golpe los límites y el precio nuevos (los Profesional bajarían de 6 a 5
---   usuarios, los Básico de 2 a 3, Clínica pasaría a $1,489).
+--   golpe los límites y el precio nuevos (los Básico pasarían de 2 a 3 usuarios,
+--   Clínica pasaría a $1,489; Profesional se queda en 6 usuarios, sin cambio).
 --   Y si el código se desplegara SIN haber pegado este archivo, TODA consulta a
 --   `clinics` sin `select` fallaría (el cliente de Prisma pide columnas que aún
 --   no existen).

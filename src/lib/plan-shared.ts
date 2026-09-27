@@ -105,7 +105,7 @@ function allModules(value: boolean): Record<string, boolean> {
  * ⚠️ Aquí SOLO va el copy que no depende de un número. Los tres cupos que sí lo
  * hacen — USUARIOS, PACIENTES y SEDES — no se escriben a mano: los inyecta
  * `planBullets` (abajo) desde el valor REAL de plan_configs, así que "3 usuarios"
- * / "5 usuarios" / "Usuarios ilimitados" y "1 sede" / "Hasta 3 sedes" salen de
+ * / "6 usuarios" / "Usuarios ilimitados" y "1 sede" / "Hasta 3 sedes" salen de
  * maxUsers / maxClinics y no pueden quedar mintiendo cuando el admin edita el
  * tope. Antes BASIC decía "2 usuarios" y PRO "6 usuarios" a mano. Igual que el
  * cupo CFDI (cfdiBullet), que las superficies insertan en la posición 3.
@@ -156,8 +156,9 @@ export interface PlanConfigShape {
  * 419/689/1489; anual 3264/5376/11614 (35% de descuento sobre 12 meses; el de
  * CLINIC es 1489 × 12 × 0.65 = 11614.20, entero porque priceMxnAnnual es Int).
  * Límites: pacientes 500/∞/∞; usuarios
- * 3/5/∞; sucursales 1/1/3; storage 5/15/75 GB; IA 0/200k/1M; BASIC SIN
- * IA/analytics/tv-modes; PRO y CLINIC con todo. Editable en /admin sin redeploy.
+ * 3/6/∞ (Rafael, 27-sep-2026: Profesional se queda en 6, no baja a 5); sucursales
+ * 1/1/3; storage 5/15/75 GB; IA 0/200k/1M; BASIC SIN IA/analytics/tv-modes; PRO y
+ * CLINIC con todo. Editable en /admin sin redeploy.
  *
  * Las clínicas dadas de alta ANTES (usuarios 2/6/∞, Clínica $1,719 / $13,404 al
  * año) NO leen esto: conservan lo suyo en los campos `*Override` de su fila de
@@ -194,7 +195,7 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     cfdiMonthly: 50,
     cfdiOverageCents: 200,
     maxPatients: null,
-    maxUsers: 5,
+    maxUsers: 6,
     maxClinics: 1,
     features: allModules(true),
   },
