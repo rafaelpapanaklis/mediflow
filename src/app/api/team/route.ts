@@ -8,6 +8,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { camposPublicosDeMiembro } from "@/lib/team/member-fields";
+import { traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 
 const DOCTOR_COLORS = [
   "#3b82f6","#7c3aed","#059669","#e11d48","#d97706",
@@ -128,7 +129,13 @@ export async function POST(req: NextRequest) {
         error: "Este email ya tiene cuenta en DaleControl. El doctor debe usar su contraseña existente.",
       }, { status: 400 });
     }
-    return NextResponse.json({ error: msg || "Error al crear usuario" }, { status: 400 });
+    // Supabase contesta en inglés: su message se queda en el log del servidor y
+    // quien da de alta al miembro lee el motivo en español.
+    console.error("[api/team POST] supabase createUser falló:", msg);
+    return NextResponse.json(
+      { error: traducirErrorDeAuth(createError, "Error al crear usuario") },
+      { status: 400 },
+    );
   }
 
   const newUser = await prisma.user.create({

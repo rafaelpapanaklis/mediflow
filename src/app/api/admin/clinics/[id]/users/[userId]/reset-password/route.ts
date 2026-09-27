@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 import { markMustChangePassword } from "@/lib/auth/must-change-password";
+import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
 
 // Service-role client. Mismo patrón que /api/team/[id]/reset-password/route.ts —
 // usa SUPABASE_SERVICE_ROLE_KEY (NUNCA exponer al cliente). Se deshabilita
@@ -104,6 +105,16 @@ export async function POST(
       "[admin/clinics/[id]/users/[userId]/reset-password] supabase update failed:",
       updateError,
     );
+    // La contraseña la tecleó el admin: si Supabase la rechaza por filtrada o
+    // por débil, tiene que saberlo para escribir otra. Antes caía al 500 de
+    // abajo, que invita a reintentar con la misma.
+    const deContrasena = leerErrorContrasena(updateError);
+    if (deContrasena) {
+      return NextResponse.json(
+        { error: deContrasena.mensaje, code: "weak_password", reason: deContrasena.motivo },
+        { status: 400 },
+      );
+    }
     return NextResponse.json(
       { error: "No se pudo actualizar la contraseña en Supabase" },
       { status: 500 },

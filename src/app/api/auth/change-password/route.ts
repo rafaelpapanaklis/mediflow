@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { logMutation } from "@/lib/audit";
 import { clearMustChangePassword } from "@/lib/auth/must-change-password";
 import { scorePassword } from "@/components/public/auth/password-strength";
+import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
 
 // Service-role client. Mismo patrón que /api/team/[id]/reset-password —
 // SUPABASE_SERVICE_ROLE_KEY NUNCA se expone al cliente.
@@ -116,9 +117,19 @@ export async function POST(req: NextRequest) {
 
   if (updateError) {
     const msg = updateError.message ?? "";
-    if (/different from the old password/i.test(msg)) {
+    const deContrasena = leerErrorContrasena(updateError);
+    if (deContrasena?.motivo === "igual") {
       return NextResponse.json(
         { error: "La contraseña nueva debe ser distinta de la temporal." },
+        { status: 400 },
+      );
+    }
+    // Supabase la rechazó por SU regla (filtrada, corta, sin algún tipo de
+    // carácter): es algo que el usuario arregla eligiendo otra, así que va como
+    // 400 y con el motivo en español, no como el 500 genérico de abajo.
+    if (deContrasena) {
+      return NextResponse.json(
+        { error: deContrasena.mensaje, code: "weak_password", reason: deContrasena.motivo },
         { status: 400 },
       );
     }

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
+import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
 import { Logo } from "../../landing/primitives/logo";
 import { PasswordInput } from "../password-input";
 import { PasswordStrength, scorePassword } from "../password-strength";
@@ -70,8 +71,13 @@ export function ResetPasswordForm() {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
         const msg = updateError.message ?? "";
-        if (/different from the old password/i.test(msg)) {
+        const deContrasena = leerErrorContrasena(updateError);
+        if (deContrasena?.motivo === "igual") {
           setError("La nueva contraseña debe ser diferente a la anterior.");
+        } else if (deContrasena) {
+          // Filtrada, corta o sin algún tipo de carácter: Supabase lo dice en
+          // inglés; aquí sale en español y con qué hacer.
+          setError(deContrasena.mensaje);
         } else if (/session/i.test(msg)) {
           setStatus("invalid");
         } else {

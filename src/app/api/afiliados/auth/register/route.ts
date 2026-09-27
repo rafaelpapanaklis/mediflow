@@ -7,6 +7,7 @@ import {
 } from "@/lib/affiliates/signup";
 import { resolveInviterId } from "@/lib/affiliates/invites";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 
 // Admin client (mismo patrón que src/app/api/laboratorios/auth/register/route.ts
 // — no hay helper compartido, se replica intencionalmente).
@@ -157,8 +158,11 @@ export async function POST(req: Request) {
         { status: 409 }
       );
     }
+    // Supabase contesta en inglés (p. ej. la contraseña filtrada): su message
+    // se queda en el log y el formulario recibe el motivo en español.
+    console.error("[afiliados/register] supabase createUser falló:", createError?.message);
     return NextResponse.json(
-      { error: createError?.message || "No se pudo crear la cuenta." },
+      { error: traducirErrorDeAuth(createError, "No se pudo crear la cuenta.") },
       { status: 400 }
     );
   }

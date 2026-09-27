@@ -1,3 +1,5 @@
+import { AYUDA_CONTRASENA } from "@/lib/auth/errores-contrasena";
+
 interface PasswordStrengthProps {
   password: string;
 }
@@ -50,6 +52,14 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
         <div style={{ fontSize: 11, color: "var(--ld-fg-muted)", display: "flex", justifyContent: "space-between" }}>
           <span>Fuerza de contraseña</span>
           <span style={{ color, fontWeight: 500 }}>{label}</span>
+        </div>
+      )}
+      {/* El medidor mide forma (largo y mezcla), no si la contraseña ya anda en
+          una lista de filtradas: eso lo decide Supabase al guardar. La línea
+          avisa antes de que llegue ese rechazo. */}
+      {password && (
+        <div style={{ fontSize: 11, lineHeight: 1.4, color: "var(--ld-fg-muted)" }}>
+          {AYUDA_CONTRASENA}
         </div>
       )}
     </div>

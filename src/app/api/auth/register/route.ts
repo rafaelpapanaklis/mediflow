@@ -14,6 +14,7 @@ import { sendAffiliateNewReferralEmail } from "@/lib/affiliate-emails";
 import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
+import { leerErrorContrasena, traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 
 const CATEGORY_MAP: Record<string, string> = {
   dental: "DENTAL", odontologia: "DENTAL",
@@ -89,7 +90,17 @@ export async function POST(req: NextRequest) {
     if (authError || !authData.user) {
       // Incluye "email ya registrado" de Supabase → frena enumeración por alta.
       await recordAuthFailure(req, { scope: "auth-register", account: data.email });
-      return NextResponse.json({ error: authError?.message ?? "Error al crear cuenta" }, { status: 400 });
+      // Supabase contesta en inglés: nunca se le pasa su message al usuario.
+      // `code` le dice al formulario que el fallo es de la contraseña, para que
+      // regrese al paso donde se teclea en vez de dejar un toast en el paso 3.
+      const deContrasena = leerErrorContrasena(authError);
+      return NextResponse.json(
+        {
+          error: traducirErrorDeAuth(authError, "Error al crear cuenta"),
+          ...(deContrasena && { code: "weak_password", reason: deContrasena.motivo }),
+        },
+        { status: 400 },
+      );
     }
 
     const slug = data.slug ?? await generateSlug(data.clinicName);

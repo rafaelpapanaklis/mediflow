@@ -23,11 +23,13 @@ interface Step1AccountProps {
   values: Step1Values;
   onChange: (values: Partial<Step1Values>) => void;
   onContinue: () => void;
+  /** Supabase rechazó esta contraseña al crear la cuenta (p. ej. por filtrada). */
+  passwordServerError?: string;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function Step1Account({ values, onChange, onContinue }: Step1AccountProps) {
+export function Step1Account({ values, onChange, onContinue, passwordServerError }: Step1AccountProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [checking, setChecking] = useState(false);
   const [emailServerError, setEmailServerError] = useState<string | undefined>();
@@ -46,12 +48,13 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
       emailServerError,
     phone: touched.phone && !phoneValid ? PHONE_ERROR : undefined,
     password:
-      touched.password && !pwValid
-        ? "La contraseña es muy débil"
-        : undefined,
+      (touched.password && !pwValid ? "La contraseña es muy débil" : undefined) ??
+      passwordServerError,
   };
 
-  const canContinue = nameValid && emailValid && phoneValid && pwValid;
+  // Con el rechazo de Supabase a la vista no se avanza: esa misma contraseña
+  // volvería a fallar en el paso 3. Se borra al teclear otra.
+  const canContinue = nameValid && emailValid && phoneValid && pwValid && !passwordServerError;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

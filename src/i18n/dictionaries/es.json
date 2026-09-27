@@ -3669,6 +3669,15 @@
       "pwMismatchToast": "Las contraseñas no coinciden",
       "pwMinLengthToast": "Mínimo 8 caracteres",
       "pwUpdatedToast": "Contraseña actualizada",
+      "pwError": {
+        "filtrada": "Esta contraseña apareció en filtraciones públicas y es fácil de adivinar. Elige otra.",
+        "corta": "La contraseña es demasiado corta. Usa al menos {min} caracteres.",
+        "caracteres": "A la contraseña le faltan tipos de carácter. Combina mayúsculas, minúsculas, números y símbolos.",
+        "debil": "Esta contraseña es demasiado débil. Elige una más larga y difícil de adivinar.",
+        "igual": "La contraseña nueva debe ser distinta de la anterior.",
+        "larga": "La contraseña no puede tener más de 72 caracteres.",
+        "otro": "No se pudo actualizar la contraseña. Inténtalo de nuevo."
+      },
       "gcalDisconnectedToast": "Google Calendar desconectado",
       "gcalDisconnectErrorToast": "Error al desconectar",
       "serviceAddedToast": "Servicio agregado",

@@ -10,6 +10,7 @@ import { CfdiReadinessCard } from "@/components/dashboard/settings/cfdi-readines
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
+import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
@@ -484,7 +485,17 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       if (error) throw error;
       toast.success(t("settings.client.pwUpdatedToast"));
       setPwForm({ current:"", next:"", confirm:"" });
-    } catch (e: any) { toast.error(e.message ?? "Error"); } finally { setSaving(false); }
+    } catch (e: any) {
+      // Supabase contesta en inglés; su message nunca se enseña. El motivo se
+      // traduce con el diccionario para que salga en el idioma del panel.
+      const deContrasena = leerErrorContrasena(e);
+      if (!deContrasena) console.error("[settings] cambio de contraseña falló:", e);
+      toast.error(
+        deContrasena
+          ? t(`settings.client.pwError.${deContrasena.motivo}`, { min: deContrasena.minimo ?? 8 })
+          : t("settings.client.pwError.otro"),
+      );
+    } finally { setSaving(false); }
   }
 
   async function disconnectGcal() {

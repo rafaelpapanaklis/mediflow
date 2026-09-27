@@ -3669,6 +3669,15 @@
       "pwMismatchToast": "Passwords do not match",
       "pwMinLengthToast": "At least 8 characters",
       "pwUpdatedToast": "Password updated",
+      "pwError": {
+        "filtrada": "This password has appeared in public data breaches and is easy to guess. Choose a different one.",
+        "corta": "The password is too short. Use at least {min} characters.",
+        "caracteres": "The password is missing character types. Mix uppercase, lowercase, numbers and symbols.",
+        "debil": "This password is too weak. Choose a longer one that is harder to guess.",
+        "igual": "The new password must be different from the previous one.",
+        "larga": "The password cannot be longer than 72 characters.",
+        "otro": "The password could not be updated. Please try again."
+      },
       "gcalDisconnectedToast": "Google Calendar disconnected",
       "gcalDisconnectErrorToast": "Error disconnecting",
       "serviceAddedToast": "Service added",

@@ -17,6 +17,7 @@ import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { trackSignupConversionAndRedirect } from "@/lib/gtag";
 import { trackGa4SignUp } from "@/lib/analytics/ga4";
 import { guardarEleccionAlta } from "@/lib/billing/eleccion-alta";
+import { MENSAJE_CONTRASENA_FILTRADA } from "@/lib/auth/errores-contrasena";
 
 interface SignupState {
   // Step 1
@@ -126,6 +127,8 @@ export function SignupForm() {
     password: isOAuthFlow ? "oauth-no-password" : "",
   }));
   const [loading, setLoading] = useState(false);
+  // Rechazo de Supabase a la contraseña; se borra en cuanto se teclea otra.
+  const [passwordServerError, setPasswordServerError] = useState<string | undefined>();
   const submitLockRef = useRef(false);
 
   // Sync email from query param si cambia
@@ -205,11 +208,24 @@ export function SignupForm() {
       const data = (await res.json().catch(() => ({}))) as {
         success?: boolean;
         error?: string;
+        code?: string; // "weak_password" cuando Supabase rechaza la contraseña
         coupon?: string | null; // "applied" | "invalid" | null
       };
       if (res.status === 409) {
         toast.error(data.error ?? "Ya existe una cuenta con este correo");
         setTimeout(() => router.push("/login"), 2000);
+        setLoading(false);
+        submitLockRef.current = false;
+        return;
+      }
+      // Supabase rechazó la contraseña (filtrada, corta…). La contraseña se
+      // tecleó en el paso 1 y el rechazo llega en el 3: se regresa a donde se
+      // corrige, con el motivo bajo el campo, en vez de dejar solo un toast.
+      if (!res.ok && data.code === "weak_password" && !isOAuthFlow) {
+        const motivo = data.error ?? MENSAJE_CONTRASENA_FILTRADA;
+        setPasswordServerError(motivo);
+        toast.error(motivo);
+        setStep(1);
         setLoading(false);
         submitLockRef.current = false;
         return;
@@ -326,8 +342,12 @@ export function SignupForm() {
             phone: form.phone,
             password: form.password,
           }}
-          onChange={update}
+          onChange={patch => {
+            if (patch.password !== undefined) setPasswordServerError(undefined);
+            update(patch);
+          }}
           onContinue={() => setStep(2)}
+          passwordServerError={passwordServerError}
         />
       )}
 
