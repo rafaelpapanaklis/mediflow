@@ -4458,6 +4458,11 @@
       "fieldAlertIfBelow": "Alerta si <",
       "fieldUnit": "Unidad",
       "fieldUnitCost": "Costo unitario",
+      "fieldProvider": "Proveedor",
+      "fieldContact": "Contacto",
+      "noProvider": "Sin proveedor",
+      "newProvider": "+ Nuevo proveedor",
+      "providerNameRequired": "El nombre del proveedor es requerido",
       "addItem": "Agregar artículo"
     },
     "labDetail": {

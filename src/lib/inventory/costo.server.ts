@@ -1,17 +1,22 @@
-// Inventario A (WS1-T4) — capa de Prisma para el costo unitario.
+// Inventario A (WS1-T4) — capa de Prisma para el costo unitario Y el
+// proveedor propio del artículo (a pesar del nombre del archivo: llegaron
+// con el mismo SQL — sql/inventario-costo-t4.sql para unitCost,
+// sql/inventario-proveedores-compras-t4.sql para providerId — y comparten
+// exactamente el mismo problema, así que una sola capa de tolerancia).
 //
-// `unitCost` es columna NUEVA de InventoryItem (sql/inventario-costo-t4.sql).
-// InventoryItem lo leen y escriben pantallas FUERA de esta tarea (Ejercicios,
-// Ortopédicos, el widget de stock bajo de Hoy) con un SELECT por default que
-// pide TODAS las columnas del modelo — si la columna no existe aún en la
-// base, esas pantallas se caerían con P2022 aunque no les importe el costo.
-// Por eso TODA lectura/escritura de InventoryItem que toca `unitCost` pasa
-// por aquí: pide el SELECT completo y, si truena por columna faltante,
-// reintenta con el SELECT viejo y rellena unitCost en 0 — nunca null (0 es
-// "no cuesta nada"; null se leía como "$0 de valor" sin decir por qué).
-// Mismo criterio de tolerancia que src/lib/inventory/lots.server.ts: lecturas
-// degradan en silencio, escrituras que de verdad necesitan la columna nueva
-// SÍ propagan el error (no hay dónde guardar el dato si no existe la columna).
+// `unitCost`/`providerId` son columnas NUEVAS de InventoryItem. InventoryItem
+// lo leen y escriben pantallas FUERA de esta tarea (Ejercicios, Ortopédicos,
+// el widget de stock bajo de Hoy) con un SELECT por default que pide TODAS
+// las columnas del modelo — si una columna no existe aún en la base, esas
+// pantallas se caerían con P2022 aunque no les importe el costo ni el
+// proveedor. Por eso TODA lectura/escritura de InventoryItem que toca
+// cualquiera de los dos pasa por aquí: pide el SELECT completo y, si truena
+// por columna faltante, reintenta con el SELECT viejo y rellena unitCost en
+// 0 (nunca null: 0 es "no cuesta nada"; null se leía como "$0 de valor" sin
+// decir por qué) y providerId en null. Mismo criterio de tolerancia que
+// src/lib/inventory/lots.server.ts: lecturas degradan en silencio,
+// escrituras que de verdad necesitan la columna nueva SÍ propagan el error
+// (no hay dónde guardar el dato si no existe la columna).
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
@@ -30,13 +35,13 @@ const SELECT_BASE = {
   createdAt: true, updatedAt: true,
 } as const;
 
-const SELECT_CON_COSTO = { ...SELECT_BASE, unitCost: true } as const;
+const SELECT_CON_COSTO = { ...SELECT_BASE, unitCost: true, providerId: true } as const;
 
 export type ItemBase = Prisma.InventoryItemGetPayload<{ select: typeof SELECT_BASE }>;
-export type ItemConCosto = ItemBase & { unitCost: number };
+export type ItemConCosto = ItemBase & { unitCost: number; providerId: string | null };
 
 function conCostoPorDefecto(row: ItemBase): ItemConCosto {
-  return { ...row, unitCost: 0 };
+  return { ...row, unitCost: 0, providerId: null };
 }
 
 export interface FiltroInventario {
@@ -82,6 +87,7 @@ export interface DatosNuevoItem {
   price: number | null;
   /** 0 = "no cuesta nada", nunca null (ver nota del archivo). */
   unitCost: number;
+  providerId?: string | null;
 }
 
 export async function crearInventoryItem(data: DatosNuevoItem, db: Db = prisma): Promise<ItemConCosto> {
@@ -89,7 +95,7 @@ export async function crearInventoryItem(data: DatosNuevoItem, db: Db = prisma):
     return await (db as PrismaClient).inventoryItem.create({ data, select: SELECT_CON_COSTO });
   } catch (e) {
     if (!faltaColumnaCosto(e)) throw e;
-    const { unitCost, ...base } = data;
+    const { unitCost, providerId, ...base } = data;
     const created = await (db as PrismaClient).inventoryItem.create({ data: base, select: SELECT_BASE });
     return conCostoPorDefecto(created);
   }
@@ -103,6 +109,7 @@ export type DatosActualizarItem = Partial<{
   price: number | null;
   emoji: string;
   unitCost: number;
+  providerId: string | null;
   quantity: number;
   updatedAt: Date;
 }>;
@@ -117,8 +124,25 @@ export async function actualizarInventoryItem(
     return await (db as PrismaClient).inventoryItem.update({ where: { id }, data, select: SELECT_CON_COSTO });
   } catch (e) {
     if (!faltaColumnaCosto(e)) throw e;
-    const { unitCost, ...base } = data;
+    const { unitCost, providerId, ...base } = data;
     const updated = await (db as PrismaClient).inventoryItem.update({ where: { id }, data: base, select: SELECT_BASE });
     return conCostoPorDefecto(updated);
   }
+}
+
+/**
+ * Suma existencias + costo de ÚLTIMO valor, dentro de una transacción abierta
+ * por el llamador (compras.server.ts). Sin tolerancia P2021/P2022 propia: si
+ * llegamos aquí es porque unitCost/providerId ya se leyeron bien antes (la
+ * compra entera solo tiene sentido con las columnas nuevas puestas).
+ */
+export async function aplicarEntradaDeCompra(
+  itemId: string,
+  data: { quantityDelta: number; unitCost: number },
+  tx: Prisma.TransactionClient,
+): Promise<void> {
+  await tx.inventoryItem.update({
+    where: { id: itemId },
+    data: { quantity: { increment: data.quantityDelta }, unitCost: data.unitCost, updatedAt: new Date() },
+  });
 }

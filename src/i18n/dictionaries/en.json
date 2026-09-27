@@ -4458,6 +4458,11 @@
       "fieldAlertIfBelow": "Alert if <",
       "fieldUnit": "Unit",
       "fieldUnitCost": "Unit cost",
+      "fieldProvider": "Provider",
+      "fieldContact": "Contact",
+      "noProvider": "No provider",
+      "newProvider": "+ New provider",
+      "providerNameRequired": "Provider name is required",
       "addItem": "Add item"
     },
     "labDetail": {

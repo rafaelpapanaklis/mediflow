@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
     unit:        body.unit ?? "pza",
     price:       body.price !== undefined && body.price !== null && body.price !== "" ? Number(body.price) : null,
     unitCost:    body.unitCost !== undefined && body.unitCost !== null && body.unitCost !== "" ? Number(body.unitCost) : 0,
+    // ws1-t4: proveedor propio, opcional.
+    providerId:  body.providerId?.trim() || null,
   });
   return NextResponse.json(item, { status: 201 });
 }

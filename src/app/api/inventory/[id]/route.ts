@@ -54,6 +54,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // ws1-t4: 0 es un costo válido y se guarda tal cual — `!== undefined`,
     // no truthy (mismo cuidado que en el alta, POST /api/inventory).
     ...(body.unitCost    !== undefined && { unitCost:    body.unitCost !== null ? Number(body.unitCost) : 0 }),
+    ...(body.providerId  !== undefined && { providerId:  body.providerId || null }),
     ...(body.emoji       !== undefined && { emoji:       body.emoji       }),
     updatedAt: new Date(),
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, type CSSProperties } from "react";
+import { useState, useMemo, useEffect, type CSSProperties } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Plus, Search, Package, X, Trash2, Minus, Check,
@@ -71,6 +71,16 @@ interface Item {
   minQuantity: number; unit: string; price: number | null;
   /** ws1-t4 — costo unitario. Nunca null (0 = "no cuesta nada"). */
   unitCost: number;
+  /** ws1-t4 — proveedor propio de la clínica, opcional. */
+  providerId: string | null;
+}
+
+/** ws1-t4 — proveedor propio de la clínica (no el Supplier del marketplace). */
+interface Proveedor {
+  id: string;
+  name: string;
+  rfc: string | null;
+  contact: string | null;
 }
 
 type StatusTab = "todos" | "disponible" | "poco" | "sin";
@@ -218,8 +228,37 @@ export function InventoryClient({
   const [newItem, setNewItem] = useState({
     name: "", description: "", category: "Instrumental básico",
     customCategory: "", quantity: 0, minQuantity: 5, unit: "pza", iconId: "fresa-jeringa",
-    unitCost: 0,
+    unitCost: 0, providerId: "",
   });
+  // ws1-t4: proveedores propios — se cargan una vez y se reutilizan en el
+  // alta de artículo y en "Registrar compra".
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [showNuevoProveedor, setShowNuevoProveedor] = useState(false);
+  const [nuevoProveedor, setNuevoProveedor] = useState({ name: "", rfc: "", contact: "" });
+
+  useEffect(() => {
+    fetch("/api/inventory/providers")
+      .then(r => r.ok ? r.json() : [])
+      .then(setProveedores)
+      .catch(() => {});
+  }, []);
+
+  async function crearProveedorRapido() {
+    if (!nuevoProveedor.name.trim()) { toast.error(t("procurement.inventoryClient.providerNameRequired")); return; }
+    try {
+      const res = await fetch("/api/inventory/providers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nuevoProveedor),
+      });
+      if (!res.ok) { toast.error((await res.json().catch(() => null))?.error ?? t("common.genericError")); return; }
+      const creado: Proveedor = await res.json();
+      setProveedores(prev => [...prev, creado].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewItem(n => ({ ...n, providerId: creado.id }));
+      setShowNuevoProveedor(false);
+      setNuevoProveedor({ name: "", rfc: "", contact: "" });
+    } catch { toast.error(t("common.genericError")); }
+  }
 
   const kpis = useMemo(() => {
     const totalQty    = items.reduce((s, i) => s + i.quantity, 0);
@@ -323,12 +362,13 @@ export function InventoryClient({
           minQuantity: newItem.minQuantity,
           unit: newItem.unit,
           unitCost: newItem.unitCost,
+          providerId: newItem.providerId || null,
         }),
       });
       const created = await res.json();
       setItems(prev => [...prev, created]);
       setShowAdd(false);
-      setNewItem({ name:"", description:"", category:"Instrumental básico", customCategory:"", quantity:0, minQuantity:5, unit:"pza", iconId:"fresa-jeringa", unitCost:0 });
+      setNewItem({ name:"", description:"", category:"Instrumental básico", customCategory:"", quantity:0, minQuantity:5, unit:"pza", iconId:"fresa-jeringa", unitCost:0, providerId:"" });
       toast.success(t("procurement.inventoryClient.itemAdded"));
       setTab(getStatus(created));
     } catch { toast.error(t("common.genericError")); }
@@ -731,6 +771,53 @@ export function InventoryClient({
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* ws1-t4: proveedor propio, opcional. */}
+              <div style={{ marginTop: 18 }}>
+                <div className="form-section__title">
+                  {t("procurement.inventoryClient.fieldProvider")}
+                  <span className="form-section__rule" />
+                </div>
+                {showNuevoProveedor ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: "8px 10px", alignItems: "end" }}>
+                    <div className="field-new">
+                      <label className="field-new__label">{t("procurement.inventoryClient.fieldName")}</label>
+                      <input className="input-new" value={nuevoProveedor.name}
+                        onChange={e => setNuevoProveedor(p => ({ ...p, name: e.target.value }))} />
+                    </div>
+                    <div className="field-new">
+                      <label className="field-new__label">RFC</label>
+                      <input className="input-new" value={nuevoProveedor.rfc}
+                        onChange={e => setNuevoProveedor(p => ({ ...p, rfc: e.target.value }))} />
+                    </div>
+                    <div className="field-new">
+                      <label className="field-new__label">{t("procurement.inventoryClient.fieldContact")}</label>
+                      <input className="input-new" value={nuevoProveedor.contact}
+                        onChange={e => setNuevoProveedor(p => ({ ...p, contact: e.target.value }))} />
+                    </div>
+                    <ButtonNew variant="primary" size="sm" type="button" onClick={crearProveedorRapido}>
+                      {t("common.confirm")}
+                    </ButtonNew>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <select
+                      className="input-new"
+                      style={{ flex: 1 }}
+                      value={newItem.providerId}
+                      onChange={e => setNewItem(n => ({ ...n, providerId: e.target.value }))}
+                    >
+                      <option value="">{t("procurement.inventoryClient.noProvider")}</option>
+                      {proveedores.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    <ButtonNew variant="ghost" size="sm" type="button" onClick={() => setShowNuevoProveedor(true)}>
+                      {t("procurement.inventoryClient.newProvider")}
+                    </ButtonNew>
+                  </div>
+                )}
               </div>
             </div>
 

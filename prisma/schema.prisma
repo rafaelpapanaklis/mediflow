@@ -2391,8 +2391,14 @@ model Expense {
   note        String?
   createdById String // User.id que registró el gasto (sin relación — se resuelve al mostrar)
   createdAt   DateTime @default(now())
+  /// WS1-T4 — gasto nacido de una compra de inventario ("Insumos"), en la
+  /// MISMA transacción que la crea. Columna NUEVA (sql/inventario-compras-t4.sql);
+  /// el resto de Expense (GET/POST/DELETE de /api/gastos) ya usa `select`
+  /// explícito sin este campo, así que no depende de que el SQL esté aplicado.
+  purchaseId  String? @unique
 
-  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic   Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  purchase InventoryPurchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
 
   @@index([clinicId, date])
   @@map("expenses")
@@ -2926,6 +2932,11 @@ model InventoryItem {
   /// de InventoryItem que toque este campo — así Ejercicios, Ortopédicos y el
   /// widget de stock bajo de Hoy, que no saben de costo, no se caen).
   unitCost    Float    @default(0)
+  /// WS1-T4 — proveedor PROPIO de la clínica (InventoryProvider, no el
+  /// Supplier del marketplace). Opcional. Columna NUEVA — misma tolerancia
+  /// P2021/P2022 que unitCost, mismo archivo (costo.server.ts, que a pesar
+  /// del nombre cubre los dos campos: llegaron con el mismo SQL).
+  providerId  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -2933,8 +2944,83 @@ model InventoryItem {
   history         InventoryHistory[]
   lots            InventoryLot[]
   materialRecipes ProcedureMaterialRecipe[]
+  provider        InventoryProvider?        @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  purchaseLines   InventoryPurchaseLine[]
 
   @@map("inventory_items")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// WS1-T4 — PROVEEDORES PROPIOS Y COMPRAS DE INVENTARIO
+//
+// clinicId aquí es un campo plano SIN @relation a Clinic (mismo criterio que
+// InventoryLot de ws1-t5, ver su nota más abajo en el archivo): evita tocar
+// el modelo Clinic, que varias pantallas editan a la vez en esta ola. El
+// aislamiento de tenant se hace en el server, filtrando siempre por
+// clinicId (y comprobando que el proveedor/artículo referido sea de la
+// misma clínica antes de escribir).
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Proveedor propio de la clínica (nombre, RFC, contacto) — NO el `Supplier`
+/// del marketplace B2B (global, sin clinicId, ver su bloque más arriba).
+model InventoryProvider {
+  id        String   @id @default(cuid())
+  clinicId  String
+  name      String
+  rfc       String?  @db.VarChar(13)
+  contact   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items     InventoryItem[]
+  purchases InventoryPurchase[]
+
+  @@index([clinicId, name])
+  @@map("inventory_providers")
+}
+
+/// Entrada de compra: en UNA transacción suma existencias, actualiza el
+/// costo (ÚLTIMO costo — decisión ws1-t4, más simple y predecible que
+/// promedio ponderado para una sola cifra por artículo) y crea el gasto
+/// "Insumos" ligado (ver Expense.purchaseId). idempotencyKey evita la
+/// compra doble por doble clic: el cliente genera un id al abrir el modal
+/// y lo reenvía tal cual en un reintento — @@unique descarta el duplicado.
+model InventoryPurchase {
+  id             String   @id @default(cuid())
+  clinicId       String
+  providerId     String?
+  date           DateTime @default(now())
+  /// Folio/referencia libre del comprobante. Opcional, sin subida de archivo.
+  receiptRef     String?
+  createdById    String
+  idempotencyKey String?
+  createdAt      DateTime @default(now())
+
+  provider InventoryProvider?      @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  lines    InventoryPurchaseLine[]
+  expense  Expense?
+
+  @@unique([clinicId, idempotencyKey])
+  @@index([clinicId, date])
+  @@map("inventory_purchases")
+}
+
+/// Línea de compra — id ESTABLE: ws1-t5 cuelga su tabla de lotes de este id
+/// (InventoryLot.purchaseLineId, sin FK dura — ver su nota en el bloque de
+/// InventoryLot).
+model InventoryPurchaseLine {
+  id         String @id @default(cuid())
+  purchaseId String
+  itemId     String
+  quantity   Int
+  unitCost   Float
+
+  purchase InventoryPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  item     InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([itemId])
+  @@map("inventory_purchase_lines")
 }
 
 model InventoryHistory {
