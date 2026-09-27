@@ -21,7 +21,8 @@
    último recurso no puede depender de algo que también puede fallar.
    ═══════════════════════════════════════════════════════════════════════ */
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ESPERA_RECARGA_MS, asegurarRecarga, seVaARecargar } from "@/lib/recarga-despliegue";
 
 export default function ErrorRaiz({
   error,
@@ -30,10 +31,52 @@ export default function ErrorRaiz({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // ── VERSIÓN VIEJA TRAS UN DESPLIEGUE ──────────────────────────────
+  // Si lo que falló fue cargar un fragmento de JS, la pestaña tiene la versión
+  // anterior y recargar lo arregla. Se hace UNA vez (guardia en sessionStorage,
+  // ver @/lib/recarga-despliegue); si tras recargar sigue fallando, se enseña
+  // la tarjeta de siempre. Se decide al pintar para no enseñar un error que va
+  // a durar un instante.
+  const [seRecarga, setSeRecarga] = useState(() => seVaARecargar(error));
+  const pidioRecarga = useRef(false);
+
   useEffect(() => {
     // El bug que motiva este archivo no dejaba rastro en la consola. Aquí sí.
     console.error("[app] error no capturado por ninguna sección:", error);
+    // En desarrollo React corre el efecto dos veces; la segunda encontraría el
+    // guardia puesto y tomaría por fallida una recarga que ya está en camino.
+    if (pidioRecarga.current) return;
+    if (asegurarRecarga(error)) {
+      pidioRecarga.current = true;
+      // Si en unos segundos la página sigue aquí, la recarga no ocurrió: se
+      // enseña la tarjeta, que al menos tiene botones.
+      setTimeout(() => setSeRecarga(false), ESPERA_RECARGA_MS);
+    } else {
+      // 🔴 «Se puede recargar» se decidió LEYENDO el guardia; escribirlo puede
+      // fallar aparte (cuota llena, Safari en privado). Sin esto la pantalla se
+      // quedaba en «Actualizando…» para siempre, sin recargar y sin botones.
+      setSeRecarga(false);
+    }
   }, [error]);
+
+  if (seRecarga) {
+    return (
+      <div
+        role="status"
+        style={{
+          minHeight: "70vh",
+          display: "grid",
+          placeItems: "center",
+          padding: 24,
+          fontSize: 15,
+          color: "#475569",
+          fontFamily: "var(--font-sans, system-ui), system-ui, sans-serif",
+        }}
+      >
+        Actualizando a la versión más reciente…
+      </div>
+    );
+  }
 
   return (
     <div

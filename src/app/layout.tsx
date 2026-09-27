@@ -10,6 +10,7 @@ import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import { GaPageview } from "@/components/analytics/ga-pageview";
 import { AdsClickCapture } from "@/components/analytics/ads-click-capture";
 import { MetaPixelPageview } from "@/components/analytics/meta-pixel-pageview";
+import { RecargaPorDespliegue } from "@/components/recarga-por-despliegue";
 import { GA4_MEASUREMENT_ID, PRIVATE_PATH_PATTERN } from "@/lib/analytics/ga4";
 import { META_PIXEL_ID } from "@/lib/analytics/meta-pixel";
 import "./globals.css";
@@ -171,6 +172,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Clic de Google Ads (gclid/gbraid/wbraid) → cookie dc_ads de 90 días; el
             alta la guarda ligada a la clínica. Solo rutas públicas. */}
         <AdsClickCapture />
+        {/* Tras un despliegue, la pestaña que ya estaba abierta pide fragmentos de
+            JS que ya no existen. Esto atrapa los que no llegan a error.tsx y
+            recarga UNA vez (o avisa, si hay algo a medio escribir). */}
+        <RecargaPorDespliegue />
       </body>
     </html>
   );
