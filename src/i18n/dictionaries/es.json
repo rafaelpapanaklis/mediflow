@@ -830,7 +830,12 @@
         "price": "Precio unitario",
         "discount": "Descuento",
         "total": "Importe de la línea",
-        "quoteStatus": "Estado original"
+        "quoteStatus": "Estado original",
+        "fullName": "Nombre completo (se parte solo)",
+        "patientExternalId": "ID del paciente en el sistema de origen",
+        "externalId": "ID en el sistema de origen",
+        "balanceExternalId": "ID del saldo en el sistema de origen",
+        "apptStatus": "Estado de la cita"
       },
       "launch": "Importar mi clínica",
       "assistedCta": "Migración asistida",
@@ -875,15 +880,17 @@
         "templateDesc": "Una pestaña por tipo de dato: Pacientes, Saldos, Citas, Expedientes, Notas y Presupuestos. Copia y pega tus datos en las columnas indicadas.",
         "templateBtn": "Descargar plantilla",
         "ownFileNote": "¿Ya tienes tu propio archivo? También funciona. Solo asegúrate de que la primera fila tenga los nombres de las columnas.",
+        "unverifiedTitle": "Perfil sin validar",
+        "unverifiedDesc": "El emparejamiento de columnas de {name} se armó con los nombres habituales, pero todavía no se ha probado con un export real. En el paso de revisión verás cada fila antes de importar: comprueba que las columnas se reconocieron bien y corrige el emparejamiento a mano si hace falta.",
         "dentalink": {
-          "s1h": "Entra a Dentalink",
-          "s1p": "Inicia sesión y abre el menú `Configuración` en la esquina superior derecha.",
-          "s2h": "Ve a Exportar datos",
-          "s2p": "En la sección `Datos & Respaldos` elige `Exportar pacientes`.",
-          "s3h": "Selecciona el rango",
-          "s3p": "Marca «Todos los pacientes» y el formato `Excel (.xlsx)`.",
-          "s4h": "Descarga el archivo",
-          "s4p": "Pulsa `Generar` y guarda el archivo en tu computadora. Lo subirás en el siguiente paso."
+          "s1h": "Entra a Reportes Excel",
+          "s1p": "En Dentalink abre `Reportes` → `Reportes Excel`. Esa función viene en los planes Pro y Titanium; si tu plan no la incluye, pide a soporte de Dentalink los listados.",
+          "s2h": "Descarga un reporte por tipo de dato",
+          "s2p": "Pacientes: el listado de pacientes con su ID. Citas: `Citas pacientes` (categoría Agenda), de hoy en adelante. Saldos: `Pacientes morosos` (categoría Pacientes).",
+          "s3h": "Un archivo por tipo de dato",
+          "s3p": "Cada reporte se sube por separado, con su propia vista previa. Pide que todos traigan el ID del paciente: así los saldos y las citas se emparejan sin adivinar por el nombre.",
+          "s4h": "Revisa antes de importar",
+          "s4p": "Las columnas de estos reportes aún no están validadas con un export real. En la vista previa comprueba que cada columna se reconoció y, si no, empárejala a mano."
         },
         "generic": {
           "s1h": "Abre tu sistema",
@@ -906,16 +913,16 @@
         "patients": "Pacientes",
         "patientsMeta": "Nombre, contacto, fecha de nacimiento",
         "balances": "Saldos",
-        "balancesMeta": "Adeudos y pagos a favor por paciente",
+        "balancesMeta": "Adeudos y pagos a favor por paciente. Se revisan antes de importar",
         "appointments": "Citas próximas",
-        "appointmentsMeta": "Agenda futura para no perder ninguna",
+        "appointmentsMeta": "Solo citas futuras (las pasadas no se importan). Se revisan una por una antes de importar",
         "medicalHistory": "Expedientes",
         "medicalHistoryMeta": "Alergias, padecimientos, medicamentos y antecedentes de pacientes que ya existen",
         "clinicalNotes": "Notas de evolución",
         "clinicalNotesMeta": "Entran marcadas como migradas, con su fecha y su autor originales",
         "quotes": "Presupuestos",
         "quotesMeta": "Historia del paciente: no generan factura ni cobro",
-        "soloNote": "Expedientes, notas y presupuestos se importan de uno en uno, cada uno con su propia revisión."
+        "soloNote": "Saldos, citas, expedientes, notas y presupuestos se importan de uno en uno, cada uno con su propia revisión: son datos de dinero, de agenda o clínicos y conviene verlos antes."
       },
       "step4": {
         "title": "Sube tu archivo",
@@ -988,7 +995,31 @@
           "one": "({count} fila)",
           "other": "({count} filas)"
         },
-        "dupNever": "Lo que ya se había migrado no se vuelve a importar."
+        "dupNever": "Lo que ya se había migrado no se vuelve a importar.",
+        "statOmitted": "Omitidas",
+        "badgeSkipped": "Omitida",
+        "omittedNote": "Las filas omitidas no se importan: citas pasadas o canceladas, o algo que ya se importó antes.",
+        "amountFormatTitle": "Hay montos que se pueden leer de dos maneras",
+        "amountFormatDesc": "{count} filas traen un monto como «{example}». No lo adivinamos: elige cómo leerlo y las filas se importarán con ese criterio.",
+        "amountFormatPick": "Elige cómo leerlos…",
+        "amountFormatNeeded": "Confirma cómo leer los montos para continuar",
+        "unverifiedReview": "El perfil de {name} aún no está validado con un export real: revisa bien esta vista previa antes de importar."
+      },
+      "sheet": {
+        "title": "¿Qué pestaña es de {entity}?",
+        "sub": "Tu archivo tiene {count} pestañas. Confirma cuál trae estos datos: nunca elegimos una por ti.",
+        "none": "Ninguna pestaña se llama como {entity}: elige la que corresponda.",
+        "suggested": "Sugerida",
+        "rows": {
+          "one": "{count} fila",
+          "other": "{count} filas"
+        },
+        "empty": "Vacía",
+        "previewOf": "Primeras filas de «{name}»",
+        "use": "Usar esta pestaña",
+        "needed": "Elige la pestaña para continuar",
+        "current": "Pestaña: {name}.",
+        "change": "Cambiar"
       },
       "upload": {
         "uploading": "Subiendo archivo… {pct}%",
@@ -1028,7 +1059,11 @@
         "importAnother": "Importar otra cosa",
         "pillMedicalHistory": "expedientes completados",
         "pillClinicalNotes": "notas migradas",
-        "pillQuotes": "presupuestos"
+        "pillQuotes": "presupuestos",
+        "omittedLine": {
+          "one": "{count} fila se dejó fuera a propósito (cita pasada o cancelada, o ya importada antes).",
+          "other": "{count} filas se dejaron fuera a propósito (citas pasadas o canceladas, o ya importadas antes)."
+        }
       },
       "assisted": {
         "title": "Migración asistida · gratis",

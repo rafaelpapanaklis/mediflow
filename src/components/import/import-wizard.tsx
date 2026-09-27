@@ -21,6 +21,8 @@ import {
   type CommitResult,
   type Origin,
   type OnUploadProgress,
+  type ValueMapping,
+  type ValueOption,
   ORIGINS,
   DATA_TYPES,
   CLINICAL_ENTITIES,
@@ -35,6 +37,7 @@ import { StepExport } from "./step-export";
 import { StepWhat } from "./step-what";
 import { StepUpload } from "./step-upload";
 import { StepMapping } from "./step-mapping";
+import { StepSheet } from "./step-sheet";
 import { StepReview } from "./step-review";
 import { ImportingPanel } from "./importing-panel";
 import { UploadProgress, type UploadProgressState } from "./upload-progress";
@@ -96,6 +99,16 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   // Paso 6: equivalente elegido para cada procedimiento que no casó con el
   // tarifario (clave normalizada → id del catálogo, o VALUE_UNLINKED).
   const [decisions, setDecisions] = useState<Record<string, string>>({});
+  // Paso 6: cómo leer los montos ambiguos («45.000»: ¿45 000 o 45?). Vacío = sin decidir; mientras
+  // el archivo los traiga sin decidir, «Importar» está bloqueado y el backend NO los importa.
+  const [formatoMontos, setFormatoMontos] = useState("");
+  // Lo que hace falta para mostrar esa decisión aunque, ya decidida, la vista previa deje de reportarla.
+  const [montosInfo, setMontosInfo] = useState<{ options: ValueOption[]; example: string; rows: number } | null>(null);
+  const [refrescando, setRefrescando] = useState(false);
+  // Un .xlsx de varias pestañas: la que el usuario CONFIRMÓ (nunca se toma una sola por él) y si
+  // está cambiándola. Sin confirmar, el paso 5 muestra el selector y nada se procesa.
+  const [sheet, setSheet] = useState<string | null>(null);
+  const [cambiandoHoja, setCambiandoHoja] = useState(false);
   // Con qué mapeo se calculó la vista previa que hay en pantalla. Si el usuario
   // lo cambia en el paso 5, «Continuar» la recalcula antes del paso 6: si no, la
   // revisión enseñaría las cifras del mapeo automático, no las del suyo.
@@ -121,6 +134,18 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     [types],
   );
   const principalEntity: Entity = selectedEntities[0] ?? "patients";
+
+  /** Decisiones ya tomadas que la vista previa debe respetar para mostrar lo que de verdad se va a importar. */
+  function valueMappingActual(formato: string = formatoMontos): ValueMapping | undefined {
+    return formato ? { amountFormat: { formato } } : undefined;
+  }
+
+  /** Recuerda el aviso de montos ambiguos (con sus opciones) la primera vez que el backend lo reporta. */
+  function recordarMontos(res: PreviewResult) {
+    const u = res.unresolved?.find((x) => x.field === "amountFormat");
+    const options = res.options?.amountFormat;
+    if (u && options?.length) setMontosInfo({ options, example: u.value, rows: u.rows });
+  }
 
   /** Cada procedimiento sin equivalente arranca en «solo el importe» (nada se inventa ni se tira). */
   function seedDecisions(res: PreviewResult) {
@@ -185,6 +210,11 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       previewReqRef.current++;
       setResult(null);
       setDecisions({});
+      setFormatoMontos("");
+      setMontosInfo(null);
+      setRefrescando(false);
+      setSheet(null);
+      setCambiandoHoja(false);
       setUploadProg(null);
       setAssistedFile(null);
       setAssistedNote("");
@@ -211,11 +241,12 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setPreviewLoading(true);
     setUploadProg({ phase: "uploading", pct: 0, eta: null, label: "" });
     const onProg = makeUploadHandler("");
-    api.preview(principalEntity, f, undefined, (p) => { if (!stale()) onProg(p); }, { origin: originId })
+    api.preview(principalEntity, f, undefined, (p) => { if (!stale()) onProg(p); }, { origin: originId, valueMapping: valueMappingActual(), sheet })
       .then((res) => {
         if (stale()) return;
         setPreview(res);
         seedDecisions(res);
+        recordarMontos(res);
         // Siembra el mapeo desde las sugerencias del backend (autodetecta SIEMPRE,
         // con o sin perfil); el usuario solo ajusta lo que falte. Antes solo sembraba
         // con perfil → "Mi Excel"/"Otro" salían con TODO en "Sin importar".
@@ -240,16 +271,47 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setPreviewLoading(true);
     setUploadProg({ phase: "uploading", pct: 0, eta: null, label: "" });
     const onProg = makeUploadHandler("");
-    api.preview(principalEntity, f, sent, (p) => { if (!stale()) onProg(p); }, { origin: originId })
+    api.preview(principalEntity, f, sent, (p) => { if (!stale()) onProg(p); }, { origin: originId, valueMapping: valueMappingActual(), sheet })
       .then((res) => {
         if (stale()) return;
         setPreview(res);
         seedDecisions(res);
+        recordarMontos(res);
         previewMappingRef.current = mappingKey(sent);
         if (!res.mappingError) setStep(6);
       })
       .catch((e) => { if (!stale()) toast.error(e instanceof Error ? e.message : t("shell.importClinic.errPreview")); })
       .finally(() => { if (!stale()) { setPreviewLoading(false); setUploadProg(null); } });
+  }
+
+  // Paso 6: el usuario eligió cómo leer los montos ambiguos. Se recalcula la vista previa con esa
+  // decisión para que las cifras y las filas sean las que de verdad se van a importar.
+  function elegirFormatoMontos(formato: string) {
+    if (!file) return;
+    const f = file;
+    setFormatoMontos(formato);
+    if (!formato) return;
+    const reqId = ++previewReqRef.current;
+    const stale = () => previewReqRef.current !== reqId;
+    setRefrescando(true);
+    api.preview(principalEntity, f, mapping, undefined, { origin: originId, valueMapping: valueMappingActual(formato), sheet })
+      .then((res) => { if (!stale()) { setPreview(res); seedDecisions(res); } })
+      .catch((e) => { if (!stale()) toast.error(e instanceof Error ? e.message : t("shell.importClinic.errPreview")); })
+      .finally(() => { if (!stale()) setRefrescando(false); });
+  }
+
+  // El usuario confirmó (o cambió) la pestaña: se recalcula todo con ella. Mapeo y decisiones
+  // eran de otra hoja, así que se descartan.
+  function confirmarHoja(nombre: string) {
+    setSheet(nombre);
+    setCambiandoHoja(false);
+    setPreview(null);
+    setMapping({});
+    setDecisions({});
+    setFormatoMontos("");
+    setMontosInfo(null);
+    setPreviewError(null);
+    previewReqRef.current++;
   }
 
   // Reintento manual desde el estado de error (botón "Reintentar").
@@ -270,6 +332,11 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setPreview(null);
     setMapping({});
     setDecisions({});
+    setFormatoMontos("");
+    setMontosInfo(null);
+    setRefrescando(false);
+    setSheet(null);
+    setCambiandoHoja(false);
     setPreviewError(null);
     setPreviewLoading(false);
     previewReqRef.current++;
@@ -304,6 +371,11 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setPreview(null);
     setMapping({});
     setDecisions({});
+    setFormatoMontos("");
+    setMontosInfo(null);
+    setRefrescando(false);
+    setSheet(null);
+    setCambiandoHoja(false);
     setPreviewError(null);
     setPreviewLoading(false);
     previewReqRef.current++;
@@ -313,6 +385,11 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setUploadError(null);
     setPreview(null);
     setMapping({});
+    setFormatoMontos("");
+    setMontosInfo(null);
+    setRefrescando(false);
+    setSheet(null);
+    setCambiandoHoja(false);
     setPreviewError(null);
     setPreviewLoading(false);
     previewReqRef.current++;
@@ -360,9 +437,18 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
           {
             skipDuplicates: skipDup,
             origin: originId,
+            // La pestaña confirmada (solo aplica a la principal: las demás no pueden ser de otro libro).
+            ...(principal && sheet ? { sheet } : {}),
             // Las decisiones del paso 6 son de la vista previa de la entidad
             // principal; una secundaria importa lo que no case «solo el importe».
-            ...(principal && Object.keys(decisions).length > 0 ? { valueMapping: { procedure: decisions } } : {}),
+            ...(principal
+              ? {
+                  valueMapping: {
+                    ...(Object.keys(decisions).length > 0 ? { procedure: decisions } : {}),
+                    ...(formatoMontos ? { amountFormat: { formato: formatoMontos } } : {}),
+                  },
+                }
+              : {}),
           },
           onProg,
         );
@@ -443,6 +529,11 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     previewReqRef.current++;
     setResult(null);
     setDecisions({});
+    setFormatoMontos("");
+    setMontosInfo(null);
+    setRefrescando(false);
+    setSheet(null);
+    setCambiandoHoja(false);
     setUploadProg(null);
   }
 
@@ -451,7 +542,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     if (flow === "assisted") { submitAssisted(); return; }
     if (step === 6) { runImport(); return; }
     if (step === 5) {
-      if (!preview || previewLoading) return;
+      if (!preview || previewLoading || preview.needsSheet || cambiandoHoja) return;
       if (mappingKey(mapping) !== previewMappingRef.current) { repreview(); return; }
       // Mismo mapeo que ya dio «falta una columna»: repetir la petición daría lo mismo.
       if (preview.mappingError) return;
@@ -488,13 +579,20 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     nextDisabled = !file;
     if (!file) hint = t("shell.importClinic.step4.needFile");
   } else if (step === 5) {
-    nextDisabled = !preview || previewLoading;
-    if (preview?.mappingError) hint = t("shell.importClinic.step5.needMapping");
+    nextDisabled = !preview || previewLoading || !!preview.needsSheet || cambiandoHoja;
+    if (preview?.needsSheet || cambiandoHoja) hint = t("shell.importClinic.sheet.needed");
+    else if (preview?.mappingError) hint = t("shell.importClinic.step5.needMapping");
   } else if (step === 6) {
     // Lo clínico nunca reimporta duplicados (el backend los salta siempre).
     const conDup = !skipDup && !CLINICAL_ENTITIES.has(principalEntity);
     const n = preview ? (conDup ? preview.stats.valid + preview.stats.duplicates : preview.stats.valid) : 0;
     nextLabel = t("shell.importClinic.step6.importBtn", { count: n });
+    // Montos ambiguos sin decidir: el backend no los importaría, así que tampoco se deja avanzar.
+    const montosSinDecidir = !!preview?.unresolved?.some((u) => u.field === "amountFormat");
+    if (montosSinDecidir || refrescando) {
+      nextDisabled = true;
+      hint = t("shell.importClinic.step6.amountFormatNeeded");
+    }
   }
 
   const headerSub =
@@ -610,6 +708,15 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                   </div>
                 ) : previewLoading || !preview ? (
                   <UploadProgress t={t} prog={uploadProg} variant="inline" />
+                ) : preview.needsSheet || cambiandoHoja ? (
+                  <StepSheet
+                    t={t}
+                    entity={principalEntity}
+                    sheets={preview.sheets ?? []}
+                    suggested={preview.suggestedSheet ?? null}
+                    current={cambiandoHoja ? sheet : null}
+                    onConfirm={confirmarHoja}
+                  />
                 ) : origin ? (
                   <StepMapping
                     t={t}
@@ -617,6 +724,8 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                     preview={preview}
                     mapping={mapping}
                     hasSecondary={selectedEntities.length > 1}
+                    sheet={preview.sheets?.length ? sheet : null}
+                    onChangeSheet={() => setCambiandoHoja(true)}
                     onChange={(source, value) => setMapping((m) => ({ ...m, [source]: value }))}
                   />
                 ) : null
@@ -624,6 +733,8 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                 <StepReview
                   t={t}
                   entity={principalEntity}
+                  unverifiedName={origin && origin.hasProfile && origin.verified === false ? origin.name : null}
+                  amountFormat={montosInfo ? { ...montosInfo, value: formatoMontos, busy: refrescando, onChange: elegirFormatoMontos } : null}
                   preview={preview}
                   skipDup={skipDup}
                   onToggleSkip={() => setSkipDup((v) => !v)}

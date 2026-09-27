@@ -5,7 +5,7 @@
 // en ámbar las columnas "Sin mapear". Si falta una columna obligatoria (un
 // archivo con encabezados que no reconocemos), el backend lo dice en
 // `mappingError` y aquí se pide emparejarla: el flujo no se rompe, pide ayuda.
-import { Sparkles, AlertCircle, Check, X, ArrowRight } from "lucide-react";
+import { Sparkles, AlertCircle, Check, X, ArrowRight, ShieldAlert } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { type Origin, type PreviewResult, type ColumnMapping } from "./import-client";
 
@@ -17,10 +17,13 @@ interface Props {
   /** El usuario eligió saldos/citas además de la entidad principal: esas columnas
    *  (Saldo, Tipo, Fecha de cita…) se autodetectan al importar, no se mapean aquí. */
   hasSecondary: boolean;
+  /** La pestaña confirmada de un .xlsx de varias hojas (null si el archivo trae una sola). */
+  sheet?: string | null;
+  onChangeSheet?: () => void;
   onChange: (source: string, value: string) => void;
 }
 
-export function StepMapping({ t, origin, preview, mapping, hasSecondary, onChange }: Props) {
+export function StepMapping({ t, origin, preview, mapping, hasSecondary, sheet, onChangeSheet, onChange }: Props) {
   const total = preview.columns.length;
   const matched = preview.columns.filter((c) => c.suggestion).length;
   // Banner "automático" siempre que el backend reconoció columnas (con o sin perfil);
@@ -50,6 +53,23 @@ export function StepMapping({ t, origin, preview, mapping, hasSecondary, onChang
           <div className="imp-callout__txt">
             <b>{t("shell.importClinic.step5.bannerManualTitle")}</b>
             <p>{t("shell.importClinic.step5.bannerManualDesc", { name: origin.name })}</p>
+          </div>
+        </div>
+      )}
+
+      {sheet && (
+        <p className="imp-hint" style={{ margin: "10px 0 0" }}>
+          {t("shell.importClinic.sheet.current", { name: sheet })}{" "}
+          <button type="button" className="imp-report-line__link" onClick={onChangeSheet}>{t("shell.importClinic.sheet.change")}</button>
+        </p>
+      )}
+
+      {origin.hasProfile && origin.verified === false && (
+        <div className="imp-callout imp-callout--warn" role="note" style={{ marginTop: 10 }}>
+          <span className="imp-callout__ic" aria-hidden><ShieldAlert size={21} /></span>
+          <div className="imp-callout__txt">
+            <b>{t("shell.importClinic.step2.unverifiedTitle")}</b>
+            <p>{t("shell.importClinic.step2.unverifiedDesc", { name: origin.name })}</p>
           </div>
         </div>
       )}
