@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, getPriceIdForPlan, stripeUnavailableResponse } from "@/lib/stripe";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
-import { ivaParaCobro } from "@/lib/billing/iva-cobro";
+import { ivaParaPagoDeClinica } from "@/lib/billing/iva-cobro";
+import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 
 
 export async function POST(req: NextRequest) {
@@ -29,12 +30,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Suscripción NUEVA con IVA 16 % (ver lib/billing/iva-cobro.ts). Sin IVA configurado no se genera.
-  const iva = ivaParaCobro(process.env);
-  if (iva.ok === false) return NextResponse.json({ error: iva.error, code: iva.codigo }, { status: 503 });
-
   const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+
+  // Suscripción NUEVA de tarjeta con IVA 16 % (ver lib/billing/iva-cobro.ts) y SU regla de exención: una
+  // clínica creada antes del 26-sep-2026 que contrata su mismo plan va sin IVA (y sin exigir el env);
+  // otro plan, clínica nueva o reactivación tras cancelar tarjeta, con IVA. Sin IVA configurado, y cuando
+  // toca IVA, no se genera el enlace. La clínica es la del `clinicId` que manda el admin autenticado.
+  const exencion = await exencionIvaDeClinica(clinic);
+  const iva = ivaParaPagoDeClinica(process.env, { metodo: "card", plan, exencion });
+  if (iva.ok === false) return NextResponse.json({ error: iva.error, code: iva.codigo }, { status: 503 });
 
   let customerId = clinic.stripeCustomerId ?? undefined;
   if (!customerId) {

@@ -1,7 +1,8 @@
 import getStripe from "./stripe";
 import { getResolvedPlan } from "@/lib/plans";
 import { applyClinicOverrides, type ClinicOverrideFields } from "@/lib/billing/plan-overrides";
-import { ivaParaCobro } from "@/lib/billing/iva-cobro";
+import { ivaParaPagoDeClinica, type ClinicaParaIva } from "@/lib/billing/iva-cobro";
+import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 
 export async function createCustomer(email: string, clinicName: string): Promise<string> {
   const stripe = getStripe();
@@ -23,14 +24,21 @@ export async function createCheckoutForSubscription(params: {
    * La clínica con sus campos de condiciones conservadas (CLINIC_OVERRIDE_SELECT).
    * Si contrata el mismo plan que tiene, el importe es el que conserva; si es
    * otro plan, el vigente de ese plan. Sin esto se cobraría el precio de lista.
+   *
+   * También lo que decide la exención de IVA (`createdAt`, `plan`, `stripeSubscriptionId`,
+   * `subscriptionId`; ver iva-cobro.ts): la MISMA regla que el checkout de la clínica y el SPEI directo.
+   * Sin `createdAt` la clínica cuenta como nueva (con IVA): nunca se regala el IVA por un dato ausente.
    */
-  clinic?: ClinicOverrideFields;
+  clinic?: ClinicOverrideFields & ClinicaParaIva & { id?: string | null };
 }): Promise<string> {
   const stripe = getStripe();
   const amount = applyClinicOverrides(await getResolvedPlan(params.plan), params.clinic).priceMxn;
-  // Suscripción NUEVA: lleva el IVA 16 % como el checkout de la clínica. Sin IVA configurado no se
-  // genera el enlace (no se cobra sin IVA en silencio). No toca ninguna suscripción existente.
-  const iva = ivaParaCobro(process.env);
+  // Suscripción NUEVA de tarjeta: lleva el IVA 16 % como el checkout de la clínica, con SU regla de exención
+  // (clínica creada antes del 26-sep-2026 y este es su mismo plan → sin IVA, y sin exigir el env; si ya tuvo
+  // tarjeta y la canceló, o es otro plan, con IVA). Sin IVA configurado, y cuando toca IVA, no se genera el
+  // enlace (no se cobra sin IVA en silencio). No toca ninguna suscripción existente.
+  const exencion = await exencionIvaDeClinica(params.clinic ? { ...params.clinic, id: params.clinic.id ?? params.clinicId } : null);
+  const iva = ivaParaPagoDeClinica(process.env, { metodo: "card", plan: params.plan, exencion });
   if (iva.ok === false) throw new Error(iva.error);
 
   const session = await stripe.checkout.sessions.create({

@@ -17,7 +17,12 @@ export async function POST(req: NextRequest) {
 
     const clinic = await prisma.clinic.findUnique({
       where: { id: clinicId },
-      select: { id: true, name: true, email: true, stripeCustomerId: true, stripeSubscriptionId: true, ...CLINIC_OVERRIDE_SELECT },
+      select: {
+        id: true, name: true, email: true, stripeCustomerId: true, stripeSubscriptionId: true,
+        // Para la exención de IVA de las clínicas de antes (iva-cobro.ts).
+        createdAt: true, subscriptionId: true,
+        ...CLINIC_OVERRIDE_SELECT,
+      },
     });
     if (!clinic) return NextResponse.json({ error: "Clinic not found" }, { status: 404 });
 
