@@ -186,6 +186,21 @@ export default function PrivacidadPage() {
             y el Píxel <b>no se carga dentro del panel de la clínica ni en el portal del paciente</b>.
           </li>
           <li>
+            <b>Chat de soporte (Tawk.to).</b> En la página principal del sitio público (no
+            en el panel de la clínica, ni en el portal del paciente, ni en el registro)
+            cargamos el chat de la web de Tawk.to, un servicio de un tercero con el que puede
+            escribirnos para pedir información o soporte. Al cargarse, Tawk.to guarda en su
+            navegador cookies propias para reconocer que es el mismo visitante y conservar su
+            conversación; su duración la fija Tawk.to. Si usted escribe en el chat, Tawk.to
+            recibe lo que escriba (por ejemplo su nombre, su correo o su mensaje) y los datos
+            técnicos de la visita (dirección IP, navegador y ubicación aproximada), que
+            usamos únicamente para atenderle. Le pedimos no escribir en el chat datos de salud
+            ni datos de pacientes. El chat es opcional:{" "}
+            <b>puede bloquear las cookies de Tawk.to</b> desde la configuración de su
+            navegador o con un bloqueador de contenido; el sitio funciona igual y el chat
+            simplemente no aparece.
+          </li>
+          <li>
             <b>Vercel Analytics y Speed Insights.</b> Servicios de Vercel, Inc. que usamos
             para medir las visitas y el rendimiento (velocidad) del sitio.
           </li>
@@ -328,6 +343,11 @@ export default function PrivacidadPage() {
             Meta, con lo descrito en la sección 3.
           </li>
           <li>
+            <b>Tawk.to</b> — chat de soporte de la página principal del sitio público, con lo
+            descrito en la sección 3: recibe lo que usted escriba en el chat y los datos
+            técnicos de la visita.
+          </li>
+          <li>
             <b>IPinfo (ipinfo.io)</b> — servicio de ubicación por dirección IP de nuestra
             analítica propia: se le envía únicamente la dirección IP de la visita, ningún
             otro dato, para obtener país, región y ciudad aproximados.
@@ -405,7 +425,7 @@ export default function PrivacidadPage() {
           incluye la dirección IP, la ubicación aproximada, el dispositivo, el identificador
           de clic si lo hubo y, si inició sesión, su correo, nombre, rol, clínica y plan) se
           elimina automáticamente a los <b>365 días</b> de haberse iniciado. Los datos que
-          reciben Google y Meta se conservan según sus propias políticas.
+          reciben Google, Meta y Tawk.to se conservan según sus propias políticas.
         </p>
       </Section>
 

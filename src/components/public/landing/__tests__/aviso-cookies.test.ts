@@ -47,3 +47,21 @@ test("el aviso de privacidad: fecha real, ancla #cookies y frase de aceptación 
   assert.match(s3, /No mostramos un botón de aceptar ni bloqueamos contenido/);
   assert.match(s3, /Cómo borrar o bloquear las cookies/, "sigue diciendo cómo desactivarlas");
 });
+
+test("el aviso nombra el chat Tawk.to: viñeta en «3. Cookies» (qué es, para qué, sus cookies, cómo bloquearlas) y encargado en «5. Transferencias»", () => {
+  const p = leer("src/app/privacidad/page.tsx");
+  const s3 = p.slice(p.indexOf('title="3. Cookies"'), p.indexOf('title="4. Finalidades'));
+  assert.match(s3, /Chat de soporte \(Tawk\.to\)/);
+  assert.match(s3, /escribirnos para pedir información o soporte/);
+  assert.match(s3, /guarda en su\s+navegador cookies propias/);
+  assert.match(s3, /puede bloquear las cookies de Tawk\.to/);
+  assert.match(s3, /no\s+en el panel de la clínica, ni en el portal del paciente/);
+  const s5 = p.slice(p.indexOf('title="5. Transferencias"'), p.indexOf('title="6. Derechos ARCO"'));
+  assert.match(s5, /<b>Tawk\.to<\/b>/);
+  // Es verdad lo que dice: solo la portada monta el chat.
+  assert.match(leer("src/app/page.tsx"), /<TawkChat \/>/);
+  const usos = ["src/app/dashboard", "src/app/paciente", "src/app/signup", "src/app/portal"].filter((d) => {
+    try { return /TawkChat/.test(leer(`${d}/layout.tsx`)); } catch { return false; }
+  });
+  assert.deepEqual(usos, []);
+});
