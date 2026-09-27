@@ -29,6 +29,8 @@ export interface CapacityRow {
   value: string;
   /** false → fila con ✗ gris (ej. "Tokens IA · 0 · Sin IA" en Básico). */
   included: boolean;
+  /** Línea pequeña bajo el valor (ajuste 15: «Reportes consolidados…» en Sedes cuando hay más de una). */
+  note?: string;
 }
 
 export interface FeatureRow {
@@ -67,10 +69,10 @@ export interface PlanCard {
    * (1) ocho funciones base en ✓ (las más vendedoras, las mismas en las tres;
    * seis hasta el ajuste 12, que sumó soporte y onboarding);
    * (2) lo que cambia entre planes con ✓/✗ calculado (asistente clínico con
-   * IA · IA en radiografías e inasistencias · analytics + TV; ajuste 13); (3) lo exclusivo de un plan SOLO en
-   * ese plan, como ✓ normales al final (ajuste 10b: sin rótulo ni separador;
-   * nunca como ✗ en los demás). Tras el ajuste 12: Básico 8 ✓ y 3 ✗;
-   * Profesional 11 ✓; Clínica 12 ✓ (reportes entre sedes).
+   * IA · IA en radiografías e inasistencias · analytics + TV; ajuste 13).
+   * Desde el ajuste 15 las tres listas tienen las MISMAS 11 filas (lo de
+   * sedes va como nota en la ficha «Sedes»): Básico 8 ✓ y 3 ✗; Profesional y
+   * Clínica 11 ✓.
    */
   features: FeatureRow[];
   /**
@@ -264,18 +266,16 @@ function analyticsRows(p: ResolvedPlan): FeatureRow[] {
 }
 
 /**
- * EXCLUSIVO de un plan (ajuste 10): se pinta SOLO en el plan que lo tiene, como
- * ✓ normales al final de su lista (10b: sin rótulo); nunca como ✗ en los
- * demás.
- * Ajuste 12 (Rafael): fuera «Roles y permisos avanzados» (los roles no tienen
- * límite en ningún plan: no es diferencia); soporte y onboarding pasan a
- * funciones base. Queda «Reportes consolidados y comparación entre sedes»,
- * que Rafael decidió anunciar: solo en planes con más de una sede, leído de
- * plan_configs.maxClinics (NULL = ilimitadas).
+ * «Reportes consolidados y comparación entre sedes» (ajuste 12, Rafael): solo
+ * en planes con más de una sede, leído de plan_configs.maxClinics (NULL =
+ * ilimitadas). Desde el ajuste 15 va como NOTA de la ficha «Sedes» y no como
+ * fila propia: así las tres listas tienen las mismas filas y no queda aire
+ * muerto sobre el botón en Básico y Profesional (las pistas del subgrid se
+ * comparten). Rafael había dado las dos opciones («en su ficha de Sedes o como
+ * ✓ propio»).
  */
-const EXCLUSIVE_ROWS: { text: string; included: (p: ResolvedPlan) => boolean }[] = [
-  { text: 'Reportes consolidados y comparación entre sedes', included: (p) => p.maxClinics == null || p.maxClinics > 1 },
-];
+const multiSede = (p: ResolvedPlan) => p.maxClinics == null || p.maxClinics > 1;
+const SEDES_NOTE = 'Reportes consolidados y comparación entre sedes';
 
 /**
  * Arma la lista de cada tarjeta (ver PlanCard.features) y la lista común.
@@ -290,16 +290,12 @@ function splitFeatures(plans: ResolvedPlan[]): { includedInAll: string[]; rowsFo
   const notInAll = COMMON_CANDIDATES.filter((c) => !inAll.includes(c));
   return {
     includedInAll: inAll.map((c) => c.text),
-    rowsFor: (p) => {
-      const exclusive: FeatureRow[] = EXCLUSIVE_ROWS.filter((r) => r.included(p)).map((r) => ({ text: r.text, included: true }));
-      return [
-        ...lead.map((c) => ({ text: c.cardText ? c.cardText(p) : c.text, included: true })),
-        ...COMPARE_ROWS.map((r) => ({ text: r.text(p), included: r.included(p) })),
-        ...analyticsRows(p),
-        ...notInAll.map((c) => ({ text: c.cardText ? c.cardText(p) : c.text, included: c.included(p) })),
-        ...exclusive,
-      ];
-    },
+    rowsFor: (p) => [
+      ...lead.map((c) => ({ text: c.cardText ? c.cardText(p) : c.text, included: true })),
+      ...COMPARE_ROWS.map((r) => ({ text: r.text(p), included: r.included(p) })),
+      ...analyticsRows(p),
+      ...notInAll.map((c) => ({ text: c.cardText ? c.cardText(p) : c.text, included: c.included(p) })),
+    ],
   };
 }
 
@@ -326,8 +322,8 @@ export function buildPlanCards(plans: ResolvedPlan[]): PlanCard[] {
       capacity: [
         { text: 'Pacientes', value: unlimited(p.maxPatients), included: true },
         { text: 'Usuarios', value: unlimited(p.maxUsers), included: true },
-        // Sedes (ajuste 9): maxClinics de plan_configs (NULL = ilimitadas).
-        { text: 'Sedes', value: formatSedes(p.maxClinics), included: true },
+        // Sedes (ajuste 9): maxClinics de plan_configs (NULL = ilimitadas). Con más de una, la nota de reportes entre sedes (ajuste 15).
+        { text: 'Sedes', value: formatSedes(p.maxClinics), included: true, note: multiSede(p) ? SEDES_NOTE : undefined },
         { text: 'Almacenamiento', value: storage(p.storageBytes), included: true },
         { text: 'Tokens IA', value: formatAiTokens(p.aiTokensDefault), included: p.aiTokensDefault > 0 },
       ],
