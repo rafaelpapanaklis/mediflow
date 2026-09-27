@@ -7,9 +7,8 @@ export const metadata: Metadata = {
     "Aviso de privacidad integral conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).",
 };
 
-// MARCADOR: se reemplaza por la fecha de publicación cuando el abogado apruebe el
-// texto (no publicar con los corchetes).
-const LAST_UPDATED = "[fecha de publicación]";
+// Fecha de publicación (texto aprobado por el abogado; se publica con la integración de la ola del 26-sep).
+const LAST_UPDATED = "27 de septiembre de 2026";
 const RESPONSIBLE_NAME = "DaleControl (operado por Rafael Papanaklis)";
 const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@dalecontrol.com";
 const PRIVACY_EMAIL = "privacidad@dalecontrol.com";
@@ -95,7 +94,7 @@ export default function PrivacidadPage() {
         </ul>
       </Section>
 
-      <Section title="3. Cookies">
+      <Section id="cookies" title="3. Cookies">
         <p>
           Una cookie es un archivo pequeño que el sitio guarda en su navegador para
           recordar algo entre una visita y otra. En el sitio público de DaleControl (las páginas que se ven sin iniciar sesión) usamos los siguientes tipos de cookies:
@@ -251,6 +250,12 @@ export default function PrivacidadPage() {
             (&quot;dc_aff&quot;). Las cookies de anuncios y de analítica se describen en los
             apartados anteriores.
           </i>
+        </p>
+        <p>
+          <b>Aceptación por uso del sitio:</b> al continuar navegando en este sitio se entiende
+          que usted acepta el uso de las cookies descritas en esta sección, conforme a este
+          Aviso de privacidad. No mostramos un botón de aceptar ni bloqueamos contenido; usted
+          puede desactivarlas o borrarlas en cualquier momento, como se explica a continuación.
         </p>
         <p>
           <b>Cómo borrar o bloquear las cookies de anuncios y de analítica:</b> puede
@@ -434,9 +439,9 @@ export default function PrivacidadPage() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section style={{ marginBottom: 28 }}>
+    <section id={id} style={{ marginBottom: 28, scrollMarginTop: 24 }}>
       <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>{title}</h2>
       <div style={{ fontSize: 14, color: "var(--text-2, #334155)" }}>{children}</div>
     </section>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FOOTER, navHref } from "./v2/landing-data";
 import { BrandGlyph } from "../primitives/logo";
 import { SecureBadge } from "../primitives/secure-badge";
+import { AvisoCookies } from "../primitives/aviso-cookies";
 import "./v2/landing-v2.css";
 
 /**
@@ -91,6 +92,10 @@ export function SalesFooter({ portada = false }: { portada?: boolean } = {}) {
           <span style={{ fontSize: 13, color: "#94a3b8" }}>{FOOTER.copyright}</span>
           <SecureBadge tone="dark" />
           <span style={{ fontSize: 13, color: "#94a3b8" }}>{FOOTER.madeIn}</span>
+        </div>
+        {/* Aviso de cookies: una línea, sin botón ni banner (ver primitives/aviso-cookies.tsx). */}
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 20px 20px" }}>
+          <AvisoCookies tone="dark" />
         </div>
       </div>
     </footer>

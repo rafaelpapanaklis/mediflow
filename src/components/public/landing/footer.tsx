@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "./primitives/logo";
 import { SecureBadge } from "./primitives/secure-badge";
+import { AvisoCookies } from "./primitives/aviso-cookies";
 
 interface FooterColumn {
   title: string;
@@ -203,6 +204,11 @@ export function Footer() {
               </a>
             ))}
           </div>
+        </div>
+
+        {/* Aviso de cookies: una línea, sin botón ni banner (ver primitives/aviso-cookies.tsx). */}
+        <div style={{ marginTop: 20 }}>
+          <AvisoCookies tone="token" />
         </div>
       </div>
 
