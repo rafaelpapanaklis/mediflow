@@ -210,19 +210,29 @@ function computeHealthScore(opts: {
   return Math.max(0, Math.min(100, score));
 }
 
+/**
+ * Etiqueta «vip»: el cliente tiene ALGUNA clínica en plan Clínica (CLINIC), o 2+ clínicas activas, o
+ * salud ≥ 80. Antes era «MRR ≥ $1,719» (el precio de Clínica de entonces): con los planes nuevos ese
+ * literal ya no significa «tiene un plan Clínica» (una Clínica nueva vale $1,489), y un umbral en pesos
+ * es justo lo que la regla (d) de CLAUDE.md prohíbe. Decisión de Rafael (ajuste 1 de la integración).
+ */
+export function tienePlanClinica(clinicas: Array<{ plan: string | null | undefined }>): boolean {
+  return clinicas.some((c) => c.plan === "CLINIC");
+}
+
 function deriveTags(opts: {
   createdAt: Date | null;
-  mrr: number;
+  planClinica: boolean;
   activeCount: number;
   healthScore: number;
   agg: ClienteAggStatus;
   norms: ClinicNormStatus[];
   lastAccess: Date | null;
 }): ClienteTag[] {
-  const { createdAt, mrr, activeCount, healthScore, agg, norms, lastAccess } = opts;
+  const { createdAt, planClinica, activeCount, healthScore, agg, norms, lastAccess } = opts;
   const tags: ClienteTag[] = [];
   if (createdAt && (Date.now() - createdAt.getTime()) / DAY <= 14) tags.push("nuevo");
-  if (mrr >= 1719 || activeCount >= 2 || healthScore >= 80) tags.push("vip");
+  if (planClinica || activeCount >= 2 || healthScore >= 80) tags.push("vip");
   const staleActive =
     activeCount > 0 && (!lastAccess || (Date.now() - lastAccess.getTime()) / DAY > 14);
   if (healthScore < 40 || agg === "churn" || norms.indexOf("past_due") >= 0 || staleActive) {
@@ -361,7 +371,7 @@ export async function getClientesList(): Promise<ClienteRow[]> {
 
     const agg = aggregateStatus(norms);
     const healthScore = computeHealthScore({ activeCount, total: clinics.length, lastAccess, createdAt });
-    const tags = deriveTags({ createdAt, mrr, activeCount, healthScore, agg, norms, lastAccess });
+    const tags = deriveTags({ createdAt, planClinica: tienePlanClinica(clinics), activeCount, healthScore, agg, norms, lastAccess });
 
     const ownerRow = grp.find((r) => r.firstName || r.lastName) || grp[0];
     const ownerName = `${ownerRow.firstName ?? ""} ${ownerRow.lastName ?? ""}`.trim() || ownerRow.email;
@@ -515,7 +525,7 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
 
   const agg = aggregateStatus(norms);
   const healthScore = computeHealthScore({ activeCount, total: clinicsRaw.length, lastAccess, createdAt });
-  const tags = deriveTags({ createdAt, mrr, activeCount, healthScore, agg, norms, lastAccess });
+  const tags = deriveTags({ createdAt, planClinica: tienePlanClinica(clinicsRaw), activeCount, healthScore, agg, norms, lastAccess });
   const ltv = mrr * 24;
 
   const roleByClinic: Record<string, string> = {};

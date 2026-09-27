@@ -7,7 +7,7 @@
  * pagan ($1,719; `Clinic.planOverrideFor` + `priceMxnMonthlyOverride`). Cada sitio que suma dinero de
  * clínicas tiene que valuarlas con ESE precio, no con el de lista:
  *   · MRR de /admin y de la cartera (`computeMrr`; sus pruebas viven en mrr-core.test.ts y cartera.test.ts);
- *   · «clientes» (`getClientesList` / `planPriceMxn`, con la etiqueta «vip»);
+ *   · «clientes» (`getClientesList` / `planPriceMxn`); su etiqueta «vip» ya no depende del MRR (ver abajo);
  *   · MRR de afiliados (`clinicMonthlyMxn`).
  * Aquí se prueban las dos últimas, y que el precio conservado NO viaja a otro plan.
  */
@@ -92,7 +92,7 @@ test("clientes: la consulta pide las dos columnas del precio conservado", async 
   assert.equal(selectVisto.clinic.select.priceMxnMonthlyOverride, true);
 });
 
-test("clientes: el MRR y la etiqueta «vip» de una Clínica de antes usan su precio conservado", async () => {
+test("clientes: el MRR de una Clínica de antes usa su precio conservado; el negociado manda", async () => {
   filas = [
     dueno("vieja", { planOverrideFor: "CLINIC", priceMxnMonthlyOverride: 1719 }),
     dueno("nueva", {}),
@@ -101,9 +101,42 @@ test("clientes: el MRR y la etiqueta «vip» de una Clínica de antes usan su pr
   const l = await lib.getClientesList();
   const por = Object.fromEntries(l.map((c) => [c.supabaseId, c]));
   assert.equal(por.vieja.mrr, 1719, "conservado, no la lista ($1,489)");
-  assert.ok(por.vieja.tags.includes("vip"), "sigue siendo «vip» (mrr ≥ $1,719) como antes de los planes nuevos");
   assert.equal(por.nueva.mrr, 1489, "una nueva vale la lista vigente");
   assert.equal(por.propio.mrr, 1200, "el precio negociado manda");
+});
+
+test("clientes: «vip» = alguna clínica en plan CLINIC (vieja o nueva), no un MRR ≥ 1719", async () => {
+  filas = [
+    dueno("clinica-vieja", { plan: "CLINIC", planOverrideFor: "CLINIC", priceMxnMonthlyOverride: 1719 }),
+    dueno("clinica-nueva", { plan: "CLINIC" }),            // $1,489: antes NO era vip (1489 < 1719); ahora sí
+    dueno("pro", { plan: "PRO" }),
+    dueno("basico", { plan: "BASIC" }),
+    dueno("pro-caro", { plan: "PRO", monthlyPrice: 5000 }), // un MRR alto ya NO da «vip» por sí solo
+  ];
+  const l = await lib.getClientesList();
+  const vip = (id: string) => l.find((c) => c.supabaseId === id)!.tags.includes("vip");
+  assert.equal(vip("clinica-vieja"), true);
+  assert.equal(vip("clinica-nueva"), true);
+  assert.equal(vip("pro"), false);
+  assert.equal(vip("basico"), false);
+  assert.equal(vip("pro-caro"), false);
+});
+
+test("clientes: siguen valiendo los otros dos motivos de «vip» (2+ clínicas activas, salud ≥ 80)", async () => {
+  filas = [
+    dueno("dos-a", { plan: "PRO" }),
+    { ...dueno("dos-a", { id: "c-dos-a-2", plan: "BASIC", slug: "dos-a-2" }) },
+    { ...dueno("sano", { plan: "PRO" }), lastLogin: new Date(Date.now() - 86_400_000) },
+  ];
+  const l = await lib.getClientesList();
+  assert.ok(l.find((c) => c.supabaseId === "dos-a")!.tags.includes("vip"), "2 clínicas activas");
+  assert.ok(l.find((c) => c.supabaseId === "sano")!.tags.includes("vip"), "salud ≥ 80 (activa, entra a diario)");
+});
+
+test("tienePlanClinica: solo el plan CLINIC", () => {
+  assert.equal(lib.tienePlanClinica([{ plan: "PRO" }, { plan: "CLINIC" }]), true);
+  assert.equal(lib.tienePlanClinica([{ plan: "PRO" }, { plan: null }]), false);
+  assert.equal(lib.tienePlanClinica([]), false);
 });
 
 test("planPriceMxn: negociado > conservado > respaldo; sin la clínica vale como antes", () => {
