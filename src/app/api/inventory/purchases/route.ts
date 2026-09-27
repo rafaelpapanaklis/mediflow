@@ -52,6 +52,11 @@ export async function POST(req: NextRequest) {
     itemId:   String(l?.itemId ?? ""),
     quantity: Number(l?.quantity),
     unitCost: Number(l?.unitCost),
+    // WS1-T5 — ajuste 2: lote/caducidad opcionales por línea (enlace
+    // automático compra→lote, ver compras.server.ts → crearLoteDeLineaDeCompra).
+    // Sin ninguno de los dos, la línea sigue entrando a "sin lote" como hoy.
+    lotNumber: l?.lotNumber ? String(l.lotNumber).trim() || null : null,
+    expiresAt: l?.expiresAt ? parseFecha(String(l.expiresAt)) : null,
   }));
   if (lines.length === 0 || lines.some((l) => !l.itemId)) {
     return NextResponse.json({ error: "La compra necesita al menos una línea con artículo." }, { status: 400 });

@@ -7,7 +7,7 @@
 // como "todavía no hay nada de lotes" (listas vacías, sin avisos), nunca
 // tumba la pantalla. Las escrituras si fallan por lo mismo SÍ se propagan:
 // no tiene sentido fingir que un lote se creó cuando no hay dónde guardarlo.
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   ALERT_DAYS_DEFAULT,
@@ -34,8 +34,15 @@ export type Db = Tx;
 // Next.js recarga el código de la app, no el singleton ya instanciado. Ese
 // proceso nunca llega a lanzar P2021: `db.inventoryLot` es `undefined` y
 // Prisma ni se entera. Medido en vivo en dev.108 el 27-sep-2026.
+// Ajuste 2 (aviso de ws1-t4, §6 de su reporte): un campo NUEVO en un modelo
+// VIEJO (InventoryItem.quantityPrecise, TreatmentSession.procedureId) no da
+// TypeError — el delegate SÍ existe, el modelo es antiguo — da
+// PrismaClientValidationError: el cliente viejo valida la FORMA de `data`
+// contra su DMMF (lo que sabía al generarse) antes de tocar la base, y
+// rechaza una llave que no conoce, con cualquier valor, incluido `null`.
 function isMissingRelation(e: any): boolean {
   if (e?.code === "P2021" || e?.code === "P2022") return true;
+  if (e instanceof Prisma.PrismaClientValidationError) return true;
   if (e instanceof TypeError && /Cannot read propert(y|ies) of undefined/.test(e.message ?? "")) return true;
   return false;
 }
@@ -226,10 +233,24 @@ async function reconcileAndLock(tx: Tx, clinicId: string, itemId: string): Promi
 async function syncItemAggregate(tx: Tx, clinicId: string, itemId: string): Promise<void> {
   const lots = await (tx as PrismaClient).inventoryLot.findMany({ where: { clinicId, itemId }, select: { remaining: true } });
   const sum  = round3(lots.reduce((s, l) => s + Math.max(0, Number(l.remaining)), 0));
-  await (tx as PrismaClient).inventoryItem.update({
-    where: { id: itemId },
-    data:  { quantity: Math.max(0, Math.round(sum)), quantityPrecise: sum },
-  });
+  try {
+    await (tx as PrismaClient).inventoryItem.update({
+      where: { id: itemId },
+      data:  { quantity: Math.max(0, Math.round(sum)), quantityPrecise: sum },
+    });
+  } catch (e) {
+    // Ajuste 2: quantityPrecise es un campo NUEVO en InventoryItem (modelo
+    // viejo) — un cliente de Prisma sin reiniciar desde antes de este schema
+    // no lo reconoce y rechaza el `data` completo con PrismaClientValidationError,
+    // aunque `quantity` sí sea válido. Se reintenta SOLO con `quantity`: el
+    // agregado que lee el resto del panel se mantiene correcto igual; el
+    // espejo decimal se pone al día solo cuando el proceso se reinicie.
+    if (!isMissingRelation(e)) throw e;
+    await (tx as PrismaClient).inventoryItem.update({
+      where: { id: itemId },
+      data:  { quantity: Math.max(0, Math.round(sum)) },
+    });
+  }
 }
 
 // ── Alta de lote ────────────────────────────────────────────────────────

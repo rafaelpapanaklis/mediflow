@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { DobleInventario } from "./doble-inventario";
 import { consumeFefoTx, createLot, listLotsForItem, writeOffExpiredLot, InsufficientStockError } from "../lots.server";
 import { consumeRecipeForSession, upsertRecipeLine } from "../recipe.server";
+import { crearLoteDeLineaDeCompra } from "../compra-lote.server";
 
 const CLINIC = "clinic-1";
 
@@ -177,5 +178,58 @@ describe("alta y baja de lote", () => {
 
     assert.equal(Number(db.tablas.inventoryLot.find(l => l.id === "lote-caduco")!.remaining), 0);
     assert.equal(db.tablas.inventoryItem.find(i => i.id === "item-4")!.quantity, 0);
+  });
+});
+
+describe("Ajuste 2: cliente de Prisma viejo — campo nuevo en modelo viejo", () => {
+  let db: DobleInventario;
+  beforeEach(() => { db = new DobleInventario(); });
+
+  it("syncItemAggregate degrada: si quantityPrecise no se reconoce, actualiza quantity igual (no revienta la transacción)", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "item-5", quantity: 10 }));
+    db.camposDesconocidosParaClienteViejo.add("quantityPrecise");
+
+    // No debe lanzar, aunque el update con quantityPrecise sí fallaría solo.
+    await consumeFefoTx(db as any, { clinicId: CLINIC, itemId: "item-5", itemName: "Anestesia", qty: 4, reason: "Sesión 1" });
+
+    assert.equal(db.tablas.inventoryItem.find(i => i.id === "item-5")!.quantity, 6);
+  });
+});
+
+describe("Ajuste 2: enlace automático compra → lote", () => {
+  let db: DobleInventario;
+  beforeEach(() => { db = new DobleInventario(); });
+
+  it("línea de compra CON lote/caducidad crea su propio InventoryLot, sin tocar InventoryItem.quantity", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "item-6", quantity: 15 })); // t4 ya sumó la compra aquí antes de llamar
+    await db.$transaction(tx => crearLoteDeLineaDeCompra(tx as any, {
+      clinicId: CLINIC, purchaseLineId: "linea-1", itemId: "item-6",
+      quantity: 5, unitCost: 12.5, lotNumber: "L-2026-09", expiresAt: new Date("2027-01-01"),
+    }));
+
+    const lote = db.tablas.inventoryLot.find(l => l.purchaseLineId === "linea-1");
+    assert.ok(lote, "debe crear el lote de esta línea");
+    assert.equal(Number(lote!.remaining), 5);
+    assert.equal(lote!.lotNumber, "L-2026-09");
+    // NO tocó el agregado: t4 ya lo había subido a 15 con aplicarEntradaDeCompra.
+    assert.equal(db.tablas.inventoryItem.find(i => i.id === "item-6")!.quantity, 15);
+  });
+
+  it("es idempotente por purchaseLineId: llamarla dos veces no duplica el lote", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "item-7", quantity: 5 }));
+    const datos = { clinicId: CLINIC, purchaseLineId: "linea-2", itemId: "item-7", quantity: 5, unitCost: 10, lotNumber: "L-A", expiresAt: null };
+    await db.$transaction(tx => crearLoteDeLineaDeCompra(tx as any, datos));
+    await db.$transaction(tx => crearLoteDeLineaDeCompra(tx as any, datos));
+
+    assert.equal(db.tablas.inventoryLot.filter(l => l.purchaseLineId === "linea-2").length, 1);
+  });
+
+  it("línea SIN lote ni caducidad no crea nada — sigue absorbiéndola el colchón sin-lote", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "item-8", quantity: 5 }));
+    await db.$transaction(tx => crearLoteDeLineaDeCompra(tx as any, {
+      clinicId: CLINIC, purchaseLineId: "linea-3", itemId: "item-8", quantity: 5, unitCost: 10, lotNumber: null, expiresAt: null,
+    }));
+
+    assert.equal(db.tablas.inventoryLot.length, 0);
   });
 });

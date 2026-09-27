@@ -2,16 +2,19 @@
 // catálogo: qué insumos y cuánto gasta UNA realización. Al registrar la
 // sesión (treatments/[id]), se multiplica por 1 y se descuenta por FEFO en
 // la misma transacción — ver consumeRecipeForSession.
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { consumeFefoTx } from "./lots.server";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 
 // Ver la nota gemela en lots.server.ts: el TypeError cubre el proceso de
-// `next dev` que ya tenía el singleton de Prisma vivo antes del `generate`.
+// `next dev` que ya tenía el singleton de Prisma vivo antes del `generate`,
+// y PrismaClientValidationError (ajuste 2) un campo nuevo en un modelo
+// viejo que ese mismo cliente tampoco reconoce.
 function isMissingRelation(e: any): boolean {
   if (e?.code === "P2021" || e?.code === "P2022") return true;
+  if (e instanceof Prisma.PrismaClientValidationError) return true;
   if (e instanceof TypeError && /Cannot read propert(y|ies) of undefined/.test(e.message ?? "")) return true;
   return false;
 }

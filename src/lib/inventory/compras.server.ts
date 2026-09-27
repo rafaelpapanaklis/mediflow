@@ -19,6 +19,12 @@ import { money } from "@/lib/caja";
 import { validarLineaCompra, montoTotalCompra, type LineaCompra } from "./costo-core";
 import { aplicarEntradaDeCompra } from "./costo.server";
 import { registrarHistorialInventario } from "./historial.server";
+// WS1-T5 (ajuste 2) — enlace automático compra→lote sobre el
+// InventoryPurchaseLine.id estable de abajo. Ver la nota completa en el
+// propio archivo: nunca toca InventoryItem (eso ya lo hace
+// aplicarEntradaDeCompra, arriba), y es silencioso si el SQL de lotes de
+// ws1-t5 aún no está aplicado.
+import { crearLoteDeLineaDeCompra } from "./compra-lote.server";
 
 // P2021/P2022 (tabla/columna faltante en la base) + los dos casos del
 // cliente de Prisma VIEJO en un `next dev` que no se reinicia solo tras
@@ -54,6 +60,11 @@ export class ArticuloNoEncontradoError extends Error {
 
 export interface LineaCompraInput extends LineaCompra {
   itemId: string;
+  // WS1-T5 (ajuste 2) — opcionales: si vienen, esta línea crea su propio
+  // InventoryLot (enlace automático compra→lote). Sin ellos, la existencia
+  // sigue entrando al colchón "sin lote" como siempre.
+  lotNumber?: string | null;
+  expiresAt?: Date | null;
 }
 
 export interface DatosCompra {
@@ -140,10 +151,22 @@ export async function registrarCompra(datos: DatosCompra, db: PrismaClient = pri
 
       const itemsActualizados: ItemActualizado[] = [];
       for (const linea of datos.lines) {
-        await tx.inventoryPurchaseLine.create({
+        const purchaseLine = await tx.inventoryPurchaseLine.create({
           data: { purchaseId: purchase.id, itemId: linea.itemId, quantity: linea.quantity, unitCost: linea.unitCost },
         });
         await aplicarEntradaDeCompra(linea.itemId, { quantityDelta: linea.quantity, unitCost: linea.unitCost }, tx);
+        // WS1-T5 (ajuste 2) — enlace automático compra→lote. Después de
+        // aplicarEntradaDeCompra a propósito: el agregado ya se movió, este
+        // lote solo etiqueta parte de ese movimiento, nunca lo repite.
+        await crearLoteDeLineaDeCompra(tx, {
+          clinicId:       datos.clinicId,
+          purchaseLineId: purchaseLine.id,
+          itemId:         linea.itemId,
+          quantity:       linea.quantity,
+          unitCost:       linea.unitCost,
+          lotNumber:      linea.lotNumber ?? null,
+          expiresAt:      linea.expiresAt ?? null,
+        });
         await registrarHistorialInventario({
           itemId:   linea.itemId,
           clinicId: datos.clinicId,

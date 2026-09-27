@@ -17,7 +17,7 @@ import { fmtMXN } from "@/lib/format";
 
 interface ItemOpcion { id: string; name: string; unit: string; }
 interface ProveedorOpcion { id: string; name: string; }
-interface LineaForm { itemId: string; quantity: string; unitCost: string; }
+interface LineaForm { itemId: string; quantity: string; unitCost: string; lotNumber: string; expiresAt: string; }
 
 export interface ResultadoCompra {
   items: { itemId: string; quantity: number; unitCost: number }[];
@@ -44,7 +44,7 @@ export function CompraModal({
   const [providerId, setProviderId] = useState("");
   const [date, setDate] = useState(hoyISO());
   const [receiptRef, setReceiptRef] = useState("");
-  const [lines, setLines] = useState<LineaForm[]>([{ itemId: "", quantity: "", unitCost: "" }]);
+  const [lines, setLines] = useState<LineaForm[]>([{ itemId: "", quantity: "", unitCost: "", lotNumber: "", expiresAt: "" }]);
   const [guardando, setGuardando] = useState(false);
 
   const total = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitCost) || 0), 0);
@@ -54,7 +54,7 @@ export function CompraModal({
   }
 
   function agregarLinea() {
-    setLines(prev => [...prev, { itemId: "", quantity: "", unitCost: "" }]);
+    setLines(prev => [...prev, { itemId: "", quantity: "", unitCost: "", lotNumber: "", expiresAt: "" }]);
   }
 
   function quitarLinea(idx: number) {
@@ -81,7 +81,15 @@ export function CompraModal({
           date,
           receiptRef: receiptRef || null,
           idempotencyKey,
-          lines: validas.map(l => ({ itemId: l.itemId, quantity: Number(l.quantity), unitCost: Number(l.unitCost) })),
+          // WS1-T5 — ajuste 2: lote/caducidad opcionales por línea. Si se
+          // capturan, esa línea crea su propio InventoryLot (enlace
+          // automático compra→lote); si no, la existencia sigue entrando al
+          // colchón "sin lote" como hasta ahora.
+          lines: validas.map(l => ({
+            itemId: l.itemId, quantity: Number(l.quantity), unitCost: Number(l.unitCost),
+            lotNumber: l.lotNumber.trim() || undefined,
+            expiresAt: l.expiresAt || undefined,
+          })),
         }),
       });
       const data = await res.json().catch(() => null);
@@ -163,6 +171,19 @@ export function CompraModal({
                   className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 0, width: 28 }} aria-label="Quitar línea">
                   <Trash2 size={16} strokeWidth={1.75} aria-hidden />
                 </button>
+                {/* WS1-T5 — ajuste 2: lote/caducidad opcionales de esta línea.
+                    Si se llenan, esta línea crea su propio lote (FEFO); si
+                    no, sigue entrando a "sin lote" como hasta hoy. */}
+                <div className="field-new" style={{ gridColumn: "1 / 3" }}>
+                  <label className="field-new__label" style={{ fontSize: 11, color: "var(--text-3)" }}>Lote (opcional)</label>
+                  <input className="input-new" value={line.lotNumber} placeholder="Ej: L-2026-08"
+                    onChange={e => actualizarLinea(idx, { lotNumber: e.target.value })} />
+                </div>
+                <div className="field-new" style={{ gridColumn: "3 / 4" }}>
+                  <label className="field-new__label" style={{ fontSize: 11, color: "var(--text-3)" }}>Caduca (opcional)</label>
+                  <input type="date" className="input-new" value={line.expiresAt}
+                    onChange={e => actualizarLinea(idx, { expiresAt: e.target.value })} />
+                </div>
               </div>
             ))}
             <ButtonNew variant="ghost" size="sm" type="button" icon={<Plus size={14} strokeWidth={1.75} aria-hidden />} onClick={agregarLinea}>

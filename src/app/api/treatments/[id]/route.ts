@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { consumeFefoTx, InsufficientStockError } from "@/lib/inventory/lots.server";
+import { consumeFefoTx, esErrorDeLotesNoAplicados, InsufficientStockError } from "@/lib/inventory/lots.server";
 import { consumeRecipeForSession } from "@/lib/inventory/recipe.server";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -87,15 +87,35 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     try {
       await prisma.$transaction(async tx => {
-        const session = await tx.treatmentSession.create({
-          data: {
-            treatmentId:   params.id,
-            sessionNumber: nextNumber,
-            notes:         body.notes || null,
-            completedAt:   new Date(),
-            procedureId,
-          },
-        });
+        let session;
+        try {
+          session = await tx.treatmentSession.create({
+            data: {
+              treatmentId:   params.id,
+              sessionNumber: nextNumber,
+              notes:         body.notes || null,
+              completedAt:   new Date(),
+              procedureId,
+            },
+          });
+        } catch (e) {
+          // Ajuste 2 (aviso de ws1-t4, §6): procedureId es un campo NUEVO en
+          // TreatmentSession (modelo viejo) — un cliente de Prisma sin
+          // reiniciar desde antes de este schema no lo reconoce y rechaza
+          // TODO el `data`, aunque valga null. Se reintenta sin esa llave:
+          // la sesión se crea igual (como antes de este cambio); el
+          // descuento por receta de abajo no depende de esta columna, solo
+          // de la variable `procedureId` en memoria.
+          if (!esErrorDeLotesNoAplicados(e)) throw e;
+          session = await tx.treatmentSession.create({
+            data: {
+              treatmentId:   params.id,
+              sessionNumber: nextNumber,
+              notes:         body.notes || null,
+              completedAt:   new Date(),
+            },
+          });
+        }
 
         if (procedureId) {
           const consumo = await consumeRecipeForSession(tx, {

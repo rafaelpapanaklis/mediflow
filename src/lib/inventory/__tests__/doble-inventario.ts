@@ -3,6 +3,7 @@
 // tablas de WS1-T5. $transaction hace snapshot/rollback DE VERDAD: si el
 // callback lanza, ninguna escritura sobrevive — así se prueba que el
 // consumo FEFO es atómico.
+import { Prisma } from "@prisma/client";
 
 type Fila = Record<string, any>;
 
@@ -86,10 +87,20 @@ export class DobleInventario {
     return [{ id: "lock" }];
   }
 
+  // Ajuste 2 — simula el cliente de Prisma VIEJO de dev.108: rechaza con
+  // PrismaClientValidationError cualquier `data` que traiga una de estas
+  // llaves (campo nuevo en un modelo viejo que ese cliente no reconoce).
+  camposDesconocidosParaClienteViejo = new Set<string>();
+
   get inventoryItem() {
     return {
       findFirst: async ({ where }: any) => this.tablas.inventoryItem.find(r => matchWhere(r, where)) ?? null,
       update: async ({ where, data }: any) => {
+        for (const k of Object.keys(data)) {
+          if (this.camposDesconocidosParaClienteViejo.has(k)) {
+            throw new Prisma.PrismaClientValidationError(`Unknown argument \`${k}\`.`, { clientVersion: "5.22.0" });
+          }
+        }
         const idx = this.tablas.inventoryItem.findIndex(r => matchWhere(r, where));
         if (idx < 0) throw new Error("inventoryItem.update: no encontrado");
         this.tablas.inventoryItem[idx] = aplicarData(this.tablas.inventoryItem[idx], data);
