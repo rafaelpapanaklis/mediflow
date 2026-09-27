@@ -37,18 +37,25 @@ export async function GET(req: NextRequest) {
     recallDate.setMonth(recallDate.getMonth() - clinic.recallMonths);
 
     // Pacientes activos cuya última cita fue antes de recallDate (sin techo).
+    // Solo si TIENEN al menos una cita no cancelada: quien no tiene NINGUNA (un
+    // paciente importado de otro sistema, o capturado sin historial) no tiene
+    // «última visita» que medir, y el mensaje «hace tiempo que no vienes» a toda
+    // una lista importada de golpe sería un WhatsApp masivo sin base. Esos
+    // pacientes entran al recall en cuanto tengan su primera cita.
     const patients = await prisma.patient.findMany({
       where: {
         clinicId: clinic.id,
         status:   "ACTIVE",
         phone:    { not: null },
         appointments: {
+          some: { status: { not: "CANCELLED" } },
           none: { startsAt: { gte: recallDate }, status: { not: "CANCELLED" } },
         },
       },
       select: {
         id: true, firstName: true, lastName: true, phone: true,
         appointments: {
+          where: { status: { not: "CANCELLED" } },
           orderBy: { startsAt: "desc" },
           take: 1,
           select: { startsAt: true },
@@ -80,7 +87,7 @@ export async function GET(req: NextRequest) {
 
       const lastVisitText = patient.appointments[0]?.startsAt
         ? new Date(patient.appointments[0].startsAt).toLocaleDateString("es-MX", { month: "long", year: "numeric" })
-        : "hace tiempo";
+        : "hace tiempo"; // (defensivo: la consulta ya exige al menos una cita no cancelada)
 
       const msg = `Hola ${patient.firstName} 😊\n\nTe contactamos de *${clinic.name}*.\n\nNos damos cuenta que tu última visita fue ${lastVisitText} y queremos recordarte que una revisión periódica es importante para mantener tu salud dental.\n\n🦷 Te invitamos a agendar tu cita de revisión.\n¿Te gustaría programar una? Responde *SÍ* y te contactamos de inmediato.`;
 
