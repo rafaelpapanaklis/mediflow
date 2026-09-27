@@ -11,6 +11,9 @@ import { getServerT } from "@/i18n/server";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { leerCuentaSpei } from "@/lib/billing/spei-directo";
+import { ivaParaCobro } from "@/lib/billing/iva-cobro";
+import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 
 export const metadata: Metadata = { title: "Configuración — DaleControl" };
 
@@ -53,6 +56,15 @@ export default async function SettingsPage({ searchParams }: Props) {
   // Google… — se sacan del payload antes de serializarlo al navegador.
   const clinicSafe = stripClinicSecrets((clinic ?? {}) as Record<string, any>);
 
+  // Qué métodos de pago existen HOY, para que «Activa o renueva tu plan» diga solo lo que hay (la misma
+  // regla que la pantalla de pago): SPEI directo solo si el admin capturó la cuenta; tarjeta/OXXO si el IVA
+  // está configurado o la clínica está exenta. Una lectura que falle = sin SPEI, nunca rompe la pantalla.
+  const [cuentaSpei, exencionIva] = await Promise.all([
+    leerCuentaSpei().catch(() => null),
+    exencionIvaDeClinica(clinic ? (clinic as any) : null).catch(() => null),
+  ]);
+  const metodosPago = { tarjetaOxxo: ivaParaCobro(process.env).ok || exencionIva !== null, spei: cuentaSpei !== null };
+
   return (
     <ErrorBoundary fallbackTitle={t("settings.page.errorBoundaryTitle")}>
       <SettingsClient
@@ -65,6 +77,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         teamMembers={teamMembers as any}
         puedeEditarClinica={puedeEditarClinica}
         rediseno={rediseno}
+        metodosPago={metodosPago}
       />
     </ErrorBoundary>
   );

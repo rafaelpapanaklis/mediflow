@@ -19,11 +19,22 @@ export interface MetodosDisponibles {
   spei: boolean;
 }
 
+/** Qué combinación de métodos se ofrece; sirve de clave para los textos (es/en) de cada pantalla. */
+export type VarianteMetodos = "todos" | "tarjetaOxxo" | "spei" | "ninguno";
+
+export function varianteMetodos(m: MetodosDisponibles): VarianteMetodos {
+  if (m.tarjetaOxxo && m.spei) return "todos";
+  if (m.tarjetaOxxo) return "tarjetaOxxo";
+  if (m.spei) return "spei";
+  return "ninguno";
+}
+
 /** La línea de la cabecera de la pantalla de pago: «Elige cómo pagar… Tarjeta u OXXO con Stripe, o transferencia SPEI directa.» */
 export function frasePagoSeguro(m: MetodosDisponibles): string {
-  if (m.tarjetaOxxo && m.spei) return "Tarjeta u OXXO con Stripe, o transferencia SPEI directa.";
-  if (m.tarjetaOxxo) return "Tarjeta u OXXO con Stripe.";
-  if (m.spei) return "Transferencia SPEI directa.";
+  const v = varianteMetodos(m);
+  if (v === "todos") return "Tarjeta u OXXO con Stripe, o transferencia SPEI directa.";
+  if (v === "tarjetaOxxo") return "Tarjeta u OXXO con Stripe.";
+  if (v === "spei") return "Transferencia SPEI directa.";
   return "";
 }
 

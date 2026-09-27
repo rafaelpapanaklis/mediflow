@@ -8,6 +8,7 @@ import { type PlanId, isPlanId } from "@/lib/billing/plans";
 import { cfdiBullet } from "@/lib/plan-shared";
 import { exencionDeIva, ivaAplica } from "@/lib/billing/iva-cobro";
 import { miles, pruebaVista } from "@/lib/billing/prueba-vista";
+import { varianteMetodos, type MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { daysUntil, isInTrial as inTrialNow, isPlanExpired, isSubscriptionActive } from "@/lib/plan-status";
 import { PaymentMethodModal } from "./payment-method-modal";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
@@ -35,6 +36,8 @@ export interface ClinicData {
 
 interface Props {
   clinic: ClinicData;
+  /** Métodos de pago que existen hoy (los resuelve la página en el servidor). Sin dato: el texto de siempre. */
+  metodosPago?: MetodosDisponibles;
   /**
    * ¿La clínica ve el rediseño de Configuración? Lo decide
    * `settings-client.tsx` con el interruptor `menu-dos-niveles` y lo baja
@@ -113,7 +116,7 @@ function paypalLinkFor(plan: PlanId): string | null {
   return url && url.length > 0 ? url : null;
 }
 
-export function SubscriptionTab({ clinic, rediseno = false }: Props) {
+export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props) {
   const t = useT();
   const router = useRouter();
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -379,6 +382,10 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
   const exencionIva = exencionDeIva({ createdAt: clinic.createdAt, plan: clinic.plan, tuvoTarjeta: false });
   const sufijoIva = (id: PlanId) => (ivaAplica({ metodo: "spei", plan: id, exencion: exencionIva }) ? " + IVA" : "");
   const prueba = pruebaVista(daysLeft, TRIAL_DAYS_TOTAL);
+  // «Activa o renueva tu plan»: dice solo los métodos que existen (sin SPEI si no hay cuenta bancaria).
+  const subtituloActivar = metodosPago
+    ? t({ todos: "shell.subscriptionTab.activateSubtitleTodos", tarjetaOxxo: "shell.subscriptionTab.activateSubtitleTarjetaOxxo", spei: "shell.subscriptionTab.activateSubtitleSpei", ninguno: "shell.subscriptionTab.activateSubtitleNinguno" }[varianteMetodos(metodosPago)])
+    : t("shell.subscriptionTab.activateSubtitle");
   const perIntervalSuffix = isAnnualBilling
     ? t("shell.subscriptionTab.mxnPerYear")
     : t("shell.subscriptionTab.mxnPerMonth");
@@ -501,6 +508,7 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
           porcentajePrueba: pct,
           pruebaVencida: trialExpired,
           mostrarActivar: !subscriptionActive || manualPeriodExpired,
+          subtituloActivar,
           onActivar: () => router.push("/dashboard/suspended"),
           tieneSuscripcionStripe: hasStripeSubscription,
           tieneClienteStripe: hasStripeCustomer,
@@ -648,7 +656,7 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
                 {t("shell.subscriptionTab.activateTitle")}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
-                {t("shell.subscriptionTab.activateSubtitle")}
+                {subtituloActivar}
               </div>
             </div>
             <button

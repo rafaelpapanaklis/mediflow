@@ -49,6 +49,8 @@ export interface ModeloSuscripcion {
   porcentajePrueba: number;
   pruebaVencida: boolean;
   mostrarActivar: boolean;
+  /** El subtítulo de «Activa tu plan»: solo los métodos de pago que existen. */
+  subtituloActivar: string;
   onActivar: () => void;
 
   /* Cambiar plan */
@@ -173,7 +175,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
           <div className={s.activar}>
             <div className={s.activarTextos}>
               <div className={s.activarTitulo}>{t("shell.subscriptionTab.activateTitle")}</div>
-              <div className={s.activarSub}>{t("shell.subscriptionTab.activateSubtitle")}</div>
+              <div className={s.activarSub}>{m.subtituloActivar}</div>
             </div>
             <Boton variante="principal" onClick={m.onActivar}>
               <CreditCard size={14} aria-hidden />

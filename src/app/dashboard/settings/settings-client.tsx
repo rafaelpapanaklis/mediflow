@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell, MessageCircle, Handshake, ImagePlus, Trash2, Lock } from "lucide-react";
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
+import type { MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
 import { CfdiReadinessCard } from "@/components/dashboard/settings/cfdi-readiness-card";
@@ -104,9 +105,11 @@ interface Props {
   /** REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
    *  resuelto en el servidor. false = la pantalla de siempre, tal cual. */
   rediseno?: boolean;
+  /** Métodos de pago que existen hoy (resuelto en el servidor): para el texto de «Activa tu plan» en Suscripción. */
+  metodosPago?: MetodosDisponibles;
 }
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago }: Props) {
   const t = useT();
   // El DOCTOR entra RECORTADO (ver `verComun`), salvo el que ya tenía
   // «Ver configuración» concedido persona a persona desde Equipo → Permisos:
@@ -629,7 +632,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <Contenido>
 
             {/* ── SUSCRIPCIÓN ── */}
-            {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} rediseno />}
+            {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} rediseno metodosPago={metodosPago} />}
 
             {/* ── CLÍNICA ── */}
             {tab === "clinica" && ve("clinica") && (
@@ -1309,7 +1312,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         <div style={{ flex: "1 1 480px", minWidth: 0 }}>
 
       {/* ── SUSCRIPCIÓN ── */}
-      {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} />}
+      {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} metodosPago={metodosPago} />}
 
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && ve("clinica") && (

@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { avisoTarjetaOxxoNoDisponible, frasePagoSeguro, subtituloDePago, CORREO_SOPORTE } from "../metodos-de-pago";
+import { avisoTarjetaOxxoNoDisponible, frasePagoSeguro, subtituloDePago, varianteMetodos, CORREO_SOPORTE } from "../metodos-de-pago";
 import { DIAS_PRUEBA_SIN_VENCIMIENTO, miles, pruebaVista } from "../prueba-vista";
 
 const RAIZ = path.resolve(__dirname, "../../../..");
@@ -179,4 +179,34 @@ test("portada: la promo del primer mes sale de plan_configs/FIRST_MONTH_PROMO_MX
     const t = sinComentarios(leer(f));
     assert.doesNotMatch(t, /primer mes[^\n]*\+ IVA/i, f);
   }
+});
+
+/* ── (N5) «Activa o renueva tu plan» en Configuración → Suscripción ────── */
+
+test("«Activa tu plan» dice solo los métodos que existen (sin SPEI si no hay cuenta; con SPEI directo si la hay)", () => {
+  assert.equal(varianteMetodos({ tarjetaOxxo: true, spei: true }), "todos");
+  assert.equal(varianteMetodos({ tarjetaOxxo: true, spei: false }), "tarjetaOxxo");
+  assert.equal(varianteMetodos({ tarjetaOxxo: false, spei: true }), "spei");
+  assert.equal(varianteMetodos({ tarjetaOxxo: false, spei: false }), "ninguno");
+  for (const f of ["es", "en"]) {
+    const d = JSON.parse(leer(`src/i18n/dictionaries/${f}.json`)).shell.subscriptionTab;
+    assert.match(d.activateSubtitleTodos, /SPEI/);
+    assert.match(d.activateSubtitleSpei, /SPEI/);
+    assert.doesNotMatch(d.activateSubtitleTarjetaOxxo, /SPEI/, `${f}: sin cuenta bancaria no se nombra SPEI`);
+    assert.doesNotMatch(d.activateSubtitleNinguno, /SPEI|OXXO/i, f);
+    assert.match(d.activateSubtitleNinguno, /soporte@dalecontrol\.com/);
+  }
+  assert.match(JSON.parse(leer("src/i18n/dictionaries/es.json")).shell.subscriptionTab.activateSubtitleTodos, /transferencia SPEI directa/);
+});
+
+test("Suscripción: la página resuelve los métodos en el servidor (misma regla que el pago) y las dos vistas usan el texto resuelto", () => {
+  const page = sinComentarios(leer("src/app/dashboard/settings/page.tsx"));
+  assert.match(page, /leerCuentaSpei\(\)\.catch\(\(\) => null\)/);
+  assert.match(page, /tarjetaOxxo: ivaParaCobro\(process\.env\)\.ok \|\| exencionIva !== null, spei: cuentaSpei !== null/);
+  assert.match(page, /metodosPago=\{metodosPago\}/);
+  const cl = sinComentarios(leer("src/app/dashboard/settings/settings-client.tsx"));
+  assert.equal((cl.match(/metodosPago=\{metodosPago\}/g) ?? []).length, 2, "las dos pestañas (rediseño y de siempre)");
+  const tab = sinComentarios(leer("src/components/dashboard/subscription-tab.tsx"));
+  assert.equal((tab.match(/\{subtituloActivar\}/g) ?? []).length, 1);
+  assert.match(sinComentarios(leer("src/components/dashboard/bloques-rediseno/suscripcion.tsx")), /\{m\.subtituloActivar\}/);
 });
