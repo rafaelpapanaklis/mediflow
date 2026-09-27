@@ -20,7 +20,7 @@
 --   3 índices          · invoiceId, y el único parcial "un PENDING por factura"
 --   3 llaves foráneas  · invoiceId → invoices, createdById → users,
 --                        paymentId → payments
---   3 CHECK            · origin, method, panelDepositMode
+--   3 CHECK            · origin, method, panelDepositMode + panelDepositExpiryHours
 --
 -- NO toca ni una fila que ya exista, ni las columnas del bot. Las filas de
 -- hoy quedan con origin='bot', method='mercadopago', invoiceId=NULL: EXACTAMENTE
@@ -33,14 +33,21 @@
 --
 -- Requiere sql/anticipo-whatsapp.sql ya aplicado (las tablas base).
 --
--- IDEMPOTENTE: cada bloque comprueba existencia antes de crear; correrlo
--- varias veces no da errores ni duplicados. CERO DROP.
+-- IDEMPOTENTE Y PLANO — SIN `DO $$` EN NINGÚN SITIO (el SQL Editor de
+-- Supabase no lo digiere de fiar; ya dio "relation does not exist" con
+-- bloques DO en otro script). Para las columnas y los índices, los propios
+-- `IF NOT EXISTS` bastan. Para las llaves foráneas y los CHECK —que no
+-- tienen `IF NOT EXISTS` en Postgres— el patrón es SIEMPRE el mismo par de
+-- líneas: "ALTER TABLE ... DROP CONSTRAINT IF EXISTS ..." seguido de
+-- "ALTER TABLE ... ADD CONSTRAINT ...". Quitar y volver a poner una
+-- restricción no toca ni una fila; solo falla si algún dato YA violara la
+-- restricción, que es justo lo que se quiere detectar. Probado dos veces
+-- seguidas contra Postgres (PGlite) sin errores ni duplicados. CERO DROP
+-- de tablas o columnas.
 --
 -- Cómo aplicarlo: Supabase → SQL Editor → pegar → Run.
 -- ⛔ NO correr `prisma migrate dev` ni `migrate deploy`.
 --
--- Nota sobre $$: delimitadores con nombre ($anticipopanel$) y NUNCA bloques
--- DO anidados — el parser SQL de Supabase rompe con $$ anidado.
 -- Nota sobre los nombres: camelCase ENTRECOMILLADO, como los escribe Prisma.
 -- ═══════════════════════════════════════════════════════════════════════
 
@@ -84,70 +91,44 @@ CREATE UNIQUE INDEX IF NOT EXISTS "appointment_deposits_un_pendiente_por_factura
 
 -- ── 4. Llaves foráneas ─────────────────────────────────────────────────
 -- SET NULL en las tres: borrar la factura, al usuario que lo pidió o el
--- Payment que lo saldó no debe borrar el rastro del anticipo.
-DO $anticipopanel$
-BEGIN
-  ALTER TABLE "appointment_deposits"
-    ADD CONSTRAINT "appointment_deposits_invoiceId_fkey"
-    FOREIGN KEY ("invoiceId") REFERENCES "invoices"("id")
-    ON DELETE SET NULL ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL;
-END
-$anticipopanel$;
+-- Payment que lo saldó no debe borrar el rastro del anticipo. Patrón plano:
+-- quitar (si existe) y volver a poner — no toca datos, solo la restricción.
+ALTER TABLE "appointment_deposits" DROP CONSTRAINT IF EXISTS "appointment_deposits_invoiceId_fkey";
+ALTER TABLE "appointment_deposits"
+  ADD CONSTRAINT "appointment_deposits_invoiceId_fkey"
+  FOREIGN KEY ("invoiceId") REFERENCES "invoices"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
 
-DO $anticipopanel$
-BEGIN
-  ALTER TABLE "appointment_deposits"
-    ADD CONSTRAINT "appointment_deposits_createdById_fkey"
-    FOREIGN KEY ("createdById") REFERENCES "users"("id")
-    ON DELETE SET NULL ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL;
-END
-$anticipopanel$;
+ALTER TABLE "appointment_deposits" DROP CONSTRAINT IF EXISTS "appointment_deposits_createdById_fkey";
+ALTER TABLE "appointment_deposits"
+  ADD CONSTRAINT "appointment_deposits_createdById_fkey"
+  FOREIGN KEY ("createdById") REFERENCES "users"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
 
-DO $anticipopanel$
-BEGIN
-  ALTER TABLE "appointment_deposits"
-    ADD CONSTRAINT "appointment_deposits_paymentId_fkey"
-    FOREIGN KEY ("paymentId") REFERENCES "payments"("id")
-    ON DELETE SET NULL ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL;
-END
-$anticipopanel$;
+ALTER TABLE "appointment_deposits" DROP CONSTRAINT IF EXISTS "appointment_deposits_paymentId_fkey";
+ALTER TABLE "appointment_deposits"
+  ADD CONSTRAINT "appointment_deposits_paymentId_fkey"
+  FOREIGN KEY ("paymentId") REFERENCES "payments"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
 
 
 -- ── 5. CHECK: lo que la base NO deja escribir ──────────────────────────
-DO $anticipopanel$
-BEGIN
-  ALTER TABLE "appointment_deposits" ADD CONSTRAINT "appointment_deposits_origin_chk"
-    CHECK ("origin" IN ('bot', 'panel'));
-EXCEPTION WHEN duplicate_object THEN NULL;
-END
-$anticipopanel$;
+-- Mismo patrón plano: quitar (si existe) y volver a poner.
+ALTER TABLE "appointment_deposits" DROP CONSTRAINT IF EXISTS "appointment_deposits_origin_chk";
+ALTER TABLE "appointment_deposits" ADD CONSTRAINT "appointment_deposits_origin_chk"
+  CHECK ("origin" IN ('bot', 'panel'));
 
-DO $anticipopanel$
-BEGIN
-  ALTER TABLE "appointment_deposits" ADD CONSTRAINT "appointment_deposits_method_chk"
-    CHECK ("method" IN ('mercadopago', 'transferencia', 'manual'));
-EXCEPTION WHEN duplicate_object THEN NULL;
-END
-$anticipopanel$;
+ALTER TABLE "appointment_deposits" DROP CONSTRAINT IF EXISTS "appointment_deposits_method_chk";
+ALTER TABLE "appointment_deposits" ADD CONSTRAINT "appointment_deposits_method_chk"
+  CHECK ("method" IN ('mercadopago', 'transferencia', 'manual'));
 
-DO $anticipopanel$
-BEGIN
-  ALTER TABLE "clinic_mercadopago" ADD CONSTRAINT "clinic_mercadopago_panelDepositMode_chk"
-    CHECK ("panelDepositMode" IN ('fixed', 'percent'));
-EXCEPTION WHEN duplicate_object THEN NULL;
-END
-$anticipopanel$;
+ALTER TABLE "clinic_mercadopago" DROP CONSTRAINT IF EXISTS "clinic_mercadopago_panelDepositMode_chk";
+ALTER TABLE "clinic_mercadopago" ADD CONSTRAINT "clinic_mercadopago_panelDepositMode_chk"
+  CHECK ("panelDepositMode" IN ('fixed', 'percent'));
 
-DO $anticipopanel$
-BEGIN
-  ALTER TABLE "clinic_mercadopago" ADD CONSTRAINT "clinic_mercadopago_panelDepositExpiryHours_chk"
-    CHECK ("panelDepositExpiryHours" BETWEEN 1 AND 48);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END
-$anticipopanel$;
+ALTER TABLE "clinic_mercadopago" DROP CONSTRAINT IF EXISTS "clinic_mercadopago_panelDepositExpiryHours_chk";
+ALTER TABLE "clinic_mercadopago" ADD CONSTRAINT "clinic_mercadopago_panelDepositExpiryHours_chk"
+  CHECK ("panelDepositExpiryHours" BETWEEN 1 AND 48);
 
 
 -- ── 6. Comprobación (solo lee) ──────────────────────────────────────────
