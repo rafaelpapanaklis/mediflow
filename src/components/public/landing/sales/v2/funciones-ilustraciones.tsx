@@ -15,18 +15,23 @@ import { IconoPanel } from "./icono-panel";
  */
 
 /* ── 1 · Tu página web gratuita: la web REAL de la clínica → la agenda del panel ──
-   Ajuste 2: la miniatura es una plantilla de verdad —«Especialistas», la que
-   Rafael quiere por defecto (añadido 2b)—, capturada de la vista previa del
-   panel de la clínica de prueba con los nombres cambiados en pantalla
-   (public/landing/web/altabrisa-especialistas.webp, 1280 px de ancho, la
-   página entera: menú, portada, especialistas, valoración y pie), dentro de
-   una ventana de navegador con su URL. La página se desplaza
-   sola, despacio, dentro de la ventana; con prefers-reduced-motion se queda
-   quieta en la portada. La tira de abajo son las 8 miniaturas de plantilla tal
-   como las pinta el panel (public/landing/web/plantilla-<id>.webp). */
+   Ajuste 2: la miniatura es una plantilla de verdad, capturada de la vista
+   previa del panel de la clínica de prueba con los nombres cambiados en
+   pantalla, dentro de una ventana de navegador con su URL. La página se
+   desplaza sola, despacio, dentro de la ventana; con prefers-reduced-motion
+   se queda quieta en la portada. La tira de abajo son las 8 miniaturas de
+   plantilla tal como las pinta el panel (public/landing/web/plantilla-<id>.webp).
+   Ajuste 6: la plantilla de ejemplo pasa a «Equipo»
+   (public/landing/web/altabrisa-equipo.webp, 1120 px de ancho, la página
+   entera: menú, portada con foto, tratamientos, los cuatro doctores con foto,
+   tecnología, opiniones, galería, FAQ, horarios/ubicación y pie). La captura
+   anterior, altabrisa-especialistas.webp, se conserva en public/ por si se
+   vuelve a ella. */
 
-/** Alto de altabrisa-especialistas.webp a 1120 px de ancho. */
-const ALTO_WEB = 5991;
+/** Alto de altabrisa-equipo.webp a 1120 px de ancho. */
+const ALTO_WEB = 6417;
+/** Plantilla que enseña la ventana y que va resaltada en la tira. */
+const PLANTILLA_EJEMPLO = "equipo";
 
 const PLANTILLAS: [string, string][] = [
   ["classic", "Clásico"],
@@ -54,10 +59,10 @@ export function IluPaginaWeb() {
               esta imagen (1120 × 5991) para ciertos anchos (medido el 26-sep:
               `/_next/image?…&w=640` con Accept image/webp no contesta nunca y
               el <img> se queda con `complete: false`). El archivo ya viene
-              optimizado (WebP, 221 KB): se sirve tal cual, sin pasar por el
+              optimizado (WebP, ~290 KB): se sirve tal cual, sin pasar por el
               optimizador, y se pide de entrada. */}
           <Image
-            src="/landing/web/altabrisa-especialistas.webp"
+            src={`/landing/web/altabrisa-${PLANTILLA_EJEMPLO}.webp`}
             alt=""
             width={1120}
             height={ALTO_WEB}
@@ -71,7 +76,7 @@ export function IluPaginaWeb() {
           <span className="dcf3-web__tlabel">8 plantillas</span>
           <span className="dcf3-web__tlist">
             {PLANTILLAS.map(([id, nombre], i) => (
-              <Image key={id} src={`/landing/web/plantilla-${id}.webp`} alt="" title={nombre} width={284} height={178} sizes="48px" className={id === "especialistas" ? "is-on" : undefined} />
+              <Image key={id} src={`/landing/web/plantilla-${id}.webp`} alt="" title={nombre} width={284} height={178} sizes="48px" className={id === PLANTILLA_EJEMPLO ? "is-on" : undefined} />
             ))}
           </span>
         </div>
@@ -201,17 +206,25 @@ export function IluAgenda() {
 }
 
 /* ── 4 · Radiografías CBCT y modelos 3D: las cuatro vistas, rotando ─────────
-   Ajuste 3: el volumen 3D (rx-3d.webp, la imagen de siempre, sin tocar) y los
-   tres cortes reales del estudio (los mismos WebP que usaba el CbctMock viejo)
-   se turnan cada 2.5 s con un fundido, en bucle, y la etiqueta de la barra
-   cambia con ellos. Es CSS puro (keyframes con retardo por vista); con
-   prefers-reduced-motion se queda quieta en la primera (el volumen 3D). */
+   Ajuste 3: el volumen 3D y los tres cortes reales del estudio (los mismos
+   WebP que usaba el CbctMock viejo) se turnan cada 2.5 s con un fundido, en
+   bucle, y la etiqueta de la barra cambia con ellos. Es CSS puro (keyframes
+   con retardo por vista); con prefers-reduced-motion se queda quieta en la
+   primera (el volumen 3D).
+   Ajuste 6: las vistas van CENTRADAS y enteras. Los originales (rx-*.webp,
+   que también usan hero.tsx y mockups.tsx, intactos) tienen la anatomía
+   descentrada —los cortes traen una franja negra y una miniatura a un
+   lado— y con object-fit: cover en un recuadro 16:10 se recortaban por
+   arriba y por abajo. Las versiones rx-*-16x10.webp son el mismo estudio
+   recortado a su anatomía y colocado entero, centrado, sobre negro en un
+   lienzo 480 × 300 (16:10): al tener la proporción del recuadro no se
+   recorta nada a ningún ancho. */
 
 const VISTAS_CBCT: { src: string; w: number; h: number; label: string }[] = [
-  { src: "/landing/rx-3d.webp", w: 349, h: 316, label: "Volumen 3D" },
-  { src: "/landing/rx-axial.webp", w: 353, h: 316, label: "Axial" },
-  { src: "/landing/rx-coronal.webp", w: 398, h: 267, label: "Coronal" },
-  { src: "/landing/rx-sagital.webp", w: 354, h: 267, label: "Sagital" },
+  { src: "/landing/rx-3d-16x10.webp", w: 480, h: 300, label: "Volumen 3D" },
+  { src: "/landing/rx-axial-16x10.webp", w: 480, h: 300, label: "Axial" },
+  { src: "/landing/rx-coronal-16x10.webp", w: 480, h: 300, label: "Coronal" },
+  { src: "/landing/rx-sagital-16x10.webp", w: 480, h: 300, label: "Sagital" },
 ];
 
 export function IluCbct() {

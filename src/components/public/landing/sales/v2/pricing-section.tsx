@@ -146,6 +146,7 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
                   <li key={c.text} className={`dcv4-price__cap${c.included ? "" : " is-off"}`}>
                     <span className="dcv4-price__caplabel">{c.text}</span>
                     <span className="dcv4-price__capvalue">{c.value}</span>
+                    {c.note && <span className="dcv4-price__capnote">{c.note}</span>}
                     <span className="dcv4-sr">{c.included ? "Incluido" : "No incluido"}</span>
                   </li>
                 ))}

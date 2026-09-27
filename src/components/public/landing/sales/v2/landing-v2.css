@@ -910,7 +910,7 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv4-price__card {
   --ink: #0f172a; --ink-2: #334155; --mute: #64748b; --hair: #e8edf4; --tile: #f8fafc;
   position: relative; isolation: isolate; display: flex; flex-direction: column; color: var(--ink);
-  background: #fff; border: 1px solid #e2e8f0; border-radius: 24px; padding: 32px 28px 28px;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 22px; padding: 28px 22px 20px; /* 15b: 6 px más entre la insignia y el nombre */
   box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(15,23,42,.04), 0 26px 56px -34px rgba(15,23,42,.38);
   transition: transform .28s cubic-bezier(.2,.7,.2,1), box-shadow .28s ease, border-color .28s ease, opacity .6s ease;
 }
@@ -929,49 +929,51 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
    antes solo se desplazaba hacia arriba y su contenido quedaba 12 px más alto
    que el de las otras). Margen negativo en ambos lados compensado con el mismo
    relleno extra: el contenido queda a la misma altura que en las vecinas. */
-@media (min-width: 1001px) { .dcv4-price__card.is-featured { margin-top: -12px; margin-bottom: -12px; padding-top: 44px; padding-bottom: 40px; } }
+@media (min-width: 1001px) { .dcv4-price__card.is-featured { margin-top: -12px; margin-bottom: -12px; padding-top: 40px; padding-bottom: 32px; } }
 
-.dcv4-price__badge { position: absolute; top: -15px; left: 28px; font-size: 12px; font-weight: 700; color: #fff; border-radius: 999px; padding: 7px 14px; white-space: nowrap; letter-spacing: .02em; box-shadow: 0 8px 18px -8px rgba(15,23,42,.5), inset 0 1px 0 rgba(255,255,255,.22); }
+.dcv4-price__badge { position: absolute; top: -15px; left: 22px; font-size: 12px; font-weight: 700; color: #fff; border-radius: 999px; padding: 7px 14px; white-space: nowrap; letter-spacing: .02em; box-shadow: 0 8px 18px -8px rgba(15,23,42,.5), inset 0 1px 0 rgba(255,255,255,.22); }
 .dcv4-price__card.is-featured .dcv4-price__badge { left: 50%; transform: translateX(-50%); box-shadow: 0 10px 24px -8px rgba(37,99,235,.85), inset 0 1px 0 rgba(255,255,255,.28); }
 
 /* Nombre del plan con un punto del color de su insignia (--plan-accent viene de
    plan-cards, el mismo color de la insignia). */
-.dcv4-price__name { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; letter-spacing: .12em; color: var(--plan-accent, #1d4ed8); text-transform: uppercase; }
+.dcv4-price__name { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .12em; color: var(--plan-accent, #1d4ed8); text-transform: uppercase; }
 .dcv4-price__name::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--plan-accent, #1d4ed8); box-shadow: 0 0 0 3px color-mix(in srgb, var(--plan-accent, #1d4ed8) 18%, transparent); }
 .dcv4-price__card.is-featured .dcv4-price__name { color: #93c5fd; }
 .dcv4-price__card.is-featured .dcv4-price__name::before { background: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,.25); }
-.dcv4-price__tagline { margin-top: 7px; font-size: 14.5px; color: var(--mute); min-height: 1.5em; }
+.dcv4-price__tagline { margin-top: 4px; font-size: 14px; color: var(--mute); min-height: 1.5em; }
 .dcv4-price__card.is-featured .dcv4-price__tagline { color: #cbd5e1; }
 
 /* Precio: la cifra manda; «$» arriba en gris y «MXN / mes» apilados, alineados
    a la base de la cifra. Al conmutar, cifra y línea de abajo entran con un
    fundido corto (key por modo en el TSX). */
 @keyframes dcPriceIn { from { opacity: 0; transform: translateY(10px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
-.dcv4-price__amount { margin-top: 22px; display: flex; align-items: flex-start; gap: 3px; line-height: 1; color: var(--ink); }
-.dcv4-price__cur { font-size: 22px; font-weight: 700; margin-top: 8px; color: var(--mute); }
-.dcv4-price__num { font-size: clamp(48px, 4.4vw, 60px); font-weight: 800; letter-spacing: -.045em; font-variant-numeric: tabular-nums; animation: dcPriceIn .34s cubic-bezier(.2,.7,.2,1) both; }
-.dcv4-price__per { display: flex; flex-direction: column; justify-content: flex-end; align-self: stretch; margin-left: 9px; padding-bottom: 6px; line-height: 1.12; }
+.dcv4-price__amount { margin-top: 12px; display: flex; align-items: flex-start; gap: 3px; line-height: 1; color: var(--ink); }
+.dcv4-price__cur { font-size: 20px; font-weight: 700; margin-top: 6px; color: var(--mute); }
+.dcv4-price__num { font-size: clamp(42px, 3.6vw, 50px); font-weight: 800; letter-spacing: -.045em; font-variant-numeric: tabular-nums; animation: dcPriceIn .34s cubic-bezier(.2,.7,.2,1) both; }
+.dcv4-price__per { display: flex; flex-direction: column; justify-content: flex-end; align-self: stretch; margin-left: 9px; padding-bottom: 4px; line-height: 1.12; }
 .dcv4-price__mxn, .dcv4-price__iva { font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--mute); }
 .dcv4-price__mes { font-size: 14.5px; font-weight: 700; color: var(--ink-2); }
 /* Ajuste 8b: «+ IVA» bajo «/ mes», discreto (mismo tono que «MXN»: #64748b en
    claro 4,8:1; #94a3b8 en la oscura 7:1). El bloque de tres líneas (~44 px)
    sigue cabiendo en el alto de la cifra (48–60 px). */
 .dcv4-price__iva { margin-top: 2px; white-space: nowrap; }
-.dcv4-price__line { margin-top: 14px; display: flex; flex-direction: column; gap: 5px; min-height: 44px; animation: dcPriceIn .34s .05s cubic-bezier(.2,.7,.2,1) both; }
+.dcv4-price__line { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; min-height: 40px; animation: dcPriceIn .34s .05s cubic-bezier(.2,.7,.2,1) both; }
 .dcv4-price__l1 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 14px; font-weight: 700; color: var(--ink); }
 .dcv4-price__l1 > span:last-child { white-space: nowrap; }
 .dcv4-price__l2 { font-size: 12.5px; color: var(--mute); white-space: nowrap; }
 .dcv4-price__save { font-size: 12px; font-weight: 800; color: #15803d; background: #dcfce7; border: 1px solid #bbf7d0; border-radius: 999px; padding: 3px 9px; line-height: 1.2; white-space: nowrap; }
 .dcv4-price__card.is-featured .dcv4-price__save { color: #86efac; background: rgba(74,222,128,.14); border-color: rgba(74,222,128,.32); }
-.dcv4-price__nocontract { margin-top: 8px; font-size: 12.5px; color: var(--mute); }
+.dcv4-price__nocontract { margin-top: 4px; font-size: 12px; color: var(--mute); }
 
 /* Cupos: cuatro fichas tipo indicador, separadas del precio por un filo. */
-.dcv4-price__caps { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--hair); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.dcv4-price__cap { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 11px 13px; border-radius: 14px; background: var(--tile); border: 1px solid var(--hair); box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
+.dcv4-price__caps { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hair); display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.dcv4-price__cap { position: relative; display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; border-radius: 12px; background: var(--tile); border: 1px solid var(--hair); box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
 .dcv4-price__card.is-featured .dcv4-price__cap { box-shadow: inset 0 1px 0 rgba(255,255,255,.06); }
-.dcv4-price__caplabel { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
-.dcv4-price__capvalue { font-size: 17px; font-weight: 800; color: #1d4ed8; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.dcv4-price__caplabel { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+.dcv4-price__capvalue { font-size: 15px; font-weight: 800; color: #1d4ed8; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
 .dcv4-price__card.is-featured .dcv4-price__capvalue { color: #93c5fd; }
+/* Ajuste 15: nota bajo el valor (Sedes: reportes consolidados entre sedes). */
+.dcv4-price__capnote { margin-top: 2px; font-size: 11px; line-height: 1.3; color: var(--mute); }
 .dcv4-price__cap.is-off { background: #f1f5f9; border-color: #e2e8f0; border-style: dashed; box-shadow: none; }
 .dcv4-price__cap.is-off .dcv4-price__capvalue { color: #64748b; font-weight: 700; }
 .dcv4-price__card.is-featured .dcv4-price__cap.is-off { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.14); }
@@ -980,8 +982,8 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv4-price__cap:nth-child(5):last-child { grid-column: 1 / -1; }
 
 /* Ajuste 9: chip «Todo lo esencial incluido» que salta al bloque común. */
-.dcv4-price__all { margin-top: 18px; display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 12.5px; font-weight: 700; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 999px; padding: 6px 12px 6px 8px; text-decoration: none; transition: background .18s, border-color .18s; }
-.dcv4-price__all svg { width: 18px; height: 18px; padding: 3px; border-radius: 50%; color: #15803d; background: #dcfce7; flex: 0 0 auto; }
+.dcv4-price__all { margin-top: 12px; display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; font-size: 12px; font-weight: 700; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 999px; padding: 4px 10px 4px 6px; text-decoration: none; transition: background .18s, border-color .18s; }
+.dcv4-price__all svg { width: 16px; height: 16px; padding: 3px; border-radius: 50%; color: #15803d; background: #dcfce7; flex: 0 0 auto; }
 .dcv4-price__all:hover { background: #dcfce7; border-color: #86efac; color: #166534; }
 .dcv4-price__all:focus-visible { outline: 2px solid #15803d; outline-offset: 2px; }
 .dcv4-price__card.is-featured .dcv4-price__all { color: #86efac; background: rgba(74,222,128,.1); border-color: rgba(74,222,128,.3); }
@@ -990,23 +992,23 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv4-price__card.is-featured .dcv4-price__all:focus-visible { outline-color: #86efac; }
 
 /* Lista de funciones: filas con filo entre ellas, ✓/✗ en ficha redonda de 20 px. */
-.dcv4-price__addendum { margin-top: 22px; display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 800; color: var(--ink); }
+.dcv4-price__addendum { margin-top: 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 800; color: var(--ink); }
 .dcv4-price__addendum::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--hair); }
-.dcv4-price__feats { margin-top: 12px; display: flex; flex-direction: column; }
-.dcv4-price__feat { display: flex; gap: 11px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--hair); font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+.dcv4-price__feats { margin-top: 4px; display: flex; flex-direction: column; }
+.dcv4-price__feat { display: flex; gap: 9px; align-items: flex-start; padding: 5px 0; border-top: 1px solid var(--hair); font-size: 13.5px; line-height: 1.35; color: var(--ink-2); }
 .dcv4-price__feat:first-child { border-top: 0; }
 .dcv4-price__feat.is-off { color: var(--mute); }
-.dcv4-price__chk { flex: 0 0 auto; margin-top: 1px; width: 20px; height: 20px; padding: 3px; border-radius: 50%; color: #64748b; background: #f1f5f9; }
+.dcv4-price__chk { flex: 0 0 auto; margin-top: 0; width: 18px; height: 18px; padding: 3px; border-radius: 50%; color: #64748b; background: #f1f5f9; }
 .dcv4-price__chk--on { color: #15803d; background: #dcfce7; }
 .dcv4-price__card.is-featured .dcv4-price__chk { color: #94a3b8; background: rgba(255,255,255,.08); }
 .dcv4-price__card.is-featured .dcv4-price__chk--on { color: #86efac; background: rgba(74,222,128,.16); }
-.dcv4-price__spacer { display: block; min-height: 22px; flex: 1 1 auto; }
+.dcv4-price__spacer { display: block; min-height: 12px; flex: 1 1 auto; }
 
 /* Botón: degradado azul con brillo interior y halo; en la recomendada es
    blanco sobre el navy (más contraste que azul sobre azul oscuro). */
-.dcv4-price__cta { margin-top: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 62px; color: #fff; border-radius: 14px; font-weight: 700; font-size: 15.5px; padding: 9px 14px; text-align: center; background: linear-gradient(180deg, #2f6df0 0%, #2563eb 55%, #1d4ed8 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 12px 26px -14px rgba(37,99,235,.75); transition: transform .2s, box-shadow .2s, background .2s; }
+.dcv4-price__cta { margin-top: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 54px; color: #fff; border-radius: 12px; font-weight: 700; font-size: 15px; padding: 7px 14px; text-align: center; background: linear-gradient(180deg, #2f6df0 0%, #2563eb 55%, #1d4ed8 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 12px 26px -14px rgba(37,99,235,.75); transition: transform .2s, box-shadow .2s, background .2s; }
 .dcv4-price__cta:hover { color: #fff; background: linear-gradient(180deg, #2563eb, #1d4ed8); transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 18px 32px -14px rgba(37,99,235,.85); }
-.dcv4-price__ctasub { font-size: 12px; font-weight: 600; color: #dbeafe; min-height: 1.2em; white-space: nowrap; }
+.dcv4-price__ctasub { font-size: 11.5px; font-weight: 600; color: #dbeafe; min-height: 1.2em; white-space: nowrap; }
 .dcv4-price__card.is-featured .dcv4-price__cta { color: #0f172a; background: linear-gradient(180deg, #fff, #eff6ff); box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 14px 30px -14px rgba(96,165,250,.6); }
 .dcv4-price__card.is-featured .dcv4-price__cta:hover { color: #0f172a; background: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 20px 36px -14px rgba(96,165,250,.75); }
 .dcv4-price__card.is-featured .dcv4-price__ctasub { color: #1d4ed8; }
@@ -1044,10 +1046,16 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
    columna flex de siempre. En móvil (una columna) no cambia nada. */
 @supports (grid-template-rows: subgrid) {
   @media (min-width: 761px) {
+    /* Ajuste 15: el subgrid HEREDA el `gap` del grid de tarjetas, así que el hueco
+       entre tarjetas (18–26 px) se colaba entre TODAS las pistas internas (21 huecos
+       ≈ 550 px por tarjeta a 1440: el «mucho espacio» que vio Rafael tras el
+       ajuste 14). Sin hueco de fila: en fila las tarjetas van lado a lado y el
+       hueco vertical no hace falta. */
+    .dcv4-price__grid { row-gap: 0; }
     .dcv4-price__card { display: grid; grid-template-rows: subgrid; grid-row: span var(--rows, 22); align-content: start; }
     .dcv4-price__feats { display: contents; }
     .dcv4-price__all { justify-self: start; align-self: start; }
-    .dcv4-price__spacer { grid-row: -3 / -2; min-height: 22px; }
+    .dcv4-price__spacer { grid-row: -3 / -2; min-height: 12px; }
     .dcv4-price__cta { grid-row: -2 / -1; margin-top: 0; align-self: end; }
   }
 }
@@ -1066,17 +1074,16 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
    aire para que «0 · Sin IA» siga en una línea junto a «ALMACENAMIENTO»
    (a 1024 la columna derecha se quedaba en 97 px y el valor se partía). */
 @media (min-width: 1001px) and (max-width: 1180px) {
-  .dcv4-price__card { padding: 30px 24px 26px; }
-  .dcv4-price__card.is-featured { padding: 42px 24px 38px; }
-  .dcv4-price__badge { left: 24px; }
-  .dcv4-price__caps { gap: 8px; }
-  .dcv4-price__cap { padding: 10px 10px; }
-  .dcv4-price__capvalue { font-size: 16px; }
+  .dcv4-price__card { padding: 28px 18px 20px; }
+  .dcv4-price__card.is-featured { padding: 40px 18px 32px; }
+  .dcv4-price__badge { left: 18px; }
+  .dcv4-price__cap { padding: 7px 9px; }
+  .dcv4-price__capvalue { font-size: 14.5px; }
   /* Ajuste 11: «Todo lo de Profesional + lo esencial» cabe en una línea a 1024 (265 px útiles). */
   .dcv4-price__all { font-size: 11.5px; letter-spacing: -.01em; gap: 6px; padding: 5px 10px 5px 7px; }
 }
 @media (max-width: 480px) {
-  .dcv4-price__card { padding: 28px 18px 22px; border-radius: 20px; }
+  .dcv4-price__card { padding: 28px 16px 18px; border-radius: 18px; }
   .dcv4-price__badge { left: 18px; }
   .dcv4-price__tbtn { padding: 9px 14px; font-size: 14px; }
 }

@@ -161,7 +161,7 @@
 /* Ajuste 3: cuatro vistas apiladas que se turnan (ciclo de 10 s, 2.5 s cada
    una, fundido de .6 s). Solo se anima `opacity`. */
 .dcf3-cb__view { position: relative; aspect-ratio: 16 / 10; background: #000; overflow: hidden; }
-.dcf3-cb__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; animation: dcf3CbctVista 10s ease-in-out infinite; }
+.dcf3-cb__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; opacity: 0; animation: dcf3CbctVista 10s ease-in-out infinite; } /* ajuste 6: la imagen ya es 16:10 con la anatomía centrada, cover no recorta */
 .dcf3-cb__t { position: relative; height: 1.35em; }
 .dcf3-cb__lbl { position: absolute; left: 0; top: 0; right: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; animation: dcf3CbctVista 10s ease-in-out infinite; }
 @keyframes dcf3CbctVista { 0% { opacity: 0; } 6% { opacity: 1; } 25% { opacity: 1; } 31% { opacity: 0; } 100% { opacity: 0; } }
