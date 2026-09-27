@@ -463,6 +463,7 @@ test("el IVA nuevo solo lo usan los sitios que crean cobros nuevos por plan (che
     "src/app/api/billing/change-plan/preview/route.ts",
     "src/app/api/billing/change-plan/route.ts",
     "src/app/api/billing/checkout/route.ts",
+    "src/app/dashboard/settings/page.tsx", // solo LEE si el IVA está configurado, para el texto de «Activa tu plan»
     "src/lib/billing/first-month-promo.ts", // el cupón del primer mes deja el total exacto con el IVA dentro
     "src/lib/billing/iva-clinica.ts",
     "src/lib/stripe-subscriptions.ts",
