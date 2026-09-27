@@ -67,6 +67,8 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     NO_IMPORT,
     { value: "firstName", label: "Nombre", labelKey: "shell.importClinic.fields.firstName" },
     { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "fullName", label: "Nombre completo (se parte solo)", labelKey: "shell.importClinic.fields.fullName" },
+    { value: "externalId", label: "ID en el sistema de origen", labelKey: "shell.importClinic.fields.externalId" },
     { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
     { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
     { value: "dob", label: "Fecha de nacimiento", labelKey: "shell.importClinic.fields.dob" },
@@ -81,6 +83,8 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
     { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
     { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "patientExternalId", label: "ID del paciente en el sistema de origen", labelKey: "shell.importClinic.fields.patientExternalId" },
+    { value: "externalId", label: "ID del saldo en el sistema de origen", labelKey: "shell.importClinic.fields.balanceExternalId" },
     { value: "amount", label: "Saldo / Monto", labelKey: "shell.importClinic.fields.amount" },
     { value: "type", label: "Tipo (adeudo/favor)", labelKey: "shell.importClinic.fields.balanceType" },
     { value: "description", label: "Concepto", labelKey: "shell.importClinic.fields.concept" },
@@ -89,6 +93,8 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
   appointments: [
     NO_IMPORT,
     { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "patientExternalId", label: "ID del paciente en el sistema de origen", labelKey: "shell.importClinic.fields.patientExternalId" },
     { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
     { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
     { value: "doctor", label: "Doctor / Profesional", labelKey: "shell.importClinic.fields.doctor" },
@@ -96,12 +102,14 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "time", label: "Hora", labelKey: "shell.importClinic.fields.time" },
     { value: "type", label: "Tipo / Motivo", labelKey: "shell.importClinic.fields.type" },
     { value: "duration", label: "Duración (min)", labelKey: "shell.importClinic.fields.duration" },
+    { value: "status", label: "Estado de la cita", labelKey: "shell.importClinic.fields.apptStatus" },
     { value: "notes", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
   ],
   medicalHistory: [
     NO_IMPORT,
     { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
     { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "patientExternalId", label: "ID del paciente en el sistema de origen", labelKey: "shell.importClinic.fields.patientExternalId" },
     { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
     { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
     { value: "allergies", label: "Alergias", labelKey: "shell.importClinic.fields.allergies" },
@@ -114,6 +122,7 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     NO_IMPORT,
     { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
     { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "patientExternalId", label: "ID del paciente en el sistema de origen", labelKey: "shell.importClinic.fields.patientExternalId" },
     { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
     { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
     { value: "date", label: "Fecha", labelKey: "shell.importClinic.fields.date" },
@@ -125,6 +134,7 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     NO_IMPORT,
     { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
     { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "patientExternalId", label: "ID del paciente en el sistema de origen", labelKey: "shell.importClinic.fields.patientExternalId" },
     { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
     { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
     { value: "folio", label: "Folio del presupuesto", labelKey: "shell.importClinic.fields.folio" },
@@ -259,6 +269,7 @@ export class RealImportClient implements ImportClient {
           name: b.name,
           color: l?.color ?? "#6b7280",
           hasProfile: !!b.hasProfile,
+          verified: !!b.verified,
           glyph: l?.glyph,
         };
       });
@@ -273,12 +284,12 @@ export class RealImportClient implements ImportClient {
     file: File,
     mapping?: ColumnMapping,
     onProgress?: OnUploadProgress,
-    opts?: { origin?: string | null },
+    opts?: { origin?: string | null; valueMapping?: ValueMapping },
   ): Promise<PreviewResult> {
     const backend = (await this.post(
       entity,
       file,
-      { dryRun: true, mapping, origin: opts?.origin },
+      { dryRun: true, mapping, origin: opts?.origin, valueMapping: opts?.valueMapping },
       onProgress,
     )) as BackendPreviewResult;
     return adaptPreview(entity, backend);
@@ -434,7 +445,7 @@ function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
     totalRows: b.total,
     columns,
     targetFields: CANONICAL_FIELDS[entity] ?? CANONICAL_FIELDS.patients,
-    stats: { valid: b.validos, errors: b.invalidos, duplicates: b.duplicados },
+    stats: { valid: b.validos, errors: b.invalidos, duplicates: b.duplicados, ...(b.omitidos ? { omitted: b.omitidos } : {}) },
     rows,
     ...(b.mappingError ? { mappingError: b.mappingError } : {}),
     ...(b.unresolved?.length ? { unresolved: b.unresolved } : {}),
@@ -454,6 +465,7 @@ function adaptCommit(entity: Entity, b: BackendCommitResult): CommitResult {
     created: b.created,
     errors: Array.isArray(b.errors) ? b.errors.length : 0,
     duplicates: b.duplicates,
+    ...(b.omitted ? { omitted: b.omitted } : {}),
     summary,
     // El backend no genera (todavía) un reporte de errores descargable; los
     // errores se muestran en la tabla de revisión. Ver ORQUESTA (followup).
