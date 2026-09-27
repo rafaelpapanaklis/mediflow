@@ -6,6 +6,7 @@ import {
   requireRole,
 } from "@/lib/agenda/api-helpers";
 import { aggregateAdminPeriodKpis } from "@/lib/agenda/server";
+import { getExpiryAlerts } from "@/lib/inventory/lots.server";
 import {
   periodRangeUtc,
   getTzParts,
@@ -313,6 +314,30 @@ async function buildAlerts(
   } catch (err) {
     console.error("[admin alerts] lowStock query failed:", err);
     /* skip — la alerta se omite, no rompemos el endpoint */
+  }
+
+  // WS1-T5 — lotes por caducar / caducados. getExpiryAlerts ya tolera que el
+  // SQL de lotes todavía no esté aplicado (devuelve listas vacías).
+  try {
+    const { porCaducar, caducado } = await getExpiryAlerts(clinicId);
+    if (caducado.length > 0) {
+      alerts.push({
+        id:    "inv-caducado",
+        tone:  "danger",
+        title: `Inventario: ${caducado.length} lote${caducado.length === 1 ? "" : "s"} caducado${caducado.length === 1 ? "" : "s"}`,
+        href:  "/dashboard/inventory?filter=caducado",
+      });
+    }
+    if (porCaducar.length > 0) {
+      alerts.push({
+        id:    "inv-por-caducar",
+        tone:  "warning",
+        title: `Inventario: ${porCaducar.length} lote${porCaducar.length === 1 ? "" : "s"} por caducar`,
+        href:  "/dashboard/inventory?filter=por-caducar",
+      });
+    }
+  } catch (err) {
+    console.error("[admin alerts] expiry alerts query failed:", err);
   }
 
   // Facturas vencidas

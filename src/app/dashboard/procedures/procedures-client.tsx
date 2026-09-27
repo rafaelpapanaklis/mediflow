@@ -23,7 +23,10 @@ import {
   Tag,
   Info,
   Power,
+  FlaskConical,
 } from "lucide-react";
+// WS1-T5 — receta de materiales del procedimiento: modal propio y aislado.
+import { MaterialesModal } from "@/components/dashboard/inventory/materiales-modal";
 
 interface Procedure {
   id: string;
@@ -87,6 +90,8 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Procedure | null>(null);
+  // WS1-T5 — receta de materiales.
+  const [materialesDe, setMaterialesDe] = useState<Procedure | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
@@ -410,6 +415,17 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                         <td className={rediseno ? undefined : "px-5 py-3"}>
                           <div className={rediseno ? styles.actions : "flex items-center justify-end gap-1"}>
                             <button
+                              onClick={() => setMaterialesDe(p)}
+                              title="Materiales (receta)"
+                              className={
+                                rediseno
+                                  ? styles.actionBtn
+                                  : "p-1.5 rounded-lg text-muted-foreground hover:text-brand-600 hover:bg-brand-600/15 dark:hover:bg-brand-900/20 transition-colors"
+                              }
+                            >
+                              <FlaskConical className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => openEdit(p)}
                               title={t("common.edit")}
                               className={
@@ -618,6 +634,15 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
             </form>
           </div>
         </div>
+      )}
+
+      {/* WS1-T5 — receta de materiales del procedimiento. */}
+      {materialesDe && (
+        <MaterialesModal
+          procedureId={materialesDe.id}
+          procedureName={materialesDe.name}
+          onClose={() => setMaterialesDe(null)}
+        />
       )}
     </div>
   );

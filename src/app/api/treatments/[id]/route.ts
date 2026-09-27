@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { consumeFefoTx, InsufficientStockError } from "@/lib/inventory/lots.server";
+import { consumeRecipeForSession } from "@/lib/inventory/recipe.server";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -31,6 +33,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json();
 
   // ── add_session with optional inventory deduction ─────────────────────────
+  // WS1-T5: el descuento se movió DESPUÉS de crear la sesión y vive en la
+  // MISMA transacción que ella (antes eran pasos sueltos: el stock se
+  // descontaba primero y, si algo fallaba al crear la sesión, quedaba
+  // descontado sin sesión que lo explique). El chequeo de stock ahora corre
+  // DENTRO de la transacción, con el artículo bloqueado (FOR UPDATE, ver
+  // consumeFefoTx) — antes se leía fuera y dos sesiones a la vez podían
+  // pasar la validación con el mismo stock y dejarlo negativo. Además, si
+  // hay receta de materiales (procedureId) o insumos elegidos a mano, el
+  // consumo se hace por LOTE (FEFO), no por cantidad plana del artículo.
   if (body.action === "add_session") {
     const completedCount = plan.sessions.filter(s => s.completedAt !== null).length;
     const nextNumber     = completedCount + 1;
@@ -39,58 +50,92 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "El plan ya tiene todas las sesiones completadas" }, { status: 400 });
     }
 
-    // inventoryItems: [{ id, qty, name }]
+    // inventoryItems: [{ id, qty, name }] — selección manual de insumos,
+    // como hoy. procedureId (WS1-T5): si el procedimiento del catálogo
+    // tiene receta de materiales, se descuenta también, sola.
     const invItems: { id: string; qty: number; name: string }[] = body.inventoryItems ?? [];
+    const procedureId: string | null = body.procedureId ? String(body.procedureId) : null;
 
+    for (const it of invItems) {
+      // EQ — una cantidad negativa o cero no puede "consumir" insumo: eso
+      // subiría existencias por la puerta de atrás con solo treatments.edit.
+      if (!(Number(it.qty) > 0)) {
+        return NextResponse.json({ error: `Cantidad inválida para "${it.name}": ${it.qty}` }, { status: 400 });
+      }
+    }
+    if (procedureId) {
+      const procedure = await prisma.procedureCatalog.findFirst({ where: { id: procedureId, clinicId: ctx.clinicId } });
+      if (!procedure) return NextResponse.json({ error: "Procedimiento no encontrado" }, { status: 404 });
+    }
+    let dbItems: { id: string; name: string }[] = [];
     if (invItems.length > 0) {
-      // Fetch items and validate stock
-      const dbItems = await prisma.inventoryItem.findMany({
-        where: { clinicId: ctx.clinicId, id: { in: invItems.map(i => i.id) } },
+      dbItems = await prisma.inventoryItem.findMany({
+        where:  { clinicId: ctx.clinicId, id: { in: invItems.map(i => i.id) } },
+        select: { id: true, name: true },
       });
-
-      for (const req of invItems) {
-        const item = dbItems.find(i => i.id === req.id);
-        if (!item) return NextResponse.json({ error: "Insumo no encontrado" }, { status: 404 });
-        if (item.quantity < req.qty) {
-          return NextResponse.json({
-            error: `Stock insuficiente de "${item.name}": disponible ${item.quantity} ${item.unit}, necesitas ${req.qty}`,
-          }, { status: 400 });
+      for (const it of invItems) {
+        if (!dbItems.find(d => d.id === it.id)) {
+          return NextResponse.json({ error: "Insumo no encontrado" }, { status: 404 });
         }
       }
-
-      // Deduct in transaction
-      await prisma.$transaction([
-        ...invItems.map(i => prisma.inventoryItem.update({
-          where: { id: i.id },
-          data:  { quantity: { decrement: i.qty } },
-        })),
-        ...invItems.map(i => prisma.inventoryHistory.create({
-          data: { itemId: i.id, change: -i.qty, reason: `Sesión ${nextNumber} — ${plan.name}` },
-        })),
-      ]);
     }
-
-    // Create session
-    await prisma.treatmentSession.create({
-      data: {
-        treatmentId:   params.id,
-        sessionNumber: nextNumber,
-        notes:         body.notes || null,
-        completedAt:   new Date(),
-      },
-    });
 
     const isCompleted     = nextNumber >= plan.totalSessions;
     const newNextExpected = new Date(Date.now() + plan.sessionIntervalDays * 24 * 60 * 60 * 1000);
 
-    await prisma.treatmentPlan.update({
-      where: { id: params.id },
-      data: {
-        nextExpectedDate: isCompleted ? null : newNextExpected,
-        status:           isCompleted ? "COMPLETED" : "ACTIVE",
-        updatedAt:        new Date(),
-      },
-    });
+    let recetaConsumida: { itemId: string; itemName: string; qtyConsumed: number }[] = [];
+
+    try {
+      await prisma.$transaction(async tx => {
+        const session = await tx.treatmentSession.create({
+          data: {
+            treatmentId:   params.id,
+            sessionNumber: nextNumber,
+            notes:         body.notes || null,
+            completedAt:   new Date(),
+            procedureId,
+          },
+        });
+
+        if (procedureId) {
+          const consumo = await consumeRecipeForSession(tx, {
+            clinicId:           ctx.clinicId,
+            procedureId,
+            treatmentSessionId: session.id,
+            userId:             ctx.userId,
+            sessionLabel:       `Sesión ${nextNumber} — ${plan.name}`,
+          });
+          recetaConsumida = consumo;
+        }
+
+        for (const it of invItems) {
+          const item = dbItems.find(d => d.id === it.id)!;
+          await consumeFefoTx(tx, {
+            clinicId:           ctx.clinicId,
+            itemId:             it.id,
+            itemName:           item.name,
+            qty:                Number(it.qty),
+            reason:             `Sesión ${nextNumber} — ${plan.name}`,
+            userId:             ctx.userId,
+            treatmentSessionId: session.id,
+          });
+        }
+
+        await tx.treatmentPlan.update({
+          where: { id: params.id },
+          data: {
+            nextExpectedDate: isCompleted ? null : newNextExpected,
+            status:           isCompleted ? "COMPLETED" : "ACTIVE",
+            updatedAt:        new Date(),
+          },
+        });
+      });
+    } catch (err: any) {
+      if (err instanceof InsufficientStockError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
 
     // NOM-024 §6.3.5 — bitácora: nueva sesión + cambio de estado del plan.
     await logMutation({
@@ -105,7 +150,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     });
 
     revalidateAfter("treatments");
-    return NextResponse.json({ success: true, sessionNumber: nextNumber, completed: isCompleted });
+    return NextResponse.json({
+      success:      true,
+      sessionNumber: nextNumber,
+      completed:     isCompleted,
+      materialesDescontados: [
+        ...recetaConsumida,
+        ...invItems.map(i => ({ itemId: i.id, itemName: i.name, qtyConsumed: Number(i.qty) })),
+      ],
+    });
   }
 
   // ── status change ──────────────────────────────────────────────────────────

@@ -1,0 +1,157 @@
+// WS1-T5 — integración de lots.server.ts / recipe.server.ts contra el doble
+// en memoria (sin Postgres). Corre: npm run test:inventario-lotes-server
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { DobleInventario } from "./doble-inventario";
+import { consumeFefoTx, createLot, writeOffExpiredLot, InsufficientStockError } from "../lots.server";
+import { consumeRecipeForSession, upsertRecipeLine } from "../recipe.server";
+
+const CLINIC = "clinic-1";
+
+function itemBase(overrides: Partial<any> = {}) {
+  return {
+    id: "item-1", clinicId: CLINIC, name: "Anestesia", category: "Materiales",
+    emoji: "📦", quantity: 10, minQuantity: 2, unit: "pza", price: null,
+    quantityPrecise: null, createdAt: new Date(), updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+describe("reconciliación: drift fuera del sistema de lotes", () => {
+  let db: DobleInventario;
+  beforeEach(() => { db = new DobleInventario(); });
+
+  it("sin lotes todavía: el primer consumo crea el sin-lote con el agregado real (no un id inventado)", async () => {
+    db.tablas.inventoryItem.push(itemBase({ quantity: 10 }));
+
+    const { allocations } = await consumeFefoTx(db as any, {
+      clinicId: CLINIC, itemId: "item-1", itemName: "Anestesia", qty: 4, reason: "Sesión 1",
+    });
+
+    assert.equal(allocations.length, 1);
+    // El lote asignado debe existir DE VERDAD (no "__nuevo_sin_lote__").
+    const lote = db.tablas.inventoryLot.find(l => l.id === allocations[0].lotId);
+    assert.ok(lote, "el lote del allocation debe existir en la tabla");
+    assert.equal(Number(lote!.remaining), 6);
+
+    const item = db.tablas.inventoryItem.find(i => i.id === "item-1")!;
+    assert.equal(item.quantity, 6);
+  });
+
+  it("una compra/ajuste externo (t4) sube quantity sin tocar lotes: el consumo lo absorbe en sin-lote antes de descontar", async () => {
+    db.tablas.inventoryItem.push(itemBase({ quantity: 10 }));
+    db.tablas.inventoryLot.push({
+      id: "lote-a", clinicId: CLINIC, itemId: "item-1", lotNumber: "L1",
+      expiresAt: new Date("2026-10-01"), quantity: 10, remaining: 10,
+      unitCost: null, purchaseLineId: null, createdAt: new Date(), updatedAt: new Date(),
+    });
+    // t4 registra una compra: sube quantity a 25 SIN crear lote (fuera de mi alcance).
+    const item = db.tablas.inventoryItem.find(i => i.id === "item-1")!;
+    item.quantity = 25;
+
+    await consumeFefoTx(db as any, { clinicId: CLINIC, itemId: "item-1", itemName: "Anestesia", qty: 3, reason: "Sesión 1" });
+
+    // 10 (lote-a) + 15 (reconciliación → sin-lote) - 3 (consumo del lote-a, que caduca antes) = 22
+    const loteA   = db.tablas.inventoryLot.find(l => l.id === "lote-a")!;
+    const sinLote = db.tablas.inventoryLot.find(l => l.lotNumber === null)!;
+    assert.equal(Number(loteA.remaining), 7);   // 10 - 3 (FEFO consume primero el que tiene fecha)
+    assert.equal(Number(sinLote.remaining), 15); // absorbió el drift, intacto
+    const itemFinal = db.tablas.inventoryItem.find(i => i.id === "item-1")!;
+    assert.equal(itemFinal.quantity, 22);
+  });
+});
+
+describe("consumo FEFO transaccional: todo o nada", () => {
+  let db: DobleInventario;
+  beforeEach(() => { db = new DobleInventario(); });
+
+  it("stock insuficiente lanza InsufficientStockError y NO descuenta nada", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "item-2", quantity: 5 }));
+
+    await assert.rejects(
+      () => consumeFefoTx(db as any, { clinicId: CLINIC, itemId: "item-2", itemName: "Anestesia", qty: 100, reason: "x" }),
+      InsufficientStockError,
+    );
+    const item = db.tablas.inventoryItem.find(i => i.id === "item-2")!;
+    assert.equal(item.quantity, 5); // sin cambios
+  });
+
+  it("receta con 2 insumos: si el segundo no alcanza, el primero también se revierte (misma transacción)", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "gasa", clinicId: CLINIC, name: "Gasas", quantity: 50 }));
+    db.tablas.inventoryItem.push(itemBase({ id: "anestesia-cara", clinicId: CLINIC, name: "Anestesia rara", quantity: 1 }));
+    db.tablas.procedureCatalog.push({ id: "proc-1", clinicId: CLINIC, name: "Extracción", isActive: true });
+    await upsertRecipeLine(CLINIC, "proc-1", "gasa", 5, db as any);
+    await upsertRecipeLine(CLINIC, "proc-1", "anestesia-cara", 10, db as any); // pide 10, solo hay 1
+
+    // Igual que la ruta real: consumeRecipeForSession corre DENTRO de
+    // $transaction, así que si el segundo insumo no alcanza, el throw
+    // aborta la transacción entera y revierte también el primero.
+    await assert.rejects(
+      () => db.$transaction(tx => consumeRecipeForSession(tx as any, {
+        clinicId: CLINIC, procedureId: "proc-1", treatmentSessionId: "sesion-1", sessionLabel: "Sesión 1",
+      })),
+      InsufficientStockError,
+    );
+
+    // Ni la gasa (que sí alcanzaba) debe haberse tocado: todo vive en una sola transacción.
+    const gasa = db.tablas.inventoryItem.find(i => i.id === "gasa")!;
+    assert.equal(gasa.quantity, 50);
+  });
+
+  it("receta completa: descuenta los dos insumos en la misma llamada", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "gasa", clinicId: CLINIC, name: "Gasas", quantity: 50 }));
+    db.tablas.inventoryItem.push(itemBase({ id: "algodon", clinicId: CLINIC, name: "Algodón", quantity: 20 }));
+    db.tablas.procedureCatalog.push({ id: "proc-2", clinicId: CLINIC, name: "Limpieza", isActive: true });
+    await upsertRecipeLine(CLINIC, "proc-2", "gasa", 3, db as any);
+    await upsertRecipeLine(CLINIC, "proc-2", "algodon", 2, db as any);
+
+    const resultado = await db.$transaction(tx =>
+      consumeRecipeForSession(tx as any, { clinicId: CLINIC, procedureId: "proc-2", treatmentSessionId: "sesion-2", sessionLabel: "Sesión 2" }),
+    );
+
+    assert.equal(resultado.length, 2);
+    assert.equal(db.tablas.inventoryItem.find(i => i.id === "gasa")!.quantity, 47);
+    assert.equal(db.tablas.inventoryItem.find(i => i.id === "algodon")!.quantity, 18);
+  });
+
+  it("procedimiento sin receta capturada: no hace nada, no es un error", async () => {
+    db.tablas.procedureCatalog.push({ id: "proc-3", clinicId: CLINIC, name: "Sin receta", isActive: true });
+    const resultado = await db.$transaction(tx =>
+      consumeRecipeForSession(tx as any, { clinicId: CLINIC, procedureId: "proc-3", treatmentSessionId: "s3", sessionLabel: "S3" }),
+    );
+    assert.deepEqual(resultado, []);
+  });
+});
+
+describe("alta y baja de lote", () => {
+  let db: DobleInventario;
+  beforeEach(() => { db = new DobleInventario(); });
+
+  it("createLot suma al agregado del artículo y deja rastro", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "item-3", quantity: 0 }));
+
+    const lot = await createLot({
+      clinicId: CLINIC, itemId: "item-3", lotNumber: "L-100",
+      expiresAt: new Date("2027-01-01"), quantity: 30, unitCost: 12.5, purchaseLineId: null,
+    }, db as any);
+
+    assert.equal(lot.remaining, 30);
+    assert.equal(db.tablas.inventoryItem.find(i => i.id === "item-3")!.quantity, 30);
+    assert.equal(db.tablas.inventoryLotMovement.filter(m => m.lotId === lot.id).length, 1);
+    assert.equal(db.tablas.inventoryHistory.filter(h => h.itemId === "item-3").length, 1);
+  });
+
+  it("writeOffExpiredLot vacía el lote y baja el agregado", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "item-4", quantity: 20 }));
+    db.tablas.inventoryLot.push({
+      id: "lote-caduco", clinicId: CLINIC, itemId: "item-4", lotNumber: "VIEJO",
+      expiresAt: new Date("2020-01-01"), quantity: 20, remaining: 20,
+      unitCost: null, purchaseLineId: null, createdAt: new Date(), updatedAt: new Date(),
+    });
+
+    await writeOffExpiredLot({ clinicId: CLINIC, lotId: "lote-caduco" }, db as any);
+
+    assert.equal(Number(db.tablas.inventoryLot.find(l => l.id === "lote-caduco")!.remaining), 0);
+    assert.equal(db.tablas.inventoryItem.find(i => i.id === "item-4")!.quantity, 0);
+  });
+});

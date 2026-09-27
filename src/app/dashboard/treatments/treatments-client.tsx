@@ -76,6 +76,10 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
   const [sessionNote,  setSessionNote]  = useState("");
   const [invItems,     setInvItems]     = useState<InvItem[]>([]);
   const [selInv,       setSelInv]       = useState<SelectedInv[]>([]);
+  // WS1-T5 — procedimiento del catálogo ligado a la sesión: si tiene receta
+  // de materiales, se descuenta solo (por lote FEFO) al registrarla.
+  const [procedureOpts, setProcedureOpts] = useState<{ id: string; name: string }[]>([]);
+  const [selProcedureId, setSelProcedureId] = useState("");
   const [loadingInv,   setLoadingInv]   = useState(false);
 
   // New plan form
@@ -162,6 +166,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
           action: "add_session",
           notes: sessionNote.trim() || null,
           inventoryItems: selInv.map(i => ({ id: i.id, qty: i.qty, name: i.name })),
+          procedureId: selProcedureId || undefined,
         }),
       });
       const data = await res.json();
@@ -193,6 +198,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       setAddingSession(null);
       setSessionNote("");
       setSelInv([]);
+      setSelProcedureId("");
       toast.success(data.completed ? t("pages.treatments.treatmentCompletedToast") : t("pages.treatments.sessionRecorded", { num: data.sessionNumber }));
       router.refresh();
     } catch (err: any) { toast.error(err.message); }
@@ -211,6 +217,18 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       toast.success(t("pages.treatments.statusUpdated"));
       router.refresh();
     } catch { toast.error(t("pages.treatments.updateError")); }
+  }
+
+  // WS1-T5 — procedimientos del catálogo, para el selector de receta de
+  // materiales. Perezoso, igual que loadInventory: solo al abrir "Registrar
+  // sesión" la primera vez.
+  async function loadProcedureOpts() {
+    if (procedureOpts.length > 0) return;
+    try {
+      const r = await fetch("/api/procedures");
+      const d = await r.json();
+      setProcedureOpts(Array.isArray(d) ? d.map((p: any) => ({ id: p.id, name: p.name })) : []);
+    } catch {}
   }
 
   // Lo mismo que hace el InventoryPicker de siempre al abrirse, para que el
@@ -577,6 +595,20 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                         />
                       </div>
 
+                      {/* WS1-T5 — si el procedimiento tiene receta de materiales, se
+                          descuenta solo (por lote FEFO) al registrar la sesión. */}
+                      <div className="field-new">
+                        <label className="field-new__label">Procedimiento (opcional — descuenta su receta de materiales)</label>
+                        <select
+                          className="input-new"
+                          value={selProcedureId}
+                          onChange={e => setSelProcedureId(e.target.value)}
+                        >
+                          <option value="">Sin procedimiento del catálogo</option>
+                          {procedureOpts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+
                       <InventoryPicker
                         clinicItems={invItems}
                         selected={selInv}
@@ -602,7 +634,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                         <ButtonNew
                           variant="ghost"
-                          onClick={() => { setAddingSession(null); setSessionNote(""); setSelInv([]); }}
+                          onClick={() => { setAddingSession(null); setSessionNote(""); setSelInv([]); setSelProcedureId(""); }}
                         >
                           {t("common.cancel")}
                         </ButtonNew>
@@ -619,7 +651,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                   ) : (
                     <ButtonNew
                       variant="primary"
-                      onClick={() => setAddingSession(selected.id)}
+                      onClick={() => { setAddingSession(selected.id); loadProcedureOpts(); }}
                       icon={<Plus size={14} />}
                       style={{ width: "100%", justifyContent: "center" }}
                     >

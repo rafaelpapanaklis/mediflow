@@ -2239,9 +2239,15 @@ model TreatmentSession {
   notes         String?
   completedAt   DateTime? // null = not yet done
   createdAt     DateTime  @default(now())
+  /// WS1-T5 — procedimiento del catálogo ligado a esta sesión, para
+  /// auto-consumir su receta de materiales por FEFO al registrarla. null =
+  /// sesión sin procedimiento asociado (selección manual de insumos, como
+  /// funciona hoy).
+  procedureId   String?
 
-  treatment      TreatmentPlan   @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  treatment      TreatmentPlan     @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
   treatmentLinks TreatmentLink[]
+  procedure      ProcedureCatalog? @relation(fields: [procedureId], references: [id], onDelete: SetNull)
 
   @@index([treatmentId])
   @@map("treatment_sessions")
@@ -2904,11 +2910,29 @@ model InventoryItem {
   minQuantity Int      @default(5)
   unit        String   @default("pza")
   price       Float?
+  /// WS1-T5 — espejo de precisión para unidades fraccionables (ml, mg).
+  /// Ver la nota de diseño en el bloque de InventoryLot, al final del
+  /// archivo. null = el artículo no usa cantidades decimales; se sigue
+  /// leyendo `quantity` como hasta hoy.
+  quantityPrecise Decimal? @db.Decimal(12, 3)
+  /// WS1-T4 — costo unitario (lo que a la clínica le CUESTA cada unidad),
+  /// separado de `price` (precio de venta, sin uso hoy). 0 = "no cuesta
+  /// nada" y se guarda tal cual, nunca null: "Valor total" (Σ unitCost ×
+  /// quantity, antes Σ price × quantity y siempre $0 porque nadie capturaba
+  /// price) necesita distinguir "cuesta 0" de "no sé cuánto cuesta". Columna
+  /// NUEVA — el código tolera P2021/P2022 mientras
+  /// sql/inventario-costo-t4.sql no se pegue (src/lib/inventory/costo.server.ts,
+  /// que es el ÚNICO punto por el que debe pasar cualquier lectura/escritura
+  /// de InventoryItem que toque este campo — así Ejercicios, Ortopédicos y el
+  /// widget de stock bajo de Hoy, que no saben de costo, no se caen).
+  unitCost    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  clinic  Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  history InventoryHistory[]
+  clinic          Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  history         InventoryHistory[]
+  lots            InventoryLot[]
+  materialRecipes ProcedureMaterialRecipe[]
 
   @@map("inventory_items")
 }
@@ -2918,6 +2942,16 @@ model InventoryHistory {
   itemId    String
   change    Int
   reason    String?
+  /// WS1-T4 — quién lo hizo y de qué clínica (nada lo llenaba antes: la
+  /// bitácora existía pero no servía para auditar). Nullable: filas viejas
+  /// se quedan sin estos datos, no se retro-llenan. Columnas NUEVAS —
+  /// tolerancia P2021/P2022 en src/lib/inventory/historial.server.ts, ÚNICO
+  /// punto de escritura de este modelo.
+  clinicId  String?
+  userId    String?
+  /// "adjust" (ajuste manual) | "session" (descuento por sesión de
+  /// tratamiento) | "purchase" (entrada por compra).
+  type      String   @default("adjust")
   createdAt DateTime @default(now())
 
   item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
@@ -3094,6 +3128,9 @@ model ProcedureCatalog {
   clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   cie9        Cie9Code?   @relation(fields: [cieCode], references: [code])
   quoteItems  QuoteItem[]
+  /// WS1-T5 — receta de materiales y sesiones ligadas a este procedimiento.
+  materialRecipes   ProcedureMaterialRecipe[]
+  treatmentSessions TreatmentSession[]
 
   @@index([clinicId, isActive])
   @@index([cieCode])
@@ -18418,4 +18455,151 @@ model DoctorSchedule {
   @@unique([doctorId, dayOfWeek])
   @@index([clinicId, doctorId])
   @@map("doctor_schedules")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INVENTARIO B — LOTES, CADUCIDAD Y CONSUMO POR TRATAMIENTO (WS1-T5)
+//
+// Bloque propio de ws1-t5, sobre el trabajo de ws1-t4 (costo unitario,
+// proveedores y compras — no se toca aquí). Decisiones de diseño:
+//
+// · clinicId aquí es un campo plano indexado, SIN @relation a Clinic: evita
+//   tocar el modelo Clinic (que editan varias pantallas a la vez en esta
+//   ola) y el aislamiento por tenant se hace igual, filtrando siempre por
+//   clinicId en la consulta (y validando que el item/procedimiento padre
+//   sea de la misma clínica antes de escribir).
+// · Cantidades en Decimal(12,3): un lote puede ser "3 jeringas" o "12.500
+//   ml" con el mismo tipo. InventoryItem.quantity (Int, "lo entero de hoy")
+//   NO se toca: sigue siendo el conteo agregado que ya leen decenas de
+//   pantallas (tarjetas de stock bajo, valor total, etc.). Se añade
+//   quantityPrecise (Decimal, nullable) SOLO como espejo de precisión para
+//   artículos con unidad fraccionable: cuando no es null, es la fuente de
+//   verdad fina y quantity se mantiene como su floor(), para que ninguna
+//   pantalla vieja se rompa. Sincronizado en src/lib/inventory/lots.server.ts.
+// · "Lote sin lote": la migración de sql/inventario-lotes-caducidad-t5.sql
+//   crea, por cada InventoryItem existente, un InventoryLot con lotNumber
+//   NULL, expiresAt NULL y remaining = quantity actual. Es también el
+//   colchón de reconciliación: cualquier alta de existencias que NO pase
+//   por el alta de lote (ajuste manual de hoy, compras futuras de ws1-t4)
+//   engorda este lote la próxima vez que se consume por FEFO — ver
+//   reconcileSinLote en lots.server.ts — así remaining nunca se desincroniza
+//   de InventoryItem.quantity de forma silenciosa.
+// · purchaseLineId: sin FK dura a la línea de compra de ws1-t4 (esa tabla
+//   puede no existir todavía en este entorno — el código tolera P2021/P2022,
+//   regla común de la ola). Es un id de texto libre que se guarda tal cual
+//   venga; si ws1-t4 no lo tiene listo, se deja null y el lote se enlaza
+//   después.
+// ═══════════════════════════════════════════════════════════════════════
+
+model InventoryLot {
+  id             String    @id @default(cuid())
+  /// Aislamiento de tenant — SIEMPRE filtrar por aquí. Sin @relation a
+  /// propósito (ver nota del bloque): evita tocar el modelo Clinic.
+  clinicId       String
+  itemId         String
+  /// null = lote "sin lote" (existencias previas a esta migración, o
+  /// existencias que entraron sin captura de lote).
+  lotNumber      String?
+  /// null = sin caducidad conocida (no cuenta para los avisos).
+  expiresAt      DateTime?
+  /// Cantidad recibida originalmente en este lote. Informativa; el consumo
+  /// siempre descuenta de `remaining`.
+  quantity       Decimal   @db.Decimal(12, 3)
+  remaining      Decimal   @db.Decimal(12, 3)
+  /// Costo unitario de ESTE lote — puede diferir entre lotes del mismo
+  /// artículo (compras en fechas distintas). No es el `unitCost` agregado
+  /// de ws1-t4.
+  unitCost       Float?
+  /// Línea de compra de origen de ws1-t4, si existe. Ver nota del bloque.
+  purchaseLineId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  item      InventoryItem          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  movements InventoryLotMovement[]
+
+  @@index([clinicId, itemId])
+  @@index([itemId, remaining])
+  @@index([clinicId, expiresAt])
+  @@map("inventory_lots")
+}
+
+/// Bitácora de movimientos POR LOTE (consumo FEFO, altas, ajustes de
+/// caducado dado de baja). Distinta de `InventoryHistory` (bitácora
+/// agregada por artículo, que ws1-t4 enriquece con usuario/clinicId/tipo):
+/// esta sostiene la trazabilidad de caducidad y consumo por tratamiento sin
+/// pelear por el mismo modelo.
+model InventoryLotMovement {
+  id                 String   @id @default(cuid())
+  lotId              String
+  /// Denormalizado desde el lote, para filtrar sin JOIN. Sin @relation.
+  clinicId           String
+  /// Negativo = consumo o caducado dado de baja; positivo = alta o ajuste.
+  change             Decimal  @db.Decimal(12, 3)
+  reason             String
+  userId             String?
+  /// Sesión de tratamiento que disparó el consumo, si vino de ahí.
+  treatmentSessionId String?
+  createdAt          DateTime @default(now())
+
+  lot InventoryLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@index([lotId, createdAt])
+  @@index([clinicId, createdAt])
+  @@map("inventory_lot_movements")
+}
+
+/// "Receta de materiales": qué insumos y cuánto gasta UNA realización de un
+/// procedimiento del catálogo. Al registrar la sesión, se descuenta por FEFO.
+model ProcedureMaterialRecipe {
+  id          String   @id @default(cuid())
+  /// Denormalizado desde procedure/item, para filtrar sin JOIN. Sin @relation.
+  clinicId    String
+  procedureId String
+  itemId      String
+  quantity    Decimal  @db.Decimal(12, 3)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  procedure ProcedureCatalog @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  item      InventoryItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([procedureId, itemId])
+  @@index([clinicId])
+  @@map("procedure_material_recipes")
+}
+
+/// Config de avisos de caducidad, una fila por clínica. Sin fila = 30 días
+/// (default de getAlertDays en lots.server.ts — no confiar solo en el
+/// default de columna por si la fila no existe aún, P2021/P2022).
+model InventoryAlertSettings {
+  clinicId       String   @id
+  alertDaysAhead Int      @default(30)
+  updatedAt      DateTime @updatedAt
+
+  @@map("inventory_alert_settings")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANTICIPOS — FASES 2 Y 3 (ws1-t3), sql/anticipo-transferencia.sql
+//
+// Datos bancarios POR SEDE para «Pedir anticipo → Transferencia» (texto +
+// PDF «Solicitud de anticipo») y para «Registrar anticipo recibido». Cada
+// sede es una Clinic aislada en dental, así que una fila por clínica. Sin
+// @relation a Clinic a propósito (mismo criterio que PlatformBankAccount/
+// SpeiTransferRequest): la FK vive en el SQL y el modelo Clinic —que tocan
+// varias pantallas a la vez en esta ola— no se toca.
+// ═══════════════════════════════════════════════════════════════════════
+model ClinicBankAccount {
+  clinicId     String   @id
+  banco        String
+  beneficiario String
+  clabe        String
+  /// Texto libre para guiar el concepto de la transferencia (p. ej. "Escribe
+  /// el nombre del paciente"). null = no se muestra esa línea.
+  referencia   String?
+  updatedBy    String?
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@map("clinic_bank_accounts")
 }
