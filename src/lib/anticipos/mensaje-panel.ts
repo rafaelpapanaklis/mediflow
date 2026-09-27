@@ -27,3 +27,50 @@ export function textoAnticipoPanel(d: DatosAnticipoPanel): string {
     d.url,
   ].join("\n");
 }
+
+// ── Transferencia (ws1-t3 fase 2) ───────────────────────────────────────
+//
+// MISMA estructura que textoAnticipoPanel (paciente, cita, monto, plazo) pero
+// SIN link: en su lugar, los datos bancarios de la sede y la guía de
+// referencia. Es el texto que se copia y el que acompaña al PDF «Solicitud de
+// anticipo» por WhatsApp.
+
+export interface DatosAnticipoTransferencia {
+  paciente: string;
+  clinica: string;
+  monto: number;
+  horas: number;
+  banco: string;
+  beneficiario: string;
+  /** YA agrupada de 3 en 3 (clabeAgrupada de spei-directo-core), para copiar/dictar. */
+  clabeAgrupada: string;
+  /** Guía del concepto ("Escribe el nombre del paciente"). null = sin guía. */
+  referencia: string | null;
+  fechaHumana?: string | null;
+  hora?: string | null;
+}
+
+export function textoAnticipoTransferencia(d: DatosAnticipoTransferencia): string {
+  const cuando = d.fechaHumana && d.hora ? ` de tu cita del ${d.fechaHumana} a las ${d.hora}` : "";
+  return [
+    `Hola ${d.paciente}, para apartar${cuando} en ${d.clinica} te pedimos un anticipo de ${formatoPesos(d.monto)} por transferencia.`,
+    `Banco: ${d.banco}`,
+    `Beneficiario: ${d.beneficiario}`,
+    `CLABE: ${d.clabeAgrupada}`,
+    ...(d.referencia ? [`Concepto: ${d.referencia}`] : []),
+    `Tienes ${d.horas} h para transferir. En cuanto lo veamos, te confirmamos por aquí.`,
+  ].join("\n");
+}
+
+// ── «Enviar recibo» (ws1-t3 fase 3) ─────────────────────────────────────
+//
+// Confirma que YA se recibió el pago (cualquiera, no solo anticipo): al
+// paciente que pagó en efectivo, transferencia o terminal en el mostrador, o
+// cuyo anticipo se acreditó. Nunca automático — solo al pulsar el botón.
+
+export function textoRecibo(d: { paciente: string; clinica: string; monto: number; folio: string }): string {
+  return (
+    `Hola ${d.paciente}, en ${d.clinica} recibimos tu pago de ${formatoPesos(d.monto)} ` +
+    `(factura ${d.folio}). Te adjuntamos el comprobante. ¡Gracias!`
+  );
+}

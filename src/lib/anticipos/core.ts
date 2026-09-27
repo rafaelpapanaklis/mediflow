@@ -226,6 +226,52 @@ export function citaEsFuturaParaAnticipo(
   return (cita.status === "SCHEDULED" || cita.status === "CONFIRMED") && cita.startsAt.getTime() > ahora.getTime();
 }
 
+// ── Anticipo pedido DESDE EL PANEL — fase 2: también por transferencia ─────
+//
+// «Pedir anticipo» ofrece Mercado Pago (fase 1) O transferencia (fase 2): la
+// MISMA validación de monto/plazo/cita-futura de arriba aplica a los dos, lo
+// único que cambia es cómo se COBRA. Sin cambiar el nombre de la función
+// (pedirAnticipoDeFactura/DeCita en panel.server.ts): un parámetro `metodo`.
+
+export type MetodoPedirAnticipo = "mercadopago" | "transferencia";
+
+/**
+ * «Registrar anticipo recibido» (fase 2, punto 3): efectivo, transferencia o
+ * terminal (débito/crédito) — el MÉTODO REAL que alimenta arqueo y CFDI, no
+ * "anticipo" (ese lo reserva la aplicación del saldo a favor del bot). Mapea
+ * 1:1 con los cuatro primeros de METODOS_PAGO (quotes/condiciones-pago.ts):
+ * mismo vocabulario que ya entiende Caja, sin inventar uno nuevo.
+ */
+export type MetodoRegistroAnticipo = "cash" | "transfer" | "debit" | "credit";
+export const METODOS_REGISTRO_ANTICIPO: readonly MetodoRegistroAnticipo[] = ["cash", "transfer", "debit", "credit"];
+
+export function esMetodoRegistroAnticipo(v: unknown): v is MetodoRegistroAnticipo {
+  return typeof v === "string" && (METODOS_REGISTRO_ANTICIPO as readonly string[]).includes(v);
+}
+
+/**
+ * "manual" | "transferencia" para `appointment_deposits.method` (el CHECK de
+ * sql/anticipo-desde-panel.sql solo acepta esos dos junto con "mercadopago").
+ * Débito/crédito/efectivo quedan como "manual": lo GRANULAR (qué tarjeta, qué
+ * referencia) vive en el Payment real, no en el anticipo.
+ */
+export function metodoRegistroADeposito(m: MetodoRegistroAnticipo): "manual" | "transferencia" {
+  return m === "transfer" ? "transferencia" : "manual";
+}
+
+/**
+ * «Para transferencia, exige la referencia» (decisión de Rafael): sin ella no
+ * hay forma de casar el depósito bancario con este anticipo en el estado de
+ * cuenta. Los demás métodos no la piden (el cajero mira el importe, y con
+ * tarjeta la terminal ya deja su propio comprobante).
+ */
+export function validarReferenciaRegistro(method: MetodoRegistroAnticipo, reference: string | undefined | null): string | null {
+  if (method === "transfer" && !(reference ?? "").trim()) {
+    return "Para transferencia, escribe la referencia del depósito.";
+  }
+  return null;
+}
+
 // ── El link y el webhook ────────────────────────────────────────────────────
 
 const PREFIJO_REF = "anticipo";

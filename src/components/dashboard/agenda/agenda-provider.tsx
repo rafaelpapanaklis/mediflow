@@ -62,6 +62,14 @@ export interface AgendaPermissions {
    * conserva el botón como hasta ahora.
    */
   canSendReminder?: boolean;
+  /**
+   * ¿Puede pedir un anticipo desde el panel de la cita? Espejo de
+   * "billing.deposit" (ws1-t3), que el doctor tiene por default y READONLY
+   * no. Opcional: quien no lo pasa oculta el botón (el lado seguro — antes
+   * dependía de `userRole !== "READONLY"`, que no reflejaba un permiso a
+   * medida sin billing.deposit).
+   */
+  canDeposit?: boolean;
 }
 
 const ALL_ALLOWED: AgendaPermissions = { canCreate: true, canEdit: true, canCancel: true };

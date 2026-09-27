@@ -10,13 +10,16 @@ import {
   calcularComision,
   calcularMontoAnticipo,
   citaEsFuturaParaAnticipo,
+  esMetodoRegistroAnticipo,
   evaluarPago,
+  metodoRegistroADeposito,
   refDeAnticipo,
   sugeridoAnticipoPanel,
   validarConfiguracion,
   validarConfiguracionPanel,
   validarMontoAnticipoManual,
   validarPlazoPanelHoras,
+  validarReferenciaRegistro,
   type PagoMp,
 } from "../core";
 import { apartadoVencido, sinApartadoVencido } from "../../agenda/apartado";
@@ -253,5 +256,31 @@ describe("citaEsFuturaParaAnticipo — Ajuste 2 (decisión de Rafael): SOLO cita
     for (const status of ["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS", "COMPLETED", "CHECKED_OUT", "CANCELLED", "NO_SHOW", "PENDING"]) {
       assert.equal(citaEsFuturaParaAnticipo({ status, startsAt: futuro }, ahora), false, status);
     }
+  });
+});
+
+describe("ws1-t3 fase 2 — «Registrar anticipo recibido»: método real y referencia", () => {
+  it("esMetodoRegistroAnticipo: solo cash/transfer/debit/credit", () => {
+    for (const m of ["cash", "transfer", "debit", "credit"]) assert.equal(esMetodoRegistroAnticipo(m), true, m);
+    for (const m of ["mercadopago", "anticipo", "check", "other", "", "CASH", 5, null, undefined]) {
+      assert.equal(esMetodoRegistroAnticipo(m), false, String(m));
+    }
+  });
+
+  it("metodoRegistroADeposito: transfer → transferencia; el resto → manual (lo granular vive en el Payment)", () => {
+    assert.equal(metodoRegistroADeposito("transfer"), "transferencia");
+    assert.equal(metodoRegistroADeposito("cash"), "manual");
+    assert.equal(metodoRegistroADeposito("debit"), "manual");
+    assert.equal(metodoRegistroADeposito("credit"), "manual");
+  });
+
+  it("validarReferenciaRegistro: transferencia SIN referencia se rechaza; los demás no la piden", () => {
+    assert.match(validarReferenciaRegistro("transfer", "") ?? "", /referencia/i);
+    assert.match(validarReferenciaRegistro("transfer", "   ") ?? "", /referencia/i);
+    assert.match(validarReferenciaRegistro("transfer", undefined) ?? "", /referencia/i);
+    assert.equal(validarReferenciaRegistro("transfer", "CR123"), null);
+    assert.equal(validarReferenciaRegistro("cash", undefined), null);
+    assert.equal(validarReferenciaRegistro("debit", undefined), null);
+    assert.equal(validarReferenciaRegistro("credit", undefined), null);
   });
 });

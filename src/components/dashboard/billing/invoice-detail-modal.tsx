@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { cfdiAvisoPersistente, cfdiImpideReintento } from "@/lib/cfdi-avisos";
@@ -39,8 +39,10 @@ import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 // Mercado Pago como método de pago (ws1-t1): el método en el cobro y el bloque
 // «ver / copiar link». Sin cuenta conectada no se monta nada.
 import { LinkMercadoPago, useCobroMercadoPago } from "./link-mercado-pago";
-// Pedir anticipo por Mercado Pago desde la factura (ws1-t3 fase 1).
+// Pedir anticipo por Mercado Pago o transferencia desde la factura (ws1-t3 fase 1-2).
 import { ModalPedirAnticipo } from "./modal-pedir-anticipo";
+// Registrar anticipo recibido (ws1-t3 fase 2).
+import { ModalRegistrarAnticipo } from "./modal-registrar-anticipo";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
@@ -222,15 +224,48 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // (queda en 0) si la ruta falla o la factura no tiene ninguno.
   const [anticipoPagado, setAnticipoPagado] = useState(0);
   const [pidiendoAnticipo, setPidiendoAnticipo] = useState(false);
+  const [registrandoAnticipo, setRegistrandoAnticipo] = useState(false);
+  // QA t2 (fase 2): los botones «Pedir anticipo»/«Registrar anticipo
+  // recibido» se deciden por el PERMISO real de la sesión (billing.deposit/
+  // billing.charge), no por el rol ni sin mirar nada. Arrancan en `false` —
+  // el lado seguro mientras este GET no responde — y el MISMO fetch que ya
+  // traía `anticipoPagado` los trae también, sin un segundo viaje.
+  const [puedeDepositar, setPuedeDepositar] = useState(false);
+  const [puedeRegistrarAnticipo, setPuedeRegistrarAnticipo] = useState(false);
+  const [puedeEnviarRecibo, setPuedeEnviarRecibo] = useState(false);
+  const [enviandoRecibo, setEnviandoRecibo] = useState(false);
   useEffect(() => {
-    if (!open || !invoice?.id) { setAnticipoPagado(0); return; }
+    if (!open || !invoice?.id) { setAnticipoPagado(0); setPuedeDepositar(false); setPuedeRegistrarAnticipo(false); setPuedeEnviarRecibo(false); return; }
     let vivo = true;
     fetch(`/api/invoices/${invoice.id}/anticipo`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (vivo) setAnticipoPagado(typeof d?.anticipoPagado === "number" ? d.anticipoPagado : 0); })
-      .catch(() => { if (vivo) setAnticipoPagado(0); });
+      .then((d) => {
+        if (!vivo) return;
+        setAnticipoPagado(typeof d?.anticipoPagado === "number" ? d.anticipoPagado : 0);
+        setPuedeDepositar(d?.puedeDepositar === true);
+        setPuedeRegistrarAnticipo(d?.puedeRegistrar === true);
+        setPuedeEnviarRecibo(d?.puedeEnviarRecibo === true);
+      })
+      .catch(() => { if (vivo) { setAnticipoPagado(0); setPuedeDepositar(false); setPuedeRegistrarAnticipo(false); setPuedeEnviarRecibo(false); } });
     return () => { vivo = false; };
   }, [open, invoice?.id]);
+
+  // «Enviar recibo» (ws1-t3 fase 3): nunca automático, solo al pulsarlo.
+  const enviarRecibo = useCallback(async () => {
+    if (!invoice?.id || enviandoRecibo) return;
+    setEnviandoRecibo(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/send-receipt`, { method: "POST" });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(out?.error ?? "No se pudo enviar el recibo.");
+        return;
+      }
+      toast.success("Recibo enviado por WhatsApp.");
+    } finally {
+      setEnviandoRecibo(false);
+    }
+  }, [invoice?.id, enviandoRecibo]);
   // Hay un link vigente de esta factura (lo avisa el bloque del link): entonces
   // «Enviar por WhatsApp» lo pide y el aviso lo lleva.
   const [hayLinkMp, setHayLinkMp] = useState(false);
@@ -709,8 +744,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
             {/* Pedir anticipo (ws1-t3 fase 1): por un importe PARCIAL, distinto
                 del link de arriba (que cobra el saldo completo). Mientras la
-                factura tenga saldo por cobrar. */}
-            {isPending && (
+                factura tenga saldo por cobrar. Gateado por el PERMISO real de
+                la sesión (billing.deposit vía el GET de arriba — QA t2, fase
+                2), no "sin mirar nada": un READONLY o un permiso a medida sin
+                billing.deposit ya no lo ve. */}
+            {isPending && puedeDepositar && (
               <button
                 type="button"
                 onClick={() => setPidiendoAnticipo(true)}
@@ -718,6 +756,35 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 className="inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50"
               >
                 <Wallet size={14} aria-hidden /> Pedir anticipo
+              </button>
+            )}
+
+            {/* Registrar anticipo recibido (ws1-t3 fase 2): efectivo,
+                transferencia o terminal — el dinero YA está, no hay link que
+                esperar. Gateado por "billing.charge" (billing.deposit no
+                basta: registrar dinero recibido es cobrar). */}
+            {isPending && puedeRegistrarAnticipo && (
+              <button
+                type="button"
+                onClick={() => setRegistrandoAnticipo(true)}
+                disabled={busy}
+                className="inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50"
+              >
+                <Wallet size={14} aria-hidden /> Registrar anticipo recibido
+              </button>
+            )}
+
+            {/* «Enviar recibo» (ws1-t3 fase 3): confirma un pago YA recibido
+                (cualquier método). Nunca automático — solo al pulsarlo. Solo
+                con algo pagado y el permiso de enviar WhatsApp. */}
+            {invoice.paid > 0 && puedeEnviarRecibo && (
+              <button
+                type="button"
+                onClick={enviarRecibo}
+                disabled={busy || enviandoRecibo}
+                className="inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50"
+              >
+                <MessageCircle size={14} aria-hidden /> {enviandoRecibo ? "Enviando…" : "Enviar recibo"}
               </button>
             )}
 
@@ -1175,6 +1242,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
         onClose={() => setPidiendoAnticipo(false)}
         origen="factura"
         id={invoice.id}
+        onListo={() => { void onMutated(); }}
+      />
+
+      <ModalRegistrarAnticipo
+        open={registrandoAnticipo}
+        onClose={() => setRegistrandoAnticipo(false)}
+        invoiceId={invoice.id}
+        saldo={invoice.balance}
         onListo={() => { void onMutated(); }}
       />
     </>

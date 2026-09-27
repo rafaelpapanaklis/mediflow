@@ -238,6 +238,51 @@ export const WA_TEMPLATE_CATALOG: readonly WaCatalogEntry[] = [
     sample: ["María", "Clínica Sonrisa"],
     optional: true,
   },
+  {
+    // ws1-t3 fase 3 — link del anticipo pedido desde el panel (Mercado Pago),
+    // para pacientes SIN ventana de 24 h. UTILITY, pero OPCIONAL: apagada por
+    // defecto, la enciende la clínica en Configuración → Anticipos (la cobra
+    // Meta, igual que la de reseñas). Solo cubre el canal Mercado Pago —el de
+    // transferencia (fase 2) no tiene link que meter en una plantilla fija, así
+    // que fuera de ventana sigue ofreciendo copiar texto/PDF, como hoy.
+    kind: "deposit_request",
+    name: "dc_anticipo_cita",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, para tu cita en {{2}} te pedimos un anticipo de {{3}}. " +
+      "Págalo aquí: {{4}}. Cualquier duda respóndenos por aquí.",
+    labelKey: "inbox.whatsapp.tplKindDepositRequest",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarAmount",
+      "inbox.whatsapp.tplVarDepositLink",
+    ],
+    sample: ["María", "Clínica Sonrisa", "$300.00 MXN", "https://mpago.la/abc123"],
+    optional: true,
+  },
+  {
+    // ws1-t3 fase 3 — «Enviar recibo»: confirma un pago YA recibido (cualquier
+    // método). UTILITY, OPCIONAL igual que la anterior. Nunca automática: el
+    // botón que la dispara solo sale al pulsarlo (send-receipt/route.ts).
+    kind: "payment_receipt",
+    name: "dc_recibo_pago",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, en {{2}} recibimos tu pago de {{3}} (factura {{4}}). " +
+      "Te adjuntamos el comprobante. ¡Gracias!",
+    labelKey: "inbox.whatsapp.tplKindPaymentReceipt",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarAmount",
+      "inbox.whatsapp.tplVarInvoiceNumber",
+    ],
+    sample: ["María", "Clínica Dental Sonrisa", "$1,200.00 MXN", "MF-1042"],
+    optional: true,
+  },
 ];
 
 /** Los tipos que se crean solos al conectar (todo menos la de marketing). */

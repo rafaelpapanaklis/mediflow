@@ -1,35 +1,49 @@
 "use client";
 
-// «Pedir anticipo» (ws1-t3 fase 1) — desde la cita o desde la factura.
+// «Pedir anticipo» (ws1-t3 fase 1-2) — desde la cita o desde la factura.
 //
 // El monto SUGERIDO lo trae el servidor (Configuración → Anticipos → panel);
 // es editable, pero lo que de verdad se cobra lo valida SIEMPRE el servidor
 // (10 ≤ monto ≤ total − pagado). Si la cita todavía no tiene factura, pide
 // además el concepto (nombre + precio) con el que se crea.
 //
+// Dos CANALES independientes (fase 2): Mercado Pago (link) o transferencia
+// (datos bancarios de la sede, texto + PDF). Si solo hay uno disponible, se
+// usa directo sin preguntar; con los dos, un selector.
+//
 // Al pedirlo: siempre "Copiar texto" (paciente, monto, fecha/hora, plazo,
-// link); "Enviar por WhatsApp" solo si el paciente escribió en las últimas
-// 24 h (si no, el botón se apaga y dice por qué — nunca intenta una plantilla
-// que no existe: esa es fase 3).
+// link o datos bancarios); "Enviar por WhatsApp" solo si el paciente escribió
+// en las últimas 24 h (si no, el botón se apaga y dice por qué — nunca
+// intenta una plantilla sin encender: eso lo decide Configuración → Anticipos).
 
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { Copy, ExternalLink, Link2, Loader2, MessageCircle, X } from "lucide-react";
+import { Copy, Download, ExternalLink, Link2, Loader2, MessageCircle, X } from "lucide-react";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 const fmtFecha = (iso: string) =>
   new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
+type MetodoAnticipo = "mercadopago" | "transferencia";
+
 interface PendienteDTO {
   id: string;
+  invoiceId: string;
   amount: number;
   expiresAt: string;
   checkoutUrl: string | null;
   apartada: boolean;
+  metodo?: MetodoAnticipo;
+}
+
+interface CanalesDTO {
+  mercadopago: boolean;
+  transferencia: boolean;
 }
 
 interface EstadoGET {
   disponible: boolean;
+  canales?: CanalesDTO;
   tieneFactura?: boolean; // solo en el endpoint de cita
   saldo?: number;
   sugerido: number | null;
@@ -41,7 +55,7 @@ interface EstadoGET {
 }
 
 interface ResultadoPOST {
-  checkoutUrl: string;
+  deposit: { invoiceId: string; checkoutUrl: string | null; metodo: MetodoAnticipo };
   texto: string;
   whatsapp: { enviado: boolean; motivo?: string };
 }
@@ -60,29 +74,40 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
   const base = origen === "cita" ? `/api/appointments/${id}/anticipo` : `/api/invoices/${id}/anticipo`;
 
   const [cargando, setCargando] = useState(true);
+  // QA t2: el GET puede fallar por algo que NO es "sin canales" (403, 500,
+  // 502, red caída). Antes cualquier fallo se pintaba como "esta clínica no
+  // tiene Mercado Pago conectado", que es falso y confunde a recepción.
+  const [cargaError, setCargaError] = useState(false);
   const [estado, setEstado] = useState<EstadoGET | null>(null);
+  const [metodo, setMetodo] = useState<MetodoAnticipo>("mercadopago");
   const [monto, setMonto] = useState("");
   const [horas, setHoras] = useState("24");
   const [descripcion, setDescripcion] = useState("");
   const [precio, setPrecio] = useState("");
   const [enviando, setEnviando] = useState<"solo" | "wa" | null>(null);
   const [resultado, setResultado] = useState<ResultadoPOST | null>(null);
+  const [recargarTick, setRecargarTick] = useState(0);
 
   useEffect(() => {
     if (!open) return;
     let vivo = true;
     setCargando(true);
+    setCargaError(false);
     setResultado(null);
     fetch(base)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: EstadoGET | null) => {
-        if (!vivo || !d) return;
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`GET ${base} → ${r.status}`))))
+      .then((d: EstadoGET) => {
+        if (!vivo) return;
         setEstado(d);
         setMonto(d.sugerido != null ? String(d.sugerido) : "");
         setHoras(String(d.horasSugeridas ?? 24));
+        // Con los dos canales disponibles, arranca en Mercado Pago (el de
+        // siempre); con uno solo, ESE, aunque no sea mercadopago.
+        if (d.canales?.mercadopago) setMetodo("mercadopago");
+        else if (d.canales?.transferencia) setMetodo("transferencia");
       })
       .catch(() => {
-        if (vivo) setEstado({ disponible: false, sugerido: null, horasSugeridas: 24, pendiente: null });
+        if (vivo) { setCargaError(true); setEstado(null); }
       })
       .finally(() => {
         if (vivo) setCargando(false);
@@ -90,7 +115,7 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
     return () => {
       vivo = false;
     };
-  }, [open, base]);
+  }, [open, base, recargarTick]);
 
   useEffect(() => {
     if (!open) return;
@@ -113,7 +138,7 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
       }
       setEnviando(enviarWhatsapp ? "wa" : "solo");
       try {
-        const body: Record<string, unknown> = { monto: montoNum };
+        const body: Record<string, unknown> = { monto: montoNum, metodo };
         const horasNum = Number(horas);
         if (Number.isFinite(horasNum) && horasNum > 0) body.horas = Math.round(horasNum);
         if (enviarWhatsapp) body.enviarWhatsapp = true;
@@ -125,8 +150,8 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
           toast.error(out?.error ?? "No se pudo pedir el anticipo.");
           return;
         }
-        setResultado({ checkoutUrl: out.deposit.checkoutUrl, texto: out.texto, whatsapp: out.whatsapp });
-        if (out.reutilizado) toast("Ya había un anticipo pendiente para esta factura: es el mismo link.");
+        setResultado({ deposit: out.deposit, texto: out.texto, whatsapp: out.whatsapp });
+        if (out.reutilizado) toast("Ya había un anticipo pendiente para esta factura: es el mismo.");
         else toast.success("Anticipo pedido.");
         if (enviarWhatsapp && out.whatsapp?.enviado) toast.success("Enviado por WhatsApp.");
         else if (enviarWhatsapp && out.whatsapp?.motivo) toast(out.whatsapp.motivo);
@@ -135,7 +160,7 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
         setEnviando(null);
       }
     },
-    [monto, horas, origen, estado, descripcion, precio, base, onListo],
+    [monto, horas, origen, estado, descripcion, precio, base, metodo, onListo],
   );
 
   const copiarTexto = useCallback(async (texto: string) => {
@@ -151,6 +176,8 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
 
   const sinFactura = origen === "cita" && estado?.tieneFactura === false;
   const pendiente = estado?.pendiente ?? null;
+  const canales = estado?.canales;
+  const dosCanal = !!canales?.mercadopago && !!canales?.transferencia;
 
   return (
     <div
@@ -179,13 +206,25 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-2)" }}>
               <Loader2 size={16} className="animate-spin" /> Cargando…
             </div>
+          ) : cargaError ? (
+            <>
+              <p style={{ fontSize: 14, color: "var(--warning-strong, #b45309)" }}>
+                No se pudo cargar la información del anticipo. Inténtalo de nuevo.
+              </p>
+              <BotonSecundario onClick={() => setRecargarTick((n) => n + 1)}>
+                Reintentar
+              </BotonSecundario>
+            </>
           ) : !estado?.disponible ? (
             <p style={{ fontSize: 14, color: "var(--text-2)" }}>
-              Esta clínica no tiene Mercado Pago conectado. Conéctalo en Configuración → Anticipos.
+              Esta clínica no tiene Mercado Pago conectado ni datos bancarios cargados. Actívalos en
+              Configuración → Anticipos.
             </p>
           ) : resultado ? (
             <>
-              <p style={{ fontSize: 14 }}>El link de pago está listo.</p>
+              <p style={{ fontSize: 14 }}>
+                {resultado.deposit.metodo === "transferencia" ? "La solicitud de transferencia está lista." : "El link de pago está listo."}
+              </p>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, borderRadius: 10, background: "var(--bg-2, #f7f7f8)", fontSize: 13, whiteSpace: "pre-wrap" }}>
                 {resultado.texto}
               </div>
@@ -196,9 +235,18 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
                 <BotonSecundario icon={<Copy size={14} />} onClick={() => copiarTexto(resultado.texto)}>
                   Copiar texto
                 </BotonSecundario>
-                <BotonSecundario icon={<ExternalLink size={14} />} onClick={() => window.open(resultado.checkoutUrl, "_blank", "noopener,noreferrer")}>
-                  Abrir link
-                </BotonSecundario>
+                {resultado.deposit.metodo === "mercadopago" && resultado.deposit.checkoutUrl ? (
+                  <BotonSecundario icon={<ExternalLink size={14} />} onClick={() => window.open(resultado.deposit.checkoutUrl!, "_blank", "noopener,noreferrer")}>
+                    Abrir link
+                  </BotonSecundario>
+                ) : (
+                  <BotonSecundario
+                    icon={<Download size={14} />}
+                    onClick={() => window.open(`/api/invoices/${resultado.deposit.invoiceId}/anticipo/solicitud-pdf`, "_blank", "noopener,noreferrer")}
+                  >
+                    Descargar PDF
+                  </BotonSecundario>
+                )}
               </div>
               <BotonPrimario onClick={onClose}>Listo</BotonPrimario>
             </>
@@ -208,16 +256,27 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
                 Ya hay un anticipo pendiente: <strong>{fmt.format(pendiente.amount)}</strong>, vence el {fmtFecha(pendiente.expiresAt)}.
                 {pendiente.apartada ? " La cita sigue apartada mientras tanto." : ""}
               </p>
-              {pendiente.checkoutUrl && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <BotonSecundario icon={<Copy size={14} />} onClick={() => copiarTexto(pendiente.checkoutUrl!)}>
-                    Copiar link
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {pendiente.metodo === "transferencia" ? (
+                  <BotonSecundario
+                    icon={<Download size={14} />}
+                    onClick={() => window.open(`/api/invoices/${pendiente.invoiceId}/anticipo/solicitud-pdf`, "_blank", "noopener,noreferrer")}
+                  >
+                    Descargar PDF con los datos bancarios
                   </BotonSecundario>
-                  <BotonSecundario icon={<ExternalLink size={14} />} onClick={() => window.open(pendiente.checkoutUrl!, "_blank", "noopener,noreferrer")}>
-                    Abrir link
-                  </BotonSecundario>
-                </div>
-              )}
+                ) : (
+                  pendiente.checkoutUrl && (
+                    <>
+                      <BotonSecundario icon={<Copy size={14} />} onClick={() => copiarTexto(pendiente.checkoutUrl!)}>
+                        Copiar link
+                      </BotonSecundario>
+                      <BotonSecundario icon={<ExternalLink size={14} />} onClick={() => window.open(pendiente.checkoutUrl!, "_blank", "noopener,noreferrer")}>
+                        Abrir link
+                      </BotonSecundario>
+                    </>
+                  )
+                )}
+              </div>
             </>
           ) : estado?.citaElegible === false ? (
             <p style={{ fontSize: 14, color: "var(--text-2)" }}>{estado.motivoCitaNoElegible}</p>
@@ -236,6 +295,14 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
               )}
               {typeof estado?.saldo === "number" && (
                 <p style={{ fontSize: 13, color: "var(--text-2)" }}>Saldo de la factura: {fmt.format(estado.saldo)}</p>
+              )}
+              {dosCanal && (
+                <Campo etiqueta="Cómo se cobra">
+                  <select value={metodo} onChange={(e) => setMetodo(e.target.value as MetodoAnticipo)} style={inputStyle}>
+                    <option value="mercadopago">Mercado Pago (link)</option>
+                    <option value="transferencia">Transferencia (datos bancarios)</option>
+                  </select>
+                </Campo>
               )}
               <Campo etiqueta="Monto del anticipo (MXN)">
                 <input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0.00" style={inputStyle} />

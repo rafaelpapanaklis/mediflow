@@ -48,6 +48,11 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     canEdit: hasPermission(user, "agenda.edit"),
     canCancel: hasPermission(user, "agenda.delete"),
     canSendReminder: canSendManualReminder(user.role),
+    // ws1-t3 fase 2 (QA t2): el botón «Pedir anticipo» del panel de la cita
+    // se decide por el PERMISO, no por el rol — un READONLY o un permiso a
+    // medida sin billing.deposit ya no lo ve, aunque no sea exactamente
+    // READONLY.
+    canDeposit: hasPermission(user, "billing.deposit"),
   };
 
   // getCurrentUser ya hace include: { clinic: true } — leemos la config

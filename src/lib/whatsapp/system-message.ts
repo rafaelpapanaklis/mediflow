@@ -23,11 +23,15 @@ export type WhatsAppSendKind =
   | "payment_notice"      // aviso de saldo pendiente de una factura
   | "quote_ready"         // presupuesto listo con su liga pública
   | "consent"             // carta de consentimiento informado para firmar
-  // ws1-t3 fase 1 — link de anticipo pedido desde la cita o la factura. SIN
-  // spec en WA_TEMPLATE_SPECS a propósito: fuera de la ventana de 24 h se
-  // BLOQUEA (decideSendMode cae directo a "sin plantilla todavía"), nunca
-  // intenta una que no existe. La plantilla con link es fase 3.
-  | "deposit_request";
+  // ws1-t3 fase 1 — link (o, desde fase 2, datos bancarios) del anticipo
+  // pedido desde la cita o la factura. Desde fase 3 SÍ tiene spec
+  // (dc_anticipo_cita en templates-catalog.ts), pero OPCIONAL: apagada por
+  // defecto, la enciende la clínica en Configuración → Anticipos.
+  | "deposit_request"
+  // ws1-t3 fase 3 — «Enviar recibo»: confirma un pago YA recibido (cualquier
+  // método, no solo anticipo). Plantilla dc_recibo_pago, también opcional.
+  // Nunca automático: solo al pulsar el botón.
+  | "payment_receipt";
 
 export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "reminder",
@@ -39,6 +43,7 @@ export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "manual_api",
   "payment_notice",
   "deposit_request",
+  "payment_receipt",
   "quote_ready",
   "consent",
 ];

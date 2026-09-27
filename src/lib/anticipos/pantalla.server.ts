@@ -7,6 +7,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { enmascarar, plataformaAnticipos, type EstadoCuentaMp, type PlataformaAnticipos } from "./cuenta.server";
 import { MINUTOS_DEFAULT, PANEL_HORAS_DEFAULT, type ModoAnticipo, type ModoAnticipoPanel, type ModoComision } from "./core";
+import { leerDatosBancariosParaEditar, type CuentaBancariaSede } from "./datos-bancarios.server";
+import { parseWaTemplates } from "@/lib/whatsapp/template-config";
 
 export interface AnticipoReciente {
   id: string;
@@ -50,6 +52,26 @@ export interface PantallaAnticipos {
   /** Solo lectura para la clínica: la fija DaleControl. Arranca en 0. */
   comision: { modo: ModoComision; valor: number };
   recientes: AnticipoReciente[];
+  /**
+   * Datos bancarios de la sede (ws1-t3 fase 2), para «Pedir anticipo →
+   * Transferencia» y su PDF/texto. null = no cargados o incompletos (la
+   * CLABE no pasa el dígito verificador): en ese estado el canal
+   * "transferencia" NO se ofrece en ningún endpoint de anticipo, aunque haya
+   * fila a medio llenar — `datosBancariosParaEditar` es la que sí trae lo
+   * incompleto, para no perderlo en el formulario.
+   */
+  datosBancarios: (Partial<CuentaBancariaSede> & { updatedAt: string | null }) | null;
+  /**
+   * Las dos plantillas OPCIONALES de esta ola (ws1-t3 fase 3): el link de
+   * anticipo (dc_anticipo_cita) y el recibo (dc_recibo_pago). `encendida` =
+   * la clínica ya la dio de alta (hay entrada en Clinic.waTemplates,
+   * cualquier estado); `estado` es lo que Meta reportó la última vez
+   * (PENDING/APPROVED/REJECTED) o null si se registró sin ese dato.
+   */
+  plantillas: {
+    anticipo: { encendida: boolean; estado: string | null };
+    recibo: { encendida: boolean; estado: string | null };
+  };
 }
 
 const SIN_CUENTA: EstadoCuentaMp = {
@@ -62,7 +84,17 @@ const SIN_CUENTA: EstadoCuentaMp = {
   desconectadaEl: null,
 };
 
-function vacia(plataforma: PlataformaAnticipos, tablasListas: boolean): PantallaAnticipos {
+const PLANTILLAS_VACIAS: PantallaAnticipos["plantillas"] = {
+  anticipo: { encendida: false, estado: null },
+  recibo: { encendida: false, estado: null },
+};
+
+function vacia(
+  plataforma: PlataformaAnticipos,
+  tablasListas: boolean,
+  datosBancarios: PantallaAnticipos["datosBancarios"] = null,
+  plantillas: PantallaAnticipos["plantillas"] = PLANTILLAS_VACIAS,
+): PantallaAnticipos {
   return {
     tablasListas,
     plataforma,
@@ -72,6 +104,26 @@ function vacia(plataforma: PlataformaAnticipos, tablasListas: boolean): Pantalla
     portal: { activo: false },
     comision: { modo: "fixed", valor: 0 },
     recientes: [],
+    datosBancarios,
+    plantillas,
+  };
+}
+
+/**
+ * Plantillas OPCIONALES de esta ola (ws1-t3 fase 3): lee `Clinic.waTemplates`
+ * directo (columna que ya existe desde WS1-T5 — sin tolerancia P2022, no hace
+ * falta). NUNCA lanza: una clínica sin fila de Clinic (no debería pasar) se
+ * calla con las dos apagadas.
+ */
+async function leerPlantillasOpcionales(clinicId: string): Promise<PantallaAnticipos["plantillas"]> {
+  if (!clinicId) return PLANTILLAS_VACIAS;
+  const fila = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { waTemplates: true } }).catch(() => null);
+  const mapa = parseWaTemplates(fila?.waTemplates ?? null);
+  const deposito = mapa.deposit_request;
+  const recibo = mapa.payment_receipt;
+  return {
+    anticipo: { encendida: !!deposito, estado: deposito?.status ?? null },
+    recibo: { encendida: !!recibo, estado: recibo?.status ?? null },
   };
 }
 
@@ -184,6 +236,15 @@ export async function leerPantallaAnticipos(
   const plataforma = plataformaAnticipos();
   if (!clinicId) return vacia(plataforma, true);
 
+  // Datos bancarios (fase 2) y plantillas opcionales (fase 3) — EN SU PROPIA
+  // lectura, fuera del try/catch de abajo: son tablas/columnas propias, y una
+  // que falte no debe apagar la otra ni el resto de la pantalla (mismo
+  // criterio que leerConfigPanel).
+  const [datosBancarios, plantillas] = await Promise.all([
+    leerDatosBancariosParaEditar(clinicId),
+    leerPlantillasOpcionales(clinicId),
+  ]);
+
   try {
     const [fila, recientes] = await Promise.all([
       db.clinicMercadoPago.findUnique({
@@ -241,10 +302,12 @@ export async function leerPantallaAnticipos(
         avisoError: r.noticeError,
         anomalias: r.payments.map((p) => `Pago ${p.mpPaymentId}: ${p.anomaly}`),
       })),
+      datosBancarios,
+      plantillas,
     };
   } catch (e) {
     const code = (e as { code?: string })?.code;
-    if (code === "P2021" || code === "P2022") return vacia(plataforma, false);
+    if (code === "P2021" || code === "P2022") return vacia(plataforma, false, datosBancarios, plantillas);
     throw e;
   }
 }

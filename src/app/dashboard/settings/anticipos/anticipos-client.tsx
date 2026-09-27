@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard, Link2, MessageCircle, QrCode, Receipt, Wallet } from "lucide-react";
+import { Banknote, CreditCard, Link2, MessageCircle, QrCode, Receipt, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
 import {
@@ -122,6 +122,19 @@ export function AnticiposClient({
   const [panelHoras, setPanelHoras] = useState(String(inicial.configPanel.horas));
   const [guardandoPanel, setGuardandoPanel] = useState(false);
 
+  // ── ws1-t3 fase 2 — datos bancarios de la sede, para «Pedir anticipo →
+  // Transferencia» y su PDF/texto. Canal INDEPENDIENTE de Mercado Pago: no
+  // exige cuenta conectada. ──
+  const [banco, setBanco] = useState(inicial.datosBancarios?.banco ?? "");
+  const [beneficiario, setBeneficiario] = useState(inicial.datosBancarios?.beneficiario ?? "");
+  const [clabe, setClabe] = useState(inicial.datosBancarios?.clabe ?? "");
+  const [referenciaBanco, setReferenciaBanco] = useState(inicial.datosBancarios?.referencia ?? "");
+  const [guardandoBanco, setGuardandoBanco] = useState(false);
+
+  // ── ws1-t3 fase 3 — plantillas OPCIONALES (link de anticipo y recibo). ──
+  const [plantillas, setPlantillas] = useState(inicial.plantillas);
+  const [encendiendoPlantilla, setEncendiendoPlantilla] = useState<"deposit_request" | "payment_receipt" | null>(null);
+
   const { plataforma, cuenta, comision } = datos;
   const puedeConectar = datos.tablasListas && plataforma.lista;
   const puedeCobrar = puedeConectar && cuenta.conectada;
@@ -178,6 +191,49 @@ export function AnticiposClient({
       toast.success("Guardado.");
     } finally {
       setGuardandoPanel(false);
+    }
+  }
+
+  async function guardarBanco() {
+    setGuardandoBanco(true);
+    try {
+      const res = await fetch("/api/settings/anticipos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        // Solo `banco`: no toca ni el bot ni el panel config de arriba.
+        body: JSON.stringify({ banco: { banco, beneficiario, clabe, referencia: referenciaBanco } }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof json.error === "string" ? json.error : "No se pudo guardar.");
+        return;
+      }
+      setDatos(json as PantallaAnticipos);
+      toast.success("Datos bancarios guardados.");
+    } finally {
+      setGuardandoBanco(false);
+    }
+  }
+
+  /** Enciende UNA plantilla opcional (Meta se la cobra a la clínica fuera de ventana). */
+  async function encenderPlantilla(kind: "deposit_request" | "payment_receipt") {
+    setEncendiendoPlantilla(kind);
+    try {
+      const res = await fetch("/api/settings/anticipos/plantilla", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        toast.error(typeof json.reason === "string" ? json.reason : typeof json.error === "string" ? json.error : "No se pudo activar la plantilla.");
+        return;
+      }
+      const pantalla = json.pantalla as PantallaAnticipos | undefined;
+      if (pantalla) { setDatos(pantalla); setPlantillas(pantalla.plantillas); }
+      toast.success("Plantilla enviada a Meta para su aprobación.");
+    } finally {
+      setEncendiendoPlantilla(null);
     }
   }
 
@@ -508,6 +564,73 @@ export function AnticiposClient({
               />
             </Campo>
           </Campos2>
+        </Seccion>
+
+        {/* ── 3c. Datos bancarios de la sede (ws1-t3 fase 2) ──
+            Canal INDEPENDIENTE de Mercado Pago: no exige cuenta conectada,
+            así que esta sección se ve entera aunque la de arriba esté apagada. */}
+        <Seccion
+          icono={<Banknote size={18} strokeWidth={1.75} aria-hidden />}
+          titulo="Datos bancarios para transferencia"
+          subtitulo="Cuando «Pedir anticipo» se manda por transferencia, estos son los datos que ve el paciente (texto y PDF). Sin ellos, ese canal no se ofrece."
+          pie={<BotonGuardar guardando={guardandoBanco} texto="Guardar" textoGuardando="Guardando…" onClick={guardarBanco} />}
+        >
+          <Campos2>
+            <Campo etiqueta="Banco">
+              <Entrada value={banco} onChange={(e) => setBanco(e.target.value)} placeholder="BBVA" />
+            </Campo>
+            <Campo etiqueta="Beneficiario">
+              <Entrada value={beneficiario} onChange={(e) => setBeneficiario(e.target.value)} placeholder="Clínica Dental Sonrisa SC" />
+            </Campo>
+          </Campos2>
+          <Campos2>
+            <Campo etiqueta="CLABE" ayuda="18 dígitos, con dígito verificador.">
+              <Entrada value={clabe} onChange={(e) => setClabe(e.target.value)} inputMode="numeric" placeholder="012345678901234567" />
+            </Campo>
+            <Campo etiqueta="Referencia (opcional)" ayuda='Guía para el paciente, p. ej. "Escribe tu nombre en el concepto".'>
+              <Entrada value={referenciaBanco} onChange={(e) => setReferenciaBanco(e.target.value)} placeholder="Escribe el nombre del paciente" />
+            </Campo>
+          </Campos2>
+          {!datos.datosBancarios?.banco && (
+            <p className={cr.campoAyuda} style={{ fontSize: 13 }}>
+              Sin datos bancarios cargados, «Pedir anticipo» no ofrece transferencia — solo Mercado Pago, si está conectado.
+            </p>
+          )}
+        </Seccion>
+
+        {/* ── 3d. Plantillas de WhatsApp opcionales (ws1-t3 fase 3) ──
+            Apagadas por defecto: Meta se las cobra a la clínica fuera de la
+            ventana de 24 h. Sin encenderlas, esos avisos siguen ofreciendo
+            copiar texto/PDF, como hasta ahora. */}
+        <Seccion
+          icono={<MessageCircle size={18} strokeWidth={1.75} aria-hidden />}
+          titulo="Plantillas de WhatsApp (opcionales)"
+          subtitulo="Para pacientes que no han escrito en las últimas 24 h. Meta las cobra a esta clínica; sin encenderlas, siempre se puede copiar el texto o el PDF."
+        >
+          <Filas>
+            <Fila etiqueta="Link de anticipo (dc_anticipo_cita)">
+              {plantillas.anticipo.encendida ? (
+                <Insignia tono={plantillas.anticipo.estado === "REJECTED" ? "peligro" : plantillas.anticipo.estado === "PENDING" ? "info" : "exito"}>
+                  {plantillas.anticipo.estado === "REJECTED" ? "Rechazada por Meta" : plantillas.anticipo.estado === "PENDING" ? "En revisión" : "Activa"}
+                </Insignia>
+              ) : (
+                <Boton variante="secundario" onClick={() => encenderPlantilla("deposit_request")} disabled={encendiendoPlantilla !== null}>
+                  {encendiendoPlantilla === "deposit_request" ? "Activando…" : "Activar"}
+                </Boton>
+              )}
+            </Fila>
+            <Fila etiqueta="Recibo de pago (dc_recibo_pago)">
+              {plantillas.recibo.encendida ? (
+                <Insignia tono={plantillas.recibo.estado === "REJECTED" ? "peligro" : plantillas.recibo.estado === "PENDING" ? "info" : "exito"}>
+                  {plantillas.recibo.estado === "REJECTED" ? "Rechazada por Meta" : plantillas.recibo.estado === "PENDING" ? "En revisión" : "Activa"}
+                </Insignia>
+              ) : (
+                <Boton variante="secundario" onClick={() => encenderPlantilla("payment_receipt")} disabled={encendiendoPlantilla !== null}>
+                  {encendiendoPlantilla === "payment_receipt" ? "Activando…" : "Activar"}
+                </Boton>
+              )}
+            </Fila>
+          </Filas>
         </Seccion>
 
         {/* ── 4. El rastro ── */}

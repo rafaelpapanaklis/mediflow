@@ -19,13 +19,17 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
-import { anticipoPanelDisponible, elegibilidadCitaDeInvoice, estadoAnticipoDeFactura, pedirAnticipoDeFactura, sugeridoParaFactura } from "@/lib/anticipos/panel.server";
-import { textoAnticipoPanel } from "@/lib/anticipos/mensaje-panel";
+import { canalesAnticipoPanel, elegibilidadCitaDeInvoice, estadoAnticipoDeFactura, pedirAnticipoDeFactura, sugeridoParaFactura } from "@/lib/anticipos/panel.server";
+import type { MetodoPedirAnticipo } from "@/lib/anticipos/core";
+import { textoAnticipoPanel, textoAnticipoTransferencia } from "@/lib/anticipos/mensaje-panel";
+import { leerDatosBancarios } from "@/lib/anticipos/datos-bancarios.server";
+import { clabeAgrupada } from "@/lib/billing/spei-directo-core";
 import { formatDateHuman, formatTimeHuman, toISODate } from "@/lib/whatsapp/bot/booking-parse";
-import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
+import { sendWhatsAppLogged, type WhatsAppOutboundAttachment } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
+import { buildSolicitudAnticipoPdf } from "@/lib/anticipos/solicitud-pdf";
 
 export const dynamic = "force-dynamic";
 
@@ -59,15 +63,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   });
   if (!inv) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
-  const [disponible, sugerido, estado, elegibilidad] = await Promise.all([
-    anticipoPanelDisponible(ctx.clinicId),
+  const [canales, sugerido, estado, elegibilidad] = await Promise.all([
+    canalesAnticipoPanel(ctx.clinicId),
     sugeridoParaFactura(ctx.clinicId, inv.total),
     estadoAnticipoDeFactura(ctx.clinicId, params.id),
     elegibilidadCitaDeInvoice(ctx.clinicId, inv.appointmentId),
   ]);
 
   return NextResponse.json({
-    disponible,
+    disponible: canales.mercadopago || canales.transferencia,
+    canales,
     sugerido: sugerido.monto,
     horasSugeridas: sugerido.horas,
     saldo: Math.max(0, inv.total - inv.paid),
@@ -79,6 +84,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     // ahora). Sin cita ligada, siempre elegible.
     citaElegible: elegibilidad.elegible,
     motivoCitaNoElegible: elegibilidad.motivo,
+    // QA t2 (fase 2): el botón que dispara este GET se decide por el
+    // PERMISO real de la sesión, no por el rol ni por "sin mirar nada". El
+    // cliente (invoice-detail-modal.tsx) esconde "Pedir anticipo"/"Registrar
+    // anticipo recibido" con esto; el servidor los vuelve a exigir igual en
+    // el POST correspondiente.
+    puedeDepositar: denyIfMissingPermission(ctx, "billing.deposit") === null,
+    puedeRegistrar: denyIfMissingPermission(ctx, "billing.charge") === null,
+    puedeEnviarRecibo: denyIfMissingPermission(ctx, "whatsapp.send") === null,
   });
 }
 
@@ -101,8 +114,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!Number.isFinite(monto)) {
     return NextResponse.json({ error: "El monto es obligatorio." }, { status: 400 });
   }
+  const metodo: MetodoPedirAnticipo = body?.metodo === "transferencia" ? "transferencia" : "mercadopago";
 
-  const r = await pedirAnticipoDeFactura({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId, monto, horas });
+  const r = await pedirAnticipoDeFactura({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId, monto, horas, metodo });
   if (!r.ok || !r.deposit) {
     const status = r.error === "no_encontrada" ? 404 : r.error === "sin_mp" ? 409 : r.error === "mp_fallo" ? 502 : 400;
     return NextResponse.json({ error: r.motivo ?? r.error ?? "No se pudo pedir el anticipo.", code: r.error }, { status });
@@ -118,7 +132,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       entityId: params.id,
       action: "update",
       before: { anticipo: null },
-      after: { anticipo: { monto: deposit.amount, expiresAt: deposit.expiresAt, origen: "panel" } },
+      after: { anticipo: { monto: deposit.amount, expiresAt: deposit.expiresAt, origen: "panel", metodo: deposit.metodo } },
     });
   }
 
@@ -137,15 +151,57 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const tz = datos?.clinic?.timezone || "America/Mexico_City";
   const paciente = datos?.patient ? `${datos.patient.firstName} ${datos.patient.lastName ?? ""}`.trim() : "Paciente";
   const cita = datos?.appointment;
-  const texto = textoAnticipoPanel({
-    paciente,
-    clinica: datos?.clinic?.name ?? "la clínica",
-    monto: deposit.amount,
-    horas: horas ?? Math.max(1, Math.round((new Date(deposit.expiresAt).getTime() - Date.now()) / 3_600_000)),
-    url: deposit.checkoutUrl,
-    fechaHumana: cita ? formatDateHuman(toISODate(cita.startsAt, tz), tz) : null,
-    hora: cita ? formatTimeHuman(cita.startsAt, tz) : null,
-  });
+  const horasTexto = horas ?? Math.max(1, Math.round((new Date(deposit.expiresAt).getTime() - Date.now()) / 3_600_000));
+  const fechaHumana = cita ? formatDateHuman(toISODate(cita.startsAt, tz), tz) : null;
+  const horaTexto = cita ? formatTimeHuman(cita.startsAt, tz) : null;
+
+  let texto: string;
+  let pdfAttachment: WhatsAppOutboundAttachment | null = null;
+  if (deposit.metodo === "transferencia") {
+    const banco = await leerDatosBancarios(ctx.clinicId);
+    if (!banco) {
+      return NextResponse.json({ error: "Esta clínica no tiene datos bancarios cargados." }, { status: 409 });
+    }
+    texto = textoAnticipoTransferencia({
+      paciente,
+      clinica: datos?.clinic?.name ?? "la clínica",
+      monto: deposit.amount,
+      horas: horasTexto,
+      banco: banco.banco,
+      beneficiario: banco.beneficiario,
+      clabeAgrupada: clabeAgrupada(banco.clabe),
+      referencia: banco.referencia,
+      fechaHumana,
+      hora: horaTexto,
+    });
+    try {
+      const pdf = await buildSolicitudAnticipoPdf({
+        clinicId: ctx.clinicId,
+        paciente,
+        monto: deposit.amount,
+        vence: new Date(deposit.expiresAt),
+        banco: banco.banco,
+        beneficiario: banco.beneficiario,
+        clabe: banco.clabe,
+        referencia: banco.referencia,
+        fechaHumana,
+        hora: horaTexto,
+      });
+      if (pdf) pdfAttachment = { buffer: pdf.buffer, filename: pdf.fileName, caption: "Solicitud de anticipo" };
+    } catch (e) {
+      console.error("[invoices/anticipo] no se pudo generar el PDF de la solicitud:", e);
+    }
+  } else {
+    texto = textoAnticipoPanel({
+      paciente,
+      clinica: datos?.clinic?.name ?? "la clínica",
+      monto: deposit.amount,
+      horas: horasTexto,
+      url: deposit.checkoutUrl ?? "",
+      fechaHumana,
+      hora: horaTexto,
+    });
+  }
 
   let whatsapp: { enviado: boolean; motivo?: string } = { enviado: false, motivo: "No se pidió enviar." };
   if (body?.enviarWhatsapp === true) {
@@ -160,7 +216,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     } else {
       const abierta = isWithin24hWindow(await lastInboundAtForPhone(ctx.clinicId, phone).catch(() => null), new Date());
       if (!abierta) {
-        whatsapp = { enviado: false, motivo: "El paciente no ha escrito en las últimas 24 h: copia el texto y compártelo por otro medio." };
+        whatsapp = { enviado: false, motivo: "El paciente no ha escrito en las últimas 24 h: copia el texto (o el PDF) y compártelo por otro medio." };
       } else {
         try {
           await sendWhatsAppLogged({
@@ -174,6 +230,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             to: phone,
             body: texto,
             kind: "deposit_request",
+            attachment: pdfAttachment,
           });
           whatsapp = { enviado: true };
         } catch (e) {

@@ -19,14 +19,17 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
-import { anticipoPanelDisponible, estadoAnticipoDeFactura, pedirAnticipoDeCita, sugeridoParaFactura } from "@/lib/anticipos/panel.server";
-import { citaEsFuturaParaAnticipo } from "@/lib/anticipos/core";
-import { textoAnticipoPanel } from "@/lib/anticipos/mensaje-panel";
+import { canalesAnticipoPanel, estadoAnticipoDeFactura, pedirAnticipoDeCita, sugeridoParaFactura } from "@/lib/anticipos/panel.server";
+import { citaEsFuturaParaAnticipo, type MetodoPedirAnticipo } from "@/lib/anticipos/core";
+import { textoAnticipoPanel, textoAnticipoTransferencia } from "@/lib/anticipos/mensaje-panel";
+import { leerDatosBancarios } from "@/lib/anticipos/datos-bancarios.server";
+import { clabeAgrupada } from "@/lib/billing/spei-directo-core";
 import { formatDateHuman, formatTimeHuman, toISODate } from "@/lib/whatsapp/bot/booking-parse";
-import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
+import { sendWhatsAppLogged, type WhatsAppOutboundAttachment } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
+import { buildSolicitudAnticipoPdf } from "@/lib/anticipos/solicitud-pdf";
 
 export const dynamic = "force-dynamic";
 
@@ -59,18 +62,20 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     ? null
     : "Esta cita ya pasó, ya se atendió o ya no está viva: el anticipo solo se puede pedir para citas futuras.";
 
-  const [disponible, invoice] = await Promise.all([
-    anticipoPanelDisponible(ctx.clinicId),
+  const [canales, invoice] = await Promise.all([
+    canalesAnticipoPanel(ctx.clinicId),
     prisma.invoice.findUnique({
       where: { appointmentId: params.id },
       select: { id: true, total: true, paid: true, status: true },
     }),
   ]);
+  const disponible = canales.mercadopago || canales.transferencia;
 
   if (!invoice) {
     const sugerido = await sugeridoParaFactura(ctx.clinicId, 0);
     return NextResponse.json({
       disponible,
+      canales,
       tieneFactura: false,
       sugerido: null,
       horasSugeridas: sugerido.horas,
@@ -87,6 +92,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   return NextResponse.json({
     disponible,
+    canales,
     tieneFactura: true,
     invoiceId: invoice.id,
     sugerido: sugerido.monto,
@@ -115,6 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!Number.isFinite(monto)) {
     return NextResponse.json({ error: "El monto es obligatorio." }, { status: 400 });
   }
+  const metodo: MetodoPedirAnticipo = body?.metodo === "transferencia" ? "transferencia" : "mercadopago";
   const concepto = body?.concepto && typeof body.concepto === "object" ? body.concepto : undefined;
 
   const r = await pedirAnticipoDeCita({
@@ -123,6 +130,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     userId: ctx.userId,
     monto,
     horas,
+    metodo,
     concepto: concepto
       ? {
           serviceId: typeof concepto.serviceId === "string" ? concepto.serviceId : undefined,
@@ -147,7 +155,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       entityId: params.id,
       action: "update",
       before: { anticipo: null },
-      after: { anticipo: { monto: deposit.amount, expiresAt: deposit.expiresAt, origen: "panel" } },
+      after: { anticipo: { monto: deposit.amount, expiresAt: deposit.expiresAt, origen: "panel", metodo: deposit.metodo } },
     });
   }
 
@@ -161,15 +169,59 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   });
   const tz = datos?.clinic?.timezone || "America/Mexico_City";
   const paciente = datos?.patient ? `${datos.patient.firstName} ${datos.patient.lastName ?? ""}`.trim() : "Paciente";
-  const texto = textoAnticipoPanel({
-    paciente,
-    clinica: datos?.clinic?.name ?? "la clínica",
-    monto: deposit.amount,
-    horas: horas ?? Math.max(1, Math.round((new Date(deposit.expiresAt).getTime() - Date.now()) / 3_600_000)),
-    url: deposit.checkoutUrl,
-    fechaHumana: datos ? formatDateHuman(toISODate(datos.startsAt, tz), tz) : null,
-    hora: datos ? formatTimeHuman(datos.startsAt, tz) : null,
-  });
+  const horasTexto = horas ?? Math.max(1, Math.round((new Date(deposit.expiresAt).getTime() - Date.now()) / 3_600_000));
+  const fechaHumana = datos ? formatDateHuman(toISODate(datos.startsAt, tz), tz) : null;
+  const horaTexto = datos ? formatTimeHuman(datos.startsAt, tz) : null;
+
+  // Transferencia (fase 2): texto y PDF con los datos bancarios de la sede.
+  // Mercado Pago (fase 1): el texto de siempre, con el link.
+  let texto: string;
+  let pdfAttachment: WhatsAppOutboundAttachment | null = null;
+  if (deposit.metodo === "transferencia") {
+    const banco = await leerDatosBancarios(ctx.clinicId);
+    if (!banco) {
+      return NextResponse.json({ error: "Esta clínica no tiene datos bancarios cargados." }, { status: 409 });
+    }
+    texto = textoAnticipoTransferencia({
+      paciente,
+      clinica: datos?.clinic?.name ?? "la clínica",
+      monto: deposit.amount,
+      horas: horasTexto,
+      banco: banco.banco,
+      beneficiario: banco.beneficiario,
+      clabeAgrupada: clabeAgrupada(banco.clabe),
+      referencia: banco.referencia,
+      fechaHumana,
+      hora: horaTexto,
+    });
+    try {
+      const pdf = await buildSolicitudAnticipoPdf({
+        clinicId: ctx.clinicId,
+        paciente,
+        monto: deposit.amount,
+        vence: new Date(deposit.expiresAt),
+        banco: banco.banco,
+        beneficiario: banco.beneficiario,
+        clabe: banco.clabe,
+        referencia: banco.referencia,
+        fechaHumana,
+        hora: horaTexto,
+      });
+      if (pdf) pdfAttachment = { buffer: pdf.buffer, filename: pdf.fileName, caption: "Solicitud de anticipo" };
+    } catch (e) {
+      console.error("[appointments/anticipo] no se pudo generar el PDF de la solicitud:", e);
+    }
+  } else {
+    texto = textoAnticipoPanel({
+      paciente,
+      clinica: datos?.clinic?.name ?? "la clínica",
+      monto: deposit.amount,
+      horas: horasTexto,
+      url: deposit.checkoutUrl ?? "",
+      fechaHumana,
+      hora: horaTexto,
+    });
+  }
 
   let whatsapp: { enviado: boolean; motivo?: string } = { enviado: false, motivo: "No se pidió enviar." };
   if (body?.enviarWhatsapp === true) {
@@ -184,7 +236,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     } else {
       const abierta = isWithin24hWindow(await lastInboundAtForPhone(ctx.clinicId, phone).catch(() => null), new Date());
       if (!abierta) {
-        whatsapp = { enviado: false, motivo: "El paciente no ha escrito en las últimas 24 h: copia el texto y compártelo por otro medio." };
+        whatsapp = { enviado: false, motivo: "El paciente no ha escrito en las últimas 24 h: copia el texto (o el PDF) y compártelo por otro medio." };
       } else {
         try {
           await sendWhatsAppLogged({
@@ -198,6 +250,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             to: phone,
             body: texto,
             kind: "deposit_request",
+            attachment: pdfAttachment,
           });
           whatsapp = { enviado: true };
         } catch (e) {

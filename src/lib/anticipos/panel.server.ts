@@ -24,15 +24,21 @@ import { credencialDeCobro, plataformaAnticipos, urlBaseApp, type CredencialDeCo
 import {
   PANEL_HORAS_DEFAULT,
   citaEsFuturaParaAnticipo,
+  metodoRegistroADeposito,
   redondear2,
   refDeAnticipo,
   sugeridoAnticipoPanel,
   validarMontoAnticipoManual,
   validarPlazoPanelHoras,
+  validarReferenciaRegistro,
+  type MetodoPedirAnticipo,
+  type MetodoRegistroAnticipo,
   type ModoAnticipoPanel,
   type PoliticaAnticipoPanel,
 } from "./core";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
+import { leerDatosBancarios, type CuentaBancariaSede } from "./datos-bancarios.server";
+import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 
 type Db = typeof prisma;
 
@@ -44,6 +50,8 @@ export interface DepsAnticipoPanel {
   expirarPreferencia: (token: string, preferenceId: string) => Promise<void>;
   ahora: () => Date;
   baseUrl: () => string | null;
+  /** ws1-t3 fase 2 — datos bancarios de la sede, para «Pedir anticipo → Transferencia». */
+  datosBancarios: (clinicId: string) => Promise<CuentaBancariaSede | null>;
 }
 
 export const depsReales: DepsAnticipoPanel = {
@@ -54,6 +62,7 @@ export const depsReales: DepsAnticipoPanel = {
   expirarPreferencia: (token, id) => expirePreference(token, id),
   ahora: () => new Date(),
   baseUrl: urlBaseApp,
+  datosBancarios: (clinicId) => leerDatosBancarios(clinicId),
 };
 
 function deps(over?: Partial<DepsAnticipoPanel>): DepsAnticipoPanel {
@@ -95,15 +104,40 @@ export async function leerPoliticaPanelVigente(
   }
 }
 
-/** ¿Esta clínica puede pedir anticipos desde el panel? (cuenta de MP conectada). */
-export async function anticipoPanelDisponible(clinicId: string, over?: Partial<DepsAnticipoPanel>): Promise<boolean> {
+export interface CanalesAnticipoPanel {
+  /** Cuenta de Mercado Pago de la clínica conectada. */
+  mercadopago: boolean;
+  /** Datos bancarios de la sede cargados y con CLABE válida (fase 2). */
+  transferencia: boolean;
+}
+
+/**
+ * Qué canales puede ofrecer «Pedir anticipo» en esta clínica. Los dos son
+ * INDEPENDIENTES a propósito (fase 2): una clínica sin cuenta de Mercado Pago
+ * puede seguir pidiendo anticipos por transferencia con solo cargar sus datos
+ * bancarios, y viceversa.
+ */
+export async function canalesAnticipoPanel(clinicId: string, over?: Partial<DepsAnticipoPanel>): Promise<CanalesAnticipoPanel> {
   const d = deps(over);
-  if (!clinicId || !d.plataformaLista() || !d.baseUrl()) return false;
-  try {
-    return !!(await d.credencial(clinicId));
-  } catch {
-    return false;
-  }
+  if (!clinicId) return { mercadopago: false, transferencia: false };
+  const [mercadopago, transferencia] = await Promise.all([
+    (async () => {
+      if (!d.plataformaLista() || !d.baseUrl()) return false;
+      try {
+        return !!(await d.credencial(clinicId));
+      } catch {
+        return false;
+      }
+    })(),
+    (async () => {
+      try {
+        return !!(await d.datosBancarios(clinicId));
+      } catch {
+        return false;
+      }
+    })(),
+  ]);
+  return { mercadopago, transferencia };
 }
 
 /** El monto sugerido para prefijar el modal, dado el total de la factura. */
@@ -142,7 +176,7 @@ export async function estadoAnticipoDeFactura(
     const [pendiente, pagados] = await Promise.all([
       d.db.appointmentDeposit.findFirst({
         where: { clinicId, invoiceId, status: "PENDING" },
-        select: { id: true, amount: true, expiresAt: true, checkoutUrl: true, appointmentId: true },
+        select: { id: true, amount: true, expiresAt: true, checkoutUrl: true, appointmentId: true, method: true },
       }),
       d.db.appointmentDeposit.findMany({
         where: { clinicId, invoiceId, status: "PAID" },
@@ -150,7 +184,9 @@ export async function estadoAnticipoDeFactura(
       }),
     ]);
     return {
-      pendiente: pendiente?.checkoutUrl
+      // Una transferencia PENDING nunca trae checkoutUrl (no hay link que
+      // generar): "hay un pendiente" se decide por el MÉTODO, no por el link.
+      pendiente: pendiente && (pendiente.method === "transferencia" || pendiente.checkoutUrl)
         ? {
             id: pendiente.id,
             invoiceId,
@@ -158,6 +194,7 @@ export async function estadoAnticipoDeFactura(
             expiresAt: pendiente.expiresAt.toISOString(),
             checkoutUrl: pendiente.checkoutUrl,
             apartada: !!pendiente.appointmentId,
+            metodo: pendiente.method === "transferencia" ? "transferencia" : "mercadopago",
           }
         : null,
       anticipoPagado: pagados.reduce((acc: number, p: { paidAmount: number | null }) => acc + (p.paidAmount ?? 0), 0),
@@ -223,9 +260,12 @@ export interface AnticipoPedido {
   invoiceId: string;
   amount: number;
   expiresAt: string;
-  checkoutUrl: string;
+  /** null = transferencia (fase 2): no hay link, solo texto + PDF con los datos bancarios. */
+  checkoutUrl: string | null;
   /** true = además dejó la cita apartada (holdExpiresAt) para ese doctor y sillón. */
   apartada: boolean;
+  /** Cómo se pidió: "mercadopago" (fase 1) o "transferencia" (fase 2). */
+  metodo: MetodoPedirAnticipo;
 }
 
 /**
@@ -271,7 +311,7 @@ function listo(deposit: AnticipoPedido, reutilizado: boolean): ResultadoPedirAnt
 // error legible ("sin_mp") en vez de un 500 crudo — nunca dice que se pidió
 // el anticipo cuando en realidad no se guardó nada.
 export async function pedirAnticipoDeFactura(
-  args: { clinicId: string; invoiceId: string; userId: string; monto: number; horas?: number },
+  args: { clinicId: string; invoiceId: string; userId: string; monto: number; horas?: number; metodo?: MetodoPedirAnticipo },
   over?: Partial<DepsAnticipoPanel>,
 ): Promise<ResultadoPedirAnticipo> {
   try {
@@ -283,16 +323,29 @@ export async function pedirAnticipoDeFactura(
 }
 
 async function pedirAnticipoDeFacturaImpl(
-  args: { clinicId: string; invoiceId: string; userId: string; monto: number; horas?: number },
+  args: { clinicId: string; invoiceId: string; userId: string; monto: number; horas?: number; metodo?: MetodoPedirAnticipo },
   over?: Partial<DepsAnticipoPanel>,
 ): Promise<ResultadoPedirAnticipo> {
   const d = deps(over);
   const { clinicId, invoiceId, userId } = args;
+  const metodo: MetodoPedirAnticipo = args.metodo === "transferencia" ? "transferencia" : "mercadopago";
   if (!clinicId || !invoiceId || !userId) return fallo("no_encontrada");
-  if (!d.plataformaLista()) return fallo("sin_mp");
-  const base = d.baseUrl();
-  const cred = await d.credencial(clinicId);
-  if (!cred || !base) return fallo("sin_mp");
+
+  // Los dos canales son INDEPENDIENTES (fase 2): Mercado Pago exige cuenta
+  // conectada; transferencia exige datos bancarios de la sede cargados. Cada
+  // uno se valida SOLO con lo que va a usar.
+  let cred: CredencialDeCobro | null = null;
+  let base: string | null = null;
+  let banco: CuentaBancariaSede | null = null;
+  if (metodo === "mercadopago") {
+    if (!d.plataformaLista()) return fallo("sin_mp");
+    base = d.baseUrl();
+    cred = await d.credencial(clinicId);
+    if (!cred || !base) return fallo("sin_mp");
+  } else {
+    banco = await d.datosBancarios(clinicId);
+    if (!banco) return fallo("sin_mp", "Esta clínica no tiene datos bancarios cargados: agrégalos en Configuración → Anticipos.");
+  }
   const ahora = d.ahora();
 
   const inv = await d.db.invoice.findFirst({
@@ -325,12 +378,15 @@ async function pedirAnticipoDeFacturaImpl(
   }
 
   // Ya hay uno pendiente: se devuelve el mismo (nunca dos a la vez — lo
-  // refuerza el índice único parcial de la base).
+  // refuerza el índice único parcial de la base), SEA CUAL SEA el canal con
+  // el que se pidió antes. Una transferencia pendiente no tiene checkoutUrl
+  // (nunca lo tuvo — no hay link que generar), así que "ya está listo" se
+  // decide por el MÉTODO, no por si trae link.
   const existente = await d.db.appointmentDeposit.findFirst({
     where: { invoiceId, clinicId, status: "PENDING" },
-    select: { id: true, amount: true, expiresAt: true, checkoutUrl: true, appointmentId: true },
+    select: { id: true, amount: true, expiresAt: true, checkoutUrl: true, appointmentId: true, method: true },
   });
-  if (existente?.checkoutUrl) {
+  if (existente && (existente.method === "transferencia" || existente.checkoutUrl)) {
     return listo(
       {
         id: existente.id,
@@ -339,6 +395,7 @@ async function pedirAnticipoDeFacturaImpl(
         expiresAt: existente.expiresAt.toISOString(),
         checkoutUrl: existente.checkoutUrl,
         apartada: !!existente.appointmentId,
+        metodo: existente.method === "transferencia" ? "transferencia" : "mercadopago",
       },
       true,
     );
@@ -394,9 +451,9 @@ async function pedirAnticipoDeFacturaImpl(
           currency: "MXN",
           status: "PENDING",
           expiresAt: vence,
-          mpCollectorId: cred.mpUserId,
+          mpCollectorId: metodo === "mercadopago" ? cred!.mpUserId : null,
           origin: "panel",
-          method: "mercadopago",
+          method: metodo,
           createdById: userId,
         },
         select: { id: true },
@@ -415,9 +472,9 @@ async function pedirAnticipoDeFacturaImpl(
     if ((e as { code?: string })?.code === "P2002") {
       const otro = await d.db.appointmentDeposit.findFirst({
         where: { invoiceId, clinicId, status: "PENDING" },
-        select: { id: true, amount: true, expiresAt: true, checkoutUrl: true, appointmentId: true },
+        select: { id: true, amount: true, expiresAt: true, checkoutUrl: true, appointmentId: true, method: true },
       });
-      if (otro?.checkoutUrl) {
+      if (otro && (otro.method === "transferencia" || otro.checkoutUrl)) {
         return listo(
           {
             id: otro.id,
@@ -426,6 +483,7 @@ async function pedirAnticipoDeFacturaImpl(
             expiresAt: otro.expiresAt.toISOString(),
             checkoutUrl: otro.checkoutUrl,
             apartada: !!otro.appointmentId,
+            metodo: otro.method === "transferencia" ? "transferencia" : "mercadopago",
           },
           true,
         );
@@ -434,10 +492,21 @@ async function pedirAnticipoDeFacturaImpl(
     throw e;
   }
 
+  // Transferencia (fase 2): no hay link que generar — el depósito PENDING ya
+  // es el "pedido" completo. El texto y el PDF con los datos bancarios los
+  // arma la ruta (necesita nombre del paciente, cita humanizada…), no este
+  // servicio: aquí solo vive el dinero.
+  if (metodo === "transferencia") {
+    return listo(
+      { id: depositId, invoiceId: inv.id, amount: monto, expiresAt: vence.toISOString(), checkoutUrl: null, apartada: !!apartadaAppointment, metodo },
+      false,
+    );
+  }
+
   const ref = refDeAnticipo(depositId);
   const vuelta = `${base}/pago/anticipo`;
   try {
-    const pref = await d.crearPreferencia(cred.accessToken, {
+    const pref = await d.crearPreferencia(cred!.accessToken, {
       items: [{ title: `Anticipo de factura ${inv.invoiceNumber}`.slice(0, 250), quantity: 1, unit_price: monto }],
       externalReference: ref,
       notificationUrl: `${base}/api/webhooks/mercadopago?ref=${encodeURIComponent(ref)}`,
@@ -459,6 +528,7 @@ async function pedirAnticipoDeFacturaImpl(
         expiresAt: vence.toISOString(),
         checkoutUrl: pref.initPoint,
         apartada: !!apartadaAppointment,
+        metodo: "mercadopago",
       },
       false,
     );
@@ -510,6 +580,7 @@ export async function pedirAnticipoDeCita(
     monto: number;
     horas?: number;
     concepto?: ConceptoManual;
+    metodo?: MetodoPedirAnticipo;
   },
   over?: Partial<DepsAnticipoPanel>,
 ): Promise<ResultadoPedirAnticipo> {
@@ -529,6 +600,7 @@ async function pedirAnticipoDeCitaImpl(
     monto: number;
     horas?: number;
     concepto?: ConceptoManual;
+    metodo?: MetodoPedirAnticipo;
   },
   over?: Partial<DepsAnticipoPanel>,
 ): Promise<ResultadoPedirAnticipo> {
@@ -583,7 +655,10 @@ async function pedirAnticipoDeCitaImpl(
     }
   }
 
-  return pedirAnticipoDeFactura({ clinicId: args.clinicId, invoiceId, userId: args.userId, monto: args.monto, horas: args.horas }, over);
+  return pedirAnticipoDeFactura(
+    { clinicId: args.clinicId, invoiceId, userId: args.userId, monto: args.monto, horas: args.horas, metodo: args.metodo },
+    over,
+  );
 }
 
 // ── 3. Cuando la factura cambia con un anticipo pendiente ──────────────────
@@ -638,4 +713,220 @@ export async function cerrarAnticiposDePanel(
     if (!faltaTabla(e)) console.error(`[anticipos-panel] no se pudieron cerrar los anticipos de ${invoiceId}: ${(e as Error).message}`);
     return 0;
   }
+}
+
+// ── 4. «Registrar anticipo recibido» (ws1-t3 fase 2) ────────────────────────
+//
+// Efectivo, transferencia o terminal: recepción YA TIENE el dinero (lo ve en
+// caja o en el estado de cuenta) y lo registra a mano. A diferencia de «Pedir
+// anticipo», aquí NO se genera ningún link ni se espera ningún webhook — el
+// Payment se crea en el instante, con su MÉTODO REAL (alimenta arqueo y CFDI,
+// nunca "anticipo": ese método lo reserva la aplicación del saldo a favor del
+// bot). Si ya había un anticipo PENDING de "Pedir anticipo → Transferencia"
+// para esta factura, ESE se marca PAID; si no, se crea uno directo ya PAID.
+
+export type ErrorRegistrarAnticipo = "no_encontrada" | "estado" | "sin_saldo" | "monto_invalido" | "metodo_invalido" | "referencia_requerida";
+
+export interface AnticipoRegistrado {
+  paymentId: string;
+  depositId: string;
+  invoiceId: string;
+  amount: number;
+  method: MetodoRegistroAnticipo;
+  /** true = la cita quedó CONFIRMED y sin apartado. */
+  citaConfirmada: boolean;
+  /** El dinero SIEMPRE se registra; esto solo dice que la cita no se pudo confirmar sola. */
+  anomalia: string | null;
+}
+
+/** UN SOLO TIPO, sin unión (mismo criterio que ResultadoPedirAnticipo). */
+export interface ResultadoRegistrarAnticipo {
+  ok: boolean;
+  error: ErrorRegistrarAnticipo | null;
+  motivo: string | null;
+  registrado: AnticipoRegistrado | null;
+}
+
+function falloRegistro(error: ErrorRegistrarAnticipo, motivo?: string): ResultadoRegistrarAnticipo {
+  return { ok: false, error, motivo: motivo ?? null, registrado: null };
+}
+
+export async function registrarAnticipoRecibido(
+  args: {
+    clinicId: string;
+    invoiceId: string;
+    userId: string;
+    monto: number;
+    method: MetodoRegistroAnticipo;
+    reference?: string;
+    notes?: string;
+  },
+  over?: Partial<DepsAnticipoPanel>,
+): Promise<ResultadoRegistrarAnticipo> {
+  try {
+    return await registrarAnticipoRecibidoImpl(args, over);
+  } catch (e) {
+    if (faltaTabla(e)) return falloRegistro("no_encontrada", "Falta aplicar la actualización de la base (sql/anticipo-desde-panel.sql).");
+    throw e;
+  }
+}
+
+async function registrarAnticipoRecibidoImpl(
+  args: {
+    clinicId: string;
+    invoiceId: string;
+    userId: string;
+    monto: number;
+    method: MetodoRegistroAnticipo;
+    reference?: string;
+    notes?: string;
+  },
+  over?: Partial<DepsAnticipoPanel>,
+): Promise<ResultadoRegistrarAnticipo> {
+  const d = deps(over);
+  const { clinicId, invoiceId, userId } = args;
+  if (!clinicId || !invoiceId || !userId) return falloRegistro("no_encontrada");
+  const errorRef = validarReferenciaRegistro(args.method, args.reference);
+  if (errorRef) return falloRegistro("referencia_requerida", errorRef);
+
+  const inv = await d.db.invoice.findFirst({
+    where: { id: invoiceId, clinicId },
+    select: { id: true, status: true, total: true, paid: true, patientId: true, appointmentId: true },
+  });
+  if (!inv) return falloRegistro("no_encontrada");
+  if (!ESTADOS_COBRABLES.includes(inv.status)) {
+    return falloRegistro("estado", "Solo se puede registrar un anticipo sobre una factura emitida con saldo (pendiente, parcial o vencida).");
+  }
+  const saldo = redondear2(Math.max(0, inv.total - inv.paid));
+  if (!(saldo > 0)) return falloRegistro("sin_saldo", "La factura ya no tiene saldo por cobrar.");
+  const errorMonto = validarMontoAnticipoManual(args.monto, inv.total, inv.paid);
+  if (errorMonto) return falloRegistro("monto_invalido", errorMonto);
+  const monto = redondear2(args.monto);
+  const ahora = d.ahora();
+  const reference = args.reference?.trim() || null;
+  const notes = args.notes?.trim() || null;
+  const depositMethod = metodoRegistroADeposito(args.method);
+
+  // Lectura + escritura en la MISMA transacción con lock de fila (FOR UPDATE),
+  // igual que POST /api/invoices/[id] (el cobro manual de siempre): serializa
+  // contra otro cobro o contra el webhook de un pago en línea, sin lost
+  // updates de paid/balance.
+  const resultado = await d.db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoiceId} FOR UPDATE`;
+    const fresca = await tx.invoice.findFirst({ where: { id: invoiceId, clinicId }, select: { total: true, paid: true, status: true } });
+    if (!fresca || !ESTADOS_COBRABLES.includes(fresca.status)) return { error: "estado" as const };
+    const saldoFresco = redondear2(Math.max(0, fresca.total - fresca.paid));
+    if (monto > saldoFresco + 0.01) return { error: "monto_invalido" as const };
+
+    const pago = await tx.payment.create({
+      data: { invoiceId, amount: monto, method: args.method, reference, notes, paidAt: ahora },
+      select: { id: true },
+    });
+    const nuevoPagado = redondear2(fresca.paid + monto);
+    const nuevoSaldo = redondear2(Math.max(0, fresca.total - nuevoPagado));
+    const saldada = nuevoSaldo <= 0;
+    await tx.invoice.updateMany({
+      where: { id: invoiceId, clinicId },
+      data: {
+        paid: nuevoPagado,
+        balance: nuevoSaldo,
+        status: saldada ? "PAID" : "PARTIAL",
+        paymentMethod: args.method,
+        ...(saldada ? { paidAt: ahora } : {}),
+      },
+    });
+
+    // Reusa el PENDING de esta factura si lo hay (nació de "Pedir anticipo →
+    // Transferencia"); si no, recepción cobró sin pedirlo antes por este
+    // camino y se crea uno directo ya PAID.
+    const pendiente = await tx.appointmentDeposit.findFirst({
+      where: { clinicId, invoiceId, status: "PENDING" },
+      select: { id: true, appointmentId: true },
+    });
+    let depositId: string;
+    let appointmentId: string | null;
+    if (pendiente) {
+      await tx.appointmentDeposit.update({
+        where: { id: pendiente.id },
+        data: { status: "PAID", method: depositMethod, paidAmount: monto, paidAt: ahora, paymentId: pago.id },
+      });
+      depositId = pendiente.id;
+      appointmentId = pendiente.appointmentId;
+    } else {
+      const nuevo = await tx.appointmentDeposit.create({
+        data: {
+          clinicId,
+          patientId: inv.patientId,
+          appointmentId: inv.appointmentId ?? null,
+          invoiceId,
+          amount: monto,
+          marketplaceFee: 0,
+          currency: "MXN",
+          status: "PAID",
+          expiresAt: ahora,
+          paidAmount: monto,
+          paidAt: ahora,
+          origin: "panel",
+          method: depositMethod,
+          createdById: userId,
+          paymentId: pago.id,
+        },
+        select: { id: true },
+      });
+      depositId = nuevo.id;
+      appointmentId = inv.appointmentId ?? null;
+    }
+
+    // Confirma la cita y quita el apartado — SOLO si sigue SCHEDULED (mismo
+    // candado condicional que aplicarPagoDeAnticipo en servicio.server.ts):
+    // si el hueco ya se perdió (lo tomó otra cita) o ya estaba confirmada por
+    // otro medio, NO se confirma a ciegas. El dinero YA se registró arriba
+    // pase lo que pase con la cita.
+    let citaConfirmada = false;
+    let anomalia: string | null = null;
+    if (appointmentId) {
+      const conf = await tx.appointment.updateMany({
+        where: { id: appointmentId, clinicId, status: "SCHEDULED" },
+        data: { status: "CONFIRMED", holdExpiresAt: null },
+      });
+      if (conf.count === 1) {
+        citaConfirmada = true;
+      } else {
+        const actual = await tx.appointment.findFirst({ where: { id: appointmentId, clinicId }, select: { status: true } });
+        if (actual && actual.status !== "CONFIRMED") {
+          anomalia = `El anticipo se cobró, pero la cita ya no estaba disponible para confirmarla sola (estado: ${actual.status}). Revísala con el paciente.`;
+        }
+      }
+    }
+    if (anomalia) {
+      await tx.payment.update({ where: { id: pago.id }, data: { notes: notes ? `${notes} · ⚠️ ${anomalia}` : `⚠️ ${anomalia}` } });
+    }
+
+    return { ok: true as const, paymentId: pago.id, depositId, citaConfirmada, anomalia };
+  });
+
+  if ("error" in resultado) {
+    return resultado.error === "estado"
+      ? falloRegistro("estado", "La factura cambió mientras registrabas el anticipo (se canceló o se saldó). Vuelve a abrirla.")
+      : falloRegistro("monto_invalido", "El monto excede el saldo pendiente (cambió mientras registrabas el anticipo).");
+  }
+
+  // El saldo cambió: un link de Mercado Pago (factura completa) que pedía el
+  // saldo viejo queda obsoleto. Nunca lanza.
+  await cerrarLinksDeFactura({ clinicId, invoiceId }).catch(() => {});
+
+  return {
+    ok: true,
+    error: null,
+    motivo: null,
+    registrado: {
+      paymentId: resultado.paymentId,
+      depositId: resultado.depositId,
+      invoiceId,
+      amount: monto,
+      method: args.method,
+      citaConfirmada: resultado.citaConfirmada,
+      anomalia: resultado.anomalia,
+    },
+  };
 }

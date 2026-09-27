@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 import { leerPantallaAnticipos } from "@/lib/anticipos/pantalla.server";
 import { validarConfiguracion, validarConfiguracionPanel } from "@/lib/anticipos/core";
+import { DatosBancariosSinTabla, guardarDatosBancarios, validarCuentaBancariaSede } from "@/lib/anticipos/datos-bancarios.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,7 +68,11 @@ export async function PUT(req: NextRequest) {
   if (!pantalla.tablasListas) {
     return NextResponse.json({ error: "Falta aplicar la actualización de la base (sql/anticipo-whatsapp.sql)." }, { status: 409 });
   }
-  if (!pantalla.cuenta.conectada || !pantalla.plataforma.lista) {
+  // Solo el interruptor del BOT exige Mercado Pago conectado (es el único
+  // canal que usa). El «pedido desde el panel» (monto sugerido/horas) y los
+  // datos bancarios (fase 2) se pueden guardar sin cuenta de MP: una clínica
+  // puede pedir anticipos SOLO por transferencia.
+  if (botTouched && (!pantalla.cuenta.conectada || !pantalla.plataforma.lista)) {
     return NextResponse.json({ error: "Conecta primero la cuenta de Mercado Pago de la clínica." }, { status: 409 });
   }
 
@@ -90,8 +95,47 @@ export async function PUT(req: NextRequest) {
     };
   }
 
-  if (!botTouched && !panelData) {
+  // Datos bancarios de la sede (ws1-t3 fase 2). `banco` es opcional en el
+  // body, con su propio "Guardar" en la pantalla: no toca ni el bot ni el
+  // panel config de arriba.
+  const bancoBody = (body.banco && typeof body.banco === "object" ? body.banco : null) as Record<string, unknown> | null;
+  if (bancoBody) {
+    const validado = validarCuentaBancariaSede(bancoBody);
+    if (!validado.ok || !validado.cuenta) {
+      return NextResponse.json({ error: validado.error ?? "Datos bancarios inválidos." }, { status: 400 });
+    }
+    const antesBanco = pantalla.datosBancarios;
+    try {
+      await guardarDatosBancarios(ctx.clinicId, validado.cuenta, ctx.userId);
+    } catch (e) {
+      if (e instanceof DatosBancariosSinTabla) return NextResponse.json({ error: e.message }, { status: 409 });
+      throw e;
+    }
+    await logAudit({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      entityType: "clinic",
+      entityId: ctx.clinicId,
+      action: "update",
+      // Nunca la CLABE completa en la bitácora: solo los últimos 4 dígitos,
+      // suficiente para reconocer un cambio sin dejar el número entero en logs.
+      changes: {
+        anticipoDatosBancarios: {
+          before: antesBanco ? { banco: antesBanco.banco, beneficiario: antesBanco.beneficiario, clabe: `…${(antesBanco.clabe ?? "").slice(-4)}` } : null,
+          after: { banco: validado.cuenta.banco, beneficiario: validado.cuenta.beneficiario, clabe: `…${validado.cuenta.clabe.slice(-4)}` },
+        },
+      },
+      ...extractAuditMeta(req),
+    });
+  }
+
+  if (!botTouched && !panelData && !bancoBody) {
     // Nada que guardar (body vacío o inválido): no toca la base ni el log.
+    return NextResponse.json(await leerPantallaAnticipos(ctx.clinicId));
+  }
+  if (!botTouched && !panelData) {
+    // Solo se guardaron los datos bancarios (ya hecho arriba, con su propio
+    // log): no hay nada más que tocar en clinic_mercadopago.
     return NextResponse.json(await leerPantallaAnticipos(ctx.clinicId));
   }
 

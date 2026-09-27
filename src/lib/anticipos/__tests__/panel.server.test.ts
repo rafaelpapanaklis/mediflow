@@ -9,7 +9,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DobleBase } from "./doble-base";
-import { pedirAnticipoDeCita, pedirAnticipoDeFactura, cerrarAnticiposDePanel, type DepsAnticipoPanel } from "../panel.server";
+import {
+  pedirAnticipoDeCita,
+  pedirAnticipoDeFactura,
+  cerrarAnticiposDePanel,
+  canalesAnticipoPanel,
+  registrarAnticipoRecibido,
+  type DepsAnticipoPanel,
+} from "../panel.server";
 import { aplicarPagoDeAnticipo } from "../servicio.server";
 import { refDeAnticipo } from "../core";
 import { hasPermission } from "../../auth/permissions";
@@ -52,6 +59,13 @@ function escenario(opts: { horas?: number; feeMode?: string; feeValue?: number }
     },
     ahora: () => reloj,
     baseUrl: () => "https://app.dalecontrol.test",
+    // ws1-t3 fase 2 — datos bancarios de la sede (canalesAnticipoPanel y
+    // pedirAnticipoDeFactura con metodo "transferencia"). Vacío por defecto:
+    // los escenarios que la necesitan la cargan con e.cargarBanco().
+    datosBancarios: async (clinicId) => {
+      const f = db.tablas.clinicBankAccount.find((x) => x.clinicId === clinicId);
+      return f ? { banco: f.banco, beneficiario: f.beneficiario, clabe: f.clabe, referencia: f.referencia ?? null } : null;
+    },
   };
 
   // Mismos deps para aplicarPagoDeAnticipo (servicio.server.ts): reutiliza la
@@ -115,6 +129,18 @@ function escenario(opts: { horas?: number; feeMode?: string; feeValue?: number }
     expiradas,
     avanzar: (min: number) => { reloj = new Date(reloj.getTime() + min * 60_000); },
     desconectarOtraCuenta: () => { usuarioConectado = "OTRA"; },
+    // ws1-t3 fase 2 — carga los datos bancarios de la sede (por defecto no hay
+    // ninguno: el canal "transferencia" no se ofrece hasta que se cargan).
+    cargarBanco: (over: Partial<Record<string, unknown>> = {}) => {
+      db.tablas.clinicBankAccount.push({
+        clinicId: "c1",
+        banco: "BBVA",
+        beneficiario: "Clínica Sonrisa SC",
+        clabe: "012180001234567899",
+        referencia: null,
+        ...over,
+      });
+    },
   };
 }
 
@@ -394,5 +420,181 @@ describe("permiso billing.deposit: quién puede pedir un anticipo (ws1-t3)", () 
   it("una clínica se lo puede quitar al doctor desde Equipo → Permisos (el override reemplaza)", () => {
     const sinDeposito = ["today.view", "agenda.view", "billing.view"]; // override explícito sin billing.deposit
     assert.equal(hasPermission(u("DOCTOR", sinDeposito), "billing.deposit"), false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// FASE 2 — «Pedir anticipo → Transferencia» y «Registrar anticipo recibido»
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("canalesAnticipoPanel: los dos canales son independientes", () => {
+  it("sin cuenta de MP y sin datos bancarios: los dos apagados", async () => {
+    const e = escenario();
+    e.db.tablas.clinicMercadoPago[0].accessToken = null; // "sin cuenta" para el doble
+    const c = await canalesAnticipoPanel("c1", e.deps);
+    assert.equal(c.mercadopago, false);
+    assert.equal(c.transferencia, false);
+  });
+
+  it("con cuenta de MP pero SIN datos bancarios: solo mercadopago", async () => {
+    const e = escenario();
+    const c = await canalesAnticipoPanel("c1", e.deps);
+    assert.equal(c.mercadopago, true);
+    assert.equal(c.transferencia, false);
+  });
+
+  it("con datos bancarios pero SIN cuenta de MP: solo transferencia", async () => {
+    const e = escenario();
+    e.db.tablas.clinicMercadoPago[0].accessToken = null;
+    e.cargarBanco();
+    const c = await canalesAnticipoPanel("c1", e.deps);
+    assert.equal(c.mercadopago, false);
+    assert.equal(c.transferencia, true);
+  });
+
+  it("con los dos: los dos encendidos", async () => {
+    const e = escenario();
+    e.cargarBanco();
+    const c = await canalesAnticipoPanel("c1", e.deps);
+    assert.equal(c.mercadopago, true);
+    assert.equal(c.transferencia, true);
+  });
+});
+
+describe("pedirAnticipoDeFactura con metodo=\"transferencia\": sin link, sin llamar a Mercado Pago", () => {
+  it("sin datos bancarios cargados: rechazado con sin_mp, no toca Mercado Pago", async () => {
+    const e = escenario();
+    const invoiceId = e.factura();
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, metodo: "transferencia" }, e.deps);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "sin_mp");
+    assert.equal(e.preferencias.length, 0);
+  });
+
+  it("con datos bancarios: crea el PENDING con checkoutUrl null y metodo transferencia, NUNCA llama a crearPreferencia", async () => {
+    const e = escenario();
+    e.cargarBanco();
+    const invoiceId = e.factura();
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, metodo: "transferencia" }, e.deps);
+    assert.equal(r.ok, true);
+    assert.equal(r.deposit?.checkoutUrl, null);
+    assert.equal(r.deposit?.metodo, "transferencia");
+    assert.equal(e.preferencias.length, 0, "transferencia no pide ningún link a Mercado Pago");
+    const dep = e.db.tablas.appointmentDeposit[0];
+    assert.equal(dep.method, "transferencia");
+    assert.equal(dep.mpCollectorId, null);
+    assert.equal(dep.status, "PENDING");
+  });
+
+  it("aparta la cita igual que Mercado Pago (holdExpiresAt tope al inicio de la cita)", async () => {
+    const e = escenario({ horas: 48 });
+    e.cargarBanco();
+    e.db.tablas.appointment.push({
+      id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED",
+      startsAt: new Date(T0.getTime() + 3 * 3600_000),
+    });
+    const invoiceId = e.factura({ appointmentId: "apt1" });
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, metodo: "transferencia" }, e.deps);
+    assert.equal(r.deposit?.apartada, true);
+    const appt = e.db.tablas.appointment[0];
+    assert.equal(appt.holdExpiresAt.getTime(), appt.startsAt.getTime());
+  });
+
+  it("DOBLE: pedirlo dos veces (transferencia) devuelve el MISMO PENDING, nunca un segundo", async () => {
+    const e = escenario();
+    e.cargarBanco();
+    const invoiceId = e.factura();
+    const r1 = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, metodo: "transferencia" }, e.deps);
+    const r2 = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 999, metodo: "transferencia" }, e.deps);
+    assert.equal(r1.deposit?.id, r2.deposit?.id);
+    assert.equal(r2.reutilizado, true);
+    assert.equal(e.db.tablas.appointmentDeposit.length, 1);
+  });
+});
+
+describe("registrarAnticipoRecibido (fase 2): efectivo/transferencia/terminal, sin webhook", () => {
+  it("efectivo: crea el Payment con method REAL (no \"anticipo\"), suma a paid/balance, confirma la cita SCHEDULED", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 3600_000) });
+    const invoiceId = e.factura({ total: 1000, paid: 0, appointmentId: "apt1" });
+    const r = await registrarAnticipoRecibido({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, method: "cash" }, e.deps);
+    assert.equal(r.ok, true);
+    assert.equal(r.registrado?.citaConfirmada, true);
+    assert.equal(r.registrado?.anomalia, null);
+    const pago = e.db.tablas.payment[0];
+    assert.equal(pago.method, "cash", "el método REAL, para arqueo y CFDI — nunca \"anticipo\"");
+    assert.equal(pago.amount, 300);
+    const inv = e.db.tablas.invoice.find((i: any) => i.id === invoiceId);
+    assert.equal(inv.paid, 300);
+    assert.equal(inv.status, "PARTIAL");
+    const appt = e.db.tablas.appointment.find((a: any) => a.id === "apt1");
+    assert.equal(appt.status, "CONFIRMED");
+    assert.equal(appt.holdExpiresAt, null);
+    const dep = e.db.tablas.appointmentDeposit[0];
+    assert.equal(dep.status, "PAID");
+    assert.equal(dep.method, "manual", "efectivo/débito/crédito se guardan como \"manual\" en el anticipo — lo granular vive en el Payment");
+    assert.equal(dep.paymentId, pago.id);
+  });
+
+  it("transferencia SIN referencia: rechazada, no crea nada", async () => {
+    const e = escenario();
+    const invoiceId = e.factura({ total: 1000, paid: 0 });
+    const r = await registrarAnticipoRecibido({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, method: "transfer" }, e.deps);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "referencia_requerida");
+    assert.equal(e.db.tablas.payment.length, 0);
+  });
+
+  it("transferencia CON referencia: la guarda en Payment.reference y el depósito queda method=transferencia", async () => {
+    const e = escenario();
+    const invoiceId = e.factura({ total: 1000, paid: 0 });
+    const r = await registrarAnticipoRecibido(
+      { clinicId: "c1", invoiceId, userId: "u1", monto: 300, method: "transfer", reference: "CR123456" },
+      e.deps,
+    );
+    assert.equal(r.ok, true);
+    assert.equal(e.db.tablas.payment[0].reference, "CR123456");
+    assert.equal(e.db.tablas.appointmentDeposit[0].method, "transferencia");
+  });
+
+  it("reusa el PENDING que ya existía de \"Pedir anticipo → Transferencia\" (no crea un segundo depósito)", async () => {
+    const e = escenario();
+    e.cargarBanco();
+    const invoiceId = e.factura({ total: 1000, paid: 0 });
+    const pedido = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, metodo: "transferencia" }, e.deps);
+    assert.equal(e.db.tablas.appointmentDeposit.length, 1);
+    const r = await registrarAnticipoRecibido(
+      { clinicId: "c1", invoiceId, userId: "u1", monto: 300, method: "transfer", reference: "REF1" },
+      e.deps,
+    );
+    assert.equal(r.ok, true);
+    assert.equal(e.db.tablas.appointmentDeposit.length, 1, "el mismo depósito, no uno nuevo");
+    assert.equal(e.db.tablas.appointmentDeposit[0].id, pedido.deposit?.id);
+    assert.equal(e.db.tablas.appointmentDeposit[0].status, "PAID");
+  });
+
+  it("monto MAYOR al saldo pendiente: rechazado, ni el Payment ni la factura se tocan", async () => {
+    const e = escenario();
+    const invoiceId = e.factura({ total: 1000, paid: 700 }); // saldo 300
+    const r = await registrarAnticipoRecibido({ clinicId: "c1", invoiceId, userId: "u1", monto: 301, method: "cash" }, e.deps);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "monto_invalido");
+    assert.equal(e.db.tablas.payment.length, 0);
+  });
+
+  it("la cita ya NO está SCHEDULED (el hueco se perdió): el dinero se registra igual, pero queda anomalía y NO se confirma sola", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "CANCELLED", startsAt: new Date(T0.getTime() + 3600_000) });
+    const invoiceId = e.factura({ total: 1000, paid: 0, appointmentId: "apt1" });
+    const r = await registrarAnticipoRecibido({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, method: "cash" }, e.deps);
+    assert.equal(r.ok, true, "el dinero SIEMPRE se registra, pase lo que pase con la cita");
+    assert.equal(r.registrado?.citaConfirmada, false);
+    assert.match(r.registrado?.anomalia ?? "", /no estaba disponible/);
+    const inv = e.db.tablas.invoice.find((i: any) => i.id === invoiceId);
+    assert.equal(inv.paid, 300, "el pago SÍ entró aunque la cita no se haya podido confirmar");
+    const appt = e.db.tablas.appointment.find((a: any) => a.id === "apt1");
+    assert.equal(appt.status, "CANCELLED", "no se toca a ciegas");
+    const pago = e.db.tablas.payment[0];
+    assert.match(pago.notes ?? "", /⚠️/, "la anomalía queda anotada en el Payment, visible en Caja");
   });
 });

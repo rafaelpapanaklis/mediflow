@@ -41,15 +41,22 @@ test("los nombres son únicos y con el formato que admite Meta", () => {
   }
 });
 
-test("solo la de reseñas es de marketing, y es la única opcional", () => {
+test("solo la de reseñas es de marketing", () => {
   // El modelo de negocio depende de esto: marketing cuesta más y el paciente la
-  // puede bloquear. Si alguna de utilidad se marcara opcional, dejaría de
-  // crearse sola y los recordatorios se apagarían sin avisar.
+  // puede bloquear.
   const marketing = WA_TEMPLATE_CATALOG.filter((e) => e.category === "MARKETING");
   assert.deepEqual(marketing.map((e) => e.kind), ["review"]);
+});
+
+test("opcionales: reseñas (marketing) + anticipo y recibo (ws1-t3, UTILITY pero apagadas por defecto)", () => {
+  // Si alguna de utilidad que SÍ debe crearse sola (recordatorio, confirmación…)
+  // se marcara opcional por accidente, dejaría de darse de alta y esos avisos
+  // se apagarían sin que nadie se entere.
   const optional = WA_TEMPLATE_CATALOG.filter((e) => e.optional);
-  assert.deepEqual(optional.map((e) => e.kind), ["review"]);
+  assert.deepEqual(optional.map((e) => e.kind).sort(), ["deposit_request", "payment_receipt", "review"].sort());
   assert.ok(!DEFAULT_CATALOG_KINDS.includes("review"));
+  assert.ok(!DEFAULT_CATALOG_KINDS.includes("deposit_request"));
+  assert.ok(!DEFAULT_CATALOG_KINDS.includes("payment_receipt"));
   assert.equal(DEFAULT_CATALOG_KINDS.length, 8);
 });
 

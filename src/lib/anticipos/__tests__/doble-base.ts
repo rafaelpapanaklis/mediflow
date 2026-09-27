@@ -59,6 +59,9 @@ export class DobleBase {
     // aplicarPagoDeAnticipo las necesitan.
     invoice: [],
     payment: [],
+    // ws1-t3 fase 2 — datos bancarios de la sede (canalesAnticipoPanel,
+    // pedirAnticipoDeFactura con metodo "transferencia").
+    clinicBankAccount: [],
   };
   private seq = 0;
   private cola: Promise<unknown> = Promise.resolve();

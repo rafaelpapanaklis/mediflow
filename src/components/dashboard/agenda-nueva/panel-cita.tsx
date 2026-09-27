@@ -672,13 +672,16 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                 decisión de Rafael) — SCHEDULED/CONFIRMED y con inicio después
                 de ahora; el servidor exige exactamente lo mismo
                 (citaEsFuturaParaAnticipo), así que el botón nunca promete algo
-                que el servidor va a rechazar. Con Mercado Pago o sin él — el
-                modal dice si no está conectado. El servidor exige
-                "billing.deposit"; READONLY nunca la tiene, así que ni se le
-                pinta el botón. */}
+                que el servidor va a rechazar. Con Mercado Pago, transferencia
+                o ninguno de los dos — el modal dice qué falta. El botón se
+                decide por el PERMISO "billing.deposit" (QA t2, fase 2), no por
+                el rol: `permissions.canDeposit` lo resuelve el server
+                component (page.tsx → hasPermission), así que un READONLY o un
+                permiso a medida sin billing.deposit no lo ve, y el servidor lo
+                vuelve a exigir igual. */}
             {(cita.estado === "SCHEDULED" || cita.estado === "CONFIRMED") &&
               new Date(dto.startsAt).getTime() > ahora.getTime() &&
-              userRole !== "READONLY" && (
+              permissions.canDeposit && (
               <button type="button" className={s.accionSecundaria} onClick={() => setPidiendoAnticipo(true)}>
                 <Wallet size={18} strokeWidth={2} />
                 Pedir anticipo
