@@ -867,6 +867,7 @@
         "title": "¿De dónde vienen tus datos?",
         "sub": "Elige tu sistema actual. Adaptaremos las instrucciones y el mapeo de columnas a tu elección.",
         "metaProfile": "Perfil listo",
+        "metaUnverified": "Perfil sin validar",
         "metaManual": "Mapeo manual",
         "assistedTitle": "¿Prefieres que lo hagamos por ti?",
         "assistedDesc": "Migración asistida gratis: súbenos tu respaldo y nuestro equipo lo deja listo.",
@@ -985,6 +986,12 @@
           "other": "Importar {count} registros"
         },
         "colDetail": "Detalle",
+        "colPatient": "Paciente",
+        "colWhen": "Fecha y hora",
+        "colDoctor": "Doctor",
+        "colDuration": "Duración",
+        "minutes": "{count} min",
+        "tzHint": "Fecha y hora en la zona de la clínica ({tz}).",
         "unresolvedTitle": {
           "one": "{count} procedimiento no está en tu catálogo",
           "other": "{count} procedimientos no están en tu catálogo"

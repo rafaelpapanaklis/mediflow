@@ -752,3 +752,142 @@ test("el formulario lleva la pestaña elegida hasta el motor (parseImportForm)",
   fd2.append("file", csv("s.csv", "a\n1"));
   assert.equal((await parseImportForm(new NextRequest("http://localhost/x", { method: "POST", body: fd2 }))).sheet, null);
 });
+
+// ═══ AJUSTE 2 (QA de panel.108) ════════════════════════════════════════════
+
+test("N1: la vista previa de CITAS trae fecha y hora en la zona de la clínica, doctor, paciente y duración", async () => {
+  reiniciar();
+  const f = csv("citas.csv", [
+    "Paciente,Celular,Profesional,Fecha,Hora,Duracion",
+    "María Hernández,5551234567,Ana López,15/01/2030,15:30,45",
+    "María Hernández,5551234567,Ana López,15/01/2020,10:00,30", // pasada: omitida, pero se ve cuándo era
+    "Jorge López,+56987654321,Inexistente,16/01/2030,09:00,30", // error: doctor
+  ].join("\n"));
+  const res = await correr("appointments", f);
+  const ok = fila(res, 2).data;
+  assert.equal(ok.startsLocal, "15/01/2030 15:30", "la hora de la CLÍNICA (Mérida), no la del servidor");
+  assert.equal(ok.doctorName, "Ana López");
+  assert.equal(ok.durationMin, 45);
+  assert.equal(ok.timezone, TZ);
+  assert.equal(fila(res, 3).status, "skipped");
+  assert.equal(fila(res, 3).data.startsLocal, "15/01/2020 10:00");
+  // Una fila con error también enseña cuándo y con quién.
+  assert.equal(fila(res, 4).status, "error");
+  assert.equal(fila(res, 4).data.startsLocal, "16/01/2030 09:00");
+  assert.equal(fila(res, 4).data.doctorName, "Inexistente");
+
+  // …y el adaptador de la interfaz lo convierte en columnas.
+  const { adaptPreview } = await import("../client");
+  const ui = adaptPreview("appointments", JSON.parse(JSON.stringify(res)));
+  assert.equal(ui.timezone, TZ);
+  assert.deepEqual(
+    ui.rows.map((r) => [r.name, r.when, r.doctor, r.duration]),
+    [
+      ["María Hernández", "15/01/2030 15:30", "Ana López", 45],
+      ["María Hernández", "15/01/2020 10:00", "Ana López", 30],
+      ["Jorge López", "16/01/2030 09:00", "Inexistente", 30],
+    ],
+  );
+});
+
+test("N2: las filas con error muestran el nombre y el teléfono que traía el archivo (no «—»)", async () => {
+  reiniciar();
+  const f = csv("saldos.csv", "Paciente,Celular,Saldo\nPersona Inventada,5550009999,100\nMaría Hernández,5551234567,abc\n");
+  const res = await correr("balances", f);
+  assert.equal(fila(res, 2).status, "error");
+  assert.equal(fila(res, 2).data.origName, "Persona Inventada");
+  assert.equal(fila(res, 2).data.origPhone, "5550009999");
+  const { adaptPreview } = await import("../client");
+  const ui = adaptPreview("balances", JSON.parse(JSON.stringify(res)));
+  assert.deepEqual(ui.rows.map((r) => [r.name, r.phone]), [["Persona Inventada", "5550009999"], ["María Hernández", "5551234567"]]);
+  // Pacientes con error: nombre completo en una columna.
+  const pac = await correr("patients", csv("p.csv", "Nombre completo,Celular\nSolo,5550000001\n"));
+  assert.equal(pac.preview[0].status, "error");
+  assert.equal(pac.preview[0].data.origName, "Solo");
+});
+
+test("N3: el paso 1 dice «sin validar» para los perfiles verified:false (los orígenes locales y los del backend)", async () => {
+  const { ORIGINS } = await import("../../../components/import/import-client");
+  const { listOrigins } = await import("../profiles");
+  for (const o of ORIGINS.filter((x) => x.hasProfile)) assert.equal(o.verified, false, o.id);
+  for (const o of listOrigins().filter((x) => x.hasProfile)) assert.equal(o.verified, false, o.id);
+  assert.equal(ORIGINS.find((o) => !o.hasProfile)!.verified, undefined);
+});
+
+test("N4: una pestaña con el nombre del reporte que mandan bajar las instrucciones se marca «Sugerida» (sin elegirla sola)", async () => {
+  reiniciar();
+  const f = () => libro({
+    "Notas": { cab: ["x"], filas: [["y"]] },
+    "Pacientes morosos": { cab: ["Celular", "Saldo"], filas: [["5551234567", 100]] },
+    "Citas pacientes": { cab: ["Paciente", "Profesional", "Fecha", "Hora"], filas: [["María Hernández", "Ana López", "15/01/2030", "10:00"]] },
+  });
+  const saldos = await correr("balances", await f(), { origin: "dentalink" });
+  assert.equal(saldos.needsSheet, true, "sugerir no es elegir");
+  assert.equal(saldos.suggestedSheet, "Pacientes morosos");
+  assert.deepEqual(saldos.preview, []);
+  assert.equal((await correr("appointments", await f(), { origin: "dentalink" })).suggestedSheet, "Citas pacientes");
+  // Sin ese origen no hay pista, y otro origen sin perfil tampoco.
+  assert.equal((await correr("balances", await f())).suggestedSheet, null);
+  assert.equal((await correr("balances", await f(), { origin: "excel" })).suggestedSheet, null);
+  // Y «Pacientes morosos» no se sugiere para pacientes.
+  assert.equal((await correr("patients", await f(), { origin: "dentalink" })).suggestedSheet, null);
+});
+
+test("N8: «Confirmada» entra como CONFIRMED y los demás estados equivalentes se mapean bien", async () => {
+  const { estadoDeCita } = await import("../entities");
+  const agenda = (v: string) => { const e: any = estadoDeCita(v); return e.accion === "omitir" ? "omitir" : e.status; };
+  const casos: Array<[string, string]> = [
+    ["Confirmada", "CONFIRMED"], ["confirmado", "CONFIRMED"], ["CONFIRMED", "CONFIRMED"],
+    ["Agendada", "SCHEDULED"], ["Programada", "SCHEDULED"], ["Reservada", "SCHEDULED"], ["Pendiente", "SCHEDULED"], ["", "SCHEDULED"],
+    ["Sin confirmar", "SCHEDULED"], ["No confirmada", "SCHEDULED"], ["Por confirmar", "SCHEDULED"], ["Pendiente de confirmación", "SCHEDULED"],
+    ["Anulada", "omitir"], ["Cancelado", "omitir"], ["No asistió", "omitir"], ["Atendida", "omitir"], ["Realizada", "omitir"],
+  ];
+  for (const [entrada, esperado] of casos) assert.equal(agenda(entrada), esperado, entrada);
+  assert.match((estadoDeCita("Xyz raro") as any).aviso, /no reconocido/);
+
+  reiniciar();
+  const f = csv("citas.csv", [
+    "Paciente,Celular,Profesional,Fecha,Hora,Estado",
+    "María Hernández,5551234567,Ana López,15/01/2030,10:00,Confirmada",
+    "María Hernández,5551234567,Ana López,16/01/2030,10:00,Agendada",
+    "María Hernández,5551234567,Ana López,17/01/2030,10:00,Sin confirmar",
+    "María Hernández,5551234567,Ana López,18/01/2030,10:00,Atendida",
+    "María Hernández,5551234567,Ana López,19/01/2030,10:00,Estado raro",
+  ].join("\n"));
+  const dry = await correr("appointments", f);
+  assert.deepEqual(dry.preview.map((r: any) => r.status), ["ok", "ok", "ok", "skipped", "ok"]);
+  assert.match(fila(dry, 6).warnings.join(" "), /no reconocido/);
+  const r = await correr("appointments", f, { dryRun: false });
+  assert.equal(r.created, 4);
+  const porDia = (d: string) => tabla("appointment").find((a) => a.startsAt.toISOString().startsWith(d))!;
+  assert.equal(porDia("2030-01-15").status, "CONFIRMED");
+  assert.ok(porDia("2030-01-15").confirmedAt instanceof Date, "CONFIRMED lleva confirmedAt");
+  assert.equal(porDia("2030-01-16").status, "SCHEDULED");
+  assert.equal(porDia("2030-01-16").confirmedAt, undefined);
+  assert.equal(porDia("2030-01-17").status, "SCHEDULED");
+  // Una cita CONFIRMED también recibe la supresión de avisos vencidos (mismo barrido).
+  assert.ok(tabla("appointment").every((a) => a.status !== "SCHEDULED" || a.confirmedAt === undefined));
+});
+
+test("N8: si el ID externo de la fila no existe y se empareja por nombre, la vista previa lo AVISA en esa fila", async () => {
+  reiniciar();
+  await correr("patients", csv("pacientes.csv", "ID,Nombre,Apellidos\n1001,Carla,Mena\n"), { dryRun: false, origin: "dentalink" });
+  const citas = await correr("appointments", csv("citas.csv", [
+    "Id paciente,Paciente,Profesional,Fecha,Hora",
+    "1001,Carla Mena,Ana López,15/01/2030,10:00", // ID que existe: sin aviso
+    "SINT-001,Carla Mena,Ana López,16/01/2030,10:00", // ID que no existe: por nombre, con aviso
+    "SINT-002,Nadie Conocido,Ana López,17/01/2030,10:00", // ni ID ni nombre: error
+  ].join("\n")), { origin: "dentalink" });
+  assert.equal(fila(citas, 2).status, "ok");
+  assert.deepEqual(fila(citas, 2).warnings, []);
+  assert.equal(fila(citas, 3).status, "ok");
+  assert.match(fila(citas, 3).warnings.join(" "), /SINT-001.*no existe.*por nombre con «Carla Mena»/);
+  assert.equal(fila(citas, 3).data.patientId, fila(citas, 2).data.patientId);
+  assert.equal(fila(citas, 4).status, "error");
+  // Mismo aviso en saldos.
+  const saldos = await correr("balances", csv("s.csv", "Id paciente,Paciente,Saldo\nSINT-001,Carla Mena,50\n"), { origin: "dentalink" });
+  assert.match(fila(saldos, 2).warnings.join(" "), /SINT-001/);
+  // Por teléfono: dice «teléfono».
+  const tel = await correr("appointments", csv("c.csv", "Id paciente,Celular,Profesional,Fecha,Hora\nSINT-009,5551234567,Ana López,15/01/2030,10:00\n"), { origin: "dentalink" });
+  assert.match(fila(tel, 2).warnings.join(" "), /por teléfono con «María Hernández»/);
+});

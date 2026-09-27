@@ -138,32 +138,49 @@ async function loadPatientIndex(
  * varios pacientes: si la fila trae nombre, con él se elige; si no alcanza, es un
  * error («identifica por ID, teléfono o correo único»), nunca «el primero».
  */
-function resolvePatient(mapped: Record<string, any>, idx: PatientIndex): { id?: string; error?: string } {
+function resolvePatient(mapped: Record<string, any>, idx: PatientIndex): { id?: string; error?: string; warning?: string } {
   const externo = limpiarId(mapped.patientExternalId);
   if (externo) {
     const id = idx.byExternal.get(externo);
     if (id) return { id };
   }
+  const r = resolverSinId(mapped, idx, externo);
+  // La fila trae un ID del sistema de origen que NO existe entre los pacientes importados y aun así
+  // se emparejó (por nombre, teléfono o correo): la vista previa lo dice en esa fila, porque puede
+  // ser otra persona con el mismo nombre.
+  if (externo && r.id) {
+    r.warning = `El ID ${externo} no existe entre los pacientes importados de este sistema: se emparejó por ${r.via ?? "nombre"} con «${idx.nameById.get(r.id) ?? ""}». Revisa que sea la misma persona`;
+  }
+  return r;
+}
+
+function resolverSinId(
+  mapped: Record<string, any>,
+  idx: PatientIndex,
+  externo: string,
+): { id?: string; error?: string; warning?: string; via?: string } {
   const sets: string[][] = [];
-  if (mapped.phone) { const ids = idx.byPhone.get(phoneKey(mapped.phone)); if (ids) sets.push(ids); }
-  if (mapped.email) { const ids = idx.byEmail.get(String(mapped.email).toLowerCase()); if (ids) sets.push(ids); }
-  if (mapped.name)  { const ids = idx.byName.get(normName(mapped.name)); if (ids) sets.push(ids); }
+  const vias: string[] = [];
+  if (mapped.phone) { const ids = idx.byPhone.get(phoneKey(mapped.phone)); if (ids) { sets.push(ids); vias.push("teléfono"); } }
+  if (mapped.email) { const ids = idx.byEmail.get(String(mapped.email).toLowerCase()); if (ids) { sets.push(ids); vias.push("correo"); } }
+  if (mapped.name)  { const ids = idx.byName.get(normName(mapped.name)); if (ids) { sets.push(ids); vias.push("nombre"); } }
   const nombre = mapped.name ? String(mapped.name) : "";
   // Un acierto por teléfono/correo cuyo nombre NO cuadra con el de la fila (la mamá con el
   // celular de la familia, y la fila dice «Luis») no es el paciente: se sigue buscando por el
   // siguiente dato (el nombre). Si nada más aparece, se devuelve con `nombreDistinto` y quien
   // llama decide (resolvePatientRow lo convierte en error).
-  let dudoso: string | undefined;
-  for (const ids of sets) {
+  let dudoso: { id: string; via: string } | undefined;
+  for (let i = 0; i < sets.length; i++) {
+    const ids = sets[i];
     let hit = ids;
     if (hit.length > 1 && nombre) hit = hit.filter((id) => sameName(nombre, idx.nameById.get(id) ?? ""));
     if (hit.length === 1) {
-      if (nombre && !sameName(nombre, idx.nameById.get(hit[0]) ?? "")) { dudoso ??= hit[0]; continue; }
-      return { id: hit[0] };
+      if (nombre && !sameName(nombre, idx.nameById.get(hit[0]) ?? "")) { dudoso ??= { id: hit[0], via: vias[i] }; continue; }
+      return { id: hit[0], via: vias[i] };
     }
     if (hit.length > 1) return { error: "Coincide con varios pacientes; identifica por teléfono o correo único" };
   }
-  if (dudoso) return { id: dudoso };
+  if (dudoso) return { id: dudoso.id, via: dudoso.via };
   if (externo && sets.length === 0) {
     return { error: `Paciente con ID ${externo} no encontrado: importa antes los pacientes de ese sistema` };
   }
@@ -747,6 +764,7 @@ export const balancesHandler: EntityHandler = {
       // le carga a la mamá: es un error que se corrige, no una deuda en el paciente equivocado.
       const res = resolvePatientRow(mapped, idx, true);
       if (res.error) pr.errors.push(res.error);
+      if (res.warning) pr.warnings.push(res.warning);
 
       if (pr.errors.length > 0) { pr.status = "error"; out.push(pr); continue; }
 
@@ -970,12 +988,33 @@ function parseDuration(v: any): number {
   return Number.isFinite(n) && n > 0 && n <= 600 ? n : DEFAULT_DURATION_MIN;
 }
 
-/** Estado de la cita en el sistema de origen que la deja FUERA: una cita anulada no se agenda. */
-function estadoQueExcluye(v: unknown): string | null {
-  const n = norm(cellText(v));
-  if (!n) return null;
-  if (/anul|cancel|elimin|noasist|inasist|ausent|falt|rechaz|suspend/.test(n)) return cellText(v);
-  return null;
+/**
+ * Estado de la cita en el sistema de origen → qué hacer con ella:
+ *  · anulada / cancelada / no asistió → NO se agenda (skip);
+ *  · ya atendida con fecha futura (dato incoherente) → NO se agenda (skip);
+ *  · «Confirmada» → CONFIRMED (el paciente ya la confirmó allá: no se le pide de nuevo);
+ *  · «Agendada», «Programada», «Pendiente», «Por confirmar», vacío → SCHEDULED;
+ *  · cualquier otra cosa → SCHEDULED, con un aviso en la fila.
+ */
+export function estadoDeCita(v: unknown):
+  | { accion: "omitir"; texto: string; motivo: string }
+  | { accion: "agendar"; status: "SCHEDULED" | "CONFIRMED"; aviso?: string } {
+  const texto = cellText(v);
+  const n = norm(texto);
+  if (!n) return { accion: "agendar", status: "SCHEDULED" };
+  if (/anul|cancel|elimin|noasist|inasist|ausent|falt|rechaz|suspend|noshow/.test(n)) {
+    return { accion: "omitir", texto, motivo: "no se agenda" };
+  }
+  if (/atendid|realizad|complet|finaliz|terminad|attended/.test(n)) {
+    return { accion: "omitir", texto, motivo: "ya atendida pero con fecha futura: dato incoherente, no se agenda" };
+  }
+  // «Sin confirmar», «No confirmada», «Por confirmar», «Pendiente de confirmación» NO son confirmadas.
+  if (/(sin|no|por|pendiente)(de)?confirm/.test(n)) return { accion: "agendar", status: "SCHEDULED" };
+  if (/confirm/.test(n)) return { accion: "agendar", status: "CONFIRMED" };
+  if (/agendad|programad|reservad|citad|pendient|vigente|activ|nueva|scheduled|booked/.test(n)) {
+    return { accion: "agendar", status: "SCHEDULED" };
+  }
+  return { accion: "agendar", status: "SCHEDULED", aviso: `Estado «${texto}» no reconocido: se agenda como pendiente de confirmar` };
 }
 
 /** Lo que dura el «grace» del barrido de recordatorios más un margen: ver suprimirRecordatoriosAtrasados. */
@@ -1088,6 +1127,12 @@ export const appointmentsHandler: EntityHandler = {
       if (inicio.error) pr.errors.push(inicio.error);
       if (inicio.warning) pr.warnings.push(inicio.warning);
       const startsAt = inicio.startsAt;
+      // Lo que la vista previa enseña de la cita aunque la fila falle o se omita: cuándo (en la zona
+      // de la clínica, no la del servidor), con quién y cuánto dura, para poder revisarla.
+      pr.data.startsLocal = startsAt ? textoLocal(startsAt, tz) : undefined;
+      pr.data.timezone = consentTimeZone(tz);
+      pr.data.doctorName = cellText(mapped.doctor) || undefined;
+      pr.data.durationMin = parseDuration(mapped.duration);
 
       // Una cita PASADA no se agenda: entraría como SCHEDULED (y dispararía un
       // WhatsApp de recordatorio o de «no asististe»), o como COMPLETED, que los
@@ -1099,18 +1144,20 @@ export const appointmentsHandler: EntityHandler = {
         out.push(pr);
         continue;
       }
-      const excluida = estadoQueExcluye(mapped.status);
-      if (excluida) {
+      const estado = estadoDeCita(mapped.status);
+      if (estado.accion === "omitir") {
         pr.status = "skipped";
-        pr.warnings.push(`Estado «${excluida}» en el sistema de origen: no se agenda`);
+        pr.warnings.push(`Estado «${estado.texto}» en el sistema de origen: ${estado.motivo}`);
         out.push(pr);
         continue;
       }
+      if (estado.aviso) pr.warnings.push(estado.aviso);
 
       // STRICT, como en saldos: si el celular es de la mamá y la fila dice «Luis», la cita no va a la
       // ficha de ella (el recordatorio saldría «Hola Ana»): es un error que se corrige en el archivo.
       const pRes = resolvePatientRow(mapped, idx, true);
       if (pRes.error) pr.errors.push(pRes.error);
+      if (pRes.warning) pr.warnings.push(pRes.warning);
 
       const dRes = (!mapped.doctor || !String(mapped.doctor).trim())
         ? { error: "Falta el doctor" }
@@ -1123,17 +1170,17 @@ export const appointmentsHandler: EntityHandler = {
       const endsAt = new Date(startsAt!.getTime() + dur * 60_000);
       const type = mapped.type && String(mapped.type).trim() ? String(mapped.type).trim().slice(0, 200) : "Consulta";
 
-      pr.data = {
+      Object.assign(pr.data, {
         patientId: pRes.id,
         doctorId: dRes.id,
         startsAt,
         endsAt,
         type,
         notes: mapped.notes ? String(mapped.notes).trim() : null,
-        status: "SCHEDULED",
+        status: estado.status,
         patientName: pRes.fullName || idx.nameById.get(pRes.id!) || undefined,
         doctorName: String(mapped.doctor).trim(),
-      };
+      });
 
       const key = `${pRes.id}|${startsAt!.toISOString()}`;
       if (seen.has(key)) {
@@ -1186,7 +1233,9 @@ export const appointmentsHandler: EntityHandler = {
         type: r.data.type,
         startsAt: r.data.startsAt,
         endsAt: r.data.endsAt,
-        status: "SCHEDULED" as any,
+        status: (r.data.status ?? "SCHEDULED") as any,
+        // «Confirmada» en el origen entra CONFIRMED, con la marca de cuándo se registró aquí.
+        ...(r.data.status === "CONFIRMED" ? { confirmedAt: ctx.now } : {}),
         notes: r.data.notes ?? null,
       }));
     const createMany = (data: any[]) => prisma.appointment.createMany({ data, skipDuplicates: true });
@@ -1341,7 +1390,7 @@ function resolvePatientRow(
   mapped: Record<string, any>,
   idx: PatientIndex,
   strict = false,
-): { id?: string; error?: string; fullName: string } {
+): { id?: string; error?: string; warning?: string; fullName: string } {
   const fullName = [mapped.name, mapped.lastName]
     .map((v) => (v == null ? "" : String(v).trim()))
     .filter(Boolean)
@@ -1487,6 +1536,7 @@ export const medicalHistoryHandler: EntityHandler = {
       const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
       const res = resolvePatientRow(mapped, idx, true);
       if (res.error) pr.errors.push(res.error);
+      if (res.warning) pr.warnings.push(res.warning);
 
       const lists = {} as Record<HistoryListField, string[]>;
       for (const f of HISTORY_LISTS) lists[f] = splitList(mapped[f]);
@@ -1682,6 +1732,7 @@ export const clinicalNotesHandler: EntityHandler = {
       const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
       const res = resolvePatientRow(mapped, idx, true);
       if (res.error) pr.errors.push(res.error);
+      if (res.warning) pr.warnings.push(res.warning);
 
       const fecha = parseCalendarDay(mapped.date);
       if (!fecha) pr.errors.push(`Fecha inválida "${cellText(mapped.date)}"`);
@@ -2005,6 +2056,7 @@ export const quotesHandler: EntityHandler = {
       if (!(sinPaciente && folio)) {
         const res = resolvePatientRow(mapped, idx, true);
         if (res.error) pr.errors.push(res.error);
+        if (res.warning) pr.warnings.push(res.warning);
         patientId = res.id;
       }
       // Fecha: igual, se hereda del folio si la línea no la trae.

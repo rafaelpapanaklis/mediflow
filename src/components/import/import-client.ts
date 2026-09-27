@@ -72,6 +72,12 @@ export interface PreviewRow {
   balance: string;
   /** Solo en saldos: "credit" = a favor (verde), "debt" = adeudo. */
   kind?: "debt" | "credit";
+  /** Solo en citas: fecha y hora EN LA ZONA DE LA CLÍNICA («15/01/2030 15:30»). */
+  when?: string;
+  /** Solo en citas: el doctor tal como lo dice el archivo. */
+  doctor?: string;
+  /** Solo en citas: minutos de duración. */
+  duration?: number;
   /** Resumen de la fila para las entidades sin saldo (nota: fecha y título; presupuesto: procedimiento e importe). */
   detail?: string;
   status: "ok" | "error" | "duplicate" | "skipped";
@@ -90,6 +96,8 @@ export interface PreviewResult {
   stats: { valid: number; errors: number; duplicates: number; omitted?: number };
   /** Muestra de filas validadas para la tabla del paso 6. */
   rows: PreviewRow[];
+  /** Solo en citas: la zona horaria de la clínica en la que se enseñan las horas. */
+  timezone?: string;
   /** El archivo trae varias pestañas: el paso 5 pide confirmar cuál (nunca toma la primera). */
   sheets?: SheetInfo[];
   /** La pestaña que propone el nombre, o null si ninguna se llama como estos datos. */
@@ -156,15 +164,15 @@ export interface ImportClient {
 // Catálogo de orígenes (paso 1). Los 9 con perfil + Excel/Otro manuales.
 // ---------------------------------------------------------------------------
 export const ORIGINS: Origin[] = [
-  { id: "dentalink", name: "Dentalink", color: "#0ea5e9", hasProfile: true },
-  { id: "medilink", name: "Medilink", color: "#14b8a6", hasProfile: true },
-  { id: "identalsoft", name: "iDentalSoft", color: "#f97316", hasProfile: true },
-  { id: "opendental", name: "Open Dental", color: "#16a34a", hasProfile: true },
-  { id: "dentrix", name: "Dentrix", color: "#2563eb", hasProfile: true },
-  { id: "eaglesoft", name: "Eaglesoft", color: "#7c3aed", hasProfile: true },
-  { id: "gesden", name: "Gesden", color: "#dc2626", hasProfile: true },
-  { id: "dentidesk", name: "Dentidesk", color: "#0891b2", hasProfile: true },
-  { id: "dentalcore", name: "DentalCore", color: "#db2777", hasProfile: true },
+  { id: "dentalink", name: "Dentalink", color: "#0ea5e9", hasProfile: true, verified: false },
+  { id: "medilink", name: "Medilink", color: "#14b8a6", hasProfile: true, verified: false },
+  { id: "identalsoft", name: "iDentalSoft", color: "#f97316", hasProfile: true, verified: false },
+  { id: "opendental", name: "Open Dental", color: "#16a34a", hasProfile: true, verified: false },
+  { id: "dentrix", name: "Dentrix", color: "#2563eb", hasProfile: true, verified: false },
+  { id: "eaglesoft", name: "Eaglesoft", color: "#7c3aed", hasProfile: true, verified: false },
+  { id: "gesden", name: "Gesden", color: "#dc2626", hasProfile: true, verified: false },
+  { id: "dentidesk", name: "Dentidesk", color: "#0891b2", hasProfile: true, verified: false },
+  { id: "dentalcore", name: "DentalCore", color: "#db2777", hasProfile: true, verified: false },
   { id: "excel", name: "Mi Excel", color: "#15803d", hasProfile: false, glyph: "XLS" },
   { id: "otro", name: "Otro", color: "#6b7280", hasProfile: false, glyph: "?" },
 ];

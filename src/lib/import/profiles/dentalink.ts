@@ -56,6 +56,10 @@ const dentalink: OriginProfile = {
   // false: si no casan, el paso de mapeo pide emparejar a mano y nada se rompe.
   // La autodetección genérica (headerVariants de cada entidad) ya cubre las
   // variantes comunes («Fecha», «Alergias», «Precio»…); aquí va lo propio.
+  sheetNames: {
+    appointments: ["Citas pacientes"],
+    balances: ["Pacientes morosos"],
+  },
   entityMappings: {
     // «Citas pacientes» (Agenda). «Hora fin» NO se mapea: la duración sale de «Duración»
     // (o 30 min por omisión) y una hora de fin mapeada a «hora» la pisaría.
