@@ -1,0 +1,345 @@
+// ws1-t3 fase 1 — anticipo pedido DESDE EL PANEL (cita o factura): el
+// servicio conducido de verdad, con la misma base en memoria y el mismo
+// Mercado Pago de mentira que servicio.test.ts (WS1-T5). Cubre los casos que
+// pidió el encargo: parcial, exacto, doble, tardío (hueco perdido), de otra
+// cuenta, factura cancelada con el anticipo pendiente, y el permiso
+// (doctor puede, readonly no).
+// Correr: npm run test:anticipos-panel
+
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { DobleBase } from "./doble-base";
+import { pedirAnticipoDeCita, pedirAnticipoDeFactura, cerrarAnticiposDePanel, type DepsAnticipoPanel } from "../panel.server";
+import { aplicarPagoDeAnticipo } from "../servicio.server";
+import { refDeAnticipo } from "../core";
+import { hasPermission } from "../../auth/permissions";
+import type { MercadoPagoPayment } from "../../mercadopago";
+
+const T0 = new Date("2026-09-22T16:00:00Z");
+
+function escenario(opts: { horas?: number; feeMode?: string; feeValue?: number } = {}) {
+  const db = new DobleBase();
+  db.tablas.clinic.push({ id: "c1", name: "Clínica Sonrisa", timezone: "America/Mexico_City" });
+  db.tablas.clinicMercadoPago.push({
+    clinicId: "c1",
+    mpUserId: "999",
+    accessToken: "v1:cifrado",
+    panelDepositExpiryHours: opts.horas ?? 24,
+    marketplaceFeeMode: opts.feeMode ?? "fixed",
+    marketplaceFeeValue: opts.feeValue ?? 0,
+  });
+  db.tablas.procedureCatalog.push({ id: "svc1", clinicId: "c1", isActive: true, name: "Limpieza dental", basePrice: 1200 });
+
+  let reloj = T0;
+  const preferencias: Array<{ token: string; opts: any }> = [];
+  const expiradas: string[] = [];
+  const pagos = new Map<string, MercadoPagoPayment>();
+  let usuarioConectado = "999";
+
+  const deps: Partial<DepsAnticipoPanel> = {
+    db: db.cliente(),
+    plataformaLista: () => true,
+    credencial: async (clinicId) => {
+      const f = db.tablas.clinicMercadoPago.find((x) => x.clinicId === clinicId && x.accessToken);
+      return f ? { accessToken: `TOKEN-${clinicId}`, mpUserId: usuarioConectado } : null;
+    },
+    crearPreferencia: async (token, o) => {
+      preferencias.push({ token, opts: o });
+      return { id: `pref-${preferencias.length}`, initPoint: `https://mpago.la/${preferencias.length}` };
+    },
+    expirarPreferencia: async (_token, prefId) => {
+      expiradas.push(prefId);
+    },
+    ahora: () => reloj,
+    baseUrl: () => "https://app.dalecontrol.test",
+  };
+
+  // Mismos deps para aplicarPagoDeAnticipo (servicio.server.ts): reutiliza la
+  // MISMA base y el MISMO Mercado Pago de mentira.
+  const depsPago = {
+    db: db.cliente(),
+    plataformaLista: () => true,
+    credencial: deps.credencial!,
+    consultarPago: async (token: string, id: string) => {
+      assert.equal(token, "TOKEN-c1");
+      return pagos.get(id) ?? null;
+    },
+    crearPreferencia: deps.crearPreferencia!,
+    crearCita: async () => {
+      throw new Error("no se usa en estos escenarios");
+    },
+    avisar: async () => {},
+    ahora: () => reloj,
+    baseUrl: () => "https://app.dalecontrol.test",
+  };
+
+  function factura(over: Partial<Record<string, unknown>> = {}) {
+    const id = db.nuevoId("inv");
+    db.tablas.invoice.push({
+      id,
+      clinicId: "c1",
+      patientId: "p1",
+      invoiceNumber: `MF-${id}`,
+      status: "PENDING",
+      total: 1000,
+      paid: 0,
+      ...over,
+    });
+    return id;
+  }
+
+  function pagar(id: string, over: Partial<MercadoPagoPayment> = {}) {
+    pagos.set(id, {
+      id,
+      status: "approved",
+      externalReference: "",
+      transactionAmount: 300,
+      currencyId: "MXN",
+      statusDetail: "accredited",
+      dateApproved: reloj.toISOString(),
+      collectorId: "999",
+      payerEmail: null,
+      paymentMethodId: "visa",
+      transactionAmountRefunded: null,
+      ...over,
+    });
+  }
+
+  return {
+    db,
+    deps,
+    depsPago,
+    factura,
+    pagar,
+    preferencias,
+    expiradas,
+    avanzar: (min: number) => { reloj = new Date(reloj.getTime() + min * 60_000); },
+    desconectarOtraCuenta: () => { usuarioConectado = "OTRA"; },
+  };
+}
+
+describe("pedirAnticipoDeFactura: el monto SIEMPRE se valida en el servidor", () => {
+  it("dentro del rango: crea el anticipo y su link, ligado a la factura", async () => {
+    const e = escenario();
+    const invoiceId = e.factura();
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+    assert.equal(r.ok, true);
+    assert.equal(r.deposit?.amount, 300);
+    assert.equal(r.deposit?.checkoutUrl, "https://mpago.la/1");
+    const dep = e.db.tablas.appointmentDeposit[0];
+    assert.equal(dep.invoiceId, invoiceId);
+    assert.equal(dep.origin, "panel");
+    assert.equal(dep.method, "mercadopago");
+    assert.equal(dep.createdById, "u1");
+  });
+
+  it("monto MENOR al mínimo ($10): rechazado, ni se crea el anticipo", async () => {
+    const e = escenario();
+    const invoiceId = e.factura();
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 5 }, e.deps);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "monto_invalido");
+    assert.equal(e.db.tablas.appointmentDeposit.length, 0);
+  });
+
+  it("monto MAYOR al saldo pendiente: rechazado (nunca se cobra de más)", async () => {
+    const e = escenario();
+    const invoiceId = e.factura({ total: 1000, paid: 700 }); // saldo 300
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 301 }, e.deps);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "monto_invalido");
+  });
+
+  it("un monto manipulado por el cliente NUNCA se usa tal cual: siempre pasa por el mínimo/máximo del servidor", async () => {
+    const e = escenario();
+    const invoiceId = e.factura({ total: 500, paid: 0 });
+    // El cliente pide $1,000,000 sobre una factura de $500: se rechaza.
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 1_000_000 }, e.deps);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "monto_invalido");
+  });
+
+  it("DOBLE: pedirlo dos veces devuelve el MISMO link, nunca un segundo", async () => {
+    const e = escenario();
+    const invoiceId = e.factura();
+    const r1 = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+    const r2 = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 999 }, e.deps);
+    assert.equal(r1.deposit?.id, r2.deposit?.id);
+    assert.equal(r2.reutilizado, true);
+    assert.equal(e.db.tablas.appointmentDeposit.length, 1, "nunca un segundo PENDING para la misma factura");
+    assert.equal(e.preferencias.length, 1, "y solo UNA preferencia creada en Mercado Pago");
+  });
+
+  it("la cita SCHEDULED queda apartada (holdExpiresAt) y el plazo nunca pasa de su inicio", async () => {
+    const e = escenario({ horas: 48 });
+    e.db.tablas.appointment.push({
+      id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED",
+      startsAt: new Date(T0.getTime() + 3 * 3600_000), // en 3 h — mucho antes de las 48 h pedidas
+    });
+    const invoiceId = e.factura({ appointmentId: "apt1" });
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+    assert.equal(r.deposit?.apartada, true);
+    const appt = e.db.tablas.appointment[0];
+    assert.equal(appt.holdExpiresAt.getTime(), appt.startsAt.getTime(), "el plazo se topa con el inicio de la cita, no las 48 h");
+  });
+});
+
+describe("pedirAnticipoDeCita: crea la factura si hace falta", () => {
+  // La creación real de la factura (crearFacturaDesdeCita) usa el folio y el
+  // saldo a favor de siempre (nextInvoiceNumber, aplicarSaldoAFavor), que no
+  // tienen doble: se prueban con Postgres real, igual que
+  // POST /api/invoices/from-appointment (sin prueba con base en memoria en
+  // todo el repo). Aquí solo se cubre lo que SÍ es puro: que sin concepto no
+  // se crea nada, y que con una factura YA existente no se duplica.
+  it("la cita YA tiene factura: la usa tal cual, nunca crea una segunda", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 86_400_000) });
+    const invoiceId = e.factura({ appointmentId: "apt1" });
+    const r = await pedirAnticipoDeCita({ clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 300 }, e.deps);
+    assert.equal(r.ok, true);
+    assert.equal(r.deposit?.invoiceId, invoiceId);
+    assert.equal(e.db.tablas.invoice.length, 1, "no se creó una segunda factura");
+  });
+
+  it("sin factura y SIN concepto: no crea nada, error claro", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: T0 });
+    const r = await pedirAnticipoDeCita({ clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 300 }, e.deps);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "sin_concepto");
+    assert.equal(e.db.tablas.invoice.length, 0);
+  });
+});
+
+describe("al pagarse: se aplica a LA FACTURA (Total / Anticipo / Pendiente), no a saldo a favor", () => {
+  it("pago EXACTO: Payment en la factura, PARTIAL, deposit PAID con paymentId sellado", async () => {
+    const e = escenario();
+    const invoiceId = e.factura({ total: 1000, paid: 0 });
+    const pedido = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+    const depId = pedido.deposit!.id;
+    e.pagar("501", { externalReference: refDeAnticipo(depId), transactionAmount: 300 });
+
+    const r = await aplicarPagoDeAnticipo(depId, "501", e.depsPago as any);
+    assert.equal(r.aplicado, true);
+
+    const inv = e.db.tablas.invoice.find((i) => i.id === invoiceId);
+    assert.equal(inv.paid, 300);
+    assert.equal(inv.status, "PARTIAL");
+    assert.equal(e.db.tablas.payment.length, 1);
+    assert.equal(e.db.tablas.payment[0].invoiceId, invoiceId);
+    assert.equal(e.db.tablas.payment[0].amount, 300);
+    assert.equal(e.db.tablas.payment[0].method, "mercadopago");
+    assert.equal(e.db.tablas.patientCredit.length, 0, "nunca se cuenta dos veces: aquí NO hay saldo a favor");
+
+    const dep = e.db.tablas.appointmentDeposit.find((d: any) => d.id === depId);
+    assert.equal(dep.status, "PAID");
+    assert.equal(dep.paymentId, e.db.tablas.payment[0].id, "el anticipo queda sellado a ESE Payment, nunca a dos destinos");
+  });
+
+  it("pago exacto CON cita apartada: además confirma la cita y quita el apartado", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 3600_000) });
+    const invoiceId = e.factura({ appointmentId: "apt1" });
+    const pedido = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+    const depId = pedido.deposit!.id;
+    e.pagar("502", { externalReference: refDeAnticipo(depId), transactionAmount: 300 });
+    const r = await aplicarPagoDeAnticipo(depId, "502", e.depsPago as any);
+    assert.equal(r.aplicado && r.confirmada, true);
+    const appt = e.db.tablas.appointment.find((a: any) => a.id === "apt1");
+    assert.equal(appt.status, "CONFIRMED");
+    assert.equal(appt.holdExpiresAt, null);
+  });
+
+  it("TARDÍO: si el hueco ya se liberó, el dinero va a SALDO A FAVOR y NO toca la factura", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 3600_000) });
+    const invoiceId = e.factura({ appointmentId: "apt1" });
+    const pedido = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, horas: 1 }, e.deps);
+    const depId = pedido.deposit!.id;
+
+    // El hueco se pierde: otra persona lo tomó y el trigger canceló la cita
+    // (aquí, a mano — el trigger vive en SQL y no lo prueba este doble).
+    const appt = e.db.tablas.appointment.find((a: any) => a.id === "apt1");
+    appt.status = "CANCELLED";
+    appt.holdExpiresAt = null;
+
+    e.pagar("503", { externalReference: refDeAnticipo(depId), transactionAmount: 300 });
+    const r = await aplicarPagoDeAnticipo(depId, "503", e.depsPago as any);
+    assert.equal(r.aplicado, true);
+    assert.equal(r.aplicado && r.confirmada, false);
+
+    const inv = e.db.tablas.invoice.find((i) => i.id === invoiceId);
+    assert.equal(inv.paid, 0, "la factura NO se tocó");
+    assert.equal(e.db.tablas.payment.length, 0);
+    assert.equal(e.db.tablas.patientCredit.length, 1, "el dinero SÍ entra, como saldo a favor");
+    assert.equal(e.db.tablas.patientCredit[0].amount, 300);
+  });
+
+  it("DE OTRA CUENTA: si la clínica conectó otra cuenta de MP, no se aplica a ciegas (lanza para que MP reintente)", async () => {
+    const e = escenario();
+    const invoiceId = e.factura();
+    const pedido = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+    const depId = pedido.deposit!.id;
+    e.desconectarOtraCuenta();
+    e.pagar("504", { externalReference: refDeAnticipo(depId), transactionAmount: 300 });
+    await assert.rejects(() => aplicarPagoDeAnticipo(depId, "504", e.depsPago as any));
+    const inv = e.db.tablas.invoice.find((i) => i.id === invoiceId);
+    assert.equal(inv.paid, 0);
+  });
+
+  it("factura CANCELADA con el anticipo pendiente: se registra el pago pero queda marcado para revisar, sin tocar el total", async () => {
+    const e = escenario();
+    const invoiceId = e.factura();
+    const pedido = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+    const depId = pedido.deposit!.id;
+    const inv = e.db.tablas.invoice.find((i) => i.id === invoiceId);
+    inv.status = "CANCELLED";
+
+    e.pagar("505", { externalReference: refDeAnticipo(depId), transactionAmount: 300 });
+    const r = await aplicarPagoDeAnticipo(depId, "505", e.depsPago as any);
+    assert.equal(r.aplicado, true);
+    assert.match(r.aplicado && r.anomalia || "", /cancelada/);
+    assert.equal(e.db.tablas.payment.length, 1, "el dinero se registra igual (es del paciente)");
+    assert.equal(inv.paid, 0, "pero el total de la factura cancelada no se toca");
+  });
+});
+
+describe("cerrarAnticiposDePanel: la factura cambia con el anticipo pendiente", () => {
+  it("cierra la preferencia en Mercado Pago, marca el anticipo EXPIRED y quita SOLO el apartado (la cita sigue viva)", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 3600_000) });
+    const invoiceId = e.factura({ appointmentId: "apt1" });
+    await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+
+    const cerrados = await cerrarAnticiposDePanel({ clinicId: "c1", invoiceId }, e.deps);
+    assert.equal(cerrados, 1);
+    assert.equal(e.db.tablas.appointmentDeposit[0].status, "EXPIRED");
+    assert.equal(e.expiradas.length, 1, "la preferencia de Mercado Pago se cierra");
+    const appt = e.db.tablas.appointment.find((a: any) => a.id === "apt1");
+    assert.equal(appt.status, "SCHEDULED", "la cita NO se cancela: ya existía antes del anticipo");
+    assert.equal(appt.holdExpiresAt, null, "solo se le quita el apartado");
+  });
+
+  it("sin ningún PENDING, no hace nada (nunca lanza)", async () => {
+    const e = escenario();
+    const invoiceId = e.factura();
+    const cerrados = await cerrarAnticiposDePanel({ clinicId: "c1", invoiceId }, e.deps);
+    assert.equal(cerrados, 0);
+  });
+});
+
+describe("permiso billing.deposit: quién puede pedir un anticipo (ws1-t3)", () => {
+  const u = (role: string, permissionsOverride: string[] = []) => ({ role: role as any, permissionsOverride });
+  it("ADMIN, SUPER_ADMIN, RECEPTIONIST y DOCTOR pueden por default", () => {
+    for (const role of ["SUPER_ADMIN", "ADMIN", "RECEPTIONIST", "DOCTOR"]) {
+      assert.equal(hasPermission(u(role), "billing.deposit"), true, `${role} debería poder pedir anticipo`);
+    }
+  });
+  it("READONLY no, por default (dinero: no es de solo lectura)", () => {
+    assert.equal(hasPermission(u("READONLY"), "billing.deposit"), false);
+  });
+  it("una clínica se lo puede quitar al doctor desde Equipo → Permisos (el override reemplaza)", () => {
+    const sinDeposito = ["today.view", "agenda.view", "billing.view"]; // override explícito sin billing.deposit
+    assert.equal(hasPermission(u("DOCTOR", sinDeposito), "billing.deposit"), false);
+  });
+});

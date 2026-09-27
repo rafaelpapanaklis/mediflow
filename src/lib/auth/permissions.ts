@@ -107,6 +107,11 @@ export const ALL_PERMISSIONS = {
   "billing.charge":       "Cobrar pagos",
   "billing.refund":       "Reembolsar / cancelar",
   "billing.edit":         "Editar precio / descuento de facturas",
+  // Pedir un anticipo (cita o factura) — ws1-t3. Key APARTE de billing.charge
+  // a propósito (decisión de Rafael): pedir anticipo se le da también al
+  // DOCTOR por default, sin tocar qué más puede cobrar (Caja, pagos de
+  // factura siguen exigiendo billing.charge, que el doctor no tiene).
+  "billing.deposit":      "Pedir anticipos",
   "analytics.view":       "Ver Analytics",
   "tvModes.view":         "Ver Pantallas TV",
   "tvModes.edit":         "Configurar Pantallas TV",
@@ -164,7 +169,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Planes de tratamiento", keys: ["treatments.view", "treatments.edit"] },
   { title: "Comunicación",   keys: ["inbox.view", "inbox.send", "inbox.delete", "whatsapp.view", "whatsapp.send"] },
   { title: "Catálogo",       keys: ["resources.view", "resources.edit", "inventory.view", "inventory.edit", "suppliers.view", "suppliers.order"] },
-  { title: "Facturación",    keys: ["billing.view", "billing.create", "billing.charge", "billing.refund", "billing.edit"] },
+  { title: "Facturación",    keys: ["billing.view", "billing.create", "billing.charge", "billing.deposit", "billing.refund", "billing.edit"] },
   { title: "Reportes y TV",  keys: ["analytics.view", "reports.view", "tvModes.view", "tvModes.edit"] },
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
   { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
@@ -242,7 +247,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     // "billing.charge" (registrar cobros) y "billing.refund" (reembolsar y
     // cancelar). Cotizar no es cobrar — el dinero lo mueve recepción o el
     // administrador, y el arqueo tiene que seguir cuadrando con quien lo hizo.
-    "billing.view", "billing.create", "billing.edit",
+    //
+    // "billing.deposit" SÍ (ws1-t3, decisión explícita de Rafael): pedir un
+    // anticipo no es "cobrar" en el sentido de Caja — es mandar un link de
+    // pago, el paciente paga en línea y el webhook lo aplica solo. El doctor
+    // sigue sin poder registrar pagos a mano ni reembolsar.
+    "billing.view", "billing.create", "billing.edit", "billing.deposit",
     "resources.view", "suppliers.view",
     "inbox.view", "inbox.send",
     "marketplace.view",
@@ -264,7 +274,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "patients.view", "patients.create", "patients.edit",
     // billing.edit: la recepción con Caja borra borradores y edita facturas desde
     // el detalle — DELETE y PATCH de /api/invoices/[id] ahora lo exigen (edit-price ya).
-    "billing.view", "billing.create", "billing.charge", "billing.edit",
+    // billing.deposit (ws1-t3): pedir un anticipo desde la cita o la factura.
+    "billing.view", "billing.create", "billing.charge", "billing.edit", "billing.deposit",
     // Recepción prepara la carta y se la manda al paciente por WhatsApp (el
     // envío exige consents.create además de whatsapp.send). Revocar NO: eso es
     // del profesional responsable.

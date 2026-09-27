@@ -14,6 +14,7 @@ import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vige
 import { esMetodoPago, METODOS_PAGO } from "@/lib/quotes/condiciones-pago";
 import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
+import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
@@ -185,6 +186,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
   // un monto viejo y se cierran. Nunca lanza.
   await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
+  // ws1-t3 fase 1: el saldo cambió por aquí también; un anticipo pendiente
+  // pedido desde el panel pedía un monto viejo. Nunca lanza.
+  await cerrarAnticiposDePanel({ clinicId, invoiceId: params.id });
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true, ...(cashWarning ? { warning: cashWarning } : {}) });
@@ -335,6 +339,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
     // un monto viejo y se cierran. Nunca lanza.
     await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
+  // ws1-t3 fase 1: el saldo cambió por aquí también; un anticipo pendiente
+  // pedido desde el panel pedía un monto viejo. Nunca lanza.
+  await cerrarAnticiposDePanel({ clinicId, invoiceId: params.id });
     revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${invoice.patientId}`);
     return NextResponse.json({ success: true, cancelled: true });

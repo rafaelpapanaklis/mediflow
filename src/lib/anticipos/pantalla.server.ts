@@ -6,7 +6,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { enmascarar, plataformaAnticipos, type EstadoCuentaMp, type PlataformaAnticipos } from "./cuenta.server";
-import { MINUTOS_DEFAULT, type ModoAnticipo, type ModoComision } from "./core";
+import { MINUTOS_DEFAULT, PANEL_HORAS_DEFAULT, type ModoAnticipo, type ModoAnticipoPanel, type ModoComision } from "./core";
 
 export interface AnticipoReciente {
   id: string;
@@ -35,6 +35,13 @@ export interface PantallaAnticipos {
   cuenta: EstadoCuentaMp;
   config: { activo: boolean; modo: ModoAnticipo; monto: number; porcentaje: number; minutos: number };
   /**
+   * Anticipo pedido DESDE EL PANEL (cita o factura), ws1-t3 fase 1. Config
+   * PROPIA, separada de `config` de arriba (el bot no se toca). `disponible` =
+   * hay cuenta de Mercado Pago conectada (no depende de `config.activo`, que
+   * es el interruptor del bot).
+   */
+  configPanel: { disponible: boolean; modo: ModoAnticipoPanel; monto: number; porcentaje: number; horas: number };
+  /**
    * Pago en línea desde el portal del paciente (ws1-t2), APARTE del anticipo.
    * `activo` solo puede ser true con cuenta conectada; la columna arranca en
    * true (DEFAULT, y en la primera conexión); reconectar no lo cambia.
@@ -61,6 +68,7 @@ function vacia(plataforma: PlataformaAnticipos, tablasListas: boolean): Pantalla
     plataforma,
     cuenta: SIN_CUENTA,
     config: { activo: false, modo: "fixed", monto: 0, porcentaje: 0, minutos: MINUTOS_DEFAULT },
+    configPanel: { disponible: false, modo: "fixed", monto: 0, porcentaje: 0, horas: PANEL_HORAS_DEFAULT },
     portal: { activo: false },
     comision: { modo: "fixed", valor: 0 },
     recientes: [],
@@ -84,6 +92,18 @@ const SELECT_CUENTA = {
   marketplaceFeeValue: true,
   // ¿Hay token? Se pregunta por la fecha, no se lee el token.
   tokenExpiresAt: true,
+} satisfies Prisma.ClinicMercadoPagoSelect;
+
+// ws1-t3 fase 1 — EN SU PROPIA CONSULTA, separada de SELECT_CUENTA a
+// propósito: dev.108 apunta a la base de PRODUCCIÓN, y hasta que se pegue
+// sql/anticipo-desde-panel.sql estas 4 columnas no existen. Si estuvieran en
+// el mismo `select` que la cuenta, una consulta rota se llevaría entre las
+// patas la pantalla del BOT (que ya funciona hoy) — no solo la de este panel.
+const SELECT_CUENTA_PANEL = {
+  panelDepositMode: true,
+  panelDepositAmount: true,
+  panelDepositPercent: true,
+  panelDepositExpiryHours: true,
 } satisfies Prisma.ClinicMercadoPagoSelect;
 
 const SELECT_RECIENTE = {
@@ -122,6 +142,39 @@ export interface DbPantallaAnticipos {
       select: typeof SELECT_RECIENTE;
     }): Promise<Array<Prisma.AppointmentDepositGetPayload<{ select: typeof SELECT_RECIENTE }>>>;
   };
+}
+
+/**
+ * Config del anticipo pedido desde el panel — EN SU PROPIA CONSULTA, PROPIO
+ * try/catch: sin sql/anticipo-desde-panel.sql aplicado, esto se calla
+ * (`disponible: false` + los defaults) sin tumbar el resto de la pantalla,
+ * que sigue leyendo las columnas de siempre.
+ *
+ * Siempre con el `prisma` real del repo (no el `db` inyectable de arriba):
+ * su interfaz `DbPantallaAnticipos` es el contrato con el doble de Sabina
+ * para lo que YA pintaba esta pantalla; esta pieza es nueva (ws1-t3 fase 1)
+ * y no forma parte de ese contrato todavía.
+ */
+async function leerConfigPanel(
+  clinicId: string,
+  puedeCobrar: boolean,
+): Promise<PantallaAnticipos["configPanel"]> {
+  try {
+    const fila = await prisma.clinicMercadoPago.findUnique({ where: { clinicId }, select: SELECT_CUENTA_PANEL });
+    return {
+      disponible: puedeCobrar,
+      modo: (fila?.panelDepositMode as ModoAnticipoPanel) ?? "fixed",
+      monto: fila?.panelDepositAmount ?? 0,
+      porcentaje: fila?.panelDepositPercent ?? 0,
+      horas: fila?.panelDepositExpiryHours ?? PANEL_HORAS_DEFAULT,
+    };
+  } catch (e) {
+    const code = (e as { code?: string })?.code;
+    if (code === "P2021" || code === "P2022") {
+      return { disponible: false, modo: "fixed", monto: 0, porcentaje: 0, horas: PANEL_HORAS_DEFAULT };
+    }
+    throw e;
+  }
 }
 
 export async function leerPantallaAnticipos(
@@ -167,6 +220,7 @@ export async function leerPantallaAnticipos(
         porcentaje: fila?.depositPercent ?? 0,
         minutos: fila?.holdMinutes ?? MINUTOS_DEFAULT,
       },
+      configPanel: await leerConfigPanel(clinicId, conectada && plataforma.lista),
       portal: { activo: conectada && plataforma.lista && fila?.portalPaymentsEnabled !== false },
       comision: {
         modo: (fila?.marketplaceFeeMode as ModoComision) ?? "fixed",

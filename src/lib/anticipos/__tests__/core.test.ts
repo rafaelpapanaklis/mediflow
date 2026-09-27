@@ -4,11 +4,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ANTICIPO_MINIMO_MXN,
+  PANEL_HORAS_MAX,
+  PANEL_HORAS_MIN,
   calcularComision,
   calcularMontoAnticipo,
   evaluarPago,
   refDeAnticipo,
+  sugeridoAnticipoPanel,
   validarConfiguracion,
+  validarConfiguracionPanel,
+  validarMontoAnticipoManual,
+  validarPlazoPanelHoras,
   type PagoMp,
 } from "../core";
 import { apartadoVencido, sinApartadoVencido } from "../../agenda/apartado";
@@ -164,5 +171,62 @@ describe("la cita apartada caduca POR DATO", () => {
     assert.deepEqual(w, {
       OR: [{ holdExpiresAt: null }, { holdExpiresAt: { gt: t0 } }, { status: { not: "SCHEDULED" } }],
     });
+  });
+});
+
+// ── ws1-t3 fase 1 — anticipo pedido DESDE EL PANEL (cita o factura) ────────
+
+describe("configuración del anticipo del panel: solo fixed/percent, sin 'total'", () => {
+  it("acepta fixed y percent válidos", () => {
+    assert.equal(validarConfiguracionPanel({ modo: "fixed", monto: 300, porcentaje: 0, horas: 24 }), null);
+    assert.equal(validarConfiguracionPanel({ modo: "percent", monto: 0, porcentaje: 20, horas: 1 }), null);
+  });
+  it("rechaza 'total' (no es un modo del panel)", () => {
+    assert.match(validarConfiguracionPanel({ modo: "total", monto: 300, porcentaje: 0, horas: 24 }) ?? "", /desconocido/);
+  });
+  it("el plazo va en HORAS, 1 a 48 (no minutos, no el tope de 240 del bot)", () => {
+    assert.equal(validarConfiguracionPanel({ modo: "fixed", monto: 300, porcentaje: 0, horas: PANEL_HORAS_MIN }), null);
+    assert.equal(validarConfiguracionPanel({ modo: "fixed", monto: 300, porcentaje: 0, horas: PANEL_HORAS_MAX }), null);
+    assert.match(validarConfiguracionPanel({ modo: "fixed", monto: 300, porcentaje: 0, horas: 0 }) ?? "", /horas/);
+    assert.match(validarConfiguracionPanel({ modo: "fixed", monto: 300, porcentaje: 0, horas: 49 }) ?? "", /horas/);
+  });
+});
+
+describe("sugeridoAnticipoPanel: el % siempre es sobre el TOTAL de la factura", () => {
+  it("fixed ignora el total", () => {
+    assert.equal(sugeridoAnticipoPanel({ modo: "fixed", monto: 250, porcentaje: 0, horas: 24 }, 5000), 250);
+  });
+  it("percent calcula sobre el total de la factura, no un precio de catálogo", () => {
+    assert.equal(sugeridoAnticipoPanel({ modo: "percent", monto: 250, porcentaje: 20, horas: 24 }, 2000), 400);
+  });
+  it("por debajo del mínimo, sin sugerido (null)", () => {
+    assert.equal(sugeridoAnticipoPanel({ modo: "fixed", monto: 5, porcentaje: 0, horas: 24 }, 100), null);
+  });
+});
+
+describe("validarMontoAnticipoManual: 10 ≤ monto ≤ total − pagado, SIEMPRE en el servidor", () => {
+  it("dentro del rango, válido", () => {
+    assert.equal(validarMontoAnticipoManual(500, 2000, 0), null);
+    assert.equal(validarMontoAnticipoManual(2000, 2000, 0), null); // el total completo también es válido
+  });
+  it("por debajo del mínimo, inválido aunque el saldo alcance de sobra", () => {
+    assert.match(validarMontoAnticipoManual(9.99, 2000, 0) ?? "", /mínimo/);
+    assert.equal(validarMontoAnticipoManual(ANTICIPO_MINIMO_MXN, 2000, 0), null);
+  });
+  it("por encima del saldo pendiente (total − pagado), inválido: nunca se cobra de más", () => {
+    assert.match(validarMontoAnticipoManual(1501, 2000, 500) ?? "", /saldo pendiente/);
+    assert.equal(validarMontoAnticipoManual(1500, 2000, 500), null);
+  });
+  it("un monto que el cliente manda manipulado (NaN, texto) se rechaza igual", () => {
+    assert.match(validarMontoAnticipoManual(NaN, 2000, 0) ?? "", /válido/);
+  });
+});
+
+describe("validarPlazoPanelHoras", () => {
+  it("1 a 48 horas, entero", () => {
+    assert.equal(validarPlazoPanelHoras(24), null);
+    assert.match(validarPlazoPanelHoras(0) ?? "", /horas/);
+    assert.match(validarPlazoPanelHoras(49) ?? "", /horas/);
+    assert.match(validarPlazoPanelHoras(1.5) ?? "", /horas/);
   });
 });

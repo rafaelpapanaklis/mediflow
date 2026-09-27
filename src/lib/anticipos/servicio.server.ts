@@ -29,6 +29,7 @@ import {
   calcularComision,
   calcularMontoAnticipo,
   evaluarPago,
+  redondear2,
   refDeAnticipo,
   type ModoAnticipo,
   type ModoComision,
@@ -312,7 +313,15 @@ async function deshacerApartado(
 
 export type ResultadoPago =
   | { aplicado: false; motivo: string }
-  | { aplicado: true; depositId: string; monto: number; confirmada: boolean; anomalia: string | null };
+  | {
+      aplicado: true;
+      depositId: string;
+      monto: number;
+      confirmada: boolean;
+      anomalia: string | null;
+      /** "bot" | "panel" — de dónde nació el anticipo (ws1-t3 fase 1). */
+      origin: string;
+    };
 
 /** Lo que MP reporta cuando un pago que ya entró se revierte. */
 const ESTADOS_DE_REVERSO = ["refunded", "charged_back", "cancelled", "in_mediation"];
@@ -436,20 +445,40 @@ export async function aplicarPagoDeAnticipo(
       if (ya) return { aplicado: false as const, motivo: "pago ya aplicado" };
 
       // Se relee bajo el candado: otro pago pudo saldarlo mientras esperábamos.
-      const fresco = await tx.appointmentDeposit.findUnique({
-        where: { id: depositId },
-        select: {
-          id: true,
-          clinicId: true,
-          patientId: true,
-          appointmentId: true,
-          amount: true,
-          status: true,
-          mpCollectorId: true,
-          appointment: { select: { startsAt: true } },
-          clinic: { select: { timezone: true } },
-        },
-      });
+      //
+      // ws1-t3 fase 1 pide "invoiceId"/"origin" — columnas de
+      // sql/anticipo-desde-panel.sql. dev.108 apunta a PRODUCCIÓN: sin ese SQL
+      // aplicado el SELECT completo lanza P2022, y esto es el webhook del
+      // anticipo del BOT (ya en uso hoy) — no se le puede pedir a Rafael que
+      // pegue el SQL antes de que un pago de HOY se acredite. Si faltan, se
+      // repite la MISMA lectura sin esas dos columnas: el resto del código las
+      // trata como "sin factura, del bot" (invoiceId null, origin "bot"),
+      // que es EXACTAMENTE el comportamiento de antes de esta fase.
+      const SELECT_FRESCO_BASE = {
+        id: true,
+        clinicId: true,
+        patientId: true,
+        appointmentId: true,
+        amount: true,
+        status: true,
+        mpCollectorId: true,
+        appointment: { select: { startsAt: true } },
+        clinic: { select: { timezone: true } },
+      } as const;
+      let fresco: any;
+      try {
+        fresco = await tx.appointmentDeposit.findUnique({
+          where: { id: depositId },
+          select: { ...SELECT_FRESCO_BASE, invoiceId: true, origin: true },
+        });
+      } catch (e) {
+        if (!faltaTabla(e)) throw e;
+        const legado = await tx.appointmentDeposit.findUnique({
+          where: { id: depositId },
+          select: SELECT_FRESCO_BASE,
+        });
+        fresco = legado ? { ...legado, invoiceId: null, origin: "bot" } : null;
+      }
       if (!fresco) return { aplicado: false as const, motivo: "anticipo inexistente" };
       const decision = evaluarPago(fresco, pago);
       if (decision.accion !== "aplicar") return { aplicado: false as const, motivo: "sin aplicar" };
@@ -457,39 +486,12 @@ export async function aplicarPagoDeAnticipo(
       const cuando = fresco.appointment
         ? ` de la cita del ${fechaCorta(fresco.appointment.startsAt, fresco.clinic?.timezone ?? "America/Mexico_City")}`
         : "";
-      const credito = await tx.patientCredit.create({
-        data: {
-          clinicId: fresco.clinicId,
-          patientId: fresco.patientId,
-          amount: decision.monto,
-          source: "anticipo_mercadopago",
-          creditDate: ahora,
-          description:
-            `Anticipo${cuando}, pagado por WhatsApp con Mercado Pago (pago ${pago.id}). ` +
-            `Se descuenta del tratamiento.` +
-            (decision.anomalia ? ` ⚠️ ${decision.anomalia}` : ""),
-        },
-        select: { id: true },
-      });
-      await tx.appointmentDepositPayment.create({
-        data: {
-          clinicId: fresco.clinicId,
-          depositId,
-          mpPaymentId: pago.id,
-          amount: decision.monto,
-          currency: pago.currencyId ?? "MXN",
-          dateApproved: pago.dateApproved ? new Date(pago.dateApproved) : null,
-          payerEmail: pago.payerEmail,
-          paymentMethodId: pago.paymentMethodId,
-          patientCreditId: credito.id,
-          anomaly: decision.anomalia,
-        },
-      });
 
       // Confirmar SOLO si la cita sigue apartada (SCHEDULED). Si el trigger o el
       // cron ya la liberaron, el dinero queda a favor y la cita no revive: ese
       // hueco pudo tomarlo otra persona. Si la recepción ya la había confirmado
-      // a mano, sigue confirmada.
+      // a mano, sigue confirmada. Mismo mecanismo con o sin invoiceId (ws1-t3
+      // fase 1 reutiliza el apartado del bot tal cual).
       //
       // «Al acreditarse queda confirmada la cita» (el cliente): sale también de
       // la cola «por validar» del bot. El pago es la validación; la cita sigue
@@ -510,8 +512,123 @@ export async function aplicarPagoDeAnticipo(
           confirmada = !!cita && ESTADOS_VIVOS_SIN_APARTADO.includes(cita.status);
         }
       }
+      // ws1-t3 fase 1 — pago TARDÍO de un anticipo CON cita apartada: el hueco
+      // ya se liberó (el trigger o el cron cancelaron la cita antes de que este
+      // pago llegara). El dinero es del paciente igual, pero ya no hay cita que
+      // confirmar — y si el anticipo era de una factura, TAMPOCO se le aplica:
+      // ese hueco pudo tomarlo otra persona y la factura pudo cobrarse ya de
+      // otra forma mientras se esperaba. Va a SALDO A FAVOR, como el anticipo
+      // del bot, y queda para que recepción lo revise en el panel (nunca por
+      // WhatsApp al paciente: fuera de ventana cuesta, y aquí no hay bot
+      // avisando).
+      const huecoPerdido = !!fresco.appointmentId && decision.confirmar && !confirmada;
 
-      if (decision.anomalia === null) {
+      let anomaliaFinal = decision.anomalia;
+      let paymentId: string | null = null;
+
+      if (fresco.invoiceId && !huecoPerdido) {
+        // ── ws1-t3 fase 1: se aplica A LA FACTURA, no a saldo a favor. Mismo
+        // candado y mismo criterio que aplicarPagoDeFactura (factura-mp): FOR
+        // UPDATE de la factura, total − paid como saldo real, y lo raro
+        // (factura cancelada o ya saldada) se registra igual —el dinero es del
+        // paciente— pero marcado para revisar, sin tocar el total. ──
+        await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${fresco.invoiceId} FOR UPDATE`;
+        const inv = await tx.invoice.findFirst({
+          where: { id: fresco.invoiceId, clinicId: fresco.clinicId },
+          select: { id: true, total: true, paid: true, status: true },
+        });
+        if (!inv) {
+          // No debería pasar (SET NULL en su FK si se borrara la factura): cae
+          // al camino de saldo a favor de abajo, como el anticipo del bot.
+          anomaliaFinal = anomaliaFinal
+            ? `${anomaliaFinal} · la factura de este anticipo ya no existe: pasó a saldo a favor`
+            : "La factura de este anticipo ya no existe: pasó a saldo a favor";
+        } else {
+          const pendiente = redondear2(Math.max(0, inv.total - inv.paid));
+          const facturaAnomalia =
+            inv.status === "CANCELLED" ? "factura cancelada" : pendiente <= 0 ? "factura ya saldada" : null;
+          if (facturaAnomalia) {
+            anomaliaFinal = anomaliaFinal
+              ? `${anomaliaFinal} · anticipo pagado sobre ${facturaAnomalia}: revisar/devolver`
+              : `Anticipo pagado sobre ${facturaAnomalia}: revisar/devolver`;
+          }
+          const pagoFactura = await tx.payment.create({
+            data: {
+              invoiceId: inv.id,
+              amount: decision.monto,
+              method: "mercadopago",
+              reference: pago.id,
+              paidAt: ahora,
+              notes:
+                `Anticipo${cuando}, pagado con Mercado Pago desde el panel (pago ${pago.id}).` +
+                (anomaliaFinal ? ` ⚠️ ${anomaliaFinal}` : ""),
+            },
+            select: { id: true },
+          });
+          paymentId = pagoFactura.id;
+          if (!facturaAnomalia) {
+            const nuevoPagado = redondear2(inv.paid + decision.monto);
+            const nuevoSaldo = redondear2(Math.max(0, inv.total - nuevoPagado));
+            await tx.invoice.updateMany({
+              where: { id: inv.id, clinicId: fresco.clinicId },
+              data: {
+                paid: nuevoPagado,
+                balance: nuevoSaldo,
+                status: nuevoSaldo <= 0 ? "PAID" : "PARTIAL",
+                paymentMethod: "mercadopago",
+                ...(nuevoSaldo <= 0 ? { paidAt: ahora } : {}),
+              },
+            });
+          }
+        }
+      }
+
+      if (paymentId) {
+        await tx.appointmentDepositPayment.create({
+          data: {
+            clinicId: fresco.clinicId,
+            depositId,
+            mpPaymentId: pago.id,
+            amount: decision.monto,
+            currency: pago.currencyId ?? "MXN",
+            dateApproved: pago.dateApproved ? new Date(pago.dateApproved) : null,
+            payerEmail: pago.payerEmail,
+            paymentMethodId: pago.paymentMethodId,
+            anomaly: anomaliaFinal,
+          },
+        });
+      } else {
+        const credito = await tx.patientCredit.create({
+          data: {
+            clinicId: fresco.clinicId,
+            patientId: fresco.patientId,
+            amount: decision.monto,
+            source: "anticipo_mercadopago",
+            creditDate: ahora,
+            description:
+              `Anticipo${cuando}, pagado con Mercado Pago (pago ${pago.id}). ` +
+              `Se descuenta del tratamiento.` +
+              (anomaliaFinal ? ` ⚠️ ${anomaliaFinal}` : ""),
+          },
+          select: { id: true },
+        });
+        await tx.appointmentDepositPayment.create({
+          data: {
+            clinicId: fresco.clinicId,
+            depositId,
+            mpPaymentId: pago.id,
+            amount: decision.monto,
+            currency: pago.currencyId ?? "MXN",
+            dateApproved: pago.dateApproved ? new Date(pago.dateApproved) : null,
+            payerEmail: pago.payerEmail,
+            paymentMethodId: pago.paymentMethodId,
+            patientCreditId: credito.id,
+            anomaly: anomaliaFinal,
+          },
+        });
+      }
+
+      if (decision.anomalia === null && anomaliaFinal === null) {
         await tx.appointmentDeposit.update({
           where: { id: depositId },
           data: {
@@ -520,12 +637,19 @@ export async function aplicarPagoDeAnticipo(
             paidAmount: decision.monto,
             paidAt: ahora,
             appointmentConfirmed: confirmada,
+            ...(paymentId ? { paymentId } : {}),
             lastMpStatus: pago.status,
             lastMpStatusDetail: pago.statusDetail,
           },
         });
       } else {
-        console.error(`[anticipos] pago ${pago.id} aplicado con anomalía (${depositId}): ${decision.anomalia}`);
+        console.error(`[anticipos] pago ${pago.id} aplicado con anomalía (${depositId}): ${anomaliaFinal}`);
+        // Sella igual el Payment que lo saldó (si lo hay), aunque la anomalía
+        // impida marcar el anticipo como PAID: un anticipo nunca queda con dos
+        // destinos posibles a la vez.
+        if (paymentId) {
+          await tx.appointmentDeposit.updateMany({ where: { id: depositId }, data: { paymentId } });
+        }
       }
 
       return {
@@ -533,7 +657,8 @@ export async function aplicarPagoDeAnticipo(
         depositId,
         monto: decision.monto,
         confirmada,
-        anomalia: decision.anomalia,
+        anomalia: anomaliaFinal,
+        origin: fresco.origin,
       };
     });
   } catch (e) {
@@ -543,7 +668,13 @@ export async function aplicarPagoDeAnticipo(
     throw e;
   }
 
-  if (resultado.aplicado && resultado.anomalia === null) {
+  // El aviso automático por WhatsApp es del BOT: es su propia conversación con
+  // el paciente la que anuncia el anticipo y pide el pago, así que es la única
+  // que tiene sentido cerrar sola. Un anticipo pedido desde el panel (ws1-t3
+  // fase 1) no nació de esa conversación —puede que el paciente ni siquiera
+  // tenga la ventana de 24 h abierta— y mandarle un mensaje de bot al cobrarse
+  // sería un aviso que nadie pidió; "Enviar recibo" es un botón aparte (fase 3).
+  if (resultado.aplicado && resultado.anomalia === null && resultado.origin !== "panel") {
     // Fuera de la transacción y sin poder tumbar el webhook: el dinero ya quedó.
     await avisarSinRomper(
       d,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard, Link2, MessageCircle, QrCode, Receipt } from "lucide-react";
+import { CreditCard, Link2, MessageCircle, QrCode, Receipt, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
 import {
@@ -31,8 +31,11 @@ import {
   ANTICIPO_MINIMO_MXN,
   MINUTOS_MAX,
   MINUTOS_MIN,
+  PANEL_HORAS_MAX,
+  PANEL_HORAS_MIN,
   formatoPesos,
   type ModoAnticipo,
+  type ModoAnticipoPanel,
 } from "@/lib/anticipos/core";
 
 /**
@@ -111,6 +114,14 @@ export function AnticiposClient({
   const [desconectando, setDesconectando] = useState(false);
   const [guardandoPortal, setGuardandoPortal] = useState(false);
 
+  // ── ws1-t3 fase 1 — anticipo pedido DESDE EL PANEL (cita o factura).
+  // Config PROPIA, con su propio "Guardar": no toca la del bot de arriba. ──
+  const [panelModo, setPanelModo] = useState<ModoAnticipoPanel>(inicial.configPanel.modo);
+  const [panelMonto, setPanelMonto] = useState(inicial.configPanel.monto > 0 ? String(inicial.configPanel.monto) : "");
+  const [panelPorcentaje, setPanelPorcentaje] = useState(inicial.configPanel.porcentaje > 0 ? String(inicial.configPanel.porcentaje) : "");
+  const [panelHoras, setPanelHoras] = useState(String(inicial.configPanel.horas));
+  const [guardandoPanel, setGuardandoPanel] = useState(false);
+
   const { plataforma, cuenta, comision } = datos;
   const puedeConectar = datos.tablasListas && plataforma.lista;
   const puedeCobrar = puedeConectar && cuenta.conectada;
@@ -139,6 +150,34 @@ export function AnticiposClient({
       toast.success(activo ? "Listo: el bot pedirá anticipo al agendar." : "Guardado. El bot agenda sin anticipo.");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function guardarPanel() {
+    setGuardandoPanel(true);
+    try {
+      const res = await fetch("/api/settings/anticipos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        // Solo `panel`: la config del bot de arriba no se toca con este botón.
+        body: JSON.stringify({
+          panel: {
+            modo: panelModo,
+            monto: panelMonto.trim() === "" ? 0 : Number(panelMonto),
+            porcentaje: panelPorcentaje.trim() === "" ? 0 : Number(panelPorcentaje),
+            horas: Number(panelHoras),
+          },
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof json.error === "string" ? json.error : "No se pudo guardar.");
+        return;
+      }
+      setDatos(json as PantallaAnticipos);
+      toast.success("Guardado.");
+    } finally {
+      setGuardandoPanel(false);
     }
   }
 
@@ -395,6 +434,80 @@ export function AnticiposClient({
             <MessageCircle size={13} strokeWidth={1.75} aria-hidden style={{ verticalAlign: "-2px" }} /> Funciona con el
             bot de WhatsApp con agenda activada. <Enlace href="/dashboard/whatsapp">Ir a WhatsApp</Enlace>
           </p>
+        </Seccion>
+
+        {/* ── 3b. El anticipo pedido DESDE EL PANEL (ws1-t3 fase 1) ──
+            Config PROPIA, separada de la del bot de arriba: "Guardar" aquí
+            no toca ni enciende ni apaga el anticipo del bot. */}
+        <Seccion
+          icono={<Wallet size={18} strokeWidth={1.75} aria-hidden />}
+          titulo="Anticipo pedido desde el panel"
+          subtitulo="El sugerido y el plazo cuando recepción pide un anticipo desde la cita o la factura. El monto final siempre lo puede cambiar quien lo pide."
+          apagada={!puedeCobrar}
+          nota={
+            !puedeCobrar ? (
+              <Aviso tono="info">Conecta primero la cuenta de Mercado Pago de la clínica.</Aviso>
+            ) : undefined
+          }
+          pie={
+            puedeCobrar ? (
+              <BotonGuardar guardando={guardandoPanel} texto="Guardar" textoGuardando="Guardando…" onClick={guardarPanel} />
+            ) : undefined
+          }
+        >
+          <Campos2>
+            <Campo etiqueta="Cómo se calcula">
+              <Selector value={panelModo} onChange={(e) => setPanelModo(e.target.value as ModoAnticipoPanel)} disabled={!puedeCobrar}>
+                <option value="fixed">Monto fijo</option>
+                <option value="percent">Porcentaje del total de la factura</option>
+              </Selector>
+            </Campo>
+            <Campo
+              etiqueta={panelModo === "fixed" ? "Monto sugerido (MXN)" : "Monto de respaldo (MXN)"}
+              ayuda={panelModo === "fixed" ? `Mínimo ${formatoPesos(ANTICIPO_MINIMO_MXN)}.` : "Se sugiere si la factura no tiene total (aún no hay concepto)."}
+            >
+              <Entrada
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="1"
+                value={panelMonto}
+                onChange={(e) => setPanelMonto(e.target.value)}
+                disabled={!puedeCobrar}
+                placeholder="300"
+              />
+            </Campo>
+          </Campos2>
+          <Campos2>
+            {panelModo === "percent" && (
+              <Campo etiqueta="Porcentaje (%)" ayuda="Del TOTAL de la factura.">
+                <Entrada
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={100}
+                  value={panelPorcentaje}
+                  onChange={(e) => setPanelPorcentaje(e.target.value)}
+                  disabled={!puedeCobrar}
+                  placeholder="20"
+                />
+              </Campo>
+            )}
+            <Campo
+              etiqueta="Plazo para pagar (horas)"
+              ayuda={`Entre ${PANEL_HORAS_MIN} y ${PANEL_HORAS_MAX}. Pasado el plazo, la cita se libera y se avisa a recepción (no al paciente).`}
+            >
+              <Entrada
+                type="number"
+                inputMode="numeric"
+                min={PANEL_HORAS_MIN}
+                max={PANEL_HORAS_MAX}
+                value={panelHoras}
+                onChange={(e) => setPanelHoras(e.target.value)}
+                disabled={!puedeCobrar}
+              />
+            </Campo>
+          </Campos2>
         </Seccion>
 
         {/* ── 4. El rastro ── */}

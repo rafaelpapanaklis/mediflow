@@ -305,7 +305,9 @@ describe("el webhook: pago aprobado", () => {
     const dep = e.deposito();
     e.pagar("777", { depositId: dep.id });
     const r = await aplicarPagoDeAnticipo(dep.id, "777", e.deps);
-    assert.deepEqual(r, { aplicado: true, depositId: dep.id, monto: 300, confirmada: true, anomalia: null });
+    // origin: undefined — el doble no aplica el default de Prisma ("bot"); en
+    // Postgres real la columna nace con ese default (ws1-t3 fase 1).
+    assert.deepEqual(r, { aplicado: true, depositId: dep.id, monto: 300, confirmada: true, anomalia: null, origin: undefined });
 
     assert.equal(e.cita().status, "CONFIRMED");
     assert.equal(e.cita().holdExpiresAt, null, "ya no caduca");

@@ -54,6 +54,11 @@ export class DobleBase {
     appointmentDeposit: [],
     appointmentDepositPayment: [],
     patientCredit: [],
+    // ws1-t3 fase 1 — el anticipo pedido desde el panel se aplica a una
+    // factura: pedirAnticipoDeFactura/DeCita y la rama con invoiceId de
+    // aplicarPagoDeAnticipo las necesitan.
+    invoice: [],
+    payment: [],
   };
   private seq = 0;
   private cola: Promise<unknown> = Promise.resolve();

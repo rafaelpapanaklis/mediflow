@@ -87,6 +87,9 @@ export interface AgendaAppointmentDTO extends HomeAppointmentDTO {
   startedAt?: string | null;
   completedAt?: string | null;
   cancelReason?: string | null;
+  /** Anticipo (WS1-T5 / ws1-t3): la cita SCHEDULED queda "apartada" hasta esta
+   * fecha. null = cita normal, o el apartado ya se resolvió (pagado o vencido). */
+  holdExpiresAt?: string | null;
 }
 
 export interface ResourceDTO {

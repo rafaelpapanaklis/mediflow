@@ -22,7 +22,12 @@ export type WhatsAppSendKind =
   | "manual_api"          // recordatorio disparado a mano desde el panel
   | "payment_notice"      // aviso de saldo pendiente de una factura
   | "quote_ready"         // presupuesto listo con su liga pública
-  | "consent";            // carta de consentimiento informado para firmar
+  | "consent"             // carta de consentimiento informado para firmar
+  // ws1-t3 fase 1 — link de anticipo pedido desde la cita o la factura. SIN
+  // spec en WA_TEMPLATE_SPECS a propósito: fuera de la ventana de 24 h se
+  // BLOQUEA (decideSendMode cae directo a "sin plantilla todavía"), nunca
+  // intenta una que no existe. La plantilla con link es fase 3.
+  | "deposit_request";
 
 export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "reminder",
@@ -33,6 +38,7 @@ export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "system",
   "manual_api",
   "payment_notice",
+  "deposit_request",
   "quote_ready",
   "consent",
 ];

@@ -96,6 +96,10 @@ describe("getPayment", () => {
       collectorId: "999",
       payerEmail: "p@correo.test",
       paymentMethodId: "visa",
+      // transactionAmountRefunded: lo añadió 96a0a741 (factura MP) a getPayment
+      // (src/lib/mercadopago.ts); esta prueba se quedó atrás. Fase 0 del plan
+      // de anticipos (REPORTE-ws1-t8.md §F): arreglo de una línea.
+      transactionAmountRefunded: null,
     });
   });
 

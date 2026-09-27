@@ -11,6 +11,7 @@ import {
   sumInvoiceItems, computeInvoiceTotal, round2, PRICE_ADJUST_FLAG,
 } from "@/lib/invoice-totals";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
+import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
@@ -171,6 +172,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
   // un monto viejo y se cierran. Nunca lanza.
   await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
+  await cerrarAnticiposDePanel({ clinicId, invoiceId: params.id });
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });

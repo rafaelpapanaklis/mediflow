@@ -109,6 +109,9 @@ export function appointmentToDTO(
     startedAt: a.startedAt?.toISOString() ?? null,
     completedAt: a.completedAt?.toISOString() ?? null,
     cancelReason: vencida ? MOTIVO_APARTADO_LIBERADO : a.cancelReason ?? null,
+    // ws1-t3 — vencida ya se pinta CANCELLED arriba: el chip de "apartada" no
+    // debe seguir mostrándose para una cita que la agenda ya trata como libre.
+    holdExpiresAt: vencida ? null : a.holdExpiresAt?.toISOString() ?? null,
   };
 }
 

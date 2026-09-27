@@ -38,6 +38,7 @@ import {
   RotateCcw,
   SkipForward,
   UserX,
+  Wallet,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -45,6 +46,7 @@ import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
+import { ModalPedirAnticipo } from "@/components/dashboard/billing/modal-pedir-anticipo";
 import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { possibleTransitions } from "@/lib/agenda/transitions";
@@ -184,6 +186,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   );
   const [buscandoFactura, setBuscandoFactura] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [pidiendoAnticipo, setPidiendoAnticipo] = useState(false);
 
   const dto = useMemo(
     () => state.appointments.find((a) => a.id === ag.citaAbiertaId) ?? null,
@@ -537,6 +540,23 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               </div>
             </div>
           )}
+
+          {/* Apartada por un anticipo pendiente (WS1-T5 / ws1-t3): la cita
+              queda fuera de cualquier hueco disponible hasta esa hora — si no
+              se paga a tiempo, se libera sola. */}
+          {cita.estado === "SCHEDULED" && dto.holdExpiresAt && new Date(dto.holdExpiresAt).getTime() > ahora.getTime() && (
+            <div className={s.panelSeccion}>
+              <div className={s.nota}>
+                <span className={s.notaIcono}>
+                  <Wallet size={18} strokeWidth={2} />
+                </span>
+                <span>
+                  Apartada · paga antes de las{" "}
+                  {formatTimeInTz(dto.holdExpiresAt, state.timezone)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Pie ── */}
@@ -647,6 +667,17 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                 No asistió
               </button>
             )}
+
+            {/* Pedir anticipo (ws1-t3 fase 1): mientras la cita siga viva, con
+                Mercado Pago o sin él — el modal dice si no está conectado. El
+                servidor exige "billing.deposit"; READONLY nunca la tiene, así
+                que ni se le pinta el botón. */}
+            {!terminal && userRole !== "READONLY" && (
+              <button type="button" className={s.accionSecundaria} onClick={() => setPidiendoAnticipo(true)}>
+                <Wallet size={18} strokeWidth={2} />
+                Pedir anticipo
+              </button>
+            )}
           </div>
 
           {siguiente && (
@@ -681,6 +712,17 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
           }}
         />
       )}
+
+      <ModalPedirAnticipo
+        open={pidiendoAnticipo}
+        onClose={() => setPidiendoAnticipo(false)}
+        origen="cita"
+        id={dto.id}
+        onListo={() => {
+          invalidateRangeCache();
+          router.refresh();
+        }}
+      />
     </>
   );
 }

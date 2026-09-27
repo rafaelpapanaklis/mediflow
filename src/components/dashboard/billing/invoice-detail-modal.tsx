@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { cfdiAvisoPersistente, cfdiImpideReintento } from "@/lib/cfdi-avisos";
-import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle } from "lucide-react";
+import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle, Wallet } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -39,6 +39,8 @@ import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 // Mercado Pago como método de pago (ws1-t1): el método en el cobro y el bloque
 // «ver / copiar link». Sin cuenta conectada no se monta nada.
 import { LinkMercadoPago, useCobroMercadoPago } from "./link-mercado-pago";
+// Pedir anticipo por Mercado Pago desde la factura (ws1-t3 fase 1).
+import { ModalPedirAnticipo } from "./modal-pedir-anticipo";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
@@ -215,6 +217,20 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // Preguntarlo al abrir hacía que el botón de Mercado Pago apareciera de golpe
   // cuando el usuario ya estaba eligiendo método (23-sep-2026).
   const mpDisponible = useCobroMercadoPago(true);
+  // ws1-t3 fase 1 — cuánto de `invoice.paid` vino de un anticipo del panel:
+  // solo lectura, para el desglose Total / Anticipo / Pendiente. Se calla
+  // (queda en 0) si la ruta falla o la factura no tiene ninguno.
+  const [anticipoPagado, setAnticipoPagado] = useState(0);
+  const [pidiendoAnticipo, setPidiendoAnticipo] = useState(false);
+  useEffect(() => {
+    if (!open || !invoice?.id) { setAnticipoPagado(0); return; }
+    let vivo = true;
+    fetch(`/api/invoices/${invoice.id}/anticipo`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (vivo) setAnticipoPagado(typeof d?.anticipoPagado === "number" ? d.anticipoPagado : 0); })
+      .catch(() => { if (vivo) setAnticipoPagado(0); });
+    return () => { vivo = false; };
+  }, [open, invoice?.id]);
   // Hay un link vigente de esta factura (lo avisa el bloque del link): entonces
   // «Enviar por WhatsApp» lo pide y el aviso lo lleva.
   const [hayLinkMp, setHayLinkMp] = useState(false);
@@ -625,6 +641,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               )}
               <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("common.total")}</span><span className={cx("font-bold", `${c.cifra} ${c.cifraTotal}`)}>{fmtMXNdec(invoice.total)}</span></div>
               <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.paid")}</span><span className={cx("font-bold", `${c.cifra} ${c.cifraExito}`)} style={rediseno ? undefined : { color: "var(--success)" }}>{fmtMXNdec(invoice.paid)}</span></div>
+              {/* ws1-t3 fase 1 — cuánto de lo pagado es anticipo. Solo se pinta
+                  si hay alguno: no añade ruido a una factura sin anticipo. */}
+              {anticipoPagado > 0 && (
+                <div className={cx("flex justify-between", c.resumenFila)}>
+                  <span className={cx("text-muted-foreground", c.rotulo)}>Anticipo</span>
+                  <span className={rediseno ? c.cifra : undefined}>{fmtMXNdec(anticipoPagado)}</span>
+                </div>
+              )}
               {/* Saldo. Cancelar NO pone `balance` a 0 en BD (solo cambia el
                   status y exige paid == 0), así que una factura anulada llega
                   aquí con balance == total y se pintaba en rojo como si se
@@ -681,6 +705,20 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 bloqueado={busy}
                 alCambiar={(l) => setHayLinkMp(!!l)}
               />
+            )}
+
+            {/* Pedir anticipo (ws1-t3 fase 1): por un importe PARCIAL, distinto
+                del link de arriba (que cobra el saldo completo). Mientras la
+                factura tenga saldo por cobrar. */}
+            {isPending && (
+              <button
+                type="button"
+                onClick={() => setPidiendoAnticipo(true)}
+                disabled={busy}
+                className="inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50"
+              >
+                <Wallet size={14} aria-hidden /> Pedir anticipo
+              </button>
             )}
 
             {/* Conceptos */}
@@ -1130,6 +1168,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
         } : null}
         onClose={() => setPaymentOpen(false)}
         onSuccess={handlePaymentSuccess}
+      />
+
+      <ModalPedirAnticipo
+        open={pidiendoAnticipo}
+        onClose={() => setPidiendoAnticipo(false)}
+        origen="factura"
+        id={invoice.id}
+        onListo={() => { void onMutated(); }}
       />
     </>
   );

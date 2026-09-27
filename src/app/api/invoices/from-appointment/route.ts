@@ -1,25 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import {
-  sumInvoiceItems,
-  computeInvoiceTotal,
-  itemLineTotal,
-  clinicInvoiceTaxDefaults,
-  round2,
-} from "@/lib/invoice-totals";
-import {
-  InvoiceNumberExhaustedError,
-  nextInvoiceNumber,
-  withInvoiceNumberRetry,
-} from "@/lib/invoices/next-invoice-number";
-import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
+import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 
 export const dynamic = "force-dynamic";
 
@@ -111,118 +98,48 @@ export async function POST(req: NextRequest) {
   // Conceptos como se PERSISTEN: `description` + importe de línea. El code /
   // diente / cara son datos clínicos útiles y viajan tal cual (el CFDI los
   // ignora, pero la ficha y el comprobante los muestran).
-  const items = parsed.data.lineItems.map((li) => {
-    const quantity = li.quantity;
-    const unitPrice = round2(li.unitPrice);
-    return {
-      ...(li.code ? { code: li.code } : {}),
-      description: String(li.description ?? li.name ?? "").trim(),
-      ...(li.toothNumber != null ? { toothNumber: li.toothNumber } : {}),
-      ...(li.surface ? { surface: li.surface } : {}),
-      quantity,
-      unitPrice,
-      total: itemLineTotal({ quantity, unitPrice }),
-    };
-  });
+  const lineItems = parsed.data.lineItems.map((li) => ({
+    ...(li.code ? { code: li.code } : {}),
+    description: String(li.description ?? li.name ?? "").trim(),
+    ...(li.toothNumber != null ? { toothNumber: li.toothNumber } : {}),
+    ...(li.surface ? { surface: li.surface } : {}),
+    unitPrice: li.unitPrice,
+    quantity: li.quantity,
+  }));
 
   // Misma aritmética canónica que POST /api/invoices y que la guarda del
   // timbrado (invoice-totals): subtotal = Σ round2(qty × unitPrice), NO
-  // round2(Σ qty × unitPrice). Con precios sub-centavo y varias líneas los dos
-  // difieren en centavos y la factura nacía con un total que POST /api/cfdi
-  // rechaza con 409 CFDI_TOTAL_MISMATCH.
-  const subtotal = sumInvoiceItems(items);
-  const discount = round2(Math.max(0, parsed.data.discount ?? 0));
-  if (discount > subtotal) {
-    return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
-  }
-
-  // Impuestos con los que NACE la factura, según la preferencia fiscal de la
-  // clínica. Sin esto caían al default de la columna (16%, incluido) y en una
-  // clínica exenta el desglose interno contradecía al CFDI. Solo la columna
-  // que se necesita: la fila entera de Clinic lleva secretos.
-  const clinicTax = await prisma.clinic.findUnique({
-    where: { id: session.clinic.id },
-    select: { cfdiTaxMode: true },
+  // round2(Σ qty × unitPrice) — ver crearFacturaDesdeCita. Compartida con el
+  // endpoint de «Pedir anticipo» (ws1-t3 fase 1), que crea la factura de la
+  // cita por el mismo camino cuando todavía no existe.
+  const resultado = await crearFacturaDesdeCita({
+    clinicId: session.clinic.id,
+    appointmentId: appt.id,
+    patientId: appt.patientId,
+    lineItems,
+    discount: parsed.data.discount,
+    notes: parsed.data.notes,
+    userId: session.user.id,
   });
-  const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(clinicTax?.cfdiTaxMode);
-  const { total } = computeInvoiceTotal(subtotal, discount, taxRate, taxIncluded);
 
-  try {
-    // Folio por MÁXIMO emitido con reintento ante carrera (P0-2). La serie
-    // INV-YYYY-#### que emitía esta ruta se retira: era la 2ª serie paralela
-    // sobre la misma columna única y su count+1 anual chocaba con la serie
-    // MF-#### del resto de generadores. El folio se recalcula DENTRO de cada
-    // intento; el P2002 de appointmentId NO se reintenta (cae al catch).
-    const invoice = await withInvoiceNumberRetry(async () =>
-      prisma.invoice.create({
-        data: {
-          clinicId: session.clinic.id,
-          patientId: appt.patientId,
-          appointmentId: appt.id,
-          invoiceNumber: await nextInvoiceNumber(session.clinic.id),
-          items: items as unknown as Prisma.InputJsonValue,
-          subtotal,
-          discount,
-          total,
-          balance: total,
-          status: "PENDING",
-          notes: parsed.data.notes ?? null,
-          taxRate,
-          taxIncluded,
-        },
-        select: {
-          id: true,
-          invoiceNumber: true,
-          subtotal: true,
-          discount: true,
-          total: true,
-          balance: true,
-          status: true,
-          appointmentId: true,
-          items: true,
-          createdAt: true,
-        },
-      }),
-    );
-    // Saldo a favor del paciente (anticipo): la factura nace con él ya
-    // descontado. Propia transacción, no lanza (patient-credit-aplicar.ts).
-    const saldo = await aplicarSaldoAFavor({
-      clinicId: session.clinic.id,
-      invoiceId: invoice.id,
-      userId: session.user.id,
-      origen: "creada",
-    });
-    revalidateAfter("invoices");
-    revalidatePath(`/dashboard/patients/${appt.patientId}`);
-    return NextResponse.json(
-      {
-        invoice: saldo.factura
-          ? { ...invoice, paid: saldo.factura.paid, balance: saldo.factura.balance, status: saldo.factura.status }
-          : invoice,
-        anticipoAplicado: saldo.aplicado,
-      },
-      { status: 201 },
-    );
-  } catch (err) {
-    // Carrera de folio agotada (ya reintentó recalculando el máximo).
-    if (err instanceof InvoiceNumberExhaustedError) {
-      return NextResponse.json({ error: "invoice_number_conflict" }, { status: 409 });
+  if (!resultado.ok) {
+    if (resultado.error === "invoice_already_exists") {
+      return NextResponse.json({ error: resultado.error, invoice: resultado.existente }, { status: 409 });
     }
-    // Race condition: otra request creó la invoice primero. Aquí solo llega el
-    // P2002 de appointmentId @unique (el de invoiceNumber lo distingue y
-    // reintenta withInvoiceNumberRetry por meta.target), así que el mensaje
-    // "invoice_already_exists" por fin es verdad siempre.
-    const code = (err as { code?: string }).code;
-    if (code === "P2002") {
-      return NextResponse.json(
-        { error: "invoice_already_exists" },
-        { status: 409 },
-      );
+    if (resultado.error === "discount_exceeds_subtotal") {
+      return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
-    console.error("[/api/invoices/from-appointment]", err);
-    return NextResponse.json(
-      { error: "internal_error", reason: err instanceof Error ? err.message : "unknown" },
-      { status: 500 },
-    );
+    if (resultado.error === "invoice_number_conflict") {
+      return NextResponse.json({ error: resultado.error }, { status: 409 });
+    }
+    console.error("[/api/invoices/from-appointment]", resultado.reason);
+    return NextResponse.json({ error: "internal_error", reason: resultado.reason }, { status: 500 });
   }
+
+  revalidateAfter("invoices");
+  revalidatePath(`/dashboard/patients/${appt.patientId}`);
+  return NextResponse.json(
+    { invoice: resultado.invoice, anticipoAplicado: resultado.anticipoAplicado },
+    { status: 201 },
+  );
 }

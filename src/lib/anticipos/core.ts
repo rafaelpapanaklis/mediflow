@@ -131,6 +131,87 @@ export function validarConfiguracion(c: {
   return null;
 }
 
+// ── Anticipo pedido DESDE EL PANEL (cita o factura), ws1-t3 fase 1 ─────────
+//
+// Config PROPIA, separada de la de arriba (el bot no se toca). Solo "fixed" o
+// "percent": aquí el % siempre es sobre el TOTAL DE LA FACTURA, nunca sobre un
+// precio de catálogo. El plazo va en HORAS, no minutos: lo pide recepción con
+// el paciente enfrente o por teléfono, y el vencido se avisa a RECEPCIÓN en el
+// panel (no al paciente por WhatsApp), así que el tope de 240 min del bot —que
+// existe por el aviso de WhatsApp— no aplica aquí.
+
+export type ModoAnticipoPanel = "fixed" | "percent";
+export const MODOS_ANTICIPO_PANEL: readonly ModoAnticipoPanel[] = ["fixed", "percent"];
+
+export const PANEL_HORAS_MIN = 1;
+export const PANEL_HORAS_MAX = 48;
+export const PANEL_HORAS_DEFAULT = 24;
+
+export interface PoliticaAnticipoPanel {
+  modo: ModoAnticipoPanel;
+  monto: number;
+  porcentaje: number;
+  horas: number;
+}
+
+/** Valida lo que Configuración → Anticipos guarda para el panel. null = válido. */
+export function validarConfiguracionPanel(c: {
+  modo: string;
+  monto: number;
+  porcentaje: number;
+  horas: number;
+}): string | null {
+  if (!(MODOS_ANTICIPO_PANEL as readonly string[]).includes(c.modo)) return "Modo de anticipo desconocido.";
+  if (!Number.isFinite(c.monto) || c.monto < 0) return "El monto no es válido.";
+  if (c.modo === "fixed" && c.monto > 0 && c.monto < ANTICIPO_MINIMO_MXN) {
+    return `El anticipo mínimo es de $${ANTICIPO_MINIMO_MXN}.`;
+  }
+  if (c.modo === "percent" && (!Number.isInteger(c.porcentaje) || c.porcentaje < 1 || c.porcentaje > 100)) {
+    return "El porcentaje va de 1 a 100.";
+  }
+  if (!Number.isInteger(c.horas) || c.horas < PANEL_HORAS_MIN || c.horas > PANEL_HORAS_MAX) {
+    return `El plazo para pagar va de ${PANEL_HORAS_MIN} a ${PANEL_HORAS_MAX} horas.`;
+  }
+  return null;
+}
+
+/**
+ * El monto SUGERIDO para prefijar el modal («Pedir anticipo»), a partir del
+ * total de la factura. Reutiliza `calcularMontoAnticipo` tratando el total de
+ * la factura como el "precio del servicio": el modo "percent" ya calcula sobre
+ * ese número, y "fixed" lo ignora. Puede dar null (por debajo del mínimo);
+ * la pantalla entonces no sugiere nada y recepción escribe el monto a mano.
+ */
+export function sugeridoAnticipoPanel(politica: PoliticaAnticipoPanel, totalFactura: number): number | null {
+  return calcularMontoAnticipo({ modo: politica.modo, monto: politica.monto, porcentaje: politica.porcentaje }, totalFactura);
+}
+
+/**
+ * El monto de un anticipo pedido a mano SIEMPRE lo valida el servidor, venga
+ * de donde venga (el sugerido, o lo que recepción tecleó encima): 10 ≤ monto ≤
+ * total − pagado. Nunca se usa un monto del cliente sin pasar por aquí.
+ */
+export function validarMontoAnticipoManual(monto: number, total: number, pagado: number): string | null {
+  if (!Number.isFinite(monto)) return "El monto no es válido.";
+  const redondeado = redondear2(monto);
+  if (aCentavos(redondeado) < aCentavos(ANTICIPO_MINIMO_MXN)) {
+    return `El anticipo mínimo es de $${ANTICIPO_MINIMO_MXN}.`;
+  }
+  const maximo = redondear2(Math.max(0, total - pagado));
+  if (aCentavos(redondeado) > aCentavos(maximo)) {
+    return `El anticipo no puede ser mayor al saldo pendiente (${formatoPesos(maximo)}).`;
+  }
+  return null;
+}
+
+/** Plazo (horas) de un anticipo pedido a mano: siempre 1–48, lo pida quien lo pida. */
+export function validarPlazoPanelHoras(horas: number): string | null {
+  if (!Number.isInteger(horas) || horas < PANEL_HORAS_MIN || horas > PANEL_HORAS_MAX) {
+    return `El plazo para pagar va de ${PANEL_HORAS_MIN} a ${PANEL_HORAS_MAX} horas.`;
+  }
+  return null;
+}
+
 // ── El link y el webhook ────────────────────────────────────────────────────
 
 const PREFIJO_REF = "anticipo";

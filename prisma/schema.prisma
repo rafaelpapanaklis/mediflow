@@ -1610,6 +1610,17 @@ model ClinicMercadoPago {
   /// pesos: el % se convierte en cada cobro.
   marketplaceFeeMode  String    @default("fixed")
   marketplaceFeeValue Float     @default(0)
+  // ── Anticipo pedido DESDE EL PANEL (cita o factura), ws1-t3 fase 1. Config
+  // PROPIA, separada de depositMode/depositAmount/depositPercent/holdMinutes
+  // de arriba: esos son del bot y no se tocan. "fixed"|"percent" únicamente
+  // (nunca "total": aquí el % es siempre sobre el TOTAL de la factura, nunca
+  // sobre un precio de catálogo). El plazo va en HORAS (1–48), no minutos: el
+  // tope de 240 min de arriba es por el aviso de WhatsApp del bot, que aquí no
+  // aplica (el vencido se avisa a recepción, no al paciente).
+  panelDepositMode        String @default("fixed")
+  panelDepositAmount      Float  @default(0)
+  panelDepositPercent     Int    @default(0)
+  panelDepositExpiryHours Int    @default(24)
   createdAt           DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
 
@@ -1649,6 +1660,25 @@ model AppointmentDeposit {
   /// Aviso al paciente (confirmada / liberada): cuándo salió o por qué no.
   noticeSentAt         DateTime? @db.Timestamptz(6)
   noticeError          String?
+  // ── Anticipo desde el panel (ws1-t3 fase 1). Sin relación Prisma a
+  // propósito (mismo criterio que InvoicePaymentLink.createdById): la FK vive
+  // en el SQL, y añadir la relación formal obligaría a tocar los modelos
+  // Invoice/User/Payment, que ya declaran sus propias listas. ──
+  /// "bot" (default, como hoy) · "panel" (pedido desde la cita o la factura).
+  origin               String    @default("bot")
+  /// "mercadopago" (default, como hoy) · "transferencia" | "manual" (fase 2).
+  method               String    @default("mercadopago")
+  /// La factura a la que se aplica este anticipo. null = anticipo del bot
+  /// (entra como saldo a favor, como siempre). Con invoiceId, el webhook
+  /// registra un Payment EN ESA factura en vez de PatientCredit — salvo que
+  /// el hueco ya se haya liberado, caso en el que cae a saldo a favor igual.
+  invoiceId            String?
+  /// Quién lo pidió desde el panel (null = el bot).
+  createdById          String?
+  /// El Payment que lo saldó, único: sella que este anticipo tiene UN solo
+  /// destino (nunca se cuenta dos veces). null hasta que se aplica, y se
+  /// queda null si acabó como PatientCredit (pago tardío).
+  paymentId            String?   @unique
   createdAt            DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
 
@@ -1660,6 +1690,7 @@ model AppointmentDeposit {
   @@index([clinicId, createdAt])
   @@index([status, expiresAt])
   @@index([appointmentId])
+  @@index([invoiceId])
   @@map("appointment_deposits")
 }
 
