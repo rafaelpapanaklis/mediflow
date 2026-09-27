@@ -593,6 +593,15 @@ export function InventoryClient({
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <input
+                        // Ajuste 1 (QA en vivo): con `defaultValue` a secas este
+                        // input no se refrescaba cuando "Registrar compra"
+                        // cambiaba item.unitCost desde OTRA acción — el DOM se
+                        // quedaba en el valor viejo aunque el KPI y el backend
+                        // ya tuvieran el nuevo. `key` fuerza a React a montar
+                        // una instancia nueva (con el defaultValue correcto)
+                        // cada vez que cambia, sin volverlo controlado (así no
+                        // se pierde el "solo blur guarda" del resto de la fila).
+                        key={item.unitCost}
                         type="number" min={0} step="0.01"
                         className="input-new mono"
                         style={{ width: 76, height: 28, textAlign: "right", display: "inline-block" }}

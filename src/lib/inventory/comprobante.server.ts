@@ -34,7 +34,11 @@ function faltaTabla(e: unknown): boolean {
 
 export class ComprasTablaFaltanteError extends Error {
   code = "COMPRAS_TABLA_FALTANTE" as const;
-  constructor() { super("La tabla inventory_purchases no existe aún. Aplica sql/inventario-proveedores-compras-t4.sql en Supabase."); }
+  // Ajuste 1 (QA en vivo): este mensaje decía "la tabla inventory_purchases
+  // no existe" — copiado de compras.server.ts sin ajustar. La tabla YA
+  // existe (ahí se acaba de escribir la compra); lo que falta aquí son las
+  // 3 columnas NUEVAS de ESTE ajuste, y el SQL correcto es otro archivo.
+  constructor() { super("Faltan las columnas de comprobante en inventory_purchases. Aplica sql/inventario-compra-comprobante-t4-ajuste1.sql en Supabase."); }
 }
 
 export class ComprobanteInvalidoError extends Error {
