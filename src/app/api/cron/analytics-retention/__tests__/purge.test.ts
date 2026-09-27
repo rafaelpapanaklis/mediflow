@@ -244,3 +244,9 @@ test("los topes por corrida dan de sobra para el ritmo real", () => {
   const porCorrida = PURGE_BATCH * MAX_BATCHES;
   assert.ok(porCorrida >= 20 * 3_300, `${porCorrida} filas por corrida`);
 });
+
+/* ===================== clic de anuncios a los 12 meses ====================== */
+
+// El script `test:analytics-retention` apunta solo a este archivo; importar el
+// otro registra sus pruebas en la misma corrida (node:test las recoge al cargar).
+import "./ads-clicks.test";
