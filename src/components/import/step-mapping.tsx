@@ -17,10 +17,13 @@ interface Props {
   /** El usuario eligió saldos/citas además de la entidad principal: esas columnas
    *  (Saldo, Tipo, Fecha de cita…) se autodetectan al importar, no se mapean aquí. */
   hasSecondary: boolean;
+  /** La pestaña confirmada de un .xlsx de varias hojas (null si el archivo trae una sola). */
+  sheet?: string | null;
+  onChangeSheet?: () => void;
   onChange: (source: string, value: string) => void;
 }
 
-export function StepMapping({ t, origin, preview, mapping, hasSecondary, onChange }: Props) {
+export function StepMapping({ t, origin, preview, mapping, hasSecondary, sheet, onChangeSheet, onChange }: Props) {
   const total = preview.columns.length;
   const matched = preview.columns.filter((c) => c.suggestion).length;
   // Banner "automático" siempre que el backend reconoció columnas (con o sin perfil);
@@ -52,6 +55,13 @@ export function StepMapping({ t, origin, preview, mapping, hasSecondary, onChang
             <p>{t("shell.importClinic.step5.bannerManualDesc", { name: origin.name })}</p>
           </div>
         </div>
+      )}
+
+      {sheet && (
+        <p className="imp-hint" style={{ margin: "10px 0 0" }}>
+          {t("shell.importClinic.sheet.current", { name: sheet })}{" "}
+          <button type="button" className="imp-report-line__link" onClick={onChangeSheet}>{t("shell.importClinic.sheet.change")}</button>
+        </p>
       )}
 
       {origin.hasProfile && origin.verified === false && (

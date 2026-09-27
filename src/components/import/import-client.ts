@@ -12,8 +12,8 @@
 
 // Entidad y mapeos: los del contrato del motor (src/lib/import/types.ts), no
 // una copia — una entidad nueva allí aparece aquí sola.
-import type { ColumnMapping, Entity, UnresolvedValue, ValueMapping, ValueOption } from "@/lib/import/types";
-export type { Entity, ColumnMapping, ValueMapping, UnresolvedValue, ValueOption } from "@/lib/import/types";
+import type { ColumnMapping, Entity, SheetInfo, UnresolvedValue, ValueMapping, ValueOption } from "@/lib/import/types";
+export type { Entity, ColumnMapping, SheetInfo, ValueMapping, UnresolvedValue, ValueOption } from "@/lib/import/types";
 export { VALUE_UNLINKED } from "@/lib/import/types";
 
 /**
@@ -90,6 +90,14 @@ export interface PreviewResult {
   stats: { valid: number; errors: number; duplicates: number; omitted?: number };
   /** Muestra de filas validadas para la tabla del paso 6. */
   rows: PreviewRow[];
+  /** El archivo trae varias pestañas: el paso 5 pide confirmar cuál (nunca toma la primera). */
+  sheets?: SheetInfo[];
+  /** La pestaña que propone el nombre, o null si ninguna se llama como estos datos. */
+  suggestedSheet?: string | null;
+  /** Falta elegir pestaña: todavía no hay columnas ni filas que revisar. */
+  needsSheet?: boolean;
+  /** La pestaña con la que se calculó esta vista previa. */
+  sheet?: string;
   /** Falta emparejar una columna obligatoria: el paso 5 lo pide en vez de fallar. */
   mappingError?: string;
   /** Valores sin equivalente en el catálogo de la clínica (hoy: procedimientos). */
@@ -131,13 +139,13 @@ export interface ImportClient {
      * `valueMapping`: decisiones ya tomadas (p. ej. cómo leer los montos ambiguos), para
      * que la vista previa refleje lo que se va a importar.
      */
-    opts?: { origin?: string | null; valueMapping?: ValueMapping },
+    opts?: { origin?: string | null; valueMapping?: ValueMapping; sheet?: string | null },
   ): Promise<PreviewResult>;
   commit(
     entity: Entity,
     file: File,
     mapping: ColumnMapping,
-    opts: { skipDuplicates: boolean; origin?: string | null; valueMapping?: ValueMapping },
+    opts: { skipDuplicates: boolean; origin?: string | null; valueMapping?: ValueMapping; sheet?: string | null },
     onProgress?: OnUploadProgress,
   ): Promise<CommitResult>;
   templateUrl(): string;
@@ -266,7 +274,7 @@ export class MockImportClient implements ImportClient {
     _file: File,
     _mapping?: ColumnMapping,
     _onProgress?: OnUploadProgress,
-    _opts?: { origin?: string | null; valueMapping?: ValueMapping },
+    _opts?: { origin?: string | null; valueMapping?: ValueMapping; sheet?: string | null },
   ): Promise<PreviewResult> {
     return delay({
       totalRows: 1265,
@@ -281,7 +289,7 @@ export class MockImportClient implements ImportClient {
     _entity: Entity,
     _file: File,
     _mapping: ColumnMapping,
-    opts: { skipDuplicates: boolean; origin?: string | null; valueMapping?: ValueMapping },
+    opts: { skipDuplicates: boolean; origin?: string | null; valueMapping?: ValueMapping; sheet?: string | null },
     _onProgress?: OnUploadProgress,
   ): Promise<CommitResult> {
     return delay({

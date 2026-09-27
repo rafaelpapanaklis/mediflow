@@ -10,7 +10,9 @@
 //   POST /api/import/clinical-notes    (entity="clinicalNotes")
 //   POST /api/import/quotes            (entity="quotes")
 // FormData: file, dryRun("true"|"false"), skipDuplicates, columnMapping?(JSON),
-//           origin?(id del perfil de origen), valueMapping?(JSON, ver ValueMapping).
+//           origin?(id del perfil de origen), valueMapping?(JSON, ver ValueMapping),
+//           sheet?(nombre de la pestaña, OBLIGATORIO en un .xlsx de varias hojas: sin él,
+//           el dry-run devuelve `needsSheet` con las pestañas y el commit es un 400).
 //   - dryRun  → PreviewResult  (añade columns + suggestedMapping)
 //   - commit  → CommitResult
 
@@ -98,6 +100,17 @@ export interface ValueOption {
   label: string;
 }
 
+/** Una pestaña de un .xlsx de varias hojas, con sus primeras filas para reconocerla. */
+export interface SheetInfo {
+  name: string;
+  /** Filas de datos (sin el encabezado). Con más de MAX_ROWS se queda en ese tope + 1. */
+  rows: number;
+  /** Encabezados de la pestaña. */
+  columns: string[];
+  /** Primeras filas, como texto, en el orden de `columns`. */
+  sample: string[][];
+}
+
 /** Respuesta de dry-run (validación sin escribir). */
 export interface PreviewResult {
   entity: Entity;
@@ -107,6 +120,17 @@ export interface PreviewResult {
   duplicados: number;
   /** Filas que se dejan fuera a propósito (citas pasadas, ya importadas). Ausente = 0. */
   omitidos?: number;
+  /**
+   * El archivo tiene VARIAS pestañas: siempre las lista (con sus primeras filas) para que el
+   * usuario confirme o cambie la que trae estos datos. Ausente en .csv y en libros de una hoja.
+   */
+  sheets?: SheetInfo[];
+  /** La pestaña que propone su nombre («Saldos» para saldos), o null si ninguna se llama así. */
+  suggestedSheet?: string | null;
+  /** Falta que el usuario elija pestaña: no se procesó nada (columns/preview van vacíos). */
+  needsSheet?: boolean;
+  /** La pestaña con la que se calculó esta vista previa (solo con varias). */
+  sheet?: string;
   /** Headers detectados en el archivo (para construir la UI de mapeo). */
   columns: string[];
   /** Autodetección header -> campo canónico (sugerencia para el mapeo). */

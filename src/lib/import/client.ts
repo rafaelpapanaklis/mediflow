@@ -284,12 +284,12 @@ export class RealImportClient implements ImportClient {
     file: File,
     mapping?: ColumnMapping,
     onProgress?: OnUploadProgress,
-    opts?: { origin?: string | null; valueMapping?: ValueMapping },
+    opts?: { origin?: string | null; valueMapping?: ValueMapping; sheet?: string | null },
   ): Promise<PreviewResult> {
     const backend = (await this.post(
       entity,
       file,
-      { dryRun: true, mapping, origin: opts?.origin, valueMapping: opts?.valueMapping },
+      { dryRun: true, mapping, origin: opts?.origin, valueMapping: opts?.valueMapping, sheet: opts?.sheet },
       onProgress,
     )) as BackendPreviewResult;
     return adaptPreview(entity, backend);
@@ -300,7 +300,7 @@ export class RealImportClient implements ImportClient {
     entity: Entity,
     file: File,
     mapping: ColumnMapping,
-    opts: { skipDuplicates: boolean; origin?: string | null; valueMapping?: ValueMapping },
+    opts: { skipDuplicates: boolean; origin?: string | null; valueMapping?: ValueMapping; sheet?: string | null },
     onProgress?: OnUploadProgress,
   ): Promise<CommitResult> {
     const backend = (await this.post(
@@ -312,6 +312,7 @@ export class RealImportClient implements ImportClient {
         skipDuplicates: opts.skipDuplicates,
         origin: opts.origin,
         valueMapping: opts.valueMapping,
+        sheet: opts.sheet,
       },
       onProgress,
     )) as BackendCommitResult;
@@ -352,6 +353,7 @@ export class RealImportClient implements ImportClient {
       skipDuplicates?: boolean;
       origin?: string | null;
       valueMapping?: ValueMapping;
+      sheet?: string | null;
     },
     onProgress?: OnUploadProgress,
   ): Promise<unknown> {
@@ -363,6 +365,8 @@ export class RealImportClient implements ImportClient {
     }
     // El sistema de origen: el backend aplica su perfil de columnas (lista blanca por id).
     if (opts.origin) fd.append("origin", opts.origin);
+    // La pestaña que el usuario confirmó (un .xlsx de varias hojas no se lee sin ella).
+    if (opts.sheet) fd.append("sheet", opts.sheet);
     if (opts.valueMapping && Object.keys(opts.valueMapping).length > 0) {
       fd.append("valueMapping", JSON.stringify(opts.valueMapping));
     }
@@ -443,6 +447,9 @@ function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
 
   return {
     totalRows: b.total,
+    ...(b.sheets?.length ? { sheets: b.sheets, suggestedSheet: b.suggestedSheet ?? null } : {}),
+    ...(b.needsSheet ? { needsSheet: true } : {}),
+    ...(b.sheet ? { sheet: b.sheet } : {}),
     columns,
     targetFields: CANONICAL_FIELDS[entity] ?? CANONICAL_FIELDS.patients,
     stats: { valid: b.validos, errors: b.invalidos, duplicates: b.duplicados, ...(b.omitidos ? { omitted: b.omitidos } : {}) },

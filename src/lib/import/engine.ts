@@ -22,6 +22,7 @@ import {
   type Entity,
   type PreviewResult,
   type PreviewRow,
+  type SheetInfo,
   type UnresolvedValue,
   type ValueMapping,
   type ValueOption,
@@ -206,25 +207,17 @@ function cellToRaw(cell: ExcelJS.Cell): any {
 }
 
 /**
- * La hoja que le toca a la entidad. Un .xlsx de varias pestañas (la plantilla
- * trae una por entidad) se lee por el NOMBRE de la pestaña; si ninguna se llama
- * como la entidad, o el libro tiene una sola hoja, manda la primera, como antes.
+ * La pestaña que PROPONE el nombre de la entidad («Saldos» para saldos). Solo es una
+ * propuesta: con varias hojas el usuario siempre la confirma o la cambia. Si ninguna se
+ * llama así, no propone nada: NUNCA cae en «la primera» en silencio.
  */
-function pickWorksheet(wb: ExcelJS.Workbook, sheetNames?: string[]): ExcelJS.Worksheet | undefined {
-  const sheets = wb.worksheets;
-  if (sheets.length > 1 && sheetNames && sheetNames.length > 0) {
-    const wanted = new Set(sheetNames.map(norm));
-    const hit = sheets.find((s) => wanted.has(norm(s.name)));
-    if (hit) return hit;
-  }
-  return sheets[0];
+function suggestSheet(sheets: ExcelJS.Worksheet[], sheetNames?: string[]): string | null {
+  if (!sheetNames || sheetNames.length === 0) return null;
+  const wanted = new Set(sheetNames.map(norm));
+  return sheets.find((s) => wanted.has(norm(s.name)))?.name ?? null;
 }
 
-async function readUploadWorksheet(
-  fileBytes: ArrayBuffer,
-  ext: string,
-  sheetNames?: string[],
-): Promise<ExcelJS.Worksheet | undefined> {
+async function readUploadSheets(fileBytes: ArrayBuffer, ext: string): Promise<ExcelJS.Worksheet[]> {
   const wb = new ExcelJS.Workbook();
   if (ext === "csv") {
     const buf = Buffer.from(fileBytes);
@@ -234,13 +227,14 @@ async function readUploadWorksheet(
     // Sniff del separador en la primera línea (Excel es-* exporta con ";").
     const firstLine = clean.subarray(0, Math.min(clean.length, 4096)).toString("utf8").split(/\r?\n/, 1)[0] ?? "";
     const delimiter = [",", ";", "\t"].reduce((a, b) => (firstLine.split(b).length > firstLine.split(a).length ? b : a));
-    return wb.csv.read(Readable.from([clean]), {
+    const ws = await wb.csv.read(Readable.from([clean]), {
       parserOptions: { delimiter },
       map: (val: any) => val, // valores crudos como texto
     });
+    return ws ? [ws] : [];
   }
   await wb.xlsx.load(fileBytes);
-  return pickWorksheet(wb, sheetNames);
+  return wb.worksheets;
 }
 
 function worksheetToRows(ws: ExcelJS.Worksheet, maxRows: number): { columns: string[]; rows: Record<string, any>[]; exceeded: boolean } {
@@ -274,15 +268,48 @@ function worksheetToRows(ws: ExcelJS.Worksheet, maxRows: number): { columns: str
   return { columns: headers.map((h) => h.key), rows, exceeded };
 }
 
+const SAMPLE_SHEET_ROWS = 5;
+
+/** Texto de una celda para la muestra de una pestaña (las fechas con su hora, si la traen). */
+function sampleCell(v: unknown): string {
+  if (v === undefined || v === null) return "";
+  if (v instanceof Date) {
+    const hora = (v as Date & { hora?: HoraDeReloj }).hora;
+    const hhmm = hora ? `${String(hora.h).padStart(2, "0")}:${String(hora.m).padStart(2, "0")}` : "";
+    if (v.getFullYear() < 1900 && hhmm) return hhmm;
+    const dia = `${String(v.getDate()).padStart(2, "0")}/${String(v.getMonth() + 1).padStart(2, "0")}/${v.getFullYear()}`;
+    return hhmm ? `${dia} ${hhmm}` : dia;
+  }
+  const s = String(v).replace(/\s+/g, " ").trim();
+  return s.length > 60 ? `${s.slice(0, 60)}…` : s;
+}
+
+export interface ParsedSpreadsheet {
+  columns: string[];
+  rows: Record<string, any>[];
+  /** Solo con varias pestañas. */
+  sheets?: SheetInfo[];
+  suggestedSheet?: string | null;
+  /** Varias pestañas y ninguna elegida: no se leyó ninguna (columns/rows vacíos). */
+  needsSheet?: boolean;
+  /** La pestaña leída (solo con varias). */
+  sheet?: string;
+}
+
 /**
  * Valida y parsea el archivo subido. Conserva los códigos/mensajes del endpoint
  * original. Devuelve los headers (columns) y las filas crudas (keyed por header).
  * Lanza ImportError (la ruta lo mapea a NextResponse).
+ *
+ * Un .xlsx de VARIAS pestañas nunca se lee «por la primera»: sin `sheet` devuelve
+ * `needsSheet` con la lista de pestañas y sus primeras filas (y la que propone el
+ * nombre); con `sheet` lee esa. Un .csv o un libro de una sola hoja no cambia.
  */
 export async function parseSpreadsheet(
   file: File,
   sheetNames?: string[],
-): Promise<{ columns: string[]; rows: Record<string, any>[] }> {
+  sheet?: string | null,
+): Promise<ParsedSpreadsheet> {
   if (!/\.(xlsx|csv)$/i.test(file.name)) throw new ImportError(400, "Solo .xlsx o .csv");
   if (file.size > MAX_BYTES) throw new ImportError(413, "Archivo supera 5MB");
 
@@ -303,13 +330,35 @@ export async function parseSpreadsheet(
   let columns: string[];
   let rows: Record<string, any>[];
   let exceeded: boolean;
+  let extra: Pick<ParsedSpreadsheet, "sheets" | "suggestedSheet" | "needsSheet" | "sheet"> = {};
   try {
-    const sheet = await readUploadWorksheet(fileBytes, ext, sheetNames);
-    if (!sheet) throw new ImportError(400, "Archivo vacío");
-    const collected = worksheetToRows(sheet, MAX_ROWS);
-    columns = collected.columns;
-    rows = collected.rows;
-    exceeded = collected.exceeded;
+    const sheets = await readUploadSheets(fileBytes, ext);
+    if (sheets.length === 0) throw new ImportError(400, "Archivo vacío");
+    if (sheets.length === 1) {
+      const collected = worksheetToRows(sheets[0], MAX_ROWS);
+      columns = collected.columns;
+      rows = collected.rows;
+      exceeded = collected.exceeded;
+    } else {
+      // Se lee cada pestaña una vez: sirve para describirla y, la elegida, para importarla.
+      const leidas = sheets.map((ws) => ({ ws, c: worksheetToRows(ws, MAX_ROWS) }));
+      const infos: SheetInfo[] = leidas.map(({ ws, c }) => ({
+        name: ws.name,
+        rows: c.rows.length,
+        columns: c.columns,
+        sample: c.rows.slice(0, SAMPLE_SHEET_ROWS).map((r) => c.columns.map((col) => sampleCell(r[col]))),
+      }));
+      const suggested = suggestSheet(sheets, sheetNames);
+      if (!sheet) {
+        return { columns: [], rows: [], sheets: infos, suggestedSheet: suggested, needsSheet: true };
+      }
+      const elegida = leidas.find((l) => l.ws.name === sheet);
+      if (!elegida) throw new ImportError(400, `El archivo no tiene una pestaña llamada «${sheet}»`);
+      columns = elegida.c.columns;
+      rows = elegida.c.rows;
+      exceeded = elegida.c.exceeded;
+      extra = { sheets: infos, suggestedSheet: suggested, sheet };
+    }
   } catch (e: any) {
     if (e instanceof ImportError) throw e;
     throw new ImportError(400, "No se pudo leer el archivo: " + (e?.message ?? "parse error"));
@@ -317,7 +366,7 @@ export async function parseSpreadsheet(
 
   if (exceeded) throw new ImportError(413, `Máximo ${MAX_ROWS} filas. Divide el archivo.`);
   if (rows.length === 0) throw new ImportError(400, "Sin filas de datos");
-  return { columns, rows };
+  return { columns, rows, ...extra };
 }
 
 // Topes del valueMapping que manda el cliente: es JSON arbitrario del body.
@@ -365,6 +414,8 @@ export async function parseImportForm(req: NextRequest): Promise<{
   columnMapping: ColumnMapping | null;
   origin: string | null;
   valueMapping: ValueMapping | null;
+  /** Pestaña elegida en un .xlsx de varias hojas. */
+  sheet: string | null;
 }> {
   let formData: FormData;
   try {
@@ -396,7 +447,9 @@ export async function parseImportForm(req: NextRequest): Promise<{
   const originRaw = formData.get("origin");
   const origin = typeof originRaw === "string" && originRaw.trim() ? originRaw.trim().slice(0, 40) : null;
   const valueMapping = parseValueMapping(formData.get("valueMapping"));
-  return { file, dryRun, skipDuplicates, columnMapping, origin, valueMapping };
+  const sheetRaw = formData.get("sheet");
+  const sheet = typeof sheetRaw === "string" && sheetRaw.trim() ? sheetRaw.trim().slice(0, 120) : null;
+  return { file, dryRun, skipDuplicates, columnMapping, origin, valueMapping, sheet };
 }
 
 // ---------------------------------------------------------------------------
@@ -606,13 +659,39 @@ export async function runImport(
     /** Id del perfil de origen (dentalink, excel…). Desconocido = sin perfil. */
     origin?: string | null;
     valueMapping?: ValueMapping | null;
+    /** Pestaña de un .xlsx de varias hojas (obligatoria si hay varias). */
+    sheet?: string | null;
   },
 ): Promise<PreviewResult | CommitResult> {
   // `clinicId: undefined` en Prisma NO filtra: se corta antes de tocar la base.
   if (typeof opts.clinicId !== "string" || !opts.clinicId) {
     throw new ImportError(401, "Sin clínica en la sesión");
   }
-  const { columns, rows: rawRows } = await parseSpreadsheet(opts.file, handler.sheetNames);
+  const parsed = await parseSpreadsheet(opts.file, handler.sheetNames, opts.sheet);
+  if (parsed.needsSheet) {
+    // Varias pestañas y ninguna elegida: se le dice al usuario cuáles hay (con sus primeras filas
+    // y la que propone el nombre) y NO se procesa nada. Importar sin elegir es un error.
+    if (!opts.dryRun) {
+      throw new ImportError(400, "El archivo tiene varias pestañas: elige cuál importar antes de continuar", undefined, "SHEET_REQUIRED");
+    }
+    return {
+      entity: handler.entity,
+      total: 0,
+      validos: 0,
+      invalidos: 0,
+      duplicados: 0,
+      columns: [],
+      suggestedMapping: {},
+      preview: [],
+      sheets: parsed.sheets,
+      suggestedSheet: parsed.suggestedSheet ?? null,
+      needsSheet: true,
+    };
+  }
+  const { columns, rows: rawRows } = parsed;
+  const sheetInfo = parsed.sheets
+    ? { sheets: parsed.sheets, suggestedSheet: parsed.suggestedSheet ?? null, sheet: parsed.sheet }
+    : {};
 
   // Sugerencia = autodetección genérica + lo que sabe el perfil del origen
   // (manda el perfil donde opina: es específico de ese sistema).
@@ -646,6 +725,7 @@ export async function runImport(
         samples: columnSamples(columns, rawRows),
         preview: [],
         mappingError: structErr,
+        ...sheetInfo,
       };
     }
     throw new ImportError(400, structErr);
@@ -694,6 +774,7 @@ export async function runImport(
       invalidos: counts.invalidos,
       duplicados: counts.duplicados,
       ...(counts.omitidos > 0 ? { omitidos: counts.omitidos } : {}),
+      ...sheetInfo,
       columns,
       suggestedMapping: suggested,
       samples: columnSamples(columns, rawRows),

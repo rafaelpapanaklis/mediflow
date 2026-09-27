@@ -1005,6 +1005,22 @@
         "amountFormatNeeded": "Confirma cómo leer los montos para continuar",
         "unverifiedReview": "El perfil de {name} aún no está validado con un export real: revisa bien esta vista previa antes de importar."
       },
+      "sheet": {
+        "title": "¿Qué pestaña es de {entity}?",
+        "sub": "Tu archivo tiene {count} pestañas. Confirma cuál trae estos datos: nunca elegimos una por ti.",
+        "none": "Ninguna pestaña se llama como {entity}: elige la que corresponda.",
+        "suggested": "Sugerida",
+        "rows": {
+          "one": "{count} fila",
+          "other": "{count} filas"
+        },
+        "empty": "Vacía",
+        "previewOf": "Primeras filas de «{name}»",
+        "use": "Usar esta pestaña",
+        "needed": "Elige la pestaña para continuar",
+        "current": "Pestaña: {name}.",
+        "change": "Cambiar"
+      },
       "upload": {
         "uploading": "Subiendo archivo… {pct}%",
         "processing": "Procesando…",

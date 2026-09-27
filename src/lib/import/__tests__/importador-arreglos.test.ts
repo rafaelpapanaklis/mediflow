@@ -82,7 +82,7 @@ async function xlsx(nombre: string, cabeceras: string[], filas: any[][], formato
 async function correr(
   entidad: string,
   file: File,
-  opts: { dryRun?: boolean; skipDuplicates?: boolean; origin?: string; valueMapping?: any; columnMapping?: Record<string, string> } = { dryRun: true },
+  opts: { dryRun?: boolean; skipDuplicates?: boolean; origin?: string; valueMapping?: any; columnMapping?: Record<string, string>; sheet?: string } = { dryRun: true },
 ): Promise<any> {
   const { runImport } = await engine();
   const { HANDLERS } = await entidades();
@@ -96,6 +96,7 @@ async function correr(
     columnMapping: opts.columnMapping ?? null,
     origin: opts.origin ?? null,
     valueMapping: opts.valueMapping ?? null,
+    sheet: opts.sheet ?? null,
   });
 }
 const fila = (res: any, n: number) => res.preview.find((r: any) => r.row === n);
@@ -642,4 +643,112 @@ test("montos y horas raros: «500.-» no es negativo, «1-2» y «9.5» no se in
   assert.equal(analizarMonto("-45,50").tipo, "ok");
   assert.equal(parseHora("9.5"), null);
   assert.deepEqual({ ...parseHora("9.05") } as any, { h: 9, m: 5 });
+});
+
+// ═══ EXCEL CON VARIAS PESTAÑAS (Ajuste 1) ══════════════════════════════════
+
+async function libro(hojas: Record<string, { cab: string[]; filas: any[][] }>, nombre = "datos.xlsx"): Promise<File> {
+  const wb = new ExcelJS.Workbook();
+  for (const [n, h] of Object.entries(hojas)) {
+    const ws = wb.addWorksheet(n);
+    ws.addRow(h.cab);
+    h.filas.forEach((f) => ws.addRow(f));
+  }
+  return new File([(await wb.xlsx.writeBuffer()) as ArrayBuffer], nombre);
+}
+
+const DOS_HOJAS = () => libro({
+  "Notas internas": { cab: ["Texto"], filas: [["recordar limpiar agenda"]] },
+  Saldos: { cab: ["Celular", "Saldo"], filas: [["5551234567", 1500], ["+56987654321", 300]] },
+  Pacientes: { cab: ["Nombre", "Apellido", "Celular"], filas: [["Carla", "Mena", "5550000001"]] },
+});
+
+test("varias pestañas: sin elegir NO se lee ninguna (ni la primera); lista las pestañas con sus primeras filas y propone por nombre", async () => {
+  reiniciar();
+  const antes = { ...base.llamadas };
+  const res = await correr("balances", await DOS_HOJAS());
+  assert.equal(res.needsSheet, true);
+  assert.equal(res.suggestedSheet, "Saldos", "propone por nombre, como pickWorksheet");
+  assert.deepEqual(res.sheets.map((s: any) => s.name), ["Notas internas", "Saldos", "Pacientes"]);
+  const saldos = res.sheets.find((s: any) => s.name === "Saldos");
+  assert.deepEqual(saldos.columns, ["Celular", "Saldo"]);
+  assert.equal(saldos.rows, 2);
+  assert.deepEqual(saldos.sample, [["5551234567", "1500"], ["+56987654321", "300"]]);
+  // No procesó nada: ni una consulta a la base.
+  assert.deepEqual(base.llamadas, antes);
+  assert.deepEqual(res.preview, []);
+  assert.equal(res.total, 0);
+});
+
+test("varias pestañas: importar SIN elegir es un error (no toma la primera en silencio) y no crea nada", async () => {
+  reiniciar();
+  await assert.rejects(
+    correr("balances", await DOS_HOJAS(), { dryRun: false }),
+    (e: any) => e.status === 400 && e.code === "SHEET_REQUIRED",
+  );
+  assert.equal(tabla("invoice").length, 0);
+});
+
+test("varias pestañas: con la pestaña elegida se lee esa (también una distinta de la propuesta) y sigue mostrando las demás para cambiar", async () => {
+  reiniciar();
+  const ok = await correr("balances", await DOS_HOJAS(), { sheet: "Saldos" });
+  assert.equal(ok.needsSheet, undefined);
+  assert.equal(ok.sheet, "Saldos");
+  assert.equal(ok.sheets.length, 3, "la vista previa conserva la lista para poder cambiar");
+  assert.equal(ok.validos, 2); // 5551234567 (p1) y +56987654321 (p2) existen
+  assert.deepEqual(ok.columns, ["Celular", "Saldo"]);
+
+  // El usuario cambia a «Pacientes» aunque estemos importando pacientes con el nombre de otra: manda su elección.
+  const pac = await correr("patients", await DOS_HOJAS(), { sheet: "Pacientes" });
+  assert.equal(pac.validos, 1);
+  assert.equal(fila(pac, 2).data.firstName, "Carla");
+  // Elige una pestaña que NO es la propuesta: se respeta (aquí «Notas internas», que no sirve para saldos).
+  const otra = await correr("balances", await DOS_HOJAS(), { sheet: "Notas internas" });
+  assert.equal(otra.mappingError !== undefined, true, "sus columnas no sirven: pide emparejar, no importa nada");
+  assert.equal(otra.validos, 0);
+});
+
+test("varias pestañas: una pestaña que no existe es un 400, y si ninguna se llama como los datos NO propone la primera", async () => {
+  reiniciar();
+  await assert.rejects(correr("balances", await DOS_HOJAS(), { sheet: "Inventada" }), (e: any) => e.status === 400 && /Inventada/.test(e.message));
+  const sinNombre = await libro({ Hoja1: { cab: ["Celular", "Saldo"], filas: [["5551234567", 10]] }, Hoja2: { cab: ["x"], filas: [["y"]] } });
+  const res = await correr("balances", sinNombre);
+  assert.equal(res.needsSheet, true);
+  assert.equal(res.suggestedSheet, null);
+});
+
+test("una sola pestaña o un .csv: todo igual que siempre (sin selector)", async () => {
+  reiniciar();
+  const una = await libro({ Cualquiera: { cab: ["Celular", "Saldo"], filas: [["5551234567", 10]] } });
+  const r1 = await correr("balances", una);
+  assert.equal(r1.needsSheet, undefined);
+  assert.equal(r1.sheets, undefined);
+  assert.equal(r1.validos, 1);
+  const r2 = await correr("balances", csv("s.csv", "Celular,Saldo\n5551234567,10\n"));
+  assert.equal(r2.sheets, undefined);
+  assert.equal(r2.validos, 1);
+});
+
+test("varias pestañas: la muestra enseña la hora de las celdas de fecha y hora (no solo el día)", async () => {
+  reiniciar();
+  const f = await libro({
+    Citas: { cab: ["Paciente", "Fecha", "Hora"], filas: [["María Hernández", new Date(Date.UTC(2030, 0, 15)), new Date(Date.UTC(1899, 11, 30, 15, 30))]] },
+    Otra: { cab: ["a"], filas: [["b"]] },
+  });
+  const res = await correr("appointments", f);
+  const citas = res.sheets.find((s: any) => s.name === "Citas");
+  assert.deepEqual(citas.sample[0], ["María Hernández", "15/01/2030", "15:30"]);
+});
+
+test("el formulario lleva la pestaña elegida hasta el motor (parseImportForm)", async () => {
+  const { NextRequest } = await import("next/server");
+  const { parseImportForm } = await engine();
+  const fd = new FormData();
+  fd.append("file", csv("s.csv", "a\n1"));
+  fd.append("sheet", "  Saldos  ");
+  const req = new NextRequest("http://localhost/x", { method: "POST", body: fd });
+  assert.equal((await parseImportForm(req)).sheet, "Saldos");
+  const fd2 = new FormData();
+  fd2.append("file", csv("s.csv", "a\n1"));
+  assert.equal((await parseImportForm(new NextRequest("http://localhost/x", { method: "POST", body: fd2 }))).sheet, null);
 });

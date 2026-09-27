@@ -1005,6 +1005,22 @@
         "amountFormatNeeded": "Confirm how to read the amounts to continue",
         "unverifiedReview": "The {name} profile has not been validated against a real export yet: check this preview carefully before importing."
       },
+      "sheet": {
+        "title": "Which tab holds the {entity}?",
+        "sub": "Your file has {count} tabs. Confirm which one has this data: we never pick one for you.",
+        "none": "No tab is named like {entity}: pick the right one.",
+        "suggested": "Suggested",
+        "rows": {
+          "one": "{count} row",
+          "other": "{count} rows"
+        },
+        "empty": "Empty",
+        "previewOf": "First rows of “{name}”",
+        "use": "Use this tab",
+        "needed": "Pick the tab to continue",
+        "current": "Tab: {name}.",
+        "change": "Change"
+      },
       "upload": {
         "uploading": "Uploading file… {pct}%",
         "processing": "Processing…",

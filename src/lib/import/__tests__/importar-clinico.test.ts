@@ -94,7 +94,7 @@ async function correr(
   file: File,
   opts: {
     dryRun: boolean; columnMapping?: Record<string, string>; origin?: string; valueMapping?: any;
-    skipDuplicates?: boolean; clinicId?: string; userId?: string; role?: string;
+    skipDuplicates?: boolean; clinicId?: string; userId?: string; role?: string; sheet?: string;
   },
 ): Promise<any> {
   const { runImport } = await engine();
@@ -109,6 +109,7 @@ async function correr(
     columnMapping: opts.columnMapping ?? null,
     origin: opts.origin ?? null,
     valueMapping: opts.valueMapping ?? null,
+    sheet: opts.sheet ?? null,
   });
 }
 
@@ -430,7 +431,13 @@ test("plantilla: trae una pestaña por entidad y cada importador lee la suya y r
     ["patients", "Pacientes"], ["balances", "Saldos"], ["appointments", "Citas"],
     ["medicalHistory", "Expedientes"], ["clinicalNotes", "Notas"], ["quotes", "Presupuestos"],
   ] as const) {
-    const prev = await correr(entidad, plantilla(), { dryRun: true });
+    // Un libro de varias pestañas NO se lee por la primera: sin elegir, avisa cuáles hay y
+    // propone la que se llama como la entidad; con la elegida, la lee.
+    const sinElegir = await correr(entidad, plantilla(), { dryRun: true });
+    assert.equal(sinElegir.needsSheet, true, `${entidad}: debe pedir pestaña`);
+    assert.equal(sinElegir.suggestedSheet, hoja, `${entidad}: propone su pestaña por nombre`);
+    assert.deepEqual(sinElegir.preview, []);
+    const prev = await correr(entidad, plantilla(), { dryRun: true, sheet: hoja });
     const cabeceras: string[] = [];
     wb.getWorksheet(hoja)!.getRow(1).eachCell((c) => { cabeceras.push(String(c.value)); });
     assert.deepEqual(prev.columns, cabeceras, `${entidad} leyó la pestaña equivocada`);
@@ -439,9 +446,9 @@ test("plantilla: trae una pestaña por entidad y cada importador lee la suya y r
     assert.deepEqual(Object.keys(prev.suggestedMapping).sort(), [...cabeceras].sort(), `${entidad}: encabezado sin reconocer`);
   }
   // Las filas de muestra de las entidades nuevas son de María, que existe: válidas.
-  assert.equal((await correr("medicalHistory", plantilla(), { dryRun: true })).validos, 1);
-  assert.equal((await correr("clinicalNotes", plantilla(), { dryRun: true })).validos, 1);
-  assert.equal((await correr("quotes", plantilla(), { dryRun: true })).validos, 2);
+  assert.equal((await correr("medicalHistory", plantilla(), { dryRun: true, sheet: "Expedientes" })).validos, 1);
+  assert.equal((await correr("clinicalNotes", plantilla(), { dryRun: true, sheet: "Notas" })).validos, 1);
+  assert.equal((await correr("quotes", plantilla(), { dryRun: true, sheet: "Presupuestos" })).validos, 2);
 });
 
 // ═══ TENANT, FECHAS Y PIEZAS SUELTAS ═══════════════════════════════════════

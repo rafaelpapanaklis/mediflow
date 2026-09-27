@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       columnMapping: form.columnMapping,
       origin: form.origin,
       valueMapping: form.valueMapping,
+      sheet: form.sheet,
     });
     return NextResponse.json(result);
   } catch (e) {
