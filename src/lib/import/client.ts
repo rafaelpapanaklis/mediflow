@@ -193,7 +193,8 @@ function sampleText(v: unknown): string {
 /** Nombre legible de una fila de preview a partir de su `data` (cualquier entidad). */
 function rowName(data: Record<string, any>): string {
   const full = [data.firstName, data.lastName].filter(Boolean).join(" ").trim();
-  const name = data.name || full || data.patientName || data.fullName;
+  // `origName`: lo que decía el archivo (las filas con error no traen nada más).
+  const name = data.name || full || data.patientName || data.fullName || data.origName;
   return name ? String(name) : "—";
 }
 
@@ -413,7 +414,7 @@ export class RealImportClient implements ImportClient {
  * - targetFields: campos canónicos REALES de la entidad (no los del mock).
  * - rows: name/phone/balance derivados de `data` + estado + motivo.
  */
-function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
+export function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
   const columns: DetectedColumn[] = b.columns.map((header) => {
     const suggestion = b.suggestedMapping?.[header] ?? "";
     let sample = b.samples?.[header] ? sampleText(b.samples[header]) : "";
@@ -435,11 +436,18 @@ function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
     return {
       row: r.row,
       name: rowName(data),
-      phone: data.phone ? String(data.phone) : "—",
+      phone: data.phone ? String(data.phone) : data.origPhone ? String(data.origPhone) : "—",
       balance: amount !== null ? formatMoney(amount) : "—",
       // Solo saldos traen `kind` (adeudo/favor); en pacientes/citas queda undefined.
       kind: data.kind === "credit" || data.kind === "debt" ? data.kind : undefined,
       detail: rowDetail(entity, data),
+      ...(entity === "appointments"
+        ? {
+            ...(data.startsLocal ? { when: String(data.startsLocal) } : {}),
+            ...(data.doctorName ? { doctor: String(data.doctorName) } : {}),
+            ...(typeof data.durationMin === "number" ? { duration: data.durationMin } : {}),
+          }
+        : {}),
       status: r.status,
       reason: rowReason(r),
     };
@@ -452,6 +460,7 @@ function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
     ...(b.sheet ? { sheet: b.sheet } : {}),
     columns,
     targetFields: CANONICAL_FIELDS[entity] ?? CANONICAL_FIELDS.patients,
+    ...(entity === "appointments" ? (() => { const tz = b.preview.find((r) => r.data?.timezone)?.data.timezone; return tz ? { timezone: String(tz) } : {}; })() : {}),
     stats: { valid: b.validos, errors: b.invalidos, duplicates: b.duplicados, ...(b.omitidos ? { omitted: b.omitidos } : {}) },
     rows,
     ...(b.mappingError ? { mappingError: b.mappingError } : {}),

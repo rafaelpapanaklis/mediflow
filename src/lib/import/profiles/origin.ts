@@ -73,6 +73,12 @@ export interface OriginProfile {
    * encima de la autodetección cuando el asistente dice de qué origen viene.
    */
   entityMappings?: Partial<Record<Exclude<Entity, "patients">, Record<string, string>>>;
+  /**
+   * Nombre de la pestaña/reporte que las instrucciones de ESE sistema mandan bajar para cada
+   * entidad, cuando no coincide con el nombre genérico («Pacientes morosos» para saldos). Solo
+   * PROPONE la pestaña en un libro de varias hojas; el usuario siempre confirma.
+   */
+  sheetNames?: Partial<Record<Exclude<Entity, "patients">, string[]>>;
 }
 
 /**

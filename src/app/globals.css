@@ -3584,6 +3584,9 @@
   .imp-src-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
   .imp-step__lbl { display: none; }
   .imp-step.is-current .imp-step__lbl { display: inline; }
+  /* En 390 los 6 pasos + la etiqueta del actual tienen que CABER (antes «Revisar» se cortaba en el borde). */
+  .imp-step { gap: 6px; }
+  .imp-step__line { min-width: 6px; margin: 0 4px; }
   .imp-callout { flex-wrap: wrap; }
   .imp-callout .btn-new { width: 100%; }
   .imp-foot { flex-wrap: wrap; }

@@ -9,7 +9,7 @@ import type { TFunction } from "@/i18n/t";
 import { CLINICAL_ENTITIES, VALUE_UNLINKED, type Entity, type PreviewResult, type PreviewRow, type ValueOption } from "./import-client";
 
 /** Entidades cuya tercera columna es el saldo; las demás enseñan un resumen de la fila. */
-const WITH_BALANCE: ReadonlySet<Entity> = new Set<Entity>(["patients", "balances", "appointments"]);
+const WITH_BALANCE: ReadonlySet<Entity> = new Set<Entity>(["patients", "balances"]);
 
 function StatusBadge({ t, row }: { t: TFunction; row: PreviewRow }) {
   const badge =
@@ -131,6 +131,8 @@ function AmountFormat({ t, info }: { t: TFunction; info: AmountFormatProps }) {
 export function StepReview({ t, entity, unverifiedName, amountFormat, preview, skipDup, onToggleSkip, decisions, onDecide }: Props) {
   const { stats, rows } = preview;
   const withBalance = WITH_BALANCE.has(entity);
+  // Las CITAS se revisan por lo que importa de una cita: cuándo (en la zona de la clínica), con quién y cuánto dura.
+  const citas = entity === "appointments";
   return (
     <div>
       <h2 className="imp-title">{t("shell.importClinic.step6.title")}</h2>
@@ -175,6 +177,12 @@ export function StepReview({ t, entity, unverifiedName, amountFormat, preview, s
         </p>
       )}
 
+      {citas && preview.timezone && (
+        <p className="imp-hint" style={{ margin: "10px 0 0", textAlign: "left" }}>
+          {t("shell.importClinic.step6.tzHint", { tz: preview.timezone })}
+        </p>
+      )}
+
       <div className="imp-review-toolbar">
         {CLINICAL_ENTITIES.has(entity) ? (
           // Lo clínico nunca reimporta un duplicado: no hay interruptor que ofrecer.
@@ -202,13 +210,23 @@ export function StepReview({ t, entity, unverifiedName, amountFormat, preview, s
 
       <div className="table-wrap" style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
-          <table className="table-new" style={{ minWidth: 540 }}>
+          <table className="table-new" style={{ minWidth: citas ? 660 : 540 }}>
             <thead>
               <tr>
                 <th style={{ width: 56 }}>{t("shell.importClinic.step6.colRow")}</th>
-                <th>{t("shell.importClinic.step6.colName")}</th>
-                <th>{t("shell.importClinic.step6.colPhone")}</th>
-                <th>{t(withBalance ? "shell.importClinic.step6.colBalance" : "shell.importClinic.step6.colDetail")}</th>
+                <th>{t(citas ? "shell.importClinic.step6.colPatient" : "shell.importClinic.step6.colName")}</th>
+                {citas ? (
+                  <>
+                    <th>{t("shell.importClinic.step6.colWhen")}</th>
+                    <th>{t("shell.importClinic.step6.colDoctor")}</th>
+                    <th>{t("shell.importClinic.step6.colDuration")}</th>
+                  </>
+                ) : (
+                  <>
+                    <th>{t("shell.importClinic.step6.colPhone")}</th>
+                    <th>{t(withBalance ? "shell.importClinic.step6.colBalance" : "shell.importClinic.step6.colDetail")}</th>
+                  </>
+                )}
                 <th>{t("common.status")}</th>
               </tr>
             </thead>
@@ -217,6 +235,14 @@ export function StepReview({ t, entity, unverifiedName, amountFormat, preview, s
                 <tr key={r.row} className={r.status === "error" ? "imp-row-err" : r.status === "duplicate" || r.status === "skipped" ? "imp-row-dup" : ""}>
                   <td className="mono">{r.row}</td>
                   <td>{r.name}</td>
+                  {citas ? (
+                    <>
+                      <td className="mono" style={{ whiteSpace: "nowrap" }}>{r.when ?? "—"}</td>
+                      <td>{r.doctor ?? "—"}</td>
+                      <td className="mono">{r.duration ? t("shell.importClinic.step6.minutes", { count: r.duration }) : "—"}</td>
+                    </>
+                  ) : (
+                  <>
                   <td className="mono">{r.phone}</td>
                   <td className={withBalance ? "mono" : undefined}>
                     <span style={r.kind === "credit" ? { color: "var(--success)", fontWeight: 600 } : undefined}>
@@ -235,6 +261,8 @@ export function StepReview({ t, entity, unverifiedName, amountFormat, preview, s
                       </span>
                     )}
                   </td>
+                  </>
+                  )}
                   <td><StatusBadge t={t} row={r} /></td>
                 </tr>
               ))}

@@ -867,6 +867,7 @@
         "title": "Where does your data come from?",
         "sub": "Choose your current system. We'll adapt the instructions and column mapping to your choice.",
         "metaProfile": "Profile ready",
+        "metaUnverified": "Unvalidated profile",
         "metaManual": "Manual mapping",
         "assistedTitle": "Prefer we do it for you?",
         "assistedDesc": "Free assisted migration: send us your backup and our team gets it ready.",
@@ -985,6 +986,12 @@
           "other": "Import {count} records"
         },
         "colDetail": "Detail",
+        "colPatient": "Patient",
+        "colWhen": "Date and time",
+        "colDoctor": "Doctor",
+        "colDuration": "Duration",
+        "minutes": "{count} min",
+        "tzHint": "Date and time in the clinic's time zone ({tz}).",
         "unresolvedTitle": {
           "one": "{count} procedure isn't in your catalog",
           "other": "{count} procedures aren't in your catalog"

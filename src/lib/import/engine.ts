@@ -583,6 +583,20 @@ export interface EntityHandler {
   valueOptions?(clinicId: string): Promise<Record<string, ValueOption[]>>;
 }
 
+/**
+ * Las filas con error (o omitidas) salen del handler sin `data`: en la vista previa
+ * quedaban como «—» aunque el archivo traía el nombre. Se les pega lo que decía el
+ * archivo (nombre y teléfono tal cual) para que se sepa de QUIÉN es cada fila.
+ */
+function conNombreDelArchivo(r: PreviewRow, m?: Record<string, any>): PreviewRow {
+  if (!m) return r;
+  const texto = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
+  const nombre = texto(m.fullName) || [m.name, m.lastName].map(texto).filter(Boolean).join(" ") || [m.firstName, m.lastName].map(texto).filter(Boolean).join(" ");
+  const tel = texto(m.phone);
+  if (!nombre && !tel) return r;
+  return { ...r, data: { ...r.data, ...(nombre ? { origName: nombre } : {}), ...(tel ? { origPhone: tel } : {}) } };
+}
+
 const SAMPLE_MAX = 80;
 
 /** Primer valor no vacío de cada columna, como texto (las fechas de celda, en AAAA-MM-DD). */
@@ -667,7 +681,14 @@ export async function runImport(
   if (typeof opts.clinicId !== "string" || !opts.clinicId) {
     throw new ImportError(401, "Sin clínica en la sesión");
   }
-  const parsed = await parseSpreadsheet(opts.file, handler.sheetNames, opts.sheet);
+  // El perfil del origen puede nombrar además la pestaña que sus instrucciones mandan bajar
+  // («Pacientes morosos» para saldos): también se PROPONE (nunca se elige sola).
+  const profile = opts.origin ? getOriginProfile(opts.origin) : null;
+  const parsed = await parseSpreadsheet(
+    opts.file,
+    [...(handler.sheetNames ?? []), ...(profile?.sheetNames?.[handler.entity as Exclude<Entity, "patients">] ?? [])],
+    opts.sheet,
+  );
   if (parsed.needsSheet) {
     // Varias pestañas y ninguna elegida: se le dice al usuario cuáles hay (con sus primeras filas
     // y la que propone el nombre) y NO se procesa nada. Importar sin elegir es un error.
@@ -695,7 +716,6 @@ export async function runImport(
 
   // Sugerencia = autodetección genérica + lo que sabe el perfil del origen
   // (manda el perfil donde opina: es específico de ese sistema).
-  const profile = opts.origin ? getOriginProfile(opts.origin) : null;
   const suggested: ColumnMapping = {
     ...autodetect(columns, handler.headerVariants),
     ...(profile ? profileSuggestions(columns, profileMappingFor(profile, handler.entity), handler.headerVariants) : {}),
@@ -739,6 +759,8 @@ export async function runImport(
   }
   if (mapped.length === 0) throw new ImportError(400, "Sin filas de datos");
 
+  const mappedPorFila = new Map(mapped.map((m) => [m.row, m.mapped]));
+
   const ctx: ImportContext = {
     userId: opts.userId,
     role: opts.role ?? "",
@@ -778,7 +800,7 @@ export async function runImport(
       columns,
       suggestedMapping: suggested,
       samples: columnSamples(columns, rawRows),
-      preview: preview.slice(0, 200).map((r) => (handler.toPreview ? handler.toPreview(r) : r)),
+      preview: preview.slice(0, 200).map((r) => conNombreDelArchivo(handler.toPreview ? handler.toPreview(r) : r, mappedPorFila.get(r.row))),
       ...(unresolved.length > 0 ? { unresolved } : {}),
       ...(options ? { options } : {}),
     };

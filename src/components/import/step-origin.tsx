@@ -39,7 +39,11 @@ export function StepOrigin({ t, origins, selected, onSelect, onAssisted }: Props
               <span className="imp-src-card__nm">{o.name}</span>
               <span className="imp-src-card__meta">
                 {o.hasProfile
-                  ? t("shell.importClinic.step1.metaProfile")
+                  // «Perfil listo» solo si de verdad se validó con un export real; si no, lo mismo que
+                  // dicen los pasos siguientes.
+                  ? o.verified === false
+                    ? t("shell.importClinic.step1.metaUnverified")
+                    : t("shell.importClinic.step1.metaProfile")
                   : t("shell.importClinic.step1.metaManual")}
               </span>
             </button>
