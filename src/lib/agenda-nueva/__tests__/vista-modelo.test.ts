@@ -287,3 +287,44 @@ test("una cita PENDING que espera validación la sigue marcando", () => {
   );
   assert.equal(v.esperaValidacion, true, "se normaliza antes de comparar con SCHEDULED");
 });
+
+/* ── Ajuste 2 (ws1-t3) — notaAnticipo: «Apartada»/«Anticipo pagado» ───── */
+
+test("SCHEDULED con holdExpiresAt vivo: «Apartada · paga antes de HH:MM»", () => {
+  const v = aCitaVista(
+    cita({ status: "SCHEDULED", holdExpiresAt: "2026-09-02T18:30:00.000Z" }), // 12:30 en México
+    CTX,
+  );
+  assert.equal(v.notaAnticipo, "Apartada · paga antes de 12:30");
+});
+
+test("SCHEDULED con holdExpiresAt YA VENCIDO: sin nota (el apartado ya no cuenta)", () => {
+  const v = aCitaVista(
+    cita({ status: "SCHEDULED", holdExpiresAt: "2026-09-02T17:00:00.000Z" }), // antes de AHORA (17:20)
+    CTX,
+  );
+  assert.equal(v.notaAnticipo, null);
+});
+
+test("SCHEDULED sin holdExpiresAt: sin nota, como siempre", () => {
+  const v = aCitaVista(cita({ status: "SCHEDULED", holdExpiresAt: null }), CTX);
+  assert.equal(v.notaAnticipo, null);
+});
+
+test("CONFIRMED con depositoPagado: «Anticipo pagado»", () => {
+  const v = aCitaVista(cita({ status: "CONFIRMED", depositoPagado: true }), CTX);
+  assert.equal(v.notaAnticipo, "Anticipo pagado");
+});
+
+test("CONFIRMED sin depositoPagado (confirmada a mano, como siempre): sin nota", () => {
+  const v = aCitaVista(cita({ status: "CONFIRMED", depositoPagado: false }), CTX);
+  assert.equal(v.notaAnticipo, null);
+  const v2 = aCitaVista(cita({ status: "CONFIRMED" }), CTX); // depositoPagado ausente (undefined)
+  assert.equal(v2.notaAnticipo, null);
+});
+
+test("una cita CHECKED_IN con depositoPagado: sin nota — ya hay cosas más urgentes que decir", () => {
+  const v = aCitaVista(cita({ status: "CHECKED_IN", depositoPagado: true, checkedInAt: "2026-09-02T17:10:00.000Z" }), CTX);
+  assert.equal(v.notaAnticipo, null);
+  assert.match(v.detalle, /llegó|sala de espera/);
+});

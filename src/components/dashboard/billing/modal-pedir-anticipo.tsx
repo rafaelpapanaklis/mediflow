@@ -35,6 +35,9 @@ interface EstadoGET {
   sugerido: number | null;
   horasSugeridas: number;
   pendiente: PendienteDTO | null;
+  /** Ajuste 2: SOLO citas futuras. false = ni se ofrece el formulario. */
+  citaElegible?: boolean;
+  motivoCitaNoElegible?: string | null;
 }
 
 interface ResultadoPOST {
@@ -216,6 +219,8 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo }: Modal
                 </div>
               )}
             </>
+          ) : estado?.citaElegible === false ? (
+            <p style={{ fontSize: 14, color: "var(--text-2)" }}>{estado.motivoCitaNoElegible}</p>
           ) : (
             <>
               {sinFactura && (

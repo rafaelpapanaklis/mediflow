@@ -668,11 +668,17 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               </button>
             )}
 
-            {/* Pedir anticipo (ws1-t3 fase 1): mientras la cita siga viva, con
-                Mercado Pago o sin él — el modal dice si no está conectado. El
-                servidor exige "billing.deposit"; READONLY nunca la tiene, así
-                que ni se le pinta el botón. */}
-            {!terminal && userRole !== "READONLY" && (
+            {/* Pedir anticipo (ws1-t3 fase 1): SOLO citas futuras (Ajuste 2,
+                decisión de Rafael) — SCHEDULED/CONFIRMED y con inicio después
+                de ahora; el servidor exige exactamente lo mismo
+                (citaEsFuturaParaAnticipo), así que el botón nunca promete algo
+                que el servidor va a rechazar. Con Mercado Pago o sin él — el
+                modal dice si no está conectado. El servidor exige
+                "billing.deposit"; READONLY nunca la tiene, así que ni se le
+                pinta el botón. */}
+            {(cita.estado === "SCHEDULED" || cita.estado === "CONFIRMED") &&
+              new Date(dto.startsAt).getTime() > ahora.getTime() &&
+              userRole !== "READONLY" && (
               <button type="button" className={s.accionSecundaria} onClick={() => setPidiendoAnticipo(true)}>
                 <Wallet size={18} strokeWidth={2} />
                 Pedir anticipo

@@ -9,6 +9,7 @@ import {
   PANEL_HORAS_MIN,
   calcularComision,
   calcularMontoAnticipo,
+  citaEsFuturaParaAnticipo,
   evaluarPago,
   refDeAnticipo,
   sugeridoAnticipoPanel,
@@ -228,5 +229,29 @@ describe("validarPlazoPanelHoras", () => {
     assert.match(validarPlazoPanelHoras(0) ?? "", /horas/);
     assert.match(validarPlazoPanelHoras(49) ?? "", /horas/);
     assert.match(validarPlazoPanelHoras(1.5) ?? "", /horas/);
+  });
+});
+
+describe("citaEsFuturaParaAnticipo — Ajuste 2 (decisión de Rafael): SOLO citas futuras", () => {
+  const ahora = new Date("2026-09-27T18:00:00Z");
+  const futuro = new Date("2026-09-27T19:00:00Z");
+  const pasado = new Date("2026-09-27T17:00:00Z");
+
+  it("SCHEDULED futura: sí", () => {
+    assert.equal(citaEsFuturaParaAnticipo({ status: "SCHEDULED", startsAt: futuro }, ahora), true);
+  });
+  it("CONFIRMED futura: también sí (no solo SCHEDULED)", () => {
+    assert.equal(citaEsFuturaParaAnticipo({ status: "CONFIRMED", startsAt: futuro }, ahora), true);
+  });
+  it("SCHEDULED pero ya pasó: no", () => {
+    assert.equal(citaEsFuturaParaAnticipo({ status: "SCHEDULED", startsAt: pasado }, ahora), false);
+  });
+  it("justo ahora (ni un segundo de margen): no — tiene que ser estrictamente después", () => {
+    assert.equal(citaEsFuturaParaAnticipo({ status: "SCHEDULED", startsAt: ahora }, ahora), false);
+  });
+  it("cualquier otro estado, aunque sea futura: no (CHECKED_IN, COMPLETED, CANCELLED, NO_SHOW…)", () => {
+    for (const status of ["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS", "COMPLETED", "CHECKED_OUT", "CANCELLED", "NO_SHOW", "PENDING"]) {
+      assert.equal(citaEsFuturaParaAnticipo({ status, startsAt: futuro }, ahora), false, status);
+    }
   });
 });

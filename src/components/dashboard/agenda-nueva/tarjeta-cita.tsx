@@ -105,7 +105,10 @@ export function TarjetaCita({
     .filter(Boolean)
     .join(" ");
 
-  const segundaLinea = [cita.tratamiento, cita.detalle].filter(Boolean).join(" · ");
+  // Ajuste 2 (ws1-t3): «Apartada · paga antes de HH:MM» / «Anticipo pagado»
+  // SUSTITUYE la segunda línea entera (Día y Semana) en vez de sumarse — son
+  // dos líneas fijas, y esto es lo que Rafael pidió ver de un vistazo.
+  const segundaLinea = cita.notaAnticipo ?? [cita.tratamiento, cita.detalle].filter(Boolean).join(" · ");
 
   return (
     <button
@@ -159,7 +162,7 @@ export function TarjetaCita({
       </span>
 
       <span className={s.tarjetaFila2}>
-        {variante === "semana" ? `${cita.horaInicio} · ${cita.tratamiento}` : segundaLinea}
+        {variante === "semana" ? (cita.notaAnticipo ?? `${cita.horaInicio} · ${cita.tratamiento}`) : segundaLinea}
       </span>
     </button>
   );

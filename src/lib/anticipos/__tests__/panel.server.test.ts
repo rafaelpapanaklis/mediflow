@@ -203,11 +203,64 @@ describe("pedirAnticipoDeCita: crea la factura si hace falta", () => {
 
   it("sin factura y SIN concepto: no crea nada, error claro", async () => {
     const e = escenario();
-    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: T0 });
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 86_400_000) });
     const r = await pedirAnticipoDeCita({ clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 300 }, e.deps);
     assert.equal(r.ok, false);
     assert.equal(r.error, "sin_concepto");
     assert.equal(e.db.tablas.invoice.length, 0);
+  });
+});
+
+describe("Ajuste 2 (decisión de Rafael): SOLO citas futuras, y sin comisión de DaleControl", () => {
+  it("cita PASADA (SCHEDULED pero startsAt ya pasó): rechazada, no crea factura ni anticipo", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() - 3600_000) });
+    const r = await pedirAnticipoDeCita(
+      { clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 300, concepto: { serviceId: "svc1" } },
+      e.deps,
+    );
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "cita_no_futura");
+    assert.equal(e.db.tablas.invoice.length, 0);
+  });
+
+  it("cita COMPLETED (aunque su hora sea futura): rechazada — no es SCHEDULED ni CONFIRMED", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "COMPLETED", startsAt: new Date(T0.getTime() + 3600_000) });
+    const r = await pedirAnticipoDeCita({ clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 300 }, e.deps);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "cita_no_futura");
+  });
+
+  it("CONFIRMED y futura: SÍ elegible (no solo SCHEDULED)", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "CONFIRMED", startsAt: new Date(T0.getTime() + 3600_000) });
+    const invoiceId = e.factura({ appointmentId: "apt1" });
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+    assert.equal(r.ok, true);
+  });
+
+  it("desde la FACTURA: si su cita ya pasó, rechazada; si NO tiene cita, permitida", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() - 3600_000) });
+    const invoiceConCitaPasada = e.factura({ appointmentId: "apt1" });
+    const r1 = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId: invoiceConCitaPasada, userId: "u1", monto: 300 }, e.deps);
+    assert.equal(r1.ok, false);
+    assert.equal(r1.error, "cita_no_futura");
+
+    const invoiceSinCita = e.factura(); // sin appointmentId
+    const r2 = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId: invoiceSinCita, userId: "u1", monto: 300 }, e.deps);
+    assert.equal(r2.ok, true);
+  });
+
+  it("los anticipos del panel NUNCA cobran comisión de DaleControl, aunque la clínica tenga una configurada para el bot", async () => {
+    const e = escenario({ feeMode: "percent", feeValue: 10 }); // 10% configurado para el bot
+    const invoiceId = e.factura();
+    const r = await pedirAnticipoDeFactura({ clinicId: "c1", invoiceId, userId: "u1", monto: 300 }, e.deps);
+    assert.equal(r.ok, true);
+    assert.equal(e.db.tablas.appointmentDeposit[0].marketplaceFee, 0);
+    // Y la preferencia de Mercado Pago tampoco lleva marketplace_fee.
+    assert.equal(e.preferencias[0].opts.marketplaceFee, 0);
   });
 });
 

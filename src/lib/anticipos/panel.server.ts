@@ -23,14 +23,13 @@ import type { CreatePreferenceOptions, CreatePreferenceResult } from "@/lib/merc
 import { credencialDeCobro, plataformaAnticipos, urlBaseApp, type CredencialDeCobro } from "./cuenta.server";
 import {
   PANEL_HORAS_DEFAULT,
-  calcularComision,
+  citaEsFuturaParaAnticipo,
   redondear2,
   refDeAnticipo,
   sugeridoAnticipoPanel,
   validarMontoAnticipoManual,
   validarPlazoPanelHoras,
   type ModoAnticipoPanel,
-  type ModoComision,
   type PoliticaAnticipoPanel,
 } from "./core";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
@@ -169,6 +168,43 @@ export async function estadoAnticipoDeFactura(
   }
 }
 
+export interface ElegibilidadCita {
+  elegible: boolean;
+  /** null = elegible (o sin cita ligada). */
+  motivo: string | null;
+}
+
+const MOTIVO_CITA_NO_FUTURA =
+  "Esta factura está ligada a una cita que ya pasó, ya se atendió o ya no está viva: el anticipo solo se puede pedir para citas futuras.";
+
+/**
+ * Ajuste 2 (decisión de Rafael): si la factura no tiene cita, siempre
+ * elegible. Si la tiene, SOLO si es futura (`citaEsFuturaParaAnticipo`) — el
+ * mismo criterio exacto que aplica `pedirAnticipoDeFactura` al pedirlo de
+ * verdad, para que el GET nunca prometa un botón que el POST va a rechazar.
+ */
+export async function elegibilidadCitaDeInvoice(
+  clinicId: string,
+  appointmentId: string | null,
+  over?: Partial<DepsAnticipoPanel>,
+): Promise<ElegibilidadCita> {
+  const d = deps(over);
+  if (!appointmentId) return { elegible: true, motivo: null };
+  try {
+    const appt = await d.db.appointment.findFirst({
+      where: { id: appointmentId, clinicId },
+      select: { status: true, startsAt: true },
+    });
+    if (!appt || !citaEsFuturaParaAnticipo(appt, d.ahora())) {
+      return { elegible: false, motivo: MOTIVO_CITA_NO_FUTURA };
+    }
+    return { elegible: true, motivo: null };
+  } catch (e) {
+    if (faltaTabla(e)) return { elegible: true, motivo: null };
+    throw e;
+  }
+}
+
 // ── 2. Pedirlo ───────────────────────────────────────────────────────────────
 
 export type ErrorPedirAnticipo =
@@ -179,6 +215,7 @@ export type ErrorPedirAnticipo =
   | "sin_concepto"
   | "monto_invalido"
   | "plazo_invalido"
+  | "cita_no_futura"
   | "mp_fallo";
 
 export interface AnticipoPedido {
@@ -256,6 +293,7 @@ async function pedirAnticipoDeFacturaImpl(
   const base = d.baseUrl();
   const cred = await d.credencial(clinicId);
   if (!cred || !base) return fallo("sin_mp");
+  const ahora = d.ahora();
 
   const inv = await d.db.invoice.findFirst({
     where: { id: invoiceId, clinicId },
@@ -267,6 +305,24 @@ async function pedirAnticipoDeFacturaImpl(
   }
   const saldo = redondear2(Math.max(0, inv.total - inv.paid));
   if (!(saldo > 0)) return fallo("sin_saldo", "La factura ya no tiene saldo por cobrar.");
+
+  // Ajuste 2 (decisión de Rafael): si la factura está ligada a una cita, el
+  // anticipo SOLO se puede pedir si esa cita sigue siendo futura (SCHEDULED/
+  // CONFIRMED, con inicio después de ahora). Una factura sin cita (o cuya
+  // cita ya pasó/se atendió) no ofrece «Pedir anticipo» por este camino —
+  // el apartado no significa nada para algo que ya ocurrió.
+  if (inv.appointmentId) {
+    const citaLigada = await d.db.appointment.findFirst({
+      where: { id: inv.appointmentId, clinicId },
+      select: { status: true, startsAt: true },
+    });
+    if (!citaLigada || !citaEsFuturaParaAnticipo(citaLigada, ahora)) {
+      return fallo(
+        "cita_no_futura",
+        "Esta factura está ligada a una cita que ya pasó, ya se atendió o ya no está viva: el anticipo solo se puede pedir para citas futuras.",
+      );
+    }
+  }
 
   // Ya hay uno pendiente: se devuelve el mismo (nunca dos a la vez — lo
   // refuerza el índice único parcial de la base).
@@ -294,18 +350,19 @@ async function pedirAnticipoDeFacturaImpl(
 
   const cuentaFila = await d.db.clinicMercadoPago.findUnique({
     where: { clinicId },
-    select: { panelDepositExpiryHours: true, marketplaceFeeMode: true, marketplaceFeeValue: true },
+    select: { panelDepositExpiryHours: true },
   });
   const horas = args.horas ?? cuentaFila?.panelDepositExpiryHours ?? PANEL_HORAS_DEFAULT;
   const errorHoras = validarPlazoPanelHoras(horas);
   if (errorHoras) return fallo("plazo_invalido", errorHoras);
 
-  // Misma comisión de DaleControl que el anticipo del bot (ClinicMercadoPago
-  // es una configuración por clínica, no por origen del anticipo).
-  const comision =
-    calcularComision((cuentaFila?.marketplaceFeeMode as ModoComision) ?? "fixed", cuentaFila?.marketplaceFeeValue ?? 0, monto) ?? 0;
+  // Ajuste 2 (decisión de Rafael): los anticipos pedidos DESDE EL PANEL NUNCA
+  // cobran comisión de DaleControl — a diferencia del anticipo del bot, que sí
+  // usa marketplaceFeeMode/marketplaceFeeValue de ClinicMercadoPago. Es una
+  // decisión de negocio explícita, no un descuido: el marketplace_fee que se
+  // manda a Mercado Pago es SIEMPRE 0 en este camino.
+  const comision = 0;
 
-  const ahora = d.ahora();
   let apartadaAppointment: { id: string } | null = null;
   // El plazo nunca pasa del inicio de la cita: un link vivo con la cita ya
   // empezada no aparta nada (mismo criterio que crearCitaDesdeBot).
@@ -478,9 +535,19 @@ async function pedirAnticipoDeCitaImpl(
   const d = deps(over);
   const appt = await d.db.appointment.findFirst({
     where: { id: args.appointmentId, clinicId: args.clinicId },
-    select: { id: true, patientId: true },
+    select: { id: true, patientId: true, status: true, startsAt: true },
   });
   if (!appt) return fallo("no_encontrada");
+
+  // Ajuste 2 (decisión de Rafael): SOLO citas futuras. Se corta aquí, antes de
+  // crear ninguna factura, para no armar una factura de la nada sobre una cita
+  // que de todos modos no puede pedir anticipo.
+  if (!citaEsFuturaParaAnticipo(appt, d.ahora())) {
+    return fallo(
+      "cita_no_futura",
+      "Esta cita ya pasó, ya se atendió o ya no está viva: el anticipo solo se puede pedir para citas futuras.",
+    );
+  }
 
   const existente = await d.db.invoice.findUnique({ where: { appointmentId: appt.id }, select: { id: true } });
   let invoiceId = existente?.id ?? null;

@@ -132,6 +132,34 @@ export interface AgendaQueryFilter {
   viewer?: VisibilityViewer | null;
 }
 
+/**
+ * Ajuste 2 (ws1-t3) — el chip «Anticipo pagado» de la tarjeta. UNA consulta
+ * aparte (no toca `appointmentToDTO`, que es síncrona y la usan también las
+ * rutas de mutación sin este dato), acotada a las citas del rango que se
+ * está pintando. Solo columnas de sql/anticipo-whatsapp.sql (ya aplicado):
+ * no depende de que se haya pegado sql/anticipo-desde-panel.sql.
+ */
+async function citasConDepositoPagado(clinicId: string, appointmentIds: string[]): Promise<Set<string>> {
+  if (appointmentIds.length === 0) return new Set();
+  try {
+    const filas = await prisma.appointmentDeposit.findMany({
+      where: { clinicId, appointmentId: { in: appointmentIds }, status: "PAID" },
+      select: { appointmentId: true },
+    });
+    return new Set(filas.map((f) => f.appointmentId).filter((id): id is string => !!id));
+  } catch (e) {
+    // Tabla sin aplicar (P2021/P2022): la agenda se calla, nunca se rompe.
+    const code = (e as { code?: string })?.code;
+    if (code === "P2021" || code === "P2022") return new Set();
+    throw e;
+  }
+}
+
+function conDepositoPagado(dtos: AgendaAppointmentDTO[], pagados: Set<string>): AgendaAppointmentDTO[] {
+  if (pagados.size === 0) return dtos;
+  return dtos.map((d) => (pagados.has(d.id) ? { ...d, depositoPagado: true } : d));
+}
+
 export async function fetchAppointmentsForDay(
   dateISO: string,
   config: ClinicTimeConfig,
@@ -166,7 +194,9 @@ export async function fetchAppointmentsForDay(
     orderBy: { startsAt: "asc" },
   });
 
-  return rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
+  const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
+  const pagados = await citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id));
+  return conDepositoPagado(dtos, pagados);
 }
 
 export async function fetchAppointmentsForRange(
@@ -196,7 +226,9 @@ export async function fetchAppointmentsForRange(
     orderBy: { startsAt: "asc" },
   });
 
-  return rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
+  const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
+  const pagados = await citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id));
+  return conDepositoPagado(dtos, pagados);
 }
 
 export async function fetchPendingValidation(

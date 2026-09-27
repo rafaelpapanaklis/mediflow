@@ -19,7 +19,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
-import { anticipoPanelDisponible, estadoAnticipoDeFactura, pedirAnticipoDeFactura, sugeridoParaFactura } from "@/lib/anticipos/panel.server";
+import { anticipoPanelDisponible, elegibilidadCitaDeInvoice, estadoAnticipoDeFactura, pedirAnticipoDeFactura, sugeridoParaFactura } from "@/lib/anticipos/panel.server";
 import { textoAnticipoPanel } from "@/lib/anticipos/mensaje-panel";
 import { formatDateHuman, formatTimeHuman, toISODate } from "@/lib/whatsapp/bot/booking-parse";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
@@ -55,14 +55,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const inv = await prisma.invoice.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    select: { total: true, paid: true, status: true },
+    select: { total: true, paid: true, status: true, appointmentId: true },
   });
   if (!inv) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
-  const [disponible, sugerido, estado] = await Promise.all([
+  const [disponible, sugerido, estado, elegibilidad] = await Promise.all([
     anticipoPanelDisponible(ctx.clinicId),
     sugeridoParaFactura(ctx.clinicId, inv.total),
     estadoAnticipoDeFactura(ctx.clinicId, params.id),
+    elegibilidadCitaDeInvoice(ctx.clinicId, inv.appointmentId),
   ]);
 
   return NextResponse.json({
@@ -74,6 +75,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     pagado: inv.paid,
     anticipoPagado: estado.anticipoPagado,
     pendiente: estado.pendiente,
+    // Ajuste 2: solo citas futuras (SCHEDULED/CONFIRMED, inicio después de
+    // ahora). Sin cita ligada, siempre elegible.
+    citaElegible: elegibilidad.elegible,
+    motivoCitaNoElegible: elegibilidad.motivo,
   });
 }
 

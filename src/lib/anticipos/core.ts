@@ -212,6 +212,20 @@ export function validarPlazoPanelHoras(horas: number): string | null {
   return null;
 }
 
+/**
+ * Ajuste 2 (decisión de Rafael) — «Pedir anticipo» SOLO en citas futuras:
+ * `SCHEDULED` o `CONFIRMED`, y con inicio posterior a ahora. Una cita ya
+ * atendida (CHECKED_IN en adelante), cancelada/no asistida, o SCHEDULED/
+ * CONFIRMED pero cuya hora ya pasó, no puede pedir anticipo — el apartado no
+ * significa nada para una cita que ya ocurrió o que ya no está viva.
+ */
+export function citaEsFuturaParaAnticipo(
+  cita: { status: string; startsAt: Date },
+  ahora: Date,
+): boolean {
+  return (cita.status === "SCHEDULED" || cita.status === "CONFIRMED") && cita.startsAt.getTime() > ahora.getTime();
+}
+
 // ── El link y el webhook ────────────────────────────────────────────────────
 
 const PREFIJO_REF = "anticipo";

@@ -90,6 +90,11 @@ export interface AgendaAppointmentDTO extends HomeAppointmentDTO {
   /** Anticipo (WS1-T5 / ws1-t3): la cita SCHEDULED queda "apartada" hasta esta
    * fecha. null = cita normal, o el apartado ya se resolvió (pagado o vencido). */
   holdExpiresAt?: string | null;
+  /** Ajuste 2 (ws1-t3): ¿esta cita tiene un AppointmentDeposit PAID? Solo lo
+   * rellenan fetchAppointmentsForDay/Range (una consulta aparte, acotada al
+   * rango pedido); las rutas de mutación no lo tocan y queda `undefined`
+   * (se trata como falso) hasta el siguiente refetch — no se inventa. */
+  depositoPagado?: boolean;
 }
 
 export interface ResourceDTO {

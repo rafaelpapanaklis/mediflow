@@ -20,6 +20,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { anticipoPanelDisponible, estadoAnticipoDeFactura, pedirAnticipoDeCita, sugeridoParaFactura } from "@/lib/anticipos/panel.server";
+import { citaEsFuturaParaAnticipo } from "@/lib/anticipos/core";
 import { textoAnticipoPanel } from "@/lib/anticipos/mensaje-panel";
 import { formatDateHuman, formatTimeHuman, toISODate } from "@/lib/whatsapp/bot/booking-parse";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
@@ -50,6 +51,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const chk = await comprobarCita(ctx, params.id);
   if ("error" in chk) return chk.error;
 
+  // Ajuste 2: SOLO citas futuras (SCHEDULED/CONFIRMED, inicio después de
+  // ahora) — mismo criterio exacto que pedirAnticipoDeCita al pedirlo de
+  // verdad, para que este GET nunca ofrezca un botón que el POST rechazaría.
+  const citaElegible = citaEsFuturaParaAnticipo(chk.appt, new Date());
+  const motivoCitaNoElegible = citaElegible
+    ? null
+    : "Esta cita ya pasó, ya se atendió o ya no está viva: el anticipo solo se puede pedir para citas futuras.";
+
   const [disponible, invoice] = await Promise.all([
     anticipoPanelDisponible(ctx.clinicId),
     prisma.invoice.findUnique({
@@ -60,7 +69,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   if (!invoice) {
     const sugerido = await sugeridoParaFactura(ctx.clinicId, 0);
-    return NextResponse.json({ disponible, tieneFactura: false, sugerido: null, horasSugeridas: sugerido.horas, pendiente: null });
+    return NextResponse.json({
+      disponible,
+      tieneFactura: false,
+      sugerido: null,
+      horasSugeridas: sugerido.horas,
+      pendiente: null,
+      citaElegible,
+      motivoCitaNoElegible,
+    });
   }
 
   const [sugerido, estado] = await Promise.all([
@@ -76,6 +93,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     horasSugeridas: sugerido.horas,
     saldo: Math.max(0, invoice.total - invoice.paid),
     pendiente: estado.pendiente,
+    citaElegible,
+    motivoCitaNoElegible,
   });
 }
 

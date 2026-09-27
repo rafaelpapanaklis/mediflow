@@ -72,6 +72,14 @@ export interface CitaVista {
   /** Minutos que lleva en consulta. `null` si no aplica. */
   minutosEnConsulta: number | null;
   motivoCancelacion: string | null;
+  /**
+   * Ajuste 2 (ws1-t3) — «Apartada · paga antes de HH:MM» mientras
+   * `holdExpiresAt` siga vivo, o «Anticipo pagado» en una CONFIRMED con
+   * depósito pagado. `null` = nada que decir (la tarjeta se pinta igual que
+   * siempre). Sustituye la segunda línea completa en Día y Semana: son cosas
+   * que Rafael pidió ver de un vistazo, no un dato más entre otros.
+   */
+  notaAnticipo: string | null;
   /** El DTO crudo, por si el panel necesita algo que no está aquí. */
   dto: AgendaAppointmentDTO;
 }
@@ -202,6 +210,21 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
   const responsable = responsableId ? ctx.doctores.find((d) => d.id === responsableId) : undefined;
   const unidad = dto.resourceId ? ctx.unidades.find((r) => r.id === dto.resourceId) : undefined;
 
+  // Ajuste 2 — «apartada» solo mientras SCHEDULED y con plazo vivo (mismo
+  // criterio que apartadoVencido/panel-cita.tsx); «anticipo pagado» solo en
+  // CONFIRMED (justo el estado al que pasa la cita cuando el pago la
+  // confirma): pasado ese punto (llegó, en consulta…) ya hay cosas más
+  // urgentes que decir, y detalleDe() vuelve a mandar sola.
+  const apartadaHasta =
+    estado === "SCHEDULED" && dto.holdExpiresAt && new Date(dto.holdExpiresAt).getTime() > ctx.ahora.getTime()
+      ? dto.holdExpiresAt
+      : null;
+  const notaAnticipo = apartadaHasta
+    ? `Apartada · paga antes de ${formatTimeInTz(apartadaHasta, timezone)}`
+    : estado === "CONFIRMED" && dto.depositoPagado === true
+      ? "Anticipo pagado"
+      : null;
+
   return {
     id: dto.id,
     inicioMin,
@@ -239,6 +262,7 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
     minutosEsperando,
     minutosEnConsulta,
     motivoCancelacion: dto.cancelReason ?? null,
+    notaAnticipo,
     dto,
   };
 }
