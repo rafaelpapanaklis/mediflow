@@ -2990,8 +2990,18 @@ model InventoryPurchase {
   clinicId       String
   providerId     String?
   date           DateTime @default(now())
-  /// Folio/referencia libre del comprobante. Opcional, sin subida de archivo.
+  /// Folio/referencia libre del comprobante (texto). Ajuste 1: además admite
+  /// el ARCHIVO (foto o PDF) en los tres campos de abajo — ninguno reemplaza
+  /// al otro, se guardan los dos si el usuario los captura.
   receiptRef     String?
+  /// Ajuste 1 — comprobante como archivo. Se guarda el PATH interno del
+  /// bucket `patient-files` (privado — ver src/lib/storage.ts), NUNCA la URL:
+  /// se firma bajo demanda (TTL corto) en listarCompras(). Columnas NUEVAS,
+  /// misma tolerancia P2021/P2022/PrismaClientValidationError que el resto
+  /// de este modelo (ver faltaTabla en compras.server.ts).
+  receiptFilePath String?
+  receiptFileName String?
+  receiptFileMime String?
   createdById    String
   idempotencyKey String?
   createdAt      DateTime @default(now())

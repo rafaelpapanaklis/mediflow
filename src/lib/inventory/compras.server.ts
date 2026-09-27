@@ -16,6 +16,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { money } from "@/lib/caja";
+import { signMaybeUrls } from "@/lib/storage";
 import { validarLineaCompra, montoTotalCompra, type LineaCompra } from "./costo-core";
 import { aplicarEntradaDeCompra } from "./costo.server";
 import { registrarHistorialInventario } from "./historial.server";
@@ -213,11 +214,18 @@ export interface CompraListada {
   date: string;
   providerName: string | null;
   receiptRef: string | null;
+  /** Ajuste 1 — comprobante como archivo (foto o PDF), aparte del folio de texto. */
+  receiptFileUrl: string | null;
+  receiptFileName: string | null;
+  createdByName: string | null;
   total: number;
   expenseId: string | null;
   lines: { itemId: string; itemName: string; quantity: number; unitCost: number }[];
 }
 
+/** Ajuste 1 — "quién la registró": createdById es un id suelto SIN @relation
+ * a propósito (mismo criterio que AppointmentDeposit.createdById — ver su
+ * nota), así que el nombre se resuelve con un lookup aparte, no un include. */
 export async function listarCompras(clinicId: string, db: PrismaClient = prisma): Promise<CompraListada[]> {
   try {
     const compras = await db.inventoryPurchase.findMany({
@@ -230,14 +238,27 @@ export async function listarCompras(clinicId: string, db: PrismaClient = prisma)
         lines:    { include: { item: { select: { name: true } } } },
       },
     });
-    return compras.map((c) => ({
-      id:           c.id,
-      date:         c.date.toISOString(),
-      providerName: c.provider?.name ?? null,
-      receiptRef:   c.receiptRef,
-      expenseId:    c.expense?.id ?? null,
-      total:        montoTotalCompra(c.lines),
-      lines:        c.lines.map((l) => ({ itemId: l.itemId, itemName: l.item.name, quantity: l.quantity, unitCost: l.unitCost })),
+    const userIds = Array.from(new Set(compras.map((c) => c.createdById)));
+    const usuarios = userIds.length
+      ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const nombrePorUsuario = new Map(usuarios.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()]));
+
+    // Ajuste 1: firma TODAS las URLs de comprobante en un round-trip (mismo
+    // patrón que /api/xrays) — no N× llamadas por fila.
+    const urls = await signMaybeUrls(compras.map((c) => c.receiptFilePath));
+
+    return compras.map((c, i) => ({
+      id:              c.id,
+      date:            c.date.toISOString(),
+      providerName:    c.provider?.name ?? null,
+      receiptRef:      c.receiptRef,
+      receiptFileUrl:  urls[i] || null,
+      receiptFileName: c.receiptFileName,
+      createdByName:   nombrePorUsuario.get(c.createdById) ?? null,
+      expenseId:       c.expense?.id ?? null,
+      total:           montoTotalCompra(c.lines),
+      lines:           c.lines.map((l) => ({ itemId: l.itemId, itemName: l.item.name, quantity: l.quantity, unitCost: l.unitCost })),
     }));
   } catch (e) {
     if (faltaTabla(e)) return [];

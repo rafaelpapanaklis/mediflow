@@ -26,6 +26,8 @@ import invStyles from "@/components/dashboard/inventario-rediseno/inventario-red
 import { LotesModal } from "@/components/dashboard/inventory/lotes-modal";
 // ws1-t4 — "Registrar compra": modal propio y aislado, mismo criterio.
 import { CompraModal, type ResultadoCompra } from "@/components/dashboard/inventory/compra-modal";
+// ws1-t4 (ajuste 1) — "Historial de compras": modal propio y aislado, mismo criterio.
+import { HistorialComprasModal } from "@/components/dashboard/inventory/historial-compras-modal";
 
 const DENTAL_ICONS = [
   { id: "implante-plateado",  src: "/icons/dental/implante-plateado.png",  labelKey: "procurement.inventoryClient.iconImplantePlateado"  },
@@ -229,6 +231,8 @@ export function InventoryClient({
   const [lotesItem, setLotesItem] = useState<Item | null>(null);
   // ws1-t4 — "Registrar compra".
   const [showCompra, setShowCompra] = useState(false);
+  // ws1-t4 (ajuste 1) — "Historial de compras".
+  const [showHistorial, setShowHistorial] = useState(false);
   const [newItem, setNewItem] = useState({
     name: "", description: "", category: "Instrumental básico",
     customCategory: "", quantity: 0, minQuantity: 5, unit: "pza", iconId: "fresa-jeringa",
@@ -348,6 +352,18 @@ export function InventoryClient({
     setItems(prev => prev.map(i => i.id === id ? { ...i, unitCost: cost } : i));
   }
 
+  // Ajuste 1 — proveedor editable en la misma tabla, un artículo ya creado
+  // no tenía forma de cambiar de proveedor sin esto.
+  async function updateProvider(id: string, providerId: string) {
+    const res = await fetch(`/api/inventory/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providerId: providerId || null }),
+    });
+    if (!res.ok) { toast.error(t("common.genericError")); return; }
+    setItems(prev => prev.map(i => i.id === id ? { ...i, providerId: providerId || null } : i));
+  }
+
   async function addItem() {
     if (!newItem.name.trim()) { toast.error(t("procurement.inventoryClient.nameRequired")); return; }
     const finalCategory = newItem.category === "Otro"
@@ -415,6 +431,9 @@ export function InventoryClient({
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <ButtonNew variant="ghost" onClick={() => setShowHistorial(true)}>
+            Historial de compras
+          </ButtonNew>
           <ButtonNew variant="secondary" onClick={() => setShowCompra(true)}>
             {t("procurement.inventoryClient.registerPurchase")}
           </ButtonNew>
@@ -490,6 +509,7 @@ export function InventoryClient({
                 <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colQuantity")}</th>
                 <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colMinimum")}</th>
                 <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colUnitCost")}</th>
+                <th>{t("procurement.inventoryClient.fieldProvider")}</th>
                 <th>{t("common.status")}</th>
                 <th style={{ textAlign: "right" }}>{t("common.actions")}</th>
               </tr>
@@ -582,6 +602,19 @@ export function InventoryClient({
                           if (!isNaN(v) && v >= 0 && v !== item.unitCost) updateUnitCost(item.id, v);
                         }}
                       />
+                    </td>
+                    <td>
+                      <select
+                        className="input-new"
+                        style={{ height: 28, fontSize: 12.5, maxWidth: 140 }}
+                        value={item.providerId ?? ""}
+                        onChange={e => updateProvider(item.id, e.target.value)}
+                      >
+                        <option value="">{t("procurement.inventoryClient.noProvider")}</option>
+                        {proveedores.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
                     </td>
                     <td>{statusBadge(status, t)}</td>
                     <td style={{ textAlign: "right" }}>
@@ -869,6 +902,9 @@ export function InventoryClient({
           onClose={() => setShowCompra(false)}
         />
       )}
+
+      {/* ws1-t4 (ajuste 1) — "Historial de compras". */}
+      {showHistorial && <HistorialComprasModal onClose={() => setShowHistorial(false)} />}
     </div>
   );
 }
