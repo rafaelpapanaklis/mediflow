@@ -310,7 +310,9 @@ test("el botón y los precios dicen LO QUE SE COBRA: el total del año en anual,
   assert.match(planes, /Pagar \$\{v\.selected\.name\} — \$\{centavosAMxn\(cobroMostrado\.totalCents\)\} \$\{unidad\}/, "el botón dice el TOTAL con IVA y su periodo");
   assert.ok(!/ctaPrice\)\}\/mes/.test(planes), "el botón ya no dice «$X/mes» en anual");
   // Sin IVA configurado la pantalla lo dice y no deja pulsar.
-  assert.match(planes, /disabled=\{v\.isRedirecting \|\| \(!v\.cobroConIvaListo && ivaSel\)\}/);
+  // Ajuste 2: el botón se ata a «se puede cobrar» (= IVA listo o pago sin IVA), y el aviso ofrece solo lo que existe.
+  assert.match(planes, /const tarjetaOxxoOk = v\.cobroConIvaListo \|\| !ivaSel;/);
+  assert.match(planes, /disabled=\{v\.isRedirecting \|\| !tarjetaOxxoOk\}/);
   const page = leer("app/dashboard/suspended/page.tsx");
   assert.match(page, /const cobroConIvaListo = ivaParaCobro\(process\.env\)\.ok;/);
 });

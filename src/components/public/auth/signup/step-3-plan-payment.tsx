@@ -166,8 +166,8 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
           <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
         </svg>
         <span>
-          Aquí no se cobra nada. El pago lo haces en el siguiente paso, dentro del panel, con tarjeta, SPEI u OXXO
-          en la página segura de Stripe.
+          Aquí no se cobra nada. El pago lo haces en el siguiente paso, dentro del panel: tarjeta u OXXO con
+          Stripe, o transferencia SPEI directa.
         </span>
       </p>
 

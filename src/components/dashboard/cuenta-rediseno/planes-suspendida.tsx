@@ -6,7 +6,8 @@ import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
 import type { PlanCardData } from "@/app/dashboard/suspended/suspended-client";
 import { centavosAMxn, importeSpei, type CuentaBancaria } from "@/lib/billing/spei-directo-core";
-import { desgloseConIva, desgloseSinIva, ivaAplica, type ExencionIva } from "@/lib/billing/iva-cobro";
+import { desgloseConIva, desglosePromoConIvaIncluido, desgloseSinIva, ivaAplica, type ExencionIva } from "@/lib/billing/iva-cobro";
+import { avisoTarjetaOxxoNoDisponible } from "@/lib/billing/metodos-de-pago";
 import { DatosTransferencia } from "./datos-transferencia";
 import s from "./pago.module.css";
 
@@ -92,15 +93,20 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
     anual
       ? `Equivale a ${fmt(v.perMonth(plan))} al mes · ahorras ${fmt(v.annualSavings(plan))} (35%)`
       : v.firstMonthEligible
-        ? `Tu primer mes: solo ${fmt(FIRST_MONTH_PROMO_MXN[plan.id])} con tarjeta · luego ${fmt(plan.priceMxn)}/mes`
+        // La promo es el TOTAL del primer mes (IVA incluido, sin «+ IVA»); desde la renovación, precio + IVA.
+        ? `Tu primer mes: solo ${fmt(FIRST_MONTH_PROMO_MXN[plan.id])} con tarjeta · luego ${fmt(plan.priceMxn)}/mes` + ivaPlan(plan.id)
         : "Facturación mensual · cancela cuando quieras";
 
-  // Lo que se cobra en tarjeta/OXXO: el subtotal (promo del primer mes si aplica, si no el precio del
-  // plan) + IVA 16 % sobre ESE subtotal — el IVA va sobre lo que se cobra, promo incluida.
-  const cobroNuevo = desgloseConIva(
-    v.selected ? (v.ctaPromo ? FIRST_MONTH_PROMO_MXN[v.selected.id] * 100 : cobrado(v.selected) * 100) : 0,
-  );
-  const cobroMostrado = ivaSel ? cobroNuevo : desgloseSinIva(cobroNuevo.subtotalCents);
+  // Lo que se cobra en tarjeta/OXXO. PROMO del primer mes: el TOTAL es exactamente la promo ($29) con el IVA
+  // DENTRO (subtotal $25.00 + IVA $4.00), nunca la promo + IVA. Sin promo: el precio del plan + IVA 16 % encima.
+  // Una clínica exenta paga la promo (o el precio) a secas.
+  const centavosBase = v.selected ? (v.ctaPromo ? FIRST_MONTH_PROMO_MXN[v.selected.id] * 100 : cobrado(v.selected) * 100) : 0;
+  const cobroNuevo = v.ctaPromo ? desglosePromoConIvaIncluido(centavosBase) : desgloseConIva(centavosBase);
+  const cobroMostrado = ivaSel ? cobroNuevo : desgloseSinIva(centavosBase);
+  // Qué se puede cobrar de verdad: tarjeta/OXXO necesitan el IVA configurado cuando este pago lleva IVA; SPEI
+  // solo existe si hay cuenta. El aviso ofrece solo lo que existe (nunca manda a un SPEI que no está).
+  const tarjetaOxxoOk = v.cobroConIvaListo || !ivaSel;
+  const aviso = avisoTarjetaOxxoNoDisponible({ tarjetaOxxo: tarjetaOxxoOk, spei: v.cuentaSpei !== null });
 
   const esSpei = v.method === "spei" && v.cuentaSpei !== null && v.selected !== undefined;
   const importe = esSpei && v.selected
@@ -290,7 +296,11 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
           })}
         </div>
 
-        {v.method === "oxxo" && <p className={s.notaMetodo}>{t("pages.suspended.asyncMethodNote")}</p>}
+        {v.method === "oxxo" && (
+          <p className={s.notaMetodo}>
+            {t(anual ? "pages.suspended.asyncMethodNoteAnnual" : "pages.suspended.asyncMethodNote")}
+          </p>
+        )}
 
         {esSpei && v.cuentaSpei && importe && v.referenciaSpei ? (
           <>
@@ -341,16 +351,16 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
               </div>
             )}
 
-            {!v.cobroConIvaListo && ivaSel && (
-              <p className={`${s.aviso} ${s.avisoPeligro}`} role="alert">
-                El pago con tarjeta y OXXO no está disponible por ahora. Puedes pagar por transferencia SPEI o escribirnos a soporte.
+            {aviso && (
+              <p className={`${s.aviso} ${s.avisoPeligro}`} role="alert" data-testid="aviso-sin-metodo">
+                {aviso.texto}
               </p>
             )}
 
             <button
               type="button"
               onClick={() => v.handleStripeCheckout(v.selectedPlan)}
-              disabled={v.isRedirecting || (!v.cobroConIvaListo && ivaSel)}
+              disabled={v.isRedirecting || !tarjetaOxxoOk}
               className={s.cta}
             >
               {v.isRedirecting ? <Loader2 size={17} className={s.girando} aria-hidden /> : <Lock size={16} aria-hidden />}

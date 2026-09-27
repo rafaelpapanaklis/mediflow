@@ -1093,6 +1093,8 @@
       "endsToday": "Termina hoy",
       "oneDayLeft": "1 día restante",
       "daysLeftOfTotal": "{days} días restantes de {total}",
+      "daysLeftOnly": "{days} días restantes",
+      "trialNoNearEnd": "Prueba sin vencimiento cercano",
       "endsOn": "Termina el {date}",
       "trialExpiredNotice": "Tu acceso expiró el {date}. Activa tu suscripción para recuperarlo.",
       "changePlanTitle": "Cambiar plan",
@@ -9017,13 +9019,14 @@
       "payConnectorOxxo": "con OXXO",
       "payPlanCta": "Pagar {plan} {connector} — ${price}/mes",
       "asyncMethodNote": "Pago único de 1 mes; no se renueva solo.",
+      "asyncMethodNoteAnnual": "Pago único del año; no se renueva solo.",
       "recommendedBadge": "Recomendado",
       "currentPlanBadge": "Tu plan actual",
       "topPlanBadge": "Plan más completo",
       "upsellLine": "Por ${amount} más al mes: {benefit}",
       "upsellBenefitPro": "pacientes ilimitados y 3 profesionales",
       "upsellBenefitClinic": "multi-sucursal, API y manager dedicado",
-      "paymentsUnavailable": "Pagos no disponibles temporalmente. Intenta más tarde o usa la transferencia SPEI de abajo."
+      "paymentsUnavailable": "Pagos no disponibles temporalmente. Intenta más tarde o escríbenos a soporte@dalecontrol.com."
     },
     "teleconsulta": {
       "title": "Teleconsultas",

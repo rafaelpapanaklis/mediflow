@@ -4,7 +4,7 @@ import { Logo } from "../../landing/primitives/logo";
 const PASOS = [
   { t: "Crea tu cuenta", s: "Tu nombre, tu correo y una contraseña. Un minuto." },
   { t: "Cuéntanos de tu clínica dental", s: "Especialidad y tamaño: con eso dejamos tu panel listo." },
-  { t: "Elige tu plan y paga", s: "Tarjeta, SPEI u OXXO, en la página segura de Stripe." },
+  { t: "Elige tu plan y paga", s: "Tarjeta u OXXO con Stripe, o transferencia SPEI directa." },
 ];
 
 const VENTAJAS = ["Sin permanencia", "Sin instalar nada", "Datos cifrados", "Soporte 1 a 1"];

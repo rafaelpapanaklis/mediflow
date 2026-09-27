@@ -41,7 +41,7 @@ const num = (n: number) => n.toLocaleString("es-MX");
 
 /* Ajuste 9: rótulos del bloque común (sin cifras). */
 const PRICING_ALL_TITLE = "Incluido en todos los planes";
-const PRICING_ALL_SUB = "Las funciones base van en Básico, Profesional y Clínica. Las tarjetas muestran solo lo que cambia.";
+const PRICING_ALL_SUB = "Las funciones base van en Básico, Profesional y Clínica.";
 const PRICING_ALL_CHIP = "Todo lo esencial incluido";
 /** Ajuste 11: en Profesional y Clínica el chip nombra al plan anterior (label de plan_configs). */
 const chipText = (previous: string | null) => (previous ? `Todo lo de ${previous} + lo esencial` : PRICING_ALL_CHIP);

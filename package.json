@@ -184,6 +184,7 @@
     "test:click-ids": "tsx --test src/lib/ads/__tests__/click-ids.test.ts",
     "test:analitica-sin-portal": "tsx --test src/lib/analytics/sin-portal.test.ts",
     "test:next-headers": "tsx --test src/lib/__tests__/next-config-headers.test.ts",
+    "test:vista-pago": "tsx --test src/lib/billing/__tests__/vista-pago.test.ts",
     "test:plan-status": "tsx --test src/lib/__tests__/plan-status.test.ts src/lib/__tests__/plan-status-guard.test.ts src/lib/clinical-shared/__tests__/trial-vs-paying.test.ts",
     "test:blog-import": "tsx --test src/lib/blog/__tests__/import-drip.test.ts",
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",

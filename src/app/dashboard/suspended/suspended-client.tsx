@@ -476,7 +476,7 @@ export function SuspendedPlanCards({
 
         {method !== "card" && (
           <p className="-mt-1 text-center text-xs" style={{ color: "rgb(180,83,9)" }}>
-            {t("pages.suspended.asyncMethodNote")}
+            {t(billing === "annual" ? "pages.suspended.asyncMethodNoteAnnual" : "pages.suspended.asyncMethodNote")}
           </p>
         )}
 

@@ -94,7 +94,8 @@ function ThemedSelect({
   const hasValue = !!value;
   return (
     <>
-    <Select.Root value={value || undefined} onValueChange={onValueChange} disabled={disabled}>
+    {/* Siempre controlado: con «value || undefined» pasaba de no controlado a controlado al elegir (aviso de React). Radix 2 enseña el placeholder con "". */}
+    <Select.Root value={value || ""} onValueChange={onValueChange} disabled={disabled}>
       <Select.Trigger
         className="themed-select-trigger"
         style={{

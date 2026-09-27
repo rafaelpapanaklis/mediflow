@@ -16,6 +16,7 @@ import {
   solicitudPendienteDe,
 } from "@/lib/billing/spei-directo";
 import { ivaParaCobro } from "@/lib/billing/iva-cobro";
+import { subtituloDePago } from "@/lib/billing/metodos-de-pago";
 import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
 import { EsperaTransferencia } from "@/components/dashboard/cuenta-rediseno/espera-transferencia";
@@ -83,7 +84,7 @@ export default async function SuspendedPage({
   const heading = isReactivation ? "Reactiva tu plan" : "Último paso: activa tu cuenta";
   const subcopy = isReactivation
     ? "Tu acceso se pausó por un pago pendiente. Reactívalo para continuar."
-    : "Elige cómo pagar tu plan y empieza a usar DaleControl. Pago seguro con tarjeta, SPEI u OXXO.";
+    : "";
 
   // REDISEÑO — el MISMO interruptor por clínica que enciende el menú de dos
   // niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno propio.
@@ -112,6 +113,11 @@ export default async function SuspendedPage({
   // ¿Hay IVA configurado para cobrar con tarjeta/OXXO? Sin él, el checkout responde 503 (no cobra sin IVA):
   // la pantalla lo dice y no deja pulsar. SPEI no depende de esto (siempre suma el 16 %).
   const cobroConIvaListo = ivaParaCobro(process.env).ok;
+  // Subtítulo de una compra nueva: en el rediseño dice SOLO lo que existe (tarjeta/OXXO con Stripe; SPEI es
+  // transferencia directa y solo si hay cuenta). La pantalla de siempre conserva su texto.
+  const subtitulo = rediseno
+    ? subtituloDePago({ tarjetaOxxo: cobroConIvaListo || exencionIva !== null, spei: cuentaSpei !== null })
+    : "Elige cómo pagar tu plan y empieza a usar DaleControl. Pago seguro con tarjeta, transferencia SPEI u OXXO.";
   // Con `?pending=oxxo|spei` (vuelta de un pago de Stripe) NO se enseña la espera: pediría transferir
   // otra vez a quien acaba de generar su voucher.
   if (pendienteSpei && sinAcceso && searchParams?.ver !== "pago" && !showPending) {
@@ -160,7 +166,7 @@ export default async function SuspendedPage({
             reactivacion={isReactivation}
             pildora={pillText}
             titulo={heading}
-            texto={subcopy}
+            texto={isReactivation ? subcopy : subtitulo}
           />
           <SuspendedPlanCards
             plans={planCards}
@@ -219,7 +225,7 @@ export default async function SuspendedPage({
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight md:text-[40px]">{heading}</h1>
           <p className="max-w-[560px] text-base leading-relaxed text-muted-foreground">
-            {subcopy}
+            {isReactivation ? subcopy : subtitulo}
           </p>
         </div>
 
