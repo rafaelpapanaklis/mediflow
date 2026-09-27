@@ -621,6 +621,8 @@
   .dca-card .dc-secure { padding-top: 5px; padding-bottom: 5px; }
 }
 @media (max-width: 480px) {
+  /* Móvil 390×844: el paso 1 medía 853 px (9 px de scroll). Menos aire arriba y abajo de la columna: cabe sin scroll. */
+  .dca-form { padding: 8px 16px 10px; }
   .dca-stepper { gap: 6px; }
   .dca-step__label { font-size: 12px; }
   .dca-plan__num { font-size: 38px; }

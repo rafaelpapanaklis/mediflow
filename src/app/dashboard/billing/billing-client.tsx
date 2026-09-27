@@ -309,13 +309,19 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                 : null}
           </span>
         )}
-        <div className="segment-new">
+        {/* En móvil (390 px) los cinco botones miden 461 px: el segmentado se desliza POR SU CUENTA (scroll propio)
+            y no empuja la página entera hacia los lados. */}
+        <div
+          className="segment-new"
+          style={{ maxWidth: "100%", minWidth: 0, overflowX: "auto", overscrollBehaviorX: "contain", scrollbarWidth: "none" }}
+        >
           {STATUS_FILTERS.map(f => (
             <button
               key={f.value}
               type="button"
               onClick={() => setStatus(f.value)}
               className={`segment-new__btn ${status === f.value ? "segment-new__btn--active" : ""}`}
+              style={{ flexShrink: 0, whiteSpace: "nowrap" }}
             >
               {t(f.labelKey)}
             </button>

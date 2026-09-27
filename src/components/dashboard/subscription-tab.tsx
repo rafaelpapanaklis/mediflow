@@ -6,6 +6,8 @@ import toast from "react-hot-toast";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles } from "lucide-react";
 import { type PlanId, isPlanId } from "@/lib/billing/plans";
 import { cfdiBullet } from "@/lib/plan-shared";
+import { exencionDeIva, ivaAplica } from "@/lib/billing/iva-cobro";
+import { miles, pruebaVista } from "@/lib/billing/prueba-vista";
 import { daysUntil, isInTrial as inTrialNow, isPlanExpired, isSubscriptionActive } from "@/lib/plan-status";
 import { PaymentMethodModal } from "./payment-method-modal";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
@@ -18,6 +20,8 @@ import { ROPA_DESGLOSE, SuscripcionRediseno, type RopaDesglose } from "./bloques
 export interface ClinicData {
   id: string;
   plan: string;
+  /** Para la exención de IVA de las clínicas de antes del 26-sep-2026 (iva-cobro.ts). */
+  createdAt?: string | Date | null;
   trialEndsAt?: string | Date | null;
   subscriptionStatus?: string | null;
   stripeCustomerId?: string | null;
@@ -370,6 +374,11 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
   // el ciclo por defecto del checkout y el comportamiento previo del tab).
   const isAnnualBilling = billingCtx?.interval === "year";
   const planPrice = (p: ApiPlan) => (isAnnualBilling ? p.priceMxnAnnual : p.priceMxn);
+  // «+ IVA» según la MISMA regla que la portada y el pago: una clínica creada antes del corte no lo paga en
+  // SU plan; las nuevas, en todo. (Aquí basta un método manual: la excepción de la tarjeta reactivada no se ve.)
+  const exencionIva = exencionDeIva({ createdAt: clinic.createdAt, plan: clinic.plan, tuvoTarjeta: false });
+  const sufijoIva = (id: PlanId) => (ivaAplica({ metodo: "spei", plan: id, exencion: exencionIva }) ? " + IVA" : "");
+  const prueba = pruebaVista(daysLeft, TRIAL_DAYS_TOTAL);
   const perIntervalSuffix = isAnnualBilling
     ? t("shell.subscriptionTab.mxnPerYear")
     : t("shell.subscriptionTab.mxnPerMonth");
@@ -481,12 +490,14 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
           estadoTono: subscriptionActive ? "exito" : isInTrial ? "violeta" : "peligro",
           lineaPlan: t(
             isAnnualBilling ? "shell.subscriptionTab.planLineAnnual" : "shell.subscriptionTab.planLine",
-            { name: currentPlan?.name ?? currentPlanId, price: (currentPlan ? planPrice(currentPlan) : 0) },
-          ),
+            { name: currentPlan?.name ?? currentPlanId, price: miles(currentPlan ? planPrice(currentPlan) : 0) },
+          ) + sufijoIva(currentPlanId),
           enPrueba: isInTrial,
           finPrueba: trialEndsAt,
           diasRestantes: daysLeft,
           totalDiasPrueba: TRIAL_DAYS_TOTAL,
+          pruebaVista: prueba,
+          ivaDe: (id: PlanId) => sufijoIva(id) !== "",
           porcentajePrueba: pct,
           pruebaVencida: trialExpired,
           mostrarActivar: !subscriptionActive || manualPeriodExpired,
@@ -566,9 +577,9 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
                   isAnnualBilling ? "shell.subscriptionTab.planLineAnnual" : "shell.subscriptionTab.planLine",
                   {
                     name: currentPlan?.name ?? currentPlanId,
-                    price: (currentPlan ? planPrice(currentPlan) : 0),
+                    price: miles(currentPlan ? planPrice(currentPlan) : 0),
                   },
-                )}
+                ) + sufijoIva(currentPlanId)}
               </div>
             </div>
           </div>
@@ -578,16 +589,23 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 12 }}>
               <span style={{ color: "var(--text-2)" }}>
-                {daysLeft === 0
+                {prueba.tipo === "hoy"
                   ? t("shell.subscriptionTab.endsToday")
-                  : daysLeft === 1
+                  : prueba.tipo === "uno"
                     ? t("shell.subscriptionTab.oneDayLeft")
-                    : t("shell.subscriptionTab.daysLeftOfTotal", { days: daysLeft, total: TRIAL_DAYS_TOTAL })}
+                    : prueba.tipo === "sinVencimiento"
+                      ? t("shell.subscriptionTab.trialNoNearEnd")
+                      : prueba.tipo === "prorrogada"
+                        ? t("shell.subscriptionTab.daysLeftOnly", { days: miles(daysLeft) })
+                        : t("shell.subscriptionTab.daysLeftOfTotal", { days: daysLeft, total: TRIAL_DAYS_TOTAL })}
               </span>
-              <span className="font-mono" style={{ color: "var(--text-3)" }}>
-                {t("shell.subscriptionTab.endsOn", { date: formatFecha(trialEndsAt) })}
-              </span>
+              {prueba.fecha && (
+                <span className="font-mono" style={{ color: "var(--text-3)" }}>
+                  {t("shell.subscriptionTab.endsOn", { date: formatFecha(trialEndsAt) })}
+                </span>
+              )}
             </div>
+            {prueba.barra && (
             <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
               <div
                 style={{
@@ -600,6 +618,7 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
                 }}
               />
             </div>
+            )}
           </div>
         )}
 
@@ -691,14 +710,14 @@ export function SubscriptionTab({ clinic, rediseno = false }: Props) {
                   )}
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "var(--brand)" }}>
-                  ${planPrice(plan)}
-                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>{perIntervalSuffix}</span>
+                  ${miles(planPrice(plan))}
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>{perIntervalSuffix}{sufijoIva(plan.id)}</span>
                 </div>
                 {!isCurrent && currentPlan && planPrice(plan) !== planPrice(currentPlan) && (
                   <div style={{ fontSize: 11, fontWeight: 600, color: planPrice(plan) > planPrice(currentPlan) ? "var(--brand)" : "var(--text-3)" }}>
                     {planPrice(plan) > planPrice(currentPlan)
-                      ? t(isAnnualBilling ? "shell.subscriptionTab.priceDeltaUpAnnual" : "shell.subscriptionTab.priceDeltaUp", { delta: planPrice(plan) - planPrice(currentPlan) })
-                      : t(isAnnualBilling ? "shell.subscriptionTab.priceDeltaDownAnnual" : "shell.subscriptionTab.priceDeltaDown", { delta: planPrice(currentPlan) - planPrice(plan) })}
+                      ? t(isAnnualBilling ? "shell.subscriptionTab.priceDeltaUpAnnual" : "shell.subscriptionTab.priceDeltaUp", { delta: miles(planPrice(plan) - planPrice(currentPlan)) })
+                      : t(isAnnualBilling ? "shell.subscriptionTab.priceDeltaDownAnnual" : "shell.subscriptionTab.priceDeltaDown", { delta: miles(planPrice(currentPlan) - planPrice(plan)) })}
                   </div>
                 )}
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>

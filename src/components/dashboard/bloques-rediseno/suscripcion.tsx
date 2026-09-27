@@ -6,6 +6,7 @@ import { textosMetodoPago, avisoMetodoPago, type MetodoPagoVista } from "@/lib/b
 import type { PlanId } from "@/lib/billing/plans";
 import type { ApiPlan, BillingInvoiceRow, ClinicData } from "@/components/dashboard/subscription-tab";
 import { textosDeFila } from "@/lib/billing/historial-facturas";
+import { miles, type PruebaVista } from "@/lib/billing/prueba-vista";
 import { Boton, Insignia, Aviso, type Tono } from "@/components/dashboard/configuracion-rediseno/piezas";
 import { Seccion } from "@/components/dashboard/configuracion-rediseno/piezas";
 import { useT } from "@/i18n/i18n-provider";
@@ -41,6 +42,10 @@ export interface ModeloSuscripcion {
   finPrueba: Date | null;
   diasRestantes: number;
   totalDiasPrueba: number;
+  /** Qué enseñar de la prueba (ver @/lib/billing/prueba-vista): sin «3633 de 14» ni fechas de 2036. */
+  pruebaVista: PruebaVista;
+  /** ¿Este plan lleva «+ IVA» para esta clínica? (regla de exención: iva-cobro.ts). */
+  ivaDe: (id: PlanId) => boolean;
   porcentajePrueba: number;
   pruebaVencida: boolean;
   mostrarActivar: boolean;
@@ -130,23 +135,31 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
           <div>
             <div className={s.pruebaCabeza}>
               <span>
-                {m.diasRestantes === 0
+                {m.pruebaVista.tipo === "hoy"
                   ? t("shell.subscriptionTab.endsToday")
-                  : m.diasRestantes === 1
+                  : m.pruebaVista.tipo === "uno"
                     ? t("shell.subscriptionTab.oneDayLeft")
-                    : t("shell.subscriptionTab.daysLeftOfTotal", { days: m.diasRestantes, total: m.totalDiasPrueba })}
+                    : m.pruebaVista.tipo === "sinVencimiento"
+                      ? t("shell.subscriptionTab.trialNoNearEnd")
+                      : m.pruebaVista.tipo === "prorrogada"
+                        ? t("shell.subscriptionTab.daysLeftOnly", { days: miles(m.diasRestantes) })
+                        : t("shell.subscriptionTab.daysLeftOfTotal", { days: m.diasRestantes, total: m.totalDiasPrueba })}
               </span>
-              <span className={s.pruebaFecha}>
-                {t("shell.subscriptionTab.endsOn", { date: m.formatFecha(m.finPrueba) })}
-              </span>
+              {m.pruebaVista.fecha && (
+                <span className={s.pruebaFecha}>
+                  {t("shell.subscriptionTab.endsOn", { date: m.formatFecha(m.finPrueba) })}
+                </span>
+              )}
             </div>
-            <div className={s.barra}>
-              <div
-                className={s.barraRelleno}
-                data-nivel={m.diasRestantes <= 3 ? "critico" : undefined}
-                style={{ width: `${m.porcentajePrueba}%` }}
-              />
-            </div>
+            {m.pruebaVista.barra && (
+              <div className={s.barra}>
+                <div
+                  className={s.barraRelleno}
+                  data-nivel={m.diasRestantes <= 3 ? "critico" : undefined}
+                  style={{ width: `${m.porcentajePrueba}%` }}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -195,14 +208,14 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
                   {!esActual && esPopular && <Insignia tono="violeta">{t("shell.subscriptionTab.popularBadge")}</Insignia>}
                 </div>
                 <div className={s.precio}>
-                  ${precio}
-                  <span className={s.precioSufijo}>{m.sufijoIntervalo}</span>
+                  ${miles(precio)}
+                  <span className={s.precioSufijo}>{m.sufijoIntervalo}{m.ivaDe(plan.id) ? " + IVA" : ""}</span>
                 </div>
                 {!esActual && precioActual !== null && precio !== precioActual && (
                   <div className={`${s.delta} ${precio > precioActual ? s.deltaSube : ""}`}>
                     {precio > precioActual
-                      ? t(m.anual ? "shell.subscriptionTab.priceDeltaUpAnnual" : "shell.subscriptionTab.priceDeltaUp", { delta: precio - precioActual })
-                      : t(m.anual ? "shell.subscriptionTab.priceDeltaDownAnnual" : "shell.subscriptionTab.priceDeltaDown", { delta: precioActual - precio })}
+                      ? t(m.anual ? "shell.subscriptionTab.priceDeltaUpAnnual" : "shell.subscriptionTab.priceDeltaUp", { delta: miles(precio - precioActual) })
+                      : t(m.anual ? "shell.subscriptionTab.priceDeltaDownAnnual" : "shell.subscriptionTab.priceDeltaDown", { delta: miles(precioActual - precio) })}
                   </div>
                 )}
                 <ul className={s.beneficios}>
