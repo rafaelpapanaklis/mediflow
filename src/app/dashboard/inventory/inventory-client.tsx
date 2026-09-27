@@ -6,6 +6,7 @@ import {
   Plus, Search, Package, X, Trash2, Minus, Check,
   AlertTriangle, PackageX, PackageOpen, SearchX, Banknote,
   Wrench, Cog, FlaskConical, Ruler, Microscope, Syringe,
+  CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -21,6 +22,8 @@ import type { TFunction } from "@/i18n/t";
 // para la clínica; apagado, ni una clase de más.
 import { CLASES_REDISENO_INVENTARIO } from "@/components/dashboard/inventario-rediseno/raiz";
 import invStyles from "@/components/dashboard/inventario-rediseno/inventario-rediseno.module.css";
+// WS1-T5 — lotes y caducidad: modal propio y aislado, ver el archivo.
+import { LotesModal } from "@/components/dashboard/inventory/lotes-modal";
 
 const DENTAL_ICONS = [
   { id: "implante-plateado",  src: "/icons/dental/implante-plateado.png",  labelKey: "procurement.inventoryClient.iconImplantePlateado"  },
@@ -66,6 +69,8 @@ interface Item {
   id: string; name: string; description: string | null;
   category: string; emoji: string; quantity: number;
   minQuantity: number; unit: string; price: number | null;
+  /** ws1-t4 — costo unitario. Nunca null (0 = "no cuesta nada"). */
+  unitCost: number;
 }
 
 type StatusTab = "todos" | "disponible" | "poco" | "sin";
@@ -208,16 +213,22 @@ export function InventoryClient({
   const [showAdd, setShowAdd]   = useState(false);
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [editQty, setEditQty]   = useState<Record<string, string>>({});
+  // WS1-T5 — lotes y caducidad.
+  const [lotesItem, setLotesItem] = useState<Item | null>(null);
   const [newItem, setNewItem] = useState({
     name: "", description: "", category: "Instrumental básico",
     customCategory: "", quantity: 0, minQuantity: 5, unit: "pza", iconId: "fresa-jeringa",
+    unitCost: 0,
   });
 
   const kpis = useMemo(() => {
     const totalQty    = items.reduce((s, i) => s + i.quantity, 0);
     const lowCount    = items.filter(i => i.quantity > 0 && i.quantity <= i.minQuantity).length;
     const outCount    = items.filter(i => i.quantity === 0).length;
-    const totalValue  = items.reduce((s, i) => s + (i.price ?? 0) * i.quantity, 0);
+    // ws1-t4: antes era Σ (price ?? 0) × quantity — price nunca se capturaba
+    // y el total siempre daba $0. unitCost sí se captura (alta, edición, y
+    // la compra lo actualiza al último costo).
+    const totalValue  = items.reduce((s, i) => s + i.unitCost * i.quantity, 0);
     return { total: items.length, totalQty, lowCount, outCount, totalValue };
   }, [items]);
 
@@ -282,6 +293,18 @@ export function InventoryClient({
     setItems(prev => prev.map(i => i.id === id ? { ...i, minQuantity: min } : i));
   }
 
+  // ws1-t4: costo unitario editable en la misma tabla (mismo patrón que
+  // updateMinQty — blur guarda). 0 es válido: no se filtra por truthy.
+  async function updateUnitCost(id: string, cost: number) {
+    const res = await fetch(`/api/inventory/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unitCost: cost }),
+    });
+    if (!res.ok) { toast.error(t("common.genericError")); return; }
+    setItems(prev => prev.map(i => i.id === id ? { ...i, unitCost: cost } : i));
+  }
+
   async function addItem() {
     if (!newItem.name.trim()) { toast.error(t("procurement.inventoryClient.nameRequired")); return; }
     const finalCategory = newItem.category === "Otro"
@@ -299,12 +322,13 @@ export function InventoryClient({
           quantity: newItem.quantity,
           minQuantity: newItem.minQuantity,
           unit: newItem.unit,
+          unitCost: newItem.unitCost,
         }),
       });
       const created = await res.json();
       setItems(prev => [...prev, created]);
       setShowAdd(false);
-      setNewItem({ name:"", description:"", category:"Instrumental básico", customCategory:"", quantity:0, minQuantity:5, unit:"pza", iconId:"fresa-jeringa" });
+      setNewItem({ name:"", description:"", category:"Instrumental básico", customCategory:"", quantity:0, minQuantity:5, unit:"pza", iconId:"fresa-jeringa", unitCost:0 });
       toast.success(t("procurement.inventoryClient.itemAdded"));
       setTab(getStatus(created));
     } catch { toast.error(t("common.genericError")); }
@@ -406,6 +430,7 @@ export function InventoryClient({
                 <th>{t("procurement.inventoryClient.colCategory")}</th>
                 <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colQuantity")}</th>
                 <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colMinimum")}</th>
+                <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colUnitCost")}</th>
                 <th>{t("common.status")}</th>
                 <th style={{ textAlign: "right" }}>{t("common.actions")}</th>
               </tr>
@@ -487,9 +512,31 @@ export function InventoryClient({
                         }}
                       />
                     </td>
+                    <td style={{ textAlign: "right" }}>
+                      <input
+                        type="number" min={0} step="0.01"
+                        className="input-new mono"
+                        style={{ width: 76, height: 28, textAlign: "right", display: "inline-block" }}
+                        defaultValue={item.unitCost}
+                        onBlur={e => {
+                          const v = parseFloat(e.target.value);
+                          if (!isNaN(v) && v >= 0 && v !== item.unitCost) updateUnitCost(item.id, v);
+                        }}
+                      />
+                    </td>
                     <td>{statusBadge(status, t)}</td>
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: 4 }}>
+                        <button
+                          type="button"
+                          onClick={() => setLotesItem(item)}
+                          className="btn-new btn-new--ghost btn-new--sm"
+                          style={{ padding: 0, width: 28 }}
+                          aria-label="Lotes y caducidad"
+                          title="Lotes y caducidad"
+                        >
+                          <CalendarClock size={16} strokeWidth={1.75} aria-hidden />
+                        </button>
                         <button
                           type="button"
                           disabled={isLoad || item.quantity === 0}
@@ -643,7 +690,7 @@ export function InventoryClient({
                   {t("procurement.inventoryClient.sectionInitialStock")}
                   <span className="form-section__rule" />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px 14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px 14px" }}>
                   <div className="field-new">
                     <label className="field-new__label">{t("procurement.inventoryClient.fieldQuantity")}</label>
                     <input
@@ -674,6 +721,15 @@ export function InventoryClient({
                       ))}
                     </select>
                   </div>
+                  <div className="field-new">
+                    <label className="field-new__label">{t("procurement.inventoryClient.fieldUnitCost")}</label>
+                    <input
+                      type="number" min={0} step="0.01"
+                      className="input-new mono"
+                      value={newItem.unitCost}
+                      onChange={e => setNewItem(n => ({ ...n, unitCost: parseFloat(e.target.value) || 0 }))}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -687,6 +743,16 @@ export function InventoryClient({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* WS1-T5 — lotes y caducidad del artículo. */}
+      {lotesItem && (
+        <LotesModal
+          itemId={lotesItem.id}
+          itemName={lotesItem.name}
+          unit={lotesItem.unit}
+          onClose={() => setLotesItem(null)}
+        />
+      )}
     </div>
   );
 }

@@ -124,7 +124,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  const denied = denyIfMissingPermission(ctx, "analytics.view");
+  // ws1-t4: "analytics.view" (para leer) por poco protegía esto — termina en
+  // ".view" y READONLY lo recibe por construcción (permissions.ts), así que
+  // solo-lectura podía crear gastos. "expenses.edit" no lo tiene.
+  const denied = denyIfMissingPermission(ctx, "expenses.edit");
   if (denied) return denied;
   const { clinicId, userId } = ctx;
 
@@ -153,6 +156,12 @@ export async function POST(req: NextRequest) {
         note:   note || null,
         createdById: userId,
       },
+      // ws1-t4: select explícito — Expense gana "purchaseId" (columna nueva,
+      // ligada a InventoryPurchase) y este alta manual no lo necesita ni lo
+      // toca. Fijar el select aquí evita que este INSERT ... RETURNING
+      // reviente con P2022 mientras sql/inventario-compras-t4.sql no se
+      // pegue: "registrar gasto a mano" sigue funcionando igual.
+      select: { id: true, date: true, category: true, amount: true, note: true },
     });
     return NextResponse.json({ gasto: serializeGasto(gasto) }, { status: 201 });
   } catch (err: any) {
@@ -166,7 +175,8 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  const denied = denyIfMissingPermission(ctx, "analytics.view");
+  // ws1-t4: mismo interruptor que crear — ver la nota en POST.
+  const denied = denyIfMissingPermission(ctx, "expenses.edit");
   if (denied) return denied;
 
   const id = new URL(req.url).searchParams.get("id") ?? "";

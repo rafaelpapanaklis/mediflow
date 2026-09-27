@@ -46,9 +46,15 @@ const u = (role: Role, permissionsOverride: string[] = []) =>
 /**
  * Keys que un endpoint o una página exigen de verdad (denyIfMissingPermission /
  * requirePermissionOrRedirect / hasPermission en server). Las que faltan del
- * catálogo (today.view, inventory.view, suppliers.view, clinicLayout.view,
- * marketplace.view, specialties.*) solo las lee el sidebar — se listan en el
- * test de "ningún interruptor muerto", no aquí.
+ * catálogo (today.view, suppliers.view, clinicLayout.view, marketplace.view,
+ * specialties.*) solo las lee el sidebar — se listan en el test de "ningún
+ * interruptor muerto", no aquí.
+ *
+ * ws1-t4: "inventory.view" se sube aquí — la página y el GET de inventario no
+ * exigían nada antes (cualquier sesión de la clínica leía el inventario
+ * completo); ahora sí. "expenses.edit" es NUEVA (POST/DELETE /api/gastos
+ * pedían "analytics.view", que READONLY recibe por ser ".view" — ver el
+ * test de READONLY más abajo).
  */
 const ENFORCED_KEYS: PermissionKey[] = [
   "agenda.view", "agenda.create", "agenda.edit", "agenda.delete",
@@ -61,10 +67,10 @@ const ENFORCED_KEYS: PermissionKey[] = [
   "inbox.view", "inbox.send", "inbox.delete",
   "whatsapp.view", "whatsapp.send",
   "resources.view", "resources.edit",
-  "inventory.edit",
+  "inventory.view", "inventory.edit",
   "suppliers.order",
   "billing.view", "billing.create", "billing.charge", "billing.refund", "billing.edit",
-  "analytics.view", "reports.view",
+  "analytics.view", "reports.view", "expenses.edit",
   "tvModes.view", "tvModes.edit",
   "team.view", "team.edit",
   "settings.view", "settings.edit",
@@ -94,13 +100,14 @@ const EXPECTED: Record<Role, Record<string, boolean>> = {
     "inbox.view": true, "inbox.send": true, "inbox.delete": false,
     "whatsapp.view": false, "whatsapp.send": false,
     "resources.view": true, "resources.edit": false,
-    "inventory.edit": false,
+    // ws1-t4: lo necesita el selector de insumos de una sesión de tratamiento.
+    "inventory.view": true, "inventory.edit": false,
     "suppliers.order": false,
     // El doctor PRESUPUESTA y FACTURA (el presupuesto es la cara del importe
     // del plan que él mismo arma), pero NO toca el dinero: cobrar y reembolsar
     // siguen siendo de recepción y administración. Ver ROLE_DEFAULT_PERMISSIONS.
     "billing.view": true, "billing.create": true, "billing.charge": false, "billing.refund": false, "billing.edit": true,
-    "analytics.view": false, "reports.view": false,
+    "analytics.view": false, "reports.view": false, "expenses.edit": false,
     "tvModes.view": false, "tvModes.edit": false,
     "team.view": false, "team.edit": false,
     "settings.view": false, "settings.edit": false,
@@ -125,10 +132,10 @@ const EXPECTED: Record<Role, Record<string, boolean>> = {
     "inbox.view": true, "inbox.send": true, "inbox.delete": false,
     "whatsapp.view": true, "whatsapp.send": true,
     "resources.view": true, "resources.edit": false,
-    "inventory.edit": false,
+    "inventory.view": true, "inventory.edit": false,
     "suppliers.order": false,
     "billing.view": true, "billing.create": true, "billing.charge": true, "billing.refund": false, "billing.edit": true,
-    "analytics.view": false, "reports.view": false,
+    "analytics.view": false, "reports.view": false, "expenses.edit": false,
     "tvModes.view": false, "tvModes.edit": false,
     "team.view": false, "team.edit": false,
     "settings.view": false, "settings.edit": false,
@@ -151,10 +158,14 @@ const EXPECTED: Record<Role, Record<string, boolean>> = {
     "inbox.view": true, "inbox.send": false, "inbox.delete": false,
     "whatsapp.view": true, "whatsapp.send": false,
     "resources.view": true, "resources.edit": false,
-    "inventory.edit": false,
+    // READONLY termina ".view", así que sí lee inventario — pero NO puede
+    // crear/borrar gastos: "expenses.edit" no acaba en ".view" a propósito
+    // (ver la nota de la key, permissions.ts), justo para que este caso no
+    // vuelva a pasar.
+    "inventory.view": true, "inventory.edit": false,
     "suppliers.order": false,
     "billing.view": true, "billing.create": false, "billing.charge": false, "billing.refund": false, "billing.edit": false,
-    "analytics.view": true, "reports.view": true,
+    "analytics.view": true, "reports.view": true, "expenses.edit": false,
     "tvModes.view": true, "tvModes.edit": false,
     "team.view": true, "team.edit": false,
     "settings.view": true, "settings.edit": false,
@@ -429,8 +440,11 @@ test("EQ-07: las 14 rutas de ISO-03 y las de los interruptores cableados exigen 
     ["app/api/treatments/route.ts", "treatments.edit"],
     ["app/api/treatments/[id]/route.ts", "treatments.edit"],
     ["app/dashboard/treatments/page.tsx", "treatments.view"],
+    ["app/api/inventory/route.ts", "inventory.view"],
     ["app/api/inventory/route.ts", "inventory.edit"],
     ["app/api/inventory/[id]/route.ts", "inventory.edit"],
+    ["app/dashboard/inventory/page.tsx", "inventory.view"],
+    ["app/api/gastos/route.ts", "expenses.edit"],
     ["app/api/compras/orders/route.ts", "suppliers.order"],
     ["app/api/compras/orders/[orderId]/pay/route.ts", "suppliers.order"],
     ["app/api/compras/orders/[orderId]/reorder/route.ts", "suppliers.order"],

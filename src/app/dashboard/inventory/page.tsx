@@ -2,8 +2,10 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { listarInventario } from "@/lib/inventory/costo.server";
 import { InventoryClient } from "./inventory-client";
 
 export const metadata: Metadata = { title: "Inventario — DaleControl" };
@@ -130,6 +132,7 @@ const DENTAL_SEED = [
 
 export default async function InventoryPage() {
   const user = await getCurrentUser();
+  requirePermissionOrRedirect(user, "inventory.view");
   const clinicId = user.clinicId;
 
   // Auto-seed dental inventory if empty
@@ -139,10 +142,7 @@ export default async function InventoryPage() {
   // viaje a la base; falla cerrado (sin tabla, sin fila o con error → false =
   // la pantalla de hoy, tal cual).
   const [items0, rediseno] = await Promise.all([
-    prisma.inventoryItem.findMany({
-      where: { clinicId },
-      orderBy: [{ category: "asc" }, { name: "asc" }],
-    }),
+    listarInventario({ clinicId }),
     menuDosNivelesEncendido(clinicId),
   ]);
   let items = items0;
@@ -164,10 +164,7 @@ export default async function InventoryPage() {
         })),
         skipDuplicates: true,
       });
-      items = await prisma.inventoryItem.findMany({
-        where: { clinicId },
-        orderBy: [{ category: "asc" }, { name: "asc" }],
-      });
+      items = await listarInventario({ clinicId });
     }
   }
 

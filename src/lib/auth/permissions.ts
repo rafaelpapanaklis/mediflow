@@ -113,6 +113,13 @@ export const ALL_PERMISSIONS = {
   // factura siguen exigiendo billing.charge, que el doctor no tiene).
   "billing.deposit":      "Pedir anticipos",
   "analytics.view":       "Ver Analytics",
+  // ws1-t4: POST/DELETE /api/gastos pedían "analytics.view" — key que
+  // TERMINA en ".view", así que READONLY la recibía por construcción (línea
+  // 302 más abajo) y de paso podía crear y borrar gastos, no solo verlos.
+  // Key aparte, que NO termina en ".view" a propósito: por default solo la
+  // tienen SUPER_ADMIN/ADMIN (vía ALL_PERMISSION_KEYS), igual que hoy podía
+  // "dirección financiera" — ver GET /api/gastos, que sigue en analytics.view.
+  "expenses.edit":        "Crear y borrar gastos (Finanzas)",
   "tvModes.view":         "Ver Pantallas TV",
   "tvModes.edit":         "Configurar Pantallas TV",
   "reports.view":         "Ver reportes",
@@ -170,7 +177,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Comunicación",   keys: ["inbox.view", "inbox.send", "inbox.delete", "whatsapp.view", "whatsapp.send"] },
   { title: "Catálogo",       keys: ["resources.view", "resources.edit", "inventory.view", "inventory.edit", "suppliers.view", "suppliers.order"] },
   { title: "Facturación",    keys: ["billing.view", "billing.create", "billing.charge", "billing.deposit", "billing.refund", "billing.edit"] },
-  { title: "Reportes y TV",  keys: ["analytics.view", "reports.view", "tvModes.view", "tvModes.edit"] },
+  { title: "Reportes y TV",  keys: ["analytics.view", "reports.view", "expenses.edit", "tvModes.view", "tvModes.edit"] },
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
   { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
   { title: "Privacidad",     keys: ["arco.manage"] },
@@ -254,6 +261,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     // sigue sin poder registrar pagos a mano ni reembolsar.
     "billing.view", "billing.create", "billing.edit", "billing.deposit",
     "resources.view", "suppliers.view",
+    // ws1-t4: GET /api/inventory ahora exige "inventory.view" (antes no
+    // exigía nada). El doctor lo necesita para el selector de insumos al
+    // registrar una sesión de tratamiento (treatments-client.tsx pega a este
+    // mismo endpoint) — sin esto, se quedaría viendo el selector vacío/403.
+    "inventory.view",
     "inbox.view", "inbox.send",
     "marketplace.view",
     "specialties.pediatrics",

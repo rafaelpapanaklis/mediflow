@@ -13,9 +13,16 @@ export default async function OrthoticsPage() {
 
   // Orthotics pipeline uses InventoryItem with category prefixed "orthotics_"
   // Each item represents a patient order with the stage stored in the unit field
+  // ws1-t4 (defensivo, sin cambio de comportamiento): select explícito —
+  // misma razón que en Ejercicios, ver su nota.
   const items = await prisma.inventoryItem.findMany({
     where: { clinicId, category: { startsWith: "orthotics_" } },
     orderBy: { createdAt: "asc" },
+    select: {
+      id: true, clinicId: true, name: true, description: true, category: true,
+      emoji: true, quantity: true, minQuantity: true, unit: true, price: true,
+      createdAt: true, updatedAt: true,
+    },
   });
 
   return <OrthoticsClient key={clinicId} initialItems={items as any} />;

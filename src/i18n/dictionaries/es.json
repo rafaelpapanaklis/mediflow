@@ -4434,6 +4434,7 @@
       "colCategory": "Categoría",
       "colQuantity": "Cantidad",
       "colMinimum": "Mínimo",
+      "colUnitCost": "Costo unit.",
       "clickToEdit": "Click para editar",
       "removeOne": "Quitar uno",
       "addOne": "Agregar uno",
@@ -4456,6 +4457,7 @@
       "fieldQuantity": "Cantidad",
       "fieldAlertIfBelow": "Alerta si <",
       "fieldUnit": "Unidad",
+      "fieldUnitCost": "Costo unitario",
       "addItem": "Agregar artículo"
     },
     "labDetail": {

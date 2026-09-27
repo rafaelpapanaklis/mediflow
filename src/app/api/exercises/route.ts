@@ -5,6 +5,15 @@ import { prisma } from "@/lib/prisma";
 // Exercise library stored as InventoryItem with category="exercise_library"
 // Mapping: name -> exercise name, description -> exercise description,
 // unit -> muscle group, quantity -> default sets, minQuantity -> default reps
+//
+// ws1-t4 (defensivo, sin cambio de comportamiento): los selects explícitos
+// de este archivo evitan que este endpoint dependa de columnas nuevas de
+// InventoryItem (unitCost, ws1-t4; quantityPrecise, ws1-t5) que no le
+// interesan — ver la misma nota en dashboard/exercises/page.tsx.
+const EXERCISE_SELECT = {
+  id: true, name: true, description: true, unit: true,
+  quantity: true, minQuantity: true, createdAt: true,
+} as const;
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -13,6 +22,7 @@ export async function GET(req: NextRequest) {
   const exercises = await prisma.inventoryItem.findMany({
     where: { clinicId: ctx.clinicId, category: "exercise_library" },
     orderBy: [{ unit: "asc" }, { name: "asc" }],
+    select: EXERCISE_SELECT,
   });
 
   // Transform to exercise-friendly shape
@@ -51,6 +61,7 @@ export async function POST(req: NextRequest) {
       minQuantity: defaultReps ? Number(defaultReps) : 10,
       unit: muscleGroup ?? "general",
     },
+    select: EXERCISE_SELECT,
   });
 
   return NextResponse.json(

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
+import { obtenerInventoryItem, actualizarInventoryItem } from "@/lib/inventory/costo.server";
+import { registrarHistorialInventario } from "@/lib/inventory/historial.server";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -14,18 +16,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (denied) return denied;
 
   const body = await req.json();
-  const item = await prisma.inventoryItem.findFirst({ where: { id: params.id, clinicId: ctx.clinicId } });
+  const item = await obtenerInventoryItem({ id: params.id, clinicId: ctx.clinicId });
   if (!item) return NextResponse.json({ error: "Insumo no encontrado" }, { status: 404 });
 
   // Delta change (+ or -)
   if (body.change !== undefined) {
     const newQty  = Math.max(0, item.quantity + Number(body.change));
-    const updated = await prisma.inventoryItem.update({
-      where: { id: params.id },
-      data:  { quantity: newQty, updatedAt: new Date() },
-    });
-    await prisma.inventoryHistory.create({
-      data: { itemId: params.id, change: Number(body.change), reason: body.reason ?? null },
+    const updated = await actualizarInventoryItem(params.id, { quantity: newQty, updatedAt: new Date() });
+    await registrarHistorialInventario({
+      itemId: params.id, clinicId: ctx.clinicId, userId: ctx.userId,
+      change: Number(body.change), reason: body.reason ?? null, type: "adjust",
     });
     return NextResponse.json(updated);
   }
@@ -34,30 +34,28 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.quantity !== undefined) {
     const newQty  = Math.max(0, Number(body.quantity));
     const change  = newQty - item.quantity;
-    const updated = await prisma.inventoryItem.update({
-      where: { id: params.id },
-      data:  { quantity: newQty, updatedAt: new Date() },
-    });
+    const updated = await actualizarInventoryItem(params.id, { quantity: newQty, updatedAt: new Date() });
     if (change !== 0) {
-      await prisma.inventoryHistory.create({
-        data: { itemId: params.id, change, reason: "Ajuste directo" },
+      await registrarHistorialInventario({
+        itemId: params.id, clinicId: ctx.clinicId, userId: ctx.userId,
+        change, reason: "Ajuste directo", type: "adjust",
       });
     }
     return NextResponse.json(updated);
   }
 
   // Update metadata fields
-  const updated = await prisma.inventoryItem.update({
-    where: { id: params.id },
-    data: {
-      ...(body.name        !== undefined && { name:        body.name        }),
-      ...(body.description !== undefined && { description: body.description }),
-      ...(body.minQuantity !== undefined && { minQuantity: Number(body.minQuantity) }),
-      ...(body.unit        !== undefined && { unit:        body.unit        }),
-      ...(body.price       !== undefined && { price:       body.price !== null ? Number(body.price) : null }),
-      ...(body.emoji       !== undefined && { emoji:       body.emoji       }),
-      updatedAt: new Date(),
-    },
+  const updated = await actualizarInventoryItem(params.id, {
+    ...(body.name        !== undefined && { name:        body.name        }),
+    ...(body.description !== undefined && { description: body.description }),
+    ...(body.minQuantity !== undefined && { minQuantity: Number(body.minQuantity) }),
+    ...(body.unit        !== undefined && { unit:        body.unit        }),
+    ...(body.price       !== undefined && { price:       body.price !== null ? Number(body.price) : null }),
+    // ws1-t4: 0 es un costo válido y se guarda tal cual — `!== undefined`,
+    // no truthy (mismo cuidado que en el alta, POST /api/inventory).
+    ...(body.unitCost    !== undefined && { unitCost:    body.unitCost !== null ? Number(body.unitCost) : 0 }),
+    ...(body.emoji       !== undefined && { emoji:       body.emoji       }),
+    updatedAt: new Date(),
   });
   return NextResponse.json(updated);
 }
