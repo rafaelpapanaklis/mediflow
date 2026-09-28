@@ -18,13 +18,13 @@ import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { datosDeCierreDeCita, planDeCierreDeCita } from "@/lib/orthodontics/cerrar-cita-al-firmar";
 import { esCitaControlOrto, TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { buscarPrecioControlOrto } from "@/lib/orthodontics/catalog-procedures";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
-import { canTransition, sideEffectsOf } from "@/lib/agenda/transitions";
 
 /** Códigos Prisma de "columna inexistente" — mismo patrón que cobranza-db.ts. */
 function esColumnaAusente(e: unknown): boolean {
@@ -135,7 +135,7 @@ export async function signTreatmentCard(
     p: data.soap.p ?? "",
   };
   if (!canSignSoap(soap)) {
-    return fail("SOAP incompleto: S, O, A y P son requeridos para firmar");
+    return fail("Falta el Plan (P): es lo único obligatorio para firmar el control");
   }
 
   const plan = await prisma.orthodonticTreatmentPlan.findFirst({
@@ -366,20 +366,17 @@ export async function signTreatmentCard(
     // se canceló, o ya estaba completada) — nunca revierte la firma clínica.
     if (citaDeControl && citaDeControl.status !== "COMPLETED") {
       try {
-        const check = canTransition(
-          citaDeControl.status as any,
-          "COMPLETED",
-          ctx.role as any,
+        const plan = planDeCierreDeCita(
+          citaDeControl.status,
+          String(ctx.role),
           now,
           citaDeControl.startsAt,
         );
-        if (check.ok) {
-          await prisma.appointment.update({
-            where: { id: citaDeControl.id },
-            data: { status: "COMPLETED", ...sideEffectsOf("COMPLETED", now) },
-          });
+        const cierre = datosDeCierreDeCita(plan, now);
+        if (cierre) {
+          await prisma.appointment.update({ where: { id: citaDeControl.id }, data: cierre });
         } else {
-          console.warn(`[ortho] signTreatmentCard: cita ${citaDeControl.id} no pasó a COMPLETED (${check.error}) — se firmó igual`);
+          console.warn(`[ortho] signTreatmentCard: cita ${citaDeControl.id} (${citaDeControl.status}) no se puede pasar a COMPLETED — se firmó igual`);
         }
       } catch (e) {
         console.warn("[ortho] signTreatmentCard: no se pudo marcar la cita como atendida (no revierte la firma):", e);
