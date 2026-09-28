@@ -6709,6 +6709,17 @@ model OrthoTreatmentCard {
   nextDate        DateTime?
   nextDurationMin Int?
 
+  /// Ola 1 (ws1-t4, Control y agenda, sep-2026) — C2 del documento de
+  /// alcance: activaciones de ESTA visita (vueltas de expansor, resortes,
+  /// arcos auxiliares). Texto libre, por visita — distinto del contador de
+  /// caso `OrthoAuxMechanics.expanderActivations` (Alta del caso). Nula y
+  /// aditiva; SQL a mano en sql/ortodoncia-control-agenda.sql.
+  activationsNote String?
+  /// Ola 1 (ws1-t4, Control y agenda) — C3: indicaciones para el paciente de
+  /// ESTA visita (elásticos, higiene, qué no comer, qué hacer si se
+  /// despega un bracket), antes revueltas en `soapP`. Nula y aditiva.
+  indications String?
+
   status     OrthoCardStatus @default(DRAFT)
   signedAt   DateTime?
   signedById String?
