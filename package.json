@@ -18,6 +18,7 @@
     "test:route-cache": "tsx --test src/lib/__tests__/route-cache.test.ts",
     "test:marketplace": "tsx --test src/lib/marketplace/access-control.test.ts",
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts",
+    "test:module-purchase": "tsx --test src/lib/marketplace/module-purchase-core.test.ts",
     "test:agenda": "tsx --test src/lib/agenda/date-ranges.test.ts",
     "test:inventario-costo": "tsx --test src/lib/inventory/__tests__/costo-core.test.ts",
     "test:inventario-compras": "tsx --test src/lib/inventory/__tests__/compras.server.test.ts",
@@ -347,6 +348,8 @@
     "test:orto-alta-caso": "tsx --test src/lib/orthodontics/__tests__/alta-caso-tolerance.test.ts",
     "//test:orto-imagen-context": "Necesita --experimental-test-module-mocks: mock.module sustituye @/lib/prisma y _helpers para getOrthoImagingContext (ws1-t8, revisión cruzada — visibilidad de paciente).",
     "test:orto-imagen-context": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/imagen/__tests__/_context.test.ts",
+    "//test:orto-imagen-list-signed-urls": "Necesita --experimental-test-module-mocks: mock.module sustituye @/lib/prisma, ../_context y @/lib/storage (hallazgo ws1-t11 — listCephalometricAnalyses devolvía el path crudo del bucket en vez de firmarlo).",
+    "test:orto-imagen-list-signed-urls": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/imagen/__tests__/listCephalometricAnalyses.test.ts",
     "test:orto-adapter-invoice-total": "tsx --test src/lib/orthodontics/redesign/__tests__/adapter-invoice-total.test.ts"
   },
   "prisma": {

@@ -2,6 +2,7 @@
 // Ortodoncia — Parte 7 «Imagen y análisis» (ws1-t8, ola 1, sep-2026). H1/H3.
 
 import { prisma } from "@/lib/prisma";
+import { signMaybeUrls } from "@/lib/storage";
 import type { CephPoints } from "@/lib/orthodontics/cefalometria/landmarks";
 import type { CephMeasurements } from "@/lib/orthodontics/cefalometria/measurements";
 import type { CephAnalysisType, CephNormSet } from "@/lib/orthodontics/cefalometria/norms";
@@ -47,8 +48,19 @@ export async function listCephalometricAnalyses(
       },
     });
 
+    // El bucket es privado (BUCKETS.PATIENT_FILES — ver @/lib/storage): lo
+    // que guarda `PatientFile.url` es el PATH interno, no algo que un
+    // <img src> pueda cargar. Se firma bajo demanda, en UN solo viaje para
+    // las hasta 2N URLs de todas las filas — mismo mecanismo que ya usa
+    // `listMonitoringPhotos.ts` (H15) y `redesign/loader.ts` (fotos T0/T1/T2)
+    // para lo mismo. Antes esta acción devolvía el path crudo tal cual: el
+    // hallazgo de ws1-t11 (imagen en blanco) es este bug, no solo el
+    // placeholder `/api/files/<id>` de los dos componentes que lo consumen.
+    const rawUrls = rows.flatMap((r) => [r.lateralXrayFile?.url ?? null, r.tracingPdfFile?.url ?? null]);
+    const signed = await signMaybeUrls(rawUrls);
+
     return ok(
-      rows.map((r) => ({
+      rows.map((r, i) => ({
         id: r.id,
         // kind/analysisType/normSet son String en la base (CHECK constraint,
         // no enum nativo — ver nota en schema.prisma) validados al escribir;
@@ -65,8 +77,8 @@ export async function listCephalometricAnalyses(
           IMPA: null,
         },
         calibrationMmPerPixel: r.calibrationMmPerPixel,
-        lateralXrayFileUrl: r.lateralXrayFile?.url ?? null,
-        tracingPdfFileUrl: r.tracingPdfFile?.url ?? null,
+        lateralXrayFileUrl: signed[i * 2] || null,
+        tracingPdfFileUrl: signed[i * 2 + 1] || null,
         createdAt: r.createdAt.toISOString(),
       })),
     );

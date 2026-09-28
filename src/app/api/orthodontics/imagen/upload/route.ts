@@ -12,6 +12,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { storageQuotaError } from "@/lib/storage-quota";
+import { createSignedFileUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -137,5 +138,20 @@ export async function POST(req: NextRequest) {
     select: { id: true, url: true },
   });
 
-  return NextResponse.json({ ok: true, fileId: patientFile.id, path: patientFile.url });
+  // El bucket es privado: `path` no sirve como <img src>. Se firma AQUÍ,
+  // en la propia respuesta de subida, para que el cliente pueda mostrar la
+  // imagen de inmediato sin un segundo viaje ni una ruta que "resuelva" un
+  // fileId a una URL (hallazgo ws1-t11: los dos componentes que consumen
+  // esto fabricaban `/api/files/<id>`, una ruta que nunca existió — 404 en
+  // dev.108). Falla en SUAVE: si firmar falla, el archivo YA se subió y
+  // tiene fileId; `signedUrl: null` dice "sin vista previa todavía", nunca
+  // rompe la subida que sí funcionó.
+  let signedUrl: string | null = null;
+  try {
+    signedUrl = await createSignedFileUrl(patientFile.url);
+  } catch (e) {
+    console.error("[ortho imagen upload] no se pudo firmar la URL de vista previa:", e);
+  }
+
+  return NextResponse.json({ ok: true, fileId: patientFile.id, path: patientFile.url, signedUrl });
 }
