@@ -5,7 +5,7 @@
 // monta dentro del shell del patient-detail (que provee la sidebar
 // contextual a la izquierda).
 
-import { Sparkles } from "lucide-react";
+import { Shield, Sparkles, Star } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import {
@@ -16,6 +16,8 @@ import { isFailure } from "@/app/actions/orthodontics/result";
 import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
 import { debeAbrirLaHoja } from "@/lib/orthodontics/consulta-ortodoncia";
 import { SectionHero } from "./sections/SectionHero";
+import { SeccionPlegada } from "./SeccionPlegada";
+import { seccionesPlegadasPorFase } from "@/lib/orthodontics/redesign/secciones-por-fase";
 import { SectionDiagnosis } from "./sections/SectionDiagnosis";
 import { SectionPlan } from "./sections/SectionPlan";
 import { SectionTreatmentCards } from "./sections/SectionTreatmentCards";
@@ -431,6 +433,12 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       : undefined;
 
   const tStatus = props.treatmentStatus ?? "en-tratamiento";
+  // Fila 26 (ws1-t4 ronda 6): lo que no toca por fase va plegado.
+  const plegadas = seccionesPlegadasPorFase({
+    estado: tStatus,
+    hayRetencionCapturada:
+      props.retentionRegimen != null || (props.retainerCheckups?.length ?? 0) > 0,
+  });
 
   return (
     <div className={`${RAIZ_ORTO} ${orto.lienzo}`}>
@@ -585,18 +593,26 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               calla si no hay caso de alineadores ni cumplimiento registrado. */}
           {t.treatmentPlanId ? <AlineadoresPanel treatmentPlanId={t.treatmentPlanId} /> : null}
 
-          <SectionRetention
-            regimen={props.retentionRegimen ?? null}
-            checkups={props.retainerCheckups ?? []}
-            treatmentStatus={tStatus}
-            sinCaso={!t.treatmentPlanId}
-            onTogglePreSurvey={props.onTogglePreSurvey}
-            onConfigureRegimen={
-              props.onUpdateRetentionRegimen
-                ? () => setDrawer({ kind: "config-retention" })
-                : props.onConfigureRetention
-            }
-          />
+          <SeccionPlegada
+            plegada={plegadas.retencion}
+            id="retention"
+            icon={<Shield size={15} strokeWidth={1.75} />}
+            title="Retención"
+            cuando="Empieza al retirar los brackets"
+          >
+            <SectionRetention
+              regimen={props.retentionRegimen ?? null}
+              checkups={props.retainerCheckups ?? []}
+              treatmentStatus={tStatus}
+              sinCaso={!t.treatmentPlanId}
+              onTogglePreSurvey={props.onTogglePreSurvey}
+              onConfigureRegimen={
+                props.onUpdateRetentionRegimen
+                  ? () => setDrawer({ kind: "config-retention" })
+                  : props.onConfigureRetention
+              }
+            />
+          </SeccionPlegada>
 
           {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S6, QUITAR: NPS
               (se programa pero nadie lo envía) y códigos de referidos (solo
@@ -604,12 +620,20 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               (onGeneratePdf) SÍ se queda — S12 lo saca explícitamente del
               QUITAR ("el PDF comparativo se queda"), es distinto del
               comparador de fotos roto que sí se oculta más abajo. */}
-          <SectionPostTreatment
-            treatmentStatus={tStatus}
-            npsSchedules={props.npsSchedules ?? []}
-            referralCode={props.referralCode ?? null}
-            onGeneratePdf={props.onGeneratePdfBeforeAfter}
-          />
+          <SeccionPlegada
+            plegada={plegadas.postratamiento}
+            id="post"
+            icon={<Star size={15} strokeWidth={1.75} />}
+            title="Post-tratamiento"
+            cuando="Al terminar el tratamiento"
+          >
+            <SectionPostTreatment
+              treatmentStatus={tStatus}
+              npsSchedules={props.npsSchedules ?? []}
+              referralCode={props.referralCode ?? null}
+              onGeneratePdf={props.onGeneratePdfBeforeAfter}
+            />
+          </SeccionPlegada>
 
           <SectionDocs
             labOrders={props.labOrders ?? []}

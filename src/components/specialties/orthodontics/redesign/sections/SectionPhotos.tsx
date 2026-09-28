@@ -19,6 +19,7 @@ import { fmtDate } from "../atoms/format";
 import { PHOTO_SLOTS, PhotoSlotIcon } from "./PhotoSlotIcon";
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
+import { juegoDeSeisMesesPendiente } from "@/lib/orthodontics/redesign/secciones-por-fase";
 
 export type PhotoStage = "T0" | "T1" | "T2" | "CONTROL";
 
@@ -165,8 +166,12 @@ export function SectionPhotos(props: SectionPhotosProps) {
   const total = PHOTO_SLOTS.length;
   const uploaded = Object.keys(uploads).length;
 
-  // Card extra al final para "Capturar set" si T2 está pendiente.
-  const t2Pending = !props.historicalSets.some((s) => s.stage === "T2");
+  // Card extra al final para "Capturar set" si T2 está pendiente — desde el
+  // mes 6, no antes (fila 26, ws1-t4 ronda 6: en el mes 2 ya salía «pendiente»).
+  const t2Pending = juegoDeSeisMesesPendiente({
+    mesActual: props.monthCurrent,
+    yaHayJuego: props.historicalSets.some((s) => s.stage === "T2"),
+  });
 
   return (
     <Card
