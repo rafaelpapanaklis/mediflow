@@ -136,6 +136,13 @@ function delegado(modelo: string) {
     {
       get(_t, op: string) {
         if (op === "create" || op === "update") return async (args: any) => escribir(modelo, op, args);
+        // Una tabla que esta clínica de prueba no sembró está VACÍA, no rota: el
+        // horario propio de cada doctor (22-sep) y lo de ortodoncia (ws1-t11: el
+        // módulo contratado, su configuración y los casos). Sin esto, agendar
+        // moría con «Cannot read properties of undefined (reading 'findMany')».
+        if (!m.agenda[modelo] && (LECTURAS.has(op) || op === "findUnique")) {
+          return async () => (op === "findMany" || op === "groupBy" ? [] : op === "count" ? 0 : null);
+        }
         if (op === "findUnique") {
           return async (args: any) => conInclude(await m.agenda[modelo].findFirst({ where: args.where }));
         }

@@ -92,6 +92,8 @@ export interface Datos {
   orthoCardBrokenBrackets?: Fila[];
   orthodonticAligners?: Fila[];
   patientCredits?: Fila[];
+  /** La fila de Configuración → Ortodoncia de cada sede: catálogo de tipos de cita y doctor tratante por defecto. */
+  orthodonticsClinicSettings?: Fila[];
 }
 
 /** Los modelos de ortodoncia (ws1-t11): entidad de Prisma → tabla del doble. */
@@ -113,6 +115,7 @@ const MODELOS_ORTO: Record<string, keyof Datos> = {
   orthoCardBrokenBracket: "orthoCardBrokenBrackets",
   orthodonticAligner: "orthodonticAligners",
   patientCredit: "patientCredits",
+  orthodonticsClinicSettings: "orthodonticsClinicSettings",
 };
 
 interface Relacion {
@@ -387,7 +390,20 @@ export function crearBase(datos: Datos): BaseDoble {
      * puede hacer. El criterio de la consulta normalizada se prueba aparte,
      * contra `buildPatientSearchSql`, en buscar-paciente.test.ts.
      */
-    async $queryRaw(): Promise<any[]> {
+    async $queryRaw(consulta?: unknown): Promise<any[]> {
+      // La ÚNICA consulta cruda que el doble contesta (ws1-t11): «¿de qué caso
+      // de ortodoncia cuelga esta factura?» (`dinero/orto-candado.ts`). Sin
+      // ella, `cobrar_factura` no cobra —no pudo comprobarlo—, que es lo que
+      // tiene que hacer con una base que falla, pero no con una de prueba.
+      const q = consulta as { strings?: readonly string[]; values?: readonly unknown[] } | undefined;
+      const texto = Array.isArray(q?.strings) ? q!.strings.join(" ? ") : "";
+      if (/"orthodonticTreatmentPlanId" AS "planId"/.test(texto)) {
+        const [id, clinicId] = (q?.values ?? []) as string[];
+        return tablas.invoices
+          .filter((i) => i.id === id && i.clinicId === clinicId)
+          .slice(0, 1)
+          .map((i) => ({ planId: i.orthodonticTreatmentPlanId ?? null }));
+      }
       throw new Error("el doble de base no ejecuta SQL crudo");
     },
   } as BaseDoble;

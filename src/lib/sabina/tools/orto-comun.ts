@@ -2,12 +2,17 @@
  * Lo común de las tres herramientas de ORTODONCIA de Sabina (ws1-t11):
  * `orto_caso`, `orto_controles` y `orto_cobranza`.
  *
- * 🔴 SOLO LECTURA (regla dura de Rafael). Sabina no abre casos, no agenda
- * controles, no firma hojas, no cobra mensualidades y no manda recordatorios:
- * dice lo que hay y da el ENLACE a la pantalla del panel donde eso se hace. Por
- * eso ninguna de las tres es una acción (`definirAccion`), ninguna entra en
- * `ACCIONES_SABINA`, y el enlace no se deja en manos del modelo: viaja en
- * `avisoObligatorio` y el motor lo añade si la respuesta no lo trae.
+ * 🔴 LAS TRES SON DE SOLO LECTURA (regla dura de Rafael). Ninguna abre casos,
+ * firma hojas, cobra mensualidades ni manda recordatorios: dicen lo que hay y
+ * dan el ENLACE a la pantalla del panel donde eso se hace. Por eso ninguna es
+ * una acción (`definirAccion`), ninguna entra en `ACCIONES_SABINA`, y el enlace
+ * no se deja en manos del modelo: viaja en `avisoObligatorio` y el motor lo
+ * añade si la respuesta no lo trae.
+ *
+ * Lo único de ortodoncia que Sabina HACE (decisión de Rafael del 28-sep-2026,
+ * «opción B») es AGENDAR, y no aquí: lo hace `agendar_cita`, la acción de
+ * siempre, que propone y espera al botón (ver ./orto-agenda). Cobrar
+ * ortodoncia, no: `cobrar_factura` lo rechaza (ver ../dinero/orto-candado).
  *
  * ── LOS NOMBRES EMPIEZAN POR `orto_`, NO POR `ortodoncia_` ──────────────
  * `sabina-dinero-actua.test.ts` prohíbe «ortodoncia» y «plan_de_pago» en el
@@ -124,8 +129,8 @@ export function avisoSinModulo(estado: Exclude<EstadoModulo, "activo">): { frase
 }
 
 /**
- * El enlace, garantizado. `queSeHace` es lo que Sabina NO hace («agendar o
- * mover un control»); la marca es la ruta, así que da igual cómo lo redacte el
+ * El enlace, garantizado. `queSeHace` es lo que Sabina NO hace («registrar la
+ * hoja de un control»); la marca es la ruta, así que da igual cómo lo redacte el
  * modelo: si la ruta no está en la respuesta, el motor añade la frase.
  */
 export function avisoEnlace(queSeHace: string, rotulo: string, ruta: string): { frase: string; marca: string } {

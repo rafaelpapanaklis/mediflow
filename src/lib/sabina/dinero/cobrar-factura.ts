@@ -22,6 +22,11 @@
  *  · Tras un fallo que PUDO escribir (500, excepción), se RELEE la factura antes de
  *    decir nada: ningún cobro es idempotente (N8) y un «inténtalo otra vez» a
  *    ciegas cobra dos veces. No se arregla N8; se rodea.
+ *  · 🔴 ORTODONCIA NO SE COBRA AQUÍ (ws1-t11, decisión de Rafael del 28-sep-2026).
+ *    La factura de un tratamiento, un control o un extra de un caso de ortodoncia
+ *    no produce tarjeta: se contesta con el dato y el enlace a la pantalla de
+ *    cobro del caso (./orto-candado). Y se comprueba OTRA VEZ al ejecutar: una
+ *    factura que se ligó a un caso después de la tarjeta tampoco se cobra.
  */
 
 import { randomUUID } from "crypto";
@@ -55,6 +60,7 @@ import {
   type FacturaLeida,
   type MetodoCobro,
 } from "./comun";
+import { facturaDeOrtodoncia, fraseNoCobraOrtodoncia } from "./orto-candado";
 import { falloIncierto, rechazoDeDinero } from "./respuestas";
 
 const COBRABLES = ["DRAFT", "PENDING", "PARTIAL", "OVERDUE"];
@@ -114,6 +120,20 @@ export async function prepararCobro(ctx: SabinaCtx, p: ParamsCobrar): Promise<Sa
   if (f.status === "PAID" || f.saldo <= 0) {
     return { tipo: "no_se_puede", frase: `La factura ${f.folio} ya está pagada: no le queda saldo.` };
   }
+
+  // 🔴 Ortodoncia: ni tarjeta ni preguntar el método. Va ANTES que todo lo demás
+  // para que Sabina no pida «¿con qué método pagó?» de un cobro que no va a hacer.
+  let orto;
+  try {
+    orto = await facturaDeOrtodoncia(ctx, f);
+  } catch (e) {
+    console.error("[sabina/dinero] no se pudo comprobar si la factura es de ortodoncia", { folio: f.folio, e });
+    return {
+      tipo: "no_se_puede",
+      frase: `No pude comprobar si la factura ${f.folio} es de un caso de ortodoncia, así que no preparé el cobro. Inténtalo otra vez en un momento.`,
+    };
+  }
+  if (orto) return { tipo: "no_se_puede", frase: await fraseNoCobraOrtodoncia(ctx, f, orto) };
 
   // El método va DESPUÉS de saber qué factura: preguntar dos cosas a la vez confunde.
   if (!p.metodo) {
@@ -259,6 +279,21 @@ export async function ejecutarCobro(
     console.error("[sabina/dinero] propuesta de cobro guardada con datos que no corresponden", { folio: d.folio });
     return { ok: false, tipo: "error", frase: "Esa propuesta no se pudo ejecutar tal como estaba. No se cobró nada; pídemelo otra vez." };
   }
+  // La tarjeta se preparó cuando la factura no era de ortodoncia; si alguien la
+  // ligó a un caso entretanto, tampoco se cobra. Bajo el candado de solo lectura.
+  try {
+    const orto = await soloLectura(`ortodoncia ${d.folio}`, () => facturaDeOrtodoncia(ctx, { id: d.facturaId }));
+    if (orto) {
+      return {
+        ok: false,
+        tipo: "invalido",
+        frase: `La factura ${d.folio} es de un caso de ortodoncia y yo no cobro ortodoncia. No se cobró nada: se cobra desde la ficha de ortodoncia del paciente.`,
+      };
+    }
+  } catch {
+    return { ok: false, tipo: "error", frase: `No pude comprobar la factura ${d.folio} antes de cobrar. No se cobró nada; inténtalo otra vez.` };
+  }
+
   const params = { id: d.facturaId };
   const base = `/api/invoices/${d.facturaId}`;
 
@@ -314,7 +349,8 @@ export const accionCobrarFactura = definirAccion<ParamsCobrar, DatosCobro>({
   nombre: "cobrar_factura",
   descripcion:
     "Prepara el cobro de una factura: un pago por `monto`, o sin monto la salda completa. " +
-    "El método pregúntaselo SIEMPRE al usuario; nunca lo supongas.",
+    "El método pregúntaselo SIEMPRE al usuario; nunca lo supongas. NO cobra ortodoncia (mensualidades, " +
+    "controles ni extras de un caso): si te lo piden, llámala igual con el paciente y di lo que te conteste.",
   titulo: "Cobrar factura",
   boton: "Sí, registrar el cobro",
   queHace: "cobrar facturas",

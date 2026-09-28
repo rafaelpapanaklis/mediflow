@@ -12,8 +12,9 @@
  * su control» es el criterio de esa pantalla y de la alerta «Falta de control»:
  * caso ACTIVO sin ningún control futuro en la agenda; urgente a los 45 días.
  *
- * 🔴 SOLO LECTURA. No agenda, no mueve, no confirma ni registra un control. El
- * enlace lleva a la pantalla donde eso se hace.
+ * 🔴 SOLO LECTURA. No confirma ni registra un control: el enlace lleva a la
+ * pantalla donde eso se hace. Agendar un control sí se puede, pero lo hace
+ * `agendar_cita` (decisión de Rafael del 28-sep-2026), no esta herramienta.
  *
  * ── PERMISOS ────────────────────────────────────────────────────────────
  * La key del módulo la mira el runner. Las listas de controles piden además
@@ -131,7 +132,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
   descripcion:
     "ORTODONCIA: los controles de hoy (que: \"hoy\") o de hoy a siete días (\"semana\"), quién se pasó de su " +
     "control y sigue sin cita (\"sin_control\"), y cuántos casos hay activos, terminados y por estado (\"casos\"). " +
-    "Solo lee: no agenda ni registra controles; da el enlace a la pantalla del módulo.",
+    "Solo lee y da el enlace a la pantalla del módulo. Para agendar un control usa agendar_cita.",
   parametros,
   permiso: PERMISO_ORTO,
 
@@ -233,7 +234,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
     if (d.que === "casos") {
       return avisoEnlace("abrir un caso o entrar al de un paciente", "Pacientes en tratamiento", d.enlace);
     }
-    return avisoEnlace("agendar, mover o registrar un control", "Controles de ortodoncia", d.enlace);
+    return avisoEnlace("registrar la hoja de un control", "Controles de ortodoncia", d.enlace);
   },
 
   resumir(d) {
@@ -271,7 +272,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
         `${plural(s.total, "caso activo", "casos activos")} sin próximo control agendado, de ${d.casosActivos ?? 0} activos` +
         `${d.urgentes > 0 ? `; ${d.urgentes} con ${DIAS_SIN_CONTROL_URGENTE} días o más sin venir` : ""}${fraseRecorte(s, "casos")}.` +
         `${lista ? " Del que lleva más tiempo al que menos:" : uno}${lista}\n` +
-        `Yo no agendo: el control se agenda en ${pantalla}.`
+        `Si quieres le preparo su cita de control: dime el día y la hora. La lista está en ${pantalla}.`
       );
     }
 
@@ -300,7 +301,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
       const uno = !lista && f0 ? ` Es ${f0.paciente}, ${f0.rotulo.toLowerCase()} a las ${f0.hora} — ${f0.estado.toLowerCase()}.` : "";
       return (
         `${hoyFrase}${semana}${fraseRecorte(d.controles, "controles")}.${uno}${lista}\n` +
-        `Yo no agendo ni registro controles: eso se hace en ${pantalla}.`
+        `Yo no registro la hoja del control: eso se hace en ${pantalla}.`
       );
     }
 

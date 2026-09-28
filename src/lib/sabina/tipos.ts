@@ -249,6 +249,15 @@ export interface SabinaDb {
   orthodonticAligner: {
     findFirst(args: any): Promise<any | null>;
   };
+  /**
+   * Agendar y (no) cobrar ortodoncia (ws1-t11): si la sede tiene el módulo, su
+   * catálogo de tipos de cita y el caso del paciente. Opcionales porque los
+   * dobles de prueba anteriores no los declaran; sin ellos, la sede se trata
+   * como una sin módulo. Los leen ./tools/orto-agenda y ./dinero/orto-candado.
+   */
+  clinicModule?: { findFirst(args: any): Promise<any | null> };
+  orthodonticsClinicSettings?: { findUnique(args: any): Promise<any | null> };
+  orthodonticTreatmentPlan?: { findFirst(args: any): Promise<any | null> };
   $queryRaw(query: any): Promise<any[]>;
 }
 

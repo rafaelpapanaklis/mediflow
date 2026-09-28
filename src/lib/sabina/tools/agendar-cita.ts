@@ -18,6 +18,13 @@
  *    el modal sí), y solo se ofrecen los abiertos y libres a esa hora;
  *  · solape con el doctor y con el sillón → alternativas, nunca un error.
  *
+ * ── ORTODONCIA (ws1-t11, decisión de Rafael del 28-sep-2026) ─────────────
+ * En una sede con el módulo, si la cita es de ortodoncia se agenda con el tipo
+ * de cita del catálogo de Configuración (su texto EXACTO va de motivo: es lo
+ * que el módulo reconoce como control), con el doctor tratante del caso y con
+ * la duración configurada para ese tipo. Lo decide ./orto-agenda; la
+ * disponibilidad, los bloqueos, el sillón y los permisos son los de siempre.
+ *
  * Nunca manda `overrideReason` (saltaría el solape) ni `notifyPatient`: desde
  * ws1-t2 ese campo SÍ manda la confirmación por WhatsApp (antes no hacía nada,
  * N5), y que Sabina escriba a un paciente es una decisión que aquí nadie tomó.
@@ -44,6 +51,8 @@ import {
 } from "./agenda-comun";
 import { evaluarHora, leerOcupacion, respuestaNoDisponible } from "./agenda-huecos";
 import { resolverDoctor, resolverPaciente, resolverSillon } from "./agenda-resolvedores";
+import { duracionDeTipo, elegirTipoDeCita, leerOrtoParaAgendar, type OrtoParaAgendar } from "./orto-agenda";
+import type { TipoDeCita } from "@/lib/orthodontics/tipos-de-cita";
 import type { SabinaCtx } from "../tipos";
 
 const parametros = z.object({
@@ -67,7 +76,9 @@ export const agendarCita = definirHerramienta<ParamsAgendarCita, DatosAccionAgen
     "PROPONE agendar una cita nueva; no la guarda. El usuario la confirma en pantalla y solo entonces se crea. " +
     "Úsala para «agéndame a Ana Pérez el jueves a las 10 con el Dr. Salas». Si hay dos pacientes o doctores " +
     "que coinciden, o falta el motivo o el sillón, devuelve la pregunta: házsela al usuario y vuelve a llamarla " +
-    "con el id que elija. Si la hora no se puede, devuelve horas libres cercanas para ofrecer.",
+    "con el id que elija. Si la hora no se puede, devuelve horas libres cercanas para ofrecer. " +
+    "También agenda ORTODONCIA (control, valoración…): pasa en `motivo` lo que pidió el usuario y, si no nombró " +
+    "doctor, no lo pongas: va con su doctor tratante y con la duración de la clínica.",
   parametros,
   permiso: "agenda.create",
 
@@ -77,25 +88,62 @@ export const agendarCita = definirHerramienta<ParamsAgendarCita, DatosAccionAgen
     }
     const db = dbAgendaDe(ctx);
 
-    const [paciente, doctor] = await Promise.all([
-      resolverPaciente(ctx, db, { pacienteId: p.pacienteId, paciente: p.paciente }),
-      resolverDoctor(ctx, db, { doctorId: p.doctorId, doctor: p.doctor }),
-    ]);
+    const paciente = await resolverPaciente(ctx, db, { pacienteId: p.pacienteId, paciente: p.paciente });
     if (paciente.tipo === "no") return { estado: "no_se_puede", causa: paciente.causa, frase: paciente.frase };
+
+    // ¿Es una cita de ortodoncia? Solo se puede saber con el paciente ya resuelto.
+    let motivo = (p.motivo ?? "").trim();
+    let orto: OrtoParaAgendar | null = null;
+    let tipoOrto: TipoDeCita | null = null;
+    let preguntaDeTipo: PreguntaAgenda | null = null;
+    if (paciente.tipo === "ok") {
+      orto = await leerOrtoParaAgendar(ctx, db, paciente.valor.id);
+      if (orto.modulo) {
+        const opcionesDe = (tipos: readonly TipoDeCita[]) => tipos.map((t) => ({ id: t.label, etiqueta: t.label, detalle: null }));
+        const eleccion = elegirTipoDeCita(motivo, orto.catalogo, orto.caso);
+        if (eleccion.tipo === "uno") {
+          tipoOrto = eleccion.cita;
+          // El texto EXACTO del catálogo: es lo que el módulo reconoce.
+          motivo = eleccion.cita.label;
+        } else if (eleccion.tipo === "varios") {
+          preguntaDeTipo = {
+            falta: "motivo",
+            texto: `¿Qué cita de ortodoncia es para ${paciente.valor.nombre}?`,
+            opciones: opcionesDe(eleccion.opciones),
+          };
+        } else if (!motivo && orto.caso) {
+          preguntaDeTipo = {
+            falta: "motivo",
+            texto: `¿Cuál es el motivo de la cita? ${paciente.valor.nombre} tiene un caso de ortodoncia activo: si es de ortodoncia, dime cuál.`,
+            opciones: opcionesDe(orto.catalogo),
+          };
+        }
+      }
+    }
+
+    // El doctor: el que diga el usuario. Si no dijo y la cita es de ortodoncia,
+    // el tratante del caso (o el tratante por defecto de la clínica).
+    const pedido = { doctorId: p.doctorId, doctor: p.doctor };
+    const nombroDoctor = Boolean(p.doctorId || (p.doctor ?? "").trim());
+    const tratante = tipoOrto ? orto?.caso?.treatingDoctorId ?? orto?.doctorPorDefecto ?? null : null;
+    let doctor = await resolverDoctor(ctx, db, !nombroDoctor && tratante ? { doctorId: tratante } : pedido);
+    // El tratante ya no está activo (o ya no es doctor): se resuelve como siempre.
+    if (doctor.tipo === "no" && !nombroDoctor && tratante) doctor = await resolverDoctor(ctx, db, pedido);
     if (doctor.tipo === "no") return { estado: "no_se_puede", causa: doctor.causa, frase: doctor.frase };
 
     // Todo lo que falta, en UNA pregunta: cada ida y vuelta es un turno del doctor.
     const preguntas: PreguntaAgenda[] = [];
     if (paciente.tipo === "pregunta") preguntas.push(paciente.pregunta);
     if (doctor.tipo === "pregunta") preguntas.push(doctor.pregunta);
-    const motivo = (p.motivo ?? "").trim();
-    if (!motivo) preguntas.push({ falta: "motivo", texto: "¿Cuál es el motivo de la cita?", opciones: [] });
+    if (preguntaDeTipo) preguntas.push(preguntaDeTipo);
+    else if (!motivo) preguntas.push({ falta: "motivo", texto: "¿Cuál es el motivo de la cita?", opciones: [] });
     if (preguntas.length > 0 || paciente.tipo !== "ok" || doctor.tipo !== "ok") {
       return { estado: "pregunta", preguntas };
     }
 
     const clinica = await cargarClinica(ctx, db);
-    const duracion = p.duracionMinutos ?? defaultDurationFor(clinica.defaultSlotMinutes);
+    const duracion =
+      p.duracionMinutos ?? (tipoOrto ? duracionDeTipo(tipoOrto) : defaultDurationFor(clinica.defaultSlotMinutes));
     const inicio = tzLocalToUtc(p.fecha, Math.floor(minutosDe(p.hora) / 60), minutosDe(p.hora) % 60, clinica.timezone);
     const fin = new Date(inicio.getTime() + duracion * 60_000);
     const ahora = new Date();
@@ -171,6 +219,16 @@ export const agendarCita = definirHerramienta<ParamsAgendarCita, DatosAccionAgen
     if (pac.visibleUserIds.length > 0 && !pac.visibleUserIds.includes(doc.id)) {
       avisos.push(`${pac.nombre} es de acceso restringido: al agendar, ${doc.nombre} tendrá acceso a su ficha de forma permanente.`);
     }
+    // Ortodoncia: de quién es el caso. Solo depende de lo ya resuelto, así que
+    // al revalidar la propuesta sale letra por letra igual.
+    const tratanteDelCaso = tipoOrto ? orto?.caso?.treatingDoctorId ?? null : null;
+    const esSuTratante = tratanteDelCaso !== null && tratanteDelCaso === doc.id;
+    if (tipoOrto && tratanteDelCaso && !esSuTratante) {
+      avisos.push(`${doc.nombre} no es el doctor tratante del caso de ortodoncia de ${pac.nombre}.`);
+    }
+    const detalleOrto = tipoOrto
+      ? [{ campo: "Ortodoncia", valor: orto?.caso ? "Cita de su caso de ortodoncia" : "Sin caso de ortodoncia abierto" }]
+      : [];
 
     return {
       estado: "propuesta",
@@ -193,11 +251,12 @@ export const agendarCita = definirHerramienta<ParamsAgendarCita, DatosAccionAgen
         frase: `Agendar a ${pac.nombre} el ${dia} a las ${p.hora} (${duracion} min) con ${doc.nombre}${sil ? `, en ${sil.nombre}` : ""}. Motivo: ${motivo}.`,
         detalle: [
           { campo: "Paciente", valor: pac.folio ? `${pac.nombre} (${pac.folio})` : pac.nombre },
-          { campo: "Doctor", valor: doc.nombre },
+          { campo: "Doctor", valor: esSuTratante ? `${doc.nombre} (su doctor tratante)` : doc.nombre },
           { campo: "Día", valor: dia },
           { campo: "Hora", valor: franja },
           ...(sil ? [{ campo: "Sillón", valor: sil.nombre }] : []),
           { campo: "Motivo", valor: motivo },
+          ...detalleOrto,
         ],
         antes: null,
         despues: null,

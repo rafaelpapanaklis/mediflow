@@ -11,8 +11,9 @@
  *  · último y próximo control .............. la Agenda (los controles son citas)
  *  · mensualidades ......................... `cobranzaDelCasoUnificada`
  *
- * 🔴 SOLO LECTURA. No abre el caso, no registra el control, no firma la hoja,
- * no agenda y no cobra: da el enlace a la pestaña Ortodoncia de la ficha.
+ * 🔴 SOLO LECTURA. No abre el caso, no registra el control, no firma la hoja
+ * y no cobra: da el enlace a la pestaña Ortodoncia de la ficha. Agendarle su
+ * control sí se puede, pero lo hace `agendar_cita`, no esta herramienta.
  *
  * ── PERMISOS ────────────────────────────────────────────────────────────
  * La key del módulo la mira el runner. Dentro, cada parte con la suya, y la que
@@ -169,7 +170,8 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
     "Cómo va el caso de ORTODONCIA de un paciente: estado, mes N de M, fase, arco actual, higiene del último " +
     "control, alineadores, último y próximo control, y sus mensualidades. Úsala para «¿cómo va el caso de …?», " +
     "con `paciente` (nombre, teléfono o folio; no hace falta buscar_paciente antes) o con el `patientId` del " +
-    "contexto. Solo lee lo registrado: no diagnostica, no agenda, no cobra y no registra controles; da el enlace a su ficha.",
+    "contexto. Solo lee lo registrado: no diagnostica, no cobra y no registra controles; da el enlace a su ficha. " +
+    "Para agendarle su control usa agendar_cita.",
   parametros,
   permiso: PERMISO_ORTO,
 

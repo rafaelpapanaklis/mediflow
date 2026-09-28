@@ -83,6 +83,9 @@ const PARAMETRO_DE: Record<string, string> = {
   doctor: "doctorId",
   sillon: "sillonId",
   cita: "citaId",
+  // ws1-t11: cuando se pregunta QUÉ cita de ortodoncia es, la opción es el
+  // texto del tipo de cita, y vuelve tal cual en `motivo`.
+  motivo: "motivo",
 };
 
 export function preparacionDeAgenda(d: DatosAccionAgenda, deshacer: SabinaDeshacer): SabinaPreparacion<PropuestaAgenda> {

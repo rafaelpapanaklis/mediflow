@@ -412,6 +412,39 @@ function sqlDe(d: Datos, terminos: Terminos[]): SqlCrudo {
   };
 }
 
+/* ── la base con AGENDA (para agendar ortodoncia) ────────────────────── */
+
+export interface OpcionesDeAgenda {
+  /** La fila de Configuración → Ortodoncia del norte. Sin ella, el catálogo de fábrica. */
+  configuracion?: Fila;
+  /** Citas de más (para ocupar al doctor tratante). */
+  citas?: Fila[];
+  /** Bloqueos de agenda vigentes (`agenda_blocks`). */
+  bloqueos?: Fila[];
+}
+
+/**
+ * La misma siembra de ortodoncia, con lo que `agendar_cita` lee además: el
+ * horario de los sillones, los recordatorios y los bloqueos. Esos delegados
+ * salen de instancias auxiliares del mismo doble, igual que en `agenda-siembra`.
+ */
+export function baseOrtoConAgenda(op: OpcionesDeAgenda = {}): { db: BaseDoble; sql: SqlCrudo; datos: Datos } {
+  const s = datosOrto();
+  s.datos.clinics = (s.datos.clinics ?? []).map((c) => ({ defaultSlotMinutes: 30, googleCalendarEnabled: false, ...c }));
+  s.datos.appointments = [...(s.datos.appointments ?? []), ...(op.citas ?? [])];
+  // Esta clínica no trabaja con sillones: si los tuviera, `agendar_cita`
+  // preguntaría cuál, y eso ya lo prueba `test:sabina-acciones-agenda`.
+  s.datos.resources = [];
+  if (op.configuracion) s.datos.orthodonticsClinicSettings = [op.configuracion];
+  const db = crearBase(s.datos) as unknown as Record<string, any>;
+  const delegadoDe = (filas: Fila[]) => (crearBase({ resources: filas }) as unknown as Record<string, any>).resource;
+  db.resourceSchedule = delegadoDe([]);
+  db.whatsAppReminder = delegadoDe([]);
+  db.agendaBlock = delegadoDe(op.bloqueos ?? []);
+  db.doctorSchedule = delegadoDe([]);
+  return { db: db as unknown as BaseDoble, sql: s.sql, datos: s.datos };
+}
+
 /* ── la base y las sesiones ──────────────────────────────────────────── */
 
 export function baseOrto(): { db: BaseDoble; sql: SqlCrudo; datos: Datos } {

@@ -69,9 +69,13 @@ import { ortoCobranza } from "./tools/orto-cobranza";
    28-sep-2026): `orto_caso`, `orto_controles` y `orto_cobranza`. Leen con el
    motor del módulo (los mismos cargadores que sus pantallas), solo en sedes con
    el módulo contratado, y dan el enlace a la pantalla donde se hace cada cosa.
-   🔴 Son consultas, no acciones: Sabina no abre casos, no agenda controles, no
-   firma hojas y no cobra mensualidades. Pruebas en
-   tools/__tests__/ortodoncia.test.ts. */
+   🔴 Son consultas, no acciones: no abren casos, no firman hojas y no cobran
+   mensualidades. Pruebas en tools/__tests__/ortodoncia.test.ts. Lo único de
+   ortodoncia que Sabina hace es AGENDAR, con la acción de siempre
+   (`agendar_cita` + tools/orto-agenda.ts: tipo de cita del catálogo, doctor
+   tratante y duración configurada); `cobrar_factura` rechaza lo que sea de un
+   caso de ortodoncia (dinero/orto-candado.ts). Pruebas en
+   tools/__tests__/ortodoncia-agenda.test.ts. */
 const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   ...CATALOGO_SABINA,
   proponerHorarios,

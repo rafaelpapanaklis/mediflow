@@ -115,6 +115,9 @@ function delegado(modelo: string) {
   return new Proxy({}, {
     get(_t, op: string) {
       if (modelo === "cashRegister") return async () => null;
+      // ws1-t11: `cobrar_factura` mira si la factura es de un caso de ortodoncia
+      // antes de cobrar. En esta clínica no hay casos: ninguna lo es.
+      if (modelo === "orthodonticTreatmentPlan") return async () => null;
       if (op === "findFirst" || op === "findUnique") {
         return async (args: any) => forma(modelo, (await filasReales(modelo, args?.where))[0], args);
       }
@@ -146,6 +149,8 @@ function delegado(modelo: string) {
 
 async function sqlCrudo(q: any, ...valores: unknown[]): Promise<any[]> {
   if (q?.__busqueda) return idsQueCasan(m.filas.patients, q.__busqueda).map((id) => ({ id }));
+  // ws1-t11: «¿de qué caso de ortodoncia cuelga esta factura?» (dinero/orto-candado.ts). De ninguno.
+  if (Array.isArray(q?.strings) && /"orthodonticTreatmentPlanId" AS "planId"/.test(q.strings.join("?"))) return [{ planId: null }];
   const sql = Array.isArray(q) ? q.join("?") : "";
   if (/FOR UPDATE/.test(sql)) return [];
   if (/"invoiceNumber"/.test(sql)) {

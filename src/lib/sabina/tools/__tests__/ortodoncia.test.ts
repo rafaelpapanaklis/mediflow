@@ -366,7 +366,8 @@ test("🔴 quién se pasó de su control: el criterio de la pantalla (caso activ
   assert.deepEqual([r.datos.urgentes, r.datos.casosActivos], [1, pantallaControles.casosActivos]);
   assert.match(r.resumen, /Beto Munoz/);
   assert.match(r.resumen, /hace 60 días/);
-  assert.match(r.resumen, /Yo no agendo/);
+  // Agendar sí puede (con `agendar_cita`): lo ofrece, y da la pantalla.
+  assert.match(r.resumen, /le preparo su cita de control/);
   // Elías terminó su tratamiento: no tiene control futuro, y NO se pasó de nada.
   assert.doesNotMatch(todo(r), /Elias/);
 });
@@ -501,7 +502,7 @@ test("🔴 solo lectura: el código de las herramientas no nombra ninguna escrit
   }
 });
 
-test("🔴 solo lectura, por el motor entero: le piden cobrar y agendar, y no sale ninguna propuesta", async () => {
+test("🔴 solo lectura, por el motor entero: las consultas de ortodoncia no producen ninguna propuesta", async () => {
   const { db, escrituras } = montar();
   const turnos = [
     turno([{ type: "tool_use", id: "tu_1", name: "orto_cobranza", input: { que: "deben" } }], "tool_use"),
@@ -511,7 +512,7 @@ test("🔴 solo lectura, por el motor entero: le piden cobrar y agendar, y no sa
   let i = 0;
   const salida = await ejecutarSabina({
     ctx: admin(db),
-    pregunta: "cóbrale a Ana su mensualidad y agéndale a Beto su control",
+    pregunta: "¿quién debe mensualidades y quién se pasó de su control?",
     tools: SABINA_TOOLS,
     llamar: async () => turnos[Math.min(i++, turnos.length - 1)],
   });
