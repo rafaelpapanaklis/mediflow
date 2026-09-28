@@ -150,14 +150,13 @@ export function SectionPhotos(props: SectionPhotosProps) {
     }
   };
 
-  const onDelete = (slotId: string) => {
-    revokeIfTracked(uploads[slotId]?.url);
-    setUploads((prev) => {
-      const next = { ...prev };
-      delete next[slotId];
-      return next;
-    });
-  };
+  // Ola 1 (ws1-t6) — A8: aquí vivía un `onDelete` que solo hacía
+  // `setUploads` local (nunca tocaba el servidor). Al recargar la pantalla
+  // la foto volvía porque `historicalSets` (server-sourced) nunca cambió:
+  // el botón "borrar" mentía. El alcance ofrece dos arreglos válidos —
+  // borrar de verdad, o quitar el botón — y aquí se quita, porque tocar
+  // Storage/PatientFile no está en el reparto de esta parte. Se puede volver
+  // a añadir cuando exista una action real de borrado.
 
   const extraoral = PHOTO_SLOTS.filter((s) => s.group === "extraoral");
   const intraoral = PHOTO_SLOTS.filter((s) => s.group === "intraoral");
@@ -259,7 +258,6 @@ export function SectionPhotos(props: SectionPhotosProps) {
         uploads={uploads}
         pending={pending}
         onPick={onPick}
-        onDelete={onDelete}
         onView={(s, p) => setLightbox({ slotId: s.id, label: s.label, group: s.group, photo: p })}
       />
 
@@ -269,7 +267,6 @@ export function SectionPhotos(props: SectionPhotosProps) {
         uploads={uploads}
         pending={pending}
         onPick={onPick}
-        onDelete={onDelete}
         onView={(s, p) => setLightbox({ slotId: s.id, label: s.label, group: s.group, photo: p })}
       />
 
@@ -330,7 +327,6 @@ function PhotoGrid({
   uploads,
   pending,
   onPick,
-  onDelete,
   onView,
 }: {
   title: string;
@@ -338,7 +334,6 @@ function PhotoGrid({
   uploads: Record<string, UploadEntry>;
   pending: Record<string, boolean>;
   onPick: (slotId: string, file: File) => void;
-  onDelete: (slotId: string) => void;
   onView: (slot: (typeof PHOTO_SLOTS)[number], photo: UploadEntry) => void;
 }) {
   return (
@@ -354,7 +349,6 @@ function PhotoGrid({
             photo={uploads[slot.id]}
             isPending={Boolean(pending[slot.id])}
             onPick={(f) => onPick(slot.id, f)}
-            onDelete={() => onDelete(slot.id)}
             onView={(p) => onView(slot, p)}
           />
         ))}
@@ -368,14 +362,12 @@ function PhotoSlot({
   photo,
   isPending,
   onPick,
-  onDelete,
   onView,
 }: {
   slot: (typeof PHOTO_SLOTS)[number];
   photo: UploadEntry | undefined;
   isPending: boolean;
   onPick: (file: File) => void;
-  onDelete: () => void;
   onView: (photo: UploadEntry) => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -430,19 +422,6 @@ function PhotoSlot({
             </>
           )}
         </button>
-        {has ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            aria-label="Eliminar foto"
-            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center shadow-sm"
-          >
-            <X className="w-3 h-3" aria-hidden />
-          </button>
-        ) : null}
         <input
           ref={fileRef}
           type="file"
