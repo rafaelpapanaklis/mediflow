@@ -117,8 +117,20 @@ export async function updateTreatmentPlan(
       action,
       entityType: "OrthodonticTreatmentPlan",
       entityId: updated.id,
-      before: { status: before.status, totalCostMxn: before.totalCostMxn.toString() },
-      after: { status: updated.status, totalCostMxn: updated.totalCostMxn.toString() },
+      // `treatingDoctorId` va a la bitácora para que una reasignación deje
+      // dicho quién llevaba el caso y desde cuándo: de ahí sale a qué doctor se
+      // le atribuye cada cobro (produccion.ts). `undefined` si la columna de
+      // sql/ortodoncia-alta-caso.sql aún no existe: `auditOrtho` lo ignora.
+      before: {
+        status: before.status,
+        totalCostMxn: before.totalCostMxn.toString(),
+        treatingDoctorId: (before as { treatingDoctorId?: string | null }).treatingDoctorId ?? null,
+      },
+      after: {
+        status: updated.status,
+        totalCostMxn: updated.totalCostMxn.toString(),
+        treatingDoctorId: (updated as { treatingDoctorId?: string | null }).treatingDoctorId ?? null,
+      },
     });
 
     revalidatePath(`/dashboard/patients/${updated.patientId}/orthodontics`);
