@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, type CSSProperties } from "react";
+import { useState, useMemo, useEffect } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Plus, Search, Package, X, Trash2, Minus, Check,
@@ -22,6 +22,10 @@ import type { TFunction } from "@/i18n/t";
 // para la clínica; apagado, ni una clase de más.
 import { CLASES_REDISENO_INVENTARIO } from "@/components/dashboard/inventario-rediseno/raiz";
 import invStyles from "@/components/dashboard/inventario-rediseno/inventario-rediseno.module.css";
+// DISEÑO (ws1-t5) — la maqueta de la pantalla y de sus ventanas: tabla que
+// cabe, fichas en teléfono, caducidad sin saltos. Solo lee tokens del panel.
+import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.module.css";
+import { ropaVentana } from "@/components/dashboard/cobros-inventario-rediseno/ventana";
 // WS1-T5 — lotes y caducidad: modal propio y aislado, ver el archivo.
 import { LotesModal } from "@/components/dashboard/inventory/lotes-modal";
 // ws1-t4 — "Registrar compra": modal propio y aislado, mismo criterio.
@@ -115,34 +119,64 @@ function getStatus(item: Item): StatusTab {
   return "disponible";
 }
 
-const statusPillBase: CSSProperties = {
-  display: "inline-flex", alignItems: "center", gap: 5,
-  minHeight: 24, padding: "3px 10px", borderRadius: 999,
-  fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap",
-};
-
 function statusBadge(s: StatusTab, t: TFunction) {
   if (s === "sin") {
     return (
-      <span style={{ ...statusPillBase, background: "var(--danger-soft)", color: "var(--danger)" }}>
-        <PackageX size={16} strokeWidth={1.75} aria-hidden />
+      <span className={`${inv.pildora} ${inv.pildoraPeligro}`}>
+        <PackageX size={13} strokeWidth={1.75} aria-hidden />
         {t("procurement.inventoryClient.badgeOut")}
       </span>
     );
   }
   if (s === "poco") {
     return (
-      <span style={{ ...statusPillBase, background: "var(--warning-soft)", color: "var(--warning-strong)" }}>
-        <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
+      <span className={`${inv.pildora} ${inv.pildoraAlerta}`}>
+        <AlertTriangle size={13} strokeWidth={1.75} aria-hidden />
         {t("procurement.inventoryClient.badgeLow")}
       </span>
     );
   }
   return (
-    <span style={{ ...statusPillBase, background: "var(--success-soft)", color: "var(--success-strong)" }}>
-      <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor", flexShrink: 0 }} />
+    <span className={`${inv.pildora} ${inv.pildoraExito}`}>
+      <span aria-hidden className={inv.pildoraPunto} />
       {t("procurement.inventoryClient.badgeOk")}
     </span>
+  );
+}
+
+const TONO_CANTIDAD: Record<string, string> = {
+  sin: inv.tonoPeligro,
+  poco: inv.tonoAlerta,
+  disponible: inv.tonoExito,
+};
+
+/**
+ * Un renglón de la tarjeta «Caducidad». Siempre se pinta, con o sin lotes:
+ * mientras los avisos no llegan enseña una raya, y con cero no es un botón.
+ * Así la tarjeta mide lo mismo antes y después, y la pantalla no salta.
+ */
+function LineaCaducidad({
+  cuantos, listo, singular, plural, tono, onVer,
+}: {
+  cuantos: number;
+  listo: boolean;
+  singular: string;
+  plural: string;
+  tono: string;
+  onVer: () => void;
+}) {
+  const rotulo = cuantos === 1 ? singular : plural;
+  if (!listo || cuantos === 0) {
+    return (
+      <span className={inv.caducidadLinea}>
+        <strong>{listo ? 0 : "—"}</strong> {rotulo}
+      </span>
+    );
+  }
+  return (
+    <button type="button" className={`${inv.caducidadLinea} ${tono}`} onClick={onVer} title={`Ver ${rotulo}`}>
+      <strong>{cuantos}</strong> {rotulo}
+    </button>
   );
 }
 
@@ -181,35 +215,17 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
         {t("procurement.inventoryClient.icon")}
         <span className="form-section__rule" />
       </div>
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(8, 1fr)",
-        gap: 6,
-        padding: 8,
-        background: "var(--bg-elev-2)",
-        borderRadius: 8,
-        border: "1px solid var(--border-soft)",
-      }}>
+      <div className={inv.iconos}>
         {DENTAL_ICONS.map(icon => (
           <button
             key={icon.id}
             type="button"
             onClick={() => onSelect(icon.id)}
             title={t(icon.labelKey)}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 6,
-              background: selected === icon.id ? "var(--brand-soft)" : "var(--bg-elev)",
-              border: selected === icon.id ? "1px solid var(--border-brand)" : "1px solid transparent",
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer",
-              transition: "background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)",
-            }}
+            aria-pressed={selected === icon.id}
+            className={`${inv.iconoOpcion} ${selected === icon.id ? inv.iconoOpcionActiva : ""}`}
           >
             <img src={icon.src} alt={t(icon.labelKey)}
-              style={{ width: 26, height: 26, objectFit: "contain" }}
               onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
           </button>
         ))}
@@ -246,6 +262,9 @@ export function InventoryClient({
   // (buildAlerts en /api/dashboard/home/admin) pero ninguna pantalla los
   // pedía ni los mostraba (REPORTE-ws1-t2.md, punto 3c).
   const [avisos, setAvisos] = useState<{ porCaducar: AvisoLote[]; caducado: AvisoLote[] }>({ porCaducar: [], caducado: [] });
+  // Diseño (ws1-t5): ¿ya contestó la petición de avisos? Solo decide si la
+  // tarjeta «Caducidad» enseña «—» o un número; no cambia qué se pide ni cuándo.
+  const [avisosListos, setAvisosListos] = useState(false);
   // ws1-t4 — "Registrar compra".
   const [showCompra, setShowCompra] = useState(false);
   // ws1-t4 (ajuste 1) — "Historial de compras".
@@ -275,7 +294,8 @@ export function InventoryClient({
     fetch("/api/inventory/alerts")
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setAvisos({ porCaducar: d.porCaducar ?? [], caducado: d.caducado ?? [] }); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setAvisosListos(true));
   }, []);
 
   // WS1-T5 (ajuste 3) — el aviso de Hoy enlaza aquí con ?filter=low,
@@ -466,165 +486,182 @@ export function InventoryClient({
     toast.success(t("procurement.inventoryClient.deleted"));
   }
 
+  // Diseño (ws1-t5): la ropa de las ventanas y los textos del estado vacío.
+  const ropa = ropaVentana(rediseno);
+  const hayBusqueda = search.trim() !== "";
+
   return (
     <div
-      className={rediseno ? `${CLASES_REDISENO_INVENTARIO} ${invStyles.pageRediseno}` : undefined}
-      style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}
+      className={[inv.pagina, rediseno ? `${CLASES_REDISENO_INVENTARIO} ${invStyles.pageRediseno}` : ""].filter(Boolean).join(" ")}
     >
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 24, flexWrap: "wrap" }}>
+      {/* Cabecera. En teléfono «Nuevo artículo» va arriba y a lo ancho, y las
+          otras dos acciones se reparten el renglón de debajo (antes la barra
+          medía 471 px fijos y desbordaba la página a 390). */}
+      <div className={inv.cabecera}>
         <div>
-          <h1 style={{ fontSize: "clamp(18px, 1.6vw, 22px)", letterSpacing: "-0.01em", color: "var(--text-1)", fontWeight: 700, margin: 0 }}>{t("procurement.inventoryClient.title")}</h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+          <h1 className={inv.titulo}>{t("procurement.inventoryClient.title")}</h1>
+          <p className={inv.subtitulo}>
             {t("procurement.inventoryClient.subtitle", { items: items.length, units: kpis.totalQty.toLocaleString("es-MX") })}
           </p>
         </div>
-        {/* Ajuste 2 (QA 2i, panel.108): a 390 esta barra medía 471 px de ancho
-            fijo y desbordaba la página en horizontal (scrollWidth 472/390 =
-            82 px de scroll lateral). flexWrap la deja pasar a dos líneas en
-            móvil sin tocar nada a 1440 (ahí siempre cupo en una). */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div className={inv.acciones}>
           <ButtonNew variant="ghost" onClick={() => setShowHistorial(true)}>
             Historial de compras
           </ButtonNew>
           <ButtonNew variant="secondary" onClick={() => setShowCompra(true)}>
             {t("procurement.inventoryClient.registerPurchase")}
           </ButtonNew>
-          <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} />} onClick={() => setShowAdd(true)}>
+          <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} aria-hidden />} onClick={() => setShowAdd(true)}>
             {t("procurement.inventoryClient.newItem")}
           </ButtonNew>
         </div>
       </div>
 
-      {/* WS1-T5 (ajuste 3) — banda de caducidad. La API ya la calculaba
-          (buildAlerts) pero ninguna pantalla la mostraba (ws1-t2, 3c).
-          Oculta por completo sin avisos: no reserva espacio vacío. */}
-      {(avisos.caducado.length > 0 || avisos.porCaducar.length > 0) && (
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
-          {avisos.caducado.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setTab("caducado")}
-              style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10,
-                background: "var(--danger-soft)", color: "var(--danger-strong)", border: "none",
-                fontSize: 13, fontWeight: 600, cursor: "pointer", flex: "1 1 240px", textAlign: "left",
-              }}
-            >
-              <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
-              {avisos.caducado.length} lote{avisos.caducado.length === 1 ? "" : "s"} caducado{avisos.caducado.length === 1 ? "" : "s"} — ver
-            </button>
-          )}
-          {avisos.porCaducar.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setTab("por_caducar")}
-              style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10,
-                background: "var(--warning-soft)", color: "var(--warning-strong)", border: "none",
-                fontSize: 13, fontWeight: 600, cursor: "pointer", flex: "1 1 240px", textAlign: "left",
-              }}
-            >
-              <CalendarClock size={16} strokeWidth={1.75} aria-hidden />
-              {avisos.porCaducar.length} lote{avisos.porCaducar.length === 1 ? "" : "s"} por caducar — ver
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* KPIs */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16, marginBottom: 24 }}>
+      {/* Indicadores. WS1-T5 (ajuste 3) trajo los avisos de caducidad como una
+          banda encima de esto; llegaba unos segundos después que el resto y
+          empujaba toda la pantalla hacia abajo. Ahora es una tarjeta más, que
+          está siempre (con «—» mientras llegan): mismo aviso, mismo filtro al
+          pulsarlo, y nada salta. */}
+      <div className={inv.kpis}>
         <KpiCard label={t("procurement.inventoryClient.kpiTotalItems")} value={String(items.length)}       icon={Package} hero />
         <KpiCard label={t("procurement.inventoryClient.kpiLowStock")}      value={String(kpis.lowCount)}      icon={AlertTriangle} />
         <KpiCard label={t("procurement.inventoryClient.kpiOutOfStock")}        value={String(kpis.outCount)}      icon={PackageX} />
         <KpiCard label={t("procurement.inventoryClient.kpiTotalValue")}     value={fmtMXN(kpis.totalValue)}    icon={Banknote} />
+        <div className={`kpi ${inv.caducidad}`}>
+          <div className="kpi__top">
+            <span className="kpi__label">Caducidad</span>
+            <div className="kpi__icon">
+              <CalendarClock size={17} strokeWidth={1.75} aria-hidden />
+            </div>
+          </div>
+          <div className={inv.caducidadLineas}>
+            <LineaCaducidad
+              cuantos={avisos.caducado.length}
+              listo={avisosListos}
+              singular="lote caducado"
+              plural="lotes caducados"
+              tono={inv.caducidadPeligro}
+              onVer={() => setTab("caducado")}
+            />
+            <LineaCaducidad
+              cuantos={avisos.porCaducar.length}
+              listo={avisosListos}
+              singular="lote por caducar"
+              plural="lotes por caducar"
+              tono={inv.caducidadAlerta}
+              onVer={() => setTab("por_caducar")}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+      {/* Buscador y filtros */}
+      <div className={inv.filtros}>
         <div className="search-field">
           <Search size={16} strokeWidth={1.75} aria-hidden />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={t("procurement.inventoryClient.searchPlaceholder")}
+            aria-label={t("procurement.inventoryClient.searchPlaceholder")}
           />
         </div>
-        {/* WS1-T5 (ajuste 3) — con los tabs de caducidad ya son hasta 6:
-            a 390 desbordaban la página en horizontal (empeorando el 2i que
-            ya reportó panel.108). Scroll propio de la barra, sin tocar la
-            clase global .segment-new (la usan otras pantallas). */}
-        <div className="segment-new" style={{ overflowX: "auto", maxWidth: "100%" }}>
+        {/* WS1-T5 (ajuste 3) — con los de caducidad son hasta seis filtros:
+            la barra se desplaza ella (sin tocar la clase global
+            .segment-new, que usan otras pantallas) y la página no. */}
+        <div className={`segment-new ${inv.segmento}`}>
           {STATUS_FILTERS.map(f => (
             <button
               key={f.id}
               type="button"
               onClick={() => setTab(f.id)}
+              aria-pressed={tab === f.id}
               className={`segment-new__btn ${tab === f.id ? "segment-new__btn--active" : ""}`}
             >
               {f.labelKey ? t(f.labelKey) : f.label}
             </button>
           ))}
           {/* WS1-T5 (ajuste 3) — solo aparecen si hay algo que filtrar: no
-              dejan un tab muerto en clínicas sin lotes por caducar. */}
+              dejan un filtro muerto en clínicas sin lotes por caducar. */}
           {avisos.porCaducar.length > 0 && (
             <button
               type="button"
               onClick={() => setTab("por_caducar")}
+              aria-pressed={tab === "por_caducar"}
               className={`segment-new__btn ${tab === "por_caducar" ? "segment-new__btn--active" : ""}`}
             >
               Por caducar
+              <span className={`${inv.cuenta} ${inv.cuentaAlerta}`}>{avisos.porCaducar.length}</span>
             </button>
           )}
           {avisos.caducado.length > 0 && (
             <button
               type="button"
               onClick={() => setTab("caducado")}
+              aria-pressed={tab === "caducado"}
               className={`segment-new__btn ${tab === "caducado" ? "segment-new__btn--active" : ""}`}
             >
               Caducado
+              <span className={`${inv.cuenta} ${inv.cuentaPeligro}`}>{avisos.caducado.length}</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* List */}
+      {/* Lista */}
       <CardNew noPad>
         {filtered.length === 0 ? (
-          <div style={{ padding: "56px 24px", textAlign: "center" }}>
-            <div style={{
-              width: 48, height: 48, margin: "0 auto 14px", borderRadius: 999,
-              background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)",
-              display: "grid", placeItems: "center", color: "var(--text-3)",
-            }}>
-              {search
+          <div className={inv.vacio}>
+            <div className={inv.vacioIcono}>
+              {hayBusqueda
                 ? <SearchX size={20} strokeWidth={1.75} aria-hidden />
                 : <PackageOpen size={20} strokeWidth={1.75} aria-hidden />}
             </div>
-            <p style={{ color: "var(--text-3)", fontSize: 13.5, margin: 0 }}>
-              {search ? t("common.noResults") : tab === "todos" ? t("procurement.inventoryClient.emptyNoItems") : t("procurement.inventoryClient.emptyNoItemsInState")}
+            <p className={inv.vacioTitulo}>
+              {hayBusqueda ? t("common.noResults") : tab === "todos" ? t("procurement.inventoryClient.emptyNoItems") : t("procurement.inventoryClient.emptyNoItemsInState")}
             </p>
-            {items.length === 0 && (
-              <div style={{ marginTop: 14 }}>
+            {/* La pista dice qué hacer a continuación, no solo que no hay nada. */}
+            <p className={inv.vacioPista}>
+              {items.length === 0
+                ? "Da de alta tus insumos para saber cuánto tienes, cuándo pedir más y qué está por caducar."
+                : hayBusqueda
+                  ? `Nada coincide con «${search.trim()}»${tab === "todos" ? "" : " dentro de este filtro"}. Prueba con otro nombre o con la categoría.`
+                  : "Cambia de filtro para ver el resto del inventario."}
+            </p>
+            <div className={inv.vacioAcciones}>
+              {hayBusqueda && (
+                <ButtonNew variant="secondary" size="sm" onClick={() => setSearch("")}>
+                  Borrar búsqueda
+                </ButtonNew>
+              )}
+              {items.length > 0 && tab !== "todos" && (
+                <ButtonNew variant="secondary" size="sm" onClick={() => setTab("todos")}>
+                  Ver todos
+                </ButtonNew>
+              )}
+              {items.length === 0 && (
                 <ButtonNew variant="primary" size="sm" icon={<Plus size={16} strokeWidth={1.75} aria-hidden />} onClick={() => setShowAdd(true)}>
                   {t("procurement.inventoryClient.addFirstItem")}
                 </ButtonNew>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-          <table className="table-new">
+          <div className={inv.tablaCaja}>
+          {/* En teléfono cada fila es una ficha (la hoja lo decide): los
+              `data-rotulo` son el rótulo visible de cada dato ahí, donde la
+              cabecera de la tabla no se ve. */}
+          <table className={`table-new ${inv.tabla}`}>
             <thead>
               <tr>
                 <th>{t("procurement.inventoryClient.colItem")}</th>
                 <th>{t("procurement.inventoryClient.colCategory")}</th>
-                <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colQuantity")}</th>
-                <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colMinimum")}</th>
-                <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colUnitCost")}</th>
+                <th className={inv.num}>{t("procurement.inventoryClient.colQuantity")}</th>
+                <th className={inv.num}>{t("procurement.inventoryClient.colMinimum")}</th>
+                <th className={inv.num}>{t("procurement.inventoryClient.colUnitCost")}</th>
                 <th>{t("procurement.inventoryClient.fieldProvider")}</th>
                 <th>{t("common.status")}</th>
-                <th style={{ textAlign: "right" }}>{t("common.actions")}</th>
+                <th className={inv.colAcciones}>{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -635,30 +672,30 @@ export function InventoryClient({
                 const iconId    = item.emoji && DENTAL_ICONS.find(i => i.id === item.emoji)
                   ? item.emoji
                   : (CATEGORY_DEFAULT_ICON[item.category] ?? "fresa-jeringa");
-                const qtyColor  = status === "sin" ? "var(--danger)" : status === "poco" ? "var(--warning-strong)" : "var(--success-strong)";
                 return (
                   <tr key={item.id}>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <td className={inv.colArticulo}>
+                      <div className={inv.articulo}>
                         <ItemIcon iconId={iconId} category={item.category} size={36} />
-                        <div>
-                          <div style={{ fontWeight: 500, color: "var(--text-1)" }}>{item.name}</div>
+                        <div className={inv.articuloTextos}>
+                          <div className={inv.articuloNombre}>{item.name}</div>
+                          <div className={inv.articuloCategoria}>{item.category}</div>
                           {item.description && (
-                            <div style={{ fontSize: 12, color: "var(--text-3)", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <div className={inv.articuloDetalle} title={item.description}>
                               {item.description}
                             </div>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td style={{ color: "var(--text-2)" }}>{item.category}</td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className={`${inv.colCategoria} ${inv.categoria}`}>{item.category}</td>
+                    <td className={`${inv.colCantidad} ${inv.num}`} data-rotulo={t("procurement.inventoryClient.colQuantity")}>
                       {isEditing ? (
-                        <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                        <div className={inv.edicion}>
                           <input
                             type="number" min={0} autoFocus
-                            className="input-new mono"
-                            style={{ width: 70, height: 28, textAlign: "right" }}
+                            className={`input-new ${inv.celda} ${inv.celdaCorta}`}
+                            aria-label={`${t("procurement.inventoryClient.colQuantity")}: ${item.name}`}
                             value={editQty[item.id]}
                             onChange={e => setEditQty(prev => ({ ...prev, [item.id]: e.target.value }))}
                             onKeyDown={e => {
@@ -671,7 +708,7 @@ export function InventoryClient({
                             onClick={() => setQuantityDirect(item.id, editQty[item.id])}
                             disabled={isLoad}
                             className="btn-new btn-new--primary btn-new--sm"
-                            style={{ padding: 0, width: 28 }}
+                            style={{ padding: 0, width: 30, height: 30, justifyContent: "center", flex: "none" }}
                             aria-label={t("common.confirm")}
                           >
                             <Check size={16} strokeWidth={1.75} aria-hidden />
@@ -681,22 +718,19 @@ export function InventoryClient({
                         <button
                           type="button"
                           onClick={() => setEditQty(prev => ({ ...prev, [item.id]: String(item.quantity) }))}
-                          className="mono"
-                          style={{
-                            color: qtyColor, fontWeight: 600, fontSize: 14,
-                            background: "transparent", border: "none", cursor: "pointer",
-                          }}
+                          className={`${inv.cantidad} ${TONO_CANTIDAD[status] ?? ""}`}
                           title={t("procurement.inventoryClient.clickToEdit")}
                         >
-                          {item.quantity} {item.unit}
+                          {item.quantity}
+                          <span className={inv.cantidadUnidad}>{item.unit}</span>
                         </button>
                       )}
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className={`${inv.colMinimo} ${inv.num}`} data-rotulo={t("procurement.inventoryClient.colMinimum")}>
                       <input
                         type="number" min={0}
-                        className="input-new mono"
-                        style={{ width: 60, height: 28, textAlign: "right", display: "inline-block" }}
+                        className={`input-new ${inv.celda} ${inv.celdaCorta}`}
+                        aria-label={`${t("procurement.inventoryClient.colMinimum")}: ${item.name}`}
                         defaultValue={item.minQuantity}
                         onBlur={e => {
                           const v = parseInt(e.target.value);
@@ -704,7 +738,7 @@ export function InventoryClient({
                         }}
                       />
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className={`${inv.colCosto} ${inv.num}`} data-rotulo={t("procurement.inventoryClient.colUnitCost")}>
                       <input
                         // Ajuste 1 (QA en vivo): con `defaultValue` a secas este
                         // input no se refrescaba cuando "Registrar compra"
@@ -716,8 +750,8 @@ export function InventoryClient({
                         // se pierde el "solo blur guarda" del resto de la fila).
                         key={item.unitCost}
                         type="number" min={0} step="0.01"
-                        className="input-new mono"
-                        style={{ width: 76, height: 28, textAlign: "right", display: "inline-block" }}
+                        className={`input-new ${inv.celda} ${inv.celdaMedia}`}
+                        aria-label={`${t("procurement.inventoryClient.colUnitCost")}: ${item.name}`}
                         defaultValue={item.unitCost}
                         onBlur={e => {
                           const v = parseFloat(e.target.value);
@@ -725,22 +759,15 @@ export function InventoryClient({
                         }}
                       />
                     </td>
-                    <td>
+                    <td className={inv.colProveedor} data-rotulo={t("procurement.inventoryClient.fieldProvider")}>
                       <select
-                        className="input-new"
-                        // Ajuste 2 (QA 2f, panel.108): a 1440 el texto salía
-                        // cortado ("Sin pr…") — 140px no le alcanzaba a "Sin
-                        // proveedor" con la flecha nativa del <select>. El
-                        // primer intento usó width:100% + minWidth/maxWidth,
-                        // pero en una tabla de layout automático (sin
-                        // table-layout:fixed) width:100% resuelve contra lo
-                        // que esta columna ya recibió (~110px, repartido
-                        // entre el resto de columnas) — minWidth ganaba
-                        // siempre y maxWidth nunca entraba en juego (medido
-                        // en vivo, seguía cortado). "Costo unit." al lado NO
-                        // usa 100%, usa un width fijo en px — mismo criterio
-                        // aquí: un ancho fijo fuerza a la COLUMNA a crecer.
-                        style={{ height: 28, fontSize: 12.5, width: 170 }}
+                        // Ajuste 2 (QA 2f, panel.108): el ancho va FIJO (en la
+                        // hoja, `.celdaLarga`) y no en `100%`: en una tabla de
+                        // layout automático `width:100%` resuelve contra lo
+                        // que la columna ya recibió y «Sin proveedor» salía
+                        // cortado. Un ancho fijo obliga a la COLUMNA a crecer.
+                        className={`input-new ${inv.celda} ${inv.celdaLarga}`}
+                        aria-label={`${t("procurement.inventoryClient.fieldProvider")}: ${item.name}`}
                         value={item.providerId ?? ""}
                         onChange={e => updateProvider(item.id, e.target.value)}
                       >
@@ -750,45 +777,46 @@ export function InventoryClient({
                         ))}
                       </select>
                     </td>
-                    <td>{statusBadge(status, t)}</td>
-                    <td style={{ textAlign: "right" }}>
-                      <div style={{ display: "inline-flex", gap: 4 }}>
+                    <td className={inv.colEstado}>{statusBadge(status, t)}</td>
+                    <td className={inv.colAcciones}>
+                      <div className={inv.grupoAcciones}>
                         <button
                           type="button"
                           onClick={() => setLotesItem(item)}
-                          className="btn-new btn-new--ghost btn-new--sm"
-                          style={{ padding: 0, width: 28 }}
-                          aria-label="Lotes y caducidad"
+                          className={inv.accion}
+                          aria-label={`Lotes y caducidad: ${item.name}`}
                           title="Lotes y caducidad"
                         >
                           <CalendarClock size={16} strokeWidth={1.75} aria-hidden />
                         </button>
-                        <button
-                          type="button"
-                          disabled={isLoad || item.quantity === 0}
-                          onClick={() => changeQty(item.id, -1)}
-                          className="btn-new btn-new--ghost btn-new--sm"
-                          style={{ padding: 0, width: 28, color: "var(--danger)" }}
-                          aria-label={t("procurement.inventoryClient.removeOne")}
-                        >
-                          <Minus size={16} strokeWidth={1.75} aria-hidden />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isLoad}
-                          onClick={() => changeQty(item.id, 1)}
-                          className="btn-new btn-new--ghost btn-new--sm"
-                          style={{ padding: 0, width: 28, color: "var(--success-strong)" }}
-                          aria-label={t("procurement.inventoryClient.addOne")}
-                        >
-                          <Plus size={16} strokeWidth={1.75} aria-hidden />
-                        </button>
+                        <span className={inv.pasos}>
+                          <button
+                            type="button"
+                            disabled={isLoad || item.quantity === 0}
+                            onClick={() => changeQty(item.id, -1)}
+                            className={`${inv.accion} ${inv.accionMenos}`}
+                            aria-label={`${t("procurement.inventoryClient.removeOne")}: ${item.name}`}
+                            title={t("procurement.inventoryClient.removeOne")}
+                          >
+                            <Minus size={16} strokeWidth={1.75} aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isLoad}
+                            onClick={() => changeQty(item.id, 1)}
+                            className={`${inv.accion} ${inv.accionMas}`}
+                            aria-label={`${t("procurement.inventoryClient.addOne")}: ${item.name}`}
+                            title={t("procurement.inventoryClient.addOne")}
+                          >
+                            <Plus size={16} strokeWidth={1.75} aria-hidden />
+                          </button>
+                        </span>
                         <button
                           type="button"
                           onClick={() => deleteItem(item.id)}
-                          className="btn-new btn-new--ghost btn-new--sm"
-                          style={{ padding: 0, width: 28 }}
-                          aria-label={t("common.delete")}
+                          className={`${inv.accion} ${inv.accionBorrar}`}
+                          aria-label={`${t("common.delete")}: ${item.name}`}
+                          title={t("common.delete")}
                         >
                           <Trash2 size={16} strokeWidth={1.75} aria-hidden />
                         </button>
@@ -822,21 +850,13 @@ export function InventoryClient({
           Inmune al problema. */}
       <Dialog.Root open={showAdd} onOpenChange={setShowAdd}>
         <Dialog.Portal>
-          <Dialog.Overlay className="modal-overlay" />
-          <Dialog.Content
-            className="modal"
-            aria-describedby={undefined}
-            style={{
-              position: "fixed",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              maxWidth: 540,
-              width: "calc(100vw - 32px)",
-              maxHeight: "90vh",
-              zIndex: 101,
-            }}
-          >
+          <Dialog.Overlay className={ropa.velo} />
+          {/* Diseño (ws1-t5): la caja se viste con `ropaVentana` —la ropa de
+              diálogos del rediseño, o `.modal` con el interruptor apagado— y
+              su esqueleto (cabecera y pie fijos, cuerpo con scroll) sale de la
+              hoja: a 390 el pie con «Agregar artículo» quedaba fuera de la
+              pantalla y la rejilla de íconos se salía por la derecha. */}
+          <Dialog.Content className={ropa.caja} aria-describedby={undefined}>
             <div className="modal__header">
               <Dialog.Title className="modal__title">{t("procurement.inventoryClient.newItem")}</Dialog.Title>
               <Dialog.Close asChild>
@@ -850,19 +870,19 @@ export function InventoryClient({
               </Dialog.Close>
             </div>
             <div className="modal__body">
-              <div style={{ marginBottom: 22 }}>
+              <div className={inv.seccion}>
                 <IconPicker
                   selected={newItem.iconId}
                   onSelect={id => setNewItem(n => ({ ...n, iconId: id }))}
                 />
               </div>
 
-              <div style={{ marginBottom: 22 }}>
+              <div className={inv.seccion}>
                 <div className="form-section__title">
                   {t("procurement.inventoryClient.sectionInfo")}
                   <span className="form-section__rule" />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px 14px" }}>
+                <div className={inv.rejilla1}>
                   <div className="field-new">
                     <label className="field-new__label">{t("procurement.inventoryClient.fieldName")} <span className="req">*</span></label>
                     <input
@@ -876,7 +896,7 @@ export function InventoryClient({
                     <label className="field-new__label">{t("procurement.inventoryClient.fieldPurpose")}</label>
                     <textarea
                       className="input-new"
-                      style={{ height: 60, paddingTop: 8, resize: "vertical" }}
+                      style={{ height: 64, paddingTop: 8, resize: "vertical" }}
                       placeholder={t("procurement.inventoryClient.purposePlaceholder")}
                       value={newItem.description}
                       onChange={e => setNewItem(n => ({ ...n, description: e.target.value }))}
@@ -911,12 +931,12 @@ export function InventoryClient({
                 </div>
               </div>
 
-              <div>
+              <div className={inv.seccion}>
                 <div className="form-section__title">
                   {t("procurement.inventoryClient.sectionInitialStock")}
                   <span className="form-section__rule" />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px 14px" }}>
+                <div className={inv.rejilla4}>
                   <div className="field-new">
                     <label className="field-new__label">{t("procurement.inventoryClient.fieldQuantity")}</label>
                     <input
@@ -960,13 +980,13 @@ export function InventoryClient({
               </div>
 
               {/* ws1-t4: proveedor propio, opcional. */}
-              <div style={{ marginTop: 18 }}>
+              <div className={inv.seccion}>
                 <div className="form-section__title">
                   {t("procurement.inventoryClient.fieldProvider")}
                   <span className="form-section__rule" />
                 </div>
                 {showNuevoProveedor ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: "8px 10px", alignItems: "end" }}>
+                  <div className={inv.formLote}>
                     <div className="field-new">
                       <label className="field-new__label">{t("procurement.inventoryClient.fieldName")}</label>
                       <input className="input-new" value={nuevoProveedor.name}
@@ -982,15 +1002,15 @@ export function InventoryClient({
                       <input className="input-new" value={nuevoProveedor.contact}
                         onChange={e => setNuevoProveedor(p => ({ ...p, contact: e.target.value }))} />
                     </div>
-                    <ButtonNew variant="primary" size="sm" type="button" onClick={crearProveedorRapido}>
+                    <ButtonNew variant="primary" type="button" onClick={crearProveedorRapido}>
                       {t("common.confirm")}
                     </ButtonNew>
                   </div>
                 ) : (
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div className={inv.enLinea}>
                     <select
                       className="input-new"
-                      style={{ flex: 1 }}
+                      aria-label={t("procurement.inventoryClient.fieldProvider")}
                       value={newItem.providerId}
                       onChange={e => setNewItem(n => ({ ...n, providerId: e.target.value }))}
                     >
@@ -999,7 +1019,7 @@ export function InventoryClient({
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
-                    <ButtonNew variant="ghost" size="sm" type="button" onClick={() => setShowNuevoProveedor(true)}>
+                    <ButtonNew variant="secondary" type="button" onClick={() => setShowNuevoProveedor(true)}>
                       {t("procurement.inventoryClient.newProvider")}
                     </ButtonNew>
                   </div>
@@ -1023,6 +1043,7 @@ export function InventoryClient({
           itemId={lotesItem.id}
           itemName={lotesItem.name}
           unit={lotesItem.unit}
+          rediseno={rediseno}
           onClose={() => setLotesItem(null)}
         />
       )}
@@ -1033,12 +1054,13 @@ export function InventoryClient({
           items={items.map(i => ({ id: i.id, name: i.name, unit: i.unit }))}
           proveedores={proveedores}
           onRegistrada={aplicarResultadoCompra}
+          rediseno={rediseno}
           onClose={() => setShowCompra(false)}
         />
       )}
 
       {/* ws1-t4 (ajuste 1) — "Historial de compras". */}
-      {showHistorial && <HistorialComprasModal onClose={() => setShowHistorial(false)} />}
+      {showHistorial && <HistorialComprasModal rediseno={rediseno} onClose={() => setShowHistorial(false)} />}
     </div>
   );
 }

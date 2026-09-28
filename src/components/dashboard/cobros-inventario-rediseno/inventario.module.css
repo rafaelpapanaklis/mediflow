@@ -1,0 +1,1322 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Inventario — diseño para trabajar horas en él (ws1-t5).
+
+   Dos raíces:
+   · `.pagina`  — la pantalla /dashboard/inventory. Va JUNTO a la raíz del
+                  rediseño de Inventario (`inventario-rediseno/`), que es la
+                  que declara los `--inv-*`.
+   · `.ventana` — las ventanas (Nuevo artículo, Registrar compra, Historial,
+                  Lotes, Materiales). Se abren en un portal a <body>, fuera
+                  de la pantalla, y se visten con la ropa de diálogos ya
+                  aprobada (`dialogos-rediseno`), que trae los `--m2-*`.
+
+   NO declara colores: solo LEE. Cada valor pide primero el token del
+   rediseño (`--inv-*` en la pantalla, `--m2-*` en las ventanas) y, si no
+   está —la clínica con el interruptor apagado—, el global de globals.css,
+   que tiene versión clara y oscura. No hay un solo hex ni un `--accent`.
+
+   Qué arregla, medido en dev.108 el 28-sep-2026:
+   · A 1440 la tabla pedía 1207 px y la pantalla daba 1122: la columna de
+     acciones quedaba cortada y había que desplazar para llegar a ella.
+   · A 390 solo se veía la columna «Artículo»; cantidad, mínimo, costo y
+     acciones quedaban a 800 px de scroll lateral dentro de la tarjeta.
+   · La banda de caducidad llegaba 3-5 s después que el resto y empujaba
+     toda la pantalla hacia abajo.
+   · En «Registrar compra» a 390 el selector de artículo medía 60 px («Eli»).
+   · Lotes y Materiales pedían `--border-1`, que no existe: sin bordes.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.pagina {
+  --iv-texto: var(--inv-texto, var(--text-1));
+  --iv-texto-2: var(--inv-texto-2, var(--text-2));
+  --iv-texto-3: var(--inv-texto-3, var(--text-3));
+  --iv-tarjeta: var(--inv-tarjeta, var(--bg-elev));
+  --iv-tarjeta-2: var(--inv-tarjeta-2, var(--bg-elev-2));
+  --iv-borde: var(--inv-borde, var(--border-soft));
+  --iv-borde-suave: var(--inv-borde-suave, var(--border-soft));
+  --iv-hover: var(--inv-hover, var(--bg-hover));
+  --iv-activo: var(--inv-activo, var(--brand));
+  --iv-activo-suave: var(--inv-activo-suave, var(--brand-soft));
+  --iv-foco: 0 0 0 2px var(--iv-activo);
+
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: clamp(14px, 1.6vw, 28px);
+  color: var(--iv-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.ventana {
+  --iv-texto: var(--m2-texto, var(--text-1));
+  --iv-texto-2: var(--m2-texto-2, var(--text-2));
+  --iv-texto-3: var(--m2-texto-3, var(--text-3));
+  --iv-tarjeta: var(--m2-tarjeta, var(--bg-elev));
+  --iv-tarjeta-2: var(--m2-n1-fondo, var(--bg-elev-2));
+  --iv-borde: var(--m2-tarjeta-borde, var(--border-soft));
+  --iv-borde-suave: var(--m2-borde, var(--border-soft));
+  --iv-hover: var(--m2-hover, var(--bg-hover));
+  --iv-activo: var(--m2-activo, var(--brand));
+  --iv-activo-suave: var(--m2-iniciales-fondo, var(--brand-soft));
+  --iv-foco: var(--m2-foco, var(--ring));
+}
+
+/* Cifras del mismo ancho en todo lo que cuelga de las dos raíces. Va sobre
+   los HIJOS: la raíz lleva `.tokens`, y `tipografia-panel.tsx` le pone a esa
+   clase `font-variant-numeric: normal` con más peso. */
+.pagina > *,
+.ventana > * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══ La pantalla ═══════════════════════════════════════════════════════ */
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  margin-bottom: 20px;
+}
+
+.titulo {
+  margin: 0;
+  font-size: clamp(19px, 1.7vw, 23px);
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  color: var(--iv-texto);
+}
+
+.subtitulo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--iv-texto-3);
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── Indicadores ──────────────────────────────────────────────────────── */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+/* La tarjeta de caducidad está SIEMPRE, con sus dos renglones, aunque los
+   avisos aún no hayan llegado: así nada salta cuando llegan. */
+.caducidad {
+  display: flex;
+  flex-direction: column;
+}
+
+.caducidadLineas {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: -3px -6px -4px;
+}
+
+.caducidadLinea {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--iv-texto-3);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 19px;
+  text-align: left;
+}
+
+.caducidadLinea strong {
+  min-width: 1.2em;
+  font-size: 15px;
+  font-weight: 700;
+  color: inherit;
+}
+
+button.caducidadLinea {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+button.caducidadLinea:focus-visible {
+  outline: none;
+  box-shadow: var(--iv-foco);
+}
+
+.caducidadPeligro {
+  color: var(--danger-strong, var(--danger));
+}
+
+.caducidadAlerta {
+  color: var(--warning-strong, var(--warning));
+}
+
+@media (hover: hover) {
+  button.caducidadPeligro:hover {
+    background: var(--danger-soft);
+  }
+  button.caducidadAlerta:hover {
+    background: var(--warning-soft);
+  }
+}
+
+/* ── Buscador y filtros ───────────────────────────────────────────────── */
+
+.filtros {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.filtros :global(.search-field) {
+  flex: 0 1 280px;
+  min-width: 0;
+}
+
+/* Hasta seis filtros: a lo ancho de un teléfono se desplazan ellos, no la
+   página, y ninguno parte su rótulo en dos renglones. */
+.segmento {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.segmento::-webkit-scrollbar {
+  display: none;
+}
+
+.segmento :global(.segment-new__btn) {
+  flex: none;
+  white-space: nowrap;
+}
+
+.segmento :global(.segment-new__btn):focus-visible {
+  outline: none;
+  box-shadow: var(--iv-foco);
+}
+
+.cuenta {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+.cuentaPeligro {
+  background: var(--danger-soft);
+  color: var(--danger-strong, var(--danger));
+}
+
+.cuentaAlerta {
+  background: var(--warning-soft);
+  color: var(--warning-strong, var(--warning));
+}
+
+/* Sobre el segmento activo (fondo de acento) la cuenta va en el color del
+   propio texto: un ámbar sobre violeta no se lee. */
+:global(.segment-new__btn--active) .cuenta {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  color: inherit;
+}
+
+/* ── La tabla ─────────────────────────────────────────────────────────── */
+
+.tablaCaja {
+  overflow-x: auto;
+}
+
+/* `.tabla.tabla`: gana a las reglas de `.table-new` y a las del rediseño
+   (`.pageRediseno .table-new td`) sin depender del orden de las hojas. */
+.tabla.tabla {
+  font-size: 13px;
+}
+
+.tabla.tabla th,
+.tabla.tabla td {
+  padding: 9px 10px;
+}
+
+.tabla.tabla th {
+  white-space: nowrap;
+}
+
+.tabla.tabla th:first-child,
+.tabla.tabla td:first-child {
+  padding-left: 16px;
+}
+
+.tabla.tabla .num {
+  text-align: right;
+}
+
+.articulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 190px;
+}
+
+.articuloTextos {
+  min-width: 0;
+}
+
+.articuloNombre {
+  font-weight: 600;
+  color: var(--iv-texto);
+}
+
+.articuloDetalle {
+  max-width: 250px;
+  font-size: 12px;
+  color: var(--iv-texto-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La categoría dentro de la celda del artículo: solo en teléfono, donde la
+   columna «Categoría» no existe. */
+.articuloCategoria {
+  display: none;
+}
+
+.categoria {
+  font-size: 12.5px;
+  color: var(--iv-texto-2);
+}
+
+/* La existencia: un botón que abre la edición. */
+.cantidad {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.cantidadUnidad {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--iv-texto-3);
+}
+
+@media (hover: hover) {
+  .cantidad:hover {
+    background: var(--iv-hover);
+    border-color: var(--iv-borde);
+  }
+}
+
+.cantidad:focus-visible {
+  outline: none;
+  box-shadow: var(--iv-foco);
+}
+
+.tonoExito { color: var(--success-strong, var(--success)); }
+.tonoAlerta { color: var(--warning-strong, var(--warning)); }
+.tonoPeligro { color: var(--danger-strong, var(--danger)); }
+
+.edicion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Los campos de la tabla: 109 filas por tres campos son 327 cajas. En
+   reposo son un fondo suave sin borde; el borde aparece al pasar y el anillo
+   al enfocar. `.celda.celda.celda` (0,4,0) gana a `.pageRediseno .input-new`. */
+.tabla .celda.celda.celda {
+  display: inline-block;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--iv-tarjeta-2);
+  color: var(--iv-texto);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 28px;
+  box-shadow: none;
+}
+
+.tabla input.celda.celda.celda {
+  text-align: right;
+  /* Sin flechitas: aparecían al pasar el ratón y corrían la cifra. */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.tabla input.celda::-webkit-inner-spin-button,
+.tabla input.celda::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.tabla select.celda.celda.celda {
+  padding-right: 4px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+@media (hover: hover) {
+  .tabla .celda.celda.celda:hover {
+    border-color: var(--iv-texto-3);
+  }
+}
+
+.tabla .celda.celda.celda:focus {
+  border-color: var(--iv-activo);
+  background: var(--iv-tarjeta);
+  box-shadow: 0 0 0 3px var(--iv-activo-suave);
+  outline: none;
+}
+
+/* globals.css pinta TODO input/select en oscuro con `!important`; aquí se le
+   gana con la misma arma, leyendo los tokens (igual que `factura-rediseno`). */
+:global(.dark) .tabla .celda.celda.celda {
+  background-color: var(--iv-tarjeta-2) !important;
+  border-color: transparent !important;
+  color: var(--iv-texto) !important;
+}
+
+:global(.dark) .tabla .celda.celda.celda:hover {
+  border-color: var(--iv-texto-3) !important;
+}
+
+:global(.dark) .tabla .celda.celda.celda:focus {
+  border-color: var(--iv-activo) !important;
+}
+
+.celdaCorta { width: 62px; }
+.celdaMedia { width: 84px; }
+.celdaLarga { width: 158px; }
+
+/* Estado. */
+.pildora {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pildoraPunto {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
+}
+
+.pildoraExito { background: var(--success-soft); color: var(--success-strong, var(--success)); }
+.pildoraAlerta { background: var(--warning-soft); color: var(--warning-strong, var(--warning)); }
+.pildoraPeligro { background: var(--danger-soft); color: var(--danger-strong, var(--danger)); }
+
+/* Acciones: pegadas al borde derecho, siempre a la vista aunque la tabla
+   no quepa entera. El fondo es opaco para tapar lo que pasa por debajo. */
+.tabla.tabla .colAcciones {
+  position: sticky;
+  right: 0;
+  padding-left: 8px;
+  padding-right: 12px;
+  background: var(--iv-tarjeta);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tabla.tabla th.colAcciones {
+  background: var(--iv-tarjeta);
+}
+
+@media (hover: hover) {
+  .tabla.tabla tbody tr:hover .colAcciones {
+    background: linear-gradient(var(--iv-hover), var(--iv-hover)), var(--iv-tarjeta);
+  }
+}
+
+.grupoAcciones {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.accion {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--iv-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.accion:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.accion:focus-visible {
+  outline: none;
+  box-shadow: var(--iv-foco);
+}
+
+@media (hover: hover) {
+  .accion:hover:not(:disabled) {
+    background: var(--iv-hover);
+    color: var(--iv-texto);
+  }
+  .accionMenos:hover:not(:disabled),
+  .accionBorrar:hover:not(:disabled) {
+    background: var(--danger-soft);
+    color: var(--danger-strong, var(--danger));
+  }
+  .accionMas:hover:not(:disabled) {
+    background: var(--success-soft);
+    color: var(--success-strong, var(--success));
+  }
+}
+
+/* − y + van juntos: son la misma herramienta. */
+.pasos {
+  display: inline-flex;
+  margin: 0 4px;
+  border: 1px solid var(--iv-borde);
+  border-radius: 9px;
+}
+
+.pasos .accion {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+/* ── Estado vacío ─────────────────────────────────────────────────────── */
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 52px 24px;
+  text-align: center;
+}
+
+.vacioIcono {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: var(--iv-activo-suave);
+  color: var(--iv-activo);
+}
+
+.vacioTitulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--iv-texto);
+}
+
+.vacioPista {
+  margin: 0;
+  max-width: 380px;
+  font-size: 12.5px;
+  color: var(--iv-texto-3);
+}
+
+.vacioAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ── Teléfono: cada artículo es una ficha ─────────────────────────────── */
+
+@media (max-width: 720px) {
+  .cabecera {
+    margin-bottom: 16px;
+  }
+
+  /* «Nuevo artículo» arriba y a lo ancho; las otras dos, mitad y mitad. */
+  .acciones {
+    width: 100%;
+  }
+
+  .acciones > * {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 0 8px;
+  }
+
+  .acciones > :last-child {
+    flex-basis: 100%;
+    order: -1;
+  }
+
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .caducidad {
+    grid-column: 1 / -1;
+  }
+
+  .caducidadLineas {
+    flex-direction: row;
+    gap: 12px;
+  }
+
+  .caducidadLinea {
+    width: auto;
+  }
+
+  .filtros :global(.search-field) {
+    flex: 1 1 100%;
+  }
+
+  .tablaCaja {
+    overflow: visible;
+  }
+
+  .tabla.tabla,
+  .tabla.tabla tbody {
+    display: block;
+  }
+
+  /* La cabecera sigue ahí para el lector de pantalla; los rótulos visibles
+     los pone cada celda. */
+  .tabla.tabla thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .tabla.tabla tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas:
+      "articulo articulo estado"
+      "cantidad minimo costo"
+      "proveedor proveedor proveedor"
+      "acciones acciones acciones";
+    gap: 12px 10px;
+    padding: 14px;
+    border-bottom: 1px solid var(--iv-borde-suave);
+  }
+
+  .tabla.tabla tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .tabla.tabla td,
+  .tabla.tabla td.num,
+  .tabla.tabla td:first-child {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+
+  .tabla.tabla .colArticulo { grid-area: articulo; }
+  .tabla.tabla .colCategoria { display: none; }
+  .tabla.tabla .colCantidad { grid-area: cantidad; }
+  .tabla.tabla .colMinimo { grid-area: minimo; }
+  .tabla.tabla .colCosto { grid-area: costo; }
+  .tabla.tabla .colProveedor { grid-area: proveedor; }
+  .tabla.tabla .colEstado { grid-area: estado; justify-self: end; align-self: start; }
+
+  .tabla.tabla .colAcciones {
+    grid-area: acciones;
+    position: static;
+    padding: 10px 0 0;
+    border-top: 1px solid var(--iv-borde-suave);
+    background: transparent;
+    text-align: left;
+  }
+
+  .tabla.tabla tbody tr:hover .colAcciones {
+    background: transparent;
+  }
+
+  .tabla.tabla td[data-rotulo]::before {
+    content: attr(data-rotulo);
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--iv-texto-3);
+  }
+
+  .articulo {
+    min-width: 0;
+    align-items: flex-start;
+  }
+
+  .articuloDetalle {
+    display: -webkit-box;
+    max-width: none;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .articuloCategoria {
+    display: block;
+    font-size: 11.5px;
+    color: var(--iv-texto-3);
+  }
+
+  .cantidad {
+    display: flex;
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    border-color: var(--iv-borde);
+    align-items: center;
+  }
+
+  .edicion {
+    display: flex;
+  }
+
+  .tabla .celda.celda.celda {
+    display: block;
+    width: 100%;
+    height: 36px;
+    line-height: 34px;
+    font-size: 13px;
+  }
+
+  .tabla input.celda.celda.celda {
+    text-align: left;
+  }
+
+  .grupoAcciones {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .accion,
+  .pasos .accion {
+    width: 40px;
+    height: 36px;
+  }
+}
+
+/* ═══ Las ventanas ══════════════════════════════════════════════════════ */
+
+/* `.ventana.ventana`: gana a `.alta` (la ropa de diálogos) y a `.modal` en
+   el ancho, sin depender del orden de las hojas. */
+.ventana.ventana {
+  display: flex;
+  flex-direction: column;
+  width: min(calc(100vw - 24px), 560px);
+  max-width: none;
+  max-height: min(92vh, calc(100dvh - 24px));
+  overflow: hidden;
+}
+
+.ventana.ventanaMedia { width: min(calc(100vw - 24px), 660px); }
+.ventana.ventanaAncha { width: min(calc(100vw - 24px), 780px); }
+
+/* Con el interruptor apagado la ventana no lleva la ropa de diálogos, que
+   es la que la centra: lo hace esta clase, igual que lo hacía el `style`. */
+.ventanaClasica {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 101;
+  transform: translate(-50%, -50%);
+}
+
+.ventana :global(.modal__header),
+.ventana :global(.modal__footer) {
+  flex: none;
+}
+
+.ventana :global(.modal__header) {
+  gap: 12px;
+}
+
+.ventana :global(.modal__title) {
+  min-width: 0;
+}
+
+.ventana :global(.modal__body) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tituloSub {
+  display: block;
+  margin-top: 1px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 17px;
+  color: var(--iv-texto-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tituloTextos {
+  display: block;
+  min-width: 0;
+}
+
+.seccion + .seccion {
+  margin-top: 20px;
+}
+
+.texto {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--iv-texto-2);
+}
+
+.pista {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--iv-texto-3);
+}
+
+.pista > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* Rejillas de campos. `minmax(0, 1fr)`: un <select> largo no ensancha su
+   columna ni saca la ventana de la pantalla. */
+.rejilla1,
+.rejilla2,
+.rejilla4 {
+  display: grid;
+  gap: 12px 14px;
+}
+
+.rejilla1 { grid-template-columns: minmax(0, 1fr); }
+.rejilla2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rejilla4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.todoElAncho {
+  grid-column: 1 / -1;
+}
+
+.ventana :global(.field-new) {
+  min-width: 0;
+}
+
+.ventana :global(.input-new) {
+  min-width: 0;
+}
+
+.enLinea {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.enLinea > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* El selector de ícono: tantas columnas como quepan, nunca se sale. */
+.iconos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--iv-borde-suave);
+  border-radius: 10px;
+  background: var(--iv-tarjeta-2);
+}
+
+.iconoOpcion {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--iv-tarjeta);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .iconoOpcion:hover {
+    border-color: var(--iv-texto-3);
+  }
+}
+
+.iconoOpcion:focus-visible {
+  outline: none;
+  box-shadow: var(--iv-foco);
+}
+
+.iconoOpcionActiva,
+.iconoOpcionActiva:hover {
+  border-color: var(--iv-activo);
+  background: var(--iv-activo-suave);
+}
+
+.iconoOpcion img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+/* ── Registrar compra: cada línea es una ficha ────────────────────────── */
+
+.lineas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.linea {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px 116px 32px;
+  grid-template-areas:
+    "articulo cantidad costo quitar"
+    "lote caduca caduca .";
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--iv-borde);
+  border-radius: 12px;
+  background: var(--iv-tarjeta-2);
+}
+
+.lineaArticulo { grid-area: articulo; }
+.lineaCantidad { grid-area: cantidad; }
+.lineaCosto { grid-area: costo; }
+.lineaLote { grid-area: lote; }
+.lineaCaduca { grid-area: caduca; }
+
+.lineaQuitar {
+  grid-area: quitar;
+  align-self: end;
+  margin-bottom: 4px;
+}
+
+.ventana :global(.input-new).cifra {
+  text-align: right;
+}
+
+.total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--iv-borde-suave);
+  border-radius: 12px;
+  background: var(--iv-tarjeta-2);
+}
+
+.totalRotulo {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--iv-texto);
+}
+
+.totalPista {
+  display: block;
+  font-size: 12px;
+  color: var(--iv-texto-3);
+}
+
+.totalCifra {
+  flex: none;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  color: var(--iv-texto);
+}
+
+/* ── Estados de carga y vacío dentro de una ventana ───────────────────── */
+
+/* Alto reservado: la ventana no crece de golpe cuando llegan los datos. */
+.espera {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 220px;
+  font-size: 12.5px;
+  color: var(--iv-texto-3);
+  text-align: center;
+}
+
+.esperaIcono {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--iv-activo-suave);
+  color: var(--iv-activo);
+}
+
+.esperaTitulo {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--iv-texto);
+}
+
+.esperaTexto {
+  margin: 0;
+  max-width: 340px;
+}
+
+.esperaCorta {
+  min-height: 96px;
+}
+
+/* ── Historial de compras ─────────────────────────────────────────────── */
+
+.compras {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compra {
+  border: 1px solid var(--iv-borde);
+  border-radius: 12px;
+  background: var(--iv-tarjeta);
+  overflow: hidden;
+}
+
+.compraCabeza {
+  display: grid;
+  grid-template-columns: 18px 96px minmax(0, 1fr) minmax(0, auto) 108px;
+  grid-template-areas: "flecha fecha proveedor quien total";
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--iv-texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+@media (hover: hover) {
+  .compraCabeza:hover {
+    background: var(--iv-hover);
+  }
+}
+
+.compraCabeza:focus-visible {
+  outline: none;
+  box-shadow: inset var(--iv-foco);
+}
+
+.compraFlecha {
+  grid-area: flecha;
+  color: var(--iv-texto-3);
+}
+
+.compraFecha {
+  grid-area: fecha;
+  font-size: 12.5px;
+  color: var(--iv-texto-2);
+  white-space: nowrap;
+}
+
+.compraProveedor {
+  grid-area: proveedor;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compraQuien {
+  grid-area: quien;
+  font-size: 12px;
+  color: var(--iv-texto-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compraTotal {
+  grid-area: total;
+  font-size: 13.5px;
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.compraDetalle {
+  padding: 4px 14px 14px;
+  border-top: 1px solid var(--iv-borde-suave);
+  background: var(--iv-tarjeta-2);
+}
+
+.compraDetalle :global(.table-new) th {
+  background: transparent;
+}
+
+.compraDetalle :global(.table-new) th,
+.compraDetalle :global(.table-new) td {
+  padding: 8px 0;
+  border-bottom-color: var(--iv-borde-suave);
+}
+
+.compraDetalle :global(.table-new) th + th,
+.compraDetalle :global(.table-new) td + td {
+  padding-left: 16px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.comprobante {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 12px;
+}
+
+.comprobanteDato {
+  font-size: 12.5px;
+  color: var(--iv-texto-2);
+}
+
+.comprobanteArchivo {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.comprobanteArchivo > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Lotes y receta de materiales ─────────────────────────────────────── */
+
+.renglones {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--iv-borde);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.renglon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 8px 8px 14px;
+}
+
+.renglon + .renglon {
+  border-top: 1px solid var(--iv-borde-suave);
+}
+
+.renglonPeligro {
+  background: var(--danger-soft);
+}
+
+.renglonIcono {
+  flex: none;
+  color: var(--iv-texto-3);
+}
+
+.renglonTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.renglonTitulo {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--iv-texto);
+}
+
+.renglonApagado {
+  font-weight: 400;
+  color: var(--iv-texto-2);
+}
+
+.renglonDetalle {
+  font-size: 12px;
+  color: var(--iv-texto-3);
+}
+
+.renglonCifra {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--iv-texto-2);
+}
+
+.renglonFin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.altaRapida {
+  padding-top: 16px;
+  border-top: 1px solid var(--iv-borde-suave);
+}
+
+.altaRapidaTitulo {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--iv-texto);
+}
+
+.altaRapidaPista {
+  font-weight: 400;
+  color: var(--iv-texto-3);
+}
+
+.formLote {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.formReceta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px auto;
+  gap: 10px;
+  align-items: end;
+}
+
+@media (max-width: 600px) {
+  .rejilla4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .linea {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px;
+    grid-template-areas:
+      "articulo articulo quitar"
+      "cantidad costo costo"
+      "lote caduca caduca";
+  }
+
+  .compraCabeza {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "flecha proveedor total"
+      "flecha fecha quien";
+    row-gap: 2px;
+    padding: 10px 12px;
+  }
+
+  .compraQuien {
+    text-align: right;
+  }
+
+  .formLote {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formLote > :first-child,
+  .formLote > :last-child {
+    grid-column: 1 / -1;
+  }
+
+  .formReceta {
+    grid-template-columns: minmax(0, 1fr) 96px;
+  }
+
+  .formReceta > :last-child {
+    grid-column: 1 / -1;
+  }
+
+  .formLote > :global(.btn-new),
+  .formReceta > :global(.btn-new) {
+    justify-content: center;
+  }
+
+  .enLinea {
+    flex-wrap: wrap;
+  }
+
+  .enLinea > :first-child {
+    flex-basis: 100%;
+  }
+}
