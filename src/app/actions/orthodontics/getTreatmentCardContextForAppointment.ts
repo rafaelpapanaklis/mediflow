@@ -13,9 +13,16 @@
 // aplicar en esta base) — mismo patrón que loader.ts / cobranza-db.ts:
 // si la tabla/columna no existe todavía, se trata como "sin hojas
 // anteriores", no como error.
+//
+// Arreglo de la revisión cruzada (REPORTE-ws1-t1.md, sección «Revisión
+// cruzada»): no comprobaba visibilidad de paciente — cualquier usuario
+// autenticado de la clínica con `medicalRecord.view` podía leer el plan,
+// wires y foto-sets de un paciente restringido con solo adivinar su
+// treatmentPlanId/appointmentId. Ahora reusa `loadPatientForOrtho`
+// (`_helpers.ts`), el mismo chequeo que el resto del módulo.
 
 import { prisma } from "@/lib/prisma";
-import { getOrthoActionContext } from "./_helpers";
+import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import type {
   OrthoPhaseKey,
@@ -74,6 +81,13 @@ export async function getTreatmentCardContextForAppointment(
     select: { id: true, patientId: true, installedAt: true, startDate: true },
   });
   if (!plan) return fail("Plan no encontrado");
+
+  // Visibilidad por paciente (arreglo de la revisión cruzada, REPORTE-ws1-t1.md):
+  // sin este chequeo, un doctor sin acceso a un paciente restringido
+  // (excluido de `visibleUserIds`) podía igual leer su plan, sus wires y
+  // sus foto-sets con solo conocer el treatmentPlanId/appointmentId.
+  const patient = await loadPatientForOrtho({ ctx, patientId: plan.patientId });
+  if (isFailure(patient)) return patient;
 
   // Tenant + integridad: la cita tiene que ser de este mismo paciente/clínica.
   const appt = await prisma.appointment.findFirst({
