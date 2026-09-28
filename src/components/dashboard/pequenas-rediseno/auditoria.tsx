@@ -7,8 +7,9 @@ import {
 } from "lucide-react";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import {
-  AUDIT_ACTION_OPTIONS, AUDIT_ENTITY_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
-  actionMeta, entityLabel, normalizeChanges, formatAuditValue, readInfo, readKindLabel,
+  AUDIT_ACTION_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
+  actionMeta, entityLabel, normalizeChanges, readInfo, readKindLabel,
+  entityOptionsFor, fieldLabel, formatAuditFieldValue, resumenDeCambio,
   QUICK_RANGE_KEYS, QUICK_RANGE_LABELS, matchQuickRange,
   type QuickRangeKey, type AuditTone, type AuditLogRow,
 } from "@/lib/admin/audit-core";
@@ -106,6 +107,7 @@ export function AuditoriaRediseno({
   activeRange,
   applyQuickRange,
   hasActiveFilters,
+  ortodoncia = false,
 }: {
   tr: Traducir;
   filters: FiltrosBitacora;
@@ -125,6 +127,8 @@ export function AuditoriaRediseno({
   activeRange: ReturnType<typeof matchQuickRange>;
   applyQuickRange: (k: QuickRangeKey) => void;
   hasActiveFilters: boolean;
+  /** La sede tiene el módulo de Ortodoncia: el filtro ofrece «Ortodoncia (todo)». */
+  ortodoncia?: boolean;
 }) {
   return (
     <RaizPequenas>
@@ -156,7 +160,7 @@ export function AuditoriaRediseno({
         </select>
         <select className={s.entrada} value={filters.entityType} onChange={(e) => patch({ entityType: e.target.value })} aria-label={tr("auditoria.entity", "Entidad")}>
           <option value="">{tr("auditoria.allEntities", "Todas las entidades")}</option>
-          {AUDIT_ENTITY_OPTIONS.map((en) => <option key={en} value={en}>{entityLabel(en)}</option>)}
+          {entityOptionsFor({ ortodoncia }).map((en) => <option key={en} value={en}>{entityLabel(en)}</option>)}
         </select>
         <input type="date" className={s.entrada} value={filters.dateFrom} onChange={(e) => patch({ dateFrom: e.target.value })} aria-label={tr("auditoria.dateFrom", "Fecha desde")} />
         <input type="date" className={s.entrada} value={filters.dateTo} onChange={(e) => patch({ dateTo: e.target.value })} aria-label={tr("auditoria.dateTo", "Fecha hasta")} />
@@ -220,6 +224,7 @@ export function AuditoriaRediseno({
                   <td>
                     <CeldaAccion action={r.action} />
                     <Lectura changes={r.changes} tr={tr} />
+                    <Cambio row={r} />
                   </td>
                   <td>
                     <button type="button" onClick={() => patch({ entityId: r.entityId })} title={tr("auditoria.filterByEntity", "Filtrar por esta entidad")} className={s.filaBoton}>
@@ -279,6 +284,13 @@ function Lectura({ changes, tr }: { changes: unknown; tr: Traducir }) {
   const lectura = readInfo(changes);
   if (!lectura) return null;
   return <div className={`${s.peq} ${s.discreto}`}>{readKindLabel(lectura.kind, tr)}</div>;
+}
+
+/** Ortodoncia: qué cambió, en una línea («Doctor tratante: Ana → Luis»). */
+function Cambio({ row }: { row: AuditLogRow }) {
+  const resumen = resumenDeCambio(row);
+  if (!resumen) return null;
+  return <div className={`${s.peq} ${s.discreto}`}>{resumen}</div>;
 }
 
 function Chip({ label, onQuitar }: { label: string; onQuitar: () => void }) {
@@ -356,9 +368,9 @@ function DetalleEvento({ row, onCerrar, tr }: { row: AuditLogRow; onCerrar: () =
               <tbody>
                 {norm.fields.map((f) => (
                   <tr key={f.field}>
-                    <td className={`${s.negrita} ${s.sinSalto}`}>{f.field}</td>
-                    <td className={`${s.anchoMax} ${s.rompe} ${s.discreto}`}>{formatAuditValue(f.before)}</td>
-                    <td className={`${s.anchoMax} ${s.rompe} ${norm.kind === "deleted" ? s.discreto : ""}`.trim()}>{formatAuditValue(f.after)}</td>
+                    <td className={`${s.negrita} ${s.sinSalto}`}>{fieldLabel(f.field, row.entityType)}</td>
+                    <td className={`${s.anchoMax} ${s.rompe} ${s.discreto}`}>{formatAuditFieldValue(f.field, f.before, row)}</td>
+                    <td className={`${s.anchoMax} ${s.rompe} ${norm.kind === "deleted" ? s.discreto : ""}`.trim()}>{formatAuditFieldValue(f.field, f.after, row)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -11,8 +11,9 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { useTOptional } from "@/i18n/i18n-provider";
 import {
-  AUDIT_ACTION_OPTIONS, AUDIT_ENTITY_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
-  actionMeta, entityLabel, normalizeChanges, formatAuditValue, readInfo, readKindLabel,
+  AUDIT_ACTION_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
+  actionMeta, entityLabel, normalizeChanges, readInfo, readKindLabel,
+  entityOptionsFor, fieldLabel, formatAuditFieldValue, resumenDeCambio,
   QUICK_RANGE_KEYS, QUICK_RANGE_LABELS, quickRangeValues, matchQuickRange,
   type QuickRangeKey, type AuditTone, type AuditLogRow, type AuditQueryResult,
 } from "@/lib/admin/audit-core";
@@ -98,7 +99,11 @@ const RANGE_I18N: Record<QuickRangeKey, string> = {
 
 // `rediseno` lo baja page.tsx desde el interruptor `menu-dos-niveles`. Apagado
 // (el valor por defecto), todo lo de abajo es el marcado de siempre, sin tocar.
-export function AuditoriaClient({ rediseno = false }: { rediseno?: boolean } = {}) {
+// `ortodoncia`: la sede tiene el módulo de Ortodoncia → el filtro de entidad
+// ofrece «Ortodoncia (todo)». También lo decide page.tsx, con la sesión.
+export function AuditoriaClient(props: { rediseno?: boolean; ortodoncia?: boolean } = {}) {
+  const { rediseno = false } = props;
+  const ortodoncia = props.ortodoncia === true;
   const tt = useTOptional();
   const tr = (k: string, fb: string) => { const v = tt?.(k); return !v || v === k ? fb : v; };
 
@@ -160,6 +165,7 @@ export function AuditoriaClient({ rediseno = false }: { rediseno?: boolean } = {
         activeRange={activeRange}
         applyQuickRange={applyQuickRange}
         hasActiveFilters={hasActiveFilters}
+        ortodoncia={ortodoncia}
       />
     );
   }
@@ -201,7 +207,7 @@ export function AuditoriaClient({ rediseno = false }: { rediseno?: boolean } = {
         </select>
         <select className={SELECT_CLS} value={filters.entityType} onChange={(e) => patch({ entityType: e.target.value })} aria-label={tr("auditoria.entity", "Entidad")}>
           <option value="">{tr("auditoria.allEntities", "Todas las entidades")}</option>
-          {AUDIT_ENTITY_OPTIONS.map((en) => <option key={en} value={en}>{entityLabel(en)}</option>)}
+          {entityOptionsFor({ ortodoncia }).map((en) => <option key={en} value={en}>{entityLabel(en)}</option>)}
         </select>
         <input type="date" className={SELECT_CLS} value={filters.dateFrom} onChange={(e) => patch({ dateFrom: e.target.value })} aria-label={tr("auditoria.dateFrom", "Fecha desde")} />
         <input type="date" className={SELECT_CLS} value={filters.dateTo} onChange={(e) => patch({ dateTo: e.target.value })} aria-label={tr("auditoria.dateTo", "Fecha hasta")} />
@@ -267,6 +273,10 @@ export function AuditoriaClient({ rediseno = false }: { rediseno?: boolean } = {
                     <ActionCell action={r.action} />
                     {readInfo(r.changes) && (
                       <div style={{ fontSize: 11, color: "var(--text-3)" }}>{readKindLabel(readInfo(r.changes)!.kind, tr)}</div>
+                    )}
+                    {/* Ortodoncia: qué cambió, en una línea («Doctor tratante: Ana → Luis»). */}
+                    {resumenDeCambio(r) && (
+                      <div style={{ fontSize: 11, color: "var(--text-3)" }}>{resumenDeCambio(r)}</div>
                     )}
                   </td>
                   <td>
@@ -407,9 +417,9 @@ function DetailModal({ row, onClose, tr }: { row: AuditLogRow; onClose: () => vo
                   <tbody>
                     {norm.fields.map((f) => (
                       <tr key={f.field} className="align-top">
-                        <td className="font-medium whitespace-nowrap">{f.field}</td>
-                        <td className="max-w-[240px] break-words" style={{ color: "var(--text-3)" }}>{formatAuditValue(f.before)}</td>
-                        <td className="max-w-[240px] break-words" style={{ color: norm.kind === "deleted" ? "var(--text-3)" : "var(--text-1)" }}>{formatAuditValue(f.after)}</td>
+                        <td className="font-medium whitespace-nowrap">{fieldLabel(f.field, row.entityType)}</td>
+                        <td className="max-w-[240px] break-words" style={{ color: "var(--text-3)" }}>{formatAuditFieldValue(f.field, f.before, row)}</td>
+                        <td className="max-w-[240px] break-words" style={{ color: norm.kind === "deleted" ? "var(--text-3)" : "var(--text-1)" }}>{formatAuditFieldValue(f.field, f.after, row)}</td>
                       </tr>
                     ))}
                   </tbody>

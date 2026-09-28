@@ -17,6 +17,7 @@ import {
   buildAuditWhere,
   clampPage,
   clampPageSize,
+  idsDePersonas,
   type AuditQueryFilters,
   type AuditQueryResult,
   type AuditLogRow,
@@ -43,8 +44,31 @@ export async function queryAuditLogs(filters: AuditQueryFilters): Promise<AuditQ
     prisma.auditLog.count({ where }),
   ]);
 
-  const rows: AuditLogRow[] = rowsRaw.map((r) => {
+  // Personas del equipo que los cambios mencionan por id (el doctor tratante
+  // de un caso de ortodoncia): se les pone nombre para que la bitácora diga
+  // «de quién a quién». UNA consulta, solo si hay ids, y cada nombre se
+  // entrega únicamente a las filas de SU clínica: un id de otra clínica no
+  // se resuelve nunca.
+  const idsPorFila = rowsRaw.map((r) => idsDePersonas(r.changes));
+  const todosLosIds = Array.from(new Set(idsPorFila.flat()));
+  const clinicas = Array.from(new Set(rowsRaw.map((r) => r.clinicId).filter(Boolean)));
+  const gente = todosLosIds.length > 0 && clinicas.length > 0
+    ? await prisma.user
+        .findMany({
+          where: { id: { in: todosLosIds }, clinicId: { in: clinicas } },
+          select: { id: true, clinicId: true, firstName: true, lastName: true },
+        })
+        .catch(() => [])
+    : [];
+
+  const rows: AuditLogRow[] = rowsRaw.map((r, i) => {
     const fullName = `${r.user?.firstName ?? ""} ${r.user?.lastName ?? ""}`.trim();
+    const personas: Record<string, string> = {};
+    for (const id of idsPorFila[i]) {
+      const p = gente.find((g) => g.id === id && g.clinicId === r.clinicId);
+      const nombre = p ? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() : "";
+      if (nombre) personas[id] = nombre;
+    }
     return {
       id: r.id,
       clinicId: r.clinicId,
@@ -60,6 +84,7 @@ export async function queryAuditLogs(filters: AuditQueryFilters): Promise<AuditQ
       ipAddress: r.ipAddress ?? null,
       userAgent: r.userAgent ?? null,
       createdAt: r.createdAt.toISOString(),
+      ...(Object.keys(personas).length > 0 ? { personas } : {}),
     };
   });
 

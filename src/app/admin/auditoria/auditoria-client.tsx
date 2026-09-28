@@ -10,7 +10,7 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import {
-  AUDIT_ACTION_OPTIONS, AUDIT_ENTITY_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
+  AUDIT_ACTION_OPTIONS, entityOptionsFor, ROLE_OPTIONS, ROLE_LABELS,
   actionMeta, entityLabel, normalizeChanges, formatAuditValue,
   QUICK_RANGE_KEYS, QUICK_RANGE_LABELS, quickRangeValues, matchQuickRange,
   type QuickRangeKey, type AuditLogRow, type AuditQueryResult,
@@ -142,7 +142,8 @@ export function AuditoriaClient({ clinics }: { clinics: ClinicOpt[] }) {
           </select>
           <select className="input-new" value={filters.entityType} onChange={(e) => patch({ entityType: e.target.value })} aria-label="Entidad">
             <option value="">Todas las entidades</option>
-            {AUDIT_ENTITY_OPTIONS.map((en) => <option key={en} value={en}>{entityLabel(en)}</option>)}
+            {/* /admin ve todas las clínicas: el filtro «Ortodoncia (todo)» va siempre. */}
+            {entityOptionsFor({ ortodoncia: true }).map((en) => <option key={en} value={en}>{entityLabel(en)}</option>)}
           </select>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)" }}>
             Desde
