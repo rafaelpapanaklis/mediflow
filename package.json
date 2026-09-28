@@ -381,7 +381,15 @@
     "test:import-detectar-entidad": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/detectar-entidad.test.ts",
     "test:import-multi-archivo": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/multi-archivo.test.ts",
     "test:import-seguridad-archivos": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/seguridad-archivos.test.ts",
-    "test:odontograma-v2-render": "tsx --tsconfig tsconfig.test.json --test src/components/dashboard/odontogram-v2/__tests__/render.test.tsx"
+    "test:odontograma-v2-render": "tsx --tsconfig tsconfig.test.json --test src/components/dashboard/odontogram-v2/__tests__/render.test.tsx",
+    "test:orto-configuracion": "tsx --test src/lib/orthodontics/__tests__/doctores-tratantes.test.ts src/lib/orthodontics/__tests__/plantillas-mensaje.test.ts src/lib/orthodontics/__tests__/permiso-expediente.test.ts src/lib/orthodontics/redesign/__tests__/postratamiento.test.ts",
+    "test:orto-numeros": "tsx --test src/lib/orthodontics/__tests__/produccion.test.ts src/lib/orthodontics/__tests__/finanzas-ortodoncia.test.ts src/lib/invoices/__tests__/concepto-de-cuota.test.ts",
+    "test:orto-produccion-db": "tsx --test --experimental-test-module-mocks src/lib/orthodontics/__tests__/produccion-db.test.ts",
+    "test:orto-conexiones": "tsx --test src/lib/command-palette/__tests__/ortodoncia-paleta.test.ts src/lib/reminders/__tests__/seguimiento-post-cita.test.ts src/lib/orthodontics/__tests__/catalogo-control-por-llave.test.ts src/lib/orthodontics/__tests__/hoy.test.ts src/lib/orthodontics/__tests__/actividad-campana.test.ts src/lib/quotes/__tests__/ortodoncia.test.ts src/lib/orthodontics/__tests__/primeros-pasos.test.ts",
+    "test:portal-ortodoncia": "tsx --test src/lib/patient-portal/__tests__/ortodoncia-portal.test.ts src/lib/orthodontics/__tests__/fotos-paciente.test.ts",
+    "test:portal-ortodoncia-vista": "tsx --tsconfig tsconfig.test.json --test src/components/paciente/__tests__/vista-ortodoncia.test.tsx src/components/paciente/__tests__/portal-varios-pacientes.test.tsx",
+    "test:portal-ortodoncia-escritura": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/alineadores/__tests__/portal-escritura.test.ts",
+    "test:admin-modulos": "tsx --test src/lib/admin/modulos-core.test.ts src/lib/marketplace/module-activated-email-core.test.ts src/lib/marketplace/module-price-admin-core.test.ts src/lib/marketplace/__tests__/webhook-facturas-de-modulo.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
