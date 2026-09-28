@@ -36,6 +36,7 @@ import {
   type TreatmentCardDTO,
   type WireStepDTO,
 } from "../types";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export type DrawerCardSubmit = {
@@ -219,6 +220,7 @@ function reducer(state: DrawerState, action: DrawerAction): DrawerState {
 }
 
 export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const isNew = props.card === null;
   const isReadOnly = props.card?.status === "SIGNED";
   const [state, dispatch] = useReducer(reducer, props.card, initialState);
@@ -302,6 +304,8 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={orto.cajon}
         role="dialog"
         aria-modal="true"

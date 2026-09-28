@@ -9,6 +9,7 @@ import { Check, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { elegirDescuentoDelCaso } from "@/app/actions/orthodontics/cobro/elegirDescuentoDelCaso";
 import type { ReglaDescuento } from "@/lib/orthodontics/cobro/reglas";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export interface DrawerElegirDescuentoProps {
@@ -20,6 +21,7 @@ export interface DrawerElegirDescuentoProps {
 }
 
 export function DrawerElegirDescuento(props: DrawerElegirDescuentoProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [seleccion, setSeleccion] = useState<string | null>(props.actual.ruleId);
   const [guardando, setGuardando] = useState(false);
 
@@ -43,6 +45,8 @@ export function DrawerElegirDescuento(props: DrawerElegirDescuentoProps) {
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={`${orto.cajon} ${orto.cajonEstrecho}`}
         role="dialog"
         aria-modal="true"

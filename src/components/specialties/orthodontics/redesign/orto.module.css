@@ -1127,6 +1127,13 @@ button.listaFila:focus-visible,
   }
 }
 
+@media (max-width: 480px) {
+  .listaFila {
+    gap: 9px;
+    padding: 11px 11px;
+  }
+}
+
 .numero {
   display: grid;
   place-items: center;
@@ -1206,11 +1213,25 @@ button.listaFila:focus-visible,
   font-size: 13px;
   line-height: 1.4;
   pointer-events: auto;
+  overflow: hidden;
   animation: ortoAparece 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .ventanaAncha { max-width: 880px; }
 .ventanaMuyAncha { max-width: 1120px; }
+
+/* El panel recibe el foco al abrirse: conserva su sombra, sin anillo. */
+.raiz .cajon:focus,
+.raiz .cajon:focus-visible {
+  outline: none;
+  box-shadow: -16px 0 48px color-mix(in srgb, var(--pr-texto) 14%, transparent);
+}
+
+.raiz .ventana:focus,
+.raiz .ventana:focus-visible {
+  outline: none;
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--pr-texto) 22%, transparent);
+}
 
 .cajonCabeza {
   display: flex;
@@ -1385,6 +1406,12 @@ button.listaFila:focus-visible,
   background: color-mix(in srgb, black 90%, transparent);
   color: white;
   animation: ortoFundido 180ms ease-out;
+}
+
+.raiz .visor:focus,
+.raiz .visor:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .visorRotulo {

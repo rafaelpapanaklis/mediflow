@@ -20,6 +20,7 @@ import { FormaDePagoFactura } from "@/components/dashboard/factura-ficha-redisen
 import { guardarCondiciones } from "@/components/dashboard/factura-ficha-rediseno/extras";
 import { condicionesPorDefecto, type CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { auditarCambioDePlan } from "@/app/actions/orthodontics/cobro/auditarCambioDePlan";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export interface DrawerCambiarPlanDePagoProps {
@@ -32,6 +33,7 @@ export interface DrawerCambiarPlanDePagoProps {
 }
 
 export function DrawerCambiarPlanDePago(props: DrawerCambiarPlanDePagoProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const original = props.condicionesActuales ?? condicionesPorDefecto();
   const [cond, setCond] = useState<CondicionesPago>(original);
   const [motivo, setMotivo] = useState("");
@@ -63,6 +65,8 @@ export function DrawerCambiarPlanDePago(props: DrawerCambiarPlanDePagoProps) {
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={orto.cajon}
         role="dialog"
         aria-modal="true"

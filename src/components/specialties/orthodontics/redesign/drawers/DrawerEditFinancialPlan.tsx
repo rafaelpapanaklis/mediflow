@@ -18,6 +18,7 @@ import { Calculator, Calendar, DollarSign, Save, Shield, X } from "lucide-react"
 import { Btn } from "../atoms/Btn";
 import { Pill } from "../atoms/Pill";
 import { fmtMoney } from "../atoms/format";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 const MONTH_PRESETS: ReadonlyArray<{ value: number; label: string }> = [
@@ -48,6 +49,7 @@ export interface DrawerEditFinancialPlanProps {
 }
 
 export function DrawerEditFinancialPlan(props: DrawerEditFinancialPlanProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const c = props.current;
   const [totalAmount, setTotalAmount] = useState<number>(c.totalAmount);
   const [downPayment, setDownPayment] = useState<number>(c.initialDownPayment);
@@ -103,6 +105,8 @@ export function DrawerEditFinancialPlan(props: DrawerEditFinancialPlanProps) {
         aria-hidden
       />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={orto.cajon}
         role="dialog"
         aria-modal="true"

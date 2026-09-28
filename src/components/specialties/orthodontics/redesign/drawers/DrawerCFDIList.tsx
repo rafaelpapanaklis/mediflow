@@ -4,6 +4,7 @@
 import { FileText, X } from "lucide-react";
 import { fmtDate, fmtMoney } from "../atoms/format";
 import type { CFDIRecordDTO } from "../types-finance";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export interface DrawerCFDIListProps {
@@ -14,6 +15,7 @@ export interface DrawerCFDIListProps {
 }
 
 export function DrawerCFDIList(props: DrawerCFDIListProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   return (
     <>
       <div
@@ -22,6 +24,8 @@ export function DrawerCFDIList(props: DrawerCFDIListProps) {
         aria-hidden
       />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={orto.cajon}
         role="dialog"
         aria-modal="true"

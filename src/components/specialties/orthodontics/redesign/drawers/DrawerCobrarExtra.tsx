@@ -16,6 +16,7 @@ import { AlertTriangle, ArrowRight, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { registrarExtraCobrado } from "@/app/actions/orthodontics/cobro/registrarExtraCobrado";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export interface DrawerCobrarExtraProps {
@@ -29,6 +30,7 @@ export interface DrawerCobrarExtraProps {
 }
 
 export function DrawerCobrarExtra(props: DrawerCobrarExtraProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [esIncluida, setEsIncluida] = useState(false);
   const [abrirEditor, setAbrirEditor] = useState(false);
 
@@ -55,6 +57,8 @@ export function DrawerCobrarExtra(props: DrawerCobrarExtraProps) {
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={`${orto.cajon} ${orto.cajonEstrecho}`}
         role="dialog"
         aria-modal="true"

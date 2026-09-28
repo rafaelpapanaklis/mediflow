@@ -56,7 +56,9 @@ export function TimelineRow({ card, onClick }: TimelineRowProps) {
           <Pill color="violet" size="xs">
             {PHASE_LABELS[card.phaseKey]}
           </Pill>
-          <span className={`${orto.tonoApagado} text-xs`}>mes {card.monthAt.toFixed(1)}</span>
+          <span className={`${orto.tonoApagado} text-xs`}>
+            mes {card.monthAt.toFixed(1)} · {card.durationMin} min
+          </span>
           {card.status === "DRAFT" ? (
             <Pill color="amber" size="xs">
               Borrador
@@ -110,10 +112,14 @@ export function TimelineRow({ card, onClick }: TimelineRowProps) {
           </span>
         ) : null}
       </span>
-      <span className={`${orto.tonoApagado} flex flex-col items-end gap-1 flex-shrink-0 text-[11.5px]`}>
-        <span>{card.durationMin} min</span>
-        <ChevronRight size={16} strokeWidth={1.75} aria-hidden />
-      </span>
+      {/* La duración va en el renglón de arriba: aquí solo la flecha, para
+          que en el teléfono el contenido tenga todo el ancho. */}
+      <ChevronRight
+        size={16}
+        strokeWidth={1.75}
+        className={`${orto.tonoApagado} flex-none self-center`}
+        aria-hidden
+      />
     </button>
   );
 }

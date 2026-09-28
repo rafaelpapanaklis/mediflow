@@ -11,6 +11,7 @@ import { Btn } from "../atoms/Btn";
 import { Pill } from "../atoms/Pill";
 import { PHASE_LABELS, PHASE_ORDER } from "../types";
 import type { OrthoPhaseKey } from "../types";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 // El catálogo vive en `wire-options.ts` (se importa también desde las pruebas,
@@ -50,6 +51,7 @@ export interface DrawerWireStepProps {
 }
 
 export function DrawerWireStep(props: DrawerWireStepProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [phase, setPhase] = useState<OrthoPhaseKey>(
     props.defaultPhase ?? "ALIGNMENT",
   );
@@ -98,6 +100,8 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
         aria-hidden
       />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={orto.cajon}
         role="dialog"
         aria-modal="true"

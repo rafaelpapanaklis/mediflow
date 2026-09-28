@@ -5,6 +5,7 @@
 
 import { Send, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export interface ChatMessage {
@@ -22,11 +23,14 @@ export interface DrawerWhatsAppChatProps {
 }
 
 export function DrawerWhatsAppChat(props: DrawerWhatsAppChatProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const ordered = [...props.messages].sort((a, b) => a.at.localeCompare(b.at));
   return (
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
-      <aside className={`${orto.cajon} ${orto.cajonEstrecho}`} role="dialog" aria-modal="true">
+      <aside
+        ref={cajonRef}
+        tabIndex={-1} className={`${orto.cajon} ${orto.cajonEstrecho}`} role="dialog" aria-modal="true">
         <header className={orto.cajonCabeza}>
           <div>
             <div className={orto.cajonCeja}>WhatsApp</div>

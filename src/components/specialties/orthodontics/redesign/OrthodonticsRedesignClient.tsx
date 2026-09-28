@@ -383,7 +383,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             cards={vm.treatmentCards}
             nextAppointment={vm.nextAppointment}
             onOpenCard={(id) => setDrawer({ kind: "tcard", cardId: id })}
-            onStartNewCard={() => setDrawer({ kind: "tcard-new" })}
+            // Sin caso abierto no hay dónde guardar un control: el botón no
+            // se pinta (antes abría la hoja y al guardar salía un error).
+            onStartNewCard={
+              t.status !== "no-iniciado" ? () => setDrawer({ kind: "tcard-new" }) : undefined
+            }
           />
 
           {/* Ola 1 (ws1-t4, Control y agenda) — C8 */}

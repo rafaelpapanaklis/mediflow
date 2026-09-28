@@ -7,9 +7,17 @@ import { useState } from "react";
 import { Save, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import type { DiagnosisDTO, OrthoSkeletalPattern as SkeletalPattern } from "../types";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 const ANGLE_OPTIONS = ["CLASS_I", "CLASS_II_DIV_1", "CLASS_II_DIV_2", "CLASS_III"] as const;
+// Solo el rótulo que se lee: el valor que se guarda es la clave de siempre.
+const ANGLE_LABEL: Record<(typeof ANGLE_OPTIONS)[number], string> = {
+  CLASS_I: "Clase I",
+  CLASS_II_DIV_1: "Clase II div. 1",
+  CLASS_II_DIV_2: "Clase II div. 2",
+  CLASS_III: "Clase III",
+};
 const SKELETAL_OPTIONS: ReadonlyArray<SkeletalPattern> = [
   "MESOFACIAL",
   "DOLICOFACIAL",
@@ -39,6 +47,7 @@ export interface DrawerEditDiagnosisProps {
 }
 
 export function DrawerEditDiagnosis(props: DrawerEditDiagnosisProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const d = props.diagnosis;
   const [angleR, setAngleR] = useState(d.angleClassRight);
   const [angleL, setAngleL] = useState(d.angleClassLeft);
@@ -90,7 +99,9 @@ export function DrawerEditDiagnosis(props: DrawerEditDiagnosisProps) {
   return (
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
-      <aside className={`${orto.cajon} ${orto.cajonAncho}`} role="dialog" aria-modal="true" aria-labelledby="dx-title">
+      <aside
+        ref={cajonRef}
+        tabIndex={-1} className={`${orto.cajon} ${orto.cajonAncho}`} role="dialog" aria-modal="true" aria-labelledby="dx-title">
         <header className={orto.cajonCabeza}>
           <div>
             <div className={orto.cajonCeja}>Diagnóstico</div>
@@ -100,14 +111,14 @@ export function DrawerEditDiagnosis(props: DrawerEditDiagnosisProps) {
         </header>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Angle der">
+            <Field label="Angle derecha">
               <select value={angleR} onChange={(e) => setAngleR(e.target.value)} className={inputCls}>
-                {ANGLE_OPTIONS.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
+                {ANGLE_OPTIONS.map((o) => <option key={o} value={o}>{ANGLE_LABEL[o]}</option>)}
               </select>
             </Field>
-            <Field label="Angle izq">
+            <Field label="Angle izquierda">
               <select value={angleL} onChange={(e) => setAngleL(e.target.value)} className={inputCls}>
-                {ANGLE_OPTIONS.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
+                {ANGLE_OPTIONS.map((o) => <option key={o} value={o}>{ANGLE_LABEL[o]}</option>)}
               </select>
             </Field>
             <Field label="Overbite (mm)"><input type="number" step="0.5" value={overbite} onChange={(e) => setOverbite(Number(e.target.value))} className={inputCls} /></Field>
@@ -136,7 +147,7 @@ export function DrawerEditDiagnosis(props: DrawerEditDiagnosisProps) {
             <Field label="ATM">
               <div className="flex flex-col gap-1 text-[13px] text-[color:var(--pr-texto-2)]">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={tmjPain} onChange={(e) => setTmjPain(e.target.checked)} /> Dolor</label>
-                <label className="flex items-center gap-2"><input type="checkbox" checked={tmjClick} onChange={(e) => setTmjClick(e.target.checked)} /> Click</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={tmjClick} onChange={(e) => setTmjClick(e.target.checked)} /> Chasquido</label>
               </div>
             </Field>
           </div>
@@ -149,7 +160,7 @@ export function DrawerEditDiagnosis(props: DrawerEditDiagnosisProps) {
           {error ? <div className="bg-[color:var(--pr-peligro-suave)] border border-[color:var(--orto-peligro-borde)] text-[color:var(--pr-peligro)] text-xs rounded-[8px] p-2">{error}</div> : null}
         </div>
         <footer className={`${orto.cajonPie} ${orto.cajonPieReparto}`}>
-          <span className="text-[11px] text-[color:var(--pr-texto-3)] inline-flex items-center gap-1"><Shield className="w-3 h-3" aria-hidden />Audit trail con before/after</span>
+          <span className="text-[11px] text-[color:var(--pr-texto-3)] inline-flex items-center gap-1"><Shield className="w-3 h-3" aria-hidden />Cada cambio queda registrado</span>
           <div className="flex gap-2">
             <Btn variant="ghost" size="md" onClick={props.onClose}>Cancelar</Btn>
             <Btn variant="primary" size="md" icon={<Save className="w-3.5 h-3.5" aria-hidden />} onClick={submit} disabled={submitting || !summary}>{submitting ? "Guardando..." : "Guardar"}</Btn>

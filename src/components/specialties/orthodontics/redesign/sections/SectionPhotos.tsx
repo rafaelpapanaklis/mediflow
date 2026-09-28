@@ -17,6 +17,7 @@ import { Pill } from "../atoms/Pill";
 import { ProgressBar } from "../atoms/ProgressBar";
 import { fmtDate } from "../atoms/format";
 import { PHOTO_SLOTS, PhotoSlotIcon } from "./PhotoSlotIcon";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export type PhotoStage = "T0" | "T1" | "T2" | "CONTROL";
@@ -446,8 +447,12 @@ function PhotoLightbox({
   photo: UploadEntry;
   onClose: () => void;
 }) {
+  // Escape cierra el visor y el foco vuelve a la foto que lo abrió.
+  const visorRef = useCajon<HTMLDivElement>(onClose);
   return (
     <div
+      ref={visorRef}
+      tabIndex={-1}
       className={orto.visor}
       role="dialog"
       aria-modal="true"

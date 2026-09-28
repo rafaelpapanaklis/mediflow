@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { Save, Shield, Star, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export interface DrawerConfigNpsProps {
@@ -26,6 +27,7 @@ export interface DrawerConfigNpsProps {
 }
 
 export function DrawerConfigNps(props: DrawerConfigNpsProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const c = props.current;
   const [early, setEarly] = useState(c.windowEarlyDays);
   const [mid, setMid] = useState(c.windowMidDays);
@@ -59,7 +61,9 @@ export function DrawerConfigNps(props: DrawerConfigNpsProps) {
   return (
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
-      <aside className={orto.cajon} role="dialog" aria-modal="true">
+      <aside
+        ref={cajonRef}
+        tabIndex={-1} className={orto.cajon} role="dialog" aria-modal="true">
         <header className={orto.cajonCabeza}>
           <div>
             <div className="text-[11px] uppercase tracking-wider text-[color:var(--pr-alerta)] font-medium inline-flex items-center gap-1"><Star className="w-3 h-3" aria-hidden />Encuesta NPS · G11</div>

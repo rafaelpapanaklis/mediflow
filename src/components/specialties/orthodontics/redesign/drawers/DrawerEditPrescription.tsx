@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { Save, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 const SLOTS = [
@@ -48,6 +49,7 @@ export interface DrawerEditPrescriptionProps {
 }
 
 export function DrawerEditPrescription(props: DrawerEditPrescriptionProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const c = props.current;
   const [slot, setSlot] = useState(c.prescriptionSlot ?? "MBT_022");
   const [bonding, setBonding] = useState<"DIRECTO" | "INDIRECTO">(c.bondingType ?? "DIRECTO");
@@ -77,7 +79,9 @@ export function DrawerEditPrescription(props: DrawerEditPrescriptionProps) {
   return (
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
-      <aside className={orto.cajon} role="dialog" aria-modal="true">
+      <aside
+        ref={cajonRef}
+        tabIndex={-1} className={orto.cajon} role="dialog" aria-modal="true">
         <header className={orto.cajonCabeza}>
           <div>
             <div className={orto.cajonCeja}>Plan de tratamiento</div>

@@ -16,6 +16,7 @@ import {
   PHASE_ORDER,
   type OrthoPhaseKey,
 } from "../types";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 // El checklist vive en `phase-criteria.ts` (se importa también desde las
@@ -108,13 +109,13 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
           {PHASE_LABELS[toPhase]}
         </span>
       }
-      eyebrow="Avanzar fase ortodóntica"
+      eyebrow="Avanzar de fase"
       onClose={props.onClose}
     >
       <div className="px-5 py-4 border-b border-[color:var(--pr-borde-suave)]">
-        <div className="text-[11px] text-[color:var(--pr-texto-3)] mb-2">
-          Confirma cada criterio clínico antes de avanzar. La acción queda en el audit
-          trail con tu firma.
+        <div className="text-xs text-[color:var(--pr-texto-3)] mb-2">
+          Confirma cada criterio clínico antes de avanzar. El cambio queda registrado con tu
+          nombre en el historial de fases.
         </div>
         <ul className="space-y-2">
           {criteria.map((c) => {
@@ -188,7 +189,7 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
                   checked={overrideMode}
                   onChange={(e) => setOverrideMode(e.target.checked)}
                 />
-                Activar override
+                Avanzar de todos modos
               </label>
               {overrideMode ? (
                 <div className="mt-2 space-y-2">
@@ -266,6 +267,7 @@ function ModalShell({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const ventanaRef = useCajon<HTMLDivElement>(onClose);
   return (
     <>
       <div
@@ -281,8 +283,10 @@ function ModalShell({
         onClick={onClose}
       >
         <div
+          ref={ventanaRef}
+          tabIndex={-1}
           onClick={(e) => e.stopPropagation()}
-          className="bg-[color:var(--pr-tarjeta)] border border-[color:var(--pr-borde)] rounded-[14px] shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+          className={orto.ventana}
         >
           <header className={orto.cajonCabeza}>
             <div>

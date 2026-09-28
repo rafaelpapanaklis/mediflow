@@ -6,10 +6,11 @@ import { useState } from "react";
 import { Send, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { DateField } from "@/components/ui/date-field";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 const CATALOG: ReadonlyArray<{ group: string; items: string[] }> = [
-  { group: "Aligners", items: ["Alineadores serie 1-30", "Refinement 1-5"] },
+  { group: "Alineadores", items: ["Alineadores serie 1-30", "Refinement 1-5"] },
   {
     group: "Retención",
     items: [
@@ -43,6 +44,7 @@ export interface DrawerLabOrderProps {
 }
 
 export function DrawerLabOrder(props: DrawerLabOrderProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [cat, setCat] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [lab, setLab] = useState(LABS[0]);
@@ -72,6 +74,8 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
         aria-hidden
       />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={orto.cajon}
         role="dialog"
         aria-modal="true"
@@ -185,7 +189,7 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
             icon={<Send className="w-4 h-4" aria-hidden />}
             onClick={() => void submit()}
           >
-            {submitting ? "Enviando…" : "Enviar al lab"}
+            {submitting ? "Enviando…" : "Enviar al laboratorio"}
           </Btn>
         </footer>
       </aside>

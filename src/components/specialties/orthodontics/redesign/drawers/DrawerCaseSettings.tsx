@@ -10,6 +10,7 @@ import { FileText, Loader2, Save, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { getCaseIntakeOptions } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 const STATUS_OPTIONS = [
@@ -52,6 +53,7 @@ export interface DrawerCaseSettingsProps {
 }
 
 export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [loading, setLoading] = useState(true);
   const [doctors, setDoctors] = useState<Array<{ id: string; fullName: string }>>([]);
   const [guardians, setGuardians] = useState<
@@ -139,6 +141,8 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={orto.cajon}
         role="dialog"
         aria-modal="true"

@@ -12,6 +12,7 @@ import { guardarConfigDeCobro } from "@/app/actions/orthodontics/cobro/guardarCo
 import { isFailure } from "@/app/actions/orthodontics/result";
 import type { ConfigDeCobro } from "@/lib/orthodontics/cobro/config-db";
 import type { ReglaDescuento, TipoValorRecargo } from "@/lib/orthodontics/cobro/reglas";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export interface DrawerConfigCobroProps {
@@ -24,6 +25,7 @@ let seq = 0;
 function nuevoId(): string { seq += 1; return `regla-nueva-${seq}`; }
 
 export function DrawerConfigCobro(props: DrawerConfigCobroProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [reglas, setReglas] = useState<ReglaDescuento[]>(props.config.discountRules);
   const [lateFeeEnabled, setLateFeeEnabled] = useState(props.config.lateFee.activo);
   const [lateFeeType, setLateFeeType] = useState<TipoValorRecargo>(props.config.lateFee.tipo);
@@ -65,6 +67,8 @@ export function DrawerConfigCobro(props: DrawerConfigCobroProps) {
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={orto.cajon}
         role="dialog"
         aria-modal="true"

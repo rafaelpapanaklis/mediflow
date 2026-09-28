@@ -8,6 +8,7 @@ import { Save, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { registrarPromesaDePago } from "@/app/actions/orthodontics/cobro/registrarPromesaDePago";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 function mañana(): string {
@@ -24,6 +25,7 @@ export interface DrawerPromesaDePagoProps {
 }
 
 export function DrawerPromesaDePago(props: DrawerPromesaDePagoProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [amount, setAmount] = useState(props.montoSugerido || 0);
   const [promisedDate, setPromisedDate] = useState(mañana());
   const [note, setNote] = useState("");
@@ -46,6 +48,8 @@ export function DrawerPromesaDePago(props: DrawerPromesaDePagoProps) {
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={`${orto.cajon} ${orto.cajonEstrecho}`}
         role="dialog"
         aria-modal="true"

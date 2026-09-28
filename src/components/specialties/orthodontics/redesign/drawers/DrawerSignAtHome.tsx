@@ -6,6 +6,7 @@
 
 import { Check, DollarSign, FileText, Send, Shield, Sparkles, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 export interface DrawerSignAtHomeProps {
@@ -24,6 +25,7 @@ export interface DrawerSignAtHomeProps {
 const DEFAULT_DOWN = 8000;
 
 export function DrawerSignAtHome(props: DrawerSignAtHomeProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const phone = props.patientPhone ?? "+52 55 1234 5678";
   const tokenPreview = props.existingToken ?? "sgnh_xxxx_yyyyzzzz";
   const downAmount = props.downPaymentAmount ?? DEFAULT_DOWN;
@@ -61,6 +63,8 @@ export function DrawerSignAtHome(props: DrawerSignAtHomeProps) {
         aria-hidden
       />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={orto.cajon}
         role="dialog"
         aria-modal="true"

@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { Send, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 const SPECIALTIES = [
@@ -32,6 +33,7 @@ export interface DrawerNewReferralProps {
 }
 
 export function DrawerNewReferral(props: DrawerNewReferralProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [clinic, setClinic] = useState("");
   const [doctor, setDoctor] = useState("");
   const [specialty, setSpecialty] = useState<string>(SPECIALTIES[0]);
@@ -64,7 +66,9 @@ export function DrawerNewReferral(props: DrawerNewReferralProps) {
   return (
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
-      <aside className={orto.cajon} role="dialog" aria-modal="true">
+      <aside
+        ref={cajonRef}
+        tabIndex={-1} className={orto.cajon} role="dialog" aria-modal="true">
         <header className={orto.cajonCabeza}>
           <div>
             <div className={orto.cajonCeja}>Carta de referencia</div>

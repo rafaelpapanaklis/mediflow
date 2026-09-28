@@ -18,6 +18,7 @@ import { Loader2, Sparkles, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { getCaseIntakeOptions } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 const ANGLE_OPTIONS = [
@@ -133,6 +134,7 @@ export interface DrawerNewCaseProps {
 }
 
 export function DrawerNewCase(props: DrawerNewCaseProps) {
+  const cajonRef = useCajon<HTMLElement>(props.onClose);
   const needsDiagnosis = !props.existingDiagnosisId;
 
   const [loadingOptions, setLoadingOptions] = useState(true);
@@ -283,6 +285,8 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     <>
       <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
+        ref={cajonRef}
+        tabIndex={-1}
         className={`${orto.cajon} ${orto.cajonAncho}`}
         role="dialog"
         aria-modal="true"
