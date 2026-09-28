@@ -17,6 +17,7 @@ import {
   PacienteCard,
   PacienteEmptyState,
   ClinicFilterChips,
+  clinicasDistintas,
   StatusBadge,
   clinicName,
   formatFechaHora,
@@ -55,7 +56,8 @@ export default function PacienteCitasPage() {
   }, []);
 
   const clinics = data ? data.clinics : [];
-  const multiClinic = clinics.length > 1;
+  // Clínicas DISTINTAS: dos hijos en la misma clínica son dos expedientes de una sola.
+  const multiClinic = clinicasDistintas(clinics).length > 1;
   const upcoming = (data ? data.upcoming : []).filter(
     (c) => !clinicId || c.clinicId === clinicId
   );
@@ -230,6 +232,10 @@ export default function PacienteCitasPage() {
                           <StatusBadge kind="cita" value={cita.status} />
                         </div>
                         <span style={{ fontSize: 14, fontWeight: 600 }}>{cita.type}</span>
+                        {/* ws1-t5 (93): con varios pacientes en la cuenta, de quién es la cita. */}
+                        {cita.patientName ? (
+                          <span style={{ fontSize: 13.5, fontWeight: 600 }}>Para {cita.patientName}</span>
+                        ) : null}
                         <span style={{ fontSize: 13, color: MUTED }}>Con {cita.doctorName}</span>
                         {multiClinic && (
                           <span style={{ fontSize: 12, color: FAINT }}>
@@ -359,6 +365,9 @@ export default function PacienteCitasPage() {
                         {formatFechaHora(cita.startsAt)}
                       </span>
                       <span style={{ fontSize: 13, color: MUTED }}>{cita.type}</span>
+                      {cita.patientName ? (
+                        <span style={{ fontSize: 13, color: MUTED }}>Para {cita.patientName}</span>
+                      ) : null}
                       <span style={{ fontSize: 13, color: FAINT }}>Con {cita.doctorName}</span>
                       {multiClinic && (
                         <span style={{ fontSize: 12, color: FAINT }}>

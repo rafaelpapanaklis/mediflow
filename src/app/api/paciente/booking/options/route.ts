@@ -8,7 +8,13 @@
 // clinicId del cliente. 401 si no hay sesión.
 //
 // 200: PacienteBookingOptionsResponse
-//   { clinics: [{ clinicId, clinicName, timezone, doctors:[{id,name,specialty}] }] }
+//   { clinics: [{ clinicId, clinicName, timezone, doctors:[{id,name,specialty}],
+//                patients:[{patientId,name}] }] }
+//
+// ws1-t5 (ronda 6, hallazgo 93): `patients` son los pacientes de la CUENTA en
+// cada clínica. Una mamá con dos hijos elegía clínica, doctor y hora, y la
+// cita quedaba siempre a nombre del primero. Con dos o más, la página pregunta
+// para quién es.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -31,19 +37,32 @@ export async function GET() {
     return NextResponse.json(empty);
   }
 
-  const clinics = await prisma.clinic.findMany({
-    where: { id: { in: clinicIds } },
-    select: {
-      id: true,
-      name: true,
-      timezone: true,
-      users: {
-        where: { isActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } },
-        select: { id: true, firstName: true, lastName: true, specialty: true },
-        orderBy: { firstName: "asc" },
+  const [clinics, vinculos] = await Promise.all([
+    prisma.clinic.findMany({
+      where: { id: { in: clinicIds } },
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+        users: {
+          where: { isActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } },
+          select: { id: true, firstName: true, lastName: true, specialty: true },
+          orderBy: { firstName: "asc" },
+        },
       },
-    },
-  });
+    }),
+    // Los pacientes salen de los vínculos de la CUENTA de la sesión, nunca de
+    // una búsqueda por nombre o teléfono.
+    prisma.patientAccountLink.findMany({
+      where: { accountId: ctx.account.id, patient: { deletedAt: null } },
+      orderBy: { createdAt: "asc" },
+      select: {
+        clinicId: true,
+        patientId: true,
+        patient: { select: { firstName: true, lastName: true } },
+      },
+    }),
+  ]);
 
   // Mapea respetando el orden de los links (estable) → {id,name,specialty}.
   const byId = new Map(clinics.map((c) => [c.id, c]));
@@ -60,6 +79,12 @@ export async function GET() {
         name: `${u.firstName} ${u.lastName}`.trim(),
         specialty: u.specialty ?? null,
       })),
+      patients: vinculos
+        .filter((v) => v.clinicId === c.id)
+        .map((v) => ({
+          patientId: v.patientId,
+          name: `${v.patient.firstName} ${v.patient.lastName}`.trim(),
+        })),
     });
   }
 

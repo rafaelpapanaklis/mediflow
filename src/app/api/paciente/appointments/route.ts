@@ -7,6 +7,8 @@
 //   doctor { firstName, lastName } → doctorName ("Dr/a. Nombre Apellido" NO —
 //   solo "Nombre Apellido", el prefijo lo pone la UI si quiere).
 // · NUNCA: notes, price, tokens de telemedicina, overrideReason, etc.
+// · ws1-t5 (93): si la cuenta lleva a varios pacientes, cada cita trae
+//   `patientName` — dos hijos con cita el mismo día se veían iguales.
 // · WS1-T5: cada cita de `upcoming` trae `pendingChange` (solicitud PENDING de
 //   esa cita o null, UNA query extra) y el response trae `policies` (por
 //   clínica de los links: minHours + autoApprove). En `past` siempre null.
@@ -33,6 +35,7 @@ import type {
   PacientePoliticaCambios,
 } from "@/lib/patient-portal/types";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { hayQueNombrarAlPaciente, pacienteDeLaCita } from "@/lib/patient-portal/ortodoncia-portal";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +49,8 @@ const citaSelect = {
   endsAt: true,
   holdExpiresAt: true,
   doctor: { select: { firstName: true, lastName: true } },
+  // El nombre del propio paciente de la cuenta (ws1-t5, 93). Nada más de su ficha.
+  patient: { select: { firstName: true, lastName: true } },
 };
 
 type CitaRow = {
@@ -57,9 +62,14 @@ type CitaRow = {
   endsAt: Date;
   holdExpiresAt: Date | null;
   doctor: { firstName: string; lastName: string };
+  patient: { firstName: string; lastName: string };
 };
 
-function toCita(a: CitaRow, pendingChange: PacienteCambioPendiente | null): PacienteCita {
+function toCita(
+  a: CitaRow,
+  pendingChange: PacienteCambioPendiente | null,
+  nombrarPaciente: boolean,
+): PacienteCita {
   return {
     id: a.id,
     clinicId: a.clinicId,
@@ -71,6 +81,7 @@ function toCita(a: CitaRow, pendingChange: PacienteCambioPendiente | null): Paci
     pendingChange,
     // WS1-T5 — apartada esperando el anticipo: se confirma sola al pagarse.
     esperaAnticipo: a.status === "SCHEDULED" && a.holdExpiresAt != null,
+    ...(nombrarPaciente ? { patientName: `${a.patient.firstName} ${a.patient.lastName}`.trim() } : {}),
   };
 }
 
@@ -186,10 +197,13 @@ export async function GET() {
     }
   }
 
+  // ws1-t5 (93): con más de un paciente en la cuenta, cada cita dice de quién es.
+  const nombrar = hayQueNombrarAlPaciente(links.map((l) => ({ patientId: l.patient.id })));
+
   const body: PacienteCitasResponse = {
     clinics,
-    upcoming: upcomingRows.map((a) => toCita(a, pendingByAppt.get(a.id) ?? null)),
-    past: pastRows.map((a) => toCita(a, null)),
+    upcoming: upcomingRows.map((a) => toCita(a, pendingByAppt.get(a.id) ?? null, nombrar)),
+    past: pastRows.map((a) => toCita(a, null, nombrar)),
     policies: Array.from(policiesMap.values()),
   };
   return NextResponse.json(body);
@@ -200,10 +214,14 @@ export async function GET() {
 // portal del paciente.
 //
 // Body: { clinicId, doctorId, date: "YYYY-MM-DD", startTime: "HH:mm",
-//         type?, reason? }
+//         type?, reason?, patientId? }
 //
 // Multi-tenant ESTRICTO: clinicId DEBE estar en un link de la sesión y el
-// patientId se DERIVA de ese link (NUNCA del body). Valida que el doctor sea
+// patientId sale de los links de la sesión en ESA clínica. ws1-t5 (93): el
+// body puede decir PARA QUIÉN es (`patientId`), pero solo vale si es uno de
+// esos links; si la cuenta tiene a varios pacientes en la clínica y no lo
+// dice, se responde 400 `falta-paciente` en vez de adivinar (antes la cita
+// del segundo hijo quedaba a nombre del primero). Valida que el doctor sea
 // de esa clínica y esté activo; valida fecha/hora contra el horario de la
 // clínica; transacción anti-doble-cita; crea con status PENDING y source
 // PATIENT_PORTAL (valor de enum existente — sin tocar el schema). Side-effects
@@ -224,13 +242,14 @@ export async function POST(req: NextRequest) {
     if (!raw || typeof raw !== "object") {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
     }
-    const { clinicId, doctorId, date, startTime, type, reason } = raw as {
+    const { clinicId, doctorId, date, startTime, type, reason, patientId: patientIdPedido } = raw as {
       clinicId?: string;
       doctorId?: string;
       date?: string;
       startTime?: string;
       type?: string;
       reason?: string;
+      patientId?: unknown;
     };
 
     if (!clinicId || !doctorId || !date || !startTime) {
@@ -243,13 +262,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Formato de hora inválido" }, { status: 400 });
     }
 
-    // Multi-tenant: la clínica DEBE estar en un link de la sesión; de ahí
-    // derivamos el patientId (NUNCA del body).
-    const link = ctx.links.find((l) => l.clinicId === clinicId);
-    if (!link) {
+    // Multi-tenant: la clínica DEBE estar en un link de la sesión, y el
+    // paciente tiene que ser uno de los links de la sesión EN esa clínica.
+    const elegido = pacienteDeLaCita(
+      ctx.links,
+      clinicId,
+      typeof patientIdPedido === "string" ? patientIdPedido : null,
+    );
+    if (elegido.ok === false) {
+      if (elegido.motivo === "falta-elegir") {
+        return NextResponse.json(
+          { error: "Elige para quién es la cita.", code: "falta-paciente" },
+          { status: 400 },
+        );
+      }
+      // Sin vínculo en la clínica, o un paciente que no es de esta cuenta: la
+      // misma respuesta, sin decir cuál de las dos.
       return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
     }
-    const patientId = link.patientId;
+    const patientId = elegido.patientId;
+
+    // El vínculo sobrevive a un expediente dado de baja: a ese no se le agenda.
+    const expediente = await prisma.patient.findFirst({
+      where: { id: patientId, clinicId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!expediente) {
+      return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+    }
 
     // Clínica: timezone + horarios + config de los side-effects.
     const clinic = await prisma.clinic.findUnique({

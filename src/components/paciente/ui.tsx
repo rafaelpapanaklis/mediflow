@@ -78,8 +78,24 @@ function chipStyle(active: boolean): React.CSSProperties {
 }
 
 /**
+ * Las clínicas DISTINTAS de la cuenta. `clinics` trae una entrada por
+ * expediente vinculado: una mamá con dos hijos en la misma clínica tiene dos
+ * entradas de UNA clínica (ws1-t5, hallazgo 93).
+ */
+export function clinicasDistintas(clinics: PacienteClinica[] | null | undefined): PacienteClinica[] {
+  const vistas = new Set<string>();
+  const out: PacienteClinica[] = [];
+  for (const c of clinics ?? []) {
+    if (vistas.has(c.clinicId)) continue;
+    vistas.add(c.clinicId);
+    out.push(c);
+  }
+  return out;
+}
+
+/**
  * Chips para filtrar por clínica. value null = "Todas". Solo se muestra si
- * hay 2+ clínicas (con 0-1 devuelve null).
+ * hay 2+ clínicas DISTINTAS (con 0-1 devuelve null).
  */
 export function ClinicFilterChips({
   clinics,
@@ -90,7 +106,8 @@ export function ClinicFilterChips({
   value: string | null;
   onChange: (clinicId: string | null) => void;
 }) {
-  if (!clinics || clinics.length < 2) return null;
+  const distintas = clinicasDistintas(clinics);
+  if (distintas.length < 2) return null;
 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -102,7 +119,7 @@ export function ClinicFilterChips({
       >
         Todas
       </button>
-      {clinics.map((c) => (
+      {distintas.map((c) => (
         <button
           key={c.clinicId}
           type="button"

@@ -21,6 +21,10 @@
 //   · GET  /api/paciente/appointments/[id]/slots?date=YYYY-MM-DD (WS1-T5)
 //                                     → 200 { date, timezone, durationMin,
 //                                        slots: "HH:mm"[] } | 400 | 401 | 404 | 422
+//   · POST /api/paciente/appointments (WS2-T1; ws1-t5 añadió `patientId` opcional)
+//                                     → 200 PacienteNuevaCitaResponse | 400
+//                                       ({ error, code: "falta-paciente" } si hay
+//                                       que elegir para quién es) | 401 | 404 | 409
 //   · POST /api/paciente/appointments/[id]/change-request (WS1-T5)
 //                                     → 200 { ok, autoApproved, status } | 400
 //                                       | 401 | 404 | 409 | 422
@@ -185,6 +189,11 @@ export interface PacienteCita {
    * ofrece «confirmar asistencia»: se confirma sola cuando se acredita el pago.
    */
   esperaAnticipo?: boolean;
+  /**
+   * ws1-t5 (93) — de quién es la cita. Solo viene cuando la cuenta lleva a
+   * más de un paciente (la mamá con dos hijos); con uno solo se omite.
+   */
+  patientName?: string | null;
 }
 
 /** Consulta paciente-safe: solo que hubo visita y con quién. CERO SOAP. */
@@ -350,12 +359,23 @@ export interface PacienteBookingDoctor {
   specialty: string | null;
 }
 
+/** Un paciente de la cuenta en una clínica: para quién se puede agendar (ws1-t5, 93). */
+export interface PacienteBookingPaciente {
+  patientId: string;
+  name: string; // "Nombre Apellido"
+}
+
 /** Clínica + sus doctores agendables. GET /api/paciente/booking/options. */
 export interface PacienteBookingClinica {
   clinicId: string;
   clinicName: string;
   timezone: string;
   doctors: PacienteBookingDoctor[];
+  /**
+   * ws1-t5 (93) — los pacientes de la cuenta en ESTA clínica. Con dos o más
+   * la cita nueva pregunta para quién es.
+   */
+  patients: PacienteBookingPaciente[];
 }
 
 export interface PacienteBookingOptionsResponse {
@@ -378,6 +398,12 @@ export interface PacienteNuevaCitaBody {
   startTime: string; // HH:mm
   type?: string;
   reason?: string;
+  /**
+   * ws1-t5 (93) — para quién es la cita. Obligatorio si la cuenta tiene a
+   * varios pacientes en esa clínica. El servidor lo valida contra los
+   * vínculos de la sesión: nunca se confía en él.
+   */
+  patientId?: string;
 }
 
 /** Respuesta de POST /api/paciente/appointments. */

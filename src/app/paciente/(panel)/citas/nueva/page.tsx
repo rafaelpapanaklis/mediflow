@@ -1,16 +1,20 @@
 "use client";
 
 // Agendar una cita NUEVA desde el portal del paciente (WS2-T1).
-// Flujo paso a paso: clínica (si hay 2+) → doctor → fecha → horario →
-// motivo/notas opcionales → confirmar. Multi-tenant: el servidor deriva el
-// patientId del link de la sesión; aquí solo elegimos clínica/doctor de las
-// opciones que el propio endpoint autorizó.
+// Flujo paso a paso: clínica (si hay 2+) → para quién (si la cuenta lleva a
+// 2+ pacientes en esa clínica) → doctor → fecha → horario → motivo/notas
+// opcionales → confirmar. Multi-tenant: el servidor valida el paciente contra
+// los links de la sesión; aquí solo elegimos entre las opciones que el propio
+// endpoint autorizó.
+//
+// ws1-t5 (ronda 6, hallazgo 93): una mamá con dos hijos no podía decir para
+// quién era la cita, y quedaba siempre a nombre del primero.
 //
 // Endpoints:
 //   GET  /api/paciente/booking/options
 //   GET  /api/paciente/booking/slots?clinicId=&doctorId=&date=YYYY-MM-DD
-//   POST /api/paciente/appointments  { clinicId, doctorId, date, startTime, type?, reason? }
-import { useCallback, useEffect, useRef, useState } from "react";
+//   POST /api/paciente/appointments  { clinicId, doctorId, date, startTime, type?, reason?, patientId? }
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePacienteData } from "@/lib/patient-portal/use-paciente";
@@ -121,6 +125,7 @@ export default function PacienteNuevaCitaPage() {
   const clinics: PacienteBookingClinica[] = data?.clinics ?? [];
 
   const [clinicId, setClinicId] = useState<string | null>(null);
+  const [patientId, setPatientId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [date, setDate] = useState("");
   const [slots, setSlots] = useState<string[] | null>(null);
@@ -138,6 +143,9 @@ export default function PacienteNuevaCitaPage() {
 
   const selectedClinic = clinics.find((c) => c.clinicId === clinicId) ?? null;
   const doctors = selectedClinic?.doctors ?? [];
+  const patients = useMemo(() => selectedClinic?.patients ?? [], [selectedClinic]);
+  /** Con un solo paciente en la clínica no hay nada que preguntar. */
+  const variosPacientes = patients.length > 1;
 
   // Auto-selección de clínica única.
   useEffect(() => {
@@ -145,6 +153,14 @@ export default function PacienteNuevaCitaPage() {
       setClinicId(clinics[0].clinicId);
     }
   }, [clinics, clinicId]);
+
+  // Con un solo paciente en la clínica, la cita es para él. Con varios NO se
+  // elige por la persona: tiene que decirlo.
+  useEffect(() => {
+    if (clinicId && patientId === null && patients.length === 1) {
+      setPatientId(patients[0].patientId);
+    }
+  }, [clinicId, patients, patientId]);
 
   // Auto-selección de doctor único de la clínica elegida.
   useEffect(() => {
@@ -217,6 +233,7 @@ export default function PacienteNuevaCitaPage() {
 
   function handleClinicChange(v: string) {
     setClinicId(v || null);
+    setPatientId(null);
     setDoctorId(null);
     setDate("");
     setSubmitError(null);
@@ -252,6 +269,10 @@ export default function PacienteNuevaCitaPage() {
 
   async function handleSubmit() {
     if (!clinicId || !doctorId || !date || !selectedSlot || submitting) return;
+    if (variosPacientes && !patientId) {
+      setSubmitError("Elige para quién es la cita.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -264,6 +285,7 @@ export default function PacienteNuevaCitaPage() {
           doctorId,
           date,
           startTime: selectedSlot,
+          ...(patientId ? { patientId } : {}),
           ...(tipo.trim() ? { type: tipo.trim() } : {}),
           ...(reason.trim() ? { reason: reason.trim() } : {}),
         }),
@@ -348,7 +370,9 @@ export default function PacienteNuevaCitaPage() {
 
   const multiClinic = clinics.length > 1;
   const noDoctors = !!clinicId && doctors.length === 0;
-  const canSubmit = !!clinicId && !!doctorId && !!date && !!selectedSlot && !submitting;
+  const canSubmit =
+    !!clinicId && !!doctorId && !!date && !!selectedSlot && !submitting && (!variosPacientes || !!patientId);
+  const paraQuien = patients.find((p) => p.patientId === patientId) ?? null;
 
   return (
     <div style={PAGE_STYLE}>
@@ -374,6 +398,33 @@ export default function PacienteNuevaCitaPage() {
                 {clinics.map((c) => (
                   <option key={c.clinicId} value={c.clinicId}>
                     {c.clinicName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Para quién es la cita (solo si la cuenta lleva a 2+ pacientes en la clínica) */}
+          {clinicId && variosPacientes && (
+            <div>
+              <label htmlFor="nueva-paciente" style={LABEL_STYLE}>
+                ¿Para quién es la cita?
+              </label>
+              <select
+                id="nueva-paciente"
+                value={patientId ?? ""}
+                onChange={(e) => {
+                  setPatientId(e.target.value || null);
+                  setSubmitError(null);
+                }}
+                disabled={submitting}
+                style={FIELD_STYLE}
+                className="focus-visible:[box-shadow:var(--ring)]"
+              >
+                <option value="">Elige a la persona…</option>
+                {patients.map((p) => (
+                  <option key={p.patientId} value={p.patientId}>
+                    {p.name}
                   </option>
                 ))}
               </select>
@@ -577,6 +628,8 @@ export default function PacienteNuevaCitaPage() {
                 <>
                   <Spinner size={14} light /> Agendando…
                 </>
+              ) : variosPacientes && paraQuien ? (
+                `Confirmar cita para ${paraQuien.name}`
               ) : (
                 "Confirmar cita"
               )}
@@ -607,7 +660,7 @@ function Header() {
           Agendar cita
         </h1>
         <p style={{ margin: "4px 0 0", fontSize: "clamp(13px, 1.5vw, 14px)", color: MUTED }}>
-          Elige clínica, doctor y horario.
+          Elige doctor y horario.
         </p>
       </div>
       <Link

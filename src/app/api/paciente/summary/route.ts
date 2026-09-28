@@ -14,6 +14,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
+import { hayQueNombrarAlPaciente } from "@/lib/patient-portal/ortodoncia-portal";
 import type {
   PacienteCita,
   PacienteClinica,
@@ -85,6 +86,8 @@ export async function GET() {
           startsAt: true,
           endsAt: true,
           doctor: { select: { firstName: true, lastName: true } },
+          // ws1-t5 (93): de quién es la cita, cuando la cuenta lleva a varios.
+          patient: { select: { firstName: true, lastName: true } },
         },
       }),
       // Saldo pendiente: solo clinicId + balance (sin items ni notes).
@@ -108,6 +111,8 @@ export async function GET() {
       patientNumber: l.patient.patientNumber,
     }));
 
+    const nombrar = hayQueNombrarAlPaciente(links.map((l) => ({ patientId: l.patient.id })));
+
     const upcoming: PacienteCita[] = appointments.map((a) => ({
       id: a.id,
       clinicId: a.clinicId,
@@ -116,6 +121,7 @@ export async function GET() {
       startsAt: a.startsAt.toISOString(),
       endsAt: a.endsAt.toISOString(),
       doctorName: `${a.doctor.firstName} ${a.doctor.lastName}`,
+      ...(nombrar ? { patientName: `${a.patient.firstName} ${a.patient.lastName}`.trim() } : {}),
     }));
 
     // Suma de balances por clínica en JS (redondeo a 2 decimales).

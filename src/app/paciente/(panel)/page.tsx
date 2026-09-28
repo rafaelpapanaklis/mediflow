@@ -21,6 +21,7 @@ import {
   PacienteEmptyState,
   StatusBadge,
   clinicName,
+  clinicasDistintas,
   formatMxn,
   formatFechaHora,
 } from "@/components/paciente/ui";
@@ -127,7 +128,8 @@ export default function PacienteInicioPage() {
 
   const { me, clinics, upcoming, pendingByClinic, pendingTotal } = data;
   const firstName = (me.name || "").trim().split(/\s+/)[0] || "paciente";
-  const multiClinic = clinics.length > 1;
+  // Clínicas DISTINTAS: dos hijos en la misma clínica son dos expedientes de una sola.
+  const multiClinic = clinicasDistintas(clinics).length > 1;
 
   return (
     <div style={PAGE_STYLE}>
@@ -175,6 +177,7 @@ export default function PacienteInicioPage() {
                         overflowWrap: "anywhere",
                       }}
                     >
+                      {cita.patientName ? `${cita.patientName} · ` : ""}
                       {cita.doctorName} · {cita.type}
                       {multiClinic ? ` · ${clinicName(clinics, cita.clinicId)}` : ""}
                     </div>
