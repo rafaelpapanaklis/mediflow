@@ -97,13 +97,22 @@ test("columnas sin relación con ninguna entidad → sin identificar (nunca se a
   assert.equal(confianza, null);
 });
 
-test("orden de dependencia: pacientes primero, notas de tratamiento al final; tratamientos activos antes que sus notas", async () => {
+test("orden de dependencia: pacientes primero, tratamientos activos antes que sus notas", async () => {
   const { ENTITY_IMPORT_ORDER, ordenDe } = await mod();
   assert.equal(ENTITY_IMPORT_ORDER[0], "patients");
-  assert.equal(ENTITY_IMPORT_ORDER[ENTITY_IMPORT_ORDER.length - 1], "treatmentNotes");
   assert.ok(ordenDe("treatmentPlans") < ordenDe("treatmentNotes"));
   assert.ok(ordenDe("patients") < ordenDe("balances"));
   assert.ok(ordenDe("patients") < ordenDe("appointments"));
-  // Sin identificar siempre queda al final, después de cualquier entidad real.
-  assert.ok(ordenDe(null) > ordenDe("treatmentNotes"));
+  // Sin identificar siempre queda al final, después de cualquier entidad real
+  // (incluidas las 6 registradas por ws1-t1/t2/t6/t12 en esta ola: doctors,
+  // blockedHours, appointmentHistory, orthoCases, labExpenseHistory,
+  // installmentPlans — ver ENTITY_IMPORT_ORDER).
+  for (const e of ENTITY_IMPORT_ORDER) assert.ok(ordenDe(null) > ordenDe(e), `null debe ir después de ${e}`);
+  // Doctores resuelto antes que lo que lo necesita (citas, bloqueos, casos de ortodoncia).
+  assert.ok(ordenDe("doctors") < ordenDe("appointments"));
+  assert.ok(ordenDe("doctors") < ordenDe("blockedHours"));
+  assert.ok(ordenDe("doctors") < ordenDe("orthoCases"));
+  // Cuotas por vencer, después de lo que puede anclar su deuda.
+  assert.ok(ordenDe("balances") < ordenDe("installmentPlans"));
+  assert.ok(ordenDe("orthoCases") < ordenDe("installmentPlans"));
 });

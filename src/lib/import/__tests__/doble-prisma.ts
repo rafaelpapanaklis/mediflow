@@ -79,6 +79,9 @@ export function cumple(row: Row, where: Where): boolean {
           case "in":
             if (!(arg as any[]).some((a) => comparable(a) === comparable(v))) return false;
             break;
+          case "notIn":
+            if ((arg as any[]).some((a) => comparable(a) === comparable(v))) return false;
+            break;
           case "gte":
             if (!(comparable(v) >= comparable(arg))) return false;
             break;

@@ -26,7 +26,6 @@
 // Multi-tenant: clinicId SIEMPRE de la sesión (runImport lo pasa).
 
 import { prisma } from "@/lib/prisma";
-import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import {
   AMOUNT_FORMAT_FIELD,
   AMOUNT_FORMAT_KEY,
@@ -116,6 +115,12 @@ export const orthoCasesHandler: EntityHandler = {
   },
 
   async process(rows: MappedRow[], clinicId: string, ctx: ImportContext): Promise<PreviewRow[]> {
+    // Import dinámico a propósito (ws1-t12, pausa del gerente): @/lib/orthodontics/access
+    // lleva `import "server-only"`, y un import estático lo cargaría con solo
+    // importar este handler (p. ej. desde entities.ts para el registro/detección),
+    // tumbando cualquier test que ni siquiera llegue a llamar process()/commit()
+    // de casos de ortodoncia. Diferido a runtime, mismo criterio que doctores/handler.ts.
+    const { hasActiveOrthodonticsModule } = await import("@/lib/orthodontics/access");
     const moduloActivo = await hasActiveOrthodonticsModule(clinicId);
     if (!moduloActivo) {
       return rows.map(({ row, mapped }) => ({

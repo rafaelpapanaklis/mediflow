@@ -32,9 +32,9 @@ let sbCreados: Array<{ email: string }> = [];
 
 mock.module("@/lib/prisma", { namedExports: { prisma: new Proxy({}, { get: (_t, k: string) => base.prisma[k] }) } });
 mock.module("@/lib/audit", { namedExports: { logAudit: async () => {} } });
-mock.module("@supabase/supabase-js", {
+mock.module("../doctores/supabase-admin", {
   namedExports: {
-    createClient: () => ({
+    getAdminClient: () => ({
       auth: {
         admin: {
           createUser: async (args: { email: string }) => {

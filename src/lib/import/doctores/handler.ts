@@ -24,14 +24,13 @@
 //
 // Multi-tenant: clinicId SIEMPRE de la sesión (runImport lo pasa).
 
-import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
-import { getPlanLimitsForClinic } from "@/lib/plans";
 import { CLINIC_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 import type { PreviewRow } from "../types";
 import { BATCH, norm, normName, type EntityHandler, type MappedRow, type ImportContext } from "../engine";
 import { cellText, oneLine } from "../migrado";
+import { getAdminClient } from "./supabase-admin";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -40,15 +39,6 @@ const DOCTOR_COLORS = [
   "#0891b2", "#db2777", "#4338ca", "#16a34a", "#dc2626",
   "#9333ea", "#0284c7", "#f97316", "#84cc16",
 ];
-
-/** Copia deliberada del cliente admin de team/route.ts: un route.ts no exporta nada más que su handler. */
-function getAdminClient() {
-  return createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } },
-  );
-}
 
 function tempPassword(): string {
   return `Medi${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.floor(10 + Math.random() * 90)}!`;
@@ -96,6 +86,12 @@ export const doctorsHandler: EntityHandler = {
     const byLicense = new Map(existentes.filter((u) => u.cedulaProfesional).map((u) => [norm(u.cedulaProfesional!), u]));
 
     const clinicPlan = await prisma.clinic.findUnique({ where: { id: clinicId }, select: CLINIC_OVERRIDE_SELECT });
+    // Import dinámico a propósito: @/lib/plans lleva `import "server-only"`, y un
+    // import estático lo cargaría con solo importar este handler (p. ej. desde
+    // entities.ts para el registro/detección), tumbando cualquier test que ni
+    // siquiera llegue a llamar process()/commit() de doctores. Diferido a
+    // runtime, solo se toca cuando de verdad se importa un archivo de doctores.
+    const { getPlanLimitsForClinic } = await import("@/lib/plans");
     const { maxUsers } = await getPlanLimitsForClinic(clinicPlan);
     const activosHoy = existentes.filter((u) => u.isActive).length;
     let cupoRestante = maxUsers == null ? Infinity : Math.max(0, maxUsers - activosHoy);

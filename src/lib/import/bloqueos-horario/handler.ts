@@ -1,11 +1,22 @@
 // BLOQUEOS DE AGENDA migrados (ws1-t12, importador Dentalink, sep-2026):
 // 13_Horas_Bloqueadas trae los días/horas cerrados del sistema anterior
 // (vacaciones, festivos, mantenimiento). NO es un modelo nuevo: ya existe
-// `AgendaBlock` (WS1-T2, sql/agenda-bloqueos.sql) con su servicio en
-// src/lib/agenda-bloqueos/service.ts — este handler es una fuente MÁS de
-// bloqueos, con las mismas reglas que crear uno a mano:
-//   · Choque con una cita ya agendada → NO se crea (crearBloqueo revisa antes
-//     de escribir); la fila queda en error para que primero se muevan esas citas.
+// `AgendaBlock` (WS1-T2, sql/agenda-bloqueos.sql), con su servicio completo en
+// src/lib/agenda-bloqueos/service.ts — pero ESE archivo lleva `import
+// "server-only"` en la línea 1 (igual que ruta.server.ts, ver el comentario
+// de core-ctx.ts), y ese paquete no resuelve bajo `tsx --test`
+// (comprobado: ni siquiera mockeándolo con mock.module, porque Node intenta
+// RESOLVERLO antes de aplicar el mock y el paquete no existe fuera del bundle
+// de Next). Por eso este handler NO importa service.ts: reimplementa el
+// mismo criterio (choque contra citas vivas + creación del bloqueo) a mano,
+// apoyándose solo en las piezas PURAS de agenda-bloqueos/core.ts (parseo de
+// rango/motivo, sin prisma ni server-only) para no duplicar esa lógica. Si
+// alguna vez agenda-bloqueos/service.ts deja de necesitar "server-only", vale
+// la pena volver a esta parte y llamarlo directo.
+//
+// Mismas reglas que crear un bloqueo a mano:
+//   · Choque con una cita ya agendada → NO se crea; la fila queda en error
+//     para que primero se muevan esas citas.
 //   · Sin doctor en la fila = bloqueo de TODA la clínica (mismo NULL que la
 //     pantalla). Se avisa siempre en la vista previa: es el radio de acción
 //     más grande posible.
@@ -17,17 +28,40 @@
 // Multi-tenant: clinicId SIEMPRE de la sesión (runImport lo pasa).
 
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@prisma/client";
+import { logAudit } from "@/lib/audit";
 import type { PreviewRow } from "../types";
-import { norm, normName, type EntityHandler, type MappedRow, type ImportContext } from "../engine";
+import { normName, type EntityHandler, type MappedRow, type ImportContext } from "../engine";
 import { cellText, oneLine } from "../migrado";
 import { parseHora } from "../valores";
-import { crearBloqueo, revisarChoque } from "@/lib/agenda-bloqueos/service";
-import { parseRangoTecleado } from "@/lib/agenda-bloqueos/core";
-import type { BloqueoCtx } from "@/lib/agenda-bloqueos/core-ctx";
-import { BloqueoError } from "@/lib/agenda-bloqueos/core-ctx";
+import { parseRangoTecleado, parseKind, BloqueoError } from "@/lib/agenda-bloqueos/core";
+import { ESTADOS_MUERTOS } from "@/lib/agenda-nueva/estados";
+import { sinApartadoVencido } from "@/lib/agenda/apartado";
 
 const MOTIVO_DEFECTO = "Bloqueo importado";
+
+/**
+ * Copia deliberada del criterio de `citasEnElRango`
+ * (src/lib/agenda-bloqueos/service.ts): mismas citas que estorban (ni
+ * canceladas ni no-show, ni un apartado ya vencido), mismo rango semiabierto.
+ * NO se importa de ahí por el bloqueo de "server-only" explicado arriba.
+ */
+async function contarChoqueConCitas(
+  clinicId: string,
+  doctorId: string | null,
+  startsAt: Date,
+  endsAt: Date,
+): Promise<number> {
+  return prisma.appointment.count({
+    where: {
+      clinicId,
+      status: { notIn: [...ESTADOS_MUERTOS] as any },
+      startsAt: { lt: endsAt },
+      endsAt: { gt: startsAt },
+      ...(doctorId ? { doctorId } : {}),
+      AND: [sinApartadoVencido()],
+    },
+  });
+}
 
 function dosDig(n: number): string {
   return String(n).padStart(2, "0");
@@ -80,11 +114,6 @@ export const blockedHoursHandler: EntityHandler = {
     const byDoctor = new Map<string, string>();
     for (const u of users) byDoctor.set(normName(`${u.firstName} ${u.lastName}`), u.id);
 
-    const bctx: BloqueoCtx = {
-      clinicId, userId: ctx.userId, role: (ctx.role as Role) || "ADMIN",
-      displayName: "Importador", timezone, puedeGestionar: true,
-    };
-
     const out: PreviewRow[] = [];
     const vistosEnArchivo = new Set<string>();
 
@@ -121,9 +150,9 @@ export const blockedHoursHandler: EntityHandler = {
         pr.status = "error"; out.push(pr); continue;
       }
 
-      const choque = await revisarChoque(bctx, { desdeDia, desdeHora: desdeHora ?? undefined, hastaDia, hastaHora: hastaHora ?? undefined, doctorId: doctorId ?? undefined });
-      if (choque) {
-        pr.errors.push(`Se empalma con ${choque.total} cita(s) ya agendada(s) en ese rango: muévelas antes de importar este bloqueo`);
+      const choque = await contarChoqueConCitas(clinicId, doctorId, rango.startsAt, rango.endsAt);
+      if (choque > 0) {
+        pr.errors.push(`Se empalma con ${choque} cita(s) ya agendada(s) en ese rango: muévelas antes de importar este bloqueo`);
         pr.status = "error"; out.push(pr); continue;
       }
 
@@ -164,25 +193,42 @@ export const blockedHoursHandler: EntityHandler = {
     const toInsert = pickInsertable(rows, skipDuplicates);
     if (toInsert.length === 0) return { created: 0, skipped: 0 };
 
-    const clinic = await prisma.clinic.findFirst({ where: { id: clinicId }, select: { timezone: true } });
-    const timezone = clinic?.timezone ?? "America/Mexico_City";
-    const bctx: BloqueoCtx = {
-      clinicId, userId: ctx.userId, role: (ctx.role as Role) || "ADMIN",
-      displayName: "Importador", timezone, puedeGestionar: true,
-    };
+    const quien = await prisma.user.findFirst({ where: { id: ctx.userId }, select: { firstName: true, lastName: true } });
+    const createdByName = (quien ? `${quien.firstName} ${quien.lastName}`.trim() : "") || "Importador";
 
     let created = 0;
     for (const r of toInsert) {
       try {
-        const resultado = await crearBloqueo(bctx, {
-          desdeDia: r.data.desdeDia, desdeHora: r.data.desdeHora, hastaDia: r.data.hastaDia, hastaHora: r.data.hastaHora,
-          doctorId: r.data.doctorId ?? undefined, reason: r.data.reason,
-        });
-        if (!resultado.ok) {
+        // REVALIDA el choque en el momento de escribir (igual que crearBloqueo):
+        // el dry-run pudo quedar viejo si otra pantalla agendó algo mientras tanto.
+        const choque = await contarChoqueConCitas(clinicId, r.data.doctorId ?? null, r.data.startsAt, r.data.endsAt);
+        if (choque > 0) {
           r.status = "error";
-          r.errors.push(`Se empalma con ${resultado.choque?.total ?? "una"} cita(s) ya agendada(s): muévelas antes de importar este bloqueo`);
+          r.errors.push(`Se empalma con ${choque} cita(s) ya agendada(s): muévelas antes de importar este bloqueo`);
           continue;
         }
+
+        const bloqueo = await prisma.agendaBlock.create({
+          data: {
+            clinicId,
+            doctorId: r.data.doctorId ?? null,
+            kind: parseKind(undefined),
+            reason: r.data.reason,
+            startsAt: r.data.startsAt,
+            endsAt: r.data.endsAt,
+            createdById: ctx.userId,
+            createdByName,
+          },
+        });
+        await logAudit({
+          clinicId, userId: ctx.userId, entityType: "agenda-block", entityId: bloqueo.id, action: "create",
+          changes: {
+            reason: { before: null, after: r.data.reason },
+            doctorId: { before: null, after: r.data.doctorId ?? null },
+            startsAt: { before: null, after: (r.data.startsAt as Date).toISOString() },
+            endsAt: { before: null, after: (r.data.endsAt as Date).toISOString() },
+          },
+        });
         created++;
       } catch (e: any) {
         r.status = "error";
