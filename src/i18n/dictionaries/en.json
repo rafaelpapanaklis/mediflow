@@ -3164,7 +3164,7 @@
       "hoy": "Today at the clinic",
       "facturadoHoy": "Billed today",
       "cobradoHoy": "Collected today",
-      "porCobrar": "Receivable",
+      "porCobrar": "Receivable from today",
       "vencido": "Overdue",
       "arqueo": "Shift reconciliation",
       "efectivoEnCaja": "Cash in drawer",

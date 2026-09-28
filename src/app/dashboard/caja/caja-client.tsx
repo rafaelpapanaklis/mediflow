@@ -536,7 +536,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14 }}>
               <KpiCard label="Facturado hoy" value={fmtMXNdec(caja.billedToday)}  icon={Receipt} />
               <KpiCard label="Cobrado hoy"   value={fmtMXNdec(collectedToday)}    icon={TrendingUp} hero />
-              <KpiCard label="Por cobrar"    value={fmtMXNdec(caja.pendingToday)} icon={Wallet} />
+              <KpiCard label="Por cobrar de hoy" value={fmtMXNdec(caja.pendingToday)} icon={Wallet} />
               <KpiCard label="Vencido"       value={fmtMXNdec(caja.overdueToday)} icon={AlertTriangle} />
             </div>
           </div>
