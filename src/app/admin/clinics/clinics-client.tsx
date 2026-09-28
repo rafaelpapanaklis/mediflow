@@ -39,6 +39,15 @@ import {
   bytesCortos, cercaDelTope, compararUltimaCompraDesc, metodoDePago, tokensCortos, ultimaCompra, type UsoClinica,
 } from "@/lib/admin/uso-core";
 import { fechaAdmin } from "@/lib/admin/zona-horaria";
+import {
+  ETIQUETA_ESTADO_MODULO,
+  ETIQUETA_ORIGEN,
+  modulosEnUso,
+  resumenMrrModulos,
+  type EstadoModulo,
+  type ModuloDeClinica,
+  type MrrModulos,
+} from "@/lib/admin/modulos-core";
 import { BarraUso, Chip, Vacio, type TonoChip } from "@/components/admin/rediseno/piezas";
 import css from "./clinics.module.css";
 
@@ -89,6 +98,11 @@ export interface FilaClinica {
   sedeIncluida: boolean;
   /** Consumo y cupos (@/lib/admin/uso-clinica). Ausente = no se midió. */
   uso?: UsoClinica;
+  /**
+   * Módulos que tiene o tuvo (@/lib/admin/modulos): cuáles, cómo los paga y
+   * cuánto. Ausente = no se pudo leer (no es «no tiene ninguno»).
+   */
+  modulos?: ModuloDeClinica[];
 }
 
 interface Props {
@@ -97,13 +111,15 @@ interface Props {
   planPrices: Record<string, number>;
   /** MRR ya calculado por la fuente única (@/lib/admin/mrr). */
   mrr: AdminMrr;
+  /** Lo que entra por módulos, aparte de los planes. `null`/ausente = no se pudo medir. */
+  mrrModulos?: MrrModulos | null;
   /** El "ahora" del servidor: así SSR e hidratación cuentan los mismos días. */
   ahoraISO: string;
   /** Lo que no se pudo medir del consumo, para decirlo. */
   avisosUso?: string[];
 }
 
-type ClaveFiltro = "todas" | "atencion" | "apagadas" | "trial-vencido" | "cobro-fallido" | "vencidas" | "tope" | "pruebas";
+type ClaveFiltro = "todas" | "atencion" | "apagadas" | "trial-vencido" | "cobro-fallido" | "vencidas" | "tope" | "modulos" | "pruebas";
 type ClaveOrden  = "compra" | "atencion" | "nombre" | "actividad" | "pacientes" | "alta" | "plan" | "renueva";
 
 const LLAVE_PREFERENCIAS = "admin-clinics-preferencias-v2";
@@ -147,11 +163,36 @@ function gateDiscrepa(salud: SaludClinica): boolean {
   return !(ESTADO_ESPERADO[salud.plan.kind] ?? []).includes(salud.estadoOperativo);
 }
 
+const TONO_MODULO: Record<EstadoModulo, TonoChip> = {
+  "activo": "success", "baja-programada": "warning", "cobro-fallido": "danger", "vencido": "neutral", "cancelado": "neutral",
+};
+
+/** «$129.00/mes», «cortesía» o el estado cuando no está pagando. Importes de clinic_modules, sin IVA. */
+function pagoDeModulo(m: ModuloDeClinica): string {
+  if (m.estado === "cobro-fallido") return "cobro fallido";
+  if (m.origen === "cortesia") return "cortesía";
+  if (m.aporteMensual > 0) return `${formatCurrency(m.aporteMensual, "MXN")}/mes`;
+  return "sin importe";
+}
+
+/** Todo lo que hay que saber del módulo, para el `title` del chip. */
+function detalleDeModulo(m: ModuloDeClinica): string {
+  const partes = [`${m.moduleName}: ${ETIQUETA_ESTADO_MODULO[m.estado]}`, ETIQUETA_ORIGEN[m.origen]];
+  if (m.origen !== "cortesia" && m.pagado > 0) {
+    partes.push(`paga ${formatCurrency(m.pagado, "MXN")} ${m.ciclo === "annual" ? "al año" : "al mes"}, sin IVA`);
+  }
+  if (m.hasta) {
+    const hasta = fechaAdmin(m.hasta);
+    if (hasta) partes.push(m.estado === "baja-programada" ? `se da de baja el ${hasta}` : m.origen === "tarjeta" ? `renueva el ${hasta}` : `hasta el ${hasta}`);
+  }
+  return partes.join(" · ");
+}
+
 function planTono(plan: string): TonoChip {
   return plan === "CLINIC" ? "brand" : plan === "PRO" ? "info" : "neutral";
 }
 
-export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO, avisosUso = [] }: Props) {
+export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModulos = null, ahoraISO, avisosUso = [] }: Props) {
   const askConfirm = useConfirm();
   const [clinics, setClinics] = useState(initial);
   const [search, setSearch]   = useState("");
@@ -234,6 +275,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
       "cobro-fallido":  v.filter((s) => s.estadoOperativo === "cobro-fallido").length,
       vencidas:         v.filter((s) => s.estadoOperativo === "vencida").length,
       tope:             v.filter((s) => !s.esPrueba && cercaDelTope(usoDe.get(s.id))).length,
+      modulos:          clinics.filter((c) => modulosEnUso(c.modulos ?? []).length > 0).length,
       pruebas:          v.filter((s) => s.esPrueba).length,
     } as Record<ClaveFiltro, number>;
   }, [saludPorId, clinics]);
@@ -244,7 +286,9 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
       !q ||
       c.name.toLowerCase().includes(q) ||
       c.slug.toLowerCase().includes(q) ||
-      (c.users[0]?.email ?? "").toLowerCase().includes(q);
+      (c.users[0]?.email ?? "").toLowerCase().includes(q) ||
+      // «ortodoncia» en el buscador deja las clínicas que tienen ese módulo.
+      modulosEnUso(c.modulos ?? []).some((m) => m.moduleName.toLowerCase().includes(q));
 
     const filas = clinics.filter((c) => {
       if (!pasa(c)) return false;
@@ -257,6 +301,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
         case "cobro-fallido":   return s.estadoOperativo === "cobro-fallido";
         case "vencidas":        return s.estadoOperativo === "vencida";
         case "tope":            return !s.esPrueba && cercaDelTope(c.uso);
+        case "modulos":         return modulosEnUso(c.modulos ?? []).length > 0;
         case "pruebas":         return s.esPrueba;
         default:                return true;
       }
@@ -365,6 +410,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
     { id: "apagadas",       label: "Apagadas" },
     { id: "vencidas",       label: "Vencidas" },
     { id: "tope",           label: "Cerca del tope" },
+    { id: "modulos",        label: "Con módulos" },
     { id: "pruebas",        label: "Pruebas" },
   ];
 
@@ -398,10 +444,17 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
         </div>
         <div className={css.cifra}>
           <div className={css.cifraEtiqueta}>MRR</div>
-          <div className={css.cifraValor}>{formatCurrency(mrr.total, "MXN")}</div>
+          {/* Planes + módulos. Los módulos salen de lo que cada clínica pagó
+              (clinic_modules), no del precio de catálogo; una cortesía vale $0. */}
+          <div className={css.cifraValor} data-mrr-total>{formatCurrency(mrr.total + (mrrModulos?.total ?? 0), "MXN")}</div>
           <div className={css.cifraPie}>
-            {mrrBreakdownHint(mrr)}
+            Planes {formatCurrency(mrr.total, "MXN")}: {mrrBreakdownHint(mrr)}
             {mrr.includedBranches > 0 && ` · ${includedBranchesHint(mrr.includedBranches)}`}
+          </div>
+          <div className={css.cifraPie} data-mrr-modulos>
+            {mrrModulos
+              ? `Módulos ${formatCurrency(mrrModulos.total, "MXN")}: ${resumenMrrModulos(mrrModulos)}`
+              : "Módulos: sin medir (no suman a esta cifra)"}
           </div>
           {/* A QUIÉN cuenta. Esta cifra y la de /admin/clientes usan los mismos
               precios (plan_configs) y la misma regla de cobro, pero NO el mismo
@@ -514,6 +567,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
                 <th>Clínica</th>
                 <th>Estado</th>
                 <th>Plan</th>
+                <th>Módulos</th>
                 <th>Última compra</th>
                 <th>Renueva</th>
                 <th>Uso</th>
@@ -537,6 +591,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
                 // Una fecha de cobro ya pasada no es una renovación: se calla (la vencida ya lo dice su estado).
                 const renueva   = clinic.nextBillingDate && new Date(clinic.nextBillingDate) >= ahora ? clinic.nextBillingDate : null;
                 const u         = clinic.uso;
+                const modulos   = clinic.modulos ? modulosEnUso(clinic.modulos) : null;
+                const porModulos = (modulos ?? []).reduce((suma, m) => suma + m.aporteMensual, 0);
                 const vol       = salud.actividad.volumen;
 
                 return (
@@ -601,6 +657,27 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
                             <option key={p} value={p}>{p} — ${planPrices[p].toLocaleString("es-MX")}/mes</option>
                           ))}
                         </select>
+                      </div>
+                    </td>
+
+                    <td data-col="Módulos">
+                      <div className={css.pila}>
+                        {modulos === null ? (
+                          <span className={css.sinDato}>sin medir</span>
+                        ) : modulos.length === 0 ? (
+                          <span className={css.meta}>—</span>
+                        ) : (
+                          <>
+                            {modulos.map((m) => (
+                              <Chip key={m.moduleKey} tono={TONO_MODULO[m.estado]} sm title={detalleDeModulo(m)}>
+                                {m.moduleName} · {pagoDeModulo(m)}
+                              </Chip>
+                            ))}
+                            {modulos.length > 1 && porModulos > 0 && (
+                              <span className={`${css.meta} ${css.num}`}>{formatCurrency(porModulos, "MXN")}/mes en módulos</span>
+                            )}
+                          </>
+                        )}
                       </div>
                     </td>
 
@@ -672,7 +749,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, ahoraISO
               })}
               {filtradas.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="ad-tabla__vacio">
+                  <td colSpan={9} className="ad-tabla__vacio">
                     {search || filtro !== "todas" ? "Ninguna clínica cumple ese filtro." : "No hay clínicas registradas."}
                   </td>
                 </tr>

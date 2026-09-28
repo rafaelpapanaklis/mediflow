@@ -7,6 +7,7 @@ import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrid
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
+import { loadModulosContratados, computeMrrModulos, modulosDeClinica, type FilaModulo } from "@/lib/admin/modulos";
 import { AdminClinicsClient, type FilaClinica } from "./clinics-client";
 
 export const metadata: Metadata = { title: "Clínicas — Admin DaleControl" };
@@ -17,8 +18,8 @@ export const metadata: Metadata = { title: "Clínicas — Admin DaleControl" };
  * COSTE: 1 consulta de precios (plan_configs, con caché) + 11 consultas de
  * datos, TODAS agregadas, en DOS tandas de 6 y 5 (el pooler se satura por
  * encima de 7 por Promise.all), más las 7 del consumo (medirUsoClinicas, en
- * dos tandas de 4 y 3). Ni una consulta por clínica: con 500 clínicas son
- * las mismas 18.
+ * dos tandas de 4 y 3) y las 2 de módulos (en fila). Ni una consulta por
+ * clínica: con 500 clínicas son las mismas 20.
  *
  * /admin es la vista del dueño de la plataforma: sus consultas son
  * deliberadamente CROSS-TENANT (no llevan clinicId) y lo que las protege es el
@@ -149,6 +150,17 @@ export default async function AdminClinicsPage() {
   // criterio que los gates que bloquean subidas y altas (@/lib/admin/uso-core).
   const uso = await medirUsoClinicas(clinics, ahora);
 
+  // ── Cuarta tanda (2 en fila): qué módulos tiene cada clínica y qué paga ──
+  // Una consulta para TODO el roster (clinic_modules) más la de la bitácora
+  // que dice qué bajas están pedidas. Ninguna por clínica.
+  const modulos = await loadModulosContratados();
+  const modulosPorClinica = new Map<string, FilaModulo[]>();
+  for (const m of modulos.filas) {
+    const lista = modulosPorClinica.get(m.clinicId);
+    if (lista) lista.push(m);
+    else modulosPorClinica.set(m.clinicId, [m]);
+  }
+
   const porClinica = <T extends { clinicId: string | null }>(filas: T[]) =>
     new Map(filas.filter((f) => f.clinicId !== null).map((f) => [f.clinicId as string, f]));
 
@@ -186,6 +198,7 @@ export default async function AdminClinicsPage() {
     totalPagado:     mPagos.get(c.id)?._sum.amount ?? 0,
     sedeIncluida:    sedesIncluidas.has(c.id),
     uso:             uso.porClinica.get(c.id),
+    modulos:         modulos.medido ? modulosDeClinica(modulosPorClinica.get(c.id) ?? [], ahora) : undefined,
   }));
 
   // MRR por la FUENTE ÚNICA (@/lib/admin/mrr), no por una suma propia: sólo
@@ -200,11 +213,19 @@ export default async function AdminClinicsPage() {
     planPrices,
   );
 
+  // Lo que entra por MÓDULOS, aparte de los planes: lo que cada clínica pagó
+  // de verdad (clinic_modules.price_paid_mxn), sin cortesías. Mismo universo
+  // que el roster: clínicas no archivadas.
+  const mrrModulos = modulos.medido
+    ? computeMrrModulos(modulos.filas, ahora, new Set(clinics.map((c) => c.id)))
+    : null;
+
   return (
     <AdminClinicsClient
       clinics={filas}
       planPrices={planPrices}
       mrr={mrr}
+      mrrModulos={mrrModulos}
       ahoraISO={ahora.toISOString()}
       avisosUso={uso.avisos}
     />
