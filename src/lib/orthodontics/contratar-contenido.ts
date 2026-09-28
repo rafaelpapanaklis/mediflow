@@ -46,9 +46,10 @@ export const CONTENIDO_ORTODONCIA: readonly CategoriaIncluida[] = [
   {
     id: "cobro",
     titulo: "Cobro y mensualidades",
-    resumen: "El tratamiento a plazos, con lo que ya se pagó y lo que falta siempre a la vista.",
+    resumen: "Cada clínica cobra a su manera, con lo pagado y lo que falta siempre a la vista.",
     puntos: [
-      "Plan de pagos con enganche y mensualidades",
+      "Tu clínica elige cómo cobra: a plazos o por control",
+      "A plazos: enganche y mensualidades",
       "Abonos de cualquier monto, hasta el saldo",
       "Promesas de pago, con su seguimiento",
       "Saldo vencido y próxima mensualidad de cada caso",
@@ -118,12 +119,6 @@ export const CONTENIDO_ORTODONCIA: readonly CategoriaIncluida[] = [
  * aquí para que quien lo termine sepa qué línea añadir arriba.
  */
 export const PENDIENTE_DE_LISTAR: readonly { categoria: CategoriaIncluida["id"]; linea: string; porQue: string }[] = [
-  {
-    categoria: "cobro",
-    linea: "Tu clínica elige: a plazos o pago por control",
-    porQue:
-      "El pago por control existe en el servidor (billing-mode.ts, updateOrthoClinicSettings), pero ninguna pantalla deja elegirlo: todas las clínicas quedan en «a plazos».",
-  },
   {
     categoria: "imagen",
     linea: "Fotos con líneas: línea E, ángulo nasolabial y línea media",

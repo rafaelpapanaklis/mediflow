@@ -141,7 +141,7 @@ test("el guardia del módulo corre en el layout Y en cada una de sus páginas", 
 
   // Un layout no se vuelve a ejecutar al navegar entre sus páginas: cada una
   // se guarda sola, antes de cargar un solo dato.
-  for (const pagina of ["tablero", "pacientes", "alertas", "cobranza", "controles"]) {
+  for (const pagina of ["tablero", "pacientes", "alertas", "cobranza", "controles", "configuracion"]) {
     const codigo = sinComentarios(leer(`src/app/dashboard/orthodontics/${pagina}/page.tsx`));
     const cuerpo = codigo.slice(codigo.indexOf("export default async function"));
     assert.ok(cuerpo.length > 0, `${pagina}: es async`);
@@ -319,11 +319,22 @@ test("lo que todavía no funciona en pantalla está anotado, y NO se lista", () 
     assert.ok(!listado.includes(p.linea), `«${p.linea}» no se promete todavía`);
     assert.ok(p.porQue.length > 20, "con su porqué");
   }
-  assert.ok(!/por control|línea E|nasolabial/i.test(listado.join("\n")));
+  assert.ok(!/línea E|nasolabial/i.test(listado.join("\n")));
   // La vista solo pinta lo listado.
   const vista = sinComentarios(leer(VISTA));
   assert.match(vista, /CONTENIDO_ORTODONCIA\.map\(/);
   assert.ok(!/PENDIENTE_DE_LISTAR/.test(vista));
+});
+
+test("«a plazos o por control» se lista porque hay una pantalla donde elegirlo", () => {
+  const cobro = CONTENIDO_ORTODONCIA.find((c) => c.id === "cobro")!;
+  assert.ok(cobro.puntos.some((p) => /a plazos o por control/.test(p)));
+  // La promesa va atada a la pantalla: si el selector desaparece de
+  // Configuración, esta línea tiene que salir de la lista.
+  const configuracion = leer("src/components/specialties/orthodontics/configuracion/OrthoConfiguracionClient.tsx");
+  assert.match(configuracion, /name="billingMode"/, "el selector del modo de cobro existe en Configuración");
+  assert.match(configuracion, /PAGO_POR_CONTROL/);
+  assert.match(configuracion, /billingMode,/, "y se guarda");
 });
 
 // ── 6. La vista previa «sin módulo» ──────────────────────────────────
