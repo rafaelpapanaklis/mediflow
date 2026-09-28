@@ -13,7 +13,7 @@
 // siendo el punto de corte del bundle — moverlos aquí no cambia qué se
 // descarga ni cuándo.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import toast from "react-hot-toast";
@@ -190,6 +190,13 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
   // explícitamente `false`, nunca en `null`/cargando).
   const [generalConsentSigned, setGeneralConsentSigned] = useState<boolean | null>(null);
   const diagnosisId = orthoRedesignVM?.diagnosis?.id ?? null;
+
+  const refetchGeneralConsentSigned = useCallback(async () => {
+    if (!diagnosisId) return;
+    const res = await getCaseIntakeOptions({ patientId: patient.id });
+    if (!isFailure(res)) setGeneralConsentSigned(res.data.generalConsentSigned);
+  }, [patient.id, diagnosisId]);
+
   useEffect(() => {
     if (!diagnosisId) {
       setGeneralConsentSigned(null);
@@ -203,6 +210,37 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
       cancelled = true;
     };
   }, [patient.id, diagnosisId]);
+
+  // H12 (QA ws1-t9): la firma del consentimiento GENERAL ocurre FUERA de esta
+  // pestaña — en la liga pública que firma la tutora desde su teléfono, o en
+  // otra pestaña del mostrador — así que el aviso «Falta el consentimiento…»
+  // se quedaba diciendo que faltaba aunque ya se hubiera firmado, hasta un F5.
+  // Mismo criterio que ya usa la pestaña «Consentimientos»
+  // (`consents-tab.tsx`, "Refresco en vivo"): recargar al recuperar el foco
+  // cubre el caso de la tableta sin pedirle nada a nadie, y el sondeo cada
+  // 30s SOLO mientras el aviso siga activo evita tráfico de fondo perpetuo.
+  useEffect(() => {
+    if (!diagnosisId) return;
+    const refetch = () => {
+      if (document.visibilityState !== "visible") return;
+      void refetchGeneralConsentSigned();
+    };
+    window.addEventListener("focus", refetch);
+    document.addEventListener("visibilitychange", refetch);
+    return () => {
+      window.removeEventListener("focus", refetch);
+      document.removeEventListener("visibilitychange", refetch);
+    };
+  }, [diagnosisId, refetchGeneralConsentSigned]);
+
+  useEffect(() => {
+    if (!diagnosisId || generalConsentSigned !== false) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void refetchGeneralConsentSigned();
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [diagnosisId, generalConsentSigned, refetchGeneralConsentSigned]);
 
   return (
     <>
