@@ -644,6 +644,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             monthAt: newCardDefaults.monthAt,
             wireFrom: newCardDefaults.wireFrom,
             visitDate: newCardDefaults.visitDate,
+            monthTotal: t.monthTotal > 0 ? t.monthTotal : null,
           }}
           availableWires={vm.wireSequence}
           onClose={closeDrawer}

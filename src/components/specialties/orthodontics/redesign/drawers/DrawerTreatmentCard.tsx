@@ -79,6 +79,8 @@ export interface DrawerTreatmentCardProps {
     monthAt: number;
     wireFrom: WireStepDTO | null;
     visitDate: string;
+    /** Duración estimada del caso, en meses. La usan las plantillas de nota («Mes 4 de 18»). */
+    monthTotal?: number | null;
   };
   /**
    * C4: foto-sets ya existentes del caso (subidos desde la sección de fotos)
@@ -171,7 +173,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     const arcoDe = props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null;
     const nota = aplicarPlantillaAlControl(state.soap, plantilla, {
       mes: props.card?.monthAt ?? props.defaultsForNew?.monthAt ?? null,
-      duracionMeses: null,
+      duracionMeses: props.defaultsForNew?.monthTotal ?? null,
       fase: clave ? ((PHASE_LABELS as Record<string, string>)[clave] ?? clave) : null,
       arcoActual: arcoDe ? wireText(arcoDe) : null,
       arcoNuevo: wireToCurrent ? wireText(wireToCurrent) : null,

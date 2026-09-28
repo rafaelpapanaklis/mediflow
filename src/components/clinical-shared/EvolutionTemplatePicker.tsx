@@ -147,7 +147,7 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
                       color: "var(--text-2)",
                     }}
                   >
-                    default
+                    habitual
                   </span>
                 ) : null}
               </button>

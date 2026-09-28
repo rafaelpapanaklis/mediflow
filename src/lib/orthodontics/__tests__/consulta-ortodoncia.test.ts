@@ -138,5 +138,9 @@ test("se cuentan los huecos que quedan por llenar", () => {
   assert.equal(huecosPorLlenar({ s: "a ____ b", o: "____ y ____", a: "nada", p: "" }), 3);
   const hoja = leer("src/components/specialties/orthodontics/redesign/drawers/DrawerTreatmentCard.tsx");
   assert.match(hoja, /const huecos = huecosPorLlenar\(state\.soap\);/);
+  // Desde la ficha la hoja sabe cuánto dura el caso: «Mes 4 de 18», sin hueco.
+  assert.match(hoja, /duracionMeses: props\.defaultsForNew\?\.monthTotal \?\? null,/);
+  const ficha = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
+  assert.match(ficha, /monthTotal: t\.monthTotal > 0 \? t\.monthTotal : null,/);
   assert.match(hoja, /La plantilla dejó 1 hueco \(____\) por llenar\./);
 });
