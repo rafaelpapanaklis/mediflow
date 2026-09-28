@@ -84,3 +84,32 @@ test("solo casa la fecha exacta: con espacios o con hora no entra por la vía de
     assert.equal(formatDate(v), referencia(v), v);
   }
 });
+
+// ── Los que pintaban la fecha sin hora por su cuenta ─────────────────────
+// No pasan por `formatDate`: tenían su propio `new Date(x).toLocale…`.
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const SRC = join(__dirname, "..", "..");
+const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
+const sinComentarios = (c: string) =>
+  c.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+test("la cabecera de la ficha pinta la próxima cita con `fechaCorta`, con y sin rediseño", async () => {
+  const hero = sinComentarios(leer("components/dashboard/patient-detail/hero-card.tsx"));
+  assert.doesNotMatch(hero, /\.format\(new Date\(iso\)\)/, "la cabecera volvió a leer el día suelto con new Date()");
+  assert.match(hero, /function fechaCabecera[\s\S]{0,120}return fechaCorta\(iso\)/);
+  const { fechaCorta, fechaConAno } = await import("@/components/dashboard/pacientes-rediseno/fechas");
+  assert.equal(fechaCorta("2026-09-28"), "28 sep");
+  assert.equal(fechaConAno("2026-01-01"), "1 ene 2026");
+});
+
+test("el portal del paciente trata la fecha sin hora como día de calendario", () => {
+  const portal = sinComentarios(leer("app/portal/[token]/portal-client.tsx"));
+  const i = portal.indexOf("function formatDate");
+  assert.ok(i >= 0);
+  const cuerpo = portal.slice(i, i + 700);
+  assert.match(cuerpo, /FECHA_SIN_HORA\.exec\(s\)/);
+  assert.match(cuerpo, /timeZone:\s*"UTC"/);
+});
