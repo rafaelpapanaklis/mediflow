@@ -137,8 +137,15 @@ export async function toggleClinicModule(
         clinicId,
         moduleKey,
         origen: "cortesia",
-        // Cada cortesía es una activación deliberada: su momento la identifica.
-        referencia: `admin:${now.getTime()}`,
+        // Una cortesía por clínica, módulo y DÍA (de México): apagar y encender
+        // varias veces el mismo día no le manda un correo por cada clic al
+        // dueño. La llave ya lleva clínica y módulo (llaveCorreoModulo).
+        referencia: `admin:${new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Mexico_City",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(now)}`,
       });
     },
     log: async (entry: ToggleAuditEntry) => {
