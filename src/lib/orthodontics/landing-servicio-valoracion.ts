@@ -12,23 +12,48 @@ export interface ServicioDeLanding {
 }
 
 /**
- * Agrega "Valoración de ortodoncia" a `servicios` si el módulo está activo
- * (`orthoValoracion` no nulo) y la clínica no tiene ya un servicio con ese
- * mismo nombre en su landing (lo habría escrito a mano). `name` sale del
- * catálogo de Configuración: al reservarlo, `Appointment.type` queda con el
- * texto EXACTO que reconoce el resto del módulo (Tablero, Agenda).
+ * Agrega un servicio de ortodoncia (nombre EXACTO del catálogo de
+ * Configuración, para que `Appointment.type` quede reconocible por el resto
+ * del módulo) a `servicios`, sin duplicar si la clínica ya tiene uno con ese
+ * mismo nombre escrito a mano en su landing.
+ */
+function conServicioDeOrtodoncia<T extends ServicioDeLanding>(
+  servicios: T[],
+  servicio: { name: string; durationMin: number } | null | undefined,
+): T[] {
+  if (!servicio?.name) return servicios;
+  const yaEsta = servicios.some(
+    (s) => s.name.trim().toLowerCase() === servicio.name.trim().toLowerCase(),
+  );
+  if (yaEsta) return servicios;
+  return [
+    ...servicios,
+    { name: servicio.name, price: null, durationMin: servicio.durationMin, icon: "🦷" } as T,
+  ];
+}
+
+/**
+ * Agrega "Valoración de ortodoncia" — se ofrece a TODO visitante (con o sin
+ * sesión) cuando el módulo está activo en la clínica. Ver
+ * `conControlDeOrtodoncia` para el caso del paciente YA identificado con un
+ * caso activo (ws1-t1 ronda 2).
  */
 export function conValoracionDeOrtodoncia<T extends ServicioDeLanding>(
   servicios: T[],
   orthoValoracion: { name: string; durationMin: number } | null | undefined,
 ): T[] {
-  if (!orthoValoracion?.name) return servicios;
-  const yaEsta = servicios.some(
-    (s) => s.name.trim().toLowerCase() === orthoValoracion.name.trim().toLowerCase(),
-  );
-  if (yaEsta) return servicios;
-  return [
-    ...servicios,
-    { name: orthoValoracion.name, price: null, durationMin: orthoValoracion.durationMin, icon: "🦷" } as T,
-  ];
+  return conServicioDeOrtodoncia(servicios, orthoValoracion);
+}
+
+/**
+ * ws1-t1 ronda 2 — agrega "Control de ortodoncia" SOLO para el paciente ya
+ * identificado (sesión del portal) que tiene un caso activo en esta clínica
+ * (`GET /api/public/orthodontics/mi-control`). Un visitante sin sesión, o un
+ * paciente sin caso, nunca ve esta opción — solo Valoración.
+ */
+export function conControlDeOrtodoncia<T extends ServicioDeLanding>(
+  servicios: T[],
+  casoActivo: { label: string; durationMin: number } | null | undefined,
+): T[] {
+  return conServicioDeOrtodoncia(servicios, casoActivo ? { name: casoActivo.label, durationMin: casoActivo.durationMin } : null);
 }

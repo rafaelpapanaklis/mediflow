@@ -15,7 +15,8 @@ import {
   normalizeServices,
   type BookingFlowService,
 } from "@/app/[slug]/_shared/booking-flow";
-import { conValoracionDeOrtodoncia } from "@/lib/orthodontics/landing-servicio-valoracion";
+import { conControlDeOrtodoncia, conValoracionDeOrtodoncia } from "@/lib/orthodontics/landing-servicio-valoracion";
+import { useMiControlOrto } from "@/lib/orthodontics/use-mi-control-orto";
 import {
   currentBookingNext,
   useBookingReopen,
@@ -50,12 +51,17 @@ export function BookingClient({
 }) {
   const theme = clinic.landingThemeColor || "#2563eb";
 
+  // ws1-t1 ronda 2 — paciente ya identificado (portal) con caso activo en
+  // esta clínica: se le ofrece "Control de ortodoncia" con su doctor
+  // tratante. Solo se pregunta si el módulo está activo aquí.
+  const casoActivo = useMiControlOrto(clinic.slug, !!clinic.orthoValoracion);
+
   // Los servicios con precio y duración mandan; si la clínica no configuró su
   // mini-web, quedan los nombres por categoría que ya venían de la página.
   const services: BookingFlowService[] = (() => {
     const propios = normalizeServices(clinic.landingServices);
     const base = propios.length > 0 ? propios : normalizeServices(categoryServices ?? []);
-    return conValoracionDeOrtodoncia(base, clinic.orthoValoracion);
+    return conControlDeOrtodoncia(conValoracionDeOrtodoncia(base, clinic.orthoValoracion), casoActivo);
   })();
 
   // Al volver del login/registro se reabre en el hueco que ya había elegido.
@@ -112,7 +118,8 @@ export function BookingClient({
           }}
           theme={theme}
           surface="dark"
-          preselectedService={preselectedService}
+          preselectedDoctorId={casoActivo?.treatingDoctorId ?? undefined}
+          preselectedService={preselectedService ?? casoActivo?.label ?? null}
           restore={restore}
           nextPath={next}
         />
