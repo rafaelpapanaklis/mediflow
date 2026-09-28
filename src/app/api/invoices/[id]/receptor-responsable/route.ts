@@ -15,7 +15,7 @@ import { leerResponsableParaCfdi, guardarFiscalesDelResponsable } from "@/lib/or
 
 export const dynamic = "force-dynamic";
 
-async function facturaVisible(ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>, id: string): Promise<NextResponse | null> {
+async function facturaVisible(ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>, id: string): Promise<Response | null> {
   const inv = await prisma.invoice.findFirst({ where: { id, clinicId: ctx.clinicId }, select: { patientId: true } });
   if (!inv) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
   if (inv.patientId) {

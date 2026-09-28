@@ -88,7 +88,7 @@ export async function guardarFiscalesDelResponsable(
   clinicId: string,
   invoiceId: string,
   datos: Partial<DatosFiscales>,
-): Promise<{ ok: true } | { ok: false; motivo: "sin-responsable" | "sin-columnas" }> {
+): Promise<{ ok: boolean; motivo?: "sin-responsable" | "sin-columnas" }> {
   const guardianId = await responsableDeLaFactura(clinicId, invoiceId);
   if (!guardianId) return { ok: false, motivo: "sin-responsable" };
   if (!(await columnasExisten())) return { ok: false, motivo: "sin-columnas" };
