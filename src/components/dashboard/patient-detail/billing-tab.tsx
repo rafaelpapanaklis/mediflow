@@ -15,6 +15,7 @@ import {
 import { fmtMXN, fmtMXNdec } from "@/lib/format";
 import { formatDate } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
+import { PagosMigradosCard } from "./pagos-migrados-card";
 import styles from "./patient-detail.module.css";
 
 /**
@@ -36,6 +37,8 @@ export interface PatientBillingInvoice {
 }
 
 interface BillingTabProps {
+  /** ws1-t6: alimenta la tarjeta "Pagos anteriores (migrados)", de solo lectura, debajo de las facturas. */
+  patientId: string;
   invoices: PatientBillingInvoice[];
   /** Totales YA calculados por el parent (los mismos del rail — sin queries nuevas). */
   summary: { total: number; paid: number; balance: number };
@@ -64,6 +67,7 @@ const MONEY_CELL: CSSProperties = {
 };
 
 export function BillingTab({
+  patientId,
   invoices,
   summary,
   facturApiEnabled,
@@ -181,6 +185,10 @@ export function BillingTab({
           </div>
         )}
       </CardNew>
+
+      <div style={{ marginTop: 14 }}>
+        <PagosMigradosCard patientId={patientId} />
+      </div>
     </div>
   );
 }
