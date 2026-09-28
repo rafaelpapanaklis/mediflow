@@ -106,13 +106,13 @@ export const SPECIALTIES: Record<string, Specialty> = {
     // de cobro automático a tarjeta ni CFDI por mensualidad: no existen. Y nada
     // de hacer la cefalometría dentro del panel: Rafael canceló el trazado (28-sep-2026);
     // lo que hay es guardar el PDF que entrega el centro radiológico o el
-    // programa del doctor. En la franja de métricas, las cifras de retención,
-    // casos documentados y carga administrativa son las que ya tenía la página;
-    // Rafael las confirmó, igual que el testimonio (28-sep-2026): no se tocan.
+    // programa del doctor. La franja de métricas es la original de la página,
+    // las cuatro cifras; Rafael las confirmó, igual que el testimonio
+    // (28-sep-2026): no se tocan.
     tagline: "Casos, controles y mensualidades", eyebrow: "Para ortodoncistas",
     heroTitle: "Casos, controles y mensualidades en un solo lugar.",
     heroSub:   "Abre el caso con su diagnóstico y su plan, lleva cada control desde la agenda con su hoja de control y cobra las mensualidades en Caja. Tu recepción sabe quién debe y cuánto.",
-    metricsStrip: [["7", "Tipos de cita de ortodoncia"], ["+34%", "Retención paciente"], ["100%", "Casos documentados"], ["< 2 h", "Carga admin/sem"]],
+    metricsStrip: [["18 mo", "Tratamiento promedio"], ["+34%", "Retención paciente"], ["100%", "Casos documentados"], ["< 2 h", "Carga admin/sem"]],
     features: [
       feature("Expediente y alta del caso", "Abre el caso desde la ficha del paciente: diagnóstico (clase de Angle, overjet, overbite, apiñamiento), técnica, duración, doctor tratante y quién paga. También puedes dejar al paciente en observación.", "doc"),
       feature("Mensualidades a plazos o por control", "Tu clínica elige cómo cobra: precio total con enganche y mensualidades, o pago por control. Acepta abonos de cualquier monto y registra promesas de pago.", "invoice"),
