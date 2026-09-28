@@ -88,6 +88,19 @@ export interface QuoteDTO {
    * corregirle una coma le borraría el plan de mensualidades ya firmado.
    */
   condicionesPagoIlegible?: boolean;
+  /**
+   * Presupuesto de ortodoncia ACEPTADO en una sede con el módulo (ws1-t5): en
+   * vez de «Crear plan de tratamiento» ofrece abrir (o ver) el caso de
+   * ortodoncia del paciente. Solo lo pone GET /api/quotes; ausente = el botón
+   * de siempre. Ver `src/lib/quotes/ortodoncia.ts`.
+   */
+  casoOrtodoncia?: {
+    accion: "abrir-caso" | "ver-caso" | "sin-permiso";
+    etiqueta: string;
+    /** `null` = quien mira no puede entrar al módulo: el botón explica quién abre el caso. */
+    href: string | null;
+    aviso?: string;
+  };
 }
 
 /** Ítem de factura tal como se guarda en el JSON `Invoice.items`. */

@@ -5,6 +5,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { distinctPhaseCount } from "@/lib/quotes/compute";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { casosDesdePresupuestos } from "@/lib/quotes/ortodoncia.server";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,11 @@ interface Params { params: { id: string } }
  * POST /api/quotes/[id]/treatment-plan — crea un plan de tratamiento ACTIVE a
  * partir de un presupuesto ACEPTADO. totalCost = total; sesiones = nº de fases.
  * Idempotente: si ya se generó (y sigue existiendo), devuelve el mismo plan.
+ *
+ * Presupuesto de ORTODONCIA en una sede con el módulo (ws1-t5): NO crea un
+ * plan general. Responde `{ casoOrtodoncia }` con a dónde ir para abrir (o
+ * ver) el caso de ortodoncia del paciente. El caso lo abre el asistente de
+ * alta de la ficha, con sus propios permisos; aquí no se escribe nada.
  */
 export async function POST(_req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
@@ -29,7 +35,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
   const quote = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    include: { items: { select: { phase: true } } },
+    include: { items: { select: { phase: true, name: true } } },
   });
   if (!quote) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
 
@@ -60,6 +66,15 @@ export async function POST(_req: NextRequest, { params }: Params) {
     if (existing) {
       return NextResponse.json({ treatmentPlanId: existing.id, name: existing.name, already: true });
     }
+  }
+
+  // De ortodoncia y con el módulo: se ofrece el caso, no un plan general.
+  const caso = (await casosDesdePresupuestos(ctx, [quote])).get(quote.id);
+  if (caso) {
+    // Sin el permiso del módulo tampoco se crea el plan general: se dice
+    // quién abre el caso.
+    if (!caso.href) return NextResponse.json({ error: caso.aviso, casoOrtodoncia: caso }, { status: 409 });
+    return NextResponse.json({ casoOrtodoncia: caso });
   }
 
   const doctorId = quote.createdById ?? ctx.userId;

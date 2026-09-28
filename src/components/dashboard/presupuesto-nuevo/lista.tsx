@@ -317,12 +317,18 @@ function Ficha({
               tono="principal"
               onClick={async () => {
                 if (quote.treatmentPlanId) { onVerPlan?.(quote.treatmentPlanId); return; }
+                // Presupuesto de ortodoncia en una sede con el módulo: abre el
+                // caso de ortodoncia del paciente, no un plan general.
+                if (quote.casoOrtodoncia?.href) { window.location.assign(quote.casoOrtodoncia.href); return; }
                 const salida = await post(`/api/quotes/${quote.id}/treatment-plan`);
+                if (salida?.casoOrtodoncia?.href) { window.location.assign(salida.casoOrtodoncia.href); return; }
                 if (salida?.treatmentPlanId) onVerPlan?.(salida.treatmentPlanId);
               }}
             >
               <ClipboardList size={13} />
-              {quote.treatmentPlanId ? t("quotes.card.viewPlan") : t("quotes.card.createPlan")}
+              {quote.treatmentPlanId
+                ? t("quotes.card.viewPlan")
+                : quote.casoOrtodoncia?.etiqueta ?? t("quotes.card.createPlan")}
             </Accion>
           </>
         )}

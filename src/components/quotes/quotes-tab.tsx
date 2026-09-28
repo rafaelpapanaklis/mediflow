@@ -389,12 +389,19 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
               onClick={async () => {
                 // Ya tiene plan → ábrelo (tab Tratamiento). Si no, créalo y ábrelo.
                 if (quote.treatmentPlanId) { onViewPlan?.(quote.treatmentPlanId); return; }
+                // Presupuesto de ortodoncia en una sede con el módulo: abre el
+                // caso de ortodoncia del paciente, no un plan general.
+                if (quote.casoOrtodoncia?.href) { window.location.assign(quote.casoOrtodoncia.href); return; }
                 const out = await post(`/api/quotes/${quote.id}/treatment-plan`);
+                if (out?.casoOrtodoncia?.href) { window.location.assign(out.casoOrtodoncia.href); return; }
                 if (out?.treatmentPlanId) onViewPlan?.(out.treatmentPlanId);
               }}
               tone="primary"
             >
-              <ClipboardList size={12} /> {quote.treatmentPlanId ? t("quotes.card.viewPlan") : t("quotes.card.createPlan")}
+              <ClipboardList size={12} />{" "}
+              {quote.treatmentPlanId
+                ? t("quotes.card.viewPlan")
+                : quote.casoOrtodoncia?.etiqueta ?? t("quotes.card.createPlan")}
             </Btn>
           </>
         )}

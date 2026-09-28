@@ -8,6 +8,7 @@ import { normalizarCondiciones } from "@/lib/quotes/condiciones-pago";
 import { guardarCondiciones, leerCondicionesDeVarios } from "@/lib/quotes/condiciones-pago-db";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { casosDesdePresupuestos } from "@/lib/quotes/ortodoncia.server";
 
 export const dynamic = "force-dynamic";
 
@@ -62,8 +63,17 @@ export async function GET(req: NextRequest) {
   // su forma de pago». Es de esta lista de donde el editor saca el presupuesto
   // que abre, así que es aquí donde la mentira «no tiene plan» se convertiría
   // en un borrado al guardar.
+  // Presupuestos de ortodoncia aceptados, en una sede con el módulo: ofrecen
+  // abrir el caso de ortodoncia en vez de un plan general (ws1-t5). Todo con
+  // la clínica y los permisos de la sesión; sin módulo, mapa vacío.
+  const casos = await casosDesdePresupuestos(ctx, quotes);
+
   return NextResponse.json(
-    quotes.map((q) => serializeQuote(q, porQuote.get(q.id) ?? null, fallo)),
+    quotes.map((q) => {
+      const dto = serializeQuote(q, porQuote.get(q.id) ?? null, fallo);
+      const caso = casos.get(q.id);
+      return caso ? { ...dto, casoOrtodoncia: caso } : dto;
+    }),
   );
 }
 
