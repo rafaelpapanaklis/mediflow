@@ -22,10 +22,18 @@
 // tiene el módulo este layout no llega a montarse. El guardia es
 // `exigirModuloOrtodoncia` (src/lib/orthodontics/exigir-modulo.ts), que además
 // corre en cada página; la decisión es `decidirEntradaAlModulo`, pura y con tests.
+//
+// ws1-t4 ronda 6 (fila 31 de la revisión de lógica de uso): el submenú solo
+// enseña lo que la persona puede abrir. «Configuración» pide `settings.view`;
+// a un doctor o a recepción les salía en el menú y al entrar recibían un error
+// de permisos. Qué apartado pide qué lo dice `submenu-permisos.ts`.
 export const dynamic = "force-dynamic";
 
 import type { ReactNode } from "react";
+import { getCurrentUser } from "@/lib/auth";
+import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
+import { apartadosPermitidos } from "@/lib/orthodontics/submenu-permisos";
 import { RaizModulo } from "@/components/specialties/orthodontics/modulo/piezas";
 import { SubmenuOrtodoncia } from "@/components/specialties/orthodontics/modulo/submenu";
 
@@ -50,11 +58,19 @@ export default async function OrthodonticsModuleLayout({
   // para por qué en los dos sitios).
   await exigirModuloOrtodoncia();
 
+  // Los permisos salen de la sesión. Un layout no se vuelve a ejecutar al
+  // navegar entre sus páginas, y no hace falta: los permisos de una persona
+  // no cambian por cambiar de apartado.
+  const user = await getCurrentUser();
+  const apartados = apartadosPermitidos(SUBMENU, (permiso) =>
+    hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride }, permiso as PermissionKey),
+  );
+
   // Diseño (ws1-t3): la raíz del módulo trae los tokens y la tipografía del
   // rediseño; el submenú marca el apartado abierto y se queda pegado arriba.
   return (
     <RaizModulo>
-      <SubmenuOrtodoncia apartados={SUBMENU} />
+      <SubmenuOrtodoncia apartados={apartados} />
       {children}
     </RaizModulo>
   );

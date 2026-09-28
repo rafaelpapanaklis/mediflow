@@ -12,12 +12,30 @@ import { prisma } from "@/lib/prisma";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { canPurchaseModules, canRequestModuleCancellation } from "@/lib/marketplace/module-purchase-core";
 import { OrthoConfiguracionClient } from "@/components/specialties/orthodontics/configuracion/OrthoConfiguracionClient";
-import { Pantalla } from "@/components/specialties/orthodontics/modulo/piezas";
+import { Lock } from "lucide-react";
+import { hasPermission } from "@/lib/auth/permissions";
+import { Pantalla, Vacio } from "@/components/specialties/orthodontics/modulo/piezas";
 import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 
 export default async function OrthodonticsConfiguracionPage() {
   await exigirModuloOrtodoncia();
   const user = await getCurrentUser();
+  // ws1-t4 ronda 6 (fila 31): quien no puede ver la configuración ya no tiene
+  // la entrada en el submenú; si llega por la dirección, se le dice en
+  // palabras de la clínica, no con el nombre de un permiso.
+  if (!hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride }, "settings.view")) {
+    return (
+      <Pantalla titulo="Configuración">
+        <Vacio
+          alto
+          icono={Lock}
+          tono="neutro"
+          titulo="La configuración del módulo la cambia quien administra la clínica"
+          pista="Tu usuario puede trabajar con los casos, los controles y la cobranza, pero no cambiar cómo está configurado el módulo. Si necesitas un cambio, pídeselo a quien administra la clínica."
+        />
+      </Pantalla>
+    );
+  }
   // Ola 2 (ws1-t1): el catálogo se pide aparte, en paralelo — si falla (SQL
   // de orthoIncludedInTreatment sin pegar, o sin permiso), la Configuración
   // igual se pinta: la sección de procedimientos queda vacía, no tumba la

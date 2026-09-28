@@ -95,7 +95,8 @@ test("el layout pasa por el guardia del módulo y monta la raíz y el submenú",
   // pase por él ANTES de pintar nada.
   const layout = leer("src/app/dashboard/orthodontics/layout.tsx");
   assert.match(layout, /await exigirModuloOrtodoncia\(\);/);
-  assert.match(layout, /<RaizModulo>\s*<SubmenuOrtodoncia apartados=\{SUBMENU\} \/>\s*\{children\}\s*<\/RaizModulo>/);
+  // `apartados` es SUBMENU sin lo que la persona no puede abrir (submenu-permisos.ts).
+  assert.match(layout, /<RaizModulo>\s*<SubmenuOrtodoncia apartados=\{apartados\} \/>\s*\{children\}\s*<\/RaizModulo>/);
   assert.ok(layout.indexOf("await exigirModuloOrtodoncia()") < layout.indexOf("<RaizModulo>"));
 });
 
