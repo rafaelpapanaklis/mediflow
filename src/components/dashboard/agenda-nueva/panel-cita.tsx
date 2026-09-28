@@ -49,6 +49,7 @@ import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detai
 import { ModalPedirAnticipo } from "@/components/dashboard/billing/modal-pedir-anticipo";
 import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
 import { RanuraCita } from "@/components/specialties/orthodontics/agenda/RanuraCita";
+import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
@@ -334,7 +335,16 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
     try {
       const res = await fetch(`/api/invoices/by-appointment/${dto.id}`);
       if (res.status === 404) {
-        toast("Esta cita todavía no tiene factura.");
+        // ws1-t4 #70: un control de ortodoncia no lleva factura propia (va en la
+        // mensualidad, o se cobra desde su caso): decir «no tiene factura» y dejar
+        // al usuario sin camino era el «Cobrar» que no sirve; el que sirve es el
+        // recuadro de Ortodoncia de este mismo panel.
+        toast(
+          esCitaOrtoConHoja(dto.reason ?? null)
+            ? "Este control no lleva factura propia: cóbralo desde el recuadro de Ortodoncia de esta cita (mensualidad o extra del caso)."
+            : "Esta cita todavía no tiene factura.",
+          { duration: 6000 },
+        );
         return;
       }
       const cuerpo = await res.json().catch(() => ({}));
@@ -685,8 +695,12 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                 component (page.tsx → hasPermission), así que un READONLY o un
                 permiso a medida sin billing.deposit no lo ve, y el servidor lo
                 vuelve a exigir igual. */}
+            {/* ws1-t4 #71: un control de ortodoncia ya va en la mensualidad del caso
+                (o se cobra después de la visita): pedir un anticipo por él sería
+                pedir dinero por una visita ya pagada. */}
             {(cita.estado === "SCHEDULED" || cita.estado === "CONFIRMED") &&
               new Date(dto.startsAt).getTime() > ahora.getTime() &&
+              !esCitaOrtoConHoja(dto.reason ?? null) &&
               permissions.canDeposit && (
               <button type="button" className={s.accionSecundaria} onClick={() => setPidiendoAnticipo(true)}>
                 <Wallet size={18} strokeWidth={2} />

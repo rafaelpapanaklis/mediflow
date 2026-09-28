@@ -58,3 +58,10 @@ test("la pantalla lo pinta y el cargador pide los extras UNA vez para todos los 
   assert.match(db, /if \(!clinicId \|\| treatmentPlanIds\.length === 0\) return out;/);
   assert.match(db, /WHERE "clinicId" = \$\{clinicId\}/);
 });
+
+// ws1-t4 #70 / #71 — el panel de la cita de un control de ortodoncia.
+test("panel de la cita: sin «Pedir anticipo» en un control, y el «Cobrar» sin factura manda al recuadro de Ortodoncia", () => {
+  const src = leer("components/dashboard/agenda-nueva/panel-cita.tsx");
+  assert.match(src, /!esCitaOrtoConHoja\(dto\.reason \?\? null\) &&\s*permissions\.canDeposit/);
+  assert.match(src, /cóbralo desde el recuadro de Ortodoncia/);
+});
