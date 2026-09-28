@@ -19,6 +19,10 @@ import { UpcomingAppointmentsCard } from "./parts/upcoming-appointments-card";
 // ya los calculaba (buildAlerts en /api/dashboard/home/admin) pero
 // ninguna pantalla los pintaba. Ver REPORTE-ws1-t2.md, punto 3c.
 import { AdminAlertRow } from "./parts/admin-alert-row";
+// ronda 3 (ws1-t2, H14) — el aviso de mensualidades vencidas de ortodoncia
+// solo estaba montado en el Hoy de recepción: el dueño/administrador no lo
+// veía. Mismo componente self-fetch (se calla solo si no hay nada vencido).
+import { AvisoMensualidadesVencidas } from "./aviso-mensualidades-vencidas";
 import { useT } from "@/i18n/i18n-provider";
 import type { HomeAdminData, AdminPeriod } from "@/lib/home/types";
 
@@ -68,6 +72,9 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         />
         <HomeQuickActions />
       </div>
+
+      {/* ronda 3 (ws1-t2, H14) — mensualidades de ortodoncia vencidas. Se calla sola si no hay ninguna. */}
+      <AvisoMensualidadesVencidas />
 
       <div
         role="group"

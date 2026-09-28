@@ -22,6 +22,7 @@ import { CLASES_FACTURA_REDISENO, CLASES_CALENDARIO_REDISENO, clasesFactura as c
 // Mercado Pago (ws1-t1): un método más, pero NO se teclea: genera el link y el
 // pago se registra solo. Sin cuenta conectada, el botón ni sale.
 import { BotonMercadoPago, LinkMercadoPago, clasesMetodoClasico, useCobroMercadoPago } from "./link-mercado-pago";
+import { montoInicialDeCobro } from "./monto-inicial-cobro";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
 /**
@@ -62,9 +63,20 @@ interface PaymentModalProps {
    * = las clases de siempre, byte por byte. La lógica del cobro no cambia.
    */
   rediseno?: boolean;
+  /**
+   * ronda 3 (ws1-t2, H6): el monto con el que arranca el campo «Monto a
+   * cobrar». Sin esto (el comportamiento de siempre) arranca con el SALDO
+   * COMPLETO de la factura — correcto para "Registrar pago" desde la ficha
+   * de una factura suelta, pero un desastre para cobrar UNA mensualidad de
+   * un plan a plazos: precargaba los $36,000 del tratamiento entero en vez
+   * de los $2,000 de la cuota. Quien cobra una cuota específica (Caja →
+   * mensualidades, «Cobrar» de la Sección F) pasa aquí SU monto. Se clampea
+   * al saldo (nunca por encima, o el campo nace en «sobrepago»).
+   */
+  montoSugerido?: number;
 }
 
-export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = false }: PaymentModalProps) {
+export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = false, montoSugerido }: PaymentModalProps) {
   const t = useT();
   const [amount, setAmount]       = useState("");
   const [method, setMethod]       = useState<MetodoDelCobro>("cash");
@@ -82,11 +94,12 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
   // Reset whenever the modal opens for a new invoice.
   useEffect(() => {
     if (!open || !invoice) return;
-    setAmount(String(invoice.balance ?? 0));
+    setAmount(String(montoInicialDeCobro(montoSugerido, invoice.balance ?? 0)));
     setMethod("cash");
     setPaidAt(todayLocalISO());
     setReference("");
     setNotes("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, invoice]);
 
   if (!invoice) return null;

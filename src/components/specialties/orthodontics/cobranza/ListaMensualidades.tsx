@@ -25,7 +25,7 @@ import { ArrowRight } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import av from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.css";
-import { fmtMoney, fmtDate } from "../redesign/atoms/format";
+import { fmtMoney, fmtDay } from "../redesign/atoms/format";
 // ws1-t5 (arreglo): el botón y la lista de hermanos dicen a cuántos, con test.
 import { listaDeNombres, rotuloCobrar } from "@/lib/orthodontics/rotulo-cobro";
 import {
@@ -67,6 +67,11 @@ function agrupar(items: MensualidadPorCobrar[]): Grupo[] {
     grupos.push({ clave: it.treatmentPlanId, guardianName: null, items: [it] });
   }
   return grupos;
+}
+
+/** ws1-t2 (ronda 3, H7): suma `cantidadVencidas` de todos los items del grupo (hermanos incluidos). */
+function cantidadVencidasDelGrupo(g: Grupo): number {
+  return g.items.reduce((s, it) => s + it.cantidadVencidas, 0);
 }
 
 function comoFactura(it: MensualidadPorCobrar): PaymentInvoice {
@@ -152,13 +157,18 @@ export function ListaMensualidades() {
             <li key={g.clave} className={av.filaCobro}>
               <div className={av.quien}>
                 <span className={av.quienNombre}>{g.guardianName ?? g.items[0].patientName}</span>
-                <BadgeNew tone={pill.tono} dot>{pill.label}</BadgeNew>
+                {/* ws1-t2 (ronda 3, H7): cuántas cuotas vencidas trae el total de
+                    abajo — reusa la MISMA pastilla (no cabe otra en la columna
+                    del importe, de ancho fijo). */}
+                <BadgeNew tone={pill.tono} dot>
+                  {peorEstado === "vencida" && cantidadVencidasDelGrupo(g) > 1 ? `${cantidadVencidasDelGrupo(g)} vencidas` : pill.label}
+                </BadgeNew>
                 {g.items.length > 1 && (
                   <span className={av.quienHermanos}>{listaDeNombres(g.items.map((it) => it.patientName))}</span>
                 )}
               </div>
               <span className={av.vence}>
-                <span className={av.venceRotulo}>Vence</span> {fmtDate(g.items[0].vencimiento)}
+                <span className={av.venceRotulo}>Vence</span> {fmtDay(g.items[0].vencimiento)}
               </span>
               <span className={av.montoFila}>{fmtMoney(subtotal)}</span>
               <ButtonNew variant="primary" size="sm" onClick={() => iniciarCobro(g.items)}>
@@ -178,6 +188,7 @@ export function ListaMensualidades() {
           onClose={() => setCobrandoCola(null)}
           onSuccess={alGuardarUno}
           rediseno={rediseno}
+          montoSugerido={cobrandoCola[0].monto}
         />
       )}
       {cobrandoCola && cobrandoCola.length > 1 && (

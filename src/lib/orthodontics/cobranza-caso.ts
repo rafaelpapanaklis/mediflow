@@ -237,6 +237,60 @@ export interface CobranzaUnificadaInput {
  * comportamiento de siempre (`cobranzaDelCaso` sin tocar). PAGO_POR_CONTROL:
  * la colocación/enganche (si existe) + los controles atendidos, combinados.
  */
+// ═══════════════════════════════════════════════════════════════════════════
+// AGRUPAR VENCIDAS POR FACTURA (ws1-t2, ronda 3 — H7) — `resumen.vencidas` es
+// la lista COMPLETA de cuotas vencidas de un caso, pero Recepción («Caja» y
+// el aviso de Hoy) cobra por FACTURA, no por cuota suelta: en modo
+// PRECIO_TOTAL todas comparten la MISMA factura (`invoiceId` del plan), así
+// que se agrupan en una sola fila con el TOTAL vencido; en PAGO_POR_CONTROL
+// cada cuota ya trae su propio `invoiceId` (un control es su propia
+// factura), así que salen agrupadas por separado — nunca se suman importes
+// de dos facturas distintas en una sola fila de cobro.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface GrupoDeVencidas {
+  invoiceId: string;
+  cuotas: CuotaConEstado[];
+  /** Suma de `falta` de las cuotas del grupo, en pesos. */
+  monto: number;
+  /** Cuántas cuotas vencidas trae este grupo. */
+  cantidad: number;
+  /** "YYYY-MM-DD" de la más vieja del grupo. */
+  vencimiento: string;
+}
+
+/**
+ * Agrupa las cuotas vencidas de un caso por la factura a la que pertenecen.
+ * `invoiceIdPorDefecto` es la factura del plan (PRECIO_TOTAL): las cuotas sin
+ * `invoiceId` propio (todas, en ese modo) caen ahí. Una cuota sin ningún
+ * `invoiceId` resoluble (no debería pasar) se descarta, no se pierde en una
+ * suma incorrecta.
+ */
+export function agruparVencidasPorFactura(
+  vencidas: CuotaConEstado[],
+  invoiceIdPorDefecto: string | null,
+): GrupoDeVencidas[] {
+  const porFactura = new Map<string, CuotaConEstado[]>();
+  for (const cuota of vencidas) {
+    const invoiceId = cuota.invoiceId ?? invoiceIdPorDefecto;
+    if (!invoiceId) continue;
+    const lista = porFactura.get(invoiceId) ?? [];
+    lista.push(cuota);
+    porFactura.set(invoiceId, lista);
+  }
+
+  const grupos: GrupoDeVencidas[] = [];
+  for (const [invoiceId, cuotas] of porFactura) {
+    const montoC = cuotas.reduce((acc, q) => acc + aCentavos(q.falta), 0);
+    const vencimiento = cuotas.reduce<string | null>((min, q) => {
+      if (!q.vencimiento) return min;
+      return min === null || q.vencimiento < min ? q.vencimiento : min;
+    }, null);
+    grupos.push({ invoiceId, cuotas, monto: aPesos(montoC), cantidad: cuotas.length, vencimiento: vencimiento ?? "" });
+  }
+  return grupos;
+}
+
 export function cobranzaDelCasoUnificada(input: CobranzaUnificadaInput): CobranzaDelCaso | null {
   const modo = normalizarOrthoBillingMode(input.modo);
 

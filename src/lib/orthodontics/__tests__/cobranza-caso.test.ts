@@ -3,7 +3,7 @@
 // clasificación pagadas/vencidas/próximas), estas pruebas tienen que fallar.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cobranzaDelCaso, cobranzaPorControles, combinarCobranzas, cobranzaDelCasoUnificada, type CargoDeControl } from "../cobranza-caso";
+import { cobranzaDelCaso, cobranzaPorControles, combinarCobranzas, cobranzaDelCasoUnificada, agruparVencidasPorFactura, type CargoDeControl } from "../cobranza-caso";
 import { condicionesPorDefecto, type CondicionesPago } from "@/lib/quotes/condiciones-pago";
 
 const plazos = (p: Partial<CondicionesPago>): CondicionesPago => ({
@@ -246,4 +246,52 @@ test("cobranzaDelCasoUnificada: modo ausente/desconocido cae a PRECIO_TOTAL (cas
   });
   const directo = cobranzaDelCaso({ ...facturaPrincipal, saldoAFavorPrevio: 0, ahora: new Date("2026-02-10T12:00:00Z"), zonaHoraria: "America/Mexico_City" });
   assert.deepEqual(r, directo);
+});
+
+// ronda 3 (ws1-t2) — H7: Caja/Hoy solo mostraban la cuota vencida más vieja
+// («1 vencida · $6,000») en vez de todo lo vencido y cuántas («2 vencidas ·
+// $8,000», como Tablero/Alertas). `agruparVencidasPorFactura` es lo que
+// arregla eso: agrupa por factura (nunca suma dos facturas distintas).
+
+test("agruparVencidasPorFactura: PRECIO_TOTAL, enganche + mes 1 vencidos — un solo grupo con el TOTAL, no solo la más vieja", () => {
+  // Enganche $2,000 (03-ene) + 3 cuotas de $6,000 (03-feb, 03-mar, 03-abr), sin pagos.
+  // Al 10-feb ya vencieron el enganche y la cuota de febrero, no las otras dos.
+  const r = cobranzaDelCaso({
+    condiciones: plazos({ enganche: 2000, numPagos: 3 }),
+    totalFactura: 20000,
+    cobros: [],
+    saldoAFavorPrevio: 0,
+    ahora: new Date("2026-02-10T12:00:00Z"),
+    zonaHoraria: "America/Mexico_City",
+  });
+  assert.equal(r.vencidas.length, 2);
+
+  const grupos = agruparVencidasPorFactura(r.vencidas, "inv-1");
+  assert.equal(grupos.length, 1);
+  assert.equal(grupos[0].invoiceId, "inv-1");
+  assert.equal(grupos[0].cantidad, 2);
+  assert.equal(grupos[0].monto, 8000); // antes: solo $2,000 (el enganche, la más vieja)
+  assert.equal(grupos[0].vencimiento, "2026-01-03"); // la más vieja del grupo
+});
+
+test("agruparVencidasPorFactura: PAGO_POR_CONTROL, vencidas de facturas distintas — nunca se mezclan en una fila", () => {
+  const r = cobranzaPorControles(
+    [
+      { invoiceId: "inv-colocacion", invoiceNumber: "F-1", total: 2000, pagado: 0, vencimiento: "2026-01-05", status: "PENDING" },
+      { invoiceId: "inv-control-2", invoiceNumber: "F-2", total: 800, pagado: 0, vencimiento: "2026-02-05", status: "PENDING" },
+    ],
+    new Date("2026-03-01T12:00:00Z"),
+    "America/Mexico_City",
+  );
+  assert.equal(r.vencidas.length, 2);
+
+  const grupos = agruparVencidasPorFactura(r.vencidas, null);
+  assert.equal(grupos.length, 2);
+  const porFactura = new Map(grupos.map((g) => [g.invoiceId, g]));
+  assert.equal(porFactura.get("inv-colocacion")!.monto, 2000);
+  assert.equal(porFactura.get("inv-control-2")!.monto, 800);
+});
+
+test("agruparVencidasPorFactura: sin vencidas da []", () => {
+  assert.deepEqual(agruparVencidasPorFactura([], "inv-1"), []);
 });

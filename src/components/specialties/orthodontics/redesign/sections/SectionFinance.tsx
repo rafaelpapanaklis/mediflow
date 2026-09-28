@@ -204,6 +204,15 @@ export function SectionFinance(props: SectionFinanceProps) {
   const esPorControl = panel.billingMode === "PAGO_POR_CONTROL";
   const hayDeudaDeControles = Boolean(panel.cobranza && (panel.cobranza.vencidas.length > 0 || panel.cobranza.proximas.length > 0));
 
+  // ronda 3 (ws1-t2, H6): lo que se sugiere cobrar con «Cobrar» — TODO lo
+  // vencido (si hay), si no la cuota de hoy. Mismo criterio que ya usaba
+  // «Registrar promesa de pago» (montoSugerido, abajo): un solo número, no
+  // dos que puedan discrepar entre el rótulo del botón y lo que precarga el
+  // modal.
+  const montoCobrarSugerido = panel.cobranza
+    ? panel.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) || panel.cobranza.cuotaDeHoy?.falta || 0
+    : 0;
+
   return (
     <>
       <Card
@@ -276,7 +285,7 @@ export function SectionFinance(props: SectionFinanceProps) {
             {panel.cobranza ? (
               <div className="px-[18px] py-[14px] border-b border-[color:var(--pr-borde-suave)] flex flex-wrap items-center gap-2">
                 <Btn variant="primary" size="md" icon={<Banknote size={15} strokeWidth={1.75} aria-hidden />} onClick={() => setDrawer({ kind: "cobrar" })}>
-                  Cobrar {panel.cobranza.cuotaDeHoy ? `· ${fmtMoney(panel.cobranza.cuotaDeHoy.falta)}` : ""}
+                  Cobrar {montoCobrarSugerido > 0 ? `· ${fmtMoney(montoCobrarSugerido)}` : ""}
                 </Btn>
                 <Btn variant="secondary" size="md" icon={<Plus size={15} strokeWidth={1.75} aria-hidden />} onClick={() => setDrawer({ kind: "extra" })}>
                   Cobrar extra
@@ -348,6 +357,11 @@ export function SectionFinance(props: SectionFinanceProps) {
                       <div key={`${q.esEnganche ? "e" : "p"}-${q.numero}`} className={`${orto.caja} text-center ${ESTILO_CUOTA[q.estado]}`} style={{ padding: "8px 6px" }}>
                         <div className="text-[11px] font-semibold opacity-80">{q.esEnganche ? "Enganche" : `Mes ${q.numero}`}</div>
                         <div className="text-[13px] tabular-nums font-bold mt-[1px] whitespace-nowrap">{fmtMoney(q.importe)}</div>
+                        {/* ronda 3 (ws1-t2, H21c): abonada a medias no se distinguía de una
+                            sin tocar — mismo color, mismo texto. */}
+                        {q.abonado > 0 && q.abonado < q.importe ? (
+                          <div className="text-[10px] mt-[1px] font-semibold whitespace-nowrap">Abonado {fmtMoney(q.abonado)}</div>
+                        ) : null}
                         <div className="text-[11px] mt-[1px] opacity-80 whitespace-nowrap">{fmtDay(q.vencimiento)}</div>
                       </div>
                     ))}
@@ -369,7 +383,7 @@ export function SectionFinance(props: SectionFinanceProps) {
                 <ul className="flex flex-col gap-[6px]">
                   {panel.promesas.filter((p) => !p.fulfilledAt && !p.cancelledAt).map((p) => (
                     <li key={p.id} className={`${orto.caja} flex items-center justify-between gap-x-3 gap-y-1 flex-wrap text-[13px]`}>
-                      <span className="min-w-0 [overflow-wrap:anywhere]"><strong className="tabular-nums">{fmtMoney(p.amount)}</strong> · promete pagar el {fmtDateShort(p.promisedDate)}{p.note ? ` · ${p.note}` : ""}</span>
+                      <span className="min-w-0 [overflow-wrap:anywhere]"><strong className="tabular-nums">{fmtMoney(p.amount)}</strong> · promete pagar el {fmtDay(p.promisedDate)}{p.note ? ` · ${p.note}` : ""}</span>
                       <span className="flex gap-3">
                         <button type="button" className={`${orto.enlace} ${orto.tonoExito}`} onClick={() => resolverPromesaDePago({ treatmentPlanId: props.treatmentPlanId, promiseId: p.id, resultado: "cumplida" }).then(recargar)}>
                           Cumplida
@@ -386,14 +400,24 @@ export function SectionFinance(props: SectionFinanceProps) {
 
             {panel.extras.length > 0 ? (
               <div className="px-[18px] py-4">
-                <h4 className={`${orto.bloqueTitulo} mb-2`}>Extras cobrados aparte</h4>
+                {/* ronda 3 (ws1-t2, H21b): decía «cobrados aparte» pero listaba
+                    CUALQUIER extra, pagado o no (`listarExtrasDelCaso` trae los
+                    dos a propósito) — una factura sin cobrar salía como si ya
+                    se hubiera pagado. Título genérico + pill de estado por fila. */}
+                <h4 className={`${orto.bloqueTitulo} mb-2`}>Extras</h4>
                 <div className={orto.filas}>
-                  {panel.extras.map((e) => (
-                    <div key={e.invoiceId} className={orto.fila}>
-                      <span className={orto.filaEtiqueta}>{e.invoiceNumber ?? e.invoiceId} · {fmtDateShort(e.createdAt)}</span>
-                      <span className={orto.filaValor}>{fmtMoney(e.total)}</span>
-                    </div>
-                  ))}
+                  {panel.extras.map((e) => {
+                    const pagada = e.status === "PAID";
+                    return (
+                      <div key={e.invoiceId} className={orto.fila}>
+                        <span className={orto.filaEtiqueta}>{e.invoiceNumber ?? e.invoiceId} · {fmtDateShort(e.createdAt)}</span>
+                        <span className="flex items-center gap-2">
+                          <Pill color={pagada ? "emerald" : "rose"} size="xs">{pagada ? "Pagada" : "Pendiente"}</Pill>
+                          <span className={orto.filaValor}>{fmtMoney(e.total)}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : null}
@@ -414,6 +438,7 @@ export function SectionFinance(props: SectionFinanceProps) {
           patientName={props.patientName}
           rediseno={panel.redisenoFacturas}
           clinicTaxMode={panel.clinicTaxMode}
+          inicial={panel.borradorInicial}
           onClose={() => setDrawer(null)}
           onCreated={async (invoice: { id: string }) => {
             const r = await abrirPlanDePago({ treatmentPlanId: props.treatmentPlanId, invoiceId: invoice.id });
@@ -424,7 +449,7 @@ export function SectionFinance(props: SectionFinanceProps) {
       ) : null}
 
       {drawer?.kind === "cobrar" && invoiceComoPago ? (
-        <PaymentModal open invoice={invoiceComoPago} onClose={() => setDrawer(null)} onSuccess={cerrarYRecargar} rediseno={panel.redisenoFacturas} />
+        <PaymentModal open invoice={invoiceComoPago} onClose={() => setDrawer(null)} onSuccess={cerrarYRecargar} rediseno={panel.redisenoFacturas} montoSugerido={montoCobrarSugerido} />
       ) : null}
 
       {drawer?.kind === "extra" ? (

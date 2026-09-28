@@ -22,7 +22,7 @@
 import { prisma } from "@/lib/prisma";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
-import { cobranzaDelCasoUnificada } from "@/lib/orthodontics/cobranza-caso";
+import { cobranzaDelCasoUnificada, agruparVencidasPorFactura } from "@/lib/orthodontics/cobranza-caso";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { cargarModosDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { cargarCargosDeControlPorCasos } from "@/lib/orthodontics/cobranza-controles-db";
@@ -46,6 +46,13 @@ export interface MensualidadPorCobrar {
   monto: number;
   vencimiento: string; // "YYYY-MM-DD"
   estado: "vencida" | "hoy" | "proxima";
+  /**
+   * ronda 3 (ws1-t2, H7): cuántas cuotas vencidas trae `monto` (0 si `estado`
+   * no es "vencida"). Antes esta lista solo enseñaba la cuota vencida más
+   * vieja del caso, aunque hubiera más — «1 vencida · $6,000» en vez de
+   * «2 vencidas · $8,000», como ya dicen el Tablero y Alertas.
+   */
+  cantidadVencidas: number;
   responsibleGuardianId: string | null;
   responsibleGuardianName: string | null;
 }
@@ -132,6 +139,20 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
   );
   const salida: MensualidadPorCobrar[] = [];
 
+  // Datos de la factura de un `invoiceId`: la del control (si es uno) o la
+  // principal del plan. Mismo criterio que antes (`invoice.balance` tal
+  // cual, nunca recalculado — el control sí se recalcula porque no trae
+  // `balance` propio).
+  function datosDeFactura(invoiceId: string): { numero: string | null; total: number; pagado: number; estado: string; balance: number } | null {
+    const cargoControl = cargoByInvoiceId.get(invoiceId);
+    if (cargoControl) {
+      return { numero: cargoControl.invoiceNumber, total: cargoControl.total, pagado: cargoControl.pagado, estado: cargoControl.status, balance: cargoControl.total - cargoControl.pagado };
+    }
+    const inv = invoiceById.get(invoiceId);
+    if (!inv) return null;
+    return { numero: inv.invoiceNumber, total: inv.total, pagado: inv.paid, estado: inv.status, balance: inv.balance };
+  }
+
   for (const plan of planes) {
     const invoice = plan.invoiceId ? invoiceById.get(plan.invoiceId) : undefined;
     const modo = normalizarOrthoBillingMode(modosPorCaso.get(plan.id) ?? null);
@@ -145,40 +166,68 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
       ahora,
       zonaHoraria,
     });
+    if (!resumen) continue;
 
-    const cuota = resumen?.cuotaDeHoy;
+    const patientName = [plan.patient.firstName, plan.patient.lastName].filter(Boolean).join(" ").trim();
+
+    // ronda 3 (ws1-t2, H7): TODO lo vencido del caso, no solo la cuota más
+    // vieja — agrupado por factura (PAGO_POR_CONTROL puede deber de varias
+    // facturas a la vez; nunca se suman entre sí, ver agruparVencidasPorFactura).
+    if (resumen.vencidas.length > 0) {
+      const grupos = agruparVencidasPorFactura(resumen.vencidas, plan.invoiceId);
+      for (const grupo of grupos) {
+        if (!grupo.vencimiento) continue;
+        const datos = datosDeFactura(grupo.invoiceId);
+        if (!datos) continue;
+        salida.push({
+          treatmentPlanId: plan.id,
+          patientId: plan.patientId,
+          patientName,
+          invoiceId: grupo.invoiceId,
+          invoiceNumber: datos.numero,
+          invoiceTotal: datos.total,
+          invoicePaid: datos.pagado,
+          invoiceBalance: datos.balance,
+          invoiceStatus: datos.estado,
+          monto: grupo.monto,
+          vencimiento: grupo.vencimiento,
+          estado: "vencida",
+          cantidadVencidas: grupo.cantidad,
+          responsibleGuardianId: plan.responsibleGuardianId,
+          responsibleGuardianName: plan.responsibleGuardian?.fullName ?? null,
+        });
+      }
+      continue;
+    }
+
+    // Nada vencido todavía: la próxima cuota, si vence hoy o dentro del horizonte.
+    const cuota = resumen.cuotaDeHoy;
     if (!cuota || !cuota.vencimiento) continue;
 
-    let estado: MensualidadPorCobrar["estado"] | null = null;
-    if (cuota.estado === "vencida") estado = "vencida";
-    else if (cuota.vencimiento === hoy) estado = "hoy";
+    let estado: "hoy" | "proxima" | null = null;
+    if (cuota.vencimiento === hoy) estado = "hoy";
     else if (cuota.vencimiento <= limiteISO) estado = "proxima";
     if (!estado) continue;
 
-    // La cuota puede venir de la factura principal (plan.invoiceId) o, en
-    // modo PAGO_POR_CONTROL, de un control específico (cuota.invoiceId).
-    const cargoControl = cuota.invoiceId ? cargoByInvoiceId.get(cuota.invoiceId) : undefined;
-    const facturaId = cargoControl ? cargoControl.invoiceId : plan.invoiceId;
+    const facturaId = cuota.invoiceId ?? plan.invoiceId;
     if (!facturaId) continue;
-    const facturaNumero = cargoControl ? cargoControl.invoiceNumber : invoice?.invoiceNumber ?? null;
-    const facturaTotal = cargoControl ? cargoControl.total : invoice?.total ?? 0;
-    const facturaPagado = cargoControl ? cargoControl.pagado : invoice?.paid ?? 0;
-    const facturaEstado = cargoControl ? cargoControl.status : invoice?.status ?? "PENDING";
-    const facturaBalance = cargoControl ? facturaTotal - facturaPagado : invoice?.balance ?? facturaTotal - facturaPagado;
+    const datos = datosDeFactura(facturaId);
+    if (!datos) continue;
 
     salida.push({
       treatmentPlanId: plan.id,
       patientId: plan.patientId,
-      patientName: [plan.patient.firstName, plan.patient.lastName].filter(Boolean).join(" ").trim(),
+      patientName,
       invoiceId: facturaId,
-      invoiceNumber: facturaNumero,
-      invoiceTotal: facturaTotal,
-      invoicePaid: facturaPagado,
-      invoiceBalance: facturaBalance,
-      invoiceStatus: facturaEstado,
+      invoiceNumber: datos.numero,
+      invoiceTotal: datos.total,
+      invoicePaid: datos.pagado,
+      invoiceBalance: datos.balance,
+      invoiceStatus: datos.estado,
       monto: cuota.falta,
       vencimiento: cuota.vencimiento,
       estado,
+      cantidadVencidas: 0,
       responsibleGuardianId: plan.responsibleGuardianId,
       responsibleGuardianName: plan.responsibleGuardian?.fullName ?? null,
     });

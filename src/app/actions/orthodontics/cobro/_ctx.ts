@@ -10,6 +10,7 @@
 // queda solo con lo que sigue siendo EXCLUSIVO de Cobro.
 
 import { prisma } from "@/lib/prisma";
+import type { OrthoTechnique } from "@prisma/client";
 import type { AuthContext } from "@/lib/auth-context";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { fail, type ActionResult } from "../result";
@@ -18,6 +19,10 @@ export interface CasoParaCobro {
   id: string;
   patientId: string;
   invoiceId: string | null;
+  /** ronda 3 (ws1-t2, H9): para precargar «Abrir plan de pago» — concepto, precio y doctor tratante. */
+  technique: OrthoTechnique;
+  totalCostMxn: number;
+  treatingDoctorId: string | null;
 }
 
 /** Códigos Prisma de "tabla/columna inexistente" — mismo criterio que cobranza-db.ts (Ola 0). */
@@ -35,7 +40,10 @@ export async function loadCasoParaCobro(args: {
   try {
     plan = await prisma.orthodonticTreatmentPlan.findFirst({
       where: { id: args.treatmentPlanId, clinicId: args.ctx.clinicId, deletedAt: null },
-      select: { id: true, patientId: true, invoiceId: true, patient: { select: { visibleUserIds: true } } },
+      select: {
+        id: true, patientId: true, invoiceId: true, technique: true, totalCostMxn: true, treatingDoctorId: true,
+        patient: { select: { visibleUserIds: true } },
+      },
     });
   } catch (e) {
     if (esRelacionAusente(e)) return fail("El núcleo de ortodoncia (Ola 0) todavía no está aplicado en esta base");
@@ -45,7 +53,17 @@ export async function loadCasoParaCobro(args: {
   if (!canSeePatient({ userId: args.ctx.userId, role: args.ctx.role, clinicId: args.ctx.clinicId }, plan.patient?.visibleUserIds)) {
     return fail("Caso no encontrado");
   }
-  return { ok: true, data: { id: plan.id, patientId: plan.patientId, invoiceId: plan.invoiceId } };
+  return {
+    ok: true,
+    data: {
+      id: plan.id,
+      patientId: plan.patientId,
+      invoiceId: plan.invoiceId,
+      technique: plan.technique,
+      totalCostMxn: Number(plan.totalCostMxn) || 0,
+      treatingDoctorId: plan.treatingDoctorId,
+    },
+  };
 }
 
 /**

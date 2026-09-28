@@ -25,6 +25,8 @@ import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { leerConfigDeCobro, type ConfigDeCobro } from "@/lib/orthodontics/cobro/config-db";
 import { leerBillingDelCaso, type BillingDelCaso } from "@/lib/orthodontics/cobro/caso-db";
+import { borradorInicialDelCaso } from "@/lib/orthodontics/cobro/borrador-factura";
+import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 import { listarExtrasDelCaso, type ExtraDelCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { listarPromesasDelCaso, type PromesaDePago } from "@/lib/orthodontics/cobro/promesas-db";
 import { calcularRecargo, diasEntre } from "@/lib/orthodontics/cobro/reglas";
@@ -66,6 +68,13 @@ export interface PanelDeCobro {
   clinicTaxMode: string | null;
   /** SUPER_ADMIN/ADMIN: puede cambiar la política de cobro de la clínica (F9/F10). */
   puedeConfigurarPolitica: boolean;
+  /**
+   * ronda 3 (ws1-t2, H9): con qué arranca «Abrir plan de pago» / «Abrir
+   * factura de colocación/enganche» — concepto (técnica), precio de
+   * referencia del caso y doctor tratante, en vez de un editor en blanco.
+   * Editable siempre: solo evita partir de cero.
+   */
+  borradorInicial: BorradorDeFactura;
 }
 
 export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<ActionResult<PanelDeCobro>> {
@@ -99,6 +108,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     puedeConfigurarPolitica: ROLES_DE_DIRECCION.has(ctx.role),
     billingMode,
     billingModeLabel: ORTHO_BILLING_MODE_LABELS[billingMode],
+    borradorInicial: borradorInicialDelCaso(caso, billingMode === "PAGO_POR_CONTROL"),
   };
 
   const zonaHoraria = clinica?.timezone || "America/Mexico_City";

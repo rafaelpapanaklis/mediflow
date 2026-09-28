@@ -24,6 +24,9 @@ import { TablaEquipo } from "./tabla-equipo";
 // la API siempre los calculó, pero ninguna pantalla los mostraba
 // (REPORTE-ws1-t2.md, punto 3c).
 import { FilaAviso } from "./fila-aviso";
+// ronda 3 (ws1-t2, H14) — mismo aviso que ya usa `hoy-recepcion.tsx`: el
+// dueño/administrador no lo veía porque solo estaba montado en Recepción.
+import { AvisoMensualidadesVencidas } from "../home/aviso-mensualidades-vencidas";
 import s from "./hoy.module.css";
 
 interface Props {
@@ -71,6 +74,9 @@ export function HoyAdmin({ clinic, data, period }: Props) {
         <Saludo nombreCompleto={clinic.name} cola={t("home.admin.opSummary")} />
         <AccionesRapidas />
       </div>
+
+      {/* ronda 3 (ws1-t2, H14) — mensualidades de ortodoncia vencidas. Se calla sola si no hay ninguna. */}
+      <AvisoMensualidadesVencidas />
 
       <div role="group" aria-label={t("home.admin.kpiGroupAria")} className={s.kpis}>
         {kpis.map((k, i) => (
