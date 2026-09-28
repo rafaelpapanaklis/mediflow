@@ -1,7 +1,7 @@
 // Módulo de Ortodoncia — la vista de Alertas (ws1-t3). Solo pinta lo que
 // recibe: las alertas las carga la página (`alertas/page.tsx`) con
 // `alerts-data.ts`, igual que antes. Arriba, un resumen con el conteo de cada
-// tipo que salta a su sección; debajo, las cinco secciones en el orden de
+// tipo que salta a su sección; debajo, las secciones en el orden de
 // siempre. Una sección sin casos se queda en una línea.
 //
 // ws1-t4 ronda 6 (revisión de lógica de uso, filas 21 y 22):
@@ -11,11 +11,16 @@
 //  - Quien no asistió a su control también se puede reagendar desde aquí.
 //  - El estado se dice como en la Agenda y en la ficha: «No asistió».
 //  - Un solo nombre para el expediente de ortodoncia: «caso».
+//
+// ws1-t5 ronda 6 (hallazgo 96): sexta sección, «Fotos del paciente por
+// revisar». El portal le dice al paciente «tu clínica la revisará» y aquí
+// nadie se enteraba de que había llegado una foto.
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
   CalendarX,
+  Camera,
   CheckCircle2,
   Clock,
   Hourglass,
@@ -28,6 +33,7 @@ import type {
   OverduePatientEntry,
 } from "@/lib/orthodontics/specialty-kpis";
 import type { NoShowEntry, OrthoAlertsData } from "@/lib/orthodontics/alerts-data";
+import { notaCorta, resumenDeFotos, type FotosPorRevisarEntry } from "@/lib/orthodontics/fotos-paciente";
 import { EnviarRecordatorioButton } from "@/components/specialties/orthodontics/EnviarRecordatorioButton";
 import { AgendarControlBoton } from "./agendar-control";
 import { fechaEnZona } from "./fechas";
@@ -58,7 +64,9 @@ export function VistaAlertas({
   zonaHoraria: string | null;
 }) {
   const fmtDate = (d: Date | string | null) => fechaEnZona(d, zonaHoraria);
+  const fotos: FotosPorRevisarEntry[] = alerts.patientPhotos ?? [];
   const totalAlerts =
+    fotos.length +
     alerts.overduePayments.length +
     alerts.missingNextControl.length +
     alerts.noShows.length +
@@ -71,6 +79,7 @@ export function VistaAlertas({
     { id: "no-se-presento", etiqueta: "No asistió", cuenta: alerts.noShows.length, icono: UserX, tono: "alerta" },
     { id: "proximo-a-terminar", etiqueta: "Próximo a terminar", cuenta: alerts.finishingSoon.length, icono: Hourglass, tono: "violeta" },
     { id: "pasado-de-fecha", etiqueta: "Pasado de su fecha", cuenta: alerts.pastDue.length, icono: CalendarX, tono: "peligro" },
+    { id: "fotos-del-paciente", etiqueta: "Fotos por revisar", cuenta: fotos.length, icono: Camera, tono: "violeta" },
   ];
 
   return (
@@ -198,6 +207,28 @@ export function VistaAlertas({
             detallePeligro
           />
         ))}
+      </AlertSection>
+
+      <AlertSection
+        id="fotos-del-paciente"
+        icon={Camera}
+        tono="violeta"
+        title="Fotos del paciente por revisar"
+        sub="Las mandó el paciente desde su portal. Se revisan en la pestaña Ortodoncia de su ficha, en «Alineadores y cumplimiento»."
+        empty="Sin fotos del paciente por revisar."
+      >
+        {fotos.map((f: FotosPorRevisarEntry) => {
+          const nota = notaCorta(f.nota);
+          return (
+            <PatientRow
+              // Una fila por CASO: es donde se revisan.
+              key={f.treatmentPlanId}
+              patientId={f.patientId}
+              patientName={f.patientName}
+              detalle={`${resumenDeFotos(f.pendientes)} · desde el ${fmtDate(f.primeraAt)}${nota ? ` · «${nota}»` : ""}`}
+            />
+          );
+        })}
       </AlertSection>
     </Pantalla>
   );

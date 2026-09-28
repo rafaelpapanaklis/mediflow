@@ -26,6 +26,8 @@ import {
   type MissingNextControlEntry,
   type OverduePatientEntry,
 } from "./specialty-kpis";
+import { agruparFotosPorRevisar, type FotosPorRevisarEntry } from "./fotos-paciente";
+import { cargarFotosPorRevisar } from "./fotos-paciente-db";
 
 export interface NoShowEntry {
   patientId: string;
@@ -44,6 +46,12 @@ export interface OrthoAlertsData {
   finishingSoon: DurationAlertEntry[];
   /** L5 */
   pastDue: DurationAlertEntry[];
+  /**
+   * ws1-t5 (ronda 6, hallazgo 96) — casos con fotos que mandó el paciente
+   * desde su portal y nadie ha revisado. Primero el que lleva más esperando.
+   * Opcional: una vista armada a mano sin este dato se pinta como «sin fotos».
+   */
+  patientPhotos?: FotosPorRevisarEntry[];
 }
 
 const NO_SHOW_WINDOW_DAYS = 30;
@@ -89,7 +97,11 @@ export async function loadOrthoAlerts(
       scheduledAt: a.startsAt,
     }));
 
+  // ws1-t5 (96): nunca lanza; sin tabla o con la base caída, no hay avisos.
+  const fotos = await cargarFotosPorRevisar(clinicId, viewer);
+
   return {
+    patientPhotos: agruparFotosPorRevisar(fotos),
     overduePayments: listOverduePatients(cases),
     missingNextControl: listMissingNextControl(cases, futureControlPatientIds),
     noShows,
