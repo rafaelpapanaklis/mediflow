@@ -98,6 +98,12 @@ before(async () => {
   ({ POST: stripePOST } = await import("@/app/api/webhooks/stripe/route"));
   ({ POST: mpPOST } = await import("@/app/api/webhooks/mercadopago/route"));
   wallet = await import("../wallet");
+  // Cargar @prisma/client (algún import de las rutas lo hace) lee el `.env` de
+  // la carpeta y trae el MERCADOPAGO_WEBHOOK_SECRET real: con él el webhook
+  // exige firma y responde 401. Estas pruebas mandan avisos sin firmar a
+  // propósito; el secreto se quita DESPUÉS de los imports (la ruta lo lee en
+  // cada petición).
+  delete process.env.MERCADOPAGO_WEBHOOK_SECRET;
 });
 
 beforeEach(() => {

@@ -57,6 +57,12 @@ test("el layout no se entera: el camino del menú de siempre queda intacto", () 
   assert.doesNotMatch(leer(LAYOUT), /TipografiaPanel/);
 });
 
+// Nombrarlo en un comentario (p. ej. `rediseno-activo.ts`, que explica cómo
+// detecta el estilo que deja) no es montarlo: solo cuenta el código.
+function sinComentarios(fuente: string): string {
+  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+
 test("nadie más lo monta: el panel tiene una sola raíz de tipografía", () => {
   const encontrados: string[] = [];
   const recorrer = (dir: string) => {
@@ -65,7 +71,7 @@ test("nadie más lo monta: el panel tiene una sola raíz de tipografía", () => 
       if (e.isDirectory()) {
         if (e.name === "node_modules" || e.name === ".next") continue;
         recorrer(rel);
-      } else if (/\.tsx?$/.test(e.name) && leer(rel).includes("TipografiaPanel")) {
+      } else if (/\.tsx?$/.test(e.name) && sinComentarios(leer(rel)).includes("TipografiaPanel")) {
         encontrados.push(rel);
       }
     }
