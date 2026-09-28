@@ -4,7 +4,11 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { datosDeCambio, leerOrthoIncluido } from "../entrada";
-import { aplicarOrthoIncluido } from "@/lib/orthodontics/catalog-procedures";
+import {
+  aplicarOrthoIncluido,
+  debeMarcarseComoControl,
+  CODIGO_CONTROL_ORTO,
+} from "@/lib/orthodontics/catalog-procedures";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -25,9 +29,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const entrada = datosDeCambio(body);
     if (!entrada.ok) return NextResponse.json({ error: entrada.error }, { status: 400 });
 
+    // El control de ortodoncia se reconoce por su llave, no por su nombre
+    // (ws1-t5). Si esta fila es el control de siempre y aún no la lleva, se le
+    // pone AHORA, antes de que el cambio de nombre lo deje irreconocible para
+    // la facturación de «Pago por control». La llave la pone el servidor; la
+    // que venga en el body se sigue ignorando.
+    const marcaDeControl = debeMarcarseComoControl(existing) ? { code: CODIGO_CONTROL_ORTO } : {};
+
     const updated = await prisma.procedureCatalog.update({
       where: { id: params.id },
-      data: entrada.data,
+      data: { ...entrada.data, ...marcaDeControl },
     });
 
     // Ola 2 de ortodoncia (ws1-t1) — orthoIncludedInTreatment va aparte, por

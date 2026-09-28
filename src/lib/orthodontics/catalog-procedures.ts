@@ -33,6 +33,65 @@ import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 
 export const ORTHO_CATALOG_CATEGORY = "orthodontics";
 
+// ── El control se reconoce por su IDENTIFICADOR, no por su nombre ─────────
+// (ws1-t5, 28-sep-2026; revisión de lógica de uso, fila 26 del mapa).
+//
+// EL FALLO. `buscarPrecioControlOrto` encontraba el procedimiento por su
+// NOMBRE exacto. Si la clínica lo renombraba en Procedimientos («Control
+// mensual», «Ajuste de brackets»…), en modo «Pago por control» los controles
+// dejaban de facturarse sin que nadie avisara.
+//
+// EL ARREGLO. La fila del control lleva una llave interna en
+// `procedure_catalog.code`, la misma columna —de siempre— que usa el
+// odontograma con sus `ODO_*` y que el panel nunca escribe (ver
+// src/app/api/procedures/entrada.ts). Sin SQL nuevo. Se busca primero por la
+// llave; si no hay ninguna (catálogos sembrados antes de este cambio), por el
+// nombre de siempre, y en ese momento se le pone la llave. También se le pone
+// justo al renombrarlo (PATCH /api/procedures/[id]).
+export const CODIGO_CONTROL_ORTO = "ORTO_CONTROL";
+
+export interface FilaCandidataControl {
+  id: string;
+  name: string;
+  code: string | null;
+  category: string;
+  basePrice: number;
+  isActive: boolean;
+}
+
+/**
+ * ¿Cuál de estas filas es el procedimiento del control? PURO.
+ *  1. La que lleva la llave, se llame como se llame y esté en la categoría
+ *     que esté.
+ *  2. Si ninguna la lleva: la de ortodoncia que conserva el nombre de siempre
+ *     (datos anteriores a la llave).
+ * Solo filas activas: un control desactivado no se factura, como hasta hoy.
+ */
+export function elegirProcedimientoControl<T extends FilaCandidataControl>(
+  filas: readonly T[],
+): { fila: T; por: "llave" | "nombre" } | null {
+  const activas = filas.filter((f) => f.isActive);
+  const conLlave = activas.find((f) => f.code === CODIGO_CONTROL_ORTO);
+  if (conLlave) return { fila: conLlave, por: "llave" };
+  const porNombre = activas.find(
+    (f) => f.category === ORTHO_CATALOG_CATEGORY && f.name === TIPO_CITA_CONTROL_ORTO && !f.code,
+  );
+  return porNombre ? { fila: porNombre, por: "nombre" } : null;
+}
+
+/**
+ * ¿Hay que ponerle la llave a esta fila ANTES de cambiarla? Sí, si es el
+ * control de siempre (por nombre y categoría) y todavía no lleva ninguna
+ * llave. Así un cambio de nombre no lo deja huérfano. PURO.
+ */
+export function debeMarcarseComoControl(fila: {
+  name: string;
+  code: string | null;
+  category: string;
+}): boolean {
+  return !fila.code && fila.category === ORTHO_CATALOG_CATEGORY && fila.name === TIPO_CITA_CONTROL_ORTO;
+}
+
 export interface OrthoProcedureSeed {
   name: string;
   basePrice: number;
@@ -164,50 +223,98 @@ export async function aplicarOrthoIncluido(procedureId: string, clinicId: string
 }
 
 /**
- * El precio vigente de «Control de ortodoncia» del catálogo de la clínica —
- * lo que usa signTreatmentCard.ts para facturar cada control en modo
- * PAGO_POR_CONTROL. `null` = la clínica todavía no tiene ese procedimiento
- * en su catálogo (no inventamos un precio: no se factura nada). Esta
- * consulta SÍ puede usar Prisma normal con `select`: `name`/`basePrice` son
- * columnas de siempre, no la nueva.
+ * El precio vigente del control del catálogo de la clínica — lo que usa
+ * signTreatmentCard.ts para facturar cada control en modo PAGO_POR_CONTROL.
+ * `null` = la clínica todavía no tiene ese procedimiento en su catálogo, o lo
+ * desactivó (no inventamos un precio: no se factura nada). Esta consulta SÍ
+ * puede usar Prisma normal con `select`: son columnas de siempre.
+ *
+ * Se reconoce por su LLAVE (`CODIGO_CONTROL_ORTO`), no por su nombre: la
+ * clínica puede llamarlo como quiera. `name` devuelve el nombre que ELLA le
+ * puso, que es el que sale en la factura.
  */
 export async function buscarPrecioControlOrto(clinicId: string): Promise<{ procedureId: string; name: string; basePrice: number } | null> {
   if (!clinicId) return null;
   try {
-    const row = await prisma.procedureCatalog.findFirst({
-      where: { clinicId, category: ORTHO_CATALOG_CATEGORY, name: TIPO_CITA_CONTROL_ORTO, isActive: true },
-      select: { id: true, name: true, basePrice: true },
+    const filas = await prisma.procedureCatalog.findMany({
+      where: {
+        clinicId,
+        isActive: true,
+        OR: [
+          { code: CODIGO_CONTROL_ORTO },
+          { category: ORTHO_CATALOG_CATEGORY, name: TIPO_CITA_CONTROL_ORTO },
+        ],
+      },
+      select: { id: true, name: true, code: true, category: true, basePrice: true, isActive: true },
+      orderBy: { createdAt: "asc" },
     });
-    return row ? { procedureId: row.id, name: row.name, basePrice: row.basePrice } : null;
+    const elegido = elegirProcedimientoControl(filas);
+    if (!elegido) return null;
+    if (elegido.por === "nombre") {
+      // Catálogo anterior a la llave: se le pone ahora, para que un cambio de
+      // nombre posterior no lo pierda. Si falla, el precio se devuelve igual.
+      await prisma.procedureCatalog
+        .updateMany({ where: { id: elegido.fila.id, clinicId, code: null }, data: { code: CODIGO_CONTROL_ORTO } })
+        .catch((e) => console.warn("[ortodoncia:catalogo] no se pudo marcar el control:", e));
+    }
+    return { procedureId: elegido.fila.id, name: elegido.fila.name, basePrice: elegido.fila.basePrice };
   } catch (e) {
     if (esRelacionAusente(e)) return null;
     throw e;
   }
 }
 
+/**
+ * Qué falta por sembrar de la precarga sugerida. PURO. No repite nombres que
+ * ya existan y no siembra un segundo control si la clínica ya tiene el suyo
+ * (con su llave), aunque le haya cambiado el nombre.
+ */
+export function faltantesPorSembrar(
+  nombresExistentes: ReadonlySet<string>,
+  yaHayControl: boolean,
+): OrthoProcedureSeed[] {
+  return DEFAULT_ORTHO_PROCEDURES.filter((p) => {
+    if (nombresExistentes.has(p.name)) return false;
+    if (p.name === TIPO_CITA_CONTROL_ORTO && yaHayControl) return false;
+    return true;
+  });
+}
+
 /** Siembra la precarga sugerida (idempotente: no duplica nombres que ya existan). Explícita: solo la corre quien la invoque (acción), nunca sola. */
 export async function sembrarProcedimientosDeOrtodoncia(clinicId: string): Promise<{ creados: number }> {
   if (!clinicId) return { creados: 0 };
   let existentes: Set<string>;
+  let yaHayControl = false;
   try {
     const rows = await prisma.procedureCatalog.findMany({
-      where: { clinicId, category: ORTHO_CATALOG_CATEGORY },
-      select: { name: true },
+      where: { clinicId, OR: [{ category: ORTHO_CATALOG_CATEGORY }, { code: CODIGO_CONTROL_ORTO }] },
+      select: { name: true, code: true },
     });
     existentes = new Set(rows.map((r) => r.name));
+    // El control que la clínica renombró sigue siendo el control: no se
+    // siembra otro con el nombre de fábrica.
+    yaHayControl = rows.some((r) => r.code === CODIGO_CONTROL_ORTO);
   } catch (e) {
     if (esRelacionAusente(e)) return { creados: 0 };
     throw e;
   }
 
-  const faltantes = DEFAULT_ORTHO_PROCEDURES.filter((p) => !existentes.has(p.name));
+  const faltantes = faltantesPorSembrar(existentes, yaHayControl);
   if (faltantes.length === 0) return { creados: 0 };
 
   // Paso 1: columnas de SIEMPRE, con Prisma normal, UNA sola consulta —
   // nunca falla por SQL sin pegar, y respeta «menos de 7 por Promise.all»
   // (createMany no cuenta como N inserts sueltos).
   await prisma.procedureCatalog.createMany({
-    data: faltantes.map((p) => ({ clinicId, name: p.name, category: ORTHO_CATALOG_CATEGORY, basePrice: p.basePrice, description: p.description })),
+    data: faltantes.map((p) => ({
+      clinicId,
+      name: p.name,
+      category: ORTHO_CATALOG_CATEGORY,
+      basePrice: p.basePrice,
+      description: p.description,
+      // El control nace con su llave (ver CODIGO_CONTROL_ORTO).
+      ...(p.name === TIPO_CITA_CONTROL_ORTO ? { code: CODIGO_CONTROL_ORTO } : {}),
+    })),
   });
 
   // Paso 2: orthoIncludedInTreatment, SQL crudo, tolerante — si la columna
