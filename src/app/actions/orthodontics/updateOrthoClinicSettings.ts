@@ -13,6 +13,7 @@ import {
   guardarOrthoClinicSettings,
   loadOrthoClinicSettings,
   DEFAULT_ORTHO_APPOINTMENT_TYPES,
+  type OrthoAppointmentTypeOption,
 } from "@/lib/orthodontics/clinic-settings-db";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -55,12 +56,23 @@ export async function updateOrthoClinicSettings(
 
   const before = await loadOrthoClinicSettings(ctx.clinicId);
 
+  // Reconstrucción explícita (en vez de pasar data.appointmentTypes tal
+  // cual): zod infería aquí un tipo con id/label opcionales dentro de este
+  // archivo — el .min(1) de cada campo no se reflejaba en el tipo de
+  // salida en este punto de la cadena. Los valores ya están validados
+  // arriba (safeParse); esto es solo para que el tipo de salida sea el que
+  // pide guardarOrthoClinicSettings.
+  const appointmentTypes: OrthoAppointmentTypeOption[] = data.appointmentTypes.map((t) => ({
+    id: t.id,
+    label: t.label,
+  }));
+
   try {
     await guardarOrthoClinicSettings({
       clinicId: ctx.clinicId,
       updatedBy: ctx.userId,
       defaultTreatingDoctorId: data.defaultTreatingDoctorId,
-      appointmentTypes: data.appointmentTypes,
+      appointmentTypes,
       messageTemplates: data.messageTemplates,
     });
   } catch (e) {
