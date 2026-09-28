@@ -9,6 +9,7 @@ import {
   computeOverdueBalances,
   computePlacementsAndRemovals,
   computeProductionByDoctor,
+  computeProjectionExcluded,
   computeValoracionesSummary,
   listFinishingSoon,
   listMissingNextControl,
@@ -147,6 +148,40 @@ describe("computeMonthlyProjection (T6)", () => {
     assert.equal(projection[1]?.amountMxn, 1500);
     assert.equal(projection[2]?.monthKey, "2026-03");
     assert.equal(projection[2]?.amountMxn, 1000);
+  });
+});
+
+describe("computeMonthlyProjection — solo casos en curso (fila 91)", () => {
+  const ahora = new Date("2026-01-15T00:00:00Z");
+  const cuota = (vencimiento: string, falta: number) => ({
+    numero: 1, esEnganche: false, importe: falta, vencimiento, abonado: 0, falta, estado: "porVencer" as const,
+  });
+  const cases = [
+    caso({ planId: "curso", status: "IN_PROGRESS", cobranza: cobranza({ proximas: [cuota("2026-02-10", 1000)] }) }),
+    caso({ planId: "planeado", status: "PLANNED", cobranza: cobranza({ proximas: [cuota("2026-02-12", 300)] }) }),
+    caso({ planId: "retencion", status: "RETENTION", cobranza: cobranza({ proximas: [cuota("2026-02-20", 200)] }) }),
+    caso({ planId: "terminado", status: "COMPLETED", cobranza: cobranza({ proximas: [cuota("2026-02-25", 100)] }) }),
+    caso({ planId: "pausa", status: "ON_HOLD", cobranza: cobranza({ proximas: [cuota("2026-02-10", 2000), cuota("2026-03-10", 2000)] }) }),
+    caso({ planId: "abandono", status: "DROPPED_OUT", cobranza: cobranza({ proximas: [cuota("2026-02-10", 4000)] }) }),
+    // En pausa, pero su cuota cae fuera de la ventana: no se anuncia como excluido.
+    caso({ planId: "pausa-lejos", status: "ON_HOLD", cobranza: cobranza({ proximas: [cuota("2027-02-10", 9000)] }) }),
+  ];
+
+  it("no promete el dinero de un caso en pausa ni de uno abandonado", () => {
+    const projection = computeMonthlyProjection(cases, ahora, 3);
+    assert.equal(projection[1]?.monthKey, "2026-02");
+    assert.equal(projection[1]?.amountMxn, 1600); // 1000 + 300 + 200 + 100
+    assert.equal(projection[2]?.amountMxn, 0);
+  });
+
+  it("dice cuánto dejó de contar y de cuántos casos", () => {
+    const fuera = computeProjectionExcluded(cases, ahora, 3);
+    assert.deepEqual(fuera, { enPausa: 1, abandonados: 1, amountMxn: 8000 });
+  });
+
+  it("sin casos en pausa ni abandonados, no hay nada excluido", () => {
+    const fuera = computeProjectionExcluded(cases.slice(0, 4), ahora, 3);
+    assert.deepEqual(fuera, { enPausa: 0, abandonados: 0, amountMxn: 0 });
   });
 });
 

@@ -185,7 +185,7 @@ export function VistaTablero({
           </div>
         </Tarjeta>
 
-        <Tarjeta icono={Wallet} titulo="Lo que va a entrar por mensualidades" sub="Los próximos seis meses.">
+        <Tarjeta icono={Wallet} titulo="Lo que va a entrar por mensualidades" sub="Los próximos seis meses, de los casos en curso.">
           <div className={s.tarjetaCuerpo}>
             {mayorProyeccion <= 0 ? (
               <Vacio

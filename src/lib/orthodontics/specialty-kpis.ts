@@ -194,19 +194,39 @@ export interface MonthlyProjectionBucket {
   amountMxn: number;
 }
 
-/** T6 — lo que va a entrar por mensualidades, sumando las cuotas "próximas" de cada caso, por mes. */
-export function computeMonthlyProjection(
-  cases: OrthoCaseSummary[],
-  ahora: Date,
-  months = 6,
-): MonthlyProjectionBucket[] {
+/**
+ * Casos cuyo dinero futuro NO se promete (fila 91 de la revisión de lógica de
+ * uso): un caso en pausa no está viniendo a sus controles y uno abandonado ya
+ * no vuelve. Sus cuotas siguen existiendo en la factura —la deuda no se borra,
+ * y Cobranza las sigue enseñando—, pero contarlas en «lo que va a entrar» le
+ * promete al dueño un dinero que no va a llegar.
+ */
+export const ESTADOS_FUERA_DE_LA_PROYECCION: OrthoTreatmentStatus[] = ["ON_HOLD", "DROPPED_OUT"];
+
+function mesesDeLaProyeccion(ahora: Date, months: number): Map<string, number> {
   const buckets = new Map<string, number>();
   for (let i = 0; i < months; i++) {
     const d = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() + i, 1));
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
     buckets.set(key, 0);
   }
+  return buckets;
+}
+
+/**
+ * T6 — lo que va a entrar por mensualidades, sumando las cuotas "próximas" de
+ * cada caso, por mes. Solo casos en curso: los que están en pausa o
+ * abandonados quedan fuera (ver `computeProjectionExcluded`, que dice cuánto
+ * se dejó de contar para que el número no cambie sin explicación).
+ */
+export function computeMonthlyProjection(
+  cases: OrthoCaseSummary[],
+  ahora: Date,
+  months = 6,
+): MonthlyProjectionBucket[] {
+  const buckets = mesesDeLaProyeccion(ahora, months);
   for (const c of cases) {
+    if (ESTADOS_FUERA_DE_LA_PROYECCION.includes(c.status)) continue;
     for (const q of c.cobranza?.proximas ?? []) {
       if (!q.vencimiento) continue;
       const key = q.vencimiento.slice(0, 7);
@@ -214,6 +234,39 @@ export function computeMonthlyProjection(
     }
   }
   return Array.from(buckets, ([monthKey, amountMxn]) => ({ monthKey, amountMxn: Math.round(amountMxn) }));
+}
+
+export interface ProjectionExcluded {
+  /** Casos en pausa con cuotas dentro de la ventana de la proyección. */
+  enPausa: number;
+  /** Casos abandonados con cuotas dentro de la ventana de la proyección. */
+  abandonados: number;
+  /** Lo que suman esas cuotas, en pesos: lo que la proyección dejó de prometer. */
+  amountMxn: number;
+}
+
+/** T6 — lo que la proyección NO cuenta (casos en pausa o abandonados), para decirlo al pie. */
+export function computeProjectionExcluded(
+  cases: OrthoCaseSummary[],
+  ahora: Date,
+  months = 6,
+): ProjectionExcluded {
+  const meses = mesesDeLaProyeccion(ahora, months);
+  const out: ProjectionExcluded = { enPausa: 0, abandonados: 0, amountMxn: 0 };
+  let importe = 0;
+  for (const c of cases) {
+    if (!ESTADOS_FUERA_DE_LA_PROYECCION.includes(c.status)) continue;
+    let delCaso = 0;
+    for (const q of c.cobranza?.proximas ?? []) {
+      if (q.vencimiento && meses.has(q.vencimiento.slice(0, 7))) delCaso += q.falta;
+    }
+    if (delCaso <= 0) continue;
+    importe += delCaso;
+    if (c.status === "ON_HOLD") out.enPausa += 1;
+    else out.abandonados += 1;
+  }
+  out.amountMxn = Math.round(importe);
+  return out;
 }
 
 export interface PlacementsAndRemovals {
