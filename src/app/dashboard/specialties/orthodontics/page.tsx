@@ -27,7 +27,7 @@ export default async function OrthodonticsIndexPage() {
 
   const [data, kanbanCards] = await Promise.all([
     loadOrthodonticPatients(user.clinicId, viewer),
-    buildKanbanData(user.clinicId),
+    buildKanbanData(user.clinicId, viewer),
   ]);
 
   const rowsSerializable = data.rows.map((r) => ({

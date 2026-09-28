@@ -8,13 +8,29 @@ import { progressPct } from "./kanban-helpers";
 import { summarizeCompliance } from "./compliance-helpers";
 import { computePaymentStatus } from "./payment-status";
 import { PHASE_ORDER } from "./phase-machine";
+import {
+  relatedPatientVisibilityAnd,
+  type VisibilityViewer,
+} from "@/lib/patient-visibility";
 
-export async function buildKanbanData(clinicId: string): Promise<OrthoKanbanCard[]> {
+/**
+ * P3 (Ola 1, ws1-t3 · Acceso y permisos): esta query solo filtraba por
+ * `clinicId` — hallazgo de la auditoría (REPORTE-ws1-t8.md, sección técnica
+ * P3: "build-kanban-data.ts:12-18 filtra solo por clínica, sin visibilidad
+ * por paciente"). `loadOrthodonticPatients` (load-patients.ts, la tabla
+ * nueva) ya usaba `relatedPatientVisibilityAnd`; este archivo (el kanban de
+ * la vista antigua, S1) se queda con el mismo criterio.
+ */
+export async function buildKanbanData(
+  clinicId: string,
+  viewer: VisibilityViewer,
+): Promise<OrthoKanbanCard[]> {
   const plans = await prisma.orthodonticTreatmentPlan.findMany({
     where: {
       clinicId,
       deletedAt: null,
       status: { in: ["PLANNED", "IN_PROGRESS", "RETENTION", "ON_HOLD"] },
+      AND: relatedPatientVisibilityAnd(viewer),
     },
     include: {
       patient: { select: { firstName: true, lastName: true } },
