@@ -417,6 +417,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                             <button
                               onClick={() => setMaterialesDe(p)}
                               title="Materiales (receta)"
+                              aria-label={`Materiales (receta) de ${p.name}`}
                               className={
                                 rediseno
                                   ? styles.actionBtn
@@ -428,6 +429,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                             <button
                               onClick={() => openEdit(p)}
                               title={t("common.edit")}
+                              aria-label={`${t("common.edit")}: ${p.name}`}
                               className={
                                 rediseno
                                   ? styles.actionBtn
@@ -439,6 +441,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                             <button
                               onClick={() => toggleActive(p)}
                               title={p.isActive ? t("pages.procedures.deactivate") : t("pages.procedures.activate")}
+                              aria-label={`${p.isActive ? t("pages.procedures.deactivate") : t("pages.procedures.activate")}: ${p.name}`}
                               className={
                                 rediseno
                                   ? `${styles.actionBtn} ${p.isActive ? styles.actionWarn : styles.actionOk}`
@@ -454,6 +457,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                             <button
                               onClick={() => handleDelete(p)}
                               title={t("common.delete")}
+                              aria-label={`${t("common.delete")}: ${p.name}`}
                               className={
                                 rediseno
                                   ? `${styles.actionBtn} ${styles.actionDanger}`
@@ -489,6 +493,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
               </h2>
               <button
                 onClick={closeModal}
+                aria-label={t("common.close")}
                 className={rediseno ? styles.modalClose : "p-1.5 rounded-lg text-muted-foreground hover:text-muted-foreground hover:bg-muted transition-colors"}
               >
                 <X className="w-4 h-4" />

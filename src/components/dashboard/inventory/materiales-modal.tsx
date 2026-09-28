@@ -116,8 +116,13 @@ export function MaterialesModal({
             se centra ella sola, y eso lo pone ahora la ropa (`ropaVentana`). */}
         <Dialog.Content className={ropa.caja} aria-describedby={undefined} onEscapeKeyDown={onClose}>
           <div className="modal__header">
-            <Dialog.Title className="modal__title">
-              <span className={inv.tituloTextos}>
+            {/* B10 de la QA de ws1-t10: el título y el subtítulo son dos nodos de
+                texto pegados ("Materiales" + span sin espacio de por medio), así
+                que el nombre accesible salía "MaterialesQA Proc t10". El
+                `aria-label` explícito no depende de cómo queden pegados los
+                nodos visuales. */}
+            <Dialog.Title className="modal__title" aria-label={`Materiales — ${procedureName}`}>
+              <span className={inv.tituloTextos} aria-hidden>
                 Materiales
                 <span className={inv.tituloSub}>{procedureName}</span>
               </span>
