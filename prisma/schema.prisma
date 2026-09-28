@@ -2576,11 +2576,11 @@ model PatientFile {
 
   // Orthodontics — Parte 7 «Imagen y análisis» (ws1-t8, ola 1, sep-2026):
   // radiografía lateral de cráneo y PDF de trazado del centro radiológico
-  // usados por un análisis cefalométrico (H1/H3/H4). Parte 8 (H15): foto de
-  // monitoreo remoto que el paciente sube desde el portal.
+  // usados por un análisis cefalométrico (H1/H3/H4). H15 (foto de monitoreo
+  // del paciente) NO usa PatientFile — ver storageKey propio en
+  // OrthodonticMonitoringPhoto, mismo patrón que PatientUpload/documentos.
   orthoCephXrayFor       OrthodonticCephalometryAnalysis[] @relation("OrthoCephXrayFile")
   orthoCephTracingPdfFor OrthodonticCephalometryAnalysis[] @relation("OrthoCephTracingPdfFile")
-  orthoMonitoringPhotoFor OrthodonticMonitoringPhoto[]     @relation("OrthoMonitoringPhotoFile")
 
   // Implants module — radiografías peri-implantarias, foto intraoperatoria
   // de la cirugía, foto del paciente para el carnet, PDF del carnet,
@@ -4334,6 +4334,8 @@ model Guardian {
   primaryFor      PediatricRecord[]  @relation("PrimaryGuardian")
   pediatricRecord PediatricRecord?   @relation("AllGuardians", fields: [pediatricRecordId], references: [id])
   consents        PediatricConsent[]
+  // Ola 1 (ws1-t6, sep-2026) — «Alta del caso» de ortodoncia, A11.
+  orthoTreatmentPlansAsResponsible OrthodonticTreatmentPlan[] @relation("OrthoResponsibleGuardian")
 
   @@index([clinicId])
   @@index([patientId, principal])
@@ -6254,6 +6256,16 @@ model OrthodonticDiagnosis {
 
   clinicalSummary String
 
+  // Ola 1 (ws1-t6, sep-2026) — «Alta del caso», A13: quién refirió al
+  // paciente (directorio existente "doctor_contacts", el mismo que la carta
+  // de referencia saliente S16, sin tocarla). A12: pacientes en observación
+  // (valorados, sin plan todavía) con fecha de próxima revisión. Las cuatro
+  // nulas/false y aditivas; SQL a mano en sql/ortodoncia-alta-caso.sql.
+  referredByDoctorId  String?
+  referredByDoctor    DoctorContact? @relation("OrthoReferringDoctor", fields: [referredByDoctorId], references: [id], onDelete: SetNull)
+  inObservation       Boolean        @default(false)
+  nextObservationDate DateTime?
+
   treatmentPlan OrthodonticTreatmentPlan?
 
   createdAt DateTime  @default(now())
@@ -6266,6 +6278,7 @@ model OrthodonticDiagnosis {
 
   @@index([patientId])
   @@index([clinicId, diagnosedAt(sort: Desc)])
+  @@index([clinicId, inObservation])
   @@map("orthodontic_diagnoses")
 }
 
@@ -6320,6 +6333,12 @@ model OrthodonticTreatmentPlan {
   treatingDoctor   User?    @relation("OrthoTreatingDoctor", fields: [treatingDoctorId], references: [id], onDelete: SetNull)
   invoiceId        String?  @unique
   invoice          Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  // Ola 1 (ws1-t6, sep-2026) — «Alta del caso», A11: responsable del pago.
+  // Reutiliza "Guardian" (pediatría) sin exigir PediatricRecord. Nula y
+  // aditiva; SQL a mano en sql/ortodoncia-alta-caso.sql.
+  responsibleGuardianId String?
+  responsibleGuardian   Guardian? @relation("OrthoResponsibleGuardian", fields: [responsibleGuardianId], references: [id], onDelete: SetNull)
 
   diagnosis      OrthodonticDiagnosis            @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
   patient        Patient                         @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -7399,8 +7418,14 @@ model OrthodonticMonitoringPhoto {
   patientId       String
   clinicId        String
 
-  patientFileId String
-  patientFile   PatientFile @relation("OrthoMonitoringPhotoFile", fields: [patientFileId], references: [id], onDelete: Cascade)
+  /// Binario propio (bucket patient-files), mismo patrón que PatientUpload:
+  /// NO se reusa PatientFile (es de subida clínica, no de paciente) ni
+  /// PatientUpload (es un inbox genérico de documentos, sin el flujo de
+  /// ángulo/revisión que necesita el monitoreo remoto).
+  storageKey String
+  fileName   String?
+  mimeType   String?
+  sizeBytes  Int?
 
   angle        OrthoMonitoringAngle        @default(OTHER)
   patientNote  String?
@@ -7767,6 +7792,8 @@ model DoctorContact {
 
   clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   referralLetters ReferralLetter[]
+  // Ola 1 (ws1-t6, sep-2026) — «Alta del caso» de ortodoncia, A13.
+  orthodonticReferrals OrthodonticDiagnosis[] @relation("OrthoReferringDoctor")
 
   @@index([clinicId, fullName])
   @@map("doctor_contacts")
