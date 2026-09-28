@@ -235,7 +235,16 @@ export function FinanzasClient() {
   }
 
   async function deleteGasto(id: string) {
-    if (!window.confirm("¿Eliminar este gasto?")) return;
+    // B6 de la QA de ws1-t10: un gasto que nació de una compra de inventario
+    // (`purchaseId`) queda huérfano al borrarlo — las existencias y el costo
+    // que sumó la compra se quedan igual, pero el gasto que los explica
+    // desaparece de Finanzas. No se bloquea (eso es decisión de Rafael, ver
+    // el reporte de ws1-t6); por ahora se avisa antes de borrar.
+    const gasto = gastos.find((g) => g.id === id);
+    const aviso = gasto?.purchaseId
+      ? "Este gasto viene de una compra de inventario. Borrarlo NO revierte las existencias ni el costo que sumó esa compra: los números dejarán de cuadrar entre Finanzas e Inventario.\n\n¿Eliminar de todas formas?"
+      : "¿Eliminar este gasto?";
+    if (!window.confirm(aviso)) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/gastos?id=${encodeURIComponent(id)}`, { method: "DELETE" });
