@@ -13,11 +13,15 @@
  * factura anulada seguiría contando como deuda. Los BORRADORES sí entran, igual
  * que en esa pantalla.
  *
- * Aparte, y etiquetado aparte, va el VENCIDO con el criterio de Finanzas →
- * Saldos (`overdueInvoiceWhere`: por cobrar, ni DRAFT ni CANCELLED, y
- * `dueDate` anterior al inicio de hoy EN LA ZONA DE LA CLÍNICA). Son dos
- * poblaciones distintas a propósito: mezclarlas daría un número que no está en
- * ninguna pantalla.
+ * Aparte, y etiquetado aparte, va el VENCIDO con el criterio de Caja, Facturas
+ * y Finanzas → Saldos (`computeReceivables` de @/lib/caja, fila 87): por
+ * cobrar (ni DRAFT ni CANCELLED) y, de cada factura, SOLO lo que ya venció
+ * — a plazos, sus cuotas vencidas sin pagar; un cargo de control de
+ * ortodoncia, según su vencimiento; de un solo pago, el saldo si `dueDate` es
+ * anterior al inicio de hoy EN LA ZONA DE LA CLÍNICA. Antes aquí contaba el
+ * saldo ENTERO de toda factura con `dueDate` pasada, y un plan a plazos con
+ * una mensualidad atrasada no contaba. Son dos poblaciones distintas a
+ * propósito: mezclarlas daría un número que no está en ninguna pantalla.
  *
  * ── PERMISO Y NOMBRES ──────────────────────────────────────────────────
  * `billing.view`, igual que GET /api/invoices, que es la pantalla que hoy
@@ -26,7 +30,7 @@
  * restringido no salga por la puerta de la facturación.
  */
 
-import { overdueInvoiceWhere } from "@/lib/caja";
+import { computeReceivables, type CajaDb } from "@/lib/caja";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { round2 } from "@/lib/invoice-totals";
 import {
@@ -64,7 +68,7 @@ export interface DatosDeuda {
   deudores: Lista<DeudorFila>;
   /** Σ balance de todas las facturas con saldo no canceladas. El KPI "Monto adeudado". */
   totalAdeudado: number;
-  /** Σ balance de las facturas VENCIDAS (criterio de Finanzas → Saldos). */
+  /** Lo VENCIDO de las facturas por cobrar, por cuota en las de plazos (`computeReceivables`, el de Finanzas → Saldos). */
   totalVencido: number;
   /** Inicio de hoy en la clínica, contra el que se midió el vencimiento. */
   vencidoAlDia: string;
@@ -96,12 +100,8 @@ export const pacientesConDeuda = definirHerramienta<ParamsDeuda, DatosDeuda>({
       status: { not: "CANCELLED" },
       ...(visRelacion.length ? { AND: visRelacion } : {}),
     };
-    const whereVencido: Record<string, any> = {
-      ...overdueInvoiceWhere(ctx.clinicId, inicioDeHoy(ctx.timezone)),
-      ...(visRelacion.length ? { AND: visRelacion } : {}),
-    };
 
-    const [sumaTotal, distintos, porPaciente, sumaVencida] = await Promise.all([
+    const [sumaTotal, distintos, porPaciente, saldos] = await Promise.all([
       db.invoice.aggregate({ _sum: { balance: true }, where: whereDeuda }),
       // Mismo movimiento que el KPI "Pacientes con deuda" de /api/patients:
       // patientIds distintos, no facturas.
@@ -114,7 +114,12 @@ export const pacientesConDeuda = definirHerramienta<ParamsDeuda, DatosDeuda>({
         orderBy: { _sum: { balance: "desc" } },
         take: 51,
       }),
-      db.invoice.aggregate({ _sum: { balance: true }, where: whereVencido }),
+      // Solo lectura. Con la visibilidad por paciente como filtro EXTRA (se
+      // suma con AND, nunca ensancha `receivableInvoiceWhere(clinicId)`).
+      computeReceivables(ctx.clinicId, new Date(), db as unknown as CajaDb, undefined, {
+        filtro: visRelacion.length ? { AND: visRelacion } : undefined,
+        timezone: ctx.timezone,
+      }),
     ]);
 
     const ids = porPaciente.map((g: any) => g.patientId).filter(Boolean);
@@ -154,7 +159,7 @@ export const pacientesConDeuda = definirHerramienta<ParamsDeuda, DatosDeuda>({
     return {
       deudores: recortar(filas, distintos.length),
       totalAdeudado: round2(sumaTotal?._sum?.balance ?? 0),
-      totalVencido: round2(sumaVencida?._sum?.balance ?? 0),
+      totalVencido: round2(saldos.vencido),
       vencidoAlDia: inicioDeHoy(ctx.timezone).toISOString(),
     };
   },

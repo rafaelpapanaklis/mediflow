@@ -203,6 +203,9 @@ export async function GET(req: NextRequest) {
       saldos: {
         porCobrar: money(saldos.porCobrar),
         vencido:   money(saldos.vencido),
+        // true solo si la clínica pasa de 100 000 facturas abiertas: las dos
+        // cifras son un mínimo y la pantalla lo dice (no se corta en silencio).
+        incompleto: saldos.incompleto,
       },
     });
   } catch (err: any) {

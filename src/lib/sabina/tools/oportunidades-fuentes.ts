@@ -22,10 +22,10 @@
  */
 
 import { buildAppointmentWhere } from "@/lib/auth-context";
-import { overdueInvoiceWhere, receivableInvoiceWhere } from "@/lib/caja";
+import { computeReceivables, receivableInvoiceWhere, type CajaDb } from "@/lib/caja";
 import { round2 } from "@/lib/invoice-totals";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
-import { comoAuthContext, recortar, tienePermiso, visorDe, type Lista } from "./base";
+import { comoAuthContext, pesos, recortar, tienePermiso, visorDe, type Lista } from "./base";
 import { ESTADOS_ACTIVOS } from "./estados";
 import { fechaDe, inicioDeHoy } from "./fechas";
 import {
@@ -192,8 +192,10 @@ export async function pacientesConCitaFutura(
  * inflaría la cifra, que es justo lo que no puede pasar aquí.
  *
  * La antigüedad se mide desde que se EMITIÓ (`createdAt`), que siempre existe, y
- * no desde `dueDate`, que es opcional. El vencimiento sí sale del `dueDate` y con
- * el criterio canónico (`overdueInvoiceWhere`), para no inventar un tercer
+ * no desde `dueDate`, que es opcional. El vencimiento sale del criterio canónico
+ * de Caja, Facturas y Finanzas (`computeReceivables`, fila 87): a plazos, solo
+ * las cuotas vencidas sin pagar; un cargo de control de ortodoncia, según su
+ * vencimiento; de un solo pago, por `dueDate`. Así no se inventa un tercer
  * número que no esté en ninguna pantalla.
  */
 /**
@@ -231,19 +233,21 @@ export async function seccionPorCobrar(
 
   const [resumen, vencidas, arco, filasCrudas] = await Promise.all([
     db.invoice.aggregate({ _sum: { balance: true }, _count: true, where: llamables }),
-    db.invoice.aggregate({
-      _sum: { balance: true },
-      where: {
-        ...overdueInvoiceWhere(ctx.clinicId, inicioDeHoy(ctx.timezone)),
+    // Solo lectura. La misma población que `llamables` (el corte, sin ARCO y
+    // con la visibilidad), como filtro EXTRA sobre las facturas por cobrar.
+    computeReceivables(ctx.clinicId, ahora, db as unknown as CajaDb, undefined, {
+      filtro: {
         createdAt: { lt: corte },
         patient: { is: { deletedAt: null } },
         ...(vis.length ? { AND: vis } : {}),
       },
+      timezone: ctx.timezone,
     }),
     db.invoice.aggregate({ _sum: { balance: true }, _count: true, where: archivadas }),
     db.invoice.findMany({
       where: llamables,
       select: {
+        id: true,
         invoiceNumber: true,
         balance: true,
         dueDate: true,
@@ -258,20 +262,33 @@ export async function seccionPorCobrar(
   const hoy = inicioDeHoy(ctx.timezone).getTime();
   const filas: FilaEscape[] = (filasCrudas as any[]).map((f) => {
     const vencidaEl = f.dueDate ? new Date(f.dueDate) : null;
-    const vencida = vencidaEl !== null && vencidaEl.getTime() < hoy;
+    const saldo = round2(num(f.balance));
+    // Lo vencido de ESTA factura con la regla de `computeReceivables`: en una a
+    // plazos puede ser solo una parte (las cuotas atrasadas), y una a plazos al
+    // corriente no está vencida aunque su `dueDate` ya haya pasado.
+    const vencidoDeEsta = num(vencidas.vencidoPorFactura[f.id]);
+    const estado =
+      vencidoDeEsta > 0
+        ? vencidoDeEsta < saldo
+          ? `, con ${pesos(vencidoDeEsta)} de cuotas vencidas`
+          : vencidaEl ? `, vencida el ${fechaDe(vencidaEl, ctx.timezone)}` : ", vencida"
+        : !vencidaEl
+          ? ", sin fecha de vencimiento"
+          : vencidaEl.getTime() >= hoy
+            ? `, vence el ${fechaDe(vencidaEl, ctx.timezone)}`
+            : ", al corriente con sus cuotas";
     return {
       tipo: "por_cobrar" as const,
       paciente: nombreDe(f.patient),
       folio: f.patient?.patientNumber ?? null,
       telefono: telefonoDe(ctx, f.patient),
-      valor: round2(num(f.balance)),
+      valor: saldo,
       dias: dias(f.createdAt, ahora),
       detalle:
         // `invoiceNumber` es obligatorio en el esquema; el `??` es para que una
         // fila a medias (un doble de prueba, una importación) no imprima "null"
         // donde el doctor espera un folio con el que buscar la factura.
-        `factura ${f.invoiceNumber ?? "sin folio"}` +
-        (vencidaEl ? `, ${vencida ? "vencida" : "vence"} el ${fechaDe(vencidaEl, ctx.timezone)}` : ", sin fecha de vencimiento"),
+        `factura ${f.invoiceNumber ?? "sin folio"}` + estado,
     };
   });
 
@@ -285,7 +302,7 @@ export async function seccionPorCobrar(
     // menos $X» de una cifra que es exacta.
     seccion: armar(filas, "por_cobrar", total, false, num((resumen as any)?._sum?.balance)),
     archivados: { filas: num((arco as any)?._count), monto: round2(num((arco as any)?._sum?.balance)), exacto: true },
-    vencido: round2(num((vencidas as any)?._sum?.balance)),
+    vencido: round2(vencidas.vencido),
   };
 }
 

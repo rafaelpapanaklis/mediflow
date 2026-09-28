@@ -207,6 +207,7 @@ export interface CajaState {
   // los manda siempre.
   receivableTotal?:  number;                 // POR COBRAR: todo lo que falta por cobrar
   overdueByInvoice?: Record<string, number>; // lo vencido de cada factura con algo vencido
+  receivablesIncompleto?: boolean;           // true = se tocó el techo de lectura: las dos cifras son un mínimo
 }
 
 function fullName(u?: { firstName?: string | null; lastName?: string | null } | null): string {
@@ -718,21 +719,53 @@ export interface SaldosDeLaClinica {
   vencido:   number;
   /** Lo vencido de cada factura que tiene algo vencido: `invoiceId` → pesos. */
   vencidoPorFactura: Record<string, number>;
+  /**
+   * `true` solo si se tocó el techo de seguridad (`RECEIVABLES_MAX_PAGINAS` ×
+   * `RECEIVABLES_PAGINA` facturas abiertas): las cifras son un MÍNIMO. Por
+   * debajo de ese techo se leen TODAS, en tandas, y es siempre `false`.
+   */
+  incompleto: boolean;
 }
+
+/** Facturas por cobrar por tanda en `computeReceivables` (lista `IN` acotada). */
+export const RECEIVABLES_PAGINA = 2000;
+/** Techo de tandas: 50 × 2000 = 100 000 facturas abiertas. Pasado eso, `incompleto`. */
+export const RECEIVABLES_MAX_PAGINAS = 50;
+
+/** Opciones de `computeReceivables` para quien necesita un SUBCONJUNTO (Sabina). */
+export interface OpcionesDeSaldos {
+  /**
+   * Filtro EXTRA sobre las facturas por cobrar (p. ej. la visibilidad por
+   * paciente, o `createdAt`). Se añade con `AND`: nunca ensancha ni reemplaza
+   * `receivableInvoiceWhere(clinicId)`.
+   */
+  filtro?:   Prisma.InvoiceWhereInput;
+  /** Zona de la clínica si quien llama ya la tiene: ahorra la lectura de `Clinic.timezone`. */
+  timezone?: string;
+  /** Solo para pruebas: tamaño de tanda y techo de tandas. */
+  pagina?:     number;
+  maxPaginas?: number;
+}
+
+const SALDOS_VACIOS = (): SaldosDeLaClinica => ({ porCobrar: 0, vencido: 0, vencidoPorFactura: {}, incompleto: false });
 
 /**
  * «POR COBRAR» y «VENCIDO» de la clínica (fila 87 de la revisión de lógica de
- * uso). Es LA función: la usan la pestaña Caja, la pestaña Facturas y
- * Finanzas, que antes daban tres cifras distintas el mismo día (Facturas y
- * Finanzas contaban vencido por `dueDate` y el saldo entero; Caja, por cuota).
+ * uso). Es LA función: la usan la pestaña Caja, la pestaña Facturas (KPIs, la
+ * píldora «Vencida» y el filtro «Vencidas»), Finanzas y Sabina, que antes daban
+ * cifras distintas el mismo día (contaban vencido por `dueDate` y el saldo
+ * entero; Caja, por cuota).
  *
- * Trae las facturas por cobrar (sin `payments`: la inmensa mayoría es de un
- * solo pago y no los necesita), sus condiciones de pago EN LOTE
+ * Lee las facturas por cobrar EN TANDAS de `RECEIVABLES_PAGINA` (cursor por
+ * `id`), sin `payments` (la inmensa mayoría es de un solo pago y no los
+ * necesita). Por cada tanda: sus condiciones de pago EN LOTE
  * (`leerCondicionesDeFacturas` — sin `sql/factura-condiciones-pago.sql`
- * aplicado no revienta: no encuentra ninguna a plazos), los cargos de control
- * de ortodoncia (tolerante) y, SOLO para las que sí son a plazos, sus pagos.
- * «Hoy» es el día de la CLÍNICA (`Clinic.timezone`). Como mucho dos consultas
- * a la vez.
+ * aplicado no revienta: no encuentra ninguna a plazos) y, SOLO para las que sí
+ * son a plazos, sus pagos. Una vez: la zona de la clínica y los cargos de
+ * control de ortodoncia (tolerante). Antes había un `take: 5000` que cortaba
+ * en silencio; ahora se lee todo hasta un techo de 100 000 y, si se toca,
+ * `incompleto: true` (y un aviso en el log). «Hoy» es el día de la CLÍNICA.
+ * Como mucho dos consultas a la vez.
  */
 export async function computeReceivables(
   clinicId: string,
@@ -740,30 +773,35 @@ export async function computeReceivables(
   db: CajaDb = prisma,
   /** Solo para pruebas: de dónde salen los cargos de control de ortodoncia. */
   leerCargosDeControl: (clinicId: string) => Promise<Map<string, string>> = cargarVencimientosDeCargosDeControl,
+  opciones: OpcionesDeSaldos = {},
 ): Promise<SaldosDeLaClinica> {
   // `clinicId: undefined` no filtra nada en Prisma: sin clínica no se consulta.
-  if (!clinicId) return { porCobrar: 0, vencido: 0, vencidoPorFactura: {} };
-  const receivable = await db.invoice.findMany({
-    where:  receivableInvoiceWhere(clinicId),
-    select: { id: true, balance: true, dueDate: true, total: true },
-    take:   5000,
+  if (!clinicId) return SALDOS_VACIOS();
+  const pagina = Math.max(1, opciones.pagina ?? RECEIVABLES_PAGINA);
+  const maxPaginas = Math.max(1, opciones.maxPaginas ?? RECEIVABLES_MAX_PAGINAS);
+
+  const leerTanda = (despuesDe: string | null) => db.invoice.findMany({
+    where: {
+      ...receivableInvoiceWhere(clinicId),
+      AND: [
+        ...(opciones.filtro ? [opciones.filtro] : []),
+        ...(despuesDe ? [{ id: { gt: despuesDe } }] : []),
+      ],
+    },
+    select:  { id: true, balance: true, dueDate: true, total: true },
+    orderBy: { id: "asc" },
+    take:    pagina,
   });
-  if (receivable.length === 0) return { porCobrar: 0, vencido: 0, vencidoPorFactura: {} };
 
-  const [{ porFactura }, clinic] = await Promise.all([
-    leerCondicionesDeFacturas(db as unknown as typeof prisma, { clinicId, invoiceIds: receivable.map((f) => f.id) }),
-    db.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }),
+  let tanda = await leerTanda(null);
+  if (tanda.length === 0) return SALDOS_VACIOS();
+
+  const [clinic, vencimientosControl] = await Promise.all([
+    opciones.timezone
+      ? Promise.resolve({ timezone: opciones.timezone })
+      : db.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }),
+    leerCargosDeControl(clinicId).catch(() => new Map<string, string>()),
   ]);
-  const vencimientosControl = await leerCargosDeControl(clinicId).catch(() => new Map<string, string>());
-
-  const idsAPlazos = receivable.filter((f) => esPlanAPlazos(porFactura.get(f.id))).map((f) => f.id);
-  const cobrosPorFactura = idsAPlazos.length === 0
-    ? new Map<string, Array<{ amount: unknown; method: string | null }>>()
-    : new Map((await db.invoice.findMany({
-        where:  { id: { in: idsAPlazos }, clinicId },
-        select: { id: true, payments: { select: { amount: true, method: true } } },
-      })).map((i) => [i.id, i.payments]));
-
   const timezone = clinic?.timezone || DEFAULT_INVOICE_TZ;
   const hoy = hoyEnZonaClinica(now, timezone);
   const todayStart = tzLocalToUtc(hoy, 0, 0, timezone);
@@ -771,19 +809,42 @@ export async function computeReceivables(
   let porCobrarC = 0;
   let vencidoC = 0;
   const vencidoPorFactura: Record<string, number> = {};
-  for (const f of receivable) {
-    porCobrarC += Math.round((f.balance ?? 0) * 100);
-    const v = overdueOfInvoice(
-      { ...f, condiciones: porFactura.get(f.id), cobros: cobrosPorFactura.get(f.id) ?? [], vencimientoControl: vencimientosControl.get(f.id) ?? null },
-      todayStart,
-      hoy,
-    );
-    if (v > 0) {
-      vencidoC += Math.round(v * 100);
-      vencidoPorFactura[f.id] = money(v);
+  let incompleto = false;
+
+  for (let n = 1; ; n++) {
+    const { porFactura } = await leerCondicionesDeFacturas(db as unknown as typeof prisma, { clinicId, invoiceIds: tanda.map((f) => f.id) });
+    const idsAPlazos = tanda.filter((f) => esPlanAPlazos(porFactura.get(f.id))).map((f) => f.id);
+    const cobrosPorFactura = idsAPlazos.length === 0
+      ? new Map<string, Array<{ amount: unknown; method: string | null }>>()
+      : new Map((await db.invoice.findMany({
+          where:  { id: { in: idsAPlazos }, clinicId },
+          select: { id: true, payments: { select: { amount: true, method: true } } },
+        })).map((i) => [i.id, i.payments]));
+
+    for (const f of tanda) {
+      porCobrarC += Math.round((f.balance ?? 0) * 100);
+      const v = overdueOfInvoice(
+        { ...f, condiciones: porFactura.get(f.id), cobros: cobrosPorFactura.get(f.id) ?? [], vencimientoControl: vencimientosControl.get(f.id) ?? null },
+        todayStart,
+        hoy,
+      );
+      if (v > 0) {
+        vencidoC += Math.round(v * 100);
+        vencidoPorFactura[f.id] = money(v);
+      }
     }
+
+    if (tanda.length < pagina) break;
+    if (n >= maxPaginas) {
+      // Quedan (o pueden quedar) más: se dice, no se corta en silencio.
+      incompleto = true;
+      console.warn(`[caja:saldos] clínica ${clinicId}: más de ${pagina * maxPaginas} facturas abiertas; «Por cobrar» y «Vencido» son un mínimo.`);
+      break;
+    }
+    tanda = await leerTanda(tanda[tanda.length - 1].id);
+    if (tanda.length === 0) break;
   }
-  return { porCobrar: porCobrarC / 100, vencido: vencidoC / 100, vencidoPorFactura };
+  return { porCobrar: porCobrarC / 100, vencido: vencidoC / 100, vencidoPorFactura, incompleto };
 }
 
 /**
@@ -812,6 +873,7 @@ async function computeDayBilling(clinicId: string, todayStart: Date, now: Date, 
     overdueToday: saldos.vencido,
     receivableTotal:  saldos.porCobrar,
     overdueByInvoice: saldos.vencidoPorFactura,
+    receivablesIncompleto: saldos.incompleto,
   };
 }
 
@@ -840,6 +902,7 @@ export async function getCajaState(clinicId: string): Promise<CajaState> {
     overdueToday:     money(dayBilling.overdueToday),
     receivableTotal:  money(dayBilling.receivableTotal),
     overdueByInvoice: dayBilling.overdueByInvoice,
+    receivablesIncompleto: dayBilling.receivablesIncompleto,
   };
 
   return { ...(await shiftOf(clinicId, reg, now, {})), ...day };

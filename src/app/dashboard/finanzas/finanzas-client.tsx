@@ -28,7 +28,7 @@ interface FinanzasResumen {
   efectivo: number;
   serie:     SeriePoint[];
   porDoctor: DoctorRow[];
-  saldos:    { porCobrar: number; vencido: number };
+  saldos:    { porCobrar: number; vencido: number; incompleto?: boolean };
 }
 interface Gasto {
   id: string; date: string; category: string; amount: number; note: string | null;
@@ -589,6 +589,11 @@ export function FinanzasClient() {
             <Kpi label="Por cobrar" value={fmtMXN(data.saldos?.porCobrar ?? 0)} icon={Wallet} tone="brand" big />
             <Kpi label="Vencido" value={fmtMXN(data.saldos?.vencido ?? 0)} icon={AlertTriangle} tone="danger" big />
           </div>
+          {data.saldos?.incompleto && (
+            <p style={{ marginTop: 10, fontSize: 12, color: "var(--text-3)" }}>
+              Cifra parcial: hay más facturas abiertas de las que se alcanzan a sumar; «Por cobrar» y «Vencido» son un mínimo.
+            </p>
+          )}
           <div style={{ marginTop: 14 }}>
             <Link
               href="/dashboard/caja?tab=facturas"

@@ -16,7 +16,7 @@
  *   3. No-shows del periodo  → KPI "No-shows" del home admin
  *   4. Ingresos del periodo  → KPI "Ingresos del mes" del home admin (BRUTO)
  *   5. Deuda: monto y nº     → KPIs "Monto adeudado" / "Pacientes con deuda"
- *   6. Vencido               → Finanzas → Saldos (`overdueInvoiceWhere`)
+ *   6. Vencido               → Finanzas → Saldos (`computeReceivables`)
  *
  * ── LA ÚNICA DIFERENCIA A PROPÓSITO, Y ES LA ZONA HORARIA ──────────────
  * Las pantallas de arriba arman «hoy» y «el mes» con la hora del PROCESO
@@ -31,9 +31,9 @@ import "./preparar";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { overdueInvoiceWhere } from "@/lib/caja";
+import { computeReceivables } from "@/lib/caja";
 import { ejecutarHerramienta } from "../index";
-import { inicioDeHoy, sumarDias, ventanaDeRango, ventanaDelDia } from "../fechas";
+import { sumarDias, ventanaDeRango, ventanaDelDia } from "../fechas";
 import { CL_NORTE, HOY_N, TZ_NORTE, adminNorte, base } from "./siembra";
 import type { BaseDoble } from "./doble-base";
 
@@ -184,13 +184,12 @@ test("5 · deuda: monto y número de pacientes iguales a los KPIs de Pacientes",
  * 6 · Vencido — Finanzas → Saldos, por el mismo helper del repo.
  * ══════════════════════════════════════════════════════════════════════ */
 
-test("6 · vencido: el mismo `overdueInvoiceWhere` que Finanzas y el corte de Caja", async () => {
+test("6 · vencido: el mismo `computeReceivables` que Finanzas, Caja y Facturas", async () => {
   const db = base();
-  // El helper es el de @/lib/caja: no se reescribe su criterio, se llama.
-  const pantalla = await db.invoice.aggregate({
-    _sum: { balance: true },
-    where: overdueInvoiceWhere(CL_NORTE, inicioDeHoy(TZ_NORTE)),
-  });
+  // La función es la de @/lib/caja (fila 87): no se reescribe su criterio, se
+  // llama — como Finanzas → Saldos, sin filtro extra y con la zona de la clínica.
+  const saldos = await computeReceivables(CL_NORTE, new Date(), comoPantalla(db), async () => new Map());
+  const pantalla = { _sum: { balance: saldos.vencido } };
 
   const sabina = await ejecutarHerramienta("pacientes_con_deuda", adminNorte(db), {});
   assert.equal(sabina.ok, true);

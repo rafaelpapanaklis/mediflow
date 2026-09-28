@@ -340,21 +340,26 @@ test("fila 87 · una factura normal sin dueDate sigue sin vencer jamás: el carg
 
 /** Una base de mentira con lo justo que lee `computeReceivables`. */
 function baseDeSaldos(opts: {
-  facturas: Array<{ id: string; clinicId: string; status: string; balance: number; total: number; dueDate: Date | null; payments?: Array<{ amount: number; method: string }> }>;
+  facturas: Array<{ id: string; clinicId: string; status: string; balance: number; total: number; dueDate: Date | null; patientId?: string; payments?: Array<{ amount: number; method: string }> }>;
   condiciones?: Array<Record<string, unknown>>;
   timezone?: string;
 }) {
   const consultas: Array<{ where: any }> = [];
   const db = {
     invoice: {
-      findMany: async ({ where, select }: any) => {
+      findMany: async ({ where, select, orderBy, take }: any) => {
         consultas.push({ where });
-        return opts.facturas
+        // `AND`: el cursor de las tandas (`id > …`) y el filtro extra (aquí, por `patientId`).
+        const y: any[] = where.AND ?? [];
+        let filas = opts.facturas
           .filter((f) => f.clinicId === where.clinicId)
           .filter((f) => (where.status?.notIn ? !where.status.notIn.includes(f.status) : true))
           .filter((f) => (where.balance?.gt !== undefined ? f.balance > where.balance.gt : true))
           .filter((f) => (where.id?.in ? where.id.in.includes(f.id) : true))
-          .map((f) => (select?.payments ? { id: f.id, payments: f.payments ?? [] } : { id: f.id, balance: f.balance, total: f.total, dueDate: f.dueDate }));
+          .filter((f) => y.every((c) => (c.id?.gt !== undefined ? f.id > c.id.gt : c.patientId !== undefined ? f.patientId === c.patientId : true)));
+        if (orderBy?.id === "asc") filas = [...filas].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+        if (typeof take === "number") filas = filas.slice(0, take);
+        return filas.map((f) => (select?.payments ? { id: f.id, payments: f.payments ?? [] } : { id: f.id, balance: f.balance, total: f.total, dueDate: f.dueDate }));
       },
       aggregate: async () => ({ _sum: {} }),
     },
@@ -407,8 +412,78 @@ test("fila 87 · computeReceivables: sin clínica no consulta nada, y si falla l
   const { db, consultas } = baseDeSaldos({
     facturas: [{ id: "n1", clinicId: "cl-1", status: "PENDING", balance: 300, total: 300, dueDate: new Date("2026-01-09T06:00:00Z") }],
   });
-  assert.deepEqual(await computeReceivables("", new Date(), db), { porCobrar: 0, vencido: 0, vencidoPorFactura: {} });
+  assert.deepEqual(await computeReceivables("", new Date(), db), { porCobrar: 0, vencido: 0, vencidoPorFactura: {}, incompleto: false });
   assert.equal(consultas.length, 0);
   const saldos = await computeReceivables("cl-1", new Date("2026-02-10T18:00:00Z"), db, async () => { throw new Error("sin columna"); });
   assert.equal(saldos.vencido, 300);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Topes silenciosos (ws1-t5): `computeReceivables` tenía `take: 5000` y
+// cortaba sin avisar. Ahora lee en tandas por cursor de `id` y, solo si toca su
+// techo, lo dice con `incompleto: true`.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** `n` facturas de un pago, vencidas, de $100 cada una, con ids ordenables. */
+function muchasFacturas(n: number) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `f${String(i).padStart(5, "0")}`, clinicId: "cl-1", status: "PENDING", balance: 100, total: 100,
+    dueDate: new Date("2026-01-01T06:00:00Z"),
+  }));
+}
+
+test("topes · computeReceivables lee TODAS las facturas en tandas: nada se queda fuera por un take", async () => {
+  const { db, consultas } = baseDeSaldos({ facturas: muchasFacturas(7) });
+  const saldos = await computeReceivables("cl-1", new Date("2026-02-10T18:00:00Z"), db, async () => new Map(), { pagina: 3 });
+  assert.equal(saldos.porCobrar, 700, "las 7, no las 3 de la primera tanda");
+  assert.equal(saldos.vencido, 700);
+  assert.equal(Object.keys(saldos.vencidoPorFactura).length, 7);
+  assert.equal(saldos.incompleto, false);
+  const tandas = consultas.filter((c) => c.where.status?.notIn);
+  assert.equal(tandas.length, 3, "3 + 3 + 1");
+  assert.ok(consultas.every((c) => c.where.clinicId === "cl-1"), "cada tanda lleva el clinicId");
+});
+
+test("topes · tanda exacta: si la última viene llena, se pide una más (vacía) y no se marca incompleto", async () => {
+  const { db, consultas } = baseDeSaldos({ facturas: muchasFacturas(6) });
+  const saldos = await computeReceivables("cl-1", new Date("2026-02-10T18:00:00Z"), db, async () => new Map(), { pagina: 3 });
+  assert.equal(saldos.porCobrar, 600);
+  assert.equal(saldos.incompleto, false);
+  assert.equal(consultas.filter((c) => c.where.status?.notIn).length, 3);
+});
+
+test("topes · pasado el techo de tandas, la cifra es un mínimo y lo DICE (incompleto: true)", async () => {
+  const { db } = baseDeSaldos({ facturas: muchasFacturas(10) });
+  const saldos = await computeReceivables("cl-1", new Date("2026-02-10T18:00:00Z"), db, async () => new Map(), { pagina: 3, maxPaginas: 2 });
+  assert.equal(saldos.porCobrar, 600, "solo 2 tandas de 3");
+  assert.equal(saldos.incompleto, true);
+});
+
+test("fila 87 · computeReceivables con filtro extra (Sabina): estrecha, no ensancha, y sigue en la clínica", async () => {
+  const { db, consultas } = baseDeSaldos({
+    facturas: [
+      { id: "a", clinicId: "cl-1", status: "PENDING", balance: 500, total: 500, dueDate: new Date("2026-01-01T06:00:00Z"), patientId: "p1" },
+      { id: "b", clinicId: "cl-1", status: "PENDING", balance: 900, total: 900, dueDate: new Date("2026-01-01T06:00:00Z"), patientId: "p2" },
+      { id: "c", clinicId: "cl-2", status: "PENDING", balance: 700, total: 700, dueDate: new Date("2026-01-01T06:00:00Z"), patientId: "p1" },
+    ],
+  });
+  const saldos = await computeReceivables("cl-1", new Date("2026-02-10T18:00:00Z"), db, async () => new Map(), {
+    filtro: { patientId: "p1" }, timezone: "America/Mexico_City",
+  });
+  assert.equal(saldos.porCobrar, 500);
+  assert.deepEqual(saldos.vencidoPorFactura, { a: 500 });
+  assert.ok(consultas.every((c) => c.where.clinicId === "cl-1"));
+});
+
+test("fila 87 · la píldora «Vencida» de Facturas es la de computeReceivables: plan a plazos al corriente con dueDate pasada NO está vencido; con una cuota atrasada, SÍ", async () => {
+  const todayStart = new Date("2026-02-10T06:00:00Z");
+  // 4 mensualidades de $1,000 (3-ene, 3-feb, 3-mar, 3-abr), con una `dueDate` de enero.
+  const condiciones = plazosMensual(4);
+  const base = { id: "p", balance: 3_000, dueDate: new Date("2026-01-01T06:00:00Z"), total: 4_000, condiciones };
+  // Enero pagado; febrero venció el 3 → atrasado el 10.
+  const conAtraso = overdueOfInvoice({ ...base, cobros: [{ amount: 1_000, method: "cash" }] }, todayStart, HOY);
+  assert.ok(conAtraso > 0 && conAtraso < 3_000, "solo la cuota, no el saldo entero");
+  // Enero y febrero pagados: al corriente aunque `dueDate` ya pasó.
+  const alCorriente = overdueOfInvoice({ ...base, balance: 2_000, cobros: [{ amount: 2_000, method: "cash" }] }, todayStart, HOY);
+  assert.equal(alCorriente, 0);
 });

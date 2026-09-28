@@ -20,7 +20,6 @@ import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
-import { isInvoiceOverdue } from "@/lib/invoices/due-date";
 import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import { todayLocalISO } from "@/lib/billing/paid-at";
 // La ficha de factura del diseño nuevo (solo con `rediseno`): lo bueno de
@@ -49,8 +48,15 @@ interface Props {
   monthInvoices: number;
   /** Facturas de la clínica en TOTAL: `invoices` trae solo las 100 más recientes. */
   totalInvoices?: number;
-  /** ISO del inicio de HOY en la zona de la clínica: umbral de "Vencidas" (dueDate < esto y saldo > 0). */
-  overdueBefore?: string;
+  /**
+   * Lo vencido de cada factura que tiene algo vencido (`invoiceId` → pesos), de
+   * `computeReceivables` (src/lib/caja.ts): la MISMA cuenta del KPI «Vencido».
+   * Cubre TODAS las facturas por cobrar de la clínica, no solo las 100 de la
+   * lista, así que también sirve para los resultados de la búsqueda remota.
+   */
+  overdueByInvoice?: Record<string, number>;
+  /** true = `computeReceivables` tocó su techo de lectura: KPIs parciales. */
+  receivablesIncompleto?: boolean;
   /** Saldo a favor total de la clínica (SUM patient_credits). 0 si no hay. */
   creditTotal?:  number;
   clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null; cfdiTaxMode?: string | null };
@@ -65,7 +71,7 @@ function patientNameOf(inv: any): string {
   return `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.trim() || "—";
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueBefore, creditTotal = 0, clinic, cfdiLive = false, rediseno = false }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueByInvoice, receivablesIncompleto = false, creditTotal = 0, clinic, cfdiLive = false, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
@@ -113,10 +119,12 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
     return () => { clearTimeout(timer); ctrl.abort(); };
   }, [search, page, refreshTick]);
 
-  // Vencida = emitida + saldo > 0 + dueDate anterior al inicio de hoy (zona de
-  // la clínica). NUNCA por status OVERDUE: nadie lo escribe. Sin umbral del
-  // servidor (prop ausente) no se marca nada como vencido.
-  const isOverdue = (inv: any) => (overdueBefore ? isInvoiceOverdue(inv, overdueBefore) : false);
+  // Vencida = tiene algo vencido según `computeReceivables` (fila 87): a plazos,
+  // si alguna cuota ya pasó sin pagarse; un cargo de control de ortodoncia,
+  // según su vencimiento; de un solo pago, por `dueDate`. El mismo criterio que
+  // el KPI «Vencido» de arriba — aquí no se vuelve a decidir. NUNCA por status
+  // OVERDUE: nadie lo escribe. Sin el mapa del servidor no se marca nada.
+  const isOverdue = (inv: any) => (overdueByInvoice?.[inv?.id] ?? 0) > 0;
 
   // Modals
   const [showNew, setShowNew]                     = useState(false);
@@ -181,7 +189,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       return name.includes(q) || (inv.invoiceNumber ?? "").toLowerCase().includes(q);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoices, remote, search, status, overdueBefore]);
+  }, [invoices, remote, search, status, overdueByInvoice]);
 
   // Refresh tras una mutación de factura. router.refresh() re-corre el server
   // component con los revalidatePath que dispararon los endpoints; el
@@ -304,6 +312,11 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           <KpiCard label={t("billing.billingClient.kpiCredit")}       value={fmtMXN(creditTotal)}     icon={Wallet} />
         )}
       </div>
+      {receivablesIncompleto && (
+        <p style={{ margin: "-10px 0 16px", fontSize: 12, color: "var(--text-3)" }}>
+          {t("billing.billingClient.partialReceivables")}
+        </p>
+      )}
 
       {/* Filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
@@ -406,8 +419,9 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
               </thead>
               <tbody>
                 {filtered.map(inv => {
-                  // La píldora dice "Vencido" cuando la factura LO ESTÁ (dueDate +
-                  // saldo), aunque su status siga en PENDING/PARTIAL.
+                  // La píldora dice "Vencido" cuando la factura LO ESTÁ (`isOverdue`:
+                  // la regla de `computeReceivables`), aunque su status siga en
+                  // PENDING/PARTIAL.
                   const badge = invoiceStatusBadge(isOverdue(inv) ? "OVERDUE" : inv.status);
                   const fullName = patientNameOf(inv);
                   const isDraft = inv.status === "DRAFT";

@@ -3257,6 +3257,7 @@
       "kpiOverdue": "Overdue",
       "kpiThisMonth": "This month",
       "kpiCredit": "Credit balance",
+      "partialReceivables": "Partial figure: there are more open invoices than can be added up; \"To collect\" and \"Overdue\" are a minimum.",
       "searchPlaceholder": "Search by patient or invoice number…",
       "emptyNoInvoices": "No invoices yet",
       "emptyNoResults": "No results for the applied filters",

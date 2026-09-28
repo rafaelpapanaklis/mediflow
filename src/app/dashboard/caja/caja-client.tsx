@@ -30,8 +30,10 @@ interface BillingProps {
   monthInvoices: number;
   /** Facturas de la clínica en TOTAL (el arreglo trae solo las 100 más recientes). */
   totalInvoices?: number;
-  /** ISO del inicio de HOY en la zona de la clínica: umbral del filtro "Vencidas". */
-  overdueBefore?: string;
+  /** Lo vencido de cada factura (`computeReceivables`): la píldora y el filtro «Vencidas». */
+  overdueByInvoice?: Record<string, number>;
+  /** true = `computeReceivables` tocó su techo de lectura: KPIs parciales. */
+  receivablesIncompleto?: boolean;
   creditTotal:   number;
   clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null; cfdiTaxMode?: string | null };
   /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. */
@@ -439,7 +441,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
       totalOverdue={billing.totalOverdue}
       monthInvoices={billing.monthInvoices}
       totalInvoices={billing.totalInvoices}
-      overdueBefore={billing.overdueBefore}
+      overdueByInvoice={billing.overdueByInvoice}
+      receivablesIncompleto={billing.receivablesIncompleto}
       creditTotal={billing.creditTotal}
       clinic={billing.clinic}
       cfdiLive={billing.cfdiLive}

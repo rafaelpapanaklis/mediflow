@@ -85,7 +85,6 @@ export default async function CajaPage() {
   // que los abonos de una PARTIAL no contaban. "Hoy" y "este mes" van en la
   // zona de la clínica: Vercel corre en UTC.
   const tz = user.clinic?.timezone || DEFAULT_INVOICE_TZ;
-  const todayStart = periodRangeUtc("day", tz).from;
   const monthStart = periodRangeUtc("month", tz).from;
   const issued: Prisma.InvoiceWhereInput = { clinicId: user.clinicId, status: { notIn: ["DRAFT", "CANCELLED"] } };
   // REDISEÑO DE CAJA — el MISMO interruptor por clínica que enciende el menú
@@ -124,9 +123,11 @@ export default async function CajaPage() {
         totalOverdue,
         monthInvoices,
         totalInvoices,
-        // Umbral del filtro "Vencidas" en el cliente: el mismo "hoy" de la clínica
-        // con el que se calculó el KPI de arriba.
-        overdueBefore: todayStart.toISOString(),
+        // La píldora «Vencida» y el filtro «Vencidas» leen ESTE mapa, el mismo
+        // cálculo (`computeReceivables`) del KPI «Vencido»: por cuota en las
+        // facturas a plazos y por su vencimiento en los cargos de control.
+        overdueByInvoice: caja.overdueByInvoice ?? {},
+        receivablesIncompleto: caja.receivablesIncompleto ?? false,
         creditTotal,
         clinic: {
           facturApiEnabled: clinic?.facturApiEnabled ?? false,
