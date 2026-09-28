@@ -8,8 +8,13 @@
 // `OrthodonticControlAppointment` (modelo viejo, S2, sin ocultar todavía).
 //
 // `clinicId`/`zonaHoraria` SIEMPRE de la sesión, nunca del cliente.
+//
+// Revisión cruzada (REPORTE-ws1-t1.md, «## Revisión cruzada», bloquea): la
+// consulta de citas no filtraba por visibilidad de paciente — mismo arreglo
+// que tablero-data.ts.
 
 import { prisma } from "@/lib/prisma";
+import { relatedPatientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import { loadOrthoCases } from "./tablero-data";
 import {
@@ -47,9 +52,10 @@ const FUTURE_CONTROL_WINDOW_DAYS = 180;
 export async function loadOrthoAlerts(
   clinicId: string,
   zonaHoraria: string,
+  viewer: VisibilityViewer,
   ahora: Date = new Date(),
 ): Promise<OrthoAlertsData> {
-  const { cases } = await loadOrthoCases(clinicId, zonaHoraria, ahora);
+  const { cases } = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
 
   const windowStart = new Date(ahora.getTime() - NO_SHOW_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const windowEnd = new Date(ahora.getTime() + FUTURE_CONTROL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
@@ -59,6 +65,7 @@ export async function loadOrthoAlerts(
       clinicId,
       type: TIPO_CITA_CONTROL_ORTO,
       startsAt: { gte: windowStart, lte: windowEnd },
+      AND: relatedPatientVisibilityAnd(viewer),
     },
     select: {
       patientId: true,

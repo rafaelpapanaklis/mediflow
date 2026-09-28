@@ -16,6 +16,13 @@
 //
 // `clinicId` y `zonaHoraria` SIEMPRE de la sesión (getCurrentUser), nunca
 // del cliente. Menos de 7 consultas por Promise.all (regla del pooler).
+//
+// Revisión cruzada (REPORTE-ws1-t1.md, «## Revisión cruzada», bloquea): estas
+// consultas solo filtraban por clinicId, sin `relatedPatientVisibilityAnd` —
+// un doctor o recepción con `visibleUserIds` restringido veía en Tablero,
+// Pacientes en tratamiento y Alertas los nombres, saldos y citas de TODOS los
+// pacientes de ortodoncia de la clínica. Mismo criterio que ya usan
+// build-kanban-data.ts y load-patients.ts.
 
 import { prisma } from "@/lib/prisma";
 import type { OrthoTreatmentStatus } from "@prisma/client";
@@ -23,6 +30,7 @@ import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { calendarDayRangeUtc } from "@/lib/agenda/time-utils";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
+import { relatedPatientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import { cobranzaDelCaso } from "./cobranza-caso";
 import {
@@ -71,10 +79,10 @@ interface RawPlan {
   invoiceId: string | null;
 }
 
-async function loadRawPlans(clinicId: string): Promise<RawPlan[]> {
+async function loadRawPlans(clinicId: string, viewer: VisibilityViewer): Promise<RawPlan[]> {
   try {
     const plans = await prisma.orthodonticTreatmentPlan.findMany({
-      where: { clinicId, deletedAt: null },
+      where: { clinicId, deletedAt: null, AND: relatedPatientVisibilityAnd(viewer) },
       select: {
         ...BASE_SELECT,
         treatingDoctorId: true,
@@ -101,7 +109,7 @@ async function loadRawPlans(clinicId: string): Promise<RawPlan[]> {
   } catch (e) {
     if (!esRelacionAusente(e)) throw e;
     const plans = await prisma.orthodonticTreatmentPlan.findMany({
-      where: { clinicId, deletedAt: null },
+      where: { clinicId, deletedAt: null, AND: relatedPatientVisibilityAnd(viewer) },
       select: BASE_SELECT,
       take: 1000,
     });
@@ -143,9 +151,10 @@ export interface OrthoCasesResult {
 export async function loadOrthoCases(
   clinicId: string,
   zonaHoraria: string,
+  viewer: VisibilityViewer,
   ahora: Date = new Date(),
 ): Promise<OrthoCasesResult> {
-  const plans = await loadRawPlans(clinicId);
+  const plans = await loadRawPlans(clinicId, viewer);
   const invoiceIds = Array.from(new Set(plans.map((p) => p.invoiceId).filter((x): x is string => !!x)));
 
   let invoicesById = new Map<string, InvoiceForCobranza>();
@@ -215,19 +224,28 @@ export interface OrthoTableroData {
 export async function loadOrthoTableroData(
   clinicId: string,
   zonaHoraria: string,
+  viewer: VisibilityViewer,
   ahora: Date = new Date(),
 ): Promise<OrthoTableroData> {
-  const { cases, invoiceIdByPlanId, invoicesById } = await loadOrthoCases(clinicId, zonaHoraria, ahora);
+  const { cases, invoiceIdByPlanId, invoicesById } = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
 
   const diagnosisPatientIds = await prisma.orthodonticDiagnosis
-    .findMany({ where: { clinicId, deletedAt: null }, select: { patientId: true } })
+    .findMany({
+      where: { clinicId, deletedAt: null, AND: relatedPatientVisibilityAnd(viewer) },
+      select: { patientId: true },
+    })
     .then((rows) => Array.from(new Set(rows.map((r) => r.patientId))));
 
   const { startUtc: todayStart, endUtc: todayEnd } = calendarDayRangeUtc(hoyEnZona(ahora, zonaHoraria), zonaHoraria);
 
   const [controlsToday, quotes] = await Promise.all([
     prisma.appointment.count({
-      where: { clinicId, type: TIPO_CITA_CONTROL_ORTO, startsAt: { gte: todayStart, lt: todayEnd } },
+      where: {
+        clinicId,
+        type: TIPO_CITA_CONTROL_ORTO,
+        startsAt: { gte: todayStart, lt: todayEnd },
+        AND: relatedPatientVisibilityAnd(viewer),
+      },
     }),
     diagnosisPatientIds.length > 0
       ? prisma.quote.findMany({
@@ -282,6 +300,7 @@ export interface TodayControlEntry {
 export async function loadTodayControlsWithIndications(
   clinicId: string,
   zonaHoraria: string,
+  viewer: VisibilityViewer,
   ahora: Date = new Date(),
 ): Promise<TodayControlEntry[]> {
   const { startUtc: todayStart, endUtc: todayEnd } = calendarDayRangeUtc(hoyEnZona(ahora, zonaHoraria), zonaHoraria);
@@ -292,6 +311,7 @@ export async function loadTodayControlsWithIndications(
       type: TIPO_CITA_CONTROL_ORTO,
       startsAt: { gte: todayStart, lt: todayEnd },
       status: { not: "CANCELLED" },
+      AND: relatedPatientVisibilityAnd(viewer),
     },
     orderBy: { startsAt: "asc" },
     select: {

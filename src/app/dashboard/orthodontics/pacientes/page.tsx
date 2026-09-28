@@ -10,7 +10,8 @@ import { OrthoPacientesTable, type OrthoPacienteRow } from "@/components/special
 
 export default async function OrthodonticsPacientesPage() {
   const user = await getCurrentUser();
-  const { cases } = await loadOrthoCases(user.clinicId, user.clinic.timezone);
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
+  const { cases } = await loadOrthoCases(user.clinicId, user.clinic.timezone, viewer);
 
   const rows: OrthoPacienteRow[] = cases
     .filter((c) => ACTIVE_PLAN_STATUSES.includes(c.status))

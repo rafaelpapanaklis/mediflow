@@ -32,7 +32,8 @@ function fmtDate(d: Date | string | null): string {
 
 export default async function OrthodonticsAlertasPage() {
   const user = await getCurrentUser();
-  const alerts = await loadOrthoAlerts(user.clinicId, user.clinic.timezone);
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
+  const alerts = await loadOrthoAlerts(user.clinicId, user.clinic.timezone, viewer);
 
   const totalAlerts =
     alerts.overduePayments.length +

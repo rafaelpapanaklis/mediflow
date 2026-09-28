@@ -41,9 +41,10 @@ function fmtHora(d: Date): string {
 
 export default async function OrthodonticsTableroPage() {
   const user = await getCurrentUser();
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   const [data, controlesHoy] = await Promise.all([
-    loadOrthoTableroData(user.clinicId, user.clinic.timezone),
-    loadTodayControlsWithIndications(user.clinicId, user.clinic.timezone),
+    loadOrthoTableroData(user.clinicId, user.clinic.timezone, viewer),
+    loadTodayControlsWithIndications(user.clinicId, user.clinic.timezone, viewer),
   ]);
 
   return (
