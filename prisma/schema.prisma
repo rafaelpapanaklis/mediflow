@@ -1623,6 +1623,61 @@ model MigratedPayment {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// CASO DE ORTODONCIA MIGRADO (ws1-t1, importador Dentalink, sep-2026).
+// 11_Pacientes_Ortodoncia trae un caso YA ABIERTO en el sistema anterior:
+// técnica, doctor tratante, fecha de colocación, estado y duración. NO se usa
+// para crear un OrthodonticDiagnosis/OrthodonticTreatmentPlan real: ese
+// modelo exige datos de EXAMEN CLÍNICO (angleClassRight, overbiteMm,
+// overjetMm, dentalPhase, clinicalSummary…) que Dentalink no exporta —
+// inventarlos sería adivinar en silencio sobre el expediente clínico de un
+// paciente real, lo que la tarea prohíbe explícitamente. Se guarda aparte,
+// de SOLO LECTURA, como historia administrativa: technique/status quedan en
+// texto libre (nunca forzados a los enums OrthoTechnique/OrthoTreatmentStatus
+// sin evidencia real). Tampoco crea una Invoice nueva — el total ya debería
+// venir contado en el saldo importado por 04_Saldos (balancesHandler); una
+// factura aparte del caso duplicaría esa deuda. Mismo criterio que
+// MigratedPayment (sin relación Prisma a Clinic/Patient/User: esos modelos no
+// cambian de forma). Tabla creada a mano por sql/ortodoncia-casos-migrados.sql
+// — el código tolera que aún no exista (P2021/P2022).
+// ═══════════════════════════════════════════════════════════════════════════
+model MigratedOrthoCase {
+  id        String @id @default(cuid())
+  clinicId  String
+  patientId String
+
+  /// Técnica tal como venía en el archivo de origen ("Brackets metálicos",
+  /// "Alineadores"…): texto libre a propósito, NUNCA forzado al enum
+  /// OrthoTechnique sin un export real que confirme el mapeo.
+  technique String?
+  treatingDoctorId String?
+  /// Nombre del doctor tal como venía en el archivo, aunque no se haya
+  /// encontrado un usuario que lo empareje (se muestra igual en la ficha).
+  treatingDoctorName String?
+  /// Bucket normalizado para filtrar: ACTIVE | COMPLETED | ON_HOLD |
+  /// DROPPED_OUT | UNKNOWN. String, no el enum OrthoTreatmentStatus: ese
+  /// enum es del caso CLÍNICO vivo, y este registro nunca lo es.
+  status    String
+  /// Estado tal como venía en el archivo de origen, para que el usuario vea
+  /// exactamente qué decía Dentalink detrás del bucket.
+  statusRaw String?
+  installedAt             DateTime?
+  estimatedDurationMonths Int?
+  /// Precio total del caso si el archivo lo traía. Informativo: NO genera
+  /// factura ni movimiento de Caja (ver nota de arriba).
+  totalAmount Float?
+  /// Folio/N° de presupuesto del caso en el sistema de origen, si venía.
+  originInvoiceFolio String?
+  /// "Dentalink", o "otro sistema" si el asistente no dijo cuál era.
+  origin      String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clinicId, patientId])
+  @@map("migrated_ortho_cases")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Anticipo por WhatsApp con Mercado Pago (WS1-T5). Tablas creadas a mano por
 // sql/anticipo-whatsapp.sql — nunca con `prisma migrate`.
 // ═══════════════════════════════════════════════════════════════════════════
