@@ -181,6 +181,48 @@ test("doctor, plan Profesional: primer nivel sin «WhatsApp y recordatorios» y 
   ]);
 });
 
+// ── Ortodoncia (ws1-t3, Ola 1) ─────────────────────────────────────────
+
+test("Ortodoncia: item real (ya no 'Próximamente'), gateado por specialties.orthodontics + módulo — el trial se resuelve ANTES de llegar aquí, en dashboard/layout.tsx (hasActiveOrthodonticsModule, no getActiveClinicModuleKeys)", () => {
+  const item = NAV_ITEMS.find((it) => it.id === "orthodontics");
+  assert.ok(item, "existe en NAV_ITEMS");
+  assert.equal(item!.href, "/dashboard/orthodontics");
+  assert.equal(item!.permission, "specialties.orthodontics");
+  assert.equal(item!.moduleKey, "orthodontics");
+  assert.equal(item!.comingSoon, undefined, "ya no es un stub");
+
+  // Lo que dashboard/layout.tsx entrega en clinicModuleKeys SOLO cuando
+  // hasActiveOrthodonticsModule(clinicId) es true — esta suite no repite esa
+  // consulta a Prisma, solo el filtro puro que corre después.
+  const conModuloReal = ["orthodontics"];
+
+  const ve = (role: UserRole, mods: string[], ov: string[] = []) =>
+    opcionesVisibles(persona(role, ov), "DENTAL", mods).some((it) => it.id === "orthodontics");
+
+  assert.equal(ve("SUPER_ADMIN", conModuloReal), true);
+  assert.equal(ve("ADMIN", conModuloReal), true);
+  assert.equal(ve("DOCTOR", conModuloReal), true);
+  assert.equal(ve("RECEPTIONIST", conModuloReal), true);
+  assert.equal(ve("READONLY", conModuloReal), false, "specialties.* no es un .view puro para READONLY");
+  assert.equal(ve("ACCOUNTANT", conModuloReal), false);
+
+  assert.equal(ve("SUPER_ADMIN", []), false, "sin el módulo activo, ni el dueño la ve");
+  assert.equal(
+    ve("SUPER_ADMIN", MODULOS_PRO),
+    false,
+    "el plan no basta: MODULOS_PRO no trae 'orthodontics' — eso lo entrega hasActiveOrthodonticsModule, no el plan",
+  );
+  // SUPER_ADMIN ve todo pase lo que pase en su override (regla ya existente
+  // de shouldShowItem); el override importa para los demás roles.
+  assert.equal(ve("DOCTOR", conModuloReal, ["today.view"]), false, "sin specialties.orthodontics en el override tampoco");
+
+  // Categoría: Ortodoncia solo en DENTAL, igual que las otras especialidades.
+  assert.equal(
+    opcionesVisibles(persona("SUPER_ADMIN"), "MEDICINE", conModuloReal).some((it) => it.id === "orthodontics"),
+    false,
+  );
+});
+
 // ── Íconos ───────────────────────────────────────────────────────────
 
 test("la lista de íconos de la fuente está ordenada y sin repetidos (así se pide a Google)", () => {
