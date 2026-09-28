@@ -34,10 +34,11 @@ export default async function OrthodonticsCobranzaPage({
   const { cases } = await loadOrthoCases(user.clinicId, zona, viewer, ahora);
   const filas = filasDeCobranza(cases, hoyEnZona(ahora, zona));
 
-  // El mismo permiso que exige la lista de cobro (`listarMensualidadesPorCobrar`).
+  // COBRAR exige `billing.charge` (lo mismo que POST /api/invoices/[id]): con
+  // solo `billing.view` el botón salía y el cobro fallaba al guardar (ws1-t4 #85).
   const puedeCobrar = hasPermission(
     { role: user.role, permissionsOverride: user.permissionsOverride },
-    "billing.view",
+    "billing.charge",
   );
 
   return (

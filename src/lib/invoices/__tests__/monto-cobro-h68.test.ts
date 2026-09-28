@@ -67,3 +67,9 @@ test("ficha de finanzas: el descuento se llama «acordado» y el recargo se cobr
   assert.match(src, /Descuento acordado/);
   assert.match(src, /cóbralo con «Cobrar extra»/);
 });
+
+// ws1-t4 #85 — «Cobrar» visible sin permiso de cobrar.
+test("Cobranza de ortodoncia: el botón de cobrar depende de billing.charge, no de billing.view", () => {
+  const src = leer("app/dashboard/orthodontics/cobranza/page.tsx");
+  assert.match(src, /const puedeCobrar = hasPermission\([\s\S]*?"billing\.charge"/);
+});
