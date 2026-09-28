@@ -59,3 +59,7 @@ export { updateNpsConfig } from "./updateNpsConfig";
 export { scheduleG15Checkpoint } from "./scheduleG15Checkpoint";
 export { updateQuoteScenario } from "./updateQuoteScenario";
 export { updateOrthoAppliances } from "./updateOrthoAppliances";
+
+// ─── Acceso y permisos · Configuración (ws1-t3, Ola 1) ──────────────────
+export { getOrthoClinicSettings } from "./getOrthoClinicSettings";
+export { updateOrthoClinicSettings } from "./updateOrthoClinicSettings";

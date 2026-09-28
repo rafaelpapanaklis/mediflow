@@ -40,6 +40,8 @@ export const ORTHO_AUDIT_ACTIONS = {
   LAB_ORDER_CREATED: "ortho.labOrder.created",
   REPORT_BEFORE_AFTER_PDF: "ortho.report.beforeAfter.pdf",
   G15_CHECKPOINT_SCHEDULED: "ortho.g15.checkpoint.scheduled",
+  // ─── Ola 1 (ws1-t3) · Acceso y permisos ─────────────────────────────
+  CLINIC_SETTINGS_UPDATED: "ortho.clinicSettings.updated",
 } as const;
 
 export type OrthoAuditAction =

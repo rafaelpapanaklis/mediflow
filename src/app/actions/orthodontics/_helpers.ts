@@ -39,6 +39,71 @@ export async function getOrthoActionContext(
 }
 
 /**
+ * Auth + categoría DENTAL + módulo orthodontics activo, para acciones de
+ * DINERO del módulo (cobro de mensualidades, extras, promesas de pago).
+ *
+ * P1 (Ola 1, ws1-t3): separa la key de "dinero" (`billing.charge`) de la de
+ * "clínico" (`medicalRecord.edit`, en `getOrthoActionContext` arriba) — así
+ * recepción cobra sin ver el diagnóstico, y el doctor ve/registra sin poder
+ * cobrar (salvo que la clínica le dé el permiso desde Equipo → Permisos).
+ * Lo usa la parte «Cobro» (`actions/orthodontics/cobro/*`); este archivo no
+ * decide SU lógica de negocio, solo el gate de acceso.
+ */
+export async function getOrthoBillingActionContext(
+  opts?: { write?: boolean },
+): Promise<ActionResult<{ ctx: AuthContext }>> {
+  const ctx = await getAuthContext();
+  if (!ctx) return fail("No autenticado");
+
+  if (ctx.clinicCategory !== "DENTAL") {
+    return fail("La clínica no soporta el módulo de Ortodoncia");
+  }
+
+  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
+  if (!access.hasAccess) {
+    return fail("Módulo Ortodoncia no activo para esta clínica");
+  }
+
+  const requiredKey = opts?.write === false ? "billing.view" : "billing.charge";
+  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+    return fail(`Sin permisos: ${requiredKey}`);
+  }
+
+  return { ok: true, data: { ctx } };
+}
+
+/**
+ * Auth + categoría DENTAL + módulo orthodontics activo, para la pantalla
+ * "Configuración" del submenú (doctor tratante por defecto, catálogo de
+ * tipos de cita, plantillas). Es AJUSTE DE LA CLÍNICA, no dinero ni
+ * expediente: usa `settings.*` — el mismo permiso de `/dashboard/settings` —
+ * para no colarle a recepción o al doctor un permiso que no tienen por
+ * default y que no pidieron (P1/P2).
+ */
+export async function getOrthoConfigActionContext(
+  opts?: { write?: boolean },
+): Promise<ActionResult<{ ctx: AuthContext }>> {
+  const ctx = await getAuthContext();
+  if (!ctx) return fail("No autenticado");
+
+  if (ctx.clinicCategory !== "DENTAL") {
+    return fail("La clínica no soporta el módulo de Ortodoncia");
+  }
+
+  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
+  if (!access.hasAccess) {
+    return fail("Módulo Ortodoncia no activo para esta clínica");
+  }
+
+  const requiredKey = opts?.write === false ? "settings.view" : "settings.edit";
+  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+    return fail(`Sin permisos: ${requiredKey}`);
+  }
+
+  return { ok: true, data: { ctx } };
+}
+
+/**
  * Verifica que un paciente exista, no esté borrado y pertenezca al clinicId
  * activo. Defensivo aunque RLS lo cubra.
  */
