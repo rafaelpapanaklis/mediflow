@@ -35,6 +35,7 @@ import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro } from "./_ctx";
 import { precioDeColocacionDelCatalogo } from "@/lib/orthodontics/catalog-procedures";
+import { controlesPorCobrarDe, type ControlPorCobrar } from "@/lib/orthodontics/cobro/controles-por-cobrar";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
 const ROLES_DE_DIRECCION = new Set(["SUPER_ADMIN", "ADMIN"]);
@@ -48,8 +49,12 @@ export interface FacturaResumen {
   status: string;
 }
 
+export type { ControlPorCobrar };
+
 export interface PanelDeCobro {
   patientId: string;
+  /** ws1-t4 #77 — en «Pago por control», los controles con factura sin pagar, del más viejo al más nuevo. Vacío en «Precio total». */
+  controlesPorCobrar: ControlPorCobrar[];
   invoiceId: string | null;
   invoice: FacturaResumen | null;
   /** Las condiciones crudas de la factura (para F7, precargar el editor de plan). */
@@ -153,8 +158,11 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     ? calcularRecargo(config.lateFee, cuotaVencida.falta, cuotaVencida.vencimiento ? diasEntre(cuotaVencida.vencimiento, hoy) : 0)
     : 0;
 
+  const controlesPorCobrar = controlesPorCobrarDe(cargosControl);
+
   return ok({
     ...base,
+    controlesPorCobrar,
     invoiceId: caso.invoiceId,
     invoice: invoice ? { id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, paid: invoice.paid, balance: invoice.balance, status: invoice.status } : null,
     condiciones,

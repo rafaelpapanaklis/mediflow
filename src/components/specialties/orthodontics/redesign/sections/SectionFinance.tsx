@@ -36,7 +36,7 @@ import { DrawerConfigCobro } from "../drawers/DrawerConfigCobro";
 import { DrawerElegirDescuento } from "../drawers/DrawerElegirDescuento";
 import { DrawerLigarFactura } from "../drawers/DrawerLigarFactura";
 import { DrawerPromesaDePago } from "../drawers/DrawerPromesaDePago";
-import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
+import { cargarPanelDeCobro, type PanelDeCobro, type FacturaResumen, type ControlPorCobrar } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import { resolverPromesaDePago } from "@/app/actions/orthodontics/cobro/resolverPromesaDePago";
 import { abrirPlanDePago } from "@/app/actions/orthodontics/cobro/abrirPlanDePago";
 import { comprobarPlanDePagoLibre } from "@/app/actions/orthodontics/cobro/comprobarPlanDePagoLibre";
@@ -63,6 +63,7 @@ export interface SectionFinanceProps {
 type DrawerKind =
   | { kind: "abrir-plan" }
   | { kind: "ligar-factura" }
+  | { kind: "cobrar-control"; invoiceId: string }
   | { kind: "cobrar" }
   | { kind: "extra" }
   | { kind: "cambiar-plan" }
@@ -200,11 +201,19 @@ export function SectionFinance(props: SectionFinanceProps) {
     );
   }
 
-  const invoiceComoPago: PaymentInvoice | null = panel.invoice
-    ? { id: panel.invoice.id, invoiceNumber: panel.invoice.invoiceNumber ?? "", total: panel.invoice.total, paid: panel.invoice.paid, balance: panel.invoice.balance, status: panel.invoice.status, patientName: props.patientName }
-    : null;
-
   const esPorControl = panel.billingMode === "PAGO_POR_CONTROL";
+  // ws1-t4 #77: en «Pago por control» el «Cobrar» de arriba abría la factura de
+  // colocación, casi siempre YA pagada. Ahora abre el primer control que se debe
+  // (y cada control tiene su propio «Cobrar» abajo); la colocación solo si aún debe.
+  const controlesPorCobrar = esPorControl ? panel.controlesPorCobrar ?? [] : [];
+  const facturaACobrar: FacturaResumen | ControlPorCobrar | null =
+    esPorControl && controlesPorCobrar.length > 0
+      ? controlesPorCobrar[0]
+      : panel.invoice && (!esPorControl || panel.invoice.balance > 0.004) ? panel.invoice : null;
+  const invoiceComoPago: PaymentInvoice | null = facturaACobrar
+    ? { id: "id" in facturaACobrar ? facturaACobrar.id : facturaACobrar.invoiceId, invoiceNumber: facturaACobrar.invoiceNumber ?? "", total: facturaACobrar.total, paid: facturaACobrar.paid, balance: facturaACobrar.balance, status: facturaACobrar.status, patientName: props.patientName }
+    : null;
+  const controlACobrar = drawer?.kind === "cobrar-control" ? controlesPorCobrar.find((c) => c.invoiceId === drawer.invoiceId) ?? null : null;
   const hayDeudaDeControles = Boolean(panel.cobranza && (panel.cobranza.vencidas.length > 0 || panel.cobranza.proximas.length > 0));
 
   // ronda 3 (ws1-t2, H6): lo que se sugiere cobrar con «Cobrar» — TODO lo
@@ -212,9 +221,32 @@ export function SectionFinance(props: SectionFinanceProps) {
   // «Registrar promesa de pago» (montoSugerido, abajo): un solo número, no
   // dos que puedan discrepar entre el rótulo del botón y lo que precarga el
   // modal.
-  const montoCobrarSugerido = panel.cobranza
-    ? panel.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) || panel.cobranza.cuotaDeHoy?.falta || 0
-    : 0;
+  const montoCobrarSugerido = esPorControl && controlesPorCobrar.length > 0
+    ? controlesPorCobrar[0].balance
+    : panel.cobranza
+      ? panel.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) || panel.cobranza.cuotaDeHoy?.falta || 0
+      : 0;
+
+  // #77: la lista de controles que se deben, uno por uno, cada uno con su «Cobrar».
+  const bloqueControlesPorCobrar = controlesPorCobrar.length > 0 ? (
+    <div className="px-[18px] py-[14px] border-b border-[color:var(--pr-borde-suave)]" data-controles-por-cobrar>
+      <h4 className={`${orto.bloqueTitulo} mb-2`}>Controles por cobrar</h4>
+      <ul className="space-y-1.5">
+        {controlesPorCobrar.map((c) => (
+          <li key={c.invoiceId} className="flex items-center justify-between gap-3 text-[13px]">
+            <span>
+              {c.invoiceNumber ?? "Control"} · {fmtDay(c.vencimiento)}
+              {c.paid > 0 ? <span className="text-[color:var(--pr-texto-3)]"> · abonado {fmtMoney(c.paid)}</span> : null}
+            </span>
+            <span className="flex items-center gap-3">
+              <span className="tabular-nums font-medium">{fmtMoney(c.balance)}</span>
+              <Btn variant="secondary" size="sm" onClick={() => setDrawer({ kind: "cobrar-control", invoiceId: c.invoiceId })}>Cobrar</Btn>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null;
 
   return (
     <>
@@ -265,6 +297,7 @@ export function SectionFinance(props: SectionFinanceProps) {
               <Btn variant="ghost" size="sm" onClick={() => setDrawer({ kind: "ligar-factura" })}>
                 Ya tengo la factura: ligarla al caso
               </Btn>
+              {bloqueControlesPorCobrar}
             </div>
           </div>
         ) : (
@@ -430,6 +463,8 @@ export function SectionFinance(props: SectionFinanceProps) {
               </div>
             ) : null}
 
+            {bloqueControlesPorCobrar}
+
             <div className={`${orto.tarjetaPie} text-[11.5px] text-[color:var(--pr-texto-3)]`}>
               {/* ws1-t1 (sep-2026): decisión de Rafael — cada pago se factura
                   como su propio CFDI PUE (igual que la suscripción del plan),
@@ -477,6 +512,17 @@ export function SectionFinance(props: SectionFinanceProps) {
           treatmentPlanId={props.treatmentPlanId}
           onClose={() => setDrawer(null)}
           onLigada={cerrarYRecargar}
+        />
+      ) : null}
+
+      {controlACobrar ? (
+        <PaymentModal
+          open
+          invoice={{ id: controlACobrar.invoiceId, invoiceNumber: controlACobrar.invoiceNumber ?? "", total: controlACobrar.total, paid: controlACobrar.paid, balance: controlACobrar.balance, status: controlACobrar.status, patientName: props.patientName }}
+          onClose={() => setDrawer(null)}
+          onSuccess={cerrarYRecargar}
+          rediseno={panel.redisenoFacturas}
+          montoSugerido={controlACobrar.balance}
         />
       ) : null}
 
