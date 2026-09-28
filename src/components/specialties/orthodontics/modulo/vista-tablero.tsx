@@ -37,6 +37,15 @@ function fmtMonthKey(monthKey: string): string {
 }
 
 /** Ancho de una barra: el importe en proporción al mayor de su lista. */
+/** «No cuenta $8,000 de 1 caso en pausa y 1 abandonado.» — o nada, si no se dejó nada fuera. */
+function fraseDeExcluidos(fuera: OrthoTableroData["projectionExcluded"]): string | null {
+  if (!fuera || fuera.amountMxn <= 0) return null;
+  const partes: string[] = [];
+  if (fuera.enPausa > 0) partes.push(`${fuera.enPausa} ${fuera.enPausa === 1 ? "caso en pausa" : "casos en pausa"}`);
+  if (fuera.abandonados > 0) partes.push(`${fuera.abandonados} ${fuera.abandonados === 1 ? "abandonado" : "abandonados"}`);
+  return `No cuenta ${fmtMoney(fuera.amountMxn)} de ${partes.join(" y ")}: esa deuda sigue en Cobranza.`;
+}
+
 function anchoBarra(importe: number, mayor: number): string {
   if (mayor <= 0 || importe <= 0) return "0%";
   return `${Math.max(2, Math.round((importe / mayor) * 100))}%`;
@@ -157,7 +166,7 @@ export function VistaTablero({
       </div>
 
       <div className={s.rejillaPar}>
-        <Tarjeta icono={TrendingUp} tono="exito" titulo="Producción del mes" sub="Cobros de ortodoncia, por doctor tratante.">
+        <Tarjeta icono={TrendingUp} tono="exito" titulo="Producción del mes" sub="Cobros de ortodoncia menos reembolsos, para el doctor que llevaba el caso el día del pago.">
           <div className={s.tarjetaCuerpo}>
             {data.productionByDoctor.length === 0 ? (
               <Vacio
@@ -209,6 +218,9 @@ export function VistaTablero({
                 ))}
               </ul>
             )}
+            {fraseDeExcluidos(data.projectionExcluded) ? (
+              <p className={s.pie}>{fraseDeExcluidos(data.projectionExcluded)}</p>
+            ) : null}
           </div>
         </Tarjeta>
       </div>

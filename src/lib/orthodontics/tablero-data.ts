@@ -41,15 +41,17 @@ import {
   computeMonthlyProjection,
   computeOverdueBalances,
   computePlacementsAndRemovals,
-  computeProductionByDoctor,
-  isSameCalendarMonthUtc,
+  computeProjectionExcluded,
   type MonthlyProjectionBucket,
   type OrthoCaseSummary,
   type OverdueBalanceSummary,
   type PlacementsAndRemovals,
   type ProductionByDoctor,
+  type ProjectionExcluded,
   type ValoracionesSummary,
 } from "./specialty-kpis";
+import { mesEnZona, produccionPorDoctor, rangoDelMes } from "./produccion";
+import { cargarCambiosDeDoctor, cargarNombresDeDoctores, cargarPagosDeCasos } from "./produccion-db";
 import { cargarValoracionesDelTablero } from "./valoraciones-tablero-db";
 
 function esRelacionAusente(e: unknown): boolean {
@@ -223,7 +225,7 @@ export interface OrthoTableroData {
   controlsToday: number;
   /** T3 */
   overdue: OverdueBalanceSummary;
-  /** T4 — producción del mes, por doctor tratante. */
+  /** T4 — producción del mes: cobros menos reembolsos, por el doctor que llevaba el caso el día del pago (fila 88). */
   productionByDoctor: ProductionByDoctor[];
   /**
    * T5 — citas de valoración de los últimos 90 días y cuántas abrieron caso
@@ -231,8 +233,10 @@ export interface OrthoTableroData {
    * romper a quien arma este objeto a mano con la forma anterior.
    */
   valoraciones: ValoracionesSummary & { agendadas?: number; dias?: number };
-  /** T6 — próximos 6 meses. */
+  /** T6 — próximos 6 meses. Solo casos en curso. */
   monthlyProjection: MonthlyProjectionBucket[];
+  /** T6 — lo que la proyección dejó fuera: casos en pausa o abandonados (fila 91). Opcional para no romper a quien arma este objeto a mano. */
+  projectionExcluded?: ProjectionExcluded;
   /** T7 */
   placementsAndRemovals: PlacementsAndRemovals;
 }
@@ -243,7 +247,7 @@ export async function loadOrthoTableroData(
   viewer: VisibilityViewer,
   ahora: Date = new Date(),
 ): Promise<OrthoTableroData> {
-  const { cases, invoiceIdByPlanId, invoicesById } = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
+  const { cases, invoiceIdByPlanId } = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
 
   const { startUtc: todayStart, endUtc: todayEnd } = calendarDayRangeUtc(hoyEnZona(ahora, zonaHoraria), zonaHoraria);
 
@@ -266,28 +270,45 @@ export async function loadOrthoTableroData(
     cargarValoracionesDelTablero(clinicId, viewer, ahora),
   ]);
 
-  // Producción del mes: cada pago de la factura de un caso, atribuido al
-  // doctor tratante de ESE caso (no hay Promise.all extra: reusa lo cargado
-  // por loadOrthoCases).
-  const doctorByPlanId = new Map(cases.map((c) => [c.planId, { id: c.treatingDoctorId, name: c.treatingDoctorName ?? "Sin doctor tratante" }]));
-  const productionPayments: Array<{ doctorId: string | null; doctorName: string; amountMxn: number }> = [];
-  for (const [planId, invoiceId] of invoiceIdByPlanId) {
-    const invoice = invoicesById.get(invoiceId);
-    const doctor = doctorByPlanId.get(planId);
-    if (!invoice || !doctor) continue;
-    for (const pay of invoice.payments) {
-      if (!isSameCalendarMonthUtc(pay.paidAt, ahora)) continue;
-      productionPayments.push({ doctorId: doctor.id, doctorName: doctor.name, amountMxn: Number(pay.amount) });
-    }
+  // Producción del mes (fila 88): cada cobro de una factura del caso, MENOS
+  // los reembolsos, atribuido a quien llevaba el caso el día del pago (no a
+  // quien lo lleva hoy) y contado en el mes de la CLÍNICA. Entran también los
+  // controles cobrados y los extras, no solo la factura del tratamiento. Tres
+  // lecturas en fila (produccion-db.ts).
+  const mes = mesEnZona(ahora, zonaHoraria);
+  const rango = rangoDelMes(mes, zonaHoraria);
+  const casosParaProduccion = cases.map((c) => ({
+    planId: c.planId,
+    invoiceId: invoiceIdByPlanId.get(c.planId) ?? null,
+    treatingDoctorId: c.treatingDoctorId,
+  }));
+  const pagosDelMes = await cargarPagosDeCasos(clinicId, casosParaProduccion, rango);
+  const cambiosDeDoctor = pagosDelMes.length > 0
+    ? await cargarCambiosDeDoctor(clinicId, Array.from(new Set(pagosDelMes.map((p) => p.planId))), rango.desde)
+    : [];
+  const nombres = new Map<string, string>();
+  for (const c of cases) if (c.treatingDoctorId && c.treatingDoctorName) nombres.set(c.treatingDoctorId, c.treatingDoctorName);
+  const sinNombre = cambiosDeDoctor.flatMap((c) => [c.de, c.a]).filter((id): id is string => !!id && !nombres.has(id));
+  if (sinNombre.length > 0) {
+    for (const [id, nombre] of await cargarNombresDeDoctores(clinicId, sinNombre)) nombres.set(id, nombre);
   }
+  const productionByDoctor = produccionPorDoctor({
+    pagos: pagosDelMes,
+    doctorActualPorCaso: new Map(cases.map((c) => [c.planId, c.treatingDoctorId])),
+    cambios: cambiosDeDoctor,
+    nombres,
+    mes,
+    zonaHoraria,
+  });
 
   return {
     activeCasesCount: computeActiveCasesCount(cases),
     controlsToday,
     overdue: computeOverdueBalances(cases),
-    productionByDoctor: computeProductionByDoctor(productionPayments),
+    productionByDoctor,
     valoraciones,
     monthlyProjection: computeMonthlyProjection(cases, ahora, 6),
+    projectionExcluded: computeProjectionExcluded(cases, ahora, 6),
     placementsAndRemovals: computePlacementsAndRemovals(cases, ahora),
   };
 }
