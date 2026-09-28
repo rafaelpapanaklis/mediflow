@@ -31,6 +31,7 @@ import {
   type PreviewRow,
   type OnUploadProgress,
   type ValueMapping,
+  type DetectBatchResult,
   ORIGINS,
 } from "@/components/import/import-client";
 import type {
@@ -395,6 +396,22 @@ export class RealImportClient implements ImportClient {
   // -- Plantilla (una hoja por tipo de dato; el motor lee cada entidad de la suya) --
   templateUrl(): string {
     return "/api/patients/import/template";
+  }
+
+  // -- Subir varios archivos a la vez (WS1-T12): clasifica, no importa nada -----
+  async detectBatch(files: File[], origin: string | null): Promise<DetectBatchResult> {
+    const fd = new FormData();
+    for (const f of files) fd.append("files", f);
+    if (origin) fd.append("origin", origin);
+    let res: Response;
+    try {
+      res = await fetchWithTimeout("/api/import/detect", { method: "POST", body: fd }, PREVIEW_TIMEOUT_MS);
+    } catch (e) {
+      throw asSpanishError(e);
+    }
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new ImportHttpError(backendError(json, res.status, "No se pudieron analizar los archivos"), res.status);
+    return json as DetectBatchResult;
   }
 
   // -- Migración asistida (sube el archivo + abre ticket de soporte) ------------

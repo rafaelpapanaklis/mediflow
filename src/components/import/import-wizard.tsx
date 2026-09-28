@@ -44,10 +44,11 @@ import { UploadProgress, type UploadProgressState } from "./upload-progress";
 import { ResultPanel } from "./result-panel";
 import { AssistedPanel } from "./assisted-panel";
 import { FilesWizard } from "./files-wizard";
+import { MultiImportWizard } from "./multi-import-wizard";
 
 type NumStep = 1 | 2 | 3 | 4 | 5 | 6;
 type Step = NumStep | "importing" | "result";
-type Flow = "wizard" | "assisted" | "files";
+type Flow = "wizard" | "assisted" | "files" | "multi";
 
 const STEP_KEYS = ["origin", "export", "what", "upload", "map", "review"] as const;
 const DEFAULT_TYPES = new Set(DATA_TYPES.filter((d) => d.on).map((d) => d.id));
@@ -616,7 +617,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   const headerSub =
     flow === "assisted"
       ? t("shell.importClinic.subAssisted")
-      : flow === "files"
+      : flow === "files" || flow === "multi"
         ? ""
         : isNumeric
           ? t("shell.importClinic.subStep", { step })
@@ -697,6 +698,14 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                 />
               ) : flow === "files" ? (
                 <FilesWizard t={t} originId={originId} onClose={() => setFlow("wizard")} />
+              ) : flow === "multi" ? (
+                <MultiImportWizard
+                  t={t}
+                  originId={originId}
+                  origins={origins}
+                  onClose={() => setFlow("wizard")}
+                  onImported={onImported}
+                />
               ) : step === "importing" ? (
                 <ImportingPanel t={t} prog={uploadProg} />
               ) : step === "result" && result ? (
@@ -715,7 +724,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
               ) : step === 2 && origin ? (
                 <StepExport t={t} origin={origin} templateUrl={api.templateUrl()} />
               ) : step === 3 ? (
-                <StepWhat t={t} selected={types} onToggle={toggleType} onFiles={() => setFlow("files")} />
+                <StepWhat t={t} selected={types} onToggle={toggleType} onFiles={() => setFlow("files")} onMulti={() => setFlow("multi")} />
               ) : step === 4 ? (
                 <StepUpload t={t} file={file} error={uploadError} onFile={handleFile} onRemove={removeFile} />
               ) : step === 5 ? (

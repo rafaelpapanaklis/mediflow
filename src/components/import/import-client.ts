@@ -240,6 +240,53 @@ export function isAcceptedFile(f: File): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// "Subir varios archivos a la vez" (WS1-T12) — detección automática de QUÉ ES
+// cada archivo/pestaña, POST /api/import/detect. Ver MultiImportWizard.
+// ---------------------------------------------------------------------------
+export const MAX_BATCH_FILES = 12;
+export const MAX_BATCH_MB = 40;
+
+export type Confidence = "alta" | "media" | "baja";
+
+/** Una entidad candidata para un archivo/pestaña, con su puntaje (solo sirve para ordenar). */
+export interface DetectGuess {
+  entity: Entity;
+  score: number;
+  confianza: Confidence;
+  requiredOk: boolean;
+}
+
+/** Un archivo, o UNA pestaña de un .xlsx con varias (cada una cuenta como un archivo aparte). */
+export interface DetectedFileItem {
+  fileIndex: number;
+  fileName: string;
+  sheetName: string | null;
+  columns: string[];
+  sample: string[][];
+  rows: number;
+  guesses: DetectGuess[];
+  /** null = "sin identificar": el usuario debe elegir la entidad a mano antes de continuar. */
+  suggestedEntity: Entity | null;
+  suggestedConfidence: Confidence | null;
+  /** Posición en el orden de importación por dependencia (pacientes primero…). */
+  order: number;
+}
+
+/** Un archivo que ni siquiera se pudo leer (no aborta el lote: el resto sigue). */
+export interface DetectFileError {
+  fileIndex: number;
+  fileName: string;
+  error: string;
+}
+
+export interface DetectBatchResult {
+  items: DetectedFileItem[];
+  errors: DetectFileError[];
+  /** El orden de dependencia completo (para explicarlo en la UI). */
+  order: Entity[];
+}
+
+// ---------------------------------------------------------------------------
 // Implementación SIMULADA. Cifras/filas idénticas al prototipo de diseño.
 // ---------------------------------------------------------------------------
 const TARGET_FIELDS: TargetField[] = [

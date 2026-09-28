@@ -28,9 +28,11 @@ interface Props {
   onToggle: (id: string) => void;
   /** Abre el sub-flujo de archivos en bloque (radiografías/fotos/PDFs): no es una hoja de cálculo, vive aparte. */
   onFiles: () => void;
+  /** Abre el sub-flujo de varios archivos de datos a la vez (WS1-T12): detecta cada uno y los ordena. */
+  onMulti: () => void;
 }
 
-export function StepWhat({ t, selected, onToggle, onFiles }: Props) {
+export function StepWhat({ t, selected, onToggle, onFiles, onMulti }: Props) {
   return (
     <div>
       <h2 className="imp-title">{t("shell.importClinic.step3.title")}</h2>
@@ -62,9 +64,14 @@ export function StepWhat({ t, selected, onToggle, onFiles }: Props) {
         })}
       </div>
       <p className="imp-hint" style={{ marginTop: 12 }}>{t("shell.importClinic.step3.soloNote")}</p>
-      <button type="button" className="btn-new btn-new--secondary btn-new--sm" style={{ marginTop: 10 }} onClick={onFiles}>
-        {t("shell.importClinic.step3.filesCta")}
-      </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10, alignItems: "flex-start" }}>
+        <button type="button" className="btn-new btn-new--secondary btn-new--sm" onClick={onMulti}>
+          {t("shell.importClinic.step3.multiCta")}
+        </button>
+        <button type="button" className="btn-new btn-new--secondary btn-new--sm" onClick={onFiles}>
+          {t("shell.importClinic.step3.filesCta")}
+        </button>
+      </div>
     </div>
   );
 }
