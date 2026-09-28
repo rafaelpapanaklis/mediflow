@@ -137,3 +137,16 @@ export const VIEW_LABELS: Record<OrthoPhotoView, string> = {
   INTRA_OCCLUSAL_UPPER: "Oclusal superior",
   INTRA_OCCLUSAL_LOWER: "Oclusal inferior",
 };
+
+/**
+ * X6 — un juego de fotos solo acepta archivos del MISMO paciente y la MISMA
+ * clínica. `null` = se puede colgar; si no, el mensaje para el usuario.
+ */
+export function motivoArchivoAjenoAlJuego(
+  set: { clinicId: string; patientId: string },
+  file: { clinicId: string; patientId: string } | null,
+): string | null {
+  if (!file || !set.clinicId || file.clinicId !== set.clinicId) return "Archivo no encontrado";
+  if (file.patientId !== set.patientId) return "Ese archivo es de otro paciente: no se puede poner en este juego de fotos";
+  return null;
+}

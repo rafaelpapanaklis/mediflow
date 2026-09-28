@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { uploadPhotoToSetSchema } from "@/lib/validation/orthodontics";
-import { VIEW_TO_ID_COLUMN } from "@/lib/orthodontics/photo-set-helpers";
+import { VIEW_TO_ID_COLUMN, motivoArchivoAjenoAlJuego } from "@/lib/orthodontics/photo-set-helpers";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -24,10 +24,14 @@ export async function uploadPhotoToSet(
   });
   if (!set) return fail("Set fotográfico no encontrado");
 
+  // X6: el archivo tiene que ser del MISMO paciente que el juego (antes solo
+  // se miraba la clínica y se podía colgar la foto de otro paciente).
   const file = await prisma.patientFile.findFirst({
-    where: { id: parsed.data.fileId, clinicId: ctx.clinicId },
+    where: { id: parsed.data.fileId, clinicId: ctx.clinicId, deletedAt: null },
+    select: { clinicId: true, patientId: true },
   });
-  if (!file) return fail("Archivo no encontrado");
+  const archivoAjeno = motivoArchivoAjenoAlJuego(set, file);
+  if (archivoAjeno) return fail(archivoAjeno);
 
   const column = VIEW_TO_ID_COLUMN[parsed.data.view];
 
