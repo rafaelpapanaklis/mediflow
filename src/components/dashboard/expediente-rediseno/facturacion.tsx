@@ -2,6 +2,7 @@
 
 import { Plus, Receipt } from "lucide-react";
 import type { PatientBillingInvoice } from "@/components/dashboard/patient-detail/billing-tab";
+import { PagosMigradosCard } from "@/components/dashboard/patient-detail/pagos-migrados-card";
 import { FichasFactura } from "@/components/dashboard/factura-ficha-rediseno/fichas-factura";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { useT } from "@/i18n/i18n-provider";
@@ -30,6 +31,8 @@ import s from "./expediente.module.css";
  */
 
 export interface FacturacionProps {
+  /** ws1-t6: alimenta la tarjeta "Pagos anteriores (migrados)", de solo lectura, debajo de las facturas. */
+  patientId: string;
   facturas: PatientBillingInvoice[];
   facturApiEnabled: boolean;
   onNueva: () => void;
@@ -43,7 +46,7 @@ export interface FacturacionProps {
   onDuplicar: (inv: PatientBillingInvoice, condiciones: CondicionesPago | null) => void;
 }
 
-export function Facturacion({ facturas, facturApiEnabled, onNueva, onAbrir, onCobrar, onTimbrar, onDuplicar }: FacturacionProps) {
+export function Facturacion({ patientId, facturas, facturApiEnabled, onNueva, onAbrir, onCobrar, onTimbrar, onDuplicar }: FacturacionProps) {
   const t = useT();
 
   return (
@@ -79,6 +82,8 @@ export function Facturacion({ facturas, facturApiEnabled, onNueva, onAbrir, onCo
           onDuplicar={onDuplicar}
         />
       </section>
+
+      <PagosMigradosCard patientId={patientId} />
     </RaizExpediente>
   );
 }
