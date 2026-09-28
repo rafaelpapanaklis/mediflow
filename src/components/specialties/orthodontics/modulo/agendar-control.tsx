@@ -2,7 +2,7 @@
 // Módulo de Ortodoncia — «Agendar control» (ws1-t3, H16). Abre la ventana de
 // Nueva cita de siempre, ya con el paciente y el motivo «Control de
 // ortodoncia» puestos: no es otra forma de agendar, es un atajo. Al crearla se
-// vuelve a pedir la pantalla, y el paciente sale de «Sin su próximo control».
+// vuelve a pedir la pantalla, y el paciente sale de «Sin próximo control».
 import { useRouter } from "next/navigation";
 import { CalendarPlus } from "lucide-react";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";

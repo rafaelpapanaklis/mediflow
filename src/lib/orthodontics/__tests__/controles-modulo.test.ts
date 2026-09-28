@@ -172,9 +172,20 @@ test("cada estado de cita tiene su texto, sin claves internas", () => {
     assert.ok(texto.length > 3, e);
     assert.doesNotMatch(texto, /[A-Z]{3,}|_/, `${e}: nada de «NO_SHOW» a la vista`);
   }
-  assert.equal(estadoDeCita("NO_SHOW").texto, "No se presentó");
+  assert.equal(estadoDeCita("NO_SHOW").texto, "No asistió");
   assert.equal(estadoDeCita("NO_SHOW").tono, "peligro");
-  assert.equal(estadoDeCita("algo-nuevo").texto, "Por confirmar", "un estado desconocido no rompe la pantalla");
+  assert.equal(estadoDeCita("algo-nuevo").texto, "Agendada", "un estado desconocido no rompe la pantalla");
+  // Fila 24 de la revisión de lógica de uso: los MISMOS nombres que la Agenda
+  // y la ficha del paciente. La misma cita no se llama de tres maneras.
+  assert.deepEqual(
+    ["PENDING", "SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_CHAIR", "IN_PROGRESS", "COMPLETED", "CHECKED_OUT", "CANCELLED", "NO_SHOW"].map(
+      (e) => estadoDeCita(e).texto,
+    ),
+    ["Agendada", "Agendada", "Confirmada", "Registrado", "En sillón", "En consulta", "Completada", "Salió", "Cancelada", "No asistió"],
+  );
+  for (const viejo of ["Por confirmar", "En sala de espera", "Atendida", "No se presentó"]) {
+    assert.ok(!estados.some((e) => estadoDeCita(e).texto === viejo), `«${viejo}» era un nombre solo de esta pantalla`);
+  }
   assert.equal(citaAtendida("COMPLETED"), true);
   assert.equal(citaAtendida("CONFIRMED"), false);
 });

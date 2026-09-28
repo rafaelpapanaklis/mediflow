@@ -8,6 +8,11 @@
 //
 // Tres tarjetas: los controles de hoy, los de los próximos siete días y quién
 // falta de control (caso activo sin su próximo control agendado).
+//
+// ws1-t4 ronda 6 (revisión de lógica de uso, filas 21 y 24): la lista se llama
+// «Sin próximo control» aquí Y en Alertas (antes «Sin su próximo control» y
+// «Falta de control»: la misma lista con dos nombres), y el estado de cada
+// cita se dice igual que en la Agenda y en la ficha (`estadoDeCita`).
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
@@ -75,7 +80,7 @@ export function VistaControles({
       icono: CalendarRange,
       tono: "violeta",
     },
-    { id: "sin-control", valor: sinControl.length, etiqueta: "Sin su próximo control", icono: Clock, tono: "alerta" },
+    { id: "sin-control", valor: sinControl.length, etiqueta: "Sin próximo control", icono: Clock, tono: "alerta" },
   ];
 
   return (
@@ -84,7 +89,7 @@ export function VistaControles({
       sub={
         data.casosActivos === 0
           ? "Los controles de ortodoncia de la Agenda, y quién falta de control."
-          : `${plural(deHoy, "control hoy", "controles hoy")} · ${plural(sinControl.length, "caso", "casos")} de ${data.casosActivos} sin su próximo control.`
+          : `${plural(deHoy, "control hoy", "controles hoy")} · ${plural(sinControl.length, "caso", "casos")} de ${data.casosActivos} sin próximo control.`
       }
       acciones={
         <Link href={`/dashboard/agenda?date=${hoy}`} className={s.boton}>
@@ -119,8 +124,8 @@ export function VistaControles({
           semana.hoy.length > 0
             ? [
                 semana.resumenHoy.enPie > 0 ? plural(semana.resumenHoy.enPie, "por atender", "por atender") : null,
-                semana.resumenHoy.atendidos > 0 ? plural(semana.resumenHoy.atendidos, "atendido", "atendidos") : null,
-                semana.resumenHoy.faltaron > 0 ? plural(semana.resumenHoy.faltaron, "no se presentó", "no se presentaron") : null,
+                semana.resumenHoy.atendidos > 0 ? plural(semana.resumenHoy.atendidos, "completado", "completados") : null,
+                semana.resumenHoy.faltaron > 0 ? plural(semana.resumenHoy.faltaron, "no asistió", "no asistieron") : null,
                 semana.resumenHoy.cancelados > 0 ? plural(semana.resumenHoy.cancelados, "cancelado", "cancelados") : null,
               ]
                 .filter(Boolean)
@@ -139,7 +144,7 @@ export function VistaControles({
             <Vacio
               icono={CalendarCheck}
               titulo="Hoy no hay controles de ortodoncia"
-              pista="Aquí aparecen las citas de tipo «Control de ortodoncia» de hoy. Se agendan desde la Agenda o desde «Sin su próximo control», más abajo."
+              pista="Aquí aparecen las citas de tipo «Control de ortodoncia» de hoy. Se agendan desde la Agenda o desde «Sin próximo control», más abajo."
             />
           </div>
         ) : (
@@ -189,7 +194,7 @@ export function VistaControles({
         id="sin-control"
         icono={Clock}
         tono={sinControl.length > 0 ? "alerta" : "neutro"}
-        titulo="Sin su próximo control"
+        titulo="Sin próximo control"
         sub={sinControl.length > 0 ? "Casos activos que no tienen ningún control agendado. Arriba, quien lleva más tiempo sin venir." : undefined}
         accion={
           sinControl.length > 0 ? (

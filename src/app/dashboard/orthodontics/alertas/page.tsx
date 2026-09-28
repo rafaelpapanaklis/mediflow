@@ -11,6 +11,7 @@
 export const dynamic = "force-dynamic";
 
 import { getCurrentUser } from "@/lib/auth";
+import { hasPermission } from "@/lib/auth/permissions";
 import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { loadOrthoAlerts } from "@/lib/orthodontics/alerts-data";
 import { VistaAlertas } from "@/components/specialties/orthodontics/modulo/vista-alertas";
@@ -21,5 +22,12 @@ export default async function OrthodonticsAlertasPage() {
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   const alerts = await loadOrthoAlerts(user.clinicId, user.clinic.timezone, viewer);
 
-  return <VistaAlertas alerts={alerts} zonaHoraria={user.clinic.timezone} />;
+  // El mismo permiso que pide el botón «Nueva cita» del menú (y que usa
+  // Controles): quien no puede agendar no ve «Agendar control».
+  const puedeAgendar = hasPermission(
+    { role: user.role, permissionsOverride: user.permissionsOverride },
+    "agenda.create",
+  );
+
+  return <VistaAlertas alerts={alerts} zonaHoraria={user.clinic.timezone} puedeAgendar={puedeAgendar} />;
 }

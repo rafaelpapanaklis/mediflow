@@ -13,6 +13,7 @@
 // México es martes en UTC).
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { pintaDeEstado } from "@/lib/agenda-nueva/estados";
 import { ACTIVE_PLAN_STATUSES, type OrthoCaseSummary } from "./specialty-kpis";
 
 /** Cuántos días se enseñan después de hoy. */
@@ -52,26 +53,30 @@ export interface DiaDeControles {
 
 export type TonoEstado = "exito" | "alerta" | "peligro" | "violeta" | "neutro";
 
-/** Cómo se le dice a la clínica el estado de una cita, y con qué color. */
+const TONO_DE_ESTADO: Record<string, TonoEstado> = {
+  SCHEDULED: "violeta",
+  CONFIRMED: "exito",
+  CHECKED_IN: "alerta",
+  IN_CHAIR: "violeta",
+  IN_PROGRESS: "violeta",
+  COMPLETED: "neutro",
+  CHECKED_OUT: "neutro",
+  CANCELLED: "neutro",
+  NO_SHOW: "peligro",
+};
+
+/**
+ * Cómo se le dice a la clínica el estado de una cita, y con qué color.
+ *
+ * ws1-t4 ronda 6 (fila 24 de la revisión de lógica de uso): el TEXTO sale de
+ * la misma fuente que la Agenda y la ficha del paciente (`pintaDeEstado`,
+ * `agenda-nueva/estados.ts`). Antes esta pantalla tenía sus propios nombres
+ * —«Por confirmar», «En sala de espera», «Atendida», «No se presentó»— y la
+ * misma cita se llamaba de tres maneras según dónde se mirara. Los colores
+ * son los de la tabla de citas de la ficha.
+ */
 export function estadoDeCita(status: string): { texto: string; tono: TonoEstado } {
-  switch (status) {
-    case "CONFIRMED":
-      return { texto: "Confirmada", tono: "exito" };
-    case "CHECKED_IN":
-      return { texto: "En sala de espera", tono: "violeta" };
-    case "IN_CHAIR":
-    case "IN_PROGRESS":
-      return { texto: "En consulta", tono: "violeta" };
-    case "COMPLETED":
-    case "CHECKED_OUT":
-      return { texto: "Atendida", tono: "exito" };
-    case "NO_SHOW":
-      return { texto: "No se presentó", tono: "peligro" };
-    case "CANCELLED":
-      return { texto: "Cancelada", tono: "neutro" };
-    default:
-      return { texto: "Por confirmar", tono: "alerta" };
-  }
+  return { texto: pintaDeEstado(status).chipTexto, tono: TONO_DE_ESTADO[status] ?? "violeta" };
 }
 
 /** ¿Esta cita ya ocurrió (el paciente pasó a consulta y salió)? */

@@ -3,6 +3,14 @@
 // `alerts-data.ts`, igual que antes. Arriba, un resumen con el conteo de cada
 // tipo que salta a su sección; debajo, las cinco secciones en el orden de
 // siempre. Una sección sin casos se queda en una línea.
+//
+// ws1-t4 ronda 6 (revisión de lógica de uso, filas 21 y 22):
+//  - «Sin próximo control» se llama igual que en Controles (antes aquí era
+//    «Falta de control») y lleva el MISMO botón «Agendar control»: quien
+//    llega por la alerta ya no se queda sin poder hacer nada.
+//  - Quien no asistió a su control también se puede reagendar desde aquí.
+//  - El estado se dice como en la Agenda y en la ficha: «No asistió».
+//  - Un solo nombre para el expediente de ortodoncia: «caso».
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
@@ -21,6 +29,7 @@ import type {
 } from "@/lib/orthodontics/specialty-kpis";
 import type { NoShowEntry, OrthoAlertsData } from "@/lib/orthodontics/alerts-data";
 import { EnviarRecordatorioButton } from "@/components/specialties/orthodontics/EnviarRecordatorioButton";
+import { AgendarControlBoton } from "./agendar-control";
 import { fechaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, type Tono } from "./piezas";
 import s from "./modulo.module.css";
@@ -40,8 +49,11 @@ const CLASE_TONO: Record<Tono, string> = {
 export function VistaAlertas({
   alerts,
   zonaHoraria,
+  puedeAgendar = false,
 }: {
   alerts: OrthoAlertsData;
+  /** Permiso `agenda.create`, decidido en el servidor: sin él no sale «Agendar control». */
+  puedeAgendar?: boolean;
   /** `clinic.timezone`: el día de una falta se pinta en la zona de la clínica, no en la del servidor. */
   zonaHoraria: string | null;
 }) {
@@ -55,8 +67,8 @@ export function VistaAlertas({
 
   const resumen: { id: string; etiqueta: string; cuenta: number; icono: LucideIcon; tono: Tono }[] = [
     { id: "mensualidad-vencida", etiqueta: "Mensualidad vencida", cuenta: alerts.overduePayments.length, icono: AlertTriangle, tono: "peligro" },
-    { id: "falta-de-control", etiqueta: "Falta de control", cuenta: alerts.missingNextControl.length, icono: Clock, tono: "alerta" },
-    { id: "no-se-presento", etiqueta: "No se presentó", cuenta: alerts.noShows.length, icono: UserX, tono: "alerta" },
+    { id: "falta-de-control", etiqueta: "Sin próximo control", cuenta: alerts.missingNextControl.length, icono: Clock, tono: "alerta" },
+    { id: "no-se-presento", etiqueta: "No asistió", cuenta: alerts.noShows.length, icono: UserX, tono: "alerta" },
     { id: "proximo-a-terminar", etiqueta: "Próximo a terminar", cuenta: alerts.finishingSoon.length, icono: Hourglass, tono: "violeta" },
     { id: "pasado-de-fecha", etiqueta: "Pasado de su fecha", cuenta: alerts.pastDue.length, icono: CalendarX, tono: "peligro" },
   ];
@@ -115,8 +127,8 @@ export function VistaAlertas({
         id="falta-de-control"
         icon={Clock}
         tono="alerta"
-        title="Falta de control"
-        sub="Casos activos sin su próximo control en la agenda."
+        title="Sin próximo control"
+        sub="Casos activos que no tienen ningún control agendado."
         empty="Todos los casos activos tienen su próximo control agendado."
       >
         {alerts.missingNextControl.map((p: MissingNextControlEntry) => (
@@ -125,7 +137,9 @@ export function VistaAlertas({
             patientId={p.patientId}
             patientName={p.patientName}
             detalle="Sin cita de control agendada"
-          />
+          >
+            {puedeAgendar && <AgendarControlBoton patientId={p.patientId} patientName={p.patientName} />}
+          </PatientRow>
         ))}
       </AlertSection>
 
@@ -133,7 +147,7 @@ export function VistaAlertas({
         id="no-se-presento"
         icon={UserX}
         tono="alerta"
-        title="No se presentó a su control"
+        title="No asistió a su control"
         sub="Faltas de los últimos 30 días."
         empty="Sin faltas en los últimos 30 días."
       >
@@ -143,7 +157,9 @@ export function VistaAlertas({
             patientId={n.patientId}
             patientName={n.patientName}
             detalle={`Faltó el ${fmtDate(n.scheduledAt)}`}
-          />
+          >
+            {puedeAgendar && <AgendarControlBoton patientId={n.patientId} patientName={n.patientName} />}
+          </PatientRow>
         ))}
       </AlertSection>
 
@@ -151,9 +167,9 @@ export function VistaAlertas({
         id="proximo-a-terminar"
         icon={Hourglass}
         tono="violeta"
-        title="Tratamiento próximo a terminar"
+        title="Caso próximo a terminar"
         sub="Para ir preparando el retiro y la retención."
-        empty="Sin tratamientos por terminar en el corto plazo."
+        empty="Ningún caso por terminar en el corto plazo."
       >
         {alerts.finishingSoon.map((e: DurationAlertEntry) => (
           <PatientRow
@@ -169,9 +185,9 @@ export function VistaAlertas({
         id="pasado-de-fecha"
         icon={CalendarX}
         tono="peligro"
-        title="Tratamiento pasado de su fecha"
+        title="Caso pasado de su fecha"
         sub="Casos que ya rebasaron la duración estimada."
-        empty="Ningún tratamiento rebasó su duración estimada."
+        empty="Ningún caso rebasó su duración estimada."
       >
         {alerts.pastDue.map((e: DurationAlertEntry) => (
           <PatientRow
@@ -259,7 +275,8 @@ function PatientRow({
         </Link>
         <div className={detallePeligro ? `${s.detalle} ${s.detallePeligro}` : s.detalle}>{detalle}</div>
       </div>
-      {children && <div className={s.filaDerecha}>{children}</div>}
+      {/* `children` puede llegar como `false` (sin permiso): ahí no se pinta la caja. */}
+      {children ? <div className={s.filaDerecha}>{children}</div> : null}
     </li>
   );
 }
