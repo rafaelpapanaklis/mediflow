@@ -89,6 +89,9 @@ export default async function AppointmentsPage() {
         timezone={tz}
         waConnected={user.clinic.waConnected ?? false}
         canSendReminder={canSendManualReminder(user.role)}
+        // La categoría sale de la sesión: en una clínica DENTAL el selector de
+        // tipo de cita no ofrece «Nutrición» ni «Psicología».
+        clinicCategory={user.clinic.category ?? null}
       />
     </ErrorBoundary>
   );

@@ -29,6 +29,7 @@ import {
   type BloqueoParaConfirmar,
 } from "@/components/dashboard/bloqueos/confirmar-bloqueo";
 import { BookingRequestsPanel } from "./booking-requests-panel";
+import { tiposDeCitaParaCategoria } from "@/lib/agenda/tipos-cita-clasica";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
@@ -55,6 +56,8 @@ interface Props {
   timezone: string;
   /** Espejo de lo que exige POST /api/whatsapp/send: sin esto, el botón daba 403. */
   canSendReminder: boolean;
+  /** `Clinic.category`, de la sesión (page.tsx). Decide qué tipos de cita se ofrecen. */
+  clinicCategory?: string | null;
 }
 
 // Día/mes: ids de traducción resueltos vía t() en tiempo de render (nunca t() a nivel módulo).
@@ -62,7 +65,8 @@ const DAY_KEYS   = ["mon","tue","wed","thu","fri","sat","sun"].map(d => `appoint
 const MONTH_KEYS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].map(m => `appointments.calendar.month.${m}`);
 const HOURS     = Array.from({ length: 14 }, (_, i) => `${(i + 7).toString().padStart(2,"0")}:00`);
 const DURATIONS = [15, 20, 30, 45, 60, 90, 120];
-const APPT_TYPES = ["Consulta general","Primera vez","Revisión / Control","Limpieza dental","Extracción","Endodoncia","Ortodoncia","Implante","Cirugía","Nutrición","Psicología","Seguimiento","Otro"];
+// Los tipos de cita viven en @/lib/agenda/tipos-cita-clasica: la lista es la de
+// siempre, pero en una clínica DENTAL no se ofrecen «Nutrición» ni «Psicología».
 
 // label = id de traducción (resuelto con t() al renderizar), no el texto visible.
 // Colores por estado = mapeo canónico de la agenda (STATUS_COLOR de
@@ -211,10 +215,14 @@ interface ApptFormProps {
   onSubmit: () => void;
   onCancel: () => void;
   label: string;
+  clinicCategory?: string | null;
 }
 
-function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCancel, label }: ApptFormProps) {
+function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCancel, label, clinicCategory = null }: ApptFormProps) {
   const t = useT();
+  // El tipo que ya trae la cita se conserva en la lista aunque no se ofrezca
+  // (una cita vieja de «Nutrición»): si no, guardar le cambiaría el tipo.
+  const tiposDeCita = tiposDeCitaParaCategoria(clinicCategory, form.type);
   function setF(k: string, v: any) { setForm((f: any) => ({ ...f, [k]: v })); }
   return (
     <>
@@ -240,7 +248,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
               <div className="field-new">
                 <label className="field-new__label">{t("appointments.form.appointmentType")}</label>
                 <select className="input-new" value={form.type} onChange={e => setF("type", e.target.value)}>
-                  {APPT_TYPES.map(ty => <option key={ty}>{ty}</option>)}
+                  {tiposDeCita.map(ty => <option key={ty}>{ty}</option>)}
                 </select>
               </div>
             </div>
@@ -323,7 +331,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
   );
 }
 
-export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected, canSendReminder, timezone: tzClinica }: Props) {
+export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected, canSendReminder, timezone: tzClinica, clinicCategory = null }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -1176,7 +1184,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 <X size={14} />
               </button>
             </div>
-            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={() => { void createAppt(); }} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.scheduleSubmit")} />
+            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={() => { void createAppt(); }} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.scheduleSubmit")} clinicCategory={clinicCategory} />
           </div>
         </div>
       )}
@@ -1191,7 +1199,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 <X size={14} />
               </button>
             </div>
-            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={() => { void saveEdit(); }} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.saveChanges")} />
+            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={() => { void saveEdit(); }} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.saveChanges")} clinicCategory={clinicCategory} />
           </div>
         </div>
       )}
