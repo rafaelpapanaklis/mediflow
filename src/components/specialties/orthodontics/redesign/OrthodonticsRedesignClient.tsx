@@ -200,10 +200,15 @@ export interface OrthodonticsRedesignClientProps {
   /** Hook para cobrar siguiente mensualidad desde sidebar derecha. */
   onCollectNow?: () => void;
 
-  /** Callback cuando se firma una card. */
-  onCardSigned?: (payload: DrawerCardSubmit) => Promise<void> | void;
-  /** Callback cuando se guarda como borrador. */
-  onCardDraftSaved?: (payload: DrawerCardSubmit) => Promise<void> | void;
+  /**
+   * Callback cuando se firma una card. Devuelve el `cardId` con el que
+   * quedó (§1 completo, ws1-t8) — DrawerTreatmentCard lo recuerda para
+   * que un "Guardar borrador" seguido de "Firmar" en la misma sesión no
+   * vuelva a mandar `cardId: null` dos veces.
+   */
+  onCardSigned?: (payload: DrawerCardSubmit) => Promise<string | null | void> | string | null | void;
+  /** Callback cuando se guarda como borrador. Mismo contrato que onCardSigned. */
+  onCardDraftSaved?: (payload: DrawerCardSubmit) => Promise<string | null | void> | string | null | void;
   /** Callback cuando se confirma avance de fase. */
   onPhaseAdvanced?: (payload: {
     fromPhase: OrthoPhaseKey;

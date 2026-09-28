@@ -613,6 +613,12 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             }
             toast.success(t("patients.ortho.appointmentSigned"));
             router.refresh();
+            // §1 completo (ws1-t8): el cajón recuerda este id — así, si ya
+            // se había guardado un borrador antes en la MISMA sesión y
+            // ahora se firma, el siguiente submit manda este cardId en vez
+            // de null (evita el "Unique constraint failed on
+            // (treatmentPlanId, cardNumber)" de intentar CREAR dos veces).
+            return res.data.cardId;
           }}
           onCardDraftSaved={async (payload) => {
             if (!orthoRedesignVM.treatment.treatmentPlanId) {
@@ -656,6 +662,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             }
             toast.success(t("patients.ortho.draftSaved"));
             router.refresh();
+            // §1 completo (ws1-t8): mismo motivo que en onCardSigned arriba.
+            return res.data.cardId;
           }}
           onPhaseAdvanced={async (payload) => {
             if (!orthoRedesignVM.treatment.treatmentPlanId) {

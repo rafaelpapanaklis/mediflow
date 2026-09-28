@@ -37,6 +37,7 @@ import {
   type WireStepDTO,
 } from "../types";
 import { useCajon } from "../atoms/useCajon";
+import { initialState, reducer, type DrawerState } from "./treatment-card-state";
 import orto from "../orto.module.css";
 
 export type DrawerCardSubmit = {
@@ -83,164 +84,20 @@ export interface DrawerTreatmentCardProps {
    */
   availablePhotoSets?: Array<{ id: string; label: string }>;
   onClose: () => void;
-  onSave?: (payload: DrawerCardSubmit) => Promise<void> | void;
-  onSign?: (payload: DrawerCardSubmit) => Promise<void> | void;
+  /**
+   * Devuelve el `cardId` con el que quedó la tarjeta (creada o
+   * actualizada) — o `null`/`void` si no se sabe (falló, o el caller no lo
+   * dice; `BotonHojaControl.tsx` en Agenda es un caller así hoy, fuera del
+   * alcance de este arreglo). Cuando SÍ llega, el cajón lo recuerda (§1
+   * completo, ws1-t8): sin esto, "Guardar borrador" y luego "Firmar" en
+   * la MISMA sesión abierta volvían a mandar `cardId: null` los dos, y el
+   * segundo intentaba CREAR una tarjeta nueva con el mismo `cardNumber`
+   * de la que el primero ya había creado — "Unique constraint failed on
+   * (treatmentPlanId, cardNumber)".
+   */
+  onSave?: (payload: DrawerCardSubmit) => Promise<string | null | void> | string | null | void;
+  onSign?: (payload: DrawerCardSubmit) => Promise<string | null | void> | string | null | void;
   onSharePatient?: (cardId: string) => void;
-}
-
-export interface DrawerState {
-  soap: SOAP;
-  plaquePct: number | null;
-  gingivitis: OrthoGingivitisLevel | null;
-  whiteSpots: boolean;
-  elastics: ElasticDTO[];
-  iprPoints: IPRPointDTO[];
-  brokenBrackets: BrokenBracketDTO[];
-  hasProgressPhoto: boolean;
-  photoSetId: string | null;
-  wireToId: string | null;
-  nextDate: string | null;
-  nextDurationMin: number | null;
-  activationsNote: string;
-  indications: string;
-}
-
-export type DrawerAction =
-  | { kind: "set-soap"; field: keyof SOAP; value: string }
-  | { kind: "set-plaque"; value: number | null }
-  | { kind: "set-gingivitis"; value: OrthoGingivitisLevel | null }
-  | { kind: "set-white-spots"; value: boolean }
-  | { kind: "set-wire-to"; value: string | null }
-  | { kind: "set-next-date"; value: string | null }
-  | { kind: "set-next-duration"; value: number | null }
-  | { kind: "set-has-photo"; value: boolean }
-  | { kind: "set-photo-set"; value: string | null }
-  | { kind: "set-activations-note"; value: string }
-  | { kind: "set-indications"; value: string }
-  | { kind: "add-elastic"; value: ElasticDTO }
-  | { kind: "update-elastic"; id: string; patch: Partial<Pick<ElasticDTO, "config" | "zone">> }
-  | { kind: "remove-elastic"; id: string }
-  | { kind: "add-ipr"; value: IPRPointDTO }
-  | { kind: "update-ipr"; id: string; patch: Partial<Pick<IPRPointDTO, "toothA" | "toothB" | "amountMm">> }
-  | { kind: "remove-ipr"; id: string }
-  | { kind: "toggle-ipr"; id: string }
-  | { kind: "add-bracket"; value: BrokenBracketDTO }
-  | { kind: "update-bracket"; id: string; patch: Partial<Pick<BrokenBracketDTO, "toothFdi">> }
-  | { kind: "remove-bracket"; id: string }
-  | { kind: "mark-rebonded"; id: string };
-
-export function initialState(card: TreatmentCardDTO | null): DrawerState {
-  if (card) {
-    return {
-      soap: { ...card.soap },
-      plaquePct: card.hygiene.plaquePct,
-      gingivitis: card.hygiene.gingivitis,
-      whiteSpots: card.hygiene.whiteSpots,
-      elastics: card.elastics,
-      iprPoints: card.iprPoints,
-      brokenBrackets: card.brokenBrackets,
-      hasProgressPhoto: card.hasProgressPhoto,
-      photoSetId: card.photoSetId,
-      wireToId: card.wireTo?.id ?? null,
-      nextDate: card.nextDate,
-      nextDurationMin: card.nextDurationMin,
-      activationsNote: card.activationsNote ?? "",
-      indications: card.indications ?? "",
-    };
-  }
-  return {
-    soap: { s: "", o: "", a: "", p: "" },
-    plaquePct: null,
-    gingivitis: null,
-    whiteSpots: false,
-    elastics: [],
-    iprPoints: [],
-    brokenBrackets: [],
-    hasProgressPhoto: false,
-    photoSetId: null,
-    wireToId: null,
-    nextDate: null,
-    nextDurationMin: 30,
-    activationsNote: "",
-    indications: "",
-  };
-}
-
-export function reducer(state: DrawerState, action: DrawerAction): DrawerState {
-  switch (action.kind) {
-    case "set-soap":
-      return { ...state, soap: { ...state.soap, [action.field]: action.value } };
-    case "set-plaque":
-      return { ...state, plaquePct: action.value };
-    case "set-gingivitis":
-      return { ...state, gingivitis: action.value };
-    case "set-white-spots":
-      return { ...state, whiteSpots: action.value };
-    case "set-wire-to":
-      return { ...state, wireToId: action.value };
-    case "set-next-date":
-      return { ...state, nextDate: action.value };
-    case "set-next-duration":
-      return { ...state, nextDurationMin: action.value };
-    case "set-has-photo":
-      return { ...state, hasProgressPhoto: action.value };
-    case "set-photo-set":
-      return { ...state, photoSetId: action.value, hasProgressPhoto: action.value != null };
-    case "set-activations-note":
-      return { ...state, activationsNote: action.value };
-    case "set-indications":
-      return { ...state, indications: action.value };
-    case "add-elastic":
-      return { ...state, elastics: [...state.elastics, action.value] };
-    case "update-elastic":
-      return {
-        ...state,
-        elastics: state.elastics.map((e) =>
-          e.id === action.id ? { ...e, ...action.patch } : e,
-        ),
-      };
-    case "remove-elastic":
-      return { ...state, elastics: state.elastics.filter((e) => e.id !== action.id) };
-    case "add-ipr":
-      return { ...state, iprPoints: [...state.iprPoints, action.value] };
-    case "update-ipr":
-      return {
-        ...state,
-        iprPoints: state.iprPoints.map((p) =>
-          p.id === action.id ? { ...p, ...action.patch } : p,
-        ),
-      };
-    case "remove-ipr":
-      return { ...state, iprPoints: state.iprPoints.filter((p) => p.id !== action.id) };
-    case "toggle-ipr":
-      return {
-        ...state,
-        iprPoints: state.iprPoints.map((p) =>
-          p.id === action.id ? { ...p, done: !p.done } : p,
-        ),
-      };
-    case "add-bracket":
-      return { ...state, brokenBrackets: [...state.brokenBrackets, action.value] };
-    case "update-bracket":
-      return {
-        ...state,
-        brokenBrackets: state.brokenBrackets.map((b) =>
-          b.id === action.id ? { ...b, ...action.patch } : b,
-        ),
-      };
-    case "remove-bracket":
-      return {
-        ...state,
-        brokenBrackets: state.brokenBrackets.filter((b) => b.id !== action.id),
-      };
-    case "mark-rebonded":
-      return {
-        ...state,
-        brokenBrackets: state.brokenBrackets.map((b) =>
-          b.id === action.id ? { ...b, reBondedDate: new Date().toISOString() } : b,
-        ),
-      };
-  }
 }
 
 export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
@@ -248,18 +105,19 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   const isNew = props.card === null;
   const isReadOnly = props.card?.status === "SIGNED";
   const [state, dispatch] = useReducer(reducer, props.card, initialState);
-  // Hallazgo ws1-t1/ws1-t4 §1 (investigado por ws1-t8): "Firmar control"
-  // fallaba en dev.108 con "Unique constraint failed on (treatmentPlanId,
-  // cardNumber)" — un doble clic en "Guardar borrador" o "Firmar control"
-  // (nada los deshabilitaba mientras la primera llamada seguía en vuelo)
-  // manda DOS submits con el mismo cardId=null (tarjeta nueva) y el mismo
-  // cardNumber calculado por el padre; el servidor intenta CREAR la
-  // tarjeta dos veces con el mismo número y la segunda choca contra la
-  // restricción única. Esto no bloquea el doble submit por completo (el
-  // padre sigue recalculando el número con datos que pueden quedar
-  // desactualizados entre un borrador y una firma en la MISMA sesión del
-  // cajón — ver REPORTE-ws1-t8.md, queda anotado como pendiente) pero sí
-  // cierra el caso más probable: el mismo botón pulsado dos veces.
+  // Hallazgo ws1-t1/ws1-t4 §1, cerrado en dos partes (ws1-t8): "Firmar
+  // control" fallaba en dev.108 con "Unique constraint failed on
+  // (treatmentPlanId, cardNumber)" por DOS caminos —
+  //   1. Doble clic en "Guardar borrador"/"Firmar control": `enVuelo`
+  //      deshabilita los dos botones mientras la llamada sigue en vuelo.
+  //   2. Guardar un borrador y FIRMAR después sin cerrar el cajón:
+  //      `props.card` no cambia dentro de la misma sesión (el padre solo
+  //      lo actualiza si remonta el componente), así que sin más nada
+  //      `buildSubmit()` seguía mandando `cardId: null` en el segundo
+  //      submit — el servidor intentaba CREAR la tarjeta otra vez con el
+  //      mismo `cardNumber`. `state.learnedCardId` (reducer, acción
+  //      "learn-card-id") es lo que arregla esto: se pone al valor que
+  //      `onSave`/`onSign` confirma, y `buildSubmit()` lo usa primero.
   const [enVuelo, setEnVuelo] = useState(false);
 
   // Re-init si cambia la card target.
@@ -299,7 +157,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   const wireToLabel = wireText(wireToCurrent);
 
   const buildSubmit = (): DrawerCardSubmit => ({
-    cardId: props.card?.id ?? null,
+    cardId: state.learnedCardId,
     soap: state.soap,
     hygiene: {
       plaquePct: state.plaquePct,
@@ -684,7 +542,8 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 if (enVuelo) return;
                 setEnVuelo(true);
                 try {
-                  await props.onSave!(buildSubmit());
+                  const id = await props.onSave!(buildSubmit());
+                  if (id) dispatch({ kind: "learn-card-id", id });
                 } finally {
                   setEnVuelo(false);
                 }
@@ -702,7 +561,8 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 if (enVuelo) return;
                 setEnVuelo(true);
                 try {
-                  await props.onSign!(buildSubmit());
+                  const id = await props.onSign!(buildSubmit());
+                  if (id) dispatch({ kind: "learn-card-id", id });
                 } finally {
                   setEnVuelo(false);
                 }
