@@ -235,6 +235,46 @@ describe("pedirAnticipoDeCita: crea la factura si hace falta", () => {
     assert.equal(r.error, "sin_concepto");
     assert.equal(e.db.tablas.invoice.length, 0);
   });
+
+  // ws1-t1 (A2, QA ws1-t10): antes, un monto o un plazo inválidos SÍ creaban
+  // la factura (crearFacturaDesdeCita) y solo el anticipo se rechazaba
+  // después, dentro de pedirAnticipoDeFactura — dejando una cuenta por cobrar
+  // huérfana si recepción desistía. Ahora se valida ANTES de tocar la base.
+  it("sin factura, con concepto pero monto INVÁLIDO (bajo el mínimo): rechaza y NO crea la factura", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 86_400_000) });
+    const r = await pedirAnticipoDeCita(
+      { clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 5, concepto: { serviceId: "svc1" } }, // svc1 = $1,200
+      e.deps,
+    );
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "monto_invalido");
+    assert.equal(e.db.tablas.invoice.length, 0, "sin factura huérfana: A2");
+  });
+
+  it("sin factura, con concepto pero monto MAYOR al precio del concepto: rechaza y NO crea la factura", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 86_400_000) });
+    const r = await pedirAnticipoDeCita(
+      { clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 5000, concepto: { description: "Consulta", unitPrice: 1000 } },
+      e.deps,
+    );
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "monto_invalido");
+    assert.equal(e.db.tablas.invoice.length, 0, "sin factura huérfana: A2");
+  });
+
+  it("sin factura, monto válido pero PLAZO inválido: rechaza y NO crea la factura", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 86_400_000) });
+    const r = await pedirAnticipoDeCita(
+      { clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 300, horas: 999, concepto: { serviceId: "svc1" } },
+      e.deps,
+    );
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "plazo_invalido");
+    assert.equal(e.db.tablas.invoice.length, 0, "sin factura huérfana: A2");
+  });
 });
 
 describe("Ajuste 2 (decisión de Rafael): SOLO citas futuras, y sin comisión de DaleControl", () => {
@@ -534,6 +574,10 @@ describe("registrarAnticipoRecibido (fase 2): efectivo/transferencia/terminal, s
     assert.equal(dep.status, "PAID");
     assert.equal(dep.method, "manual", "efectivo/débito/crédito se guardan como \"manual\" en el anticipo — lo granular vive en el Payment");
     assert.equal(dep.paymentId, pago.id);
+    // ws1-t1 (M6): sin esto, `appointmentConfirmed` se quedaba en su default
+    // (false) aunque la cita SÍ se haya confirmado — «Últimos anticipos» lee
+    // esta columna, no la variable en memoria de la respuesta.
+    assert.equal(dep.appointmentConfirmed, true, "M6: se persiste, no solo se devuelve en la respuesta");
   });
 
   it("transferencia SIN referencia: rechazada, no crea nada", async () => {
@@ -596,5 +640,22 @@ describe("registrarAnticipoRecibido (fase 2): efectivo/transferencia/terminal, s
     assert.equal(appt.status, "CANCELLED", "no se toca a ciegas");
     const pago = e.db.tablas.payment[0];
     assert.match(pago.notes ?? "", /⚠️/, "la anomalía queda anotada en el Payment, visible en Caja");
+    const dep = e.db.tablas.appointmentDeposit[0];
+    assert.equal(dep.appointmentConfirmed, false, "M6: tampoco queda en true cuando no se pudo confirmar");
+  });
+
+  // ws1-t1 (M6, QA ws1-t10): un anticipo registrado a mano SIN ninguna cita
+  // ligada (factura suelta) no tiene ningún hueco que confirmar o perder —
+  // «Últimos anticipos» (pantalla.server.ts → anticipos-client.tsx) no debe
+  // pintar «el horario ya se había liberado» sobre él.
+  it("SIN cita ligada (factura suelta): citaConfirmada es false pero NO hay anomalía — nunca hubo hueco que perder", async () => {
+    const e = escenario();
+    const invoiceId = e.factura({ total: 1000, paid: 0 }); // sin appointmentId
+    const r = await registrarAnticipoRecibido({ clinicId: "c1", invoiceId, userId: "u1", monto: 300, method: "cash" }, e.deps);
+    assert.equal(r.ok, true);
+    assert.equal(r.registrado?.citaConfirmada, false);
+    assert.equal(r.registrado?.anomalia, null, "sin cita no hay «hueco perdido» que anotar");
+    const dep = e.db.tablas.appointmentDeposit[0];
+    assert.equal(dep.appointmentId, null);
   });
 });

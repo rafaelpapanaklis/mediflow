@@ -39,6 +39,7 @@ import {
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { leerDatosBancarios, type CuentaBancariaSede } from "./datos-bancarios.server";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
+import { computeInvoiceTotal, clinicInvoiceTaxDefaults } from "@/lib/invoice-totals";
 
 type Db = typeof prisma;
 
@@ -639,6 +640,23 @@ async function pedirAnticipoDeCitaImpl(
     if (!description || typeof unitPrice !== "number" || !(unitPrice >= 0)) {
       return fallo("sin_concepto", "Esta cita no tiene factura: elige un servicio del catálogo o escribe un concepto y un precio.");
     }
+
+    // Ajuste (ws1-t1, A2): el monto (y el plazo) se validan ANTES de crear la
+    // factura de la cita — con el MISMO total que va a tener (misma
+    // aritmética que crearFacturaDesdeCita: un solo concepto, sin descuento) —
+    // para que un monto o un plazo inválidos no dejen una factura huérfana.
+    // Antes esto se validaba solo dentro de pedirAnticipoDeFactura, que ya
+    // corría con la factura recién creada.
+    const clinicTax = await d.db.clinic.findUnique({ where: { id: args.clinicId }, select: { cfdiTaxMode: true } });
+    const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(clinicTax?.cfdiTaxMode);
+    const { total: totalPrevisto } = computeInvoiceTotal([{ quantity: 1, unitPrice }], 0, taxRate, taxIncluded);
+    const errorMontoPrevio = validarMontoAnticipoManual(args.monto, totalPrevisto, 0);
+    if (errorMontoPrevio) return fallo("monto_invalido", errorMontoPrevio);
+    if (args.horas !== undefined) {
+      const errorHorasPrevio = validarPlazoPanelHoras(args.horas);
+      if (errorHorasPrevio) return fallo("plazo_invalido", errorHorasPrevio);
+    }
+
     const creada = await crearFacturaDesdeCita({
       clinicId: args.clinicId,
       appointmentId: appt.id,
@@ -900,6 +918,15 @@ async function registrarAnticipoRecibidoImpl(
     }
     if (anomalia) {
       await tx.payment.update({ where: { id: pago.id }, data: { notes: notes ? `${notes} · ⚠️ ${anomalia}` : `⚠️ ${anomalia}` } });
+    }
+
+    // ws1-t1 (M6): sin esto, `appointmentConfirmed` se quedaba en su default
+    // (false) sin importar cómo salió la cita — «Últimos anticipos»
+    // (pantalla.server.ts) lee esta columna, no la variable en memoria de
+    // arriba, así que un anticipo confirmado por este camino aparecía igual
+    // que uno que nunca lo logró.
+    if (appointmentId) {
+      await tx.appointmentDeposit.update({ where: { id: depositId }, data: { appointmentConfirmed: citaConfirmada } });
     }
 
     return { ok: true as const, paymentId: pago.id, depositId, citaConfirmada, anomalia };
