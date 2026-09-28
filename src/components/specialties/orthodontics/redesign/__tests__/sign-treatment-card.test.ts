@@ -1,5 +1,8 @@
 // Tests del predicate canSignSoap usado por signTreatmentCard server action.
 // Importamos del archivo de predicados puros (sin server-only imports).
+//
+// Fila 12 (sep-2026): para firmar solo el Plan (P) es obligatorio; S, O y A
+// son opcionales. Antes se exigían los cuatro.
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -18,26 +21,27 @@ describe("signTreatmentCard.canSignSoap", () => {
     );
   });
 
-  it("bloquea firma cuando S está vacío", () => {
-    assert.equal(canSignSoap({ s: "", o: "x", a: "x", p: "x" }), false);
+  it("permite firmar solo con el Plan (S, O y A vacíos)", () => {
+    assert.equal(canSignSoap({ s: "", o: "", a: "", p: "control 4 sem" }), true);
   });
 
-  it("bloquea firma cuando O solo contiene whitespace", () => {
-    assert.equal(canSignSoap({ s: "x", o: "   ", a: "x", p: "x" }), false);
+  it("S vacío ya no bloquea", () => {
+    assert.equal(canSignSoap({ s: "", o: "x", a: "x", p: "x" }), true);
   });
 
-  it("bloquea firma cuando A está vacío", () => {
-    assert.equal(canSignSoap({ s: "x", o: "x", a: "", p: "x" }), false);
+  it("O solo whitespace ya no bloquea", () => {
+    assert.equal(canSignSoap({ s: "x", o: "   ", a: "x", p: "x" }), true);
   });
 
-  it("bloquea firma cuando P solo contiene tabs/newlines", () => {
+  it("bloquea si P vacío aunque S/O/A estén llenos", () => {
+    assert.equal(canSignSoap({ s: "x", o: "x", a: "x", p: "" }), false);
+  });
+
+  it("bloquea si P es solo whitespace", () => {
     assert.equal(canSignSoap({ s: "x", o: "x", a: "x", p: "\t\n " }), false);
   });
 
-  it("permite firma cuando los campos contienen espacios y contenido real", () => {
-    assert.equal(
-      canSignSoap({ s: " a ", o: " b ", a: " c ", p: " d " }),
-      true,
-    );
+  it("permite firmar con strings con espacios y contenido", () => {
+    assert.equal(canSignSoap({ s: " a ", o: " b ", a: " c ", p: " d " }), true);
   });
 });

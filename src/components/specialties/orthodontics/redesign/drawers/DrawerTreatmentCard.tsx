@@ -44,7 +44,13 @@ import { AvisarProximoControlButton } from "@/components/specialties/orthodontic
 import { addWireStep } from "@/app/actions/orthodontics/addWireStep";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { WIRE_GAUGE_RECT, WIRE_GAUGE_ROUND, WIRE_MATERIAL_OPTIONS } from "./wire-options";
-import { initialState, reducer, type DrawerState } from "./treatment-card-state";
+import {
+  initialState,
+  notaBaseParaPlantilla,
+  puedeFirmarNota,
+  reducer,
+  type PrecargaHoja,
+} from "./treatment-card-state";
 import orto from "../orto.module.css";
 
 export type DrawerCardSubmit = {
@@ -105,6 +111,13 @@ export interface DrawerTreatmentCardProps {
      */
     lastElastics?: Array<{ elasticClass: OrthoElasticClass; config: string; zone: OrthoElasticZone }>;
     lastIndications?: string | null;
+    /**
+     * Fila 12: brackets que la última hoja FIRMADA dejó caídos sin
+     * recementar — siguen pendientes en esta.
+     */
+    lastPendingBrackets?: Array<{ toothFdi: number; brokenDate: string; notes: string | null }>;
+    /** Fila 12: nota S/O/A/P con la que arranca la hoja (soap-prefill). */
+    soapPrefill?: SOAP | null;
   };
   /**
    * C4: foto-sets ya existentes del caso (subidos desde la sección de fotos)
@@ -143,7 +156,12 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   const cajonRef = useCajon<HTMLElement>(props.onClose);
   const isNew = props.card === null;
   const isReadOnly = props.card?.status === "SIGNED";
-  const [state, dispatch] = useReducer(reducer, props.card, initialState);
+  // Fila 12: una hoja NUEVA nace con lo del control anterior (arco actual,
+  // elásticos, brackets pendientes, indicaciones) y la nota precargada. Va en
+  // el estado inicial —una sola vez—; antes eran efectos tras montar.
+  const [state, dispatch] = useReducer(reducer, props.card, (card) =>
+    initialState(card, card ? null : precargaDesdeDefaults(props.defaultsForNew)),
+  );
   // Hallazgo ws1-t1/ws1-t4 §1, cerrado en dos partes (ws1-t8): "Firmar
   // control" fallaba en dev.108 con "Unique constraint failed on
   // (treatmentPlanId, cardNumber)" por DOS caminos —
@@ -165,35 +183,11 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     // mounts, el componente se remonta porque el padre debe usar key={cardId}.
   }, [props.card]);
 
-  // Sincroniza el wireFrom/to inicial cuando es nueva.
-  useEffect(() => {
-    if (isNew && props.defaultsForNew && state.wireToId === null) {
-      const wf = props.defaultsForNew.wireFrom;
-      if (wf) dispatch({ kind: "set-wire-to", value: wf.id });
-    }
-  }, [isNew, props.defaultsForNew, state.wireToId]);
-
-  // M12 (Ronda 6, hallazgo 12): precarga elásticos vigentes e indicaciones
-  // de la última hoja FIRMADA — una sola vez, mismo criterio que el arco de
-  // arriba. Si el doctor los borra todos a mano, no se vuelven a poner solos
-  // (el guard es "sigue vacío", igual que `state.wireToId === null` arriba).
-  useEffect(() => {
-    if (isNew && state.elastics.length === 0 && props.defaultsForNew?.lastElastics?.length) {
-      props.defaultsForNew.lastElastics.forEach((e) => {
-        dispatch({
-          kind: "add-elastic",
-          value: { ...e, id: `heredado-${Math.random().toString(36).slice(2)}` },
-        });
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNew, props.defaultsForNew, state.elastics.length]);
-
-  useEffect(() => {
-    if (isNew && !state.indications && props.defaultsForNew?.lastIndications) {
-      dispatch({ kind: "set-indications", value: props.defaultsForNew.lastIndications });
-    }
-  }, [isNew, props.defaultsForNew, state.indications]);
+  // M12 (Ronda 6, hallazgo 12) + fila 12: el arco, los elásticos vigentes y
+  // las indicaciones de la última hoja FIRMADA se precargan en
+  // `initialState` (ver `precargaDesdeDefaults` abajo), no en efectos: los
+  // efectos corrían dos veces en desarrollo (elásticos duplicados) y el del
+  // arco volvía a ponerlo cada vez que el doctor elegía «Sin cambio».
 
   // M11 (Ronda 6, hallazgo 11): tras firmar, el cajón se queda abierto en
   // vez de cerrarse en silencio, y ofrece agendar/avisar el próximo control
@@ -242,7 +236,10 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   const aplicarPlantilla = (plantilla: { S: string; O: string; A: string; P: string }) => {
     const clave = props.card?.phaseKey ?? props.defaultsForNew?.phase ?? null;
     const arcoDe = props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null;
-    const nota = aplicarPlantillaAlControl(state.soap, plantilla, {
+    // Fila 12 (b): lo que sigue tal cual se precargó lo reemplaza la
+    // plantilla; lo que el doctor escribió se conserva (va debajo).
+    const base = notaBaseParaPlantilla(state.soap, state.notaPrecargada, plantilla);
+    const nota = aplicarPlantillaAlControl(base, plantilla, {
       mes: props.card?.monthAt ?? props.defaultsForNew?.monthAt ?? null,
       duracionMeses: props.defaultsForNew?.monthTotal ?? null,
       fase: clave ? ((PHASE_LABELS as Record<string, string>)[clave] ?? clave) : null,
@@ -289,11 +286,9 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     appointmentId: props.appointmentId ?? null,
   });
 
-  const canSign =
-    state.soap.s.trim().length > 0 &&
-    state.soap.o.trim().length > 0 &&
-    state.soap.a.trim().length > 0 &&
-    state.soap.p.trim().length > 0;
+  // Fila 12 (c): solo el Plan es obligatorio (S/O/A opcionales); un Plan
+  // precargado sin tocar no cuenta. Misma regla en el servidor (canSignSoap).
+  const canSign = puedeFirmarNota(state.soap, state.notaPrecargada);
 
   // M11 (Ronda 6): control recién firmado en ESTA sesión del cajón —
   // pantalla de cierre con Agendar/Avisar en el momento, en vez de cerrar en
@@ -407,7 +402,12 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 aria-hidden
               />
               <div className="flex-1 min-w-0">
-                <div className={`${orto.campoEtiqueta} mb-[5px]`}>Nuevo</div>
+                <div className={`${orto.campoEtiqueta} mb-[5px]`}>
+                Nuevo
+                {!isReadOnly && state.delAnterior.arco ? (
+                  <DelAnterior className="ml-[6px]" />
+                ) : null}
+              </div>
                 {isReadOnly ? (
                   <div className={`${orto.tonoVioleta} flex items-center h-[38px] text-[13.5px] font-semibold`}>
                     {wireToLabel}
@@ -455,6 +455,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           {/* ELÁSTICOS */}
           <ElasticsBlock
             elastics={state.elastics}
+            heredados={isReadOnly ? [] : state.delAnterior.elasticos}
             readOnly={isReadOnly}
             onAdd={(e) => dispatch({ kind: "add-elastic", value: e })}
             onUpdate={(id, patch) => dispatch({ kind: "update-elastic", id, patch })}
@@ -474,6 +475,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           {/* BROKEN BRACKETS */}
           <BrokenBlock
             list={state.brokenBrackets}
+            heredados={isReadOnly ? [] : state.delAnterior.brackets}
             readOnly={isReadOnly}
             onAdd={(b) => dispatch({ kind: "add-bracket", value: b })}
             onUpdate={(id, patch) => dispatch({ kind: "update-bracket", id, patch })}
@@ -517,23 +519,30 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               ) : null}
               {!isReadOnly && !canSign ? (
                 <span className={`${orto.bloqueNota} ${orto.tonoAlerta}`}>
-                  Los 4 campos son obligatorios para firmar
+                  {state.notaPrecargada && state.soap.p.trim()
+                    ? "Revisa el Plan (P): para firmar, escribe lo de este control"
+                    : "El Plan (P) es obligatorio para firmar"}
                 </span>
               ) : null}
             </div>
+            {!isReadOnly && state.notaPrecargada ? (
+              <p className={`${orto.bloqueNota} mb-[10px]`}>
+                Nota precargada con los datos del caso: edítala o elige una plantilla.
+              </p>
+            ) : null}
             {!isReadOnly && huecos > 0 ? (
               <p className={`${orto.bloqueNota} ${orto.tonoAlerta} mb-[10px]`} role="status">
                 {huecos === 1
-                  ? "La plantilla dejó 1 hueco (____) por llenar."
-                  : `La plantilla dejó ${huecos} huecos (____) por llenar.`}
+                  ? "Queda 1 hueco (____) por llenar."
+                  : `Quedan ${huecos} huecos (____) por llenar.`}
               </p>
             ) : null}
             <div className="flex flex-col gap-[10px]">
               {(
                 [
-                  ["s", "Subjetivo", "Lo que refiere el paciente…"],
-                  ["o", "Objetivo", "Lo que encuentras en la exploración…"],
-                  ["a", "Análisis", "Tu valoración de cómo va el caso…"],
+                  ["s", "Subjetivo (opcional)", "Lo que refiere el paciente…"],
+                  ["o", "Objetivo (opcional)", "Lo que encuentras en la exploración…"],
+                  ["a", "Análisis (opcional)", "Tu valoración de cómo va el caso…"],
                   ["p", "Plan", "Lo que sigue para la próxima visita…"],
                 ] as const
               ).map(([key, label, pista]) => (
@@ -567,6 +576,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           <section className={orto.bloque}>
             <div className={orto.bloqueCabeza}>
               <h4 className={orto.bloqueTitulo}>Indicaciones para el paciente</h4>
+              {!isReadOnly && state.delAnterior.indicaciones ? <DelAnterior /> : null}
             </div>
             {isReadOnly ? (
               <Lectura vacio="Sin indicaciones para esta visita.">{state.indications}</Lectura>
@@ -795,7 +805,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 }
               }}
               disabled={!canSign || enVuelo}
-              title={!canSign ? "Completa los 4 campos de la nota para firmar el control" : undefined}
+              title={!canSign ? "Escribe el Plan (P) de este control para firmarlo" : undefined}
             >
               {enVuelo ? "Firmando…" : "Firmar control"}
             </Btn>
@@ -804,6 +814,27 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
       </aside>
     </>
   );
+}
+
+/** Fila 12: marca de lo que la hoja nueva heredó del control anterior. */
+function DelAnterior({ className = "" }: { className?: string }) {
+  return (
+    <Pill color="sky" size="xs" className={className}>
+      Del control anterior
+    </Pill>
+  );
+}
+
+/** Fila 12: `defaultsForNew` → lo que hereda la hoja nueva (ver `initialState`). */
+function precargaDesdeDefaults(d: DrawerTreatmentCardProps["defaultsForNew"]): PrecargaHoja | null {
+  if (!d) return null;
+  return {
+    arcoId: d.wireFrom?.id ?? null,
+    elastics: d.lastElastics ?? [],
+    brackets: d.lastPendingBrackets ?? [],
+    indications: d.lastIndications ?? null,
+    nota: d.soapPrefill ?? null,
+  };
 }
 
 /** Un campo en modo lectura (control ya firmado). */
@@ -821,6 +852,8 @@ function Lectura({ children, vacio }: { children: string; vacio: string }) {
 
 function ElasticsBlock(props: {
   elastics: ElasticDTO[];
+  /** Fila 12: ids heredados del control anterior (se marcan). */
+  heredados: string[];
   readOnly: boolean;
   onAdd: (e: ElasticDTO) => void;
   onUpdate: (id: string, patch: Partial<Pick<ElasticDTO, "config" | "zone">>) => void;
@@ -867,6 +900,7 @@ function ElasticsBlock(props: {
             ) : (
               <div key={e.id} className={`${orto.caja} flex items-center gap-2 text-[13px]`}>
                 <span className="font-semibold shrink-0">{ELASTIC_CLASS_LABELS[e.elasticClass]}</span>
+                {props.heredados.includes(e.id) ? <DelAnterior className="shrink-0" /> : null}
                 <input
                   type="text"
                   value={e.config}
@@ -1030,6 +1064,8 @@ function IprBlock(props: {
 
 function BrokenBlock(props: {
   list: BrokenBracketDTO[];
+  /** Fila 12: ids de pendientes heredados del control anterior (se marcan). */
+  heredados: string[];
   readOnly: boolean;
   onAdd: (b: BrokenBracketDTO) => void;
   onUpdate: (id: string, patch: Partial<Pick<BrokenBracketDTO, "toothFdi" | "brokenDate">>) => void;
@@ -1103,6 +1139,7 @@ function BrokenBlock(props: {
                 </>
               )}
               <span className="ml-auto flex items-center gap-2">
+                {props.heredados.includes(b.id) ? <DelAnterior /> : null}
                 {b.reBondedDate ? (
                   <Pill color="emerald" size="xs">
                     Recementado

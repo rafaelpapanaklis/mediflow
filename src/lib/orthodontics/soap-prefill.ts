@@ -41,7 +41,10 @@ export function buildOrthoSoapPrefill(input: OrthoSoapPrefillInput): OrthoSoapPr
       broken
         ? `, brackets sueltos en FDI ${input.bracketsLooseFdis!.join(", ")}`
         : ""
-    }. Higiene: ${input.hygieneScore ?? "—"}/100. Fase actual: ${phaseLabel}.`;
+    }.${
+      // Fila 12: sin dato de higiene no se escribe «Higiene: —/100» en la nota.
+      input.hygieneScore == null ? "" : ` Higiene: ${input.hygieneScore}/100.`
+    } Fase actual: ${phaseLabel}.`;
 
   const paymentSuffix =
     input.paymentStatus === "ON_TIME"
@@ -53,7 +56,10 @@ export function buildOrthoSoapPrefill(input: OrthoSoapPrefillInput): OrthoSoapPr
           : input.paymentStatus === "PAID_IN_FULL"
             ? "pagado en su totalidad"
             : "—";
-  const A = `Tratamiento progresando en fase ${phaseLabel}. Adeudo financiero: ${paymentSuffix}.`;
+  // Fila 12: sin plan de pagos no se escribe «Adeudo financiero: —».
+  const A = `Tratamiento progresando en fase ${phaseLabel}.${
+    input.paymentStatus ? ` Adeudo financiero: ${paymentSuffix}.` : ""
+  }`;
 
   const remindCollect =
     input.paymentStatus === "LIGHT_DELAY" || input.paymentStatus === "SEVERE_DELAY"

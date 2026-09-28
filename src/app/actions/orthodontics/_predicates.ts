@@ -3,8 +3,12 @@
 // barrel; los tests importan directo desde este archivo.
 
 /**
- * SOAP completo: requiere los 4 campos no vacíos tras trim. Regla SPEC §D
- * para firma de Treatment Card.
+ * Firma de Treatment Card. Fila 12 (sep-2026): solo el Plan (P) es
+ * obligatorio; S, O y A son opcionales — con controles de 15 minutos exigir
+ * los cuatro era lo que más tiempo quitaba. Antes (SPEC §D) pedía los cuatro.
+ * El cajón aplica la misma regla (`puedeFirmarNota` en
+ * drawers/treatment-card-state.ts), que además no da por escrito un Plan
+ * precargado sin tocar.
  */
 export function canSignSoap(soap: {
   s: string;
@@ -12,12 +16,7 @@ export function canSignSoap(soap: {
   a: string;
   p: string;
 }): boolean {
-  return (
-    soap.s.trim().length > 0 &&
-    soap.o.trim().length > 0 &&
-    soap.a.trim().length > 0 &&
-    soap.p.trim().length > 0
-  );
+  return soap.p.trim().length > 0;
 }
 
 /**

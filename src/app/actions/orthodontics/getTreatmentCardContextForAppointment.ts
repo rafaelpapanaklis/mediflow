@@ -39,10 +39,18 @@ import { prisma } from "@/lib/prisma";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import { tarjetaDeControlDeHoy } from "@/lib/orthodontics/redesign/control-del-dia";
+import {
+  arcoActualDelControl,
+  bracketsPendientes,
+  notaPrecargada,
+  type BracketPendiente,
+} from "@/lib/orthodontics/precarga-hoja-control";
+import type { OrthoPaymentStatus, OrthoTechnique } from "@prisma/client";
 import type {
   OrthoElasticClass,
   OrthoElasticZone,
   OrthoPhaseKey,
+  SOAP,
   TreatmentCardDTO,
   WireStepDTO,
 } from "@/components/specialties/orthodontics/redesign/types";
@@ -93,6 +101,10 @@ export interface TreatmentCardAgendaContext {
     /** M12: indicaciones de la última hoja FIRMADA (referencia — el doctor
      * las edita o las deja tal cual, no se re-envían solas). */
     lastIndications: string | null;
+    /** Fila 12: brackets que la última hoja FIRMADA dejó sin recementar. */
+    lastPendingBrackets: BracketPendiente[];
+    /** Fila 12: nota S/O/A/P con la que arranca la hoja (soap-prefill). */
+    soapPrefill: SOAP;
   };
   /** C4: foto-sets del caso para ligar el de esta visita. */
   availablePhotoSets: Array<{ id: string; label: string }>;
@@ -106,7 +118,16 @@ export interface TreatmentCardAgendaContext {
  * `appt`.
  */
 export async function buildTreatmentCardContext(
-  plan: { id: string; patientId: string; installedAt: Date | null; startDate: Date | null },
+  plan: {
+    id: string;
+    patientId: string;
+    installedAt: Date | null;
+    startDate: Date | null;
+    /** Fila 12: para la nota precargada. Opcionales: sin ellos la nota sale más genérica. */
+    technique?: OrthoTechnique | null;
+    patient?: { firstName: string; lastName: string } | null;
+    paymentPlan?: { status: OrthoPaymentStatus } | null;
+  },
   appt: { id: string; startsAt: Date; endsAt: Date } | null,
   clinicTimezone: string,
 ): Promise<TreatmentCardAgendaContext> {
@@ -151,7 +172,11 @@ export async function buildTreatmentCardContext(
   const phase: OrthoPhaseKey =
     lastSignedCard?.phaseKey ?? phaseInProgress?.phaseKey ?? "ALIGNMENT";
   const monthAt = monthsSince(plan.installedAt ?? plan.startDate);
-  const wireFrom = lastSignedCard?.wireToId ? (wireById.get(lastSignedCard.wireToId) ?? null) : null;
+  // Fila 12: el arco actual es el que puso el último control o, si ese
+  // control no cambió de arco, el mismo con el que llegó (antes, sin cambio
+  // de arco en el último control, la hoja nueva decía «—»).
+  const arcoActualId = arcoActualDelControl(lastSignedCard);
+  const wireFrom = arcoActualId ? (wireById.get(arcoActualId) ?? null) : null;
   const durationMin = appt
     ? Math.max(15, Math.round((appt.endsAt.getTime() - appt.startsAt.getTime()) / 60000))
     : 30;
@@ -162,6 +187,15 @@ export async function buildTreatmentCardContext(
     config: e.config,
     zone: e.zone as OrthoElasticZone,
   }));
+  const lastPendingBrackets = bracketsPendientes(lastSignedCard?.brokenBrackets ?? []);
+  const soapPrefill = notaPrecargada({
+    patientName: plan.patient ? `${plan.patient.firstName} ${plan.patient.lastName}` : "",
+    monthAt,
+    technique: plan.technique ?? null,
+    phaseKey: phase,
+    paymentStatus: plan.paymentPlan?.status ?? null,
+    bracketsPendientesFdi: lastPendingBrackets.map((b) => b.toothFdi),
+  });
 
   return {
     treatmentPlanId: plan.id,
@@ -178,6 +212,8 @@ export async function buildTreatmentCardContext(
       durationMin,
       lastElastics,
       lastIndications: lastSignedCard?.indications ?? null,
+      lastPendingBrackets,
+      soapPrefill,
     },
     availablePhotoSets: photoSets.map((s) => ({
       id: s.id,
@@ -196,7 +232,16 @@ export async function getTreatmentCardContextForAppointment(
 
   const plan = await prisma.orthodonticTreatmentPlan.findFirst({
     where: { id: treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
-    select: { id: true, patientId: true, installedAt: true, startDate: true },
+    select: {
+      id: true,
+      patientId: true,
+      installedAt: true,
+      startDate: true,
+      // Fila 12: datos de la nota precargada.
+      technique: true,
+      patient: { select: { firstName: true, lastName: true } },
+      paymentPlan: { select: { status: true } },
+    },
   });
   if (!plan) return fail("Plan no encontrado");
 

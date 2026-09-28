@@ -32,6 +32,7 @@ import {
   type OrthoPhaseKey,
   type OrthoElasticClass,
   type OrthoElasticZone,
+  type SOAP,
 } from "../redesign/types";
 
 export interface BotonHojaControlProps {
@@ -52,6 +53,10 @@ interface LoadedContext {
     durationMin: number;
     lastElastics: Array<{ elasticClass: OrthoElasticClass; config: string; zone: OrthoElasticZone }>;
     lastIndications: string | null;
+    /** Fila 12: brackets caídos que el control anterior dejó sin recementar. */
+    lastPendingBrackets: Array<{ toothFdi: number; brokenDate: string; notes: string | null }>;
+    /** Fila 12: nota con la que arranca la hoja. */
+    soapPrefill: SOAP;
   };
 }
 
@@ -175,6 +180,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaCo
                   visitDate: ctx.defaultsForNew.visitDate,
                   lastElastics: ctx.defaultsForNew.lastElastics,
                   lastIndications: ctx.defaultsForNew.lastIndications,
+                  lastPendingBrackets: ctx.defaultsForNew.lastPendingBrackets,
+                  soapPrefill: ctx.defaultsForNew.soapPrefill,
                 }
           }
           onClose={cerrar}

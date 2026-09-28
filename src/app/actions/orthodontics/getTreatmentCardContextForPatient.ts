@@ -36,7 +36,16 @@ export async function getTreatmentCardContextForPatient(
 
   const plan = await prisma.orthodonticTreatmentPlan.findFirst({
     where: { id: treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
-    select: { id: true, patientId: true, installedAt: true, startDate: true },
+    select: {
+      id: true,
+      patientId: true,
+      installedAt: true,
+      startDate: true,
+      // Fila 12: datos de la nota precargada (buildTreatmentCardContext).
+      technique: true,
+      patient: { select: { firstName: true, lastName: true } },
+      paymentPlan: { select: { status: true } },
+    },
   });
   if (!plan) return fail("Plan no encontrado");
 

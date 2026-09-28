@@ -1,48 +1,46 @@
-// Tests de la regla "para firmar Treatment Card se requieren los 4 campos
-// SOAP no vacíos". La lógica vive inline en el drawer; este test la replica
-// como spec contract.
+// Regla de firma de la hoja de control en el CAJÓN (`puedeFirmarNota`).
+// Antes este archivo replicaba en línea la regla de "los 4 campos"; desde la
+// fila 12 la regla vive exportada en treatment-card-state.ts y se prueba la
+// real: solo el Plan (P) es obligatorio, y un Plan precargado sin tocar no
+// cuenta como escrito.
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type { SOAP } from "../types";
+import { puedeFirmarNota } from "../drawers/treatment-card-state";
 
-function canSign(soap: SOAP): boolean {
-  return (
-    soap.s.trim().length > 0 &&
-    soap.o.trim().length > 0 &&
-    soap.a.trim().length > 0 &&
-    soap.p.trim().length > 0
-  );
-}
+const precarga = { s: "S pre", o: "O pre", a: "A pre", p: "Próxima cita en 4 semanas. Ajustes: ____." };
 
-describe("Treatment Card sign rule", () => {
+describe("Treatment Card sign rule (cajón)", () => {
   it("permite firmar con S/O/A/P todos llenos", () => {
     assert.equal(
-      canSign({ s: "refiere molestia", o: "alineación ok", a: "evolución", p: "cita 4 sem" }),
+      puedeFirmarNota({ s: "refiere molestia", o: "alineación ok", a: "evolución", p: "cita 4 sem" }, null),
       true,
     );
   });
 
-  it("bloquea si S vacío", () => {
-    assert.equal(canSign({ s: "", o: "x", a: "x", p: "x" }), false);
+  it("S/O/A vacíos no bloquean", () => {
+    assert.equal(puedeFirmarNota({ s: "", o: "  ", a: "", p: "x" }, null), true);
   });
 
-  it("bloquea si O solo whitespace", () => {
-    assert.equal(canSign({ s: "x", o: "   ", a: "x", p: "x" }), false);
+  it("bloquea si P vacío o solo espacios", () => {
+    assert.equal(puedeFirmarNota({ s: "x", o: "x", a: "x", p: "" }, null), false);
+    assert.equal(puedeFirmarNota({ s: "x", o: "x", a: "x", p: "  \n" }, null), false);
   });
 
-  it("bloquea si A vacío", () => {
-    assert.equal(canSign({ s: "x", o: "x", a: "", p: "x" }), false);
+  it("un Plan precargado sin tocar no deja firmar", () => {
+    assert.equal(puedeFirmarNota({ ...precarga }, precarga), false);
+    // Espacios de más al final siguen siendo «sin tocar».
+    assert.equal(puedeFirmarNota({ ...precarga, p: `${precarga.p}  ` }, precarga), false);
   });
 
-  it("bloquea si P vacío", () => {
-    assert.equal(canSign({ s: "x", o: "x", a: "x", p: "" }), false);
-  });
-
-  it("permite firmar con strings con espacios y contenido", () => {
+  it("en cuanto el Plan precargado se edita, se puede firmar", () => {
     assert.equal(
-      canSign({ s: " a ", o: " b ", a: " c ", p: " d " }),
+      puedeFirmarNota({ ...precarga, p: "Próxima cita en 4 semanas. Ajustes: cambio a 0.016 NiTi." }, precarga),
       true,
     );
+  });
+
+  it("borrar el Plan precargado no deja firmar", () => {
+    assert.equal(puedeFirmarNota({ ...precarga, p: "" }, precarga), false);
   });
 });

@@ -152,5 +152,6 @@ test("se cuentan los huecos que quedan por llenar", () => {
   assert.match(hoja, /duracionMeses: props\.defaultsForNew\?\.monthTotal \?\? null,/);
   const ficha = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
   assert.match(ficha, /monthTotal: t\.monthTotal > 0 \? t\.monthTotal : null,/);
-  assert.match(hoja, /La plantilla dejó 1 hueco \(____\) por llenar\./);
+  // Fila 12: los huecos pueden venir de la plantilla o de la nota precargada.
+  assert.match(hoja, /Queda 1 hueco \(____\) por llenar\./);
 });

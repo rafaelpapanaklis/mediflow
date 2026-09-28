@@ -760,6 +760,10 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             monthTotal: t.monthTotal > 0 ? t.monthTotal : null,
             lastElastics: nuevoControlCtx.defaultsForNew.lastElastics,
             lastIndications: nuevoControlCtx.defaultsForNew.lastIndications,
+            // Fila 12: la hoja nueva también hereda los brackets pendientes y
+            // la nota precargada del control anterior.
+            lastPendingBrackets: nuevoControlCtx.defaultsForNew.lastPendingBrackets,
+            soapPrefill: nuevoControlCtx.defaultsForNew.soapPrefill,
           }}
           availableWires={nuevoControlCtx.availableWires}
           treatmentPlanId={t.treatmentPlanId || undefined}

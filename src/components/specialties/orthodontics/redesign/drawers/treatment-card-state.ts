@@ -38,6 +38,41 @@ export interface DrawerState {
    * cardNumber)".
    */
   learnedCardId: string | null;
+  /**
+   * Fila 12: qué vino del control anterior (hoja nueva). Sirve para marcarlo
+   * en pantalla como «del control anterior»; en cuanto el doctor lo cambia
+   * deja de estar marcado (ya es de este control).
+   */
+  delAnterior: MarcasDelAnterior;
+  /**
+   * Fila 12: la nota tal como se precargó (soap-prefill), o `null`. Una
+   * plantilla elegida después REEMPLAZA los campos que siguen igual a la
+   * precarga en vez de añadirse debajo, y el Plan precargado sin tocar no
+   * cuenta como Plan escrito.
+   */
+  notaPrecargada: SOAP | null;
+}
+
+export interface MarcasDelAnterior {
+  arco: boolean;
+  /** Ids (locales) de los elásticos heredados. */
+  elasticos: string[];
+  /** Ids (locales) de los brackets pendientes heredados. */
+  brackets: string[];
+  indicaciones: boolean;
+}
+
+const SIN_MARCAS: MarcasDelAnterior = { arco: false, elasticos: [], brackets: [], indicaciones: false };
+
+/** Lo que una hoja NUEVA hereda del control anterior del mismo caso. */
+export interface PrecargaHoja {
+  /** Arco actual (el que queda si no se cambia). */
+  arcoId?: string | null;
+  elastics?: ReadonlyArray<Pick<ElasticDTO, "elasticClass" | "config" | "zone">>;
+  /** Brackets que el control anterior dejó caídos sin recementar. */
+  brackets?: ReadonlyArray<{ toothFdi: number; brokenDate: string; notes?: string | null }>;
+  indications?: string | null;
+  nota?: SOAP | null;
 }
 
 export type DrawerAction =
@@ -65,7 +100,10 @@ export type DrawerAction =
   | { kind: "mark-rebonded"; id: string }
   | { kind: "learn-card-id"; id: string };
 
-export function initialState(card: TreatmentCardDTO | null): DrawerState {
+export function initialState(
+  card: TreatmentCardDTO | null,
+  precarga?: PrecargaHoja | null,
+): DrawerState {
   if (card) {
     return {
       soap: { ...card.soap },
@@ -83,25 +121,88 @@ export function initialState(card: TreatmentCardDTO | null): DrawerState {
       activationsNote: card.activationsNote ?? "",
       indications: card.indications ?? "",
       learnedCardId: card.id,
+      delAnterior: SIN_MARCAS,
+      notaPrecargada: null,
     };
   }
+  // Fila 12: la precarga va aquí, en el estado inicial, y no en efectos
+  // después de montar: así ocurre UNA vez (sin duplicar elásticos cuando
+  // React corre los efectos dos veces en desarrollo) y elegir «Sin cambio»
+  // en el arco ya no se deshace solo.
+  const p = precarga ?? {};
+  const elastics: ElasticDTO[] = (p.elastics ?? []).map((e, i) => ({
+    id: `anterior-elastico-${i}`,
+    elasticClass: e.elasticClass,
+    config: e.config,
+    zone: e.zone,
+  }));
+  const brokenBrackets: BrokenBracketDTO[] = (p.brackets ?? []).map((b, i) => ({
+    id: `anterior-bracket-${i}`,
+    toothFdi: b.toothFdi,
+    brokenDate: b.brokenDate,
+    reBondedDate: null,
+    notes: b.notes ?? null,
+  }));
+  const indications = p.indications?.trim() ? p.indications : "";
+  const nota = p.nota ? { ...p.nota } : null;
   return {
-    soap: { s: "", o: "", a: "", p: "" },
+    soap: nota ? { ...nota } : { s: "", o: "", a: "", p: "" },
     plaquePct: null,
     gingivitis: null,
     whiteSpots: false,
-    elastics: [],
+    elastics,
     iprPoints: [],
-    brokenBrackets: [],
+    brokenBrackets,
     hasProgressPhoto: false,
     photoSetId: null,
-    wireToId: null,
+    wireToId: p.arcoId ?? null,
     nextDate: null,
     nextDurationMin: 30,
     activationsNote: "",
-    indications: "",
+    indications,
     learnedCardId: null,
+    delAnterior: {
+      arco: Boolean(p.arcoId),
+      elasticos: elastics.map((e) => e.id),
+      brackets: brokenBrackets.map((b) => b.id),
+      indicaciones: indications !== "",
+    },
+    notaPrecargada: nota,
   };
+}
+
+/** Quita un id de una lista de marcas sin crear objetos si no estaba. */
+function sinMarca(marcas: MarcasDelAnterior, campo: "elasticos" | "brackets", id: string): MarcasDelAnterior {
+  return marcas[campo].includes(id) ? { ...marcas, [campo]: marcas[campo].filter((x) => x !== id) } : marcas;
+}
+
+/**
+ * Fila 12 (c): para firmar solo el Plan es obligatorio; S, O y A son
+ * opcionales. Un Plan precargado que nadie tocó no cuenta como escrito.
+ * El servidor aplica la misma regla (`canSignSoap`, sin saber de precargas).
+ */
+export function puedeFirmarNota(soap: SOAP, precargada: SOAP | null): boolean {
+  const plan = soap.p.trim();
+  if (plan.length === 0) return false;
+  return !precargada || plan !== precargada.p.trim();
+}
+
+/**
+ * Fila 12 (b): sobre qué nota se aplica una plantilla elegida. Un campo que
+ * sigue tal cual se precargó se vacía SI la plantilla trae texto para él (la
+ * plantilla lo reemplaza); si la plantilla no dice nada de ese campo, la
+ * precarga se queda. Lo que el doctor ya escribió o cambió se conserva y la
+ * plantilla va debajo, como siempre.
+ */
+export function notaBaseParaPlantilla(
+  soap: SOAP,
+  precargada: SOAP | null,
+  plantilla: { S: string; O: string; A: string; P: string },
+): SOAP {
+  if (!precargada) return soap;
+  const campo = (k: keyof SOAP, deLaPlantilla: string) =>
+    soap[k] === precargada[k] && deLaPlantilla.trim() !== "" ? "" : soap[k];
+  return { s: campo("s", plantilla.S), o: campo("o", plantilla.O), a: campo("a", plantilla.A), p: campo("p", plantilla.P) };
 }
 
 export function reducer(state: DrawerState, action: DrawerAction): DrawerState {
@@ -115,7 +216,11 @@ export function reducer(state: DrawerState, action: DrawerAction): DrawerState {
     case "set-white-spots":
       return { ...state, whiteSpots: action.value };
     case "set-wire-to":
-      return { ...state, wireToId: action.value };
+      return {
+        ...state,
+        wireToId: action.value,
+        delAnterior: state.delAnterior.arco ? { ...state.delAnterior, arco: false } : state.delAnterior,
+      };
     case "set-next-date":
       return { ...state, nextDate: action.value };
     case "set-next-duration":
@@ -127,7 +232,13 @@ export function reducer(state: DrawerState, action: DrawerAction): DrawerState {
     case "set-activations-note":
       return { ...state, activationsNote: action.value };
     case "set-indications":
-      return { ...state, indications: action.value };
+      return {
+        ...state,
+        indications: action.value,
+        delAnterior: state.delAnterior.indicaciones
+          ? { ...state.delAnterior, indicaciones: false }
+          : state.delAnterior,
+      };
     case "add-elastic":
       return { ...state, elastics: [...state.elastics, action.value] };
     case "update-elastic":
@@ -136,9 +247,14 @@ export function reducer(state: DrawerState, action: DrawerAction): DrawerState {
         elastics: state.elastics.map((e) =>
           e.id === action.id ? { ...e, ...action.patch } : e,
         ),
+        delAnterior: sinMarca(state.delAnterior, "elasticos", action.id),
       };
     case "remove-elastic":
-      return { ...state, elastics: state.elastics.filter((e) => e.id !== action.id) };
+      return {
+        ...state,
+        elastics: state.elastics.filter((e) => e.id !== action.id),
+        delAnterior: sinMarca(state.delAnterior, "elasticos", action.id),
+      };
     case "add-ipr":
       return { ...state, iprPoints: [...state.iprPoints, action.value] };
     case "update-ipr":
@@ -165,11 +281,13 @@ export function reducer(state: DrawerState, action: DrawerAction): DrawerState {
         brokenBrackets: state.brokenBrackets.map((b) =>
           b.id === action.id ? { ...b, ...action.patch } : b,
         ),
+        delAnterior: sinMarca(state.delAnterior, "brackets", action.id),
       };
     case "remove-bracket":
       return {
         ...state,
         brokenBrackets: state.brokenBrackets.filter((b) => b.id !== action.id),
+        delAnterior: sinMarca(state.delAnterior, "brackets", action.id),
       };
     case "mark-rebonded":
       return {
@@ -177,6 +295,7 @@ export function reducer(state: DrawerState, action: DrawerAction): DrawerState {
         brokenBrackets: state.brokenBrackets.map((b) =>
           b.id === action.id ? { ...b, reBondedDate: new Date().toISOString() } : b,
         ),
+        delAnterior: sinMarca(state.delAnterior, "brackets", action.id),
       };
     case "learn-card-id":
       return { ...state, learnedCardId: action.id };
