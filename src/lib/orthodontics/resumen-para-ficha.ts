@@ -55,6 +55,8 @@ export interface ResumenOrtoParaFicha {
   abierto: boolean;
   /** Lo que se lee en la ficha: «Mes 2 de 18 · Alineación», «Por colocar», «En retención». */
   linea: string;
+  /** Lo mismo sin la fase, para donde no cabe: «Mes 2 de 18», «Por colocar». */
+  lineaCorta: string;
 }
 
 const ESTADO_POR_STATUS: Record<string, EstadoCasoOrto> = {
@@ -117,7 +119,12 @@ type Traductor = (clave: string, vars?: Record<string, string | number>) => stri
  * La misma `linea`, pero en el idioma de la clínica. En español devuelve
  * exactamente `resumen.linea` (un test compara las dos contra `es.json`).
  */
-export function lineaDelCasoTraducida(resumen: ResumenOrtoParaFicha, t: Traductor): string {
+export function lineaDelCasoTraducida(
+  resumen: ResumenOrtoParaFicha,
+  t: Traductor,
+  opciones: { conFase?: boolean } = {},
+): string {
+  const conFase = opciones.conFase !== false;
   const estado = t(`${CLAVES_CASO_ORTO}.${CLAVE_DE_ESTADO[resumen.estado]}`);
   if (!resumen.enCurso) return estado;
   const mes =
@@ -126,7 +133,7 @@ export function lineaDelCasoTraducida(resumen: ResumenOrtoParaFicha, t: Traducto
       : resumen.mesActual > 0
         ? t(`${CLAVES_CASO_ORTO}.mes`, { mes: resumen.mesActual })
         : estado;
-  const fase = resumen.faseClave ? t(`${CLAVES_CASO_ORTO}.fase.${resumen.faseClave}`) : null;
+  const fase = conFase && resumen.faseClave ? t(`${CLAVES_CASO_ORTO}.fase.${resumen.faseClave}`) : null;
   return [mes, fase].filter(Boolean).join(" · ");
 }
 
@@ -159,9 +166,8 @@ export function resumenOrtoParaFicha(caso: CasoOrtoCargado | null | undefined): 
   // En curso se cuenta por dónde va («Mes 2 de 18 · Alineación»). En los demás
   // estados lo que importa es el estado: decir «Mes 9 de 18» de un caso en
   // pausa da a entender que sigue avanzando.
-  const linea = enCurso
-    ? [textoDelMes(mesActual, mesesTotales) ?? etiquetaEstado, fase].filter(Boolean).join(" · ")
-    : etiquetaEstado;
+  const lineaCorta = enCurso ? (textoDelMes(mesActual, mesesTotales) ?? etiquetaEstado) : etiquetaEstado;
+  const linea = enCurso ? [lineaCorta, fase].filter(Boolean).join(" · ") : etiquetaEstado;
 
   return {
     estado,
@@ -173,5 +179,6 @@ export function resumenOrtoParaFicha(caso: CasoOrtoCargado | null | undefined): 
     enCurso,
     abierto: ABIERTOS.indexOf(estado) !== -1,
     linea,
+    lineaCorta,
   };
 }

@@ -52,6 +52,7 @@ test("caso en curso: «Mes 2 de 18 · Alineación»", () => {
   assert.equal(r.enCurso, true);
   assert.equal(r.abierto, true);
   assert.equal(r.linea, "Mes 2 de 18 · Alineación");
+  assert.equal(r.lineaCorta, "Mes 2 de 18");
 });
 
 test("caso planeado sin colocar: «Por colocar», y cuenta como abierto", () => {
@@ -186,6 +187,7 @@ test("es.json dice exactamente lo que dice `linea`", () => {
       const r = resumenOrtoParaFicha(caso(status, extra));
       assert.ok(r);
       assert.equal(lineaDelCasoTraducida(r, t), r.linea, `${status} ${JSON.stringify(extra)}`);
+      assert.equal(lineaDelCasoTraducida(r, t, { conFase: false }), r.lineaCorta, `corta ${status}`);
     }
   }
   const sinDuracion = resumenOrtoParaFicha({

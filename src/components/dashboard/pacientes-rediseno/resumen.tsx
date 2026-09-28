@@ -12,6 +12,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { useT } from "@/i18n/i18n-provider";
+import { lineaDelCasoTraducida, type ResumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
 import { fechaCorta, fechaConAno, diasHasta } from "./fechas";
 import s from "./rediseno.module.css";
 
@@ -48,6 +49,12 @@ export interface ResumenProps {
   citas: any[];
   facturas: any[];
   tratamientos: any[];
+  /**
+   * El caso de ortodoncia del paciente, ya resumido (`resumenOrtoParaFicha`).
+   * Solo llega cuando la sede tiene el módulo y quien mira puede verlo; sin
+   * eso es `null` y esta pantalla no pinta nada de ortodoncia.
+   */
+  casoOrtodoncia?: ResumenOrtoParaFicha | null;
   /** Consultas firmadas del paciente — alimenta el contador de visitas. */
   canViewBilling: boolean;
   canEditPatient: boolean;
@@ -134,6 +141,7 @@ export function Resumen({
   citas,
   facturas,
   tratamientos,
+  casoOrtodoncia = null,
   canViewBilling,
   canEditPatient,
   onCobrar,
@@ -210,6 +218,17 @@ export function Resumen({
       costo: typeof activo.totalCost === "number" ? activo.totalCost : null,
     };
   }, [tratamientos]);
+
+  // El caso de ortodoncia cuenta como tratamiento del paciente mientras esté
+  // ABIERTO (por colocar, en curso, pausado o en retención). Terminado o
+  // abandonado ya no es «tratamiento activo». Antes esta tarjeta solo miraba
+  // los planes generales y a un paciente en el mes 2 de 18 le decía «Sin
+  // tratamiento activo».
+  const casoOrto = casoOrtodoncia && casoOrtodoncia.abierto ? casoOrtodoncia : null;
+  const avanceCasoOrto =
+    casoOrto && casoOrto.enCurso && casoOrto.mesesTotales > 0
+      ? Math.min(100, Math.round((casoOrto.mesActual / casoOrto.mesesTotales) * 100))
+      : null;
 
   const cobros = useMemo(
     () =>
@@ -417,7 +436,44 @@ export function Resumen({
                     <span className={`${s.filaValor} ${s.importe}`}>{formatCurrency(plan.costo)}</span>
                   </div>
                 )}
+                {/* Plan general Y caso de ortodoncia: el plan manda, como
+                    siempre, y el caso va debajo en una línea con su puerta. */}
+                {casoOrto && (
+                  <div className={s.fila}>
+                    <span className={s.filaEtiqueta}>
+                      {t("pacientesRediseno.casoOrto.titulo")}
+                      {" · "}
+                      {lineaDelCasoTraducida(casoOrto, t, { conFase: false })}
+                    </span>
+                    <button type="button" className={s.tarjetaEnlace} onClick={() => onIrA("ortodoncia")}>
+                      {t("pacientesRediseno.casoOrto.abrir")}
+                    </button>
+                  </div>
+                )}
               </div>
+            </>
+          ) : casoOrto ? (
+            <>
+              <div className={s.filaValor} style={{ textAlign: "left", fontSize: 15, marginBottom: 2 }}>
+                {t("pacientesRediseno.casoOrto.titulo")}
+              </div>
+              <div className={s.pie}>
+                <span>{lineaDelCasoTraducida(casoOrto, t)}</span>
+                {avanceCasoOrto !== null && <span className={s.importe}>{avanceCasoOrto}%</span>}
+              </div>
+              {avanceCasoOrto !== null && (
+                <div className={s.barra} aria-hidden>
+                  <div className={s.barraRelleno} style={{ width: `${avanceCasoOrto}%` }} />
+                </div>
+              )}
+              <button
+                type="button"
+                className={s.boton}
+                style={{ marginTop: 12 }}
+                onClick={() => onIrA("ortodoncia")}
+              >
+                {t("pacientesRediseno.casoOrto.abrir")}
+              </button>
             </>
           ) : (
             <Vacio

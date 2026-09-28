@@ -4,6 +4,7 @@ import { Calendar, CheckCircle2, Clock, CreditCard, Edit, Hourglass, ListChecks,
 import { formatCurrency } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { esDescripcionDePlan, MARCA_PLAN } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
+import { lineaDelCasoTraducida, type ResumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
 import { RaizExpediente } from "./raiz";
 import s from "./expediente.module.css";
 
@@ -27,6 +28,14 @@ export interface PlanTratamientoProps {
   onVer: (plan: any) => void;
   onEditar: (plan: any) => void;
   onEliminar: (plan: any) => void;
+  /**
+   * El caso de ortodoncia del paciente, ya resumido (`resumenOrtoParaFicha`).
+   * Solo llega con el módulo y los permisos; sin eso es `null` y aquí no se
+   * pinta nada de ortodoncia. El caso NO es un plan general: no entra en los
+   * contadores ni en la lista, va en su propia fila con la puerta a su pestaña.
+   */
+  casoOrtodoncia?: ResumenOrtoParaFicha | null;
+  onAbrirCaso?: () => void;
 }
 
 const ESTADO_PLAN: Record<string, { labelKey: string; tono: string }> = {
@@ -48,8 +57,14 @@ const resumenDescripcion = (descripcion: string) =>
 const sesionesHechas = (sesiones: any[] | undefined) =>
   (sesiones ?? []).filter((x: any) => x.completedAt).length;
 
-export function PlanTratamiento({ tratamientos, puedeEditar, onNuevo, onVer, onEditar, onEliminar }: PlanTratamientoProps) {
+export function PlanTratamiento({
+  tratamientos, puedeEditar, onNuevo, onVer, onEditar, onEliminar, casoOrtodoncia = null, onAbrirCaso,
+}: PlanTratamientoProps) {
   const t = useT();
+
+  // Abierto = por colocar, en curso, pausado o en retención. Un caso terminado
+  // o abandonado se consulta en su pestaña; aquí ya no es un tratamiento vivo.
+  const casoOrto = casoOrtodoncia && casoOrtodoncia.abierto ? casoOrtodoncia : null;
 
   const activos = tratamientos.filter((p: any) => p.status === "ACTIVE");
   const pendientesTotal = activos.reduce(
@@ -102,11 +117,33 @@ export function PlanTratamiento({ tratamientos, puedeEditar, onNuevo, onVer, onE
           </div>
         )}
 
+        {casoOrto && (
+          <section className={s.tarjeta} style={{ padding: "14px 18px" }}>
+            <div className={s.planCabeza} style={{ marginBottom: 0, alignItems: "center" }}>
+              <div>
+                <div className={s.planNombre}>{t("pacientesRediseno.casoOrto.titulo")}</div>
+                <div className={s.planSub}>{lineaDelCasoTraducida(casoOrto, t)}</div>
+              </div>
+              {onAbrirCaso && (
+                <div className={s.planLado}>
+                  <button type="button" className={`${s.boton} ${s.botonChico}`} onClick={onAbrirCaso}>
+                    {t("pacientesRediseno.casoOrto.abrir")}
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {tratamientos.length === 0 ? (
           <section className={s.tarjeta}>
             <div className={s.vacio}>
               <span className={s.vacioIcono}><Pill size={17} strokeWidth={1.75} aria-hidden /></span>
-              <div className={s.vacioTitulo}>{t("planTratamiento.lista.vacio")}</div>
+              {/* Con caso de ortodoncia, el paciente SÍ tiene tratamiento: lo
+                  que no tiene son planes generales, y eso es lo que se dice. */}
+              <div className={s.vacioTitulo}>
+                {casoOrto ? t("pacientesRediseno.casoOrto.sinPlanesGenerales") : t("planTratamiento.lista.vacio")}
+              </div>
               {puedeEditar && (
                 <button type="button" className={s.enlace} onClick={onNuevo}>
                   {t("planTratamiento.lista.crearPrimero")}
