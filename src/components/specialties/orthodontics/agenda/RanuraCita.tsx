@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { getTreatmentPlanIdForAppointment } from "@/app/actions/orthodontics/getTreatmentPlanIdForAppointment";
-import { ESTADO_VACIO_RANURA_CITA, resolverEstadoRanuraCita } from "./ranura-cita-estado";
+import { ESTADO_VACIO_RANURA_CITA, esRespuestaCaida, resolverEstadoRanuraCita } from "./ranura-cita-estado";
 import { ResumenCobranza } from "../cobranza/ResumenCobranza";
 import { BotonHojaControl } from "./BotonHojaControl";
 import { RAIZ_ORTO } from "../redesign/raiz";
@@ -57,6 +57,9 @@ export function RanuraCita({ dto }: RanuraCitaProps) {
       getTreatmentPlanIdForAppointment(dto.patient.id)
         .then((res) => {
           if (cancelled) return;
+          // X8: un 502 deja la action en `undefined` sin rechazar: que lo tome
+          // el `.catch` (reintento y «Reintentar») en vez de callarse.
+          if (esRespuestaCaida(res)) throw new Error("respuesta caída");
           setFallo(false);
           setState(resolverEstadoRanuraCita(res));
         })

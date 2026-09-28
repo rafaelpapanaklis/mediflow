@@ -32,3 +32,18 @@ export function resolverEstadoRanuraCita(
     canOpenClinicalCard: res.data.canOpenClinicalCard,
   };
 }
+
+/**
+ * X8 — ¿la respuesta es de una llamada CAÍDA (red/502: la action resolvió
+ * `undefined` o basura) y no una respuesta real del servidor? Una caída debe
+ * mostrar «Reintentar»; un `fail(...)` legítimo (sin permiso, módulo apagado)
+ * o `treatmentPlanId: null` (sin caso) sí se callan.
+ */
+export function esRespuestaCaida(res: unknown): boolean {
+  if (!res || typeof res !== "object") return true;
+  const ok = (res as { ok?: unknown }).ok;
+  if (ok === false) return false;
+  if (ok !== true) return true;
+  const data = (res as { data?: unknown }).data;
+  return !data || typeof data !== "object";
+}
