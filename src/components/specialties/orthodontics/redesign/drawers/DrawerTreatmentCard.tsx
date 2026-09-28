@@ -49,9 +49,15 @@ export type DrawerCardSubmit = {
   iprPoints: Array<{ toothA: number; toothB: number; amountMm: number; done: boolean }>;
   brokenBrackets: Array<{ toothFdi: number; brokenDate: string; reBondedDate: string | null }>;
   hasProgressPhoto: boolean;
+  /** C4: qué foto-set existente (ya subido) corresponde a esta visita. */
+  photoSetId: string | null;
   wireToId: string | null;
   nextDate: string | null;
   nextDurationMin: number | null;
+  /** C2: activaciones de mecánica auxiliar de ESTA visita (texto libre). */
+  activationsNote: string | null;
+  /** C3: indicaciones para el paciente de ESTA visita (texto libre). */
+  indications: string | null;
 };
 
 export interface DrawerTreatmentCardProps {
@@ -67,6 +73,13 @@ export interface DrawerTreatmentCardProps {
     wireFrom: WireStepDTO | null;
     visitDate: string;
   };
+  /**
+   * C4: foto-sets ya existentes del caso (subidos desde la sección de fotos)
+   * para ligar el que corresponde a ESTA visita. Sin esta prop (p. ej. desde
+   * la ficha del paciente) el bloque de foto cae al toggle simple de
+   * siempre — nadie más está obligado a pasarla.
+   */
+  availablePhotoSets?: Array<{ id: string; label: string }>;
   onClose: () => void;
   onSave?: (payload: DrawerCardSubmit) => Promise<void> | void;
   onSign?: (payload: DrawerCardSubmit) => Promise<void> | void;
@@ -82,9 +95,12 @@ interface DrawerState {
   iprPoints: IPRPointDTO[];
   brokenBrackets: BrokenBracketDTO[];
   hasProgressPhoto: boolean;
+  photoSetId: string | null;
   wireToId: string | null;
   nextDate: string | null;
   nextDurationMin: number | null;
+  activationsNote: string;
+  indications: string;
 }
 
 type DrawerAction =
@@ -96,6 +112,9 @@ type DrawerAction =
   | { kind: "set-next-date"; value: string | null }
   | { kind: "set-next-duration"; value: number | null }
   | { kind: "set-has-photo"; value: boolean }
+  | { kind: "set-photo-set"; value: string | null }
+  | { kind: "set-activations-note"; value: string }
+  | { kind: "set-indications"; value: string }
   | { kind: "add-elastic"; value: ElasticDTO }
   | { kind: "remove-elastic"; id: string }
   | { kind: "add-ipr"; value: IPRPointDTO }
@@ -116,9 +135,12 @@ function initialState(card: TreatmentCardDTO | null): DrawerState {
       iprPoints: card.iprPoints,
       brokenBrackets: card.brokenBrackets,
       hasProgressPhoto: card.hasProgressPhoto,
+      photoSetId: card.photoSetId,
       wireToId: card.wireTo?.id ?? null,
       nextDate: card.nextDate,
       nextDurationMin: card.nextDurationMin,
+      activationsNote: card.activationsNote ?? "",
+      indications: card.indications ?? "",
     };
   }
   return {
@@ -130,9 +152,12 @@ function initialState(card: TreatmentCardDTO | null): DrawerState {
     iprPoints: [],
     brokenBrackets: [],
     hasProgressPhoto: false,
+    photoSetId: null,
     wireToId: null,
     nextDate: null,
     nextDurationMin: 30,
+    activationsNote: "",
+    indications: "",
   };
 }
 
@@ -154,6 +179,12 @@ function reducer(state: DrawerState, action: DrawerAction): DrawerState {
       return { ...state, nextDurationMin: action.value };
     case "set-has-photo":
       return { ...state, hasProgressPhoto: action.value };
+    case "set-photo-set":
+      return { ...state, photoSetId: action.value, hasProgressPhoto: action.value != null };
+    case "set-activations-note":
+      return { ...state, activationsNote: action.value };
+    case "set-indications":
+      return { ...state, indications: action.value };
     case "add-elastic":
       return { ...state, elastics: [...state.elastics, action.value] };
     case "remove-elastic":
@@ -248,9 +279,12 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
       reBondedDate: b.reBondedDate,
     })),
     hasProgressPhoto: state.hasProgressPhoto,
+    photoSetId: state.photoSetId,
     wireToId: state.wireToId,
     nextDate: state.nextDate,
     nextDurationMin: state.nextDurationMin,
+    activationsNote: state.activationsNote.trim() ? state.activationsNote : null,
+    indications: state.indications.trim() ? state.indications : null,
   });
 
   const canSign =
@@ -362,6 +396,35 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             onRemove={(id) => dispatch({ kind: "remove-bracket", id })}
           />
 
+          {/* ACTIVACIONES (C2) */}
+          <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
+              Activaciones de esta visita
+            </div>
+            {isReadOnly ? (
+              <div
+                className={`text-sm rounded border px-2.5 py-1.5 min-h-[34px] ${
+                  state.activationsNote
+                    ? "bg-white border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+                    : "bg-slate-50 border-dashed border-slate-200 text-slate-300 italic dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-600"
+                }`}
+              >
+                {state.activationsNote || "Sin activaciones anotadas."}
+              </div>
+            ) : (
+              <textarea
+                value={state.activationsNote}
+                onChange={(e) =>
+                  dispatch({ kind: "set-activations-note", value: e.target.value })
+                }
+                rows={2}
+                placeholder="Vueltas del expansor, activación de resortes o arcos auxiliares…"
+                className="w-full text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 resize-y dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                aria-label="Activaciones de esta visita"
+              />
+            )}
+          </section>
+
           {/* SOAP */}
           <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
             <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
@@ -415,6 +478,33 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             </div>
           </section>
 
+          {/* INDICACIONES (C3) */}
+          <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
+              Indicaciones para el paciente
+            </div>
+            {isReadOnly ? (
+              <div
+                className={`text-sm rounded border px-2.5 py-1.5 min-h-[34px] ${
+                  state.indications
+                    ? "bg-white border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+                    : "bg-slate-50 border-dashed border-slate-200 text-slate-300 italic dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-600"
+                }`}
+              >
+                {state.indications || "Sin indicaciones para esta visita."}
+              </div>
+            ) : (
+              <textarea
+                value={state.indications}
+                onChange={(e) => dispatch({ kind: "set-indications", value: e.target.value })}
+                rows={2}
+                placeholder="Horas de elásticos, higiene, qué no comer, qué hacer si se despega un bracket…"
+                className="w-full text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 resize-y dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                aria-label="Indicaciones para el paciente"
+              />
+            )}
+          </section>
+
           {/* HIGIENE */}
           <HygieneBlock
             plaquePct={state.plaquePct}
@@ -426,12 +516,37 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             onWhiteSpots={(v) => dispatch({ kind: "set-white-spots", value: v })}
           />
 
-          {/* FOTO */}
+          {/* FOTO (C4: liga un foto-set ya subido cuando hay catálogo disponible) */}
           <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
             <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
               Foto de progreso
             </div>
-            {state.hasProgressPhoto ? (
+            {props.availablePhotoSets && props.availablePhotoSets.length > 0 ? (
+              isReadOnly ? (
+                <div className="text-sm text-slate-700 dark:text-slate-300">
+                  {state.photoSetId
+                    ? (props.availablePhotoSets.find((s) => s.id === state.photoSetId)?.label ??
+                      "Foto-set vinculado")
+                    : "Sin foto-set ligado a esta visita."}
+                </div>
+              ) : (
+                <select
+                  value={state.photoSetId ?? ""}
+                  onChange={(e) =>
+                    dispatch({ kind: "set-photo-set", value: e.target.value || null })
+                  }
+                  className="w-full text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                  aria-label="Foto-set de esta visita"
+                >
+                  <option value="">Sin foto-set ligado</option>
+                  {props.availablePhotoSets.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              )
+            ) : state.hasProgressPhoto ? (
               <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded px-3 py-2 text-sm dark:bg-emerald-900/20 dark:border-emerald-800">
                 <Check
                   className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
@@ -467,11 +582,33 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             )}
           </section>
 
-          {/* PRÓXIMA CITA */}
+          {/* PRÓXIMA CITA (C5: "próximo control en N semanas" al cerrar la
+              hoja — Recepción es quien la agenda de verdad, con un clic,
+              cuando cobra; ver REPORTE-ws1-t4.md) */}
           {!isReadOnly ? (
             <section className="px-6 py-4">
               <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
-                Próxima cita
+                Próximo control en…
+              </div>
+              <div className="flex gap-1.5 mb-2">
+                {[2, 4, 6, 8].map((weeks) => (
+                  <button
+                    key={weeks}
+                    type="button"
+                    onClick={() =>
+                      dispatch({
+                        kind: "set-next-date",
+                        value: addWeeks(
+                          props.card?.visitDate ?? props.defaultsForNew?.visitDate ?? null,
+                          weeks,
+                        ),
+                      })
+                    }
+                    className="text-[11px] px-2 py-1 rounded bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-300"
+                  >
+                    {weeks} sem
+                  </button>
+                ))}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input
@@ -857,4 +994,12 @@ function wireText(wire: { gauge: string; material: string } | null): string {
   };
   const m = matLabel[wire.material] ?? wire.material;
   return `${m} ${wire.gauge}`;
+}
+
+/** C5: "próximo control en N semanas" — parte de la fecha de ESTA visita, no de hoy. */
+function addWeeks(fromIso: string | null, weeks: number): string {
+  const base = fromIso ? new Date(fromIso) : new Date();
+  const d = new Date(base.getTime());
+  d.setDate(d.getDate() + weeks * 7);
+  return d.toISOString();
 }
