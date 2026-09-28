@@ -3,6 +3,7 @@ import { generateAiReply } from "./ai";
 import { handleBookingTurn, isBookingInProgress } from "./booking";
 import { handleSaldoTurn, isSaldoInProgress } from "./saldo";
 import { getCobranzaSettings } from "@/lib/reminders/config";
+import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { BotIntent } from "./types";
 import type {
   BotBusinessHours,
@@ -32,6 +33,12 @@ async function loadBotConfig(
   });
   if (!row) return null;
 
+  // ws1-t1 ronda 2 — interruptor separado del de dinero. Una consulta más
+  // por turno (findUnique por clinicId, indexado), tolerante a que la tabla
+  // ni siquiera exista todavía (loadOrthoClinicSettings ya lo resuelve a
+  // "encendido", su default de fábrica).
+  const proximoControlBotEnabled = (await loadOrthoClinicSettings(row.clinicId)).proximoControlBotEnabled;
+
   const config: BotConfigDTO = {
     id: row.id,
     clinicId: row.clinicId,
@@ -44,6 +51,7 @@ async function loadBotConfig(
     canAnswerFaq: row.canAnswerFaq,
     canBookAppointments: row.canBookAppointments,
     canAnswerBalance: getCobranzaSettings(row.clinic).bot,
+    canAnswerOrthoControl: proximoControlBotEnabled,
     fallbackToHuman: row.fallbackToHuman,
     timezone: row.clinic.timezone,
   };
@@ -178,7 +186,7 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
   //     continúa antes que nada. El paciente ya recibió «¿de quién me
   //     preguntas? dime su fecha de nacimiento» y lo que escriba ahora es la
   //     respuesta a ESO; si cayera en FAQ o en la IA, se quedaría sin respuesta.
-  if (config.canAnswerBalance && isSaldoInProgress(input.botState)) {
+  if ((config.canAnswerBalance || config.canAnswerOrthoControl) && isSaldoInProgress(input.botState)) {
     const saldo = await handleSaldoTurn(input, config);
     if (saldo) return saldo;
   }

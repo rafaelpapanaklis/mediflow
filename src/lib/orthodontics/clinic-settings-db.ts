@@ -37,6 +37,14 @@ function faltaClienteDeOrtho(): boolean {
 export interface OrthoAppointmentTypeOption {
   id: string;
   label: string;
+  /**
+   * ws1-t1 ronda 2 — minutos de esta cita, editable en Configuración.
+   * `null`/`undefined` = sin valor propio: el bot de WhatsApp y la reserva
+   * web caen a `suggestOrthoAppointmentDuration()` y, si tampoco reconoce el
+   * texto, a 30 min (`whatsapp-bot-booking.ts`). Nunca 0 ni negativo — lo
+   * exige `motivoDeRechazo` (tipos-de-cita.ts).
+   */
+  durationMin?: number | null;
 }
 
 /** Catálogo por defecto (C7, alcance-ortodoncia.html): se usa mientras la
@@ -49,11 +57,19 @@ export interface OrthoAppointmentTypeOption {
  * catálogo desde Configuración, el ID "control" — sea cual sea el índice
  * que ocupe — sigue siendo el texto que la Agenda reconoce como control.
  * Esa fila es la FIJA, y se reconoce por su clave (`tipos-de-cita.ts`). */
+// ws1-t1 ronda 2 — durationMin explícito SOLO en "valoracion" y "control":
+// son los dos que usan el bot de WhatsApp y la reserva web pública, y su
+// texto no calza con ningún patrón de `suggestOrthoAppointmentDuration()`
+// (pensados para el `reason` libre de otra pantalla, con otro orden de
+// palabras). Las demás filas quedan sin valor propio a propósito: sus
+// textos SÍ calzan con esa función (p.ej. "Retiro de aparatología" →
+// "retiro...aparatolog", "Control de retención" → "control...retención"),
+// así que ya tenían una duración razonable sin necesidad de fijarla aquí.
 export const DEFAULT_ORTHO_APPOINTMENT_TYPES: readonly OrthoAppointmentTypeOption[] = [
-  { id: "valoracion", label: "Valoración de ortodoncia" },
+  { id: "valoracion", label: "Valoración de ortodoncia", durationMin: 45 },
   { id: "toma-registros", label: "Toma de registros de ortodoncia" },
   { id: "colocacion", label: "Colocación de aparatología" },
-  { id: ID_TIPO_CITA_CONTROL, label: TIPO_CITA_CONTROL_ORTO },
+  { id: ID_TIPO_CITA_CONTROL, label: TIPO_CITA_CONTROL_ORTO, durationMin: 30 },
   { id: "urgencia", label: "Urgencia de ortodoncia" },
   { id: "retiro", label: "Retiro de aparatología" },
   { id: "control-retencion", label: "Control de retención" },
@@ -68,7 +84,18 @@ export interface OrthoClinicSettings {
    * el modo con el que nació (OrthodonticTreatmentPlan.billingMode), cambiar
    * esto no lo toca. */
   billingMode: OrthoBillingMode;
+  /** ws1-t1 ronda 2 — interruptor SEPARADO del de dinero (cobranza.bot, en
+   * Clinic.reminderSettings): ¿el bot contesta "¿cuándo es mi próximo
+   * control?" por WhatsApp? Encendido de fábrica (no revela dinero). */
+  proximoControlBotEnabled: boolean;
   updatedAt: Date | null;
+}
+
+/** `raw !== false` → encendido: NULL (columna sin pegar, o fila nueva) es
+ * "encendido de fábrica", igual que cualquier boolean nuevo con default true
+ * en este módulo (ver billing-mode.ts para el mismo patrón con un String). */
+export function normalizarProximoControlBotEnabled(raw: unknown): boolean {
+  return raw !== false;
 }
 
 function defaults(clinicId: string): OrthoClinicSettings {
@@ -78,6 +105,7 @@ function defaults(clinicId: string): OrthoClinicSettings {
     appointmentTypes: [...DEFAULT_ORTHO_APPOINTMENT_TYPES],
     messageTemplates: {},
     billingMode: ORTHO_BILLING_MODE_DEFAULT,
+    proximoControlBotEnabled: true,
     updatedAt: null,
   };
 }
@@ -107,6 +135,9 @@ export async function loadOrthoClinicSettings(clinicId: string): Promise<OrthoCl
         : [...DEFAULT_ORTHO_APPOINTMENT_TYPES],
       messageTemplates: (row.messageTemplates as Record<string, string> | null) ?? {},
       billingMode: normalizarOrthoBillingMode((row as { billingMode?: unknown }).billingMode),
+      proximoControlBotEnabled: normalizarProximoControlBotEnabled(
+        (row as { proximoControlBotEnabled?: unknown }).proximoControlBotEnabled,
+      ),
       updatedAt: row.updatedAt,
     };
   } catch (e) {
@@ -122,6 +153,7 @@ export interface GuardarOrthoClinicSettingsArgs {
   appointmentTypes: OrthoAppointmentTypeOption[];
   messageTemplates: Record<string, string>;
   billingMode: OrthoBillingMode;
+  proximoControlBotEnabled: boolean;
 }
 
 /** Upsert de la fila. Lanza si la tabla aún no existe — el caller (server
@@ -145,6 +177,7 @@ export async function guardarOrthoClinicSettings(
       appointmentTypes: args.appointmentTypes as unknown as object,
       messageTemplates: args.messageTemplates as unknown as object,
       billingMode: args.billingMode,
+      proximoControlBotEnabled: args.proximoControlBotEnabled,
       updatedBy: args.updatedBy,
     },
     update: {
@@ -152,6 +185,7 @@ export async function guardarOrthoClinicSettings(
       appointmentTypes: args.appointmentTypes as unknown as object,
       messageTemplates: args.messageTemplates as unknown as object,
       billingMode: args.billingMode,
+      proximoControlBotEnabled: args.proximoControlBotEnabled,
       updatedBy: args.updatedBy,
     },
   });

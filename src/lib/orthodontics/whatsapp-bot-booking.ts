@@ -19,22 +19,28 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { hasActiveOrthodonticsModule } from "./access";
-import { loadOrthoClinicSettings } from "./clinic-settings-db";
+import { loadOrthoClinicSettings, type OrthoAppointmentTypeOption } from "./clinic-settings-db";
 import { ID_TIPO_CITA_CONTROL } from "./tipos-de-cita";
 import { suggestOrthoAppointmentDuration } from "./appointment-durations";
 import { ACTIVE_PLAN_STATUSES } from "./specialty-kpis";
 
 const ID_TIPO_CITA_VALORACION = "valoracion";
 
-/** Duración por defecto cuando `appointment-durations.ts` no reconoce el
- * texto exacto del catálogo (hoy no lo reconoce para "Control de ortodoncia"
- * ni "Valoración de ortodoncia" — sus patrones fueron pensados para el
- * `reason` libre de otra pantalla). Mismo fallback que ya usa el bot para
- * cualquier servicio sin duración configurada (`bot-booking-service.ts`). */
+/** Mismo fallback que ya usa el bot para cualquier servicio sin duración
+ * configurada (`bot-booking-service.ts`), para cuando NI la clínica fijó un
+ * valor NI `appointment-durations.ts` reconoce el texto. */
 const DURACION_POR_DEFECTO_MIN = 30;
 
-function duracionDe(label: string): number {
-  return suggestOrthoAppointmentDuration(label)?.minutes ?? DURACION_POR_DEFECTO_MIN;
+/**
+ * ws1-t1 ronda 2 — orden de preferencia: (1) lo que la clínica configuró
+ * para ESTE tipo de cita en Configuración (`durationMin`, editable), (2) el
+ * mejor esfuerzo de `suggestOrthoAppointmentDuration()` sobre el texto, (3)
+ * 30 min. El catálogo por defecto ya trae (1) puesto para "control" y
+ * "valoracion" (`DEFAULT_ORTHO_APPOINTMENT_TYPES`).
+ */
+function duracionDe(tipo: { label: string; durationMin?: number | null }): number {
+  if (tipo.durationMin != null && tipo.durationMin > 0) return tipo.durationMin;
+  return suggestOrthoAppointmentDuration(tipo.label)?.minutes ?? DURACION_POR_DEFECTO_MIN;
 }
 
 function esRelacionAusente(e: unknown): boolean {
@@ -105,7 +111,7 @@ export async function getOrthoBookingContext(
           treatmentPlanId: plan.id,
           treatingDoctorId: plan.treatingDoctorId,
           label: tipoControl.label,
-          durationMin: duracionDe(tipoControl.label),
+          durationMin: duracionDe(tipoControl),
         };
       }
     } catch (e) {
@@ -114,7 +120,7 @@ export async function getOrthoBookingContext(
   }
 
   const valoracion: OrthoBookingTipoValoracion | null = tipoValoracion
-    ? { label: tipoValoracion.label, durationMin: duracionDe(tipoValoracion.label) }
+    ? { label: tipoValoracion.label, durationMin: duracionDe(tipoValoracion) }
     : null;
 
   return { casoActivo, valoracion };
@@ -124,7 +130,7 @@ export async function getOrthoBookingContext(
  * no tiene fila propia (usa los defaults, que siempre traen ambos). */
 async function tiposDeCitaDe(
   clinicId: string,
-): Promise<{ tipoControl?: { id: string; label: string }; tipoValoracion?: { id: string; label: string } }> {
+): Promise<{ tipoControl?: OrthoAppointmentTypeOption; tipoValoracion?: OrthoAppointmentTypeOption }> {
   const settings = await loadOrthoClinicSettings(clinicId);
   return {
     tipoControl: settings.appointmentTypes.find((t) => t.id === ID_TIPO_CITA_CONTROL),
@@ -152,5 +158,5 @@ export async function orthoValoracionParaLanding(
   if (!activo) return null;
   const { tipoValoracion } = await tiposDeCitaDe(clinicId);
   if (!tipoValoracion) return null;
-  return { name: tipoValoracion.label, durationMin: duracionDe(tipoValoracion.label) };
+  return { name: tipoValoracion.label, durationMin: duracionDe(tipoValoracion) };
 }

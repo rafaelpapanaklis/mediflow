@@ -166,8 +166,20 @@ async function proximoControlDe(clinicId: string, patientId: string): Promise<st
   }
 }
 
-/** Las dependencias reales. Las pruebas pasan dobles en su lugar. */
-export function realSaldoDeps(timezone: string): SaldoDeps {
+/**
+ * Las dependencias reales. Las pruebas pasan dobles en su lugar.
+ *
+ * ws1-t1 ronda 2 — `permiteDinero`/`permiteControl` son los DOS interruptores
+ * separados (antes era uno solo, `canAnswerBalance`, que también tapaba el
+ * control). Cierran sobre `resumenDeSaldo` para que enmascarar el dato sea
+ * cosa del shell (I/O), no del núcleo puro (`saldo-core.ts` no sabe de
+ * interruptores de ortodoncia, solo de lo que `ResumenSaldo` le trae).
+ */
+export function realSaldoDeps(
+  timezone: string,
+  permiteDinero: boolean,
+  permiteControl: boolean,
+): SaldoDeps {
   return {
     async buscarPacientesPorTelefono(clinicId, phone): Promise<PacienteSaldo[]> {
       if (!clinicId || !phone) return [];
@@ -201,15 +213,16 @@ export function realSaldoDeps(timezone: string): SaldoDeps {
     },
 
     async resumenDeSaldo(clinicId, patientId) {
-      // ws1-t1 (Ortodoncia conectada al bot) — además del saldo genérico (que
-      // ya cubre las facturas a plazos del caso de ortodoncia en modo PRECIO_
-      // TOTAL, mismo motor plan-de-pagos.ts), se añade el próximo "Control de
-      // ortodoncia" en la Agenda, si tiene uno. Es una lectura más sobre la
-      // MISMA pregunta de "¿cómo va mi tratamiento?": no dispara ningún
-      // WhatsApp nuevo, solo enriquece la respuesta que ya se manda.
+      // ws1-t1 ronda 2 — interruptores SEPARADOS: solo se LEE (y por tanto
+      // solo se puede contestar) lo que su propio interruptor permite. Un
+      // clínica con el de dinero apagado y el de control encendido nunca ve
+      // `resumenDeSaldoDePaciente` correr para esa consulta, y viceversa —
+      // no es un `if` al pintar el texto, es que el dato ni se trae.
       const [resumen, proximoControl] = await Promise.all([
-        resumenDeSaldoDePaciente(clinicId, patientId, hoyEnZona(new Date(), timezone)),
-        proximoControlDe(clinicId, patientId),
+        permiteDinero
+          ? resumenDeSaldoDePaciente(clinicId, patientId, hoyEnZona(new Date(), timezone))
+          : Promise.resolve(null),
+        permiteControl ? proximoControlDe(clinicId, patientId) : Promise.resolve(null),
       ]);
       if (!resumen && !proximoControl) return null;
       return {
@@ -236,15 +249,28 @@ export function realSaldoDeps(timezone: string): SaldoDeps {
 /**
  * Entrypoint que consume el motor (engine.ts). `deps` inyectable para pruebas.
  *
- * El interruptor `canAnswerBalance` lo resuelve `loadBotConfig` desde
- * `Clinic.reminderSettings.cobranza.bot`, y el núcleo lo comprueba lo primero.
+ * ws1-t1 ronda 2 — DOS interruptores separados: `canAnswerBalance` (dinero,
+ * `Clinic.reminderSettings.cobranza.bot`, apagado de fábrica) y
+ * `canAnswerOrthoControl` (próximo control, `OrthodonticsClinicSettings.
+ * proximoControlBotEnabled`, encendido de fábrica). El núcleo comprueba que
+ * al menos uno esté encendido; cuál de los dos deja VER cada dato lo decide
+ * `realSaldoDeps` al construir el shell.
  */
 export function handleSaldoTurn(
   input: BotTurnInput,
   config: BotConfigDTO,
   deps?: SaldoDeps,
 ): Promise<BotTurnResult | null> {
-  return runSaldoTurn(input, config, deps ?? realSaldoDeps(config.timezone ?? "America/Mexico_City"));
+  return runSaldoTurn(
+    input,
+    config,
+    deps ??
+      realSaldoDeps(
+        config.timezone ?? "America/Mexico_City",
+        config.canAnswerBalance ?? false,
+        config.canAnswerOrthoControl ?? false,
+      ),
+  );
 }
 
 /** ¿Esta clínica deja que el bot hable de dinero? (lee el Json de la clínica) */

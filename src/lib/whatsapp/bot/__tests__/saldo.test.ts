@@ -612,10 +612,22 @@ test("sin cobranza y sin control, sigue siendo sinPlan", async () => {
   assert.equal(r!.reply, TEXTOS.sinPlan);
 });
 
-test("el interruptor de la clínica también apaga la pregunta de control", async () => {
-  const r = await correr("¿cuándo es mi próximo control?", null, config({ canAnswerBalance: false }));
+test("con los DOS interruptores apagados, la pregunta de control no pasa", async () => {
+  const r = await correr("¿cuándo es mi próximo control?", null, config({ canAnswerBalance: false, canAnswerOrthoControl: false }));
   assert.equal(r, null);
   assert.deepEqual(lecturas, []);
+});
+
+test("ws1-t1 ronda 2 — con SOLO el interruptor de control encendido (dinero apagado), la pregunta de control ya no se bloquea", async () => {
+  // Antes de la ronda 2 había un solo interruptor (canAnswerBalance) que
+  // tapaba las dos preguntas; ahora canAnswerOrthoControl basta por sí solo.
+  const r = await correr("¿cuándo es mi próximo control?", null, config({ canAnswerBalance: false, canAnswerOrthoControl: true }));
+  assert.ok(r, "ya no devuelve null solo porque el de dinero está apagado");
+});
+
+test("ws1-t1 ronda 2 — con SOLO el interruptor de dinero encendido, una pregunta de saldo sigue funcionando igual", async () => {
+  const r = await correr("¿cuánto debo?", null, config({ canAnswerBalance: true, canAnswerOrthoControl: false }));
+  assert.ok(r!.reply!.includes("$2,000.00"));
 });
 
 test("número compartido: el control también se desambigua por fecha de nacimiento", async () => {

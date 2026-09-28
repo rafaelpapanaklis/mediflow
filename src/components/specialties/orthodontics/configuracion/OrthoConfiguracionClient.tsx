@@ -14,7 +14,7 @@
 
 import { useId, useState } from "react";
 import toast from "react-hot-toast";
-import { AlertTriangle, CalendarClock, ClipboardList, Lock, MessageSquareText, Plus, Stethoscope, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, Ban, CalendarClock, ClipboardList, Lock, MessageCircle, MessageSquareText, Plus, Stethoscope, Trash2, Wallet } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { Pantalla, Tarjeta } from "@/components/specialties/orthodontics/modulo/piezas";
 import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
@@ -34,6 +34,15 @@ export interface OrthoConfiguracionClientProps {
   settings: OrthoClinicSettings;
   doctors: OrthoConfigDoctorOption[];
   procedimientos: OrthoProcedureRow[];
+  /**
+   * La tarjeta "Suscripción" (ws1-t2, 28-sep-2026) — `null` si no hay nada
+   * que cancelar desde aquí: sin permiso (no dueño/administrador), módulo
+   * activado por soporte ("admin"), pagado con SPEI/OXXO (sin suscripción
+   * que cancelar), o ya cancelado. El servidor ya decidió todo esto
+   * (`canRequestModuleCancellation` + `canPurchaseModules`); aquí solo se
+   * pinta o no.
+   */
+  suscripcion: { currentPeriodEnd: string | null } | null;
 }
 
 const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
@@ -55,7 +64,7 @@ const PLANTILLAS_CLAVES: { clave: string; etiqueta: string; ayuda: string }[] = 
   },
 ];
 
-export function OrthoConfiguracionClient({ settings, doctors, procedimientos: procedimientosIniciales }: OrthoConfiguracionClientProps) {
+export function OrthoConfiguracionClient({ settings, doctors, procedimientos: procedimientosIniciales, suscripcion }: OrthoConfiguracionClientProps) {
   const [defaultTreatingDoctorId, setDefaultTreatingDoctorId] = useState<string>(
     settings.defaultTreatingDoctorId ?? "",
   );
@@ -64,6 +73,9 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
   );
   const [templates, setTemplates] = useState<Record<string, string>>(settings.messageTemplates);
   const [billingMode, setBillingMode] = useState<OrthoBillingMode>(settings.billingMode);
+  // ws1-t1 ronda 2 — interruptor SEPARADO del de dinero (cobranza.bot, en
+  // /dashboard/whatsapp): ¿el bot contesta "¿cuándo es mi próximo control?".
+  const [proximoControlBotEnabled, setProximoControlBotEnabled] = useState(settings.proximoControlBotEnabled);
   const [saving, setSaving] = useState(false);
   const [procedimientos, setProcedimientos] = useState<OrthoProcedureRow[]>(procedimientosIniciales);
   const [sembrando, setSembrando] = useState(false);
@@ -99,6 +111,16 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
     setAppointmentTypes((arr) => arr.map((t) => (t.id === id ? { ...t, [campo]: valor } : t)));
   }
 
+  /** ws1-t1 ronda 2 — texto libre del campo de minutos: vacío = "sin valor
+   * propio" (cae al mejor esfuerzo al agendar), nunca 0 ni negativo. */
+  function actualizarDuracion(id: string, texto: string) {
+    const limpio = texto.trim();
+    const numero = limpio === "" ? null : Number(limpio);
+    setAppointmentTypes((arr) =>
+      arr.map((t) => (t.id === id ? { ...t, durationMin: numero != null && Number.isFinite(numero) && numero > 0 ? Math.round(numero) : null } : t)),
+    );
+  }
+
   function quitarTipo(id: string) {
     const tipo = appointmentTypes.find((t) => t.id === id);
     if (tipo && esTipoFijo(tipo)) {
@@ -127,6 +149,7 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
         appointmentTypes,
         messageTemplates: templates,
         billingMode,
+        proximoControlBotEnabled,
       });
       if (isFailure(res)) {
         toast.error(res.error);
@@ -135,6 +158,42 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
       toast.success("Configuración de Ortodoncia guardada.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Suscripción del módulo (ws1-t2, 28-sep-2026) — "Cancelar módulo".
+  const [cancelando, setCancelando] = useState(false);
+  const [cancelado, setCancelado] = useState(false);
+
+  async function cancelarModulo() {
+    const fecha = suscripcion?.currentPeriodEnd
+      ? new Date(suscripcion.currentPeriodEnd).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+      : "el fin del periodo ya pagado";
+    const confirmado = window.confirm(
+      `¿Cancelar el módulo de Ortodoncia?\n\nSeguirá activo hasta el ${fecha} (ya está pagado). ` +
+        "Después de esa fecha ya no se cobrará, y el menú vuelve a pedir contratarlo. " +
+        "Los pacientes, casos y todo lo que ya se guardó NO se borran.",
+    );
+    if (!confirmado) return;
+    setCancelando(true);
+    try {
+      const res = await fetch("/api/marketplace/module-cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleKey: "orthodontics" }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(data?.error ?? "No se pudo cancelar. Intenta de nuevo.");
+        return;
+      }
+      setCancelado(true);
+      toast.success(data?.message ?? "El módulo se cancelará al final del periodo ya pagado.");
+    } catch (err) {
+      toast.error("No se pudo cancelar. Intenta de nuevo.");
+      console.error("[ortho.configuracion.cancelarModulo]", err);
+    } finally {
+      setCancelando(false);
     }
   }
 
@@ -274,6 +333,18 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
                         disabled={esControl}
                         title={esControl ? "La Agenda reconoce los controles por este texto exacto — no se puede editar." : undefined}
                       />
+                      <input
+                        type="number"
+                        min={1}
+                        step={5}
+                        className={s.campoEntrada}
+                        value={tipo.durationMin ?? ""}
+                        placeholder="min"
+                        aria-label={`Duración en minutos de ${tipo.label.trim() || `el tipo de cita ${i + 1}`}`}
+                        title="Minutos de esta cita. En blanco = se calcula solo al agendar."
+                        onChange={(e) => actualizarDuracion(tipo.id, e.target.value)}
+                        style={{ maxWidth: 68, flex: "0 0 68px" }}
+                      />
                       {esControl ? (
                         <span className={s.candado} title="Fijo: la Agenda lo usa para reconocer los controles.">
                           <Lock size={15} strokeWidth={1.9} aria-hidden />
@@ -294,7 +365,9 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
                 })}
               </ul>
               <p className={s.pie}>
-                «{TIPO_CITA_CONTROL_ORTO}» es fijo: la Agenda reconoce los controles por ese texto exacto.
+                «{TIPO_CITA_CONTROL_ORTO}» es fijo: la Agenda reconoce los controles por ese texto exacto. La
+                duración es la que usan el bot de WhatsApp y la reserva pública al agendar; en blanco, se calcula
+                sola.
               </p>
               <div style={{ marginTop: 12 }}>
                 <ButtonNew
@@ -338,6 +411,55 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
           </div>
         </Tarjeta>
 
+        <Tarjeta
+          icono={MessageCircle}
+          titulo="WhatsApp del bot"
+          sub="Dos interruptores separados: uno para el próximo control, otro para dinero."
+        >
+          <div className={s.tarjetaCuerpo} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={proximoControlBotEnabled}
+                onChange={(e) => setProximoControlBotEnabled(e.target.checked)}
+                style={{ marginTop: 3, flexShrink: 0 }}
+              />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--pr-texto)" }}>
+                  El bot contesta &ldquo;¿cuándo es mi próximo control?&rdquo;
+                </span>
+                <span style={{ display: "block", fontSize: 12, lineHeight: 1.45, color: "var(--pr-texto-3)", marginTop: 2 }}>
+                  Encendido por defecto: solo dice una fecha de cita, nunca dinero. Verifica el teléfono contra el
+                  expediente igual que el resto del bot.
+                </span>
+              </span>
+            </label>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "flex-start",
+                padding: "10px 12px",
+                borderRadius: "var(--pr-radio-s)",
+                background: "var(--pr-tarjeta-2)",
+                fontSize: 12,
+                lineHeight: 1.45,
+                color: "var(--pr-texto-3)",
+              }}
+            >
+              <Wallet size={15} strokeWidth={1.9} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden />
+              <span>
+                Que el bot diga cuánto debe un paciente es otro interruptor, aparte de este — está apagado por
+                defecto y se enciende en{" "}
+                <a href="/dashboard/whatsapp" style={{ color: "var(--pr-activo)", textDecoration: "underline" }}>
+                  Configuración → WhatsApp
+                </a>
+                , sección &ldquo;Mensualidades&rdquo;.
+              </span>
+            </div>
+          </div>
+        </Tarjeta>
+
         <div style={{ gridColumn: "1 / -1" }}>
           <Tarjeta
             icono={ClipboardList}
@@ -371,6 +493,53 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
             </div>
           </Tarjeta>
         </div>
+
+        {suscripcion && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <Tarjeta
+              icono={Ban}
+              titulo="Suscripción"
+              sub="Cancelar el módulo de Ortodoncia. No borra pacientes, casos ni ningún dato ya guardado."
+            >
+              <div className={s.tarjetaCuerpo} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {cancelado ? (
+                  <div
+                    role="status"
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "flex-start",
+                      padding: "10px 12px",
+                      borderRadius: "var(--pr-radio-s)",
+                      background: "var(--pr-alerta-suave)",
+                      color: "var(--pr-alerta)",
+                      fontSize: 12,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    <AlertTriangle size={15} strokeWidth={1.9} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden />
+                    <span>
+                      Cancelación programada. El módulo sigue activo hasta el fin del periodo ya pagado; después ya no
+                      se cobra y el menú vuelve a pedir contratarlo.
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ margin: 0, fontSize: 13, color: "var(--pr-texto-2)" }}>
+                      Se apaga al final del periodo que ya está pagado — no se cobra ni un día de más, y nada de lo
+                      guardado (pacientes, casos, hojas de control, facturas) se borra.
+                    </p>
+                    <div>
+                      <ButtonNew type="button" variant="danger" onClick={cancelarModulo} disabled={cancelando}>
+                        {cancelando ? "Cancelando…" : "Cancelar módulo"}
+                      </ButtonNew>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Tarjeta>
+          </div>
+        )}
 
         <div className={s.barraGuardar}>
           <ButtonNew type="button" variant="primary" onClick={guardar} disabled={saving}>

@@ -24,6 +24,9 @@ export const ID_TIPO_CITA_CONTROL = "control";
 export interface TipoDeCita {
   id: string;
   label: string;
+  /** ws1-t1 ronda 2 — minutos de esta cita. `null`/`undefined` = sin valor
+   * propio, cae al mejor esfuerzo (`whatsapp-bot-booking.ts`). */
+  durationMin?: number | null;
 }
 
 /** ¿Es la fila fija? Por su CLAVE, nunca por lo que diga su texto. */
@@ -46,11 +49,25 @@ export function nombreComparable(texto: string): string {
  *  - cualquier OTRA fila que se llame igual que la fija se quita: era el
  *    duplicado que dejaba el fallo.
  */
+/** Copia id/label y, SOLO si trae una duración de verdad, también
+ * durationMin — nunca la clave con `undefined`: un catálogo sin duraciones
+ * propias (el caso de hoy, el de casi todos los tests) tiene que seguir
+ * comparando IGUAL con `assert.deepEqual` que antes de esta ronda. */
+function copiar(t: TipoDeCita): TipoDeCita {
+  return t.durationMin != null ? { id: t.id, label: t.label, durationMin: t.durationMin } : { id: t.id, label: t.label };
+}
+
 export function normalizarCatalogo(tipos: readonly TipoDeCita[]): TipoDeCita[] {
-  const fija: TipoDeCita = { id: ID_TIPO_CITA_CONTROL, label: TIPO_CITA_CONTROL_ORTO };
   const textoFijo = nombreComparable(TIPO_CITA_CONTROL_ORTO);
   const conClave = tipos.findIndex((t) => esTipoFijo(t));
   const sitio = conClave >= 0 ? conClave : tipos.findIndex((t) => nombreComparable(t.label) === textoFijo);
+  // La duración SÍ se conserva (ws1-t1 ronda 2): solo el id/label de la fila
+  // fija son inmovibles, su duración la sigue editando la clínica.
+  const fija: TipoDeCita = copiar({
+    id: ID_TIPO_CITA_CONTROL,
+    label: TIPO_CITA_CONTROL_ORTO,
+    durationMin: sitio >= 0 ? tipos[sitio].durationMin : undefined,
+  });
 
   const salida: TipoDeCita[] = [];
   tipos.forEach((t, i) => {
@@ -59,7 +76,7 @@ export function normalizarCatalogo(tipos: readonly TipoDeCita[]): TipoDeCita[] {
       return;
     }
     if (esTipoFijo(t) || nombreComparable(t.label) === textoFijo) return;
-    salida.push({ id: t.id, label: t.label });
+    salida.push(copiar(t));
   });
   if (sitio < 0) salida.push(fija);
   return salida;
@@ -73,6 +90,9 @@ export function normalizarCatalogo(tipos: readonly TipoDeCita[]): TipoDeCita[] {
 export function motivoDeRechazo(tipos: readonly TipoDeCita[]): string | null {
   if (tipos.length === 0) return "Deja al menos un tipo de cita en el catálogo.";
   if (tipos.some((t) => !t.id.trim() || !t.label.trim())) return "Cada tipo de cita necesita clave y nombre.";
+  if (tipos.some((t) => t.durationMin != null && (!Number.isFinite(t.durationMin) || t.durationMin <= 0))) {
+    return "La duración tiene que ser un número de minutos mayor que cero, o dejarse en blanco.";
+  }
 
   const fijas = tipos.filter((t) => esTipoFijo(t));
   if (fijas.length !== 1 || fijas[0].label !== TIPO_CITA_CONTROL_ORTO) {

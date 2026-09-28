@@ -19132,6 +19132,11 @@ model OrthodonticsClinicSettings {
   /// cambiar esto NO lo toca. String, no enum: sql/ortodoncia-modo-cobro.sql,
   /// aditivo y plano, sin CREATE TYPE.
   billingMode             String?
+  /// ws1-t1 ronda 2 — ¿el bot de WhatsApp contesta "¿cuándo es mi próximo
+  /// control?" (interruptor SEPARADO del de dinero, cobranza.bot en
+  /// Clinic.reminderSettings)? null = encendido (default de fábrica: no
+  /// revela dinero, solo una fecha). sql/ortodoncia-proximo-control-bot.sql.
+  proximoControlBotEnabled Boolean?
   updatedBy               String?
   updatedAt               DateTime @default(now()) @updatedAt
 

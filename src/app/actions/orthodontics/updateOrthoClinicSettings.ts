@@ -21,6 +21,9 @@ import { fail, isFailure, ok, type ActionResult } from "./result";
 const appointmentTypeSchema = z.object({
   id: z.string().min(1).max(60),
   label: z.string().min(1).max(120),
+  // ws1-t1 ronda 2 — editable, opcional: sin valor cae al mejor esfuerzo
+  // (whatsapp-bot-booking.ts). null explícito = "borrar el valor propio".
+  durationMin: z.number().int().positive().max(600).nullable().optional(),
 });
 
 const inputSchema = z.object({
@@ -31,6 +34,9 @@ const inputSchema = z.object({
   // Configuración (ws1-t3) no mande este campo, se conserva el que ya
   // tenía guardado la clínica (no se resetea a PRECIO_TOTAL por omisión).
   billingMode: z.enum(["PRECIO_TOTAL", "PAGO_POR_CONTROL"]).optional(),
+  // ws1-t1 ronda 2 — mismo criterio opcional que billingMode: sin este
+  // campo se conserva el valor que ya tenía la clínica.
+  proximoControlBotEnabled: z.boolean().optional(),
 });
 
 function esTablaAusente(e: unknown): boolean {
@@ -70,6 +76,7 @@ export async function updateOrthoClinicSettings(
   const appointmentTypes: OrthoAppointmentTypeOption[] = data.appointmentTypes.map((t) => ({
     id: t.id,
     label: t.label,
+    durationMin: t.durationMin ?? null,
   }));
 
   // La fila fija se reconoce por su CLAVE ("control"), no por su texto
@@ -82,6 +89,7 @@ export async function updateOrthoClinicSettings(
   if (rechazo) return fail(rechazo);
 
   const billingMode = data.billingMode ? normalizarOrthoBillingMode(data.billingMode) : before.billingMode;
+  const proximoControlBotEnabled = data.proximoControlBotEnabled ?? before.proximoControlBotEnabled;
 
   try {
     await guardarOrthoClinicSettings({
@@ -91,6 +99,7 @@ export async function updateOrthoClinicSettings(
       appointmentTypes,
       messageTemplates: data.messageTemplates,
       billingMode,
+      proximoControlBotEnabled,
     });
   } catch (e) {
     if (esTablaAusente(e)) {
@@ -113,12 +122,14 @@ export async function updateOrthoClinicSettings(
       appointmentTypes: before.appointmentTypes,
       messageTemplates: before.messageTemplates,
       billingMode: before.billingMode,
+      proximoControlBotEnabled: before.proximoControlBotEnabled,
     },
     after: {
       defaultTreatingDoctorId: data.defaultTreatingDoctorId,
       appointmentTypes: data.appointmentTypes,
       messageTemplates: data.messageTemplates,
       billingMode,
+      proximoControlBotEnabled,
     },
   });
 

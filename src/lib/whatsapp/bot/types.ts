@@ -57,6 +57,18 @@ export interface BotConfigDTO {
    * comportándose como hoy.
    */
   canAnswerBalance?: boolean;
+  /**
+   * ws1-t1 ronda 2 — interruptor SEPARADO del de dinero: el bot puede decir
+   * la fecha del próximo "Control de ortodoncia" del paciente (nunca dinero,
+   * ver bot/saldo-core.ts). Vive en `OrthodonticsClinicSettings.
+   * proximoControlBotEnabled` (no en `whatsapp_bot_configs`, mismo motivo que
+   * `canAnswerBalance`). OPCIONAL, pero a diferencia de `canAnswerBalance` su
+   * ausencia SÍ debe leerse como "encendido" — es el default de fábrica
+   * (`normalizarProximoControlBotEnabled`, clinic-settings-db.ts) — así que
+   * ningún caller lo deja `undefined` sin querer decir "apagado": `loadBotConfig`
+   * SIEMPRE lo resuelve a un boolean explícito.
+   */
+  canAnswerOrthoControl?: boolean;
   fallbackToHuman: boolean;
   /** TZ de la clínica: el saldo necesita saber qué día es HOY donde atienden. */
   timezone?: string;

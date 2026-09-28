@@ -80,6 +80,7 @@
     "test:endpoint-gates": "tsx --test src/lib/auth/__tests__/endpoint-permission-gates.test.ts",
     "test:endpoint-gates-resto": "tsx --test src/lib/auth/__tests__/endpoint-permission-gates-resto.test.ts",
     "test:team-fields": "tsx --test src/lib/team/__tests__/member-fields.test.ts",
+    "test:permissions-modal-titulo": "tsx --test src/components/dashboard/team/__tests__/permissions-modal-titulo.test.ts",
     "test:vendor-fields": "tsx --test src/lib/b2b/__tests__/vendor-fields.test.ts",
     "test:2fa-gate": "tsx --test src/lib/auth/__tests__/two-factor-gate.test.ts",
     "test:2fa-identity": "tsx --test src/lib/auth/__tests__/two-factor-identity.test.ts",
@@ -123,6 +124,9 @@
     "test:portal-menu-ortodoncia": "tsx --tsconfig tsconfig.test.json --test src/components/paciente/__tests__/portal-menu-ortodoncia.test.tsx",
     "test:anticipos": "tsx --test src/lib/anticipos/__tests__/core.test.ts src/lib/anticipos/__tests__/servicio.test.ts src/lib/anticipos/__tests__/mercadopago-wrapper.test.ts src/lib/whatsapp/bot/__tests__/booking-anticipo.test.ts",
     "test:anticipos-panel": "tsx --test src/lib/anticipos/__tests__/panel.server.test.ts src/lib/anticipos/__tests__/datos-bancarios.test.ts src/lib/anticipos/__tests__/mensaje-panel.test.ts",
+    "test:settings-anticipos-n2": "tsx --test --experimental-test-module-mocks src/app/api/settings/anticipos/__tests__/n2-guarda-sin-mp.test.ts",
+    "test:anticipos-n11-texto": "tsx --test src/app/dashboard/settings/anticipos/__tests__/n11-texto-cerrado.test.ts",
+    "test:invoice-detail-n15": "tsx --test src/components/dashboard/billing/__tests__/n15-anticipo-pendiente-resumen.test.ts",
     "//test:cancelar-cierra-anticipo": "Necesita --experimental-test-module-mocks: mock.module sustituye prisma/auth/permisos/etc. para POST /api/invoices/[id]/cancel (ws1-t1, hallazgo A1).",
     "test:cancelar-cierra-anticipo": "tsx --test --experimental-test-module-mocks src/app/api/invoices/__tests__/cancel-cierra-anticipo.test.ts",
     "//test:avisos-recepcion": "Necesita --experimental-test-module-mocks: mock.module sustituye @/lib/prisma para anticiposPorRevisar (ws1-t3 fase 2).",
@@ -362,9 +366,12 @@
     "test:orto-imagen-facial-analysis": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/imagen/__tests__/getFacialAnalysis.test.ts src/app/actions/orthodontics/imagen/__tests__/saveFacialAnalysis.test.ts",
     "test:orto-adapter-invoice-total": "tsx --test src/lib/orthodontics/redesign/__tests__/adapter-invoice-total.test.ts",
     "test:orto-landing-valoracion": "tsx --test src/lib/orthodontics/__tests__/landing-servicio-valoracion.test.ts",
+    "test:orto-clinic-settings-puro": "tsx --test src/lib/orthodontics/__tests__/clinic-settings-db.test.ts",
+    "test:orto-tipos-de-cita": "tsx --test src/lib/orthodontics/__tests__/tipos-de-cita.test.ts",
     "test:import-detectar-entidad": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/detectar-entidad.test.ts",
     "test:import-multi-archivo": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/multi-archivo.test.ts",
-    "test:import-seguridad-archivos": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/seguridad-archivos.test.ts"
+    "test:import-seguridad-archivos": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/seguridad-archivos.test.ts",
+    "test:odontograma-v2-render": "tsx --tsconfig tsconfig.test.json --test src/components/dashboard/odontogram-v2/__tests__/render.test.tsx"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

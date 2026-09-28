@@ -404,8 +404,12 @@ export async function runSaldoTurn(
 ): Promise<BotTurnResult | null> {
   // 1. El interruptor de la clínica manda, y va ANTES que nada: con esto
   //    apagado el bot no consulta, no busca al paciente y no deja rastro,
-  //    porque no ha pasado nada que registrar.
-  if (!config.canAnswerBalance) return null;
+  //    porque no ha pasado nada que registrar. ws1-t1 ronda 2 — son DOS
+  //    interruptores separados (dinero y próximo control); con los DOS
+  //    apagados no hay nada que este flujo pueda contestar. Cuál de los dos
+  //    deja VER cada dato lo decide el shell (realSaldoDeps, saldo.ts): este
+  //    núcleo no sabe cuál pregunta es de dinero y cuál de control todavía.
+  if (!config.canAnswerBalance && !config.canAnswerOrthoControl) return null;
 
   const enCurso = isSaldoInProgress(input.botState);
   const texto = (input.incomingText ?? "").trim();

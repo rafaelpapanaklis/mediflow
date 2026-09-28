@@ -128,5 +128,7 @@ test("la pantalla, el servidor y el cargador usan la clave, no el texto", () => 
 
   const cargador = sinComentarios(leer("src/lib/orthodontics/clinic-settings-db.ts"));
   assert.match(cargador, /\? normalizarCatalogo\(row\.appointmentTypes\)/);
-  assert.match(cargador, /\{ id: ID_TIPO_CITA_CONTROL, label: TIPO_CITA_CONTROL_ORTO \},/);
+  // ws1-t1 ronda 2 — la fila fija ahora también trae su durationMin de
+  // fábrica; lo que no cambia es que sigue siendo id/label EXACTOS.
+  assert.match(cargador, /\{ id: ID_TIPO_CITA_CONTROL, label: TIPO_CITA_CONTROL_ORTO,[^}]*\},/);
 });
