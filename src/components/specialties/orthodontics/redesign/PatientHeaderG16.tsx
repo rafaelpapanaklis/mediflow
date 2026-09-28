@@ -12,6 +12,7 @@ import { Calendar, ClipboardCheck, DollarSign, MoreHorizontal, Phone, Play } fro
 import { Btn } from "./atoms/Btn";
 import { Pill } from "./atoms/Pill";
 import { fmtDate, fmtDateShort, fmtMoney, fmtTime } from "./atoms/format";
+import { subDelSaldo } from "@/lib/orthodontics/saldo-cabecera";
 import { FLOW_STATUS_LABELS, type NextAppointmentDTO, type PatientFlowDTO } from "./types";
 import orto from "./orto.module.css";
 
@@ -42,6 +43,12 @@ export interface PatientHeaderProps {
    * y decía "Pendiente" aunque nadie hubiera abierto ninguna factura).
    */
   outstandingAmount: number | null;
+  /**
+   * ws1-t4 #73 — lo que ya VENCIÓ de ese saldo (cuotas pasadas de fecha). El
+   * saldo total sale rojo solo si esto es > 0: un paciente al corriente con
+   * $23,000 por pagar en mensualidades futuras no debe verse como deudor.
+   */
+  overdueAmount?: number | null;
   /** Fecha de la última visita registrada. */
   lastVisitAt: string | null;
   /** Conteo total de visitas (asistidas) y "desde N". */
@@ -174,15 +181,9 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
         <Stat
           label="Saldo de ortodoncia"
           value={props.outstandingAmount != null ? fmtMoney(props.outstandingAmount) : "—"}
-          sub={
-            props.outstandingAmount == null
-              ? "Sin plan de pago"
-              : props.outstandingAmount > 0
-                ? "Pendiente"
-                : "Al día"
-          }
+          sub={subDelSaldo(props.outstandingAmount, props.overdueAmount)}
           muted={props.outstandingAmount == null}
-          tone={props.outstandingAmount != null && props.outstandingAmount > 0 ? "rose" : "emerald"}
+          tone={props.outstandingAmount != null && (props.overdueAmount ?? 0) > 0 ? "rose" : "emerald"}
         />
         <Stat
           label="Última visita"

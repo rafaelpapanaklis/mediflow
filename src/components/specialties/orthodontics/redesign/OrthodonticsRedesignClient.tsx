@@ -430,6 +430,12 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       ? Math.max(0, panelDeCobro.invoice.balance)
       : null;
 
+  // #73: lo VENCIDO de ese saldo (el rojo de la cabecera depende de esto, no del saldo total).
+  const overdueAmountReal =
+    panelDeCobro && panelDeCobro !== "cargando" && panelDeCobro !== "error" && panelDeCobro.cobranza
+      ? Math.round(panelDeCobro.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) * 100) / 100
+      : null;
+
   const cardForDrawer =
     drawer?.kind === "tcard"
       ? vm.treatmentCards.find((c) => c.id === drawer.cardId) ?? null
@@ -470,6 +476,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           patientFlow={props.patientHeader.patientFlow ?? vm.patientFlow}
           nextAppointment={props.patientHeader.nextAppointment ?? vm.nextAppointment}
           outstandingAmount={outstandingAmountReal}
+          overdueAmount={overdueAmountReal}
           lastVisitAt={props.patientHeader.lastVisitAt}
           totalVisits={props.patientHeader.totalVisits}
           onStartVisit={props.patientHeader.onStartVisit}
