@@ -182,6 +182,8 @@ export async function getCaseIntakeOptions(
         patientId,
         procedureKey: "ortodoncia",
         signedAt: { not: null },
+        // H62: un consentimiento revocado no cuenta como firmado.
+        revokedAt: null,
         deletedAt: null,
       },
       select: { id: true },

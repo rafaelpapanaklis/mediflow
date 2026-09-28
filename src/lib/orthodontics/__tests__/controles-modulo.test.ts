@@ -277,3 +277,9 @@ test("las frases de quien falta de control", () => {
   assert.equal(fraseSinControl({ diasSinControl: null, faltoAlUltimo: false }), "Sin controles registrados");
   assert.equal(fraseSinControl({ diasSinControl: null, faltoAlUltimo: true }), "Faltó a su cita · sin controles registrados");
 });
+
+test("H43: retención, pausa y planeado no aparecen como «falta de control»", () => {
+  const mk = (id: string, status: OrthoCaseSummary["status"]) => ({ ...caso(), planId: id, patientId: id, patientName: id, status });
+  const casos = [mk("a", "IN_PROGRESS"), mk("b", "RETENTION"), mk("c", "ON_HOLD"), mk("d", "PLANNED")];
+  assert.deepEqual(listMissingNextControl(casos, new Set()).map((c) => c.patientId), ["a"]);
+});

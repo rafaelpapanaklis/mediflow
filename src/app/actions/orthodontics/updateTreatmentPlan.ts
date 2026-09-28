@@ -4,6 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { updateTreatmentPlanSchema } from "@/lib/validation/orthodontics";
+import { aplicarEfectosDeEstado } from "@/lib/orthodontics/efectos-estado-caso";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { auditOrtho, getOrthoPlanActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -106,6 +107,18 @@ export async function updateTreatmentPlan(
         );
         return prisma.orthodonticTreatmentPlan.update({ where: { id: treatmentPlanId }, data: reduced });
       });
+
+    // H46: el estado arrastra a la fase (y al régimen de retención). Es
+    // secundario: si falla, el cambio de estado ya quedó guardado.
+    if (updated.status !== before.status) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          await aplicarEfectosDeEstado(tx, { id: updated.id, clinicId: ctx.clinicId }, updated.status);
+        });
+      } catch (e) {
+        console.error("[ortho] updateTreatmentPlan: efectos del estado no aplicados:", e);
+      }
+    }
 
     const action =
       parsed.data.status && parsed.data.status !== before.status

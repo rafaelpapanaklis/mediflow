@@ -16,6 +16,14 @@ export const ACTIVE_PLAN_STATUSES: OrthoTreatmentStatus[] = [
 ];
 
 /**
+ * H43: «Falta de control» solo aplica a casos en tratamiento activo. Uno en
+ * retención se revisa a 3/6/12 meses (su cita es «Control de retención», no
+ * la mensual), uno en pausa no viene a propósito y uno planeado aún no tiene
+ * aparatología colocada.
+ */
+export const ESTADOS_CON_CONTROL_MENSUAL: OrthoTreatmentStatus[] = ["IN_PROGRESS"];
+
+/**
  * Deriva los KPIs spec a partir de las filas y el conteo separado de
  * citas de hoy. Pure — apto para tests con datos mock.
  */
@@ -343,7 +351,7 @@ export function listMissingNextControl(
   const seen = new Set<string>();
   const out: MissingNextControlEntry[] = [];
   for (const c of cases) {
-    if (!ACTIVE_PLAN_STATUSES.includes(c.status)) continue;
+    if (!ESTADOS_CON_CONTROL_MENSUAL.includes(c.status)) continue;
     if (patientIdsWithFutureControl.has(c.patientId)) continue;
     if (seen.has(c.patientId)) continue;
     seen.add(c.patientId);

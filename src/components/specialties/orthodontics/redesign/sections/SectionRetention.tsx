@@ -9,7 +9,10 @@
 // Trigger automático al avanzar fase a Retención: crear LabOrder retainer +
 // agendar 5 revisiones (lo dispara advancePhase server action).
 
+import { useState } from "react";
 import { MessageCircle, Plus, Settings2, Shield } from "lucide-react";
+import { agendarRevisionRetencion } from "@/app/actions/orthodontics/agendarRevisionRetencion";
+import { isFailure } from "@/app/actions/orthodontics/result";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
@@ -259,6 +262,25 @@ function PreSurveyToggle({
 }
 
 function CheckupCard({ checkup }: { checkup: RetainerCheckupDTO }) {
+  // H65: la revisión se convierte en cita de la Agenda.
+  const puedeAgendar = checkup.status === "PROGRAMMED" && !checkup.id.startsWith("placeholder-");
+  const [abierto, setAbierto] = useState(false);
+  const [cuando, setCuando] = useState("");
+  const [estado, setEstado] = useState<"idle" | "cargando" | "agendado" | "error">("idle");
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  const agendar = async () => {
+    if (!cuando) return;
+    setEstado("cargando");
+    setMensaje(null);
+    const r = await agendarRevisionRetencion({ checkupId: checkup.id, startsAt: new Date(cuando).toISOString() });
+    if (isFailure(r)) {
+      setEstado("error");
+      setMensaje(r.error);
+      return;
+    }
+    setEstado("agendado");
+    setAbierto(false);
+  };
   return (
     <div className={`${orto.caja} text-center flex flex-col items-center gap-[3px]`}>
       <div className="text-[15px] font-bold leading-tight">
@@ -270,6 +292,28 @@ function CheckupCard({ checkup }: { checkup: RetainerCheckupDTO }) {
       <Pill color={STATUS_COLOR[checkup.status]} size="xs">
         {STATUS_LABEL[checkup.status]}
       </Pill>
+      {estado === "agendado" ? <span className="text-[11.5px]" role="status">Cita creada</span> : null}
+      {puedeAgendar && estado !== "agendado" ? (
+        abierto ? (
+          <div className="flex flex-col gap-[4px] w-full mt-[4px]">
+            <input
+              type="datetime-local"
+              value={cuando}
+              onChange={(e) => setCuando(e.target.value)}
+              className={orto.entrada}
+              aria-label={`Fecha y hora de la revisión de ${checkup.monthsFromDebond} meses`}
+            />
+            <Btn variant="secondary" size="sm" onClick={agendar} disabled={!cuando || estado === "cargando"}>
+              {estado === "cargando" ? "Agendando…" : "Confirmar cita"}
+            </Btn>
+          </div>
+        ) : (
+          <button type="button" className={orto.enlace} onClick={() => setAbierto(true)}>
+            Agendar
+          </button>
+        )
+      ) : null}
+      {mensaje ? <span className="text-[11.5px]" role="alert">{mensaje}</span> : null}
     </div>
   );
 }

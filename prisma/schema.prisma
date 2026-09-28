@@ -335,6 +335,7 @@ model Clinic {
   // Ortodoncia — Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
   orthoCephalometryAnalyses OrthodonticCephalometryAnalysis[]
   orthoFacialAnalyses       OrthodonticFacialAnalysis[]
+  orthoBoltonAnalyses       OrthodonticBoltonAnalysis[]
   orthoAligners             OrthodonticAligner[]
   orthoAlignerEvents        OrthodonticAlignerEvent[]
   orthoElasticsLogs         OrthodonticElasticsLog[]
@@ -1517,6 +1518,7 @@ model Patient {
   // Ortodoncia — Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
   orthoCephalometryAnalyses OrthodonticCephalometryAnalysis[]
   orthoFacialAnalyses       OrthodonticFacialAnalysis[]
+  orthoBoltonAnalyses       OrthodonticBoltonAnalysis[]
   orthoAligners             OrthodonticAligner[]
   orthoElasticsLogs         OrthodonticElasticsLog[]
   orthoMonitoringPhotos     OrthodonticMonitoringPhoto[]
@@ -6613,6 +6615,7 @@ model OrthodonticTreatmentPlan {
   // Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
   cephalometryAnalyses OrthodonticCephalometryAnalysis[]
   facialAnalyses       OrthodonticFacialAnalysis[]
+  boltonAnalysis       OrthodonticBoltonAnalysis?
   aligner              OrthodonticAligner?
   elasticsLogs         OrthodonticElasticsLog[]
   monitoringPhotos     OrthodonticMonitoringPhoto[]
@@ -7580,6 +7583,34 @@ model OrthodonticFacialAnalysis {
   @@index([clinicId])
   @@index([patientId])
   @@map("orthodontic_facial_analyses")
+}
+
+/// H58 (revisión de lógica, ws1-t8 ronda 6): las medidas de Bolton y el espacio
+/// de arco se capturaban y se perdían. Un registro por caso; guardar de nuevo
+/// lo reemplaza. SQL a mano en sql/ortodoncia-bolton.sql (aditivo, no aplicado).
+model OrthodonticBoltonAnalysis {
+  id              String @id @default(uuid())
+  treatmentPlanId String @unique
+  patientId       String
+  clinicId        String
+
+  /// { [fdi]: anchoMesiodistalMm } de los dientes medidos.
+  widths        Json   @default("{}")
+  upperSpaceMm  Float?
+  lowerSpaceMm  Float?
+
+  createdByUserId String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@map("orthodontic_bolton_analyses")
 }
 
 // ─── Parte 8 «Alineadores y cumplimiento» (ws1-t8, ola 1, sep-2026) ──────

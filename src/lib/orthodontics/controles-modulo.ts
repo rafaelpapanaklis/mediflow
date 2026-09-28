@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { pintaDeEstado } from "@/lib/agenda-nueva/estados";
-import { ACTIVE_PLAN_STATUSES, type OrthoCaseSummary } from "./specialty-kpis";
+import { ESTADOS_CON_CONTROL_MENSUAL, type OrthoCaseSummary } from "./specialty-kpis";
 
 /** Cuántos días se enseñan después de hoy. */
 export const DIAS_DE_LA_SEMANA = 7;
@@ -243,7 +243,7 @@ export function casosSinControl(
   const vistos = new Set<string>();
   const salida: CasoSinControl[] = [];
   for (const c of cases) {
-    if (!ACTIVE_PLAN_STATUSES.includes(c.status)) continue;
+    if (!ESTADOS_CON_CONTROL_MENSUAL.includes(c.status)) continue;
     if (historial.conControlFuturo.has(c.patientId)) continue;
     if (vistos.has(c.patientId)) continue;
     vistos.add(c.patientId);

@@ -59,7 +59,7 @@ export function ImagenYAnalisisCard({ treatmentPlanId, patientId }: ImagenYAnali
 
       {tab === "cefalometria" ? <CephalometriaPanel treatmentPlanId={treatmentPlanId} patientId={patientId} /> : null}
       {tab === "fotos" ? <FacialAnalysisTab treatmentPlanId={treatmentPlanId} patientId={patientId} /> : null}
-      {tab === "modelo3d" ? <BoltonPanel patientId={patientId} /> : null}
+      {tab === "modelo3d" ? <BoltonPanel patientId={patientId} treatmentPlanId={treatmentPlanId} /> : null}
     </div>
   );
 }

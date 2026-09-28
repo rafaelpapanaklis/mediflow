@@ -220,14 +220,29 @@ export async function loadOrthoRedesignData(
           }),
         )
       : Promise.resolve(null),
-    planId
-      ? safeArray(() =>
-          prisma.orthodonticConsent.findMany({
-            where: { treatmentPlanId: planId, clinicId: input.clinicId },
-            orderBy: { signedAt: "desc" },
-          }),
-        )
-      : Promise.resolve([]),
+    // H61: Documentos lee el consentimiento GENERAL (ConsentForm, el mismo de
+    // la ficha → Consentimientos), no el modelo propio de ortodoncia que el
+    // alcance manda ocultar: antes una pantalla decía «FIRMADO» y esta «Sin
+    // consentimientos».
+    safeArray(() =>
+      prisma.consentForm.findMany({
+        where: {
+          clinicId: input.clinicId,
+          patientId: input.patientId,
+          procedureKey: "ortodoncia",
+          deletedAt: null,
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          procedure: true,
+          signedAt: true,
+          revokedAt: true,
+          signerName: true,
+          signerRelation: true,
+          doctorSignedAt: true,
+        },
+      }),
+    ),
     safeArray(() =>
       prisma.labOrder.findMany({
         where: {
@@ -809,20 +824,21 @@ function adaptReferralCode(r: Record<string, unknown>): ReferralCodeDTO {
 }
 
 function adaptConsent(c: Record<string, unknown>): ConsentRow {
-  const TYPE_LABELS: Record<string, string> = {
-    TREATMENT: "Consentimiento de tratamiento",
-    FINANCIAL: "Acuerdo financiero",
-    MINOR_ASSENT: "Asentimiento menor de edad",
-    PHOTO_USE: "Uso de fotografía clínica",
-  };
-  const consentType = (c.consentType as string | null) ?? "TREATMENT";
+  const fecha = (v: unknown) => (v instanceof Date ? v.toISOString() : null);
+  const revocado = c.revokedAt instanceof Date;
+  const firmado = c.signedAt instanceof Date && !revocado;
+  const porRepresentante = typeof c.signerName === "string" && c.signerName.length > 0;
+  const faltaDoctor = firmado && !(c.doctorSignedAt instanceof Date);
+  let detalle = "Consentimiento informado del paciente.";
+  if (revocado) detalle = "Revocado por el paciente: no cuenta como firmado.";
+  else if (firmado && porRepresentante) {
+    detalle = `Firmado por el representante (${c.signerName}${c.signerRelation ? `, ${c.signerRelation}` : ""})${faltaDoctor ? " · falta la firma del doctor" : ""}.`;
+  } else if (faltaDoctor) detalle = "Firmado por el paciente · falta la firma del doctor.";
   return {
-    name: TYPE_LABELS[consentType] ?? consentType,
-    signed: Boolean(c.signedAt),
-    date:
-      c.signedAt instanceof Date ? c.signedAt.toISOString() : null,
-    risks:
-      (c.notes as string | null) ?? "Consentimiento informado del paciente.",
+    name: (c.procedure as string | null) ?? "Consentimiento de ortodoncia",
+    signed: firmado,
+    date: fecha(c.signedAt),
+    risks: detalle,
   };
 }
 

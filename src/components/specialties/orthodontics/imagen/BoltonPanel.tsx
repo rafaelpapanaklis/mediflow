@@ -5,10 +5,12 @@
 // espacio de arco a partir de anchos mesiodistales que el doctor teclea
 // (medidos con la regla del visor 3D o un calibre físico).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Box } from "lucide-react";
 import { computeArchSpaceDiscrepancy, computeBolton, type ToothWidths } from "@/lib/orthodontics/alineadores/bolton";
+import { getBoltonAnalysis, saveBoltonAnalysis } from "@/app/actions/orthodontics/imagen/boltonAnalysis";
+import { isFailure } from "@/app/actions/orthodontics/result";
 import { Btn } from "../redesign/atoms/Btn";
 import orto from "../redesign/orto.module.css";
 
@@ -17,12 +19,55 @@ const LOWER_TEETH = [46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36];
 
 export interface BoltonPanelProps {
   patientId: string;
+  /** H58: con el caso, las medidas se guardan y se reabren. */
+  treatmentPlanId?: string;
 }
 
-export function BoltonPanel({ patientId }: BoltonPanelProps) {
+export function BoltonPanel({ patientId, treatmentPlanId }: BoltonPanelProps) {
+  const [estado, setEstado] = useState<"idle" | "guardando" | "guardado" | "error">("idle");
+  const [mensaje, setMensaje] = useState<string | null>(null);
   const [widths, setWidths] = useState<ToothWidths>({});
   const [upperSpace, setUpperSpace] = useState<number | "">("");
   const [lowerSpace, setLowerSpace] = useState<number | "">("");
+
+  useEffect(() => {
+    if (!treatmentPlanId) return;
+    let vivo = true;
+    getBoltonAnalysis(treatmentPlanId)
+      .then((res) => {
+        if (!vivo || !res || isFailure(res) || !res.data) return;
+        const w: ToothWidths = {};
+        for (const [k, v] of Object.entries(res.data.widths)) w[Number(k)] = v;
+        setWidths(w);
+        setUpperSpace(res.data.upperSpaceMm ?? "");
+        setLowerSpace(res.data.lowerSpaceMm ?? "");
+        setEstado("guardado");
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [treatmentPlanId]);
+
+  const guardar = async () => {
+    if (!treatmentPlanId) return;
+    setEstado("guardando");
+    setMensaje(null);
+    const limpio: Record<string, number> = {};
+    for (const [k, v] of Object.entries(widths)) if (typeof v === "number") limpio[k] = v;
+    const res = await saveBoltonAnalysis({
+      treatmentPlanId,
+      widths: limpio,
+      upperSpaceMm: upperSpace === "" ? null : Number(upperSpace),
+      lowerSpaceMm: lowerSpace === "" ? null : Number(lowerSpace),
+    });
+    if (isFailure(res)) {
+      setEstado("error");
+      setMensaje(res.error);
+      return;
+    }
+    setEstado("guardado");
+  };
 
   const bolton = useMemo(() => computeBolton(widths), [widths]);
   const upperDiscrepancy = useMemo(
@@ -72,6 +117,16 @@ export function BoltonPanel({ patientId }: BoltonPanelProps) {
         <SpaceInput label="Espacio disponible, arco superior (mm)" value={upperSpace} onChange={setUpperSpace} result={upperDiscrepancy} />
         <SpaceInput label="Espacio disponible, arco inferior (mm)" value={lowerSpace} onChange={setLowerSpace} result={lowerDiscrepancy} />
       </div>
+
+      {treatmentPlanId ? (
+        <div className="mt-3 flex items-center gap-3">
+          <Btn variant="secondary" size="sm" onClick={guardar} disabled={estado === "guardando"}>
+            {estado === "guardando" ? "Guardando…" : "Guardar medidas"}
+          </Btn>
+          {estado === "guardado" ? <span className="text-xs">Guardado en el caso.</span> : null}
+          {estado === "error" && mensaje ? <span className="text-xs" role="alert">{mensaje}</span> : null}
+        </div>
+      ) : null}
 
       {bolton.missingTeeth.length > 0 ? (
         <p className="mt-3 text-[11px] text-[color:var(--pr-texto-3)]">
