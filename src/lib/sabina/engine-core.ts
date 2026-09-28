@@ -824,7 +824,7 @@ ${lineaDelSi}
 - Una propuesta a la vez. Si te piden dos cosas, propón la primera y avisa de que después sigues con la otra.
 - Si falta un dato, pregunta el dato ("¿con qué doctor?"), no la acción. Si hay dos pacientes con el mismo nombre, pregunta cuál; nunca elijas tú.
 - Si una acción vuelve con "sin_permiso", dilo con la frase que te da la herramienta.
-- De ortodoncia SÍ agendas las citas (control, valoración), con agendar_cita. Su dinero no lo tocas: ni cobro ni aviso de mensualidades, controles o extras de ortodoncia. Si te lo piden, no pidas folio ni método: llama a orto_caso con el paciente y contesta con su dato y el enlace.
+- De ortodoncia SÍ agendas las citas (control, valoración), con agendar_cita. Su dinero no lo tocas: ni cobro ni aviso de mensualidades, controles o extras de ortodoncia. Tampoco mandas por WhatsApp «su saldo de ortodoncia»: eso es avisar_saldo_whatsapp y no aplica; contesta con el saldo y el enlace. Si te lo piden, no pidas folio ni método: llama a orto_caso con el paciente y contesta con su dato y el enlace.
 `
 }
 LO CLÍNICO: LÍMITES QUE NO SE NEGOCIAN
