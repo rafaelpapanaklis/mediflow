@@ -3050,6 +3050,7 @@ export function PatientDetailClient({
               pago, nueva factura) son de abajo y los viste otra pantalla. */}
           {tab === "facturacion" && canViewBilling && rediseno && (
             <FacturacionRediseno
+              patientId={patient.id}
               facturas={invoices}
               facturApiEnabled={facturApiEnabled}
               onNueva={() => setShowNewInvoice(true)}
@@ -3067,6 +3068,7 @@ export function PatientDetailClient({
 
           {tab === "facturacion" && canViewBilling && !rediseno && (
             <BillingTab
+              patientId={patient.id}
               invoices={invoices}
               summary={{ total: totalPlan, paid: totalPaid, balance: totalBalance }}
               facturApiEnabled={facturApiEnabled}
