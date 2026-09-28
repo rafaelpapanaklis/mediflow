@@ -31,13 +31,17 @@
 
 
 -- ── 1. Responsable del pago (A11) ───────────────────────────────────────
+-- [ws1-t1, consolidación de la ola] "Guardian" tiene @@map("ped_guardians")
+-- en prisma/schema.prisma — la tabla real NO se llama "guardians" (esa no
+-- existe; verificado leyendo information_schema en producción, solo lectura).
+-- Sin este arreglo el ADD CONSTRAINT de abajo fallaría al pegarlo.
 ALTER TABLE "orthodontic_treatment_plans"
   ADD COLUMN IF NOT EXISTS "responsibleGuardianId" TEXT;
 
 ALTER TABLE "orthodontic_treatment_plans" DROP CONSTRAINT IF EXISTS "orthodontic_treatment_plans_responsibleGuardianId_fkey";
 ALTER TABLE "orthodontic_treatment_plans"
   ADD CONSTRAINT "orthodontic_treatment_plans_responsibleGuardianId_fkey"
-  FOREIGN KEY ("responsibleGuardianId") REFERENCES "guardians"("id")
+  FOREIGN KEY ("responsibleGuardianId") REFERENCES "ped_guardians"("id")
   ON DELETE SET NULL ON UPDATE CASCADE;
 
 CREATE INDEX IF NOT EXISTS "orthodontic_treatment_plans_responsibleGuardianId_idx"
