@@ -236,9 +236,11 @@ function haceCuanto(dias: number): string {
   return `hace ${dias} días`;
 }
 
+/** Días de CALENDARIO (hora local) entre la visita y hoy, no bloques de 24 h. */
 function daysAgo(iso: string): number {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return 0;
-  const diffMs = Date.now() - d.getTime();
-  return Math.max(0, Math.floor(diffMs / (24 * 60 * 60 * 1000)));
+  const hoy = new Date();
+  const inicioDe = (x: Date) => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate());
+  return Math.max(0, Math.round((inicioDe(hoy) - inicioDe(d)) / (24 * 60 * 60 * 1000)));
 }
