@@ -25,6 +25,7 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth/permissions";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { getModuleAnnualPriceMxn } from "@/lib/marketplace/module-annual-price";
+import { pagoDeModuloConfirmado } from "@/lib/marketplace/module-checkout-session";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import {
   COOKIE_VISTA_PREVIA_SIN_MODULO,
@@ -42,7 +43,7 @@ import { VistaContratar } from "@/components/specialties/orthodontics/contratar/
 export default async function ContratarOrtodonciaPage({
   searchParams,
 }: {
-  searchParams: { compra?: string | string[]; ciclo?: string | string[] };
+  searchParams: { compra?: string | string[]; ciclo?: string | string[]; session_id?: string | string[] };
 }) {
   const user = await getCurrentUser();
 
@@ -59,7 +60,17 @@ export default async function ContratarOrtodonciaPage({
     cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
   });
   const moduloActivo = moduloActivoALaVista(activoReal, vistaPrevia);
-  const compra = leerEstadoCompra(searchParams.compra);
+  // «Pago recibido» solo si Stripe lo confirma para ESTA clínica: que la URL
+  // diga `?compra=ok` no prueba nada (cualquiera puede escribirlo o reabrirlo
+  // del historial). Sin confirmación, la página se pinta como si no se hubiera
+  // pagado. La activación no depende de esto: la hace el webhook.
+  const pedida = leerEstadoCompra(searchParams.compra);
+  const sessionId = Array.isArray(searchParams.session_id) ? searchParams.session_id[0] : searchParams.session_id;
+  const compra =
+    pedida === "ok" &&
+    !(await pagoDeModuloConfirmado({ sessionId, clinicId: user.clinicId, moduleKey: ORTHODONTICS_MODULE_KEY }))
+      ? null
+      : pedida;
 
   const entrada = decidirEntradaAContratar({
     esDental: user.clinic.category === "DENTAL",

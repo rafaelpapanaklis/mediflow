@@ -81,17 +81,15 @@ test("la hoja solo lee los tokens del rediseño y hereda la tipografía", () => 
   assert.match(css, /font-variant-numeric:\s*tabular-nums/, "cifras de ancho fijo");
 });
 
-test("el layout conserva sus tres comprobaciones y monta la raíz y el submenú del módulo", () => {
-  // Desde el 28-sep-2026 la decisión (a dónde va cada quien) vive en
-  // `decidirEntradaAlModulo`, con sus propios tests
-  // (src/lib/orthodontics/__tests__/contratar.test.ts). Aquí, que el layout
-  // le siga dando las tres cosas y que pinte después de decidir.
+test("el layout pasa por el guardia del módulo y monta la raíz y el submenú", () => {
+  // Las tres comprobaciones (clínica dental, permiso, módulo contratado) viven
+  // en `exigirModuloOrtodoncia`, y sus tests en
+  // src/lib/orthodontics/__tests__/contratar.test.ts. Aquí, que el layout
+  // pase por él ANTES de pintar nada.
   const layout = leer("src/app/dashboard/orthodontics/layout.tsx");
-  assert.match(layout, /esDental: user\.clinic\.category === "DENTAL",/);
-  assert.match(layout, /const active = await hasActiveOrthodonticsModule\(user\.clinicId\);/);
-  assert.match(layout, /hasPermission\(\s*\{ role: user\.role, permissionsOverride: user\.permissionsOverride \},\s*"specialties\.orthodontics",\s*\)/);
+  assert.match(layout, /await exigirModuloOrtodoncia\(\);/);
   assert.match(layout, /<RaizModulo>\s*<SubmenuOrtodoncia apartados=\{SUBMENU\} \/>\s*\{children\}\s*<\/RaizModulo>/);
-  assert.ok(layout.indexOf("redirect(entrada.a)") < layout.indexOf("<RaizModulo>"), "se decide ANTES de pintar nada");
+  assert.ok(layout.indexOf("await exigirModuloOrtodoncia()") < layout.indexOf("<RaizModulo>"));
 });
 
 test("el submenú conserva los seis apartados, con su nombre, y marca el abierto", () => {

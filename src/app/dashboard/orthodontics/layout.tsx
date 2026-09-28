@@ -19,22 +19,13 @@
 // (/dashboard/contratar/ortodoncia). Esa página vive FUERA de esta ruta a
 // propósito: este guardia está en un layout, y un layout no se vuelve a
 // ejecutar al navegar entre las páginas que cuelgan de él. Así, para quien no
-// tiene el módulo este layout no llega a montarse nunca. La decisión está en
-// `decidirEntradaAlModulo` (src/lib/orthodontics/contratar.ts), pura y con tests.
+// tiene el módulo este layout no llega a montarse. El guardia es
+// `exigirModuloOrtodoncia` (src/lib/orthodontics/exigir-modulo.ts), que además
+// corre en cada página; la decisión es `decidirEntradaAlModulo`, pura y con tests.
 export const dynamic = "force-dynamic";
 
 import type { ReactNode } from "react";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
-import { hasPermission } from "@/lib/auth/permissions";
-import {
-  COOKIE_VISTA_PREVIA_SIN_MODULO,
-  decidirEntradaAlModulo,
-  moduloActivoALaVista,
-  vistaPreviaSinModulo,
-} from "@/lib/orthodontics/contratar";
+import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { RaizModulo } from "@/components/specialties/orthodontics/modulo/piezas";
 import { SubmenuOrtodoncia } from "@/components/specialties/orthodontics/modulo/submenu";
 
@@ -52,30 +43,9 @@ export default async function OrthodonticsModuleLayout({
 }: {
   children: ReactNode;
 }) {
-  const user = await getCurrentUser();
-  const active = await hasActiveOrthodonticsModule(user.clinicId);
-  // La vista previa «sin módulo» solo puede QUITAR el acceso a la vista, nunca
-  // darlo, y en producción se ignora.
-  const moduloActivo = moduloActivoALaVista(
-    active,
-    vistaPreviaSinModulo({
-      nodeEnv: process.env.NODE_ENV,
-      cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
-    }),
-  );
-
-  const entrada = decidirEntradaAlModulo({
-    esDental: user.clinic.category === "DENTAL",
-    // P3 (Ola 1, ws1-t3): "specialties.orthodontics" es el permiso UI del
-    // módulo — sin él (por ejemplo, alguien a quien la clínica se lo quitó
-    // desde Equipo → Permisos) tampoco entra por URL directa.
-    tienePermiso: hasPermission(
-      { role: user.role, permissionsOverride: user.permissionsOverride },
-      "specialties.orthodontics",
-    ),
-    moduloActivo,
-  });
-  if (entrada.tipo === "redirigir") redirect(entrada.a);
+  // El mismo guardia que corre en cada página del módulo (ver exigir-modulo.ts
+  // para por qué en los dos sitios).
+  await exigirModuloOrtodoncia();
 
   // Diseño (ws1-t3): la raíz del módulo trae los tokens y la tipografía del
   // rediseño; el submenú marca el apartado abierto y se queda pegado arriba.

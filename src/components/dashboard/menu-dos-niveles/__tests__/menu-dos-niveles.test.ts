@@ -311,6 +311,7 @@ test("candado: el menú lo pinta con el ícono de candado de la fuente y sigue s
   const viejo = leer("src/components/dashboard/sidebar.tsx");
   assert.match(viejo, /shouldShowItem\(item, props\.user, props\.clinicCategory, clinicModuleKeys, lockedModuleKeys\)/);
   assert.match(viejo, /\{item\.locked && \(/);
+  assert.match(viejo, /\{item\.locked && ` · \$\{t\("menuDosNiveles\.moduloConCandadoCorto"\)\}`\}/, "recogido, el aviso va en el tooltip");
 });
 
 // ── Íconos ───────────────────────────────────────────────────────────

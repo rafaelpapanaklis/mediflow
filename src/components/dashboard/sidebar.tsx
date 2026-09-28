@@ -460,6 +460,7 @@ export function Sidebar(props: SidebarProps) {
                 }}
               >
                 {t(`sidebar.nav.${item.id}`)}
+                {item.locked && ` · ${t("menuDosNiveles.moduloConCandadoCorto")}`}
                 {count > 0 && (
                   <span
                     style={{

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BellRing, Users, Wallet } from "lucide-react";
+import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { OrthoModulePlaceholder } from "@/components/specialties/orthodontics/OrthoModulePlaceholder";
 import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 
@@ -9,7 +10,8 @@ import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 //
 // Diseño (ws1-t3): el cartel le habla a la clínica, no a quien programa, y
 // dice dónde se ve HOY la cobranza.
-export default function OrthodonticsCobranzaPage() {
+export default async function OrthodonticsCobranzaPage() {
+  await exigirModuloOrtodoncia();
   return (
     <OrthoModulePlaceholder
       icon={Wallet}

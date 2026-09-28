@@ -27,11 +27,14 @@ export function TarjetaPrecio({
   precios,
   cicloInicial,
   puedeContratar,
+  pagoEnCurso = false,
 }: {
   precios: ResumenDePrecios;
   /** null = no hay ningún precio configurado. */
   cicloInicial: CicloCobro | null;
   puedeContratar: boolean;
+  /** Ya hay un pago hecho o pendiente: se enseña el precio, pero no el botón. */
+  pagoEnCurso?: boolean;
 }) {
   const grupo = useId();
   const [ciclo, setCiclo] = useState<CicloCobro | null>(cicloInicial);
@@ -50,10 +53,11 @@ export function TarjetaPrecio({
   }
 
   const importe = ciclo === "annual" ? precios.anualMxn : precios.mensualMxn;
-  const hayAhorro = precios.ahorroAnualMxn > 0;
+  // Un ahorro que no llega al uno por ciento no se anuncia («Ahorras 0 %»).
+  const hayAhorro = precios.ahorroAnualMxn > 0 && precios.ahorroPct >= 1;
 
   async function contratar() {
-    if (enviando || ciclo === null) return;
+    if (enviando || pagoEnCurso || ciclo === null) return;
     setEnviando(true);
     setError(null);
     try {
@@ -100,7 +104,7 @@ export function TarjetaPrecio({
                   setCiclo(c);
                   setError(null);
                 }}
-                disabled={enviando}
+                disabled={enviando || pagoEnCurso}
                 className={s.cicloRadio}
               />
               <span className={s.cicloCara}>
@@ -141,7 +145,15 @@ export function TarjetaPrecio({
         </p>
       </div>
 
-      {puedeContratar ? (
+      {pagoEnCurso ? (
+        <div className={s.sinPermiso} role="note">
+          <CreditCard size={16} strokeWidth={1.9} aria-hidden />
+          <div>
+            <strong>Ya hay un pago en curso</strong>
+            No hace falta pagar otra vez. En cuanto se confirme, Ortodoncia se activa sola.
+          </div>
+        </div>
+      ) : puedeContratar ? (
         <>
           <ButtonNew
             type="button"

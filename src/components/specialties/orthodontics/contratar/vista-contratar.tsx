@@ -150,7 +150,15 @@ export function VistaContratar({
         </section>
 
         <aside className={s.columnaPrecio} aria-label="Precio y contratación">
-          <TarjetaPrecio precios={precios} cicloInicial={cicloInicial} puedeContratar={puedeContratar} />
+          <TarjetaPrecio
+            precios={precios}
+            cicloInicial={cicloInicial}
+            puedeContratar={puedeContratar}
+            // Con un pago ya hecho (o pendiente de confirmarse) NO se ofrece
+            // pagar otra vez: el webhook tarda unos segundos en activar el
+            // módulo y, en ese rato, un segundo clic abriría otra suscripción.
+            pagoEnCurso={compra === "ok" || compra === "pendiente"}
+          />
         </aside>
       </div>
     </div>

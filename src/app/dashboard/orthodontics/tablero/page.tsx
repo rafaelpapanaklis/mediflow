@@ -1,7 +1,7 @@
 // Ortodoncia — Tablero (T1-T7, ws1-t2, Ola 1). El vistazo del doctor y de la
 // dirección: activos, controles de hoy, saldos vencidos, producción,
 // conversión de valoraciones, lo que va a entrar por mensualidades y
-// colocaciones/retiros del mes. La guarda de módulo ya corrió en el layout.
+// colocaciones/retiros del mes. La guarda de módulo corre en el layout y, otra vez, aquí.
 //
 // La lista de "Controles de hoy" monta EnviarIndicacionesButton (Paciente y
 // WhatsApp, W5 — reasignado a esta parte): manda por WhatsApp las
@@ -13,10 +13,12 @@
 export const dynamic = "force-dynamic";
 
 import { getCurrentUser } from "@/lib/auth";
+import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { loadOrthoTableroData, loadTodayControlsWithIndications } from "@/lib/orthodontics/tablero-data";
 import { VistaTablero } from "@/components/specialties/orthodontics/modulo/vista-tablero";
 
 export default async function OrthodonticsTableroPage() {
+  await exigirModuloOrtodoncia();
   const user = await getCurrentUser();
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   const [data, controlesHoy] = await Promise.all([

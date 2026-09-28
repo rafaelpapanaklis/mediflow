@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CalendarClock, CalendarDays, LayoutDashboard } from "lucide-react";
+import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { OrthoModulePlaceholder } from "@/components/specialties/orthodontics/OrthoModulePlaceholder";
 import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 
@@ -9,7 +10,8 @@ import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 //
 // Diseño (ws1-t3): el cartel le habla a la clínica, no a quien programa, y
 // dice dónde se ven HOY los controles.
-export default function OrthodonticsControlesPage() {
+export default async function OrthodonticsControlesPage() {
+  await exigirModuloOrtodoncia();
   return (
     <OrthoModulePlaceholder
       icon={CalendarClock}

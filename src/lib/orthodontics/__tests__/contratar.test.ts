@@ -123,16 +123,33 @@ test("la página de contratar NO cuelga de /dashboard/orthodontics (su layout no
   assert.ok(vuelta.cancelUrl.startsWith(`https://x${RUTA_CONTRATAR_ORTODONCIA}?`));
 });
 
-test("el layout del módulo: un solo redirect, el de la decisión, y no depende de la ruta pedida", () => {
+test("el guardia del módulo corre en el layout Y en cada una de sus páginas", () => {
+  const guardia = sinComentarios(leer("src/lib/orthodontics/exigir-modulo.ts"));
+  assert.match(guardia, /^import "server-only";/);
+  assert.match(guardia, /const real = await hasActiveOrthodonticsModule\(user\.clinicId\);/, "el clinicId sale de la sesión");
+  assert.match(guardia, /esDental: user\.clinic\.category === "DENTAL",/);
+  assert.match(guardia, /"specialties\.orthodontics",/);
+  assert.match(guardia, /const entrada = decidirEntradaAlModulo\(\{/);
+  assert.match(guardia, /if \(entrada\.tipo === "redirigir"\) redirect\(entrada\.a\);/);
+  assert.equal((guardia.match(/redirect\(/g) ?? []).length, 1, "un solo redirect: el de la decisión");
+  assert.ok(!/x-pathname|headers\(\)/.test(guardia), "no decide por la ruta pedida");
+
   const layout = sinComentarios(leer(LAYOUT));
-  assert.match(layout, /const active = await hasActiveOrthodonticsModule\(user\.clinicId\);/);
-  assert.match(layout, /esDental: user\.clinic\.category === "DENTAL",/);
-  assert.match(layout, /"specialties\.orthodontics",/);
-  assert.match(layout, /const entrada = decidirEntradaAlModulo\(\{/);
-  assert.match(layout, /if \(entrada\.tipo === "redirigir"\) redirect\(entrada\.a\);/);
-  assert.equal((layout.match(/redirect\(/g) ?? []).length, 1);
+  assert.match(layout, /await exigirModuloOrtodoncia\(\);/);
+  assert.ok(layout.indexOf("await exigirModuloOrtodoncia()") < layout.indexOf("<RaizModulo>"), "se decide ANTES de pintar");
   assert.ok(!/x-pathname|headers\(\)/.test(layout), "un layout que decide por ruta se queda con la decisión vieja al navegar");
-  assert.ok(layout.indexOf("redirect(entrada.a)") < layout.indexOf("<RaizModulo>"), "se decide ANTES de pintar");
+
+  // Un layout no se vuelve a ejecutar al navegar entre sus páginas: cada una
+  // se guarda sola, antes de cargar un solo dato.
+  for (const pagina of ["tablero", "pacientes", "alertas", "cobranza", "controles"]) {
+    const codigo = sinComentarios(leer(`src/app/dashboard/orthodontics/${pagina}/page.tsx`));
+    const cuerpo = codigo.slice(codigo.indexOf("export default async function"));
+    assert.ok(cuerpo.length > 0, `${pagina}: es async`);
+    const primera = cuerpo.slice(cuerpo.indexOf("{") + 1).trimStart();
+    assert.ok(primera.startsWith("await exigirModuloOrtodoncia();"), `${pagina}: el guardia es lo PRIMERO que hace`);
+  }
+  // La raíz solo redirige al Tablero, que se guarda solo.
+  assert.match(leer("src/app/dashboard/orthodontics/page.tsx"), /redirect\("\/dashboard\/orthodontics\/tablero"\);/);
 });
 
 test("la página: se guarda a sí misma, y los precios salen de la tabla modules", () => {
@@ -164,7 +181,7 @@ test("el botón llama al checkout de ws1-t2 con el ciclo elegido y vuelve a esta
   assert.match(tarjeta, /^"use client";/);
   assert.match(tarjeta, /fetch\("\/api\/marketplace\/module-checkout"/);
   assert.match(tarjeta, /moduleKey: ORTHODONTICS_MODULE_KEY,\s*billing: ciclo,\s*method: "card",\s*origin: "contratar",/);
-  assert.match(tarjeta, /\{puedeContratar \? \(/, "sin permiso no hay botón");
+  assert.match(tarjeta, /\) : puedeContratar \? \(/, "sin permiso no hay botón");
   assert.match(tarjeta, /Pídeselo al administrador/);
 });
 
@@ -187,6 +204,35 @@ test("contrata el dueño o un administrador; los demás ven el precio pero no el
 });
 
 // ── 4. El precio ─────────────────────────────────────────────────────
+
+test("«pago recibido» no se cree porque lo diga la URL: se confirma con Stripe, para esta clínica", () => {
+  const pagina = sinComentarios(leer(PAGINA));
+  assert.match(pagina, /pedida === "ok" &&\s*!\(await pagoDeModuloConfirmado\(\{ sessionId, clinicId: user\.clinicId, moduleKey: ORTHODONTICS_MODULE_KEY \}\)\)\s*\? null/);
+  assert.ok(pagina.indexOf("pagoDeModuloConfirmado(") < pagina.indexOf("decidirEntradaAContratar("), "se confirma ANTES de decidir");
+  const confirmar = sinComentarios(leer("src/lib/marketplace/module-checkout-session.ts"));
+  assert.match(confirmar, /sesion\.status === "complete"/);
+  assert.match(confirmar, /sesion\.metadata\?\.clinicId === clinicId/, "una sesión de otra clínica no vale");
+  assert.match(confirmar, /sesion\.metadata\?\.moduleKey === moduleKey/);
+  assert.match(confirmar, /sesion\.metadata\?\.kind === MODULE_SUBSCRIPTION_KIND/);
+  assert.match(confirmar, /catch \{\s*return false;\s*\}/, "falla cerrado");
+  assert.ok(!/\.update\(|\.create\(|\.del\(|\.cancel\(/.test(confirmar), "solo lee");
+});
+
+test("con un pago hecho o pendiente no se ofrece pagar otra vez", () => {
+  const vista = sinComentarios(leer(VISTA));
+  assert.match(vista, /pagoEnCurso=\{compra === "ok" \|\| compra === "pendiente"\}/);
+  const tarjeta = sinComentarios(leer(TARJETA));
+  assert.match(tarjeta, /if \(enviando \|\| pagoEnCurso \|\| ciclo === null\) return;/);
+  assert.match(tarjeta, /\{pagoEnCurso \? \(/);
+  assert.ok(tarjeta.indexOf("{pagoEnCurso ? (") < tarjeta.indexOf("<ButtonNew"), "el aviso va en lugar del botón");
+});
+
+test("un ahorro que no llega al uno por ciento no se anuncia", () => {
+  const r = resumirPrecios({ mensualMxn: 129, anualMxn: 1547 });
+  assert.equal(r.ahorroAnualMxn, 1);
+  assert.equal(r.ahorroPct, 0);
+  assert.match(sinComentarios(leer(TARJETA)), /const hayAhorro = precios\.ahorroAnualMxn > 0 && precios\.ahorroPct >= 1;/);
+});
 
 test("con los precios de la base ($129 y $1,316): ahorro del 15 %, $232 al año, $110 al mes", () => {
   const r = resumirPrecios({ mensualMxn: 129, anualMxn: 1316 });
