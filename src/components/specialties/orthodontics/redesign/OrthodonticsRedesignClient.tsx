@@ -18,6 +18,7 @@ import {
 } from "./sections/SectionPhotos";
 import { SectionFinance } from "./sections/SectionFinance";
 import { ResumenCobranza } from "../cobranza/ResumenCobranza";
+import { HygieneTrendCard } from "../hygiene/HygieneTrendCard";
 import { AlineadoresPanel } from "../alineadores/AlineadoresPanel";
 import {
   SectionRetention,
@@ -229,6 +230,15 @@ export interface OrthodonticsRedesignClientProps {
   /** Ola 1 (ws1-t6) — A5/A6/A7/A11: cambiar doctor tratante, responsable del
    *  pago, fecha de colocación o estado del caso ya abierto. */
   onUpdateCaseSettings?: (payload: DrawerCaseSettingsPayload) => Promise<void> | void;
+  /** Ola 1 (ws1-t6) — A10: si ya existe un consentimiento GENERAL de
+   *  ortodoncia firmado (`ConsentForm`, no el propio `OrthodonticConsent`
+   *  que se oculta). `null` = todavía cargando/no se pudo saber; no pinta
+   *  nada mientras tanto. El enlace de la pestaña "Consentimientos" se arma
+   *  aquí mismo con `vm.patient.id` — es navegación real de página (`<a>`),
+   *  no client-side: el `tab` de la ficha solo lee `?tab=` en el montaje
+   *  inicial (`useState(initialTab)`), así que un `router.push` sin recarga
+   *  no cambiaría la pestaña visible. */
+  generalConsentSigned?: boolean | null;
   /** Hook para abrir wizard de wire step nuevo. Si está presente reemplaza
    *  al drawer interno G3. */
   onAddWireStep?: () => void;
@@ -355,6 +365,15 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onStartControl={() => setDrawer({ kind: "tcard-new" })}
             onAdvancePhase={t.phase ? () => setDrawer({ kind: "advance-phase" }) : undefined}
           />
+
+          {/* Ola 1 (ws1-t6, Alta del caso) — A10: consentimiento GENERAL
+              (no el propio OrthodonticConsent, que se oculta) sin firmar. */}
+          {vm.diagnosis && props.generalConsentSigned === false ? (
+            <ConsentMissingBanner patientId={vm.patient.id} />
+          ) : null}
+
+          {/* Ola 1 (ws1-t4, Control y agenda) — C8 */}
+          <HygieneTrendCard treatmentCards={vm.treatmentCards} />
 
           <SectionDiagnosis
             diagnosis={vm.diagnosis}
@@ -716,6 +735,31 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * A10 — aviso de que falta el consentimiento GENERAL de ortodoncia firmado.
+ * El enlace es un `<a>` normal (navegación real de página), no un botón con
+ * `router.push`: la pestaña de la ficha (`tab`) solo lee `?tab=` en el
+ * montaje inicial (`useState(initialTab)` en patient-detail-client.tsx, sin
+ * `useEffect` que la resincronice), así que un push sin recargar no movería
+ * la vista de un tab ya montado a "Consentimientos".
+ */
+function ConsentMissingBanner({ patientId }: { patientId: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+      <span>
+        <strong>Falta el consentimiento informado firmado</strong> (A10) — el caso no tiene un
+        consentimiento general de ortodoncia firmado en la pestaña &ldquo;Consentimientos&rdquo;.
+      </span>
+      <a
+        href={`/dashboard/patients/${patientId}?tab=consentimientos`}
+        className="whitespace-nowrap rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-900/40"
+      >
+        Ir a Consentimientos
+      </a>
     </div>
   );
 }
