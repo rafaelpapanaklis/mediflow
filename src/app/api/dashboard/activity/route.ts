@@ -14,6 +14,8 @@ import {
   eventoDeCitaCompletada,
   eventoDePago,
 } from "@/lib/orthodontics/actividad-campana";
+import { avisosDeFotos } from "@/lib/orthodontics/fotos-paciente";
+import { cargarFotosPorRevisar } from "@/lib/orthodontics/fotos-paciente-db";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +31,7 @@ const CACHE_TTL_MS = 30_000;
 
 interface ActivityEvent {
   id: string;
-  type: "payment" | "patient_new" | "appointment_completed" | "booking_request" | "ortho_case";
+  type: "payment" | "patient_new" | "appointment_completed" | "booking_request" | "ortho_case" | "ortho_photo";
   title: string;
   subtitle?: string;
   amount?: number;
@@ -177,11 +179,16 @@ export async function GET(req: NextRequest) {
             .catch(() => []);
         }
 
+        // Fotos que el paciente mandó desde su portal y nadie ha revisado
+        // (ws1-t5, hallazgo 96). Mismo acceso que el resto de ortodoncia y la
+        // misma visibilidad por paciente; nunca lanza.
+        const fotosPorRevisar = casosNuevos !== null ? await cargarFotosPorRevisar(ctx.clinicId, viewer) : [];
+
         return [
           facturas,
           pacientes,
           citas,
-          { acceso: casosNuevos !== null, casosNuevos: casosNuevos ?? [], facturasDeCaso },
+          { acceso: casosNuevos !== null, casosNuevos: casosNuevos ?? [], facturasDeCaso, fotosPorRevisar },
         ] as const;
       },
     ),
@@ -232,6 +239,8 @@ export async function GET(req: NextRequest) {
       at: a.updatedAt,
     })),
     ...orto.casosNuevos.map(eventoDeCasoAbierto),
+    // Un aviso por caso con fotos del paciente sin revisar; lleva al caso.
+    ...avisosDeFotos(orto.fotosPorRevisar).map((a) => ({ ...a, type: "ortho_photo" as const })),
     ...solicitudes.map(s => ({
       id: `req-${s.id}`,
       type: "booking_request" as const,
