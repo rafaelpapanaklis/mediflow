@@ -42,7 +42,6 @@ import {
   computeOverdueBalances,
   computePlacementsAndRemovals,
   computeProductionByDoctor,
-  computeValoracionesSummary,
   isSameCalendarMonthUtc,
   type MonthlyProjectionBucket,
   type OrthoCaseSummary,
@@ -51,6 +50,7 @@ import {
   type ProductionByDoctor,
   type ValoracionesSummary,
 } from "./specialty-kpis";
+import { cargarValoracionesDelTablero } from "./valoraciones-tablero-db";
 
 function esRelacionAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
@@ -225,8 +225,12 @@ export interface OrthoTableroData {
   overdue: OverdueBalanceSummary;
   /** T4 — producción del mes, por doctor tratante. */
   productionByDoctor: ProductionByDoctor[];
-  /** T5 */
-  valoraciones: ValoracionesSummary;
+  /**
+   * T5 — citas de valoración de los últimos 90 días y cuántas abrieron caso
+   * (`valoraciones-tablero.ts`). `agendadas` y `dias` son opcionales para no
+   * romper a quien arma este objeto a mano con la forma anterior.
+   */
+  valoraciones: ValoracionesSummary & { agendadas?: number; dias?: number };
   /** T6 — próximos 6 meses. */
   monthlyProjection: MonthlyProjectionBucket[];
   /** T7 */
@@ -241,30 +245,25 @@ export async function loadOrthoTableroData(
 ): Promise<OrthoTableroData> {
   const { cases, invoiceIdByPlanId, invoicesById } = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
 
-  const diagnosisPatientIds = await prisma.orthodonticDiagnosis
-    .findMany({
-      where: { clinicId, deletedAt: null, AND: relatedPatientVisibilityAnd(viewer) },
-      select: { patientId: true },
-    })
-    .then((rows) => Array.from(new Set(rows.map((r) => r.patientId))));
-
   const { startUtc: todayStart, endUtc: todayEnd } = calendarDayRangeUtc(hoyEnZona(ahora, zonaHoraria), zonaHoraria);
 
-  const [controlsToday, quotes] = await Promise.all([
+  // Valoraciones (fila 16 de la revisión de lógica de uso): antes se contaban
+  // presupuestos de cualquier procedimiento y fecha; ahora, citas de
+  // valoración de ortodoncia. Ver valoraciones-tablero.ts.
+  const [controlsToday, valoraciones] = await Promise.all([
     prisma.appointment.count({
       where: {
         clinicId,
         type: TIPO_CITA_CONTROL_ORTO,
         startsAt: { gte: todayStart, lt: todayEnd },
+        // Sin las canceladas: el mismo criterio que la lista de al lado
+        // (`loadTodayControlsWithIndications`) y que la pantalla Controles.
+        // Antes el indicador decía 3 y la lista enseñaba 2.
+        status: { not: "CANCELLED" },
         AND: relatedPatientVisibilityAnd(viewer),
       },
     }),
-    diagnosisPatientIds.length > 0
-      ? prisma.quote.findMany({
-          where: { clinicId, patientId: { in: diagnosisPatientIds } },
-          select: { status: true, acceptedAt: true, rejectedAt: true },
-        })
-      : Promise.resolve([]),
+    cargarValoracionesDelTablero(clinicId, viewer, ahora),
   ]);
 
   // Producción del mes: cada pago de la factura de un caso, atribuido al
@@ -287,7 +286,7 @@ export async function loadOrthoTableroData(
     controlsToday,
     overdue: computeOverdueBalances(cases),
     productionByDoctor: computeProductionByDoctor(productionPayments),
-    valoraciones: computeValoracionesSummary(quotes),
+    valoraciones,
     monthlyProjection: computeMonthlyProjection(cases, ahora, 6),
     placementsAndRemovals: computePlacementsAndRemovals(cases, ahora),
   };
