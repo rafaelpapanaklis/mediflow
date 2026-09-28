@@ -1591,6 +1591,38 @@ model PatientCredit {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// HISTORIAL DE PAGOS MIGRADO (ws1-t6, sep-2026). Un pago que YA ocurrió en el
+// sistema anterior (Dentalink "Pagos pacientes" y equivalentes). Es HISTORIA
+// pura: nunca toca `invoices`/`payments` (por eso Caja, cortes de caja, CFDI y
+// WhatsApp lo ignoran sin código nuevo — ambos solo leen esas dos tablas), y
+// nunca cambia el saldo del paciente (el saldo actual viene del archivo de
+// saldos, `balancesHandler`). Sin relación Prisma a propósito (mismo criterio
+// que PatientCredit con Invoice/Payment/User): Clinic/Patient no cambian de
+// forma. Tabla creada a mano por sql/pagos-historial-migrados.sql — el código
+// tolera que aún no exista (P2021/P2022), igual que patient-credit.ts.
+// ═══════════════════════════════════════════════════════════════════════════
+model MigratedPayment {
+  id          String   @id @default(cuid())
+  clinicId    String
+  patientId   String
+  /// Siempre positivo — un pago histórico nunca es negativo.
+  amount      Float
+  method      String?
+  /// Concepto o folio del pago tal como venía en el archivo de origen.
+  concept     String?
+  doctorId    String?
+  /// Fecha ORIGINAL del pago en el sistema de origen (no la de importación).
+  paidAt      DateTime
+  /// "Dentalink", o "otro sistema" si el asistente no dijo cuál era.
+  origin      String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([clinicId, patientId, paidAt])
+  @@map("migrated_payments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Anticipo por WhatsApp con Mercado Pago (WS1-T5). Tablas creadas a mano por
 // sql/anticipo-whatsapp.sql — nunca con `prisma migrate`.
 // ═══════════════════════════════════════════════════════════════════════════
