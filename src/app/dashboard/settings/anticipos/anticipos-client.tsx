@@ -34,6 +34,7 @@ import {
   PANEL_HORAS_MAX,
   PANEL_HORAS_MIN,
   formatoPesos,
+  notasAnticipoReciente,
   type ModoAnticipo,
   type ModoAnticipoPanel,
 } from "@/lib/anticipos/core";
@@ -59,17 +60,6 @@ const MOTIVOS: Record<string, string> = {
   plataforma: "DaleControl todavía no tiene activados los cobros con Mercado Pago.",
   canje: "Mercado Pago no confirmó la autorización. Vuelve a intentarlo.",
   guardar: "No se pudo guardar la conexión de forma segura. Avisa a soporte.",
-};
-
-/** Lo que Mercado Pago dice de un intento que no se aprobó, en español. */
-const ESTADOS_MP: Record<string, string> = {
-  rejected: "rechazado",
-  in_process: "en revisión",
-  pending: "pendiente",
-  cancelled: "cancelado",
-  refunded: "devuelto",
-  charged_back: "contracargo",
-  otra_cuenta: "pagó en la cuenta de Mercado Pago anterior; vuelve a conectar esa cuenta para aplicarlo",
 };
 
 const ESTADOS: Record<string, { texto: string; tono: "neutro" | "info" | "exito" | "alerta" | "peligro" }> = {
@@ -138,6 +128,11 @@ export function AnticiposClient({
   const { plataforma, cuenta, comision } = datos;
   const puedeConectar = datos.tablasListas && plataforma.lista;
   const puedeCobrar = puedeConectar && cuenta.conectada;
+  // ws1-t1 (M5): el anticipo PEDIDO DESDE EL PANEL (3b) no es del bot — puede
+  // cobrarse por Mercado Pago O por transferencia (canales independientes,
+  // fase 2), así que su sección no puede apagarse solo porque falte Mercado
+  // Pago. El servidor ya decide esto (pantalla.server.ts, configPanel.disponible).
+  const puedeConfigurarPanel = datos.configPanel.disponible;
 
   async function guardar() {
     setGuardando(true);
@@ -499,21 +494,21 @@ export function AnticiposClient({
           icono={<Wallet size={18} strokeWidth={1.75} aria-hidden />}
           titulo="Anticipo pedido desde el panel"
           subtitulo="El sugerido y el plazo cuando recepción pide un anticipo desde la cita o la factura. El monto final siempre lo puede cambiar quien lo pide."
-          apagada={!puedeCobrar}
+          apagada={!puedeConfigurarPanel}
           nota={
-            !puedeCobrar ? (
-              <Aviso tono="info">Conecta primero la cuenta de Mercado Pago de la clínica.</Aviso>
+            !puedeConfigurarPanel ? (
+              <Aviso tono="info">Conecta la cuenta de Mercado Pago de la clínica o carga sus datos bancarios (abajo) para poder pedir anticipos desde el panel.</Aviso>
             ) : undefined
           }
           pie={
-            puedeCobrar ? (
+            puedeConfigurarPanel ? (
               <BotonGuardar guardando={guardandoPanel} texto="Guardar" textoGuardando="Guardando…" onClick={guardarPanel} />
             ) : undefined
           }
         >
           <Campos2>
             <Campo etiqueta="Cómo se calcula">
-              <Selector value={panelModo} onChange={(e) => setPanelModo(e.target.value as ModoAnticipoPanel)} disabled={!puedeCobrar}>
+              <Selector value={panelModo} onChange={(e) => setPanelModo(e.target.value as ModoAnticipoPanel)} disabled={!puedeConfigurarPanel}>
                 <option value="fixed">Monto fijo</option>
                 <option value="percent">Porcentaje del total de la factura</option>
               </Selector>
@@ -529,7 +524,7 @@ export function AnticiposClient({
                 step="1"
                 value={panelMonto}
                 onChange={(e) => setPanelMonto(e.target.value)}
-                disabled={!puedeCobrar}
+                disabled={!puedeConfigurarPanel}
                 placeholder="300"
               />
             </Campo>
@@ -544,7 +539,7 @@ export function AnticiposClient({
                   max={100}
                   value={panelPorcentaje}
                   onChange={(e) => setPanelPorcentaje(e.target.value)}
-                  disabled={!puedeCobrar}
+                  disabled={!puedeConfigurarPanel}
                   placeholder="20"
                 />
               </Campo>
@@ -560,7 +555,7 @@ export function AnticiposClient({
                 max={PANEL_HORAS_MAX}
                 value={panelHoras}
                 onChange={(e) => setPanelHoras(e.target.value)}
-                disabled={!puedeCobrar}
+                disabled={!puedeConfigurarPanel}
               />
             </Campo>
           </Campos2>
@@ -672,16 +667,9 @@ export function AnticiposClient({
 
 function FilaAnticipo({ r, tz }: { r: AnticipoReciente; tz: string }) {
   const est = ESTADOS[r.estado] ?? { texto: r.estado, tono: "neutro" as const };
-  const notas: string[] = [];
-  if (r.estado === "PAID") {
-    notas.push(r.citaConfirmada ? "Cita confirmada" : "El horario ya se había liberado: quedó como saldo a favor");
-  }
-  if ((r.estado === "PENDING" || r.estado === "EXPIRED") && r.ultimoEstadoMp && r.ultimoEstadoMp !== "approved") {
-    const detalle = r.ultimoEstadoMp === "otra_cuenta" && r.ultimoDetalleMp ? ` (${r.ultimoDetalleMp})` : "";
-    notas.push(`Último intento: ${ESTADOS_MP[r.ultimoEstadoMp] ?? r.ultimoEstadoMp}${detalle}`);
-  }
-  if (r.avisoError) notas.push(`Aviso al paciente no enviado: ${r.avisoError}`);
-  notas.push(...r.anomalias);
+  // ws1-t1 (M6): lógica PURA en core.ts (notasAnticipoReciente), probada ahí
+  // — sin cita ligada nunca hubo un apartado que confirmar o liberar.
+  const notas = notasAnticipoReciente(r);
   return (
     <tr>
       <td className={cr.tablaApagado}>{fecha(r.creado, tz)}</td>

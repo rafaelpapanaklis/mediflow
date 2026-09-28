@@ -7,7 +7,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { enmascarar, plataformaAnticipos, type EstadoCuentaMp, type PlataformaAnticipos } from "./cuenta.server";
 import { MINUTOS_DEFAULT, PANEL_HORAS_DEFAULT, type ModoAnticipo, type ModoAnticipoPanel, type ModoComision } from "./core";
-import { leerDatosBancariosParaEditar, type CuentaBancariaSede } from "./datos-bancarios.server";
+import { leerDatosBancarios, leerDatosBancariosParaEditar, type CuentaBancariaSede } from "./datos-bancarios.server";
 import { parseWaTemplates } from "@/lib/whatsapp/template-config";
 
 export interface AnticipoReciente {
@@ -37,10 +37,13 @@ export interface PantallaAnticipos {
   cuenta: EstadoCuentaMp;
   config: { activo: boolean; modo: ModoAnticipo; monto: number; porcentaje: number; minutos: number };
   /**
-   * Anticipo pedido DESDE EL PANEL (cita o factura), ws1-t3 fase 1. Config
+   * Anticipo pedido DESDE EL PANEL (cita o factura), ws1-t3 fase 1-2. Config
    * PROPIA, separada de `config` de arriba (el bot no se toca). `disponible` =
-   * hay cuenta de Mercado Pago conectada (no depende de `config.activo`, que
-   * es el interruptor del bot).
+   * hay Mercado Pago conectado O datos bancarios cargados (fase 2): los dos
+   * canales son INDEPENDIENTES (ver canalesAnticipoPanel en panel.server.ts),
+   * así que esta sección no puede depender solo de Mercado Pago (ws1-t1,
+   * hallazgo M5) — una clínica que solo cobra por transferencia también
+   * necesita fijar su sugerido/plazo.
    */
   configPanel: { disponible: boolean; modo: ModoAnticipoPanel; monto: number; porcentaje: number; horas: number };
   /**
@@ -240,9 +243,13 @@ export async function leerPantallaAnticipos(
   // lectura, fuera del try/catch de abajo: son tablas/columnas propias, y una
   // que falte no debe apagar la otra ni el resto de la pantalla (mismo
   // criterio que leerConfigPanel).
-  const [datosBancarios, plantillas] = await Promise.all([
+  const [datosBancarios, plantillas, transferenciaDisponible] = await Promise.all([
     leerDatosBancariosParaEditar(clinicId),
     leerPlantillasOpcionales(clinicId),
+    // "Usable" de verdad (CLABE con dígito verificador válido), no solo
+    // "algo guardado": el mismo criterio que decide si el canal transferencia
+    // se ofrece en «Pedir anticipo» (canalesAnticipoPanel).
+    leerDatosBancarios(clinicId).then((v) => !!v),
   ]);
 
   try {
@@ -281,7 +288,7 @@ export async function leerPantallaAnticipos(
         porcentaje: fila?.depositPercent ?? 0,
         minutos: fila?.holdMinutes ?? MINUTOS_DEFAULT,
       },
-      configPanel: await leerConfigPanel(clinicId, conectada && plataforma.lista),
+      configPanel: await leerConfigPanel(clinicId, (conectada && plataforma.lista) || transferenciaDisponible),
       portal: { activo: conectada && plataforma.lista && fila?.portalPaymentsEnabled !== false },
       comision: {
         modo: (fila?.marketplaceFeeMode as ModoComision) ?? "fixed",
