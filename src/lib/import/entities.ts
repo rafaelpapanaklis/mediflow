@@ -25,6 +25,9 @@ import {
 } from "@/app/api/patient-documents/_lib/service";
 import { AMOUNT_FORMAT_FIELD, AMOUNT_FORMAT_KEY, VALUE_UNLINKED, type PreviewRow, type UnresolvedRef } from "./types";
 import { cargarExternos, guardarExternos, limpiarId } from "./externos";
+// Historial de pagos migrado (ws1-t6): construido en su propio archivo mientras
+// este módulo cambiaba en paralelo (ws1-t12); solo se registra aquí.
+import { paymentHistoryHandler } from "./pagos-historial/handler";
 import {
   crearLectorMontos,
   horaAdjunta,
@@ -3594,4 +3597,5 @@ export const HANDLERS: Record<string, EntityHandler> = {
   treatmentPlans: treatmentPlansHandler,
   odontogram: odontogramHandler,
   treatmentNotes: treatmentNotesHandler,
+  paymentHistory: paymentHistoryHandler,
 };

@@ -8,15 +8,13 @@
 //   · Se ve, de solo lectura, en la ficha del paciente ("Pagos anteriores
 //     (migrados)" — ver leer.ts + la tarjeta de la ficha).
 //
-// Construido en un archivo NUEVO (no en entities.ts) porque ws1-t12 está
-// cambiando el motor/detección/UI del asistente en paralelo. Este handler es
+// Construido en un archivo NUEVO (no en entities.ts) porque ws1-t12 estaba
+// cambiando el motor/detección/UI del asistente en paralelo mientras se hizo
+// este handler; se registró en entities.ts/detect-entity.ts/client.ts en
+// cuanto ws1-t12 quedó commiteado (mismo prompt, paso final). Este handler es
 // EntityHandler-compatible (mismo shape que engine.ts espera) y se invoca
 // directo con `runImport(paymentHistoryHandler, opts)` desde su propia ruta
-// (src/app/api/import/payment-history/route.ts) — NO pasa por el registro de
-// entities.ts todavía. `entity`/`Entity` de types.ts no declara este tipo
-// ("paymentHistory"): se castea vía `unknown` a propósito para no tocar ese
-// archivo compartido; el registro real (entities.ts + detección + el wizard)
-// es el último paso de esta tarea, cuando ws1-t12 esté commiteado.
+// (src/app/api/import/payment-history/route.ts).
 //
 // Multi-tenant: clinicId SIEMPRE de la sesión (runImport lo pasa).
 
@@ -25,7 +23,6 @@ import { round2 } from "@/lib/invoice-totals";
 import {
   AMOUNT_FORMAT_FIELD,
   AMOUNT_FORMAT_KEY,
-  type Entity,
   type PreviewRow,
 } from "../types";
 import {
@@ -73,11 +70,7 @@ function rowDbErrorMessage(e: any): string {
 }
 
 export const paymentHistoryHandler: EntityHandler = {
-  // Cast a propósito: "paymentHistory" no está (todavía) en el union Entity de
-  // types.ts — ver nota de cabecera. El shape del objeto es el mismo que
-  // exige EntityHandler; runImport nunca compara `entity` contra el union,
-  // solo lo usa como etiqueta en las respuestas.
-  entity: "paymentHistory" as unknown as Entity,
+  entity: "paymentHistory",
   auditEntityType: "invoice",
   sheetNames: ["pagos", "pago", "historialpagos", "pagospacientes", "payments"],
   headerVariants: {

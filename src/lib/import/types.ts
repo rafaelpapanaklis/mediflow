@@ -12,6 +12,7 @@
 //   POST /api/import/treatment-plans   (entity="treatmentPlans")
 //   POST /api/import/odontogram        (entity="odontogram")
 //   POST /api/import/treatment-notes   (entity="treatmentNotes")
+//   POST /api/import/payment-history   (entity="paymentHistory")
 // FormData: file, dryRun("true"|"false"), skipDuplicates, columnMapping?(JSON),
 //           origin?(id del perfil de origen), valueMapping?(JSON, ver ValueMapping),
 //           sheet?(nombre de la pestaña, OBLIGATORIO en un .xlsx de varias hojas: sin él,
@@ -29,7 +30,8 @@ export type Entity =
   | "quotes"
   | "treatmentPlans"
   | "odontogram"
-  | "treatmentNotes";
+  | "treatmentNotes"
+  | "paymentHistory";
 
 /**
  * Mapeo columna(header tal cual en el archivo) -> campo canónico de la entidad.
@@ -50,6 +52,8 @@ export type Entity =
  *                   condition | notes
  *   treatmentNotes: name | lastName | phone | email | patientExternalId | folio | date |
  *                   doctor | title | text
+ *   paymentHistory: name | lastName | phone | email | patientExternalId | externalId | amount |
+ *                   method | date | doctor | description
  */
 export type ColumnMapping = Record<string, string>;
 

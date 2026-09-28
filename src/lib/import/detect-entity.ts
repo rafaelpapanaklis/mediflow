@@ -178,6 +178,7 @@ export function mejorEntidad(guesses: EntityGuess[]): { entity: Entity | null; c
 export const ENTITY_IMPORT_ORDER: Entity[] = [
   "patients",
   "balances",
+  "paymentHistory",
   "appointments",
   "medicalHistory",
   "clinicalNotes",
