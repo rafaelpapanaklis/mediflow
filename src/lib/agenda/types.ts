@@ -47,7 +47,7 @@ export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
   EQUIPMENT: "Equipo",
   CONSULTORIO_DENTAL: "Consultorio Dental",
   CONSULTORIO_GENERAL: "Consultorio General",
-  SILLA_DENTAL: "Silla Dental",
+  SILLA_DENTAL: "Sillón dental",
   SALA_DE_ESPERA: "Sala de Espera",
   RADIOGRAFIA: "Radiografía",
   LABORATORIO: "Laboratorio",

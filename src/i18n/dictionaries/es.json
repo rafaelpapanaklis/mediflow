@@ -2364,7 +2364,7 @@
       "registerFirst": "Registrar primera consulta →",
       "consultLabel": "Consulta",
       "editUnavailableTitle": "Edición no disponible para este tipo de consulta",
-      "editUnavailableBody": "Solo las consultas dentales se pueden editar inline por ahora. Otros tipos (nutrición, psicología, medicina general) tendrán este flujo en próximos PRs.",
+      "editUnavailableBody": "Esta nota es de otro tipo de consulta y solo se puede leer.",
       "deleteDraft": "Eliminar borrador"
     },
     "note": {
@@ -2778,8 +2778,8 @@
           "other": "Tiene {count} registros de especialidad (ortodoncia, pediatría o periodoncia)"
         },
         "credit": {
-          "one": "Tiene 1 saldo a favor o paquete prepagado sin usar",
-          "other": "Tiene {count} saldos a favor o paquetes prepagados sin usar"
+          "one": "Tiene 1 saldo a favor sin usar",
+          "other": "Tiene {count} saldos a favor sin usar"
         },
         "related": "Tiene información ligada que debe conservarse"
       }
@@ -3048,9 +3048,9 @@
       "fieldReceivingDoctor": "Médico receptor",
       "receivingDoctorPlaceholder": "Dr/a. nombre",
       "fieldSpecialty": "Especialidad solicitada",
-      "specialtyPlaceholder": "Cardiología, Oncología…",
+      "specialtyPlaceholder": "Cirugía maxilofacial, Endodoncia, Periodoncia…",
       "fieldReason": "Motivo de la referencia *",
-      "reasonPlaceholder": "Ej: requiere evaluación cardiológica",
+      "reasonPlaceholder": "Ej: requiere valoración de cirugía maxilofacial",
       "fieldClinicalSummary": "Resumen clínico *",
       "clinicalSummaryPlaceholder": "Antecedentes, evolución, estudios realizados, hallazgos relevantes…",
       "fieldDiagnoses": "Diagnósticos relevantes (CIE-10)",
@@ -6465,7 +6465,7 @@
       "draftInvoiceTip": "Al guardar el expediente se creará automáticamente una factura borrador con estos procedimientos. Podrás editarla en la sección de Facturación antes de confirmar.",
       "prescriptionTitle": "Receta médica",
       "createPrescription": "Crear receta",
-      "prescriptionHelp": "Las recetas se crean con FK al catálogo CUMS (Sector Salud) y vigencia legal según grupo COFEPRIS. Firma electrónica con FIEL/SAT opcional.",
+      "prescriptionHelp": "Las recetas usan el catálogo de medicamentos y llevan la vigencia que marca COFEPRIS para cada grupo. La firma electrónica (e.firma del SAT) es opcional.",
       "prescriptionCreated": "Receta creada.",
       "viewVerifiablePrescription": "Ver receta verificable",
       "clinicalObservationsLabel": "Observaciones clínicas / Diagnóstico",
@@ -7978,7 +7978,7 @@
       "controlledSubstance": "Sustancia controlada — Grupo COFEPRIS {group}.",
       "legalValidity": "Vigencia legal: {eta}.",
       "generalIndicationsLabel": "Indicaciones generales (opcional)",
-      "indicationsPlaceholder": "Reposo, dieta, signos de alarma…",
+      "indicationsPlaceholder": "Dieta blanda, higiene, signos de alarma…",
       "cofeprisFolioLabel": "Folio COFEPRIS (Grupo {group})",
       "cofeprisFolioPlaceholder": "Folio del receteario oficial",
       "signWithFiel": "Firmar electrónicamente con FIEL/SAT",
@@ -7987,7 +7987,7 @@
       "noCert": "No tienes certificado FIEL/SAT activo. Configúralo en /dashboard/settings/signature para firmar recetas electrónicamente.",
       "createPrescription": "Crear receta",
       "diagnosisLabel": "Diagnóstico (opcional)",
-      "diagnosisPlaceholder": "Ej. Faringitis aguda bacteriana",
+      "diagnosisPlaceholder": "Ej. Absceso periapical agudo",
       "validityLabel": "Vigencia hasta (opcional)",
       "validityHint": "Si la dejas vacía, se calcula automáticamente según el grupo COFEPRIS.",
       "successTitle": "Receta creada",
@@ -9111,7 +9111,7 @@
       "saveChanges": "Guardar cambios",
       "catGeneral": "General",
       "catDental": "Dental",
-      "catAesthetic": "Estética",
+      "catAesthetic": "Estética dental",
       "catLaboratory": "Laboratorio",
       "catConsultation": "Consulta",
       "countProcedures": {

@@ -2364,7 +2364,7 @@
       "registerFirst": "Record first consultation →",
       "consultLabel": "Consultation",
       "editUnavailableTitle": "Editing not available for this consultation type",
-      "editUnavailableBody": "Only dental consultations can be edited inline for now. Other types (nutrition, psychology, general medicine) will get this flow in upcoming PRs.",
+      "editUnavailableBody": "This note belongs to another type of consultation and is read-only.",
       "deleteDraft": "Delete draft"
     },
     "note": {
@@ -2778,8 +2778,8 @@
           "other": "Has {count} specialty records (orthodontics, pediatrics or periodontics)"
         },
         "credit": {
-          "one": "Has 1 account credit or unused prepaid package",
-          "other": "Has {count} account credits or unused prepaid packages"
+          "one": "Has 1 unused account credit",
+          "other": "Has {count} unused account credits"
         },
         "related": "Has linked information that must be kept"
       }
@@ -3048,9 +3048,9 @@
       "fieldReceivingDoctor": "Receiving physician",
       "receivingDoctorPlaceholder": "Dr. name",
       "fieldSpecialty": "Requested specialty",
-      "specialtyPlaceholder": "Cardiology, Oncology…",
+      "specialtyPlaceholder": "Maxillofacial surgery, Endodontics, Periodontics…",
       "fieldReason": "Reason for referral *",
-      "reasonPlaceholder": "E.g.: requires cardiology evaluation",
+      "reasonPlaceholder": "E.g.: requires a maxillofacial surgery assessment",
       "fieldClinicalSummary": "Clinical summary *",
       "clinicalSummaryPlaceholder": "History, evolution, tests performed, relevant findings…",
       "fieldDiagnoses": "Relevant diagnoses (ICD-10)",
@@ -6465,7 +6465,7 @@
       "draftInvoiceTip": "When you save the record, a draft invoice with these procedures is created automatically. You can edit it in the Billing section before confirming.",
       "prescriptionTitle": "Medical prescription",
       "createPrescription": "Create prescription",
-      "prescriptionHelp": "Prescriptions are created with an FK to the CUMS catalog (Health Sector) and legal validity per COFEPRIS group. Electronic signature with FIEL/SAT optional.",
+      "prescriptionHelp": "Prescriptions use the medication catalog and carry the validity period COFEPRIS sets for each group. The electronic signature (SAT e.firma) is optional.",
       "prescriptionCreated": "Prescription created.",
       "viewVerifiablePrescription": "View verifiable prescription",
       "clinicalObservationsLabel": "Clinical observations / Diagnosis",
@@ -7978,7 +7978,7 @@
       "controlledSubstance": "Controlled substance — COFEPRIS Group {group}.",
       "legalValidity": "Legal validity: {eta}.",
       "generalIndicationsLabel": "General indications (optional)",
-      "indicationsPlaceholder": "Rest, diet, warning signs…",
+      "indicationsPlaceholder": "Soft diet, hygiene, warning signs…",
       "cofeprisFolioLabel": "COFEPRIS folio (Group {group})",
       "cofeprisFolioPlaceholder": "Folio from the official prescription pad",
       "signWithFiel": "Sign electronically with FIEL/SAT",
@@ -7987,7 +7987,7 @@
       "noCert": "You don't have an active FIEL/SAT certificate. Set it up in /dashboard/settings/signature to sign prescriptions electronically.",
       "createPrescription": "Create prescription",
       "diagnosisLabel": "Diagnosis (optional)",
-      "diagnosisPlaceholder": "E.g. Acute bacterial pharyngitis",
+      "diagnosisPlaceholder": "E.g. Acute periapical abscess",
       "validityLabel": "Valid until (optional)",
       "validityHint": "If left empty, it is calculated automatically from the COFEPRIS group.",
       "successTitle": "Prescription created",
@@ -9111,7 +9111,7 @@
       "saveChanges": "Save changes",
       "catGeneral": "General",
       "catDental": "Dental",
-      "catAesthetic": "Aesthetic",
+      "catAesthetic": "Cosmetic dentistry",
       "catLaboratory": "Laboratory",
       "catConsultation": "Consultation",
       "countProcedures": {
