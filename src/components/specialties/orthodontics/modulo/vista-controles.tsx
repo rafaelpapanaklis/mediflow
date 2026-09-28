@@ -20,7 +20,6 @@ import {
   CalendarDays,
   CalendarRange,
   CheckCircle2,
-  ChevronRight,
   ClipboardCheck,
   Clock,
   type LucideIcon,
@@ -92,6 +91,9 @@ export function VistaControles({
           ? "Los controles de ortodoncia de la Agenda, y quién falta de control."
           : `${plural(deHoy, "control hoy", "controles hoy")} · ${plural(sinControl.length, "caso", "casos")} de ${data.casosActivos} sin próximo control.`
       }
+      // Fila 15 (ws1-t4 ronda 6, decisión del gerente): el ÚNICO enlace a la
+      // Agenda de esta pantalla. «Ver el día», el título de cada día y «Ver en
+      // la Agenda» de cada fila eran tres salidas más al mismo sitio.
       acciones={
         <Link href={`/dashboard/agenda?date=${hoy}`} className={s.boton}>
           <CalendarDays size={15} strokeWidth={1.9} aria-hidden />
@@ -133,12 +135,6 @@ export function VistaControles({
                 .join(" · ")
             : undefined
         }
-        accion={
-          <Link href={`/dashboard/agenda?date=${hoy}`} className={s.enlace}>
-            Ver el día
-            <ChevronRight size={14} aria-hidden />
-          </Link>
-        }
       >
         {semana.hoy.length === 0 ? (
           <div className={s.tarjetaCuerpo}>
@@ -151,7 +147,7 @@ export function VistaControles({
         ) : (
           <ul className={s.tarjetaLista}>
             {semana.hoy.map((c) => (
-              <FilaDeControl key={c.appointmentId} cita={c} dia={hoy} zonaHoraria={zonaHoraria} esHoy />
+              <FilaDeControl key={c.appointmentId} cita={c} zonaHoraria={zonaHoraria} esHoy />
             ))}
           </ul>
         )}
@@ -173,16 +169,14 @@ export function VistaControles({
             {semana.proximosDias.map((d) => (
               <section key={d.dia} className={s.dia} aria-label={rotuloDelDia(d.dia, hoy)}>
                 <h3 className={s.diaTitulo}>
-                  <Link href={`/dashboard/agenda?date=${d.dia}`} className={s.diaEnlace}>
-                    {rotuloDelDia(d.dia, hoy)}
-                  </Link>
+                  {rotuloDelDia(d.dia, hoy)}
                   <span className={s.diaCuenta}>
                     {plural(d.citas.filter((c) => c.status !== "CANCELLED").length, "control", "controles")}
                   </span>
                 </h3>
                 <ul className={s.diaLista}>
                   {d.citas.map((c) => (
-                    <FilaDeControl key={c.appointmentId} cita={c} dia={d.dia} zonaHoraria={zonaHoraria} />
+                    <FilaDeControl key={c.appointmentId} cita={c} zonaHoraria={zonaHoraria} />
                   ))}
                 </ul>
               </section>
@@ -245,13 +239,10 @@ export function VistaControles({
 
 function FilaDeControl({
   cita,
-  dia,
   zonaHoraria,
   esHoy = false,
 }: {
   cita: CitaDeControl;
-  /** "YYYY-MM-DD" del día de la cita en la zona de la clínica: a dónde lleva «Ver en la Agenda». */
-  dia: string;
   zonaHoraria: string | null;
   /** M3 (Ronda 6): esta fila es la de HOY — habilita "Registrar control". */
   esHoy?: boolean;
@@ -287,14 +278,6 @@ function FilaDeControl({
       </div>
       <div className={s.filaDerecha}>
         <span className={`${s.etiqueta} ${CLASE_ESTADO[estado.tono]}`}>{estado.texto}</span>
-        <Link
-          href={`/dashboard/agenda?date=${dia}&highlight=${cita.appointmentId}`}
-          className={s.enlace}
-          aria-label={`Ver en la Agenda el control de ${cita.patientName}`}
-        >
-          Ver en la Agenda
-          <ChevronRight size={14} aria-hidden />
-        </Link>
         {puedeRegistrarAqui && cita.treatmentPlanId ? (
           <BotonHojaControl appointmentId={cita.appointmentId} treatmentPlanId={cita.treatmentPlanId} />
         ) : (

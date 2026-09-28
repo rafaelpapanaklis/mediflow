@@ -197,8 +197,10 @@ test("sin atajos duplicados: el Tablero no lleva botones en la cabecera", () => 
   const tablero = sinComentarios(leer("src/components/specialties/orthodontics/modulo/vista-tablero.tsx"));
   assert.doesNotMatch(tablero, /acciones=/);
   assert.doesNotMatch(tablero, /BellRing|\bUsers\b/, "ni sus íconos, que ya no usa nadie");
-  // Lo que SÍ se queda: salir a la Agenda desde «Controles de hoy».
-  assert.match(tablero, /<Link href="\/dashboard\/agenda" className=\{s\.enlace\}>/);
+  // Fila 15 (ws1-t4 ronda 6, decisión del gerente): «Controles de hoy» lleva a
+  // «Ver controles» dentro del módulo; a la Agenda se sale desde Controles.
+  assert.match(tablero, /<Link href="\/dashboard\/orthodontics\/controles#controles-de-hoy" className=\{s\.enlace\}>\s*Ver controles/);
+  assert.doesNotMatch(tablero, /\/dashboard\/agenda/);
 });
 
 test("los botones de acción se quedan", () => {

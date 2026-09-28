@@ -151,8 +151,10 @@ export function VistaTablero({
           titulo="Controles de hoy"
           sub="Manda por WhatsApp las indicaciones que ya están en la hoja de control."
           accion={
-            <Link href="/dashboard/agenda" className={s.enlace}>
-              Ver agenda
+            // Fila 15 (ws1-t4 ronda 6, decisión del gerente): «Ver controles»
+            // lleva a Controles dentro del módulo; a la Agenda se sale desde ahí.
+            <Link href="/dashboard/orthodontics/controles#controles-de-hoy" className={s.enlace}>
+              Ver controles
               <ChevronRight size={14} aria-hidden />
             </Link>
           }

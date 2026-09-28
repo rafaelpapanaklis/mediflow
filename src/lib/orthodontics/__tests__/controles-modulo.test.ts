@@ -84,7 +84,10 @@ test("H16: la página de Controles carga las citas de verdad (antes: «Esta pant
 
   const vista = leer("src/components/specialties/orthodontics/modulo/vista-controles.tsx");
   assert.match(vista, /horaEnZona\(cita\.startsAt, zonaHoraria\)/, "la hora, en la zona de la clínica");
-  assert.match(vista, /\/dashboard\/agenda\?date=\$\{dia\}&highlight=\$\{cita\.appointmentId\}/, "cada control lleva a su día en la Agenda");
+  // Fila 15 (ws1-t4 ronda 6, decisión del gerente): UN solo enlace a la
+  // Agenda, el de la cabecera («Abrir la Agenda», en el día de hoy).
+  assert.equal((vista.match(/\/dashboard\/agenda/g) ?? []).length, 1, "un solo enlace a la Agenda");
+  assert.match(vista, /<Link href=\{`\/dashboard\/agenda\?date=\$\{hoy\}`\} className=\{s\.boton\}>/);
   const boton = leer("src/components/specialties/orthodontics/modulo/agendar-control.tsx");
   assert.match(boton, /initialReason: TIPO_CITA_CONTROL_ORTO,/, "agenda un CONTROL, con la ventana de Nueva cita de siempre");
   assert.match(boton, /onCreated: \(\) => router\.refresh\(\),/);
