@@ -8,6 +8,7 @@ import {
   distance,
   pxToMm,
   signedDistanceToLine,
+  signedDistanceToPerpendicularLine,
 } from "../geometria-plana";
 
 describe("angleAtVertex", () => {
@@ -71,5 +72,30 @@ describe("pxToMm", () => {
   it("devuelve null sin calibración (0 o negativa)", () => {
     assert.equal(pxToMm(100, 0), null);
     assert.equal(pxToMm(100, -5), null);
+  });
+});
+
+describe("signedDistanceToPerpendicularLine", () => {
+  // FH horizontal (Or→Po en +x); la perpendicular por N es entonces una
+  // vertical (+y) que pasa por N — equivalente a medir la componente X.
+  const OR = { x: 0, y: 100 };
+  const PO = { x: 100, y: 100 };
+  const N = { x: 50, y: 0 };
+
+  it("distancia 0 para un punto sobre la perpendicular", () => {
+    const d = signedDistanceToPerpendicularLine({ x: 50, y: 40 }, N, OR, PO);
+    assert.equal(Math.round(d), 0);
+  });
+
+  it("misma magnitud que la distancia X directa cuando FH es horizontal", () => {
+    const p = { x: 80, y: 40 }; // 30 a la derecha de la vertical por N
+    const d = signedDistanceToPerpendicularLine(p, N, OR, PO);
+    assert.equal(Math.round(Math.abs(d)), 30);
+  });
+
+  it("signos opuestos a cada lado de la perpendicular", () => {
+    const left = signedDistanceToPerpendicularLine({ x: 20, y: 40 }, N, OR, PO);
+    const right = signedDistanceToPerpendicularLine({ x: 80, y: 40 }, N, OR, PO);
+    assert.equal(Math.sign(left), -Math.sign(right));
   });
 });

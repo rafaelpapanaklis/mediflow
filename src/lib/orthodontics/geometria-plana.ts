@@ -79,3 +79,30 @@ export function pxToMm(px: number, pixelsPerMm: number): number | null {
   if (!pixelsPerMm || pixelsPerMm <= 0) return null;
   return round2(px / pixelsPerMm);
 }
+
+/** Rota un vector 90° (perpendicular en el plano). */
+function rotate90(v: Point2D): Point2D {
+  return { x: -v.y, y: v.x };
+}
+
+/**
+ * Distancia perpendicular con signo de `p` a la recta que PASA por
+ * `through` y es perpendicular a la recta `refA→refB`.
+ *
+ * Construye esta recta-perpendicular sin necesitar un segundo punto real
+ * marcado por el doctor — sirve para "N-perpendicular" de McNamara: la
+ * vertical que pasa por Nasion, perpendicular al plano de Frankfort
+ * (Or→Po), usada como referencia porque el trazado manual no tiene una
+ * vertical verdadera (foto de perfil erguido) disponible.
+ */
+export function signedDistanceToPerpendicularLine(
+  p: Point2D,
+  through: Point2D,
+  refA: Point2D,
+  refB: Point2D,
+): number {
+  const dir = rotate90(vector(refA, refB));
+  if (length(dir) === 0) return NaN;
+  const b = { x: through.x + dir.x, y: through.y + dir.y };
+  return signedDistanceToLine(p, through, b);
+}
