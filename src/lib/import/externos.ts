@@ -9,7 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { newId } from "./migrado";
 
-export type EntidadExterna = "patient" | "balance" | "payment";
+export type EntidadExterna = "patient" | "balance" | "payment" | "labExpense" | "installment" | "procedure";
 
 /** Tope por sentencia: el JSON de un lote de 200 filas cabe de sobra. */
 const LOTE = 500;
