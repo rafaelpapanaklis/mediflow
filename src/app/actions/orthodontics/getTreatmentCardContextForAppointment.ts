@@ -20,11 +20,28 @@
 // wires y foto-sets de un paciente restringido con solo adivinar su
 // treatmentPlanId/appointmentId. Ahora reusa `loadPatientForOrtho`
 // (`_helpers.ts`), el mismo chequeo que el resto del módulo.
+//
+// Ronda 6 (ws1-t8, «El día de la ortodoncista», M6/M12): la construcción del
+// contexto se separó en `buildTreatmentCardContext` para que
+// `getTreatmentCardContextForPatient.ts` (entrada desde la ficha, "Registrar
+// control" sin pasar por una cita concreta) devuelva EXACTAMENTE lo mismo —
+// "una sola forma de registrar el control" también en el backend, no solo en
+// el botón. Dos añadidos sobre la Ola 1:
+//   · M12 — `lastElastics`/`lastIndications`: lo que la ÚLTIMA hoja firmada
+//     dejó anotado, para precargar la hoja nueva (hallazgo 12: "la hoja
+//     empieza en blanco cada vez").
+//   · M6/hallazgo 7 — si YA hay una hoja de HOY para este plan (por fecha de
+//     calendario en la zona de la clínica, `tarjetaDeControlDeHoy`), se
+//     devuelve como `existingCard` aunque no esté ligada a ESTA cita: se
+//     CONTINÚA esa hoja en vez de crear una segunda del mismo día.
 
 import { prisma } from "@/lib/prisma";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { tarjetaDeControlDeHoy } from "@/lib/orthodontics/redesign/control-del-dia";
 import type {
+  OrthoElasticClass,
+  OrthoElasticZone,
   OrthoPhaseKey,
   TreatmentCardDTO,
   WireStepDTO,
@@ -53,7 +70,15 @@ async function fetchCards(treatmentPlanId: string) {
 export interface TreatmentCardAgendaContext {
   treatmentPlanId: string;
   patientId: string;
-  /** Ya hay una hoja ligada a ESTA cita (se reabre, no se crea otra). */
+  /**
+   * La cita de la que se abrió este contexto — `null` si `getTreatmentCard-
+   * ContextForPatient` no encontró ninguna cita de control de HOY (M6: la
+   * ficha igual deja registrar un control sin cita, pero ya no puede
+   * FINGIR que está ligado a una).
+   */
+  appointmentId: string | null;
+  /** Ya hay una hoja ligada a ESTA cita, o una hoja de HOY del mismo caso
+   * (se reabre/continúa, no se crea otra — hallazgo 7). */
   existingCard: TreatmentCardDTO | null;
   availableWires: WireStepDTO[];
   defaultsForNew: {
@@ -63,9 +88,102 @@ export interface TreatmentCardAgendaContext {
     wireFrom: WireStepDTO | null;
     visitDate: string;
     durationMin: number;
+    /** M12: elásticos vigentes según la última hoja FIRMADA. */
+    lastElastics: Array<{ elasticClass: OrthoElasticClass; config: string; zone: OrthoElasticZone }>;
+    /** M12: indicaciones de la última hoja FIRMADA (referencia — el doctor
+     * las edita o las deja tal cual, no se re-envían solas). */
+    lastIndications: string | null;
   };
   /** C4: foto-sets del caso para ligar el de esta visita. */
   availablePhotoSets: Array<{ id: string; label: string }>;
+}
+
+/**
+ * Núcleo compartido: dado el plan YA cargado y una cita (o `null` si no hay
+ * ninguna concreta), arma el contexto completo. `getTreatmentCardContext-
+ * ForAppointment` y `getTreatmentCardContextForPatient` son wrappers finos
+ * sobre esto — la única diferencia entre Agenda y ficha es CÓMO se resuelve
+ * `appt`.
+ */
+export async function buildTreatmentCardContext(
+  plan: { id: string; patientId: string; installedAt: Date | null; startDate: Date | null },
+  appt: { id: string; startsAt: Date; endsAt: Date } | null,
+  clinicTimezone: string,
+): Promise<TreatmentCardAgendaContext> {
+  const [wireSteps, cards, phaseInProgress, photoSets] = await Promise.all([
+    prisma.orthoWireStep.findMany({
+      where: { treatmentPlanId: plan.id },
+      orderBy: { orderIndex: "asc" },
+    }),
+    fetchCards(plan.id).catch((e) => {
+      if (esColumnaOTablaAusente(e)) return [] as RawCard[];
+      throw e;
+    }),
+    prisma.orthodonticPhase.findFirst({
+      where: { treatmentPlanId: plan.id, status: "IN_PROGRESS" },
+      select: { phaseKey: true },
+    }),
+    prisma.orthoPhotoSet.findMany({
+      where: { treatmentPlanId: plan.id },
+      orderBy: { capturedAt: "desc" },
+      take: 20,
+      select: { id: true, setType: true, capturedAt: true },
+    }),
+  ]);
+
+  const wireDTOs = wireSteps.map(adaptWire);
+  const wireById = new Map(wireDTOs.map((w) => [w.id, w]));
+
+  // ¿Esta cita ya tiene una hoja ligada? Columna `appointmentId` puede no
+  // existir aún — si `cards` vino vacío por P2021/P2022, esto simplemente
+  // no encuentra nada (no crashea).
+  const linkedToAppt = appt ? cards.find((c) => c.appointmentId === appt.id) ?? null : null;
+  // Hallazgo 7: si no hay una ligada a ESTA cita, ¿hay una de HOY de este
+  // mismo caso (por otra cita, o sin cita)? Se continúa esa en vez de crear
+  // una segunda del mismo día.
+  const deHoy = linkedToAppt ? null : tarjetaDeControlDeHoy(cards, clinicTimezone);
+  const raw = linkedToAppt ?? deHoy;
+  const existingCard = raw ? adaptCard(raw, wireById) : null;
+
+  const maxCardNumber = cards.reduce((m, c) => Math.max(m, c.cardNumber), 0);
+  const lastSignedCard = [...cards].reverse().find((c) => c.status === "SIGNED") ?? null;
+
+  const phase: OrthoPhaseKey =
+    lastSignedCard?.phaseKey ?? phaseInProgress?.phaseKey ?? "ALIGNMENT";
+  const monthAt = monthsSince(plan.installedAt ?? plan.startDate);
+  const wireFrom = lastSignedCard?.wireToId ? (wireById.get(lastSignedCard.wireToId) ?? null) : null;
+  const durationMin = appt
+    ? Math.max(15, Math.round((appt.endsAt.getTime() - appt.startsAt.getTime()) / 60000))
+    : 30;
+  const visitDate = appt ? appt.startsAt.toISOString() : new Date().toISOString();
+
+  const lastElastics = (lastSignedCard?.elastics ?? []).map((e) => ({
+    elasticClass: e.elasticClass as OrthoElasticClass,
+    config: e.config,
+    zone: e.zone as OrthoElasticZone,
+  }));
+
+  return {
+    treatmentPlanId: plan.id,
+    patientId: plan.patientId,
+    appointmentId: appt?.id ?? null,
+    existingCard,
+    availableWires: wireDTOs,
+    defaultsForNew: {
+      cardNumber: maxCardNumber + 1,
+      phase,
+      monthAt,
+      wireFrom,
+      visitDate,
+      durationMin,
+      lastElastics,
+      lastIndications: lastSignedCard?.indications ?? null,
+    },
+    availablePhotoSets: photoSets.map((s) => ({
+      id: s.id,
+      label: `${photoSetLabel(s.setType)} · ${s.capturedAt.toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}`,
+    })),
+  };
 }
 
 export async function getTreatmentCardContextForAppointment(
@@ -96,66 +214,9 @@ export async function getTreatmentCardContextForAppointment(
   });
   if (!appt) return fail("Cita no encontrada para este paciente");
 
-  const [wireSteps, cards, phaseInProgress, photoSets] = await Promise.all([
-    prisma.orthoWireStep.findMany({
-      where: { treatmentPlanId: plan.id },
-      orderBy: { orderIndex: "asc" },
-    }),
-    fetchCards(plan.id).catch((e) => {
-      if (esColumnaOTablaAusente(e)) return [] as RawCard[];
-      throw e;
-    }),
-    prisma.orthodonticPhase.findFirst({
-      where: { treatmentPlanId: plan.id, status: "IN_PROGRESS" },
-      select: { phaseKey: true },
-    }),
-    prisma.orthoPhotoSet.findMany({
-      where: { treatmentPlanId: plan.id },
-      orderBy: { capturedAt: "desc" },
-      take: 20,
-      select: { id: true, setType: true, capturedAt: true },
-    }),
-  ]);
-
-  const wireDTOs = wireSteps.map(adaptWire);
-  const wireById = new Map(wireDTOs.map((w) => [w.id, w]));
-
-  // ¿Esta cita ya tiene una hoja ligada? Columna `appointmentId` puede no
-  // existir aún — si `cards` vino vacío por P2021/P2022, esto simplemente
-  // no encuentra nada (no crashea).
-  const linked = cards.find((c) => c.appointmentId === appointmentId);
-  const existingCard = linked ? adaptCard(linked, wireById) : null;
-
-  const maxCardNumber = cards.reduce((m, c) => Math.max(m, c.cardNumber), 0);
-  const lastSignedCard = [...cards].reverse().find((c) => c.status === "SIGNED") ?? null;
-
-  const phase: OrthoPhaseKey =
-    lastSignedCard?.phaseKey ?? phaseInProgress?.phaseKey ?? "ALIGNMENT";
-  const monthAt = monthsSince(plan.installedAt ?? plan.startDate);
-  const wireFrom = lastSignedCard?.wireToId ? (wireById.get(lastSignedCard.wireToId) ?? null) : null;
-  const durationMin = Math.max(
-    15,
-    Math.round((appt.endsAt.getTime() - appt.startsAt.getTime()) / 60000),
-  );
-
-  return ok({
-    treatmentPlanId: plan.id,
-    patientId: plan.patientId,
-    existingCard,
-    availableWires: wireDTOs,
-    defaultsForNew: {
-      cardNumber: maxCardNumber + 1,
-      phase,
-      monthAt,
-      wireFrom,
-      visitDate: appt.startsAt.toISOString(),
-      durationMin,
-    },
-    availablePhotoSets: photoSets.map((s) => ({
-      id: s.id,
-      label: `${photoSetLabel(s.setType)} · ${s.capturedAt.toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}`,
-    })),
-  });
+  const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
+  const context = await buildTreatmentCardContext(plan, appt, clinic?.timezone ?? "America/Mexico_City");
+  return ok(context);
 }
 
 function monthsSince(from: Date | null): number {

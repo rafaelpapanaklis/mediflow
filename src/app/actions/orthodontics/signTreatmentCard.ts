@@ -24,6 +24,7 @@ import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { buscarPrecioControlOrto } from "@/lib/orthodontics/catalog-procedures";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
+import { canTransition, sideEffectsOf } from "@/lib/agenda/transitions";
 
 /** Códigos Prisma de "columna inexistente" — mismo patrón que cobranza-db.ts. */
 function esColumnaAusente(e: unknown): boolean {
@@ -145,11 +146,11 @@ export async function signTreatmentCard(
 
   // Tenant + integridad: si viene un appointmentId, la cita tiene que ser de
   // este mismo paciente y clínica (C6).
-  let citaDeControl: { id: string; type: string } | null = null;
+  let citaDeControl: { id: string; type: string; status: string; startsAt: Date } | null = null;
   if (data.appointmentId) {
     const appt = await prisma.appointment.findFirst({
       where: { id: data.appointmentId, clinicId: ctx.clinicId, patientId: plan.patientId },
-      select: { id: true, type: true },
+      select: { id: true, type: true, status: true, startsAt: true },
     });
     if (!appt) return fail("La cita no pertenece a este paciente");
     citaDeControl = appt;
@@ -353,6 +354,79 @@ export async function signTreatmentCard(
         avisoControlSinFacturar = "Este control no se facturó: hubo un problema al crear la factura. Cóbralo a mano desde Caja.";
         console.warn("[ortho] signTreatmentCard: falló la facturación automática del control (no revierte la firma):", e);
       }
+    }
+
+    // Ronda 6 (ws1-t8, «El día de la ortodoncista») — M6/hallazgo 23: firmar
+    // la hoja CIERRA la cita en la Agenda (pasa a "Atendida"/COMPLETED).
+    // Antes la cita se quedaba en su estado de siempre (Agendada,
+    // Confirmada…) aunque el control ya estuviera firmado, y "Falta de
+    // control"/Controles seguían viendo al paciente como si no hubiera
+    // venido el mismo día que vino. No bloqueante: se salta en silencio si
+    // la transición no es válida desde el estado actual (p. ej. la cita ya
+    // se canceló, o ya estaba completada) — nunca revierte la firma clínica.
+    if (citaDeControl && citaDeControl.status !== "COMPLETED") {
+      try {
+        const check = canTransition(
+          citaDeControl.status as any,
+          "COMPLETED",
+          ctx.role as any,
+          now,
+          citaDeControl.startsAt,
+        );
+        if (check.ok) {
+          await prisma.appointment.update({
+            where: { id: citaDeControl.id },
+            data: { status: "COMPLETED", ...sideEffectsOf("COMPLETED", now) },
+          });
+        } else {
+          console.warn(`[ortho] signTreatmentCard: cita ${citaDeControl.id} no pasó a COMPLETED (${check.error}) — se firmó igual`);
+        }
+      } catch (e) {
+        console.warn("[ortho] signTreatmentCard: no se pudo marcar la cita como atendida (no revierte la firma):", e);
+      }
+    }
+
+    // Ronda 6 (ws1-t8) — M5/hallazgo 5, decisión 4 del gerente
+    // (REPORTE-ws1-t8.md): las hojas de control SÍ cuentan como notas del
+    // expediente. "Historial de consultas" y el PDF del expediente leen
+    // `medical_records` (prisma.medicalRecord), no `ortho_treatment_cards`
+    // — sin esto, para la NOM-004 la doctora tenía que escribir la misma
+    // nota dos veces, y el historial general mostraba "0 total" con un
+    // control firmado el mismo día. Idempotente por
+    // `specialtyData.treatmentCardId`: si alguna vez se permite re-firmar,
+    // no duplica la nota.
+    try {
+      const yaExiste = await prisma.medicalRecord.findFirst({
+        where: {
+          clinicId: plan.clinicId,
+          patientId: plan.patientId,
+          specialtyData: { path: ["treatmentCardId"], equals: cardId },
+        },
+        select: { id: true },
+      });
+      if (!yaExiste) {
+        await prisma.medicalRecord.create({
+          data: {
+            clinicId: plan.clinicId,
+            patientId: plan.patientId,
+            doctorId: ctx.userId,
+            visitDate,
+            subjective: soap.s,
+            objective: soap.o,
+            assessment: soap.a,
+            plan: soap.p,
+            specialtyData: {
+              type: "orthodontics",
+              treatmentCardId: cardId,
+              treatmentPlanId: plan.id,
+              appointmentId: data.appointmentId ?? null,
+              cardNumber: data.cardNumber,
+            },
+          },
+        });
+      }
+    } catch (e) {
+      console.warn("[ortho] signTreatmentCard: no se pudo crear la nota de evolución en el expediente general (no revierte la firma):", e);
     }
 
     await auditOrtho({
