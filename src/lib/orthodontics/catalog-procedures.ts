@@ -339,3 +339,22 @@ export async function sembrarProcedimientosDeOrtodoncia(clinicId: string): Promi
 
   return { creados: faltantes.length };
 }
+
+/** Nombre del procedimiento cuyo precio abre la factura de colocación en «Pago por control». */
+export const NOMBRE_COLOCACION_APARATOLOGIA = "Colocación de aparatología";
+
+/**
+ * Puro: el precio de «Colocación de aparatología» entre las filas del catálogo,
+ * o null si no está, está apagada o no tiene precio. Una fila activa gana a una
+ * apagada del mismo nombre.
+ */
+export function elegirPrecioColocacion(filas: readonly Pick<OrthoProcedureRow, "name" | "basePrice" | "isActive">[]): number | null {
+  const fila = filas.find((f) => f.isActive && f.name === NOMBRE_COLOCACION_APARATOLOGIA);
+  const precio = Number(fila?.basePrice);
+  return Number.isFinite(precio) && precio > 0 ? precio : null;
+}
+
+/** El precio de la colocación en el catálogo de ortodoncia de la clínica (null si no hay). */
+export async function precioDeColocacionDelCatalogo(clinicId: string): Promise<number | null> {
+  return elegirPrecioColocacion(await listarProcedimientosDeOrtodoncia(clinicId));
+}

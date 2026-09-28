@@ -25,12 +25,23 @@ export interface CasoParaBorrador {
  * (los controles se cobran aparte, uno por uno, en Caja) — decirlo evita que
  * recepción piense que ese monto es el tratamiento entero.
  */
-export function borradorInicialDelCaso(caso: CasoParaBorrador, esPorControl: boolean): BorradorDeFactura {
+export function borradorInicialDelCaso(
+  caso: CasoParaBorrador,
+  esPorControl: boolean,
+  /** Precio de «Colocación de aparatología» en el catálogo de la clínica (solo lo usa PAGO_POR_CONTROL). */
+  precioColocacion?: number | null,
+): BorradorDeFactura {
   const tecnica = techniqueLabel(caso.technique);
   const nombre = esPorControl
     ? `Colocación/enganche — ortodoncia (${tecnica})`
     : `Tratamiento de ortodoncia (${tecnica})`;
-  const precio = Math.max(0, Number(caso.totalCostMxn) || 0);
+  // PAGO_POR_CONTROL: la factura es SOLO la colocación. Con el costo de todo el
+  // tratamiento el paciente quedaba debiendo $30,000 de colocación más cada
+  // control (ws1-t4 #76). Sin precio de catálogo arranca en $0 —que recepción
+  // lo teclee— antes que proponer un monto equivocado.
+  const precio = esPorControl
+    ? Math.max(0, Number(precioColocacion) || 0)
+    : Math.max(0, Number(caso.totalCostMxn) || 0);
 
   return {
     items: [{ name: nombre, quantity: 1, unitPrice: precio, discount: 0 }],

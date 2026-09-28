@@ -34,6 +34,7 @@ import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro } from "./_ctx";
+import { precioDeColocacionDelCatalogo } from "@/lib/orthodontics/catalog-procedures";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
 const ROLES_DE_DIRECCION = new Set(["SUPER_ADMIN", "ADMIN"]);
@@ -96,6 +97,10 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     cargarModoDeCobro(ctx.clinicId, treatmentPlanId),
   ]);
   const billingMode = normalizarOrthoBillingMode(billingModeCrudo);
+  // Solo en PAGO_POR_CONTROL el borrador es la colocación, y solo ahí hace falta el catálogo.
+  const precioColocacion = billingMode === "PAGO_POR_CONTROL"
+    ? await precioDeColocacionDelCatalogo(ctx.clinicId)
+    : null;
 
   const base = {
     patientId: caso.patientId,
@@ -108,7 +113,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     puedeConfigurarPolitica: ROLES_DE_DIRECCION.has(ctx.role),
     billingMode,
     billingModeLabel: ORTHO_BILLING_MODE_LABELS[billingMode],
-    borradorInicial: borradorInicialDelCaso(caso, billingMode === "PAGO_POR_CONTROL"),
+    borradorInicial: borradorInicialDelCaso(caso, billingMode === "PAGO_POR_CONTROL", precioColocacion),
   };
 
   const zonaHoraria = clinica?.timezone || "America/Mexico_City";
