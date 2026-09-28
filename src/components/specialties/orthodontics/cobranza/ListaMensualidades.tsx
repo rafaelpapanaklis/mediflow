@@ -13,11 +13,18 @@
 // el `PaymentModal` de la primera factura y, al guardar, encadena el de la
 // segunda — dos confirmaciones rápidas en vez de dos búsquedas separadas.
 
+// Diseño (ws1-t5): esta lista vive en CAJA, no en la pestaña de Ortodoncia,
+// así que se viste con el sistema de diseño del panel (BadgeNew, ButtonNew y
+// los tokens que Caja ya redirige a los aprobados) y no con los átomos del
+// módulo de Ortodoncia, que traen su propia paleta (`slate-*`). La ropa está
+// en `cobros-inventario-rediseno/avisos.module.css`. Lo único que sigue
+// viniendo de los átomos es el FORMATO de importes y fechas, que no se toca.
+
 import { useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
-import { Card } from "../redesign/atoms/Card";
-import { Pill, type PillColor } from "../redesign/atoms/Pill";
-import { Btn } from "../redesign/atoms/Btn";
+import { ArrowRight } from "lucide-react";
+import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import av from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.css";
 import { fmtMoney, fmtDate } from "../redesign/atoms/format";
 import {
   listarMensualidadesPorCobrar,
@@ -25,10 +32,10 @@ import {
 } from "@/app/actions/orthodontics/recepcion/listarMensualidadesPorCobrar";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 
-const ESTADO_PILL: Record<MensualidadPorCobrar["estado"], { color: PillColor; label: string }> = {
-  vencida: { color: "rose", label: "Vencida" },
-  hoy: { color: "amber", label: "Vence hoy" },
-  proxima: { color: "slate", label: "Próxima" },
+const ESTADO_PILL: Record<MensualidadPorCobrar["estado"], { tono: "danger" | "warning" | "neutral"; label: string }> = {
+  vencida: { tono: "danger", label: "Vencida" },
+  hoy: { tono: "warning", label: "Vence hoy" },
+  proxima: { tono: "neutral", label: "Próxima" },
 };
 
 interface Grupo {
@@ -108,14 +115,29 @@ export function ListaMensualidades() {
   }
 
   return (
-    <Card
-      id="mensualidades-ortodoncia"
-      eyebrow="Ortodoncia"
-      title={`${items.length === 1 ? "1 mensualidad" : `${items.length} mensualidades`} por cobrar`}
-      action={<span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{fmtMoney(total)}</span>}
-      accent={vencidas > 0 ? "rose" : "amber"}
-    >
-      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+    <section id="mensualidades-ortodoncia" className={av.lista} aria-labelledby="mensualidades-ortodoncia-titulo">
+      <header className={av.listaCabeza}>
+        <div className={av.textos}>
+          <p className={av.ceja}>Ortodoncia</p>
+          <h2 id="mensualidades-ortodoncia-titulo" className={av.listaTitulo}>
+            {items.length === 1 ? "1 mensualidad" : `${items.length} mensualidades`} por cobrar
+            {vencidas > 0 && (
+              <>
+                {" "}
+                <BadgeNew tone="danger" dot>
+                  {vencidas === 1 ? "1 vencida" : `${vencidas} vencidas`}
+                </BadgeNew>
+              </>
+            )}
+          </h2>
+        </div>
+        <div className={av.listaTotal}>
+          <span className={av.listaTotalRotulo}>Total</span>
+          <span className={av.listaTotalCifra}>{fmtMoney(total)}</span>
+        </div>
+      </header>
+
+      <ul className={av.filas}>
         {grupos.map((g) => {
           const subtotal = g.items.reduce((s, it) => s + it.monto, 0);
           const peorEstado = g.items.some((it) => it.estado === "vencida")
@@ -125,25 +147,21 @@ export function ListaMensualidades() {
               : "proxima";
           const pill = ESTADO_PILL[peorEstado];
           return (
-            <li key={g.clave} className="px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                <span className="font-medium text-slate-800 dark:text-slate-100">
-                  {g.guardianName ?? g.items[0].patientName}
-                  {g.items.length > 1 && (
-                    <span className="text-slate-400 dark:text-slate-500 font-normal">
-                      {" "}
-                      ({g.items.map((it) => it.patientName).join(" y ")})
-                    </span>
-                  )}
-                </span>
-                <Pill color={pill.color}>{pill.label}</Pill>
-                <span className="text-slate-500 dark:text-slate-400">
-                  {fmtMoney(subtotal)} · vence {fmtDate(g.items[0].vencimiento)}
-                </span>
+            <li key={g.clave} className={av.filaCobro}>
+              <div className={av.quien}>
+                <span className={av.quienNombre}>{g.guardianName ?? g.items[0].patientName}</span>
+                <BadgeNew tone={pill.tono} dot>{pill.label}</BadgeNew>
+                {g.items.length > 1 && (
+                  <span className={av.quienHermanos}>{g.items.map((it) => it.patientName).join(" y ")}</span>
+                )}
               </div>
-              <Btn variant={peorEstado === "vencida" ? "rose" : "primary"} size="sm" onClick={() => iniciarCobro(g.items)}>
+              <span className={av.vence}>
+                <span className={av.venceRotulo}>Vence</span> {fmtDate(g.items[0].vencimiento)}
+              </span>
+              <span className={av.montoFila}>{fmtMoney(subtotal)}</span>
+              <ButtonNew variant="primary" size="sm" onClick={() => iniciarCobro(g.items)}>
                 {g.items.length > 1 ? "Cobrar a los dos" : "Cobrar"}
-              </Btn>
+              </ButtonNew>
             </li>
           );
         })}
@@ -159,11 +177,11 @@ export function ListaMensualidades() {
         />
       )}
       {cobrandoCola && cobrandoCola.length > 1 && (
-        <div className="px-6 py-2 flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
-          <AlertTriangle size={12} aria-hidden />
+        <p className={av.siguiente}>
+          <ArrowRight size={13} strokeWidth={1.75} aria-hidden />
           Al guardar, sigue la factura de {cobrandoCola[1].patientName}.
-        </div>
+        </p>
       )}
-    </Card>
+    </section>
   );
 }

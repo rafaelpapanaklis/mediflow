@@ -1,0 +1,411 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Avisos de cobro y de inventario (ws1-t5, diseño): el aviso de anticipos
+   por revisar (Caja), el de mensualidades vencidas (Hoy), la lista de
+   mensualidades por cobrar (Caja y Cobranza de Ortodoncia) y las filas de
+   la tarjeta «Avisos» de Hoy.
+
+   NO declara colores: solo LEE. Cada pieza puede caer en tres sitios
+   distintos —dentro de «Hoy» (tokens `--m2-*` del menú), dentro de Caja
+   (que redirige `--text-1`, `--bg-elev`, `--brand`… a los `--pr-*`
+   aprobados) o en la pantalla de siempre— así que cada valor pide primero
+   el token del menú y, si no está, el global de globals.css, que tiene
+   versión clara y oscura. No hay un solo hex ni un `--accent`.
+
+   Por qué existe: los dos avisos leían `--warning-bg` y `--danger-bg`, que
+   no existen en ningún sitio, y caían siempre en su respaldo (un crema y un
+   rosa fijos): en oscuro salían como una mancha clara con letra clara.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.aviso,
+.lista,
+.filaAviso {
+  --av-texto: var(--m2-texto, var(--text-1));
+  --av-texto-2: var(--m2-texto-2, var(--text-2));
+  --av-texto-3: var(--m2-texto-3, var(--text-3));
+  --av-tarjeta: var(--m2-tarjeta, var(--bg-elev));
+  --av-tarjeta-hover: var(--m2-tarjeta-hover, var(--bg-elev-2));
+  --av-borde: var(--m2-tarjeta-borde, var(--border-soft));
+  --av-divisor: var(--m2-borde, var(--border-soft));
+  --av-hover: var(--m2-hover, var(--bg-hover));
+  --av-sombra: var(--m2-sombra, var(--shadow-1));
+  --av-foco: var(--m2-foco, var(--ring));
+}
+
+/* ── La tarjeta de un aviso ───────────────────────────────────────────── */
+
+.aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--av-borde);
+  border-radius: 12px;
+  background: var(--av-tarjeta);
+  box-shadow: var(--av-sombra);
+  color: var(--av-texto);
+  font-size: 13px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+/* El aviso que además es un enlace (el de Hoy lleva a Caja). */
+.avisoEnlace {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .avisoEnlace:hover {
+    background: var(--av-tarjeta-hover);
+    border-color: var(--av-texto-3);
+  }
+}
+
+.avisoEnlace:focus-visible {
+  outline: none;
+  box-shadow: var(--av-foco);
+}
+
+.cabeza {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.icono {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.iconoAlerta {
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+}
+
+.iconoPeligro {
+  background: var(--danger-soft);
+  color: var(--danger-strong, var(--danger));
+}
+
+.iconoInfo {
+  background: var(--info-soft);
+  color: var(--info-strong, var(--info));
+}
+
+.textos {
+  flex: 1;
+  min-width: 0;
+}
+
+.titulo {
+  display: block;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--av-texto);
+}
+
+.sub {
+  display: block;
+  margin: 1px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--av-texto-3);
+}
+
+.importe {
+  flex: none;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+  color: var(--av-texto);
+}
+
+.importePeligro {
+  color: var(--danger-strong, var(--danger));
+}
+
+.flecha {
+  flex: none;
+  color: var(--av-texto-3);
+}
+
+/* ── Renglones de un aviso (anticipos por revisar) ────────────────────── */
+
+.renglones {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--av-divisor);
+}
+
+.renglon {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 16px;
+  padding: 8px 0;
+  font-size: 12.5px;
+}
+
+.renglon + .renglon {
+  border-top: 1px solid var(--av-divisor);
+}
+
+.renglon:last-child {
+  padding-bottom: 0;
+}
+
+.renglonTextos {
+  min-width: 0;
+}
+
+.renglonNombre {
+  font-weight: 600;
+  color: var(--av-texto);
+}
+
+.renglonMotivo {
+  display: block;
+  margin-top: 1px;
+  color: var(--av-texto-2);
+}
+
+.renglonImporte {
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--av-texto);
+}
+
+.resto {
+  margin: 0;
+  font-size: 12px;
+  color: var(--av-texto-3);
+}
+
+/* ── Lista de mensualidades por cobrar ────────────────────────────────── */
+
+.lista {
+  border: 1px solid var(--av-borde);
+  border-radius: 14px;
+  background: var(--av-tarjeta);
+  box-shadow: var(--av-sombra);
+  color: var(--av-texto);
+  font-size: 13px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  /* El aviso de Hoy enlaza aquí con un ancla: que la barra de arriba del
+     panel no tape la cabecera al llegar. */
+  scroll-margin-top: 72px;
+}
+
+.listaCabeza {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--av-divisor);
+}
+
+.ceja {
+  margin: 0 0 1px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--av-texto-3);
+}
+
+.listaTitulo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  line-height: 19px;
+  color: var(--av-texto);
+}
+
+.listaTotal {
+  flex: none;
+  text-align: right;
+}
+
+.listaTotalRotulo {
+  display: block;
+  font-size: 11px;
+  color: var(--av-texto-3);
+}
+
+.listaTotalCifra {
+  display: block;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  color: var(--av-texto);
+}
+
+.filas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Nombre · estado · vence · importe · acción. Las tres columnas de la
+   derecha tienen ancho propio para que fechas e importes caigan uno debajo
+   de otro en todas las filas. */
+.filaCobro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px 112px auto;
+  align-items: center;
+  column-gap: 16px;
+  padding: 10px 16px;
+  min-height: 52px;
+}
+
+.filaCobro + .filaCobro {
+  border-top: 1px solid var(--av-divisor);
+}
+
+@media (hover: hover) {
+  .filaCobro:hover {
+    background: var(--av-hover);
+  }
+}
+
+.quien {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.quienNombre {
+  min-width: 0;
+  font-weight: 600;
+  color: var(--av-texto);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quienHermanos {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--av-texto-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vence {
+  font-size: 12.5px;
+  color: var(--av-texto-2);
+  white-space: nowrap;
+}
+
+.venceRotulo {
+  color: var(--av-texto-3);
+}
+
+.montoFila {
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--av-texto);
+}
+
+.siguiente {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 16px;
+  border-top: 1px solid var(--av-divisor);
+  font-size: 12px;
+  color: var(--av-texto-3);
+}
+
+/* A lo ancho de un teléfono: el nombre arriba y, debajo, vence · importe ·
+   botón. Nada se sale por la derecha. */
+@media (max-width: 640px) {
+  .listaCabeza {
+    padding: 12px 14px;
+  }
+
+  .filaCobro {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    row-gap: 8px;
+    column-gap: 12px;
+    padding: 12px 14px;
+  }
+
+  .quien {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ── Filas de la tarjeta «Avisos» de Hoy ──────────────────────────────── */
+
+.filaAviso {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  color: var(--av-texto);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.filaAviso + .filaAviso {
+  border-top: 1px solid var(--av-divisor);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+a.filaAviso {
+  transition: background 0.12s;
+}
+
+@media (hover: hover) {
+  a.filaAviso:hover {
+    background: var(--av-hover);
+  }
+}
+
+a.filaAviso:focus-visible {
+  outline: none;
+  box-shadow: var(--av-foco);
+}
+
+.filaAvisoIcono {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.filaAvisoTexto {
+  flex: 1;
+  min-width: 0;
+}

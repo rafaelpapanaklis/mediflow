@@ -5,11 +5,17 @@
  * Hoy (rediseño). El rediseño de julio nunca montó esto: la API ya calculaba
  * los avisos (inventario bajo, por caducar, caducado, facturas vencidas…)
  * pero ninguna pantalla los pintaba (REPORTE-ws1-t2.md, punto 3c).
+ *
+ * Diseño (ws1-t5): la ropa pasa de estilos en línea a
+ * `cobros-inventario-rediseno/avisos.module.css`, porque en línea no se puede
+ * escribir ni el `:hover` ni el foco de teclado, y la última fila se quedaba
+ * con una raya debajo que no separaba nada.
  */
 
 import Link from "next/link";
 import { AlertTriangle, AlertCircle, ChevronRight, Info, type LucideIcon } from "lucide-react";
 import type { HomeAdminAlert } from "@/lib/home/types";
+import s from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.css";
 
 const ICONO: Record<HomeAdminAlert["tone"], LucideIcon> = {
   warning: AlertTriangle,
@@ -17,16 +23,10 @@ const ICONO: Record<HomeAdminAlert["tone"], LucideIcon> = {
   info:    Info,
 };
 
-const COLOR: Record<HomeAdminAlert["tone"], string> = {
-  warning: "var(--warning-strong)",
-  danger:  "var(--danger-strong)",
-  info:    "var(--info-strong)",
-};
-
-const FONDO: Record<HomeAdminAlert["tone"], string> = {
-  warning: "var(--warning-soft)",
-  danger:  "var(--danger-soft)",
-  info:    "var(--info-soft)",
+const TONO: Record<HomeAdminAlert["tone"], string> = {
+  warning: s.iconoAlerta,
+  danger:  s.iconoPeligro,
+  info:    s.iconoInfo,
 };
 
 export function FilaAviso({ alert }: { alert: HomeAdminAlert }) {
@@ -34,25 +34,15 @@ export function FilaAviso({ alert }: { alert: HomeAdminAlert }) {
 
   const contenido = (
     <>
-      <span style={{
-        width: 28, height: 28, borderRadius: 8, background: FONDO[alert.tone],
-        display: "grid", placeItems: "center", flexShrink: 0,
-      }}>
-        <Icono size={14} strokeWidth={1.75} style={{ color: COLOR[alert.tone] }} aria-hidden />
+      <span className={`${s.icono} ${s.filaAvisoIcono} ${TONO[alert.tone]}`}>
+        <Icono size={14} strokeWidth={1.75} aria-hidden />
       </span>
-      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>
-        {alert.title}
-      </span>
-      {alert.href && <ChevronRight size={13} style={{ color: "var(--text-3)", flexShrink: 0 }} aria-hidden />}
+      <span className={s.filaAvisoTexto}>{alert.title}</span>
+      {alert.href && <ChevronRight size={14} strokeWidth={1.75} className={s.flecha} aria-hidden />}
     </>
   );
 
-  const estiloFila: React.CSSProperties = {
-    display: "flex", alignItems: "center", gap: 10, padding: "10px 4px",
-    textDecoration: "none", color: "inherit", borderBottom: "1px solid var(--border-soft)",
-  };
-
   return alert.href
-    ? <Link href={alert.href} style={estiloFila}>{contenido}</Link>
-    : <div style={estiloFila}>{contenido}</div>;
+    ? <Link href={alert.href} className={s.filaAviso}>{contenido}</Link>
+    : <div className={s.filaAviso}>{contenido}</div>;
 }

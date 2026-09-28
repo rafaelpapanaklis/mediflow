@@ -14,9 +14,12 @@
 // `caja-client.tsx`) para no dejar a recepción buscando la fila a mano.
 
 import { useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { listarMensualidadesPorCobrar } from "@/app/actions/orthodontics/recepcion/listarMensualidadesPorCobrar";
+// Diseño (ws1-t5): antes pedía `--danger-bg`, que no existe, y caía en un rosa
+// fijo (en oscuro, una mancha clara). La ropa solo lee tokens del panel.
+import s from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.css";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -51,26 +54,20 @@ export function AvisoMensualidadesVencidas() {
   return (
     <Link
       href="/dashboard/caja?tab=facturas#mensualidades-ortodoncia"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "10px 16px",
-        marginBottom: 16,
-        borderRadius: 10,
-        border: "1px solid var(--danger-strong, #b91c1c)",
-        background: "var(--danger-bg, #fef2f2)",
-        color: "var(--danger-strong, #b91c1c)",
-        fontWeight: 600,
-        fontSize: 13,
-        textDecoration: "none",
-      }}
+      className={`${s.aviso} ${s.avisoEnlace}`}
       role="alert"
     >
-      <AlertTriangle size={16} strokeWidth={2} aria-hidden />
-      {vencidas.count === 1 ? "1 mensualidad vencida" : `${vencidas.count} mensualidades vencidas`}
-      {" · "}
-      {fmt.format(vencidas.total)}
+      <span className={`${s.icono} ${s.iconoPeligro}`}>
+        <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
+      </span>
+      <span className={s.textos}>
+        <span className={s.titulo}>
+          {vencidas.count === 1 ? "1 mensualidad vencida" : `${vencidas.count} mensualidades vencidas`}
+        </span>
+        <span className={s.sub}>Ortodoncia · cobrar en Caja</span>
+      </span>
+      <span className={`${s.importe} ${s.importePeligro}`}>{fmt.format(vencidas.total)}</span>
+      <ChevronRight size={16} strokeWidth={1.75} className={s.flecha} aria-hidden />
     </Link>
   );
 }
