@@ -333,7 +333,13 @@
     "//test:ia-interruptor": "ws1-t1: las cinco rutas que llamaban a Claude sin rastro (weekly-insights, ai-insight, no-shows, clinic-layout, homeopatía) dejan su AiUsageEvent con billedCents 0 sin cambiar quién paga, y registrar nunca tumba la respuesta. Con la función apagada en Saldo de IA no sale ni un fetch (13 funciones; el cron lo lee por clínica a mitad de corrida). Todo encendido de fábrica y si no se puede leer, encendido.",
     "test:ia-interruptor": "tsx --test src/lib/ai-billing/__tests__/fugas-e-interruptor.test.ts",
     "test:orto-cobranza-caso": "tsx --test src/lib/orthodontics/__tests__/cobranza-caso.test.ts",
-    "test:orto-cobro-reglas": "tsx --test src/lib/orthodontics/__tests__/cobro-reglas.test.ts"
+    "test:orto-cobro-reglas": "tsx --test src/lib/orthodontics/__tests__/cobro-reglas.test.ts",
+    "test:orto-tablero-alertas": "tsx --test src/lib/orthodontics/__tests__/tablero-alertas.test.ts",
+    "test:orto-geometria": "tsx --test src/lib/orthodontics/__tests__/geometria-plana.test.ts",
+    "test:orto-cefalometria": "tsx --test src/lib/orthodontics/cefalometria/__tests__/measurements.test.ts src/lib/orthodontics/cefalometria/__tests__/norms.test.ts",
+    "test:orto-fotos-analisis": "tsx --test src/lib/orthodontics/fotos/__tests__/facial-analysis.test.ts",
+    "test:orto-alineadores": "tsx --test src/lib/orthodontics/alineadores/__tests__/expected-tray.test.ts src/lib/orthodontics/alineadores/__tests__/bolton.test.ts",
+    "test:orto-elastics-compliance": "tsx --test src/lib/orthodontics/__tests__/elastics-compliance.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
