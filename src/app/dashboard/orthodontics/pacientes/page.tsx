@@ -8,35 +8,34 @@
 // elegir paciente. Antes un caso solo se abría desde la ficha. Lo ve quien
 // puede escribir en el expediente (`medicalRecord.edit`), el mismo permiso
 // que exige crear el caso.
+//
+// ws1-t4 ronda 6 (revisión de lógica de uso, filas 18 a 20): la tabla dice por
+// dónde va cada caso (etapa, aparatología, último y próximo control) y deja
+// de repetir la de Cobranza; se puede filtrar por estado y por doctor
+// tratante, así que también se encuentra a quien está en retención, en pausa,
+// terminó o abandonó; y un caso sin plan de pago ya no sale «Al día». Las
+// filas las arma `pacientes-modulo.ts` (puro, con tests).
 export const dynamic = "force-dynamic";
 
 import { getCurrentUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/auth/permissions";
 import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
-import { loadOrthoCases } from "@/lib/orthodontics/tablero-data";
-import { ACTIVE_PLAN_STATUSES } from "@/lib/orthodontics/specialty-kpis";
-import { OrthoPacientesTable, type OrthoPacienteRow } from "@/components/specialties/orthodontics/OrthoPacientesTable";
+import { cargarFilasDeCasos } from "@/lib/orthodontics/pacientes-modulo-db";
+import { contarPorEstado, leerFiltroEstado, leerFiltroVer } from "@/lib/orthodontics/pacientes-modulo";
+import { OrthoPacientesTable } from "@/components/specialties/orthodontics/OrthoPacientesTable";
 import { Pantalla } from "@/components/specialties/orthodontics/modulo/piezas";
 import { AbrirCasoBoton } from "@/components/specialties/orthodontics/modulo/abrir-caso";
 
-export default async function OrthodonticsPacientesPage() {
+export default async function OrthodonticsPacientesPage({
+  searchParams,
+}: {
+  searchParams?: { estado?: string | string[]; ver?: string | string[] };
+}) {
   await exigirModuloOrtodoncia();
   const user = await getCurrentUser();
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
-  const { cases } = await loadOrthoCases(user.clinicId, user.clinic.timezone, viewer);
-
-  const rows: OrthoPacienteRow[] = cases
-    .filter((c) => ACTIVE_PLAN_STATUSES.includes(c.status))
-    .map((c) => ({
-      planId: c.planId,
-      patientId: c.patientId,
-      patientName: c.patientName,
-      treatingDoctorName: c.treatingDoctorName,
-      status: c.status as OrthoPacienteRow["status"],
-      overdueAmountMxn: Math.round(c.cobranza?.vencidas.reduce((s, q) => s + q.falta, 0) ?? 0),
-      nextDueDate: c.cobranza?.proximoVencimiento ?? null,
-    }))
-    .sort((a, b) => a.patientName.localeCompare(b.patientName));
+  const rows = await cargarFilasDeCasos(user.clinicId, user.clinic.timezone, viewer);
+  const activos = contarPorEstado(rows).activos;
 
   const puedeAbrirCaso = hasPermission(
     { role: user.role, permissionsOverride: user.permissionsOverride },
@@ -46,10 +45,18 @@ export default async function OrthodonticsPacientesPage() {
   return (
     <Pantalla
       titulo="Pacientes en tratamiento"
-      sub={`${rows.length} caso${rows.length === 1 ? "" : "s"} activo${rows.length === 1 ? "" : "s"}.`}
+      sub={`${activos} caso${activos === 1 ? "" : "s"} activo${activos === 1 ? "" : "s"}${
+        rows.length > activos ? ` · ${rows.length} en total` : ""
+      }.`}
       acciones={puedeAbrirCaso ? <AbrirCasoBoton /> : undefined}
     >
-      <OrthoPacientesTable rows={rows} puedeAbrirCaso={puedeAbrirCaso} />
+      <OrthoPacientesTable
+        rows={rows}
+        puedeAbrirCaso={puedeAbrirCaso}
+        zonaHoraria={user.clinic.timezone}
+        estadoInicial={leerFiltroEstado(searchParams?.estado)}
+        verInicial={leerFiltroVer(searchParams?.ver)}
+      />
     </Pantalla>
   );
 }
