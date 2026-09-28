@@ -25,6 +25,7 @@ import { formatRelative } from "@/lib/home/greet";
 import type { HomeActionItem, HomeReceptionistData } from "@/lib/home/types";
 import { AccionesRapidas, BarraAtajos, Saludo, Tarjeta, Vacio } from "./piezas";
 import { FilaCita } from "./fila-cita";
+import { AvisoMensualidadesVencidas } from "../home/aviso-mensualidades-vencidas";
 import s from "./hoy.module.css";
 
 interface Props {
@@ -69,6 +70,9 @@ export function HoyRecepcion({ user, data }: Props) {
         />
         <AccionesRapidas />
       </div>
+
+      {/* ws1-t5 — mensualidades de ortodoncia vencidas. Se calla sola si no hay ninguna. */}
+      <AvisoMensualidadesVencidas />
 
       <div className={s.rejillaPrincipal}>
         <Tarjeta

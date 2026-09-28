@@ -18,6 +18,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { ChevronRight, Clock } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import type { HomeReceptionistData } from "@/lib/home/types";
+import { AvisoMensualidadesVencidas } from "./aviso-mensualidades-vencidas";
 
 interface Props {
   user: { displayName: string };
@@ -77,6 +78,9 @@ export function HomeReceptionist({ user, data }: Props) {
         />
         <HomeQuickActions />
       </div>
+
+      {/* ws1-t5 — mensualidades de ortodoncia vencidas. Se calla sola si no hay ninguna. */}
+      <AvisoMensualidadesVencidas />
 
       {/* Mismo criterio que el home de admin: el colapso a una columna lo
           decide el ancho del CONTENEDOR (ver home.module.css). */}
