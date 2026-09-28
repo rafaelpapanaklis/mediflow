@@ -11,7 +11,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { StepOrigin } from "../step-origin";
 import { StepReview } from "../step-review";
 import { StepSheet } from "../step-sheet";
-import { ORIGINS } from "../import-client";
+import { StepWhat } from "../step-what";
+import { ORIGINS, DATA_TYPES } from "../import-client";
 import es from "@/i18n/dictionaries/es.json";
 import en from "@/i18n/dictionaries/en.json";
 
@@ -73,6 +74,16 @@ for (const [lang, dic] of [["es", es], ["en", en]] as const) {
     assert.ok(!html.includes("«shell."), "clave sin traducir: " + (html.match(/«shell[^»]*»/g) ?? []).join());
     assert.ok(html.includes("Mancha rarísima XYZ") && html.includes("Caries") && html.includes("Pigmentación"));
     assert.ok(!/Solo el importe, sin ligar|Amount only, not linked/.test(html), "el odontograma no tiene un resguardo 'sin ligar'");
+  });
+
+  test(`${lang}: paso 3 — QUÉ importar, con las dos CTA de "varios archivos" y "archivos en bloque"`, () => {
+    const html = renderToStaticMarkup(
+      <StepWhat t={t} selected={new Set(["pacientes"])} onToggle={() => {}} onFiles={() => {}} onMulti={() => {}} />,
+    );
+    assert.ok(!html.includes("«shell."), "clave sin traducir: " + (html.match(/«shell[^»]*»/g) ?? []).join());
+    assert.equal((html.match(/<input/g) ?? []).length, DATA_TYPES.length);
+    assert.ok(/varios archivos|Several files/i.test(html), "CTA de subir varios a la vez (WS1-T12)");
+    assert.ok(/radiograf|PDF|x-rays/i.test(html), "CTA de archivos en bloque sigue ahí");
   });
 
   test(`${lang}: selector de pestañas — sugerida preseleccionada y vista previa; sin propuesta no elige nada`, () => {

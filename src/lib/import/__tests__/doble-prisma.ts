@@ -14,6 +14,8 @@
 // Cuenta las llamadas por modelo/método: con eso se demuestra que una
 // importación NO hace una consulta por fila.
 
+import { folioToInt } from "@/lib/patients/next-patient-number-core";
+
 type Row = Record<string, any>;
 type Where = Record<string, any> | undefined;
 
@@ -266,6 +268,20 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
                   hechos.push({ id: p.id });
                 }
                 return hechos;
+              }
+              if (/FROM "patients"/.test(sql)) {
+                // Folio de paciente (next-patient-number.ts, lastPatientFolio): MAX
+                // numérico real, nunca un COUNT — mismo criterio que el folio de quotes,
+                // reusando `folioToInt` (espejo puro en JS de la misma extracción SQL).
+                contar("$queryRaw.lastPatientFolio");
+                const [clinicId] = values;
+                let max: number | null = null;
+                for (const p of tabla("patient")) {
+                  if (p.clinicId !== clinicId) continue;
+                  const n = folioToInt(p.patientNumber);
+                  if (n !== null && (max === null || n > max)) max = n;
+                }
+                return [{ max }];
               }
               if (/FROM "quotes"/.test(sql)) {
                 contar("$queryRaw.lastQuoteFolio");
