@@ -48,7 +48,7 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
     user.email ||
     "";
   const homeUser = { displayName, role: user.role };
-  const homeClinic = { name: clinic.name };
+  const homeClinic = { name: clinic.name, timezone: clinic.timezone };
 
   const role = user.role;
   const period: AdminPeriod = isValidPeriod(searchParams?.period)

@@ -28,7 +28,7 @@ import type { HomeAdminData, AdminPeriod } from "@/lib/home/types";
 
 interface Props {
   user: { displayName: string };
-  clinic: { name: string };
+  clinic: { name: string; timezone?: string | null };
   data: HomeAdminData;
   period: AdminPeriod;
 }
@@ -69,6 +69,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         <Greeting
           userFullName={clinic.name}
           trailing={t("home.admin.opSummary")}
+          clinicTimezone={clinic.timezone}
         />
         <HomeQuickActions />
       </div>

@@ -31,7 +31,7 @@ import s from "./hoy.module.css";
 
 interface Props {
   user: { displayName: string };
-  clinic: { name: string };
+  clinic: { name: string; timezone?: string | null };
   data: HomeAdminData;
   period: AdminPeriod;
 }
@@ -71,7 +71,7 @@ export function HoyAdmin({ clinic, data, period }: Props) {
   return (
     <>
       <div className={s.cabecera}>
-        <Saludo nombreCompleto={clinic.name} cola={t("home.admin.opSummary")} />
+        <Saludo nombreCompleto={clinic.name} cola={t("home.admin.opSummary")} zonaHorariaClinica={clinic.timezone} />
         <AccionesRapidas />
       </div>
 

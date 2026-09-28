@@ -7,25 +7,29 @@ import { timeGreeting, formatLongDate, firstName } from "@/lib/home/greet";
 export function Greeting({
   userFullName,
   trailing,
+  clinicTimezone,
 }: {
   userFullName: string;
   trailing?: string;
+  /** H26 (QA ws1-t9): sin esto, el saludo y la fecha usan la zona del
+   *  navegador — de noche puede ya ser "mañana" ahí y no en la clínica. */
+  clinicTimezone?: string | null;
 }) {
   const t = useT();
   const [greeting, setGreeting] = useState(t("home.greeting.hello"));
-  const [date, setDate] = useState(formatLongDate());
+  const [date, setDate] = useState(formatLongDate(undefined, clinicTimezone));
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const update = () => {
-      setGreeting(timeGreeting());
-      setDate(formatLongDate());
+      setGreeting(timeGreeting(undefined, clinicTimezone));
+      setDate(formatLongDate(undefined, clinicTimezone));
     };
     update();
     setMounted(true);
     const id = window.setInterval(update, 60_000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [clinicTimezone]);
 
   const first = firstName(userFullName);
 

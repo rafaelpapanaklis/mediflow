@@ -1,19 +1,50 @@
 // src/lib/home/greet.ts
 
-export function timeGreeting(now: Date = new Date()): string {
-  const h = now.getHours();
+/**
+ * H26 (QA ws1-t9): sin `timeZone`, `getHours()`/`Intl.DateTimeFormat` usan la
+ * zona del NAVEGADOR (o la del servidor en un render de prueba en el mismo
+ * host) — a las 23:25 del domingo en CDMX, un navegador en EDT ya está en
+ * lunes. La Agenda sí acertaba porque ya pinta en la zona de la clínica; Hoy
+ * no. `timeZone` es opcional: sin clínica (home vieja sin ese dato) el
+ * comportamiento de siempre no cambia. Zona vacía o corrupta (dato sucio en
+ * `Clinic.timezone`) cae al mismo default que la Agenda en vez de tumbar el
+ * saludo (mismo criterio que `consentTimeZone`/`zonaValida`).
+ */
+const ZONA_POR_DEFECTO = "America/Mexico_City";
+
+function zonaValida(timeZone: string | null | undefined): string | undefined {
+  if (!timeZone) return undefined;
+  try {
+    new Intl.DateTimeFormat("es-MX", { timeZone });
+    return timeZone;
+  } catch {
+    return ZONA_POR_DEFECTO;
+  }
+}
+
+export function timeGreeting(now: Date = new Date(), timeZone?: string | null): string {
+  const zona = zonaValida(timeZone);
+  let h = zona
+    ? Number(
+        new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: zona }).format(now),
+      )
+    : now.getHours();
+  // Algunos motores devuelven "24" para la medianoche con hour12:false.
+  if (h === 24) h = 0;
   if (h < 6) return "Buenas noches";
   if (h < 13) return "Buenos días";
   if (h < 20) return "Buenas tardes";
   return "Buenas noches";
 }
 
-export function formatLongDate(now: Date = new Date()): string {
+export function formatLongDate(now: Date = new Date(), timeZone?: string | null): string {
+  const zona = zonaValida(timeZone);
   return new Intl.DateTimeFormat("es-MX", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
+    ...(zona ? { timeZone: zona } : {}),
   })
     .format(now)
     .toLowerCase();

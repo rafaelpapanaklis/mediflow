@@ -30,11 +30,11 @@ import s from "./hoy.module.css";
 
 interface Props {
   user: { displayName: string };
-  clinic: { name: string };
+  clinic: { name: string; timezone?: string | null };
   data: HomeReceptionistData;
 }
 
-export function HoyRecepcion({ user, data }: Props) {
+export function HoyRecepcion({ user, clinic, data }: Props) {
   const t = useT();
   const router = useRouter();
   const enSala = data.checkedInPatients.length;
@@ -67,6 +67,7 @@ export function HoyRecepcion({ user, data }: Props) {
         <Saludo
           nombreCompleto={user.displayName}
           cola={enSala > 0 ? t("home.recep.patientsWaiting", { count: enSala }) : undefined}
+          zonaHorariaClinica={clinic.timezone}
         />
         <AccionesRapidas />
       </div>

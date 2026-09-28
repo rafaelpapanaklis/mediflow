@@ -22,11 +22,11 @@ import { AvisoMensualidadesVencidas } from "./aviso-mensualidades-vencidas";
 
 interface Props {
   user: { displayName: string };
-  clinic: { name: string };
+  clinic: { name: string; timezone?: string | null };
   data: HomeReceptionistData;
 }
 
-export function HomeReceptionist({ user, data }: Props) {
+export function HomeReceptionist({ user, clinic, data }: Props) {
   const t = useT();
   const router = useRouter();
   const waiting = data.checkedInPatients.length;
@@ -75,6 +75,7 @@ export function HomeReceptionist({ user, data }: Props) {
               ? t("home.recep.patientsWaiting", { count: waiting })
               : undefined
           }
+          clinicTimezone={clinic.timezone}
         />
         <HomeQuickActions />
       </div>

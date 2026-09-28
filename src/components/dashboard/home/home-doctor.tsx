@@ -18,11 +18,11 @@ import type { HomeDoctorData } from "@/lib/home/types";
 
 interface Props {
   user: { displayName: string };
-  clinic: { name: string };
+  clinic: { name: string; timezone?: string | null };
   data: HomeDoctorData;
 }
 
-export function HomeDoctor({ user, data }: Props) {
+export function HomeDoctor({ user, clinic, data }: Props) {
   const t = useT();
   const router = useRouter();
   const totalToday = data.todayAppointments.length;
@@ -51,7 +51,7 @@ export function HomeDoctor({ user, data }: Props) {
         flexWrap: "wrap",
         marginBottom: 24,
       }}>
-        <Greeting userFullName={`Dr. ${user.displayName}`} trailing={trailing} />
+        <Greeting userFullName={`Dr. ${user.displayName}`} trailing={trailing} clinicTimezone={clinic.timezone} />
         <HomeQuickActions />
       </div>
 

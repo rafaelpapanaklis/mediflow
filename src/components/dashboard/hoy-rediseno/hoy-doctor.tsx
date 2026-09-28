@@ -30,11 +30,11 @@ import s from "./hoy.module.css";
 
 interface Props {
   user: { displayName: string };
-  clinic: { name: string };
+  clinic: { name: string; timezone?: string | null };
   data: HomeDoctorData;
 }
 
-export function HoyDoctor({ user, data }: Props) {
+export function HoyDoctor({ user, clinic, data }: Props) {
   const t = useT();
   const totalHoy = data.todayAppointments.length;
   const { draftNotes, unanalyzedXrays, unsignedConsents } = data.pendingTasks;
@@ -54,7 +54,7 @@ export function HoyDoctor({ user, data }: Props) {
   return (
     <>
       <div className={s.cabecera}>
-        <Saludo nombreCompleto={`Dr. ${user.displayName}`} cola={cola} />
+        <Saludo nombreCompleto={`Dr. ${user.displayName}`} cola={cola} zonaHorariaClinica={clinic.timezone} />
         <AccionesRapidas />
       </div>
 

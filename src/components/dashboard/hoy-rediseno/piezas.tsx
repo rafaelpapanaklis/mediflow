@@ -27,22 +27,32 @@ import s from "./hoy.module.css";
  * cada minuto: es el MISMO reloj de cliente que ya tenía la home de siempre
  * (`home/parts/greeting.tsx`), sin ninguna petición de red.
  */
-export function Saludo({ nombreCompleto, cola }: { nombreCompleto: string; cola?: string }) {
+export function Saludo({
+  nombreCompleto,
+  cola,
+  zonaHorariaClinica,
+}: {
+  nombreCompleto: string;
+  cola?: string;
+  /** H26 (QA ws1-t9): sin esto, la fecha y el saludo salen en la zona del
+   *  navegador — la Agenda ya pinta en la de la clínica, Hoy no. */
+  zonaHorariaClinica?: string | null;
+}) {
   const t = useT();
   const [saludo, setSaludo] = useState(t("home.greeting.hello"));
-  const [fecha, setFecha] = useState(formatLongDate());
+  const [fecha, setFecha] = useState(formatLongDate(undefined, zonaHorariaClinica));
   const [montado, setMontado] = useState(false);
 
   useEffect(() => {
     const actualizar = () => {
-      setSaludo(timeGreeting());
-      setFecha(formatLongDate());
+      setSaludo(timeGreeting(undefined, zonaHorariaClinica));
+      setFecha(formatLongDate(undefined, zonaHorariaClinica));
     };
     actualizar();
     setMontado(true);
     const id = window.setInterval(actualizar, 60_000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [zonaHorariaClinica]);
 
   return (
     <div>
