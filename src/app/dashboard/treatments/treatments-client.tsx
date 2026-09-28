@@ -254,6 +254,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
           loadingInv, loadInventory, form, setForm, createPlan, addSession, changeStatus, patients,
           doctors, isAdmin, canEdit, active, overdue, completed, daysOverdue, progressPct,
           commonTreatments: COMMON_TREATMENTS.slice(0, 5),
+          procedureOpts, selProcedureId, setSelProcedureId, loadProcedureOpts,
         }}
       />
     );

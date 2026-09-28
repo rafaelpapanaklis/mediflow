@@ -91,6 +91,10 @@ export interface TratamientosVm {
   daysOverdue: (tp: Treatment) => number;
   progressPct: (tp: Treatment) => number;
   commonTreatments: string[];
+  procedureOpts: { id: string; name: string }[];
+  selProcedureId: string;
+  setSelProcedureId: (v: string) => void;
+  loadProcedureOpts: () => Promise<void>;
 }
 
 export function Tratamientos({ vm }: { vm: TratamientosVm }) {
@@ -100,6 +104,7 @@ export function Tratamientos({ vm }: { vm: TratamientosVm }) {
     addingSession, setAddingSession, sessionNote, setSessionNote, invItems, selInv, setSelInv,
     loadingInv, loadInventory, form, setForm, createPlan, addSession, changeStatus, patients,
     doctors, isAdmin, canEdit, active, overdue, completed, daysOverdue, progressPct, commonTreatments,
+    procedureOpts, selProcedureId, setSelProcedureId, loadProcedureOpts,
   } = vm;
 
   const filtros: { valor: Filtro; etiqueta: string }[] = [
@@ -303,6 +308,21 @@ export function Tratamientos({ vm }: { vm: TratamientosVm }) {
                       onChange={(e) => setSessionNote(e.target.value)}
                     />
                   </Campo>
+                  <Campo etiqueta={t("pages.treatments.procedureOptionalLabel")} htmlFor="tr-procedimiento">
+                    <select
+                      id="tr-procedimiento"
+                      className={s.campoEntrada}
+                      value={selProcedureId}
+                      onChange={(e) => setSelProcedureId(e.target.value)}
+                    >
+                      <option value="">{t("pages.treatments.procedureNoneOption")}</option>
+                      {procedureOpts.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Campo>
                   <SelectorInsumos
                     clinicItems={invItems}
                     selected={selInv}
@@ -317,7 +337,7 @@ export function Tratamientos({ vm }: { vm: TratamientosVm }) {
                     onRemove={(id) => setSelInv((prev) => prev.filter((i) => i.id !== id))}
                   />
                   <div className={s.acciones} style={{ justifyContent: "flex-end" }}>
-                    <Boton variante="suave" onClick={() => { setAddingSession(null); setSessionNote(""); setSelInv([]); }}>
+                    <Boton variante="suave" onClick={() => { setAddingSession(null); setSessionNote(""); setSelInv([]); setSelProcedureId(""); }}>
                       {t("common.cancel")}
                     </Boton>
                     <Boton variante="principal" onClick={() => addSession(selected.id)} disabled={saving} icono={<CheckCircle size={15} strokeWidth={1.75} />}>
@@ -326,7 +346,7 @@ export function Tratamientos({ vm }: { vm: TratamientosVm }) {
                   </div>
                 </div>
               ) : (
-                <Boton ancho variante="principal" onClick={() => setAddingSession(selected.id)} icono={<Plus size={15} strokeWidth={2} />}>
+                <Boton ancho variante="principal" onClick={() => { setAddingSession(selected.id); loadProcedureOpts(); }} icono={<Plus size={15} strokeWidth={2} />}>
                   {t("pages.treatments.recordCompletedSession")}
                 </Boton>
               )}
