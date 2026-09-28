@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { cfdiAvisoPersistente, cfdiImpideReintento } from "@/lib/cfdi-avisos";
-import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle, Wallet } from "lucide-react";
+import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle, Wallet, HandCoins } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -41,6 +41,9 @@ import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 import { LinkMercadoPago, useCobroMercadoPago } from "./link-mercado-pago";
 // Pedir anticipo por Mercado Pago o transferencia desde la factura (ws1-t3 fase 1-2).
 import { ModalPedirAnticipo } from "./modal-pedir-anticipo";
+// Diseño (ws1-t5): la fila «Anticipo» del resumen y el renglón de acciones
+// de anticipo/recibo. Solo ropa.
+import ant from "@/components/dashboard/cobros-inventario-rediseno/anticipo.module.css";
 // Registrar anticipo recibido (ws1-t3 fase 2).
 import { ModalRegistrarAnticipo } from "./modal-registrar-anticipo";
 import { invoiceStatusBadge } from "./invoice-status";
@@ -679,9 +682,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               {/* ws1-t3 fase 1 — cuánto de lo pagado es anticipo. Solo se pinta
                   si hay alguno: no añade ruido a una factura sin anticipo. */}
               {anticipoPagado > 0 && (
-                <div className={cx("flex justify-between", c.resumenFila)}>
-                  <span className={cx("text-muted-foreground", c.rotulo)}>Anticipo</span>
-                  <span className={rediseno ? c.cifra : undefined}>{fmtMXNdec(anticipoPagado)}</span>
+                // Diseño (ws1-t5): sangrada bajo «Pagado» y con la cifra más
+                // ligera — es una PARTE de lo pagado, no un importe más que
+                // sumar. El número es el mismo de antes.
+                <div className={`${cx("flex justify-between", c.resumenFila)} ${ant.subfila}`}>
+                  <span className={`${cx("text-muted-foreground", c.rotulo)} ${ant.subfilaRotulo}`}>
+                    <Wallet size={12} strokeWidth={1.75} aria-hidden /> Anticipo
+                  </span>
+                  <span className={`${rediseno ? c.cifra : ""} ${ant.subfilaCifra}`}>{fmtMXNdec(anticipoPagado)}</span>
                 </div>
               )}
               {/* Saldo. Cancelar NO pone `balance` a 0 en BD (solo cambia el
@@ -742,6 +750,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               />
             )}
 
+            {/* Diseño (ws1-t5): las tres acciones de anticipo y recibo van en UN
+                renglón (antes cada una ocupaba el ancho entero, una debajo
+                de otra) y con el botón de la familia de la factura. Cada
+                una conserva su condición y su permiso, tal cual. */}
+            <div className={ant.accionesFactura}>
             {/* Pedir anticipo (ws1-t3 fase 1): por un importe PARCIAL, distinto
                 del link de arriba (que cobra el saldo completo). Mientras la
                 factura tenga saldo por cobrar. Gateado por el PERMISO real de
@@ -753,7 +766,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 type="button"
                 onClick={() => setPidiendoAnticipo(true)}
                 disabled={busy}
-                className="inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50"
+                className={cx("inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50", c.boton)}
               >
                 <Wallet size={14} aria-hidden /> Pedir anticipo
               </button>
@@ -768,9 +781,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 type="button"
                 onClick={() => setRegistrandoAnticipo(true)}
                 disabled={busy}
-                className="inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50"
+                className={cx("inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50", c.boton)}
               >
-                <Wallet size={14} aria-hidden /> Registrar anticipo recibido
+                <HandCoins size={14} aria-hidden /> Registrar anticipo recibido
               </button>
             )}
 
@@ -782,11 +795,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 type="button"
                 onClick={enviarRecibo}
                 disabled={busy || enviandoRecibo}
-                className="inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50"
+                className={cx("inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50", c.boton)}
               >
                 <MessageCircle size={14} aria-hidden /> {enviandoRecibo ? "Enviando…" : "Enviar recibo"}
               </button>
             )}
+            </div>
 
             {/* Conceptos */}
             {Array.isArray(invoice.items) && invoice.items.length > 0 && (

@@ -15,11 +15,16 @@
 
 import { useCallback, useState } from "react";
 import toast from "react-hot-toast";
-import { Loader2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ArrowLeftRight, Banknote, CreditCard, Loader2, type LucideIcon } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+// Diseño (ws1-t5): de la FAMILIA de la factura, igual que «Pedir anticipo».
+// Ver la nota en modal-pedir-anticipo.tsx. Solo cambia la ropa.
+import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
+import a from "@/components/dashboard/cobros-inventario-rediseno/anticipo.module.css";
+import { useRedisenoActivo } from "@/components/dashboard/cobros-inventario-rediseno/rediseno-activo";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -32,6 +37,14 @@ const METODOS: { value: MetodoRegistro; label: string }[] = [
   { value: "credit", label: "Terminal · crédito" },
 ];
 
+/** El ícono de cada método: solo dibujo, no cambia qué se envía. */
+const ICONO_METODO: Record<MetodoRegistro, LucideIcon> = {
+  cash: Banknote,
+  transfer: ArrowLeftRight,
+  debit: CreditCard,
+  credit: CreditCard,
+};
+
 export interface ModalRegistrarAnticipoProps {
   open: boolean;
   onClose: () => void;
@@ -39,9 +52,16 @@ export interface ModalRegistrarAnticipoProps {
   saldo: number;
   /** Avisa al que lo montó (para refrescar la factura). */
   onListo?: () => void;
+  /** ¿Diseño nuevo? Solo decide la ropa; si no llega, se detecta. */
+  rediseno?: boolean;
 }
 
-export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, onListo }: ModalRegistrarAnticipoProps) {
+export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, onListo, rediseno: redisenoProp }: ModalRegistrarAnticipoProps) {
+  const redisenoDetectado = useRedisenoActivo();
+  const rediseno = redisenoProp ?? redisenoDetectado;
+  const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
+  // Un campo: la maqueta propia y, con el diseño nuevo, el rótulo de la familia.
+  const campo = `${a.campo} ${rediseno ? c.campo : ""}`;
   const [monto, setMonto] = useState(() => (saldo > 0 ? String(saldo) : ""));
   const [method, setMethod] = useState<MetodoRegistro>("cash");
   const [reference, setReference] = useState("");
@@ -85,49 +105,69 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, onList
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Registrar anticipo recibido</DialogTitle>
+      <DialogContent className={cx("max-w-md bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalEstrecho}`)}>
+        <DialogHeader className={rediseno ? c.cabecera : undefined}>
+          <DialogTitle className={cx("text-foreground font-bold", c.titulo)}>Registrar anticipo recibido</DialogTitle>
         </DialogHeader>
 
-        <div className="px-6 py-4 space-y-3.5 flex-1 overflow-y-auto min-h-0 text-sm">
-          <p className="text-xs text-muted-foreground">
+        <div className={`${a.anticipo} ${cx(a.cuerpoClasico, c.cuerpo)}`}>
+          <p className={a.texto}>
             Para cuando el dinero YA llegó (efectivo, transferencia o terminal): se registra como pago real de la
             factura y, si la cita seguía apartada, queda confirmada.
           </p>
-          {saldo > 0 && <p className="text-xs text-muted-foreground">Saldo de la factura: {fmt.format(saldo)}</p>}
-
-          <div className="space-y-1.5">
-            <Label>Monto recibido (MXN)</Label>
-            <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0.00" />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Método</Label>
-            <select
-              value={method}
-              onChange={(e) => setMethod(e.target.value as MetodoRegistro)}
-              className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
-            >
-              {METODOS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {method === "transfer" && (
-            <div className="space-y-1.5">
-              <Label>Referencia de la transferencia</Label>
-              <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Clave de rastreo, folio…" />
+          {saldo > 0 && (
+            <div className={a.resumen}>
+              <span className={a.resumenRotulo}>Saldo de la factura</span>
+              <span className={a.resumenCifra}>{fmt.format(saldo)}</span>
             </div>
           )}
 
-          <div className="flex gap-2 flex-wrap pt-1">
-            <ButtonNew variant="primary" icon={enviando ? <Loader2 size={14} className="animate-spin" /> : undefined} onClick={registrar} disabled={enviando}>
-              {enviando ? "Registrando…" : "Registrar anticipo"}
-            </ButtonNew>
+          <div className={campo}>
+            <Label htmlFor="anticipo-recibido">Monto recibido (MXN)</Label>
+            <div className={a.importe}>
+              <span className={a.importeSigno} aria-hidden>$</span>
+              <Input id="anticipo-recibido" value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0.00" />
+            </div>
           </div>
+
+          <div className={campo} role="radiogroup" aria-labelledby="anticipo-metodo">
+            <Label id="anticipo-metodo">Método</Label>
+            {/* Las cuatro opciones a la vista en vez de un desplegable: un clic
+                menos y se ve cuál está elegida. Mismo estado (`method`). */}
+            <div className={a.opciones}>
+              {METODOS.map((m) => {
+                const Icono = ICONO_METODO[m.value];
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={method === m.value}
+                    onClick={() => setMethod(m.value)}
+                    className={`${a.opcion} ${method === m.value ? a.opcionActiva : ""}`}
+                  >
+                    <Icono size={16} strokeWidth={1.75} aria-hidden />
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {method === "transfer" && (
+            <div className={campo}>
+              <Label htmlFor="anticipo-referencia">Referencia de la transferencia</Label>
+              <Input id="anticipo-referencia" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Clave de rastreo, folio…" />
+            </div>
+          )}
         </div>
+
+        <DialogFooter className={`${a.pie} ${rediseno ? c.pie : ""}`}>
+          <ButtonNew variant="ghost" onClick={onClose} disabled={enviando}>Cancelar</ButtonNew>
+          <ButtonNew variant="primary" icon={enviando ? <Loader2 size={14} className="animate-spin" aria-hidden /> : undefined} onClick={registrar} disabled={enviando}>
+            {enviando ? "Registrando…" : "Registrar anticipo"}
+          </ButtonNew>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -650,7 +650,8 @@ export function AnticiposClient({
                     <th>Pedido</th>
                     <th>Paciente</th>
                     <th>Cita</th>
-                    <th>Monto</th>
+                    {/* Diseño (ws1-t5): los importes a la derecha, uno bajo otro. */}
+                    <th style={{ textAlign: "right" }}>Monto</th>
                     <th>Estado</th>
                     <th>Ref. Mercado Pago</th>
                   </tr>
@@ -684,9 +685,11 @@ function FilaAnticipo({ r, tz }: { r: AnticipoReciente; tz: string }) {
   return (
     <tr>
       <td className={cr.tablaApagado}>{fecha(r.creado, tz)}</td>
-      <td>{r.paciente}</td>
+      <td style={{ minWidth: 120 }}>{r.paciente}</td>
       <td className={cr.tablaApagado}>{fecha(r.cita, tz)}</td>
-      <td>{formatoPesos(r.pagado ?? r.monto)}</td>
+      <td style={{ textAlign: "right", whiteSpace: "nowrap", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+        {formatoPesos(r.pagado ?? r.monto)}
+      </td>
       <td>
         <Insignia tono={est.tono}>{est.texto}</Insignia>
         {notas.length > 0 && (

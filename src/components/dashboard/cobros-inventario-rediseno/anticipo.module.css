@@ -1,0 +1,323 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   «Pedir anticipo» y «Registrar anticipo recibido» (ws1-t5, diseño).
+
+   Las dos ventanas son de la FAMILIA de la factura (Reembolsar, Editar
+   precio, Registrar pago…): con el diseño nuevo su caja lleva la misma ropa
+   (`factura-rediseno`), que trae los `--m2-*` del menú y viste campos,
+   botones y cifras. Aquí solo está lo que esa familia no tenía: elegir entre
+   dos o cuatro opciones, el importe con su signo de pesos, el mensaje que se
+   copia y los estados de espera.
+
+   NO declara colores: cada valor pide el token del menú y, si no está —la
+   clínica con el interruptor apagado—, el global de globals.css, que tiene
+   versión clara y oscura. No hay un solo hex ni un `--accent`.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.anticipo {
+  --an-texto: var(--m2-texto, var(--text-1));
+  --an-texto-2: var(--m2-texto-2, var(--text-2));
+  --an-texto-3: var(--m2-texto-3, var(--text-3));
+  --an-tarjeta: var(--m2-tarjeta, var(--bg-elev));
+  --an-tarjeta-hover: var(--m2-tarjeta-hover, var(--bg-elev-2));
+  --an-fondo: var(--m2-n1-fondo, var(--bg-elev-2));
+  --an-borde: var(--m2-tarjeta-borde, var(--border-soft));
+  --an-divisor: var(--m2-borde, var(--border-soft));
+  --an-activo: var(--m2-activo, var(--brand));
+  --an-activo-texto: var(--m2-activo-texto, hsl(var(--primary-foreground)));
+  --an-foco: var(--m2-foco, var(--ring));
+
+  font-variant-numeric: tabular-nums;
+}
+
+/* Con el interruptor apagado la ventana no lleva la ropa de la factura, que
+   es la que pone el aire entre piezas: lo pone esto. */
+.cuerpoClasico {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 24px 18px;
+  font-size: 13px;
+  color: var(--an-texto);
+}
+
+/* ── Resumen (saldo de la factura) ────────────────────────────────────── */
+
+.resumen {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 16px;
+  padding: 11px 14px;
+  border: 1px solid var(--an-divisor);
+  border-radius: 10px;
+  background: var(--an-fondo);
+  font-size: 12.5px;
+}
+
+.resumenRotulo {
+  color: var(--an-texto-3);
+}
+
+.resumenCifra {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  color: var(--an-texto);
+}
+
+/* ── Texto ────────────────────────────────────────────────────────────── */
+
+.texto {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--an-texto-2);
+}
+
+.texto strong {
+  font-weight: 650;
+  color: var(--an-texto);
+  white-space: nowrap;
+}
+
+.nota {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.nota > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.notaInfo {
+  background: var(--info-soft);
+  color: var(--info-strong, var(--info));
+}
+
+.notaAlerta {
+  background: var(--warning-soft);
+  color: var(--warning-strong, var(--warning));
+}
+
+.notaPeligro {
+  background: var(--danger-soft);
+  color: var(--danger-strong, var(--danger));
+}
+
+.notaExito {
+  background: var(--success-soft);
+  color: var(--success-strong, var(--success));
+}
+
+.notaTitulo {
+  display: block;
+  font-weight: 600;
+}
+
+/* ── Campos ───────────────────────────────────────────────────────────── */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* `align-items: end`: si un rótulo parte en dos renglones y el de al lado
+   no, los dos campos siguen a la misma altura. */
+.rejilla2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+
+.ayuda {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--an-texto-3);
+}
+
+/* El importe: el signo de pesos dentro del campo y la cifra en grande, que
+   es el dato que se revisa antes de pulsar. `.importe.importe input` (0,3,1)
+   gana a `.raiz input:not(…)` (0,2,1) de la ropa de la factura. */
+.importe {
+  position: relative;
+}
+
+.importeSigno {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--an-texto-3);
+  pointer-events: none;
+}
+
+.importe.importe input {
+  padding-left: 26px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ── Elegir una opción (canal de cobro, método de pago) ───────────────── */
+
+.opciones {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.opcion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--an-borde);
+  border-radius: 10px;
+  background: var(--an-tarjeta);
+  color: var(--an-texto-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.opcion > svg {
+  flex: none;
+}
+
+@media (hover: hover) {
+  .opcion:hover {
+    background: var(--an-tarjeta-hover);
+    border-color: var(--an-texto-3);
+    color: var(--an-texto);
+  }
+}
+
+.opcion:focus-visible {
+  outline: none;
+  box-shadow: var(--an-foco);
+}
+
+.opcionActiva,
+.opcionActiva:hover {
+  background: var(--an-activo);
+  border-color: var(--an-activo);
+  color: var(--an-activo-texto);
+}
+
+.opcionDetalle {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* ── El mensaje que se copia ──────────────────────────────────────────── */
+
+.mensaje {
+  max-height: 220px;
+  margin: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+  border: 1px solid var(--an-divisor);
+  border-radius: 10px;
+  background: var(--an-fondo);
+  color: var(--an-texto);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Espera ───────────────────────────────────────────────────────────── */
+
+/* Alto reservado: la ventana no crece de golpe al llegar los datos. */
+.espera {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 190px;
+  font-size: 12.5px;
+  color: var(--an-texto-3);
+}
+
+/* ── El pie en un teléfono: un botón por renglón, el principal arriba ─── */
+
+@media (max-width: 480px) {
+  .pie.pie {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .pie.pie > * {
+    justify-content: center;
+  }
+
+  .opcion {
+    padding: 6px 10px;
+  }
+}
+
+/* ── Dentro del detalle de la factura ─────────────────────────────────── */
+
+/* «Anticipo» es una PARTE de «Pagado», no un importe más: va sangrado debajo
+   de él, con la cifra más ligera, para que nadie sume los dos. Estas clases
+   viven fuera de `.anticipo` (dentro del resumen de la factura), así que
+   piden el token ellas mismas. */
+.subfila {
+  margin-left: 2px;
+  padding-left: 10px;
+  border-left: 2px solid var(--m2-borde, var(--border-soft));
+}
+
+.subfilaRotulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* `.subfilaCifra.subfilaCifra` (0,2,0)+: gana a `.raiz .cifra` de la factura. */
+:root .subfilaCifra.subfilaCifra {
+  font-weight: 500;
+  color: var(--m2-texto-2, var(--text-2));
+  font-variant-numeric: tabular-nums;
+}
+
+/* Las acciones de anticipo y recibo: en un renglón, no una debajo de otra.
+   Si la factura no tiene ninguna, el renglón no ocupa sitio. */
+.accionesFactura {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accionesFactura:empty {
+  display: none;
+}
