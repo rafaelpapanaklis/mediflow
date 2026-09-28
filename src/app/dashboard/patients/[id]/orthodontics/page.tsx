@@ -1,85 +1,21 @@
-// Orthodontics — vista embebida del módulo dentro del expediente del paciente.
-// Patrón Periodontics §1.7 + Implant.
+// Orthodontics — vista embebida VIEJA del módulo dentro del expediente.
+//
+// Sección I (revisión de lógica de uso): ya no se pinta. Un marcador o un
+// enlace viejo llega a la ficha del paciente, pestaña Ortodoncia, que es la
+// vista de hoy y hace sus propias guardias (clínica dental, módulo activo,
+// permiso, visibilidad del paciente). El archivo se queda solo para redirigir.
 
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
-import { canAccessModule } from "@/lib/marketplace/access-control";
-import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
-import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
-import { ORTHODONTICS_MODULE_KEY, PEDIATRICS_MODULE_KEY } from "@/lib/specialties/keys";
-import { loadOrthoData } from "@/lib/orthodontics/load-data";
-import { OrthodonticsClient } from "@/components/specialties/orthodontics/OrthodonticsClient";
-import { getServerT } from "@/i18n/server";
+import { fichaOrtodonciaDesdeRutaVieja } from "@/lib/orthodontics/rutas-viejas";
 
-export default async function PatientOrthodonticsPage({
+export default function PatientOrthodonticsPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  const { t } = await getServerT();
-  const user = await getCurrentUser();
-  if (user.clinic.category !== "DENTAL") redirect(`/dashboard/patients/${params.id}`);
-  // Revisión cruzada (Ola 1): canAccessModule abría esta vista durante el
-  // trial de cualquier clínica dental. Migrado a hasActiveOrthodonticsModule
-  // (mismo criterio que specialties/orthodontics/[patientId]/page.tsx, A1).
-  const active = await hasActiveOrthodonticsModule(user.clinicId);
-  if (!active) {
-    redirect(await destinoModuloVencido(user.clinicId, ORTHODONTICS_MODULE_KEY));
-  }
-  const pediAccess = await canAccessModule(user.clinicId, PEDIATRICS_MODULE_KEY);
-
-  const data = await loadOrthoData({ clinicId: user.clinicId, patientId: params.id }, { userId: user.id, role: user.role, clinicId: user.clinicId });
-  if (!data) redirect(`/dashboard/patients/${params.id}`);
-
-  const resolveFileUrl = (fileId: string) => `/api/patient-files/${fileId}`;
-  const agreementPdfHref = data.paymentPlan
-    ? `/api/orthodontics/payment-plans/${data.paymentPlan.id}/financial-agreement-pdf`
-    : undefined;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: 16 }}>
-      <Link
-        href={`/dashboard/patients/${params.id}`}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          fontSize: 12,
-          color: "var(--text-2)",
-          textDecoration: "none",
-        }}
-      >
-        <ArrowLeft size={14} aria-hidden /> {t("patients.orthodonticsPage.backToRecord")}
-      </Link>
-
-      <h1 style={{ margin: 0, fontSize: 18, color: "var(--text-1)" }}>
-        {t("patients.orthodonticsPage.title")} · {data.patientName}
-      </h1>
-
-      <OrthodonticsClient
-        patientId={data.patientId}
-        patientName={data.patientName}
-        isMinor={data.isMinor}
-        pediatricsModuleActive={pediAccess.hasAccess}
-        hasPediatricProfile={data.hasPediatricProfile}
-        guardianName={data.guardianName}
-        pediatricHabits={data.pediatricHabits}
-        diagnosis={data.diagnosis}
-        plan={data.plan}
-        phases={data.phases}
-        monthInTreatment={data.monthInTreatment}
-        paymentPlan={data.paymentPlan}
-        installments={data.installments}
-        photoSets={data.photoSets}
-        controls={data.controls}
-        digitalRecords={data.digitalRecords}
-        resolveFileUrl={resolveFileUrl}
-        agreementPdfHref={agreementPdfHref}
-      />
-    </div>
-  );
+  redirect(fichaOrtodonciaDesdeRutaVieja(params.id, searchParams));
 }
