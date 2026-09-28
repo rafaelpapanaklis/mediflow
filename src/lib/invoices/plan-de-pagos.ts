@@ -43,6 +43,13 @@ export interface Cuota {
   importe: number;
   /** "YYYY-MM-DD", o null si el trato no fijó primera fecha. */
   vencimiento: string | null;
+  /**
+   * Factura de la que sale ESTA cuota, si son varias facturas independientes
+   * (ws1-t1, Ola 2 — modo "pago por control" de ortodoncia: cada control es
+   * su propia factura). `undefined` = las cuotas de un plan a plazos de
+   * SIEMPRE, todas de la MISMA factura que ya conoce quien llama.
+   */
+  invoiceId?: string;
 }
 
 /** ¿Estas condiciones son un plan a plazos? Un pago único no tiene cuotas. */

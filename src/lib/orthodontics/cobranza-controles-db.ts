@@ -1,0 +1,121 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// CARGADOR de los «cargos de control» del modo PAGO_POR_CONTROL (ws1-t1,
+// Ola 2) — el I/O que alimenta `cobranzaPorControles`/`cobranzaDelCasoUnificada`
+// (cobranza-caso.ts, puro, sin tocar).
+//
+// Un cargo de control es una factura AUTOMÁTICA creada al firmar la hoja de
+// un control (signTreatmentCard.ts) con el concepto «Control de ortodoncia»
+// del catálogo — se distingue de cualquier otro «extra» del caso (retenedor,
+// microimplante…) porque SOLO ella nace ligada a la cita de control
+// (`invoices.appointmentId`, único por cita) Y al caso
+// (`invoices.orthodonticTreatmentPlanId`, sql/ortodoncia-cobro.sql —
+// exactamente la misma columna que ya usan los extras, extras-db.ts). Un
+// extra normal (reposición de bracket, retenedor…) SIEMPRE nace con
+// `appointmentId` nulo (se factura aparte, ver DrawerCobrarExtra), así que el
+// filtro `appointmentId IS NOT NULL AND appointment.type = 'Control de
+// ortodoncia'` no puede atrapar un extra por accidente.
+//
+// SQL crudo + sonda de columna, mismo patrón que extras-db.ts: sin
+// sql/ortodoncia-modo-cobro.sql pegado, esto no tumba nada — devuelve un mapa
+// vacío (el caso se ve «sin controles cobrados todavía», no rompe la pantalla).
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
+import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
+import type { CargoDeControl } from "./cobranza-caso";
+
+let columna: { existe: boolean; at: number } | null = null;
+const TTL_MS = 60_000;
+
+async function columnaExiste(): Promise<boolean> {
+  const t = Date.now();
+  if (columna && (columna.existe || t - columna.at < TTL_MS)) return columna.existe;
+  try {
+    const filas = await prisma.$queryRaw<{ existe: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_name = 'invoices' AND column_name = 'orthodonticTreatmentPlanId'
+      ) AS existe`;
+    columna = { existe: filas[0]?.existe === true, at: t };
+    return columna.existe;
+  } catch (e) {
+    console.warn("[ortodoncia:cargos-control] no se pudo comprobar la columna:", e);
+    return false;
+  }
+}
+
+/** Solo para pruebas: olvida lo que se sabía de la columna. */
+export function _olvidarColumnaCargosControl(): void {
+  columna = null;
+}
+
+interface FilaCargo {
+  planId: string;
+  invoiceId: string;
+  invoiceNumber: string | null;
+  total: unknown;
+  paid: unknown;
+  status: string;
+  dueDate: Date | null;
+  createdAt: Date;
+}
+
+function aFechaISO(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Los cargos de control (facturas de citas «Control de ortodoncia», ya
+ * ligadas a su caso) de varios casos a la vez — UNA sola consulta, sin
+ * importar cuántos casos traigas. Solo tiene sentido para casos en modo
+ * PAGO_POR_CONTROL; llamarla con casos en modo PRECIO_TOTAL no rompe nada,
+ * solo trae un mapa vacío para ellos (no deberían tener facturas así).
+ */
+export async function cargarCargosDeControlPorCasos(
+  clinicId: string,
+  treatmentPlanIds: string[],
+): Promise<Map<string, CargoDeControl[]>> {
+  const salida = new Map<string, CargoDeControl[]>();
+  if (!clinicId || treatmentPlanIds.length === 0) return salida;
+  if (!(await columnaExiste())) return salida;
+
+  try {
+    const filas = await prisma.$queryRaw<FilaCargo[]>`
+      SELECT i."orthodonticTreatmentPlanId" AS "planId", i."id" AS "invoiceId",
+             i."invoiceNumber", i."total", i."paid", i."status", i."dueDate", i."createdAt"
+        FROM "invoices" i
+        JOIN "appointments" a ON a."id" = i."appointmentId"
+       WHERE i."clinicId" = ${clinicId}
+         AND i."orthodonticTreatmentPlanId" IN (${Prisma.join(treatmentPlanIds)})
+         AND i."appointmentId" IS NOT NULL
+         AND a."type" = ${TIPO_CITA_CONTROL_ORTO}`;
+
+    for (const f of filas) {
+      const cargo: CargoDeControl = {
+        invoiceId: f.invoiceId,
+        invoiceNumber: f.invoiceNumber,
+        total: Number(f.total) || 0,
+        pagado: Number(f.paid) || 0,
+        status: f.status,
+        vencimiento: aFechaISO(f.dueDate ?? f.createdAt),
+      };
+      const lista = salida.get(f.planId);
+      if (lista) lista.push(cargo);
+      else salida.set(f.planId, [cargo]);
+    }
+    return salida;
+  } catch (e) {
+    console.warn("[ortodoncia:cargos-control] no se pudieron leer:", e);
+    return salida;
+  }
+}
+
+/** Mismo cargador, para UN solo caso. */
+export async function cargarCargosDeControlDelCaso(
+  clinicId: string,
+  treatmentPlanId: string,
+): Promise<CargoDeControl[]> {
+  const mapa = await cargarCargosDeControlPorCasos(clinicId, [treatmentPlanId]);
+  return mapa.get(treatmentPlanId) ?? [];
+}

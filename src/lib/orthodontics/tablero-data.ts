@@ -32,7 +32,10 @@ import { calendarDayRangeUtc } from "@/lib/agenda/time-utils";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { relatedPatientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
-import { cobranzaDelCaso } from "./cobranza-caso";
+import { cobranzaDelCasoUnificada } from "./cobranza-caso";
+import { normalizarOrthoBillingMode } from "./billing-mode";
+import { cargarModosDeCobro } from "./billing-mode-db";
+import { cargarCargosDeControlPorCasos } from "./cobranza-controles-db";
 import {
   computeActiveCasesCount,
   computeMonthlyProjection,
@@ -77,9 +80,17 @@ interface RawPlan {
   droppedOutAt: Date | null;
   statusUpdatedAt: Date;
   invoiceId: string | null;
+  /** Ola 2 (ws1-t1) — sql/ortodoncia-modo-cobro.sql, EN SU PROPIA sonda (no
+   * comparte la de treatingDoctorId/invoiceId): puede llegar aplicado antes o
+   * después que esas, y no queremos perder doctor/factura por su culpa. */
+  billingMode: string | null;
 }
 
 async function loadRawPlans(clinicId: string, viewer: VisibilityViewer): Promise<RawPlan[]> {
+  const conModo = async (plans: Omit<RawPlan, "billingMode">[]): Promise<RawPlan[]> => {
+    const modos = await cargarModosDeCobro(clinicId, plans.map((p) => p.id));
+    return plans.map((p) => ({ ...p, billingMode: modos.get(p.id) ?? null }));
+  };
   try {
     const plans = await prisma.orthodonticTreatmentPlan.findMany({
       where: { clinicId, deletedAt: null, AND: relatedPatientVisibilityAnd(viewer) },
@@ -91,7 +102,7 @@ async function loadRawPlans(clinicId: string, viewer: VisibilityViewer): Promise
       },
       take: 1000,
     });
-    return plans.map((p) => ({
+    return conModo(plans.map((p) => ({
       id: p.id,
       patientId: p.patientId,
       patientName: `${p.patient.firstName} ${p.patient.lastName}`.trim(),
@@ -105,7 +116,7 @@ async function loadRawPlans(clinicId: string, viewer: VisibilityViewer): Promise
       droppedOutAt: p.droppedOutAt,
       statusUpdatedAt: p.statusUpdatedAt,
       invoiceId: p.invoiceId,
-    }));
+    })));
   } catch (e) {
     if (!esRelacionAusente(e)) throw e;
     const plans = await prisma.orthodonticTreatmentPlan.findMany({
@@ -113,7 +124,7 @@ async function loadRawPlans(clinicId: string, viewer: VisibilityViewer): Promise
       select: BASE_SELECT,
       take: 1000,
     });
-    return plans.map((p) => ({
+    return conModo(plans.map((p) => ({
       id: p.id,
       patientId: p.patientId,
       patientName: `${p.patient.firstName} ${p.patient.lastName}`.trim(),
@@ -125,7 +136,7 @@ async function loadRawPlans(clinicId: string, viewer: VisibilityViewer): Promise
       droppedOutAt: p.droppedOutAt,
       statusUpdatedAt: p.statusUpdatedAt,
       invoiceId: null,
-    }));
+    })));
   }
 }
 
@@ -156,6 +167,9 @@ export async function loadOrthoCases(
 ): Promise<OrthoCasesResult> {
   const plans = await loadRawPlans(clinicId, viewer);
   const invoiceIds = Array.from(new Set(plans.map((p) => p.invoiceId).filter((x): x is string => !!x)));
+  const planIdsPorControl = plans
+    .filter((p) => normalizarOrthoBillingMode(p.billingMode) === "PAGO_POR_CONTROL")
+    .map((p) => p.id);
 
   let invoicesById = new Map<string, InvoiceForCobranza>();
   let condicionesPorFactura = new Map<string, CondicionesPago>();
@@ -170,22 +184,20 @@ export async function loadOrthoCases(
     condicionesPorFactura = condicionesResult.porFactura;
     invoicesById = new Map(invoices.map((i) => [i.id, i]));
   }
+  const cargosControlPorPlan = await cargarCargosDeControlPorCasos(clinicId, planIdsPorControl);
 
   const invoiceIdByPlanId = new Map<string, string>();
   const cases: OrthoCaseSummary[] = plans.map((p) => {
     if (p.invoiceId) invoiceIdByPlanId.set(p.id, p.invoiceId);
     const invoice = p.invoiceId ? invoicesById.get(p.invoiceId) : undefined;
-    const cobranza =
-      invoice != null
-        ? cobranzaDelCaso({
-            condiciones: condicionesPorFactura.get(p.invoiceId!) ?? null,
-            totalFactura: invoice.total,
-            cobros: invoice.payments,
-            saldoAFavorPrevio: 0,
-            ahora,
-            zonaHoraria,
-          })
-        : null;
+    const cobranza = cobranzaDelCasoUnificada({
+      modo: p.billingMode,
+      facturaPrincipal: invoice != null ? { condiciones: condicionesPorFactura.get(p.invoiceId!) ?? null, totalFactura: invoice.total, cobros: invoice.payments } : null,
+      cargosControl: cargosControlPorPlan.get(p.id) ?? [],
+      saldoAFavorPrevio: 0,
+      ahora,
+      zonaHoraria,
+    });
     return {
       planId: p.id,
       patientId: p.patientId,

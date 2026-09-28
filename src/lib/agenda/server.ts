@@ -2,7 +2,10 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
-import { cobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
+import { cobranzaDelCasoUnificada } from "@/lib/orthodontics/cobranza-caso";
+import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
+import { cargarModosDeCobro } from "@/lib/orthodontics/billing-mode-db";
+import { cargarCargosDeControlPorCasos } from "@/lib/orthodontics/cobranza-controles-db";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import type { Prisma, ClinicCategory } from "@prisma/client";
 import type {
@@ -185,20 +188,26 @@ async function pacientesConMensualidadVencida(
   try {
     if (!(await hasActiveOrthodonticsModule(clinicId))) return new Set();
 
+    // Ola 2 (ws1-t1): ya no se filtra por `invoiceId: { not: null }` — un caso
+    // en modo PAGO_POR_CONTROL puede deber sin haber abierto la factura de
+    // colocación/enganche todavía.
     const planes = await prisma.orthodonticTreatmentPlan.findMany({
-      where: { clinicId, deletedAt: null, invoiceId: { not: null }, patientId: { in: patientIds } },
-      select: { patientId: true, invoiceId: true },
+      where: { clinicId, deletedAt: null, patientId: { in: patientIds } },
+      select: { id: true, patientId: true, invoiceId: true },
     });
     if (planes.length === 0) return new Set();
 
     const invoiceIds = planes.map((p) => p.invoiceId).filter((id): id is string => !!id);
-    const [clinica, condicionesResult, invoices] = await Promise.all([
+    const modosPorCaso = await cargarModosDeCobro(clinicId, planes.map((p) => p.id));
+    const casosPorControl = planes.filter((p) => normalizarOrthoBillingMode(modosPorCaso.get(p.id) ?? null) === "PAGO_POR_CONTROL").map((p) => p.id);
+    const [clinica, condicionesResult, invoices, cargosPorCaso] = await Promise.all([
       prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }),
       leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds }),
       prisma.invoice.findMany({
         where: { id: { in: invoiceIds }, clinicId },
         select: { id: true, total: true, payments: { select: { amount: true, method: true } } },
       }),
+      cargarCargosDeControlPorCasos(clinicId, casosPorControl),
     ]);
 
     const zonaHoraria = clinica?.timezone || "America/Mexico_City";
@@ -207,18 +216,18 @@ async function pacientesConMensualidadVencida(
     const vencidos = new Set<string>();
 
     for (const plan of planes) {
-      if (!plan.invoiceId) continue;
-      const invoice = invoiceById.get(plan.invoiceId);
-      if (!invoice) continue;
-      const resumen = cobranzaDelCaso({
-        condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null,
-        totalFactura: invoice.total,
-        cobros: invoice.payments,
+      const invoice = plan.invoiceId ? invoiceById.get(plan.invoiceId) : undefined;
+      const resumen = cobranzaDelCasoUnificada({
+        modo: modosPorCaso.get(plan.id) ?? null,
+        facturaPrincipal: invoice != null && plan.invoiceId
+          ? { condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null, totalFactura: invoice.total, cobros: invoice.payments }
+          : null,
+        cargosControl: cargosPorCaso.get(plan.id) ?? [],
         saldoAFavorPrevio: 0,
         ahora,
         zonaHoraria,
       });
-      if (resumen.vencidas.length > 0) vencidos.add(plan.patientId);
+      if (resumen && resumen.vencidas.length > 0) vencidos.add(plan.patientId);
     }
     return vencidos;
   } catch (e) {

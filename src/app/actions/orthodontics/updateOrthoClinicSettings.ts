@@ -15,6 +15,7 @@ import {
   type OrthoAppointmentTypeOption,
 } from "@/lib/orthodontics/clinic-settings-db";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
+import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const appointmentTypeSchema = z.object({
@@ -26,6 +27,10 @@ const inputSchema = z.object({
   defaultTreatingDoctorId: z.string().nullable(),
   appointmentTypes: z.array(appointmentTypeSchema).min(1).max(20),
   messageTemplates: z.record(z.string().max(2000)),
+  // Ola 2 (ws1-t1) — opcional a propósito: mientras la pantalla de
+  // Configuración (ws1-t3) no mande este campo, se conserva el que ya
+  // tenía guardado la clínica (no se resetea a PRECIO_TOTAL por omisión).
+  billingMode: z.enum(["PRECIO_TOTAL", "PAGO_POR_CONTROL"]).optional(),
 });
 
 function esTablaAusente(e: unknown): boolean {
@@ -78,6 +83,8 @@ export async function updateOrthoClinicSettings(
     );
   }
 
+  const billingMode = data.billingMode ? normalizarOrthoBillingMode(data.billingMode) : before.billingMode;
+
   try {
     await guardarOrthoClinicSettings({
       clinicId: ctx.clinicId,
@@ -85,6 +92,7 @@ export async function updateOrthoClinicSettings(
       defaultTreatingDoctorId: data.defaultTreatingDoctorId,
       appointmentTypes,
       messageTemplates: data.messageTemplates,
+      billingMode,
     });
   } catch (e) {
     if (esTablaAusente(e)) {
@@ -106,11 +114,13 @@ export async function updateOrthoClinicSettings(
       defaultTreatingDoctorId: before.defaultTreatingDoctorId,
       appointmentTypes: before.appointmentTypes,
       messageTemplates: before.messageTemplates,
+      billingMode: before.billingMode,
     },
     after: {
       defaultTreatingDoctorId: data.defaultTreatingDoctorId,
       appointmentTypes: data.appointmentTypes,
       messageTemplates: data.messageTemplates,
+      billingMode,
     },
   });
 

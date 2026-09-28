@@ -3,7 +3,9 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { datosDeAlta } from "./entrada";
+import { datosDeAlta, leerOrthoIncluido } from "./entrada";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { sembrarProcedimientosDeOrtodoncia, aplicarOrthoIncluido, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
 
 // Default dental procedures with MX average prices
 const DENTAL_SEED = [
@@ -58,6 +60,27 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Ola 2 de ortodoncia (ws1-t1, sep-2026) — mismo patrón de arriba, pero
+  // INDEPENDIENTE de si ya hay procedimientos dentales: una clínica con
+  // catálogo dental de siempre puede activar Ortodoncia después y nunca
+  // pasar por el bloque de arriba (procedures.length ya no es 0). Solo
+  // siembra si el módulo está realmente contratado (no en trial) y el
+  // catálogo de ortodoncia sigue vacío. Tolera que orthoIncludedInTreatment
+  // (sql/ortodoncia-modo-cobro.sql) aún no exista: no tumba el GET.
+  if (!procedures.some((p) => p.category === ORTHO_CATALOG_CATEGORY) && (await hasActiveOrthodonticsModule(ctx.clinicId))) {
+    try {
+      const { creados } = await sembrarProcedimientosDeOrtodoncia(ctx.clinicId);
+      if (creados > 0) {
+        procedures = await prisma.procedureCatalog.findMany({
+          where: { clinicId: ctx.clinicId, ...(includeInactive ? {} : { isActive: true }) },
+          orderBy: [{ category: "asc" }, { name: "asc" }],
+        });
+      }
+    } catch (e) {
+      console.warn("[procedures] no se pudo sembrar el catálogo de ortodoncia:", e);
+    }
+  }
+
   return NextResponse.json(procedures);
 }
 
@@ -80,6 +103,12 @@ export async function POST(req: NextRequest) {
     const procedure = await prisma.procedureCatalog.create({
       data: { clinicId: ctx.clinicId, ...entrada.data },
     });
+
+    // Ola 2 de ortodoncia (ws1-t1) — orthoIncludedInTreatment va aparte, por
+    // SQL crudo (ver entrada.ts/catalog-procedures.ts).
+    const orthoIncluido = leerOrthoIncluido(body.orthoIncludedInTreatment);
+    if (orthoIncluido !== undefined) await aplicarOrthoIncluido(procedure.id, ctx.clinicId, orthoIncluido);
+
     revalidateAfter("procedures");
     return NextResponse.json(procedure, { status: 201 });
   } catch (err: any) {

@@ -22,7 +22,10 @@
 import { prisma } from "@/lib/prisma";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
-import { cobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
+import { cobranzaDelCasoUnificada } from "@/lib/orthodontics/cobranza-caso";
+import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
+import { cargarModosDeCobro } from "@/lib/orthodontics/billing-mode-db";
+import { cargarCargosDeControlPorCasos } from "@/lib/orthodontics/cobranza-controles-db";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { ok, isFailure, type ActionResult } from "../result";
@@ -70,11 +73,13 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
     patient: { firstName: string; lastName: string };
   }>;
   try {
+    // Ola 2 (ws1-t1): ya no se filtra por `invoiceId: { not: null }` — un
+    // caso en modo PAGO_POR_CONTROL puede deber (controles atendidos) SIN
+    // haber abierto todavía la factura de colocación/enganche.
     planes = await prisma.orthodonticTreatmentPlan.findMany({
       where: {
         clinicId: ctx.clinicId,
         deletedAt: null,
-        invoiceId: { not: null },
         AND: relatedPatientVisibilityAnd(viewer),
       },
       select: {
@@ -93,6 +98,9 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
   if (planes.length === 0) return ok({ items: [], redisenoFacturas });
 
   const invoiceIds = planes.map((p) => p.invoiceId).filter((id): id is string => !!id);
+  const modosPorCaso = await cargarModosDeCobro(ctx.clinicId, planes.map((p) => p.id));
+  const casosPorControl = planes.filter((p) => normalizarOrthoBillingMode(modosPorCaso.get(p.id) ?? null) === "PAGO_POR_CONTROL").map((p) => p.id);
+  const cargosControlPorCaso = await cargarCargosDeControlPorCasos(ctx.clinicId, casosPorControl);
 
   const [clinica, condicionesResult, invoices] = await Promise.all([
     prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }),
@@ -119,23 +127,26 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
   const limiteISO = hoyEnZona(limite, zonaHoraria);
 
   const invoiceById = new Map(invoices.map((i) => [i.id, i]));
+  const cargoByInvoiceId = new Map(
+    Array.from(cargosControlPorCaso.values()).flat().map((c) => [c.invoiceId, c]),
+  );
   const salida: MensualidadPorCobrar[] = [];
 
   for (const plan of planes) {
-    if (!plan.invoiceId) continue;
-    const invoice = invoiceById.get(plan.invoiceId);
-    if (!invoice) continue;
-
-    const resumen = cobranzaDelCaso({
-      condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null,
-      totalFactura: invoice.total,
-      cobros: invoice.payments,
+    const invoice = plan.invoiceId ? invoiceById.get(plan.invoiceId) : undefined;
+    const modo = normalizarOrthoBillingMode(modosPorCaso.get(plan.id) ?? null);
+    const resumen = cobranzaDelCasoUnificada({
+      modo,
+      facturaPrincipal: invoice != null && plan.invoiceId
+        ? { condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null, totalFactura: invoice.total, cobros: invoice.payments }
+        : null,
+      cargosControl: cargosControlPorCaso.get(plan.id) ?? [],
       saldoAFavorPrevio: 0,
       ahora,
       zonaHoraria,
     });
 
-    const cuota = resumen.cuotaDeHoy;
+    const cuota = resumen?.cuotaDeHoy;
     if (!cuota || !cuota.vencimiento) continue;
 
     let estado: MensualidadPorCobrar["estado"] | null = null;
@@ -144,16 +155,27 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
     else if (cuota.vencimiento <= limiteISO) estado = "proxima";
     if (!estado) continue;
 
+    // La cuota puede venir de la factura principal (plan.invoiceId) o, en
+    // modo PAGO_POR_CONTROL, de un control específico (cuota.invoiceId).
+    const cargoControl = cuota.invoiceId ? cargoByInvoiceId.get(cuota.invoiceId) : undefined;
+    const facturaId = cargoControl ? cargoControl.invoiceId : plan.invoiceId;
+    if (!facturaId) continue;
+    const facturaNumero = cargoControl ? cargoControl.invoiceNumber : invoice?.invoiceNumber ?? null;
+    const facturaTotal = cargoControl ? cargoControl.total : invoice?.total ?? 0;
+    const facturaPagado = cargoControl ? cargoControl.pagado : invoice?.paid ?? 0;
+    const facturaEstado = cargoControl ? cargoControl.status : invoice?.status ?? "PENDING";
+    const facturaBalance = cargoControl ? facturaTotal - facturaPagado : invoice?.balance ?? facturaTotal - facturaPagado;
+
     salida.push({
       treatmentPlanId: plan.id,
       patientId: plan.patientId,
       patientName: [plan.patient.firstName, plan.patient.lastName].filter(Boolean).join(" ").trim(),
-      invoiceId: plan.invoiceId,
-      invoiceNumber: invoice.invoiceNumber,
-      invoiceTotal: invoice.total,
-      invoicePaid: invoice.paid,
-      invoiceBalance: invoice.balance,
-      invoiceStatus: invoice.status,
+      invoiceId: facturaId,
+      invoiceNumber: facturaNumero,
+      invoiceTotal: facturaTotal,
+      invoicePaid: facturaPagado,
+      invoiceBalance: facturaBalance,
+      invoiceStatus: facturaEstado,
       monto: cuota.falta,
       vencimiento: cuota.vencimiento,
       estado,

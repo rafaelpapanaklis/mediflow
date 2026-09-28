@@ -18,6 +18,12 @@ import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
+import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
+import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
+import { buscarPrecioControlOrto } from "@/lib/orthodontics/catalog-procedures";
+import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
+import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
 
 /** Códigos Prisma de "columna inexistente" — mismo patrón que cobranza-db.ts. */
 function esColumnaAusente(e: unknown): boolean {
@@ -139,12 +145,14 @@ export async function signTreatmentCard(
 
   // Tenant + integridad: si viene un appointmentId, la cita tiene que ser de
   // este mismo paciente y clínica (C6).
+  let citaDeControl: { id: string; type: string } | null = null;
   if (data.appointmentId) {
     const appt = await prisma.appointment.findFirst({
       where: { id: data.appointmentId, clinicId: ctx.clinicId, patientId: plan.patientId },
-      select: { id: true },
+      select: { id: true, type: true },
     });
     if (!appt) return fail("La cita no pertenece a este paciente");
+    citaDeControl = appt;
   }
 
   const visitDate = new Date(data.visitDate);
@@ -302,6 +310,40 @@ export async function signTreatmentCard(
         } else {
           throw e;
         }
+      }
+    }
+
+    // Ola 2 (ws1-t1) — modo PAGO_POR_CONTROL: al firmar la hoja de UN
+    // control, factura automáticamente el concepto «Control de ortodoncia»
+    // del catálogo (factura normal de la cita, cobrable en Caja como
+    // cualquier otra) y la liga al caso. Non-blocking a propósito, igual
+    // que el bloque de columnas nuevas de arriba: nada de esto puede
+    // revertir una firma ya hecha. Sin catálogo o factura ya existente
+    // (re-firma de la misma hoja), no pasa nada — no se duplica.
+    if (citaDeControl && esCitaControlOrto(citaDeControl.type)) {
+      try {
+        const modo = normalizarOrthoBillingMode(await cargarModoDeCobro(plan.clinicId, plan.id));
+        if (modo === "PAGO_POR_CONTROL") {
+          const precio = await buscarPrecioControlOrto(plan.clinicId);
+          if (!precio) {
+            console.warn("[ortho] signTreatmentCard: modo PAGO_POR_CONTROL sin \"Control de ortodoncia\" en el catálogo — no se facturó este control");
+          } else {
+            const factura = await crearFacturaDesdeCita({
+              clinicId: plan.clinicId,
+              appointmentId: citaDeControl.id,
+              patientId: plan.patientId,
+              lineItems: [{ description: precio.name, unitPrice: precio.basePrice, quantity: 1 }],
+              userId: ctx.userId,
+            });
+            if (factura.ok && factura.invoice) {
+              await vincularExtraAlCaso({ invoiceId: factura.invoice.id, treatmentPlanId: plan.id, clinicId: plan.clinicId });
+            } else if (factura.error && factura.error !== "invoice_already_exists") {
+              console.warn("[ortho] signTreatmentCard: no se pudo facturar el control (modo PAGO_POR_CONTROL):", factura.error, factura.reason);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[ortho] signTreatmentCard: falló la facturación automática del control (no revierte la firma):", e);
       }
     }
 

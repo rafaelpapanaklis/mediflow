@@ -3,7 +3,8 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { datosDeCambio } from "../entrada";
+import { datosDeCambio, leerOrthoIncluido } from "../entrada";
+import { aplicarOrthoIncluido } from "@/lib/orthodontics/catalog-procedures";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -28,6 +29,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       where: { id: params.id },
       data: entrada.data,
     });
+
+    // Ola 2 de ortodoncia (ws1-t1) — orthoIncludedInTreatment va aparte, por
+    // SQL crudo (ver entrada.ts/catalog-procedures.ts).
+    const orthoIncluido = leerOrthoIncluido(body.orthoIncludedInTreatment);
+    if (orthoIncluido !== undefined) await aplicarOrthoIncluido(params.id, ctx.clinicId, orthoIncluido);
+
     revalidateAfter("procedures");
     return NextResponse.json(updated);
   } catch (err: any) {

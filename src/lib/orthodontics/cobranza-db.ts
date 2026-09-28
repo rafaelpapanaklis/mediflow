@@ -13,7 +13,10 @@
 import { prisma } from "@/lib/prisma";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
-import { cobranzaDelCaso, type CobranzaDelCaso } from "./cobranza-caso";
+import { cobranzaDelCasoUnificada, type CobranzaDelCaso } from "./cobranza-caso";
+import { normalizarOrthoBillingMode } from "./billing-mode";
+import { cargarModoDeCobro } from "./billing-mode-db";
+import { cargarCargosDeControlDelCaso } from "./cobranza-controles-db";
 
 /** Códigos Prisma de "tabla/columna inexistente" — igual que patient-credit.ts. */
 function esRelacionAusente(e: unknown): boolean {
@@ -58,26 +61,31 @@ export async function cargarCobranzaDelCaso(
     if (esRelacionAusente(e)) return null;
     throw e;
   }
-  if (!plan?.invoiceId) return null;
+  if (!plan) return null;
   const invoiceId = plan.invoiceId;
 
-  const [condicionesResult, invoice, saldoAFavorPrevio] = await Promise.all([
-    leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds: [invoiceId] }),
-    prisma.invoice.findFirst({
-      where: { id: invoiceId, clinicId },
-      select: {
-        total: true,
-        payments: { select: { amount: true, method: true } },
-      },
-    }),
+  const [condicionesResult, invoice, saldoAFavorPrevio, modoCrudo] = await Promise.all([
+    invoiceId ? leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds: [invoiceId] }) : Promise.resolve({ porFactura: new Map() }),
+    invoiceId
+      ? prisma.invoice.findFirst({
+          where: { id: invoiceId, clinicId },
+          select: { total: true, payments: { select: { amount: true, method: true } } },
+        })
+      : Promise.resolve(null),
     getPatientCreditBalance(clinicId, patientId),
+    cargarModoDeCobro(clinicId, treatmentPlanId),
   ]);
-  if (!invoice) return null;
+  if (invoiceId && !invoice) return null;
 
-  return cobranzaDelCaso({
-    condiciones: condicionesResult.porFactura.get(invoiceId) ?? null,
-    totalFactura: invoice.total,
-    cobros: invoice.payments,
+  const modo = normalizarOrthoBillingMode(modoCrudo);
+  const cargosControl = modo === "PAGO_POR_CONTROL" ? await cargarCargosDeControlDelCaso(clinicId, treatmentPlanId) : [];
+
+  return cobranzaDelCasoUnificada({
+    modo,
+    facturaPrincipal: invoice
+      ? { condiciones: condicionesResult.porFactura.get(invoiceId!) ?? null, totalFactura: invoice.total, cobros: invoice.payments }
+      : null,
+    cargosControl,
     saldoAFavorPrevio,
     ahora: args.ahora ?? new Date(),
     zonaHoraria: args.zonaHoraria,

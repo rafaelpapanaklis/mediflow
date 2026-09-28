@@ -3258,6 +3258,16 @@ model ProcedureCatalog {
   duration    Int? // minutes
   description String?
   isActive    Boolean     @default(true)
+  // Ola 2 de ortodoncia (ws1-t1, sep-2026): "orthoIncludedInTreatment"
+  // (incluido en el tratamiento / con costo aparte) NO se declara aquí a
+  // propósito. `procedure_catalog` la lee CASI toda la app sin `select`
+  // explícito (facturas, presupuestos, odontograma…): declarar el campo en
+  // Prisma revienta con P2022 CUALQUIER lectura sin select mientras Rafael
+  // no pegue sql/ortodoncia-modo-cobro.sql — medido en vivo en dev.108, tumbó
+  // /api/procedures entero. Va por SQL crudo, igual que
+  // `invoices.orthodonticTreatmentPlanId` (cobro/extras-db.ts) y
+  // `orthodontic_billing_configs` (cobro/config-db.ts): ver
+  // src/lib/orthodontics/catalog-procedures.ts.
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
@@ -6331,8 +6341,22 @@ model OrthodonticTreatmentPlan {
   // sql/ortodoncia-nucleo.sql.
   treatingDoctorId String?
   treatingDoctor   User?    @relation("OrthoTreatingDoctor", fields: [treatingDoctorId], references: [id], onDelete: SetNull)
+  /// Modo PRECIO_TOTAL: la factura del plan a plazos (enganche + mensualidades).
+  /// Modo PAGO_POR_CONTROL (Ola 2): la factura de la colocación/enganche —
+  /// MISMO campo, dos significados según `billingMode`; los controles NO
+  /// pasan por aquí (van ligados por `invoices.orthodonticTreatmentPlanId`,
+  /// ver sql/ortodoncia-cobro.sql + sql/ortodoncia-modo-cobro.sql).
   invoiceId        String?  @unique
   invoice          Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  // Ola 2 (ws1-t1, sep-2026) — "billingMode" (modo de cobro con el que nació
+  // el caso) NO se declara aquí a propósito: `orthodonticTreatmentPlan` la
+  // lee sin `select` explícito en más de 40 sitios (medido con grep) fuera
+  // de esta parte — declarar el campo en Prisma arriesga tumbar CUALQUIERA
+  // de esos con P2022 mientras Rafael no pegue sql/ortodoncia-modo-cobro.sql
+  // (mismo problema medido en vivo con procedure_catalog, ver el comentario
+  // de arriba). Va por SQL crudo — ver src/lib/orthodontics/billing-mode-db.ts,
+  // mismo patrón que `orthodontic_billing_configs` (cobro/config-db.ts).
 
   // Ola 1 (ws1-t6, sep-2026) — «Alta del caso», A11: responsable del pago.
   // Reutiliza "Guardian" (pediatría) sin exigir PediatricRecord. Nula y
@@ -19013,6 +19037,12 @@ model OrthodonticsClinicSettings {
   /// vencida, etc.) como { [clave]: texto }. null = usa las plantillas por
   /// defecto del módulo.
   messageTemplates        Json?
+  /// Ola 2 (ws1-t1) — modo de cobro DEFAULT para casos NUEVOS: "PRECIO_TOTAL"
+  /// (plan a plazos, default) o "PAGO_POR_CONTROL" (cada control se cobra
+  /// aparte). Un caso ya abierto conserva el suyo (OrthodonticTreatmentPlan.billingMode);
+  /// cambiar esto NO lo toca. String, no enum: sql/ortodoncia-modo-cobro.sql,
+  /// aditivo y plano, sin CREATE TYPE.
+  billingMode             String?
   updatedBy               String?
   updatedAt               DateTime @default(now()) @updatedAt
 

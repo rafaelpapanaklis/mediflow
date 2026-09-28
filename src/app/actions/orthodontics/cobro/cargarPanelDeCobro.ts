@@ -17,7 +17,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
-import { cobranzaDelCaso, type CobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
+import { cobranzaDelCasoUnificada, type CobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
+import { normalizarOrthoBillingMode, ORTHO_BILLING_MODE_LABELS, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
+import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
+import { cargarCargosDeControlDelCaso } from "@/lib/orthodontics/cobranza-controles-db";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { leerConfigDeCobro, type ConfigDeCobro } from "@/lib/orthodontics/cobro/config-db";
@@ -49,6 +52,9 @@ export interface PanelDeCobro {
   /** Las condiciones crudas de la factura (para F7, precargar el editor de plan). */
   condiciones: CondicionesPago | null;
   cobranza: CobranzaDelCaso | null;
+  /** Ola 2 (ws1-t1) — modo CON EL QUE NACIÓ este caso (no el default actual de la clínica). */
+  billingMode: OrthoBillingMode;
+  billingModeLabel: string;
   /** Recargo por atraso sugerido HOY sobre `cobranza.cuotaDeHoy`, o 0. Nunca se cobra solo. */
   recargoSugerido: number;
   billingDelCaso: BillingDelCaso;
@@ -71,14 +77,16 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   if (isFailure(casoResult)) return casoResult;
   const caso = casoResult.data;
 
-  const [redisenoFacturas, clinica, billingDelCaso, config, extras, promesas] = await Promise.all([
+  const [redisenoFacturas, clinica, billingDelCaso, config, extras, promesas, billingModeCrudo] = await Promise.all([
     menuDosNivelesEncendido(ctx.clinicId),
     prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { cfdiTaxMode: true, timezone: true } }),
     leerBillingDelCaso(treatmentPlanId, ctx.clinicId),
     leerConfigDeCobro(ctx.clinicId),
     listarExtrasDelCaso(treatmentPlanId, ctx.clinicId),
     listarPromesasDelCaso(treatmentPlanId, ctx.clinicId),
+    cargarModoDeCobro(ctx.clinicId, treatmentPlanId),
   ]);
+  const billingMode = normalizarOrthoBillingMode(billingModeCrudo);
 
   const base = {
     patientId: caso.patientId,
@@ -89,36 +97,39 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     redisenoFacturas,
     clinicTaxMode: clinica?.cfdiTaxMode ?? null,
     puedeConfigurarPolitica: ROLES_DE_DIRECCION.has(ctx.role),
+    billingMode,
+    billingModeLabel: ORTHO_BILLING_MODE_LABELS[billingMode],
   };
 
-  if (!caso.invoiceId) {
-    return ok({ ...base, invoiceId: null, invoice: null, condiciones: null, cobranza: null, recargoSugerido: 0 });
+  const zonaHoraria = clinica?.timezone || "America/Mexico_City";
+
+  let invoice: { id: string; invoiceNumber: string | null; total: number; paid: number; balance: number; status: string; payments: Array<{ amount: unknown; method: string | null }> } | null = null;
+  if (caso.invoiceId) {
+    invoice = await prisma.invoice.findFirst({
+      where: { id: caso.invoiceId, clinicId: ctx.clinicId },
+      select: { id: true, invoiceNumber: true, total: true, paid: true, balance: true, status: true, payments: { select: { amount: true, method: true } } },
+    });
+    if (!invoice) return fail("La factura del tratamiento ya no existe");
   }
 
-  const invoice = await prisma.invoice.findFirst({
-    where: { id: caso.invoiceId, clinicId: ctx.clinicId },
-    select: { id: true, invoiceNumber: true, total: true, paid: true, balance: true, status: true, payments: { select: { amount: true, method: true } } },
-  });
-  if (!invoice) return fail("La factura del tratamiento ya no existe");
-
-  const zonaHoraria = clinica?.timezone || "America/Mexico_City";
-  const [condicionesResult, saldoAFavorPrevio] = await Promise.all([
-    leerCondicionesDeFacturas(prisma, { clinicId: ctx.clinicId, invoiceIds: [invoice.id] }),
+  const [condicionesResult, saldoAFavorPrevio, cargosControl] = await Promise.all([
+    invoice ? leerCondicionesDeFacturas(prisma, { clinicId: ctx.clinicId, invoiceIds: [invoice.id] }) : Promise.resolve({ porFactura: new Map<string, CondicionesPago>() }),
     getPatientCreditBalance(ctx.clinicId, caso.patientId),
+    billingMode === "PAGO_POR_CONTROL" ? cargarCargosDeControlDelCaso(ctx.clinicId, treatmentPlanId) : Promise.resolve([]),
   ]);
 
-  const condiciones = condicionesResult.porFactura.get(invoice.id) ?? null;
-  const cobranza = cobranzaDelCaso({
-    condiciones,
-    totalFactura: invoice.total,
-    cobros: invoice.payments,
+  const condiciones = invoice ? condicionesResult.porFactura.get(invoice.id) ?? null : null;
+  const cobranza = cobranzaDelCasoUnificada({
+    modo: billingMode,
+    facturaPrincipal: invoice ? { condiciones, totalFactura: invoice.total, cobros: invoice.payments } : null,
+    cargosControl,
     saldoAFavorPrevio,
     ahora: new Date(),
     zonaHoraria,
   });
 
   const hoy = hoyEnZona(new Date(), zonaHoraria);
-  const cuotaVencida = cobranza.cuotaDeHoy?.estado === "vencida" ? cobranza.cuotaDeHoy : null;
+  const cuotaVencida = cobranza?.cuotaDeHoy?.estado === "vencida" ? cobranza.cuotaDeHoy : null;
   const recargoSugerido = cuotaVencida
     ? calcularRecargo(config.lateFee, cuotaVencida.falta, cuotaVencida.vencimiento ? diasEntre(cuotaVencida.vencimiento, hoy) : 0)
     : 0;
@@ -126,7 +137,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   return ok({
     ...base,
     invoiceId: caso.invoiceId,
-    invoice: { id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, paid: invoice.paid, balance: invoice.balance, status: invoice.status },
+    invoice: invoice ? { id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, paid: invoice.paid, balance: invoice.balance, status: invoice.status } : null,
     condiciones,
     cobranza,
     recargoSugerido,

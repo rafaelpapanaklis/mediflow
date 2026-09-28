@@ -20,6 +20,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
+import { normalizarOrthoBillingMode, ORTHO_BILLING_MODE_DEFAULT, type OrthoBillingMode } from "./billing-mode";
 
 function esTablaAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
@@ -61,6 +62,10 @@ export interface OrthoClinicSettings {
   defaultTreatingDoctorId: string | null;
   appointmentTypes: OrthoAppointmentTypeOption[];
   messageTemplates: Record<string, string>;
+  /** Ola 2 (ws1-t1) — default para CASOS NUEVOS; un caso ya abierto conserva
+   * el modo con el que nació (OrthodonticTreatmentPlan.billingMode), cambiar
+   * esto no lo toca. */
+  billingMode: OrthoBillingMode;
   updatedAt: Date | null;
 }
 
@@ -70,6 +75,7 @@ function defaults(clinicId: string): OrthoClinicSettings {
     defaultTreatingDoctorId: null,
     appointmentTypes: [...DEFAULT_ORTHO_APPOINTMENT_TYPES],
     messageTemplates: {},
+    billingMode: ORTHO_BILLING_MODE_DEFAULT,
     updatedAt: null,
   };
 }
@@ -94,6 +100,7 @@ export async function loadOrthoClinicSettings(clinicId: string): Promise<OrthoCl
         ? row.appointmentTypes
         : [...DEFAULT_ORTHO_APPOINTMENT_TYPES],
       messageTemplates: (row.messageTemplates as Record<string, string> | null) ?? {},
+      billingMode: normalizarOrthoBillingMode((row as { billingMode?: unknown }).billingMode),
       updatedAt: row.updatedAt,
     };
   } catch (e) {
@@ -108,6 +115,7 @@ export interface GuardarOrthoClinicSettingsArgs {
   defaultTreatingDoctorId: string | null;
   appointmentTypes: OrthoAppointmentTypeOption[];
   messageTemplates: Record<string, string>;
+  billingMode: OrthoBillingMode;
 }
 
 /** Upsert de la fila. Lanza si la tabla aún no existe — el caller (server
@@ -130,12 +138,14 @@ export async function guardarOrthoClinicSettings(
       defaultTreatingDoctorId: args.defaultTreatingDoctorId,
       appointmentTypes: args.appointmentTypes as unknown as object,
       messageTemplates: args.messageTemplates as unknown as object,
+      billingMode: args.billingMode,
       updatedBy: args.updatedBy,
     },
     update: {
       defaultTreatingDoctorId: args.defaultTreatingDoctorId,
       appointmentTypes: args.appointmentTypes as unknown as object,
       messageTemplates: args.messageTemplates as unknown as object,
+      billingMode: args.billingMode,
       updatedBy: args.updatedBy,
     },
   });

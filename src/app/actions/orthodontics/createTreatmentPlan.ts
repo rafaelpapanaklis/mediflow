@@ -7,6 +7,8 @@ import { createTreatmentPlanSchema } from "@/lib/validation/orthodontics";
 import { PHASE_ORDER } from "@/lib/orthodontics/phase-machine";
 import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
+import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
+import { guardarModoDeCobroDelCaso } from "@/lib/orthodontics/billing-mode-db";
 import {
   auditOrtho,
   getOrthoPlanActionContext,
@@ -129,6 +131,15 @@ export async function createTreatmentPlan(
       return plan;
     });
 
+  // Ola 2 (ws1-t1) — modo de cobro con el que nace el caso: el default de
+  // HOY de la clínica (`OrthodonticsClinicSettings.billingMode`). Se lee
+  // ANTES de la transacción, sola: si `loadOrthoClinicSettings` no
+  // encuentra fila/tabla ya devuelve el default (PRECIO_TOTAL) — nunca
+  // lanza. `defaults(clinicId)` si la clínica jamás guardó Configuración
+  // también cae en PRECIO_TOTAL, que es el comportamiento de siempre.
+  const clinicSettings = await loadOrthoClinicSettings(ctx.clinicId);
+  const billingModeDelCaso = clinicSettings.billingMode;
+
   try {
     let altaCasoFieldsSaved = wantsAltaCasoFields;
     const created = await runTransaction(wantsAltaCasoFields).catch(async (e) => {
@@ -140,6 +151,14 @@ export async function createTreatmentPlan(
       );
       return runTransaction(false);
     });
+
+    // Ola 2 (ws1-t1) — SQL crudo, EN SU PROPIO paso, separado a propósito
+    // del de arriba (mismo criterio que signTreatmentCard.ts con C2/C3/C6):
+    // un P2021/P2022 de sql/ortodoncia-modo-cobro.sql nunca debe poder
+    // revertir un caso ya creado. `guardarModoDeCobroDelCaso` ya no lanza —
+    // sin la columna, el caso queda en null = PRECIO_TOTAL (default correcto
+    // de todas formas) y solo avisa por consola.
+    await guardarModoDeCobroDelCaso(ctx.clinicId, created.id, billingModeDelCaso);
 
     await auditOrtho({
       ctx,

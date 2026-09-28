@@ -31,7 +31,9 @@ import {
   estadoDelPlan,
   pagosDesdeFilas,
   type CuotaConEstado,
+  type EstadoCuota,
 } from "@/lib/invoices/plan-de-pagos";
+import { normalizarOrthoBillingMode } from "./billing-mode";
 
 export interface CobranzaDelCasoInput {
   /**
@@ -89,4 +91,173 @@ export function cobranzaDelCaso(input: CobranzaDelCasoInput): CobranzaDelCaso {
     saldoAFavor: aPesos(aCentavos(input.saldoAFavorPrevio) + aCentavos(estado.excedente)),
     proximoVencimiento: estado.siguiente?.vencimiento ?? null,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODO «PAGO POR CONTROL» (ws1-t1, Ola 2) — segundo motor de cobranza, para
+// el caso que nace SIN precio total. Aquí no hay UN plan a plazos: hay N
+// facturas independientes (cada control atendido, más la colocación/enganche
+// aparte), cada una con su propio total y lo cobrado de ESA factura — no hay
+// cascada entre facturas: lo que se cobra de más en una NO se pasa a la
+// siguiente (a diferencia de `estadoDelPlan`, que sí reparte en cascada
+// porque ahí es UNA sola factura con varias cuotas acordadas).
+//
+// `cobranzaDelCasoUnificada` es el único punto de entrada que necesita
+// quien arma el input real (`cobranza-db.ts`, `tablero-data.ts`,
+// `listarMensualidadesPorCobrar.ts`, `cargarPanelDeCobro.ts`,
+// `agenda/server.ts`): decide el motor según `modo` y siempre devuelve el
+// mismo contrato `CobranzaDelCaso`, así que nadie corriente abajo (Tablero,
+// Alertas, ListaMensualidades, aviso en Hoy, marca en la agenda, portal del
+// paciente, recordatorio de WhatsApp) necesita saber que hay dos modos.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Una factura independiente que cuenta como «debe» del caso en modo control: un control atendido, o la colocación/enganche. */
+export interface CargoDeControl {
+  invoiceId: string;
+  /** No entra en la aritmética; para que Recepción sepa qué factura abrir. */
+  invoiceNumber: string | null;
+  /** Total de la factura, en pesos. */
+  total: number;
+  /** Lo cobrado de ESA factura hasta hoy, en pesos (`Invoice.paid`, o suma de `payments`). */
+  pagado: number;
+  /** "YYYY-MM-DD" — `dueDate` de la factura, o su fecha de creación si no tiene. */
+  vencimiento: string;
+  /** `Invoice.status` tal cual — pasa de largo, no entra en la aritmética. */
+  status: string;
+}
+
+function cuotaVacia(): CobranzaDelCaso {
+  return { cuotaDeHoy: null, pagadas: [], vencidas: [], proximas: [], saldoTotal: 0, saldoAFavor: 0, proximoVencimiento: null };
+}
+
+function porVencimiento(a: CuotaConEstado, b: CuotaConEstado): number {
+  return (a.vencimiento ?? "").localeCompare(b.vencimiento ?? "");
+}
+
+/**
+ * Resumen de cobranza a partir de cargos independientes (controles +
+ * colocación/enganche, modo `PAGO_POR_CONTROL`). Cada cargo es su propia
+ * factura: SIN cascada entre ellos. `saldoAFavor` sale SOLO del excedente de
+ * estos cargos (lo cobrado de más en una factura de ESTE caso) — el saldo a
+ * favor previo del paciente (otras facturas) lo suma quien llama.
+ */
+export function cobranzaPorControles(
+  cargos: CargoDeControl[],
+  ahora: Date,
+  zonaHoraria: string,
+): CobranzaDelCaso {
+  if (cargos.length === 0) return cuotaVacia();
+  const hoy = hoyEnZona(ahora, zonaHoraria);
+  let excedenteC = 0;
+
+  const cuotas: CuotaConEstado[] = cargos
+    .map((c, i) => {
+      const importeC = Math.max(0, aCentavos(c.total));
+      const pagadoC = Math.max(0, aCentavos(c.pagado));
+      const abonadoC = Math.min(importeC, pagadoC);
+      excedenteC += Math.max(0, pagadoC - importeC);
+      const faltaC = importeC - abonadoC;
+      const estado: EstadoCuota = faltaC === 0 ? "pagada" : c.vencimiento < hoy ? "vencida" : "porVencer";
+      return {
+        numero: i,
+        esEnganche: false,
+        importe: aPesos(importeC),
+        vencimiento: c.vencimiento,
+        invoiceId: c.invoiceId,
+        abonado: aPesos(abonadoC),
+        falta: aPesos(faltaC),
+        estado,
+      };
+    })
+    .sort(porVencimiento);
+
+  const vencidas = cuotas.filter((c) => c.estado === "vencida");
+  const proximas = cuotas.filter((c) => c.estado === "porVencer");
+  const pagadas = cuotas.filter((c) => c.estado === "pagada");
+  const pendienteC = cuotas.reduce((acc, c) => acc + aCentavos(c.falta), 0);
+
+  return {
+    cuotaDeHoy: vencidas[0] ?? proximas[0] ?? null,
+    pagadas,
+    vencidas,
+    proximas,
+    saldoTotal: aPesos(pendienteC),
+    saldoAFavor: aPesos(excedenteC),
+    proximoVencimiento: proximas[0]?.vencimiento ?? null,
+  };
+}
+
+/**
+ * Une dos resúmenes de cobranza del MISMO caso en uno solo (modo control:
+ * colocación/enganche + controles). Nada se cuenta dos veces porque las dos
+ * fuentes son disjuntas por construcción (facturas distintas). `null` en
+ * ambos = sin nada que cobrar todavía.
+ */
+export function combinarCobranzas(a: CobranzaDelCaso | null, b: CobranzaDelCaso | null): CobranzaDelCaso | null {
+  if (!a && !b) return null;
+  const x = a ?? cuotaVacia();
+  const y = b ?? cuotaVacia();
+  const vencidas = [...x.vencidas, ...y.vencidas].sort(porVencimiento);
+  const proximas = [...x.proximas, ...y.proximas].sort(porVencimiento);
+  const pagadas = [...x.pagadas, ...y.pagadas].sort(porVencimiento);
+  return {
+    cuotaDeHoy: vencidas[0] ?? proximas[0] ?? null,
+    pagadas,
+    vencidas,
+    proximas,
+    saldoTotal: aPesos(aCentavos(x.saldoTotal) + aCentavos(y.saldoTotal)),
+    saldoAFavor: aPesos(aCentavos(x.saldoAFavor) + aCentavos(y.saldoAFavor)),
+    proximoVencimiento: proximas[0]?.vencimiento ?? null,
+  };
+}
+
+export interface CobranzaUnificadaInput {
+  /** Como sale crudo de la base (`OrthodonticTreatmentPlan.billingMode`): cualquier string, null o undefined. Se normaliza adentro. */
+  modo: string | null | undefined;
+  /**
+   * La factura del plan a plazos (modo PRECIO_TOTAL) o de la
+   * colocación/enganche (modo PAGO_POR_CONTROL) — el mismo campo
+   * `OrthodonticTreatmentPlan.invoiceId` en los dos modos. `null` = el caso
+   * todavía no tiene esa factura abierta.
+   */
+  facturaPrincipal: {
+    condiciones: CondicionesPago | null;
+    totalFactura: number;
+    cobros: Array<{ amount: unknown; method?: string | null }>;
+  } | null;
+  /** Solo aplica en PAGO_POR_CONTROL: los controles atendidos, cada uno con su factura. */
+  cargosControl: CargoDeControl[];
+  saldoAFavorPrevio: number;
+  ahora: Date;
+  zonaHoraria: string;
+}
+
+/**
+ * Punto de entrada único para los dos modos. PRECIO_TOTAL: exactamente el
+ * comportamiento de siempre (`cobranzaDelCaso` sin tocar). PAGO_POR_CONTROL:
+ * la colocación/enganche (si existe) + los controles atendidos, combinados.
+ */
+export function cobranzaDelCasoUnificada(input: CobranzaUnificadaInput): CobranzaDelCaso | null {
+  const modo = normalizarOrthoBillingMode(input.modo);
+
+  if (modo === "PRECIO_TOTAL") {
+    if (!input.facturaPrincipal) return null;
+    return cobranzaDelCaso({
+      ...input.facturaPrincipal,
+      saldoAFavorPrevio: input.saldoAFavorPrevio,
+      ahora: input.ahora,
+      zonaHoraria: input.zonaHoraria,
+    });
+  }
+
+  const colocacion = input.facturaPrincipal
+    ? cobranzaDelCaso({ ...input.facturaPrincipal, saldoAFavorPrevio: 0, ahora: input.ahora, zonaHoraria: input.zonaHoraria })
+    : null;
+  const controles = input.cargosControl.length > 0 ? cobranzaPorControles(input.cargosControl, input.ahora, input.zonaHoraria) : null;
+  const combinado = combinarCobranzas(colocacion, controles);
+
+  if (!combinado) {
+    return input.saldoAFavorPrevio > 0 ? { ...cuotaVacia(), saldoAFavor: input.saldoAFavorPrevio } : null;
+  }
+  return { ...combinado, saldoAFavor: aPesos(aCentavos(combinado.saldoAFavor) + aCentavos(input.saldoAFavorPrevio)) };
 }

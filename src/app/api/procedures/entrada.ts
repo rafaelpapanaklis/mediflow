@@ -36,6 +36,25 @@ export interface DatosAlta {
   description: string | null;
 }
 
+/**
+ * Ola 2 de ortodoncia (ws1-t1, sep-2026) — `orthoIncludedInTreatment` NO
+ * entra en `DatosAlta`/`DatosCambio` a propósito: esos dos objetos se pasan
+ * tal cual a `prisma.procedureCatalog.create`/`update`, y esa columna va por
+ * SQL crudo (ver catalog-procedures.ts — declararla en Prisma revienta con
+ * P2022 cualquier lectura de procedure_catalog sin select mientras Rafael no
+ * pegue sql/ortodoncia-modo-cobro.sql). Quien la necesite la lee con esta
+ * función y la aplica aparte con `aplicarOrthoIncluido` (catalog-procedures.ts).
+ *
+ * undefined en el body = «no la tocamos» (`undefined`, no `null`: distinto
+ * de «bórrala»); `null` explícito SÍ borra el flag; cualquier otra cosa se
+ * lee como booleano.
+ */
+export function leerOrthoIncluido(raw: unknown): boolean | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  return Boolean(raw);
+}
+
 export function datosDeAlta(body: any): Entrada<DatosAlta> {
   if (!body?.name?.trim()) return { ok: false, error: "Nombre es requerido" };
   if (body.basePrice === undefined || body.basePrice < 0) return { ok: false, error: "Precio inválido" };
