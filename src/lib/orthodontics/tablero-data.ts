@@ -262,3 +262,63 @@ export async function loadOrthoTableroData(
     placementsAndRemovals: computePlacementsAndRemovals(cases, ahora),
   };
 }
+
+export interface TodayControlEntry {
+  appointmentId: string;
+  patientId: string;
+  patientName: string;
+  startsAt: Date;
+  treatmentPlanId: string | null;
+  /** C3 (Control y agenda) — null = sin hoja de control todavía para esta cita. */
+  indications: string | null;
+}
+
+/**
+ * Los controles de HOY con las indicaciones (C3) que ya se cargaron en su
+ * hoja, si la hay — para el botón "Enviar indicaciones" (ws1-t2, Paciente y
+ * WhatsApp, W5). Lee `OrthoTreatmentCard.indications`, campo de "Control y
+ * agenda" (ws1-t4): solo LEE, no lo edita.
+ */
+export async function loadTodayControlsWithIndications(
+  clinicId: string,
+  zonaHoraria: string,
+  ahora: Date = new Date(),
+): Promise<TodayControlEntry[]> {
+  const { startUtc: todayStart, endUtc: todayEnd } = calendarDayRangeUtc(hoyEnZona(ahora, zonaHoraria), zonaHoraria);
+
+  const appointments = await prisma.appointment.findMany({
+    where: {
+      clinicId,
+      type: TIPO_CITA_CONTROL_ORTO,
+      startsAt: { gte: todayStart, lt: todayEnd },
+      status: { not: "CANCELLED" },
+    },
+    orderBy: { startsAt: "asc" },
+    select: {
+      id: true,
+      patientId: true,
+      startsAt: true,
+      patient: { select: { firstName: true, lastName: true } },
+    },
+    take: 200,
+  });
+  if (appointments.length === 0) return [];
+
+  const cards = await prisma.orthoTreatmentCard.findMany({
+    where: { clinicId, appointmentId: { in: appointments.map((a) => a.id) } },
+    select: { appointmentId: true, treatmentPlanId: true, indications: true },
+  });
+  const cardByAppointmentId = new Map(cards.map((c) => [c.appointmentId, c]));
+
+  return appointments.map((a) => {
+    const card = cardByAppointmentId.get(a.id);
+    return {
+      appointmentId: a.id,
+      patientId: a.patientId,
+      patientName: `${a.patient.firstName} ${a.patient.lastName}`.trim(),
+      startsAt: a.startsAt,
+      treatmentPlanId: card?.treatmentPlanId ?? null,
+      indications: card?.indications ?? null,
+    };
+  });
+}
