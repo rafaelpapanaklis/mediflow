@@ -250,6 +250,7 @@ export const I18N: Record<Lang, Record<string, string>> = {
     patient: "Paciente",
     examType: "Examen",
     style: "Estilo",
+    loadingChart: "Cargando…",
   },
   en: {
     title: "Dental Chart",
@@ -290,5 +291,6 @@ export const I18N: Record<Lang, Record<string, string>> = {
     patient: "Patient",
     examType: "Exam",
     style: "Style",
+    loadingChart: "Loading…",
   },
 };

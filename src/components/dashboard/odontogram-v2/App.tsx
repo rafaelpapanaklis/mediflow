@@ -273,8 +273,14 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
               )}
             </div>
             <div className="odo-summary">
-              <span><b>{toothCount}</b> {t.teeth}</span>
-              <span><b>{findingCount}</b> {t.findings}</span>
+              {loading ? (
+                <span className="odo-summary-loading">{t.loadingChart}</span>
+              ) : (
+                <>
+                  <span><b>{toothCount}</b> {t.teeth}</span>
+                  <span><b>{findingCount}</b> {t.findings}</span>
+                </>
+              )}
               <button type="button" className="odo-clearall" onClick={clearAll}>{t.clearAll}</button>
             </div>
           </div>
@@ -292,6 +298,13 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
                 onSelect={handleSelect}
               />
             </div>
+            {/* N14 (ws1-t10 ronda 4): mientras carga, un odontograma vacío de
+               verdad y uno que todavía no respondió se veían IGUAL («0
+               dientes · 0 hallazgos», todos los dientes en blanco). Este aviso
+               es lo único que distingue "no hay nada" de "todavía no sé". */}
+            {loading && (
+              <div className="odo-2d-loading" aria-hidden="true">{t.loadingChart}</div>
+            )}
           </div>
           {!dedupeLegend && <Legend lang={lang} />}
         </div>

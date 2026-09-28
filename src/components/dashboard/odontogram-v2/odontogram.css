@@ -79,6 +79,7 @@
 .odo-app .odo-hint { font-size: 13px; color: var(--ink-2); font-weight: 500; }
 .odo-app .odo-summary { display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: var(--ink-2); }
 .odo-app .odo-summary b { color: var(--ink); font-weight: 800; }
+.odo-app .odo-summary-loading { font-weight: 600; color: var(--ink-3); }
 .odo-app .odo-clearall { border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; }
 @media (hover: hover) and (pointer: fine) { .odo-app .odo-clearall:hover { border-color: #f0b4b4; color: #d8504f; background: #fdf3f3; } }
 
@@ -220,6 +221,13 @@
    vez de desplazarse con el contenido. Solo pinta algo si el caller pasa
    `edgeScrollHint` Y estamos por debajo de 640px — a 1440/1280 no hace nada. */
 .odo-app .odo-chart-scroll-wrap { position: relative; }
+/* N14 (ws1-t10 ronda 4): mientras carga, encima de los dientes en blanco —
+   sin esto, un odontograma cargando y uno de verdad vacío se ven idénticos. */
+.odo-app .odo-2d-loading {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 13px; font-weight: 700; color: var(--ink-2);
+  background: rgba(255, 255, 255, .78); border-radius: 10px; pointer-events: none;
+}
 @media (max-width: 640px) {
   .odo-app .odo-edge-hint::before,
   .odo-app .odo-edge-hint::after {
