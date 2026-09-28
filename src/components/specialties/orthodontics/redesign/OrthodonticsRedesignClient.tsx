@@ -8,6 +8,11 @@
 import { Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
+import {
+  getTreatmentCardContextForPatient,
+} from "@/app/actions/orthodontics/getTreatmentCardContextForPatient";
+import type { TreatmentCardAgendaContext } from "@/app/actions/orthodontics/getTreatmentCardContextForAppointment";
+import { isFailure } from "@/app/actions/orthodontics/result";
 import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
 import { debeAbrirLaHoja } from "@/lib/orthodontics/consulta-ortodoncia";
 import { SectionHero } from "./sections/SectionHero";
@@ -64,6 +69,7 @@ import layout from "./ortho-redesign-layout.module.css";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
 import { proximaFechaDeVisitaPorDefecto } from "@/lib/orthodontics/redesign/next-card-visit-default";
+import { PHASE_LABELS } from "./types";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
 import type {
@@ -319,10 +325,32 @@ export interface OrthodonticsRedesignClientProps {
 
 export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProps) {
   const [drawer, setDrawer] = useState<DrawerState>(null);
-  const closeDrawer = () => setDrawer(null);
+  // M6 (ws1-t8, Ronda 6 — hallazgo 6): "Registrar control" desde la ficha
+  // resuelve la cita de HOY (si la hay) y "¿ya hay hoja de hoy?" con el
+  // MISMO cargador que Agenda (getTreatmentCardContextForPatient, hermano de
+  // getTreatmentCardContextForAppointment) — antes abría siempre en blanco,
+  // sin ligar nada a la cita del día.
+  const [nuevoControlCtx, setNuevoControlCtx] = useState<TreatmentCardAgendaContext | null>(null);
+  const closeDrawer = () => {
+    setDrawer(null);
+    setNuevoControlCtx(null);
+  };
 
   const vm = props.vm;
   const t = vm.treatment;
+
+  const abrirRegistrarControl = useCallback(async () => {
+    if (!t.treatmentPlanId) return;
+    // Mismo criterio que BotonHojaControl.tsx en Agenda: se trae el
+    // contexto ANTES de abrir el cajón, para que nazca ya con la cita de
+    // hoy ligada (si la hay) y, si ya hay hoja de hoy, continuándola en vez
+    // de crear una segunda (hallazgo 7). Si el self-fetch falla, se abre
+    // igual con los defaults locales de `newCardDefaults` (sin cita ligada)
+    // — degradación, no bloqueo: el control se sigue pudiendo registrar.
+    const res = await getTreatmentCardContextForPatient(t.treatmentPlanId);
+    setNuevoControlCtx(isFailure(res) ? null : res.data);
+    setDrawer({ kind: "tcard-new" });
+  }, [t.treatmentPlanId]);
 
   // H17 (QA ws1-t9, ws1-t3): quien llega desde «Abrir caso» del módulo
   // (Pacientes en tratamiento → elegir paciente) trae `?abrirCaso=1`: el
@@ -337,7 +365,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   const casoActivo = debeAbrirLaHoja({ tienePlan: Boolean(t.treatmentPlanId), estado: t.status });
   useEffect(() => {
     if (!abrirControlAlEntrar) return;
-    if (casoActivo) setDrawer({ kind: "tcard-new" });
+    if (casoActivo) void abrirRegistrarControl();
     onControlAbierto?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrirControlAlEntrar]);
@@ -422,7 +450,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           // arriba, a la vista, y manda sobre los demás botones. Mismo
           // cajón que abría «Nueva cita» en el resumen.
           onStartControl={
-            t.status !== "no-iniciado" ? () => setDrawer({ kind: "tcard-new" }) : undefined
+            t.status !== "no-iniciado" ? abrirRegistrarControl : undefined
           }
           controlIsToday={isToday(vm.nextAppointment?.date)}
         />
@@ -452,7 +480,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             // Con la cabecera del paciente montada, «Registrar control» vive
             // ahí (arriba, siempre a la vista); aquí solo si no hay cabecera.
             onStartControl={
-              props.patientHeader ? undefined : () => setDrawer({ kind: "tcard-new" })
+              props.patientHeader ? undefined : abrirRegistrarControl
             }
             onAdvancePhase={t.phase ? () => setDrawer({ kind: "advance-phase" }) : undefined}
           />
@@ -470,7 +498,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             // Sin caso abierto no hay dónde guardar un control: el botón no
             // se pinta (antes abría la hoja y al guardar salía un error).
             onStartNewCard={
-              t.status !== "no-iniciado" ? () => setDrawer({ kind: "tcard-new" }) : undefined
+              t.status !== "no-iniciado" ? abrirRegistrarControl : undefined
             }
           />
 
@@ -633,8 +661,44 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
-      {/* Drawer nueva cita */}
-      {drawer?.kind === "tcard-new" && newCardDefaults ? (
+      {/* Drawer nueva cita. M6 (Ronda 6): si `nuevoControlCtx` trajo una
+          hoja de HOY (ligada a esta cita, a otra, o sin cita — hallazgo 7),
+          se CONTINÚA esa en vez de abrir una en blanco. Sin contexto (falló
+          el self-fetch), cae a `newCardDefaults` — mismo comportamiento que
+          antes de esta ronda. */}
+      {drawer?.kind === "tcard-new" && nuevoControlCtx?.existingCard ? (
+        <DrawerTreatmentCard
+          key={nuevoControlCtx.existingCard.id}
+          card={nuevoControlCtx.existingCard}
+          appointmentId={nuevoControlCtx.appointmentId}
+          availableWires={nuevoControlCtx.availableWires}
+          availablePhotoSets={nuevoControlCtx.availablePhotoSets}
+          onClose={closeDrawer}
+          onSave={props.onCardDraftSaved}
+          onSign={props.onCardSigned}
+        />
+      ) : drawer?.kind === "tcard-new" && nuevoControlCtx ? (
+        <DrawerTreatmentCard
+          key="new-card-con-cita"
+          card={null}
+          appointmentId={nuevoControlCtx.appointmentId}
+          defaultsForNew={{
+            cardNumber: nuevoControlCtx.defaultsForNew.cardNumber,
+            phase: PHASE_LABELS[nuevoControlCtx.defaultsForNew.phase],
+            monthAt: nuevoControlCtx.defaultsForNew.monthAt,
+            wireFrom: nuevoControlCtx.defaultsForNew.wireFrom,
+            visitDate: nuevoControlCtx.defaultsForNew.visitDate,
+            monthTotal: t.monthTotal > 0 ? t.monthTotal : null,
+            lastElastics: nuevoControlCtx.defaultsForNew.lastElastics,
+            lastIndications: nuevoControlCtx.defaultsForNew.lastIndications,
+          }}
+          availableWires={nuevoControlCtx.availableWires}
+          availablePhotoSets={nuevoControlCtx.availablePhotoSets}
+          onClose={closeDrawer}
+          onSave={props.onCardDraftSaved}
+          onSign={props.onCardSigned}
+        />
+      ) : drawer?.kind === "tcard-new" && !nuevoControlCtx && newCardDefaults ? (
         <DrawerTreatmentCard
           key="new-card"
           card={null}

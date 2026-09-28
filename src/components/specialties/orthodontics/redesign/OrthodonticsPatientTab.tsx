@@ -21,6 +21,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { getInitials } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
 import type { OrthoTabData } from "@/lib/orthodontics/load-data";
+import { labelParentesco } from "@/lib/consent/default-signer";
 import type { OrthoRedesignViewModel } from "./types";
 import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
 import {
@@ -406,8 +407,13 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               phone: patient.phone ?? null,
               email: patient.email ?? null,
               bloodType: patient.bloodType ?? null,
+              // ws1-t10 (H·F "Menor con tutor"): con responsable de pago real
+              // (A11) el rótulo lleva SU parentesco («madre», «tutor legal»),
+              // no la palabra genérica "(tutor)" de siempre.
               guardianLabel: orthoData?.guardianName
-                ? t("patients.ortho.guardianLabel", { name: orthoData.guardianName })
+                ? orthoData.responsibleGuardianRelation
+                  ? `${orthoData.guardianName} (${labelParentesco(orthoData.responsibleGuardianRelation)})`
+                  : t("patients.ortho.guardianLabel", { name: orthoData.guardianName })
                 : null,
               criticalAllergies:
                 Array.isArray(patient.allergies) && patient.allergies.length > 0
@@ -682,6 +688,10 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               nextDurationMin: payload.nextDurationMin,
               activationsNote: payload.activationsNote,
               indications: payload.indications,
+              // M6 (ws1-t8, Ronda 6 — hallazgo 6): antes esta llamada nunca
+              // mandaba appointmentId — "Registrar control" desde la ficha
+              // nunca quedaba ligado a la cita del día, aunque hubiera una.
+              appointmentId: payload.appointmentId,
             });
             if (isFailure(res)) {
               toast.error(res.error);
@@ -739,6 +749,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               nextDurationMin: payload.nextDurationMin,
               activationsNote: payload.activationsNote,
               indications: payload.indications,
+              appointmentId: payload.appointmentId,
             });
             if (isFailure(res)) {
               toast.error(res.error);
