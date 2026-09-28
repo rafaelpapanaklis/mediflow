@@ -4,13 +4,15 @@
 // tipos de cita, plantillas) para pintar el formulario, más la lista de
 // doctores de la clínica para el selector.
 
-import { prisma } from "@/lib/prisma";
 import { getOrthoConfigActionContext } from "./_helpers";
 import { loadOrthoClinicSettings, type OrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
-import { fail, isFailure, ok, type ActionResult } from "./result";
+import { cargarDoctoresTratantes } from "@/lib/orthodontics/doctores-tratantes-db";
+import { etiquetaDeDoctor } from "@/lib/orthodontics/doctores-tratantes";
+import { isFailure, ok, type ActionResult } from "./result";
 
 export interface OrthoConfigDoctorOption {
   id: string;
+  /** Con la especialidad si la marcó en Equipo: «Ana Ruiz · Ortodoncia». */
   name: string;
 }
 
@@ -24,17 +26,15 @@ export async function getOrthoClinicSettings(): Promise<ActionResult<OrthoClinic
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 
+  // ws1-t5 (ronda 6): la lista incluye al dueño o administrador que atiende y
+  // pone primero a quien marcó «Ortodoncia» en Equipo (doctores-tratantes.ts).
   const [settings, doctors] = await Promise.all([
     loadOrthoClinicSettings(ctx.clinicId),
-    prisma.user.findMany({
-      where: { clinicId: ctx.clinicId, role: "DOCTOR", isActive: true },
-      select: { id: true, firstName: true, lastName: true },
-      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
-    }),
+    cargarDoctoresTratantes(ctx.clinicId),
   ]);
 
   return ok({
     settings,
-    doctors: doctors.map((d) => ({ id: d.id, name: `${d.firstName} ${d.lastName}`.trim() })),
+    doctors: doctors.map((d) => ({ id: d.id, name: etiquetaDeDoctor(d) })),
   });
 }

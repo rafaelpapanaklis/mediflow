@@ -15,6 +15,8 @@
 import { prisma } from "@/lib/prisma";
 import { ORTHO_BILLING_MODE_DEFAULT, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
+import { cargarDoctoresTratantes } from "@/lib/orthodontics/doctores-tratantes-db";
+import { doctorPropuestoParaElAlta, etiquetaDeDoctor } from "@/lib/orthodontics/doctores-tratantes";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -49,6 +51,13 @@ export interface CaseIntakeOptions {
    * control» no se factura un total, así que ahí es un estimado.
    */
   billingMode: OrthoBillingMode;
+  /**
+   * Con qué doctor arranca el alta de un caso NUEVO (ws1-t5, ronda 6): el
+   * «Doctor tratante por defecto» de Configuración si sigue atendiendo, o el
+   * único ortodoncista/doctor de la clínica. "" = que lo elija quien abre el
+   * caso. Es una propuesta: el selector sigue editable.
+   */
+  suggestedTreatingDoctorId: string;
 }
 
 export async function getCaseIntakeOptions(
@@ -145,12 +154,10 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: no se pudo comprobar columnsExist:", e);
   }
 
+  // ws1-t5 (ronda 6): doctores + el dueño o administrador que atiende, con los
+  // ortodoncistas de Equipo primero (doctores-tratantes.ts).
   const [doctorsRaw, guardiansRaw, referringRaw] = await Promise.all([
-    prisma.user.findMany({
-      where: { clinicId: ctx.clinicId, role: "DOCTOR", isActive: true },
-      select: { id: true, firstName: true, lastName: true },
-      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
-    }),
+    cargarDoctoresTratantes(ctx.clinicId),
     prisma.guardian.findMany({
       where: { clinicId: ctx.clinicId, patientId, deletedAt: null },
       select: { id: true, fullName: true, parentesco: true, phone: true },
@@ -184,18 +191,23 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: ConsentForm no disponible:", e);
   }
 
-  // El modo de cobro de la clínica. best-effort: si no se puede leer, el de
-  // siempre (precio total) — el alta no se cae por esto.
+  // El modo de cobro de la clínica y el doctor tratante por defecto.
+  // best-effort: si no se puede leer, el modo de siempre (precio total) y sin
+  // doctor por defecto — el alta no se cae por esto.
   let billingMode: OrthoBillingMode = ORTHO_BILLING_MODE_DEFAULT;
+  let doctorPorDefecto: string | null = null;
   try {
-    billingMode = (await loadOrthoClinicSettings(ctx.clinicId)).billingMode;
+    const settings = await loadOrthoClinicSettings(ctx.clinicId);
+    billingMode = settings.billingMode;
+    doctorPorDefecto = settings.defaultTreatingDoctorId;
   } catch (e) {
-    console.error("[ortho] getCaseIntakeOptions: no se pudo leer el modo de cobro:", e);
+    console.error("[ortho] getCaseIntakeOptions: no se pudo leer la Configuración de la clínica:", e);
   }
 
   return ok({
     billingMode,
-    doctors: doctorsRaw.map((d) => ({ id: d.id, fullName: `${d.firstName} ${d.lastName}`.trim() })),
+    suggestedTreatingDoctorId: doctorPropuestoParaElAlta({ porDefecto: doctorPorDefecto, opciones: doctorsRaw }),
+    doctors: doctorsRaw.map((d) => ({ id: d.id, fullName: etiquetaDeDoctor(d) })),
     guardians: guardiansRaw.map((g) => ({
       id: g.id,
       fullName: g.fullName,

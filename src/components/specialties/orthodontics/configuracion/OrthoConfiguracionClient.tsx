@@ -29,6 +29,7 @@ import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { esTipoFijo, motivoDeRechazo, nuevaClave } from "@/lib/orthodontics/tipos-de-cita";
 import { ORTHO_BILLING_MODE_LABELS, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import type { OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
+import { MAX_PLANTILLA, PLANTILLAS_ORTO, motivoDeRechazoDePlantillas } from "@/lib/orthodontics/plantillas-mensaje";
 
 export interface OrthoConfiguracionClientProps {
   settings: OrthoClinicSettings;
@@ -51,22 +52,18 @@ const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
     "Sin precio total: cada control atendido se cobra aparte con el precio de «Control de ortodoncia» del catálogo, y la colocación/enganche va en su propia factura.",
 };
 
-const PLANTILLAS_CLAVES: { clave: string; etiqueta: string; ayuda: string }[] = [
-  {
-    clave: "recordatorioControl",
-    etiqueta: "Recordatorio de control",
-    ayuda: "WhatsApp que se manda antes de la cita de control. Variables: {paciente}, {fecha}, {hora}.",
-  },
-  {
-    clave: "avisoMensualidadVencida",
-    etiqueta: "Aviso de mensualidad vencida",
-    ayuda: "WhatsApp cuando una mensualidad de la factura a plazos vence sin cobrarse. Variables: {paciente}, {monto}.",
-  },
-];
+// Las plantillas, dónde se usa cada una y qué variables acepta viven en
+// plantillas-mensaje.ts (ws1-t5, ronda 6): la pantalla, el guardado y los dos
+// envíos leen de ahí, para que lo que aquí se promete sea lo que se manda.
 
 export function OrthoConfiguracionClient({ settings, doctors, procedimientos: procedimientosIniciales, suscripcion }: OrthoConfiguracionClientProps) {
+  // Si el doctor guardado ya no atiende (baja o cambio de rol) no está en la
+  // lista: el selector arranca en «Sin doctor por defecto» y lo dice, en vez
+  // de conservar a escondidas un valor que el guardado rechazaría.
+  const doctorGuardadoYaNoAtiende =
+    Boolean(settings.defaultTreatingDoctorId) && !doctors.some((d) => d.id === settings.defaultTreatingDoctorId);
   const [defaultTreatingDoctorId, setDefaultTreatingDoctorId] = useState<string>(
-    settings.defaultTreatingDoctorId ?? "",
+    doctorGuardadoYaNoAtiende ? "" : settings.defaultTreatingDoctorId ?? "",
   );
   const [appointmentTypes, setAppointmentTypes] = useState<OrthoAppointmentTypeOption[]>(
     settings.appointmentTypes,
@@ -142,6 +139,12 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
       toast.error(rechazo);
       return;
     }
+    // Una variable mal escrita le llegaría al paciente con todo y llaves.
+    const rechazoPlantilla = motivoDeRechazoDePlantillas(templates);
+    if (rechazoPlantilla) {
+      toast.error(rechazoPlantilla);
+      return;
+    }
     setSaving(true);
     try {
       const res = await updateOrthoClinicSettings({
@@ -215,7 +218,7 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
           <Tarjeta
             icono={Stethoscope}
             titulo="Doctor tratante por defecto"
-            sub="Se pre-rellena al abrir un caso nuevo — cada caso lo puede cambiar por su cuenta."
+            sub="Es el doctor con el que arranca el alta de un caso nuevo. Cada caso puede elegir a otro."
           >
             <div className={s.tarjetaCuerpo}>
               <div className={s.campo}>
@@ -235,9 +238,20 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
                     </option>
                   ))}
                 </select>
-                {doctors.length === 0 && (
+                {doctorGuardadoYaNoAtiende && defaultTreatingDoctorId === "" ? (
+                  <div className={s.campoAyuda} role="status">
+                    El doctor que estaba por defecto ya no atiende en esta clínica. Elige a otro y guarda.
+                  </div>
+                ) : null}
+                {doctors.length === 0 ? (
                   <div className={s.campoAyuda}>
-                    Esta clínica no tiene doctores dados de alta todavía (Equipo → Nuevo miembro).
+                    Nadie de esta clínica aparece como doctor. En Equipo, dale rol de doctor a quien atiende; si
+                    atiende el dueño o un administrador, basta con que esté en la Agenda.
+                  </div>
+                ) : (
+                  <div className={s.campoAyuda}>
+                    Salen los doctores y también el dueño o administrador que atiende. Primero va quien tiene la
+                    especialidad «Ortodoncia» en Equipo.
                   </div>
                 )}
               </div>
@@ -387,10 +401,10 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
         <Tarjeta
           icono={MessageSquareText}
           titulo="Plantillas de mensaje"
-          sub="Textos que usa el módulo para avisar por WhatsApp. Vacío = usa el texto por defecto."
+          sub="Tu redacción de los dos mensajes de Ortodoncia. Si dejas uno vacío, sale el texto de siempre."
         >
           <div className={s.tarjetaCuerpo} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {PLANTILLAS_CLAVES.map((p) => (
+            {PLANTILLAS_ORTO.map((p) => (
               <div className={s.campo} key={p.clave}>
                 <label className={s.campoEtiqueta} htmlFor={`${idPlantilla}-${p.clave}`}>
                   {p.etiqueta}
@@ -398,16 +412,40 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
                 <textarea
                   id={`${idPlantilla}-${p.clave}`}
                   className="input-new"
-                  rows={3}
+                  rows={4}
+                  maxLength={MAX_PLANTILLA}
+                  placeholder={p.ejemplo}
                   value={templates[p.clave] ?? ""}
                   aria-describedby={`${idPlantilla}-${p.clave}-ayuda`}
                   onChange={(e) => setTemplates((t) => ({ ...t, [p.clave]: e.target.value }))}
                 />
                 <div className={s.campoAyuda} id={`${idPlantilla}-${p.clave}-ayuda`}>
-                  {p.ayuda}
+                  {p.ayuda} Variables: {p.variables.map((v) => `{${v}}`).join(", ")}.
                 </div>
               </div>
             ))}
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "flex-start",
+                padding: "10px 12px",
+                borderRadius: "var(--pr-radio-s)",
+                background: "var(--pr-tarjeta-2)",
+                fontSize: 12,
+                lineHeight: 1.45,
+                color: "var(--pr-texto-3)",
+              }}
+            >
+              <MessageCircle size={15} strokeWidth={1.9} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden />
+              <span>
+                El aviso automático de mensualidad <strong>por vencer</strong> no se redacta aquí: está en{" "}
+                <a href="/dashboard/whatsapp" style={{ color: "var(--pr-activo)", textDecoration: "underline" }}>
+                  Configuración → WhatsApp
+                </a>
+                , sección &ldquo;Mensualidades&rdquo;.
+              </span>
+            </div>
           </div>
         </Tarjeta>
 

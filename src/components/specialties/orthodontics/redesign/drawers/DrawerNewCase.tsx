@@ -171,6 +171,9 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   // se sabe ANTES de elegir doctor/responsable, no después de guardar.
   const [columnsExist, setColumnsExist] = useState({ treatingDoctorId: true, responsibleGuardianId: true });
   const [billingMode, setBillingMode] = useState<OrthoBillingMode>(ORTHO_BILLING_MODE_DEFAULT);
+  const [treatingDoctorId, setTreatingDoctorId] = useState("");
+  /** El doctor que propuso Configuración, para decir de dónde salió. */
+  const [doctorPropuesto, setDoctorPropuesto] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -181,6 +184,13 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       setReferringDoctors(res.data.referringDoctors);
       setColumnsExist(res.data.columnsExist);
       setBillingMode(res.data.billingMode);
+      // ws1-t5 (ronda 6): el alta arranca con el «Doctor tratante por defecto»
+      // de Configuración (o el único ortodoncista de la clínica). Solo si
+      // nadie eligió ya a otro mientras cargaba, y si la columna existe.
+      if (res.data.columnsExist.treatingDoctorId && res.data.suggestedTreatingDoctorId) {
+        setDoctorPropuesto(res.data.suggestedTreatingDoctorId);
+        setTreatingDoctorId((actual) => actual || res.data.suggestedTreatingDoctorId);
+      }
     }).finally(() => {
       if (!cancelled) setLoadingOptions(false);
     });
@@ -227,7 +237,6 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   const [tadsRequired, setTadsRequired] = useState(false);
   const [objectives, setObjectives] = useState("AESTHETIC_AND_FUNCTIONAL");
   const [retention, setRetention] = useState(DEFAULT_RETENTION);
-  const [treatingDoctorId, setTreatingDoctorId] = useState("");
   const [guardianMode, setGuardianMode] = useState<ModoResponsable>("none");
   const [responsibleGuardianId, setResponsibleGuardianId] = useState("");
   const [newGuardianName, setNewGuardianName] = useState("");
@@ -657,6 +666,17 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                     ))}
                   </select>
                 </Field>
+                {doctorPropuesto && treatingDoctorId === doctorPropuesto ? (
+                  <p className="text-[11px] text-[color:var(--pr-texto-3)]">
+                    Propuesto por la Configuración de Ortodoncia. Puedes elegir a otro.
+                  </p>
+                ) : null}
+                {!loadingOptions && columnsExist.treatingDoctorId && doctors.length === 0 ? (
+                  <p className="text-[11px] text-[color:var(--pr-alerta)]">
+                    Nadie de esta clínica aparece como doctor. Revisa en Equipo que quien atiende tenga rol de
+                    doctor o esté en la Agenda.
+                  </p>
+                ) : null}
                 {!columnsExist.treatingDoctorId ? (
                   <p className="text-[11px] text-[color:var(--pr-alerta)]">
                     Falta pegar el SQL de la Ola 0 (sql/ortodoncia-nucleo.sql) — no se puede asignar todavía.

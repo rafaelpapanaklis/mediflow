@@ -6,8 +6,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
 import { getOrthoConfigActionContext, auditOrtho } from "./_helpers";
+import { esDoctorTratanteDeLaClinica } from "@/lib/orthodontics/doctores-tratantes-db";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import {
   guardarOrthoClinicSettings,
@@ -16,6 +16,7 @@ import {
 } from "@/lib/orthodontics/clinic-settings-db";
 import { motivoDeRechazo } from "@/lib/orthodontics/tipos-de-cita";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
+import { motivoDeRechazoDePlantillas, normalizarPlantillas } from "@/lib/orthodontics/plantillas-mensaje";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const appointmentTypeSchema = z.object({
@@ -55,14 +56,13 @@ export async function updateOrthoClinicSettings(
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
   const data = parsed.data;
 
-  // El doctor por defecto tiene que ser un DOCTOR real de ESTA clínica — el
-  // clinicId nunca sale del cliente, sale de la sesión (ctx.clinicId).
+  // El doctor por defecto tiene que ser alguien que ATIENDE en ESTA clínica —
+  // el clinicId nunca sale del cliente, sale de la sesión (ctx.clinicId). La
+  // regla es la misma de la lista que se ofrece (doctores-tratantes.ts): un
+  // doctor, o el dueño/administrador que atiende.
   if (data.defaultTreatingDoctorId) {
-    const doctor = await prisma.user.findFirst({
-      where: { id: data.defaultTreatingDoctorId, clinicId: ctx.clinicId, role: "DOCTOR" },
-      select: { id: true },
-    });
-    if (!doctor) return fail("El doctor tratante por defecto no pertenece a esta clínica");
+    const valido = await esDoctorTratanteDeLaClinica(ctx.clinicId, data.defaultTreatingDoctorId);
+    if (!valido) return fail("El doctor tratante por defecto ya no atiende en esta clínica. Elige otro de la lista.");
   }
 
   const before = await loadOrthoClinicSettings(ctx.clinicId);
@@ -88,6 +88,14 @@ export async function updateOrthoClinicSettings(
   const rechazo = motivoDeRechazo(appointmentTypes);
   if (rechazo) return fail(rechazo);
 
+  // ws1-t5 (ronda 6): las plantillas ya se MANDAN (recordatorio de control y
+  // aviso de mensualidad vencida), así que una variable mal escrita le
+  // llegaría al paciente con todo y llaves. Se rechaza aquí, diciendo cuáles
+  // sí existen; y se guardan solo las claves del módulo, sin las vacías.
+  const rechazoPlantilla = motivoDeRechazoDePlantillas(data.messageTemplates);
+  if (rechazoPlantilla) return fail(rechazoPlantilla);
+  const messageTemplates = normalizarPlantillas(data.messageTemplates);
+
   const billingMode = data.billingMode ? normalizarOrthoBillingMode(data.billingMode) : before.billingMode;
   const proximoControlBotEnabled = data.proximoControlBotEnabled ?? before.proximoControlBotEnabled;
 
@@ -97,7 +105,7 @@ export async function updateOrthoClinicSettings(
       updatedBy: ctx.userId,
       defaultTreatingDoctorId: data.defaultTreatingDoctorId,
       appointmentTypes,
-      messageTemplates: data.messageTemplates,
+      messageTemplates,
       billingMode,
       proximoControlBotEnabled,
     });
@@ -127,7 +135,7 @@ export async function updateOrthoClinicSettings(
     after: {
       defaultTreatingDoctorId: data.defaultTreatingDoctorId,
       appointmentTypes: data.appointmentTypes,
-      messageTemplates: data.messageTemplates,
+      messageTemplates,
       billingMode,
       proximoControlBotEnabled,
     },

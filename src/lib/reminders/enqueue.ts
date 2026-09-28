@@ -20,11 +20,16 @@ import {
   formatApptDateParts,
   getConfirmUrl,
   getEffectiveReminderSettings,
-  renderReminderTemplate,
 } from "@/lib/reminders/config";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import { loadNotifPrefsByAccount } from "@/lib/patient-notifications/prefs";
 import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
+import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
+import {
+  CLAVE_RECORDATORIO_CONTROL,
+  plantillaUsable,
+  textoRecordatorioDeCita,
+} from "@/lib/orthodontics/plantillas-mensaje";
 import type { NotifPrefs } from "@/lib/patient-notifications/types";
 
 export interface SweepSummary {
@@ -190,6 +195,22 @@ export async function sweepAppointmentReminders(opts?: {
         console.error("[reminders/enqueue] links/prefs (best-effort):", err);
       }
 
+      // ws1-t5 (ronda 6) — «Recordatorio de control» de Configuración de
+      // Ortodoncia: si la clínica lo redactó, ese es el texto del recordatorio
+      // de sus controles. Se lee UNA vez por clínica y solo si en esta corrida
+      // hay algún control; best-effort: si no se puede leer, el recordatorio
+      // sale igual, con el texto general.
+      let plantillaControl: string | null = null;
+      const hayControles = candidatesByOffset.some((c) => c.appointments.some((a) => esCitaControlOrto(a.type)));
+      if (hayControles) {
+        try {
+          const cfg = await loadOrthoClinicSettings(clinic.id);
+          plantillaControl = plantillaUsable(cfg.messageTemplates, CLAVE_RECORDATORIO_CONTROL);
+        } catch (err) {
+          console.error("[reminders/enqueue] plantilla de control (best-effort):", err);
+        }
+      }
+
       // confirmToken generados en esta corrida (reusados entre offsets/canales).
       const tokenCache = new Map<string, string>();
 
@@ -273,22 +294,24 @@ export async function sweepAppointmentReminders(opts?: {
           tokenCache.set(appt.id, token);
 
           const confirmUrl = getConfirmUrl(token);
-          let message = renderReminderTemplate(settings.template, {
-            paciente: appt.patient.firstName,
-            clinica: clinic.name,
-            fecha,
-            hora,
-            doctor: doctorName,
-            link: confirmUrl,
+          // El texto lo decide `textoRecordatorioDeCita` (plantillas-mensaje.ts,
+          // con test): una cita normal sale con la plantilla de la clínica; un
+          // control de ortodoncia, con la plantilla propia de Ortodoncia si la
+          // clínica la redactó (ws1-t5, ronda 6) o, si no, con la general más
+          // la línea «Este es el recordatorio de tu control» (ws1-t1).
+          const message = textoRecordatorioDeCita({
+            esControl: esCitaControlOrto(appt.type),
+            plantillaGeneral: settings.template,
+            plantillaControl,
+            vars: {
+              paciente: appt.patient.firstName,
+              clinica: clinic.name,
+              fecha,
+              hora,
+              doctor: doctorName,
+              link: confirmUrl,
+            },
           });
-          // ws1-t1 (Ortodoncia conectada al bot) — el recordatorio genérico de
-          // Agenda no distingue tipos de cita; para un control de ortodoncia se
-          // antepone una línea aparte (texto libre, no toca la plantilla de la
-          // clínica) para que el paciente sepa de qué cita se trata. No manda
-          // nada nuevo: es el MISMO recordatorio de siempre, con una línea más.
-          if (esCitaControlOrto(appt.type)) {
-            message = `🦷 Este es el recordatorio de tu *control de ortodoncia*.\n\n${message}`;
-          }
 
           // Nunca en el pasado: si la grace window ya pasó el momento ideal,
           // el worker lo manda en el siguiente tick.
