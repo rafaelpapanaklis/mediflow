@@ -61,6 +61,8 @@ const ODONTOGRAMA = "../../../app/api/import/odontogram/route";
 const NOTAS_TRATAMIENTO = "../../../app/api/import/treatment-notes/route";
 const HISTORIAL_PAGOS = "../../../app/api/import/payment-history/route";
 const GASTOS_LABORATORIO = "../../../app/api/import/lab-expenses/route";
+const CUOTAS_PLAN = "../../../app/api/import/installment-plans/route";
+const ARANCELES = "../../../app/api/import/procedure-catalog/route";
 
 test("citas: exige agenda.create además del rol", async () => {
   sesion = sesionDe("ADMIN");
@@ -187,6 +189,37 @@ test("historial de gastos de laboratorio migrado: exige billing.create además d
   assert.equal(await llamar(GASTOS_LABORATORIO), 403);
   sesion = null;
   assert.equal(await llamar(GASTOS_LABORATORIO), 401);
+});
+
+test("cuotas por vencer migradas: exige billing.create además del rol, mismo candado que saldos y pagos (ws1-t6)", async () => {
+  sesion = sesionDe("ADMIN");
+  assert.equal(await llamar(CUOTAS_PLAN), 400);
+  sesion = sesionDe("RECEPTIONIST");
+  assert.equal(await llamar(CUOTAS_PLAN), 400, "recepción tiene billing.create por defecto");
+  sesion = sesionDe("RECEPTIONIST", ["agenda.view", "agenda.create", "patients.create"]);
+  assert.equal(await llamar(CUOTAS_PLAN), 403, "sin billing.create no se crean cuotas por importación");
+  sesion = sesionDe("DOCTOR");
+  assert.equal(await llamar(CUOTAS_PLAN), 403);
+  sesion = sesionDe("READONLY");
+  assert.equal(await llamar(CUOTAS_PLAN), 403);
+  sesion = null;
+  assert.equal(await llamar(CUOTAS_PLAN), 401);
+});
+
+test("aranceles y precios migrados: exige procedures.edit (mismo candado que crear/editar un procedimiento a mano), sin restricción de rol aparte (ws1-t6)", async () => {
+  sesion = sesionDe("ADMIN");
+  assert.equal(await llamar(ARANCELES), 400, "ADMIN tiene procedures.edit por defecto");
+  sesion = sesionDe("RECEPTIONIST");
+  assert.equal(await llamar(ARANCELES), 403, "recepción NO tiene procedures.edit por defecto");
+  sesion = sesionDe("DOCTOR");
+  assert.equal(await llamar(ARANCELES), 403, "el doctor no edita el tarifario por defecto");
+  sesion = sesionDe("READONLY");
+  assert.equal(await llamar(ARANCELES), 403);
+  // Con el permiso concedido a mano (Equipo → Permisos), CUALQUIER rol pasa: no hay requireRole.
+  sesion = sesionDe("RECEPTIONIST", ["procedures.edit"]);
+  assert.equal(await llamar(ARANCELES), 400, "con el permiso concedido, pasa aunque el rol no sea ADMIN");
+  sesion = null;
+  assert.equal(await llamar(ARANCELES), 401);
 });
 
 test("archivos en bloque (match/sign/confirm/abort): las 4 exigen xrays.upload además del rol, igual que registrar un archivo a mano", async () => {
