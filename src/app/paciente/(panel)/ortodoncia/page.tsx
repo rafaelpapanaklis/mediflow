@@ -23,6 +23,7 @@ import { CameraGuideOverlay } from "@/components/clinical-shared/photos/CameraGu
 import { logElasticsComplianceFromPortal } from "@/app/actions/orthodontics/alineadores/logElasticsComplianceFromPortal";
 import { submitMonitoringPhoto } from "@/app/actions/orthodontics/alineadores/submitMonitoringPhoto";
 import type { PacienteOrtodonciaCase } from "@/app/api/paciente/ortodoncia/route";
+import { isFailure } from "@/app/actions/orthodontics/result";
 
 const TEXT = "rgba(255,255,255,0.92)";
 const MUTED = "rgba(255,255,255,0.55)";
@@ -218,7 +219,7 @@ function ElasticsCheckin({
       usedElastics,
     });
     setSaving(false);
-    if (!res.ok) {
+    if (isFailure(res)) {
       setError(res.error);
       return;
     }
@@ -302,7 +303,7 @@ function MonitoringUpload({ treatmentPlanId }: { treatmentPlanId: string }) {
         angle: json.angle,
         patientNote: json.patientNote,
       });
-      if (!created.ok) {
+      if (isFailure(created)) {
         setError(created.error);
         setStatus("error");
         return;
