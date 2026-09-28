@@ -67,10 +67,20 @@ test("con historial pero sin caso en marcha: se enseña su pestaña, sin abrir h
 test("la hoja que se abre es la de «Registrar control», y el aviso se apaga", () => {
   const ficha = sinComentarios(leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx"));
   assert.match(ficha, /const casoActivo = debeAbrirLaHoja\(\{ tienePlan: Boolean\(t\.treatmentPlanId\), estado: t\.status \}\);/);
-  assert.match(ficha, /if \(casoActivo\) setDrawer\(\{ kind: "tcard-new" \}\);\s*onControlAbierto\?\.\(\);/);
-  // El mismo cajón que abre el botón «Registrar control» de la cabecera.
-  assert.match(ficha, /onStartControl=\{\s*t\.status !== "no-iniciado" \? \(\) => setDrawer\(\{ kind: "tcard-new" \}\) : undefined/);
-  assert.equal((ficha.match(/<DrawerTreatmentCard\b/g) ?? []).length, 2, "la hoja nueva y la ya guardada: no hay una tercera");
+  // Ronda 6 (ws1-t8, hallazgo 6): «Nueva consulta → Ortodoncia» ya no abre el
+  // cajón en blanco directo — pasa por `abrirRegistrarControl`, que resuelve
+  // la cita de control de HOY (mismo cargador que la Agenda) antes de abrir.
+  assert.match(ficha, /if \(casoActivo\) void abrirRegistrarControl\(\);\s*onControlAbierto\?\.\(\);/);
+  assert.match(ficha, /const abrirRegistrarControl = useCallback\(async \(\) => \{/);
+  assert.match(ficha, /getTreatmentCardContextForPatient\(t\.treatmentPlanId\)/);
+  // El mismo cajón que abre el botón «Registrar control» de la cabecera —
+  // UNA sola función, no un setDrawer directo repetido por cada botón.
+  assert.match(ficha, /onStartControl=\{\s*t\.status !== "no-iniciado" \? abrirRegistrarControl : undefined/);
+  assert.equal(
+    (ficha.match(/<DrawerTreatmentCard\b/g) ?? []).length,
+    4,
+    "reabrir una hoja guardada, continuar la de hoy, nueva con cita, y el respaldo sin cita ligada — nada más",
+  );
 });
 
 // ── Las seis plantillas ──────────────────────────────────────────────────

@@ -69,6 +69,10 @@ mock.module("@/lib/prisma", {
       orthoTreatmentCard: { findMany: async () => [] },
       orthodonticPhase: { findFirst: async () => null },
       orthoPhotoSet: { findMany: async () => [] },
+      // Ronda 6 (ws1-t8): `buildTreatmentCardContext` ahora recibe el
+      // timezone de la clínica (hallazgo 7, tarjetaDeControlDeHoy) — el
+      // wrapper lo resuelve con esta consulta antes de delegar.
+      clinic: { findUnique: async () => ({ timezone: "America/Mexico_City" }) },
     },
   },
 });
