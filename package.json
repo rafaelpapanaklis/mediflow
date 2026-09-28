@@ -213,6 +213,7 @@
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",
     "test:plan-de-pagos": "tsx --test src/lib/invoices/__tests__/plan-de-pagos.test.ts",
     "test:monto-cobro-h68": "tsx --test src/lib/invoices/__tests__/monto-cobro-h68.test.ts",
+    "test:factura-cancelada-h-f": "tsx --test src/lib/orthodontics/__tests__/factura-cancelada-h-f.test.ts",
     "test:cfdi-pago-concepto": "tsx --test src/lib/invoices/__tests__/cfdi-pago-concepto.test.ts",
     "test:payment-plans": "tsx --test --experimental-test-module-mocks src/lib/payment-plans/__tests__/letras.test.ts src/app/api/payment-plans/__tests__/plan-letras-ruta.test.ts",
     "test:invoice-money": "tsx --test --experimental-test-module-mocks src/app/api/invoices/__tests__/invoice-money.test.ts",

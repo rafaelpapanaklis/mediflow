@@ -129,9 +129,13 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   ]);
 
   const condiciones = invoice ? condicionesResult.porFactura.get(invoice.id) ?? null : null;
+  // ws1-t10 (H·F "Factura cancelada") — una factura CANCELLED no cuenta como
+  // deuda del caso (mismo criterio que cobranza-db.ts): el total cancelado
+  // no se sigue anunciando como pendiente.
+  const facturaVigente = invoice && invoice.status !== "CANCELLED" ? invoice : null;
   const cobranza = cobranzaDelCasoUnificada({
     modo: billingMode,
-    facturaPrincipal: invoice ? { condiciones, totalFactura: invoice.total, cobros: invoice.payments } : null,
+    facturaPrincipal: facturaVigente ? { condiciones, totalFactura: facturaVigente.total, cobros: facturaVigente.payments } : null,
     cargosControl,
     saldoAFavorPrevio,
     ahora: new Date(),

@@ -69,7 +69,7 @@ export async function cargarCobranzaDelCaso(
     invoiceId
       ? prisma.invoice.findFirst({
           where: { id: invoiceId, clinicId },
-          select: { total: true, payments: { select: { amount: true, method: true } } },
+          select: { status: true, total: true, payments: { select: { amount: true, method: true } } },
         })
       : Promise.resolve(null),
     getPatientCreditBalance(clinicId, patientId),
@@ -77,13 +77,20 @@ export async function cargarCobranzaDelCaso(
   ]);
   if (invoiceId && !invoice) return null;
 
+  // ws1-t10 (H·F "Factura cancelada") — una factura CANCELLED no es deuda:
+  // antes "Ortodoncia sigue contando sus cuotas como deuda" del total
+  // cancelado, aunque el caso ya no le debiera nada a nadie. Se trata como
+  // si el caso no tuviera factura todavía (mismo criterio que `invoiceId`
+  // nulo), no como si la debiera completa.
+  const facturaVigente = invoice && invoice.status !== "CANCELLED" ? invoice : null;
+
   const modo = normalizarOrthoBillingMode(modoCrudo);
   const cargosControl = modo === "PAGO_POR_CONTROL" ? await cargarCargosDeControlDelCaso(clinicId, treatmentPlanId) : [];
 
   return cobranzaDelCasoUnificada({
     modo,
-    facturaPrincipal: invoice
-      ? { condiciones: condicionesResult.porFactura.get(invoiceId!) ?? null, totalFactura: invoice.total, cobros: invoice.payments }
+    facturaPrincipal: facturaVigente
+      ? { condiciones: condicionesResult.porFactura.get(invoiceId!) ?? null, totalFactura: facturaVigente.total, cobros: facturaVigente.payments }
       : null,
     cargosControl,
     saldoAFavorPrevio,

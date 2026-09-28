@@ -26,7 +26,21 @@ export async function abrirPlanDePago(args: {
   const casoResult = await loadCasoParaCobro({ ctx, treatmentPlanId: args.treatmentPlanId });
   if (isFailure(casoResult)) return casoResult;
   const caso = casoResult.data;
-  if (caso.invoiceId) return fail("Este caso ya tiene un plan de pago abierto");
+
+  // ws1-t10 (H·F "Factura cancelada") — si la factura que el caso tenía
+  // ligada está CANCELADA, no cuenta como "ya tiene un plan abierto": antes
+  // cancelar la factura del tratamiento dejaba el caso atascado para
+  // siempre, sin poder abrir el plan de verdad. Una factura VIGENTE (de
+  // cualquier otro estado) sigue bloqueando: solo un plan a la vez.
+  let invoiceAnteriorCancelada = false;
+  if (caso.invoiceId) {
+    const anterior = await prisma.invoice.findFirst({
+      where: { id: caso.invoiceId, clinicId: ctx.clinicId },
+      select: { status: true },
+    });
+    if (anterior?.status !== "CANCELLED") return fail("Este caso ya tiene un plan de pago abierto");
+    invoiceAnteriorCancelada = true;
+  }
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: args.invoiceId, clinicId: ctx.clinicId },
@@ -35,9 +49,14 @@ export async function abrirPlanDePago(args: {
   if (!invoice) return fail("La factura no existe o es de otra clínica");
   if (invoice.patientId !== caso.patientId) return fail("La factura no es de este paciente");
 
-  // Solo si SIGUE sin plan (defensivo contra doble clic / dos pestañas).
+  // Solo si SIGUE sin plan vigente (defensivo contra doble clic / dos
+  // pestañas): la misma factura cancelada de antes, o ninguna.
   const { count } = await prisma.orthodonticTreatmentPlan.updateMany({
-    where: { id: args.treatmentPlanId, clinicId: ctx.clinicId, invoiceId: null },
+    where: {
+      id: args.treatmentPlanId,
+      clinicId: ctx.clinicId,
+      invoiceId: invoiceAnteriorCancelada ? caso.invoiceId : null,
+    },
     data: { invoiceId: args.invoiceId },
   });
   if (count === 0) return fail("Este caso ya tiene un plan de pago abierto");
