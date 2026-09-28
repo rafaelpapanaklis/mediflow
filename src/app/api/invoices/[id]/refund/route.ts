@@ -8,6 +8,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { round2 } from "@/lib/invoice-totals";
 import { denyIfCfdiVigente } from "@/lib/invoices/cfdi-vigente";
+import { algunPagoTieneCfdiVigente } from "@/lib/invoices/cfdi-pago-db";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 
@@ -83,6 +84,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // reembolso.
     const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "reembolsar");
     if (cfdiDenied) return { denied: cfdiDenied };
+    // CFDI por pago (ws1-t1, sep-2026, facturas a plazos): un reembolso no
+    // apunta a un pago concreto (baja `paid` en general), así que no se sabe
+    // a cuál de los CFDI-por-pago le tocaría este dinero. Cancelar ese CFDI
+    // ante el SAT todavía no existe en dental (lib/invoices/cfdi-vigente.ts):
+    // se bloquea en vez de dejar un CFDI vigente por un pago que ya no está
+    // completo.
+    if (await algunPagoTieneCfdiVigente(tx, { clinicId, invoiceId: params.id })) {
+      return {
+        denied: NextResponse.json({
+          error: "Esta factura tiene uno o más pagos con su propio CFDI timbrado (enganche/mensualidades). Reembolsar la dejaría con un CFDI vigente por un pago que ya no está completo, y cancelar ese CFDI ante el SAT todavía no se puede hacer desde DaleControl: escríbenos a soporte con el folio de la factura.",
+          code: "CFDI_POR_PAGO_VIGENTE",
+        }, { status: 409 }),
+      };
+    }
     if (invoice.paid <= 0)              return { error: "Esta factura no tiene pagos para reembolsar", status: 400 };
     // Lo pagado se compara REDONDEADO: una factura legada con paid =
     // 1000.0099999999999 rechazaba el reembolso completo de $1,000.01.

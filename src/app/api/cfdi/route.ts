@@ -6,13 +6,14 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { logMutation } from "@/lib/audit";
 import {
-  createInvoice, createOrUpdateCustomer, getOrgApiKey, getOrganizationStatus,
+  createInvoice, createOrUpdateCustomer, getOrgApiKey,
   validateRfc, CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
   type InvoiceResult,
 } from "@/lib/facturapi";
 import { cfdiClaimFor, isCfdiClaim, CFDI_EN_CURSO_ERROR } from "@/lib/invoices/cfdi-vigente";
 import { cfdiCuadre, CFDI_TOTAL_MISMATCH } from "@/lib/invoices/cfdi-cuadre";
 import { pudoHaberTimbrado, CFDI_TIMBRE_INCIERTO_ERROR } from "@/lib/invoices/cfdi-timbre-incierto";
+import { liveReadinessBlock } from "@/lib/invoices/cfdi-readiness";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { isUsableWhereId } from "@/lib/validations";
 import { getResolvedPlan } from "@/lib/plans";
@@ -25,67 +26,9 @@ import {
   derivePaymentForm, resolveTaxMode, itemQuantity, itemUnitPrice,
   itemDiscount, round2, type CfdiTaxMode,
 } from "@/lib/invoice-totals";
-
-/**
- * Gate de producción. Con FACTURAPI_ENV=live el CFDI se timbra ante el SAT y ya
- * no se puede "deshacer": si la organización de la clínica todavía no puede
- * emitir, JAMÁS se intenta timbrar — se devuelve 409 con el paso que falta.
- *
- * La fuente de verdad es la organización en Facturapi (`is_production_ready` /
- * `pending_steps`). El boolean local `csdUploaded` solo se usa como respaldo
- * cuando Facturapi no responde — así un CSD subido fuera de MediFlow no bloquea,
- * y un `csdUploaded` viejo tampoco.
- */
-async function liveReadinessBlock(orgId: string, csdUploaded: boolean): Promise<NextResponse | null> {
-  let status;
-  try {
-    status = await getOrganizationStatus(orgId);
-  } catch {
-    // Facturapi no respondió: se cae al único dato local que hay. Sin CSD no hay
-    // timbrado posible en Live; con CSD se deja pasar (no se bloquea una
-    // operación válida por una falla ajena y el timbrado es el juez final).
-    if (!csdUploaded) {
-      return NextResponse.json({
-        error: "Falta subir tus certificados CSD (.cer y .key del SAT) en Configuración → Facturación antes de timbrar con validez fiscal.",
-        code:  "CFDI_LIVE_NOT_READY",
-      }, { status: 409 });
-    }
-    return null;
-  }
-
-  // A partir de aquí manda Facturapi, NO el boolean local: si la org está lista
-  // para producción se timbra aunque `csdUploaded` esté desactualizado (p. ej. el
-  // CSD se subió desde el panel de Facturapi).
-  if (!status.exists) {
-    return NextResponse.json({
-      error: "Tu organización fiscal ya no existe en Facturapi. Vuelve a guardar tu configuración fiscal en Configuración → Facturación.",
-      code:  "CFDI_LIVE_NOT_READY",
-    }, { status: 409 });
-  }
-  if (status.isProductionReady) return null;
-
-  const faltan: string[] = [];
-  if (status.hasLegal       === false) faltan.push("Completa tus datos fiscales (razón social, régimen y código postal).");
-  if (status.hasCertificate === false) faltan.push("Falta subir tus certificados CSD.");
-  if (status.manifestSigned === false) faltan.push("Falta firmar la Carta Manifiesto con tu e.firma.");
-  if (status.hasLogo        === false) faltan.push("Falta subir el logo de tu organización en Facturapi.");
-  // pending_steps puede traer un paso que no mapeamos: se muestra su propia
-  // descripción antes que un mensaje vacío.
-  if (faltan.length === 0) {
-    faltan.push(...status.pendingSteps.map((s) => s.description || s.type).filter(Boolean));
-  }
-  // Facturapi dice que no está lista pero no dijo por qué: se manda al panel en vez
-  // de devolver un mensaje sin contenido.
-  if (faltan.length === 0) {
-    faltan.push("Facturapi reporta tu organización como no lista para producción pero no detalló el motivo. Revisa Configuración → Facturación → «Listo para facturar ante el SAT».");
-  }
-
-  return NextResponse.json({
-    error: `Todavía no puedes timbrar con validez fiscal. ${faltan.join(" ")}`,
-    code:  "CFDI_LIVE_NOT_READY",
-    pendingSteps: status.pendingSteps,
-  }, { status: 409 });
-}
+import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
+import { esPlanAPlazos } from "@/lib/invoices/plan-de-pagos";
+import { algunPagoTieneCfdiVigente } from "@/lib/invoices/cfdi-pago-db";
 
 export async function POST(req: NextRequest) {
   const rl = rateLimit(req, 5, 60 * 60 * 1000);
@@ -217,10 +160,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "El total a timbrar debe ser mayor a $0." }, { status: 400 });
   }
 
+  // ── Facturas a plazos (ws1-t1, sep-2026) ──────────────────────────────────
+  // Decisión de Rafael: una factura a plazos (enganche + mensualidades) ya NO
+  // se timbra entera de un jalón — cada pago se factura por su lado con
+  // POST /api/payments/[id]/cfdi, como su propio CFDI PUE por el monto
+  // pagado. Dos candados, en este orden:
+  //
+  //   1. Si YA hay algún pago de esta factura con CFDI vigente, timbrar la
+  //      factura completa la duplicaría (el mismo dinero, dos veces ante el
+  //      SAT) — se bloquea siempre, sin importar si está saldada.
+  //   2. Si la factura ES a plazos y todavía tiene saldo, el override
+  //      `confirmUnpaidPue` NO aplica aquí: no hay "confirmar y timbrar
+  //      igual", hay que facturar pago por pago.
+  //
+  // Sin sql/cfdi-pagos-a-plazos.sql aplicado, ambas consultas contestan
+  // "no hay" (columna ausente) y esta factura sigue su camino de siempre.
+  const yaTieneCfdiPorPago = await algunPagoTieneCfdiVigente(prisma, { clinicId: ctx!.clinicId, invoiceId });
+  if (yaTieneCfdiPorPago) {
+    return NextResponse.json({
+      error: "Esta factura ya tiene uno o más pagos con su propio CFDI timbrado (enganche/mensualidades). No se puede timbrar la factura completa además: se duplicaría el importe ante el SAT. Sigue facturando pago por pago.",
+      code: "CFDI_POR_PAGO_VIGENTE",
+    }, { status: 409 });
+  }
+  const { porFactura: condicionesPorFactura } = await leerCondicionesDeFacturas(prisma, { clinicId: ctx!.clinicId, invoiceIds: [invoiceId] });
+  const condicionesDeEstaFactura = condicionesPorFactura.get(invoiceId) ?? null;
+  const esAPlazos = esPlanAPlazos(condicionesDeEstaFactura);
+
   // ── PUE con saldo pendiente ───────────────────────────────────────────────
   // El CFDI sale como PUE (pago en una sola exhibición); si la factura no está
-  // totalmente pagada, se exige confirmación explícita y queda en el audit log.
+  // totalmente pagada, se exige confirmación explícita y queda en el audit log
+  // — salvo que sea a plazos, donde no hay override posible (ver arriba).
   const fullyPaid = invoice.paid + 0.01 >= invoice.total;
+  if (!fullyPaid && esAPlazos) {
+    return NextResponse.json({
+      error: `Esta factura es a plazos y todavía tiene saldo ($${invoice.balance.toFixed(2)}). No se puede timbrar entera como PUE: factura cada pago por separado con el botón "Facturar este pago".`,
+      code: "CFDI_A_PLAZOS_CON_SALDO",
+    }, { status: 409 });
+  }
   if (!fullyPaid && confirmUnpaidPue !== true) {
     return NextResponse.json({
       error: `La factura tiene saldo pendiente ($${invoice.balance.toFixed(2)}) y el CFDI se emitiría como PUE (pago en una sola exhibición). Confirma explícitamente para timbrar de todos modos.`,
