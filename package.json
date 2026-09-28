@@ -371,6 +371,7 @@
     "test:orto-landing-valoracion": "tsx --test src/lib/orthodontics/__tests__/landing-servicio-valoracion.test.ts",
     "test:orto-clinic-settings-puro": "tsx --test src/lib/orthodontics/__tests__/clinic-settings-db.test.ts",
     "test:orto-tipos-de-cita": "tsx --test src/lib/orthodontics/__tests__/tipos-de-cita.test.ts",
+    "test:ortho-casos-migrados": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/ortho-casos.test.ts",
     "test:import-detectar-entidad": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/detectar-entidad.test.ts",
     "test:import-multi-archivo": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/multi-archivo.test.ts",
     "test:import-seguridad-archivos": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/seguridad-archivos.test.ts",
