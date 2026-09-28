@@ -4,13 +4,18 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { updateTreatmentPlanSchema } from "@/lib/validation/orthodontics";
+import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
+// Ola 1 (ws1-t6) — columnas de sql/ortodoncia-alta-caso.sql (A5/A11): si el
+// update las toca y aún no existen (P2021/P2022), reintenta sin ellas.
+const ALTA_CASO_PLAN_FIELDS = ["treatingDoctorId", "responsibleGuardianId"] as const;
+
 export async function updateTreatmentPlan(
   input: unknown,
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -30,23 +35,72 @@ export async function updateTreatmentPlan(
     }
   }
 
-  const { treatmentPlanId, diagnosisId, patientId, ...rest } = parsed.data;
+  const { treatmentPlanId, diagnosisId, patientId, newResponsibleGuardian, ...rest } = parsed.data;
   const data: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(rest)) {
     if (value !== undefined) data[key] = value;
   }
+  // `installedAt`/`startDate` viajan como string ISO (schema `.datetime()`);
+  // Prisma exige `Date` en `update()`. Nadie más había llamado a este action
+  // con estos dos campos todavía (F7 sin construir) — el bug no se había
+  // topado. A6 es la primera llamadora real de `installedAt` aquí.
+  if (typeof data.installedAt === "string") data.installedAt = new Date(data.installedAt);
+  if (typeof data.startDate === "string") data.startDate = new Date(data.startDate);
   if (parsed.data.status === "DROPPED_OUT" && !data.droppedOutAt) {
     data.droppedOutAt = new Date();
   }
   if (parsed.data.status && parsed.data.status !== before.status) {
     data.statusUpdatedAt = new Date();
   }
+  // A6 · si se pone/cambia la fecha de colocación y el caso seguía como
+  // PLANNED (sin que este mismo update toque `status` a mano), el caso
+  // arranca: sin esto, "sin empezar" se quedaba así para siempre en
+  // cualquier caso que no puso la fecha al crearlo (hallazgo del alcance).
+  if (
+    data.installedAt instanceof Date &&
+    !parsed.data.status &&
+    before.status === "PLANNED"
+  ) {
+    data.status = "IN_PROGRESS";
+    data.statusUpdatedAt = new Date();
+  }
 
   try {
-    const updated = await prisma.orthodonticTreatmentPlan.update({
-      where: { id: treatmentPlanId },
-      data,
-    });
+    let altaCasoFieldsSaved = true;
+    const updated = await prisma
+      .$transaction(async (tx) => {
+        const finalData = { ...data };
+        if (newResponsibleGuardian && !finalData.responsibleGuardianId) {
+          const guardian = await tx.guardian.create({
+            data: {
+              clinicId: ctx.clinicId,
+              patientId: before.patientId,
+              fullName: newResponsibleGuardian.fullName,
+              parentesco: newResponsibleGuardian.parentesco,
+              phone: newResponsibleGuardian.phone,
+              esResponsableLegal: true,
+              principal: true,
+              createdBy: ctx.userId,
+            },
+            select: { id: true },
+          });
+          finalData.responsibleGuardianId = guardian.id;
+        }
+        return tx.orthodonticTreatmentPlan.update({ where: { id: treatmentPlanId }, data: finalData });
+      })
+      .catch(async (e) => {
+        const touchesAltaCaso =
+          ALTA_CASO_PLAN_FIELDS.some((k) => k in data) || Boolean(newResponsibleGuardian);
+        if (!touchesAltaCaso || !isMissingColumnError(e)) throw e;
+        altaCasoFieldsSaved = false;
+        const reduced = { ...data };
+        for (const k of ALTA_CASO_PLAN_FIELDS) delete reduced[k];
+        console.error(
+          "[ortho] updateTreatmentPlan: columnas de alta-caso.sql aún no existen, se guarda sin doctor/responsable:",
+          e,
+        );
+        return prisma.orthodonticTreatmentPlan.update({ where: { id: treatmentPlanId }, data: reduced });
+      });
 
     const action =
       parsed.data.status && parsed.data.status !== before.status
@@ -67,7 +121,7 @@ export async function updateTreatmentPlan(
     revalidatePath(`/dashboard/specialties/orthodontics`);
     void diagnosisId;
     void patientId;
-    return ok({ id: updated.id });
+    return ok({ id: updated.id, altaCasoFieldsSaved });
   } catch (e) {
     console.error("[ortho] updateTreatmentPlan failed:", e);
     return fail("No se pudo actualizar el plan");

@@ -60,6 +60,9 @@ export { scheduleG15Checkpoint } from "./scheduleG15Checkpoint";
 export { updateQuoteScenario } from "./updateQuoteScenario";
 export { updateOrthoAppliances } from "./updateOrthoAppliances";
 
+// ─── Alta del caso (ws1-t6, Ola 1) ──────────────────────────────────────
+export { getCaseIntakeOptions } from "./getCaseIntakeOptions";
+
 // ─── Acceso y permisos · Configuración (ws1-t3, Ola 1) ──────────────────
 export { getOrthoClinicSettings } from "./getOrthoClinicSettings";
 export { updateOrthoClinicSettings } from "./updateOrthoClinicSettings";

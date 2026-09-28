@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { createTreatmentPlanSchema } from "@/lib/validation/orthodontics";
 import { PHASE_ORDER } from "@/lib/orthodontics/phase-machine";
 import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
+import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import {
   auditOrtho,
   getOrthoActionContext,
@@ -16,7 +17,7 @@ import { fail, isFailure, ok, type ActionResult } from "./result";
 
 export async function createTreatmentPlan(
   input: unknown,
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -38,8 +39,42 @@ export async function createTreatmentPlan(
 
   const installedAt = parsed.data.installedAt ? new Date(parsed.data.installedAt) : null;
 
-  try {
-    const created = await prisma.$transaction(async (tx) => {
+  // Ola 1 (ws1-t6) — A5 (doctor tratante) ya trae su columna de la Ola 0.
+  // A11 (responsable del pago): un Guardian existente, o se crea uno nuevo
+  // reutilizando el modelo de pediatría (sin exigir PediatricRecord). Ambas
+  // columnas nuevas — si sql/ortodoncia-alta-caso.sql aún no está pegado,
+  // se reintenta la transacción completa sin ellas (P2021/P2022): el caso
+  // se abre igual, sin doctor/responsable, para no tumbar dev.108.
+  const withAltaCasoFields = {
+    treatingDoctorId: parsed.data.treatingDoctorId ?? null,
+    responsibleGuardianId: parsed.data.responsibleGuardianId ?? null,
+  };
+  const wantsAltaCasoFields =
+    withAltaCasoFields.treatingDoctorId != null ||
+    withAltaCasoFields.responsibleGuardianId != null ||
+    Boolean(parsed.data.newResponsibleGuardian);
+
+  const runTransaction = (includeAltaCasoFields: boolean) =>
+    prisma.$transaction(async (tx) => {
+      let responsibleGuardianId = withAltaCasoFields.responsibleGuardianId;
+      if (includeAltaCasoFields && !responsibleGuardianId && parsed.data.newResponsibleGuardian) {
+        const g = parsed.data.newResponsibleGuardian;
+        const guardian = await tx.guardian.create({
+          data: {
+            clinicId: ctx.clinicId,
+            patientId: parsed.data.patientId,
+            fullName: g.fullName,
+            parentesco: g.parentesco,
+            phone: g.phone,
+            esResponsableLegal: true,
+            principal: true,
+            createdBy: ctx.userId,
+          },
+          select: { id: true },
+        });
+        responsibleGuardianId = guardian.id;
+      }
+
       const plan = await tx.orthodonticTreatmentPlan.create({
         data: {
           diagnosisId: parsed.data.diagnosisId,
@@ -62,6 +97,12 @@ export async function createTreatmentPlan(
           retentionPlanText: parsed.data.retentionPlanText,
           status: installedAt ? "IN_PROGRESS" : "PLANNED",
           signedTreatmentConsentFileId: parsed.data.signedTreatmentConsentFileId ?? null,
+          ...(includeAltaCasoFields
+            ? {
+                treatingDoctorId: withAltaCasoFields.treatingDoctorId,
+                responsibleGuardianId,
+              }
+            : {}),
         },
       });
 
@@ -82,6 +123,18 @@ export async function createTreatmentPlan(
       }
 
       return plan;
+    });
+
+  try {
+    let altaCasoFieldsSaved = wantsAltaCasoFields;
+    const created = await runTransaction(wantsAltaCasoFields).catch(async (e) => {
+      if (!wantsAltaCasoFields || !isMissingColumnError(e)) throw e;
+      altaCasoFieldsSaved = false;
+      console.error(
+        "[ortho] createTreatmentPlan: columnas de alta-caso.sql aún no existen, se crea sin doctor/responsable:",
+        e,
+      );
+      return runTransaction(false);
     });
 
     await auditOrtho({
@@ -124,7 +177,7 @@ export async function createTreatmentPlan(
     revalidatePath(`/dashboard/specialties/orthodontics/${parsed.data.patientId}`);
     revalidatePath(`/dashboard/specialties/orthodontics`);
 
-    return ok({ id: created.id });
+    return ok({ id: created.id, altaCasoFieldsSaved });
   } catch (e) {
     console.error("[ortho] createTreatmentPlan failed:", e);
     return fail("No se pudo crear el plan");
