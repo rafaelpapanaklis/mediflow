@@ -19,6 +19,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { invoiceTaxPortion } from "@/lib/invoice-totals";
 import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
+import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
+import { calendarioDeCuotas, esPlanAPlazos, estadoDelPlan, pagosDesdeFilas } from "@/lib/invoices/plan-de-pagos";
+import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
+import { getTzParts } from "@/lib/agenda/time-utils";
+import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
 
 /**
  * Lo único que Caja LEE de la base, y nada más.
@@ -33,7 +38,7 @@ import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
 export type CajaDb = {
   cashRegister: Pick<typeof prisma.cashRegister, "findFirst" | "findMany">;
   payment:      Pick<typeof prisma.payment, "findMany">;
-  invoice:      Pick<typeof prisma.invoice, "aggregate">;
+  invoice:      Pick<typeof prisma.invoice, "aggregate" | "findMany">;
   clinic:       Pick<typeof prisma.clinic, "findUnique">;
   user:         Pick<typeof prisma.user, "findMany">;
 };
@@ -189,7 +194,11 @@ export interface CajaState {
   suggestedOpening: number; // efectivo cobrado hoy aún NO cuadrado en un corte cerrado
   billedToday:      number; // total facturado hoy (excluye DRAFT/CANCELLED)
   pendingToday:     number; // saldo por cobrar de las facturas de hoy
-  overdueToday:     number; // saldo de facturas vencidas (dueDate < hoy) con saldo
+  // Vencido (H21a): facturas de un pago → balance completo si dueDate < hoy
+  // (de siempre); facturas A PLAZOS (invoice_payment_terms) → SOLO sus cuotas
+  // vencidas (estadoDelPlan.importeVencido), nunca el balance completo. Ver
+  // computeOverdueAmount.
+  overdueToday:     number;
 }
 
 function fullName(u?: { firstName?: string | null; lastName?: string | null } | null): string {
@@ -549,11 +558,123 @@ async function computeSuggestedOpening(clinicId: string, todayStart: Date, now: 
   return cashPayments.reduce((sum, p) => (isCounted(p.paidAt) ? sum : sum + (p.amount ?? 0)), 0);
 }
 
+/** Una factura A PLAZOS, con lo que hace falta para saber cuánto de ella está
+ *  vencido de verdad: su total (denominador del calendario) y sus cobros. */
+export interface FacturaAPlazosParaVencido {
+  total:       number | null;
+  condiciones: CondicionesPago;
+  cobros:      Array<{ amount: unknown; method?: string | null }>;
+}
+
+/**
+ * Cuánto de UNA factura a plazos está REALMENTE vencido hoy: la suma de
+ * `falta` de sus cuotas vencidas (`estadoDelPlan.importeVencido`,
+ * `plan-de-pagos.ts`) — el MISMO motor que ya usan el Tablero y las Alertas
+ * de ortodoncia (`computeOverdueBalances`, `specialty-kpis.ts`), no una copia.
+ *
+ * Nunca por `Invoice.dueDate`: es un campo de texto libre ("Vence el") que la
+ * recepcionista llena a mano en el editor de facturas, y guardar las
+ * condiciones a plazos (PUT /api/invoices/[id]/condiciones) NO lo toca —
+ * puede quedar vacío, o con una fecha que no tiene ninguna relación con el
+ * calendario de cuotas acordado.
+ */
+export function overdueInstallmentsOf(f: FacturaAPlazosParaVencido, hoy: string): number {
+  const cuotas = calendarioDeCuotas(f.condiciones, f.total ?? 0);
+  const pagos = pagosDesdeFilas(f.cobros);
+  return estadoDelPlan(cuotas, pagos, hoy).importeVencido;
+}
+
+/** Una factura por cobrar, tal como la necesita `computeOverdueAmount`. */
+export interface FacturaPorCobrarParaVencido {
+  id:          string;
+  balance:     number | null;
+  dueDate:     Date | null;
+  total:       number | null;
+  /** `null`/`undefined` = de un solo pago (o sin `invoice_payment_terms` aplicado todavía). */
+  condiciones: CondicionesPago | null | undefined;
+  /** Solo se usan si `condiciones` es a plazos. */
+  cobros:      Array<{ amount: unknown; method?: string | null }>;
+}
+
+/**
+ * El «Vencido» de TODAS las facturas por cobrar de una clínica (H21a, ronda 4).
+ *
+ * Dos poblaciones disjuntas por `esPlanAPlazos`, así que nada se cuenta dos
+ * veces: de un solo pago → el criterio de SIEMPRE (`dueDate < hoy`, balance
+ * completo); a plazos → SOLO `overdueInstallmentsOf` (nunca el balance
+ * completo, que contaría como vencido un plan al corriente con `dueDate`
+ * vacío o pasado, o de menos si `dueDate` es futuro y ya hay una mensualidad
+ * vieja sin cubrir).
+ *
+ * Sin ninguna factura a plazos, el resultado es IDÉNTICO al de siempre.
+ */
+export function computeOverdueAmount(
+  facturas: FacturaPorCobrarParaVencido[],
+  todayStart: Date,
+  hoy: string,
+): number {
+  let total = 0;
+  for (const f of facturas) {
+    if (esPlanAPlazos(f.condiciones)) {
+      total += overdueInstallmentsOf({ total: f.total, condiciones: f.condiciones, cobros: f.cobros }, hoy);
+    } else if (f.dueDate && f.dueDate.getTime() < todayStart.getTime()) {
+      total += f.balance ?? 0;
+    }
+  }
+  return money(total);
+}
+
+/** "YYYY-MM-DD" de `now` en la zona de la clínica — mismo criterio que
+ *  `hoyEnZona` (lib/whatsapp/cobranza/sweep.ts) y el Tablero de ortodoncia,
+ *  sin acoplar Caja al módulo de WhatsApp por una función de una línea. */
+function hoyEnZonaClinica(now: Date, timezone: string): string {
+  const p = getTzParts(now, timezone);
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+}
+
+/**
+ * Shell con I/O de `computeOverdueAmount`: trae las facturas por cobrar
+ * (id/balance/dueDate/total, sin `payments` — la inmensa mayoría es de un
+ * solo pago y no los necesita), sus condiciones de pago EN LOTE
+ * (`leerCondicionesDeFacturas` — sin `sql/factura-condiciones-pago.sql`
+ * aplicado, no revienta: no encuentra ninguna a plazos y el resultado sale
+ * idéntico al de siempre) y, SOLO para las que sí son a plazos, sus pagos.
+ */
+async function computeOverdueToday(clinicId: string, todayStart: Date, now: Date, db: CajaDb): Promise<number> {
+  const receivable = await db.invoice.findMany({
+    where:  receivableInvoiceWhere(clinicId),
+    select: { id: true, balance: true, dueDate: true, total: true },
+    take:   5000,
+  });
+  if (receivable.length === 0) return 0;
+
+  const [{ porFactura }, clinic] = await Promise.all([
+    leerCondicionesDeFacturas(db as unknown as typeof prisma, { clinicId, invoiceIds: receivable.map((f) => f.id) }),
+    db.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }),
+  ]);
+
+  const idsAPlazos = receivable.filter((f) => esPlanAPlazos(porFactura.get(f.id))).map((f) => f.id);
+  const cobrosPorFactura = idsAPlazos.length === 0
+    ? new Map<string, Array<{ amount: unknown; method: string | null }>>()
+    : new Map((await db.invoice.findMany({
+        where:  { id: { in: idsAPlazos }, clinicId },
+        select: { id: true, payments: { select: { amount: true, method: true } } },
+      })).map((i) => [i.id, i.payments]));
+
+  const hoy = hoyEnZonaClinica(now, clinic?.timezone ?? DEFAULT_INVOICE_TZ);
+  return computeOverdueAmount(
+    receivable.map((f) => ({ ...f, condiciones: porFactura.get(f.id), cobros: cobrosPorFactura.get(f.id) ?? [] })),
+    todayStart,
+    hoy,
+  );
+}
+
 /**
  * Resumen de facturación del día natural (México), independiente del turno:
  *  - billedToday:  Σ total de facturas EMITIDAS hoy (excluye DRAFT/CANCELLED).
  *  - pendingToday: Σ saldo por cobrar de esas mismas facturas de hoy.
- *  - overdueToday: Σ saldo de facturas VENCIDAS (dueDate < hoy) con saldo > 0.
+ *  - overdueToday: computeOverdueAmount (H21a) — de un pago por `dueDate`,
+ *    a plazos por cuota vencida.
  */
 async function computeDayBilling(clinicId: string, todayStart: Date, now: Date, db: CajaDb = prisma) {
   const issuedToday: Prisma.InvoiceWhereInput = {
@@ -561,20 +682,17 @@ async function computeDayBilling(clinicId: string, todayStart: Date, now: Date, 
     status:    { notIn: ["DRAFT", "CANCELLED"] },
     createdAt: { gte: todayStart, lte: now },
   };
-  // Vencido = por cobrar + dueDate < hoy (overdueInvoiceWhere), el MISMO
-  // criterio que el KPI de Facturas y Finanzas → Saldos.
-  const overdue = overdueInvoiceWhere(clinicId, todayStart);
 
-  const [billedAgg, pendingAgg, overdueAgg] = await Promise.all([
+  const [billedAgg, pendingAgg, overdueToday] = await Promise.all([
     db.invoice.aggregate({ _sum: { total: true },   where: issuedToday }),
     db.invoice.aggregate({ _sum: { balance: true }, where: issuedToday }),
-    db.invoice.aggregate({ _sum: { balance: true }, where: overdue }),
+    computeOverdueToday(clinicId, todayStart, now, db),
   ]);
 
   return {
     billedToday:  billedAgg._sum.total    ?? 0,
     pendingToday: pendingAgg._sum.balance ?? 0,
-    overdueToday: overdueAgg._sum.balance ?? 0,
+    overdueToday,
   };
 }
 

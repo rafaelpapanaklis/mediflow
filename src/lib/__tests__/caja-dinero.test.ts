@@ -13,20 +13,25 @@
  *  · 18b  el arqueo impreso se contradecía      → buildCloseSummary.
  *  · 18c  la apertura sugería efectivo anulado  → cashOnHandPaymentWhere.
  *  · 18d  "Descuentos" mezclaba dos poblaciones → invoiceDiscountPortion.
+ *  · H21a «Vencido» contaba entera una factura a plazos → computeOverdueAmount.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildCloseSummary,
   cashOnHandPaymentWhere,
+  computeOverdueAmount,
   deriveWindow,
   expectedCashOf,
   invoiceDiscountPortion,
   money,
   netRevenueSeries,
+  overdueInstallmentsOf,
   paymentDiscountPortion,
+  type FacturaPorCobrarParaVencido,
 } from "../caja";
 import { bucketKeyOf } from "../analytics/query";
+import { condicionesPorDefecto, type CondicionesPago } from "../quotes/condiciones-pago";
 
 /** El MISMO bucketing que usa /api/finanzas: día natural de México, no UTC. */
 const dayKey = (d: Date) => bucketKeyOf(d, "day");
@@ -232,4 +237,78 @@ test("18d · el descuento viaja con el cobro y se prorratea en los abonos", () =
   assert.equal(invoiceDiscountPortion(1_000, null), 0);
   // Un sobrepago no reparte más descuento del que la factura tiene.
   assert.equal(invoiceDiscountPortion(9_999, factura), 20_000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// HALLAZGO H21a (ws1-t2, ronda 4) — «Vencido» de Caja contaba ENTERA una
+// factura a plazos (`Invoice.balance`) en cuanto su `dueDate` —un campo de
+// texto libre que la recepcionista llena a mano y que guardar las
+// condiciones NUNCA toca— caía en el pasado. Debe contar SOLO lo que sus
+// cuotas vencidas de verdad suman (estadoDelPlan.importeVencido).
+// ─────────────────────────────────────────────────────────────────────────
+const HOY = "2026-02-10";
+
+/** `n` mensualidades desde el 3 de enero de 2026 (vence 3-ene, 3-feb, 3-mar…). */
+const plazosMensual = (numPagos: number, over: Partial<CondicionesPago> = {}): CondicionesPago => ({
+  ...condicionesPorDefecto(), modo: "plazos", numPagos, primerPago: "2026-01-03", ...over,
+});
+/** 2 mensualidades de $2,000 (total $4,000): vence 3-ene, 3-feb. */
+const plazosDosMil2 = (over: Partial<CondicionesPago> = {}) => plazosMensual(2, over);
+
+test("H21a · factura a plazos con 2 cuotas vencidas y NADA pagado: vencido = las 2 cuotas completas", () => {
+  // Las dos ya vencieron para el 10 de febrero (3-ene y 3-feb).
+  const vencido = overdueInstallmentsOf({ total: 4_000, condiciones: plazosDosMil2(), cobros: [] }, HOY);
+  assert.equal(vencido, 4_000, "ninguna cuota se pagó: las dos cuentan completas");
+});
+
+test("H21a · factura a plazos con una cuota vencida abonada parcial y la otra AÚN sin vencer: solo cuenta lo que falta de la vencida", () => {
+  // hoy = 20 de enero: la del 3-ene ya venció, la del 3-feb todavía no.
+  const condiciones = plazosDosMil2();
+  const abono500 = [{ amount: 500 }]; // abona $500 de los $2,000 de la cuota vencida
+  const vencido = overdueInstallmentsOf({ total: 4_000, condiciones, cobros: abono500 }, "2026-01-20");
+  assert.equal(vencido, 1_500, "$2,000 de la cuota vencida menos los $500 ya abonados; la que no vence no entra");
+});
+
+test("H21a · computeOverdueAmount: factura normal vencida + a plazos con cuotas vencidas, SIN contar el balance completo de la de plazos", () => {
+  const normalVencida: FacturaPorCobrarParaVencido = {
+    id: "n1", balance: 5_000, dueDate: new Date("2026-01-01T00:00:00Z"), total: 5_000,
+    condiciones: null, cobros: [],
+  };
+  // La de plazos: 4 mensualidades de $2,000 (Jan3, Feb3, Mar3, Abr3) — para el
+  // 10 de febrero solo vencieron 2 ($4,000), y NADA se ha pagado. Su `balance`
+  // real es de $8,000 (le quedan las 4 completas) y su `dueDate` es NULO — la
+  // recepción nunca lo llenó. El criterio viejo, que miraba dueDate/balance,
+  // habría dado 0 aquí (sin dueDate, "nunca vence") o $8,000 si alguien hubiera
+  // puesto un dueDate viejo por error; ninguna de las dos es correcta.
+  const aPlazos: FacturaPorCobrarParaVencido = {
+    id: "p1", balance: 8_000, dueDate: null, total: 8_000,
+    condiciones: plazosMensual(4), cobros: [],
+  };
+  const todayStart = new Date("2026-02-10T06:00:00Z");
+  const total = computeOverdueAmount([normalVencida, aPlazos], todayStart, HOY);
+  assert.equal(total, 5_000 + 4_000, "5,000 de la normal + SOLO las 2 mensualidades ya vencidas de la de plazos (nunca sus $8,000)");
+});
+
+test("H21a · una factura a plazos AL CORRIENTE no aporta nada, aunque su dueDate esté vencido", () => {
+  // dueDate vencido a propósito: demuestra que en una factura a plazos esa
+  // columna NUNCA decide — solo lo hacen sus cuotas.
+  const alCorriente: FacturaPorCobrarParaVencido = {
+    id: "p2", balance: 8_000, dueDate: new Date("2026-01-01T00:00:00Z"), total: 4_000,
+    condiciones: plazosDosMil2(), cobros: [{ amount: 4_000 }], // las 2 cuotas, pagadas
+  };
+  const todayStart = new Date("2026-02-10T06:00:00Z");
+  assert.equal(computeOverdueAmount([alCorriente], todayStart, HOY), 0);
+});
+
+test("H21a · SIN facturas a plazos, computeOverdueAmount da EXACTAMENTE lo de siempre (dueDate < hoy, balance completo)", () => {
+  const facturas: FacturaPorCobrarParaVencido[] = [
+    { id: "a", balance: 1_000, dueDate: new Date("2026-01-01T00:00:00Z"), total: 1_000, condiciones: null, cobros: [] }, // vencida
+    { id: "b", balance: 2_500, dueDate: new Date("2026-03-01T00:00:00Z"), total: 2_500, condiciones: undefined, cobros: [] }, // futura: no cuenta
+    { id: "c", balance: 700, dueDate: null, total: 700, condiciones: null, cobros: [] }, // sin dueDate: nunca vence
+  ];
+  const todayStart = new Date("2026-02-10T06:00:00Z");
+  // Es la MISMA cuenta que hacía overdueInvoiceWhere + aggregate antes de H21a:
+  // solo la (a) tiene dueDate < hoy. La clínica sin plan a plazos no ve cambiar
+  // su «Vencido» ni un peso.
+  assert.equal(computeOverdueAmount(facturas, todayStart, HOY), 1_000);
 });
