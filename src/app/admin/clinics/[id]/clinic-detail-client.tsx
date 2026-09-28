@@ -747,6 +747,7 @@ export function AdminClinicDetailClient({
           clinicCategory={clinic.category}
           modules={moduleCatalog}
           clinicModules={clinicModuleRows}
+          ahoraISO={ahoraISO}
         />
       )}
 

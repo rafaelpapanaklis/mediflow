@@ -9,6 +9,7 @@ import { getLiveSubscriptionSnapshot, type StripeLivePaymentMethod } from "@/lib
 import { getResolvedPlan, getResolvedPlanForClinic } from "@/lib/plans";
 import { activeOverrides } from "@/lib/billing/plan-overrides";
 import { loadPlanPrices } from "@/lib/admin/mrr";
+import { loadBajasProgramadas } from "@/lib/admin/modulos";
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import { leerSaldoIaClinica, type SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia-clinica";
@@ -34,6 +35,11 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
           activatedAt:      true,
           cancelledAt:      true,
           currentPeriodEnd: true,
+          // Lo que PAGA de verdad (no el precio de catálogo) y si hay una
+          // suscripción de Stripe cobrando sola detrás.
+          billingCycle:         true,
+          pricePaidMxn:         true,
+          stripeSubscriptionId: true,
           module:           { select: { key: true } },
         },
       },
@@ -269,6 +275,14 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     },
   });
 
+  // La baja al fin del periodo (pedida por la clínica o desde aquí) no tiene
+  // columna: se lee de la bitácora. Solo se consulta si hay suscripciones vivas.
+  const bajasProgramadas = await loadBajasProgramadas(
+    clinic.clinicModules
+      .filter((cm) => cm.stripeSubscriptionId && cm.status === "active")
+      .map((cm) => cm.stripeSubscriptionId as string),
+  );
+
   const clinicModuleRows = clinic.clinicModules.map((cm) => ({
     moduleKey:        cm.module.key,
     status:           cm.status,
@@ -276,6 +290,11 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     activatedAt:      cm.activatedAt.toISOString(),
     cancelledAt:      cm.cancelledAt ? cm.cancelledAt.toISOString() : null,
     currentPeriodEnd: cm.currentPeriodEnd.toISOString(),
+    billingCycle:     cm.billingCycle,
+    pricePaidMxn:     cm.pricePaidMxn,
+    // A la pestaña le basta saber si hay una suscripción detrás, no cuál.
+    tieneSuscripcionStripe: !!cm.stripeSubscriptionId,
+    bajaProgramada:   !!cm.stripeSubscriptionId && bajasProgramadas.has(cm.stripeSubscriptionId),
   }));
 
   return (
