@@ -86,3 +86,13 @@ test("el detalle de factura precarga con el responsable y, con responsable, guar
   const lista = leer("app/dashboard/billing/billing-client.tsx");
   assert.match(lista, /pedirResponsableDeFactura\(inv\.id\)/);
 });
+
+test("hermanos: «Datos del caso» de un caso ya abierto también busca el tutor de otro paciente (mismo Guardian.id)", () => {
+  const d = leer("components/specialties/orthodontics/redesign/drawers/DrawerCaseSettings.tsx");
+  assert.match(d, /buscarTutoresDeLaClinica\(\{ q: tutorQuery, excludePatientId: props\.patientId \}\)/);
+  assert.match(d, /data-tutores-de-hermanos/);
+  // «Ya registrado» ya no se apaga por no tener tutores propios
+  assert.doesNotMatch(d, /disabled=\{!columnsExist\.responsibleGuardianId \|\| guardians\.length === 0\}/);
+  // el servidor acepta el tutor de un hermano (de la clínica), no solo los del paciente
+  assert.match(leer("lib/orthodontics/validar-personas-del-caso-db.ts"), /clinicId/);
+});

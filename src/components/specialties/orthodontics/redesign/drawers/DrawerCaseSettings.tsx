@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { FileText, Loader2, Save, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
-import { getCaseIntakeOptions } from "@/app/actions/orthodontics";
+import { getCaseIntakeOptions, buscarTutoresDeLaClinica, type TutorDeLaClinica } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
@@ -68,6 +68,26 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
   const [treatingDoctorId, setTreatingDoctorId] = useState("");
   const [guardianMode, setGuardianMode] = useState<"keep" | "existing" | "new">("keep");
   const [responsibleGuardianId, setResponsibleGuardianId] = useState("");
+  // ws1-t10 (decisión 5): «hermanos» también para un caso YA abierto — buscar un tutor
+  // ya registrado de OTRO paciente y reusar su mismo Guardian.id.
+  const [tutorQuery, setTutorQuery] = useState("");
+  const [tutoresDeHermanos, setTutoresDeHermanos] = useState<TutorDeLaClinica[]>([]);
+  const [buscandoTutor, setBuscandoTutor] = useState(false);
+  useEffect(() => {
+    if (guardianMode !== "existing" || tutorQuery.trim().length < 2) {
+      setTutoresDeHermanos([]);
+      return;
+    }
+    let cancelled = false;
+    setBuscandoTutor(true);
+    const espera = setTimeout(() => {
+      buscarTutoresDeLaClinica({ q: tutorQuery, excludePatientId: props.patientId }).then((res) => {
+        if (cancelled) return;
+        if (!isFailure(res)) setTutoresDeHermanos(res.data);
+      }).finally(() => { if (!cancelled) setBuscandoTutor(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(espera); };
+  }, [tutorQuery, guardianMode, props.patientId]);
   const [newGuardianName, setNewGuardianName] = useState("");
   const [newGuardianPhone, setNewGuardianPhone] = useState("");
   const [newGuardianRelation, setNewGuardianRelation] = useState("madre");
@@ -206,16 +226,50 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
             ) : null}
             <div className="flex gap-2">
               <ModeBtn active={guardianMode === "keep"} onClick={() => setGuardianMode("keep")}>Dejar como está</ModeBtn>
-              <ModeBtn active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId || guardians.length === 0}>Ya registrado</ModeBtn>
+              <ModeBtn active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId}>Ya registrado</ModeBtn>
               <ModeBtn active={guardianMode === "new"} onClick={() => setGuardianMode("new")} disabled={!columnsExist.responsibleGuardianId}>Nuevo</ModeBtn>
             </div>
             {guardianMode === "existing" ? (
-              <select value={responsibleGuardianId} onChange={(e) => setResponsibleGuardianId(e.target.value)} className={inputCls}>
-                <option value="">— elegir —</option>
-                {guardians.map((g) => (
-                  <option key={g.id} value={g.id}>{g.fullName} · {g.parentesco} · {g.phone}</option>
-                ))}
-              </select>
+              <>
+                {guardians.length > 0 ? (
+                  <select value={responsibleGuardianId} onChange={(e) => setResponsibleGuardianId(e.target.value)} className={inputCls}>
+                    <option value="">— elegir —</option>
+                    {guardians.map((g) => (
+                      <option key={g.id} value={g.id}>{g.fullName} · {g.parentesco} · {g.phone}</option>
+                    ))}
+                  </select>
+                ) : null}
+                <Field label="¿Ya paga lo de un hermano? Búscalo por nombre o teléfono">
+                  <input
+                    value={tutorQuery}
+                    onChange={(e) => setTutorQuery(e.target.value)}
+                    placeholder="Nombre o teléfono del responsable"
+                    className={inputCls}
+                  />
+                </Field>
+                {buscandoTutor ? (
+                  <p className="text-[11px] text-[color:var(--pr-texto-3)]">Buscando…</p>
+                ) : tutorQuery.trim().length >= 2 && tutoresDeHermanos.length === 0 ? (
+                  <p className="text-[11px] text-[color:var(--pr-texto-3)]">Sin resultados.</p>
+                ) : tutoresDeHermanos.length > 0 ? (
+                  <ul className="space-y-1" data-tutores-de-hermanos>
+                    {tutoresDeHermanos.map((tut) => (
+                      <li key={tut.id}>
+                        <button
+                          type="button"
+                          onClick={() => { setResponsibleGuardianId(tut.id); setTutorQuery(""); setTutoresDeHermanos([]); }}
+                          className="w-full text-left text-xs rounded-[8px] border px-2 py-1.5 border-[color:var(--pr-borde-suave)]"
+                        >
+                          {tut.fullName} · {tut.parentesco} · {tut.phone} — responsable de {tut.patientName}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {responsibleGuardianId && !guardians.some((g) => g.id === responsibleGuardianId) && !tutorQuery ? (
+                  <p className="text-[11px] text-[color:var(--pr-texto-3)]" data-responsable-de-hermano>Responsable de un hermano ya elegido.</p>
+                ) : null}
+              </>
             ) : null}
             {guardianMode === "new" ? (
               <div className="grid grid-cols-2 gap-3">
