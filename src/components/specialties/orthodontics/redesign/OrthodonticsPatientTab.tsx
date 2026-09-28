@@ -795,6 +795,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             if (res.data.avisoControlSinFacturar) {
               toast.error(res.data.avisoControlSinFacturar, { duration: 8000 });
             }
+            if (res.data.avisoReposiciones) toast(res.data.avisoReposiciones, { duration: 9000 });
             toast.success(t("patients.ortho.appointmentSigned"));
             router.refresh();
             // §1 completo (ws1-t8): el cajón recuerda este id — así, si ya

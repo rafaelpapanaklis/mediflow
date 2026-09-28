@@ -135,6 +135,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
     if (avisoControlSinFacturar) {
       toast.error(avisoControlSinFacturar, { duration: 8000 });
     }
+    const avisoReposiciones = firmar ? (res.data as { avisoReposiciones?: string }).avisoReposiciones : undefined;
+    if (avisoReposiciones) toast(avisoReposiciones, { duration: 9000 });
     // M11 (Ronda 6): al FIRMAR, el cajón se queda abierto — es él quien
     // ahora ofrece Agendar/Avisar el próximo control con el cardId que
     // devuelve la firma (ver DrawerTreatmentCard.tsx, `justSigned`). Antes

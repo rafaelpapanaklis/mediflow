@@ -25,6 +25,8 @@ import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { buscarPrecioControlOrto } from "@/lib/orthodontics/catalog-procedures";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
+import { consumirReposicionIncluida } from "@/lib/orthodontics/cobro/caso-db";
+import { avisoDeReposiciones } from "@/lib/orthodontics/cobro/reposiciones";
 
 /** Códigos Prisma de "columna inexistente" — mismo patrón que cobranza-db.ts. */
 function esColumnaAusente(e: unknown): boolean {
@@ -115,7 +117,7 @@ export type SignTreatmentCardInput = z.input<typeof inputSchema>;
 
 export async function signTreatmentCard(
   input: unknown,
-): Promise<ActionResult<{ cardId: string; avisoControlSinFacturar?: string }>> {
+): Promise<ActionResult<{ cardId: string; avisoControlSinFacturar?: string; avisoReposiciones?: string }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -160,6 +162,7 @@ export async function signTreatmentCard(
   const nextDate = data.nextDate ? new Date(data.nextDate) : null;
   const now = new Date();
 
+  let yaEstabaFirmada = false;
   try {
     const cardId = await prisma.$transaction(async (tx) => {
       // Upsert por (treatmentPlanId, cardNumber). Si la card existe se
@@ -167,9 +170,11 @@ export async function signTreatmentCard(
       const existing = data.cardId
         ? await tx.orthoTreatmentCard.findFirst({
             where: { id: data.cardId, treatmentPlanId: plan.id },
-            select: { id: true },
+            select: { id: true, status: true },
           })
         : null;
+      // #81: una hoja que YA estaba firmada no vuelve a mover el cupo de reposiciones.
+      yaEstabaFirmada = existing?.status === "SIGNED";
 
       let resolvedId: string;
       if (existing) {
@@ -356,6 +361,27 @@ export async function signTreatmentCard(
       }
     }
 
+    // ws1-t4 #81 — el bracket que la doctora anota como repuesto en la hoja cuenta
+    // contra las reposiciones INCLUIDAS del caso («0 de 2 usadas» no se movía solo).
+    // Si ya no hay cupo, no se inventa una factura: se avisa que quedan reposiciones
+    // por cobrar con «Cobrar extra». No revierte la firma. Una hoja ya firmada antes
+    // no vuelve a gastar cupo.
+    let avisoReposiciones: string | undefined;
+    const repuestos = data.brokenBrackets.filter((b) => b.reBondedDate).length;
+    if (!yaEstabaFirmada && repuestos > 0) {
+      try {
+        let incluidas = 0;
+        for (let i = 0; i < repuestos; i++) {
+          const r = await consumirReposicionIncluida(plan.id, plan.clinicId);
+          if (r.fueIncluida) incluidas++;
+          else break;
+        }
+        avisoReposiciones = avisoDeReposiciones({ repuestos, incluidas });
+      } catch (e) {
+        console.warn("[ortho] signTreatmentCard: no se pudo contar la reposición contra las incluidas (no revierte la firma):", e);
+      }
+    }
+
     // Ronda 6 (ws1-t8, «El día de la ortodoncista») — M6/hallazgo 23: firmar
     // la hoja CIERRA la cita en la Agenda (pasa a "Atendida"/COMPLETED).
     // Antes la cita se quedaba en su estado de siempre (Agendada,
@@ -447,7 +473,7 @@ export async function signTreatmentCard(
 
     revalidatePath(`/dashboard/specialties/orthodontics/${plan.patientId}`);
     revalidatePath(`/dashboard/patients/${plan.patientId}`);
-    return ok({ cardId, ...(avisoControlSinFacturar ? { avisoControlSinFacturar } : {}) });
+    return ok({ cardId, ...(avisoReposiciones ? { avisoReposiciones } : {}), ...(avisoControlSinFacturar ? { avisoControlSinFacturar } : {}) });
   } catch (e) {
     console.error("[ortho] signTreatmentCard failed:", e);
     return fail("No se pudo firmar la cita");
