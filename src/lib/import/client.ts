@@ -468,7 +468,7 @@ export class RealImportClient implements ImportClient {
     } catch {
       json = null;
     }
-    if (!res.ok) throw new Error(backendError(json, res.status, "No se pudo procesar el archivo"));
+    if (!res.ok) throw new ImportHttpError(backendError(json, res.status, "No se pudo procesar el archivo"), res.status);
     if (!json || typeof json !== "object") throw new Error("Respuesta inesperada del servidor");
     return json;
   }
@@ -585,6 +585,27 @@ class UploadNetworkError extends Error {
     super("upload-network");
     this.name = "UploadNetworkError";
   }
+}
+
+/**
+ * Respuesta !ok del backend, con el status HTTP a la vista (B7 del QA de
+ * ws1-t10): un 502/503 de un servidor caído NO es "tu archivo es inválido" —
+ * la UI necesita distinguirlo para no culpar al archivo por algo transitorio.
+ */
+export class ImportHttpError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ImportHttpError";
+    this.status = status;
+  }
+}
+
+/** ¿Este error es del SERVIDOR/red (transitorio), no del archivo que subió el usuario? */
+export function esErrorTransitorio(e: unknown): boolean {
+  if (e instanceof UploadTimeoutError || e instanceof UploadNetworkError) return true;
+  if (e instanceof ImportHttpError) return e.status >= 500;
+  return false;
 }
 
 /**

@@ -30,7 +30,7 @@ import {
   isAcceptedFile,
   MAX_FILE_MB,
 } from "./import-client";
-import { RealImportClient } from "@/lib/import/client";
+import { RealImportClient, esErrorTransitorio } from "@/lib/import/client";
 import { ROPA_IMPORTAR, type AparienciaPortal } from "@/components/dashboard/portales-rediseno/ropa";
 import { StepOrigin } from "./step-origin";
 import { StepExport } from "./step-export";
@@ -95,7 +95,9 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   const [skipDup, setSkipDup] = useState(true);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  // "file" = el backend rechazó el archivo (4xx); "server" = falla transitoria
+  // (502/503/timeout/red) — NO es culpa del archivo (B7 del QA de ws1-t10).
+  const [previewError, setPreviewError] = useState<"file" | "server" | null>(null);
   const [result, setResult] = useState<CommitResult | null>(null);
   // Paso 6: equivalente elegido para cada procedimiento que no casó con el
   // tarifario (clave normalizada → id del catálogo, o VALUE_UNLINKED).
@@ -268,7 +270,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
         setMapping(seeded);
         previewMappingRef.current = mappingKey(seeded);
       })
-      .catch(() => { if (!stale()) setPreviewError(t("shell.importClinic.step5.errorTitle")); })
+      .catch((e) => { if (!stale()) setPreviewError(esErrorTransitorio(e) ? "server" : "file"); })
       .finally(() => { if (!stale()) { setPreviewLoading(false); setUploadProg(null); } });
   }
 
@@ -720,8 +722,12 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                 previewError ? (
                   <div className="imp-error" role="alert">
                     <AlertCircle size={40} className="imp-error__ic" aria-hidden />
-                    <h3 className="imp-error__title">{t("shell.importClinic.step5.errorTitle")}</h3>
-                    <p className="imp-error__desc">{t("shell.importClinic.step5.errorDesc")}</p>
+                    <h3 className="imp-error__title">
+                      {t(previewError === "server" ? "shell.importClinic.step5.errorTitleServer" : "shell.importClinic.step5.errorTitle")}
+                    </h3>
+                    <p className="imp-error__desc">
+                      {t(previewError === "server" ? "shell.importClinic.step5.errorDescServer" : "shell.importClinic.step5.errorDesc")}
+                    </p>
                     <button type="button" className="btn-new btn-new--secondary imp-error__btn" onClick={retryPreview}>
                       <RefreshCw size={14} /> {t("shell.importClinic.step5.retry")}
                     </button>
