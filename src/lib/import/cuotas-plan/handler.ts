@@ -101,12 +101,7 @@ function rowDbErrorMessage(e: any): string {
   return "No se pudo guardar la fila (error de base de datos)";
 }
 
-// "installmentPlans" aún NO está en el union `Entity` de ../types.ts: ese
-// registro es de ws1-t12 (dueño del motor), que está tocando ese archivo en
-// paralelo ahora mismo (doctores/bloqueos/citas históricas). El cast evita
-// bloquear el typecheck de ESTE archivo mientras tanto — t12 lo puede quitar
-// en cuanto registre el tipo.
-const INSTALLMENT_PLANS_ENTITY = "installmentPlans" as Entity;
+const INSTALLMENT_PLANS_ENTITY: Entity = "installmentPlans";
 
 export const installmentPlansHandler: EntityHandler = {
   entity: INSTALLMENT_PLANS_ENTITY,

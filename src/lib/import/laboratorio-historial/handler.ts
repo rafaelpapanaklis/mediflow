@@ -38,7 +38,6 @@ import { round2 } from "@/lib/invoice-totals";
 import {
   AMOUNT_FORMAT_FIELD,
   AMOUNT_FORMAT_KEY,
-  type Entity,
   type PreviewRow,
 } from "../types";
 import {
@@ -86,12 +85,7 @@ function rowDbErrorMessage(e: any): string {
 }
 
 export const labExpenseHandler: EntityHandler = {
-  // Cast a propósito: "labExpenseHistory" no está (todavía) en el union Entity
-  // de types.ts — el registro final es de ws1-t12 (dueño del motor). El shape
-  // del objeto es el mismo que exige EntityHandler; runImport nunca compara
-  // `entity` contra el union, solo lo usa como etiqueta en las respuestas
-  // (mismo criterio que paymentHistoryHandler antes de su registro).
-  entity: "labExpenseHistory" as unknown as Entity,
+  entity: "labExpenseHistory",
   auditEntityType: "invoice",
   sheetNames: ["laboratorio", "laboratorios", "accioneslaboratorio", "costoslaboratorio", "gastoslaboratorio", "labactionscosts"],
   headerVariants: {

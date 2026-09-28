@@ -28,6 +28,15 @@ import { cargarExternos, guardarExternos, limpiarId } from "./externos";
 // Historial de pagos migrado (ws1-t6): construido en su propio archivo mientras
 // este módulo cambiaba en paralelo (ws1-t12); solo se registra aquí.
 import { paymentHistoryHandler } from "./pagos-historial/handler";
+// Doctores (ws1-t12), bloqueos de agenda (ws1-t12) e historial de citas
+// pasadas (ws1-t12), y los tipos que entregaron ws1-t1/ws1-t6/ws1-t2 en
+// paralelo — mismo criterio: archivo nuevo, se registra aquí.
+import { doctorsHandler } from "./doctores/handler";
+import { blockedHoursHandler } from "./bloqueos-horario/handler";
+import { appointmentHistoryHandler } from "./citas-historial/handler";
+import { orthoCasesHandler } from "./ortho-casos/handler";
+import { labExpenseHandler } from "./laboratorio-historial/handler";
+import { installmentPlansHandler } from "./cuotas-plan/handler";
 import {
   crearLectorMontos,
   horaAdjunta,
@@ -3603,4 +3612,10 @@ export const HANDLERS: Record<string, EntityHandler> = {
   odontogram: odontogramHandler,
   treatmentNotes: treatmentNotesHandler,
   paymentHistory: paymentHistoryHandler,
+  doctors: doctorsHandler,
+  blockedHours: blockedHoursHandler,
+  appointmentHistory: appointmentHistoryHandler,
+  orthoCases: orthoCasesHandler,
+  labExpenseHistory: labExpenseHandler,
+  installmentPlans: installmentPlansHandler,
 };

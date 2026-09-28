@@ -18,6 +18,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { PagosMigradosCard } from "./pagos-migrados-card";
 import { GastosLaboratorioMigradosCard } from "./gastos-laboratorio-migrados-card";
 import { CuotasMigradasCard } from "./cuotas-migradas-card";
+import { CitasMigradasCard } from "./citas-migradas-card";
 import styles from "./patient-detail.module.css";
 
 /**
@@ -196,6 +197,9 @@ export function BillingTab({
       </div>
       <div style={{ marginTop: 14 }}>
         <CuotasMigradasCard patientId={patientId} />
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <CitasMigradasCard patientId={patientId} />
       </div>
     </div>
   );

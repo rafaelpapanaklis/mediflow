@@ -5,6 +5,7 @@ import type { PatientBillingInvoice } from "@/components/dashboard/patient-detai
 import { PagosMigradosCard } from "@/components/dashboard/patient-detail/pagos-migrados-card";
 import { GastosLaboratorioMigradosCard } from "@/components/dashboard/patient-detail/gastos-laboratorio-migrados-card";
 import { CuotasMigradasCard } from "@/components/dashboard/patient-detail/cuotas-migradas-card";
+import { CitasMigradasCard } from "@/components/dashboard/patient-detail/citas-migradas-card";
 import { FichasFactura } from "@/components/dashboard/factura-ficha-rediseno/fichas-factura";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { useT } from "@/i18n/i18n-provider";
@@ -89,6 +90,7 @@ export function Facturacion({ patientId, facturas, facturApiEnabled, onNueva, on
       <PagosMigradosCard patientId={patientId} />
       <GastosLaboratorioMigradosCard patientId={patientId} />
       <CuotasMigradasCard patientId={patientId} />
+      <CitasMigradasCard patientId={patientId} />
     </RaizExpediente>
   );
 }

@@ -13,6 +13,9 @@
 //   POST /api/import/odontogram        (entity="odontogram")
 //   POST /api/import/treatment-notes   (entity="treatmentNotes")
 //   POST /api/import/payment-history   (entity="paymentHistory")
+//   POST /api/import/doctors           (entity="doctors")
+//   POST /api/import/blocked-hours     (entity="blockedHours")
+//   POST /api/import/appointments-history (entity="appointmentHistory")
 // FormData: file, dryRun("true"|"false"), skipDuplicates, columnMapping?(JSON),
 //           origin?(id del perfil de origen), valueMapping?(JSON, ver ValueMapping),
 //           sheet?(nombre de la pestaña, OBLIGATORIO en un .xlsx de varias hojas: sin él,
@@ -31,7 +34,24 @@ export type Entity =
   | "treatmentPlans"
   | "odontogram"
   | "treatmentNotes"
-  | "paymentHistory";
+  | "paymentHistory"
+  // Doctores/profesionales (ws1-t12, importador Dentalink): crea o empareja
+  // usuarios DOCTOR, sin invitación ni correo.
+  | "doctors"
+  // Bloqueos de agenda (ws1-t12, importador Dentalink): días/horas cerradas
+  // del sistema anterior, sobre el modelo AgendaBlock que ya existe.
+  | "blockedHours"
+  // Historial de citas pasadas (ws1-t12, importador Dentalink): citas YA
+  // resueltas (atendida/no asistió/cancelada) del sistema anterior. Es
+  // historia de solo lectura — jamás crea una fila en Appointment ni dispara
+  // recordatorios o cobros (ver src/lib/import/citas-historial/handler.ts).
+  | "appointmentHistory"
+  // Casos de ortodoncia migrados (ws1-t1, importador Dentalink).
+  | "orthoCases"
+  // Historial de gastos de laboratorio migrado (ws1-t2, importador Dentalink).
+  | "labExpenseHistory"
+  // Cuotas/mensualidades por vencer migradas (ws1-t6, importador Dentalink).
+  | "installmentPlans";
 
 /**
  * Mapeo columna(header tal cual en el archivo) -> campo canónico de la entidad.
@@ -54,6 +74,10 @@ export type Entity =
  *                   doctor | title | text
  *   paymentHistory: name | lastName | phone | email | patientExternalId | externalId | amount |
  *                   method | date | doctor | description
+ *   doctors:        name | lastName | email | phone | license | specialty | active
+ *   blockedHours:   doctor | dateFrom | dateTo | timeFrom | timeTo | reason
+ *   appointmentHistory: name | lastName | phone | email | patientExternalId | doctor | date |
+ *                   time | status | type | notes
  */
 export type ColumnMapping = Record<string, string>;
 

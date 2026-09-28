@@ -2898,6 +2898,45 @@ model MigratedInstallment {
   @@map("migrated_installments")
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CITA PASADA MIGRADA (ws1-t12, importador Dentalink, sep-2026).
+// 05b_Citas_Estados_Historico trae citas del sistema anterior YA resueltas
+// (atendida/no asistió/cancelada) — el archivo de citas vivas las omite a
+// propósito (appointmentsHandler, entities.ts: una cita pasada no se agenda).
+// Es HISTORIA de solo lectura, nunca una fila de `Appointment`:
+//   · NUNCA dispara un recordatorio ni un cobro — ninguno de los dos lee esta
+//     tabla (reminders/enqueue.ts y post-appointment-followup/route.ts
+//     consultan Appointment, no migrated_visits).
+//   · Se ve en la ficha del paciente ("Citas anteriores (migradas)").
+// Sin relación Prisma a propósito (mismo criterio que MigratedPayment/
+// MigratedOrthoCase/MigratedInstallment): Clinic/Patient/User no cambian de
+// forma. Tabla creada a mano por sql/citas-historial-migradas.sql — el código
+// tolera que aún no exista (P2021/P2022).
+// ═══════════════════════════════════════════════════════════════════════════
+model MigratedVisit {
+  id        String   @id @default(cuid())
+  clinicId  String
+  patientId String
+  doctorId  String?
+
+  /// Instante ORIGINAL de la cita en el sistema de origen (no el de importación).
+  startsAt DateTime
+  /// COMPLETED | NO_SHOW | CANCELLED — reusa el enum de Appointment.status:
+  /// son exactamente los tres estados finales que este archivo puede traer.
+  status AppointmentStatus
+  /// Motivo/tratamiento tal como venía en el archivo.
+  type  String?
+  notes String?
+
+  /// "Dentalink", o "otro sistema" si el asistente no dijo cuál era.
+  origin      String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([clinicId, patientId, startsAt])
+  @@map("migrated_visits")
+}
+
 // ── Consent Forms ─────────────────────────────────────────────────────
 /// Carta de consentimiento informado con firma electrónica.
 ///

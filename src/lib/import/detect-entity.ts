@@ -177,15 +177,32 @@ export function mejorEntidad(guesses: EntityGuess[]): { entity: Entity | null; c
  */
 export const ENTITY_IMPORT_ORDER: Entity[] = [
   "patients",
+  // Doctores (ws1-t12): sin dependencia de pacientes, pero todo lo que trae
+  // doctorId (citas, bloqueos, casos de ortodoncia) lo necesita ya resuelto.
+  "doctors",
   "balances",
+  // Casos de ortodoncia (ws1-t1): liga con el doctor tratante y abre su
+  // propia factura/caso, que installmentPlans puede necesitar más abajo.
+  "orthoCases",
+  // Cuotas por vencer (ws1-t6): reparte en fechas la deuda que ya contó
+  // "balances" (factura "Saldo inicial migrado") o el totalAmount de un caso
+  // de ortodoncia migrado — por eso va DESPUÉS de los dos.
+  "installmentPlans",
   "paymentHistory",
   "appointments",
+  // Bloqueos de agenda (ws1-t12): necesita doctors resuelto, y revisa choque
+  // contra las citas VIVAS ya importadas (appointments, arriba).
+  "blockedHours",
+  // Historial de citas pasadas (ws1-t12): necesita patients + doctors.
+  "appointmentHistory",
   "medicalHistory",
   "clinicalNotes",
   "odontogram",
   "quotes",
   "treatmentPlans",
   "treatmentNotes",
+  // Historial de gastos de laboratorio (ws1-t2): solo necesita patients.
+  "labExpenseHistory",
 ];
 
 /** Posición en el orden de dependencia; sin identificar queda siempre al final. */

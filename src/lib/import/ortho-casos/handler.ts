@@ -88,7 +88,7 @@ function rowDbErrorMessage(e: any): string {
 }
 
 export const orthoCasesHandler: EntityHandler = {
-  entity: "orthoCases" as any,
+  entity: "orthoCases",
   auditEntityType: "record",
   sheetNames: ["pacientesortodoncia", "casosortodoncia", "ortodoncia", "ortodonciapacientes", "orthodonticpatients"],
   headerVariants: {

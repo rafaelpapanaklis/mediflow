@@ -62,6 +62,13 @@ const dentalink: OriginProfile = {
     // «Tratamientos activos» (ws1-t6, 27-sep-2026): sin export real delante,
     // igual que el resto de sheetNames de este archivo — solo PROPONE.
     treatmentPlans: ["Tratamientos activos", "Presupuestos activos"],
+    // Doctores/bloqueos/historial de citas (ws1-t12, 28-sep-2026): nombres de
+    // archivo probables de BEVADENT (10_Usuarios_Profesionales,
+    // 13_Horas_Bloqueadas, 05b_Citas_Estados_Historico). Sin export real
+    // delante — solo PROPONE, igual que el resto.
+    doctors: ["Usuarios Profesionales", "Profesionales", "Dentistas"],
+    blockedHours: ["Horas Bloqueadas", "Bloqueos de Agenda"],
+    appointmentHistory: ["Citas Estados Historico", "Historial de Citas"],
   },
   entityMappings: {
     // «Citas pacientes» (Agenda). «Hora fin» NO se mapea: la duración sale de «Duración»
@@ -243,6 +250,61 @@ const dentalink: OriginProfile = {
       "Tratamiento": "title",
       "Evolución": "text",
       "Detalle evolución": "text",
+    },
+    // Doctores/profesionales (ws1-t12, 28-sep-2026). FUENTE: campos del
+    // endpoint /dentistas de la API pública (https://api.dentalink.
+    // healthatom.com/docs/): id, rut, nombre, apellidos, celular, telefono,
+    // email, id_especialidad, especialidad, habilitado. "Rut" es vocabulario
+    // chileno; BEVADENT (México) probablemente exporte "Cédula" — por eso el
+    // headerVariants del handler ya cubre las dos (ver doctores/handler.ts).
+    // Sin export real delante: `verified` sigue en false.
+    doctors: {
+      "Nombre": "name",
+      "Nombres": "name",
+      "Apellido": "lastName",
+      "Apellidos": "lastName",
+      "Email": "email",
+      "Correo": "email",
+      "Celular": "phone",
+      "Teléfono": "phone",
+      "Rut": "license",
+      "Cédula": "license",
+      "Cédula profesional": "license",
+      "Especialidad": "specialty",
+      "Habilitado": "active",
+    },
+    // Bloqueos de agenda (ws1-t12, 28-sep-2026). FUENTE: endpoint
+    // /horariosbloqueados de la API pública (mismo docs de arriba): fecha,
+    // hora_inicio/inicio, hora_fin/fin, tipo ("Bloqueo"), comentario. Sin
+    // export real delante: `verified` sigue en false.
+    blockedHours: {
+      "Dentista": "doctor",
+      "Profesional": "doctor",
+      "Fecha": "dateFrom",
+      "Fecha inicio": "dateFrom",
+      "Fecha fin": "dateTo",
+      "Hora inicio": "timeFrom",
+      "Hora fin": "timeTo",
+      "Comentario": "reason",
+      "Tipo": "reason",
+    },
+    // Historial de citas pasadas (ws1-t12, 28-sep-2026). FUENTE: endpoint
+    // /citas/estados de la API pública (mismo docs de arriba): valores
+    // confirmada/no show/anulada/atendida. Sin export real delante:
+    // `verified` sigue en false.
+    appointmentHistory: {
+      "Id paciente": "patientExternalId",
+      "ID Paciente": "patientExternalId",
+      "Paciente": "name",
+      "Nombre paciente": "name",
+      "Celular": "phone",
+      "Dentista": "doctor",
+      "Nombre dentista": "doctor",
+      "Fecha": "date",
+      "Hora": "time",
+      "Estado": "status",
+      "Motivo": "type",
+      "Comentario": "notes",
     },
   },
 };

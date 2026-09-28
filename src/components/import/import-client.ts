@@ -231,6 +231,19 @@ export const DATA_TYPES: DataType[] = [
   // Notas de evolución de tratamiento: como notas de evolución, pero se ligan a
   // la sesión del tratamiento activo importado cuando el folio casa con uno.
   { id: "notastratamiento", labelKey: "treatmentNotes", descKey: "treatmentNotesMeta", icon: "file", badge: "adv", on: false, entity: "treatmentNotes", solo: true },
+  // Doctores: crea/empareja usuarios DOCTOR reales (sin invitación ni correo).
+  // Va SOLO: crear cuentas de acceso no puede colarse como secundario sin revisión.
+  { id: "doctores", labelKey: "doctors", descKey: "doctorsMeta", icon: "users", badge: "easy", on: false, entity: "doctors", solo: true },
+  // Bloqueos de agenda: días/horas cerradas del sistema anterior, sobre AgendaBlock.
+  { id: "bloqueos", labelKey: "blockedHours", descKey: "blockedHoursMeta", icon: "calendar", badge: "easy", on: false, entity: "blockedHours", solo: true },
+  // Historial de citas pasadas: solo lectura, nunca agenda ni dispara mensajes.
+  { id: "citashistorial", labelKey: "appointmentHistory", descKey: "appointmentHistoryMeta", icon: "calendar", badge: "easy", on: false, entity: "appointmentHistory", solo: true },
+  // Casos de ortodoncia migrados (ws1-t1): solo si el módulo de Ortodoncia está activo.
+  { id: "casosortodoncia", labelKey: "orthoCases", descKey: "orthoCasesMeta", icon: "activity", badge: "adv", on: false, entity: "orthoCases", solo: true },
+  // Historial de gastos de laboratorio migrado (ws1-t2): solo lectura.
+  { id: "laboratorio", labelKey: "labExpenseHistory", descKey: "labExpenseHistoryMeta", icon: "stack", badge: "easy", on: false, entity: "labExpenseHistory", solo: true },
+  // Cuotas/mensualidades por vencer migradas (ws1-t6): reparte en fechas una deuda ya contada.
+  { id: "cuotasplan", labelKey: "installmentPlans", descKey: "installmentPlansMeta", icon: "money", badge: "easy", on: false, entity: "installmentPlans", solo: true },
 ];
 
 // Límites de archivo del paso 4.
