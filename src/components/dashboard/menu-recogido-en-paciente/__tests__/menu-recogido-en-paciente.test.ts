@@ -14,13 +14,16 @@
  *  4. El cableado: el menú de dos niveles enchufa el hook en la línea del
  *     estado `encogido`, y ese es el ÚNICO cambio en el archivo compartido
  *     (aparte del import).
+ *  5. El módulo de Ortodoncia (ws1-t3, 28-sep-2026): /dashboard/orthodontics
+ *     y lo que cuelga es una zona más, con las MISMAS reglas que la ficha. La
+ *     zona es el módulo entero: cambiar de pestaña no vuelve a recoger.
  */
 import Module from "node:module";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { encogidoEfectivo, esFichaDePaciente, pacienteDeFicha } from "../recogido";
+import { ZONA_ORTODONCIA, encogidoEfectivo, esFichaDePaciente, pacienteDeFicha, zonaRecogida } from "../recogido";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..", "..");
 const leer = (rel: string) => readFileSync(join(RAIZ, rel), "utf8");
@@ -193,6 +196,75 @@ test("con React de verdad: el primer render ya sale recogido en la ficha y como 
   assert.equal(pinta(false, "/dashboard/patients"), '<aside data-encogido="false"></aside>');
   assert.equal(pinta(true, "/dashboard/patients"), '<aside data-encogido="true"></aside>');
   assert.equal(pinta(false, "/dashboard/specialties/orthodontics/p1"), '<aside data-encogido="false"></aside>');
+});
+
+// ── 5. El módulo de Ortodoncia es una zona más ───────────────────────
+
+test("el módulo de Ortodoncia es una zona; la pantalla vieja de especialidades y el resto no", () => {
+  assert.equal(zonaRecogida("/dashboard/orthodontics"), ZONA_ORTODONCIA);
+  assert.equal(zonaRecogida("/dashboard/orthodontics/"), ZONA_ORTODONCIA);
+  assert.equal(zonaRecogida("/dashboard/orthodontics/tablero"), ZONA_ORTODONCIA);
+  assert.equal(zonaRecogida("/dashboard/orthodontics/cobranza?mes=2026-09"), ZONA_ORTODONCIA);
+  assert.equal(zonaRecogida("/dashboard/orthodontics/configuracion"), ZONA_ORTODONCIA, "todas las pestañas son la misma zona");
+  assert.equal(zonaRecogida("/dashboard/orthodonticsx"), null);
+  assert.equal(zonaRecogida("/dashboard/specialties/orthodontics"), null, "la pantalla vieja no cambia");
+  assert.equal(zonaRecogida("/dashboard/specialties/orthodontics/abc-123"), null);
+  assert.equal(zonaRecogida("/dashboard/agenda"), null);
+  assert.equal(zonaRecogida("/dashboard"), null);
+  assert.equal(zonaRecogida(null), null);
+  assert.equal(zonaRecogida(""), null);
+  // La ficha sigue siendo su propia zona, una por paciente.
+  assert.equal(zonaRecogida("/dashboard/patients/abc-123"), "paciente:abc-123");
+  assert.equal(zonaRecogida("/dashboard/patients/abc-123/orthodontics"), "paciente:abc-123");
+  assert.equal(zonaRecogida("/dashboard/patients"), null);
+  // Un paciente cuyo id fuera literalmente el nombre de la zona no choca con ella.
+  assert.notEqual(zonaRecogida("/dashboard/patients/modulo:ortodoncia"), ZONA_ORTODONCIA);
+  // pacienteDeFicha no se entera del módulo: sigue hablando solo de pacientes.
+  assert.equal(pacienteDeFicha("/dashboard/orthodontics/tablero"), null);
+});
+
+test("Ortodoncia: al entrar se recoge, entre pestañas no salta, y al salir vuelve como estaba", () => {
+  const p = persona(false);
+  assert.equal(p.navegar("/dashboard/hoy"), false);
+  assert.equal(p.navegar("/dashboard/orthodontics/tablero"), true, "al abrir Ortodoncia, recogido");
+  assert.equal(p.navegar("/dashboard/orthodontics/cobranza"), true, "dentro del módulo sigue recogido");
+  assert.equal(p.navegar("/dashboard/hoy"), false, "al salir, como estaba");
+  assert.equal(p.preferencia(), false, "la preferencia no se tocó");
+});
+
+test("Ortodoncia: desplegar a mano dura mientras se está en el módulo, no pisa la preferencia, y al volver a entrar se recoge", () => {
+  const p = persona(false);
+  assert.equal(p.navegar("/dashboard/orthodontics/tablero"), true);
+  assert.equal(p.pulsarBoton("/dashboard/orthodontics/tablero"), false, "se puede desplegar dentro del módulo");
+  assert.equal(p.navegar("/dashboard/orthodontics/alertas"), false, "cambiar de pestaña no lo vuelve a recoger");
+  assert.equal(p.preferencia(), false, "la preferencia guardada no cambió");
+  assert.equal(p.navegar("/dashboard/agenda"), false);
+  assert.equal(p.navegar("/dashboard/orthodontics/tablero"), true, "al volver a entrar, recogido otra vez");
+});
+
+test("Ortodoncia → ficha del paciente: son zonas distintas, la ficha se abre recogida aunque el módulo estuviera desplegado", () => {
+  const p = persona(false);
+  assert.equal(p.navegar("/dashboard/orthodontics/pacientes"), true);
+  assert.equal(p.pulsarBoton("/dashboard/orthodontics/pacientes"), false);
+  assert.equal(p.navegar("/dashboard/patients/p1?tab=ortodoncia"), true, "la ficha es otra zona: recogida");
+  assert.equal(p.navegar("/dashboard/orthodontics/pacientes"), true, "y al volver al módulo, recogido de nuevo");
+  assert.equal(p.preferencia(), false);
+});
+
+test("Ortodoncia con React de verdad: el primer render ya sale recogido (sin salto al cargar)", () => {
+  delete require.cache[require.resolve("../use-encogido-en-ficha")];
+  const { useEncogidoEnFicha } = require("../use-encogido-en-ficha") as typeof import("../use-encogido-en-ficha");
+  const { createElement } = require("react") as typeof import("react");
+  const { renderToStaticMarkup } = require("react-dom/server") as typeof import("react-dom/server");
+  const Menu = ({ preferencia, pathname }: { preferencia: boolean; pathname: string }) => {
+    const [encogido] = useEncogidoEnFicha([preferencia, () => {}], pathname);
+    return createElement("aside", { "data-encogido": encogido ? "true" : "false" });
+  };
+  const pinta = (preferencia: boolean, pathname: string) =>
+    renderToStaticMarkup(createElement(Menu, { preferencia, pathname }));
+  assert.equal(pinta(false, "/dashboard/orthodontics/tablero"), '<aside data-encogido="true"></aside>');
+  assert.equal(pinta(true, "/dashboard/orthodontics/cobranza"), '<aside data-encogido="true"></aside>');
+  assert.equal(pinta(false, "/dashboard/specialties/orthodontics"), '<aside data-encogido="false"></aside>');
 });
 
 // ── 4. El cableado en el menú compartido ─────────────────────────────

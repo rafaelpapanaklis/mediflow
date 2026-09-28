@@ -18,9 +18,22 @@
  * Solo la ficha de Pacientes. Las pantallas de especialidad
  * (/dashboard/specialties/<x>/<patientId>) y radiografías (/dashboard/xrays)
  * no cambian: «no cambies el menú en ninguna otra pantalla».
+ *
+ * Y, desde el 28-sep-2026, el módulo de Ortodoncia (pedido de Rafael, ws1-t3:
+ * «que ortodoncia al darle click y cargue se esconda el menú completamente
+ * igual que cuando abres un paciente»). /dashboard/orthodontics y todo lo que
+ * cuelga de ahí es una ZONA más, con las mismas tres reglas: entra recogido,
+ * se puede desplegar a mano sin pisar la preferencia, y al salir el menú
+ * vuelve como estaba. La zona es el módulo ENTERO, no cada pestaña: pasar de
+ * Tablero a Cobranza no vuelve a recoger lo que la persona desplegó. La
+ * pantalla vieja /dashboard/specialties/orthodontics sigue sin cambiar.
  */
 
 const FICHA = /^\/dashboard\/patients\/([^/?#]+)(?:[/?#]|$)/;
+const MODULO_ORTODONCIA = /^\/dashboard\/orthodontics(?:[/?#]|$)/;
+
+/** La zona del módulo de Ortodoncia. No choca con un paciente: esas llevan `paciente:` delante. */
+export const ZONA_ORTODONCIA = "modulo:ortodoncia";
 
 /**
  * El id del paciente si la ruta es su ficha (o una pantalla dentro de ella,
@@ -34,6 +47,19 @@ export function pacienteDeFicha(pathname: string | null | undefined): string | n
 }
 
 export const esFichaDePaciente = (pathname: string | null | undefined) => pacienteDeFicha(pathname) !== null;
+
+/**
+ * La zona donde el menú sale recogido, o null si en esa pantalla manda la
+ * preferencia. Cada ficha es su propia zona (`paciente:<id>`) y el módulo de
+ * Ortodoncia es una sola. Es la clave a la que el hook ata la elección hecha
+ * a mano: cambia la zona y la elección se olvida.
+ */
+export function zonaRecogida(pathname: string | null | undefined): string | null {
+  const paciente = pacienteDeFicha(pathname);
+  if (paciente !== null) return `paciente:${paciente}`;
+  if (pathname && MODULO_ORTODONCIA.test(pathname)) return ZONA_ORTODONCIA;
+  return null;
+}
 
 /**
  * Cómo se pinta el menú:
