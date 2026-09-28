@@ -8,6 +8,7 @@ import {
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { AppointmentDTO, AppointmentStatus } from "@/lib/home/types";
 import { formatShortTime } from "@/lib/home/greet";
+import { destinoDeLaCitaEnHoy } from "@/lib/orthodontics/hoy";
 import { useT } from "@/i18n/i18n-provider";
 
 // Pills de estado del sistema (prototipo variante-a: fondo *-soft + dot 6px
@@ -94,7 +95,10 @@ export function TodayAppointmentRow({
       <div style={{ flex: 1, minWidth: 0 }}>
         <button
           type="button"
-          onClick={() => router.push(`/dashboard/patients/${appt.patient.id}`)}
+          // Un control de ortodoncia abre el caso del paciente, no la ficha general.
+          onClick={() =>
+            router.push(destinoDeLaCitaEnHoy({ patientId: appt.patient.id, motivo: appt.reason }))
+          }
           style={{
             background: "transparent",
             border: "none",

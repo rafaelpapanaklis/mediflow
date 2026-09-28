@@ -18,6 +18,7 @@ import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { useT } from "@/i18n/i18n-provider";
 import { formatShortTime } from "@/lib/home/greet";
 import type { AppointmentDTO } from "@/lib/home/types";
+import { destinoDeLaCitaEnHoy } from "@/lib/orthodontics/hoy";
 import { EtiquetaEstado } from "./piezas";
 import s from "./hoy.module.css";
 
@@ -46,7 +47,10 @@ export function FilaCita({ appt, compacta, onCheckIn, onCall, onWhatsApp }: Prop
         <button
           type="button"
           className={s.nombre}
-          onClick={() => router.push(`/dashboard/patients/${appt.patient.id}`)}
+          // Un control de ortodoncia abre el caso del paciente, no la ficha general.
+          onClick={() =>
+            router.push(destinoDeLaCitaEnHoy({ patientId: appt.patient.id, motivo: appt.reason }))
+          }
         >
           {appt.patient.name}
         </button>

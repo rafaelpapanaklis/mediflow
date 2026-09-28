@@ -80,7 +80,11 @@ test("la pantalla nueva manda a los mismos sitios que la de siempre", () => {
     "/dashboard/reports",
     "/dashboard/xrays?filter=unanalyzed",
     "/dashboard/ai-assistant?patient=${appt.patient.id}",
-    "/dashboard/patients/${appt.patient.id}",
+    // La ficha del paciente de una cita: desde ws1-t5 (ortodoncia en Hoy) la
+    // decide `destinoDeLaCitaEnHoy` — la ficha de siempre, o el caso del
+    // paciente si la cita es un control de ortodoncia. Sus reglas se prueban
+    // en src/lib/orthodontics/__tests__/hoy.test.ts.
+    "destinoDeLaCitaEnHoy({ patientId: appt.patient.id, motivo: appt.reason })",
     "/api/dashboard/home/revenue?range=",
     "/api/dashboard/home/upcoming?limit=",
     "/dashboard/agenda?date=${",

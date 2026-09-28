@@ -9,6 +9,7 @@ import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useT } from "@/i18n/i18n-provider";
 import { formatShortTime, formatTimeUntil } from "@/lib/home/greet";
 import type { HomeDoctorData } from "@/lib/home/types";
+import { destinoDeLaCitaEnHoy } from "@/lib/orthodontics/hoy";
 
 type NextAppt = NonNullable<HomeDoctorData["nextAppointment"]>;
 
@@ -220,7 +221,8 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
         <button
           type="button"
           onClick={() =>
-            router.push(`/dashboard/patients/${appt.patient.id}`)
+            // Un control de ortodoncia abre el caso del paciente, no la ficha general.
+            router.push(destinoDeLaCitaEnHoy({ patientId: appt.patient.id, motivo: appt.reason }))
           }
           style={secondaryCtaStyle}
           onMouseEnter={(e) => {
