@@ -44,6 +44,9 @@ import {
   updateNpsConfig,
   scheduleG15Checkpoint,
   updateQuoteScenario,
+  createDiagnosis,
+  createTreatmentPlan,
+  updateTreatmentPlan,
 } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 
@@ -293,15 +296,80 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             onCollect,
             onMore: undefined,
           }}
-          onStartDiagnosisWizard={() => {
-            // Si no hay diagnóstico, redirige al cliente legacy con el
-            // wizard completo en /dashboard/specialties/orthodontics/[id].
-            router.push(`/dashboard/specialties/orthodontics/${patient.id}`);
+          // Ola 1 (ws1-t6) — «Alta del caso»: antes estos dos handlers
+          // mandaban a la vista antigua (/dashboard/specialties/orthodontics/
+          // [id], S1). Ahora abren el asistente DENTRO de la ficha nueva —
+          // ver `onCreateCase` más abajo — así que S1 ya no es el único
+          // camino para abrir un caso y se puede ocultar cuando Rafael lo
+          // decida (REPORTE-ws1-t1.md, «Ojo» de esta parte).
+          onCreateCase={async (payload) => {
+            let diagnosisId = orthoRedesignVM.diagnosis?.id ?? null;
+            if (payload.diagnosis) {
+              const res = await createDiagnosis({ patientId: patient.id, ...payload.diagnosis });
+              if (isFailure(res)) {
+                toast.error(res.error);
+                return;
+              }
+              diagnosisId = res.data.id;
+              if (
+                !res.data.altaCasoFieldsSaved &&
+                (payload.diagnosis.referredByDoctorId || payload.diagnosis.inObservation)
+              ) {
+                toast(t("patients.ortho.altaCasoSqlPending"));
+              }
+            }
+            if (!diagnosisId) {
+              toast.error(t("patients.ortho.noPlan"));
+              return;
+            }
+            if (payload.plan) {
+              const res = await createTreatmentPlan({
+                diagnosisId,
+                patientId: patient.id,
+                ...payload.plan,
+              });
+              if (isFailure(res)) {
+                toast.error(res.error);
+                return;
+              }
+              if (!res.data.altaCasoFieldsSaved && (payload.plan.treatingDoctorId || payload.plan.responsibleGuardianId || payload.plan.newResponsibleGuardian)) {
+                toast(t("patients.ortho.altaCasoSqlPending"));
+              }
+              toast.success(t("patients.ortho.caseOpened"));
+            } else {
+              toast.success(t("patients.ortho.caseOpenedObservation"));
+            }
+            router.refresh();
           }}
-          onEditPrescription={() => {
-            // Sin onUpdateAppliances todavía hidratado; este handler delega
-            // al wizard del cliente legacy.
-            router.push(`/dashboard/specialties/orthodontics/${patient.id}`);
+          onOpenImagingRecords={() => {
+            // A9 · enlaza a lo que ya existe en el expediente (radiografías,
+            // panorámica, lateral de cráneo, modelos 3D) en vez de mandar al
+            // asistente de diagnóstico — el alcance lo pidió reducido a
+            // "enlazar", no a construir un uploader propio dentro del caso.
+            router.push(`/dashboard/xrays/${patient.id}`);
+          }}
+          onUpdateCaseSettings={async (payload) => {
+            if (!orthoRedesignVM.treatment.treatmentPlanId) {
+              toast.error(t("patients.ortho.noPlan"));
+              return;
+            }
+            const res = await updateTreatmentPlan({
+              treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+              ...payload,
+              // `status` es `z.enum(...).optional()` — SIN `.nullable()` — a
+              // diferencia de los demás campos de este payload; `null` lo
+              // rechazaría cuando el estado no cambió.
+              status: payload.status ?? undefined,
+            });
+            if (isFailure(res)) {
+              toast.error(res.error);
+              return;
+            }
+            if (!res.data.altaCasoFieldsSaved && (payload.treatingDoctorId || payload.responsibleGuardianId || payload.newResponsibleGuardian)) {
+              toast(t("patients.ortho.altaCasoSqlPending"));
+            }
+            toast.success(t("patients.ortho.caseSettingsSaved"));
+            router.refresh();
           }}
           onUpdateDiagnosis={async (payload) => {
             const res = await updateDiagnosis({

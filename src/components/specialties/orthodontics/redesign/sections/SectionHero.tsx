@@ -6,7 +6,7 @@
 //   2. En tratamiento: status chip + 4 mini-stats + progress bar mes X/Y +
 //      timeline visual de fases + botón "Iniciar cita de control".
 
-import { Plus, Pencil, Sparkles, Layers, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Settings, Sparkles, Layers, ChevronRight } from "lucide-react";
 import { Btn, Card, StatChip, fmtDate, fmtPct } from "../atoms";
 import { Pill } from "../atoms/Pill";
 import {
@@ -21,6 +21,9 @@ export interface SectionHeroProps {
   hasUpcomingControlToday?: boolean;
   onStartTreatment?: () => void;
   onEditPlan?: () => void;
+  /** Ola 1 (ws1-t6) — A5/A6/A7/A11: doctor tratante, responsable del pago,
+   *  fecha de colocación y estado del caso. */
+  onOpenCaseSettings?: () => void;
   onStartControl?: () => void;
   onAdvancePhase?: () => void;
 }
@@ -61,6 +64,16 @@ export function SectionHero(props: SectionHeroProps) {
       accent="violet"
       action={
         <div className="flex gap-2">
+          {props.onOpenCaseSettings ? (
+            <Btn
+              variant="secondary"
+              size="sm"
+              icon={<Settings className="w-3.5 h-3.5" aria-hidden />}
+              onClick={props.onOpenCaseSettings}
+            >
+              Caso
+            </Btn>
+          ) : null}
           {props.onEditPlan ? (
             <Btn variant="secondary" size="sm" icon={<Pencil className="w-3.5 h-3.5" aria-hidden />} onClick={props.onEditPlan}>
               Editar plan

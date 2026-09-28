@@ -40,15 +40,19 @@ import { OrthodonticsModuleSidebar } from "./sidebar/OrthodonticsModuleSidebar";
 import { DrawerTreatmentCard } from "./drawers/DrawerTreatmentCard";
 import type { DrawerCardSubmit } from "./drawers/DrawerTreatmentCard";
 import { ModalAdvancePhase } from "./drawers/ModalAdvancePhase";
-import { ModalCollect } from "./drawers/ModalCollect";
 import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
-import { DrawerEditFinancialPlan } from "./drawers/DrawerEditFinancialPlan";
 import { DrawerEditDiagnosis } from "./drawers/DrawerEditDiagnosis";
 import { DrawerEditPrescription } from "./drawers/DrawerEditPrescription";
 import { DrawerNewReferral } from "./drawers/DrawerNewReferral";
 import { DrawerConfigRetention } from "./drawers/DrawerConfigRetention";
 import { DrawerWhatsAppChat } from "./drawers/DrawerWhatsAppChat";
 import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
+import {
+  DrawerNewCase,
+  type DrawerNewCaseDiagnosisPayload,
+  type DrawerNewCasePlanPayload,
+} from "./drawers/DrawerNewCase";
+import { DrawerCaseSettings, type DrawerCaseSettingsPayload } from "./drawers/DrawerCaseSettings";
 import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
 import layout from "./ortho-redesign-layout.module.css";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
@@ -65,18 +69,18 @@ type DrawerState =
   | { kind: "advance-phase" }
   | { kind: "openchoice" }
   | { kind: "signhome" }
-  | { kind: "collect" }
   | { kind: "cfdi" }
   | { kind: "laborder" }
   | { kind: "wirestep" }
   | { kind: "compare" }
-  | { kind: "edit-financial" }
   | { kind: "edit-diagnosis" }
   | { kind: "edit-prescription" }
   | { kind: "new-referral" }
   | { kind: "config-retention" }
   | { kind: "config-nps" }
   | { kind: "wa-chat" }
+  | { kind: "new-case" }
+  | { kind: "case-settings" }
   | null;
 
 export interface OrthodonticsRedesignClientProps {
@@ -203,10 +207,27 @@ export interface OrthodonticsRedesignClientProps {
     overrideReason: string | null;
     overridePin: string | null;
   }) => Promise<void> | void;
-  /** Hook para abrir wizard de diagnóstico legacy. */
+  /** Hook para abrir wizard de diagnóstico legacy — fallback si `onCreateCase`
+   *  no está (queda por compatibilidad; ver `onCreateCase` para el flujo
+   *  nuevo, ws1-t6, dentro de la ficha). */
   onStartDiagnosisWizard?: () => void;
-  /** Hook para abrir wizard del plan tx legacy (G4 prescription). */
+  /** Hook para abrir wizard del plan tx legacy (G4 prescription) — fallback
+   *  cuando no hay `onUpdateAppliances`. */
   onEditPrescription?: () => void;
+  /** Ola 1 (ws1-t6) — «Alta del caso»: abre el asistente DENTRO de la ficha
+   *  (diagnóstico + plan, o solo plan si ya hay diagnóstico). Si está
+   *  presente, sustituye a `onStartDiagnosisWizard` en Hero/Diagnóstico. */
+  onCreateCase?: (payload: {
+    diagnosis: DrawerNewCaseDiagnosisPayload | null;
+    plan: DrawerNewCasePlanPayload | null;
+  }) => Promise<void> | void;
+  /** A9 · enlaza a las radiografías/escaneos que ya existen en el
+   *  expediente, en vez de mandar al asistente de diagnóstico (bug heredado
+   *  de reusar `onStartDiagnosisWizard` para "subir registro"). */
+  onOpenImagingRecords?: () => void;
+  /** Ola 1 (ws1-t6) — A5/A6/A7/A11: cambiar doctor tratante, responsable del
+   *  pago, fecha de colocación o estado del caso ya abierto. */
+  onUpdateCaseSettings?: (payload: DrawerCaseSettingsPayload) => Promise<void> | void;
   /** Hook para abrir wizard de wire step nuevo. Si está presente reemplaza
    *  al drawer interno G3. */
   onAddWireStep?: () => void;
@@ -284,7 +305,6 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         }
       : undefined;
 
-  const nextPending = (props.installments ?? []).find((i) => i.status === "PENDING");
   const tStatus = props.treatmentStatus ?? "en-tratamiento";
 
   return (
@@ -320,8 +340,17 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           <SectionHero
             treatment={t}
             hasUpcomingControlToday={isToday(vm.nextAppointment?.date)}
-            onStartTreatment={props.onStartDiagnosisWizard}
-            onEditPlan={props.onEditPrescription}
+            onStartTreatment={
+              props.onCreateCase ? () => setDrawer({ kind: "new-case" }) : props.onStartDiagnosisWizard
+            }
+            onEditPlan={
+              props.onUpdateAppliances
+                ? () => setDrawer({ kind: "edit-prescription" })
+                : props.onEditPrescription
+            }
+            onOpenCaseSettings={
+              props.onUpdateCaseSettings ? () => setDrawer({ kind: "case-settings" }) : undefined
+            }
             onStartControl={() => setDrawer({ kind: "tcard-new" })}
             onAdvancePhase={t.phase ? () => setDrawer({ kind: "advance-phase" }) : undefined}
           />
@@ -329,13 +358,17 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           <SectionDiagnosis
             diagnosis={vm.diagnosis}
             digitalRecords={props.digitalRecords ?? []}
-            onStartWizard={props.onStartDiagnosisWizard}
+            onStartWizard={
+              props.onCreateCase ? () => setDrawer({ kind: "new-case" }) : props.onStartDiagnosisWizard
+            }
             onEdit={
               vm.diagnosis && props.onUpdateDiagnosis
                 ? () => setDrawer({ kind: "edit-diagnosis" })
-                : props.onStartDiagnosisWizard
+                : props.onCreateCase
+                  ? () => setDrawer({ kind: "new-case" })
+                  : props.onStartDiagnosisWizard
             }
-            onUploadRecord={props.onStartDiagnosisWizard}
+            onUploadRecord={props.onOpenImagingRecords ?? props.onStartDiagnosisWizard}
           />
 
           <SectionPlan
@@ -375,23 +408,23 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onScheduleG15={props.onScheduleG15Action ?? props.onScheduleG15}
           />
 
-          <SectionFinance
-            totalCost={t.totalCost}
-            paid={t.paid}
-            installments={props.installments ?? []}
-            onEditFinancialPlan={
-              props.onUpdateFinancialPlan
-                ? () => setDrawer({ kind: "edit-financial" })
-                : undefined
-            }
-            onCollectNext={() => setDrawer({ kind: "collect" })}
-          />
-
-          {/* Ortodoncia — Ola 0 (ws1-t1): ranura del resumen de cobranza
-              (decisión 1 — el dinero va por la factura a plazos). Hoy no
-              pinta nada; la parte «Cobro» la llena en la Ola 1. */}
+          {/* Ortodoncia — Ola 1 (ws1-t1 · Cobro): Sección F reescrita contra
+              la factura a plazos del tratamiento (decisión 1), ya no contra
+              el maquetado OrthoPaymentPlan/installments de Ola 0. Se basta
+              con el id del caso: autofetch vía cargarPanelDeCobro. */}
           {t.treatmentPlanId ? (
-            <ResumenCobranza treatmentPlanId={t.treatmentPlanId} />
+            <SectionFinance
+              treatmentPlanId={t.treatmentPlanId}
+              patientId={t.patientId}
+              patientName={vm.patient.fullName}
+            />
+          ) : null}
+
+          {/* Ranura del resumen de cobranza (decisión 1), rellenada en Ola 1
+              (ws1-t1 · Cobro): mismo número que Sección F, calculado una vez
+              por cobranzaDelCaso. */}
+          {t.treatmentPlanId ? (
+            <ResumenCobranza treatmentPlanId={t.treatmentPlanId} patientName={vm.patient.fullName} />
           ) : null}
 
           <SectionRetention
@@ -448,10 +481,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               patientFlow={vm.patientFlow}
               aiSuggestions={vm.aiSuggestions}
               whatsappRecent={vm.whatsappRecent}
-              suggestedChargeAmount={nextPending?.amount ?? null}
-              onCollectNow={
-                props.onCollectNow ?? (() => setDrawer({ kind: "collect" }))
-              }
+              suggestedChargeAmount={null}
+              onCollectNow={props.onCollectNow}
               onOpenChat={() => setDrawer({ kind: "wa-chat" })}
             />
           </div>
@@ -509,22 +540,12 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           SectionFinance. Ocultar, no borrar: ModalOpenChoice y
           DrawerSignAtHome se quedan en su archivo. */}
 
-      {/* Modal Collect (cobrar siguiente) */}
-      {drawer?.kind === "collect" ? (
-        <ModalCollect
-          amount={nextPending?.amount ?? 0}
-          installmentLabel={
-            nextPending
-              ? `Mensualidad ${nextPending.installmentNumber}/${(props.installments ?? []).length}`
-              : "—"
-          }
-          onClose={closeDrawer}
-          onConfirm={async (method) => {
-            await props.onConfirmCollect?.(method);
-            closeDrawer();
-          }}
-        />
-      ) : null}
+      {/* Ortodoncia — Ola 1 (ws1-t1 · Cobro), S3 QUITAR: "cobrar siguiente"
+          aparte (ModalCollect) no pasaba por Caja ni por la factura del
+          tratamiento — verificado sin ortho_installments guardados, nada
+          que perder. Cobrar de verdad vive ahora en la Sección F (arriba),
+          con PaymentModal sobre la factura real. Ocultar, no borrar:
+          ModalCollect se queda en su archivo. */}
 
       {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S14, QUITAR: la
           lista de CFDI sale siempre vacía (nada la llena hoy). Sin botón
@@ -560,26 +581,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           armaba su input (summaryToCompareSet, glue local de este
           archivo, no reusable) se quitó por no tener ya llamador. */}
 
-      {/* Drawer Editor Plan Financiero (BUG 7 / nuevo feature) */}
-      {drawer?.kind === "edit-financial" && props.financialPlan ? (
-        <DrawerEditFinancialPlan
-          current={{
-            totalAmount: props.financialPlan.totalAmount,
-            initialDownPayment: props.financialPlan.initialDownPayment,
-            installmentCount: props.financialPlan.installmentCount,
-            installmentAmount: props.financialPlan.installmentAmount,
-            paidInstallmentsCount: (props.installments ?? []).filter(
-              (i) => i.status === "PAID",
-            ).length,
-            paidAmount: props.financialPlan.paidAmount,
-          }}
-          onClose={closeDrawer}
-          onConfirm={async (payload) => {
-            await props.onUpdateFinancialPlan?.(payload);
-            closeDrawer();
-          }}
-        />
-      ) : null}
+      {/* Ortodoncia — Ola 1 (ws1-t1 · Cobro): "Editar plan financiero"
+          (DrawerEditFinancialPlan) apuntaba a updateFinancialPlan.ts, que
+          edita el modelo OrthoPaymentPlan/installments que la decisión 1 de
+          la arquitectura reemplaza. F7 (cambiar el plan a mitad) vive ahora
+          en la Sección F, sobre las condiciones de la factura real.
+          Ocultar, no borrar: DrawerEditFinancialPlan y updateFinancialPlan.ts
+          se quedan en su archivo. */}
 
       {/* Drawer Editor Diagnóstico (Sección B "Editar") */}
       {drawer?.kind === "edit-diagnosis" && vm.diagnosis ? (
@@ -670,6 +678,34 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             patientName: m.patientName,
           }))}
           onClose={closeDrawer}
+        />
+      ) : null}
+
+      {/* Ola 1 (ws1-t6) — «Alta del caso»: asistente de alta DENTRO de la
+          ficha nueva (reemplaza el puente a la vista antigua S1). */}
+      {drawer?.kind === "new-case" && props.onCreateCase ? (
+        <DrawerNewCase
+          patientId={vm.patient.id}
+          patientFullName={vm.patient.fullName}
+          existingDiagnosisId={vm.diagnosis?.id ?? null}
+          onClose={closeDrawer}
+          onConfirm={async (payload) => {
+            await props.onCreateCase?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Ola 1 (ws1-t6) — A5/A6/A7/A11: configuración del caso ya abierto. */}
+      {drawer?.kind === "case-settings" && t.treatmentPlanId && props.onUpdateCaseSettings ? (
+        <DrawerCaseSettings
+          patientId={vm.patient.id}
+          treatmentPlanId={t.treatmentPlanId}
+          onClose={closeDrawer}
+          onConfirm={async (payload) => {
+            await props.onUpdateCaseSettings?.(payload);
+            closeDrawer();
+          }}
         />
       ) : null}
     </div>
