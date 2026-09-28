@@ -5,6 +5,8 @@ import { isInTrial } from "@/lib/plan-status";
 import * as XLSX from "xlsx";
 import { diaAdmin } from "@/lib/admin/zona-horaria";
 import { diaDePeriodo } from "@/lib/admin/dia-de-periodo";
+import { getAdminMrr } from "@/lib/admin/mrr";
+import { computeMrrModulos, loadModulosContratados } from "@/lib/admin/modulos";
 
 
 export const runtime = "nodejs";
@@ -44,7 +46,7 @@ async function computeMetrics(from: Date, to: Date) {
     newClinicsPeriod,
     churnedPeriod,
   ] = await Promise.all([
-    safe(prisma.clinic.findMany({ select: { id: true, plan: true, monthlyPrice: true, subscriptionStatus: true, createdAt: true, trialEndsAt: true } }), [] as any[]),
+    safe(prisma.clinic.findMany({ select: { id: true, plan: true, monthlyPrice: true, subscriptionStatus: true, createdAt: true, trialEndsAt: true, archivedAt: true } }), [] as any[]),
     safe(prisma.clinic.findMany({ where: { subscriptionStatus: "active" }, select: { monthlyPrice: true, plan: true } }), [] as any[]),
     safe(prisma.subscriptionInvoice.findMany({
       where: { createdAt: { gte: from, lte: to } },
@@ -63,7 +65,20 @@ async function computeMetrics(from: Date, to: Date) {
   // las filas ya cargadas. Antes era un `where` propio (trialing/null + fecha).
   const trialClinics = allClinics.filter((c) => isInTrial(c, now));
 
-  const mrr = activeClinics.reduce((s, c) => s + (c.monthlyPrice ?? 0), 0);
+  // MRR = el mismo de la portada de /admin y de /admin/payments: planes
+  // (plan_configs + condiciones conservadas, vía getAdminMrr) más lo que se paga
+  // por módulos. Antes sumaba Clinic.monthlyPrice, que las clínicas de Stripe
+  // Checkout tienen en 0. Las dos cargas nunca lanzan.
+  const mrrPlanes = await getAdminMrr();
+  const modulos = await loadModulosContratados();
+  const mrrModulos = modulos.medido
+    ? computeMrrModulos(
+        modulos.filas,
+        now,
+        allClinics.length ? new Set(allClinics.filter((c) => !c.archivedAt).map((c) => c.id as string)) : undefined,
+      ).total
+    : 0;
+  const mrr = Math.round((mrrPlanes.total + mrrModulos) * 100) / 100;
   const arr = mrr * 12;
   const arpu = activeClinics.length > 0 ? mrr / activeClinics.length : 0;
 

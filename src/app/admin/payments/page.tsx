@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getResolvedPlans } from "@/lib/plans";
 import { CLINIC_OVERRIDE_SELECT, applyClinicOverrides } from "@/lib/billing/plan-overrides";
 import { getAdminMrr, includedBranchesHint, mrrBreakdownHint, EMPTY_MRR } from "@/lib/admin/mrr";
+import { computeMrrModulos, loadModulosContratados } from "@/lib/admin/modulos";
 import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
 import { isInTrial, isPlanExpired } from "@/lib/plan-status";
 import { PaymentsClient } from "./payments-client";
@@ -182,10 +183,13 @@ async function renderPaymentsPage() {
   // columna que sólo escribe /api/admin/billing: las clínicas que pagan por
   // Stripe Checkout la tienen en 0 y el KPI marcaba $0 con 5 clínicas activas.
   const mrr = await safe(getAdminMrr(), EMPTY_MRR);
+  // Lo que las clínicas pagan por módulos (clinic_modules) también es MRR: la
+  // portada de /admin ya lo suma y aquí debe decir la misma cifra. Nunca lanza.
+  const modulos = await loadModulosContratados();
 
   const clinicRows = await safe(
     prisma.clinic.findMany({
-      select: { id: true, name: true, email: true, monthlyPrice: true, ...CLINIC_OVERRIDE_SELECT },
+      select: { id: true, name: true, email: true, monthlyPrice: true, archivedAt: true, ...CLINIC_OVERRIDE_SELECT },
       orderBy: { name: "asc" },
     }),
     [] as any[],
@@ -211,6 +215,21 @@ async function renderPaymentsPage() {
   // el where); usamos optional chaining para no explotar con "cannot read
   // properties of null". Number() fuerza a primitivo JS por si algún Float
   // llegara como Decimal del driver.
+  // Mismo universo que la portada: un módulo de una clínica archivada no suma.
+  const mrrModulos = modulos.medido
+    ? computeMrrModulos(
+        modulos.filas,
+        now,
+        // Sin la lista de clínicas no se sabe cuáles están archivadas: cuentan todas.
+        clinicRows.length ? new Set(clinicRows.filter((c: any) => !c.archivedAt).map((c: any) => c.id as string)) : undefined,
+      )
+    : null;
+  const mrrModulosHint = !modulos.medido
+    ? "sin módulos: no se pudieron leer"
+    : mrrModulos && mrrModulos.total > 0
+      ? `módulos $${mrrModulos.total.toLocaleString("es-MX", { maximumFractionDigits: 0 })} (${mrrModulos.clinicasPagando} ${mrrModulos.clinicasPagando === 1 ? "clínica" : "clínicas"})`
+      : "";
+
   const thisMonth = Number(thisMonthRev?._sum?.amount ?? 0);
   const prevMonth = Number(prevMonthRev?._sum?.amount ?? 0);
   const thisMonthPayments = Number(thisMonthRev?._count ?? 0);
@@ -236,8 +255,8 @@ async function renderPaymentsPage() {
         activeClinics,
         trialClinics,
         expiredClinics,
-        currentMRR: mrr.total,
-        mrrBreakdown: [mrrBreakdownHint(mrr), includedBranchesHint(mrr.includedBranches)].filter(Boolean).join(" · "),
+        currentMRR: Math.round((mrr.total + (mrrModulos?.total ?? 0)) * 100) / 100,
+        mrrBreakdown: [mrrBreakdownHint(mrr), mrrModulosHint, includedBranchesHint(mrr.includedBranches)].filter(Boolean).join(" · "),
         thisMonthRevenue: thisMonth,
         thisMonthPayments,
         prevMonthRevenue: prevMonth,
