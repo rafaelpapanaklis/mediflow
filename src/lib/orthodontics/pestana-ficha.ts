@@ -67,3 +67,17 @@ export function accesoDeOrtodonciaEnLaFicha(e: { moduloActivo: boolean; tuvoCaso
   if (e.moduloActivo) return "completo";
   return e.tuvoCaso ? "solo-lectura" : "oculto";
 }
+
+/**
+ * En solo lectura, ¿esta etiqueta de botón es una acción que ESCRIBE (registrar,
+ * cobrar, editar, abrir un caso…)? Es un freno de cliente para no dejar botones
+ * vivos que el servidor va a rechazar; el bloqueo de verdad sigue estando en el
+ * servidor. Ver, filtrar, cambiar de sección y recargar NO son escritura.
+ */
+export function esAccionDeEscritura(etiqueta: string): boolean {
+  const t = etiqueta
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+  return /\b(registrar|iniciar consulta|agendar|reagendar|reprogramar|cobrar|editar|avanzar|guardar|firmar|nuevo|nueva|abrir|enviar|generar|subir|crear|confirmar|aplicar|agregar|anadir|eliminar|borrar|marcar|recordar|pedir|solicitar|cambiar|reasignar|pausar|reanudar|terminar|finalizar|condonar|imprimir orden)\b/.test(t);
+}

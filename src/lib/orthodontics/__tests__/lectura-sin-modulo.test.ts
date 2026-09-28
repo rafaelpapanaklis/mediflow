@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { accesoDeOrtodonciaEnLaFicha } from "../pestana-ficha";
+import { accesoDeOrtodonciaEnLaFicha, esAccionDeEscritura } from "../pestana-ficha";
 
 const SRC = join(__dirname, "..", "..", "..");
 const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
@@ -57,4 +57,18 @@ test("el caso por paciente se consulta con el clinicId de la sesión, nunca sin 
   const src = leer("lib/orthodontics/tuvo-caso.ts");
   assert.match(src, /if \(!clinicId \|\| !patientId\) return false;/);
   assert.match(src, /const where = \{ clinicId, patientId, deletedAt: null \}/);
+});
+
+test("solo lectura: los botones que escriben se frenan y los de leer no", () => {
+  for (const e of ["Registrar control de hoy", "Iniciar consulta", "Agendar próxima", "Cobrar", "Editar aparatología", "Avanzar de fase", "Registrar control", "Abrir un caso nuevo", "Guardar"]) {
+    assert.equal(esAccionDeEscritura(e), true, e);
+  }
+  for (const e of ["Resumen", "Controles", "Diagnóstico", "Cobro", "Fotos", "Retención", "Post-tratamiento", "Documentos", "Recargar datos", "Ver", "Datos del caso", "Historial"]) {
+    assert.equal(esAccionDeEscritura(e), false, e);
+  }
+});
+
+test("la ficha monta la pestaña dentro del freno de solo lectura", () => {
+  const src = leer("app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(src, /<SoloLectura activo=\{orthoSoloLectura\}>\s*<OrthodonticsPatientTab/);
 });

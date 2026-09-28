@@ -9,7 +9,7 @@ import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { stripPatientSecrets } from "@/lib/patient-secrets";
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { logRead } from "@/lib/audit";
 import { PatientDetailClient } from "./patient-detail-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -25,6 +25,7 @@ import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialti
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { accesoDeOrtodonciaEnLaFicha } from "@/lib/orthodontics/pestana-ficha";
+import { COOKIE_VISTA_PREVIA_SIN_MODULO, moduloActivoALaVista, vistaPreviaSinModulo } from "@/lib/orthodontics/contratar";
 import { pacienteTuvoCasoDeOrtodoncia } from "@/lib/orthodontics/tuvo-caso";
 import {
   loadOrthoRedesignData,
@@ -422,7 +423,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // que YA tiene o tuvo un caso conserva la LECTURA de su expediente (NOM-004:
   // no se oculta); crear o cobrar sigue bloqueado por el servidor. Solo se
   // pregunta por el caso cuando falta el módulo: con módulo, cero consultas más.
-  const orthoModuloActivo = isDental && (await hasActiveOrthodonticsModule(user.clinicId));
+  // La vista previa «sin módulo» (solo fuera de producción) solo puede QUITAR
+  // el acceso a la vista, igual que en el guardia del módulo.
+  const orthoModuloActivo = isDental && moduloActivoALaVista(
+    await hasActiveOrthodonticsModule(user.clinicId),
+    vistaPreviaSinModulo({ nodeEnv: process.env.NODE_ENV, cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value }),
+  );
   const orthoAcceso = isDental
     ? accesoDeOrtodonciaEnLaFicha({
         moduloActivo: orthoModuloActivo,

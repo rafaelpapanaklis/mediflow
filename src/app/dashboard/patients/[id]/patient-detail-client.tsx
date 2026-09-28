@@ -103,6 +103,7 @@ import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
 import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
 import { buildEmptySuggestion } from "@/lib/patient-detail/empty-suggestion";
 import { OrthodonticsPatientTab } from "@/components/specialties/orthodontics/redesign/OrthodonticsPatientTab";
+import { SoloLectura } from "@/components/specialties/orthodontics/redesign/SoloLectura";
 
 // Fallback de carga de los módulos lazy (pestañas de especialidad). Componente
 // cliente para poder traducir el texto con useT — el `loading` de dynamicImport
@@ -1996,6 +1997,7 @@ export function PatientDetailClient({
               comportamiento) — ver REPORTE-ws1-t1.md. Esta ficha ya NO
               importa acciones ni tipos de ortodoncia directamente. */}
           {tab === "ortodoncia" && (
+            <SoloLectura activo={orthoSoloLectura}>
             <OrthodonticsPatientTab
               patient={patient}
               fullName={fullName}
@@ -2013,6 +2015,7 @@ export function PatientDetailClient({
               abrirControlAlEntrar={abrirControlOrto}
               onControlAbierto={() => setAbrirControlOrto(false)}
             />
+            </SoloLectura>
           )}
 
           {/* ===== TAB: ODONTOGRAMA (rediseño) =====
