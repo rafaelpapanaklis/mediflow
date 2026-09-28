@@ -139,6 +139,23 @@ test("tokenizeInline — enlaces solo hacia rutas de la app (el comprobante), nu
   }
 });
 
+test("tokenizeInline — un enlace del panel puede abrir una pestaña (?tab=…), y por los parámetros no sale de la app", () => {
+  assert.deepEqual(tokenizeInline("Eso se hace en [su ficha de ortodoncia](/dashboard/patients/p-1?tab=ortodoncia)."), [
+    { text: "Eso se hace en " },
+    { text: "su ficha de ortodoncia", href: "/dashboard/patients/p-1?tab=ortodoncia" },
+    { text: "." },
+  ]);
+  for (const malo of [
+    "[clic](/dashboard/x?next=https://otro.sitio)",
+    "[clic](/dashboard/x?next=//otro.sitio)",
+    "[clic](/dashboard/x?a=%2F%2Fotro.sitio)",
+    "[clic](/dashboard/x?a=javascript:alert(1))",
+    "[clic](/dashboard/../login?tab=x)",
+  ]) {
+    assert.ok(tokenizeInline(malo).every((t) => !t.href), malo);
+  }
+});
+
 test("tokenizeInline — texto sin marcado devuelve un único token plano", () => {
   assert.deepEqual(tokenizeInline("sin nada especial"), [{ text: "sin nada especial" }]);
 });

@@ -335,10 +335,14 @@ export interface InlineToken {
  * `/dashboard/…`): es lo que deja a Sabina dar el comprobante en PDF. Una URL con
  * dominio, `javascript:` o `//otro.sitio` se queda como texto plano: el modelo
  * escribe lo que leyó, y lo que leyó puede venir de un campo que tecleó cualquiera.
+ *
+ * La ruta puede llevar parámetros (`?tab=ortodoncia`): es como el panel abre una
+ * pestaña de la ficha del paciente. Solo letras, números y `_ - = &`: ni `%`, ni
+ * `:`, ni `/`, así que por ahí no entra otra dirección disfrazada.
  */
 export function tokenizeInline(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
-  const re = /\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[([^\]\n]{1,80})\]\((\/(?:api|dashboard)\/[A-Za-z0-9_\-./]*)\)/g;
+  const re = /\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[([^\]\n]{1,80})\]\((\/(?:api|dashboard)\/[A-Za-z0-9_\-./]*(?:\?[A-Za-z0-9_\-=&]{1,120})?)\)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
