@@ -4887,7 +4887,8 @@
         "one": "{count} min",
         "other": "{count} min"
       },
-      "footerNote": "Note: Revenue = paid invoices associated with the doctor's appointments. Satisfaction = average PatientSatisfaction (NPS 1-5). Average time = AppointmentTimeline.totalConsultMin. Payroll exports a CSV with the visible data. A professional payroll PDF will arrive in the next push."
+      "footerNote": "Note: Revenue = amount collected on invoices linked to the doctor's appointments, plus what was collected in the period (minus refunds) on the orthodontic cases they were treating on the payment date. Satisfaction = average survey score (1 to 5). Average time = consultation length recorded on the appointment. “Payroll” downloads a PDF with this same data.",
+      "includesOrtho": "includes {amount} from orthodontics"
     },
     "doctorsPage": {
       "adminOnly": "Admins only."

@@ -92,6 +92,11 @@ export function DoctorsRediseno({
                   </Td>
                   <Td align="right" cifra>
                     <strong>${d.revenueGenerated.toLocaleString("es-MX", { maximumFractionDigits: 0 })}</strong>
+                    {(d.revenueOrtho ?? 0) > 0 && (
+                      <div style={{ fontSize: 10, fontWeight: 500, color: "var(--text-3)" }}>
+                        {t("analytics.doctors.includesOrtho", { amount: `$${(d.revenueOrtho ?? 0).toLocaleString("es-MX", { maximumFractionDigits: 0 })}` })}
+                      </div>
+                    )}
                   </Td>
                 </tr>
               ))}

@@ -4887,7 +4887,8 @@
         "one": "{count} min",
         "other": "{count} min"
       },
-      "footerNote": "Nota: Ingresos = facturas pagadas asociadas a citas del doctor. Satisfacción = promedio de PatientSatisfaction (NPS 1-5). Tiempo promedio = AppointmentTimeline.totalConsultMin. Nómina exporta CSV con los datos visibles. PDF profesional de nómina llegará en el próximo push."
+      "footerNote": "Nota: Ingresos = lo cobrado de las facturas ligadas a las citas del doctor, más lo cobrado en el periodo (menos reembolsos) de los casos de ortodoncia que llevaba el día del pago. Satisfacción = promedio de las encuestas (1 a 5). Tiempo promedio = duración de la consulta registrada en la cita. «Nómina» descarga un PDF con estos mismos datos.",
+      "includesOrtho": "incluye {amount} de ortodoncia"
     },
     "doctorsPage": {
       "adminOnly": "Solo admin."

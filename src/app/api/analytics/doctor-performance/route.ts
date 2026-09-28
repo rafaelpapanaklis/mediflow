@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { ingresosDeCasosSinCitaPorDoctor } from "@/lib/orthodontics/produccion-db";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,8 @@ export const dynamic = "force-dynamic";
  *  - apptsTotal, apptsCompleted, apptsNoShow
  *  - apptsPerDay (promedio sobre días con al menos una cita)
  *  - revenueGenerated (suma de Invoice.paid donde el invoice está
- *    asociado a un appointment del doctor en el rango)
+ *    asociado a un appointment del doctor en el rango, MÁS lo cobrado en el
+ *    rango de los casos de ortodoncia que llevaba: `revenueOrtho`)
  *  - avgSatisfaction (promedio de PatientSatisfaction.score)
  *  - avgConsultMin (de AppointmentTimeline)
  *
@@ -43,6 +45,16 @@ export async function GET(req: NextRequest) {
     },
     select: { id: true, firstName: true, lastName: true, color: true, role: true },
   });
+
+  // Fila 89 de la revisión de lógica de uso: la factura de un caso de
+  // ortodoncia no nace de una cita, así que el doctor que más cobraba salía con
+  // $0. Se suma aparte, por pago del periodo y menos reembolsos, a quien
+  // llevaba el caso ese día (produccion.ts). `to` es inclusivo aquí.
+  const ingresosOrto = await ingresosDeCasosSinCitaPorDoctor(
+    clinicId,
+    { desde: from, hasta: new Date(to.getTime() + 1) },
+    user.clinic?.timezone || "America/Mexico_City",
+  );
 
   const rows = await Promise.all(
     doctors.map(async (doc) => {
@@ -107,7 +119,9 @@ export async function GET(req: NextRequest) {
         apptsNoShow,
         noShowRate: Math.round(noShowRate * 10) / 10,
         apptsPerDay: Math.round(apptsPerDay * 10) / 10,
-        revenueGenerated: invoiced._sum.paid ?? 0,
+        revenueGenerated: (invoiced._sum.paid ?? 0) + (ingresosOrto.get(doc.id) ?? 0),
+        // Cuánto de `revenueGenerated` es de casos de ortodoncia (mensualidades, enganche y extras).
+        revenueOrtho: ingresosOrto.get(doc.id) ?? 0,
         avgSatisfaction: avgSatisfaction != null ? Math.round(avgSatisfaction * 10) / 10 : null,
         satisfactionCount: satisfactions.length,
         avgConsultMin,

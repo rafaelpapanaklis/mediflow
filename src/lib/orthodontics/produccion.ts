@@ -35,6 +35,8 @@ export interface PagoDeCaso {
   amount: number;
   method: string | null;
   paidAt: Date;
+  /** La cita de la factura, si nació de una (el cargo de un control). `null` = factura del tratamiento o extra. */
+  appointmentId?: string | null;
 }
 
 /** Una reasignación del doctor tratante de un caso, leída de la bitácora. */
@@ -139,6 +141,16 @@ export function produccionPorDoctor(input: ProduccionInput): ProduccionDeDoctor[
     });
   }
   return out.sort((a, b) => b.amountMxn - a.amountMxn || a.doctorName.localeCompare(b.doctorName, "es"));
+}
+
+/**
+ * Los pagos de facturas que NO nacieron de una cita (fila 89): la factura del
+ * tratamiento y los extras. La analítica de doctores ya cuenta las facturas
+ * ligadas a una cita del doctor —ahí entra el cargo de cada control—, así que
+ * sumarle TODOS los pagos de los casos contaría esos controles dos veces.
+ */
+export function pagosSinCita(pagos: PagoDeCaso[]): PagoDeCaso[] {
+  return pagos.filter((p) => !p.appointmentId);
 }
 
 /** Cobrado, reembolsado y neto de una lista de pagos, en pesos. Sin atribuir a nadie. */

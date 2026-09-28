@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { ingresosDeCasosSinCitaPorDoctor } from "@/lib/orthodontics/produccion-db";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { PayrollDocument, type PayrollRow } from "@/lib/pdf/payroll-document";
 import { createElement } from "react";
@@ -49,6 +50,14 @@ export async function GET(req: NextRequest) {
   ]);
 
   if (!clinic) return NextResponse.json({ error: "clinic_not_found" }, { status: 404 });
+
+  // Igual que /api/analytics/doctor-performance (fila 89): lo cobrado de los
+  // casos de ortodoncia cuenta para el doctor que los llevaba.
+  const ingresosOrto = await ingresosDeCasosSinCitaPorDoctor(
+    clinicId,
+    { desde: from, hasta: new Date(to.getTime() + 1) },
+    user.clinic?.timezone || "America/Mexico_City",
+  );
 
   const rows: PayrollRow[] = await Promise.all(
     doctors.map(async (doc) => {
@@ -102,7 +111,7 @@ export async function GET(req: NextRequest) {
         avgConsultMin,
         avgSatisfaction,
         satisfactionCount: satisfactions.length,
-        revenueGenerated: invoiced._sum.paid ?? 0,
+        revenueGenerated: (invoiced._sum.paid ?? 0) + (ingresosOrto.get(doc.id) ?? 0),
       };
     }),
   );

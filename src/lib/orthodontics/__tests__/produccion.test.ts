@@ -11,6 +11,7 @@ import {
   cambioDeDoctorDesdeBitacora,
   doctorVigente,
   mesEnZona,
+  pagosSinCita,
   produccionPorDoctor,
   rangoDelMes,
   totalesDePagos,
@@ -233,5 +234,16 @@ describe("cambioDeDoctorDesdeBitacora", () => {
     assert.equal(cambioDeDoctorDesdeBitacora({ entityId: "p", createdAt, changes: null }), null);
     assert.equal(cambioDeDoctorDesdeBitacora({ entityId: "p", createdAt, changes: "texto" }), null);
     assert.equal(cambioDeDoctorDesdeBitacora({ entityId: "p", createdAt, changes: { treatingDoctorId: { before: "d-ana", after: "d-ana" } } }), null);
+  });
+});
+
+describe("pagosSinCita (fila 89)", () => {
+  it("deja fuera el cargo de un control: la analítica ya lo cuenta por su cita", () => {
+    const pagos = [
+      pago({ invoiceId: "tratamiento", amount: 3000, appointmentId: null }),
+      pago({ invoiceId: "extra", amount: 500 }),
+      pago({ invoiceId: "control", amount: 800, appointmentId: "cita-1" }),
+    ];
+    assert.deepEqual(pagosSinCita(pagos).map((p) => p.invoiceId), ["tratamiento", "extra"]);
   });
 });

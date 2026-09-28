@@ -22,6 +22,8 @@ import { Prisma } from "@prisma/client";
 import { ORTHO_AUDIT_ACTIONS } from "@/app/actions/orthodontics/audit-actions";
 import {
   cambioDeDoctorDesdeBitacora,
+  pagosSinCita,
+  produccionPorDoctor,
   type CambioDeDoctor,
   type PagoDeCaso,
 } from "./produccion";
@@ -98,12 +100,19 @@ export async function cargarPagosDeCasos(
         paidAt: { gte: rango.desde, lt: rango.hasta },
         invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
       },
-      select: { invoiceId: true, amount: true, method: true, paidAt: true },
+      select: { invoiceId: true, amount: true, method: true, paidAt: true, invoice: { select: { appointmentId: true } } },
     });
     for (const f of filas) {
       const planId = planPorFactura.get(f.invoiceId);
       if (!planId) continue;
-      pagos.push({ planId, invoiceId: f.invoiceId, amount: Number(f.amount) || 0, method: f.method ?? null, paidAt: f.paidAt });
+      pagos.push({
+        planId,
+        invoiceId: f.invoiceId,
+        amount: Number(f.amount) || 0,
+        method: f.method ?? null,
+        paidAt: f.paidAt,
+        appointmentId: f.invoice?.appointmentId ?? null,
+      });
     }
   }
   return pagos;
@@ -156,4 +165,60 @@ export async function cargarNombresDeDoctores(clinicId: string, ids: Array<strin
     select: { id: true, firstName: true, lastName: true },
   });
   return new Map(usuarios.map((u) => [u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "—"]));
+}
+
+/**
+ * Todos los casos de la clínica con lo que hace falta para atribuir su dinero.
+ * SIN filtro de visibilidad por paciente: es para agregados de dirección
+ * (analítica y Finanzas, solo administradores), que no enseñan nombres. Tolera
+ * que `treatingDoctorId`/`invoiceId` (sql/ortodoncia-nucleo.sql) no existan:
+ * devuelve lista vacía, no hay dinero de casos que atribuir.
+ */
+export async function cargarCasosParaProduccion(clinicId: string): Promise<CasoParaProduccion[]> {
+  if (!clinicId) return [];
+  try {
+    const planes = await prisma.orthodonticTreatmentPlan.findMany({
+      where: { clinicId, deletedAt: null },
+      select: { id: true, invoiceId: true, treatingDoctorId: true },
+      take: 5000,
+    });
+    return planes.map((p) => ({ planId: p.id, invoiceId: p.invoiceId, treatingDoctorId: p.treatingDoctorId }));
+  } catch (e) {
+    if (!esRelacionAusente(e)) console.warn("[ortodoncia:produccion] no se pudieron leer los casos:", e);
+    return [];
+  }
+}
+
+/**
+ * Lo cobrado (menos reembolsos) en `[desde, hasta)` de las facturas de casos
+ * de ortodoncia que NO nacieron de una cita, por el doctor que llevaba el caso
+ * el día del pago: `doctorId` → pesos. Es lo que la analítica de doctores y la
+ * nómina no veían (fila 89): solo contaban facturas ligadas a una cita, y la
+ * factura del tratamiento no lo está. Nunca lanza: si algo falla, mapa vacío.
+ */
+export async function ingresosDeCasosSinCitaPorDoctor(
+  clinicId: string,
+  rango: { desde: Date; hasta: Date },
+  zonaHoraria: string,
+): Promise<Map<string, number>> {
+  const salida = new Map<string, number>();
+  try {
+    const casos = await cargarCasosParaProduccion(clinicId);
+    if (casos.length === 0) return salida;
+    const pagos = pagosSinCita(await cargarPagosDeCasos(clinicId, casos, rango));
+    if (pagos.length === 0) return salida;
+    const cambios = await cargarCambiosDeDoctor(clinicId, Array.from(new Set(pagos.map((p) => p.planId))), rango.desde);
+    const filas = produccionPorDoctor({
+      pagos,
+      doctorActualPorCaso: new Map(casos.map((c) => [c.planId, c.treatingDoctorId])),
+      cambios,
+      nombres: new Map(),
+      zonaHoraria,
+    });
+    for (const f of filas) if (f.doctorId) salida.set(f.doctorId, f.amountMxn);
+    return salida;
+  } catch (e) {
+    console.warn("[ortodoncia:produccion] no se pudieron calcular los ingresos de casos:", e);
+    return new Map();
+  }
 }
