@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { SignaturePad } from "@/components/ui/signature-pad";
 import { parseConsentText, splitConsentBody } from "@/lib/consent/render";
+import { formatConsentDateTime } from "@/lib/consent/dates";
 
 interface ConsentPublicData {
   procedure: string;
@@ -48,7 +49,7 @@ interface ConsentPublicData {
   witness2Name: string | null;
   witness2SignedAt: string | null;
   patient: { firstName: string; lastName: string } | null;
-  clinic: { name: string; phone: string | null; logoUrl: string | null } | null;
+  clinic: { name: string; phone: string | null; logoUrl: string | null; timezone: string | null } | null;
 }
 
 /** Por qué no se puede mostrar el documento. Cambia el icono y el texto de ayuda. */
@@ -173,7 +174,7 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
               <h2 className="text-sm font-bold text-red-800">Consentimiento revocado</h2>
             </div>
             <p className="mt-1.5 text-xs text-red-700 leading-relaxed">
-              Este consentimiento fue revocado el {fmtDateTime(form.revokedAt)}. Si tienes dudas,
+              Este consentimiento fue revocado el {formatConsentDateTime(form.revokedAt, form.clinic?.timezone)}. Si tienes dudas,
               comunícate con {form.clinic?.name ?? "la clínica"}
               {form.clinic?.phone ? ` al ${form.clinic.phone}` : ""}.
             </p>
@@ -187,7 +188,7 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
               <h2 className="text-sm font-bold text-emerald-800">Consentimiento firmado</h2>
             </div>
             <p className="mt-1.5 text-xs text-emerald-800 leading-relaxed">
-              Firmado por <strong>{signerLabel}</strong> el {fmtDateTime(form.signedAt)}
+              Firmado por <strong>{signerLabel}</strong> el {formatConsentDateTime(form.signedAt, form.clinic?.timezone)}
               {isRepresented ? ", como representante legal del paciente" : ""}.
             </p>
             <a
@@ -454,8 +455,12 @@ function WitnessSection({
         ) : null}
       </div>
 
-      {done1 ? <WitnessDone n={1} name={form.witness1Name} at={form.witness1SignedAt} /> : null}
-      {done2 ? <WitnessDone n={2} name={form.witness2Name} at={form.witness2SignedAt} /> : null}
+      {done1 ? (
+        <WitnessDone n={1} name={form.witness1Name} at={form.witness1SignedAt} timezone={form.clinic?.timezone ?? null} />
+      ) : null}
+      {done2 ? (
+        <WitnessDone n={2} name={form.witness2Name} at={form.witness2SignedAt} timezone={form.clinic?.timezone ?? null} />
+      ) : null}
 
       {open && !bothDone ? (
         <WitnessForm token={token} slot={done1 ? 2 : 1} onSaved={async () => { setOpen(false); await onSaved(); }} />
@@ -464,12 +469,19 @@ function WitnessSection({
   );
 }
 
-function WitnessDone({ n, name, at }: { n: number; name: string | null; at: string | null }) {
+function WitnessDone({
+  n, name, at, timezone,
+}: {
+  n: number;
+  name: string | null;
+  at: string | null;
+  timezone: string | null;
+}) {
   return (
     <p className="mt-2.5 flex items-center gap-1.5 text-xs text-emerald-700">
       <CheckCircle2 size={14} className="shrink-0" />
       <span>
-        Testigo {n}: <strong>{name}</strong> · {fmtDateTime(at)}
+        Testigo {n}: <strong>{name}</strong> · {formatConsentDateTime(at, timezone)}
       </span>
     </p>
   );
@@ -549,13 +561,4 @@ function WitnessForm({
       </button>
     </div>
   );
-}
-
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleString("es-MX", {
-    day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
-  });
 }

@@ -40,7 +40,12 @@ const PUBLIC_SELECT = {
   witness2Name: true,
   witness2SignedAt: true,
   patient: { select: { firstName: true, lastName: true } },
-  clinic: { select: { name: true, phone: true, logoUrl: true } },
+  // H11 (QA ws1-t9): la página pintaba "Firmado el… a las…" con
+  // `toLocaleString` sin `timeZone` — la del runtime (servidor o, en la
+  // captura de QA, la del navegador de pruebas), no la de la clínica. El
+  // PDF (buildConsentPdf, `consentTimeZone`) ya usaba `clinic.timezone`;
+  // ahora la página lo pide también para pintar la MISMA hora.
+  clinic: { select: { name: true, phone: true, logoUrl: true, timezone: true } },
 } as const;
 
 // GET /api/consent/public/[token] — el paciente lee su carta.
