@@ -621,9 +621,17 @@ export function InventoryClient({
                         className="input-new"
                         // Ajuste 2 (QA 2f, panel.108): a 1440 el texto salía
                         // cortado ("Sin pr…") — 140px no le alcanzaba a "Sin
-                        // proveedor" con la flecha nativa del <select>. Hay
-                        // espacio de sobra en esta columna a ese ancho.
-                        style={{ height: 28, fontSize: 12.5, maxWidth: 190, minWidth: 110, width: "100%" }}
+                        // proveedor" con la flecha nativa del <select>. El
+                        // primer intento usó width:100% + minWidth/maxWidth,
+                        // pero en una tabla de layout automático (sin
+                        // table-layout:fixed) width:100% resuelve contra lo
+                        // que esta columna ya recibió (~110px, repartido
+                        // entre el resto de columnas) — minWidth ganaba
+                        // siempre y maxWidth nunca entraba en juego (medido
+                        // en vivo, seguía cortado). "Costo unit." al lado NO
+                        // usa 100%, usa un width fijo en px — mismo criterio
+                        // aquí: un ancho fijo fuerza a la COLUMNA a crecer.
+                        style={{ height: 28, fontSize: 12.5, width: 170 }}
                         value={item.providerId ?? ""}
                         onChange={e => updateProvider(item.id, e.target.value)}
                       >
