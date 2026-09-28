@@ -339,7 +339,8 @@
     "test:orto-cefalometria": "tsx --test src/lib/orthodontics/cefalometria/__tests__/measurements.test.ts src/lib/orthodontics/cefalometria/__tests__/norms.test.ts",
     "test:orto-fotos-analisis": "tsx --test src/lib/orthodontics/fotos/__tests__/facial-analysis.test.ts",
     "test:orto-alineadores": "tsx --test src/lib/orthodontics/alineadores/__tests__/expected-tray.test.ts src/lib/orthodontics/alineadores/__tests__/bolton.test.ts",
-    "test:orto-elastics-compliance": "tsx --test src/lib/orthodontics/__tests__/elastics-compliance.test.ts"
+    "test:orto-elastics-compliance": "tsx --test src/lib/orthodontics/__tests__/elastics-compliance.test.ts",
+    "test:orto-alta-caso": "tsx --test src/lib/orthodontics/__tests__/alta-caso-tolerance.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

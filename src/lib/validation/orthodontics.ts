@@ -25,6 +25,13 @@ const ORTHO_TREATMENT_STATUS = [
 
 const ORTHO_PHOTO_SET_TYPE = ["T0", "T1", "T2", "CONTROL"] as const;
 
+// Ola 1 (ws1-t6, sep-2026) — «Alta del caso», A11 (responsable del pago):
+// mismo enum que "Guardian" de pediatría (prisma/schema.prisma).
+const PED_GUARDIAN_RELATIONSHIP = [
+  "madre", "padre", "tutor_legal", "abuelo", "abuela", "tio", "tia",
+  "hermano", "hermana", "otro",
+] as const;
+
 const ORTHO_PHOTO_VIEW = [
   "EXTRA_FRONTAL", "EXTRA_PROFILE", "EXTRA_SMILE",
   "INTRA_FRONTAL_OCCLUSION", "INTRA_LATERAL_RIGHT", "INTRA_LATERAL_LEFT",
@@ -109,6 +116,14 @@ export const createDiagnosisSchema = z.object({
     .string()
     .min(40, "El resumen clínico debe tener al menos 40 caracteres")
     .max(5000),
+  // Ola 1 (ws1-t6, sep-2026) — «Alta del caso»:
+  //   A13 · quién refirió al paciente (directorio doctor_contacts).
+  //   A12 · paciente en observación (valorado, sin plan todavía) + próxima
+  //   revisión. Ambos opcionales — el código tolera que sus columnas aún no
+  //   existan en la base (ver sql/ortodoncia-alta-caso.sql).
+  referredByDoctorId: z.string().min(1).optional().nullable(),
+  inObservation: z.boolean().default(false),
+  nextObservationDate: z.string().datetime().optional().nullable(),
 });
 
 export const updateDiagnosisSchema = createDiagnosisSchema.partial().extend({
@@ -136,6 +151,20 @@ export const createTreatmentPlanSchema = z.object({
   patientGoals: z.string().max(1000).optional().nullable(),
   retentionPlanText: z.string().min(20).max(2000),
   signedTreatmentConsentFileId: z.string().optional().nullable(),
+  // Ola 1 (ws1-t6, sep-2026) — «Alta del caso»:
+  //   A5 · doctor tratante del caso (Ola 0 ya trae la columna).
+  //   A11 · responsable del pago — un Guardian existente, o los datos para
+  //   crear uno nuevo (reutiliza el modelo de pediatría, sin PediatricRecord).
+  treatingDoctorId: z.string().min(1).optional().nullable(),
+  responsibleGuardianId: z.string().min(1).optional().nullable(),
+  newResponsibleGuardian: z
+    .object({
+      fullName: z.string().min(2).max(200),
+      phone: z.string().min(7).max(20),
+      parentesco: z.enum(PED_GUARDIAN_RELATIONSHIP),
+    })
+    .optional()
+    .nullable(),
 });
 
 export const updateTreatmentPlanSchema = createTreatmentPlanSchema.partial().extend({
