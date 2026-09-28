@@ -177,6 +177,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   // Asistente IA de consulta — procedencia separada del texto clínico firmado.
   const [aiAssist, setAiAssist] = useState<AiAssistValue | null>(initialRecord?.aiAssist ?? null);
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
+  const [catalogEstado, setCatalogEstado] = useState<"cargando" | "listo" | "error">("cargando");
   const [selectedProcs, setSelectedProcs] = useState<SelectedProcedure[]>(() => {
     const raw = initialSpec.procedures;
     if (!Array.isArray(raw)) return [];
@@ -233,8 +234,8 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   useEffect(() => {
     fetch("/api/procedures")
       .then(r => { if (!r.ok) throw new Error("Error"); return r.json(); })
-      .then((data: CatalogProcedure[]) => setCatalog(Array.isArray(data) ? data : []))
-      .catch(() => setCatalog([]));
+      .then((data: CatalogProcedure[]) => { setCatalog(Array.isArray(data) ? data : []); setCatalogEstado("listo"); })
+      .catch(() => { setCatalog([]); setCatalogEstado("error"); });
   }, []);
 
   const [treatmentPlans, setTreatmentPlans] = useState<any[]>([]);
@@ -1232,10 +1233,16 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         {/* Available procedures */}
         <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
           {filteredCatalog.length === 0 ? (
-            <div className="text-xs text-muted-foreground py-2">
-              {catalog.length === 0
-                ? t("clinical.dentalForm.noProceduresCatalog")
-                : t("common.noResults")}
+            <div className="text-xs text-muted-foreground py-2" role={catalogEstado === "error" ? "alert" : undefined}>
+              {/* ws1-t4 #86: «no hay procedimientos» salía mientras el catálogo aún cargaba (o si
+                  la consulta fallaba), mandando a una ruta que no existe. */}
+              {catalogEstado === "cargando"
+                ? t("common.loading")
+                : catalogEstado === "error"
+                  ? t("clinical.dentalForm.proceduresCatalogFailed")
+                  : catalog.length === 0
+                    ? t("clinical.dentalForm.noProceduresCatalog")
+                    : t("common.noResults")}
             </div>
           ) : filteredCatalog.map(p => {
             const isSelected = selectedProcs.some(sp => sp.id === p.id);
