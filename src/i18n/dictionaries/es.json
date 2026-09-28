@@ -3796,6 +3796,7 @@
       "clinicDataTitle": "Datos de la clínica",
       "clinicNameLabel": "Nombre de la clínica",
       "categoryLabel": "Categoría",
+      "categoryFixedNote": "La categoría de tu clínica es fija.",
       "timezoneLabel": "Zona horaria",
       "timezoneHelp": "Afecta todos los horarios visibles: agenda, citas, recordatorios. Tras guardar, recarga la pagina.",
       "cityLabel": "Ciudad",

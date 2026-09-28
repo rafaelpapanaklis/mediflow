@@ -3796,6 +3796,7 @@
       "clinicDataTitle": "Clinic details",
       "clinicNameLabel": "Clinic name",
       "categoryLabel": "Category",
+      "categoryFixedNote": "Your clinic's category is fixed.",
       "timezoneLabel": "Time zone",
       "timezoneHelp": "Affects all visible times: schedule, appointments, reminders. After saving, reload the page.",
       "cityLabel": "City",

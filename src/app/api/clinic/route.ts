@@ -4,6 +4,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { isValidLatLng } from "@/lib/directory/distance";
+import { categoriaAlGuardar } from "@/lib/clinic/categoria-fija";
 
 // Contexto vía el helper CENTRAL (getAuthContext): misma resolución
 // cookie→clínica que la copia local que había aquí, pero pasando por los
@@ -56,7 +57,18 @@ export async function PATCH(req: NextRequest) {
     data.isPublic      = Boolean(body.isPublic);
     data.landingActive = Boolean(body.isPublic);
   }
-  if (body.category    !== undefined) data.category    = body.category;
+  // La categoría de una clínica DENTAL es fija (decisión del gerente): si en la
+  // base ya es DENTAL, se ignora lo que mande el cliente y se guarda el resto.
+  // La categoría «actual» se lee de la BASE con el clinicId de la sesión — no
+  // del body ni de la sesión en caché. Las clínicas de otra categoría siguen
+  // pudiendo cambiarla como siempre. Ver @/lib/clinic/categoria-fija.
+  if (body.category !== undefined) {
+    const actual = await prisma.clinic.findUnique({
+      where: { id: dbUser.clinicId },
+      select: { category: true },
+    });
+    data.category = categoriaAlGuardar(actual?.category, body.category);
+  }
   // NOM-024: CLUES Sector Salud (11 chars). Trim y null si vacío.
   if (body.clues       !== undefined) {
     const clues = typeof body.clues === "string" ? body.clues.trim() : "";

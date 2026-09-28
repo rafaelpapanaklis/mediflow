@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
+import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
 import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
@@ -135,6 +136,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [user,     setUser]     = useState(initUser);
   const [clinic,   setClinic]   = useState(initClinic);
+  // La categoría de una clínica DENTAL es fija: se decide con el valor que
+  // mandó el SERVIDOR al cargar (no con el estado que edita el selector) y el
+  // guardado la vuelve a imponer en /api/clinic. Otras categorías: como siempre.
+  const categoriaFija = esCategoriaFija(initClinic?.category);
+  const etiquetaCategoriaFija = CATEGORIES.find((c) => c.id === initClinic?.category)?.label ?? "Dental";
   const [isPublic, setIsPublic] = useState<boolean>(Boolean(initClinic.isPublic ?? false));
   const [schedule, setSchedule] = useState<Record<number,{enabled:boolean;open:string;close:string}>>(
     Object.fromEntries((initClinic.schedules ?? []).map((s: any) => [s.dayOfWeek, { enabled:s.enabled, open:s.openTime, close:s.closeTime }]))
@@ -712,11 +718,17 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   </Campo>
 
                   <Campos2>
-                    <Campo etiqueta={t("settings.client.categoryLabel")}>
-                      <Selector value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
-                        {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                      </Selector>
-                    </Campo>
+                    {categoriaFija ? (
+                      <Campo etiqueta={t("settings.client.categoryLabel")} ayuda={t("settings.client.categoryFixedNote")}>
+                        <Entrada value={etiquetaCategoriaFija} readOnly aria-readonly="true" />
+                      </Campo>
+                    ) : (
+                      <Campo etiqueta={t("settings.client.categoryLabel")}>
+                        <Selector value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
+                          {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        </Selector>
+                      </Campo>
+                    )}
                     <Campo etiqueta={t("settings.client.timezoneLabel")} ayuda={t("settings.client.timezoneHelp")}>
                       <Selector value={clinic.timezone ?? "America/Mexico_City"} onChange={e => setClinic((c: any) => ({ ...c, timezone: e.target.value }))}>
                         {TIMEZONES.map(tz => <option key={tz.id} value={tz.id}>{tz.label}</option>)}
@@ -1391,10 +1403,19 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
           <div className="field-new">
             <label className="field-new__label">{t("settings.client.categoryLabel")}</label>
-            <select className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
-              value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
-              {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-            </select>
+            {categoriaFija ? (
+              <>
+                <input
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-muted px-3 text-sm text-muted-foreground"
+                  value={etiquetaCategoriaFija} readOnly aria-readonly="true" />
+                <p className="text-xs text-muted-foreground mt-1">{t("settings.client.categoryFixedNote")}</p>
+              </>
+            ) : (
+              <select className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
+                value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
+                {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+            )}
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("settings.client.timezoneLabel")}</label>
