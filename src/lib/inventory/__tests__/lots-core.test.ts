@@ -4,6 +4,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  diasParaCaducar,
+  estadoDeCaducidad,
   isExpired,
   isExpiringSoon,
   planFefoConsumption,
@@ -99,35 +101,86 @@ describe("reconciliación: el lote sin-lote absorbe el drift", () => {
   });
 });
 
-describe("caducidad: expirado vs. por caducar", () => {
-  const now = d("2026-09-27T12:00:00Z");
+// ws1-t5 (28-sep-2026) — la caducidad va por DÍA DE CALENDARIO en la zona de
+// la clínica. Antes estos tests comparaban instantes (`expiresAt < now`); la
+// regla cambió por decisión de Rafael y los tests con ella: un lote que
+// caduca el día 1 se puede usar TODO ese día y caduca a partir del día 2.
+describe("caducidad por día de calendario: expirado vs. por caducar", () => {
+  const hoy = "2026-09-27";
 
   it("sin fecha de caducidad, nunca está expirado ni por caducar", () => {
-    assert.equal(isExpired(null, now), false);
-    assert.equal(isExpiringSoon(null, now, 30), false);
+    assert.equal(isExpired(null, hoy), false);
+    assert.equal(isExpiringSoon(null, hoy, 30), false);
+    assert.equal(diasParaCaducar(null, hoy), null);
+    assert.equal(estadoDeCaducidad(null, hoy, 30), "ok");
   });
 
   it("fecha pasada = expirado, no 'por caducar'", () => {
     const past = d("2026-09-01T00:00:00Z");
-    assert.equal(isExpired(past, now), true);
-    assert.equal(isExpiringSoon(past, now, 30), false);
+    assert.equal(isExpired(past, hoy), true);
+    assert.equal(isExpiringSoon(past, hoy, 30), false);
+    assert.equal(estadoDeCaducidad(past, hoy, 30), "caducado");
+  });
+
+  it("el día que caduca se puede usar TODO el día: aún no está caducado", () => {
+    const caducaHoy = d("2026-09-27T00:00:00Z");
+    assert.equal(diasParaCaducar(caducaHoy, hoy), 0);
+    assert.equal(isExpired(caducaHoy, hoy), false);
+    assert.equal(estadoDeCaducidad(caducaHoy, hoy, 30), "por_caducar");
+  });
+
+  it("caduca a partir del día siguiente", () => {
+    const caducoAyer = d("2026-09-26T00:00:00Z");
+    assert.equal(diasParaCaducar(caducoAyer, hoy), -1);
+    assert.equal(isExpired(caducoAyer, hoy), true);
+    assert.equal(estadoDeCaducidad(caducoAyer, hoy, 30), "caducado");
+  });
+
+  it("las dos formas ya guardadas del mismo día dan el mismo estado", () => {
+    // 00:00Z (alta de lote) y 06:00Z (compra, con la hora de México fija).
+    for (const forma of ["2026-09-27T00:00:00.000Z", "2026-09-27T06:00:00.000Z"]) {
+      assert.equal(estadoDeCaducidad(d(forma), "2026-09-27", 30), "por_caducar", forma);
+      assert.equal(estadoDeCaducidad(d(forma), "2026-09-28", 30), "caducado", forma);
+    }
+  });
+
+  it("el bug que había: el 31-ago por la tarde el lote del 1-sep ya salía caducado", () => {
+    const lote = d("2026-09-01T00:00:00Z");
+    // A las 18:30 de México del 31 de agosto ya era 1-sep 00:30 UTC, y
+    // `expiresAt < now` daba verdadero. Por día de calendario, no.
+    assert.equal(lote.getTime() < d("2026-09-01T00:30:00Z").getTime(), true);
+    assert.equal(estadoDeCaducidad(lote, "2026-08-31", 30), "por_caducar");
+    assert.equal(estadoDeCaducidad(lote, "2026-09-01", 30), "por_caducar");
+    assert.equal(estadoDeCaducidad(lote, "2026-09-02", 30), "caducado");
   });
 
   it("dentro de la ventana configurada = por caducar", () => {
     const in10days = d("2026-10-07T00:00:00Z");
-    assert.equal(isExpired(in10days, now), false);
-    assert.equal(isExpiringSoon(in10days, now, 30), true);
-    assert.equal(isExpiringSoon(in10days, now, 5), false);
+    assert.equal(diasParaCaducar(in10days, hoy), 10);
+    assert.equal(isExpired(in10days, hoy), false);
+    assert.equal(isExpiringSoon(in10days, hoy, 30), true);
+    assert.equal(isExpiringSoon(in10days, hoy, 5), false);
   });
 
-  it("justo en el borde de la ventana cuenta como 'por caducar'", () => {
-    const exactly30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    assert.equal(isExpiringSoon(exactly30, now, 30), true);
+  it("justo en el borde de la ventana cuenta como 'por caducar'; un día más, no", () => {
+    assert.equal(isExpiringSoon(d("2026-10-27T00:00:00Z"), hoy, 30), true);
+    assert.equal(isExpiringSoon(d("2026-10-28T00:00:00Z"), hoy, 30), false);
   });
 
   it("muy lejos, no cuenta", () => {
     const farAway = d("2027-06-01T00:00:00Z");
-    assert.equal(isExpiringSoon(farAway, now, 30), false);
+    assert.equal(isExpiringSoon(farAway, hoy, 30), false);
+    assert.equal(estadoDeCaducidad(farAway, hoy, 30), "ok");
+  });
+
+  it("cruza meses y años contando días de calendario", () => {
+    assert.equal(diasParaCaducar(d("2027-01-01T00:00:00Z"), "2026-12-31"), 1);
+    assert.equal(diasParaCaducar(d("2028-03-01T00:00:00Z"), "2028-02-28"), 2); // bisiesto
+  });
+
+  it("un «hoy» ilegible no marca nada como caducado", () => {
+    assert.equal(diasParaCaducar(d("2020-01-01T00:00:00Z"), "no es fecha"), null);
+    assert.equal(estadoDeCaducidad(d("2020-01-01T00:00:00Z"), "", 30), "ok");
   });
 });
 

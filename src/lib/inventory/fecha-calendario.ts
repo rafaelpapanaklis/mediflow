@@ -89,3 +89,105 @@ export function hoyEnZona(timezone: string | null | undefined, now: Date = new D
   const de = (tipo: string) => lista.find((p) => p.type === tipo)?.value ?? "";
   return `${de("year")}-${de("month")}-${de("day")}`;
 }
+
+// ── La fecha de una COMPRA ───────────────────────────────────────────────
+//
+// No es lo mismo que una caducidad, aunque el arreglo se parezca. La fecha de
+// la compra es también la fecha de su GASTO («Insumos»), y Gastos guarda y
+// consulta instantes: «el gasto del 1 de octubre» es la medianoche del 1 de
+// octubre EN LA CLÍNICA. Guardada a medianoche UTC, una compra del 1 de
+// octubre caería a las 18:00 del 30 de septiembre y se iría al mes anterior.
+//
+// Por eso la compra se guarda como el INICIO DE ESE DÍA EN LA ZONA DE LA
+// CLÍNICA, y se pinta en esa misma zona. Antes la hora de México iba escrita
+// fija (`-06:00`) al guardar y se pintaba con la zona del NAVEGADOR: en una
+// clínica de Tijuana, o vista desde otro huso, salía un día antes.
+
+function zonaValida(timezone: string | null | undefined): string {
+  const z = timezone && timezone.trim() ? timezone.trim() : ZONA_POR_DEFECTO;
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: z });
+    return z;
+  } catch {
+    return ZONA_POR_DEFECTO;
+  }
+}
+
+/** Las partes de reloj (año…minuto) de un instante visto desde una zona. */
+function relojEnZona(instante: Date, zona: string): number {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zona,
+    hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(instante);
+  const de = (tipo: string) => Number(partes.find((p) => p.type === tipo)?.value ?? 0);
+  return Date.UTC(de("year"), de("month") - 1, de("day"), de("hour"), de("minute"), de("second"));
+}
+
+/**
+ * El instante en que EMPIEZA un día de calendario («2026-10-01») en la zona
+ * de la clínica. Con horario de verano incluido (Tijuana lo tiene): el
+ * desfase se mide en ese día concreto, no se da por sabido.
+ */
+export function inicioDelDiaEnZona(dia: unknown, timezone: string | null | undefined): Date | null {
+  const medianocheUtc = parseFechaCalendario(dia);
+  if (!medianocheUtc) return null;
+  const zona = zonaValida(timezone);
+  // Se parte de la medianoche UTC y se corrige por lo que la zona «ve» de
+  // más o de menos. Dos pasadas: la primera puede caer al otro lado de un
+  // cambio de horario.
+  let instante = medianocheUtc;
+  for (let i = 0; i < 2; i++) {
+    const desfase = relojEnZona(instante, zona) - instante.getTime();
+    instante = new Date(medianocheUtc.getTime() - desfase);
+  }
+  return instante;
+}
+
+const SOLO_FECHA_EXACTA = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Lo que manda «Registrar compra» → el instante que se guarda.
+ *   · sin fecha           → ahora mismo
+ *   · «2026-10-01»        → el inicio de ese día en la zona de la clínica
+ *   · un ISO con su hora  → ese instante, tal cual
+ *   · cualquier otra cosa → `null` (fecha inválida)
+ */
+export function parseFechaDeCompra(
+  raw: unknown,
+  timezone: string | null | undefined,
+  now: Date = new Date(),
+): Date | null {
+  if (raw === undefined || raw === null || raw === "") return now;
+  if (typeof raw !== "string") return null;
+  const texto = raw.trim();
+  if (texto === "") return now;
+  if (SOLO_FECHA_EXACTA.test(texto)) return inicioDelDiaEnZona(texto, timezone);
+  const d = new Date(texto);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Lo guardado → el día de la compra, «2026-10-01», visto desde la clínica.
+ *
+ * Tolera la forma que ya hay guardada: las compras anteriores a este arreglo
+ * llevan la hora de México escrita fija, así que caen EXACTAMENTE a las
+ * 06:00:00.000Z. Esas se leen por su día UTC, que es el que se tecleó; una
+ * compra nueva de una clínica a UTC−6 cae a esa misma hora y da lo mismo.
+ */
+export function diaDeCompra(valor: Date | string | null | undefined, timezone: string | null | undefined): string | null {
+  if (valor == null) return null;
+  const d = valor instanceof Date ? valor : new Date(valor);
+  if (isNaN(d.getTime())) return null;
+  const esFormaAnterior =
+    d.getUTCHours() === 6 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+  if (esFormaAnterior) return fechaCalendarioDe(d);
+  return hoyEnZona(zonaValida(timezone), d);
+}
+
+/** Lo guardado → «01 oct 2026», el día de la compra en la clínica. */
+export function formatearFechaDeCompra(valor: Date | string | null | undefined, timezone: string | null | undefined): string {
+  const dia = diaDeCompra(valor, timezone);
+  return dia ? formatearFechaCalendario(parseFechaCalendario(dia)) : "—";
+}

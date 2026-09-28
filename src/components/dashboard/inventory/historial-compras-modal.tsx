@@ -13,6 +13,9 @@ import { fmtMXN } from "@/lib/format";
 // Diseño (ws1-t5): la ropa de la ventana y la maqueta de la lista.
 import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.module.css";
 import { ropaVentana } from "@/components/dashboard/cobros-inventario-rediseno/ventana";
+// ws1-t5 (arreglo): el día de la compra se pinta en la zona de la CLÍNICA. Antes
+// era la del navegador: visto desde otro huso, la compra salía un día antes.
+import { formatearFechaDeCompra } from "@/lib/inventory/fecha-calendario";
 
 interface LineaCompra { itemId: string; itemName: string; quantity: number; unitCost: number; }
 
@@ -29,8 +32,6 @@ interface Compra {
   lines: LineaCompra[];
 }
 
-const fmtFecha = (iso: string) =>
-  new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(iso));
 
 function iconoComprobante(name: string | null) {
   if (name && /\.pdf$/i.test(name)) return <FileText size={14} strokeWidth={1.75} aria-hidden />;
@@ -38,11 +39,13 @@ function iconoComprobante(name: string | null) {
 }
 
 export function HistorialComprasModal({
-  onClose, rediseno = false,
+  onClose, rediseno = false, timezone = null,
 }: {
   onClose: () => void;
   /** ¿Diseño nuevo? Solo decide la ropa de la ventana. */
   rediseno?: boolean;
+  /** Zona horaria de la clínica: en ella se lee el día de cada compra. */
+  timezone?: string | null;
 }) {
   const ropa = ropaVentana(rediseno, "ancha");
   const [compras, setCompras] = useState<Compra[] | null>(null);
@@ -123,7 +126,7 @@ export function HistorialComprasModal({
                         {expandida
                           ? <ChevronDown size={16} strokeWidth={1.75} className={inv.compraFlecha} aria-hidden />
                           : <ChevronRight size={16} strokeWidth={1.75} className={inv.compraFlecha} aria-hidden />}
-                        <span className={inv.compraFecha}>{fmtFecha(c.date)}</span>
+                        <span className={inv.compraFecha}>{formatearFechaDeCompra(c.date, timezone)}</span>
                         <span className={inv.compraProveedor}>{c.providerName ?? "Sin proveedor"}</span>
                         <span className={inv.compraQuien}>{c.createdByName ?? "—"}</span>
                         <span className={inv.compraTotal}>{fmtMXN(c.total)}</span>

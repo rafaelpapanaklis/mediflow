@@ -1128,7 +1128,7 @@ export function InventoryClient({
       )}
 
       {/* ws1-t4 (ajuste 1) — "Historial de compras". */}
-      {showHistorial && <HistorialComprasModal rediseno={rediseno} onClose={() => setShowHistorial(false)} />}
+      {showHistorial && <HistorialComprasModal rediseno={rediseno} timezone={timezone} onClose={() => setShowHistorial(false)} />}
     </div>
   );
 }

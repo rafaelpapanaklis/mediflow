@@ -263,7 +263,7 @@
     "test:procedimientos-gasto": "tsx --test --experimental-test-module-mocks src/app/api/procedures/__tests__/gasto-y-llave.test.ts",
     "//test:inventario-lotes": "WS1-T5, puro: FEFO (primero el que caduca, el sin-lote al final, lote elegido a mano primero), reconciliacion del drift y clasificacion por-caducar/caducado.",
     "test:inventario-lotes": "tsx --test src/lib/inventory/__tests__/lots-core.test.ts",
-    "test:inventario-arreglos": "tsx --test src/lib/inventory/__tests__/fecha-calendario.test.ts src/lib/inventory/__tests__/respuesta-cliente.test.ts src/lib/inventory/__tests__/avisos-existencias.test.ts src/lib/orthodontics/__tests__/rotulo-cobro.test.ts",
+    "test:inventario-arreglos": "tsx --test src/lib/inventory/__tests__/fecha-calendario.test.ts src/lib/inventory/__tests__/respuesta-cliente.test.ts src/lib/inventory/__tests__/avisos-existencias.test.ts src/lib/inventory/__tests__/zona-clinica.server.test.ts src/lib/orthodontics/__tests__/rotulo-cobro.test.ts",
     "//test:inventario-lotes-server": "WS1-T5, contra doble en memoria: reconciliacion con InventoryItem.quantity, atomicidad del consumo (receta o manual) dentro de $transaction, alta/baja de lote.",
     "test:inventario-lotes-server": "tsx --test src/lib/inventory/__tests__/lots-server.test.ts",
     "//test:alta-paciente": "Necesita --experimental-test-module-mocks: ejecuta DE VERDAD el POST de /api/patients (N7 y N8) con getAuthContext, buildPatientWhere y la visibilidad reales; sólo sustituye Prisma, la sesión de Supabase y los efectos de después del alta.",

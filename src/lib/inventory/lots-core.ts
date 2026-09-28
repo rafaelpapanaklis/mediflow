@@ -11,6 +11,8 @@
 // reconcileSinLote en lots.server.ts) sin robarle turno a un lote que sí
 // tiene fecha real.
 
+import { fechaCalendarioDe, parseFechaCalendario } from "./fecha-calendario";
+
 export const ALERT_DAYS_DEFAULT = 30;
 
 export interface LotForFefo {
@@ -100,14 +102,56 @@ export function reconciliationDelta(itemQuantity: number, lotsSum: number): numb
   return round3(itemQuantity - lotsSum);
 }
 
-export function isExpired(expiresAt: Date | null, now: Date): boolean {
-  if (!expiresAt) return false;
-  return expiresAt.getTime() < now.getTime();
+// ── Caducidad: por DÍA DE CALENDARIO, en la zona de la clínica ────────────
+//
+// Decisión de Rafael (28-sep-2026), como en las farmacias: un lote que caduca
+// el día 1 se puede usar TODO ese día y está «Caducado» a partir del día 2.
+//
+// Antes se comparaba el instante guardado con el momento actual
+// (`expiresAt.getTime() < now.getTime()`), y como la caducidad se guarda a
+// medianoche UTC, un lote que caducaba el 1 de septiembre salía «Caducado»
+// desde las 18:00 del 31 de agosto (hora de México) y durante todo el día 1.
+//
+// Aquí no entra ningún reloj: `hoy` es el día de calendario de la clínica
+// («2026-09-27», ver `hoyEnZona` en fecha-calendario.ts) y lo calcula quien
+// llama. El día de caducidad se lee por sus partes UTC, que acierta con las
+// dos formas ya guardadas (00:00Z y 06:00Z).
+
+export type EstadoCaducidad = "ok" | "por_caducar" | "caducado";
+
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+function diaUtcEnMs(dia: string | null): number | null {
+  const d = parseFechaCalendario(dia);
+  return d ? d.getTime() : null;
 }
 
-export function isExpiringSoon(expiresAt: Date | null, now: Date, alertDaysAhead: number): boolean {
-  if (!expiresAt) return false;
-  if (isExpired(expiresAt, now)) return false;
-  const msAhead = alertDaysAhead * 24 * 60 * 60 * 1000;
-  return expiresAt.getTime() <= now.getTime() + msAhead;
+/**
+ * Cuántos días de calendario faltan para el día de caducidad: 0 = caduca
+ * HOY (todavía se puede usar), negativo = ya pasó. `null` si el lote no
+ * tiene caducidad o si `hoy` no es un día válido.
+ */
+export function diasParaCaducar(expiresAt: Date | null, hoy: string): number | null {
+  const caduca = diaUtcEnMs(fechaCalendarioDe(expiresAt));
+  const hoyMs = diaUtcEnMs(hoy);
+  if (caduca === null || hoyMs === null) return null;
+  return Math.round((caduca - hoyMs) / MS_POR_DIA);
+}
+
+/** Caducado = su día de caducidad YA PASÓ. El propio día todavía no. */
+export function isExpired(expiresAt: Date | null, hoy: string): boolean {
+  const dias = diasParaCaducar(expiresAt, hoy);
+  return dias !== null && dias < 0;
+}
+
+/** Por caducar = no ha caducado y le quedan `alertDaysAhead` días o menos. */
+export function isExpiringSoon(expiresAt: Date | null, hoy: string, alertDaysAhead: number): boolean {
+  const dias = diasParaCaducar(expiresAt, hoy);
+  return dias !== null && dias >= 0 && dias <= alertDaysAhead;
+}
+
+export function estadoDeCaducidad(expiresAt: Date | null, hoy: string, alertDaysAhead: number): EstadoCaducidad {
+  if (isExpired(expiresAt, hoy)) return "caducado";
+  if (isExpiringSoon(expiresAt, hoy, alertDaysAhead)) return "por_caducar";
+  return "ok";
 }

@@ -9,7 +9,8 @@ import {
   ArticuloNoEncontradoError,
 } from "@/lib/inventory/compras.server";
 import { providerPerteneceAClinica } from "@/lib/inventory/proveedores.server";
-import { parseFechaCalendario } from "@/lib/inventory/fecha-calendario";
+import { parseFechaCalendario, parseFechaDeCompra } from "@/lib/inventory/fecha-calendario";
+import { zonaDeClinica } from "@/lib/inventory/zona-clinica.server";
 
 // ═══════════════════════════════════════════════════════════════════
 // COMPRAS / ENTRADAS de inventario (ws1-t4). "Editar inventario" — mismo
@@ -18,14 +19,9 @@ import { parseFechaCalendario } from "@/lib/inventory/fecha-calendario";
 // proveedor.
 // ═══════════════════════════════════════════════════════════════════
 
-const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-function parseFecha(raw?: string): Date | null {
-  if (!raw) return new Date();
-  const iso = DATE_ONLY_RE.test(raw) ? `${raw}T00:00:00.000-06:00` : raw;
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? null : d;
-}
+// ws1-t5 (arreglo): la fecha de la compra se guardaba con la hora de México
+// escrita fija (`T00:00:00.000-06:00`). Ahora es el inicio de ese día en la
+// zona de ESTA clínica: ver `parseFechaDeCompra` en fecha-calendario.ts.
 
 export async function GET() {
   const ctx = await getAuthContext();
@@ -58,16 +54,16 @@ export async function POST(req: NextRequest) {
     // Sin ninguno de los dos, la línea sigue entrando a "sin lote" como hoy.
     lotNumber: l?.lotNumber ? String(l.lotNumber).trim() || null : null,
     // ws1-t5 (arreglo): la caducidad es un día de calendario y se guarda
-    // igual que en el alta de lote (medianoche UTC de ese día). Antes pasaba
-    // por `parseFecha`, que le ponía la hora de México (06:00Z): dos formas
-    // de guardar lo mismo. Una fecha ilegible sigue dando «sin caducidad».
+    // igual que en el alta de lote (medianoche UTC de ese día). Antes se le
+    // ponía la hora de México (06:00Z): dos formas de guardar lo mismo. Una
+    // fecha ilegible sigue dando «sin caducidad».
     expiresAt: l?.expiresAt ? parseFechaCalendario(String(l.expiresAt)) : null,
   }));
   if (lines.length === 0 || lines.some((l) => !l.itemId)) {
     return NextResponse.json({ error: "La compra necesita al menos una línea con artículo." }, { status: 400 });
   }
 
-  const date = parseFecha(body.date);
+  const date = parseFechaDeCompra(body.date, await zonaDeClinica(ctx.clinicId));
   if (!date) return NextResponse.json({ error: "Fecha inválida (usa YYYY-MM-DD o ISO)." }, { status: 400 });
 
   // ws1-t4: providerId es un id suelto del cliente — se valida que sea de

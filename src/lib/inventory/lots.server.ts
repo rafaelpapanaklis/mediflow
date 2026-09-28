@@ -11,14 +11,17 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   ALERT_DAYS_DEFAULT,
-  isExpired,
-  isExpiringSoon,
+  estadoDeCaducidad,
   planFefoConsumption,
   round3,
   type FefoInsufficient,
   type FefoPlan,
   type LotForFefo,
 } from "./lots-core";
+// ws1-t5 — la caducidad va por DÍA DE CALENDARIO en la zona de la clínica
+// (decisión de Rafael, 28-sep-2026): ver la nota en lots-core.ts.
+import { hoyEnZona } from "./fecha-calendario";
+import { zonaDeClinica } from "./zona-clinica.server";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 /** Inyectable para pruebas (mismo patrón que src/lib/anticipos/panel.server.ts): las
@@ -109,14 +112,15 @@ export async function listLotsForItem(clinicId: string, itemId: string, db: Db =
     // aparezca con la cantidad de HOY.
     await (db as PrismaClient).$transaction(tx => reconcileAndLock(tx, clinicId, itemId));
 
-    const [lots, alertDays] = await Promise.all([
+    const [lots, alertDays, zona] = await Promise.all([
       (db as PrismaClient).inventoryLot.findMany({
         where:   { clinicId, itemId },
         orderBy: [{ expiresAt: "asc" }, { createdAt: "asc" }],
       }),
       getAlertDaysAhead(clinicId, db),
+      zonaDeClinica(clinicId, db),
     ]);
-    const now = new Date();
+    const hoy = hoyEnZona(zona);
     return lots.map(l => ({
       id:             l.id,
       lotNumber:      l.lotNumber,
@@ -126,11 +130,7 @@ export async function listLotsForItem(clinicId: string, itemId: string, db: Db =
       unitCost:       l.unitCost,
       purchaseLineId: l.purchaseLineId,
       createdAt:      l.createdAt.toISOString(),
-      estado: isExpired(l.expiresAt, now)
-        ? "caducado"
-        : isExpiringSoon(l.expiresAt, now, alertDays)
-        ? "por_caducar"
-        : "ok",
+      estado: estadoDeCaducidad(l.expiresAt, hoy, alertDays),
     }));
   } catch (e) {
     if (isMissingRelation(e)) return [];
@@ -429,15 +429,16 @@ export interface AvisoLote {
 
 export async function getExpiryAlerts(clinicId: string, db: Db = prisma): Promise<{ porCaducar: AvisoLote[]; caducado: AvisoLote[] }> {
   try {
-    const [alertDays, lots] = await Promise.all([
+    const [alertDays, lots, zona] = await Promise.all([
       getAlertDaysAhead(clinicId, db),
       (db as PrismaClient).inventoryLot.findMany({
         where:   { clinicId, remaining: { gt: 0 }, expiresAt: { not: null } },
         include: { item: { select: { id: true, name: true, unit: true } } },
         orderBy: { expiresAt: "asc" },
       }),
+      zonaDeClinica(clinicId, db),
     ]);
-    const now = new Date();
+    const hoy = hoyEnZona(zona);
     const porCaducar: AvisoLote[] = [];
     const caducado: AvisoLote[]   = [];
     for (const l of lots) {
@@ -451,8 +452,9 @@ export async function getExpiryAlerts(clinicId: string, db: Db = prisma): Promis
         expiresAt: l.expiresAt.toISOString(),
         remaining: Number(l.remaining),
       };
-      if (isExpired(l.expiresAt, now)) caducado.push(dto);
-      else if (isExpiringSoon(l.expiresAt, now, alertDays)) porCaducar.push(dto);
+      const estado = estadoDeCaducidad(l.expiresAt, hoy, alertDays);
+      if (estado === "caducado") caducado.push(dto);
+      else if (estado === "por_caducar") porCaducar.push(dto);
     }
     return { porCaducar, caducado };
   } catch (e) {
