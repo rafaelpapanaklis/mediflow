@@ -56,7 +56,7 @@ const detectMod = () => import("../detect-entity");
 const engine = () => import("../engine");
 const entidades = () => import("../entities");
 
-async function correr(entidad: string, file: File, opts: { dryRun: boolean; sheet?: string | null } = { dryRun: false }) {
+async function correr(entidad: string, file: File, opts: { dryRun: boolean; sheet?: string | null } = { dryRun: false }): Promise<any> {
   const { runImport } = await engine();
   const { HANDLERS } = await entidades();
   return runImport(HANDLERS[entidad], {
