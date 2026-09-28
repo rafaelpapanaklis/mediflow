@@ -2,6 +2,15 @@
 // Orthodontics — saveTreatmentCardDraft. DrawerTreatmentCard onSave:
 // persiste status DRAFT con todos los hijos (elastics/IPR/brokenBrackets)
 // SIN exigir SOAP completo. La card solo se firma vía signTreatmentCard.
+//
+// Ola 1 (ws1-t4, Control y agenda, sep-2026): además de los campos de Ola 0,
+// persiste `appointmentId` (liga la hoja con la cita real de Agenda que la
+// originó, C6) y `activationsNote`/`indications` (C2/C3). Las tres columnas
+// son nuevas y pueden no estar aplicadas todavía en esta base
+// (sql/ortodoncia-control-agenda.sql, sql/ortodoncia-nucleo.sql) — se
+// escriben en un UPDATE aparte, tolerante a P2021/P2022, para que un SQL
+// pendiente nunca tumbe el guardado del resto de la hoja (SOAP, higiene,
+// elásticos…) que ya funciona en producción.
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -9,6 +18,12 @@ import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+
+/** Códigos Prisma de "columna inexistente" — mismo patrón que cobranza-db.ts. */
+function esColumnaAusente(e: unknown): boolean {
+  const code = (e as { code?: string } | null)?.code;
+  return code === "P2021" || code === "P2022";
+}
 
 const elasticClassEnum = z.enum([
   "CLASE_I",
@@ -78,8 +93,15 @@ const inputSchema = z.object({
     )
     .default([]),
   hasProgressPhoto: z.boolean().default(false),
+  photoSetId: z.string().uuid().nullable().optional(),
   nextDate: z.string().nullable().optional(),
   nextDurationMin: z.number().int().positive().nullable().optional(),
+  /** C6: la cita de Agenda que originó esta hoja (BotonHojaControl). */
+  appointmentId: z.string().nullable().optional(),
+  /** C2: activaciones de mecánica auxiliar de ESTA visita. */
+  activationsNote: z.string().nullable().optional(),
+  /** C3: indicaciones para el paciente de ESTA visita. */
+  indications: z.string().nullable().optional(),
 });
 
 export type SaveTreatmentCardDraftInput = z.input<typeof inputSchema>;
@@ -101,6 +123,17 @@ export async function saveTreatmentCardDraft(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!plan) return fail("Plan no encontrado");
+
+  // Tenant + integridad: si viene un appointmentId, la cita tiene que ser de
+  // este mismo paciente y clínica — nunca se confía en que el cliente mande
+  // el id correcto sin verificar (C6).
+  if (data.appointmentId) {
+    const appt = await prisma.appointment.findFirst({
+      where: { id: data.appointmentId, clinicId: ctx.clinicId, patientId: plan.patientId },
+      select: { id: true },
+    });
+    if (!appt) return fail("La cita no pertenece a este paciente");
+  }
 
   const visitDate = new Date(data.visitDate);
   const nextDate = data.nextDate ? new Date(data.nextDate) : null;
@@ -140,6 +173,7 @@ export async function saveTreatmentCardDraft(
             hygieneGingivitis: data.hygiene.gingivitis,
             hygieneWhiteSpots: data.hygiene.whiteSpots,
             hasProgressPhoto: data.hasProgressPhoto,
+            photoSetId: data.photoSetId ?? null,
             nextDate,
             nextDurationMin: data.nextDurationMin ?? null,
             status: "DRAFT",
@@ -171,6 +205,7 @@ export async function saveTreatmentCardDraft(
             hygieneGingivitis: data.hygiene.gingivitis,
             hygieneWhiteSpots: data.hygiene.whiteSpots,
             hasProgressPhoto: data.hasProgressPhoto,
+            photoSetId: data.photoSetId ?? null,
             nextDate,
             nextDurationMin: data.nextDurationMin ?? null,
             status: "DRAFT",
@@ -220,6 +255,47 @@ export async function saveTreatmentCardDraft(
 
       return resolvedId;
     });
+
+    // Columnas nuevas (Ola 1, sql/ortodoncia-control-agenda.sql +
+    // sql/ortodoncia-nucleo.sql), en su PROPIA transacción — separada a
+    // propósito de la de arriba: si el SQL todavía no está pegado en esta
+    // base, Postgres aborta cualquier transacción donde falle un UPDATE por
+    // columna inexistente, y eso se llevaría entre las patas los hijos
+    // (elastics/IPR/brokenBrackets) que sí acaban de guardarse bien. Aparte,
+    // P2021/P2022 solo pierde estas tres columnas, nunca el resto de la hoja.
+    if (
+      data.appointmentId !== undefined ||
+      data.activationsNote !== undefined ||
+      data.indications !== undefined
+    ) {
+      try {
+        await prisma.orthoTreatmentCard.update({
+          where: { id: cardId },
+          data: {
+            ...(data.appointmentId !== undefined
+              ? { appointmentId: data.appointmentId }
+              : {}),
+            ...(data.activationsNote !== undefined
+              ? { activationsNote: data.activationsNote }
+              : {}),
+            ...(data.indications !== undefined ? { indications: data.indications } : {}),
+          },
+        });
+      } catch (e) {
+        if (esColumnaAusente(e)) {
+          console.warn(
+            "[ortho] saveTreatmentCardDraft: columnas C2/C3/C6 aún sin aplicar (sql/ortodoncia-control-agenda.sql, sql/ortodoncia-nucleo.sql) — hoja guardada sin ellas",
+          );
+        } else if ((e as { code?: string } | null)?.code === "P2002") {
+          // Esa cita ya tiene otra hoja ligada (índice único appointmentId) —
+          // la hoja de esta card ya se guardó bien arriba, solo no quedó
+          // ligada a la cita.
+          console.warn("[ortho] saveTreatmentCardDraft: la cita ya tenía otra hoja ligada");
+        } else {
+          throw e;
+        }
+      }
+    }
 
     await auditOrtho({
       ctx,
