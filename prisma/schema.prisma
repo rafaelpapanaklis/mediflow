@@ -1251,6 +1251,9 @@ model User {
   orthoSignAtHomeCreated OrthoSignAtHomePackage[] @relation("OrthoSignAtHomeCreatedBy")
   quotesCreated          Quote[]                  @relation("QuoteCreatedBy")
 
+  // Orthodontics Ola 0 — núcleo de cobranza/agenda (ws1-t1, sep-2026).
+  orthoTreatmentPlansAsTreatingDoctor OrthodonticTreatmentPlan[] @relation("OrthoTreatingDoctor")
+
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implantsPlaced          Implant[]        @relation("ImplantPlacedBy")
   implantConsentsAsDoctor ImplantConsent[] @relation("ImplantConsentDoctor")
@@ -2027,6 +2030,9 @@ model Appointment {
   spaceMaintainers     SpaceMaintainer[]
   endoTreatments       PediatricEndodonticTreatment[]
   deposits             AppointmentDeposit[]
+  // Ola 0 de ortodoncia (ws1-t1, sep-2026): reverso de
+  // OrthoTreatmentCard.appointmentId — el control ES una cita.
+  orthoTreatmentCard   OrthoTreatmentCard?
 
   @@index([clinicId, startsAt, endsAt, status])
   @@index([doctorId, startsAt])
@@ -2345,6 +2351,9 @@ model Invoice {
   payments    Payment[]
   // Links de Mercado Pago con los que el paciente paga el saldo (ws1-t1).
   paymentLinks InvoicePaymentLink[]
+  // Ola 0 de ortodoncia (ws1-t1, sep-2026): reverso de
+  // OrthodonticTreatmentPlan.invoiceId — la factura del tratamiento.
+  orthodonticTreatmentPlan OrthodonticTreatmentPlan?
 
   @@unique([clinicId, invoiceNumber])
   @@index([clinicId, status, createdAt(sort: Desc)])
@@ -6273,6 +6282,15 @@ model OrthodonticTreatmentPlan {
   signedTreatmentConsentFileId String?
   signedTreatmentConsentFile   PatientFile? @relation("OrthoTreatmentConsentSignedFile", fields: [signedTreatmentConsentFileId], references: [id], onDelete: SetNull)
 
+  // Ola 0 (ws1-t1, sep-2026): doctor tratante del caso y factura del
+  // tratamiento (decisión 1 — el dinero va por la factura a plazos, no por
+  // OrthoPaymentPlan/OrthoInstallment). Ambas nulas y aditivas; SQL a mano en
+  // sql/ortodoncia-nucleo.sql.
+  treatingDoctorId String?
+  treatingDoctor   User?    @relation("OrthoTreatingDoctor", fields: [treatingDoctorId], references: [id], onDelete: SetNull)
+  invoiceId        String?  @unique
+  invoice          Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
   diagnosis      OrthodonticDiagnosis            @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
   patient        Patient                         @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic         Clinic                          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
@@ -6616,6 +6634,12 @@ model OrthoTreatmentCard {
   /// representan el mismo evento — la card es la versión rica con SOAP.
   controlAppointmentId String?                        @unique
   controlAppointment   OrthodonticControlAppointment? @relation("OrthoCardControl", fields: [controlAppointmentId], references: [id], onDelete: SetNull)
+
+  /// Ola 0 (ws1-t1, sep-2026): FK opcional 1:1 a la cita de Agenda (decisión
+  /// 2 — el control ES una cita, Appointment.type = TIPO_CITA_CONTROL_ORTO).
+  /// Nula y aditiva; SQL a mano en sql/ortodoncia-nucleo.sql.
+  appointmentId String?      @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
   cardNumber  Int
   visitDate   DateTime
