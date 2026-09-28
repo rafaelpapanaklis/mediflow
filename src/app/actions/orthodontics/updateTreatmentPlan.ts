@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { updateTreatmentPlanSchema } from "@/lib/validation/orthodontics";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoPlanActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -16,7 +16,12 @@ const ALTA_CASO_PLAN_FIELDS = ["treatingDoctorId", "responsibleGuardianId"] as c
 export async function updateTreatmentPlan(
   input: unknown,
 ): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean }>> {
-  const auth = await getOrthoActionContext();
+  // A11 (revisión cruzada): si el payload SOLO trae treatmentPlanId +
+  // responsibleGuardianId/newResponsibleGuardian, acepta billing.* además de
+  // medicalRecord.edit — recepción arma/cambia quién paga sin necesitar el
+  // permiso clínico. Cualquier otro campo (status, técnica…) sigue exigiendo
+  // medicalRecord.edit completo, como antes.
+  const auth = await getOrthoPlanActionContext(input);
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 

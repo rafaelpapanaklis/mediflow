@@ -9,7 +9,7 @@ import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import {
   auditOrtho,
-  getOrthoActionContext,
+  getOrthoPlanActionContext,
   loadPatientForOrtho,
 } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -18,7 +18,11 @@ import { fail, isFailure, ok, type ActionResult } from "./result";
 export async function createTreatmentPlan(
   input: unknown,
 ): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean }>> {
-  const auth = await getOrthoActionContext();
+  // A11 (revisión cruzada): en la práctica crear un plan siempre trae campos
+  // clínicos obligatorios (técnica, costo, anclaje…), así que este gate no
+  // se relaja de verdad aquí — se usa el mismo helper que updateTreatmentPlan
+  // por consistencia, no porque hoy cambie el resultado.
+  const auth = await getOrthoPlanActionContext(input);
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 
