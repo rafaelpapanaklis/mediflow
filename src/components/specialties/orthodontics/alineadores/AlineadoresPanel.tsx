@@ -17,6 +17,7 @@ import { getElasticsCompliance, type ElasticsComplianceView } from "@/app/action
 import { listMonitoringPhotos, type MonitoringPhotoRow } from "@/app/actions/orthodontics/alineadores/listMonitoringPhotos";
 import { reviewMonitoringPhoto } from "@/app/actions/orthodontics/alineadores/reviewMonitoringPhoto";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { nombreDeLaFoto, notaCorta } from "@/lib/orthodontics/fotos-paciente";
 import {
   EJEMPLO_SISTEMA,
   PISTA_SISTEMA,
@@ -300,6 +301,26 @@ function MonitoringBlock({
   onReviewed: () => void;
 }) {
   const pending = photos.filter((p) => p.reviewStatus === "PENDING");
+  const [marcando, setMarcando] = useState<string | null>(null);
+  const [fallo, setFallo] = useState<string | null>(null);
+
+  // ws1-t5 (ronda 6, hallazgo 96): la miniatura ABRE la foto. Antes un clic la
+  // marcaba como revisada sin haberla visto en grande, y lo que el paciente
+  // escribió junto a la foto no se leía en ningún sitio.
+  async function marcarRevisada(photoId: string) {
+    setMarcando(photoId);
+    setFallo(null);
+    try {
+      const res = await reviewMonitoringPhoto({ photoId, treatmentPlanId, reviewStatus: "REVIEWED" });
+      if (isFailure(res)) setFallo(res.error);
+      else onReviewed();
+    } catch {
+      setFallo("No se pudo marcar como revisada. Intenta de nuevo.");
+    } finally {
+      setMarcando(null);
+    }
+  }
+
   if (photos.length === 0) {
     return (
       <div>
@@ -314,35 +335,68 @@ function MonitoringBlock({
         Monitoreo del paciente {pending.length > 0 ? <Pill color="amber" size="xs">{pending.length} por revisar</Pill> : null}
       </div>
       <div className="grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
-        {photos.slice(0, 8).map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className="relative aspect-square rounded-[8px] overflow-hidden border border-[color:var(--pr-borde)]"
-            onClick={() => {
-              if (p.reviewStatus === "PENDING") {
-                reviewMonitoringPhoto({ photoId: p.id, treatmentPlanId, reviewStatus: "REVIEWED" }).then(onReviewed);
-              }
-            }}
-            title={p.reviewStatus === "PENDING" ? "Pulsa para marcarla como revisada" : "Revisada"}
-            aria-label={p.reviewStatus === "PENDING" ? "Foto por revisar: marcar como revisada" : "Foto revisada"}
-          >
-            {p.url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.url} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-[color:var(--pr-hover)]" />
-            )}
+        {photos.slice(0, 8).map((p) => {
+          const porRevisar = p.reviewStatus === "PENDING";
+          const rotulo = `${porRevisar ? "Por revisar" : "Revisada"}: ${nombreDeLaFoto(p.angle)}. Abrir en grande`;
+          const marca = (
             <span className="absolute top-0.5 right-0.5">
-              {p.reviewStatus === "PENDING" ? (
+              {porRevisar ? (
                 <Circle className="w-3 h-3 text-[color:var(--pr-alerta)] fill-[var(--pr-alerta)]" />
               ) : (
                 <CheckCircle2 className="w-3 h-3 text-[color:var(--pr-exito)] fill-[var(--pr-tarjeta)]" />
               )}
             </span>
-          </button>
-        ))}
+          );
+          const caja = "relative block aspect-square rounded-[8px] overflow-hidden border border-[color:var(--pr-borde)]";
+          return p.url ? (
+            <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className={caja} title={rotulo} aria-label={rotulo}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.url} alt="" className="w-full h-full object-cover" />
+              {marca}
+            </a>
+          ) : (
+            <div key={p.id} className={caja} title="No se pudo cargar la foto">
+              <div className="w-full h-full bg-[color:var(--pr-hover)]" />
+              {marca}
+            </div>
+          );
+        })}
       </div>
+
+      {pending.length > 0 ? (
+        <ul className="mt-2 flex flex-col gap-2">
+          {pending.slice(0, 4).map((p) => {
+            const nota = notaCorta(p.patientNote, 160);
+            return (
+              <li key={p.id}>
+                <div className={orto.datoSub} style={{ marginTop: 0 }}>
+                  <span className="font-semibold capitalize">{nombreDeLaFoto(p.angle)}</span>
+                  {" · "}
+                  {new Date(p.submittedAt).toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
+                </div>
+                {nota ? <div className={orto.datoNota}>«{nota}»</div> : null}
+                <Btn
+                  variant="secondary"
+                  size="sm"
+                  className="mt-1"
+                  disabled={marcando !== null}
+                  onClick={() => marcarRevisada(p.id)}
+                >
+                  {marcando === p.id ? "Marcando…" : "Marcar como revisada"}
+                </Btn>
+              </li>
+            );
+          })}
+          {pending.length > 4 ? (
+            <li className={orto.vacioLinea}>Y {pending.length - 4} más por revisar.</li>
+          ) : null}
+        </ul>
+      ) : null}
+      {fallo ? (
+        <p role="alert" className={`${orto.tonoAlerta} mt-1 text-xs font-semibold`}>
+          {fallo}
+        </p>
+      ) : null}
     </div>
   );
 }

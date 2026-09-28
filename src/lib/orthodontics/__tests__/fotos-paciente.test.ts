@@ -110,3 +110,27 @@ test("textos: plural, ángulo y nota recortada", () => {
   assert.ok(larga && larga.length <= 31 && larga.endsWith("…"), larga ?? "");
   assert.doesNotMatch(larga ?? "", /\s…$/);
 });
+
+// ── En el caso: la foto se ABRE, no se marca sola ────────────────────────────
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const PANEL = readFileSync(
+  join(__dirname, "..", "..", "..", "components", "specialties", "orthodontics", "alineadores", "AlineadoresPanel.tsx"),
+  "utf8",
+);
+
+test("96 · en el caso, tocar la miniatura abre la foto; revisarla es un botón aparte", () => {
+  const bloque = PANEL.slice(PANEL.indexOf("function MonitoringBlock"));
+  assert.match(bloque, /<a key=\{p\.id\} href=\{p\.url\} target="_blank" rel="noopener noreferrer"/);
+  assert.match(bloque, /Marcar como revisada/);
+  assert.equal((bloque.match(/reviewMonitoringPhoto\(/g) ?? []).length, 1, "una sola llamada, la del botón");
+  assert.match(bloque, /onClick=\{\(\) => marcarRevisada\(p\.id\)\}/);
+});
+
+test("96 · en el caso se lee lo que el paciente escribió junto a la foto", () => {
+  const bloque = PANEL.slice(PANEL.indexOf("function MonitoringBlock"));
+  assert.match(bloque, /notaCorta\(p\.patientNote/);
+  assert.match(bloque, /nombreDeLaFoto\(p\.angle\)/);
+});
