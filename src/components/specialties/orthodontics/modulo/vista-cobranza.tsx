@@ -24,7 +24,6 @@ import {
   Lock,
   Search,
   SearchX,
-  Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -143,13 +142,8 @@ export function VistaCobranza({
           alto
           icono={Wallet}
           titulo="Aún no hay casos con cobranza"
-          pista="En cuanto un caso de ortodoncia esté activo aparece aquí, con lo que debe y su próximo pago. El plan de pago se abre desde la ficha del paciente, en «Cobro del tratamiento»."
-        >
-          <Link href="/dashboard/orthodontics/pacientes" className={s.boton}>
-            <Users size={15} strokeWidth={1.9} aria-hidden />
-            Pacientes en tratamiento
-          </Link>
-        </Vacio>
+          pista="En cuanto un caso de ortodoncia esté activo aparece aquí, con lo que debe y su próximo pago. Los casos se abren en «Pacientes en tratamiento»; el plan de pago, desde la ficha del paciente, en «Cobro del tratamiento»."
+        />
       </Pantalla>
     );
   }

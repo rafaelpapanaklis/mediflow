@@ -2,16 +2,18 @@
 // recibe: los datos los carga la página (`tablero/page.tsx`) con
 // `tablero-data.ts`, igual que antes. Las barras son el mismo importe
 // dibujado en proporción al mayor de su lista; no se calcula dinero aquí.
+//
+// Sin atajos a otros apartados del módulo (Rafael, 28-sep-2026): «Alertas» y
+// «Pacientes en tratamiento» salían como botones en la cabecera y repetían el
+// submenú, que está justo encima. Para moverse por el módulo, el submenú.
 import {
   Activity,
   AlertCircle,
-  BellRing,
   CalendarCheck,
   ChevronRight,
   ClipboardList,
   Smile,
   TrendingUp,
-  Users,
   Wallet,
   Wrench,
 } from "lucide-react";
@@ -57,18 +59,6 @@ export function VistaTablero({
     <Pantalla
       titulo="Tablero"
       sub="Casos activos, cobranza al corriente y alertas de un vistazo."
-      acciones={
-        <>
-          <Link href="/dashboard/orthodontics/alertas" className={s.boton}>
-            <BellRing size={15} strokeWidth={1.9} aria-hidden />
-            Alertas
-          </Link>
-          <Link href="/dashboard/orthodontics/pacientes" className={s.boton}>
-            <Users size={15} strokeWidth={1.9} aria-hidden />
-            Pacientes en tratamiento
-          </Link>
-        </>
-      }
     >
       <section className={s.kpis} aria-label="Indicadores">
         <KpiCard label="Pacientes activos" value={String(data.activeCasesCount)} icon={Activity} hero />

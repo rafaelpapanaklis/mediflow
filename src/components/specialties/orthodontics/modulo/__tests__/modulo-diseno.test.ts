@@ -128,6 +128,55 @@ test("el submenú conserva los seis apartados, con su nombre, marca el abierto y
   assert.match(css, /@media \(max-width: 639\.98px\) \{\s*\.submenuLargo \{\s*display: none;\s*\}\s*\.submenuCorto \{\s*display: inline;\s*\}/);
 });
 
+// Rafael, 28-sep-2026: «Alertas» y «Pacientes en tratamiento» salían como
+// botones en la cabecera del Tablero y repetían el submenú. Para moverse por el
+// módulo solo queda el submenú. Los botones de ACCIÓN («Abrir caso», «Cobrar»,
+// «Agendar control») y los enlaces que salen del módulo (la Agenda, la ficha
+// del paciente) se quedan: no repiten ninguna entrada.
+test("sin atajos duplicados: ninguna vista del módulo enlaza a otro apartado del submenú", () => {
+  const layout = leer("src/app/dashboard/orthodontics/layout.tsx");
+  const apartados = Array.from(layout.matchAll(/\{ href: "(\/dashboard\/orthodontics\/[a-z]+)"/g), (m) => m[1]);
+  assert.equal(apartados.length, 6);
+
+  const vistas = [
+    "src/components/specialties/orthodontics/modulo/vista-tablero.tsx",
+    "src/components/specialties/orthodontics/modulo/vista-alertas.tsx",
+    "src/components/specialties/orthodontics/modulo/vista-cobranza.tsx",
+    "src/components/specialties/orthodontics/modulo/vista-controles.tsx",
+    "src/components/specialties/orthodontics/modulo/abrir-caso.tsx",
+    "src/components/specialties/orthodontics/modulo/agendar-control.tsx",
+    "src/components/specialties/orthodontics/modulo/piezas.tsx",
+    "src/components/specialties/orthodontics/OrthoPacientesTable.tsx",
+    "src/components/specialties/orthodontics/configuracion/OrthoConfiguracionClient.tsx",
+    ...apartados.map((a) => `src/app${a}/page.tsx`),
+  ];
+  for (const rel of vistas) {
+    const codigo = sinComentarios(leer(rel));
+    for (const a of apartados) {
+      assert.ok(!codigo.includes(`"${a}"`) && !codigo.includes(`\`${a}`), `${rel}: atajo a ${a}, que ya está en el submenú`);
+    }
+    assert.doesNotMatch(codigo, /["`]\/dashboard\/orthodontics["`/]/, `${rel}: enlace suelto al módulo`);
+  }
+
+  // El único sitio que los enlaza es el submenú, que los recibe del layout.
+  const submenu = leer("src/components/specialties/orthodontics/modulo/submenu.tsx");
+  assert.match(submenu, /href=\{a\.href\}/);
+});
+
+test("sin atajos duplicados: el Tablero no lleva botones en la cabecera", () => {
+  const tablero = sinComentarios(leer("src/components/specialties/orthodontics/modulo/vista-tablero.tsx"));
+  assert.doesNotMatch(tablero, /acciones=/);
+  assert.doesNotMatch(tablero, /BellRing|\bUsers\b/, "ni sus íconos, que ya no usa nadie");
+  // Lo que SÍ se queda: salir a la Agenda desde «Controles de hoy».
+  assert.match(tablero, /<Link href="\/dashboard\/agenda" className=\{s\.enlace\}>/);
+});
+
+test("los botones de acción se quedan", () => {
+  assert.match(leer("src/app/dashboard/orthodontics/pacientes/page.tsx"), /acciones=\{puedeAbrirCaso \? <AbrirCasoBoton \/> : undefined\}/);
+  assert.match(leer("src/components/specialties/orthodontics/modulo/vista-cobranza.tsx"), /<ListaMensualidades alCobrar=/);
+  assert.match(leer("src/components/specialties/orthodontics/modulo/vista-controles.tsx"), /<AgendarControlBoton /);
+});
+
 test("H16: ningún apartado del submenú es un cartel «Próximamente»", () => {
   const layout = leer("src/app/dashboard/orthodontics/layout.tsx");
   const apartados = Array.from(layout.matchAll(/\{ href: "\/dashboard\/orthodontics\/([a-z]+)"/g), (m) => m[1]);
