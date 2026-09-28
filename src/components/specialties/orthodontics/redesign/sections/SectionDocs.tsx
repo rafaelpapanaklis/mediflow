@@ -5,7 +5,7 @@
 // LabOrder catalog ampliado con 8 chips clickeables al pie del tab Lab.
 
 import { useState } from "react";
-import { FileText, Plus } from "lucide-react";
+import { ExternalLink, FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
@@ -53,6 +53,17 @@ export interface SectionDocsProps {
   whatsappLog: WhatsAppLogEntry[];
   onNewLabOrder?: () => void;
   onNewReferral?: () => void;
+  /**
+   * El caso (plan de tratamiento). Con él salen los PDFs del caso: «PDF del
+   * plan de tratamiento» y «Reporte de avance (PDF)», que abren sus rutas
+   * (`/api/orthodontics/treatment-plans/<id>/…`) en pestaña nueva.
+   */
+  treatmentPlanId?: string | null;
+  /**
+   * `null` = el reporte de avance se puede abrir; un texto = sale deshabilitado
+   * con ese motivo (hace falta el juego T0 y uno posterior).
+   */
+  motivoSinReporteDeAvance?: string | null;
 }
 
 const CATALOG_AMPLIADO = [
@@ -127,6 +138,13 @@ export function SectionDocs(props: SectionDocsProps) {
         ) : null}
       </div>
 
+      {props.treatmentPlanId ? (
+        <PdfsDelCaso
+          treatmentPlanId={props.treatmentPlanId}
+          motivoSinReporteDeAvance={props.motivoSinReporteDeAvance ?? null}
+        />
+      ) : null}
+
       {tab === "lab" ? <LabOrdersPanel rows={props.labOrders} /> : null}
       {tab === "consent" ? <ConsentsPanel rows={props.consents} /> : null}
       {tab === "ref" ? (
@@ -134,6 +152,58 @@ export function SectionDocs(props: SectionDocsProps) {
       ) : null}
       {tab === "wa" ? <WhatsAppPanel entries={props.whatsappLog} /> : null}
     </Card>
+  );
+}
+
+/** Rutas de los PDFs del caso. Exportadas para los tests. */
+export function rutaPdfDelPlan(treatmentPlanId: string): string {
+  return `/api/orthodontics/treatment-plans/${encodeURIComponent(treatmentPlanId)}/treatment-plan-pdf`;
+}
+export function rutaReporteDeAvance(treatmentPlanId: string): string {
+  return `/api/orthodontics/treatment-plans/${encodeURIComponent(treatmentPlanId)}/progress-report-pdf`;
+}
+
+function abrirEnPestanaNueva(url: string) {
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function PdfsDelCaso({
+  treatmentPlanId,
+  motivoSinReporteDeAvance,
+}: {
+  treatmentPlanId: string;
+  motivoSinReporteDeAvance: string | null;
+}) {
+  return (
+    <div className="px-[18px] pt-[12px]">
+      <div className={`${orto.ceja} mb-2`}>PDFs del caso</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Btn
+          variant="secondary"
+          size="sm"
+          icon={<ExternalLink size={14} strokeWidth={1.75} aria-hidden />}
+          onClick={() => abrirEnPestanaNueva(rutaPdfDelPlan(treatmentPlanId))}
+        >
+          PDF del plan de tratamiento
+        </Btn>
+        <Btn
+          variant="secondary"
+          size="sm"
+          icon={<ExternalLink size={14} strokeWidth={1.75} aria-hidden />}
+          disabled={motivoSinReporteDeAvance !== null}
+          title={motivoSinReporteDeAvance ?? undefined}
+          aria-describedby={motivoSinReporteDeAvance ? "orto-docs-motivo-avance" : undefined}
+          onClick={() => abrirEnPestanaNueva(rutaReporteDeAvance(treatmentPlanId))}
+        >
+          Reporte de avance (PDF)
+        </Btn>
+      </div>
+      {motivoSinReporteDeAvance ? (
+        <p id="orto-docs-motivo-avance" className="mt-[6px] text-xs text-[color:var(--pr-texto-3)]">
+          Reporte de avance: {motivoSinReporteDeAvance.charAt(0).toLowerCase() + motivoSinReporteDeAvance.slice(1)}.
+        </p>
+      ) : null}
+    </div>
   );
 }
 

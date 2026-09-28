@@ -3,7 +3,7 @@
 // 2 columnas con thumbnails de 10 vistas. Permite alternar T0 vs T1, T2,
 // CONTROL · genera PDF antes/después en debond (M5 visual proof).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Camera, Download, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { Pill } from "../atoms/Pill";
@@ -29,10 +29,25 @@ export interface ModalCompareProps {
   onClose: () => void;
 }
 
+const ETIQUETA_ETAPA: Record<PhotoStage, string> = {
+  T0: "Inicial",
+  T1: "3 meses",
+  T2: "6 meses",
+  CONTROL: "Control",
+};
+
 export function ModalCompare(props: ModalCompareProps) {
   const [stage, setStage] = useState<PhotoStage>(
     (props.setRight?.stage ?? "T1") as PhotoStage,
   );
+  const { onClose } = props;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   return (
     <>
@@ -51,7 +66,7 @@ export function ModalCompare(props: ModalCompareProps) {
           <header className={orto.cajonCabeza}>
             <div>
               <div className={orto.cajonCeja}>
-                M5 · Visual proof
+                Fotos del caso
               </div>
               <h3
                 id="modal-compare-title"
@@ -72,7 +87,7 @@ export function ModalCompare(props: ModalCompareProps) {
 
           <div className="px-5 py-3 border-b border-[color:var(--pr-borde-suave)] flex items-center gap-2 flex-wrap">
             <span className="text-xs text-[color:var(--pr-texto-3)]">
-              Comparar T0 vs:
+              Comparar el inicial con:
             </span>
             {(["T1", "T2", "CONTROL"] as const).map((s) => (
               <button
@@ -89,7 +104,7 @@ export function ModalCompare(props: ModalCompareProps) {
                     : "border-[color:var(--pr-borde)] bg-[color:var(--pr-tarjeta)] text-[color:var(--pr-texto-2)]"
                 }`}
               >
-                {s}
+                {ETIQUETA_ETAPA[s]}
               </button>
             ))}
             <div className="ml-auto">
@@ -100,7 +115,7 @@ export function ModalCompare(props: ModalCompareProps) {
                   icon={<Download className="w-3.5 h-3.5" aria-hidden />}
                   onClick={props.onGeneratePdf}
                 >
-                  Generar PDF
+                  PDF comparativo
                 </Btn>
               ) : null}
             </div>
@@ -108,15 +123,13 @@ export function ModalCompare(props: ModalCompareProps) {
 
           <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
             <CompareColumn
-              label="T0 · inicial"
+              label="Inicial"
               date={props.setT0?.takenAt ?? null}
               photos={props.setT0?.photos ?? {}}
               accent="slate"
             />
             <CompareColumn
-              label={
-                stage === "T1" ? "T1 · mes 12" : stage === "T2" ? "T2 · final" : "Control"
-              }
+              label={ETIQUETA_ETAPA[stage]}
               date={props.setRight?.takenAt ?? null}
               photos={props.setRight?.photos ?? {}}
               accent="violet"

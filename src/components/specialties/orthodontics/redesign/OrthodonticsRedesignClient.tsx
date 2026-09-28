@@ -66,6 +66,15 @@ import {
   type DrawerNewCasePlanPayload,
 } from "./drawers/DrawerNewCase";
 import { DrawerCaseSettings, type DrawerCaseSettingsPayload } from "./drawers/DrawerCaseSettings";
+import { ModalCompare } from "./drawers/ModalCompare";
+import {
+  MOTIVO_SIN_REPORTE_DE_AVANCE,
+  etapaActualParaComparar,
+  etapasParaComparar,
+  hayReporteDeAvance,
+  juegoParaComparar,
+  sePuedeComparar,
+} from "./fotos-del-caso";
 import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
 import layout from "./ortho-redesign-layout.module.css";
 import orto from "./orto.module.css";
@@ -328,6 +337,12 @@ export interface OrthodonticsRedesignClientProps {
 
 export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProps) {
   const [drawer, setDrawer] = useState<DrawerState>(null);
+  // «Comparar» fotos: la etapa del lado derecho mientras el modal está abierto
+  // (null = cerrado). Los juegos salen de `historicalPhotoSets`, que ya trae
+  // las URLs firmadas por vista.
+  const [compararCon, setCompararCon] = useState<PhotoStage | null>(null);
+  const juegosDeFotos = props.historicalPhotoSets ?? [];
+  const cerrarComparar = useCallback(() => setCompararCon(null), []);
   // M6 (ws1-t8, Ronda 6 — hallazgo 6): "Registrar control" desde la ficha
   // resuelve la cita de HOY (si la hay) y "¿ya hay hoja de hoy?" con el
   // MISMO cargador que Agenda (getTreatmentCardContextForPatient, hermano de
@@ -556,15 +571,19 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             }
           />
 
-          {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S12, QUITAR
-              (solo el comparador): en la ficha nueva el comparador de fotos
-              muestra huecos (el loader no trae URL por slot todavía). Sin
-              onCompare no hay botón que lo abra. El PDF comparativo SÍ se
-              queda — ver onGeneratePdf de SectionPostTreatment más arriba. */}
+          {/* «Comparar» (S12) vuelve: el loader ya trae la URL firmada de
+              cada vista (`slots`), así que ModalCompare pinta las fotos de
+              verdad. El botón solo sale con fotos en el inicial y en al
+              menos una etapa posterior (fotos-del-caso.ts). */}
           <SectionPhotos
             monthCurrent={t.monthCurrent}
             monthTotal={t.monthTotal}
-            historicalSets={props.historicalPhotoSets ?? []}
+            historicalSets={juegosDeFotos}
+            onCompare={
+              sePuedeComparar(juegosDeFotos)
+                ? () => setCompararCon(etapaActualParaComparar(juegosDeFotos))
+                : undefined
+            }
             onUpload={props.onUploadPhoto}
             onScheduleG15={props.onScheduleG15Action ?? props.onScheduleG15}
           />
@@ -654,6 +673,10 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
                 ? () => setDrawer({ kind: "new-referral" })
                 : undefined
             }
+            treatmentPlanId={t.treatmentPlanId || null}
+            motivoSinReporteDeAvance={
+              hayReporteDeAvance(juegosDeFotos) ? null : MOTIVO_SIN_REPORTE_DE_AVANCE
+            }
           />
 
           <PhaseTransitionAuditTeaser count={vm.phaseTransitions.length} />
@@ -680,6 +703,18 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           </div>
         </div>
       </div>
+
+      {compararCon ? (
+        <ModalCompare
+          key={compararCon}
+          setT0={juegoParaComparar(juegosDeFotos, "T0")}
+          setRight={juegoParaComparar(juegosDeFotos, compararCon)}
+          availableRightStages={etapasParaComparar(juegosDeFotos)}
+          onSelectRight={setCompararCon}
+          onGeneratePdf={props.onGenerateComparePdf ?? props.onGeneratePdfBeforeAfter}
+          onClose={cerrarComparar}
+        />
+      ) : null}
 
       {/* Drawer Treatment Card existente */}
       {drawer?.kind === "tcard" && cardForDrawer ? (
