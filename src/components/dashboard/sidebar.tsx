@@ -7,7 +7,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Settings,
   ChevronDown, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
-  X, Plus,
+  X, Plus, Lock,
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
@@ -25,6 +25,7 @@ import {
   COLLAPSIBLE_SECTIONS,
   isActivePath,
   shouldShowItem,
+  conCandados,
   type Section,
   type CollapsibleSectionId,
   type NavItemDef,
@@ -71,6 +72,13 @@ export interface SidebarProps {
    * sección entera se oculta cuando ningún item pasa el filtro.
    */
   clinicModuleKeys?: string[];
+  /**
+   * Módulos SIN contratar que el menú enseña con candado (ws1-t3). Hoy solo
+   * Ortodoncia, en clínicas dentales: la opción se ve y lleva a la página
+   * donde se contrata. Lo decide el layout (`modulosConCandado`), con la base
+   * en la mano. Vacío o ausente = el menú de siempre.
+   */
+  lockedModuleKeys?: string[];
   /**
    * Secciones del sidebar que el usuario tiene colapsadas (persistido en DB:
    * User.sidebarCollapsed). Estado inicial server→client; el toggle se guarda
@@ -214,14 +222,22 @@ export function Sidebar(props: SidebarProps) {
     [props.clinicModuleKeys],
   );
 
+  const lockedModuleKeys = useMemo(
+    () => props.lockedModuleKeys ?? [],
+    [props.lockedModuleKeys],
+  );
+
   const visibleItems = useMemo(() => {
-    return NAV_ITEMS.filter((item) =>
-      shouldShowItem(item, props.user, props.clinicCategory, clinicModuleKeys),
+    return conCandados(
+      NAV_ITEMS.filter((item) =>
+        shouldShowItem(item, props.user, props.clinicCategory, clinicModuleKeys, lockedModuleKeys),
+      ),
+      lockedModuleKeys,
     );
     // Necesitamos depender del array completo (override puede cambiar tras
     // un guardado en /dashboard/team). props.user es el objeto referencial
     // que cambia cuando el layout re-renderiza con datos frescos.
-  }, [props.user, props.clinicCategory, clinicModuleKeys]);
+  }, [props.user, props.clinicCategory, clinicModuleKeys, lockedModuleKeys]);
 
   const itemsBySection = useMemo(() => {
     const map: Record<Section, NavItemDef[]> = {
@@ -341,6 +357,10 @@ export function Sidebar(props: SidebarProps) {
           key={item.id}
           href={item.href}
           aria-current={active ? "page" : undefined}
+          // Módulo sin contratar (ws1-t3): mismo enlace, con candado; el href
+          // ya es el de la página de contratar.
+          aria-label={item.locked ? `${t(`sidebar.nav.${item.id}`)}. ${t("menuDosNiveles.moduloConCandado")}` : undefined}
+          data-candado={item.locked ? "true" : undefined}
           className={`mf-sidebar-item ${active ? "mf-sidebar-item--active" : ""}`}
           style={{
             display: "flex",
@@ -379,6 +399,9 @@ export function Sidebar(props: SidebarProps) {
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {t(`sidebar.nav.${item.id}`)}
               </span>
+              {item.locked && (
+                <Lock size={14} strokeWidth={1.9} aria-hidden style={{ flexShrink: 0, opacity: 0.75 }} />
+              )}
               {count > 0 && (
                 <span className="mf-nav-count" aria-label={t("sidebar.itemPending", { count })}>
                   {count > 99 ? "99+" : count}

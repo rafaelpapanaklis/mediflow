@@ -31,6 +31,11 @@ const ARCHIVOS = [
   "src/components/specialties/orthodontics/modulo/submenu.tsx",
   "src/components/specialties/orthodontics/modulo/vista-tablero.tsx",
   "src/components/specialties/orthodontics/modulo/vista-alertas.tsx",
+  "src/components/specialties/orthodontics/contratar/contratar.module.css",
+  "src/components/specialties/orthodontics/contratar/vista-contratar.tsx",
+  "src/components/specialties/orthodontics/contratar/TarjetaPrecio.tsx",
+  "src/components/specialties/orthodontics/contratar/EsperandoActivacion.tsx",
+  "src/app/dashboard/orthodontics/contratar/page.tsx",
   "src/components/specialties/orthodontics/OrthoPacientesTable.tsx",
   "src/components/specialties/orthodontics/OrthoModulePlaceholder.tsx",
   "src/components/specialties/orthodontics/EnviarIndicacionesButton.tsx",
@@ -76,14 +81,17 @@ test("la hoja solo lee los tokens del rediseño y hereda la tipografía", () => 
   assert.match(css, /font-variant-numeric:\s*tabular-nums/, "cifras de ancho fijo");
 });
 
-test("el layout conserva sus tres guardas y monta la raíz y el submenú del módulo", () => {
+test("el layout conserva sus tres comprobaciones y monta la raíz y el submenú del módulo", () => {
+  // Desde el 28-sep-2026 la decisión (a dónde va cada quien) vive en
+  // `decidirEntradaAlModulo`, con sus propios tests
+  // (src/lib/orthodontics/__tests__/contratar.test.ts). Aquí, que el layout
+  // le siga dando las tres cosas y que pinte después de decidir.
   const layout = leer("src/app/dashboard/orthodontics/layout.tsx");
-  assert.match(layout, /if \(user\.clinic\.category !== "DENTAL"\) redirect\("\/dashboard"\);/);
-  assert.match(layout, /const active = await hasActiveOrthodonticsModule\(user\.clinicId\);\s*if \(!active\) redirect\("\/dashboard"\);/);
-  assert.match(layout, /hasPermission\(\{ role: user\.role, permissionsOverride: user\.permissionsOverride \}, "specialties\.orthodontics"\)/);
-  assert.match(layout, /<RaizModulo>\s*<SubmenuOrtodoncia apartados=\{SUBMENU\} \/>\s*\{children\}\s*<\/RaizModulo>/);
-  // Las guardas van ANTES de pintar nada.
-  assert.ok(layout.indexOf("hasPermission(") < layout.indexOf("<RaizModulo>"));
+  assert.match(layout, /esDental: user\.clinic\.category === "DENTAL",/);
+  assert.match(layout, /const active = await hasActiveOrthodonticsModule\(user\.clinicId\);/);
+  assert.match(layout, /hasPermission\(\s*\{ role: user\.role, permissionsOverride: user\.permissionsOverride \},\s*"specialties\.orthodontics",\s*\)/);
+  assert.match(layout, /<RaizModulo>\s*\{entrada\.tipo === "modulo" && <SubmenuOrtodoncia apartados=\{SUBMENU\} \/>\}\s*\{children\}\s*<\/RaizModulo>/);
+  assert.ok(layout.indexOf("redirect(entrada.a)") < layout.indexOf("<RaizModulo>"), "se decide ANTES de pintar nada");
 });
 
 test("el submenú conserva los seis apartados, con su nombre, y marca el abierto", () => {

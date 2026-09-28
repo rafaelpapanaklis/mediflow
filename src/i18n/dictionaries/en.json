@@ -465,6 +465,8 @@
     "proximamente": "Coming soon",
     "cajaSinAcceso": "The cash register is enabled person by person and your user doesn't have it. Ask the clinic owner.",
     "cajaSinAccesoCorto": "No access",
+    "moduloConCandado": "Module not purchased. Open it to see the price and what it includes.",
+    "moduloConCandadoCorto": "Not purchased",
     "cajaSinPermisoTitulo": "You don't have access to the cash register",
     "cajaSinPermisoVolver": "Back to Today",
     "cajaSinPermisoEquipo": "Turn it on in Team",

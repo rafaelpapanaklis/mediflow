@@ -31,6 +31,10 @@
 
 const FICHA = /^\/dashboard\/patients\/([^/?#]+)(?:[/?#]|$)/;
 const MODULO_ORTODONCIA = /^\/dashboard\/orthodontics(?:[/?#]|$)/;
+// La página de contratar vive dentro de la ruta del módulo, pero NO es el
+// módulo: es una página de compra, no un sitio de trabajo. Ahí el menú se
+// queda como la persona lo tiene.
+const CONTRATAR_ORTODONCIA = /^\/dashboard\/orthodontics\/contratar(?:[/?#]|$)/;
 
 /** La zona del módulo de Ortodoncia. No choca con un paciente: esas llevan `paciente:` delante. */
 export const ZONA_ORTODONCIA = "modulo:ortodoncia";
@@ -57,7 +61,7 @@ export const esFichaDePaciente = (pathname: string | null | undefined) => pacien
 export function zonaRecogida(pathname: string | null | undefined): string | null {
   const paciente = pacienteDeFicha(pathname);
   if (paciente !== null) return `paciente:${paciente}`;
-  if (pathname && MODULO_ORTODONCIA.test(pathname)) return ZONA_ORTODONCIA;
+  if (pathname && MODULO_ORTODONCIA.test(pathname) && !CONTRATAR_ORTODONCIA.test(pathname)) return ZONA_ORTODONCIA;
   return null;
 }
 

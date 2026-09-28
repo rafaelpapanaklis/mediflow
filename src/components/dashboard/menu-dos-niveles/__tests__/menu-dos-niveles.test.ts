@@ -206,7 +206,7 @@ test("Ortodoncia: item real (ya no 'Próximamente'), gateado por specialties.ort
   assert.equal(ve("READONLY", conModuloReal), false, "specialties.* no es un .view puro para READONLY");
   assert.equal(ve("ACCOUNTANT", conModuloReal), false);
 
-  assert.equal(ve("SUPER_ADMIN", []), false, "sin el módulo activo, ni el dueño la ve");
+  assert.equal(ve("SUPER_ADMIN", []), false, "sin el módulo y sin candado (lista vacía), ni el dueño la ve");
   assert.equal(
     ve("SUPER_ADMIN", MODULOS_PRO),
     false,
@@ -221,6 +221,85 @@ test("Ortodoncia: item real (ya no 'Próximamente'), gateado por specialties.ort
     opcionesVisibles(persona("SUPER_ADMIN"), "MEDICINE", conModuloReal).some((it) => it.id === "orthodontics"),
     false,
   );
+});
+
+// ── Ortodoncia con candado (ws1-t3, 28-sep-2026) ──────────────────────
+// Decisión de Rafael: en clínicas dentales «Ortodoncia» sale SIEMPRE. Sin el
+// módulo, con candado y llevando a la página de contratar.
+
+const CON_CANDADO = ["orthodontics"];
+const ortodonciaDe = (role: UserRole, mods: string[], candados: string[], ov: string[] = [], cat: ClinicCategory = "DENTAL") =>
+  opcionesVisibles(persona(role, ov), cat, mods, candados).find((it) => it.id === "orthodontics");
+
+test("candado: sin el módulo, Ortodoncia SÍ sale, con candado, y lleva a la página de contratar", () => {
+  for (const role of ["SUPER_ADMIN", "ADMIN", "DOCTOR", "RECEPTIONIST"] as UserRole[]) {
+    const it = ortodonciaDe(role, MODULOS_PRO, CON_CANDADO);
+    assert.ok(it, `${role} la ve`);
+    assert.equal(it!.locked, true, `${role}: con candado`);
+    assert.equal(it!.href, "/dashboard/orthodontics/contratar", `${role}: NO abre el módulo`);
+  }
+  // La opción de NAV_ITEMS no se toca: el candado va en una copia.
+  const original = NAV_ITEMS.find((it) => it.id === "orthodontics")!;
+  assert.equal(original.href, "/dashboard/orthodontics");
+  assert.equal(original.locked, undefined);
+});
+
+test("candado: con el módulo activo, todo como hoy (sin candado y abre el módulo)", () => {
+  const it = ortodonciaDe("SUPER_ADMIN", ["orthodontics"], []);
+  assert.ok(it);
+  assert.equal(it!.locked, undefined);
+  assert.equal(it!.href, "/dashboard/orthodontics");
+  // Aunque llegaran las dos listas a la vez, manda el candado: nunca abre sin pagar.
+  assert.equal(ortodonciaDe("SUPER_ADMIN", ["orthodontics"], CON_CANDADO)!.locked, true);
+});
+
+test("candado: no se salta ni el permiso ni la categoría", () => {
+  assert.equal(ortodonciaDe("READONLY", MODULOS_PRO, CON_CANDADO), undefined, "sin specialties.orthodontics no sale ni con candado");
+  assert.equal(ortodonciaDe("ACCOUNTANT", MODULOS_PRO, CON_CANDADO), undefined);
+  assert.equal(ortodonciaDe("DOCTOR", MODULOS_PRO, CON_CANDADO, ["today.view"]), undefined, "permiso quitado desde Equipo");
+  for (const cat of CATEGORIAS.filter((c) => c !== "DENTAL")) {
+    assert.equal(ortodonciaDe("SUPER_ADMIN", MODULOS_PRO, CON_CANDADO, [], cat), undefined, `${cat}: solo dental`);
+  }
+});
+
+test("candado: no destapa ninguna otra opción, y un módulo sin página de contratar no puede llevarlo", () => {
+  for (const role of ROLES) {
+    const sin = opcionesVisibles(persona(role), "DENTAL", MODULOS_PRO).map((it) => it.id);
+    const con = opcionesVisibles(persona(role), "DENTAL", MODULOS_PRO, CON_CANDADO).map((it) => it.id);
+    assert.deepEqual(con.filter((id) => id !== "orthodontics"), sin, `${role}: el resto del menú no cambia`);
+  }
+  // Un módulo cualquiera en la lista de candados, sin página de contratar: sigue escondido.
+  const conOtro = opcionesVisibles(persona("SUPER_ADMIN"), "DENTAL", MODULOS_BASICO, ["analytics", "implants"]).map((it) => it.id);
+  assert.ok(!conOtro.includes("analytics"));
+  assert.ok(!conOtro.includes("implants"));
+});
+
+test("candado: va en el segundo nivel, en Especialidades, y marca Administración al estar en la página de contratar", () => {
+  const menu = armarMenu(opcionesVisibles(persona("SUPER_ADMIN"), "DENTAL", MODULOS_PRO, CON_CANDADO));
+  const esp = menu.grupos.find((g) => g.id === "especialidades");
+  assert.deepEqual(esp?.items.map((it) => it.id), ["orthodontics"]);
+  assert.equal(menu.nivel1.some((it) => it.id === "orthodontics"), false);
+  assert.equal(segundoNivelActivo("/dashboard/orthodontics/contratar", menu.grupos), true);
+  assert.equal(segundoNivelActivo("/dashboard/orthodontics/tablero", menu.grupos), false, "el candado no pinta como abierto un módulo que no se tiene");
+  assert.deepEqual(etiquetaDeRuta("/dashboard/orthodontics/contratar", {}), { tipo: "opcion", id: "orthodontics" }, "la miga dice «Ortodoncia»");
+});
+
+test("candado: el menú lo pinta con el ícono de candado de la fuente y sigue siendo un enlace", () => {
+  const menu = leer("src/components/dashboard/menu-dos-niveles/menu-dos-niveles.tsx");
+  assert.match(menu, /opcionesVisibles\(props\.user, props\.clinicCategory, clinicModuleKeys, modulosConCandado\)/);
+  assert.match(menu, /if \(item\.locked\) \{/);
+  assert.match(menu, /data-candado="true"/);
+  assert.match(menu, /<Icono nombre="lock" className=\{s\.candado\} \/>/);
+  assert.ok(ICONOS_EN_FUENTE.includes("lock"), "el candado está en la fuente recortada");
+  // El layout es quien decide, con la base en la mano.
+  const layout = leer("src/app/dashboard/layout.tsx");
+  assert.match(layout, /const lockedModuleKeys = modulosConCandado\(\{/);
+  assert.match(layout, /ortodonciaActiva: orthodonticsModuleActive,/);
+  assert.match(layout, /\n    lockedModuleKeys,\n/, "se lo pasa a los dos menús");
+  // El menú de siempre también.
+  const viejo = leer("src/components/dashboard/sidebar.tsx");
+  assert.match(viejo, /shouldShowItem\(item, props\.user, props\.clinicCategory, clinicModuleKeys, lockedModuleKeys\)/);
+  assert.match(viejo, /\{item\.locked && \(/);
 });
 
 // ── Íconos ───────────────────────────────────────────────────────────

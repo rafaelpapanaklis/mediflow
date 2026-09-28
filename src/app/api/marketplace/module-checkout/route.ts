@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { ivaParaCobro } from "@/lib/billing/iva-cobro";
 import {
+  canPurchaseModules,
   hasActiveAccess,
+  resolveModuleCheckoutReturnUrls,
   resolveModulePriceMxn,
   MODULE_SUBSCRIPTION_KIND,
   type ModuleBillingCycle,
@@ -20,6 +22,9 @@ const BodySchema = z.object({
   moduleKey: z.string().min(1),
   billing: z.enum(["monthly", "annual"]).default("monthly"),
   method: z.enum(["card", "spei", "oxxo"]).default("card"),
+  // Desde dónde se compra (ws1-t3): decide a dónde vuelve la clínica después
+  // del checkout. Sin este campo, Marketplace, como siempre.
+  origin: z.enum(["marketplace", "contratar"]).default("marketplace"),
 });
 
 /**
@@ -30,6 +35,10 @@ const BodySchema = z.object({
  * de Sprint 2, que sigue sin checkout — ver src/lib/marketplace/pricing.ts).
  *
  * - Auth: getCurrentUser. Multi-tenant: clinicId SIEMPRE de la sesión.
+ * - Solo dueño o administrador (`canPurchaseModules`); los demás, 403.
+ * - `origin`: a dónde vuelve después del checkout ("marketplace" por defecto;
+ *   "contratar" = la página propia del módulo). Ver
+ *   `resolveModuleCheckoutReturnUrls`.
  * - Precio: `Module.priceMxnMonthly` / columna cruda `price_mxn_annual`
  *   (fuente única — nunca hardcodeado aquí). `price_data` dinámico: no
  *   hace falta crear Price/Product en el Dashboard de Stripe.
@@ -49,6 +58,16 @@ export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
 
+  // Solo el dueño o un administrador compromete a la clínica a un cobro
+  // (ws1-t3, decisión de Rafael del 28-sep-2026). Va antes de leer el cuerpo y
+  // de tocar Stripe: a quien no puede comprar no se le crea ni el cliente.
+  if (!canPurchaseModules(user.role)) {
+    return NextResponse.json(
+      { error: "Solo el dueño o un administrador de la clínica puede contratar módulos. Pídeselo a tu administrador.", code: "solo_administrador" },
+      { status: 403 },
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -60,7 +79,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Datos inválidos", details: parsed.error.flatten() }, { status: 400 });
   }
-  const { moduleKey, billing, method } = parsed.data;
+  const { moduleKey, billing, method, origin } = parsed.data;
 
   const stripe = getStripeSafe();
   if (!stripe) return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
@@ -115,6 +134,13 @@ export async function POST(req: NextRequest) {
   const iva = ivaParaCobro(process.env);
   if (iva.ok === false) return NextResponse.json({ error: iva.error, code: iva.codigo }, { status: 503 });
 
+  const { successUrl, cancelUrl } = resolveModuleCheckoutReturnUrls({
+    baseUrl,
+    moduleKey: mod.key,
+    method,
+    origin,
+  });
+
   const unitAmount = price.amountMxn * 100;
   const meta = {
     clinicId: clinic.id,
@@ -149,8 +175,8 @@ export async function POST(req: NextRequest) {
       ],
       metadata: meta,
       subscription_data: { metadata: meta },
-      success_url: `${baseUrl}/dashboard/marketplace?compra=${mod.key}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/dashboard/marketplace`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
     });
   } else {
     // SPEI/OXXO: pago ÚNICO de un periodo (Stripe no permite estos métodos
@@ -182,8 +208,8 @@ export async function POST(req: NextRequest) {
       ],
       metadata: meta,
       payment_intent_data: { metadata: meta },
-      success_url: `${baseUrl}/dashboard/marketplace?compra=${mod.key}&pendiente=${method}`,
-      cancel_url: `${baseUrl}/dashboard/marketplace`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
     });
   }
 

@@ -25,6 +25,7 @@ import {
   ORTHODONTICS_MODULE_KEY,
 } from "@/lib/specialties/keys";
 import { HIDE_SUPPLY_MODULES, SUPPLY_NAV_IDS } from "@/lib/hidden-modules";
+import { RUTA_CONTRATAR_ORTODONCIA } from "@/lib/orthodontics/contratar";
 
 // ═══════════════════════════════════════════════════════════════════
 // Tipos
@@ -93,6 +94,11 @@ export interface NavItemDef {
   // (área "core" del producto). Se usa hoy para los items de
   // "Especialidades" y se puede extender a otras áreas modulares.
   moduleKey?: string;
+  // Candado (ws1-t3, 28-sep-2026): el módulo de esta opción NO está contratado.
+  // No lo escribe nadie en NAV_ITEMS: lo pone `conCandados` sobre una COPIA de
+  // la opción, junto con el `href` de la página donde se contrata. El menú la
+  // pinta con candado y, en vez de abrir el módulo, lleva a esa página.
+  locked?: boolean;
   // "Próximamente": si es true el item se muestra pero NO navega (sin Link).
   // renderItem lo pinta como <div> deshabilitado con badge "Próximamente".
   comingSoon?: boolean;
@@ -170,6 +176,8 @@ export const NAV_ITEMS: NavItemDef[] = [
   // esa key SOLO cuando hasActiveOrthodonticsModule(clinicId) es true — NUNCA
   // el atajo de trial de getActiveClinicModuleKeys/canAccessModule, que abre
   // todas las especialidades durante el periodo de prueba de la clínica.
+  // 28-sep-2026 (ws1-t3): sin el módulo, la opción YA NO se esconde: sale con
+  // candado y lleva a la página de contratar (ver `conCandados`, más abajo).
   { id: "orthodontics", section: "specialties", label: "Ortodoncia", href: "/dashboard/orthodontics",
     icon: Smile,
     categories: ["DENTAL"],
@@ -257,11 +265,45 @@ export function isActivePath(pathname: string | null, href: string, matchExact?:
 // Hoy son stubs "Próximamente" sin funcionalidad. Poner en false para re-mostrarlas.
 export const HIDE_SPECIALTIES = true;
 
+/**
+ * A dónde lleva una opción con candado: la página donde se contrata su módulo.
+ * Un módulo que no esté aquí no puede salir con candado (no habría a dónde ir).
+ */
+export const RUTA_CONTRATAR_POR_MODULO: Readonly<Record<string, string>> = {
+  [ORTHODONTICS_MODULE_KEY]: RUTA_CONTRATAR_ORTODONCIA,
+};
+
+/** ¿Esta opción sale con candado? Su módulo está en la lista y tiene página de contratar. */
+export function llevaCandado(item: NavItemDef, lockedModuleKeys: readonly string[]): boolean {
+  return Boolean(
+    item.moduleKey &&
+      lockedModuleKeys.includes(item.moduleKey) &&
+      RUTA_CONTRATAR_POR_MODULO[item.moduleKey],
+  );
+}
+
+/**
+ * Marca con candado las opciones cuyo módulo no está contratado: devuelve una
+ * COPIA con `locked` y con el `href` de la página de contratar. Las demás
+ * pasan tal cual (el mismo objeto). Se aplica DESPUÉS de `shouldShowItem`.
+ */
+export function conCandados(items: NavItemDef[], lockedModuleKeys: readonly string[]): NavItemDef[] {
+  if (lockedModuleKeys.length === 0) return items;
+  return items.map((item) =>
+    llevaCandado(item, lockedModuleKeys)
+      ? { ...item, locked: true, href: RUTA_CONTRATAR_POR_MODULO[item.moduleKey as string] }
+      : item,
+  );
+}
+
 export function shouldShowItem(
   item: NavItemDef,
   user: SidebarUser,
   category: ClinicCategory,
   clinicModuleKeys: string[],
+  // Módulos sin contratar que se enseñan CON CANDADO (ws1-t3). Por defecto
+  // ninguno: quien no pase esta lista ve exactamente lo de siempre.
+  lockedModuleKeys: readonly string[] = [],
 ): boolean {
   // Items exclusivos del menú de suspensión (Facturación) NUNCA salen en el
   // flujo normal; el sidebar los renderiza aparte cuando isExpired.
@@ -282,7 +324,13 @@ export function shouldShowItem(
   // clínica tenga ese módulo activo (o esté en trial). Aplica también al
   // SUPER_ADMIN — el toggle del marketplace es la fuente de verdad y un
   // admin tampoco debe ver una especialidad que no contrató.
-  if (item.moduleKey && !clinicModuleKeys.includes(item.moduleKey)) return false;
+  // Excepción (ws1-t3): un módulo sin contratar que lleva candado SÍ se
+  // enseña. Lo demás —categoría, adminOnly y permiso— se le exige igual.
+  if (
+    item.moduleKey &&
+    !clinicModuleKeys.includes(item.moduleKey) &&
+    !llevaCandado(item, lockedModuleKeys)
+  ) return false;
   // Permission gating: SUPER_ADMIN ve todo (mantiene el comportamiento previo).
   // Para los demás, si el item declara `permission`, exigimos que el set
   // efectivo (default del role + override) lo incluya. Items sin `permission`

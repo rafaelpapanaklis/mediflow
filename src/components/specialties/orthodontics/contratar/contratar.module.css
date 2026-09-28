@@ -1,0 +1,504 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Contratar Ortodoncia (/dashboard/orthodontics/contratar) — ws1-t3.
+
+   La página que abre el candado del menú: el precio (mensual o anual, con su
+   selector) y todo lo que incluye el módulo, por categorías.
+
+   Cuelga de la raíz del módulo (`modulo/modulo.module.css` → `.raiz`), así
+   que hereda los tokens `--pr-*` del rediseño, la tipografía del panel, las
+   cifras de ancho fijo y los botones ya vestidos. Aquí NO se declara ningún
+   token ni ningún color: solo lo que es propio de esta página.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Cabecera ────────────────────────────────────────────────────────── */
+
+.cabeza {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: clamp(4px, 1vw, 12px) 0 18px;
+}
+
+.cabezaIcono {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+/* El candado, en la esquina del ícono: es el mismo que el del menú. */
+.cabezaCandado {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--pr-fondo);
+  border-radius: 50%;
+  background: var(--pr-texto);
+  color: var(--pr-fondo);
+}
+
+.cabezaTextos {
+  min-width: 0;
+}
+
+.sobretitulo {
+  margin: 0 0 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.titulo {
+  margin: 0;
+  font-size: clamp(21px, 2vw, 26px);
+  font-weight: 650;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  color: var(--pr-texto);
+}
+
+.subtitulo {
+  margin: 5px 0 0;
+  max-width: 62ch;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-2);
+}
+
+/* ── Rejilla: lo que incluye + el precio ───────────────────────────────
+   En ancho, el precio va a la derecha y se queda a la vista al bajar. En
+   estrecho va ARRIBA: lo primero que pidió ver Rafael al dar clic es el
+   precio. */
+
+.rejilla {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  align-items: start;
+  gap: 18px;
+}
+
+.columnaPrecio {
+  position: sticky;
+  /* Debajo de la barra superior del panel (56 px), con un respiro. */
+  top: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+@container orto (max-width: 900px) {
+  .rejilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .columnaPrecio {
+    position: static;
+    order: -1;
+  }
+}
+
+/* ── Avisos (vuelta de Stripe, vista previa) ─────────────────────────── */
+
+.aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--pr-texto-2);
+}
+
+.aviso > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.aviso strong {
+  display: block;
+  font-weight: 600;
+  color: var(--pr-texto);
+}
+
+.avisoExito { border-color: var(--pr-exito); background: var(--pr-exito-suave); }
+.avisoExito > svg { color: var(--pr-exito); }
+.avisoAlerta { border-color: var(--pr-alerta); background: var(--pr-alerta-suave); }
+.avisoAlerta > svg { color: var(--pr-alerta); }
+.avisoPeligro { border-color: var(--pr-peligro); background: var(--pr-peligro-suave); }
+.avisoPeligro > svg { color: var(--pr-peligro); }
+
+.avisoCuerpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.avisoEnlace {
+  font-weight: 600;
+  color: var(--pr-activo);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: 4px;
+}
+
+.avisoEnlace:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+/* ── Tarjeta del precio ──────────────────────────────────────────────── */
+
+.precio {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra-2);
+}
+
+.precioTitulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  color: var(--pr-texto);
+}
+
+/* Selector Mensual / Anual: dos radios de verdad (flechas del teclado y
+   lector de pantalla gratis), vestidos como el control segmentado del panel. */
+.ciclos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-hover);
+}
+
+.ciclo {
+  position: relative;
+  min-width: 0;
+}
+
+.cicloRadio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cicloCara {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  color: var(--pr-texto-2);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+
+@media (hover: hover) {
+  .cicloRadio:hover + .cicloCara {
+    color: var(--pr-texto);
+  }
+}
+
+.cicloRadio:checked + .cicloCara {
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-weight: 600;
+  box-shadow: var(--pr-sombra);
+}
+
+.cicloRadio:focus-visible + .cicloCara {
+  box-shadow: var(--pr-foco);
+}
+
+.ahorro {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--pr-exito-suave);
+  color: var(--pr-exito);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* La cifra. Alto reservado para dos renglones de detalle: al cambiar de
+   ciclo la tarjeta no cambia de alto y el botón no se mueve. */
+.importe {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+
+.importeCifra {
+  font-size: clamp(34px, 3.4vw, 42px);
+  font-weight: 700;
+  letter-spacing: -1.4px;
+  line-height: 1;
+  color: var(--pr-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.importeUnidad {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+.importeIva {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pr-texto-3);
+}
+
+.detalle {
+  min-height: 36px;
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+.detalle strong {
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+/* Tres clases para ganarle, sin `!important`, a la ropa que la raíz del
+   módulo le pone a `ButtonNew`. */
+.precio .boton.boton {
+  width: 100%;
+  height: 44px;
+  font-size: 14px;
+}
+
+.letraChica {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--pr-texto-3);
+}
+
+.letraChica li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.letraChica svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--pr-texto-3);
+}
+
+/* Quien no puede contratar: en vez del botón, a quién pedírselo. */
+.sinPermiso {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px dashed var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-2);
+}
+
+.sinPermiso > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--pr-texto-3);
+}
+
+.sinPermiso strong {
+  display: block;
+  font-weight: 600;
+  color: var(--pr-texto);
+}
+
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--pr-peligro);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-peligro-suave);
+  color: var(--pr-peligro);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+/* ── Lo que incluye ──────────────────────────────────────────────────── */
+
+.incluyeTitulo {
+  margin: 0 0 3px;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  color: var(--pr-texto);
+}
+
+.incluyeSub {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--pr-texto-3);
+}
+
+.categorias {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* La rejilla de categorías mide su PROPIO ancho: con el precio al lado le
+   queda menos sitio que a la página. */
+.incluye {
+  min-width: 0;
+  container-type: inline-size;
+  container-name: incluye;
+}
+
+@container incluye (max-width: 600px) {
+  .categorias {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.categoria {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px 18px 18px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra);
+}
+
+/* Son siete: la última ocupa las dos columnas en vez de dejar un hueco, y
+   reparte sus puntos en dos. */
+.categoria:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.categoria:last-child:nth-child(odd) .puntos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 18px;
+}
+
+@container incluye (max-width: 600px) {
+  .categoria:last-child:nth-child(odd) .puntos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.categoriaCabeza {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.categoriaIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+.categoriaTitulo {
+  margin: 0;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  line-height: 1.25;
+  color: var(--pr-texto);
+}
+
+.categoriaResumen {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+.puntos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.punto {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--pr-texto-2);
+  overflow-wrap: anywhere;
+}
+
+.punto > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--pr-exito);
+}
+
+/* En el teléfono el botón flotante de Sabina vive abajo a la derecha: que el
+   final de la página se pueda subir por encima de él. */
+@container orto (max-width: 560px) {
+  .pagina {
+    padding-bottom: 72px;
+  }
+}

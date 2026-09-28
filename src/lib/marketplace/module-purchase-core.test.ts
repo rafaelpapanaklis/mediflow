@@ -10,7 +10,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildActivateModuleWrite,
+  canPurchaseModules,
   canRequestModuleCancellation,
+  resolveModuleCheckoutReturnUrls,
   computeAnnualPriceMxn,
   hasActiveAccess,
   resolveModuleDeletion,
@@ -188,4 +190,57 @@ test("resolveModuleDeletion: pagado con tarjeta → cancel", () => {
 test("resolveModuleDeletion: sin ClinicModule → noop", () => {
   const r = resolveModuleDeletion(null);
   assert.equal(r.type, "noop");
+});
+
+// ── 6. A dónde vuelve después del checkout (ws1-t3) ─────────────────────
+const BASE = "https://panel.ejemplo.mx";
+
+test("vuelta del checkout: desde Marketplace, exactamente las URLs de siempre", () => {
+  assert.deepEqual(
+    resolveModuleCheckoutReturnUrls({ baseUrl: BASE, moduleKey: "orthodontics", method: "card", origin: "marketplace" }),
+    {
+      successUrl: `${BASE}/dashboard/marketplace?compra=orthodontics&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${BASE}/dashboard/marketplace`,
+    },
+  );
+  assert.deepEqual(
+    resolveModuleCheckoutReturnUrls({ baseUrl: BASE, moduleKey: "orthodontics", method: "spei", origin: "marketplace" }),
+    {
+      successUrl: `${BASE}/dashboard/marketplace?compra=orthodontics&pendiente=spei`,
+      cancelUrl: `${BASE}/dashboard/marketplace`,
+    },
+  );
+});
+
+test("vuelta del checkout: desde la página de contratar, vuelve a esa página", () => {
+  assert.deepEqual(
+    resolveModuleCheckoutReturnUrls({ baseUrl: BASE, moduleKey: "orthodontics", method: "card", origin: "contratar" }),
+    {
+      successUrl: `${BASE}/dashboard/orthodontics/contratar?compra=ok&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${BASE}/dashboard/orthodontics/contratar?compra=cancelada`,
+    },
+  );
+  assert.equal(
+    resolveModuleCheckoutReturnUrls({ baseUrl: BASE, moduleKey: "orthodontics", method: "oxxo", origin: "contratar" }).successUrl,
+    `${BASE}/dashboard/orthodontics/contratar?compra=pendiente&metodo=oxxo`,
+  );
+});
+
+test("vuelta del checkout: un módulo sin página de contratar vuelve a Marketplace aunque pida otra cosa", () => {
+  assert.deepEqual(
+    resolveModuleCheckoutReturnUrls({ baseUrl: BASE, moduleKey: "implants", method: "card", origin: "contratar" }),
+    {
+      successUrl: `${BASE}/dashboard/marketplace?compra=implants&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${BASE}/dashboard/marketplace`,
+    },
+  );
+});
+
+// ── 7. Quién puede comprar (ws1-t3) ─────────────────────────────────────
+test("comprar un módulo: solo el dueño o un administrador", () => {
+  assert.equal(canPurchaseModules("SUPER_ADMIN"), true);
+  assert.equal(canPurchaseModules("ADMIN"), true);
+  for (const r of ["DOCTOR", "RECEPTIONIST", "READONLY", "", null, undefined]) {
+    assert.equal(canPurchaseModules(r), false, String(r));
+  }
 });

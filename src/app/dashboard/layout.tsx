@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar, type SidebarProps } from "@/components/dashboard/sidebar";
@@ -28,6 +28,12 @@ import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import {
+  COOKIE_VISTA_PREVIA_SIN_MODULO,
+  moduloActivoALaVista,
+  modulosConCandado,
+  vistaPreviaSinModulo,
+} from "@/lib/orthodontics/contratar";
 import { I18nProvider } from "@/i18n/i18n-provider";
 import { getDict } from "@/i18n/dictionaries";
 import { makeT } from "@/i18n/t";
@@ -188,7 +194,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Falla cerrado: sin la tabla, sin fila o con error devuelve false y se pinta
   // el menú de siempre. clinic.id sale de la sesión (getCurrentUser).
   const isDentalClinic = ((clinic as any).category ?? "OTHER") === "DENTAL";
-  const [allClinics, clinicModuleKeysRaw, onboardingCompleted, menuDosNiveles, orthodonticsModuleActive] =
+  const [allClinics, clinicModuleKeysRaw, onboardingCompleted, menuDosNiveles, orthodonticsModuleReal] =
     await Promise.all([
       getUserClinics(),
       isExpired ? Promise.resolve<string[]>([]) : getActiveClinicModuleKeys(clinic.id),
@@ -198,6 +204,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
       // ClinicModule real. Ver src/lib/orthodontics/access.ts.
       isExpired || !isDentalClinic ? Promise.resolve(false) : hasActiveOrthodonticsModule(clinic.id),
     ]);
+  // Vista previa «sin módulo» (ws1-t3): fuera de producción, una cookie hace
+  // que ESTE navegador vea la clínica como si no tuviera Ortodoncia, para poder
+  // revisar el candado. Solo puede quitarlo a la vista, nunca darlo, y en
+  // producción se ignora. Ver src/lib/orthodontics/contratar.ts.
+  const orthodonticsModuleActive = moduloActivoALaVista(
+    orthodonticsModuleReal,
+    vistaPreviaSinModulo({
+      nodeEnv: process.env.NODE_ENV,
+      cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
+    }),
+  );
+  // Candado (decisión de Rafael, 28-sep-2026): en clínicas dentales Ortodoncia
+  // sale SIEMPRE en el menú. Sin el módulo, con candado y llevando a la página
+  // de contratar; con el módulo, como hasta hoy.
+  const lockedModuleKeys = modulosConCandado({
+    esDental: isDentalClinic,
+    planVencido: isExpired,
+    ortodonciaActiva: orthodonticsModuleActive,
+    llaveOrtodoncia: ORTHODONTICS_MODULE_KEY,
+  });
   // getActiveClinicModuleKeys mete "orthodontics" para CUALQUIER clínica
   // dental en trial (mismo atajo que el resto de especialidades); lo
   // corregimos aquí con el resultado del check real antes de que llegue al
@@ -250,6 +276,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     trialEndsAt,
     isInTrial,
     clinicModuleKeys,
+    lockedModuleKeys,
     sidebarCollapsed: (user as { sidebarCollapsed?: string[] }).sidebarCollapsed ?? [],
     isExpired,
   };

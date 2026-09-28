@@ -7,6 +7,7 @@
 import {
   NAV_ITEMS,
   SUSPENDED_NAV_IDS,
+  conCandados,
   isActivePath,
   shouldShowItem,
   type ClinicCategory,
@@ -140,13 +141,22 @@ export interface MenuArmado {
   grupos: GrupoArmado[];
 }
 
-/** Las opciones que ve esta persona: el MISMO filtro y orden que el menú de siempre. */
+/**
+ * Las opciones que ve esta persona: el MISMO filtro y orden que el menú de siempre.
+ *
+ * `modulosConCandado` (ws1-t3): módulos sin contratar que se enseñan igual,
+ * con candado y llevando a su página de contratar. Sin esa lista, lo de siempre.
+ */
 export function opcionesVisibles(
   user: SidebarUser,
   category: ClinicCategory,
   clinicModuleKeys: string[],
+  modulosConCandado: readonly string[] = [],
 ): NavItemDef[] {
-  return NAV_ITEMS.filter((item) => shouldShowItem(item, user, category, clinicModuleKeys));
+  return conCandados(
+    NAV_ITEMS.filter((item) => shouldShowItem(item, user, category, clinicModuleKeys, modulosConCandado)),
+    modulosConCandado,
+  );
 }
 
 /**

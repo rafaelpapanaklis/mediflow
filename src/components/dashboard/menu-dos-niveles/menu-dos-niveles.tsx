@@ -128,9 +128,12 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   const clinicModuleKeys = useMemo(() => props.clinicModuleKeys ?? [], [props.clinicModuleKeys]);
 
   // Quién ve qué: el filtro del menú de siempre, sin tocar.
+  // Módulos sin contratar que salen con candado (hoy, Ortodoncia): los decide
+  // el layout con la base en la mano; aquí solo se pintan.
+  const modulosConCandado = useMemo(() => props.lockedModuleKeys ?? [], [props.lockedModuleKeys]);
   const visibles = useMemo(
-    () => opcionesVisibles(props.user, props.clinicCategory, clinicModuleKeys),
-    [props.user, props.clinicCategory, clinicModuleKeys],
+    () => opcionesVisibles(props.user, props.clinicCategory, clinicModuleKeys, modulosConCandado),
+    [props.user, props.clinicCategory, clinicModuleKeys, modulosConCandado],
   );
 
   // El menú personal solo cambia de SITIO lo de arriba; nunca añade nada. Se
@@ -344,6 +347,31 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
     }
 
     const activo = isActivePath(pathname, item.href, item.matchExact);
+
+    // Módulo sin contratar: la opción se ve, con candado, y SÍ navega — pero a
+    // la página donde se contrata (el `href` ya viene cambiado por
+    // `conCandados`), no al módulo.
+    if (item.locked) {
+      const aviso = t("menuDosNiveles.moduloConCandado");
+      const conCandado = (
+        <Link
+          key={item.id}
+          href={item.href}
+          aria-current={activo ? "page" : undefined}
+          aria-label={`${texto}. ${aviso}`}
+          data-candado="true"
+          className={cx(claseBase, activo && s.itemActivo)}
+        >
+          <Icono nombre={icono} relleno={activo} className={iconoEstilo} />
+          {!compacto && <span className={s.itemTexto}>{texto}</span>}
+          {!compacto && <Icono nombre="lock" className={s.candado} />}
+        </Link>
+      );
+      return compacto
+        ? conTooltip(item.id, conCandado, `${texto} · ${t("menuDosNiveles.moduloConCandadoCorto")}`)
+        : conCandado;
+    }
+
     const enlace = (
       <Link
         key={item.id}

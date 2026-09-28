@@ -217,3 +217,67 @@ export function resolveModuleDeletion(
   if (cm.paymentMethod === "admin") return { type: "noop", reason: "admin_grant_no_lo_cancela_stripe" };
   return { type: "cancel" };
 }
+
+/* ── 6. A dónde vuelve la clínica después del checkout ─────────────────── */
+
+/**
+ * Desde dónde se pidió la compra. "marketplace" es lo de siempre; "contratar"
+ * (ws1-t3, 28-sep-2026) es la página propia del módulo, a la que se llega por
+ * el candado del menú. Hace falta porque Marketplace está OCULTO en el menú
+ * nuevo: volver ahí después de pagar dejaba a la clínica en una pantalla que
+ * no sabe cómo encontró.
+ */
+export type ModuleCheckoutOrigin = "marketplace" | "contratar";
+
+/** Módulos con página propia de contratar. Los demás vuelven a Marketplace. */
+const RUTA_CONTRATAR: Readonly<Record<string, string>> = {
+  orthodontics: "/dashboard/orthodontics/contratar",
+};
+
+export interface ModuleCheckoutReturnUrls {
+  successUrl: string;
+  cancelUrl: string;
+}
+
+/**
+ * URLs de vuelta del checkout. Con origen "marketplace" (o un módulo sin
+ * página de contratar) devuelve EXACTAMENTE las de siempre, letra por letra.
+ * `{CHECKOUT_SESSION_ID}` lo rellena Stripe; aquí va tal cual.
+ */
+export function resolveModuleCheckoutReturnUrls(input: {
+  baseUrl: string;
+  moduleKey: string;
+  method: ModulePaymentMethod;
+  origin: ModuleCheckoutOrigin;
+}): ModuleCheckoutReturnUrls {
+  const { baseUrl, moduleKey, method, origin } = input;
+  const contratar = origin === "contratar" ? RUTA_CONTRATAR[moduleKey] : undefined;
+  if (contratar) {
+    return {
+      successUrl:
+        method === "card"
+          ? `${baseUrl}${contratar}?compra=ok&session_id={CHECKOUT_SESSION_ID}`
+          : `${baseUrl}${contratar}?compra=pendiente&metodo=${method}`,
+      cancelUrl: `${baseUrl}${contratar}?compra=cancelada`,
+    };
+  }
+  return {
+    successUrl:
+      method === "card"
+        ? `${baseUrl}/dashboard/marketplace?compra=${moduleKey}&session_id={CHECKOUT_SESSION_ID}`
+        : `${baseUrl}/dashboard/marketplace?compra=${moduleKey}&pendiente=${method}`,
+    cancelUrl: `${baseUrl}/dashboard/marketplace`,
+  };
+}
+
+/* ── 7. Quién puede comprar ────────────────────────────────────────────── */
+
+/**
+ * Comprar un módulo compromete un cobro recurrente a la clínica: solo su
+ * dueño o un administrador, la misma regla que la pestaña «Suscripción» de
+ * Configuración. Antes el endpoint no lo comprobaba y cualquier usuario de la
+ * clínica podía abrir un checkout.
+ */
+export function canPurchaseModules(role: string | null | undefined): boolean {
+  return role === "SUPER_ADMIN" || role === "ADMIN";
+}
