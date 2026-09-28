@@ -16,6 +16,7 @@ import {
   computeAnnualPriceMxn,
   hasActiveAccess,
   hasDuplicatePurchaseInFlight,
+  referenciaDeFactura,
   resolveActivationConflict,
   resolveModuleDeletion,
   resolveModulePriceMxn,
@@ -322,4 +323,43 @@ test("resolveActivationConflict: la que llega es un pago único (SPEI/OXXO, sin 
     resolveActivationConflict({ status: "active", stripeSubscriptionId: "sub_1" }, null),
     { type: "activate" },
   );
+});
+
+// ── ¿Esta factura es de un módulo? (ws1-t5) ─────────────────────────────────
+
+test("factura de módulo: la metadata de la suscripción llega en `parent` (API nueva)", () => {
+  const r = referenciaDeFactura({
+    parent: { subscription_details: { subscription: "sub_mod", metadata: { kind: "module-subscription", moduleKey: "orthodontics", clinicId: "c1" } } },
+  });
+  assert.deepEqual(r, { esDeModulo: true, moduleKey: "orthodontics", stripeSubscriptionId: "sub_mod" });
+});
+
+test("factura de módulo: forma anterior de la API y suscripción expandida", () => {
+  const r = referenciaDeFactura({
+    subscription_details: { metadata: { kind: "module-subscription", moduleKey: "orthodontics" } },
+    subscription: { id: "sub_mod" },
+  });
+  assert.deepEqual(r, { esDeModulo: true, moduleKey: "orthodontics", stripeSubscriptionId: "sub_mod" });
+});
+
+test("factura de módulo: si solo la línea trae la metadata, también se reconoce", () => {
+  const r = referenciaDeFactura({
+    lines: { data: [null, { metadata: {} }, { metadata: { kind: "module-subscription", moduleKey: "orthodontics" } }] },
+  });
+  assert.equal(r.esDeModulo, true);
+  assert.equal(r.moduleKey, "orthodontics");
+  assert.equal(r.stripeSubscriptionId, null);
+});
+
+test("factura del PLAN: no es de módulo, pero deja la suscripción para comprobarla", () => {
+  const r = referenciaDeFactura({
+    parent: { subscription_details: { subscription: "sub_plan", metadata: { kind: "platform-subscription", clinicId: "c1" } } },
+    lines: { data: [{ metadata: { kind: "platform-subscription" } }] },
+  });
+  assert.deepEqual(r, { esDeModulo: false, moduleKey: null, stripeSubscriptionId: "sub_plan" });
+});
+
+test("factura sin metadata ni suscripción (cargo suelto): no es de módulo", () => {
+  assert.deepEqual(referenciaDeFactura({}), { esDeModulo: false, moduleKey: null, stripeSubscriptionId: null });
+  assert.deepEqual(referenciaDeFactura(null), { esDeModulo: false, moduleKey: null, stripeSubscriptionId: null });
 });

@@ -378,3 +378,60 @@ export function resolveActivationConflict(
 export function canPurchaseModules(role: string | null | undefined): boolean {
   return role === "SUPER_ADMIN" || role === "ADMIN";
 }
+
+/* ── 8. ¿Esta factura de Stripe es de un módulo? (ws1-t5, 28-sep-2026) ──── */
+
+/**
+ * La suscripción de un módulo comparte el `customer` de Stripe con la del
+ * plan, así que sus facturas llegan al mismo `invoice.paid` /
+ * `invoice.payment_failed`. Sin distinguirlas, una mensualidad de módulo
+ * rechazada dejaba a la CLÍNICA ENTERA en `past_due` (sin panel, con el plan
+ * al corriente) y una pagada mandaba el correo «Tu plan está activo».
+ *
+ * La factura no trae `metadata.kind` propio: lo hereda de la suscripción, y
+ * según la versión de la API de Stripe viene en un sitio o en otro. Se miran
+ * los tres.
+ */
+export interface FacturaStripeParaModulo {
+  parent?: { subscription_details?: { subscription?: unknown; metadata?: Record<string, string> | null } | null } | null;
+  /** Forma anterior a la API 2025: los detalles colgaban de la factura. */
+  subscription_details?: { metadata?: Record<string, string> | null } | null;
+  subscription?: unknown;
+  lines?: { data?: Array<{ metadata?: Record<string, string> | null } | null> | null } | null;
+}
+
+export interface ReferenciaDeFactura {
+  /** `true` si la metadata dice que es de un módulo. */
+  esDeModulo: boolean;
+  moduleKey: string | null;
+  /**
+   * La suscripción que generó la factura, si se pudo leer. Con ella el webhook
+   * puede comprobar contra `clinic_modules` cuando la metadata no llegó.
+   */
+  stripeSubscriptionId: string | null;
+}
+
+function idDe(valor: unknown): string | null {
+  if (typeof valor === "string" && valor) return valor;
+  if (valor && typeof valor === "object") {
+    const id = (valor as { id?: unknown }).id;
+    if (typeof id === "string" && id) return id;
+  }
+  return null;
+}
+
+export function referenciaDeFactura(invoice: FacturaStripeParaModulo | null | undefined): ReferenciaDeFactura {
+  if (!invoice) return { esDeModulo: false, moduleKey: null, stripeSubscriptionId: null };
+  const candidatas: Array<Record<string, string> | null | undefined> = [
+    invoice.parent?.subscription_details?.metadata,
+    invoice.subscription_details?.metadata,
+    ...(invoice.lines?.data ?? []).map((l) => l?.metadata),
+  ];
+  const meta = candidatas.find((m) => m?.kind === MODULE_SUBSCRIPTION_KIND) ?? null;
+  return {
+    esDeModulo: meta !== null,
+    moduleKey: meta?.moduleKey ?? null,
+    stripeSubscriptionId:
+      idDe(invoice.parent?.subscription_details?.subscription) ?? idDe(invoice.subscription),
+  };
+}

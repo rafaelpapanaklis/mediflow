@@ -46,6 +46,7 @@ import { PLAN_MARKETING } from "@/lib/plan-shared";
 import {
   MODULE_SUBSCRIPTION_KIND,
   buildActivateModuleWrite,
+  referenciaDeFactura,
   resolveActivationConflict,
   resolveModuleDeletion,
   resolveModuleSubscriptionSync,
@@ -53,6 +54,7 @@ import {
   type ModulePaymentMethod,
 } from "@/lib/marketplace/module-purchase-core";
 import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
+import { notifyModuleActivated } from "@/lib/marketplace/module-activated-email";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -375,7 +377,13 @@ export async function POST(req: NextRequest) {
           // billing_reason "subscription_update" y NO debe costarle a la clínica
           // el acceso al plan que ya paga por haber intentado subir de plan.
           const reason = invoice.billing_reason;
-          const canSuspend = canSuspendForFailedInvoice(reason);
+          // La mensualidad de un MÓDULO tampoco suspende (ws1-t5): su
+          // suscripción comparte el customer con la del plan, y un cobro de
+          // módulo rechazado dejaba a la clínica entera sin panel con el plan
+          // al corriente. El módulo se pausa por su lado, con
+          // `customer.subscription.updated` (syncModuleSubscription).
+          const moduloDeLaFactura = await moduloDeFactura(invoice);
+          const canSuspend = moduloDeLaFactura === null && canSuspendForFailedInvoice(reason);
           if (canSuspend) {
             await prisma.clinic.update({
               where: { id: clinicId },
@@ -404,6 +412,9 @@ export async function POST(req: NextRequest) {
                   invoiceId: invoice.id,
                   billingReason: reason ?? null,
                   suspended: canSuspend,
+                  ...(moduloDeLaFactura !== null
+                    ? { kind: MODULE_SUBSCRIPTION_KIND, moduleKey: moduloDeLaFactura.moduleKey }
+                    : {}),
                 },
               },
             },
@@ -469,6 +480,13 @@ export async function POST(req: NextRequest) {
         if (clinic) {
           await recordStripeInvoice(invoice, clinic.id);
         }
+
+        // Factura de un MÓDULO (ws1-t5): se registra como cobro (arriba) y
+        // nada más. No es el plan: sin correo «Tu plan está activo / renovado»
+        // (el suyo, «Módulo activado», sale al activarse) y sin comisión de
+        // afiliado, que se calcula con las reglas del PLAN y pagaría por una
+        // mensualidad de módulo lo mismo que por una de plan.
+        if ((await moduloDeFactura(invoice)) !== null) break;
 
         // ──────────────────────────────────────────────────────────────────
         // CORREOS DE CICLO DE VIDA DEL PLAN — van ANTES del break por afiliado
@@ -1088,6 +1106,21 @@ async function activateModulePurchase(
     update: write,
   });
 
+  // Correo «Módulo activado» (ws1-t5): antes la clínica pagaba y no le llegaba
+  // nada. Un solo correo por suscripción (o por sesión de pago, en SPEI/OXXO)
+  // aunque Stripe reenvíe el evento. Fire-and-forget: nunca lanza ni retrasa
+  // el 200 al webhook.
+  notifyModuleActivated({
+    clinicId,
+    moduleKey,
+    origen: "compra",
+    referencia: opts.stripeSubscriptionId ?? opts.source.sessionId,
+    amountMxn: opts.amountMxn,
+    billing: opts.billing,
+    method: opts.method,
+    periodEnd,
+  }).catch(() => {});
+
   await logAudit({
     clinicId,
     userId: clinicId, // sin user en webhook context — mismo placeholder que activatePlatformSubscription
@@ -1193,4 +1226,26 @@ async function cancelModuleSubscription(sub: Stripe.Subscription, eventType: str
       _source: { before: null, after: { event: eventType, subscriptionId: sub.id, kind: MODULE_SUBSCRIPTION_KIND, moduleKey } },
     },
   });
+}
+
+/**
+ * ¿Esta factura es de la suscripción de un módulo? Primero por la metadata que
+ * la factura hereda de la suscripción; si Stripe no la mandó, por la propia
+ * suscripción contra `clinic_modules`. `null` = no es de un módulo (o no se
+ * pudo saber: se trata como factura del plan, que es lo de siempre).
+ */
+async function moduloDeFactura(invoice: Stripe.Invoice): Promise<{ moduleKey: string | null } | null> {
+  const ref = referenciaDeFactura(invoice as unknown as Parameters<typeof referenciaDeFactura>[0]);
+  if (ref.esDeModulo) return { moduleKey: ref.moduleKey };
+  if (!ref.stripeSubscriptionId) return null;
+  try {
+    const cm = await prisma.clinicModule.findUnique({
+      where: { stripeSubscriptionId: ref.stripeSubscriptionId },
+      select: { module: { select: { key: true } } },
+    });
+    return cm ? { moduleKey: cm.module.key } : null;
+  } catch (e) {
+    console.error("[stripe webhook] no se pudo comprobar si la factura es de un módulo:", e);
+    return null;
+  }
 }
