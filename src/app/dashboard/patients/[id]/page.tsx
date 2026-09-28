@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
+import { labelParentesco } from "@/lib/consent/default-signer";
 import { getPatientVisibility, clinicScopeFilter, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
@@ -427,6 +428,30 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     }
   }
 
+  // H24 (QA ws1-t9): «Nuevo consentimiento» defaulteaba el profesional al
+  // usuario CONECTADO (casi nunca el que firma) y el representante legal
+  // salía en blanco aunque el caso de ortodoncia ya tuviera tutora
+  // registrada (A11, "Alta del caso"). `treatingDoctorId` ya viaja en
+  // `orthoData.plan`; el nombre/parentesco del tutor pide una consulta
+  // aparte — una sola fila por `id`, tolerante a que no exista.
+  const orthoTreatingDoctorId = orthoData?.plan?.treatingDoctorId ?? null;
+  let orthoResponsibleGuardian: { nombre: string; relacion: string } | null = null;
+  const responsibleGuardianId = orthoData?.plan?.responsibleGuardianId ?? null;
+  if (responsibleGuardianId) {
+    const guardian = await prisma.guardian
+      .findUnique({
+        where: { id: responsibleGuardianId },
+        select: { fullName: true, parentesco: true },
+      })
+      .catch(() => null);
+    if (guardian) {
+      orthoResponsibleGuardian = {
+        nombre: guardian.fullName,
+        relacion: labelParentesco(guardian.parentesco),
+      };
+    }
+  }
+
   // Nota: totales financieros (totalPaid/Balance/Plan) se derivan client-side
   // desde el state local `invoices` (ver patient-detail-client.tsx) para que
   // el card "Finanzas" y el sidebar "Estado de cuenta" se mantengan en sync
@@ -566,6 +591,8 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           orthoData={orthoData}
           orthoRedesignVM={orthoRedesignVM}
           orthoRedesignBundle={orthoRedesignBundle}
+          orthoTreatingDoctorId={orthoTreatingDoctorId}
+          orthoResponsibleGuardian={orthoResponsibleGuardian}
           activityCounts={activityCounts}
           questionnaireStatus={questionnaireStatus}
           questionnaireFilledAt={questionnaireFilledAt}

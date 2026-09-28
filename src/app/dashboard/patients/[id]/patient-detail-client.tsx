@@ -286,6 +286,13 @@ interface Props {
    */
   orthoRedesignBundle?: OrthoRedesignBundle | null;
   /**
+   * H24 (QA ws1-t9): doctor tratante y representante legal del caso de
+   * ortodoncia (si hay uno abierto) — precargan «Nuevo consentimiento» en
+   * vez del usuario conectado y un representante en blanco.
+   */
+  orthoTreatingDoctorId?: string | null;
+  orthoResponsibleGuardian?: { nombre: string; relacion: string } | null;
+  /**
    * Conteos por módulo del paciente actual. Se usan en el quick-nav para
    * atenuar ítems de especialidades sin actividad. El módulo permanece
    * visible (el clinic lo tiene activo) y clickable; la atenuación
@@ -413,6 +420,8 @@ export function PatientDetailClient({
   orthoData,
   orthoRedesignVM,
   orthoRedesignBundle,
+  orthoTreatingDoctorId = null,
+  orthoResponsibleGuardian = null,
   activityCounts,
   questionnaireStatus,
   questionnaireRiskFlags = [],
@@ -2978,6 +2987,8 @@ export function PatientDetailClient({
               initialConsents={consents}
               doctors={doctors}
               currentUserId={currentUser.id}
+              defaultDoctorId={orthoTreatingDoctorId}
+              defaultRepresentative={orthoResponsibleGuardian}
               canCreate={canCreateConsents}
               canRevoke={canRevokeConsents}
               canSendWhatsApp={canSendWhatsApp}

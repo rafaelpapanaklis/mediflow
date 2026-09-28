@@ -54,6 +54,7 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { SignaturePad } from "@/components/ui/signature-pad";
 import type { ConsentDTO, ConsentStatus } from "@/lib/consent/types";
+import { resolveConsentDoctorId } from "@/lib/consent/default-signer";
 import { ConsentVisor } from "./consent-documento";
 import { ConsentEditor, urlPreviewCarta, type PreviewCarta } from "./consent-editor";
 import styles from "./patient-detail.module.css";
@@ -77,6 +78,15 @@ export interface ConsentsTabProps {
   doctors: DoctorOption[];
   /** Usuario de la sesión — default del selector de responsable. */
   currentUserId: string;
+  /**
+   * H24 (QA ws1-t9): doctor tratante y representante legal ya registrados en
+   * el caso clínico (hoy solo lo manda Ortodoncia, `treatingDoctorId`/
+   * `responsibleGuardianId` del plan) — precargan «Nuevo consentimiento» en
+   * vez de defaultear al usuario conectado y a un representante en blanco.
+   * `undefined`/`null` = sin caso o sin esos datos: comportamiento de siempre.
+   */
+  defaultDoctorId?: string | null;
+  defaultRepresentative?: { nombre: string; relacion: string } | null;
   canCreate: boolean;
   canRevoke: boolean;
   /** "whatsapp.send" — sin él no se ofrece el envío (la API lo revalida). */
@@ -124,6 +134,7 @@ function fmtDate(iso: string | null): string {
 export function ConsentsTab(props: ConsentsTabProps) {
   const {
     patientId, patientDob = null, initialConsents, doctors, currentUserId,
+    defaultDoctorId = null, defaultRepresentative = null,
     canCreate, canRevoke, canSendWhatsApp, canCountersign,
     pacientesRediseno = false,
   } = props;
@@ -139,7 +150,7 @@ export function ConsentsTab(props: ConsentsTabProps) {
   const [nueva, setNueva] = useState<PreviewCarta | null>(null);
   const [abriendo, setAbriendo] = useState(false);
   const [creada, setCreada] = useState<{ id: string; signUrl: string } | null>(null);
-  const doctorInicial = doctors.some((d) => d.id === currentUserId) ? currentUserId : (doctors[0]?.id ?? "");
+  const doctorInicial = resolveConsentDoctorId(doctors, defaultDoctorId, currentUserId);
   const [countersigning, setCountersigning] = useState<ConsentDTO | null>(null);
   // La carta abierta como documento. Se guarda el id y no la fila: la lista se
   // refresca sola y la hoja tiene que ver la fila NUEVA (con la firma recién hecha).
@@ -329,6 +340,7 @@ export function ConsentsTab(props: ConsentsTabProps) {
         patientDob={patientDob}
         doctors={doctors}
         doctorInicial={doctorInicial}
+        representanteInicial={defaultRepresentative}
         onVolver={() => setNueva(null)}
         onCreado={async (c) => {
           setNueva(null);

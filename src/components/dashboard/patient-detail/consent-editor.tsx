@@ -88,7 +88,7 @@ export function urlPreviewCarta(datos: {
 }
 
 export function ConsentEditor({
-  hoja, patientId, patientDob, doctors, doctorInicial, onVolver, onCreado,
+  hoja, patientId, patientDob, doctors, doctorInicial, representanteInicial, onVolver, onCreado,
 }: {
   /** La hoja en blanco con la que se abre, ya pedida con `doctorInicial`. */
   hoja: PreviewCarta;
@@ -96,6 +96,12 @@ export function ConsentEditor({
   patientDob: string | null;
   doctors: DoctorDeCarta[];
   doctorInicial: string;
+  /**
+   * H24 (QA ws1-t9): el representante legal ya registrado en el caso (p. ej.
+   * el responsable del pago del caso de ortodoncia) — se precarga, no se
+   * fuerza: la clínica lo puede cambiar o quitar la casilla igual que antes.
+   */
+  representanteInicial?: { nombre: string; relacion: string } | null;
   onVolver: () => void;
   onCreado: (creada: { id: string; signUrl: string }) => void | Promise<void>;
 }) {
@@ -112,9 +118,9 @@ export function ConsentEditor({
   // la rechaza sin ese dato (misma regla, `minorSignerError`).
   const menor = isMinor(patientDob);
   const edad = ageYears(patientDob);
-  const [porRepresentante, setPorRepresentante] = useState(menor);
-  const [firmanteNombre, setFirmanteNombre] = useState("");
-  const [firmanteRelacion, setFirmanteRelacion] = useState("");
+  const [porRepresentante, setPorRepresentante] = useState(menor || Boolean(representanteInicial?.nombre));
+  const [firmanteNombre, setFirmanteNombre] = useState(representanteInicial?.nombre ?? "");
+  const [firmanteRelacion, setFirmanteRelacion] = useState(representanteInicial?.relacion ?? "");
   const [viendo, setViendo] = useState(false);
   const [trayendo, setTrayendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
