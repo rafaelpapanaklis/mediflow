@@ -268,40 +268,44 @@ export function SectionPhotos(props: SectionPhotosProps) {
         onView={(s, p) => setLightbox({ slotId: s.id, label: s.label, group: s.group, photo: p })}
       />
 
-      <div className="px-[18px] py-[16px]">
-        <div className={`${orto.ceja} mb-3`}>Juegos de fotos por etapa</div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-[10px]">
-          {props.historicalSets.map((p) => (
-            <HistoricalSetCard
-              key={p.stage}
-              set={p}
-              onView={() => props.onViewSet?.(p.stage)}
-            />
-          ))}
-          {t2Pending ? (
-            <div className={orto.vacio}>
-              <Pill color="slate" size="xs">
-                {STAGE_LABEL.T2}
-              </Pill>
-              <p className={orto.vacioTitulo}>Juego de los 6 meses pendiente</p>
-              <p className={orto.vacioPista}>
-                Elige la etapa «{STAGE_LABEL.T2}» arriba y sube las fotos.
-              </p>
-              {props.onCaptureSet ? (
-                <Btn
-                  variant="secondary"
-                  size="sm"
-                  icon={<Plus size={14} strokeWidth={1.75} aria-hidden />}
-                  className="mt-1"
-                  onClick={props.onCaptureSet}
-                >
-                  Capturar juego
-                </Btn>
-              ) : null}
-            </div>
-          ) : null}
+      {/* Sin juegos guardados y sin ninguno pendiente todavía (antes del mes
+          6), el título se quedaba solo sobre una rejilla vacía. */}
+      {props.historicalSets.length > 0 || t2Pending ? (
+        <div className="px-[18px] py-[16px]">
+          <div className={`${orto.ceja} mb-3`}>Juegos de fotos por etapa</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-[10px]">
+            {props.historicalSets.map((p) => (
+              <HistoricalSetCard
+                key={p.stage}
+                set={p}
+                onView={() => props.onViewSet?.(p.stage)}
+              />
+            ))}
+            {t2Pending ? (
+              <div className={orto.vacio}>
+                <Pill color="slate" size="xs">
+                  {STAGE_LABEL.T2}
+                </Pill>
+                <p className={orto.vacioTitulo}>Juego de los 6 meses pendiente</p>
+                <p className={orto.vacioPista}>
+                  Elige la etapa «{STAGE_LABEL.T2}» arriba y sube las fotos.
+                </p>
+                {props.onCaptureSet ? (
+                  <Btn
+                    variant="secondary"
+                    size="sm"
+                    icon={<Plus size={14} strokeWidth={1.75} aria-hidden />}
+                    className="mt-1"
+                    onClick={props.onCaptureSet}
+                  >
+                    Capturar juego
+                  </Btn>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {lightbox ? (
         <PhotoLightbox
