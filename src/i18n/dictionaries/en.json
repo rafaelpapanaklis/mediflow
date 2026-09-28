@@ -930,7 +930,8 @@
         "quotesMeta": "Patient history: they don't create invoices or charges",
         "treatmentPlans": "Active treatments",
         "treatmentPlansMeta": "Estimates already in progress: come in as a live, continuable plan, with what's done and what's paid",
-        "soloNote": "Balances, appointments, medical history, notes, estimates and active treatments are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first."
+        "soloNote": "Balances, appointments, medical history, notes, estimates and active treatments are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first.",
+        "filesCta": "Have x-rays, photos or PDFs? Upload them in bulk →"
       },
       "step4": {
         "title": "Upload your file",

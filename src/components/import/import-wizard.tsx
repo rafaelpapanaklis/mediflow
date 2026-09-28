@@ -43,10 +43,11 @@ import { ImportingPanel } from "./importing-panel";
 import { UploadProgress, type UploadProgressState } from "./upload-progress";
 import { ResultPanel } from "./result-panel";
 import { AssistedPanel } from "./assisted-panel";
+import { FilesWizard } from "./files-wizard";
 
 type NumStep = 1 | 2 | 3 | 4 | 5 | 6;
 type Step = NumStep | "importing" | "result";
-type Flow = "wizard" | "assisted";
+type Flow = "wizard" | "assisted" | "files";
 
 const STEP_KEYS = ["origin", "export", "what", "upload", "map", "review"] as const;
 const DEFAULT_TYPES = new Set(DATA_TYPES.filter((d) => d.on).map((d) => d.id));
@@ -598,9 +599,11 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   const headerSub =
     flow === "assisted"
       ? t("shell.importClinic.subAssisted")
-      : isNumeric
-        ? t("shell.importClinic.subStep", { step })
-        : "";
+      : flow === "files"
+        ? ""
+        : isNumeric
+          ? t("shell.importClinic.subStep", { step })
+          : "";
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -675,6 +678,8 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                   onNote={setAssistedNote}
                   onDone={onClose}
                 />
+              ) : flow === "files" ? (
+                <FilesWizard t={t} originId={originId} onClose={() => setFlow("wizard")} />
               ) : step === "importing" ? (
                 <ImportingPanel t={t} prog={uploadProg} />
               ) : step === "result" && result ? (
@@ -693,7 +698,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
               ) : step === 2 && origin ? (
                 <StepExport t={t} origin={origin} templateUrl={api.templateUrl()} />
               ) : step === 3 ? (
-                <StepWhat t={t} selected={types} onToggle={toggleType} />
+                <StepWhat t={t} selected={types} onToggle={toggleType} onFiles={() => setFlow("files")} />
               ) : step === 4 ? (
                 <StepUpload t={t} file={file} error={uploadError} onFile={handleFile} onRemove={removeFile} />
               ) : step === 5 ? (

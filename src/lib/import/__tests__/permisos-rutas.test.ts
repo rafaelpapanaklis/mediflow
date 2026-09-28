@@ -34,6 +34,7 @@ mock.module("@/lib/rate-limit", { namedExports: { rateLimit: () => null } });
 mock.module("@/lib/prisma", { namedExports: { prisma: new Proxy({}, { get: () => ({}) }) } });
 mock.module("@/lib/audit", { namedExports: { logAudit: async () => {} } });
 mock.module("@/lib/patient-quota", { namedExports: { getPatientQuota: async () => ({ unlimited: true }) } });
+mock.module("@/lib/storage-quota", { namedExports: { storageQuotaError: async () => null } });
 mock.module("@/lib/support/service", { namedExports: { createTicket: async () => ({ id: "t", folioLabel: "#DC-0001" }) } });
 
 const sesionDe = (role: string, permissionsOverride: string[] = []): Sesion => ({
@@ -52,6 +53,10 @@ const CITAS = "../../../app/api/import/appointments/route";
 const SALDOS = "../../../app/api/import/balances/route";
 const ASISTIDA = "../../../app/api/import/assisted/route";
 const TRATAMIENTOS = "../../../app/api/import/treatment-plans/route";
+const ARCHIVOS_MATCH = "../../../app/api/import/patient-files/match/route";
+const ARCHIVOS_SIGN = "../../../app/api/import/patient-files/sign/route";
+const ARCHIVOS_CONFIRM = "../../../app/api/import/patient-files/confirm/route";
+const ARCHIVOS_ABORT = "../../../app/api/import/patient-files/abort/route";
 
 test("citas: exige agenda.create además del rol", async () => {
   sesion = sesionDe("ADMIN");
@@ -113,4 +118,19 @@ test("tratamientos activos: exige billing.create Y treatments.edit (crea factura
   assert.equal(await llamar(TRATAMIENTOS), 403);
   sesion = null;
   assert.equal(await llamar(TRATAMIENTOS), 401);
+});
+
+test("archivos en bloque (match/sign/confirm/abort): las 4 exigen xrays.upload además del rol, igual que registrar un archivo a mano", async () => {
+  for (const ruta of [ARCHIVOS_MATCH, ARCHIVOS_SIGN, ARCHIVOS_CONFIRM, ARCHIVOS_ABORT]) {
+    sesion = sesionDe("ADMIN");
+    assert.equal(await llamar(ruta), 400, `${ruta}: un admin pasa el gate`);
+    sesion = sesionDe("RECEPTIONIST");
+    assert.equal(await llamar(ruta), 400, `${ruta}: recepción tiene xrays.upload por defecto`);
+    sesion = sesionDe("RECEPTIONIST", ["patients.view"]);
+    assert.equal(await llamar(ruta), 403, `${ruta}: sin xrays.upload no se registran archivos por importación`);
+    sesion = sesionDe("READONLY");
+    assert.equal(await llamar(ruta), 403, `${ruta}: solo lectura no sube nada`);
+    sesion = null;
+    assert.equal(await llamar(ruta), 401, `${ruta}: sin sesión`);
+  }
 });
