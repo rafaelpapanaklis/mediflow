@@ -2722,6 +2722,7 @@
       "copyReadonlyLink": "Copiar link de solo lectura",
       "generateReadonlyLink": "Generar link de solo lectura",
       "printSummary": "Imprimir resumen",
+      "exportHl7": "Exportar expediente (formato HL7)",
       "viewInAgenda": "Ver en agenda",
       "alertsAria": "Alertas clínicas del paciente",
       "noAllergies": "Sin alergias registradas",

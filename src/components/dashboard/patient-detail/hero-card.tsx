@@ -26,6 +26,7 @@ import {
   Building2,
   Trash2,
   Baby,
+  Download,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
@@ -422,6 +423,22 @@ export function HeroCard({
                 {t("patients.heroCard.downloadRecord")}
               </button>
             )}
+            {/* NOM-024 — el expediente en HL7 CDA R2. Era el botón más visible
+                de toda ficha («Exportar CDA HL7», arriba a la derecha, en las
+                migas) y en una clínica dental nadie sabe qué es: se usa rara
+                vez, así que vive aquí. La MISMA acción y los mismos permisos:
+                se ofrece a todos y la ruta decide (medicalRecord.read → 403). */}
+            <button
+              type="button"
+              className={styles.heroMenuItem}
+              title={t("patients.export.cdaTitle")}
+              onClick={() => {
+                setMoreOpen(false);
+                window.location.href = `/api/patients/${patient.id}/export-cda`;
+              }}
+            >
+              <Download size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.exportHl7")}
+            </button>
             <button
               type="button"
               className={styles.heroMenuItem}

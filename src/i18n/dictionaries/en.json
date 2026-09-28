@@ -2722,6 +2722,7 @@
       "copyReadonlyLink": "Copy read-only link",
       "generateReadonlyLink": "Generate read-only link",
       "printSummary": "Print summary",
+      "exportHl7": "Export record (HL7 format)",
       "viewInAgenda": "View in agenda",
       "alertsAria": "Patient clinical alerts",
       "noAllergies": "No known allergies",
