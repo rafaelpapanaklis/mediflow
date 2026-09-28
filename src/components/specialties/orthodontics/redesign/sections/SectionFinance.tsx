@@ -38,6 +38,7 @@ import { DrawerPromesaDePago } from "../drawers/DrawerPromesaDePago";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import { resolverPromesaDePago } from "@/app/actions/orthodontics/cobro/resolverPromesaDePago";
 import { abrirPlanDePago } from "@/app/actions/orthodontics/cobro/abrirPlanDePago";
+import { comprobarPlanDePagoLibre } from "@/app/actions/orthodontics/cobro/comprobarPlanDePagoLibre";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import type { CuotaConEstado } from "@/lib/invoices/plan-de-pagos";
 import orto from "../orto.module.css";
@@ -446,9 +447,19 @@ export function SectionFinance(props: SectionFinanceProps) {
           clinicTaxMode={panel.clinicTaxMode}
           inicial={panel.borradorInicial}
           onClose={() => setDrawer(null)}
+          // X4 (dos pestañas): antes de crear, ¿el caso sigue sin plan? Si otra
+          // pestaña ya lo abrió, no se crea la segunda factura y se recarga.
+          antesDeCrear={async () => {
+            const r = await comprobarPlanDePagoLibre({ treatmentPlanId: props.treatmentPlanId });
+            if (isFailure(r) || r.data.libre) return null;
+            cerrarYRecargar();
+            return `Este caso ya tiene su plan de pago abierto${r.data.invoiceNumber ? ` (${r.data.invoiceNumber})` : ""}, quizá desde otra pestaña. No se creó otra factura.`;
+          }}
           onCreated={async (invoice: { id: string }) => {
             const r = await abrirPlanDePago({ treatmentPlanId: props.treatmentPlanId, invoiceId: invoice.id });
             if (isFailure(r)) { window.alert(r.error); }
+            // X4: otra pestaña ganó — esta se queda con la factura que ya estaba ligada.
+            else if (r.data.aviso) { window.alert(r.data.aviso); }
             cerrarYRecargar();
           }}
         />

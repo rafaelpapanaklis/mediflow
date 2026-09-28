@@ -101,9 +101,16 @@ export interface InvoiceEditorModalProps {
    * siempre. La factura se crea igual, por el mismo POST.
    */
   inicial?: BorradorDeFactura | null;
+  /**
+   * Opcional: se consulta justo ANTES de crear la factura. Si devuelve un
+   * texto, NO se crea (se muestra ese texto). Lo usa Ortodoncia para no crear
+   * una segunda factura del plan cuando otra pestaña ya lo abrió (X4). Sin él,
+   * todo igual que siempre.
+   */
+  antesDeCrear?: () => Promise<string | null>;
 }
 
-export function InvoiceEditorModal({ open, patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno = false, inicial = null }: InvoiceEditorModalProps) {
+export function InvoiceEditorModal({ open, patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno = false, inicial = null, antesDeCrear }: InvoiceEditorModalProps) {
   // Solo el diseño nuevo lo enciende, y solo mientras guarda el trato o envía al
   // paciente DESPUÉS de crear: en ese rato el popup no se cierra (ni Esc, ni
   // clic fuera, ni «Cancelar»). Si se cerrara, el `onCreated` que llega al
@@ -123,6 +130,7 @@ export function InvoiceEditorModal({ open, patientId, patientName, patients, cli
           rediseno={rediseno}
           inicial={inicial}
           ocupado={ocupado}
+          antesDeCrear={antesDeCrear}
         />
       </DialogContent>
     </Dialog>
@@ -130,7 +138,7 @@ export function InvoiceEditorModal({ open, patientId, patientName, patients, cli
 }
 
 function InvoiceEditorBody({
-  patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno, inicial, ocupado,
+  patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno, inicial, ocupado, antesDeCrear,
 }: {
   patientId?: string;
   patientName?: string;
@@ -141,6 +149,7 @@ function InvoiceEditorBody({
   rediseno: boolean;
   inicial: BorradorDeFactura | null;
   ocupado: MutableRefObject<boolean>;
+  antesDeCrear?: () => Promise<string | null>;
 }) {
   const t = useT();
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de
@@ -333,6 +342,12 @@ function InvoiceEditorBody({
     const clean = items.filter((it) => it.name.trim().length > 0);
     if (clean.length === 0) { toast.error(t("billing.invoiceEditor.errorNoItems")); return; }
     setSaving(true);
+    if (antesDeCrear) {
+      // Si la comprobación misma falla (red), se sigue: el servidor de quien
+      // la pidió vuelve a comprobar al ligar. Solo un «no» explícito frena.
+      const motivo = await antesDeCrear().catch(() => null);
+      if (motivo) { toast.error(motivo, { duration: 10000 }); setSaving(false); return; }
+    }
     // Reusa la matemática autoritativa: normaliza líneas (lineTotal con descuento
     // de línea) y resuelve el descuento global %→monto. Así el server obtiene
     // subtotal=Σtotal y total=subtotal−discount, coincidiendo con el "Total" en vivo.
