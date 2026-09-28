@@ -1268,11 +1268,43 @@
   place-items: center;
 }
 
-/* Ortodoncia — R4 (ws1-t5): marca de mensualidad vencida, junto al nombre. */
+/* Ortodoncia — R4 (ws1-t5): marca de mensualidad vencida, junto al nombre.
+   Diseño (ws1-t5): un signo de pesos rojo suelto se perdía entre el nombre y
+   la hora; ahora es una ficha redonda con el rojo de la agenda (los mismos
+   `--ag-rojo-*` de una cita cancelada, con su versión oscura). */
 .tarjetaAvisoOrto {
   flex: none;
   display: grid;
   place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  border: 1px solid var(--ag-tarjeta-rojo-borde);
+  background: var(--ag-rojo-fondo);
+  color: var(--ag-rojo-texto);
+}
+
+/* Anticipos (ws1-t5, diseño): «Apartada · paga antes de…» y «Anticipo
+   pagado» ocupan la segunda línea de la tarjeta. Llevan ícono y tinta propia
+   para que se lean de un vistazo; la hora va con cifras de ancho fijo. */
+.tarjetaNotaApartada,
+.tarjetaNotaPagada {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tarjetaNotaApartada {
+  color: var(--ag-ambar-texto);
+}
+
+.tarjetaNotaPagada {
+  color: var(--ag-chip-verde-tinta);
+}
+
+.tarjetaNotaIcono {
+  display: inline-block;
+  vertical-align: -1.5px;
+  margin-right: 4px;
 }
 
 /* ═══ Paneles laterales ═════════════════════════════════════════════════ */
@@ -1549,6 +1581,13 @@ a.panelNombre:hover {
 .notaIcono {
   color: var(--ag-ambar-icono);
   flex: none;
+}
+
+/* La hora límite de una cita apartada: es el dato que se busca en la nota. */
+.notaDato {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* ── Pie del panel de cita ── */

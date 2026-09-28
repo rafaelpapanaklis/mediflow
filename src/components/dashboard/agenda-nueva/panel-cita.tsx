@@ -553,7 +553,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                 </span>
                 <span>
                   Apartada · paga antes de las{" "}
-                  {formatTimeInTz(dto.holdExpiresAt, state.timezone)}
+                  <span className={s.notaDato}>{formatTimeInTz(dto.holdExpiresAt, state.timezone)}</span>
                 </span>
               </div>
             </div>

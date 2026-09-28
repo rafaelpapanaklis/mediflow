@@ -17,12 +17,12 @@
  * barra izquierda de 3 px es el color del responsable. Ni un hex aquí dentro.
  */
 
-import { Armchair, Ban, Check, Circle, Clock, DollarSign, UserX } from "lucide-react";
+import { Armchair, Ban, Check, Circle, Clock, DollarSign, UserX, Wallet } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { IconoEstado } from "@/lib/agenda-nueva/estados";
 import type { CitaVista } from "@/lib/agenda-nueva/vista-modelo";
-import { AGENDA_SOMBRAS, AGENDA_TOKENS } from "@/lib/agenda-nueva/tokens";
+import { AGENDA_SOMBRAS } from "@/lib/agenda-nueva/tokens";
 import s from "./agenda-nueva.module.css";
 
 /** Debajo de esto la segunda línea no cabe: el README la oculta bajo 30 min. */
@@ -109,6 +109,16 @@ export function TarjetaCita({
   // SUSTITUYE la segunda línea entera (Día y Semana) en vez de sumarse — son
   // dos líneas fijas, y esto es lo que Rafael pidió ver de un vistazo.
   const segundaLinea = cita.notaAnticipo ?? [cita.tratamiento, cita.detalle].filter(Boolean).join(" · ");
+  // Diseño (ws1-t5): la nota del anticipo iba con la misma letra gris que
+  // «Limpieza · Sin confirmar» y no se distinguía de un vistazo. Ahora lleva
+  // su ícono y su tinta: ámbar mientras está apartada, verde cuando ya pagó.
+  // `notaAnticipo` solo existe en esos dos casos (vista-modelo.ts), y «pagado»
+  // es justo el de la cita CONFIRMED: aquí no se decide nada, solo se pinta.
+  const claseNota = cita.notaAnticipo
+    ? cita.estado === "CONFIRMED"
+      ? s.tarjetaNotaPagada
+      : s.tarjetaNotaApartada
+    : "";
 
   return (
     <button
@@ -149,7 +159,7 @@ export function TarjetaCita({
 
         {cita.avisoMensualidadVencida && (
           <span className={s.tarjetaAvisoOrto} aria-hidden>
-            <DollarSign size={13} color={AGENDA_TOKENS.rojoTexto} strokeWidth={2.6} />
+            <DollarSign size={11} strokeWidth={2.6} />
           </span>
         )}
 
@@ -168,7 +178,8 @@ export function TarjetaCita({
         )}
       </span>
 
-      <span className={s.tarjetaFila2}>
+      <span className={`${s.tarjetaFila2} ${claseNota}`}>
+        {cita.notaAnticipo && <Wallet size={11} strokeWidth={2} className={s.tarjetaNotaIcono} aria-hidden />}
         {variante === "semana" ? (cita.notaAnticipo ?? `${cita.horaInicio} · ${cita.tratamiento}`) : segundaLinea}
       </span>
     </button>
