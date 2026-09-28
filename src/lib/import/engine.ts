@@ -31,6 +31,8 @@ import {
 export const MAX_BYTES = 5 * 1024 * 1024;
 export const MAX_ROWS = 5000;
 export const BATCH = 200;
+/** Tope de pestañas de un .xlsx: una "bomba" de miles de hojas vacías igual gasta CPU al listarlas. */
+export const MAX_SHEETS = 60;
 
 // ---------------------------------------------------------------------------
 // Error tipado → se mapea a NextResponse con su status. Conserva los códigos y
@@ -234,6 +236,9 @@ async function readUploadSheets(fileBytes: ArrayBuffer, ext: string): Promise<Ex
     return ws ? [ws] : [];
   }
   await wb.xlsx.load(fileBytes);
+  if (wb.worksheets.length > MAX_SHEETS) {
+    throw new ImportError(400, `El archivo tiene demasiadas pestañas (${wb.worksheets.length}); máximo ${MAX_SHEETS}`);
+  }
   return wb.worksheets;
 }
 

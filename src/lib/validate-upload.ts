@@ -144,14 +144,103 @@ export function validateCbctZip(bytes: ArrayBuffer): string | null {
 // Hojas de cálculo (XLSX / XLS / CSV)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Contenedor ZIP de un .xlsx: bombas zip y macros por CONTENIDO, sin descomprimir
+// nada (exceljs nunca llega a tocar un archivo que no pase esto). Recorre el
+// directorio central del ZIP a mano — los tamaños ahí declarados son los que un
+// atacante controla, así que se desconfía de ellos en vez de confiar en exceljs.
+// ---------------------------------------------------------------------------
+
+const ZIP_EOCD_SIG = 0x06054b50; // "PK\x05\x06"
+const ZIP_CDFH_SIG = 0x02014b50; // "PK\x01\x02"
+const MAX_ZIP_ENTRIES = 2000;
+const MAX_ZIP_ENTRY_UNCOMPRESSED = 120 * 1024 * 1024; // 120 MB por entrada interna
+const MAX_ZIP_TOTAL_UNCOMPRESSED = 250 * 1024 * 1024; // 250 MB descomprimido en total
+const MAX_ZIP_RATIO = 200; // descomprimido/comprimido
+const ZIP_RATIO_FLOOR = 1 * 1024 * 1024; // no penaliza XML pequeño muy compresible
+
+/**
+ * Rechaza, SIN descomprimir: una macro embebida (xl/vbaProject.bin, aunque la
+ * extensión diga .xlsx), más entradas de las razonables (bomba de muchas
+ * entradas diminutas), o una entrada / el total que declare un tamaño
+ * DESCOMPRIMIDO disparatado frente al comprimido (bomba zip clásica). Nunca
+ * lanza: un zip mal formado se rechaza con mensaje, no revienta el parseo.
+ */
+function validateXlsxZipSafety(bytes: ArrayBuffer): string | null {
+  const buf = Buffer.from(bytes);
+  if (buf.length < 22) return "el contenido no es un .xlsx válido (demasiado corto)";
+
+  // El End Of Central Directory vive en los últimos 64 KB + 22 (el comentario
+  // del zip puede ocupar hasta 64 KB) — se busca desde el final hacia atrás.
+  const searchFrom = Math.max(0, buf.length - 22 - 65535);
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= searchFrom; i--) {
+    if (buf.readUInt32LE(i) === ZIP_EOCD_SIG) { eocd = i; break; }
+  }
+  if (eocd === -1) return "el contenido no es un .xlsx válido (sin fin de directorio ZIP)";
+
+  const totalEntries = buf.readUInt16LE(eocd + 10);
+  const cdOffset = buf.readUInt32LE(eocd + 16);
+  if (totalEntries === 0xffff || cdOffset === 0xffffffff) {
+    return "el archivo usa ZIP64: no se acepta (un .xlsx normal no lo necesita)";
+  }
+  if (totalEntries > MAX_ZIP_ENTRIES) {
+    return `el archivo tiene demasiadas entradas internas (${totalEntries}); no parece una hoja de cálculo real`;
+  }
+  if (cdOffset >= buf.length) return "el contenido no es un .xlsx válido (directorio ZIP corrupto)";
+
+  let offset = cdOffset;
+  let totalUncompressed = 0;
+  let seen = 0;
+  while (offset + 46 <= buf.length && seen < totalEntries) {
+    if (buf.readUInt32LE(offset) !== ZIP_CDFH_SIG) break; // fin real del directorio
+    const compressedSize = buf.readUInt32LE(offset + 20);
+    const uncompressedSize = buf.readUInt32LE(offset + 24);
+    const nameLen = buf.readUInt16LE(offset + 28);
+    const extraLen = buf.readUInt16LE(offset + 30);
+    const commentLen = buf.readUInt16LE(offset + 32);
+    const nameEnd = offset + 46 + nameLen;
+    if (nameEnd > buf.length) break;
+    const name = buf.toString("utf8", offset + 46, nameEnd).toLowerCase();
+
+    if (name === "xl/vbaproject.bin" || name.endsWith("/vbaproject.bin")) {
+      return "el archivo tiene macros (VBA): no se aceptan libros con macros";
+    }
+    if (uncompressedSize > MAX_ZIP_ENTRY_UNCOMPRESSED) {
+      return "una hoja interna del archivo declara un tamaño descomprimido excesivo";
+    }
+    if (compressedSize > 0 && uncompressedSize > ZIP_RATIO_FLOOR && uncompressedSize / compressedSize > MAX_ZIP_RATIO) {
+      return "el archivo se comprime de forma anómala (posible bomba zip)";
+    }
+    totalUncompressed += uncompressedSize;
+    if (totalUncompressed > MAX_ZIP_TOTAL_UNCOMPRESSED) {
+      return "el contenido descomprimido del archivo excede el límite permitido";
+    }
+
+    offset = nameEnd + extraLen + commentLen;
+    seen++;
+  }
+
+  return null;
+}
+
 /**
  * Valida hojas de cálculo por CONTENIDO:
- *   - .xlsx: debe ser contenedor ZIP/OOXML (firma "PK").
+ *   - .xlsx: debe ser contenedor ZIP/OOXML (firma "PK"), sin macros y sin señales
+ *     de bomba zip (`validateXlsxZipSafety`). Un .xlsx cifrado/protegido con
+ *     contraseña es en realidad un contenedor OLE2 (firma D0 CF 11 E0) y se
+ *     rechaza con un mensaje propio, no como ".xlsx inválido" a secas.
  *   - .xls : debe ser OLE2/Compound File (firma D0 CF 11 E0); acepta PK por si
  *            es realmente un .xlsx mal nombrado.
  *   - .csv : texto plano (sin firma); se rechaza solo si `file-type` detecta un
  *            binario concreto disfrazado.
  * Siempre rechaza ejecutables. Devuelve null si OK, o un mensaje de error.
+ *
+ * PUNTO DE ENCHUFE: si `src/lib/uploads/validar-archivo.ts` (validador
+ * compartido de subidas de todo el panel, ws1-t8) llega a existir, esta
+ * función — y en particular `validateXlsxZipSafety` — es lo que debería
+ * llamar para la parte específica de hojas de cálculo; no dupliques esta
+ * lógica allí.
  */
 export async function validateSpreadsheet(bytes: ArrayBuffer, ext: string): Promise<string | null> {
   const head = headOf(bytes);
@@ -161,11 +250,12 @@ export async function validateSpreadsheet(bytes: ArrayBuffer, ext: string): Prom
   if (danger) return `el contenido es un ${danger}, no una hoja de cálculo`;
 
   const PK = [0x50, 0x4b]; // "PK" — zip / xlsx / ooxml
-  const CFB = [0xd0, 0xcf, 0x11, 0xe0]; // OLE2 — xls/doc antiguos
+  const CFB = [0xd0, 0xcf, 0x11, 0xe0]; // OLE2 — xls/doc antiguos, y también un .xlsx cifrado
 
   if (e === "xlsx") {
-    if (startsWith(head, PK)) return null;
-    return "el contenido no es un .xlsx válido (se esperaba un archivo de Office/ZIP)";
+    if (startsWith(head, CFB)) return "el archivo está cifrado o protegido con contraseña: quita la protección antes de subirlo";
+    if (!startsWith(head, PK)) return "el contenido no es un .xlsx válido (se esperaba un archivo de Office/ZIP)";
+    return validateXlsxZipSafety(bytes);
   }
   if (e === "xls") {
     if (startsWith(head, CFB) || startsWith(head, PK)) return null;
