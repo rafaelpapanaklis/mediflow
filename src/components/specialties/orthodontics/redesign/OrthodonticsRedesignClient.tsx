@@ -542,10 +542,17 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
                 ? () => setDrawer({ kind: "edit-prescription" })
                 : props.onEditPrescription
             }
+            // H51: sin plan activo estos formularios solo fallan al guardar.
             onAddWireStep={
-              props.onAddWireStep ?? (() => setDrawer({ kind: "wirestep" }))
+              t.treatmentPlanId
+                ? (props.onAddWireStep ?? (() => setDrawer({ kind: "wirestep" })))
+                : undefined
             }
-            onAddTad={props.onAddTad ?? (() => setDrawer({ kind: "add-tad" }))}
+            onAddTad={
+              t.treatmentPlanId
+                ? (props.onAddTad ?? (() => setDrawer({ kind: "add-tad" })))
+                : undefined
+            }
           />
 
           {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S12, QUITAR
@@ -640,7 +647,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             consents={props.consents ?? []}
             referralLetters={props.referralLetters ?? []}
             whatsappLog={props.whatsappLog ?? []}
-            onNewLabOrder={() => setDrawer({ kind: "laborder" })}
+            onNewLabOrder={t.treatmentPlanId ? () => setDrawer({ kind: "laborder" }) : undefined}
             onNewReferral={
               props.onCreateReferralLetter
                 ? () => setDrawer({ kind: "new-referral" })

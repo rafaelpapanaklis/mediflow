@@ -38,28 +38,56 @@ export interface RanuraCitaProps {
 export function RanuraCita({ dto }: RanuraCitaProps) {
   const esControl = esCitaControlOrto(dto.reason ?? null);
   const [state, setState] = useState(ESTADO_VACIO_RANURA_CITA);
+  // H41: si la consulta se aborta (dev lento, 502) reintenta una vez y, si
+  // vuelve a fallar, avisa con «Reintentar» en vez de quedarse vacía.
+  const [fallo, setFallo] = useState(false);
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
     if (!esControl) {
       setState(ESTADO_VACIO_RANURA_CITA);
+      setFallo(false);
       return;
     }
     let cancelled = false;
-    // H23 (QA ws1-t9): "Abrir la cita justo cuando dev.108 dio 502" —
-    // `resolverEstadoRanuraCita` (ranura-cita-estado.ts) tolera un `res`
-    // vacío o mal formado en vez de reventar en `isFailure(res)`, y el
-    // `.catch` cubre el rechazo directo de la promesa.
-    getTreatmentPlanIdForAppointment(dto.patient.id)
-      .then((res) => {
-        if (!cancelled) setState(resolverEstadoRanuraCita(res));
-      })
-      .catch(() => {
-        if (!cancelled) setState(ESTADO_VACIO_RANURA_CITA);
-      });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cargar = (reintentosRestantes: number) => {
+      // H23 (QA ws1-t9): `resolverEstadoRanuraCita` tolera un `res` vacío o
+      // mal formado; el `.catch` cubre el rechazo directo de la promesa.
+      getTreatmentPlanIdForAppointment(dto.patient.id)
+        .then((res) => {
+          if (cancelled) return;
+          setFallo(false);
+          setState(resolverEstadoRanuraCita(res));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          if (reintentosRestantes > 0) {
+            timer = setTimeout(() => cargar(reintentosRestantes - 1), 1500);
+            return;
+          }
+          setState(ESTADO_VACIO_RANURA_CITA);
+          setFallo(true);
+        });
+    };
+    setFallo(false);
+    cargar(1);
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [esControl, dto.patient.id]);
+  }, [esControl, dto.patient.id, intento]);
+
+  if (esControl && fallo) {
+    return (
+      <div className={`${RAIZ_ORTO} flex items-center gap-[10px] text-xs`}>
+        <span>No se pudo cargar ortodoncia.</span>
+        <button type="button" className="underline" onClick={() => setIntento((n) => n + 1)}>
+          Reintentar
+        </button>
+      </div>
+    );
+  }
 
   if (!esControl || !state.treatmentPlanId) return null;
 

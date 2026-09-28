@@ -52,6 +52,7 @@ import {
 } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
+import { elegirSetParaFoto } from "@/lib/orthodontics/redesign/set-de-foto-por-visita";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
 import { DrawerNewCase, type DrawerNewCaseDiagnosisPayload, type DrawerNewCasePlanPayload } from "./drawers/DrawerNewCase";
 import { Btn } from "./atoms/Btn";
@@ -956,11 +957,12 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             try {
               // 1. Resolver setId · usar el del bundle si existe, o crear
               //    uno nuevo para esta etapa.
-              const existingSet =
-                orthoRedesignBundle?.historicalPhotoSets.find(
-                  (s) => s.stage === stage,
-                );
-              let setId = existingSet?.setId ?? null;
+              // H39: un set nuevo por visita en CONTROL (no pisa las fotos
+              // del control anterior); T0/T1/T2 se reusan.
+              let setId = elegirSetParaFoto(
+                orthoRedesignBundle?.historicalPhotoSets ?? [],
+                stage,
+              );
               if (!setId) {
                 const created = await createPhotoSet({
                   treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,

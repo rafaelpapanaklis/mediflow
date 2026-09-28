@@ -38,7 +38,7 @@ export function BoltonPanel({ patientId }: BoltonPanelProps) {
     <div className="bg-[color:var(--pr-tarjeta)] p-[18px]">
       <div className="flex items-center justify-between mb-3">
         <h4 className={orto.bloqueTitulo}>Bolton y espacio</h4>
-        <Link href={`/dashboard/patients/${patientId}/orthodontics`} className="inline-flex">
+        <Link href={`/dashboard/patients/${patientId}?tab=modelos-3d`} className="inline-flex">
           <Btn variant="secondary" size="sm" icon={<Box size={14} strokeWidth={1.75} aria-hidden />}>
             Abrir modelo 3D
           </Btn>

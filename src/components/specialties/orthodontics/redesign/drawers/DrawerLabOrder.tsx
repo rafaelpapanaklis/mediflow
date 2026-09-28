@@ -189,7 +189,7 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
             icon={<Send className="w-4 h-4" aria-hidden />}
             onClick={() => void submit()}
           >
-            {submitting ? "Enviando…" : "Enviar al laboratorio"}
+            {submitting ? "Guardando…" : "Guardar orden"}
           </Btn>
         </footer>
       </aside>
