@@ -462,6 +462,13 @@ button.caducidadLinea:focus-visible {
   background: var(--iv-tarjeta);
 }
 
+/* En oscuro globals.css pinta la fila de cabecera con `--card` (y con
+   `!important`): la celda pegada toma ese mismo fondo para no verse como un
+   parche de otro tono. */
+:global(.dark) .tabla.tabla th.colAcciones {
+  background: hsl(var(--card));
+}
+
 @media (hover: hover) {
   .tabla.tabla tbody tr:hover .colAcciones {
     background: linear-gradient(var(--iv-hover), var(--iv-hover)), var(--iv-tarjeta);
