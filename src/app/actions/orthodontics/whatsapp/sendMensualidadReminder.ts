@@ -11,15 +11,21 @@
 // clinicId SIEMPRE de la sesión. No usa _helpers.ts (Acceso y permisos,
 // exclusivo de esa parte): getAuthContext + denyIfMissingPermission directo,
 // mismo patrón que la ruta de anticipo.
+//
+// Revisión cruzada (REPORTE-ws1-t1.md, «## Revisión cruzada»):
+//   · [bloquea] usaba `canAccessModule` (abre TODOS los módulos de cualquier
+//     clínica dental EN PRUEBA) — cambiado a `hasActiveOrthodonticsModule`.
+//   · [menor] sin candado de doble envío — ahora pregunta a `whatsapp-dedupe`
+//     si ya salió un recordatorio a este teléfono en las últimas 24 h.
 
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { canAccessModule } from "@/lib/marketplace/access-control";
-import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { cargarCobranzaDelCaso } from "@/lib/orthodontics/cobranza-db";
 import { textoMensualidadPorVencer, textoMensualidadVencida } from "@/lib/orthodontics/mensaje-mensualidad";
+import { lastSentOfKind } from "@/lib/orthodontics/whatsapp-dedupe";
 import { formatDateHuman } from "@/lib/whatsapp/bot/booking-parse";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
@@ -46,8 +52,8 @@ export async function sendMensualidadReminder(
   const denied = denyIfMissingPermission(ctx, "whatsapp.send");
   if (denied) return fail("Sin permiso para enviar WhatsApp");
 
-  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) return fail("Módulo Ortodoncia no activo para esta clínica");
+  const activo = await hasActiveOrthodonticsModule(ctx.clinicId);
+  if (!activo) return fail("Módulo Ortodoncia no activo para esta clínica");
 
   const visibilidad = await assertPatientVisible(input.patientId, {
     userId: ctx.userId,
@@ -100,11 +106,21 @@ export async function sendMensualidadReminder(
           montoMxn: Math.round(proxima!.falta),
         });
 
+  const ahora = new Date();
+  const yaEnviado = await lastSentOfKind(ctx.clinicId, patient.phone, "payment_notice", ahora).catch(() => null);
+  if (yaEnviado) {
+    return ok({
+      texto,
+      enviado: false,
+      motivoNoEnviado: `Ya se le mandó un recordatorio hoy (${yaEnviado.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}). Si de verdad hace falta otro, cópialo.`,
+    });
+  }
+
   if (!clinic.waConnected || !clinic.waPhoneNumberId || !clinic.waAccessToken) {
     return ok({ texto, enviado: false, motivoNoEnviado: "WhatsApp no está conectado en esta clínica." });
   }
 
-  const abierta = isWithin24hWindow(await lastInboundAtForPhone(ctx.clinicId, patient.phone).catch(() => null), new Date());
+  const abierta = isWithin24hWindow(await lastInboundAtForPhone(ctx.clinicId, patient.phone).catch(() => null), ahora);
   if (!abierta) {
     return ok({
       texto,
