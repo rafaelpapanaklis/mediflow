@@ -427,7 +427,8 @@ export function InventoryClient({
     }
   }
 
-  async function updateMinQty(id: string, min: number) {
+  // Devuelve si se guardó: el campo de la tabla vuelve a su valor si no.
+  async function updateMinQty(id: string, min: number): Promise<boolean> {
     // ws1-t5 (arreglo): antes cambiaba el mínimo en pantalla sin mirar la
     // respuesta, y un fallo de red quedaba como promesa rechazada sin aviso.
     // Mismo patrón que updateUnitCost, aquí abajo.
@@ -438,21 +439,29 @@ export function InventoryClient({
         body: JSON.stringify({ minQuantity: min }),
       });
       const r = await leerRespuesta(res);
-      if (!r.ok) { toast.error(r.error ?? t("common.genericError")); return; }
+      if (!r.ok) { toast.error(r.error ?? t("common.genericError")); return false; }
       setItems(prev => prev.map(i => i.id === id ? { ...i, minQuantity: min } : i));
-    } catch { toast.error(t("common.genericError")); }
+      return true;
+    } catch { toast.error(t("common.genericError")); return false; }
   }
 
   // ws1-t4: costo unitario editable en la misma tabla (mismo patrón que
   // updateMinQty — blur guarda). 0 es válido: no se filtra por truthy.
-  async function updateUnitCost(id: string, cost: number) {
-    const res = await fetch(`/api/inventory/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ unitCost: cost }),
-    });
-    if (!res.ok) { toast.error(t("common.genericError")); return; }
-    setItems(prev => prev.map(i => i.id === id ? { ...i, unitCost: cost } : i));
+  // ws1-t5 (arreglo): devuelve si se guardó (el campo vuelve a su valor si
+  // no), dice el motivo del servidor y no deja una promesa rechazada sin
+  // aviso cuando se cae la red.
+  async function updateUnitCost(id: string, cost: number): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/inventory/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unitCost: cost }),
+      });
+      const r = await leerRespuesta(res);
+      if (!r.ok) { toast.error(r.error ?? t("common.genericError")); return false; }
+      setItems(prev => prev.map(i => i.id === id ? { ...i, unitCost: cost } : i));
+      return true;
+    } catch { toast.error(t("common.genericError")); return false; }
   }
 
   // Ajuste 1 — proveedor editable en la misma tabla, un artículo ya creado
@@ -783,8 +792,13 @@ export function InventoryClient({
                         aria-label={`${t("procurement.inventoryClient.colMinimum")}: ${item.name}`}
                         defaultValue={item.minQuantity}
                         onBlur={e => {
-                          const v = parseInt(e.target.value);
-                          if (!isNaN(v) && v !== item.minQuantity) updateMinQty(item.id, v);
+                          const campo = e.currentTarget;
+                          const v = parseInt(campo.value);
+                          if (!isNaN(v) && v !== item.minQuantity) {
+                            // ws1-t5 (arreglo): si no se guardó, el campo
+                            // vuelve a decir lo que hay guardado.
+                            void updateMinQty(item.id, v).then(ok => { if (!ok) campo.value = String(item.minQuantity); });
+                          }
                         }}
                       />
                     </td>
@@ -804,8 +818,11 @@ export function InventoryClient({
                         aria-label={`${t("procurement.inventoryClient.colUnitCost")}: ${item.name}`}
                         defaultValue={item.unitCost}
                         onBlur={e => {
-                          const v = parseFloat(e.target.value);
-                          if (!isNaN(v) && v >= 0 && v !== item.unitCost) updateUnitCost(item.id, v);
+                          const campo = e.currentTarget;
+                          const v = parseFloat(campo.value);
+                          if (!isNaN(v) && v >= 0 && v !== item.unitCost) {
+                            void updateUnitCost(item.id, v).then(ok => { if (!ok) campo.value = String(item.unitCost); });
+                          }
                         }}
                       />
                     </td>
