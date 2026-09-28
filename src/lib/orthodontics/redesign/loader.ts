@@ -116,22 +116,14 @@ export async function loadOrthoRedesignData(
   const planId = legacy.plan?.id ?? null;
 
   // Queries Fase 1 + Fase 1.5. Resilientes a tabla inexistente.
-  const [
-    wireSteps,
-    treatmentCards,
-    tads,
-    auxMechanics,
-    phaseTransitions,
-    patientFlow,
-    quoteScenariosRaw,
-    retentionRegimenRaw,
-    npsSchedulesRaw,
-    referralCodeRaw,
-    consentsRaw,
-    labOrdersRaw,
-    referralLettersRaw,
-    whatsappThreads,
-  ] = await Promise.all([
+  //
+  // X7: eran 14 consultas en un solo Promise.all y el pooler se satura por
+  // encima de 7 (reglas de la casa). Van en TRES tandas seguidas, mismas
+  // consultas, mismos filtros y mismo orden de resultados que antes:
+  //   · tanda 1 (5): arcos, hojas de control, TADs, mecánica auxiliar, cambios de fase
+  //   · tanda 2 (5): flujo del paciente, escenarios de presupuesto, retención, NPS, código de referido
+  //   · tanda 3 (4): consentimientos, órdenes de laboratorio, cartas de referencia, WhatsApp
+  const [wireSteps, treatmentCards, tads, auxMechanics, phaseTransitions] = await Promise.all([
     planId
       ? safeArray(() =>
           prisma.orthoWireStep.findMany({
@@ -179,6 +171,8 @@ export async function loadOrthoRedesignData(
           }),
         )
       : Promise.resolve([]),
+  ]);
+  const [patientFlow, quoteScenariosRaw, retentionRegimenRaw, npsSchedulesRaw, referralCodeRaw] = await Promise.all([
     safeOne(() =>
       prisma.patientFlow.findFirst({
         where: {
@@ -220,6 +214,8 @@ export async function loadOrthoRedesignData(
           }),
         )
       : Promise.resolve(null),
+  ]);
+  const [consentsRaw, labOrdersRaw, referralLettersRaw, whatsappThreads] = await Promise.all([
     // H61: Documentos lee el consentimiento GENERAL (ConsentForm, el mismo de
     // la ficha → Consentimientos), no el modelo propio de ortodoncia que el
     // alcance manda ocultar: antes una pantalla decía «FIRMADO» y esta «Sin
