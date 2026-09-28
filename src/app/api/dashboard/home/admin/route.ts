@@ -8,6 +8,7 @@ import {
 import { aggregateAdminPeriodKpis } from "@/lib/agenda/server";
 import { getExpiryAlerts } from "@/lib/inventory/lots.server";
 import { avisosDeExistencias } from "@/lib/inventory/avisos-existencias";
+import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import {
   periodRangeUtc,
   getTzParts,
@@ -438,7 +439,7 @@ async function buildTeamPerformance(
     const t = totals.get(d.id) ?? { appts: 0, completed: 0 };
     return {
       userId: d.id,
-      doctorName: shortName(d.firstName, category),
+      doctorName: shortName(d, category),
       appointments: t.appts,
       completionPct: t.appts > 0 ? Math.round((t.completed / t.appts) * 100) : 0,
       revenueMXN: 0,
@@ -458,7 +459,10 @@ const NON_MEDICAL = [
   "LASER_HAIR_REMOVAL",
 ];
 
-function shortName(firstName: string, category: string): string {
-  const first = firstName.split(/\s+/)[0] ?? firstName;
-  return NON_MEDICAL.includes(category) ? first : `Dr. ${first}`;
+// Sin «Dr.»: el usuario no tiene campo de tratamiento ni de género, y con el
+// prefijo fijo salía «Dr. Renata». Nombre y apellido, como la Agenda. Las
+// categorías no médicas siguen con el nombre de pila, como estaban.
+function shortName(d: { firstName: string; lastName: string }, category: string): string {
+  const first = d.firstName.split(/\s+/)[0] ?? d.firstName;
+  return NON_MEDICAL.includes(category) ? first : nombreDeProfesional(d) || first;
 }

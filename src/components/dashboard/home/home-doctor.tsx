@@ -51,7 +51,7 @@ export function HomeDoctor({ user, clinic, data }: Props) {
         flexWrap: "wrap",
         marginBottom: 24,
       }}>
-        <Greeting userFullName={`Dr. ${user.displayName}`} trailing={trailing} clinicTimezone={clinic.timezone} />
+        <Greeting userFullName={user.displayName} trailing={trailing} clinicTimezone={clinic.timezone} />
         <HomeQuickActions />
       </div>
 

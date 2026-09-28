@@ -13,6 +13,7 @@ import { formatCurrency } from "@/lib/utils";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { useT } from "@/i18n/i18n-provider";
 import { lineaDelCasoTraducida, type ResumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
+import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { fechaCorta, fechaConAno, diasHasta } from "./fechas";
 import { etiquetaDeCobro } from "./cobros";
 import s from "./rediseno.module.css";
@@ -259,7 +260,9 @@ export function Resumen({
 
   const filaCita = (c: any, esProxima: boolean) => {
     const estado = ESTADO_CITA[c.status] ?? ESTADO_CITA.PENDING;
-    const doctor = c.doctor ? `${t("patients.doctorPrefix")} ${c.doctor.firstName}` : null;
+    // Nombre y apellido, sin «Dr/a.»: no hay campo de tratamiento ni de género
+    // y no se adivina por el nombre. Igual que la Agenda.
+    const doctor = nombreDeProfesional(c.doctor) || null;
     return (
       <div
         key={c.id}

@@ -54,7 +54,7 @@ export function HoyDoctor({ user, clinic, data }: Props) {
   return (
     <>
       <div className={s.cabecera}>
-        <Saludo nombreCompleto={`Dr. ${user.displayName}`} cola={cola} zonaHorariaClinica={clinic.timezone} />
+        <Saludo nombreCompleto={user.displayName} cola={cola} zonaHorariaClinica={clinic.timezone} />
         <AccionesRapidas />
       </div>
 
