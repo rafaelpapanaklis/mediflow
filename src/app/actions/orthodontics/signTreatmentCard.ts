@@ -414,6 +414,12 @@ export async function signTreatmentCard(
             plan: soap.p,
             specialtyData: {
               type: "orthodontics",
+              // Visto en vivo: sin esto el historial de consultas pintaba la
+              // nota de un control FIRMADO como «Borrador» y ofrecía
+              // «Eliminar borrador». Misma forma que una nota firmada de
+              // /api/clinical-notes (NOM-024: inalterable).
+              status: "SIGNED",
+              signedAt: new Date().toISOString(),
               treatmentCardId: cardId,
               treatmentPlanId: plan.id,
               appointmentId: data.appointmentId ?? null,
