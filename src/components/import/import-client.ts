@@ -216,6 +216,9 @@ export const DATA_TYPES: DataType[] = [
   // Importados como secundarios de otro archivo se autodetectaban y entraban SIN que nadie
   // viera una sola fila (la revisión del paso 6 es la de la entidad principal).
   { id: "saldos", labelKey: "balances", descKey: "balancesMeta", icon: "money", badge: "easy", on: false, entity: "balances", solo: true },
+  // Historial de pagos: pagos que YA ocurrieron en el sistema anterior. Nunca cambia el saldo
+  // (eso lo trae "saldos") ni toca Caja/CFDI — es historia de solo lectura en la ficha del paciente.
+  { id: "pagos", labelKey: "paymentHistory", descKey: "paymentHistoryMeta", icon: "money", badge: "easy", on: false, entity: "paymentHistory", solo: true },
   { id: "citas", labelKey: "appointments", descKey: "appointmentsMeta", icon: "calendar", badge: "easy", on: false, entity: "appointments", solo: true },
   { id: "expedientes", labelKey: "medicalHistory", descKey: "medicalHistoryMeta", icon: "clipboard", badge: "adv", on: false, entity: "medicalHistory", solo: true },
   { id: "notas", labelKey: "clinicalNotes", descKey: "clinicalNotesMeta", icon: "file", badge: "adv", on: false, entity: "clinicalNotes", solo: true },

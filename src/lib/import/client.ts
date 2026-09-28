@@ -198,6 +198,20 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "title", label: "Título", labelKey: "shell.importClinic.fields.title" },
     { value: "text", label: "Texto de la nota", labelKey: "shell.importClinic.fields.text" },
   ],
+  paymentHistory: [
+    NO_IMPORT,
+    { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "patientExternalId", label: "ID del paciente en el sistema de origen", labelKey: "shell.importClinic.fields.patientExternalId" },
+    { value: "externalId", label: "ID del pago en el sistema de origen", labelKey: "shell.importClinic.fields.paymentExternalId" },
+    { value: "amount", label: "Monto pagado", labelKey: "shell.importClinic.fields.paymentAmount" },
+    { value: "method", label: "Método de pago", labelKey: "shell.importClinic.fields.paymentMethod" },
+    { value: "date", label: "Fecha del pago", labelKey: "shell.importClinic.fields.paymentDate" },
+    { value: "doctor", label: "Doctor / Profesional", labelKey: "shell.importClinic.fields.doctor" },
+    { value: "description", label: "Concepto / Folio", labelKey: "shell.importClinic.fields.concept" },
+  ],
 };
 
 const ENDPOINTS: Record<Entity, string> = {
@@ -210,6 +224,7 @@ const ENDPOINTS: Record<Entity, string> = {
   treatmentPlans: "/api/import/treatment-plans",
   odontogram: "/api/import/odontogram",
   treatmentNotes: "/api/import/treatment-notes",
+  paymentHistory: "/api/import/payment-history",
 };
 
 const PREVIEW_TIMEOUT_MS = 60_000;
@@ -303,6 +318,13 @@ function rowDetail(entity: Entity, data: Record<string, any>): string | undefine
     const parts = Object.entries(added).map(([k, v]) =>
       `${HISTORY_LABELS[k] ?? k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`,
     );
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "paymentHistory") {
+    const parts: string[] = [];
+    if (typeof data.amount === "number") parts.push(formatMoney(data.amount));
+    if (data.method) parts.push(String(data.method));
+    if (data.concept) parts.push(String(data.concept));
     return parts.length ? parts.join(" · ") : undefined;
   }
   return undefined;
