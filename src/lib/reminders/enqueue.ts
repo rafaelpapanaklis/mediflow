@@ -24,6 +24,7 @@ import {
 } from "@/lib/reminders/config";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import { loadNotifPrefsByAccount } from "@/lib/patient-notifications/prefs";
+import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
 import type { NotifPrefs } from "@/lib/patient-notifications/types";
 
 export interface SweepSummary {
@@ -98,6 +99,9 @@ export async function sweepAppointmentReminders(opts?: {
           patientId: string;
           startsAt: Date;
           confirmToken: string | null;
+          /** ws1-t1 (Ortodoncia conectada al bot) — para mencionar "control de
+           * ortodoncia" en el recordatorio cuando aplica. */
+          type: string;
           patient: {
             firstName: string;
             lastName: string;
@@ -125,6 +129,7 @@ export async function sweepAppointmentReminders(opts?: {
             id: true,
             patientId: true,
             startsAt: true,
+            type: true,
             confirmToken: true,
             patient: {
               select: { firstName: true, lastName: true, phone: true, email: true },
@@ -268,7 +273,7 @@ export async function sweepAppointmentReminders(opts?: {
           tokenCache.set(appt.id, token);
 
           const confirmUrl = getConfirmUrl(token);
-          const message = renderReminderTemplate(settings.template, {
+          let message = renderReminderTemplate(settings.template, {
             paciente: appt.patient.firstName,
             clinica: clinic.name,
             fecha,
@@ -276,6 +281,14 @@ export async function sweepAppointmentReminders(opts?: {
             doctor: doctorName,
             link: confirmUrl,
           });
+          // ws1-t1 (Ortodoncia conectada al bot) — el recordatorio genérico de
+          // Agenda no distingue tipos de cita; para un control de ortodoncia se
+          // antepone una línea aparte (texto libre, no toca la plantilla de la
+          // clínica) para que el paciente sepa de qué cita se trata. No manda
+          // nada nuevo: es el MISMO recordatorio de siempre, con una línea más.
+          if (esCitaControlOrto(appt.type)) {
+            message = `🦷 Este es el recordatorio de tu *control de ortodoncia*.\n\n${message}`;
+          }
 
           // Nunca en el pasado: si la grace window ya pasó el momento ideal,
           // el worker lo manda en el siguiente tick.
