@@ -41,8 +41,12 @@ import a from "@/components/dashboard/cobros-inventario-rediseno/anticipo.module
 import { useRedisenoActivo } from "@/components/dashboard/cobros-inventario-rediseno/rediseno-activo";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
-const fmtFecha = (iso: string) =>
-  new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+// ws1-t1 (M4): SIEMPRE con la zona de la CLÍNICA (viene del GET), nunca la
+// del navegador — sin `timeZone`, Intl usa la del dispositivo, y una
+// recepción en otra zona (o con el equipo mal configurado) leía una hora que
+// no era la real (mismo criterio que el chip de la agenda y el PDF).
+const fmtFecha = (iso: string, tz: string) =>
+  new Intl.DateTimeFormat("es-MX", { timeZone: tz, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
 type MetodoAnticipo = "mercadopago" | "transferencia";
 
@@ -72,6 +76,8 @@ interface EstadoGET {
   /** Ajuste 2: SOLO citas futuras. false = ni se ofrece el formulario. */
   citaElegible?: boolean;
   motivoCitaNoElegible?: string | null;
+  /** ws1-t1 (M4): zona de la clínica, para pintar `pendiente.expiresAt`. */
+  zonaHoraria?: string;
 }
 
 interface ResultadoPOST {
@@ -281,7 +287,7 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo, redisen
               <p className={`${a.nota} ${a.notaAlerta}`}>
                 <Clock size={16} strokeWidth={1.75} aria-hidden />
                 <span>
-                  Ya hay un anticipo pendiente: <strong>{fmt.format(pendiente.amount)}</strong>, vence el {fmtFecha(pendiente.expiresAt)}.
+                  Ya hay un anticipo pendiente: <strong>{fmt.format(pendiente.amount)}</strong>, vence el {fmtFecha(pendiente.expiresAt, estado?.zonaHoraria || "America/Mexico_City")}.
                   {pendiente.apartada ? " La cita sigue apartada mientras tanto." : ""}
                 </span>
               </p>
