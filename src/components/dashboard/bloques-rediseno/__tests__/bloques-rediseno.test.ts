@@ -241,12 +241,27 @@ test("la tarjeta CFDI conserva su camino de siempre y el nuevo usa las mismas cl
 // Salidas (hallazgo 21): un umbral en el idioma nuevo, y las pantallas
 // viejas intactas
 // ═══════════════════════════════════════════════════════════════════════════
-test("Ortodoncia: la banda solo con rediseno, el ancho no salta, y el módulo no se toca", () => {
+test("Ortodoncia: el ancho no salta, y el módulo no se toca", () => {
+  // ws1-t8 (revisión de ws1-t4, hallazgo §12): desde la Ola 0 (ws1-t1) TODO
+  // el cableado de la pestaña vive en OrthodonticsPatientTab.tsx, no aquí —
+  // patient-detail-client.tsx solo monta esa ranura, sin condicionar nada
+  // por `orthoRedesignVM` ni por `rediseno` (ver REPORTE-ws1-t1.md). Y la
+  // banda «Ortodoncia» (SalidaOrtodoncia) que este test exigía detrás de la
+  // bandera se dejó de montar del todo (ws1-t4, sep-2026): con la cabecera
+  // G16 nueva repetía el nombre del paciente una tercera vez y empujaba el
+  // contenido 75 px — el archivo `salidas.tsx` sigue, solo que huérfano.
   const src = leer("app/dashboard/patients/[id]/patient-detail-client.tsx");
   assert.match(src, /const outerMaxWidth = isOrthoTab && !rediseno \? 1920 : 1760;/, "el ancho de siempre (1920 en Ortodoncia) ya no se conserva sin bandera");
-  assert.match(src, /\{tab === "ortodoncia" && orthoRedesignVM && rediseno && \(\s*<SalidaOrtodoncia titulo=\{t\("patients\.tabs\.ortodoncia"\)\} paciente=\{fullName\} \/>\s*\)\}/, "la banda no está detrás de la bandera");
-  // El módulo se monta igual que siempre, justo debajo.
-  assert.match(src, /\{tab === "ortodoncia" && orthoRedesignVM && \(\s*<OrthodonticsRedesignClient/, "el módulo de Ortodoncia cambió cómo se monta");
+  assert.match(src, /\{tab === "ortodoncia" && \(\s*<OrthodonticsPatientTab/, "la ranura de Ortodoncia cambió cómo se monta");
+  assert.ok(!/SalidaOrtodoncia/.test(src), "patient-detail-client.tsx no debe volver a montar la banda directamente");
+
+  // La ranura decide sola si monta el módulo nuevo (con orthoRedesignVM) o
+  // el legado, y NO monta la banda (confirma que de verdad se dejó de usar,
+  // no que solo cambió de sitio).
+  const ranura = leer("components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx");
+  assert.match(ranura, /\{orthoRedesignVM && \(\s*<OrthodonticsRedesignClient/, "la ranura dejó de decidir con orthoRedesignVM");
+  assert.ok(!/<SalidaOrtodoncia/.test(ranura), "la banda debería seguir sin montarse (si volvió, actualiza este test a propósito)");
+
   // Ni un archivo del módulo importa la carpeta nueva.
   const modulo = leer("components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
   assert.ok(!/bloques-rediseno|rediseno=/.test(modulo), "el módulo de Ortodoncia no debe saber del rediseño");

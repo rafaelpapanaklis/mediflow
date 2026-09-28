@@ -6,7 +6,8 @@
 // contextual a la izquierda).
 
 import { Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import { SectionHero } from "./sections/SectionHero";
 import { SectionDiagnosis } from "./sections/SectionDiagnosis";
 import { SectionPlan } from "./sections/SectionPlan";
@@ -49,6 +50,7 @@ import { DrawerNewReferral } from "./drawers/DrawerNewReferral";
 import { DrawerConfigRetention } from "./drawers/DrawerConfigRetention";
 import { DrawerWhatsAppChat } from "./drawers/DrawerWhatsAppChat";
 import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
+import { DrawerAddTad, type DrawerAddTadSubmit } from "./drawers/DrawerAddTad";
 import {
   DrawerNewCase,
   type DrawerNewCaseDiagnosisPayload,
@@ -76,6 +78,7 @@ type DrawerState =
   | { kind: "cfdi" }
   | { kind: "laborder" }
   | { kind: "wirestep" }
+  | { kind: "add-tad" }
   | { kind: "compare" }
   | { kind: "edit-diagnosis" }
   | { kind: "edit-prescription" }
@@ -248,8 +251,11 @@ export interface OrthodonticsRedesignClientProps {
   onSubmitWireStep?: (payload: DrawerWireStepSubmit) => Promise<void> | void;
   /** Generar PDF antes/después desde ModalCompare. */
   onGenerateComparePdf?: () => void;
-  /** Hook para abrir form de TAD nuevo. */
+  /** Hook para abrir form de TAD nuevo. Si está presente reemplaza al
+   *  drawer interno DrawerAddTad (hallazgo ws1-t4 §9). */
   onAddTad?: () => void;
+  /** Submit de un TAD desde el DrawerAddTad interno. */
+  onSubmitAddTad?: (payload: DrawerAddTadSubmit) => Promise<void> | void;
   /** Hook para chat WhatsApp completo. */
   onOpenChat?: () => void;
   /** ¿El usuario actual puede hacer override del checklist de fase? */
@@ -286,10 +292,17 @@ export interface OrthodonticsRedesignClientProps {
   /** Patient header con G16 — opcional. Cuando se provee, se renderiza arriba
    *  de la grilla principal. Si se omite, el shell host (legacy o nuevo) es
    *  responsable de renderizar el header del paciente. */
-  patientHeader?: Omit<PatientHeaderProps, "patientFlow" | "nextAppointment"> & {
+  patientHeader?: Omit<PatientHeaderProps, "patientFlow" | "nextAppointment" | "outstandingAmount"> & {
     /** Si se omite, se reusa vm.patientFlow / vm.nextAppointment. */
     patientFlow?: PatientHeaderProps["patientFlow"];
     nextAppointment?: PatientHeaderProps["nextAppointment"];
+    /**
+     * Hallazgo ws1-t4 §5: ya no la lee nadie — `OrthodonticsRedesignClient`
+     * calcula el saldo real de la factura (`cargarPanelDeCobro`), no el
+     * precio de referencia del plan. Se deja opcional (no se borra del
+     * type) para no romper a un caller que todavía la pase; se ignora.
+     */
+    outstandingAmount?: number;
   };
 }
 
@@ -299,6 +312,34 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
 
   const vm = props.vm;
   const t = vm.treatment;
+
+  // Hallazgo ws1-t4 §5/§11: la cabecera, «Estado de cuenta» (RightRail),
+  // «Cobro del tratamiento» (SectionFinance) y el resumen de mensualidades
+  // (ResumenCobranza) tienen que decir EXACTAMENTE el mismo número — la
+  // factura real del caso, no el precio de referencia del plan
+  // (t.totalCost/paid, que sigue igual aunque nunca se abra una factura).
+  // Antes cada tarjeta se auto-cargaba por su lado (SectionFinance Y
+  // ResumenCobranza pedían `cargarPanelDeCobro` cada una, dos veces el
+  // mismo caso) — se carga UNA vez aquí y se reparte hacia abajo.
+  const [panelDeCobro, setPanelDeCobro] = useState<PanelDeCobro | null | "cargando" | "error">("cargando");
+  const recargarPanelDeCobro = useCallback(() => {
+    if (!t.treatmentPlanId) {
+      setPanelDeCobro(null);
+      return;
+    }
+    setPanelDeCobro("cargando");
+    cargarPanelDeCobro(t.treatmentPlanId)
+      .then((r) => setPanelDeCobro(r.ok ? r.data : "error"))
+      .catch(() => setPanelDeCobro("error"));
+  }, [t.treatmentPlanId]);
+  useEffect(() => { recargarPanelDeCobro(); }, [recargarPanelDeCobro]);
+
+  // Saldo real: null mientras carga o si el caso no tiene factura todavía
+  // — nunca el precio de referencia disfrazado de "pendiente" (§5).
+  const outstandingAmountReal =
+    panelDeCobro && panelDeCobro !== "cargando" && panelDeCobro !== "error" && panelDeCobro.invoice
+      ? Math.max(0, panelDeCobro.invoice.balance)
+      : null;
 
   const cardForDrawer =
     drawer?.kind === "tcard"
@@ -327,7 +368,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           patient={props.patientHeader.patient}
           patientFlow={props.patientHeader.patientFlow ?? vm.patientFlow}
           nextAppointment={props.patientHeader.nextAppointment ?? vm.nextAppointment}
-          outstandingAmount={props.patientHeader.outstandingAmount}
+          outstandingAmount={outstandingAmountReal}
           lastVisitAt={props.patientHeader.lastVisitAt}
           totalVisits={props.patientHeader.totalVisits}
           onStartVisit={props.patientHeader.onStartVisit}
@@ -425,7 +466,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onAddWireStep={
               props.onAddWireStep ?? (() => setDrawer({ kind: "wirestep" }))
             }
-            onAddTad={props.onAddTad}
+            onAddTad={props.onAddTad ?? (() => setDrawer({ kind: "add-tad" }))}
           />
 
           {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S12, QUITAR
@@ -450,14 +491,22 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               treatmentPlanId={t.treatmentPlanId}
               patientId={t.patientId}
               patientName={vm.patient.fullName}
+              panel={panelDeCobro}
+              onReload={recargarPanelDeCobro}
             />
           ) : null}
 
           {/* Ranura del resumen de cobranza (decisión 1), rellenada en Ola 1
               (ws1-t1 · Cobro): mismo número que Sección F, calculado una vez
-              por cobranzaDelCaso. */}
+              por cobranzaDelCaso — y, desde el hallazgo ws1-t4 §11, la misma
+              carga (panelDeCobro de arriba) en vez de una segunda consulta. */}
           {t.treatmentPlanId ? (
-            <ResumenCobranza treatmentPlanId={t.treatmentPlanId} patientName={vm.patient.fullName} />
+            <ResumenCobranza
+              treatmentPlanId={t.treatmentPlanId}
+              patientName={vm.patient.fullName}
+              panel={panelDeCobro}
+              onReload={recargarPanelDeCobro}
+            />
           ) : null}
 
           {/* Parte 8 «Alineadores y cumplimiento» (ws1-t8, ola 1, sep-2026):
@@ -515,6 +564,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           <div className={orto.rielPegajoso}>
             <RightRail
               treatment={t}
+              panel={panelDeCobro}
               nextAppointment={vm.nextAppointment}
               patientFlow={vm.patientFlow}
               aiSuggestions={vm.aiSuggestions}
@@ -608,6 +658,17 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           onClose={closeDrawer}
           onSubmit={async (payload) => {
             await props.onSubmitWireStep?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Drawer Agregar TAD (hallazgo ws1-t4 §9 — antes 4 window.prompt()) */}
+      {drawer?.kind === "add-tad" ? (
+        <DrawerAddTad
+          onClose={closeDrawer}
+          onSubmit={async (payload) => {
+            await props.onSubmitAddTad?.(payload);
             closeDrawer();
           }}
         />

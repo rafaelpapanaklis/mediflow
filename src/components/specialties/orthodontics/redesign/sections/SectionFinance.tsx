@@ -21,7 +21,7 @@
 // `src/app/api/invoices/**`. F6 (CFDI de mensualidades) y F13 (cobro
 // automático con tarjeta) quedan pendientes de Rafael — ver el hueco abajo.
 
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Banknote, CalendarClock, Percent, Plus, Printer, Settings2, Wallet } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
@@ -74,20 +74,67 @@ function calendarioCompleto(cobranza: NonNullable<PanelDeCobro["cobranza"]>): Cu
 
 /**
  * Hallazgo ws1-t4 §8: «Imprimir convenio» llamaba a `window.print()` a
- * secas, que imprime la PESTAÑA ENTERA (secciones de arriba y abajo
- * incluidas). Vista de impresión propia: una clase en `<body>` que el CSS
- * de `orto.module.css` usa para esconder todo menos `.convenioImprimible`
- * SOLO en el diálogo de impresión (`@media print`) — en pantalla ese
- * bloque nunca se ve. `afterprint` quita la clase sola; el timeout es el
- * respaldo para navegadores que no disparan ese evento tras cancelar.
+ * secas, que imprime la PESTAÑA ENTERA. Primer intento (CSS con
+ * `visibility: hidden` en `*` + una clase en `<body>`) tumbó dev.108: un
+ * selector `:global(...) *` sin ninguna clase local no es válido en un
+ * CSS Module (`Syntax error: ... is not pure`), y ESO rompe la compilación
+ * de TODO el bundle, no solo esta pantalla. Vista de impresión propia,
+ * sin tocar ningún CSS Module: se abre una pestaña nueva con SOLO el
+ * convenio (HTML/CSS inline, sin depender de ninguna hoja de estilos del
+ * panel) y se imprime esa pestaña — mismo criterio que ya usa
+ * `invoice-detail-modal.tsx` para "Imprimir comprobante" (pestaña nueva,
+ * no `window.print()` sobre la página actual).
  */
-function imprimirConvenio() {
-  const CLASE = "orto-imprimiendo-convenio";
-  document.body.classList.add(CLASE);
-  const limpiar = () => document.body.classList.remove(CLASE);
-  window.addEventListener("afterprint", limpiar, { once: true });
-  window.setTimeout(limpiar, 5000);
-  window.print();
+function imprimirConvenio(data: {
+  patientName: string;
+  total: number;
+  paid: number;
+  balance: number;
+  discountLabel: string | null;
+  discountPct: number | null;
+  cuotas: CuotaConEstado[];
+}) {
+  const fila = (a: string, b: string) =>
+    `<tr><td style="border:1px solid #999;padding:6px 10px;text-align:left">${a}</td><td style="border:1px solid #999;padding:6px 10px;text-align:left">${b}</td></tr>`;
+  const filaCuota = (c: CuotaConEstado) =>
+    `<tr>
+      <td style="border:1px solid #999;padding:6px 10px;text-align:left">${c.esEnganche ? "Enganche" : `Mes ${c.numero}`}</td>
+      <td style="border:1px solid #999;padding:6px 10px;text-align:left">${fmtDay(c.vencimiento)}</td>
+      <td style="border:1px solid #999;padding:6px 10px;text-align:left">${fmtMoney(c.importe)}</td>
+    </tr>`;
+  const tablaCuotas =
+    data.cuotas.length > 0
+      ? `<table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Cuota</th>
+            <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Vence</th>
+            <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Importe</th>
+          </tr></thead>
+          <tbody>${data.cuotas.map(filaCuota).join("")}</tbody>
+        </table>`
+      : "";
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><title>Convenio de pago</title></head>
+<body style="font-family: Arial, sans-serif; color:#000; background:#fff; padding:24px; max-width:640px; margin:0 auto;">
+  <h2 style="font-size:18px;font-weight:700;margin-bottom:4px;">Convenio de pago</h2>
+  <p style="margin-bottom:16px;">${data.patientName} · ${fmtDateShort(new Date().toISOString())}</p>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+    <tbody>
+      ${fila("Total del tratamiento", fmtMoney(data.total))}
+      ${fila("Pagado", fmtMoney(data.paid))}
+      ${fila("Saldo pendiente", fmtMoney(data.balance))}
+      ${data.discountLabel ? fila("Descuento aplicado", `${data.discountLabel} (${data.discountPct}%)`) : ""}
+    </tbody>
+  </table>
+  ${tablaCuotas}
+  <p style="margin-top:40px;">_________________________________</p>
+  <p>Firma del paciente / responsable</p>
+  <script>window.onload = function () { window.print(); };</script>
+</body></html>`;
+  const ventana = window.open("", "_blank");
+  if (!ventana) return; // bloqueador de pop-ups: sin ventana, no hay nada que imprimir
+  ventana.document.write(html);
+  ventana.document.close();
 }
 
 const ICONO_SECCION = <Wallet size={15} strokeWidth={1.75} />;
@@ -98,10 +145,6 @@ const ESTILO_CUOTA: Record<CuotaConEstado["estado"], string> = {
   vencida: `${orto.cajaPeligro} ${orto.tonoPeligro}`,
   porVencer: orto.tonoTexto2,
 };
-
-/** Solo para la tabla de `.convenioImprimible` — no hay hoja de estilos de impresión que reusar para bordes de tabla. */
-const CELDA_CONVENIO: CSSProperties = { border: "1px solid #999", padding: "6px 10px", textAlign: "left" };
-const CELDA_CONVENIO_CABECERA: CSSProperties = { ...CELDA_CONVENIO, fontWeight: 700, background: "#eee" };
 
 export function SectionFinance(props: SectionFinanceProps) {
   const compartido = props.panel !== undefined;
@@ -249,7 +292,22 @@ export function SectionFinance(props: SectionFinanceProps) {
                     Registrar promesa de pago
                   </Btn>
                 ) : null}
-                <Btn variant="ghost" size="md" icon={<Printer size={15} strokeWidth={1.75} aria-hidden />} onClick={imprimirConvenio}>
+                <Btn
+                  variant="ghost"
+                  size="md"
+                  icon={<Printer size={15} strokeWidth={1.75} aria-hidden />}
+                  onClick={() =>
+                    imprimirConvenio({
+                      patientName: props.patientName ?? "Paciente",
+                      total: panel.invoice!.total,
+                      paid: panel.invoice!.paid,
+                      balance: panel.invoice!.balance,
+                      discountLabel: panel.billingDelCaso.discountLabel,
+                      discountPct: panel.billingDelCaso.discountPct,
+                      cuotas: panel.cobranza ? calendarioCompleto(panel.cobranza) : [],
+                    })
+                  }
+                >
                   Imprimir convenio
                 </Btn>
               </div>
@@ -348,63 +406,6 @@ export function SectionFinance(props: SectionFinanceProps) {
           </>
         )}
       </Card>
-
-      {/* Solo existe para el diálogo de impresión (§8 arriba) — en pantalla
-          `.convenioImprimible` es `display: none`. */}
-      {panel.invoiceId && panel.invoice ? (
-        <div className={orto.convenioImprimible}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Convenio de pago</h2>
-          <p style={{ marginBottom: 16 }}>
-            {props.patientName ?? "Paciente"} · {fmtDateShort(new Date().toISOString())}
-          </p>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 20 }}>
-            <tbody>
-              <tr>
-                <td style={CELDA_CONVENIO}>Total del tratamiento</td>
-                <td style={CELDA_CONVENIO}>{fmtMoney(panel.invoice.total)}</td>
-              </tr>
-              <tr>
-                <td style={CELDA_CONVENIO}>Pagado</td>
-                <td style={CELDA_CONVENIO}>{fmtMoney(panel.invoice.paid)}</td>
-              </tr>
-              <tr>
-                <td style={CELDA_CONVENIO}>Saldo pendiente</td>
-                <td style={CELDA_CONVENIO}>{fmtMoney(panel.invoice.balance)}</td>
-              </tr>
-              {panel.billingDelCaso.discountLabel ? (
-                <tr>
-                  <td style={CELDA_CONVENIO}>Descuento aplicado</td>
-                  <td style={CELDA_CONVENIO}>
-                    {panel.billingDelCaso.discountLabel} ({panel.billingDelCaso.discountPct}%)
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-          {panel.cobranza && calendarioCompleto(panel.cobranza).length > 0 ? (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={CELDA_CONVENIO_CABECERA}>Cuota</th>
-                  <th style={CELDA_CONVENIO_CABECERA}>Vence</th>
-                  <th style={CELDA_CONVENIO_CABECERA}>Importe</th>
-                </tr>
-              </thead>
-              <tbody>
-                {calendarioCompleto(panel.cobranza).map((q) => (
-                  <tr key={`${q.esEnganche ? "e" : "p"}-${q.numero}`}>
-                    <td style={CELDA_CONVENIO}>{q.esEnganche ? "Enganche" : `Mes ${q.numero}`}</td>
-                    <td style={CELDA_CONVENIO}>{fmtDay(q.vencimiento)}</td>
-                    <td style={CELDA_CONVENIO}>{fmtMoney(q.importe)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : null}
-          <p style={{ marginTop: 40 }}>_________________________________</p>
-          <p>Firma del paciente / responsable</p>
-        </div>
-      ) : null}
 
       {drawer?.kind === "abrir-plan" ? (
         <InvoiceEditorModal

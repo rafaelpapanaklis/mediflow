@@ -77,7 +77,14 @@ function FacialAnalysisTab({ patientId }: { patientId: string }) {
       setError(json.error ?? "No se pudo subir la foto");
       return;
     }
-    setImageUrl(`/api/files/${json.fileId}`);
+    // Hallazgo ws1-t4 §7: `/api/files/<id>` no existe — la subida YA
+    // devuelve la URL firmada del bucket (ver upload/route.ts, hallazgo
+    // ws1-t11), lista para usarse tal cual.
+    if (!json.signedUrl) {
+      setError("La foto se subió, pero no se pudo generar la vista previa. Recarga la página.");
+      return;
+    }
+    setImageUrl(json.signedUrl);
     setPoints({});
   }
 

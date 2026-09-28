@@ -14,6 +14,7 @@ import { KV } from "../atoms/KV";
 import { Pill } from "../atoms/Pill";
 import { ProgressBar } from "../atoms/ProgressBar";
 import { fmtDate, fmtDateShort, fmtMoney, fmtTime } from "../atoms/format";
+import type { PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import {
   FLOW_STATUS_LABELS,
   type AISuggestionDTO,
@@ -26,6 +27,15 @@ import orto from "../orto.module.css";
 
 export interface RightRailProps {
   treatment: OrthoTreatmentDTO;
+  /**
+   * Hallazgo ws1-t4 §5: «Estado de cuenta» pintaba `treatment.totalCost/
+   * paid` — el precio DE REFERENCIA del caso, no la factura real, así que
+   * un caso sin plan de pago abierto mostraba un saldo "pendiente" que
+   * nadie debía todavía. Misma fuente que «Cobro del tratamiento»
+   * (SectionFinance): la factura real, vía `cargarPanelDeCobro`
+   * (compartida desde `OrthodonticsRedesignClient` — ver hallazgo §11).
+   */
+  panel: PanelDeCobro | null | "cargando" | "error";
   nextAppointment: NextAppointmentDTO | null;
   patientFlow: PatientFlowDTO | null;
   aiSuggestions: AISuggestionDTO[];
@@ -41,7 +51,9 @@ export interface RightRailProps {
 const ICONO = { size: 15, strokeWidth: 1.75 } as const;
 
 export function RightRail(props: RightRailProps) {
-  const remaining = Math.max(0, props.treatment.totalCost - props.treatment.paid);
+  const { panel } = props;
+  const invoice = panel && panel !== "cargando" && panel !== "error" ? panel.invoice : null;
+  const remaining = invoice ? Math.max(0, invoice.balance) : 0;
   return (
     <aside className={orto.riel}>
       <NextAppointmentCard
@@ -51,35 +63,47 @@ export function RightRail(props: RightRailProps) {
 
       <Card title="Estado de cuenta" icon={<Wallet {...ICONO} />}>
         <div className={orto.tarjetaCuerpo}>
-          <KV k="Total del tratamiento" v={fmtMoney(props.treatment.totalCost)} />
-          <KV k="Pagado" v={fmtMoney(props.treatment.paid)} vClass={orto.tonoExito} />
-          <KV
-            k="Saldo"
-            v={fmtMoney(remaining)}
-            className={orto.filaTotal}
-            vClass={remaining > 0 ? orto.tonoPeligro : orto.tonoExito}
-          />
-          <ProgressBar
-            value={props.treatment.paid}
-            max={props.treatment.totalCost}
-            color="emerald"
-            className="mt-3"
-            ariaLabel="Avance de pagos"
-          />
-          {props.onCollectNow ? (
-            <Btn
-              variant="primary"
-              size="md"
-              className="mt-3 w-full"
-              icon={<DollarSign size={15} strokeWidth={1.75} aria-hidden />}
-              onClick={props.onCollectNow}
-            >
-              Cobrar ahora
-              {props.suggestedChargeAmount != null
-                ? ` · ${fmtMoney(props.suggestedChargeAmount)}`
-                : ""}
-            </Btn>
-          ) : null}
+          {panel === "cargando" ? (
+            <div className={orto.vacioLinea} style={{ minHeight: 96 }} role="status">
+              Cargando la cobranza…
+            </div>
+          ) : panel === "error" ? (
+            <div className={orto.vacioLinea}>No se pudo cargar la cobranza.</div>
+          ) : !invoice ? (
+            <div className={orto.vacioLinea}>Este caso todavía no tiene un plan de pago.</div>
+          ) : (
+            <>
+              <KV k="Total del tratamiento" v={fmtMoney(invoice.total)} />
+              <KV k="Pagado" v={fmtMoney(invoice.paid)} vClass={orto.tonoExito} />
+              <KV
+                k="Saldo"
+                v={fmtMoney(remaining)}
+                className={orto.filaTotal}
+                vClass={remaining > 0 ? orto.tonoPeligro : orto.tonoExito}
+              />
+              <ProgressBar
+                value={invoice.paid}
+                max={invoice.total}
+                color="emerald"
+                className="mt-3"
+                ariaLabel="Avance de pagos"
+              />
+              {props.onCollectNow ? (
+                <Btn
+                  variant="primary"
+                  size="md"
+                  className="mt-3 w-full"
+                  icon={<DollarSign size={15} strokeWidth={1.75} aria-hidden />}
+                  onClick={props.onCollectNow}
+                >
+                  Cobrar ahora
+                  {props.suggestedChargeAmount != null
+                    ? ` · ${fmtMoney(props.suggestedChargeAmount)}`
+                    : ""}
+                </Btn>
+              ) : null}
+            </>
+          )}
         </div>
       </Card>
 

@@ -8,7 +8,7 @@
 // El submit/firma del card se delega vía callbacks — la persistencia (server
 // action) se conecta en commit posterior.
 
-import { useEffect, useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import {
   Camera,
   Check,
@@ -88,7 +88,7 @@ export interface DrawerTreatmentCardProps {
   onSharePatient?: (cardId: string) => void;
 }
 
-interface DrawerState {
+export interface DrawerState {
   soap: SOAP;
   plaquePct: number | null;
   gingivitis: OrthoGingivitisLevel | null;
@@ -105,7 +105,7 @@ interface DrawerState {
   indications: string;
 }
 
-type DrawerAction =
+export type DrawerAction =
   | { kind: "set-soap"; field: keyof SOAP; value: string }
   | { kind: "set-plaque"; value: number | null }
   | { kind: "set-gingivitis"; value: OrthoGingivitisLevel | null }
@@ -118,15 +118,18 @@ type DrawerAction =
   | { kind: "set-activations-note"; value: string }
   | { kind: "set-indications"; value: string }
   | { kind: "add-elastic"; value: ElasticDTO }
+  | { kind: "update-elastic"; id: string; patch: Partial<Pick<ElasticDTO, "config" | "zone">> }
   | { kind: "remove-elastic"; id: string }
   | { kind: "add-ipr"; value: IPRPointDTO }
+  | { kind: "update-ipr"; id: string; patch: Partial<Pick<IPRPointDTO, "toothA" | "toothB" | "amountMm">> }
   | { kind: "remove-ipr"; id: string }
   | { kind: "toggle-ipr"; id: string }
   | { kind: "add-bracket"; value: BrokenBracketDTO }
+  | { kind: "update-bracket"; id: string; patch: Partial<Pick<BrokenBracketDTO, "toothFdi">> }
   | { kind: "remove-bracket"; id: string }
   | { kind: "mark-rebonded"; id: string };
 
-function initialState(card: TreatmentCardDTO | null): DrawerState {
+export function initialState(card: TreatmentCardDTO | null): DrawerState {
   if (card) {
     return {
       soap: { ...card.soap },
@@ -163,7 +166,7 @@ function initialState(card: TreatmentCardDTO | null): DrawerState {
   };
 }
 
-function reducer(state: DrawerState, action: DrawerAction): DrawerState {
+export function reducer(state: DrawerState, action: DrawerAction): DrawerState {
   switch (action.kind) {
     case "set-soap":
       return { ...state, soap: { ...state.soap, [action.field]: action.value } };
@@ -189,10 +192,24 @@ function reducer(state: DrawerState, action: DrawerAction): DrawerState {
       return { ...state, indications: action.value };
     case "add-elastic":
       return { ...state, elastics: [...state.elastics, action.value] };
+    case "update-elastic":
+      return {
+        ...state,
+        elastics: state.elastics.map((e) =>
+          e.id === action.id ? { ...e, ...action.patch } : e,
+        ),
+      };
     case "remove-elastic":
       return { ...state, elastics: state.elastics.filter((e) => e.id !== action.id) };
     case "add-ipr":
       return { ...state, iprPoints: [...state.iprPoints, action.value] };
+    case "update-ipr":
+      return {
+        ...state,
+        iprPoints: state.iprPoints.map((p) =>
+          p.id === action.id ? { ...p, ...action.patch } : p,
+        ),
+      };
     case "remove-ipr":
       return { ...state, iprPoints: state.iprPoints.filter((p) => p.id !== action.id) };
     case "toggle-ipr":
@@ -204,6 +221,13 @@ function reducer(state: DrawerState, action: DrawerAction): DrawerState {
       };
     case "add-bracket":
       return { ...state, brokenBrackets: [...state.brokenBrackets, action.value] };
+    case "update-bracket":
+      return {
+        ...state,
+        brokenBrackets: state.brokenBrackets.map((b) =>
+          b.id === action.id ? { ...b, ...action.patch } : b,
+        ),
+      };
     case "remove-bracket":
       return {
         ...state,
@@ -224,6 +248,19 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   const isNew = props.card === null;
   const isReadOnly = props.card?.status === "SIGNED";
   const [state, dispatch] = useReducer(reducer, props.card, initialState);
+  // Hallazgo ws1-t1/ws1-t4 §1 (investigado por ws1-t8): "Firmar control"
+  // fallaba en dev.108 con "Unique constraint failed on (treatmentPlanId,
+  // cardNumber)" — un doble clic en "Guardar borrador" o "Firmar control"
+  // (nada los deshabilitaba mientras la primera llamada seguía en vuelo)
+  // manda DOS submits con el mismo cardId=null (tarjeta nueva) y el mismo
+  // cardNumber calculado por el padre; el servidor intenta CREAR la
+  // tarjeta dos veces con el mismo número y la segunda choca contra la
+  // restricción única. Esto no bloquea el doble submit por completo (el
+  // padre sigue recalculando el número con datos que pueden quedar
+  // desactualizados entre un borrador y una firma en la MISMA sesión del
+  // cajón — ver REPORTE-ws1-t8.md, queda anotado como pendiente) pero sí
+  // cierra el caso más probable: el mismo botón pulsado dos veces.
+  const [enVuelo, setEnVuelo] = useState(false);
 
   // Re-init si cambia la card target.
   useEffect(() => {
@@ -382,6 +419,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             elastics={state.elastics}
             readOnly={isReadOnly}
             onAdd={(e) => dispatch({ kind: "add-elastic", value: e })}
+            onUpdate={(id, patch) => dispatch({ kind: "update-elastic", id, patch })}
             onRemove={(id) => dispatch({ kind: "remove-elastic", id })}
           />
 
@@ -390,6 +428,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             points={state.iprPoints}
             readOnly={isReadOnly}
             onAdd={(p) => dispatch({ kind: "add-ipr", value: p })}
+            onUpdate={(id, patch) => dispatch({ kind: "update-ipr", id, patch })}
             onToggle={(id) => dispatch({ kind: "toggle-ipr", id })}
             onRemove={(id) => dispatch({ kind: "remove-ipr", id })}
           />
@@ -399,6 +438,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             list={state.brokenBrackets}
             readOnly={isReadOnly}
             onAdd={(b) => dispatch({ kind: "add-bracket", value: b })}
+            onUpdate={(id, patch) => dispatch({ kind: "update-bracket", id, patch })}
             onMarkRebonded={(id) => dispatch({ kind: "mark-rebonded", id })}
             onRemove={(id) => dispatch({ kind: "remove-bracket", id })}
           />
@@ -589,7 +629,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               <div className={orto.rejilla2}>
                 <input
                   type="datetime-local"
-                  value={state.nextDate ? state.nextDate.slice(0, 16) : ""}
+                  value={toDatetimeLocalValue(state.nextDate)}
                   onChange={(e) =>
                     dispatch({
                       kind: "set-next-date",
@@ -632,16 +672,25 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               Compartir con el paciente
             </Btn>
           ) : null}
-          <Btn variant="ghost" size="md" onClick={props.onClose}>
+          <Btn variant="ghost" size="md" onClick={props.onClose} disabled={enVuelo}>
             {isReadOnly ? "Cerrar" : "Cancelar"}
           </Btn>
           {!isReadOnly && props.onSave ? (
             <Btn
               variant="secondary"
               size="md"
-              onClick={() => void props.onSave!(buildSubmit())}
+              disabled={enVuelo}
+              onClick={async () => {
+                if (enVuelo) return;
+                setEnVuelo(true);
+                try {
+                  await props.onSave!(buildSubmit());
+                } finally {
+                  setEnVuelo(false);
+                }
+              }}
             >
-              Guardar borrador
+              {enVuelo ? "Guardando…" : "Guardar borrador"}
             </Btn>
           ) : null}
           {!isReadOnly && props.onSign ? (
@@ -649,11 +698,19 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               variant="primary"
               size="md"
               icon={<Check size={15} strokeWidth={1.75} aria-hidden />}
-              onClick={() => void props.onSign!(buildSubmit())}
-              disabled={!canSign}
+              onClick={async () => {
+                if (enVuelo) return;
+                setEnVuelo(true);
+                try {
+                  await props.onSign!(buildSubmit());
+                } finally {
+                  setEnVuelo(false);
+                }
+              }}
+              disabled={!canSign || enVuelo}
               title={!canSign ? "Completa los 4 campos de la nota para firmar el control" : undefined}
             >
-              Firmar control
+              {enVuelo ? "Firmando…" : "Firmar control"}
             </Btn>
           ) : null}
         </footer>
@@ -679,6 +736,7 @@ function ElasticsBlock(props: {
   elastics: ElasticDTO[];
   readOnly: boolean;
   onAdd: (e: ElasticDTO) => void;
+  onUpdate: (id: string, patch: Partial<Pick<ElasticDTO, "config" | "zone">>) => void;
   onRemove: (id: string) => void;
 }) {
   const onPick = (cls: OrthoElasticClass) => {
@@ -709,26 +767,49 @@ function ElasticsBlock(props: {
         <div className={orto.vacioLinea}>Sin elásticos en este control.</div>
       ) : (
         <div className="flex flex-col gap-[6px]">
-          {props.elastics.map((e) => (
-            <div key={e.id} className={`${orto.caja} flex items-center gap-2 text-[13px]`}>
-              <span className="font-semibold">
-                {ELASTIC_CLASS_LABELS[e.elasticClass]} {e.config}
-              </span>
-              <span className={`${orto.tonoApagado} ml-auto text-xs`}>
-                {ELASTIC_ZONE_LABELS[e.zone]}
-              </span>
-              {!props.readOnly ? (
+          {props.elastics.map((e) =>
+            props.readOnly ? (
+              <div key={e.id} className={`${orto.caja} flex items-center gap-2 text-[13px]`}>
+                <span className="font-semibold">
+                  {ELASTIC_CLASS_LABELS[e.elasticClass]} {e.config}
+                </span>
+                <span className={`${orto.tonoApagado} ml-auto text-xs`}>
+                  {ELASTIC_ZONE_LABELS[e.zone]}
+                </span>
+              </div>
+            ) : (
+              <div key={e.id} className={`${orto.caja} flex items-center gap-2 text-[13px]`}>
+                <span className="font-semibold shrink-0">{ELASTIC_CLASS_LABELS[e.elasticClass]}</span>
+                <input
+                  type="text"
+                  value={e.config}
+                  onChange={(ev) => props.onUpdate(e.id, { config: ev.target.value })}
+                  className={`${orto.entrada} flex-1`}
+                  aria-label="Descripción del elástico (medida y onzas)"
+                />
+                <select
+                  value={e.zone}
+                  onChange={(ev) => props.onUpdate(e.id, { zone: ev.target.value as OrthoElasticZone })}
+                  className={`${orto.entrada} w-[140px] shrink-0`}
+                  aria-label="Zona del elástico"
+                >
+                  {(["ANTERIOR", "POSTERIOR", "INTERMAXILAR"] as const).map((z) => (
+                    <option key={z} value={z}>
+                      {ELASTIC_ZONE_LABELS[z]}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={() => props.onRemove(e.id)}
                   aria-label="Quitar elástico"
-                  className={`${orto.botonIcono} ${orto.botonIconoPeligro} -my-1 -mr-1`}
+                  className={`${orto.botonIcono} ${orto.botonIconoPeligro} -my-1 -mr-1 shrink-0`}
                 >
                   <Trash2 size={14} strokeWidth={1.75} aria-hidden />
                 </button>
-              ) : null}
-            </div>
-          ))}
+              </div>
+            ),
+          )}
         </div>
       )}
     </section>
@@ -739,6 +820,7 @@ function IprBlock(props: {
   points: IPRPointDTO[];
   readOnly: boolean;
   onAdd: (p: IPRPointDTO) => void;
+  onUpdate: (id: string, patch: Partial<Pick<IPRPointDTO, "toothA" | "toothB" | "amountMm">>) => void;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
@@ -766,12 +848,68 @@ function IprBlock(props: {
               key={p.id}
               className={`${orto.caja} ${p.done ? orto.cajaExito : ""} flex items-center gap-2 text-[13px]`}
             >
-              <span className="font-semibold">
-                {p.toothA}-{p.toothB}
-              </span>
-              <span className={`${p.done ? orto.tonoExito : orto.tonoTexto2} font-semibold`}>
-                {p.amountMm.toFixed(1)} mm
-              </span>
+              {props.readOnly ? (
+                <>
+                  <span className="font-semibold">
+                    {p.toothA}-{p.toothB}
+                  </span>
+                  <span className={`${p.done ? orto.tonoExito : orto.tonoTexto2} font-semibold`}>
+                    {p.amountMm.toFixed(1)} mm
+                  </span>
+                </>
+              ) : (
+                <>
+                  <div className="w-[34px] shrink-0">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={11}
+                      max={48}
+                      value={p.toothA}
+                      onChange={(e) =>
+                        props.onUpdate(p.id, {
+                          toothA: e.target.value === "" ? p.toothA : parseInt(e.target.value, 10),
+                        })
+                      }
+                      className={`${orto.entrada} ${orto.entradaCorta}`}
+                      aria-label="Diente mesial del IPR"
+                    />
+                  </div>
+                  <span className="font-semibold">-</span>
+                  <div className="w-[34px] shrink-0">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={11}
+                      max={48}
+                      value={p.toothB}
+                      onChange={(e) =>
+                        props.onUpdate(p.id, {
+                          toothB: e.target.value === "" ? p.toothB : parseInt(e.target.value, 10),
+                        })
+                      }
+                      className={`${orto.entrada} ${orto.entradaCorta}`}
+                      aria-label="Diente distal del IPR"
+                    />
+                  </div>
+                  <div className="w-[52px] shrink-0">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min={0}
+                      value={p.amountMm}
+                      onChange={(e) =>
+                        props.onUpdate(p.id, {
+                          amountMm: e.target.value === "" ? 0 : parseFloat(e.target.value),
+                        })
+                      }
+                      className={`${orto.entrada} ${orto.entradaCorta}`}
+                      aria-label="Milímetros de desgaste"
+                    />
+                  </div>
+                  <span className={`${orto.tonoApagado} text-xs`}>mm</span>
+                </>
+              )}
               <span className={`${orto.tonoApagado} ml-auto text-xs`}>
                 {p.done ? "Realizado" : "Pendiente"}
               </span>
@@ -807,6 +945,7 @@ function BrokenBlock(props: {
   list: BrokenBracketDTO[];
   readOnly: boolean;
   onAdd: (b: BrokenBracketDTO) => void;
+  onUpdate: (id: string, patch: Partial<Pick<BrokenBracketDTO, "toothFdi">>) => void;
   onMarkRebonded: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
@@ -840,7 +979,29 @@ function BrokenBlock(props: {
               key={b.id}
               className={`${orto.caja} ${b.reBondedDate ? "" : orto.cajaPeligro} flex items-center gap-2 text-[13px]`}
             >
-              <span className="font-semibold">Diente {b.toothFdi}</span>
+              {props.readOnly ? (
+                <span className="font-semibold">Diente {b.toothFdi}</span>
+              ) : (
+                <>
+                  <span className="font-semibold shrink-0">Diente</span>
+                  <div className="w-[34px] shrink-0">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={11}
+                      max={48}
+                      value={b.toothFdi}
+                      onChange={(e) =>
+                        props.onUpdate(b.id, {
+                          toothFdi: e.target.value === "" ? b.toothFdi : parseInt(e.target.value, 10),
+                        })
+                      }
+                      className={`${orto.entrada} ${orto.entradaCorta}`}
+                      aria-label="Diente FDI del bracket caído"
+                    />
+                  </div>
+                </>
+              )}
               <span className="ml-auto flex items-center gap-2">
                 {b.reBondedDate ? (
                   <Pill color="emerald" size="xs">
@@ -979,4 +1140,22 @@ function addWeeks(fromIso: string | null, weeks: number): string {
   const d = new Date(base.getTime());
   d.setDate(d.getDate() + weeks * 7);
   return d.toISOString();
+}
+
+/**
+ * ISO UTC → el string local que pide `<input type="datetime-local">`.
+ * Hallazgo ws1-t4 §4: `iso.slice(0, 16)` pintaba los dígitos UTC tal cual
+ * (05:45 UTC salía como "05:45" en la casilla, cuando en México son las
+ * 23:45 del día anterior o similar según la fecha). `getHours()`/
+ * `getMinutes()` etc. SÍ convierten a la zona del navegador — mismo
+ * criterio que ya usan `fmtDate`/`fmtTime` de `atoms/format.ts` para el
+ * resto de fechas de esta pantalla (sin timezone explícita de la clínica:
+ * el equipo que llena la hoja trabaja desde la propia clínica).
+ */
+export function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

@@ -10,13 +10,17 @@ import type { DiagnosisDTO, OrthoSkeletalPattern as SkeletalPattern } from "../t
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
-const ANGLE_OPTIONS = ["CLASS_I", "CLASS_II_DIV_1", "CLASS_II_DIV_2", "CLASS_III"] as const;
+// Hallazgo ws1-t4 §10: faltaba "Asimétrica" — el alta del caso
+// (DrawerNewCase) sí la ofrece, así que ya existe como valor válido en la
+// base (createDiagnosis la guarda sin problema); solo faltaba aquí.
+const ANGLE_OPTIONS = ["CLASS_I", "CLASS_II_DIV_1", "CLASS_II_DIV_2", "CLASS_III", "ASYMMETRIC"] as const;
 // Solo el rótulo que se lee: el valor que se guarda es la clave de siempre.
 const ANGLE_LABEL: Record<(typeof ANGLE_OPTIONS)[number], string> = {
   CLASS_I: "Clase I",
   CLASS_II_DIV_1: "Clase II div. 1",
   CLASS_II_DIV_2: "Clase II div. 2",
   CLASS_III: "Clase III",
+  ASYMMETRIC: "Asimétrica",
 };
 const SKELETAL_OPTIONS: ReadonlyArray<SkeletalPattern> = [
   "MESOFACIAL",

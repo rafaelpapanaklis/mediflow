@@ -9,7 +9,8 @@
 // Trigger automático al avanzar fase a Retención: crear LabOrder retainer +
 // agendar 5 revisiones (lo dispara advancePhase server action).
 
-import { MessageCircle, Shield } from "lucide-react";
+import { MessageCircle, Plus, Settings2, Shield } from "lucide-react";
+import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
 import { fmtDateShort } from "../atoms/format";
@@ -70,11 +71,7 @@ const STATUS_COLOR: Record<RetainerCheckupDTO["status"], "slate" | "emerald" | "
 
 export function SectionRetention(props: SectionRetentionProps) {
   const isActive = props.treatmentStatus === "retencion";
-  const r = props.regimen ?? defaultPlanned();
-
-  const upperLabel = r.upperLabel ?? "Hawley sup";
-  const lowerLabel = r.lowerLabel ?? "Essix inf";
-  const fixedLabel = r.fixedLingualGauge ? GAUGE_LABEL[r.fixedLingualGauge] : ".0195";
+  const r = props.regimen;
 
   return (
     <Card
@@ -83,66 +80,83 @@ export function SectionRetention(props: SectionRetentionProps) {
       title="Retención"
       eyebrow="Retenedores, régimen de uso y controles"
       action={
-        <Pill color={isActive ? "emerald" : "slate"}>
-          {isActive ? "Activa" : "Empieza al retirar los brackets"}
-        </Pill>
+        <div className="flex items-center gap-2">
+          <Pill color={isActive ? "emerald" : "slate"}>
+            {isActive ? "Activa" : "Empieza al retirar los brackets"}
+          </Pill>
+          {r && props.onConfigureRegimen ? (
+            <Btn
+              variant="secondary"
+              size="sm"
+              icon={<Settings2 size={14} strokeWidth={1.75} aria-hidden />}
+              onClick={props.onConfigureRegimen}
+            >
+              Editar régimen
+            </Btn>
+          ) : null}
+        </div>
       }
     >
-      <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
-        <h4 className={`${orto.bloqueTitulo} mb-[10px]`}>Tipo de retenedor</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <RetainerCard
-            label="Superior"
-            value={upperLabel}
-            sub={r.upperDescription ?? "Acrílico + arco vestibular"}
-          />
-          <RetainerCard
-            label="Inferior"
-            value={lowerLabel}
-            sub={r.lowerDescription ?? "Termoformado transparente"}
-          />
-          <RetainerCard
-            label="Fijo lingual 3-3"
-            value={fixedLabel}
-            sub="Acero trenzado, mandibular"
-            mono
-          />
+      {/* Hallazgo ws1-t4 §6: sin régimen configurado, esto mostraba datos
+          inventados (Hawley sup / Essix inf / .0195) como si la clínica ya
+          los hubiera elegido — y el botón para configurarlo de verdad no
+          existía aunque el cajón (DrawerConfigRetention, ver
+          OrthodonticsRedesignClient) ya se podía abrir. */}
+      {!r ? (
+        <div className="px-[18px] py-[16px]">
+          <div className={orto.vacio}>
+            <span className={orto.vacioIcono} aria-hidden>
+              <Shield size={17} strokeWidth={1.75} />
+            </span>
+            <p className={orto.vacioTitulo}>Nadie configuró el régimen de retención todavía</p>
+            <p className={orto.vacioPista}>
+              Elige qué retenedor lleva arriba y abajo, si hay fijo lingual y su calibre, y el
+              régimen de uso (horas al día, cuánto dura cada etapa).
+            </p>
+            {props.onConfigureRegimen ? (
+              <Btn
+                variant="primary"
+                className="mt-1"
+                icon={<Plus size={15} strokeWidth={1.75} aria-hidden />}
+                onClick={props.onConfigureRegimen}
+              >
+                Configurar régimen
+              </Btn>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
+            <h4 className={`${orto.bloqueTitulo} mb-[10px]`}>Tipo de retenedor</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <RetainerCard label="Superior" value={r.upperLabel ?? "—"} sub={r.upperDescription ?? "—"} />
+              <RetainerCard label="Inferior" value={r.lowerLabel ?? "—"} sub={r.lowerDescription ?? "—"} />
+              {r.fixedLingualPresent ? (
+                <RetainerCard
+                  label="Fijo lingual 3-3"
+                  value={r.fixedLingualGauge ? GAUGE_LABEL[r.fixedLingualGauge] : "—"}
+                  sub="Acero trenzado, mandibular"
+                  mono
+                />
+              ) : (
+                <RetainerCard label="Fijo lingual 3-3" value="Sin fijo" sub="—" />
+              )}
+            </div>
+          </div>
 
-      <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
-        <h4 className={`${orto.bloqueTitulo} mb-[10px]`}>Régimen de uso</h4>
-        {/* Dos tramos en fila: el primero nunca mide menos que su rótulo (en el
-            teléfono, al 20 % del ancho, «24 h · año 1» se salía de su caja). */}
-        <div
-          className="flex h-9 border border-[color:var(--orto-violeta-borde)] rounded-[10px] overflow-hidden"
-          role="img"
-          aria-label="Régimen: 24 horas el primer año y después nocturno del año 2 al 5"
-        >
-          <div
-            className="flex-none min-w-[88px] bg-[color:var(--pr-activo)] flex items-center justify-center px-2 text-[11px] font-semibold text-[color:var(--pr-activo-texto)] whitespace-nowrap"
-            style={{ width: "20%" }}
-          >
-            24 h · año 1
+          <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
+            <h4 className={`${orto.bloqueTitulo} mb-[10px]`}>Régimen de uso</h4>
+            <p className="text-[13px] text-[color:var(--pr-texto-2)]">{r.regimenDescription}</p>
           </div>
-          <div className="flex-1 min-w-0 bg-[color:var(--pr-activo-suave)] flex items-center justify-center px-2 text-[11px] font-semibold text-[color:var(--orto-violeta)] whitespace-nowrap">
-            Nocturno · años 2-5
-          </div>
-        </div>
-        <div className="mt-2 flex justify-between text-[11px] text-[color:var(--pr-texto-3)] tabular-nums">
-          <span>Retiro</span>
-          <span>1 año</span>
-          <span>2 años</span>
-          <span>3 años</span>
-          <span>5 años</span>
-        </div>
-      </div>
+        </>
+      )}
 
       <div className="px-[18px] py-[16px]">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h4 className={orto.bloqueTitulo}>Controles de retención</h4>
           <PreSurveyToggle
-            enabled={r.preSurveyEnabled}
+            enabled={r?.preSurveyEnabled ?? false}
             onChange={(v) => void props.onTogglePreSurvey?.(v)}
           />
         </div>
@@ -226,20 +240,6 @@ function CheckupCard({ checkup }: { checkup: RetainerCheckupDTO }) {
   );
 }
 
-function defaultPlanned(): RetentionRegimenDTO {
-  return {
-    id: null,
-    upperLabel: "Hawley sup",
-    upperDescription: "Acrílico + arco vestibular",
-    lowerLabel: "Essix inf",
-    lowerDescription: "Termoformado transparente",
-    fixedLingualPresent: true,
-    fixedLingualGauge: "G_0195",
-    regimenDescription: "24/7 año 1 · nocturno años 2-5",
-    preSurveyEnabled: true,
-    debondedAt: null,
-  };
-}
 
 function defaultCheckups(): RetainerCheckupDTO[] {
   // Visualización pre-debond: muestra los slots como futuros sin fecha.

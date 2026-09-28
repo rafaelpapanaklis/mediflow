@@ -294,10 +294,11 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                   ? patient.allergies.join(", ")
                   : null,
             },
-            outstandingAmount: Math.max(
-              0,
-              orthoRedesignVM.treatment.totalCost - orthoRedesignVM.treatment.paid,
-            ),
+            // outstandingAmount ya no se calcula aquí (hallazgo ws1-t4 §5):
+            // OrthodonticsRedesignClient lee la factura real del caso vía
+            // cargarPanelDeCobro, no `treatment.totalCost - treatment.paid`
+            // (el precio de referencia, que decía "$45,000 Pendiente" sin
+            // que existiera ninguna factura).
             // En tab Ortodoncia, derivamos lastVisitAt y totalVisits del
             // modelo OrthodonticControlAppointment (visitas reales del tx
             // ortodóntico), no del Appointment genérico.
@@ -529,36 +530,22 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             toast.success(t("patients.ortho.wireStepAdded"));
             router.refresh();
           }}
-          onAddTad={async () => {
+          // onAddTad queda sin override: OrthodonticsRedesignClient abre su
+          // DrawerAddTad interno (hallazgo ws1-t4 §9 — antes 4
+          // window.prompt() seguidos, sin poder corregir un campo sin
+          // cancelar los cuatro).
+          onAddTad={undefined}
+          onSubmitAddTad={async (payload) => {
             if (!orthoRedesignVM.treatment.treatmentPlanId) {
               toast.error(t("patients.ortho.noPlan"));
               return;
             }
-            const brand = window.prompt(
-              t("patients.ortho.tadBrandPrompt"),
-              "DENTOS",
-            );
-            if (!brand) return;
-            const size = window.prompt(t("patients.ortho.tadSizePrompt"), "");
-            if (!size) return;
-            const location = window.prompt(
-              t("patients.ortho.tadLocationPrompt"),
-              "",
-            );
-            if (!location) return;
-            const torqueStr = window.prompt(
-              t("patients.ortho.tadTorquePrompt"),
-              "",
-            );
-            const torqueNcm = torqueStr ? parseInt(torqueStr, 10) : null;
             const res = await createOrthoTAD({
               treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-              brand: brand.toUpperCase() as any,
-              size,
-              location,
-              torqueNcm: Number.isFinite(torqueNcm as number)
-                ? (torqueNcm as number)
-                : null,
+              brand: payload.brand,
+              size: payload.size,
+              location: payload.location,
+              torqueNcm: payload.torqueNcm,
             });
             if (isFailure(res)) {
               toast.error(res.error);
@@ -606,8 +593,11 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               iprPoints: payload.iprPoints,
               brokenBrackets: payload.brokenBrackets,
               hasProgressPhoto: payload.hasProgressPhoto,
+              photoSetId: payload.photoSetId,
               nextDate: payload.nextDate,
               nextDurationMin: payload.nextDurationMin,
+              activationsNote: payload.activationsNote,
+              indications: payload.indications,
             });
             if (isFailure(res)) {
               toast.error(res.error);
@@ -646,8 +636,11 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               iprPoints: payload.iprPoints,
               brokenBrackets: payload.brokenBrackets,
               hasProgressPhoto: payload.hasProgressPhoto,
+              photoSetId: payload.photoSetId,
               nextDate: payload.nextDate,
               nextDurationMin: payload.nextDurationMin,
+              activationsNote: payload.activationsNote,
+              indications: payload.indications,
             });
             if (isFailure(res)) {
               toast.error(res.error);

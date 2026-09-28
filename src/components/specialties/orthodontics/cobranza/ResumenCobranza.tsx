@@ -23,20 +23,36 @@ import orto from "../redesign/orto.module.css";
 export interface ResumenCobranzaProps {
   treatmentPlanId: string;
   patientName?: string;
+  /**
+   * Hallazgo ws1-t4 §11 (ráfaga de ~15 llamadas al abrir la pestaña): desde
+   * la ficha del paciente, `OrthodonticsRedesignClient` ya cargó
+   * `cargarPanelDeCobro` para `SectionFinance` — se lo pasa aquí para no
+   * repetir la misma consulta. Desde `RanuraCita` (panel de la cita en
+   * Agenda) no hay ese padre compartido: se omite y esta ranura auto-carga
+   * la suya, como siempre.
+   */
+  panel?: PanelDeCobro | null | "cargando" | "error";
+  onReload?: () => void;
 }
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
 export function ResumenCobranza(props: ResumenCobranzaProps) {
-  const [panel, setPanel] = useState<PanelDeCobro | null | "cargando" | "error">("cargando");
+  const compartido = props.panel !== undefined;
+  const [panelPropio, setPanelPropio] = useState<PanelDeCobro | null | "cargando" | "error">("cargando");
+  const panel = compartido ? props.panel! : panelPropio;
   const [cobrando, setCobrando] = useState(false);
 
-  function recargar() {
-    setPanel("cargando");
-    cargarPanelDeCobro(props.treatmentPlanId).then((r) => setPanel(r.ok ? r.data : "error")).catch(() => setPanel("error"));
+  function recargarPropio() {
+    setPanelPropio("cargando");
+    cargarPanelDeCobro(props.treatmentPlanId).then((r) => setPanelPropio(r.ok ? r.data : "error")).catch(() => setPanelPropio("error"));
   }
+  const recargar = compartido ? props.onReload ?? (() => {}) : recargarPropio;
 
-  useEffect(() => { recargar(); }, [props.treatmentPlanId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!compartido) recargarPropio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compartido, props.treatmentPlanId]);
 
   if (panel === "cargando" || panel === "error") return null;
   if (!panel.invoiceId || !panel.cobranza || !panel.invoice) return null;

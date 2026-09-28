@@ -35,8 +35,13 @@ export interface PatientHeaderProps {
   patientFlow: PatientFlowDTO | null;
   /** Próxima cita. */
   nextAppointment: NextAppointmentDTO | null;
-  /** Saldo pendiente del tratamiento ortodóntico. */
-  outstandingAmount: number;
+  /**
+   * Saldo pendiente del tratamiento ortodóntico, de la factura real del
+   * caso — `null` mientras carga o si el caso todavía no tiene factura
+   * (hallazgo ws1-t4 §5: antes esto era el precio de REFERENCIA del plan,
+   * y decía "Pendiente" aunque nadie hubiera abierto ninguna factura).
+   */
+  outstandingAmount: number | null;
   /** Fecha de la última visita registrada. */
   lastVisitAt: string | null;
   /** Conteo total de visitas (asistidas) y "desde N". */
@@ -168,9 +173,16 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
         />
         <Stat
           label="Saldo de ortodoncia"
-          value={fmtMoney(props.outstandingAmount)}
-          sub={props.outstandingAmount > 0 ? "Pendiente" : "Al día"}
-          tone={props.outstandingAmount > 0 ? "rose" : "emerald"}
+          value={props.outstandingAmount != null ? fmtMoney(props.outstandingAmount) : "—"}
+          sub={
+            props.outstandingAmount == null
+              ? "Sin plan de pago"
+              : props.outstandingAmount > 0
+                ? "Pendiente"
+                : "Al día"
+          }
+          muted={props.outstandingAmount == null}
+          tone={props.outstandingAmount != null && props.outstandingAmount > 0 ? "rose" : "emerald"}
         />
         <Stat
           label="Última visita"
