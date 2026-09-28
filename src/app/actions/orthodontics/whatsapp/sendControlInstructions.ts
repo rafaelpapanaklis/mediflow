@@ -81,12 +81,14 @@ export async function sendControlInstructions(
   const texto = `Hola ${paciente}, indicaciones de tu control de hoy en ${clinic.name}:\n${card.indications}`;
 
   const ahora = new Date();
-  const yaEnviado = await lastSentOfKind(ctx.clinicId, patient.phone, "manual_api", ahora).catch(() => null);
+  // Se busca ESTE texto (las indicaciones de ESTE control), no «algo de tipo manual»:
+  // otro mensaje suelto del panel a ese teléfono no cuenta como «ya se mandaron».
+  const yaEnviado = await lastSentOfKind(ctx.clinicId, patient.phone, "manual_api", ahora, 24, card.indications).catch(() => null);
   if (yaEnviado) {
     return ok({
       texto,
       enviado: false,
-      motivoNoEnviado: `Ya se le mandaron indicaciones hoy (${yaEnviado.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}). Si de verdad hace falta otro envío, cópialo.`,
+      motivoNoEnviado: `Ya se le mandaron ESTAS indicaciones hoy (${yaEnviado.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}). Si de verdad hace falta otro envío, cópialo.`,
     });
   }
 

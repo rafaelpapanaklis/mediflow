@@ -28,6 +28,12 @@ export async function lastSentOfKind(
   kind: WhatsAppSendKind,
   ahora: Date = new Date(),
   windowHours = 24,
+  /**
+   * ws1-t4 #83: solo cuenta un envío de ese `kind` cuyo TEXTO contiene esto. `manual_api`
+   * lo usa CUALQUIER mensaje suelto del panel: sin este filtro, un aviso mandado por la
+   * mañana bloqueaba las indicaciones del control de la tarde («ya se mandaron»).
+   */
+  bodyContains?: string,
 ): Promise<Date | null> {
   const threads = await findWhatsAppThreadsForPhone(clinicId, phone);
   if (threads.length === 0) return null;
@@ -39,6 +45,7 @@ export async function lastSentOfKind(
       direction: "OUT",
       externalId: { startsWith: `${SYSTEM_EXTERNAL_ID_PREFIX}${kind}:` },
       sentAt: { gte: desde },
+      ...(bodyContains ? { body: { contains: bodyContains } } : {}),
     },
     orderBy: { sentAt: "desc" },
     select: { sentAt: true },

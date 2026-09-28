@@ -73,3 +73,14 @@ test("Hoy y Caja cuentan cuotas vencidas, no casos", () => {
   const caja = leer("components/specialties/orthodontics/cobranza/ListaMensualidades.tsx");
   assert.match(caja, /reduce\(\(n, it\) => n \+ Math\.max\(1, it\.cantidadVencidas\), 0\)/);
 });
+
+// ws1-t4 #83 — «Enviar indicaciones» ya no se bloquea por OTRO mensaje suelto del panel.
+test("el candado de indicaciones busca el texto de ESE control, no cualquier «manual_api»", () => {
+  const dedupe = leer("lib/orthodontics/whatsapp-dedupe.ts");
+  assert.match(dedupe, /\.\.\.\(bodyContains \? \{ body: \{ contains: bodyContains \} \} : \{\}\)/);
+  const envio = leer("app/actions/orthodontics/whatsapp/sendControlInstructions.ts");
+  assert.match(envio, /lastSentOfKind\(ctx\.clinicId, patient\.phone, "manual_api", ahora, 24, card\.indications\)/);
+  // el recordatorio de mensualidad y las demás llamadas siguen igual (sin el filtro)
+  const mens = leer("app/actions/orthodontics/whatsapp/sendMensualidadReminder.ts");
+  assert.match(mens, /lastSentOfKind\(ctx\.clinicId, telefonoDestino, "payment_notice", ahora\)/);
+});
