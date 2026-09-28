@@ -1451,3 +1451,382 @@
 .huesoSub { width: 320px; max-width: 80%; height: 13px; margin-top: 8px; border-radius: 6px; }
 .huesoKpi { height: 96px; border-radius: var(--pr-radio); }
 .huesoTarjeta { height: 220px; border-radius: var(--pr-radio); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Cobranza y Controles (ws1-t3, 28-sep-2026) — los dos apartados que decían
+   «Próximamente». Mismas piezas que Alertas y Pacientes; aquí solo va lo que
+   no existía: los cuadros de arriba, los días de la semana y las etiquetas
+   de estado de una cita.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Cuadros de totales: como el resumen de Alertas, pero de cuatro (o tres). */
+.cuadros {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cuadros3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@container orto (max-width: 900px) {
+  .cuadros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cuadros3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container orto (max-width: 560px) {
+  .cuadros3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cuadros3 > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@container orto (max-width: 380px) {
+  .cuadros,
+  .cuadros3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cuadros3 > :last-child {
+    grid-column: auto;
+  }
+}
+
+/* En Cobranza cada cuadro es además un filtro de la tabla: es un botón. */
+.cuadro {
+  width: 100%;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cuadroActivo,
+.cuadroActivo:hover {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo-suave);
+}
+
+.cuadros .resumenValor {
+  overflow-wrap: anywhere;
+}
+
+/* La línea «todo en orden» cuando va suelta, fuera de una tarjeta. */
+.enOrdenSuelto {
+  padding: 11px 14px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+}
+
+.enOrdenAviso > svg {
+  color: var(--pr-texto-3);
+}
+
+.pieTabla {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--pr-borde-suave);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+.pieTabla > svg {
+  flex-shrink: 0;
+}
+
+/* Los próximos días: un bloque por día, con su fecha y sus controles. */
+.dias {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 10px 12px;
+}
+
+.dia {
+  min-width: 0;
+}
+
+.diaTitulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 6px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--pr-texto-2);
+}
+
+.diaTitulo::first-letter {
+  text-transform: uppercase;
+}
+
+.diaEnlace {
+  border-radius: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .diaEnlace:hover {
+    color: var(--pr-activo);
+  }
+}
+
+.diaEnlace:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.diaCuenta {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--pr-texto-3);
+}
+
+.diaLista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* La nota de la hoja va debajo del estado, pegada a la derecha como él; en
+   el teléfono, donde todo baja a la izquierda, ella también. */
+.filaDerecha > .notaExito {
+  justify-content: flex-end;
+}
+
+@container orto (max-width: 460px) {
+  .filaApilable > .filaDerecha > .notaExito {
+    justify-content: flex-start;
+  }
+}
+
+/* Con la tabla hecha tarjetas, una cifra con su explicación («2 pagos
+   vencidos · desde el…») salta de línea en vez de montarse en la de al lado. */
+@container orto (max-width: 640px) {
+  .tabla .num {
+    white-space: normal;
+  }
+  .tabla td {
+    min-width: 0;
+  }
+}
+
+/* Una cita cancelada se queda en la lista (se ve el hueco), pero apagada. */
+.filaApagada {
+  opacity: 0.62;
+}
+
+.filaApagada .nombre {
+  text-decoration: line-through;
+}
+
+/* Estado de una cita. La violeta ya existía (`.etiquetaVioleta`). */
+.etiquetaExito { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.etiquetaAlerta { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.etiquetaPeligro { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+.etiquetaNeutra { background: var(--pr-hover); color: var(--pr-texto-3); }
+
+/* El cuadro de «Abrir caso»: buscar al paciente y elegirlo. */
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(16px, 8vh, 72px) 16px 16px;
+  background: color-mix(in srgb, var(--pr-texto) 45%, transparent);
+  overflow-y: auto;
+}
+
+.dialogo {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: min(640px, calc(100vh - 32px));
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  background: var(--pr-tarjeta);
+  box-shadow: var(--pr-sombra-2);
+  color: var(--pr-texto);
+  overflow: hidden;
+}
+
+.dialogoCabeza {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px 12px;
+}
+
+.dialogoTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.dialogoTitulo {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+}
+
+.dialogoSub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+.dialogoBuscador {
+  padding: 0 18px 12px;
+}
+
+.dialogoBuscador .buscador {
+  max-width: none;
+}
+
+.dialogoLista {
+  flex: 1;
+  min-height: 120px;
+  margin: 0;
+  padding: 0 10px 10px;
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.opcion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--pr-radio-s);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .opcion:hover {
+    background: var(--pr-hover);
+  }
+}
+
+.opcion:focus-visible {
+  outline: none;
+  border-color: var(--pr-activo);
+  box-shadow: var(--pr-foco);
+}
+
+.opcionTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.dialogoEstado {
+  margin: 0;
+  padding: 26px 18px 30px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--pr-texto-3);
+}
+
+.dialogoPie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 18px 12px;
+  border-top: 1px solid var(--pr-borde-suave);
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+.botonPrincipal {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+@media (hover: hover) {
+  .botonPrincipal:hover {
+    border-color: var(--pr-activo);
+    background: var(--pr-activo);
+    color: var(--pr-activo-texto);
+    filter: brightness(1.06);
+  }
+}
+
+/* El portal del cuadro: vive fuera de `.raiz`, así que trae lo suyo — la
+   letra del módulo y los mismos vestidos de las piezas del sistema de diseño. */
+.portal {
+  --text-1: var(--pr-texto);
+  --text-2: var(--pr-texto-2);
+  --text-3: var(--pr-texto-3);
+  --bg-elev: var(--pr-tarjeta);
+  --bg-elev-2: var(--pr-tarjeta-2);
+  --border-soft: var(--pr-borde);
+  --brand: var(--pr-activo);
+  --brand-soft: var(--pr-activo-suave);
+  --success: var(--pr-exito);
+  --success-soft: var(--pr-exito-suave);
+  --warning: var(--pr-alerta);
+  --warning-soft: var(--pr-alerta-suave);
+  --danger: var(--pr-peligro);
+  --danger-soft: var(--pr-peligro-suave);
+  color: var(--pr-texto);
+  font-size: 13px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.opcion .etiqueta {
+  flex-shrink: 0;
+}
+
+/* Cerrar no es borrar: gris, no rojo. */
+@media (hover: hover) {
+  .botonCerrar:hover:not(:disabled) {
+    background: var(--pr-hover);
+    color: var(--pr-texto);
+  }
+}
+
+.opcion > svg {
+  flex-shrink: 0;
+  color: var(--pr-texto-3);
+}

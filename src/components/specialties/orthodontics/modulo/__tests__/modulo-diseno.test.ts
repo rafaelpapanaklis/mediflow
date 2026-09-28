@@ -13,7 +13,9 @@
  *     contratado de verdad, permiso `specialties.orthodontics`).
  *  4. El submenú dice dónde estás (`aria-current`) y conserva los seis
  *     apartados con el nombre que decidió Rafael.
- *  5. Los carteles «Próximamente» le hablan a la clínica, no a quien programa.
+ *  5. Cobranza y Controles son pantallas de verdad, no carteles
+ *     «Próximamente» (H16 de la QA en vivo, 28-sep-2026), y sus textos le
+ *     hablan a la clínica, no a quien programa.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -31,6 +33,10 @@ const ARCHIVOS = [
   "src/components/specialties/orthodontics/modulo/submenu.tsx",
   "src/components/specialties/orthodontics/modulo/vista-tablero.tsx",
   "src/components/specialties/orthodontics/modulo/vista-alertas.tsx",
+  "src/components/specialties/orthodontics/modulo/vista-cobranza.tsx",
+  "src/components/specialties/orthodontics/modulo/vista-controles.tsx",
+  "src/components/specialties/orthodontics/modulo/agendar-control.tsx",
+  "src/components/specialties/orthodontics/modulo/abrir-caso.tsx",
   "src/components/specialties/orthodontics/modulo/fechas.ts",
   "src/components/specialties/orthodontics/contratar/contratar.module.css",
   "src/components/specialties/orthodontics/contratar/vista-contratar.tsx",
@@ -122,10 +128,44 @@ test("el submenú conserva los seis apartados, con su nombre, marca el abierto y
   assert.match(css, /@media \(max-width: 639\.98px\) \{\s*\.submenuLargo \{\s*display: none;\s*\}\s*\.submenuCorto \{\s*display: inline;\s*\}/);
 });
 
-test("los carteles «Próximamente» no enseñan nombres de archivos ni de oleadas", () => {
-  for (const rel of ["src/app/dashboard/orthodontics/cobranza/page.tsx", "src/app/dashboard/orthodontics/controles/page.tsx"]) {
-    const m = /description="([^"]+)"/.exec(leer(rel));
-    assert.ok(m, `${rel}: tiene descripción`);
-    assert.ok(!/REPORTE|\.ts\b|\.md\b|Ola \d|ws\d/i.test(m[1]), `${rel}: la descripción es para la clínica`);
+test("H16: ningún apartado del submenú es un cartel «Próximamente»", () => {
+  const layout = leer("src/app/dashboard/orthodontics/layout.tsx");
+  const apartados = Array.from(layout.matchAll(/\{ href: "\/dashboard\/orthodontics\/([a-z]+)"/g), (m) => m[1]);
+  assert.equal(apartados.length, 6);
+  for (const a of apartados) {
+    const pagina = leer(`src/app/dashboard/orthodontics/${a}/page.tsx`);
+    assert.doesNotMatch(pagina, /OrthoModulePlaceholder/, `${a}: es una pantalla de verdad`);
+    assert.match(pagina, /await exigirModuloOrtodoncia\(\);/, `${a}: pasa por el guardia del módulo`);
+  }
+});
+
+test("los textos de Cobranza y Controles no enseñan nombres de archivos, de oleadas ni claves internas", () => {
+  for (const rel of [
+    "src/components/specialties/orthodontics/modulo/vista-cobranza.tsx",
+    "src/components/specialties/orthodontics/modulo/vista-controles.tsx",
+    "src/components/specialties/orthodontics/modulo/abrir-caso.tsx",
+    "src/components/specialties/orthodontics/modulo/agendar-control.tsx",
+  ]) {
+    const codigo = sinComentarios(leer(rel));
+    // Lo que se lee en pantalla: el texto entre etiquetas y los títulos/pistas.
+    const textos = [
+      ...Array.from(codigo.matchAll(/>\s*([^<>{}\n]*[a-záéíóúñ]{4,}[^<>{}\n]*)\s*</g), (m) => m[1]),
+      ...Array.from(codigo.matchAll(/(?:titulo|pista|sub|placeholder|etiqueta|aria-label)=\{?"([^"]+)"/g), (m) => m[1]),
+    ];
+    assert.ok(textos.length > 0, rel);
+    for (const t of textos) {
+      assert.ok(!/REPORTE|\.tsx?\b|\.md\b|Ola \d|ws\d|NO_SHOW|PAGO_POR_CONTROL|billing\.|Próximamente|todavía no está lista/i.test(t), `${rel}: «${t}»`);
+    }
+  }
+});
+
+test("las vistas nuevas no calculan fechas con la zona del servidor", () => {
+  for (const rel of [
+    "src/components/specialties/orthodontics/modulo/vista-cobranza.tsx",
+    "src/components/specialties/orthodontics/modulo/vista-controles.tsx",
+  ]) {
+    const codigo = sinComentarios(leer(rel));
+    assert.doesNotMatch(codigo, /toLocale(Date|Time)String\(/, `${rel}: las fechas pasan por fechas.ts`);
+    assert.doesNotMatch(codigo, /new Date\(/, `${rel}: «hoy» lo decide el servidor, en la zona de la clínica`);
   }
 });

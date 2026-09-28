@@ -25,6 +25,7 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fechaEnZona } from "@/components/specialties/orthodontics/modulo/fechas";
 import { Vacio } from "@/components/specialties/orthodontics/modulo/piezas";
+import { AbrirCasoBoton } from "@/components/specialties/orthodontics/modulo/abrir-caso";
 import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 
 export interface OrthoPacienteRow {
@@ -62,7 +63,14 @@ function fmtMoney(n: number): string {
 // Fecha de calendario ("YYYY-MM-DD"): se pinta tal cual, sin zona horaria.
 const fmtDate = (iso: string | null) => fechaEnZona(iso, null);
 
-export function OrthoPacientesTable({ rows }: { rows: OrthoPacienteRow[] }) {
+export function OrthoPacientesTable({
+  rows,
+  puedeAbrirCaso = false,
+}: {
+  rows: OrthoPacienteRow[];
+  /** `medicalRecord.edit`, decidido en el servidor: sin él no sale «Abrir caso». */
+  puedeAbrirCaso?: boolean;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
 
@@ -78,8 +86,13 @@ export function OrthoPacientesTable({ rows }: { rows: OrthoPacienteRow[] }) {
         alto
         icono={Users}
         titulo="Aún no hay pacientes en tratamiento"
-        pista="Un caso se abre desde la ficha del paciente: entra a su pestaña Ortodoncia y abre su caso desde ahí. En cuanto esté activo, aparece aquí con su saldo y su próxima mensualidad."
+        pista={
+          puedeAbrirCaso
+            ? "Pulsa «Abrir caso» y elige al paciente: se abre su ficha con el formulario del caso. En cuanto esté activo, aparece aquí con su saldo y su próxima mensualidad."
+            : "Un caso lo abre el doctor desde la ficha del paciente, en su pestaña Ortodoncia. En cuanto esté activo, aparece aquí con su saldo y su próxima mensualidad."
+        }
       >
+        {puedeAbrirCaso && <AbrirCasoBoton />}
         <Link href="/dashboard/patients" className={s.boton}>
           <Users size={15} strokeWidth={1.9} aria-hidden />
           Ir a Pacientes

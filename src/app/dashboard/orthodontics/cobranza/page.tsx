@@ -1,31 +1,40 @@
-import Link from "next/link";
-import { BellRing, Users, Wallet } from "lucide-react";
-import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
-import { OrthoModulePlaceholder } from "@/components/specialties/orthodontics/OrthoModulePlaceholder";
-import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
-
-// Ola 0 (ws1-t1) · dueñas en la Ola 1: «Cobro» (la cobranza de cada caso,
-// vía cobranza-caso.ts) y «Recepción» (ListaMensualidades, la vista de
-// Caja/Hoy) — comparten el contrato de la Ola 0, ninguna lo cambia sola.
+// Ortodoncia — Cobranza de mensualidades (ws1-t3, H16 de la QA en vivo del
+// 28-sep-2026: este apartado decía «Próximamente»). Quién debe, cuánto y
+// desde cuándo, caso por caso; qué está por vencer; y cobrar.
 //
-// Diseño (ws1-t3): el cartel le habla a la clínica, no a quien programa, y
-// dice dónde se ve HOY la cobranza.
+// No calcula dinero por su cuenta: usa `loadOrthoCases` (el mismo cargador
+// del Tablero, Alertas y Pacientes), que resuelve cada caso con
+// `cobranzaDelCasoUnificada` contra la factura real del tratamiento. Para
+// cobrar monta `ListaMensualidades`, la misma lista de Caja.
+//
+// La guarda de módulo corre en el layout y, otra vez, aquí. `clinicId` y la
+// zona horaria salen de la sesión.
+export const dynamic = "force-dynamic";
+
+import { getCurrentUser } from "@/lib/auth";
+import { hasPermission } from "@/lib/auth/permissions";
+import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
+import { loadOrthoCases } from "@/lib/orthodontics/tablero-data";
+import { filasDeCobranza, resumenDeCobranza } from "@/lib/orthodontics/cobranza-modulo";
+import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
+import { zonaValida } from "@/components/specialties/orthodontics/modulo/fechas";
+import { VistaCobranza } from "@/components/specialties/orthodontics/modulo/vista-cobranza";
+
 export default async function OrthodonticsCobranzaPage() {
   await exigirModuloOrtodoncia();
-  return (
-    <OrthoModulePlaceholder
-      icon={Wallet}
-      title="Cobranza de mensualidades"
-      description="Aquí vas a ver quién debe, cuánto y desde cuándo, caso por caso. Mientras tanto, las mensualidades vencidas están en Alertas, y el saldo y la próxima mensualidad de cada paciente en Pacientes en tratamiento."
-    >
-      <Link href="/dashboard/orthodontics/alertas" className={s.boton}>
-        <BellRing size={15} strokeWidth={1.9} aria-hidden />
-        Ver alertas
-      </Link>
-      <Link href="/dashboard/orthodontics/pacientes" className={s.boton}>
-        <Users size={15} strokeWidth={1.9} aria-hidden />
-        Pacientes en tratamiento
-      </Link>
-    </OrthoModulePlaceholder>
+  const user = await getCurrentUser();
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
+  const zona = zonaValida(user.clinic.timezone);
+  const ahora = new Date();
+
+  const { cases } = await loadOrthoCases(user.clinicId, zona, viewer, ahora);
+  const filas = filasDeCobranza(cases, hoyEnZona(ahora, zona));
+
+  // El mismo permiso que exige la lista de cobro (`listarMensualidadesPorCobrar`).
+  const puedeCobrar = hasPermission(
+    { role: user.role, permissionsOverride: user.permissionsOverride },
+    "billing.view",
   );
+
+  return <VistaCobranza filas={filas} resumen={resumenDeCobranza(filas)} puedeCobrar={puedeCobrar} />;
 }
