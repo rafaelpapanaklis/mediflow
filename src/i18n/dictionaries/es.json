@@ -9195,7 +9195,7 @@
       "resourceTypeLabel": "Tipo de recurso *",
       "resourceTypePlaceholder": "Ej: Consultorio, Equipo, Sala",
       "resourceNameLabel": "Nombre del recurso *",
-      "resourceNamePlaceholder": "Ej: Consultorio 1, Láser CO2",
+      "resourceNamePlaceholder": "Ej: Consultorio 1, Sala de rayos X",
       "startTimeLabel": "Hora inicio *",
       "endTimeLabel": "Hora fin *"
     },

@@ -9195,7 +9195,7 @@
       "resourceTypeLabel": "Resource type *",
       "resourceTypePlaceholder": "E.g.: Office, Equipment, Room",
       "resourceNameLabel": "Resource name *",
-      "resourceNamePlaceholder": "E.g.: Office 1, CO2 Laser",
+      "resourceNamePlaceholder": "E.g.: Office 1, X-ray room",
       "startTimeLabel": "Start time *",
       "endTimeLabel": "End time *"
     },
