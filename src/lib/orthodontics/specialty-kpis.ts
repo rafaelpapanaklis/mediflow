@@ -128,6 +128,8 @@ export function computeOverdueBalances(cases: OrthoCaseSummary[]): OverdueBalanc
 export interface OverduePatientEntry {
   patientId: string;
   patientName: string;
+  /** ws1-t2 (W2) — para poder pedir el recordatorio de mensualidad de ESTE caso. */
+  treatmentPlanId: string;
   amountMxn: number;
   /** "YYYY-MM-DD" de la cuota vencida más vieja. */
   oldestDueDate: string | null;
@@ -144,7 +146,7 @@ export function listOverduePatients(cases: OrthoCaseSummary[]): OverduePatientEn
       if (!q.vencimiento) return min;
       return min === null || q.vencimiento < min ? q.vencimiento : min;
     }, null);
-    out.push({ patientId: c.patientId, patientName: c.patientName, amountMxn, oldestDueDate: oldest });
+    out.push({ patientId: c.patientId, patientName: c.patientName, treatmentPlanId: c.planId, amountMxn, oldestDueDate: oldest });
   }
   return out.sort((a, b) => b.amountMxn - a.amountMxn);
 }

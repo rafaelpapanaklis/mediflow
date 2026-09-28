@@ -1,7 +1,10 @@
 // Ortodoncia — Alertas (L1-L5, ws1-t2, Ola 1): mensualidad vencida, falta de
-// control, no-show, próximo a terminar, pasado de fecha. Solo alertas EN EL
-// PANEL — sin WhatsApp nuevo (eso es de "Paciente y WhatsApp", ws1-t8). La
-// guarda de módulo ya corrió en el layout.
+// control, no-show, próximo a terminar, pasado de fecha. La guarda de módulo
+// ya corrió en el layout.
+//
+// L1 monta EnviarRecordatorioButton (Paciente y WhatsApp, W2 — reasignado a
+// esta parte tras cerrar Tablero y alertas): texto libre dentro de la
+// ventana de 24 h, sin plantilla de Meta, opcional/manual.
 export const dynamic = "force-dynamic";
 
 import type { ReactNode } from "react";
@@ -15,6 +18,7 @@ import type {
   OverduePatientEntry,
 } from "@/lib/orthodontics/specialty-kpis";
 import type { NoShowEntry } from "@/lib/orthodontics/alerts-data";
+import { EnviarRecordatorioButton } from "@/components/specialties/orthodontics/EnviarRecordatorioButton";
 
 function fmtMoney(n: number): string {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
@@ -55,6 +59,7 @@ export default async function OrthodonticsAlertasPage() {
           <PatientRow key={p.patientId} patientId={p.patientId} patientName={p.patientName}>
             <span style={{ fontWeight: 600, color: "var(--danger, #ef4444)" }}>{fmtMoney(p.amountMxn)}</span>
             <span style={{ fontSize: 11, color: "var(--text-3)" }}>vence desde {fmtDate(p.oldestDueDate)}</span>
+            <EnviarRecordatorioButton patientId={p.patientId} treatmentPlanId={p.treatmentPlanId} />
           </PatientRow>
         ))}
       </AlertSection>
