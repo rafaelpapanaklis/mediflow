@@ -298,6 +298,9 @@ export async function GET() {
     const plans = await prisma.orthodonticTreatmentPlan.findMany({
       where: {
         deletedAt: null,
+        // Un expediente dado de baja (p. ej. cancelación ARCO) no enseña su caso
+        // en el portal, igual que ya no enseña sus citas.
+        patient: { deletedAt: null },
         OR: vinculos.map((l) => ({ patientId: l.patientId, clinicId: l.clinicId })),
       },
       select: {
