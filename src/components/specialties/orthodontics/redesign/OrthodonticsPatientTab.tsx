@@ -603,6 +603,14 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               toast.error(res.error);
               return;
             }
+            // Ola 2 (ws1-t1) — «nada en silencio»: si el control era de una
+            // cita de agenda y el modo de cobro es «Pago por control» pero
+            // no se pudo facturar solo (catálogo sin precio, o un error al
+            // crear la factura), la firma clínica se guardó igual pero
+            // Recepción tiene que enterarse para cobrarlo a mano.
+            if (res.data.avisoControlSinFacturar) {
+              toast.error(res.data.avisoControlSinFacturar, { duration: 8000 });
+            }
             toast.success(t("patients.ortho.appointmentSigned"));
             router.refresh();
           }}
