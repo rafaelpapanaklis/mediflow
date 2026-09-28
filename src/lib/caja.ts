@@ -21,6 +21,7 @@ import { invoiceTaxPortion } from "@/lib/invoice-totals";
 import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { calendarioDeCuotas, esPlanAPlazos, estadoDelPlan, pagosDesdeFilas } from "@/lib/invoices/plan-de-pagos";
+import { conceptoConCuota, rotuloDeCuotasDelPago } from "@/lib/invoices/concepto-de-cuota";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { cargarVencimientosDeCargosDeControl } from "@/lib/orthodontics/cobranza-controles-db";
@@ -222,6 +223,54 @@ function conceptOf(items: unknown): string {
   return parts.length ? parts.join(", ") : "—";
 }
 
+/**
+ * A qué cuota fue cada cobro del turno, para los que son de una factura A
+ * PLAZOS: `paymentId` → «mensualidad 7 de 24» (`rotuloDeCuotasDelPago`). Dos
+ * lecturas, y solo si el turno tiene cobros: las condiciones de esas facturas
+ * en lote y, de las que sí son a plazos, todos sus pagos (hace falta el
+ * historial entero para saber por cuál cuota iba). Es un adorno del concepto:
+ * si algo falla devuelve el mapa vacío y el corte sale como siempre.
+ */
+async function cuotaDeCadaPago(
+  clinicId: string,
+  payments: Array<{ id: string; invoiceId: string; invoice?: { total?: number | null } | null }>,
+  db: CajaDb,
+): Promise<Map<string, string>> {
+  const salida = new Map<string, string>();
+  const totalPorFactura = new Map<string, number>();
+  for (const p of payments) if (p.invoiceId) totalPorFactura.set(p.invoiceId, p.invoice?.total ?? 0);
+  if (!clinicId || totalPorFactura.size === 0) return salida;
+  try {
+    const { porFactura } = await leerCondicionesDeFacturas(db as unknown as typeof prisma, {
+      clinicId,
+      invoiceIds: Array.from(totalPorFactura.keys()),
+    });
+    const aPlazos = Array.from(totalPorFactura.keys()).filter((id) => esPlanAPlazos(porFactura.get(id)));
+    if (aPlazos.length === 0) return salida;
+
+    const historial = await db.payment.findMany({
+      where:  { invoiceId: { in: aPlazos }, invoice: { clinicId } },
+      select: { id: true, invoiceId: true, amount: true, method: true, paidAt: true },
+    });
+    const pagosPorFactura = new Map<string, typeof historial>();
+    for (const h of historial) {
+      const lista = pagosPorFactura.get(h.invoiceId);
+      if (lista) lista.push(h);
+      else pagosPorFactura.set(h.invoiceId, [h]);
+    }
+    for (const p of payments) {
+      const condiciones = porFactura.get(p.invoiceId);
+      if (!esPlanAPlazos(condiciones)) continue;
+      const rotulo = rotuloDeCuotasDelPago(condiciones, totalPorFactura.get(p.invoiceId) ?? 0, pagosPorFactura.get(p.invoiceId) ?? [], p.id);
+      if (rotulo) salida.set(p.id, rotulo);
+    }
+    return salida;
+  } catch (e) {
+    console.warn("[caja] no se pudo saber a qué cuota fue cada cobro:", e);
+    return new Map();
+  }
+}
+
 /** Caja OPEN de la clínica (o null). Incluye operador y retiros. */
 export async function getOpenRegister(clinicId: string, db: CajaDb = prisma) {
   return db.cashRegister.findFirst({
@@ -334,6 +383,8 @@ export async function deriveWindow(
     for (const d of docs) attributedById.set(d.id, { firstName: d.firstName, lastName: d.lastName });
   }
 
+  const cuotaDelPago = await cuotaDeCadaPago(clinicId, payments, db);
+
   let cashIncome = 0;
   let cardDebitIncome = 0;
   let cardCreditIncome = 0;
@@ -377,7 +428,9 @@ export async function deriveWindow(
       patientName: opts.viewer && p.invoice?.patient && !canSeePatient(opts.viewer, p.invoice.patient.visibleUserIds)
         ? "Paciente privado"
         : fullName(p.invoice?.patient),
-      concept:     conceptOf(p.invoice?.items),
+      // Si el cobro fue a una factura a plazos, dice a qué cuota: «… —
+      // mensualidad 7 de 24». Doce abonos iguales ya no se confunden en el corte.
+      concept:     conceptoConCuota(conceptOf(p.invoice?.items), cuotaDelPago.get(p.id) ?? null),
       amount,
       method:      p.method,
       discount:    money(discountPortion),
