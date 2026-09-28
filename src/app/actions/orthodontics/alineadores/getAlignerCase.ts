@@ -62,7 +62,9 @@ export async function getAlignerCase(treatmentPlanId: string): Promise<ActionRes
       attachmentsPlaced: aligner.attachmentsPlaced,
       attachmentsLost: aligner.attachmentsLost,
       refinementCount: aligner.refinementCount,
-      status: aligner.status,
+      // status es String en la base (CHECK constraint, no enum nativo — ver
+      // nota en schema.prisma) validado al escribir; se afirma al leer.
+      status: aligner.status as AlignerCaseRow["status"],
       notes: aligner.notes,
       expectedTray: expected.expectedTray,
       daysSinceStart: expected.daysSinceStart,

@@ -46,7 +46,9 @@ export async function listMonitoringPhotos(treatmentPlanId: string): Promise<Act
           angle: r.angle,
           patientNote: r.patientNote,
           doctorNote: r.doctorNote,
-          reviewStatus: r.reviewStatus,
+          // reviewStatus es String en la base (CHECK constraint, no enum
+          // nativo — ver nota en schema.prisma) validado al escribir.
+          reviewStatus: r.reviewStatus as MonitoringPhotoRow["reviewStatus"],
           submittedAt: r.submittedAt.toISOString(),
         };
       }),

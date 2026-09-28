@@ -7236,32 +7236,22 @@ model PatientFlow {
 // mexicanas. SQL a mano en sql/ortodoncia-cefalometria.sql (aditivo, no
 // aplicado). Dueña única de este bloque — ver REPORTE-ws1-t8.md.
 
-enum OrthoCephTracingKind {
-  INITIAL
-  PROGRESS
-  FINAL
-}
-
-enum OrthoCephAnalysisType {
-  STEINER
-  RICKETTS
-  MCNAMARA
-}
-
-enum OrthoCephNormSet {
-  STANDARD
-  MEXICAN
-}
-
 model OrthodonticCephalometryAnalysis {
   id              String @id @default(uuid())
   treatmentPlanId String
   patientId       String
   clinicId        String
 
-  kind         OrthoCephTracingKind  @default(INITIAL)
-  analysisType OrthoCephAnalysisType @default(STEINER)
-  normSet      OrthoCephNormSet      @default(STANDARD)
+  /// "INITIAL" | "PROGRESS" | "FINAL". String, no enum nativo: el SQL a
+  /// mano de esta ola (sql/ortodoncia-cefalometria.sql) crea la columna
+  /// como TEXT + CHECK, no un tipo Postgres — un enum de Prisma aquí
+  /// esperaría un tipo nativo que no existe (hallazgo de ws1-t1 al
+  /// revisar el SQL de toda la ola). Validado en TS con un union type.
+  kind String @default("INITIAL")
+  /// "STEINER" | "RICKETTS" | "MCNAMARA". Ver nota de `kind` — String, no enum.
+  analysisType String @default("STEINER")
+  /// "STANDARD" | "MEXICAN". Ver nota de `kind` — String, no enum.
+  normSet String @default("STANDARD")
 
   /// Puntos marcados a mano: Partial<Record<CephLandmarkId, {x,y}>> en px de
   /// la imagen (ver src/lib/orthodontics/cefalometria/landmarks.ts).
@@ -7302,22 +7292,6 @@ model OrthodonticCephalometryAnalysis {
 // Contacto con «Control y agenda»: la hoja del control es de esa parte;
 // esto NO la reemplaza, guarda el estado del CASO de alineadores aparte.
 
-enum OrthoAlignerStatus {
-  ACTIVE
-  PAUSED
-  FINISHED
-}
-
-enum OrthoAlignerEventType {
-  DELIVERY
-  REFINEMENT
-  TRAY_CHANGE
-  ATTACHMENT_PLACED
-  ATTACHMENT_LOST
-  PAUSE
-  RESUME
-}
-
 model OrthodonticAligner {
   id              String @id @default(uuid())
   treatmentPlanId String @unique
@@ -7331,8 +7305,10 @@ model OrthodonticAligner {
   startedAt          DateTime
   attachmentsPlaced  Int?
   attachmentsLost    Int                @default(0)
-  refinementCount    Int                @default(0)
-  status             OrthoAlignerStatus @default(ACTIVE)
+  refinementCount    Int     @default(0)
+  /// "ACTIVE" | "PAUSED" | "FINISHED". String, no enum — ver nota en
+  /// OrthodonticCephalometryAnalysis.kind (SQL crea TEXT + CHECK).
+  status             String  @default("ACTIVE")
   notes              String?
 
   treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
@@ -7353,7 +7329,10 @@ model OrthodonticAlignerEvent {
   alignerId String
   clinicId  String
 
-  eventType OrthoAlignerEventType
+  /// "DELIVERY" | "REFINEMENT" | "TRAY_CHANGE" | "ATTACHMENT_PLACED" |
+  /// "ATTACHMENT_LOST" | "PAUSE" | "RESUME". String, no enum — ver nota en
+  /// OrthodonticCephalometryAnalysis.kind (SQL crea TEXT + CHECK).
+  eventType String
   trayNumber Int?
   quantity   Int?
   notes      String?
@@ -7370,11 +7349,6 @@ model OrthodonticAlignerEvent {
   @@map("orthodontic_aligner_events")
 }
 
-enum OrthoElasticsSource {
-  PATIENT_PORTAL
-  CLINIC_MANUAL
-}
-
 model OrthodonticElasticsLog {
   id              String @id @default(uuid())
   treatmentPlanId String
@@ -7383,8 +7357,10 @@ model OrthodonticElasticsLog {
 
   logDate      DateTime
   wornHours    Float?
-  usedElastics Boolean             @default(false)
-  source       OrthoElasticsSource @default(PATIENT_PORTAL)
+  usedElastics Boolean @default(false)
+  /// "PATIENT_PORTAL" | "CLINIC_MANUAL". String, no enum — ver nota en
+  /// OrthodonticCephalometryAnalysis.kind (SQL crea TEXT + CHECK).
+  source       String  @default("PATIENT_PORTAL")
   notes        String?
 
   treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
@@ -7396,20 +7372,6 @@ model OrthodonticElasticsLog {
   @@unique([treatmentPlanId, logDate])
   @@index([treatmentPlanId])
   @@map("orthodontic_elastics_logs")
-}
-
-enum OrthoMonitoringAngle {
-  FRONTAL
-  LATERAL
-  SMILE
-  INTRAORAL
-  OTHER
-}
-
-enum OrthoMonitoringReviewStatus {
-  PENDING
-  REVIEWED
-  FLAGGED
 }
 
 model OrthodonticMonitoringPhoto {
@@ -7427,10 +7389,14 @@ model OrthodonticMonitoringPhoto {
   mimeType   String?
   sizeBytes  Int?
 
-  angle        OrthoMonitoringAngle        @default(OTHER)
+  /// "FRONTAL" | "LATERAL" | "SMILE" | "INTRAORAL" | "OTHER". String, no
+  /// enum — ver nota en OrthodonticCephalometryAnalysis.kind.
+  angle        String  @default("OTHER")
   patientNote  String?
   doctorNote   String?
-  reviewStatus OrthoMonitoringReviewStatus @default(PENDING)
+  /// "PENDING" | "REVIEWED" | "FLAGGED". String, no enum — ver nota en
+  /// OrthodonticCephalometryAnalysis.kind.
+  reviewStatus String  @default("PENDING")
 
   reviewedByUserId String?
   reviewedByUser   User?   @relation("OrthoMonitoringPhotoReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)

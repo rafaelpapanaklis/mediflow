@@ -50,9 +50,12 @@ export async function listCephalometricAnalyses(
     return ok(
       rows.map((r) => ({
         id: r.id,
-        kind: r.kind,
-        analysisType: r.analysisType,
-        normSet: r.normSet,
+        // kind/analysisType/normSet son String en la base (CHECK constraint,
+        // no enum nativo — ver nota en schema.prisma) validados al escribir;
+        // se afirman al tipo angosto de TS al leer.
+        kind: r.kind as CephalometricAnalysisRow["kind"],
+        analysisType: r.analysisType as CephAnalysisType,
+        normSet: r.normSet as CephNormSet,
         points: (r.points as CephPoints) ?? {},
         measurements: (r.measurements as unknown as CephMeasurements) ?? {
           SNA: null,
