@@ -9,6 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth/permissions";
 import {
+  conceptosGenerales,
   casoDesdePresupuesto,
   esPresupuestoDeOrtodoncia,
   type CasoDesdePresupuesto,
@@ -57,7 +58,11 @@ export async function casosDesdePresupuestos(
   const salida = new Map<string, CasoDesdePresupuesto>();
   // Solo interesan los aceptados que aún no generaron plan: si no hay ninguno,
   // ni siquiera se pregunta por el módulo.
-  const candidatos = presupuestos.filter((q) => q.status === "ACCEPTED" && !q.treatmentPlanId);
+  // Excepción: un presupuesto MIXTO que ya generó su plan general (con el
+  // resto) sigue ofreciendo el caso de ortodoncia, que ese plan no cubre.
+  const candidatos = presupuestos.filter(
+    (q) => q.status === "ACCEPTED" && (!q.treatmentPlanId || conceptosGenerales(q.items).length > 0),
+  );
   if (candidatos.length === 0) return salida;
 
   try {
@@ -83,13 +88,17 @@ export async function casosDesdePresupuestos(
         quoteId: q.id,
         patientId: q.patientId,
         status: q.status,
-        treatmentPlanId: q.treatmentPlanId,
+        // El plan general de un mixto es el del resto: no tapa el caso.
+        treatmentPlanId: conceptosGenerales(q.items).length > 0 ? null : q.treatmentPlanId,
         esDeOrtodoncia: true,
         moduloActivo: true,
         tienePermiso,
         casosDelPaciente: casos.filter((c) => c.patientId === q.patientId).map((c) => c.status),
       });
-      if (caso) salida.set(q.id, caso);
+      if (caso) {
+        if (conceptosGenerales(q.items).length > 0) caso.conPlanGeneral = true;
+        salida.set(q.id, caso);
+      }
     }
   } catch (e) {
     console.warn("[presupuestos:ortodoncia] no se pudo resolver el caso:", e);

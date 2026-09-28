@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  conceptosGenerales,
   AVISO_SIN_PERMISO_DE_ORTODONCIA,
   casoDesdePresupuesto,
   esPresupuestoDeOrtodoncia,
@@ -142,4 +143,28 @@ test("la ruta de «Crear plan» ofrece el caso ANTES de crear el plan general", 
     assert.match(texto, /quote\.casoOrtodoncia\?\.etiqueta \?\? t\("quotes\.card\.createPlan"\)/, pantalla);
     assert.match(texto, /if \(quote\.casoOrtodoncia\?\.href\)/, pantalla);
   }
+});
+
+// ── Presupuesto MIXTO (revisión de ws1-t5, 28-sep-2026) ─────────────────────
+// Ortodoncia + «Resina 16» + «Extracción 18»: el caso no cubre la resina ni la
+// extracción; esos conceptos van a un plan general aparte (`?general=1`).
+
+test("mixto: los conceptos que no son de ortodoncia quedan para el plan general", () => {
+  const items = [
+    { name: "Ortodoncia con brackets metálicos" },
+    { name: "Resina 16" },
+    { name: "Extracción 18" },
+    { name: "Retenedor Hawley de ortodoncia" },
+  ];
+  assert.deepEqual(conceptosGenerales(items).map((i) => i.name), ["Resina 16", "Extracción 18"]);
+});
+
+test("solo ortodoncia: no queda nada para un plan general", () => {
+  assert.deepEqual(conceptosGenerales([{ name: "Alineadores Invisalign" }, { name: "Brackets" }]), []);
+});
+
+test("la ruta solo arma el plan con el resto si el caso lo marca como mixto y se pide general=1", () => {
+  const ruta = readFileSync(join(__dirname, "../../../app/api/quotes/[id]/treatment-plan/route.ts"), "utf8");
+  assert.match(ruta, /caso\?\.conPlanGeneral && req\.nextUrl\.searchParams\.get\("general"\) === "1"/);
+  assert.match(ruta, /conceptosGenerales\(quote\.items\)/);
 });

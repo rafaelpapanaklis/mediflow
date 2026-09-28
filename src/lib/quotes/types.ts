@@ -100,6 +100,8 @@ export interface QuoteDTO {
     /** `null` = quien mira no puede entrar al módulo: el botón explica quién abre el caso. */
     href: string | null;
     aviso?: string;
+    /** Mixto: además ofrece «Crear plan general con el resto» (`?general=1`). */
+    conPlanGeneral?: boolean;
   };
 }
 

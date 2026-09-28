@@ -74,6 +74,15 @@ export function esPresupuestoDeOrtodoncia(p: {
   return nombraElTratamiento(p.title);
 }
 
+/**
+ * Los conceptos de un presupuesto que NO son de ortodoncia (ni el tratamiento
+ * ni un extra de ortodoncia): «Resina 16», «Extracción 18»… En un presupuesto
+ * mixto, el caso de ortodoncia no los cubre: van a un plan general aparte.
+ */
+export function conceptosGenerales<T extends { name: string | null | undefined }>(items: ReadonlyArray<T>): T[] {
+  return items.filter((i) => !hablaDeOrtodoncia(i.name));
+}
+
 export const PARAMETRO_PRESUPUESTO = "presupuesto";
 
 const ESTADOS_EN_CURSO = ["PLANNED", "IN_PROGRESS", "ON_HOLD", "RETENTION"];
@@ -86,6 +95,12 @@ export interface CasoDesdePresupuesto {
   href: string | null;
   /** Lo que se le dice a quien no puede abrir el caso. */
   aviso?: string;
+  /**
+   * Presupuesto MIXTO: además del tratamiento trae conceptos que no son de
+   * ortodoncia. Para esos se ofrece también «Crear plan general con el resto»
+   * (POST …/treatment-plan?general=1), que arma el plan solo con ellos.
+   */
+  conPlanGeneral?: boolean;
 }
 
 export const AVISO_SIN_PERMISO_DE_ORTODONCIA =

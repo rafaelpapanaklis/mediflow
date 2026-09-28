@@ -6,6 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { distinctPhaseCount } from "@/lib/quotes/compute";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { casosDesdePresupuestos } from "@/lib/quotes/ortodoncia.server";
+import { conceptosGenerales } from "@/lib/quotes/ortodoncia";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +21,12 @@ interface Params { params: { id: string } }
  * plan general. Responde `{ casoOrtodoncia }` con a dónde ir para abrir (o
  * ver) el caso de ortodoncia del paciente. El caso lo abre el asistente de
  * alta de la ficha, con sus propios permisos; aquí no se escribe nada.
+ *
+ * Presupuesto MIXTO (tratamiento de ortodoncia + «Resina 16», «Extracción
+ * 18»…): con `?general=1` crea el plan general SOLO con los conceptos que no
+ * son de ortodoncia (su coste y sus fases). El tratamiento sigue yendo al caso.
  */
-export async function POST(_req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -35,7 +40,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
   const quote = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    include: { items: { select: { phase: true, name: true } } },
+    include: { items: { select: { phase: true, name: true, lineTotal: true } } },
   });
   if (!quote) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
 
@@ -70,7 +75,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
   // De ortodoncia y con el módulo: se ofrece el caso, no un plan general.
   const caso = (await casosDesdePresupuestos(ctx, [quote])).get(quote.id);
-  if (caso) {
+  const soloElResto = !!caso?.conPlanGeneral && req.nextUrl.searchParams.get("general") === "1";
+  if (caso && !soloElResto) {
     // Sin el permiso del módulo tampoco se crea el plan general: se dice
     // quién abre el caso.
     if (!caso.href) return NextResponse.json({ error: caso.aviso, casoOrtodoncia: caso }, { status: 409 });
@@ -78,7 +84,9 @@ export async function POST(_req: NextRequest, { params }: Params) {
   }
 
   const doctorId = quote.createdById ?? ctx.userId;
-  const totalSessions = distinctPhaseCount(quote.items.map((i) => ({ phase: i.phase == null ? null : Number(i.phase) })));
+  // Mixto: el plan general solo lleva lo que no es de ortodoncia.
+  const items = soloElResto ? conceptosGenerales(quote.items) : quote.items;
+  const totalSessions = distinctPhaseCount(items.map((i) => ({ phase: i.phase == null ? null : Number(i.phase) })));
   const sessionIntervalDays = 30;
   const startDate = new Date();
   const endDate = new Date(startDate.getTime() + totalSessions * sessionIntervalDays * 24 * 60 * 60 * 1000);
@@ -93,7 +101,9 @@ export async function POST(_req: NextRequest, { params }: Params) {
       description: `Generado desde presupuesto ${quote.folio}`,
       totalSessions,
       sessionIntervalDays,
-      totalCost: Number(quote.total) || 0,
+      totalCost: soloElResto
+        ? Math.round(items.reduce((s, i) => s + (Number(i.lineTotal) || 0), 0) * 100) / 100
+        : Number(quote.total) || 0,
       status: "ACTIVE",
       startDate,
       endDate,

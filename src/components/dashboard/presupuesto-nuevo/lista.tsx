@@ -330,6 +330,24 @@ function Ficha({
                 ? t("quotes.card.viewPlan")
                 : quote.casoOrtodoncia?.etiqueta ?? t("quotes.card.createPlan")}
             </Accion>
+            {/* Presupuesto MIXTO (ortodoncia + otros conceptos): el caso no
+                cubre la resina ni la extracción. Sin plan todavía, se ofrece el
+                plan general con el resto; con él ya creado, el caso sigue a mano. */}
+            {quote.casoOrtodoncia?.conPlanGeneral && !quote.treatmentPlanId && (
+              <Accion
+                onClick={async () => {
+                  const salida = await post(`/api/quotes/${quote.id}/treatment-plan?general=1`);
+                  if (salida?.treatmentPlanId) onVerPlan?.(salida.treatmentPlanId);
+                }}
+              >
+                <ClipboardList size={13} /> Crear plan general con el resto
+              </Accion>
+            )}
+            {quote.casoOrtodoncia?.href && quote.treatmentPlanId && (
+              <Accion onClick={() => window.location.assign(quote.casoOrtodoncia!.href!)}>
+                <ClipboardList size={13} /> {quote.casoOrtodoncia.etiqueta}
+              </Accion>
+            )}
           </>
         )}
 
