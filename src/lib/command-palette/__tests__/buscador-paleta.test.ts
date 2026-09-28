@@ -133,6 +133,8 @@ test("la ruta parte la búsqueda en términos y busca pacientes con el criterio 
   // Los permisos no se mueven: clinicId de la sesión y visibilidad por paciente en AND.
   assert.match(ruta, /patientVisibilityAnd\(viewer\)/);
   assert.match(ruta, /relatedPatientVisibilityAnd\(viewer\)/);
-  assert.equal((ruta.match(/clinicId: ctx\.clinicId/g) ?? []).length, 5, "alguna consulta perdió su clinicId");
+  // Seis: las cinco de siempre y la de los casos de ortodoncia (ws1-t5), que
+  // también va acotada a la clínica de la sesión.
+  assert.equal((ruta.match(/clinicId: ctx\.clinicId/g) ?? []).length, 6, "alguna consulta perdió su clinicId");
   assert.ok(!ruta.includes("searchParams.get(\"clinicId\")"), "el clinicId nunca sale del cliente");
 });

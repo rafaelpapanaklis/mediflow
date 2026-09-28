@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
@@ -13,6 +14,14 @@ import {
   condicionesFacturas,
   condicionesPacientesRespaldo,
 } from "@/lib/command-palette/terminos-busqueda";
+import { accesoOrtodonciaParaPaleta } from "@/lib/command-palette/ortodoncia";
+import { hasPermission } from "@/lib/auth/permissions";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import {
+  COOKIE_VISTA_PREVIA_SIN_MODULO,
+  moduloActivoALaVista,
+  vistaPreviaSinModulo,
+} from "@/lib/orthodontics/contratar";
 
 export const dynamic = "force-dynamic";
 
@@ -23,9 +32,36 @@ export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Ortodoncia en el buscador (ws1-t5): las MISMAS tres condiciones que el
+  // guardia del módulo (sede dental, módulo contratado de verdad y permiso
+  // `specialties.orthodontics`). Sin ellas la paleta no enseña nada de
+  // ortodoncia. Se resuelve también con la búsqueda vacía, porque la paleta
+  // lo pide al abrirse para pintar los destinos. clinicId de la sesión.
+  const quien = { role: ctx.role as any, permissionsOverride: ctx.permissionsOverride };
+  const esDental = ctx.clinicCategory === "DENTAL";
+  const tienePermisoModulo = hasPermission(quien, "specialties.orthodontics");
+  const moduloReal =
+    esDental && tienePermisoModulo && !ctx.isPlanExpired
+      ? await hasActiveOrthodonticsModule(ctx.clinicId).catch(() => false)
+      : false;
+  const ortodoncia = accesoOrtodonciaParaPaleta({
+    esDental,
+    // La vista previa «sin módulo» solo puede QUITARLO a la vista, y en
+    // producción se ignora (igual que en el layout y en el guardia).
+    moduloActivo: moduloActivoALaVista(
+      moduloReal,
+      vistaPreviaSinModulo({
+        nodeEnv: process.env.NODE_ENV,
+        cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
+      }),
+    ),
+    tienePermisoModulo,
+    puedeVerConfiguracion: hasPermission(quien, "settings.view"),
+  });
+
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   if (q.length < LARGO_MINIMO_BUSQUEDA) {
-    return NextResponse.json({ patients: [], appointments: [], invoices: [] });
+    return NextResponse.json({ patients: [], appointments: [], invoices: [], ortodoncia });
   }
 
   // "Ana Pérez" son DOS términos y cada uno tiene que casar en algún campo
@@ -134,6 +170,25 @@ export async function GET(req: NextRequest) {
     folioPromise,
   ]);
 
+  // ¿Cuáles de estos pacientes tienen (o tuvieron) un caso de ortodoncia? Solo
+  // se pregunta si la persona puede entrar al módulo. Acotado por clinicId y a
+  // los ids que YA pasaron la visibilidad de arriba. Si falla, la búsqueda
+  // sigue: simplemente no se ofrece «Abrir su caso».
+  const conCaso = new Set<string>();
+  if (ortodoncia.activo && patients.length > 0) {
+    const planes = await prisma.orthodonticTreatmentPlan
+      .findMany({
+        where: {
+          clinicId: ctx.clinicId,
+          patientId: { in: patients.map((p) => p.id) },
+          deletedAt: null,
+        },
+        select: { patientId: true },
+      })
+      .catch(() => [] as Array<{ patientId: string }>);
+    for (const plan of planes) conCaso.add(plan.patientId);
+  }
+
   // Solo los que de verdad SON ese folio (cola numérica == número escrito).
   const exactFolio = folioHits.filter((i) => {
     const tail = /(\d+)$/.exec(i.invoiceNumber ?? "")?.[1];
@@ -156,6 +211,7 @@ export async function GET(req: NextRequest) {
       lastName: p.lastName,
       patientNumber: p.patientNumber,
       phone: p.phone,
+      ...(conCaso.has(p.id) ? { casoOrtodoncia: true } : {}),
     })),
     appointments: appointments.map(a => ({
       id: a.id,
@@ -173,5 +229,6 @@ export async function GET(req: NextRequest) {
       date: i.createdAt.toISOString(),
       patientName: `${i.patient.firstName} ${i.patient.lastName}`,
     })),
+    ortodoncia,
   });
 }

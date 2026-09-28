@@ -1,9 +1,14 @@
 import {
   Calendar, UserPlus, FileText, Stethoscope, Home, Users,
   MessageCircle, CreditCard, FileImage, Sparkles, Settings,
-  Moon, HelpCircle, FlaskConical,
+  Moon, HelpCircle, FlaskConical, Smile,
 } from "lucide-react";
 import type { CommandItem } from "./types";
+import {
+  destinosOrtodoncia,
+  hrefCasoOrtodoncia,
+  type AccesoOrtodonciaPaleta,
+} from "./ortodoncia";
 
 export interface OpcionesAccionesGlobales {
   /**
@@ -144,4 +149,34 @@ export function buildActiveConsultActions(
       run: (ctx) => ctx.push(`/dashboard/ai-assistant?patient=${patientId}`),
     },
   ];
+}
+
+/**
+ * Los apartados del módulo de Ortodoncia como destinos «Ir a». Vacío si la
+ * sede no tiene el módulo o la persona no tiene el permiso: eso lo decide el
+ * servidor y llega en `acceso` (ver ortodoncia.ts).
+ */
+export function buildOrthodonticsActions(acceso: AccesoOrtodonciaPaleta): CommandItem[] {
+  return destinosOrtodoncia(acceso).map((d) => ({
+    id: d.id,
+    group: "ir-a" as const,
+    label: d.label,
+    sub: d.sub,
+    icon: Smile,
+    keywords: d.keywords,
+    run: (ctx) => ctx.push(d.href),
+  }));
+}
+
+/** La fila que acompaña a un paciente con caso: abre su ficha en la pestaña Ortodoncia. */
+export function buildOpenOrthoCaseAction(patientId: string, patientName: string): CommandItem {
+  return {
+    id: `patient-orto-${patientId}`,
+    group: "pacientes",
+    label: `Abrir su caso de ortodoncia — ${patientName}`,
+    icon: Smile,
+    tone: "brand",
+    keywords: ["ortodoncia", "caso", "brackets"],
+    run: (ctx) => ctx.push(hrefCasoOrtodoncia(patientId)),
+  };
 }

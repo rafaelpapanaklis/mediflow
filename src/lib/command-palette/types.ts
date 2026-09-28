@@ -48,6 +48,9 @@ export interface RemoteSearchResult {
     lastName: string;
     patientNumber: string | null;
     phone: string | null;
+    /** Tiene o tuvo un caso de ortodoncia. Solo viene `true` si la sede tiene
+     *  el módulo y quien busca tiene el permiso del módulo. */
+    casoOrtodoncia?: boolean;
   }>;
   appointments?: Array<{
     id: string;
@@ -68,4 +71,7 @@ export interface RemoteSearchResult {
     date: string;
     patientName: string;
   }>;
+  /** Qué de Ortodoncia puede abrir esta persona en esta sede (ortodoncia.ts).
+   *  Viene también con la búsqueda vacía. */
+  ortodoncia?: { activo: boolean; configuracion: boolean };
 }

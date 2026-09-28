@@ -12,7 +12,14 @@ import type {
 } from "@/lib/command-palette/types";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { fmtMXN } from "@/lib/format";
-import { buildGlobalActions, buildActiveConsultActions } from "@/lib/command-palette/actions";
+import {
+  buildGlobalActions, buildActiveConsultActions,
+  buildOrthodonticsActions, buildOpenOrthoCaseAction,
+} from "@/lib/command-palette/actions";
+import {
+  SIN_ACCESO_ORTODONCIA, leerAccesoOrtodoncia, ofreceAbrirCaso,
+  type AccesoOrtodonciaPaleta,
+} from "@/lib/command-palette/ortodoncia";
 import { fuzzyScore } from "@/lib/command-palette/fuzzy";
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -110,6 +117,9 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [remoteResults, setRemoteResults] = useState<RemoteSearchResult | null>(null);
   const [loading, setLoading] = useState(false);
+  // Qué de Ortodoncia puede abrir esta persona en esta sede. Lo dice el
+  // servidor (módulo contratado + permiso); hasta que contesta, nada.
+  const [ortoAcceso, setOrtoAcceso] = useState<AccesoOrtodonciaPaleta>(SIN_ACCESO_ORTODONCIA);
 
   const debouncedQuery = useDebouncedValue(query, 200);
 
@@ -121,6 +131,23 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
       setLoading(false);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
+  }, [open]);
+
+  // Al abrir, con el input todavía vacío, se pregunta SOLO por el acceso a
+  // Ortodoncia (la ruta con `q` vacía no consulta pacientes ni facturas): así
+  // los destinos del módulo salen sin haber escrito nada, y solo a quien los
+  // puede abrir. Si falla, la paleta sigue igual que antes, sin ortodoncia.
+  useEffect(() => {
+    if (!open) return;
+    const ac = new AbortController();
+    fetch("/api/dashboard/search?q=", {
+      signal: ac.signal,
+      headers: { Accept: "application/json" },
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+      .then((data: RemoteSearchResult) => setOrtoAcceso(leerAccesoOrtodoncia(data?.ortodoncia)))
+      .catch(() => {});
+    return () => ac.abort();
   }, [open]);
 
   useEffect(() => {
@@ -142,6 +169,7 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
       .then((data: RemoteSearchResult) => {
         setRemoteResults(data);
+        if (data?.ortodoncia) setOrtoAcceso(leerAccesoOrtodoncia(data.ortodoncia));
         setLoading(false);
       })
       .catch((err) => {
@@ -196,6 +224,10 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
           icon: UserIcon,
           run: (c) => c.push(`/dashboard/patients/${p.id}`),
         });
+        // Paciente con caso de ortodoncia: debajo de su ficha, su caso.
+        if (ofreceAbrirCaso(p, ortoAcceso)) {
+          all.push(buildOpenOrthoCaseAction(p.id, name || (p.patientNumber ?? "—")));
+        }
       });
       remoteResults.appointments?.forEach((a) => {
         all.push({
@@ -266,7 +298,10 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
       });
     }
 
-    const globals = buildGlobalActions(nueva ? { rutaAgenda: RUTA_AGENDA.nueva } : undefined);
+    const globals = [
+      ...buildGlobalActions(nueva ? { rutaAgenda: RUTA_AGENDA.nueva } : undefined),
+      ...buildOrthodonticsActions(ortoAcceso),
+    ];
     if (!q) {
       all.push(...globals);
       return all;
@@ -278,7 +313,7 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
     all.push(...filteredGlobals);
 
     return all;
-  }, [activeConsult, remoteResults, query, locale, t, nueva, vestir]);
+  }, [activeConsult, remoteResults, query, locale, t, nueva, vestir, ortoAcceso]);
 
   useEffect(() => {
     setHighlightedIndex(0);
