@@ -111,7 +111,19 @@ export function LotesModal({
     <Dialog.Root open onOpenChange={v => { if (!v) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="modal-overlay" />
-        <Dialog.Content className="modal" style={{ maxWidth: 640 }} onEscapeKeyDown={onClose}>
+        {/* Ajuste 3 — .modal-overlay centra por CSS grid a sus HIJOS; Dialog.Content
+            es hermano de Dialog.Overlay dentro del Portal, así que sin este
+            `position: fixed` propio quedaba en flujo normal (arriba del todo del
+            documento, fuera de la ventana). Mismo patrón que el resto de modales
+            del panel (ver el "Modal agregar" de este mismo archivo). */}
+        <Dialog.Content
+          className="modal"
+          style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            maxWidth: 640, width: "calc(100vw - 32px)", maxHeight: "90vh", zIndex: 101,
+          }}
+          onEscapeKeyDown={onClose}
+        >
           <div className="modal__header">
             <Dialog.Title className="modal__title">Lotes — {itemName}</Dialog.Title>
             <Dialog.Close asChild>

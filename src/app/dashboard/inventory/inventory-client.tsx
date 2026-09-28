@@ -87,14 +87,27 @@ interface Proveedor {
   contact: string | null;
 }
 
-type StatusTab = "todos" | "disponible" | "poco" | "sin";
+// WS1-T5 (ajuste 3) — "por_caducar"/"caducado" son tabs de LOTE, no de
+// existencias: no los calcula getStatus(item), vienen de /api/inventory/alerts.
+type StatusTab = "todos" | "disponible" | "poco" | "sin" | "por_caducar" | "caducado";
 
-const STATUS_FILTERS: { id: StatusTab; labelKey: string }[] = [
+const STATUS_FILTERS: { id: StatusTab; labelKey?: string; label?: string }[] = [
   { id: "todos",      labelKey: "common.all" },
   { id: "disponible", labelKey: "procurement.inventoryClient.filterAvailable" },
   { id: "poco",       labelKey: "procurement.inventoryClient.filterLowStock" },
   { id: "sin",        labelKey: "procurement.inventoryClient.filterOutOfStock" },
 ];
+
+/** Un lote con problema de caducidad, tal como lo entrega GET /api/inventory/alerts. */
+interface AvisoLote {
+  lotId: string;
+  itemId: string;
+  itemName: string;
+  unit: string;
+  lotNumber: string | null;
+  expiresAt: string;
+  remaining: number;
+}
 
 function getStatus(item: Item): StatusTab {
   if (item.quantity === 0) return "sin";
@@ -229,6 +242,10 @@ export function InventoryClient({
   const [editQty, setEditQty]   = useState<Record<string, string>>({});
   // WS1-T5 — lotes y caducidad.
   const [lotesItem, setLotesItem] = useState<Item | null>(null);
+  // WS1-T5 (ajuste 3) — avisos de caducidad: la API ya los calculaba
+  // (buildAlerts en /api/dashboard/home/admin) pero ninguna pantalla los
+  // pedía ni los mostraba (REPORTE-ws1-t2.md, punto 3c).
+  const [avisos, setAvisos] = useState<{ porCaducar: AvisoLote[]; caducado: AvisoLote[] }>({ porCaducar: [], caducado: [] });
   // ws1-t4 — "Registrar compra".
   const [showCompra, setShowCompra] = useState(false);
   // ws1-t4 (ajuste 1) — "Historial de compras".
@@ -249,6 +266,28 @@ export function InventoryClient({
       .then(r => r.ok ? r.json() : [])
       .then(setProveedores)
       .catch(() => {});
+  }, []);
+
+  // WS1-T5 (ajuste 3) — avisos de caducidad, mismo patrón que proveedores
+  // arriba: se piden una vez al cargar. Silencioso si el SQL de lotes aún
+  // no está aplicado (la API ya responde listas vacías en ese caso).
+  useEffect(() => {
+    fetch("/api/inventory/alerts")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setAvisos({ porCaducar: d.porCaducar ?? [], caducado: d.caducado ?? [] }); })
+      .catch(() => {});
+  }, []);
+
+  // WS1-T5 (ajuste 3) — el aviso de Hoy enlaza aquí con ?filter=low,
+  // ?filter=por-caducar o ?filter=caducado. Antes ninguno hacía nada
+  // (REPORTE-ws1-t8.md y ws1-t2.md, 3c): se lee UNA vez al montar, con
+  // URLSearchParams directo (sin useSearchParams, para no exigir un
+  // <Suspense> nuevo en esta pantalla).
+  useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get("filter");
+    if (f === "low") setTab("poco");
+    else if (f === "por-caducar") setTab("por_caducar");
+    else if (f === "caducado") setTab("caducado");
   }, []);
 
   async function crearProveedorRapido() {
@@ -279,9 +318,19 @@ export function InventoryClient({
     return { total: items.length, totalQty, lowCount, outCount, totalValue };
   }, [items]);
 
+  // WS1-T5 (ajuste 3) — de qué artículos hablan los avisos de caducidad,
+  // para los tabs "Por caducar"/"Caducado" (no son estado de existencias).
+  const porCaducarIds = useMemo(() => new Set(avisos.porCaducar.map(a => a.itemId)), [avisos.porCaducar]);
+  const caducadoIds   = useMemo(() => new Set(avisos.caducado.map(a => a.itemId)), [avisos.caducado]);
+
   const filtered = useMemo(() => {
     return items
-      .filter(i => tab === "todos" || getStatus(i) === tab)
+      .filter(i => {
+        if (tab === "todos") return true;
+        if (tab === "por_caducar") return porCaducarIds.has(i.id);
+        if (tab === "caducado") return caducadoIds.has(i.id);
+        return getStatus(i) === tab;
+      })
       .filter(i => !search
         || i.name.toLowerCase().includes(search.toLowerCase())
         || i.category.toLowerCase().includes(search.toLowerCase()))
@@ -294,7 +343,7 @@ export function InventoryClient({
         }
         return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
       });
-  }, [items, tab, search]);
+  }, [items, tab, search, porCaducarIds, caducadoIds]);
 
   async function setQuantityDirect(id: string, qtyStr: string) {
     const qty = parseInt(qtyStr);
@@ -447,6 +496,42 @@ export function InventoryClient({
         </div>
       </div>
 
+      {/* WS1-T5 (ajuste 3) — banda de caducidad. La API ya la calculaba
+          (buildAlerts) pero ninguna pantalla la mostraba (ws1-t2, 3c).
+          Oculta por completo sin avisos: no reserva espacio vacío. */}
+      {(avisos.caducado.length > 0 || avisos.porCaducar.length > 0) && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
+          {avisos.caducado.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTab("caducado")}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10,
+                background: "var(--danger-soft)", color: "var(--danger-strong)", border: "none",
+                fontSize: 13, fontWeight: 600, cursor: "pointer", flex: "1 1 240px", textAlign: "left",
+              }}
+            >
+              <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
+              {avisos.caducado.length} lote{avisos.caducado.length === 1 ? "" : "s"} caducado{avisos.caducado.length === 1 ? "" : "s"} — ver
+            </button>
+          )}
+          {avisos.porCaducar.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTab("por_caducar")}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10,
+                background: "var(--warning-soft)", color: "var(--warning-strong)", border: "none",
+                fontSize: 13, fontWeight: 600, cursor: "pointer", flex: "1 1 240px", textAlign: "left",
+              }}
+            >
+              <CalendarClock size={16} strokeWidth={1.75} aria-hidden />
+              {avisos.porCaducar.length} lote{avisos.porCaducar.length === 1 ? "" : "s"} por caducar — ver
+            </button>
+          )}
+        </div>
+      )}
+
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16, marginBottom: 24 }}>
         <KpiCard label={t("procurement.inventoryClient.kpiTotalItems")} value={String(items.length)}       icon={Package} hero />
@@ -465,7 +550,11 @@ export function InventoryClient({
             placeholder={t("procurement.inventoryClient.searchPlaceholder")}
           />
         </div>
-        <div className="segment-new">
+        {/* WS1-T5 (ajuste 3) — con los tabs de caducidad ya son hasta 6:
+            a 390 desbordaban la página en horizontal (empeorando el 2i que
+            ya reportó panel.108). Scroll propio de la barra, sin tocar la
+            clase global .segment-new (la usan otras pantallas). */}
+        <div className="segment-new" style={{ overflowX: "auto", maxWidth: "100%" }}>
           {STATUS_FILTERS.map(f => (
             <button
               key={f.id}
@@ -473,9 +562,29 @@ export function InventoryClient({
               onClick={() => setTab(f.id)}
               className={`segment-new__btn ${tab === f.id ? "segment-new__btn--active" : ""}`}
             >
-              {t(f.labelKey)}
+              {f.labelKey ? t(f.labelKey) : f.label}
             </button>
           ))}
+          {/* WS1-T5 (ajuste 3) — solo aparecen si hay algo que filtrar: no
+              dejan un tab muerto en clínicas sin lotes por caducar. */}
+          {avisos.porCaducar.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTab("por_caducar")}
+              className={`segment-new__btn ${tab === "por_caducar" ? "segment-new__btn--active" : ""}`}
+            >
+              Por caducar
+            </button>
+          )}
+          {avisos.caducado.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTab("caducado")}
+              className={`segment-new__btn ${tab === "caducado" ? "segment-new__btn--active" : ""}`}
+            >
+              Caducado
+            </button>
+          )}
         </div>
       </div>
 

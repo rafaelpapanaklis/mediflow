@@ -14,6 +14,11 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { HomeQuickActions } from "./parts/home-quick-actions";
 import { RevenueTrendCard } from "./parts/revenue-trend-card";
 import { UpcomingAppointmentsCard } from "./parts/upcoming-appointments-card";
+// WS1-T5 (ajuste 3) — el rediseño de julio nunca montó los avisos del
+// admin (inventario bajo/por caducar/caducado, facturas vencidas…): la API
+// ya los calculaba (buildAlerts en /api/dashboard/home/admin) pero
+// ninguna pantalla los pintaba. Ver REPORTE-ws1-t2.md, punto 3c.
+import { AdminAlertRow } from "./parts/admin-alert-row";
 import { useT } from "@/i18n/i18n-provider";
 import type { HomeAdminData, AdminPeriod } from "@/lib/home/types";
 
@@ -102,11 +107,26 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         )}
       </div>
 
+      {/* WS1-T5 (ajuste 3) — avisos del admin (inventario bajo/por caducar/
+          caducado, facturas vencidas…). Sin montar desde julio: la API
+          siempre los calculó, pero ninguna pantalla los mostraba. Oculto
+          por completo si no hay ninguno — no reserva espacio vacío. */}
+      {data.alerts.length > 0 && (
+        <HomeSection title="Avisos" noPad>
+          <div>
+            {data.alerts.map((alert) => (
+              <AdminAlertRow key={alert.id} alert={alert} />
+            ))}
+          </div>
+        </HomeSection>
+      )}
+
       <div
         style={{
           display: "flex",
           justifyContent: "flex-end",
           marginBottom: 12,
+          marginTop: data.alerts.length > 0 ? 16 : 0,
         }}
       >
         <AdminPeriodToggle value={period} />

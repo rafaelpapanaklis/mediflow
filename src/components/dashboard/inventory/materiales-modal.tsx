@@ -98,7 +98,18 @@ export function MaterialesModal({
     <Dialog.Root open onOpenChange={v => { if (!v) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="modal-overlay" />
-        <Dialog.Content className="modal" style={{ maxWidth: 560 }} onEscapeKeyDown={onClose}>
+        {/* Ajuste 3 (ws1-t5) — ver la misma nota en lotes-modal.tsx: sin este
+            `position: fixed` propio, Dialog.Content queda en flujo normal
+            (el grid de .modal-overlay solo centra a sus hijos directos, y
+            Content es hermano de Overlay dentro del Portal). */}
+        <Dialog.Content
+          className="modal"
+          style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            maxWidth: 560, width: "calc(100vw - 32px)", maxHeight: "90vh", zIndex: 101,
+          }}
+          onEscapeKeyDown={onClose}
+        >
           <div className="modal__header">
             <Dialog.Title className="modal__title">Materiales — {procedureName}</Dialog.Title>
             <Dialog.Close asChild>

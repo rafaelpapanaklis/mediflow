@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowDownRight, ArrowUpRight, Calendar, ChevronRight, DollarSign, TrendingUp, UserX, Users,
+  AlertTriangle, ArrowDownRight, ArrowUpRight, Calendar, ChevronRight, DollarSign, TrendingUp, UserX, Users,
   type LucideIcon,
 } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
@@ -19,6 +19,11 @@ import { AccionesRapidas, Saludo, Tarjeta } from "./piezas";
 import { TarjetaIngresos } from "./tarjeta-ingresos";
 import { TarjetaProximas } from "./tarjeta-proximas";
 import { TablaEquipo } from "./tabla-equipo";
+// WS1-T5 (ajuste 3) — avisos del admin (inventario bajo/por caducar/
+// caducado, facturas vencidas…). Sin montar desde este rediseño de julio:
+// la API siempre los calculó, pero ninguna pantalla los mostraba
+// (REPORTE-ws1-t2.md, punto 3c).
+import { FilaAviso } from "./fila-aviso";
 import s from "./hoy.module.css";
 
 interface Props {
@@ -79,6 +84,16 @@ export function HoyAdmin({ clinic, data, period }: Props) {
           />
         ))}
       </div>
+
+      {/* WS1-T5 (ajuste 3) — oculta por completo sin avisos: no reserva
+          espacio vacío en clínicas al día. */}
+      {data.alerts.length > 0 && (
+        <Tarjeta icono={AlertTriangle} titulo="Avisos" lista>
+          {data.alerts.map((alert) => (
+            <FilaAviso key={alert.id} alert={alert} />
+          ))}
+        </Tarjeta>
+      )}
 
       <div className={s.periodo}>
         <SelectorPeriodo value={period} />
