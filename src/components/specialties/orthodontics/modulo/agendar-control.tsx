@@ -9,7 +9,7 @@ import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import s from "./modulo.module.css";
 
-export function AgendarControlBoton({ patientId, patientName }: { patientId: string; patientName: string }) {
+export function AgendarControlBoton({ patientId, patientName, doctorId }: { patientId: string; patientName: string; /** El doctor tratante del caso: la cita nace con él, no con quien esté de turno. */ doctorId?: string | null }) {
   const router = useRouter();
   const { open } = useNewAppointmentDialog();
   return (
@@ -21,6 +21,7 @@ export function AgendarControlBoton({ patientId, patientName }: { patientId: str
         open({
           initialPatient: { id: patientId, name: patientName },
           initialReason: TIPO_CITA_CONTROL_ORTO,
+          ...(doctorId ? { initialDoctorId: doctorId } : {}),
           onCreated: () => router.refresh(),
         })
       }

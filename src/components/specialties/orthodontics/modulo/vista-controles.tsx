@@ -225,7 +225,7 @@ export function VistaControles({
                 </div>
                 {puedeAgendar && (
                   <div className={s.filaDerecha}>
-                    <AgendarControlBoton patientId={c.patientId} patientName={c.patientName} />
+                    <AgendarControlBoton patientId={c.patientId} patientName={c.patientName} doctorId={c.treatingDoctorId} />
                   </div>
                 )}
               </li>

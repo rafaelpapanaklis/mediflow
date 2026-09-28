@@ -51,3 +51,9 @@ test("guardar el caso avisa cuántos controles quedaron con el doctor anterior y
   const tab = leer("components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx");
   assert.match(tab, /moverControlesFuturosAlDoctor\(\{ treatmentPlanId/);
 });
+
+test("«Agendar control» de Controles propone al doctor tratante del caso", () => {
+  assert.match(leer("components/specialties/orthodontics/modulo/agendar-control.tsx"), /\.\.\.\(doctorId \? \{ initialDoctorId: doctorId \} : \{\}\)/);
+  assert.match(leer("components/specialties/orthodontics/modulo/vista-controles.tsx"), /doctorId=\{c\.treatingDoctorId\}/);
+  assert.match(leer("lib/orthodontics/controles-modulo.ts"), /treatingDoctorId: c\.treatingDoctorId,/);
+});

@@ -175,6 +175,8 @@ export interface CasoSinControl {
   patientId: string;
   patientName: string;
   treatingDoctorName: string | null;
+  /** F «Cambio de doctor»: para que «Agendar control» proponga al doctor tratante. */
+  treatingDoctorId?: string | null;
   /** El último control al que SÍ vino (cita atendida u hoja registrada), o `null` si no hay ninguno. */
   ultimoControl: Date | null;
   /** Días de calendario desde ese control. `null` si no hay ninguno. */
@@ -259,6 +261,7 @@ export function casosSinControl(
       patientId: c.patientId,
       patientName: c.patientName,
       treatingDoctorName: c.treatingDoctorName,
+      treatingDoctorId: c.treatingDoctorId,
       ultimoControl: ultimo,
       diasSinControl: dias,
       faltoAlUltimo: falta !== null && (ultimo === null || falta > ultimo),
