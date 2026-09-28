@@ -112,7 +112,7 @@ test("H16: la página de Cobranza carga los casos de verdad (antes: «Esta panta
   assert.match(pagina, /<VistaCobranza\s+filas=\{filas\}\s+resumen=\{resumenDeCobranza\(filas\)\}\s+puedeCobrar=\{puedeCobrar\}/);
   // ws1-t4 ronda 6: puede abrir ya filtrada (el indicador del Tablero), con el filtro saneado en el servidor.
   assert.match(pagina, /filtroInicial=\{leerFiltroCobranza\(searchParams\?\.filtro\)\}/);
-  assert.match(pagina, /"billing\.view"/, "cobrar exige el permiso de Caja");
+  assert.match(pagina, /"billing\.charge"/, "cobrar exige billing.charge (el mismo permiso de POST /api/invoices/[id]), no solo verla — ws1-t10 #85");
 
   // Reutiliza lo que ya existe: el motor de cobranza y la lista de Caja.
   const cargador = leer("src/lib/orthodontics/tablero-data.ts");
