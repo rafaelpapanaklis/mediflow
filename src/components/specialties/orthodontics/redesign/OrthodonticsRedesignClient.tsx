@@ -550,6 +550,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             regimen={props.retentionRegimen ?? null}
             checkups={props.retainerCheckups ?? []}
             treatmentStatus={tStatus}
+            sinCaso={!t.treatmentPlanId}
             onTogglePreSurvey={props.onTogglePreSurvey}
             onConfigureRegimen={
               props.onUpdateRetentionRegimen

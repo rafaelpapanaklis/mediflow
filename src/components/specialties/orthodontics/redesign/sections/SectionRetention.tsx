@@ -51,6 +51,12 @@ export interface SectionRetentionProps {
   checkups: RetainerCheckupDTO[];
   /** Estado actual del tratamiento — usado para derivar "Activa" vs "Programada". */
   treatmentStatus: "no-iniciado" | "en-tratamiento" | "retencion" | "completado";
+  /**
+   * El paciente no tiene un caso (plan de tratamiento) abierto. Se pregunta
+   * por el caso y no por `treatmentStatus`, que sale «en-tratamiento» por
+   * defecto cuando aún no hay nada cargado.
+   */
+  sinCaso?: boolean;
   onTogglePreSurvey?: (enabled: boolean) => Promise<void> | void;
   onConfigureRegimen?: () => void;
 }
@@ -72,6 +78,34 @@ const STATUS_COLOR: Record<RetainerCheckupDTO["status"], "slate" | "emerald" | "
 export function SectionRetention(props: SectionRetentionProps) {
   const isActive = props.treatmentStatus === "retencion";
   const r = props.regimen;
+
+  // H18d (QA ws1-t9, ws1-t3): sin caso abierto esta tarjeta enseñaba el
+  // calendario de controles de retención («3 meses · futura»…) y el
+  // interruptor de la pre-encuesta como si fueran de este paciente. Sin caso
+  // no hay retención que planear: se dice eso, y nada más.
+  if (props.sinCaso && !r && props.checkups.length === 0) {
+    return (
+      <Card
+        id="retention"
+        icon={<Shield size={15} strokeWidth={1.75} />}
+        title="Retención"
+        eyebrow="Retenedores, régimen de uso y controles"
+      >
+        <div className="px-[18px] py-[16px]">
+          <div className={orto.vacio}>
+            <span className={orto.vacioIcono} aria-hidden>
+              <Shield size={17} strokeWidth={1.75} />
+            </span>
+            <p className={orto.vacioTitulo}>Aún no hay caso de ortodoncia</p>
+            <p className={orto.vacioPista}>
+              La retención se planea con el caso abierto: qué retenedor lleva, cómo lo usa y sus
+              controles después de retirar la aparatología.
+            </p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card
