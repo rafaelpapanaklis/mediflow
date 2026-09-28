@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
 import { getTreatmentPlanIdForAppointment } from "@/app/actions/orthodontics/getTreatmentPlanIdForAppointment";
-import { isFailure } from "@/app/actions/orthodontics/result";
+import { ESTADO_VACIO_RANURA_CITA, resolverEstadoRanuraCita } from "./ranura-cita-estado";
 import { ResumenCobranza } from "../cobranza/ResumenCobranza";
 import { BotonHojaControl } from "./BotonHojaControl";
 import { RAIZ_ORTO } from "../redesign/raiz";
@@ -35,34 +35,27 @@ export interface RanuraCitaProps {
   dto: Pick<AgendaAppointmentDTO, "id" | "reason" | "patient">;
 }
 
-interface RanuraCitaState {
-  treatmentPlanId: string | null;
-  canOpenClinicalCard: boolean;
-}
-
-const ESTADO_VACIO: RanuraCitaState = { treatmentPlanId: null, canOpenClinicalCard: false };
-
 export function RanuraCita({ dto }: RanuraCitaProps) {
   const esControl = esCitaControlOrto(dto.reason ?? null);
-  const [state, setState] = useState<RanuraCitaState>(ESTADO_VACIO);
+  const [state, setState] = useState(ESTADO_VACIO_RANURA_CITA);
 
   useEffect(() => {
     if (!esControl) {
-      setState(ESTADO_VACIO);
+      setState(ESTADO_VACIO_RANURA_CITA);
       return;
     }
     let cancelled = false;
-    getTreatmentPlanIdForAppointment(dto.patient.id).then((res) => {
-      if (cancelled) return;
-      if (isFailure(res)) {
-        setState(ESTADO_VACIO);
-        return;
-      }
-      setState({
-        treatmentPlanId: res.data.treatmentPlanId,
-        canOpenClinicalCard: res.data.canOpenClinicalCard,
+    // H23 (QA ws1-t9): "Abrir la cita justo cuando dev.108 dio 502" —
+    // `resolverEstadoRanuraCita` (ranura-cita-estado.ts) tolera un `res`
+    // vacío o mal formado en vez de reventar en `isFailure(res)`, y el
+    // `.catch` cubre el rechazo directo de la promesa.
+    getTreatmentPlanIdForAppointment(dto.patient.id)
+      .then((res) => {
+        if (!cancelled) setState(resolverEstadoRanuraCita(res));
+      })
+      .catch(() => {
+        if (!cancelled) setState(ESTADO_VACIO_RANURA_CITA);
       });
-    });
     return () => {
       cancelled = true;
     };
