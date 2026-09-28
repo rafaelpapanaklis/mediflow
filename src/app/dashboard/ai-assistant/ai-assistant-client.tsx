@@ -41,6 +41,11 @@ import { AiQuotaBanner, type AiUsageSnapshot } from "@/components/dashboard/ai-q
 // "claude-sonnet-4-6" mientras el chat corría en Haiku.
 import { AI_CHAT_MODEL } from "@/lib/ai/models";
 import {
+  bienvenidaAsistentePara,
+  sugerenciasAsistentePara,
+  type SugerenciaAsistenteId,
+} from "@/lib/ai/prompts-asistente";
+import {
   AI_MESSAGE_MAX_CHARS,
   AI_MIGRATION_MAX_CONVERSATIONS,
   AI_MIGRATION_MAX_MESSAGES,
@@ -175,32 +180,14 @@ interface ConversationMeta {
   group: AiConversationGroup;
 }
 
-const SUGGESTIONS = [
-  {
-    icon: Stethoscope,
-    titleKey: "pages.aiAssistant.suggestDdxTitle",
-    descKey: "pages.aiAssistant.suggestDdxDesc",
-    textKey: "pages.aiAssistant.suggestDdxText",
-  },
-  {
-    icon: Pill,
-    titleKey: "pages.aiAssistant.suggestDoseTitle",
-    descKey: "pages.aiAssistant.suggestDoseDesc",
-    textKey: "pages.aiAssistant.suggestDoseText",
-  },
-  {
-    icon: FileText,
-    titleKey: "pages.aiAssistant.suggestSoapTitle",
-    descKey: "pages.aiAssistant.suggestSoapDesc",
-    textKey: "pages.aiAssistant.suggestSoapText",
-  },
-  {
-    icon: ClipboardList,
-    titleKey: "pages.aiAssistant.suggestStudiesTitle",
-    descKey: "pages.aiAssistant.suggestStudiesDesc",
-    textKey: "pages.aiAssistant.suggestStudiesText",
-  },
-];
+// Las tarjetas de la bienvenida (sus textos) dependen del giro de la clínica y
+// viven en @/lib/ai/prompts-asistente; aquí solo se les pone el icono.
+const ICONO_SUGERENCIA: Record<SugerenciaAsistenteId, typeof Stethoscope> = {
+  ddx: Stethoscope,
+  dose: Pill,
+  soap: FileText,
+  studies: ClipboardList,
+};
 
 const SLASH_COMMANDS = [
   { cmd: "/paciente", nameKey: "pages.aiAssistant.slashPatientName", descKey: "pages.aiAssistant.slashPatientDesc", icon: Users },
@@ -393,7 +380,16 @@ function archiveLegacyStorage() {
   }
 }
 
-export function AiAssistantClient({ rediseno = false }: { rediseno?: boolean } = {}) {
+export function AiAssistantClient({
+  rediseno = false,
+  categoria = null,
+}: {
+  rediseno?: boolean;
+  /** `Clinic.category`, leída en el servidor (page.tsx). Solo cambia textos. */
+  categoria?: string | null;
+} = {}) {
+  const sugerencias = sugerenciasAsistentePara(categoria);
+  const llaveBienvenida = bienvenidaAsistentePara(categoria);
   const t = useT();
   // Un solo juego de clases por render: el de siempre o el del rediseño. Lo
   // mismo con los tokens en línea: el viejo (`viejo`) o el del menú (`nuevo`).
@@ -1626,21 +1622,24 @@ export function AiAssistantClient({ rediseno = false }: { rediseno?: boolean } =
                 <div className={c.welcomeIcon}><Sparkles size={26} aria-hidden /></div>
                 <h2 className={c.welcomeTitle}>{t("pages.aiAssistant.clinicalAssistant")}</h2>
                 <p className={c.welcomeText}>
-                  {t("pages.aiAssistant.welcomeText")}
+                  {t(llaveBienvenida)}
                 </p>
                 <div className={c.suggestionsGrid}>
-                  {SUGGESTIONS.map((s) => (
+                  {sugerencias.map((s) => {
+                    const Icono = ICONO_SUGERENCIA[s.id];
+                    return (
                     <button
                       key={s.titleKey}
                       type="button"
                       className={c.suggestion}
                       onClick={() => setInput(t(s.textKey))}
                     >
-                      <span className={c.suggestionIcon}><s.icon size={14} aria-hidden /></span>
+                      <span className={c.suggestionIcon}><Icono size={14} aria-hidden /></span>
                       <span className={c.suggestionTitle}>{t(s.titleKey)}</span>
                       <span className={c.suggestionDesc}>{t(s.descKey)}</span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (

@@ -7,22 +7,7 @@ import { AI_CHAT_MODEL } from "@/lib/ai/models";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
 import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { AI_FEATURE_CHAT_ASSISTANT } from "@/lib/ai-billing/types";
-
-const AI_SYSTEM_PROMPT = `Eres un asistente clínico de apoyo para médicos en México. 
-Tu función es ayudar al doctor a:
-1. Sugerir diagnósticos diferenciales basados en síntomas descritos
-2. Recordar dosis estándar de medicamentos comunes
-3. Redactar notas de evolución SOAP de forma rápida
-4. Sugerir estudios de laboratorio relevantes
-5. Revisar interacciones medicamentosas básicas
-
-IMPORTANTE:
-- Eres un apoyo, NO reemplazas el juicio médico del doctor
-- Siempre menciona que tus sugerencias deben validarse con criterio clínico
-- Responde en español médico claro y conciso
-- Para medicamentos, usa nombres genéricos y menciona que las dosis deben ajustarse al paciente
-- Si la consulta es urgente o de alta complejidad, recomienda consultar especialista
-- Máximo 300 palabras por respuesta para ser eficiente`;
+import { promptAsistentePara } from "@/lib/ai/prompts-asistente";
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -82,9 +67,12 @@ export async function POST(req: NextRequest) {
     }, { status: 429 });
   }
 
+  // El prompt depende del giro de la clínica, leído de la SESIÓN (nunca del
+  // body): DENTAL habla para odontólogos; las demás, el texto de siempre.
+  const promptBase = promptAsistentePara(ctx.clinicCategory);
   const systemPrompt = patientContext
-    ? `${AI_SYSTEM_PROMPT}\n\nCONTEXTO DEL PACIENTE:\n${patientContext}`
-    : AI_SYSTEM_PROMPT;
+    ? `${promptBase}\n\nCONTEXTO DEL PACIENTE:\n${patientContext}`
+    : promptBase;
 
   const messages = [
     ...(conversationHistory ?? []),

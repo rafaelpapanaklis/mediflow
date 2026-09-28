@@ -32,5 +32,7 @@ export default async function AIAssistantPage() {
   // Su respuesta vive 60 s en memoria por clínica, así que aquí cae en la
   // caché que el layout acaba de llenar: no es un viaje más a la base.
   const rediseno = await menuDosNivelesEncendido(user.clinicId);
-  return <AiAssistantClient key={user.clinicId} rediseno={rediseno} />;
+  // La categoría sale de la sesión: una clínica DENTAL ve las tarjetas y la
+  // bienvenida en clave odontológica (el prompt lo elige /api/ai por su cuenta).
+  return <AiAssistantClient key={user.clinicId} rediseno={rediseno} categoria={user.clinic?.category ?? null} />;
 }
