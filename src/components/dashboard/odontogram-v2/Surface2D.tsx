@@ -139,6 +139,14 @@ function ToothBadges({ meta, record }: { meta: ToothMeta; record: ToothRecord })
   const roman = conds.find((c) => c.render === "roman");
   const icon = conds.find((c) => c.render === "icon");
   const cross = conds.find((c) => c.render === "cross");
+  // N4 (ws1-t10 ronda 4, importador): un hallazgo de SUPERFICIE (caries…)
+  // guardado sin cara específica (archivo importado sin columna de cara, o con
+  // una cara no reconocida) cae en `record.tooth` porque no hay a qué zona
+  // asignarlo — pero ninguna de las formas de arriba lo dibuja (son de diente
+  // completo), así que antes desaparecía en silencio. Se marca con un punto en
+  // una esquina libre del círculo: NUNCA en una zona real (mentiría sobre cuál
+  // cara es), pero visible — el doctor sabe que hay algo que revisar.
+  const unassignedSurface = conds.filter((c) => c.target === "surface");
   const out: JSX.Element[] = [];
   if (badge) {
     out.push(
@@ -169,6 +177,14 @@ function ToothBadges({ meta, record }: { meta: ToothMeta; record: ToothRecord })
   if (icon) {
     out.push(<g key="i" transform="translate(50,50)">{glyphIcon(icon.icon || "", GROUP_COLOR[icon.group])}</g>);
   }
+  unassignedSurface.forEach((c, i) => {
+    out.push(
+      <g key={`us-${c.id}`} transform={`translate(${20 + i * 15},84)`}>
+        <circle r="6.5" fill={GROUP_COLOR[c.group]} stroke="#fff" strokeWidth="1.5" />
+        <title>{`${c.es} — sin cara específica`}</title>
+      </g>
+    );
+  });
   return <>{out}</>;
 }
 
