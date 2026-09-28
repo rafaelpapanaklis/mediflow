@@ -2349,6 +2349,8 @@
       "titleMedicine": "🩺 New medical consultation",
       "typeLabel": "Type",
       "optDental": "Dental / Orthodontics",
+      "optDentalGeneral": "General dentistry",
+      "optOrthodontics": "Orthodontics",
       "optNutrition": "Nutrition",
       "optPsychology": "Psychology",
       "optMedicine": "General medicine",
@@ -9279,7 +9281,8 @@
       "treatmentCompletedToast": "Treatment completed!",
       "sessionRecorded": "Session {num} recorded",
       "statusUpdated": "Status updated",
-      "updateError": "Error updating"
+      "updateError": "Error updating",
+      "sessionError": "Couldn't record the session. Try again."
     },
     "tvModes": {
       "modeOperationalLabel": "Operational (waiting room)",

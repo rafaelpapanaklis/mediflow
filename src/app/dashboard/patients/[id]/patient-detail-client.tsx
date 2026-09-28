@@ -44,6 +44,12 @@ import { Resumen as ResumenRediseno } from "@/components/dashboard/pacientes-red
 import { Historia as HistoriaRediseno } from "@/components/dashboard/pacientes-rediseno/historia";
 import { Cuestionario as CuestionarioRediseno } from "@/components/dashboard/pacientes-rediseno/cuestionario";
 import { NuevaConsulta as NuevaConsultaRediseno } from "@/components/dashboard/pacientes-rediseno/nueva-consulta";
+import {
+  TIPO_ORTODONCIA,
+  formularioDeConsulta,
+  permiteRestablecerTipo,
+  tiposDeConsulta,
+} from "@/components/dashboard/pacientes-rediseno/tipos-de-consulta";
 // Segunda ola del rediseño (ws1-t4): los cuatro apartados que faltaban.
 import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashboard/expediente-rediseno/odontograma";
 import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
@@ -983,6 +989,29 @@ export function PatientDetailClient({
   const [overrideSpecialty, setOverrideSpecialty] = useState<string | null>(null);
   const detectedSpecialty = detectSpecialty(specialty);
   const currentSpecialty = overrideSpecialty ?? detectedSpecialty;
+
+  // El selector «Tipo» de Nueva consulta (Rafael, 28-sep-2026). En una clínica
+  // dental solo ofrece «Dental general» y, con el módulo en la sede,
+  // «Ortodoncia»; nada de Nutrición, Psicología, Medicina ni «Reset». Las
+  // demás verticales siguen como estaban. Reglas y tests:
+  // pacientes-rediseno/tipos-de-consulta.ts.
+  const tiposConsulta = tiposDeConsulta({ categoria: clinicCategory, moduloOrtodoncia: showOrthodontics });
+  const formularioConsulta = formularioDeConsulta(currentSpecialty, clinicCategory);
+  const puedeRestablecerTipo =
+    permiteRestablecerTipo(clinicCategory) && Boolean(overrideSpecialty) && overrideSpecialty !== detectedSpecialty;
+  // «Ortodoncia» no es otro formulario de esta pantalla: la consulta de
+  // ortodoncia ES la hoja de control. Elegirla lleva a la pestaña Ortodoncia y
+  // abre ahí la hoja, la misma de «Registrar control». Si el paciente nunca
+  // tuvo caso, esa pestaña ofrece «Abrir caso de ortodoncia».
+  const [abrirControlOrto, setAbrirControlOrto] = useState(false);
+  const cambiarTipoDeConsulta = (valor: string) => {
+    if (valor === TIPO_ORTODONCIA) {
+      setAbrirControlOrto(true);
+      setTab("ortodoncia");
+      return;
+    }
+    setOverrideSpecialty(valor);
+  };
 
   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : null;
   const initials = getInitials(patient.firstName, patient.lastName);
@@ -1950,6 +1979,8 @@ export function PatientDetailClient({
               orthoRedesignBundle={orthoRedesignBundle}
               onScheduleNext={() => setTab("agenda")}
               onCollect={openBillingTab}
+              abrirControlAlEntrar={abrirControlOrto}
+              onControlAbierto={() => setAbrirControlOrto(false)}
             />
           )}
 
@@ -1975,13 +2006,10 @@ export function PatientDetailClient({
               especialidad es exactamente el mismo de siempre. */}
           {tab === "expediente" && rediseno && (
             <NuevaConsultaRediseno
-              especialidad={currentSpecialty}
-              onCambiarEspecialidad={setOverrideSpecialty}
-              onRestablecerEspecialidad={
-                overrideSpecialty && overrideSpecialty !== detectedSpecialty
-                  ? () => setOverrideSpecialty(null)
-                  : undefined
-              }
+              especialidad={formularioConsulta}
+              tipos={tiposConsulta}
+              onCambiarEspecialidad={cambiarTipoDeConsulta}
+              onRestablecerEspecialidad={puedeRestablecerTipo ? () => setOverrideSpecialty(null) : undefined}
               antecedentes={{
                 riskFlags: questionnaireRiskFlags,
                 allergies: patient.allergies ?? [],
@@ -1993,10 +2021,10 @@ export function PatientDetailClient({
               onIrACuestionario={() => setTab("cuestionario")}
               formulario={
                 <>
-                  {currentSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} rediseno />}
-                  {currentSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
-                  {currentSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
-                  {currentSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
+                  {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} rediseno />}
+                  {formularioConsulta === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
+                  {formularioConsulta === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
+                  {formularioConsulta === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
                 </>
               }
             />
@@ -2007,24 +2035,23 @@ export function PatientDetailClient({
             <div className="bg-card border border-border rounded-xl p-5 shadow-[var(--shadow-1)]">
               <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
                 <h2 className="text-[15px] font-semibold tracking-[-0.01em]">
-                  {currentSpecialty === "dental"     ? t("patients.newConsult.titleDental") :
-                   currentSpecialty === "nutrition"  ? t("patients.newConsult.titleNutrition") :
-                   currentSpecialty === "psychology" ? t("patients.newConsult.titlePsychology") :
+                  {formularioConsulta === "dental"     ? t("patients.newConsult.titleDental") :
+                   formularioConsulta === "nutrition"  ? t("patients.newConsult.titleNutrition") :
+                   formularioConsulta === "psychology" ? t("patients.newConsult.titlePsychology") :
                    t("patients.newConsult.titleMedicine")}
                 </h2>
                 <div className="flex items-center gap-2">
                   <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.newConsult.typeLabel")}</label>
                   <select
-                    value={currentSpecialty}
-                    onChange={(e) => setOverrideSpecialty(e.target.value)}
+                    value={formularioConsulta}
+                    onChange={(e) => cambiarTipoDeConsulta(e.target.value)}
                     className="flex h-9 rounded-lg border border-border bg-card px-3 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand-soft)] focus:border-[var(--border-brand)]"
                   >
-                    <option value="dental">{t("patients.newConsult.optDental")}</option>
-                    <option value="nutrition">{t("patients.newConsult.optNutrition")}</option>
-                    <option value="psychology">{t("patients.newConsult.optPsychology")}</option>
-                    <option value="medicine">{t("patients.newConsult.optMedicine")}</option>
+                    {tiposConsulta.map((tipo) => (
+                      <option key={tipo.valor} value={tipo.valor}>{t(tipo.labelKey)}</option>
+                    ))}
                   </select>
-                  {overrideSpecialty && overrideSpecialty !== detectedSpecialty && (
+                  {puedeRestablecerTipo && (
                     <button
                       type="button"
                       onClick={() => setOverrideSpecialty(null)}
@@ -2037,10 +2064,10 @@ export function PatientDetailClient({
                 </div>
               </div>
               {showQuestionnaireWarning && <div className="mb-4">{questionnaireBanner}</div>}
-              {currentSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} />}
-              {currentSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
-              {currentSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
-              {currentSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
+              {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} />}
+              {formularioConsulta === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
+              {formularioConsulta === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
+              {formularioConsulta === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
             </div>
           )}
 

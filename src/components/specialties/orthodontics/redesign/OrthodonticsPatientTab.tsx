@@ -167,6 +167,15 @@ export interface OrthodonticsPatientTabProps {
   onScheduleNext: () => void;
   /** Antes `openBillingTab` en patient-detail-client.tsx. */
   onCollect: () => void;
+  /**
+   * Se llegó desde «Nueva consulta» eligiendo el tipo «Ortodoncia» (Rafael,
+   * 28-sep-2026): la hoja de control se abre sola al entrar, la misma de
+   * «Registrar control». Sin caso con el que registrar un control no abre
+   * nada: la pestaña ya ofrece lo que toca (abrir el caso).
+   */
+  abrirControlAlEntrar?: boolean;
+  /** La pestaña ya atendió el aviso: que la ficha lo apague. */
+  onControlAbierto?: () => void;
 }
 
 /** La pestaña «Ortodoncia» completa: banda de rediseño + ficha nueva o legacy. */
@@ -183,6 +192,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     orthoRedesignBundle,
     onScheduleNext,
     onCollect,
+    abrirControlAlEntrar,
+    onControlAbierto,
   } = props;
   const router = useRouter();
   const t = useT();
@@ -302,7 +313,15 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
   });
   if (vista === "oculta") return null;
   if (vista === "solo-abrir-caso") {
-    return <OrtodonciaSinCaso patientId={patient.id} patientFullName={fullName} onCreateCase={crearCaso} />;
+    return (
+      <OrtodonciaSinCaso
+        patientId={patient.id}
+        patientFullName={fullName}
+        onCreateCase={crearCaso}
+        vieneDeNuevaConsulta={abrirControlAlEntrar}
+        onAvisoAtendido={onControlAbierto}
+      />
+    );
   }
 
   return (
@@ -441,6 +460,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
           // camino para abrir un caso y se puede ocultar cuando Rafael lo
           // decida (REPORTE-ws1-t1.md, «Ojo» de esta parte).
           onCreateCase={crearCaso}
+          abrirControlAlEntrar={abrirControlAlEntrar}
+          onControlAbierto={onControlAbierto}
           onOpenImagingRecords={() => {
             // A9 · enlaza a lo que ya existe en el expediente (radiografías,
             // panorámica, lateral de cráneo, modelos 3D) en vez de mandar al

@@ -92,7 +92,10 @@ test("caso 3 — con el módulo y sin caso nunca, solo «Abrir caso de ortodonci
   assert.match(pestana, /moduloActivo: orthoData !== null && orthoData !== undefined,/);
   assert.match(pestana, /tienePlan: Boolean\(orthoData\?\.plan\),/);
   assert.match(pestana, /tieneDiagnostico: Boolean\(orthoData\?\.diagnosis\),/);
-  assert.match(pestana, /if \(vista === "solo-abrir-caso"\) \{\s*return <OrtodonciaSinCaso patientId=\{patient\.id\} patientFullName=\{fullName\} onCreateCase=\{crearCaso\} \/>;/);
+  assert.match(
+    pestana,
+    /if \(vista === "solo-abrir-caso"\) \{\s*return \(\s*<OrtodonciaSinCaso\s+patientId=\{patient\.id\}\s+patientFullName=\{fullName\}\s+onCreateCase=\{crearCaso\}/,
+  );
   // La salida va ANTES de montar la pestaña completa: sus secciones no llegan a pintarse.
   assert.ok(pestana.indexOf('if (vista === "solo-abrir-caso")') < pestana.indexOf("<OrthodonticsRedesignClient"));
 

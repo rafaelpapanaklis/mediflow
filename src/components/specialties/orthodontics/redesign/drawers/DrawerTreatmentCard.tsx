@@ -37,6 +37,8 @@ import {
   type WireStepDTO,
 } from "../types";
 import { useCajon } from "../atoms/useCajon";
+import { EvolutionTemplatePicker } from "@/components/clinical-shared/EvolutionTemplatePicker";
+import { aplicarPlantillaAlControl, huecosPorLlenar } from "@/lib/orthodontics/consulta-ortodoncia";
 import { initialState, reducer, type DrawerState } from "./treatment-card-state";
 import orto from "../orto.module.css";
 
@@ -155,6 +157,28 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   const wireFromLabel = wireText(props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null);
   const wireToCurrent = props.availableWires.find((w) => w.id === state.wireToId) ?? null;
   const wireToLabel = wireText(wireToCurrent);
+
+  // Plantillas de nota (Rafael, 28-sep-2026): las seis de ortodoncia que ya
+  // existían y nadie usaba (Cementado de brackets, Activación de arco, Control
+  // mensual general, Cambio de alineador, Retiro de brackets, Entrega de
+  // retenedor). Al elegir una se rellena la nota con lo que esta hoja ya sabe
+  // —mes, fase, arcos— y lo demás queda como un hueco a la vista. No pisa lo
+  // que ya esté escrito: se añade debajo.
+  const aplicarPlantilla = (plantilla: { S: string; O: string; A: string; P: string }) => {
+    const clave = props.card?.phaseKey ?? props.defaultsForNew?.phase ?? null;
+    const arcoDe = props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null;
+    const nota = aplicarPlantillaAlControl(state.soap, plantilla, {
+      mes: props.card?.monthAt ?? props.defaultsForNew?.monthAt ?? null,
+      duracionMeses: null,
+      fase: clave ? ((PHASE_LABELS as Record<string, string>)[clave] ?? clave) : null,
+      arcoActual: arcoDe ? wireText(arcoDe) : null,
+      arcoNuevo: wireToCurrent ? wireText(wireToCurrent) : null,
+    });
+    (["s", "o", "a", "p"] as const).forEach((campo) => {
+      if (nota[campo] !== state.soap[campo]) dispatch({ kind: "set-soap", field: campo, value: nota[campo] });
+    });
+  };
+  const huecos = huecosPorLlenar(state.soap);
 
   const buildSubmit = (): DrawerCardSubmit => ({
     cardId: state.learnedCardId,
@@ -326,12 +350,28 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           <section className={orto.bloque}>
             <div className={orto.bloqueCabeza}>
               <h4 className={orto.bloqueTitulo}>Nota de evolución</h4>
+              {!isReadOnly ? (
+                <span className={orto.plantillas}>
+                  <EvolutionTemplatePicker
+                    module="orthodontics"
+                    ensureDefaults
+                    onApply={(plantilla) => aplicarPlantilla(plantilla.soapTemplate)}
+                  />
+                </span>
+              ) : null}
               {!isReadOnly && !canSign ? (
                 <span className={`${orto.bloqueNota} ${orto.tonoAlerta}`}>
                   Los 4 campos son obligatorios para firmar
                 </span>
               ) : null}
             </div>
+            {!isReadOnly && huecos > 0 ? (
+              <p className={`${orto.bloqueNota} ${orto.tonoAlerta} mb-[10px]`} role="status">
+                {huecos === 1
+                  ? "La plantilla dejó 1 hueco (____) por llenar."
+                  : `La plantilla dejó ${huecos} huecos (____) por llenar.`}
+              </p>
+            ) : null}
             <div className="flex flex-col gap-[10px]">
               {(
                 [

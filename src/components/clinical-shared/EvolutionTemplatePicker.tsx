@@ -29,13 +29,20 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
     let cancelled = false;
     async function fetchAll() {
       setLoading(true);
-      const res = await listEvolutionTemplates({
-        module: props.module,
-        ensureDefaults: props.ensureDefaults ?? props.module === "pediatrics",
-      });
+      try {
+        const res = await listEvolutionTemplates({
+          module: props.module,
+          ensureDefaults: props.ensureDefaults ?? props.module === "pediatrics",
+        });
+        if (cancelled) return;
+        if (isFailure(res)) setError(res.error);
+        else setTemplates(res.data);
+      } catch {
+        // La acción puede fallar (tabla sin crear, base caída): el selector
+        // lo dice y quien lo monta sigue funcionando.
+        if (!cancelled) setError("No se pudieron cargar las plantillas.");
+      }
       if (cancelled) return;
-      if (isFailure(res)) setError(res.error);
-      else setTemplates(res.data);
       setLoading(false);
     }
     void fetchAll();

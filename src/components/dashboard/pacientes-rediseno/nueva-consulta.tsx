@@ -3,6 +3,7 @@
 import { AlertTriangle, ClipboardCheck, HeartPulse, Stethoscope } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { construirAntecedentes, type EntradaAntecedentes } from "./antecedentes";
+import type { TipoDeConsulta } from "./tipos-de-consulta";
 import s from "./rediseno.module.css";
 
 /**
@@ -29,8 +30,14 @@ import s from "./rediseno.module.css";
 
 export interface NuevaConsultaProps {
   especialidad: string;
+  /**
+   * Las opciones del selector «Tipo», ya decididas por la ficha
+   * (`tiposDeConsulta`): en dental, «Dental general» y —con el módulo—
+   * «Ortodoncia»; en las demás verticales, las de siempre.
+   */
+  tipos: TipoDeConsulta[];
   onCambiarEspecialidad: (valor: string) => void;
-  /** Se ofrece volver al automático solo si hay un override puesto a mano. */
+  /** Se ofrece volver al automático solo si hay un override puesto a mano. En dental no se pasa. */
   onRestablecerEspecialidad?: () => void;
   antecedentes: EntradaAntecedentes;
   /** Aviso de cuestionario ausente o vencido, si la ficha lo levantó. */
@@ -55,6 +62,7 @@ const TITULO: Record<string, string> = {
 
 export function NuevaConsulta({
   especialidad,
+  tipos,
   onCambiarEspecialidad,
   onRestablecerEspecialidad,
   antecedentes,
@@ -85,10 +93,11 @@ export function NuevaConsulta({
             value={especialidad}
             onChange={(e) => onCambiarEspecialidad(e.target.value)}
           >
-            <option value="dental">{t("patients.newConsult.optDental")}</option>
-            <option value="nutrition">{t("patients.newConsult.optNutrition")}</option>
-            <option value="psychology">{t("patients.newConsult.optPsychology")}</option>
-            <option value="medicine">{t("patients.newConsult.optMedicine")}</option>
+            {tipos.map((tipo) => (
+              <option key={tipo.valor} value={tipo.valor}>
+                {t(tipo.labelKey)}
+              </option>
+            ))}
           </select>
           {onRestablecerEspecialidad && (
             <button type="button" className={s.tarjetaEnlace} onClick={onRestablecerEspecialidad}>

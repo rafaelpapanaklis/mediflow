@@ -1039,6 +1039,18 @@
   color: var(--pr-texto-3);
 }
 
+/* El selector de plantillas de nota es una pieza compartida que pinta con los
+   tokens de siempre: dentro de la hoja se le prestan los de la ficha. */
+.plantillas {
+  --surface-1: var(--pr-tarjeta);
+  --surface-2: var(--pr-hover);
+  --border: var(--pr-borde);
+  --text-1: var(--pr-texto);
+  --text-2: var(--pr-texto-3);
+  --danger: var(--pr-peligro);
+  margin-left: auto;
+}
+
 /* La pestaña de quien nunca tuvo caso: el vacío ES la pantalla. */
 .vacioSinCaso {
   gap: 10px;

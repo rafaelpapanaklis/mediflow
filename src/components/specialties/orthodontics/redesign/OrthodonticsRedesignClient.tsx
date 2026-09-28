@@ -9,6 +9,7 @@ import { Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
+import { debeAbrirLaHoja } from "@/lib/orthodontics/consulta-ortodoncia";
 import { SectionHero } from "./sections/SectionHero";
 import { SectionDiagnosis } from "./sections/SectionDiagnosis";
 import { SectionPlan } from "./sections/SectionPlan";
@@ -235,6 +236,9 @@ export interface OrthodonticsRedesignClientProps {
     diagnosis: DrawerNewCaseDiagnosisPayload | null;
     plan: DrawerNewCasePlanPayload | null;
   }) => Promise<void> | void;
+  /** Se llegó desde «Nueva consulta» con el tipo «Ortodoncia»: abrir la hoja de control al entrar. */
+  abrirControlAlEntrar?: boolean;
+  onControlAbierto?: () => void;
   /** A9 · enlaza a las radiografías/escaneos que ya existen en el
    *  expediente, en vez de mandar al asistente de diagnóstico (bug heredado
    *  de reusar `onStartDiagnosisWizard` para "subir registro"). */
@@ -325,6 +329,19 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   // asistente de alta se abre solo, sin tener que buscar el botón. El aviso
   // no da ningún permiso (ver `debeAbrirElAlta`), y se quita de la dirección
   // para que recargar o volver atrás no lo abra otra vez.
+  // Quien llega desde «Nueva consulta» eligiendo el tipo «Ortodoncia»
+  // (Rafael, 28-sep-2026): con un caso activo se abre la hoja de control, la
+  // misma de «Registrar control». Sin caso activo no se abre nada: la pestaña
+  // ya enseña lo que hay. El aviso se apaga en la ficha en cuanto se atiende.
+  const { abrirControlAlEntrar, onControlAbierto } = props;
+  const casoActivo = debeAbrirLaHoja({ tienePlan: Boolean(t.treatmentPlanId), estado: t.status });
+  useEffect(() => {
+    if (!abrirControlAlEntrar) return;
+    if (casoActivo) setDrawer({ kind: "tcard-new" });
+    onControlAbierto?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirControlAlEntrar]);
+
   // La regla y el porqué, en `useAbrirAltaAlLlegar` (la comparte la vista
   // limpia del paciente que nunca tuvo caso, `OrtodonciaSinCaso`).
   useAbrirAltaAlLlegar({
