@@ -220,6 +220,20 @@ test("doctor no encontrado: el tratamiento queda a cargo de quien importa, con a
   assert.equal(plan.doctorId, IMPORTA);
 });
 
+test("M7 (QA ws1-t10): «Tratamiento» Y «Procedimiento» en la misma hoja no caen en el mismo campo", async () => {
+  reiniciar();
+  const texto = "nombre,apellido,telefono,folio,fecha,Tratamiento,Procedimiento,precio,estado\nMaría,Hernández,5551234567,9010,2024-04-01,QA plan activo,Resina simple,850,Pendiente\n";
+  const prev = await correr(csv("conflicto.csv", texto), { dryRun: true });
+  assert.equal(prev.mappingError, undefined, JSON.stringify(prev));
+  assert.equal(prev.suggestedMapping["Tratamiento"], "title");
+  assert.equal(prev.suggestedMapping["Procedimiento"], "procedure");
+  await correr(csv("conflicto.csv", texto), { dryRun: false });
+  const plan = tabla("treatmentPlan").find((p) => p.name.startsWith("QA plan activo"))!;
+  assert.ok(plan, "el título viene de «Tratamiento», no de «Procedimiento»");
+  const q = tabla("quote").find((x) => x.treatmentPlanId === plan.id)!;
+  assert.match(q.title ?? "", /QA plan activo/);
+});
+
 test("próxima visita ya vencida en el archivo se clampa a futuro: nunca dispara el seguimiento el primer barrido", async () => {
   reiniciar();
   const vencida = isoPasado(400);

@@ -473,14 +473,35 @@ export function applyMapping(rows: Record<string, any>[], mapping: ColumnMapping
   });
 }
 
-/** Autodetección header -> campo canónico usando las variantes de la entidad. */
+/**
+ * Autodetección header -> campo canónico usando las variantes de la entidad.
+ * Un mismo alias puede servir para más de un campo (p. ej. "tratamiento" es
+ * título O procedimiento, según si la hoja ya trae una columna de procedimiento
+ * aparte): los headers SIN ambigüedad se resuelven primero, para que un campo
+ * inequívoco no se quede sin dueño por culpa de uno ambiguo; los ambiguos se
+ * resuelven después, cediendo el campo que ya tenga dueño y quedándose con el
+ * declarado más tarde en `headerVariants` cuando ninguno está tomado (mismo
+ * criterio que antes para una hoja con una sola columna así).
+ */
 export function autodetect(columns: string[], headerVariants: Record<string, string[]>): ColumnMapping {
+  const campos = Object.keys(headerVariants);
   const map: ColumnMapping = {};
+  const claimed = new Set<string>();
+  const candidatos = new Map<string, string[]>();
   for (const header of columns) {
     const n = norm(header);
-    for (const [campo, variants] of Object.entries(headerVariants)) {
-      if (variants.includes(n)) { map[header] = campo; break; }
-    }
+    const coincide = campos.filter((campo) => headerVariants[campo].includes(n));
+    if (coincide.length > 0) candidatos.set(header, coincide);
+  }
+  for (const [header, coincide] of candidatos) {
+    if (coincide.length === 1) { map[header] = coincide[0]; claimed.add(coincide[0]); }
+  }
+  for (const [header, coincide] of candidatos) {
+    if (coincide.length <= 1) continue;
+    const libre = [...coincide].reverse().find((c) => !claimed.has(c));
+    const campo = libre ?? coincide[coincide.length - 1];
+    map[header] = campo;
+    claimed.add(campo);
   }
   return map;
 }

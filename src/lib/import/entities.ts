@@ -2107,7 +2107,8 @@ export const quotesHandler: EntityHandler = {
       "idpresupuesto", "folioplan", "numerodeplan", "nplan", "idplan", "nodeplan",
     ],
     date: ["fecha", "fechapresupuesto", "fechadelpresupuesto", "fechacreacion", "fechaplan", "date"],
-    title: ["titulo", "nombrepresupuesto", "nombredelpresupuesto", "nombreplan", "nombredelplan", "plandetratamiento", "presupuesto"],
+    // Mismo criterio ambiguo que treatmentPlansHandler arriba (M7 del QA).
+    title: ["titulo", "nombrepresupuesto", "nombredelpresupuesto", "nombreplan", "nombredelplan", "plandetratamiento", "presupuesto", "tratamiento"],
     procedure: ["procedimiento", "prestacion", "servicio", "concepto", "tratamiento", "accion", "descripcion"],
     tooth: ["pieza", "diente", "piezadental", "dientes", "piezas", "fdi", "organodentario"],
     quantity: ["cantidad", "cant", "unidades", "qty"],
@@ -2551,7 +2552,11 @@ export const treatmentPlansHandler: EntityHandler = {
       "idpresupuesto", "folioplan", "numerodeplan", "nplan", "idplan", "nodeplan",
     ],
     date: ["fecha", "fechapresupuesto", "fechadelpresupuesto", "fechacreacion", "fechaplan", "date"],
-    title: ["titulo", "nombrepresupuesto", "nombredelpresupuesto", "nombreplan", "nombredelplan", "plandetratamiento", "presupuesto"],
+    // "tratamiento" es ambiguo a propósito: si la hoja TAMBIÉN trae una columna
+    // de procedimiento aparte ("Procedimiento"/"Prestación"/…), autodetect()
+    // cede este alias al título; si "Tratamiento" es la ÚNICA columna de las
+    // dos, sigue cayendo en procedimiento (como siempre) — ver M7 del QA.
+    title: ["titulo", "nombrepresupuesto", "nombredelpresupuesto", "nombreplan", "nombredelplan", "plandetratamiento", "presupuesto", "tratamiento"],
     procedure: ["procedimiento", "prestacion", "servicio", "concepto", "tratamiento", "accion", "descripcion"],
     tooth: ["pieza", "diente", "piezadental", "dientes", "piezas", "fdi", "organodentario"],
     quantity: ["cantidad", "cant", "unidades", "qty"],

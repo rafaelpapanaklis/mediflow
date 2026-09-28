@@ -369,6 +369,30 @@ test("presupuestos: si otro folio se adelanta, se renumera y no quedan líneas h
   assert.equal(tabla("quoteItem").length, 4);
 });
 
+test("M7 (QA ws1-t10): «Tratamiento» Y «Procedimiento» en la misma hoja no caen en el mismo campo", async () => {
+  reiniciar();
+  const conflicto = new File(
+    ["nombre,apellido,telefono,fecha,Tratamiento,Procedimiento,precio\nMaría,Hernández,5551234567,05/02/2024,QA plan activo,Resina simple,850\n"],
+    "conflicto.csv",
+  );
+  const prev = await correr("quotes", conflicto, { dryRun: true });
+  assert.equal(prev.mappingError, undefined, JSON.stringify(prev));
+  assert.equal(prev.suggestedMapping["Tratamiento"], "title");
+  assert.equal(prev.suggestedMapping["Procedimiento"], "procedure");
+  assert.equal(fila(prev, 2).data.title, "QA plan activo");
+  assert.equal(fila(prev, 2).data.procedure, "Resina simple");
+
+  // Con una sola columna "Tratamiento" (sin "Procedimiento" aparte) sigue
+  // cayendo en procedimiento, como antes de este arreglo.
+  const solo = new File(
+    ["nombre,apellido,telefono,fecha,Tratamiento,precio\nMaría,Hernández,5551234567,05/02/2024,Resina simple,850\n"],
+    "solo.csv",
+  );
+  const prevSolo = await correr("quotes", solo, { dryRun: true });
+  assert.equal(prevSolo.suggestedMapping["Tratamiento"], "procedure");
+  assert.equal(prevSolo.mappingError, undefined, JSON.stringify(prevSolo));
+});
+
 // ═══ COLUMNAS DESCONOCIDAS, PERFIL Y PLANTILLA ═════════════════════════════
 
 test("columnas que no reconocemos: la vista previa pide ayuda en vez de fallar, y con el mapeo manual entra", async () => {
