@@ -187,7 +187,7 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
         <Stat
           label="Última visita"
           value={fmtDateShort(props.lastVisitAt) || "—"}
-          sub={props.lastVisitAt ? `hace ${daysAgo(props.lastVisitAt)} días` : ""}
+          sub={props.lastVisitAt ? haceCuanto(daysAgo(props.lastVisitAt)) : ""}
         />
         <Stat
           label="Visitas"
@@ -227,6 +227,13 @@ function Stat({
       {sub ? <div className={orto.datoSub}>{sub}</div> : null}
     </div>
   );
+}
+
+/** «hoy», «ayer», «hace N días» — no «hace 0 días» (ws1-t4 ronda 6). */
+function haceCuanto(dias: number): string {
+  if (dias <= 0) return "hoy";
+  if (dias === 1) return "ayer";
+  return `hace ${dias} días`;
 }
 
 function daysAgo(iso: string): number {
