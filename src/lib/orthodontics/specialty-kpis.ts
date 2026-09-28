@@ -104,6 +104,8 @@ export interface OrthoCaseSummary {
   estimatedDurationMonths: number | null;
   droppedOutAt: Date | null;
   statusUpdatedAt: Date;
+  /** H45: días que el caso estuvo «En pausa» (de la bitácora). Sin dato = 0. */
+  diasEnPausa?: number;
   /** `null` = sin factura de tratamiento, o sin condiciones cargadas: nada que cobrar todavía (T3/L1 lo ignoran, no lo cuentan como "al día"). */
   cobranza: CobranzaDelCaso | null;
 }
@@ -184,7 +186,9 @@ function durationAlertEntries(cases: OrthoCaseSummary[], ahora: Date): DurationA
   return cases
     .filter((c) => c.status === "IN_PROGRESS" && c.installedAt !== null && c.estimatedDurationMonths !== null)
     .map((c) => {
-      const monthInTreatment = Math.max(0, differenceInMonths(ahora, c.installedAt!));
+      // H45: los meses en pausa no cuentan como tiempo de tratamiento.
+      const mesesPausados = Math.floor((c.diasEnPausa ?? 0) / 30.44);
+      const monthInTreatment = Math.max(0, differenceInMonths(ahora, c.installedAt!) - mesesPausados);
       const estimatedDurationMonths = c.estimatedDurationMonths!;
       return {
         patientId: c.patientId,

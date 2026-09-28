@@ -18,6 +18,7 @@ import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { cargarDoctoresTratantes } from "@/lib/orthodontics/doctores-tratantes-db";
 import { doctorPropuestoParaElAlta, etiquetaDeDoctor } from "@/lib/orthodontics/doctores-tratantes";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
+import { oclusionDeLaConsulta, type OclusionDeConsulta } from "@/lib/orthodontics/oclusion-de-consulta";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 export interface CaseIntakeOptions {
@@ -58,6 +59,12 @@ export interface CaseIntakeOptions {
    * caso. Es una propuesta: el selector sigue editable.
    */
   suggestedTreatingDoctorId: string;
+  /**
+   * H60: la oclusión que el doctor ya capturó en su última consulta (clase
+   * molar, sobremordida, overjet, mordida) para proponerla en el diagnóstico
+   * en vez de pedirla dos veces. `null` = ninguna consulta la trae.
+   */
+  oclusionDeConsulta: OclusionDeConsulta | null;
 }
 
 export async function getCaseIntakeOptions(
@@ -206,7 +213,25 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: no se pudo leer la Configuración de la clínica:", e);
   }
 
+  // H60: best-effort; sin consulta previa o con la lectura caída, el alta queda como siempre.
+  let oclusionDeConsulta: OclusionDeConsulta | null = null;
+  try {
+    const consultas = await prisma.medicalRecord.findMany({
+      where: { clinicId: ctx.clinicId, patientId },
+      orderBy: { visitDate: "desc" },
+      take: 10,
+      select: { specialtyData: true },
+    });
+    for (const c of consultas) {
+      oclusionDeConsulta = oclusionDeLaConsulta(c.specialtyData);
+      if (oclusionDeConsulta) break;
+    }
+  } catch (e) {
+    console.error("[ortho] getCaseIntakeOptions: no se pudo leer la oclusión de la consulta:", e);
+  }
+
   return ok({
+    oclusionDeConsulta,
     billingMode,
     suggestedTreatingDoctorId: doctorPropuestoParaElAlta({ porDefecto: doctorPorDefecto, opciones: doctorsRaw }),
     doctors: doctorsRaw.map((d) => ({ id: d.id, fullName: etiquetaDeDoctor(d) })),

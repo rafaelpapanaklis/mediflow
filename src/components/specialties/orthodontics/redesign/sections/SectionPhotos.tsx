@@ -17,6 +17,7 @@ import { Pill } from "../atoms/Pill";
 import { ProgressBar } from "../atoms/ProgressBar";
 import { fmtDate } from "../atoms/format";
 import { PHOTO_SLOTS, PhotoSlotIcon } from "./PhotoSlotIcon";
+import { ElegirArchivoDelPaciente } from "../../imagen/ElegirArchivoDelPaciente";
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 import { juegoDeSeisMesesPendiente } from "@/lib/orthodontics/redesign/secciones-por-fase";
@@ -47,6 +48,13 @@ export interface SectionPhotosProps {
   historicalSets: PhotoSetSummary[];
   /** Callback al subir un slot. La persistencia real va vía server action. */
   onUpload?: (stage: PhotoStage, slotId: string, file: File) => Promise<void> | void;
+  /**
+   * H55: elegir una foto que ya está en el expediente en vez de subirla otra
+   * vez. Con `patientId` y este callback aparece «Elegir de los archivos del
+   * paciente». Devuelve un texto solo si falló.
+   */
+  patientId?: string;
+  onElegirExistente?: (stage: PhotoStage, slotId: string, fileId: string) => Promise<string | null | void> | string | null | void;
   /** Abrir comparativa T0 vs actual. */
   onCompare?: () => void;
   /** Programar foto-set + Rx panorámica para mes 12 (G15). */
@@ -250,6 +258,17 @@ export function SectionPhotos(props: SectionPhotosProps) {
         </div>
       </div>
 
+      {props.patientId && props.onElegirExistente ? (
+        <ElegirFotoExistente
+          patientId={props.patientId}
+          stageLabel={STAGE_LABEL[stage]}
+          onElegir={async (slotId, fileId) => {
+            const r = await props.onElegirExistente?.(stage, slotId, fileId);
+            return r ? String(r) : null;
+          }}
+        />
+      ) : null}
+
       <PhotoGrid
         title="Extraorales · 3 vistas"
         slots={extraoral}
@@ -316,6 +335,74 @@ export function SectionPhotos(props: SectionPhotosProps) {
         />
       ) : null}
     </Card>
+  );
+}
+
+/** H55: «Elegir de los archivos del paciente» — elige la foto y en qué vista va. */
+function ElegirFotoExistente({
+  patientId,
+  stageLabel,
+  onElegir,
+}: {
+  patientId: string;
+  stageLabel: string;
+  onElegir: (slotId: string, fileId: string) => Promise<string | null>;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [fileId, setFileId] = useState<string | null>(null);
+  const [slotId, setSlotId] = useState(PHOTO_SLOTS[0]?.id ?? "");
+  const [enviando, setEnviando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const poner = async () => {
+    if (!fileId) return;
+    setEnviando(true);
+    setAviso(null);
+    try {
+      const error = await onElegir(slotId, fileId);
+      if (error) {
+        setAviso(error);
+        return;
+      }
+      setAbierto(false);
+      setFileId(null);
+    } finally {
+      setEnviando(false);
+    }
+  };
+  return (
+    <div className="px-[18px] py-[10px] border-b border-[color:var(--pr-borde-suave)]">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Btn variant="secondary" size="sm" onClick={() => setAbierto((v) => !v)}>
+          Elegir de los archivos del paciente
+        </Btn>
+        <span className="text-xs text-[color:var(--pr-texto-3)]">Sin subirla otra vez · etapa {stageLabel}</span>
+      </div>
+      {abierto ? (
+        <>
+          <ElegirArchivoDelPaciente
+            patientId={patientId}
+            tipo="imagen"
+            titulo="Fotos del expediente"
+            onElegir={(a) => setFileId(a.id)}
+            onCerrar={() => setAbierto(false)}
+          />
+          {fileId ? (
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <label className="text-xs" htmlFor="orto-foto-vista">¿En qué vista va?</label>
+              <select id="orto-foto-vista" value={slotId} onChange={(e) => setSlotId(e.target.value)} className={orto.entrada}>
+                {PHOTO_SLOTS.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+              <Btn variant="primary" size="sm" onClick={poner} disabled={enviando}>
+                {enviando ? "Poniendo…" : "Poner esta foto"}
+              </Btn>
+            </div>
+          ) : null}
+          {aviso ? <div className="mt-1 text-xs" role="alert">{aviso}</div> : null}
+        </>
+      ) : null}
+    </div>
   );
 }
 

@@ -225,7 +225,8 @@ export async function loadOrthoRedesignData(
         where: {
           clinicId: input.clinicId,
           patientId: input.patientId,
-          procedureKey: "ortodoncia",
+          // H64: además del consentimiento de ortodoncia, el asentimiento del menor.
+          OR: [{ procedureKey: "ortodoncia" }, { procedure: { startsWith: "Asentimiento del menor" } }],
           deletedAt: null,
         },
         orderBy: { createdAt: "desc" },
@@ -239,17 +240,59 @@ export async function loadOrthoRedesignData(
         },
       }),
     ),
-    safeArray(() =>
-      prisma.labOrder.findMany({
-        where: {
-          clinicId: input.clinicId,
-          patientId: input.patientId,
-          module: "orthodontics",
-          deletedAt: null,
-        },
-        orderBy: { createdAt: "desc" },
-      }),
-    ),
+    // H53: una sola lista de «lo que se pidió al laboratorio» — las órdenes
+    // guardadas de ortodoncia (lab_orders) y los pedidos que el paciente ya
+    // tiene con laboratorios de la plataforma (dental_lab_orders).
+    safeArray(async () => {
+      const [propias, deLaPlataforma] = await Promise.all([
+        prisma.labOrder.findMany({
+          where: {
+            clinicId: input.clinicId,
+            patientId: input.patientId,
+            module: "orthodontics",
+            deletedAt: null,
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.dentalLabOrder
+          .findMany({
+            where: { clinicId: input.clinicId, patientId: input.patientId },
+            orderBy: { createdAt: "desc" },
+            take: 30,
+            select: {
+              id: true,
+              status: true,
+              notes: true,
+              createdAt: true,
+              lab: { select: { name: true } },
+              service: { select: { name: true } },
+            },
+          })
+          .catch(() => []),
+      ]);
+      const ESTADO_PLATAFORMA: Record<string, string> = {
+        SOLICITADA: "sent",
+        RECIBIDA: "in_progress",
+        ATENDIENDO: "in_progress",
+        ENVIADA: "in_progress",
+        ENTREGADA: "received",
+        CANCELADA: "cancelled",
+      };
+      return [
+        ...propias,
+        ...deLaPlataforma.map((o) => ({
+          id: o.id,
+          status: ESTADO_PLATAFORMA[o.status] ?? "sent",
+          createdAt: o.createdAt,
+          notes: o.notes,
+          spec: {
+            catalog: o.service?.name ?? "Pedido a laboratorio",
+            description: o.notes ?? "Pedido enviado por la plataforma",
+            lab: `${o.lab.name} · plataforma`,
+          },
+        })),
+      ];
+    }),
     safeArray(() =>
       prisma.referral.findMany({
         where: { clinicId: input.clinicId, patientId: input.patientId },
@@ -353,7 +396,9 @@ export async function loadOrthoRedesignData(
     ? adaptReferralCode(referralCodeRaw as Record<string, unknown>)
     : null;
   const consents = (consentsRaw as Array<Record<string, unknown>>).map(adaptConsent);
-  const labOrders = (labOrdersRaw as Array<Record<string, unknown>>).map(adaptLabOrder);
+  const labOrders = (labOrdersRaw as Array<Record<string, unknown>>)
+    .map(adaptLabOrder)
+    .sort((x, y) => (y.orderedAt ?? "").localeCompare(x.orderedAt ?? ""));
   const referralLetters = (referralLettersRaw as Array<Record<string, unknown>>).map(
     adaptReferralLetter,
   );

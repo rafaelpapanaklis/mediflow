@@ -64,6 +64,13 @@ export interface SectionDocsProps {
    * con ese motivo (hace falta el juego T0 y uno posterior).
    */
   motivoSinReporteDeAvance?: string | null;
+  /**
+   * H64: para un menor, pide su asentimiento (además del consentimiento del
+   * representante). Sin esta prop no se ofrece.
+   */
+  onPedirAsentimiento?: () => Promise<string | null | void> | string | null | void;
+  /** H66: la carta de alta solo se emite con el caso en retención o terminado. */
+  cartaDeAltaDisponible?: boolean;
 }
 
 const CATALOG_AMPLIADO = [
@@ -142,11 +149,12 @@ export function SectionDocs(props: SectionDocsProps) {
         <PdfsDelCaso
           treatmentPlanId={props.treatmentPlanId}
           motivoSinReporteDeAvance={props.motivoSinReporteDeAvance ?? null}
+          cartaDeAltaDisponible={props.cartaDeAltaDisponible ?? false}
         />
       ) : null}
 
       {tab === "lab" ? <LabOrdersPanel rows={props.labOrders} /> : null}
-      {tab === "consent" ? <ConsentsPanel rows={props.consents} /> : null}
+      {tab === "consent" ? <ConsentsPanel rows={props.consents} onPedirAsentimiento={props.onPedirAsentimiento} /> : null}
       {tab === "ref" ? (
         <ReferralPanel rows={props.referralLetters} onNew={props.onNewReferral} />
       ) : null}
@@ -159,6 +167,9 @@ export function SectionDocs(props: SectionDocsProps) {
 export function rutaPdfDelPlan(treatmentPlanId: string): string {
   return `/api/orthodontics/treatment-plans/${encodeURIComponent(treatmentPlanId)}/treatment-plan-pdf`;
 }
+export function rutaCartaDeAlta(treatmentPlanId: string): string {
+  return `/api/orthodontics/treatment-plans/${encodeURIComponent(treatmentPlanId)}/discharge-letter-pdf`;
+}
 export function rutaReporteDeAvance(treatmentPlanId: string): string {
   return `/api/orthodontics/treatment-plans/${encodeURIComponent(treatmentPlanId)}/progress-report-pdf`;
 }
@@ -170,9 +181,11 @@ function abrirEnPestanaNueva(url: string) {
 function PdfsDelCaso({
   treatmentPlanId,
   motivoSinReporteDeAvance,
+  cartaDeAltaDisponible,
 }: {
   treatmentPlanId: string;
   motivoSinReporteDeAvance: string | null;
+  cartaDeAltaDisponible: boolean;
 }) {
   return (
     <div className="px-[18px] pt-[12px]">
@@ -197,6 +210,16 @@ function PdfsDelCaso({
         >
           Reporte de avance (PDF)
         </Btn>
+        {cartaDeAltaDisponible ? (
+          <Btn
+            variant="secondary"
+            size="sm"
+            icon={<ExternalLink size={14} strokeWidth={1.75} aria-hidden />}
+            onClick={() => abrirEnPestanaNueva(rutaCartaDeAlta(treatmentPlanId))}
+          >
+            Carta de alta (PDF)
+          </Btn>
+        ) : null}
       </div>
       {motivoSinReporteDeAvance ? (
         <p id="orto-docs-motivo-avance" className="mt-[6px] text-xs text-[color:var(--pr-texto-3)]">
@@ -256,9 +279,11 @@ function LabOrdersPanel({ rows }: { rows: LabOrderRow[] }) {
           ))}
         </div>
       </div>
-      {/* H53: los pedidos a laboratorios de la plataforma viven en otra lista. */}
+      {/* H53: una sola lista — aquí salen las órdenes guardadas de ortodoncia y
+          los pedidos del paciente a laboratorios de la plataforma. */}
       <p className="mt-[12px] text-xs text-[color:var(--pr-texto-2)]">
-        Aquí se guardan las órdenes de ortodoncia. Los pedidos enviados a un laboratorio de la plataforma están en{" "}
+        Aquí ves las órdenes guardadas y los pedidos enviados a laboratorios de la plataforma. Para pedir a
+        un laboratorio de la plataforma entra a{" "}
         <Link href="/dashboard/ordenes-laboratorio" className={orto.enlace}>
           Órdenes de laboratorio
         </Link>
@@ -268,9 +293,36 @@ function LabOrdersPanel({ rows }: { rows: LabOrderRow[] }) {
   );
 }
 
-function ConsentsPanel({ rows }: { rows: ConsentRow[] }) {
+function ConsentsPanel({
+  rows,
+  onPedirAsentimiento,
+}: {
+  rows: ConsentRow[];
+  onPedirAsentimiento?: SectionDocsProps["onPedirAsentimiento"];
+}) {
+  const [enviando, setEnviando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const pedir = async () => {
+    if (!onPedirAsentimiento) return;
+    setEnviando(true);
+    setAviso(null);
+    try {
+      const error = await onPedirAsentimiento();
+      setAviso(error ? String(error) : "Listo: el asentimiento quedó en Consentimientos, con su liga para firmar.");
+    } finally {
+      setEnviando(false);
+    }
+  };
   return (
     <div className="p-[18px]">
+      {onPedirAsentimiento ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Btn variant="secondary" size="sm" onClick={pedir} disabled={enviando}>
+            {enviando ? "Generando…" : "Pedir asentimiento del menor"}
+          </Btn>
+          {aviso ? <span className="text-xs text-[color:var(--pr-texto-2)]" role="status">{aviso}</span> : null}
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <div className={orto.vacioLinea}>Sin consentimientos registrados todavía.</div>
       ) : (

@@ -121,6 +121,8 @@ export interface OrthodonticsRedesignClientProps {
     slotId: string,
     file: File,
   ) => Promise<void> | void;
+  /** H55: liga una foto que ya está en el expediente a una vista del juego. */
+  onElegirFotoExistente?: (stage: PhotoStage, slotId: string, fileId: string) => Promise<string | null | void> | string | null | void;
   /** Comparativa T0 vs actual. */
   onComparePhotos?: () => void;
   /** Programar foto-set + RX panorámica para mes 12 (G15). */
@@ -308,6 +310,8 @@ export interface OrthodonticsRedesignClientProps {
   consents?: ConsentRow[];
   referralLetters?: ReferralLetterRow[];
   whatsappLog?: WhatsAppLogEntry[];
+  /** H64: pide el asentimiento del menor; devuelve un texto solo si falló. */
+  onPedirAsentimiento?: () => Promise<string | null | void> | string | null | void;
   onCreateLabOrder?: (payload: {
     catalog: string;
     description: string;
@@ -491,6 +495,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         <div className={orto.columna}>
           <SectionHero
             treatment={t}
+            cards={vm.treatmentCards}
             hasUpcomingControlToday={isToday(vm.nextAppointment?.date)}
             onStartTreatment={
               props.onCreateCase ? () => setDrawer({ kind: "new-case" }) : props.onStartDiagnosisWizard
@@ -587,6 +592,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
                 : undefined
             }
             onUpload={props.onUploadPhoto}
+            patientId={vm.patient.id}
+            onElegirExistente={props.onElegirFotoExistente}
             onScheduleG15={props.onScheduleG15Action ?? props.onScheduleG15}
           />
 
@@ -676,6 +683,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
                 : undefined
             }
             treatmentPlanId={t.treatmentPlanId || null}
+            onPedirAsentimiento={props.onPedirAsentimiento}
+            cartaDeAltaDisponible={t.status === "retencion" || t.status === "completado"}
             motivoSinReporteDeAvance={
               hayReporteDeAvance(juegosDeFotos) ? null : MOTIVO_SIN_REPORTE_DE_AVANCE
             }

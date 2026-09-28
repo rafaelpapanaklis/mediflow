@@ -31,6 +31,8 @@ import {
 } from "@/app/actions/orthodontics/imagen/listCephalometricAnalyses";
 import { saveCephalometricAnalysis } from "@/app/actions/orthodontics/imagen/saveCephalometricAnalysis";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import type { ArchivoDelPaciente } from "@/app/actions/orthodontics/imagen/archivosDelPaciente";
+import { ElegirArchivoDelPaciente } from "./ElegirArchivoDelPaciente";
 import orto from "../redesign/orto.module.css";
 
 export interface CephalometriaPanelProps {
@@ -66,6 +68,41 @@ export function CephalometriaPanel({ treatmentPlanId, patientId }: Cephalometria
   // Sin elegir, la etapa sale sola: el primero es el inicial y los demás, de control.
   const etapaElegida: Etapa = etapa ?? (guardados.length === 0 ? "INITIAL" : "PROGRESS");
 
+  // El archivo se liga al caso como un trazado sin puntos: así aparece en la
+  // lista de abajo. (Antes el archivo se subía y aquí no se volvía a ver.)
+  async function ligarArchivo(fileId: string) {
+    const guardado = await saveCephalometricAnalysis({
+      treatmentPlanId,
+      kind: etapaElegida,
+      analysisType: "STEINER",
+      normSet: "STANDARD",
+      points: {},
+      tracingPdfFileId: fileId,
+    });
+    if (isFailure(guardado)) {
+      setError(guardado.error);
+      return;
+    }
+    const lista = await listCephalometricAnalyses(treatmentPlanId);
+    if (lista.ok) setRows(lista.data);
+    setEtapa(null);
+  }
+
+  // H57: elegir uno que ya está en el expediente en vez de subirlo otra vez.
+  const [eligiendo, setEligiendo] = useState(false);
+  async function elegirExistente(a: ArchivoDelPaciente) {
+    setError(null);
+    setGuardando(true);
+    setEligiendo(false);
+    try {
+      await ligarArchivo(a.id);
+    } catch {
+      setError("No se pudo guardar el archivo. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
   async function guardarPdf(file: File) {
     setError(null);
     setGuardando(true);
@@ -80,23 +117,7 @@ export function CephalometriaPanel({ treatmentPlanId, patientId }: Cephalometria
         setError(json?.error ?? "No se pudo subir el PDF");
         return;
       }
-      // El PDF se liga al caso como un trazado sin puntos: así aparece en la
-      // lista de abajo. (Antes el archivo se subía y aquí no se volvía a ver.)
-      const guardado = await saveCephalometricAnalysis({
-        treatmentPlanId,
-        kind: etapaElegida,
-        analysisType: "STEINER",
-        normSet: "STANDARD",
-        points: {},
-        tracingPdfFileId: json.fileId,
-      });
-      if (isFailure(guardado)) {
-        setError(guardado.error);
-        return;
-      }
-      const lista = await listCephalometricAnalyses(treatmentPlanId);
-      if (lista.ok) setRows(lista.data);
-      setEtapa(null);
+      await ligarArchivo(json.fileId);
     } catch {
       setError("No se pudo guardar el PDF. Revisa tu conexión e inténtalo de nuevo.");
     } finally {
@@ -157,7 +178,25 @@ export function CephalometriaPanel({ treatmentPlanId, patientId }: Cephalometria
             }}
           />
         </label>
+        <button
+          type="button"
+          className={`${orto.boton}`}
+          style={{ height: 38 }}
+          disabled={guardando}
+          onClick={() => setEligiendo((v) => !v)}
+        >
+          Elegir de los archivos del paciente
+        </button>
       </div>
+      {eligiendo ? (
+        <ElegirArchivoDelPaciente
+          patientId={patientId}
+          tipo="trazado"
+          titulo="Trazado o lateral de cráneo ya guardados"
+          onElegir={(a) => void elegirExistente(a)}
+          onCerrar={() => setEligiendo(false)}
+        />
+      ) : null}
 
       <div className="mt-[16px]">
         <div className="flex items-center justify-between gap-2 mb-2">

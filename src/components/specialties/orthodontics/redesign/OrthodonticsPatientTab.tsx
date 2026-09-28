@@ -53,6 +53,7 @@ import {
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
 import { RUTA_CONTRATAR_ORTODONCIA } from "@/lib/orthodontics/contratar";
+import { textoAsentimientoMenor } from "@/lib/orthodontics/asentimiento-menor";
 import { elegirSetParaFoto } from "@/lib/orthodontics/redesign/set-de-foto-por-visita";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
 import { DrawerNewCase, type DrawerNewCaseDiagnosisPayload, type DrawerNewCasePlanPayload } from "./drawers/DrawerNewCase";
@@ -918,6 +919,29 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             }
             router.refresh();
           }}
+          onPedirAsentimiento={
+            orthoData?.isMinor && orthoData.guardianName
+              ? async () => {
+                  const res = await fetch("/api/consent", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      patientId: patient.id,
+                      procedure: "Asentimiento del menor — ortodoncia",
+                      content: textoAsentimientoMenor(`${patient.firstName} ${patient.lastName}`.trim()),
+                      signerName: orthoData.guardianName,
+                      signerRelation: labelParentesco(orthoData.responsibleGuardianRelation) || "Representante legal",
+                    }),
+                  });
+                  if (!res.ok) {
+                    const body = await res.json().catch(() => null);
+                    return body?.error ?? "No se pudo generar el asentimiento.";
+                  }
+                  router.refresh();
+                  return null;
+                }
+              : undefined
+          }
           onCreateLabOrder={async (payload) => {
             const res = await createOrthoLabOrder({
               patientId: patient.id,
@@ -1050,6 +1074,33 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             } catch (e) {
               console.error("[ortho upload] failed:", e);
               toast.error(t("patients.ortho.photoUploadUnexpected"));
+            }
+          }}
+          onElegirFotoExistente={async (stage, slotId, fileId) => {
+            // H55: la foto ya está en el expediente: se liga a la vista sin subirla otra vez.
+            const view = SLOT_TO_VIEW[slotId];
+            if (!view) return t("patients.ortho.slotOutsideAao");
+            if (!orthoRedesignVM.treatment.treatmentPlanId) return t("patients.ortho.noPlan");
+            try {
+              let setId = elegirSetParaFoto(orthoRedesignBundle?.historicalPhotoSets ?? [], stage);
+              if (!setId) {
+                const created = await createPhotoSet({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  patientId: patient.id,
+                  setType: stage,
+                  capturedAt: new Date().toISOString(),
+                  monthInTreatment: orthoRedesignVM.treatment.monthCurrent,
+                });
+                if (isFailure(created)) return created.error;
+                setId = (created.data as { id: string }).id;
+              }
+              const attached = await uploadPhotoToSet({ setId, fileId, view });
+              if (isFailure(attached)) return attached.error;
+              toast.success(t("patients.ortho.photoUploaded", { view: view.replace(/_/g, " ").toLowerCase() }));
+              router.refresh();
+              return null;
+            } catch {
+              return t("patients.ortho.photoUploadUnexpected");
             }
           }}
           onComparePhotos={undefined}

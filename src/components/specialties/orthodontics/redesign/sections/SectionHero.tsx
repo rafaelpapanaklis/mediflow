@@ -25,10 +25,13 @@ import {
   PHASE_ORDER,
   type OrthoTreatmentDTO,
 } from "../types";
+import { bracketsDelCaso, cooperacionDelPaciente, type ControlParaResumen } from "@/lib/orthodontics/resumen-del-caso";
 import orto from "../orto.module.css";
 
 export interface SectionHeroProps {
   treatment: OrthoTreatmentDTO;
+  /** H66: controles del caso, para los brackets caídos acumulados. */
+  cards?: readonly ControlParaResumen[];
   hasUpcomingControlToday?: boolean;
   onStartTreatment?: () => void;
   onEditPlan?: () => void;
@@ -160,6 +163,24 @@ export function SectionHero(props: SectionHeroProps) {
             deltaColor={elasticTone === "rose" ? "rose" : elasticTone === "amber" ? "amber" : "emerald"}
           />
         </div>
+
+        {(() => {
+          const cooperacion = cooperacionDelPaciente(asistencia, elasticos);
+          const brackets = props.cards ? bracketsDelCaso(props.cards) : null;
+          if (!cooperacion && !(brackets && brackets.caidos > 0)) return null;
+          return (
+            <p className={`${orto.tonoApagado} mt-[12px] text-[12.5px]`}>
+              {cooperacion ? <>Cooperación del paciente: <strong>{cooperacion}</strong></> : null}
+              {cooperacion && brackets && brackets.caidos > 0 ? " · " : null}
+              {brackets && brackets.caidos > 0 ? (
+                <>
+                  Brackets caídos en el caso: <strong>{brackets.caidos}</strong>
+                  {brackets.pendientes > 0 ? ` (${brackets.pendientes} sin recementar)` : ""}
+                </>
+              ) : null}
+            </p>
+          );
+        })()}
 
         <div className="mt-[18px]">
           <div className="flex items-baseline justify-between gap-3 mb-[7px]">

@@ -32,6 +32,8 @@ import { calendarDayRangeUtc } from "@/lib/agenda/time-utils";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { relatedPatientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
+import { ORTHO_AUDIT_ACTIONS } from "@/app/actions/orthodontics/audit-actions";
+import { cambiosDeEstadoDeBitacora, diasEnPausa } from "./dias-en-pausa";
 import { cobranzaDelCasoUnificada } from "./cobranza-caso";
 import { normalizarOrthoBillingMode } from "./billing-mode";
 import { cargarModosDeCobro } from "./billing-mode-db";
@@ -187,6 +189,7 @@ export async function loadOrthoCases(
     invoicesById = new Map(invoices.map((i) => [i.id, i]));
   }
   const cargosControlPorPlan = await cargarCargosDeControlPorCasos(clinicId, planIdsPorControl);
+  const pausaPorPlan = await cargarDiasEnPausaPorCaso(clinicId, plans.map((p) => p.id), ahora, plans);
 
   const invoiceIdByPlanId = new Map<string, string>();
   const cases: OrthoCaseSummary[] = plans.map((p) => {
@@ -211,11 +214,51 @@ export async function loadOrthoCases(
       estimatedDurationMonths: p.estimatedDurationMonths,
       droppedOutAt: p.droppedOutAt,
       statusUpdatedAt: p.statusUpdatedAt,
+      diasEnPausa: pausaPorPlan.get(p.id) ?? 0,
       cobranza,
     };
   });
 
   return { cases, invoiceIdByPlanId, invoicesById };
+}
+
+/**
+ * H45: días en pausa de cada caso, leídos de la bitácora (una consulta para
+ * todos). Nunca lanza: sin bitácora o con la base caída, 0 días (lo de antes).
+ */
+async function cargarDiasEnPausaPorCaso(
+  clinicId: string,
+  planIds: string[],
+  ahora: Date,
+  plans: Array<{ id: string; status: string }>,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (planIds.length === 0) return out;
+  try {
+    const filas = await prisma.auditLog.findMany({
+      where: {
+        clinicId,
+        entityType: "OrthodonticTreatmentPlan",
+        entityId: { in: planIds },
+        action: ORTHO_AUDIT_ACTIONS.TREATMENT_PLAN_STATUS_CHANGED,
+      },
+      select: { entityId: true, createdAt: true, changes: true },
+      take: 5000,
+    });
+    const porPlan = new Map<string, Array<{ createdAt: Date; changes: unknown }>>();
+    for (const f of filas) {
+      const l = porPlan.get(f.entityId) ?? [];
+      l.push({ createdAt: f.createdAt, changes: f.changes });
+      porPlan.set(f.entityId, l);
+    }
+    for (const p of plans) {
+      const l = porPlan.get(p.id);
+      if (l) out.set(p.id, diasEnPausa(cambiosDeEstadoDeBitacora(l), p.status, ahora));
+    }
+  } catch (e) {
+    console.error("[ortho] no se pudo leer la bitácora de pausas:", e);
+  }
+  return out;
 }
 
 export interface OrthoTableroData {

@@ -50,6 +50,17 @@ export async function saveCephalometricAnalysis(
   if (isFailure(auth)) return auth;
   const { ctx, patientId } = auth.data;
 
+  // Los archivos que se ligan tienen que ser de ESTE paciente y de esta clínica
+  // (el id llega del cliente): sin esto se podía colgar el archivo de otro.
+  for (const fileId of [input.tracingPdfFileId, input.lateralXrayFileId]) {
+    if (!fileId) continue;
+    const archivo = await prisma.patientFile.findFirst({
+      where: { id: fileId, clinicId: ctx.clinicId, patientId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!archivo) return fail("El archivo no es de este paciente");
+  }
+
   const measurements = computeCephMeasurements(input.points);
 
   try {

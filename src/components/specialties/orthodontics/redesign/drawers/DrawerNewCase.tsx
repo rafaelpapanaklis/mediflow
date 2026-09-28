@@ -190,6 +190,8 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   const [treatingDoctorId, setTreatingDoctorId] = useState("");
   /** El doctor que propuso Configuración, para decir de dónde salió. */
   const [doctorPropuesto, setDoctorPropuesto] = useState("");
+  /** H60: la oclusión de abajo viene de la última consulta (se dice en pantalla). */
+  const [oclusionPrecargada, setOclusionPrecargada] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -201,6 +203,19 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       setColumnsExist(res.data.columnsExist);
       setBillingMode(res.data.billingMode);
       setModoDeLaClinica(res.data.billingMode);
+      // H60: lo que el doctor ya midió en «Nueva consulta» se propone aquí (editable).
+      const o = res.data.oclusionDeConsulta;
+      if (o) {
+        if (o.angleClass) {
+          setAngleR(o.angleClass);
+          setAngleL(o.angleClass);
+        }
+        if (o.overbiteMm !== null) setOverbiteMm(o.overbiteMm);
+        if (o.overjetMm !== null) setOverjetMm(o.overjetMm);
+        if (o.crossbite) setCrossbite(true);
+        if (o.openBite) setOpenBite(true);
+        setOclusionPrecargada(true);
+      }
       // ws1-t5 (ronda 6): el alta arranca con el «Doctor tratante por defecto»
       // de Configuración (o el único ortodoncista de la clínica). Solo si
       // nadie eligió ya a otro mientras cargaba, y si la columna existe.
@@ -458,6 +473,11 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
           {needsDiagnosis ? (
             <section className="space-y-4">
               <SectionTitle>Diagnóstico ortodóntico</SectionTitle>
+              {oclusionPrecargada ? (
+                <p className="text-xs text-[color:var(--pr-texto-3)]">
+                  Clase, sobremordida, overjet y mordida vienen de tu última consulta; revísalos y cámbialos si hace falta.
+                </p>
+              ) : null}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Angle derecha">
                   <Select value={angleR} onChange={setAngleR} options={ANGLE_OPTIONS} />
