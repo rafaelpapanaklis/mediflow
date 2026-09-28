@@ -13,6 +13,7 @@
 // siendo el punto de corte del bundle — moverlos aquí no cambia qué se
 // descarga ni cuándo.
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import toast from "react-hot-toast";
@@ -47,6 +48,7 @@ import {
   createDiagnosis,
   createTreatmentPlan,
   updateTreatmentPlan,
+  getCaseIntakeOptions,
 } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 
@@ -169,6 +171,26 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
   const router = useRouter();
   const t = useT();
 
+  // Ola 1 (ws1-t6) — A10: si ya hay diagnóstico, pregunta una sola vez si
+  // existe un consentimiento GENERAL de ortodoncia firmado (no bloquea el
+  // render mientras llega: el banner solo aparece cuando la respuesta es
+  // explícitamente `false`, nunca en `null`/cargando).
+  const [generalConsentSigned, setGeneralConsentSigned] = useState<boolean | null>(null);
+  const diagnosisId = orthoRedesignVM?.diagnosis?.id ?? null;
+  useEffect(() => {
+    if (!diagnosisId) {
+      setGeneralConsentSigned(null);
+      return;
+    }
+    let cancelled = false;
+    getCaseIntakeOptions({ patientId: patient.id }).then((res) => {
+      if (!cancelled && !isFailure(res)) setGeneralConsentSigned(res.data.generalConsentSigned);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [patient.id, diagnosisId]);
+
   return (
     <>
       {/* Hallazgo 21: con el rediseño, una banda en el idioma nuevo presenta
@@ -210,6 +232,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
           referralLetters={orthoRedesignBundle?.referralLetters ?? []}
           whatsappLog={orthoRedesignBundle?.whatsappLog ?? []}
           treatmentStatus={orthoRedesignBundle?.treatmentStatus ?? "en-tratamiento"}
+          generalConsentSigned={generalConsentSigned}
           financialPlan={orthoRedesignBundle?.financialPlan ?? null}
           onUpdateFinancialPlan={async (payload) => {
             if (!orthoRedesignVM.treatment.treatmentPlanId) {
