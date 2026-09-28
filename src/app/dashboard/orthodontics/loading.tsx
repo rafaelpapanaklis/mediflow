@@ -6,7 +6,7 @@ import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 
 export default function OrthodonticsModuleLoading() {
   return (
-    <div className={s.pantalla} aria-busy="true" aria-label="Cargando">
+    <div className={s.pantalla} role="status" aria-busy="true" aria-label="Cargando">
       <div className={s.cabeza}>
         <div className={s.cabezaTextos} style={{ flex: 1 }}>
           <span className={`${s.hueso} ${s.huesoTitulo}`} />

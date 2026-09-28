@@ -95,7 +95,9 @@ export function VistaAlertas({ alerts }: { alerts: OrthoAlertsData }) {
       >
         {alerts.overduePayments.map((p: OverduePatientEntry) => (
           <PatientRow
-            key={p.patientId}
+            // Una fila por CASO, no por paciente: dos casos del mismo paciente
+            // con deuda compartirían clave y el estado del botón se cruzaría.
+            key={p.treatmentPlanId}
             patientId={p.patientId}
             patientName={p.patientName}
             detalle={`Vencida desde el ${fmtDate(p.oldestDueDate)}`}
@@ -211,9 +213,9 @@ function AlertSection({
         hasItems ? (
           <span
             className={`${s.contador} ${tono === "peligro" ? s.contadorPeligro : tono === "alerta" ? s.contadorAlerta : ""}`}
-            aria-label={`${children.length} caso${children.length === 1 ? "" : "s"}`}
           >
             {children.length}
+            <span className={s.soloLector}> caso{children.length === 1 ? "" : "s"}</span>
           </span>
         ) : undefined
       }

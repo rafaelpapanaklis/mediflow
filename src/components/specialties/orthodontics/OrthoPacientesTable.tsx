@@ -12,7 +12,9 @@
 // Diseño (ws1-t3): misma tabla, mismas columnas y mismo destino al pulsar.
 // El nombre es ahora un enlace de verdad (se llega con Tab y se abre con
 // Enter), los importes van alineados a la derecha y, en el teléfono, cada
-// paciente pasa a ser una tarjeta en vez de una tabla que se desliza.
+// paciente pasa a ser una tarjeta en vez de una tabla que se desliza. Los
+// `role` van escritos porque, pintada como tarjetas, algunos lectores de
+// pantalla dejan de leerla como tabla.
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -77,7 +79,7 @@ export function OrthoPacientesTable({ rows }: { rows: OrthoPacienteRow[] }) {
         alto
         icono={Users}
         titulo="Aún no hay pacientes en tratamiento"
-        pista="Un caso se abre desde la ficha del paciente: entra a su pestaña Ortodoncia y pulsa «Iniciar tratamiento ortodóntico». En cuanto esté activo, aparece aquí con su saldo y su próxima mensualidad."
+        pista="Un caso se abre desde la ficha del paciente: entra a su pestaña Ortodoncia y abre su caso desde ahí. En cuanto esté activo, aparece aquí con su saldo y su próxima mensualidad."
       >
         <Link href="/dashboard/patients" className={s.boton}>
           <Users size={15} strokeWidth={1.9} aria-hidden />
@@ -123,21 +125,21 @@ export function OrthoPacientesTable({ rows }: { rows: OrthoPacienteRow[] }) {
         </div>
       ) : (
         <div className={s.tablaCaja}>
-          <table className={s.tabla}>
-            <thead>
-              <tr>
-                <th scope="col">Paciente</th>
-                <th scope="col">Estado</th>
-                <th scope="col" className={s.num}>Saldo vencido</th>
-                <th scope="col" className={s.num}>Próxima mensualidad</th>
+          <table className={s.tabla} role="table">
+            <thead role="rowgroup">
+              <tr role="row">
+                <th scope="col" role="columnheader">Paciente</th>
+                <th scope="col" role="columnheader">Estado</th>
+                <th scope="col" role="columnheader" className={s.num}>Saldo vencido</th>
+                <th scope="col" role="columnheader" className={s.num}>Próxima mensualidad</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {filtered.map((r) => {
                 const href = `/dashboard/patients/${r.patientId}?tab=ortodoncia`;
                 return (
-                  <tr key={r.planId} onClick={() => router.push(href)}>
-                    <td>
+                  <tr key={r.planId} role="row" onClick={() => router.push(href)}>
+                    <td role="cell">
                       <div className={s.paciente}>
                         <AvatarNew name={r.patientName} size="sm" />
                         <div className={s.pacienteTextos}>
@@ -148,17 +150,17 @@ export function OrthoPacientesTable({ rows }: { rows: OrthoPacienteRow[] }) {
                         </div>
                       </div>
                     </td>
-                    <td className={s.estado} data-etiqueta="Estado">
+                    <td role="cell" className={s.estado} data-etiqueta="Estado">
                       <BadgeNew tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</BadgeNew>
                     </td>
-                    <td className={s.num} data-etiqueta="Saldo vencido">
+                    <td role="cell" className={s.num} data-etiqueta="Saldo vencido">
                       {r.overdueAmountMxn > 0 ? (
                         <span className={`${s.importe} ${s.importePeligro}`}>{fmtMoney(r.overdueAmountMxn)}</span>
                       ) : (
                         <span className={`${s.importe} ${s.importeApagado}`}>Al día</span>
                       )}
                     </td>
-                    <td className={s.num} data-etiqueta="Próxima mensualidad">
+                    <td role="cell" className={s.num} data-etiqueta="Próxima mensualidad">
                       {fmtDate(r.nextDueDate)}
                     </td>
                   </tr>
