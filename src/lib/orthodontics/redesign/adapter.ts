@@ -8,6 +8,8 @@
 // migración Fase 1 no se aplicó), las arrays llegan vacías y la UI
 // renderiza empty states.
 
+import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
+import { ETIQUETA_ESTADO_CASO } from "@/lib/orthodontics/resumen-para-ficha";
 import type {
   OrthodonticDiagnosis,
   OrthodonticTreatmentPlan,
@@ -112,6 +114,10 @@ export interface AdapterInput {
   // Métricas calculadas.
   attendancePct: number;
   elasticsCompliancePct: number;
+  /** ws1-t4 ronda 6: los indicadores de verdad (`indicadores-del-caso.ts`). Opcionales. */
+  attendance?: OrthoTreatmentDTO["attendance"];
+  elastics?: OrthoTreatmentDTO["elastics"];
+  visitas?: OrthoRedesignViewModel["visitas"];
   /**
    * Doctor que atenderá la próxima cita. Se resuelve en el loader vía
    * lookup del `attendedById` del control con scheduledAt > now más
@@ -173,6 +179,8 @@ export function adaptToOrthoRedesignViewModel(
     wireCurrent,
     attendancePct: input.attendancePct,
     elasticsCompliancePct: input.elasticsCompliancePct,
+    attendance: input.attendance,
+    elastics: input.elastics,
     realInvoiceTotal: input.realInvoiceTotal ?? null,
     realInvoicePaid: input.realInvoicePaid ?? null,
   });
@@ -199,16 +207,29 @@ export function adaptToOrthoRedesignViewModel(
       chair: input.nextAppointmentChair ?? null,
       real: input.nextRealAppointment ?? null,
     }),
+    ...(input.visitas ? { visitas: input.visitas } : {}),
     aiSuggestions: [],
     whatsappRecent: [],
   };
 }
+
+/** Las mismas palabras que `resumen-para-ficha.ts`: un solo nombre para cada estado. */
+const ETIQUETA_DEL_ESTADO: Record<string, string> = {
+  PLANNED: ETIQUETA_ESTADO_CASO.planeado,
+  IN_PROGRESS: ETIQUETA_ESTADO_CASO["en-curso"],
+  ON_HOLD: ETIQUETA_ESTADO_CASO.pausado,
+  RETENTION: ETIQUETA_ESTADO_CASO.retencion,
+  COMPLETED: ETIQUETA_ESTADO_CASO.terminado,
+  DROPPED_OUT: ETIQUETA_ESTADO_CASO.abandonado,
+};
 
 function adaptTreatment(args: {
   legacy: OrthoTabData;
   wireCurrent: WireStepDTO | null;
   attendancePct: number;
   elasticsCompliancePct: number;
+  attendance?: OrthoTreatmentDTO["attendance"];
+  elastics?: OrthoTreatmentDTO["elastics"];
   realInvoiceTotal: number | null;
   realInvoicePaid: number | null;
 }): OrthoTreatmentDTO {
@@ -255,6 +276,12 @@ function adaptTreatment(args: {
     estimatedEndDate: deriveEstimatedEndDate(plan),
     attendancePct: args.attendancePct,
     elasticsCompliancePct: args.elasticsCompliancePct,
+    ...(args.attendance ? { attendance: args.attendance } : {}),
+    ...(args.elastics ? { elastics: args.elastics } : {}),
+    // El estado en palabras, igual que en la ficha general y en el módulo.
+    ...(plan && ETIQUETA_DEL_ESTADO[String(plan.status)]
+      ? { caseStatusLabel: ETIQUETA_DEL_ESTADO[String(plan.status)] }
+      : {}),
     totalCost,
     paid,
   };
@@ -471,9 +498,11 @@ function deriveNextAppointment(
   // Doctor real (resuelto en loader desde attendedById/doctorId). Antes el
   // código ponía l.patientName como placeholder — bug detectado en audit E2E.
   // Si no se pudo resolver, fallback "Doctor asignado" en vez de patientName.
+  // Sin «Dr/a.»: no hay campo de tratamiento ni de género, y el panel nombra
+  // al profesional por su nombre y apellido (ws1-t4 ronda 6, fila 37).
   const doctorName = ctx.doctor
-    ? `Dr/a. ${ctx.doctor.firstName} ${ctx.doctor.lastName}`.trim()
-    : "Doctor asignado";
+    ? `${ctx.doctor.firstName} ${ctx.doctor.lastName}`.trim()
+    : "Doctor por asignar";
 
   // H10 (QA ws1-t9): la cita REAL de la Agenda manda sobre `l.controls`
   // (OrthodonticControlAppointment, tabla legacy que hoy nadie llena) — sin
@@ -486,7 +515,7 @@ function deriveNextAppointment(
     return {
       date: ctx.real.startsAt.toISOString(),
       durationMin,
-      type: "Control mensual ortodoncia",
+      type: TIPO_CITA_CONTROL_ORTO,
       doctor: doctorName,
       chair: ctx.chair,
       prep: [],
@@ -503,7 +532,7 @@ function deriveNextAppointment(
   return {
     date: upcoming.scheduledAt.toISOString(),
     durationMin: 30,
-    type: "Control mensual ortodoncia",
+    type: TIPO_CITA_CONTROL_ORTO,
     doctor: doctorName,
     chair: ctx.chair,
     prep: [],

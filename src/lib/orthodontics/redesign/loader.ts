@@ -13,6 +13,15 @@
 import { prisma } from "@/lib/prisma";
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
+import type { ElasticsLogEntry } from "@/lib/orthodontics/elastics/compliance";
+import {
+  VENTANA_ELASTICOS_DIAS,
+  asistenciaDelCaso,
+  proximaCitaDelCaso,
+  usoDeElasticos,
+  visitasDelCaso,
+  type CitaDeControlDelCaso,
+} from "./indicadores-del-caso";
 import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { signMaybeUrls } from "@/lib/storage";
 import {
@@ -262,13 +271,25 @@ export async function loadOrthoRedesignData(
     ),
   ]);
 
-  const attendancePct = computeAttendancePct(legacy);
-
-  // Compliance elásticos — última entry de audit log
-  // `ortho.elastics.compliance.recorded` para este plan. Si no existe, 0.
-  const elasticsCompliancePct = planId
-    ? await readLatestCompliancePct(input.clinicId, planId)
-    : 0;
+  // ws1-t4 ronda 6 (filas 8 y 9 de la revisión de lógica de uso): la
+  // asistencia, el uso de elásticos, las visitas y la próxima cita salen de lo
+  // que pasó de verdad —citas de control de la Agenda, hojas de control y lo
+  // que marca el paciente en el portal—, no de tablas que ya nadie llena. La
+  // cuenta es de `indicadores-del-caso.ts` (puro, con tests). Va DESPUÉS de la
+  // tanda de arriba, no junto a ella: el pooler se satura por encima de 7.
+  const ahora = new Date();
+  const indicadores = await cargarIndicadoresDelCaso(input.clinicId, input.patientId, planId, ahora);
+  const hojasDeControl = (treatmentCards as Array<{ appointmentId?: string | null; visitDate: Date }>).map((c) => ({
+    appointmentId: c.appointmentId ?? null,
+    visitDate: c.visitDate,
+  }));
+  const attendance = asistenciaDelCaso(indicadores.citas, hojasDeControl, ahora);
+  const elastics = usoDeElasticos(indicadores.elasticos);
+  const visitasReales = visitasDelCaso(indicadores.citas, hojasDeControl, ahora, indicadores.zona);
+  // Los dos números de siempre se conservan para quien todavía los lee; ya no
+  // se inventan: sin datos valen 0 y la pantalla pinta «—» (ver `attendance`).
+  const attendancePct = attendance.pct ?? 0;
+  const elasticsCompliancePct = elastics.pct ?? 0;
 
   // H10 (QA ws1-t9): la cita real que Recepción crea desde la Agenda vive
   // en `Appointment` (mismo origen que ya usan Tablero y Alertas,
@@ -277,10 +298,13 @@ export async function loadOrthoRedesignData(
   // (ControlAppointmentWizard) y que hoy nadie usa. Preferimos la cita real;
   // si no hay ninguna, caemos al resolve legacy (y `deriveNextAppointment`
   // sigue mirando `l.controls` como antes).
-  const nextRealAppointment = await resolveNextRealAppointment(
-    input.clinicId,
-    input.patientId,
-  );
+  // Fila 9: una cita de HOY cuya hora ya pasó sigue siendo «la de hoy»
+  // mientras nadie la cierre (`proximaCitaDelCaso`); antes, a mediodía, el
+  // control de las 10:00 desaparecía y la cabecera decía «Sin programar».
+  const proxima = proximaCitaDelCaso(indicadores.citas, ahora, indicadores.zona);
+  const nextRealAppointment = proxima
+    ? { startsAt: proxima.startsAt, endsAt: proxima.endsAt, doctor: proxima.doctor, chair: proxima.chair }
+    : null;
   const nextAppointmentDoctor =
     nextRealAppointment?.doctor ??
     (await resolveNextAppointmentDoctor(input.clinicId, input.patientId));
@@ -342,6 +366,13 @@ export async function loadOrthoRedesignData(
     patientFlow: patientFlow as AdapterInput["patientFlow"],
     attendancePct,
     elasticsCompliancePct,
+    attendance,
+    elastics,
+    visitas: {
+      total: visitasReales.total,
+      ultima: visitasReales.ultima ? visitasReales.ultima.toISOString() : null,
+      primera: visitasReales.primera ? visitasReales.primera.toISOString() : null,
+    },
     nextAppointmentDoctor,
     nextAppointmentChair,
     nextRealAppointment,
@@ -484,6 +515,83 @@ async function adaptPhotoSets(
       hasRxLatCef: false,
     };
   });
+}
+
+interface CitaDelCasoCargada extends CitaDeControlDelCaso {
+  doctor: { firstName: string; lastName: string } | null;
+  chair: string | null;
+}
+
+/**
+ * ws1-t4 ronda 6: lo que necesitan los indicadores del caso, en una tanda de
+ * tres lecturas: la zona de la clínica, las citas de control del paciente y
+ * lo que se ha registrado de elásticos. Todo por clínica. Si algo falla o la
+ * tabla todavía no existe, esa parte sale vacía y la ficha se pinta igual.
+ */
+async function cargarIndicadoresDelCaso(
+  clinicId: string,
+  patientId: string,
+  planId: string | null,
+  ahora: Date,
+): Promise<{ zona: string; citas: CitaDelCasoCargada[]; elasticos: ElasticsLogEntry[] }> {
+  const vacio = { zona: "America/Mexico_City", citas: [], elasticos: [] };
+  // `clinicId: undefined` en Prisma NO filtra: sin clínica no se consulta nada.
+  if (!clinicId || !patientId) return vacio;
+  const desdeElasticos = new Date(ahora.getTime() - VENTANA_ELASTICOS_DIAS * 86_400_000);
+  try {
+    const [clinica, citas, elasticos] = await Promise.all([
+      prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }),
+      prisma.appointment.findMany({
+        where: {
+          clinicId,
+          patientId,
+          type: TIPO_CITA_CONTROL_ORTO,
+          startsAt: {
+            gte: new Date(ahora.getTime() - 3 * 366 * 86_400_000),
+            lte: new Date(ahora.getTime() + 366 * 86_400_000),
+          },
+        },
+        orderBy: { startsAt: "asc" },
+        select: {
+          id: true,
+          startsAt: true,
+          endsAt: true,
+          status: true,
+          doctor: { select: { firstName: true, lastName: true } },
+          resource: { select: { name: true } },
+        },
+        take: 500,
+      }),
+      planId
+        ? safeArray(() =>
+            prisma.orthodonticElasticsLog.findMany({
+              where: { clinicId, treatmentPlanId: planId, logDate: { gte: desdeElasticos } },
+              select: { logDate: true, wornHours: true, usedElastics: true },
+              orderBy: { logDate: "desc" },
+            }),
+          )
+        : Promise.resolve([]),
+    ]);
+    return {
+      zona: clinica?.timezone || vacio.zona,
+      citas: citas.map((c) => ({
+        id: c.id,
+        startsAt: c.startsAt,
+        endsAt: c.endsAt,
+        status: c.status,
+        doctor: c.doctor,
+        chair: c.resource?.name ?? null,
+      })),
+      elasticos: (elasticos as Array<{ logDate: Date; wornHours: number | null; usedElastics: boolean }>).map((e) => ({
+        date: e.logDate.toISOString().slice(0, 10),
+        wornHours: e.wornHours,
+        usedElastics: e.usedElastics,
+      })),
+    };
+  } catch (e) {
+    console.error("[ortho-redesign] cargarIndicadoresDelCaso failed:", e);
+    return vacio;
+  }
 }
 
 /**

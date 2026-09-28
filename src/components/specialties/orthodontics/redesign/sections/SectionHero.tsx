@@ -6,6 +6,14 @@
 //      que abre el caso.
 //   2. En tratamiento: mes X de Y + fase, cuatro datos, barra de avance y las
 //      fases con la actual marcada.
+//
+// ws1-t4 ronda 6 (revisión de lógica de uso, filas 8 y 27, y sección H):
+//  - «Asistencia» y «Uso de elásticos» dicen lo que pasó de verdad, con de
+//    dónde sale el número; sin datos pintan «—», no un 100 % ni un 0 %.
+//  - «Aparatología» dice primero QUÉ lleva el paciente («Brackets
+//    metálicos»); antes decía «Sin definir» encima del tipo.
+//  - El expediente de ortodoncia es el «caso», con su estado en palabras.
+//  - El botón que abre la aparatología se llama así, no «Editar plan».
 
 import { Activity, ChevronRight, ClipboardCheck, Layers, Pencil, Plus, Settings } from "lucide-react";
 import { Btn, Card, StatChip, fmtDayLong, fmtPct } from "../atoms";
@@ -40,14 +48,37 @@ export function SectionHero(props: SectionHeroProps) {
 
   const progressPct =
     t.monthTotal > 0 ? Math.min(100, Math.round((t.monthCurrent / t.monthTotal) * 100)) : 0;
-  const applianceLabel = t.appliance.prescriptionSlot
-    ? APPLIANCE_SLOT_LABELS[t.appliance.prescriptionSlot]
-    : "Sin definir";
+  // Primero qué lleva; debajo, la prescripción. Antes salía «Sin definir»
+  // como dato principal aunque el tipo sí estuviera capturado.
+  const applianceLabel = t.appliance.type ?? "Sin definir";
+  const applianceSub = t.appliance.prescriptionSlot
+    ? `Prescripción ${APPLIANCE_SLOT_LABELS[t.appliance.prescriptionSlot]}`
+    : t.appliance.type
+      ? "Prescripción sin definir"
+      : "—";
+  // Con los indicadores de verdad, `pct: null` es «sin datos». Sin ellos
+  // (quien arma el objeto a mano), los dos números de siempre.
+  const asistencia = t.attendance ? t.attendance.pct : t.attendancePct;
+  const elasticos = t.elastics ? t.elastics.pct : t.elasticsCompliancePct;
+  const asistenciaSub = !t.attendance
+    ? "últimos 6 meses"
+    : t.attendance.pct === null
+      ? "sin controles registrados"
+      : t.attendance.falto === 0
+        ? `${t.attendance.asistio} de ${t.attendance.asistio} controles · 6 meses`
+        : `faltó a ${t.attendance.falto} de ${t.attendance.asistio + t.attendance.falto} · 6 meses`;
+  const elasticosSub = !t.elastics
+    ? t.wireCurrent
+      ? "uso 22 h/día"
+      : "no aplica"
+    : t.elastics.pct === null
+      ? "sin registros del paciente"
+      : `${t.elastics.diasRegistrados} de ${t.elastics.ventanaDias} días registrados`;
   const wireLabel = t.wireCurrent
     ? `${formatWireLabel(t.wireCurrent)}`
     : "Sin arco activo";
   const elasticTone =
-    t.elasticsCompliancePct >= 85 ? "emerald" : t.elasticsCompliancePct >= 70 ? "amber" : "rose";
+    (elasticos ?? 0) >= 85 ? "emerald" : (elasticos ?? 0) >= 70 ? "amber" : "rose";
   const phaseIndex = t.phase ? PHASE_ORDER.indexOf(t.phase) : -1;
 
   return (
@@ -65,7 +96,7 @@ export function SectionHero(props: SectionHeroProps) {
           ) : null}
         </>
       }
-      eyebrow="Tratamiento de ortodoncia activo"
+      eyebrow={t.caseStatusLabel ? `Caso de ortodoncia · ${t.caseStatusLabel}` : "Caso de ortodoncia"}
       action={
         <>
           {props.onOpenCaseSettings ? (
@@ -75,7 +106,7 @@ export function SectionHero(props: SectionHeroProps) {
               icon={<Settings size={14} strokeWidth={1.75} aria-hidden />}
               onClick={props.onOpenCaseSettings}
             >
-              Ajustes del caso
+              Datos del caso
             </Btn>
           ) : null}
           {props.onEditPlan ? (
@@ -85,7 +116,7 @@ export function SectionHero(props: SectionHeroProps) {
               icon={<Pencil size={14} strokeWidth={1.75} aria-hidden />}
               onClick={props.onEditPlan}
             >
-              Editar plan
+              Editar aparatología
             </Btn>
           ) : null}
           {props.onStartControl ? (
@@ -106,7 +137,7 @@ export function SectionHero(props: SectionHeroProps) {
           <StatChip
             label="Aparatología"
             value={applianceLabel}
-            sub={t.appliance.type ?? "—"}
+            sub={applianceSub}
           />
           <StatChip
             label="Arco actual"
@@ -115,16 +146,17 @@ export function SectionHero(props: SectionHeroProps) {
           />
           <StatChip
             label="Asistencia"
-            value={fmtPct(t.attendancePct)}
-            sub="últimos 6 meses"
+            value={fmtPct(asistencia)}
+            sub={asistenciaSub}
+            delta={asistencia !== null && asistencia < 80 ? "baja" : undefined}
+            deltaColor={asistencia !== null && asistencia < 60 ? "rose" : "amber"}
           />
           <StatChip
             label="Uso de elásticos"
-            value={fmtPct(t.elasticsCompliancePct)}
-            sub={t.wireCurrent ? "uso 22 h/día" : "no aplica"}
-            // Sin arco activo el dato «no aplica»: marcarlo además como bajo
-            // se contradecía en la misma casilla.
-            delta={t.wireCurrent && t.elasticsCompliancePct < 80 ? "bajo" : undefined}
+            value={fmtPct(elasticos)}
+            sub={elasticosSub}
+            // Sin datos no hay nada que marcar como bajo.
+            delta={elasticos !== null && elasticos < 80 && (t.elastics || t.wireCurrent) ? "bajo" : undefined}
             deltaColor={elasticTone === "rose" ? "rose" : elasticTone === "amber" ? "amber" : "emerald"}
           />
         </div>

@@ -74,7 +74,10 @@ test("EL CASO QUE FALLABA HOY: cita de control creada en Agenda (Appointment), n
   assert.notEqual(vm.nextAppointment, null, "no debe quedar 'Sin programar' con una cita real futura");
   assert.equal(vm.nextAppointment?.date, startsAt.toISOString());
   assert.equal(vm.nextAppointment?.durationMin, 30);
-  assert.equal(vm.nextAppointment?.doctor, "Dr/a. Mariana Cortés");
+  // Sin «Dr/a.»: el panel nombra al profesional por nombre y apellido (ws1-t4 ronda 6).
+  assert.equal(vm.nextAppointment?.doctor, "Mariana Cortés");
+  // Y la cita se llama como en la Agenda: «Control de ortodoncia».
+  assert.equal(vm.nextAppointment?.type, "Control de ortodoncia");
   assert.equal(vm.nextAppointment?.chair, "Sillón 2");
 });
 

@@ -172,6 +172,17 @@ export interface OrthoTreatmentDTO {
   estimatedEndDate: string | null;
   attendancePct: number;
   elasticsCompliancePct: number;
+  /**
+   * ws1-t4 ronda 6 (fila 8 de la revisión de lógica de uso): la asistencia y
+   * el uso de elásticos DE VERDAD (`indicadores-del-caso.ts`). `pct: null` =
+   * todavía no hay datos: la pantalla pinta «—», no un 100 % ni un 0 %
+   * inventado. Opcionales para quien arma este objeto a mano (pruebas, vista
+   * previa): sin ellos se pintan los dos números de arriba, como antes.
+   */
+  attendance?: { pct: number | null; asistio: number; falto: number };
+  elastics?: { pct: number | null; diasRegistrados: number; ventanaDias: number; metaHoras: number };
+  /** El estado del caso en palabras: «En curso», «Pausado», «En retención»… */
+  caseStatusLabel?: string;
   totalCost: number;
   paid: number;
 }
@@ -371,6 +382,11 @@ export interface OrthoRedesignViewModel {
   phaseTransitions: PhaseTransitionDTO[];
   patientFlow: PatientFlowDTO | null;
   nextAppointment: NextAppointmentDTO | null;
+  /**
+   * ws1-t4 ronda 6 (fila 8): los controles a los que el paciente SÍ vino, de
+   * las citas de control de la Agenda y de las hojas registradas. Fechas en ISO.
+   */
+  visitas?: { total: number; ultima: string | null; primera: string | null };
   aiSuggestions: AISuggestionDTO[];
   whatsappRecent: WhatsAppEntryDTO[];
 }
