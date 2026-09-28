@@ -118,6 +118,7 @@
     "test:wa-booking": "tsx --test src/lib/whatsapp/bot/__tests__/booking.test.ts",
     "test:factura-mp": "tsx --test src/lib/factura-mp/__tests__/factura-mp.test.ts src/lib/factura-mp/__tests__/webhook-factura.test.ts",
     "test:portal-mercadopago": "tsx --tsconfig tsconfig.test.json --test \"src/app/api/paciente/payments/__tests__/portal-mercadopago.test.tsx\"",
+    "test:portal-menu-ortodoncia": "tsx --tsconfig tsconfig.test.json --test src/components/paciente/__tests__/portal-menu-ortodoncia.test.tsx",
     "test:anticipos": "tsx --test src/lib/anticipos/__tests__/core.test.ts src/lib/anticipos/__tests__/servicio.test.ts src/lib/anticipos/__tests__/mercadopago-wrapper.test.ts src/lib/whatsapp/bot/__tests__/booking-anticipo.test.ts",
     "test:anticipos-panel": "tsx --test src/lib/anticipos/__tests__/panel.server.test.ts src/lib/anticipos/__tests__/datos-bancarios.test.ts src/lib/anticipos/__tests__/mensaje-panel.test.ts",
     "//test:avisos-recepcion": "Necesita --experimental-test-module-mocks: mock.module sustituye @/lib/prisma para anticiposPorRevisar (ws1-t3 fase 2).",

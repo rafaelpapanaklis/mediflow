@@ -5,6 +5,8 @@
 //   Historial (/paciente/historial), Pagos (/paciente/pagos), Perfil
 //   (/paciente/perfil) + botón "Cerrar sesión" (POST /api/paciente/logout →
 //   window.location.href = "/paciente/login").
+// · «Ortodoncia» (/paciente/ortodoncia) es la única sección condicional: solo
+//   sale con `tieneOrtodoncia` (caso abierto + módulo activo, ws1-t11).
 // · RESPONSIVE OBLIGATORIO a cada resolución: desktop = sidebar compacta o
 //   topbar; móvil = bottom-nav o menú hamburguesa. NADA de anchos fijos que
 //   corten con scroll horizontal. Usa clamp() como el panel de laboratorios.
@@ -24,6 +26,7 @@ import {
   MessageSquare,
   User,
   LogOut,
+  Smile,
 } from "lucide-react";
 import { Logo } from "@/components/public/landing/primitives/logo";
 import { NotifBell } from "@/components/paciente/notif-bell";
@@ -31,6 +34,12 @@ import type { PacienteMe } from "@/lib/patient-portal/types";
 
 export interface PacientePortalShellProps {
   me: PacienteMe;
+  /**
+   * true = el paciente tiene un caso de ortodoncia abierto en una clínica con
+   * el módulo activo. Lo decide el layout en el servidor
+   * (`tieneOrtodonciaEnPortal`); aquí solo se pinta.
+   */
+  tieneOrtodoncia?: boolean;
   children: React.ReactNode;
 }
 
@@ -52,6 +61,16 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/paciente/perfil", label: "Perfil", icon: User },
 ];
 
+// Solo para pacientes con caso de ortodoncia abierto (ver `tieneOrtodoncia`).
+// Va justo después de «Historial», junto a lo clínico.
+const NAV_ORTODONCIA: NavItem = { href: "/paciente/ortodoncia", label: "Ortodoncia", icon: Smile };
+
+function itemsDelMenu(tieneOrtodoncia: boolean): NavItem[] {
+  if (!tieneOrtodoncia) return NAV_ITEMS;
+  const i = NAV_ITEMS.findIndex((item) => item.href === "/paciente/historial");
+  return [...NAV_ITEMS.slice(0, i + 1), NAV_ORTODONCIA, ...NAV_ITEMS.slice(i + 1)];
+}
+
 const BORDER_SOFT = "1px solid rgba(255,255,255,0.08)";
 
 async function handleLogout() {
@@ -62,8 +81,9 @@ async function handleLogout() {
   }
 }
 
-export function PacientePortalShell({ me, children }: PacientePortalShellProps) {
+export function PacientePortalShell({ me, tieneOrtodoncia = false, children }: PacientePortalShellProps) {
   const pathname = usePathname();
+  const navItems = itemsDelMenu(tieneOrtodoncia);
 
   function isActive(item: NavItem) {
     if (!pathname) return false;
@@ -149,7 +169,7 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
           aria-label="Secciones del portal"
           style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}
         >
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = isActive(item);
             const Icon = item.icon;
             return (
@@ -358,7 +378,7 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
           left: 0,
           right: 0,
           zIndex: 30,
-          gridTemplateColumns: `repeat(${NAV_ITEMS.length}, 1fr)`,
+          gridTemplateColumns: `repeat(${navItems.length}, 1fr)`,
           background: "rgba(11,8,21,0.96)",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
@@ -366,7 +386,7 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const active = isActive(item);
           const Icon = item.icon;
           return (
@@ -386,7 +406,10 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
                 // caber en pantallas de 320px (≈45px por columna). Bajamos el
                 // mínimo del clamp a 8px y, como red de seguridad, el span
                 // elipsiza antes de pisar al vecino.
-                fontSize: "clamp(8px, 2.2vw, 10.5px)",
+                // 8 items (paciente con ortodoncia): la columna baja a ≈49px en
+                // 390px, así que la letra se encoge un poco para que
+                // "Documentos" y "Ortodoncia" sigan entrando completos.
+                fontSize: navItems.length > 7 ? "clamp(7.2px, 2vw, 10.5px)" : "clamp(8px, 2.2vw, 10.5px)",
                 fontWeight: 500,
                 textDecoration: "none",
                 background: active ? "rgba(124,58,237,0.15)" : "transparent",
