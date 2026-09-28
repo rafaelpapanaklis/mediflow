@@ -12,7 +12,6 @@ import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import {
   guardarOrthoClinicSettings,
   loadOrthoClinicSettings,
-  DEFAULT_ORTHO_APPOINTMENT_TYPES,
   type OrthoAppointmentTypeOption,
 } from "@/lib/orthodontics/clinic-settings-db";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -111,5 +110,3 @@ export async function updateOrthoClinicSettings(
 
   return ok({ saved: true });
 }
-
-export { DEFAULT_ORTHO_APPOINTMENT_TYPES };

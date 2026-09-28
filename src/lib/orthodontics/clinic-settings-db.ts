@@ -3,10 +3,19 @@
 // permisos») — configuración del submenú "Configuración": doctor tratante
 // por defecto, catálogo de tipos de cita (C7) y plantillas de mensaje.
 //
-// `clinicId` SIEMPRE de la sesión, nunca del cliente. Tolera que la tabla de
-// sql/ortodoncia-configuracion.sql todavía no exista: P2021 se lee como "sin
-// configuración todavía" y devuelve los defaults del módulo, no tumba la
-// pantalla — mismo espíritu que cobranza-db.ts (Ola 0).
+// `clinicId` SIEMPRE de la sesión, nunca del cliente. Tolera dos escenarios
+// de "la Configuración todavía no existe":
+//   1) SQL sin pegar en Supabase (P2021/P2022 de Prisma).
+//   2) `npx prisma generate` sin correr todavía DESPUÉS de este cambio de
+//      schema, en un proceso `next dev` que ya estaba arriba: el cliente en
+//      memoria de ESE proceso ni siquiera tiene la propiedad
+//      `orthodonticsClinicSettings` (no es un error de Prisma con `.code`,
+//      es un `TypeError: Cannot read properties of undefined`). Medido en
+//      dev.108 el 27-sep-2026 con el server ya arriba desde antes de este
+//      commit — se resuelve solo con el próximo reinicio del proceso, pero
+//      mientras tanto la pantalla no debe morir.
+// En ambos casos: defaults del módulo, no tumba la pantalla — mismo espíritu
+// que cobranza-db.ts (Ola 0).
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { prisma } from "@/lib/prisma";
@@ -14,6 +23,12 @@ import { prisma } from "@/lib/prisma";
 function esTablaAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
   return code === "P2021" || code === "P2022";
+}
+
+/** `true` si ESTE proceso todavía no tiene el modelo en su Prisma Client
+ * (schema nuevo, cliente viejo en memoria — ver comentario de arriba). */
+function faltaClienteDeOrtho(): boolean {
+  return typeof (prisma as any)?.orthodonticsClinicSettings?.findUnique !== "function";
 }
 
 export interface OrthoAppointmentTypeOption {
@@ -60,6 +75,7 @@ function esArrayDeOpciones(v: unknown): v is OrthoAppointmentTypeOption[] {
 /** Trae la configuración de la clínica, o los defaults si no hay fila (o la tabla aún no existe). */
 export async function loadOrthoClinicSettings(clinicId: string): Promise<OrthoClinicSettings> {
   if (!clinicId) return defaults(clinicId);
+  if (faltaClienteDeOrtho()) return defaults(clinicId);
   try {
     const row = await prisma.orthodonticsClinicSettings.findUnique({ where: { clinicId } });
     if (!row) return defaults(clinicId);
@@ -91,6 +107,14 @@ export interface GuardarOrthoClinicSettingsArgs {
 export async function guardarOrthoClinicSettings(
   args: GuardarOrthoClinicSettingsArgs,
 ): Promise<void> {
+  if (faltaClienteDeOrtho()) {
+    // Mismo contrato que un P2021 real (tabla ausente): el caller
+    // (updateOrthoClinicSettings) ya sabe traducir ese código a "pega el SQL
+    // primero" en vez de un 500 mudo.
+    throw Object.assign(new Error("orthodonticsClinicSettings no existe en este cliente de Prisma"), {
+      code: "P2021",
+    });
+  }
   await prisma.orthodonticsClinicSettings.upsert({
     where: { clinicId: args.clinicId },
     create: {
