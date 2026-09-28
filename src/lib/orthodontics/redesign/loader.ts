@@ -333,6 +333,12 @@ export async function loadOrthoRedesignData(
     elasticsCompliancePct,
     nextAppointmentDoctor,
     nextAppointmentChair,
+    // Revisión cruzada (REPORTE-ws1-t1.md, "## Arreglos de la revisión"):
+    // `legacy` ya trae la factura real resuelta (load-data.ts) — el adapter
+    // solo la usa cuando `plan.invoiceId` no es null, así que pasarla aquí
+    // siempre es seguro.
+    realInvoiceTotal: legacy.invoiceTotal,
+    realInvoicePaid: legacy.invoicePaid,
   };
 
   const viewModel = adaptToOrthoRedesignViewModel(adapterInput);
