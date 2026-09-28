@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { AdminSettingsClient } from "./settings-client";
+import { prisma } from "@/lib/prisma";
 import { getResolvedPlans } from "@/lib/plans";
 import { leerCuentaSpeiParaEditar } from "@/lib/billing/spei-directo";
+import { leerModulosEnVenta } from "@/lib/marketplace/module-price-admin";
+import { computeMrrModulos, loadModulosContratados } from "@/lib/admin/modulos";
 
 export const metadata: Metadata = { title: "Configuración — Admin DaleControl" };
 
@@ -27,5 +30,35 @@ export default async function AdminSettingsPage() {
     // Nunca lanza por tabla ausente: sin el SQL aplicado devuelve null.
     leerCuentaSpeiParaEditar().catch(() => null),
   ]);
-  return <AdminSettingsClient envStatus={envStatus} planConfigs={planConfigs} cuentaSpei={cuentaSpei} />;
+  // Módulos que se venden aparte del plan: su precio (tabla `modules`) y quién
+  // los tiene hoy. En fila y después de la tanda de arriba; ninguna de las dos
+  // lanza (sin base devuelven vacío y la pestaña se pinta sin ese bloque).
+  const enVenta = await leerModulosEnVenta();
+  const contratados = enVenta.length > 0 ? await loadModulosContratados() : null;
+  // Mismo universo que el MRR: los módulos de una clínica archivada no cuentan.
+  const vivas = contratados?.medido
+    ? await prisma.clinic
+        .findMany({ where: { archivedAt: null }, select: { id: true } })
+        .catch(() => null)
+    : null;
+  const uso = contratados?.medido && vivas
+    ? computeMrrModulos(contratados.filas, new Date(), new Set(vivas.map((c) => c.id)))
+    : null;
+  const modulosEnVenta = enVenta.map((m) => {
+    const linea = uso?.porModulo.find((l) => l.moduleKey === m.key);
+    return {
+      ...m,
+      uso: uso
+        ? { clinicas: linea?.clinicas ?? 0, pagando: linea?.pagando ?? 0, cortesia: linea?.cortesia ?? 0, total: linea?.total ?? 0 }
+        : null,
+    };
+  });
+  return (
+    <AdminSettingsClient
+      envStatus={envStatus}
+      planConfigs={planConfigs}
+      cuentaSpei={cuentaSpei}
+      modulosEnVenta={modulosEnVenta}
+    />
+  );
 }

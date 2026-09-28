@@ -8,6 +8,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { PLAN_MODULES, type ResolvedPlan } from "@/lib/plan-shared";
 import { BancoSpeiEditor, type CuentaGuardada } from "./banco-spei";
+import { PrecioModulosEditor, type ModuloEditable } from "./precio-modulos";
 
 interface EnvStatus {
   ADMIN_PASSWORD: boolean;
@@ -198,10 +199,13 @@ export function AdminSettingsClient({
   envStatus,
   planConfigs,
   cuentaSpei = null,
+  modulosEnVenta = [],
 }: {
   envStatus: EnvStatus;
   planConfigs: ResolvedPlan[];
   cuentaSpei?: CuentaGuardada | null;
+  /** Módulos que se contratan aparte del plan, con su precio (tabla `modules`). */
+  modulosEnVenta?: ModuloEditable[];
 }) {
   const [tab, setTab]   = useState("empresa");
   const [saving, setSaving] = useState(false);
@@ -300,6 +304,13 @@ export function AdminSettingsClient({
           )}
 
           {/* PLANES — editor de precio/límites/permisos por plan (plan_configs). */}
+          {/* MÓDULOS — precio de lo que se contrata aparte del plan (tabla modules). */}
+          {tab === "precios" && modulosEnVenta.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <PrecioModulosEditor modulos={modulosEnVenta} />
+            </div>
+          )}
+
           {tab === "precios" && (
             <CardNew title="Planes" sub="Precio, límites y permisos por módulo de cada plan. Se guardan por plan y aplican sin redeploy. Los topes de usuarios y sedes y los precios rigen a las clínicas NUEVAS: las que ya estaban registradas conservan los suyos (se ven y se editan en la ficha de cada clínica, «Condiciones conservadas»).">
               <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 760 }}>
