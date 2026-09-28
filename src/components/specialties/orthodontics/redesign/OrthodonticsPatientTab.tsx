@@ -50,6 +50,7 @@ import {
   updateTreatmentPlan,
   getCaseIntakeOptions,
 } from "@/app/actions/orthodontics";
+import { moverControlesFuturosAlDoctor } from "@/app/actions/orthodontics/moverControlesFuturosAlDoctor";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
 import { RUTA_CONTRATAR_ORTODONCIA } from "@/lib/orthodontics/contratar";
@@ -568,6 +569,23 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               toast(t("patients.ortho.altaCasoSqlPending"));
             }
             toast.success(t("patients.ortho.caseSettingsSaved"));
+            // F «Cambio de doctor»: los controles YA agendados se quedaban con el
+            // doctor anterior. Se ofrece pasarlos al nuevo (solo los que no chocan
+            // con su agenda; los demás se quedan y se avisa).
+            if (res.data.controlesConOtroDoctor > 0) {
+              const n = res.data.controlesConOtroDoctor;
+              const pasar = window.confirm(
+                `${n === 1 ? "Hay 1 control futuro agendado" : `Hay ${n} controles futuros agendados`} con el doctor anterior. ¿Pasarlo${n === 1 ? "" : "s"} al doctor nuevo? Solo se pasan los que no chocan con su agenda.`,
+              );
+              if (pasar) {
+                const r = await moverControlesFuturosAlDoctor({ treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId });
+                if (isFailure(r)) toast.error(r.error);
+                else toast.success(
+                  `${r.data.movidos} control${r.data.movidos === 1 ? "" : "es"} pasado${r.data.movidos === 1 ? "" : "s"} al doctor nuevo` +
+                  (r.data.conChoque > 0 ? `; ${r.data.conChoque} chocan con su agenda y se quedaron como estaban.` : "."),
+                );
+              }
+            }
             router.refresh();
           }}
           onUpdateDiagnosis={async (payload) => {

@@ -10,6 +10,7 @@ import { auditOrtho, getOrthoPlanActionContext } from "./_helpers";
 import { validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { controlesConOtroDoctor } from "@/lib/orthodontics/controles-con-otro-doctor-db";
 
 // Ola 1 (ws1-t6) — columnas de sql/ortodoncia-alta-caso.sql (A5/A11): si el
 // update las toca y aún no existen (P2021/P2022), reintenta sin ellas.
@@ -17,7 +18,7 @@ const ALTA_CASO_PLAN_FIELDS = ["treatingDoctorId", "responsibleGuardianId"] as c
 
 export async function updateTreatmentPlan(
   input: unknown,
-): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean }>> {
+): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; controlesConOtroDoctor: number }>> {
   // A11 (revisión cruzada): si el payload SOLO trae treatmentPlanId +
   // responsibleGuardianId/newResponsibleGuardian, acepta billing.* además de
   // medicalRecord.edit — recepción arma/cambia quién paga sin necesitar el
@@ -168,7 +169,20 @@ export async function updateTreatmentPlan(
     revalidatePath(`/dashboard/specialties/orthodontics`);
     void diagnosisId;
     void patientId;
-    return ok({ id: updated.id, altaCasoFieldsSaved });
+    // F «Cambio de doctor»: si se reasignó el doctor, ¿cuántos controles futuros
+    // se quedaron agendados con el anterior? La ficha ofrece pasarlos. Es solo
+    // aviso: si la consulta falla, el guardado ya quedó y no se dice nada.
+    let controlesFuturosConOtroDoctor = 0;
+    const doctorNuevo = (updated as { treatingDoctorId?: string | null }).treatingDoctorId ?? null;
+    const doctorAnterior = (before as { treatingDoctorId?: string | null }).treatingDoctorId ?? null;
+    if (doctorNuevo && doctorNuevo !== doctorAnterior) {
+      controlesFuturosConOtroDoctor = await controlesConOtroDoctor({
+        clinicId: ctx.clinicId,
+        patientId: updated.patientId,
+        treatingDoctorId: doctorNuevo,
+      }).then((l) => l.length).catch(() => 0);
+    }
+    return ok({ id: updated.id, altaCasoFieldsSaved, controlesConOtroDoctor: controlesFuturosConOtroDoctor });
   } catch (e) {
     console.error("[ortho] updateTreatmentPlan failed:", e);
     return fail("No se pudo actualizar el plan");
