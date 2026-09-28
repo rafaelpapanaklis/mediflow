@@ -130,6 +130,37 @@ export function MarketplaceContent({
     });
   };
 
+  /**
+   * Compra DIRECTA de un módulo (ws1-t2): abre Stripe Checkout para ESE
+   * módulo solo, sin pasar por el carrito multi-módulo (que sigue sin
+   * checkout — ver DiscountTiersBar/FloatingCart, Sprint 3 sin construir).
+   * Mensual con tarjeta por default; el toggle anual/mensual y otros
+   * métodos de pago quedan para cuando el carrito tenga su propio checkout.
+   */
+  const handleBuyNow = (moduleId: string, moduleKey: string) => {
+    markPending(moduleId, true);
+    startTransition(async () => {
+      try {
+        const res = await fetch("/api/marketplace/module-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ moduleKey, billing: "monthly", method: "card" }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.url) {
+          toast.error(data?.error ?? t("pages.marketplace.addError"));
+          return;
+        }
+        window.location.href = data.url;
+      } catch (err) {
+        toast.error(t("pages.marketplace.addError"));
+        console.error("[marketplace.buyNow]", err);
+      } finally {
+        markPending(moduleId, false);
+      }
+    });
+  };
+
   const handleRemove = (moduleId: string) => {
     if (!cart.includes(moduleId)) return;
     setCart((prev) => prev.filter((id) => id !== moduleId)); // optimista
@@ -232,6 +263,7 @@ export function MarketplaceContent({
               pending={pendingIds.has(m.id) || isPending}
               onAddToCart={() => handleAdd(m.id)}
               onRemoveFromCart={() => handleRemove(m.id)}
+              onBuyNow={status === "locked" ? () => handleBuyNow(m.id, m.key) : undefined}
             />
           );
         })}

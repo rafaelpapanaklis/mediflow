@@ -43,6 +43,15 @@ import {
 import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
+import {
+  MODULE_SUBSCRIPTION_KIND,
+  buildActivateModuleWrite,
+  resolveModuleDeletion,
+  resolveModuleSubscriptionSync,
+  type ModuleBillingCycle,
+  type ModulePaymentMethod,
+} from "@/lib/marketplace/module-purchase-core";
+import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -139,6 +148,30 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        // Compra de UN módulo del marketplace (ws1-t2, Ortodoncia es el
+        // primero). Tarjeta (mode "subscription") o pago con tarjeta ya
+        // acreditado aquí; SPEI/OXXO llegan por async_payment_succeeded
+        // (mismo guard `isPaidNow` que platform-subscription, abajo).
+        if (session.metadata?.kind === MODULE_SUBSCRIPTION_KIND) {
+          const moduleClinicId = session.metadata?.clinicId;
+          const moduleKey = session.metadata?.moduleKey;
+          if (moduleClinicId && moduleKey) {
+            const isPaidNow = session.mode === "subscription" || session.payment_status === "paid";
+            if (isPaidNow) {
+              const subscriptionId =
+                typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
+              await activateModulePurchase(moduleClinicId, moduleKey, {
+                billing: session.metadata?.billing === "annual" ? "annual" : "monthly",
+                method: (session.metadata?.method as "card" | "spei" | "oxxo" | undefined) ?? "card",
+                amountMxn: (session.amount_subtotal ?? session.amount_total ?? 0) / 100,
+                stripeSubscriptionId: subscriptionId,
+                source: { event: event.type, sessionId: session.id },
+              });
+            }
+          }
+          break;
+        }
+
         if (session.metadata?.kind !== "platform-subscription") break;
 
         const clinicId = session.metadata?.clinicId;
@@ -184,6 +217,23 @@ export async function POST(req: NextRequest) {
           }
           break;
         }
+        // Módulo pagado por SPEI/OXXO: mismo "1 periodo manual, sin
+        // auto-renovación" que la plataforma — la próxima vez la clínica
+        // vuelve a comprar.
+        if (session.metadata?.kind === MODULE_SUBSCRIPTION_KIND) {
+          const moduleClinicId = session.metadata?.clinicId;
+          const moduleKey = session.metadata?.moduleKey;
+          if (moduleClinicId && moduleKey) {
+            await activateModulePurchase(moduleClinicId, moduleKey, {
+              billing: session.metadata?.billing === "annual" ? "annual" : "monthly",
+              method: (session.metadata?.method as "card" | "spei" | "oxxo" | undefined) ?? "spei",
+              amountMxn: (session.amount_subtotal ?? session.amount_total ?? 0) / 100,
+              stripeSubscriptionId: null,
+              source: { event: event.type, sessionId: session.id },
+            });
+          }
+          break;
+        }
         if (session.metadata?.kind !== "platform-subscription") break;
         const clinicId = session.metadata?.clinicId;
         if (!clinicId) break;
@@ -203,7 +253,7 @@ export async function POST(req: NextRequest) {
         const kind = session.metadata?.kind;
         // El diferencial de upgrade también se audita: si no se pagó, el plan
         // simplemente NO se aplicó (nada que revertir).
-        if (kind !== "platform-subscription" && kind !== PLAN_UPGRADE_DIFF_KIND) break;
+        if (kind !== "platform-subscription" && kind !== PLAN_UPGRADE_DIFF_KIND && kind !== MODULE_SUBSCRIPTION_KIND) break;
         const clinicId = session.metadata?.clinicId;
         if (clinicId) {
           await logAudit({
@@ -223,6 +273,13 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const sub = event.data.object as Stripe.Subscription;
+        // Suscripción de un MÓDULO (ws1-t2): distinta de la del plan de la
+        // plataforma aunque comparta el mismo customer de Stripe — nunca
+        // toca Clinic.subscriptionStatus/stripeSubscriptionId.
+        if (sub.metadata?.kind === MODULE_SUBSCRIPTION_KIND) {
+          await syncModuleSubscription(sub, event.type);
+          break;
+        }
         const clinicId = (sub.metadata?.clinicId as string | undefined)
           ?? await resolveClinicIdByCustomer(sub.customer as string);
         if (clinicId) {
@@ -278,6 +335,10 @@ export async function POST(req: NextRequest) {
 
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
+        if (sub.metadata?.kind === MODULE_SUBSCRIPTION_KIND) {
+          await cancelModuleSubscription(sub, event.type);
+          break;
+        }
         const clinicId = (sub.metadata?.clinicId as string | undefined)
           ?? await resolveClinicIdByCustomer(sub.customer as string);
         if (clinicId) {
@@ -934,6 +995,169 @@ async function activatePlatformSubscription(
       trialEndsAt: { before: before?.trialEndsAt ?? null, after: next },
       nextBillingDate: { before: before?.nextBillingDate ?? null, after: next },
       _source: { before: null, after: source },
+    },
+  });
+}
+
+/**
+ * Activa/renueva/reactiva UN módulo del marketplace para una clínica desde
+ * un pago real de Stripe (ws1-t2). El periodo que se fija aquí es un
+ * PLACEHOLDER inmediato (ahora + 1 mes/año): para tarjeta, el evento
+ * `customer.subscription.*` que Stripe manda justo después lo corrige con
+ * el `current_period_end` REAL (ver `syncModuleSubscription`); para
+ * SPEI/OXXO (pago único, sin auto-renovación) este valor YA es el
+ * definitivo. Upsert por `[clinicId, moduleId]`: reenviar el MISMO evento
+ * de Stripe (reintento/reenvío manual) escribe la misma fila, no duplica
+ * nada — idempotente por construcción.
+ *
+ * Una activación "admin" (Rafael Clínica, clínica de prueba) SOLO puede
+ * pisarse si esa misma clínica de verdad compra el módulo por Stripe — el
+ * checkout (`/api/marketplace/module-checkout`) ya bloquea la compra si
+ * `hasActiveAccess` es true, así que en la práctica esto nunca ocurre para
+ * las clínicas con "admin"; si alguna vez pasara, es el comportamiento
+ * documentado desde que se creó el toggle de admin
+ * (`toggle-clinic-module.ts`): "si la clínica luego compra el módulo, el
+ * upsert real reemplaza este admin grant".
+ */
+async function activateModulePurchase(
+  clinicId: string,
+  moduleKey: string,
+  opts: {
+    billing: ModuleBillingCycle;
+    method: ModulePaymentMethod;
+    amountMxn: number;
+    stripeSubscriptionId: string | null;
+    source: { event: string; sessionId: string };
+  },
+): Promise<void> {
+  const mod = await prisma.module.findUnique({ where: { key: moduleKey }, select: { id: true } });
+  if (!mod) return;
+
+  const before = await prisma.clinicModule.findUnique({
+    where: { clinicId_moduleId: { clinicId, moduleId: mod.id } },
+    select: { status: true },
+  });
+
+  const now = new Date();
+  const periodEnd = opts.billing === "annual" ? addYears(now, 1) : addMonths(now, 1);
+  const write = buildActivateModuleWrite({
+    billing: opts.billing,
+    amountMxn: opts.amountMxn,
+    paymentMethod: opts.method,
+    stripeSubscriptionId: opts.stripeSubscriptionId,
+    currentPeriodEnd: periodEnd,
+    now,
+  });
+
+  await prisma.clinicModule.upsert({
+    where: { clinicId_moduleId: { clinicId, moduleId: mod.id } },
+    create: { clinicId, moduleId: mod.id, ...write },
+    update: write,
+  });
+
+  await logAudit({
+    clinicId,
+    userId: clinicId, // sin user en webhook context — mismo placeholder que activatePlatformSubscription
+    entityType: "subscription",
+    entityId: opts.stripeSubscriptionId ?? opts.source.sessionId,
+    action: "update",
+    changes: {
+      status: { before: before?.status ?? null, after: "active" },
+      _source: { before: null, after: { ...opts.source, kind: MODULE_SUBSCRIPTION_KIND, moduleKey } },
+    },
+  });
+}
+
+/**
+ * `customer.subscription.created`/`.updated` de un módulo: corrige el
+ * `currentPeriodEnd` con el valor REAL de Stripe (renovación) y refleja
+ * active/paused según el status de la suscripción. Nunca crea la fila —
+ * si no existe un ClinicModule para esta suscripción, no hace nada (la
+ * creación siempre pasa primero por `activateModulePurchase`, disparada
+ * por `checkout.session.completed`, que sí la conoce).
+ */
+async function syncModuleSubscription(sub: Stripe.Subscription, eventType: string): Promise<void> {
+  const clinicId = sub.metadata?.clinicId as string | undefined;
+  const moduleKey = sub.metadata?.moduleKey as string | undefined;
+  if (!clinicId || !moduleKey) return;
+
+  const mod = await prisma.module.findUnique({ where: { key: moduleKey }, select: { id: true } });
+  if (!mod) return;
+
+  const existing = await prisma.clinicModule.findUnique({
+    where: { clinicId_moduleId: { clinicId, moduleId: mod.id } },
+    select: { id: true, status: true },
+  });
+
+  const periodEndSeconds = subscriptionPeriodEndSeconds(sub);
+  const action = resolveModuleSubscriptionSync({
+    clinicModuleExists: existing !== null,
+    subscriptionStatus: sub.status,
+    periodEndFromStripe: periodEndSeconds ? new Date(periodEndSeconds * 1000) : null,
+  });
+  if (action.type === "noop" || !existing) return;
+
+  await prisma.clinicModule.update({
+    where: { id: existing.id },
+    data: {
+      status: action.status,
+      stripeSubscriptionId: sub.id,
+      ...(action.currentPeriodEnd ? { currentPeriodEnd: action.currentPeriodEnd } : {}),
+    },
+  });
+
+  await logAudit({
+    clinicId,
+    userId: clinicId,
+    entityType: "subscription",
+    entityId: sub.id,
+    action: "update",
+    changes: {
+      status: { before: existing.status, after: action.status },
+      _source: { before: null, after: { event: eventType, subscriptionId: sub.id, kind: MODULE_SUBSCRIPTION_KIND, moduleKey } },
+    },
+  });
+}
+
+/**
+ * `customer.subscription.deleted` de un módulo: Stripe cerró el periodo
+ * (cancelación programada por el cliente, o pago finalmente rechazado tras
+ * los reintentos). Marca `clinic_modules.status = 'cancelled'` — NO borra
+ * la fila ni toca ningún dato del caso clínico. Una activación "admin"
+ * nunca llega aquí en la práctica (no tiene `stripeSubscriptionId`, Stripe
+ * no le manda eventos), pero `resolveModuleDeletion` la protege igual por
+ * si acaso.
+ */
+async function cancelModuleSubscription(sub: Stripe.Subscription, eventType: string): Promise<void> {
+  const clinicId = sub.metadata?.clinicId as string | undefined;
+  const moduleKey = sub.metadata?.moduleKey as string | undefined;
+  if (!clinicId || !moduleKey) return;
+
+  const mod = await prisma.module.findUnique({ where: { key: moduleKey }, select: { id: true } });
+  if (!mod) return;
+
+  const existing = await prisma.clinicModule.findUnique({
+    where: { clinicId_moduleId: { clinicId, moduleId: mod.id } },
+    select: { id: true, paymentMethod: true, stripeSubscriptionId: true, status: true },
+  });
+
+  const action = resolveModuleDeletion(existing);
+  if (action.type === "noop" || !existing) return;
+
+  await prisma.clinicModule.update({
+    where: { id: existing.id },
+    data: { status: "cancelled", cancelledAt: new Date() },
+  });
+
+  await logAudit({
+    clinicId,
+    userId: clinicId,
+    entityType: "subscription",
+    entityId: sub.id,
+    action: "update",
+    changes: {
+      status: { before: existing.status, after: "cancelled" },
+      _source: { before: null, after: { event: eventType, subscriptionId: sub.id, kind: MODULE_SUBSCRIPTION_KIND, moduleKey } },
     },
   });
 }

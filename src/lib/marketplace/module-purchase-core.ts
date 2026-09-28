@@ -1,0 +1,219 @@
+/**
+ * Núcleo puro de la compra de un módulo del marketplace (ws1-t2, Ortodoncia
+ * es el primer módulo que lo usa) — sin Prisma, sin Stripe, sin Next: todo
+ * por argumentos simples, para que los tests no necesiten mocks.
+ *
+ * El carrito multi-módulo de `pricing.ts` (Sprint 2, "2 meses gratis" +
+ * descuento por volumen) sigue sin conectar a ningún checkout real — esto
+ * es la compra DIRECTA de UN módulo, que es lo que hace falta para que una
+ * clínica pueda comprar Ortodoncia sola.
+ *
+ * El I/O real vive en:
+ *   - src/app/api/marketplace/module-checkout/route.ts (crea la sesión de Stripe)
+ *   - src/app/api/webhooks/stripe/route.ts (activa/renueva/cancela desde Stripe)
+ *   - src/app/api/marketplace/module-cancel/route.ts (pide la cancelación)
+ */
+
+export type ModuleBillingCycle = "monthly" | "annual";
+export type ModulePaymentMethod = "card" | "spei" | "oxxo";
+export type ClinicModuleStatus = "active" | "paused" | "cancelled";
+
+/**
+ * `metadata.kind` que distingue una compra de MÓDULO de todos los demás
+ * `kind` que ya vive en el mismo webhook de Stripe (platform-subscription,
+ * plan-upgrade-diff, ai-topup, cfdi-overage, patient-invoice…).
+ */
+export const MODULE_SUBSCRIPTION_KIND = "module-subscription" as const;
+
+/* ── 1. Cuánto se cobra ──────────────────────────────────────────────── */
+
+export interface ModulePriceRow {
+  priceMxnMonthly: number;
+  /** null = este módulo todavía no tiene precio anual propio configurado. */
+  priceMxnAnnual: number | null;
+}
+
+export type ResolvedModulePrice =
+  | { ok: true; amountMxn: number; billing: ModuleBillingCycle }
+  | { ok: false; error: string };
+
+/**
+ * Precio a cobrar por un módulo según el ciclo elegido.
+ *
+ * El anual NUNCA se deriva del mensual con una fórmula genérica: el
+ * carrito multi-módulo (`pricing.ts`) usa "2 meses gratis" para TODO el
+ * carrito junto, pero cada módulo puede tener su propio descuento anual
+ * (Ortodoncia: 15%, decisión de Rafael 28-sep-2026 — ver
+ * `computeAnnualPriceMxn`). Si el módulo no trae `priceMxnAnnual`, el
+ * ciclo anual simplemente no está disponible todavía para ESE módulo — no
+ * se le inventa un precio a nadie.
+ */
+export function resolveModulePriceMxn(
+  mod: ModulePriceRow,
+  billing: ModuleBillingCycle,
+): ResolvedModulePrice {
+  if (billing === "monthly") {
+    if (!(mod.priceMxnMonthly > 0)) {
+      return { ok: false, error: "Este módulo no tiene precio mensual configurado." };
+    }
+    return { ok: true, amountMxn: mod.priceMxnMonthly, billing };
+  }
+  if (mod.priceMxnAnnual == null || !(mod.priceMxnAnnual > 0)) {
+    return { ok: false, error: "Este módulo todavía no tiene precio anual configurado." };
+  }
+  return { ok: true, amountMxn: mod.priceMxnAnnual, billing };
+}
+
+/**
+ * Precio anual con X% de descuento sobre 12 meses, redondeado a pesos
+ * enteros (el marketplace factura en enteros — ver
+ * sql/marketplace-modulo-ortodoncia-precio.sql). Para Ortodoncia:
+ * `computeAnnualPriceMxn(129, 15)` = 1316 (129×12×0.85 = 1315.80 → 1316).
+ * Es una utilidad para calcular el número UNA vez al fijar el precio, no
+ * una fórmula que el checkout aplique en caliente — el precio real que se
+ * cobra siempre sale de `priceMxnAnnual` ya guardado en `modules`.
+ */
+export function computeAnnualPriceMxn(monthlyMxn: number, discountPct: number): number {
+  return Math.round(monthlyMxn * 12 * (1 - discountPct / 100));
+}
+
+/* ── 2. ¿Ya tiene acceso? (bloquea la compra, admin o pagado) ─────────── */
+
+export interface ExistingClinicModuleAccess {
+  status: string;
+  currentPeriodEnd: Date;
+}
+
+/** Igual criterio que `hasActiveOrthodonticsModule`: activo Y vigente. */
+export function hasActiveAccess(cm: ExistingClinicModuleAccess | null, now: Date): boolean {
+  if (!cm) return false;
+  return cm.status === "active" && cm.currentPeriodEnd.getTime() > now.getTime();
+}
+
+/* ── 3. Activación desde el webhook (idempotente) ─────────────────────── */
+
+export interface ActivateModulePurchaseInput {
+  billing: ModuleBillingCycle;
+  amountMxn: number;
+  paymentMethod: ModulePaymentMethod;
+  stripeSubscriptionId: string | null;
+  currentPeriodEnd: Date;
+  now: Date;
+}
+
+/** Lo que hay que escribir en `clinic_modules` — el wrapper hace el upsert real. */
+export interface ClinicModuleWrite {
+  status: "active";
+  billingCycle: ModuleBillingCycle;
+  activatedAt: Date;
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date;
+  cancelledAt: null;
+  stripeSubscriptionId: string | null;
+  paymentMethod: ModulePaymentMethod;
+  pricePaidMxn: number;
+}
+
+/**
+ * Qué escribir al activar (alta nueva O renovación/reactivación — un
+ * upsert por `[clinicId, moduleId]` cubre los tres casos con la MISMA
+ * escritura). Idempotente: reenviar el mismo evento de Stripe produce
+ * exactamente la misma fila, sin duplicar ni acumular nada.
+ */
+export function buildActivateModuleWrite(input: ActivateModulePurchaseInput): ClinicModuleWrite {
+  return {
+    status: "active",
+    billingCycle: input.billing,
+    activatedAt: input.now,
+    currentPeriodStart: input.now,
+    currentPeriodEnd: input.currentPeriodEnd,
+    cancelledAt: null,
+    stripeSubscriptionId: input.stripeSubscriptionId,
+    paymentMethod: input.paymentMethod,
+    pricePaidMxn: input.amountMxn,
+  };
+}
+
+/* ── 4. Sincronizar desde customer.subscription.updated (renovación) ──── */
+
+const GRANTING_STATUSES = new Set(["active", "trialing"]);
+const PAST_DUE_STATUSES = new Set(["past_due", "unpaid"]);
+
+export interface ModuleSubscriptionSyncInput {
+  /** null = esta suscripción de Stripe no corresponde a ningún ClinicModule que conozcamos. */
+  clinicModuleExists: boolean;
+  /** `sub.status` de Stripe. */
+  subscriptionStatus: string;
+  /** `subscriptionPeriodEndSeconds(sub)` ya convertido a Date, o null si Stripe no lo reportó. */
+  periodEndFromStripe: Date | null;
+}
+
+export type ModuleSyncAction =
+  | { type: "update"; status: ClinicModuleStatus; currentPeriodEnd: Date | null }
+  | { type: "noop"; reason: string };
+
+/**
+ * Qué hacer con un ClinicModule cuando llega `customer.subscription.created`
+ * o `.updated`. Mismo criterio que `PERIOD_GRANTING_STATUSES` de
+ * `lib/billing/proration.ts` (active/trialing = periodo con derecho a
+ * acceso), para que el mismo evento de Stripe se lea igual en la
+ * plataforma y en un módulo.
+ */
+export function resolveModuleSubscriptionSync(input: ModuleSubscriptionSyncInput): ModuleSyncAction {
+  if (!input.clinicModuleExists) return { type: "noop", reason: "sin_clinic_module_para_esta_suscripcion" };
+  if (GRANTING_STATUSES.has(input.subscriptionStatus)) {
+    return { type: "update", status: "active", currentPeriodEnd: input.periodEndFromStripe };
+  }
+  if (PAST_DUE_STATUSES.has(input.subscriptionStatus)) {
+    // Pago fallido, Stripe reintentando: pausa el acceso, NO cancela — si el
+    // reintento cobra, el próximo evento vuelve a poner "active".
+    return { type: "update", status: "paused", currentPeriodEnd: null };
+  }
+  // canceled/incomplete_expired/etc.: la baja real la maneja
+  // customer.subscription.deleted (abajo), no este evento.
+  return { type: "noop", reason: `estado_${input.subscriptionStatus}_sin_accion_aqui` };
+}
+
+/* ── 5. Cancelación ────────────────────────────────────────────────────── */
+
+export interface CancellableClinicModule {
+  paymentMethod: string;
+  stripeSubscriptionId: string | null;
+  status: string;
+}
+
+export type CancelRequestResult =
+  | { ok: true; stripeSubscriptionId: string }
+  | { ok: false; error: string };
+
+/**
+ * ¿Se puede pedir la cancelación (cancel_at_period_end) de este módulo? La
+ * baja real de `clinic_modules` NO pasa aquí: llega después, por
+ * `customer.subscription.deleted` cuando Stripe cierra el periodo — hasta
+ * entonces el módulo sigue activo y los datos del caso no se tocan.
+ */
+export function canRequestModuleCancellation(
+  cm: CancellableClinicModule | null,
+): CancelRequestResult {
+  if (!cm) return { ok: false, error: "No tienes este módulo activo." };
+  if (cm.paymentMethod === "admin") {
+    return { ok: false, error: "Este módulo lo activó soporte; escríbenos si ya no lo necesitas." };
+  }
+  if (cm.status === "cancelled") return { ok: false, error: "Este módulo ya está cancelado." };
+  if (!cm.stripeSubscriptionId) {
+    return {
+      ok: false,
+      error: "Este módulo se pagó con SPEI/OXXO (pago único): no tiene una suscripción que cancelar — simplemente no se renueva.",
+    };
+  }
+  return { ok: true, stripeSubscriptionId: cm.stripeSubscriptionId };
+}
+
+/** ¿Un `customer.subscription.deleted` real debe cancelar este ClinicModule? */
+export function resolveModuleDeletion(
+  cm: CancellableClinicModule | null,
+): { type: "cancel" } | { type: "noop"; reason: string } {
+  if (!cm) return { type: "noop", reason: "sin_clinic_module_para_esta_suscripcion" };
+  if (cm.paymentMethod === "admin") return { type: "noop", reason: "admin_grant_no_lo_cancela_stripe" };
+  return { type: "cancel" };
+}

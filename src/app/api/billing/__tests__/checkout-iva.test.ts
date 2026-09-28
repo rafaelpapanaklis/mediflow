@@ -463,6 +463,11 @@ test("el IVA nuevo solo lo usan los sitios que crean cobros nuevos por plan (che
     "src/app/api/billing/change-plan/preview/route.ts",
     "src/app/api/billing/change-plan/route.ts",
     "src/app/api/billing/checkout/route.ts",
+    // ws1-t2: compra de UN módulo del marketplace (Ortodoncia). Usa
+    // `ivaParaCobro` directo, NUNCA `ivaParaPagoDeClinica`/`exencionDeIva`:
+    // un módulo no es "el mismo plan" de la clínica, así que la excepción de
+    // las clínicas de antes del 26-sep-2026 no aplica — siempre lleva IVA.
+    "src/app/api/marketplace/module-checkout/route.ts",
     "src/app/dashboard/settings/page.tsx", // solo LEE si el IVA está configurado, para el texto de «Activa tu plan»
     "src/lib/billing/first-month-promo.ts", // el cupón del primer mes deja el total exacto con el IVA dentro
     "src/lib/billing/iva-clinica.ts",
@@ -503,7 +508,14 @@ test("ningún camino de renovación crea sesiones: `subscriptions.update` solo e
     .filter((f) => !f.startsWith("src/lib/realty/") && !f.startsWith("src/lib/barber/"))
     .sort();
   // Ninguno de esos toca precios/tasas con este ajuste (el test anterior lo garantiza para tax_rates).
-  assert.deepEqual(con, ["src/app/api/billing/change-plan/route.ts", "src/lib/stripe-subscriptions.ts"]);
+  // ws1-t2: module-cancel/route.ts SOLO pide `cancel_at_period_end: true`
+  // (agenda la baja al fin del periodo YA pagado) — no cambia precio, no
+  // cambia tasa, no crea sesión nueva.
+  assert.deepEqual(con, [
+    "src/app/api/billing/change-plan/route.ts",
+    "src/app/api/marketplace/module-cancel/route.ts",
+    "src/lib/stripe-subscriptions.ts",
+  ]);
 });
 
 /* ── Integración #425 (condiciones conservadas) × #424/IVA ─────────────────────────────────────── */

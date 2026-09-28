@@ -21,7 +21,9 @@ export const PERIODONTICS_MODULE_KEY = "periodontics" as const;
 
 /**
  * Key registrada en `modules.key` del marketplace para Ortodoncia.
- * Pricing $329 MXN/mes (tier intermedio: Perio $279 < Orto $329 < Implant $349).
- * Coincide con prisma/seed.ts (SEED_MODULES). SPEC §1.15.
+ * Pricing $129 MXN/mes o $1,316 MXN/año (15% de descuento) — decisión de
+ * Rafael del 28-sep-2026 (ws1-t2), reemplaza el $329/mes original de
+ * SPEC §1.15. Ver sql/marketplace-modulo-ortodoncia-precio.sql.
+ * Coincide con prisma/seed.ts (SEED_MODULES).
  */
 export const ORTHODONTICS_MODULE_KEY = "orthodontics" as const;

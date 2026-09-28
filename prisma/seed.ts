@@ -63,7 +63,11 @@ const SEED_MODULES: SeedModule[] = [
       "Plan de pagos con seguimiento de mensualidades",
       "Comparativo visual T0/T1/T2 + import de cefalometrías y STL",
     ],
-    priceMxnMonthly: 329,
+    // Decisión de Rafael (28-sep-2026, ws1-t2): $129/mes, ya NO $329. El
+    // precio anual ($1,316 — 129×12×0.85 redondeado) vive en la columna
+    // cruda "price_mxn_annual" (sql/marketplace-modulo-ortodoncia-precio.sql),
+    // fuera de este seed porque no es un campo del modelo Prisma "Module".
+    priceMxnMonthly: 129,
   },
   {
     key: "periodontics",

@@ -28,6 +28,15 @@ interface ModuleCardProps {
   pending?: boolean;
   onAddToCart: () => void;
   onRemoveFromCart: () => void;
+  /**
+   * Compra DIRECTA de este módulo (ws1-t2 — Stripe Checkout de un solo
+   * módulo, sin pasar por el carrito multi-módulo que todavía no tiene
+   * checkout). Si se pasa, un módulo `locked` la usa en vez de
+   * `onAddToCart` — "Comprar para desbloquear" pasa de agregar al carrito
+   * (que no lleva a ningún lado) a abrir Stripe de verdad. Sin este prop,
+   * el botón se comporta exactamente igual que antes.
+   */
+  onBuyNow?: () => void;
 }
 
 // La categoría se muestra como tag neutral tokenizado; el color de identidad
@@ -66,6 +75,7 @@ export function ModuleCard({
   pending = false,
   onAddToCart,
   onRemoveFromCart,
+  onBuyNow,
 }: ModuleCardProps) {
   const t = useT();
   const Icon = getModuleIcon(m.iconKey);
@@ -152,7 +162,7 @@ export function ModuleCard({
         ) : (
           <button
             type="button"
-            onClick={onAddToCart}
+            onClick={isLocked && onBuyNow ? onBuyNow : onAddToCart}
             disabled={pending}
             aria-label={isLocked ? t("pages.moduleCard.buyToUnlockAria", { name: m.name }) : t("pages.moduleCard.addAria", { name: m.name })}
             className="w-full text-[13px] font-semibold px-3 py-2.5 rounded-[var(--radius)] bg-brand-600 text-white hover:bg-brand-700 transition-[background-color,transform] duration-150 ease-[cubic-bezier(.2,.8,.4,1)] active:scale-[.98] flex items-center justify-center gap-1.5 disabled:opacity-45 disabled:cursor-wait focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]"
