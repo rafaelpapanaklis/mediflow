@@ -7,6 +7,7 @@ import { randomUUID } from "crypto";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { storageQuotaError } from "@/lib/storage-quota";
 import { MAX_STUDY_UPLOAD_BYTES, MAX_STUDY_UPLOAD_LABEL } from "@/lib/uploads/patient-study-upload";
+import { limiteSubidasPorUsuario } from "@/lib/uploads/validar-archivo";
 
 // Subida DIRECTA a Storage de un set CBCT (.zip de cortes DICOM). Como los CBCT
 // pesan cientos de MB, no pasan por el route handler (límite de body): el cliente
@@ -54,6 +55,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     select: { id: true },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  if (!limiteSubidasPorUsuario(`dental:dicom-sign:${ctx.userId}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const name = String(body?.name ?? "estudio.zip");

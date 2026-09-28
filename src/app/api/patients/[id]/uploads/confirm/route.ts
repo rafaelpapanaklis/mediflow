@@ -44,6 +44,7 @@ import {
   mimeForStudyExt,
   studyPathPrefix,
 } from "@/lib/uploads/patient-study-upload";
+import { registrarSubidaRechazada } from "@/lib/uploads/validar-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -209,6 +210,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       await removeFileFromStorage(path).catch((e) =>
         console.error("[uploads/confirm] no se pudo borrar el objeto inválido:", e),
       );
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        patientId: params.id,
+        ruta: "/api/patients/[id]/uploads/confirm",
+        motivo: magicError,
+        codigo: "tipo_no_permitido",
+        nombreOriginal: originalName,
+      });
       return NextResponse.json(
         {
           error: "Archivo no válido: el contenido no coincide con la extensión",

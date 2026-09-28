@@ -10,8 +10,10 @@
 // SERVER ONLY: toca Supabase Storage.
 
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { BUCKETS } from "@/lib/storage";
 import { validateMagicNumber } from "@/lib/validate-upload";
+import { pareceScriptOMarcado } from "@/lib/uploads/validar-archivo";
 
 /** Una firma son unos KB; 5 MB es el techo que frena abusos sin estorbar. */
 export const MAX_SIGNATURE_BYTES = 5 * 1024 * 1024;
@@ -55,12 +57,36 @@ export async function validateSignatureDataUrl(input: unknown): Promise<Signatur
       buffer: EMPTY,
     };
   }
+  const marcador = pareceScriptOMarcado(buffer);
+  if (marcador) {
+    return {
+      error: "Archivo no válido: el contenido no coincide con la extensión",
+      status: 400,
+      detail: `contenido tipo script/marcado (${marcador.trim()})`,
+      buffer: EMPTY,
+    };
+  }
   const magicError = await validateMagicNumber(buffer, ALLOWED_SIGNATURE_MIMES);
   if (magicError) {
     return {
       error: "Archivo no válido: el contenido no coincide con la extensión",
       status: 400,
       detail: magicError,
+      buffer: EMPTY,
+    };
+  }
+  // Decodificación real (no solo la firma de bytes): una firma manuscrita es
+  // un PNG/JPEG/WEBP chico — si sharp no la puede decodificar, no es una
+  // imagen real.
+  try {
+    const metadata = await sharp(buffer).metadata();
+    if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+    await sharp(buffer).toBuffer();
+  } catch {
+    return {
+      error: "Archivo no válido: el contenido no coincide con la extensión",
+      status: 400,
+      detail: "la imagen no se pudo decodificar (está corrupta o no es una imagen real)",
       buffer: EMPTY,
     };
   }

@@ -2,20 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
-import { signMaybeUrl, getStorageObjectSize } from "@/lib/storage";
+import { BUCKETS, signMaybeUrl, getStorageObjectSize, removeFileFromStorage } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { validateCbctZip } from "@/lib/validate-upload";
+import { MAX_SERVER_INSPECT_BYTES } from "@/lib/uploads/patient-study-upload";
+import { registrarSubidaRechazada, limiteSubidasPorUsuario } from "@/lib/uploads/validar-archivo";
+
+// Solo caracteres que produce studyStoragePath()/el path que este endpoint
+// arma. Cierra ../ y cualquier intento de escaparse de la carpeta aunque el
+// prefijo coincida (mismo regex que /uploads/confirm/route.ts).
+const SAFE_PATH = /^[a-zA-Z0-9/._-]+$/;
 
 // Registra como PatientFile un set CBCT (.zip) ya subido a Storage vía la signed
 // upload URL. Guarda SOLO el path interno; la signed URL se firma bajo demanda.
 //
 // POST /api/patients/[id]/dicom-set/register  body: { path, name, size }
 //
-// SEGURIDAD (magic number): solo recibe el path + tamaño de un .zip ya subido
-// directo al bucket; los bytes nunca pasan por el servidor, así que no hay firma
-// de contenido que validar aquí. La defensa es el límite de tamaño del bucket en
-// Supabase. El path sí se valida (debe pertenecer a esta clínica + paciente).
+// SEGURIDAD (magic number): los bytes nunca pasan por el servidor durante la
+// subida (signed upload URL directa). Igual que /uploads/confirm, aquí SÍ se
+// descarga y valida el objeto cuando su tamaño real cae dentro de
+// MAX_SERVER_INSPECT_BYTES — arriba de eso (CBCT grandes) se guarda tal cual,
+// mismo trade-off documentado ahí (memoria de una función serverless).
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -39,6 +48,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
+  if (!limiteSubidasPorUsuario(`dental:dicom-register:${ctx.userId}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const path = String(body?.path ?? "");
   const name = String(body?.name ?? "estudio.zip").slice(0, 120);
@@ -46,7 +59,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const clientSize = Number(body?.size) || null;
 
   // Seguridad: el path debe pertenecer EXACTAMENTE a esta clínica + paciente
-  // (evita registrar un archivo de otra clínica conociendo su path).
+  // (evita registrar un archivo de otra clínica conociendo su path). El
+  // `startsWith` NO basta por sí solo — un path como
+  // "<mia>/dicom-sets/<id>/../../../<otra-clinica>/x.zip" también empieza
+  // con el prefijo propio pero escapa con "..": mismo veto que ya usa
+  // /uploads/confirm (revisión ws1-t8).
+  if (path !== "" && (!SAFE_PATH.test(path) || path.includes(".."))) {
+    return NextResponse.json({ error: "Path inválido" }, { status: 400 });
+  }
   if (path !== "" && !path.startsWith(`${ctx.clinicId}/dicom-sets/${params.id}/`)) {
     return NextResponse.json({ error: "Path inválido" }, { status: 400 });
   }
@@ -86,6 +106,42 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Se guarda el tamaño REAL si lo hay; el del cliente solo como último recurso
   // para que el listado no quede sin dato (no influye en ninguna cuota).
   const size = realSize ?? clientSize;
+
+  // Inspección de contenido cuando el objeto es lo bastante chico (mismo techo
+  // que /uploads/confirm): descarga server↔server (no pasa por el cuerpo de la
+  // petición) y valida que sea un .zip real y no un ejecutable disfrazado.
+  if (realSize != null && realSize <= MAX_SERVER_INSPECT_BYTES) {
+    try {
+      const admin = createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+      const dl = await admin.storage.from(BUCKETS.PATIENT_FILES).download(path);
+      if (dl.error || !dl.data) {
+        console.warn("[dicom-set/register] no se pudo descargar para validar:", dl.error);
+      } else {
+        const bytes = await dl.data.arrayBuffer();
+        const magicError = validateCbctZip(bytes);
+        if (magicError) {
+          await removeFileFromStorage(path).catch((e) =>
+            console.error("[dicom-set/register] no se pudo borrar el objeto inválido:", e),
+          );
+          await registrarSubidaRechazada({
+            clinicId: ctx.clinicId,
+            userId: ctx.userId,
+            patientId: params.id,
+            ruta: "/api/patients/[id]/dicom-set/register",
+            motivo: magicError,
+            codigo: "tipo_no_permitido",
+            nombreOriginal: name,
+          });
+          return NextResponse.json(
+            { error: "Archivo no válido: el contenido no coincide con un set CBCT (.zip)", detalle: magicError },
+            { status: 400 },
+          );
+        }
+      }
+    } catch (e) {
+      console.error("[dicom-set/register] inspección de contenido falló, se deja pasar:", e);
+    }
+  }
 
   const record = await prisma.patientFile.create({
     data: {

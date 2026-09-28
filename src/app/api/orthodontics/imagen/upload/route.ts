@@ -9,10 +9,15 @@ import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { validateMagicNumber } from "@/lib/validate-upload";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { storageQuotaError } from "@/lib/storage-quota";
 import { createSignedFileUrl } from "@/lib/storage";
+import {
+  validarArchivo,
+  registrarSubidaRechazada,
+  limiteSubidasPorUsuario,
+  type PerfilSubida,
+} from "@/lib/uploads/validar-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +27,21 @@ const BUCKET = "patient-files";
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 const IMAGE_MIMES = ["image/jpeg", "image/png", "image/webp", "image/tiff"];
 const PDF_MIME = "application/pdf";
+
+const PERFIL_IMAGEN: PerfilSubida = {
+  id: "ORTHO_CEFALOMETRIA_IMG",
+  mimesPermitidos: IMAGE_MIMES,
+  maxBytes: MAX_SIZE,
+  imagen: true,
+  descripcion: "radiografía o foto de análisis facial",
+};
+const PERFIL_PDF: PerfilSubida = {
+  id: "ORTHO_TRAZADO_PDF",
+  mimesPermitidos: [PDF_MIME],
+  maxBytes: MAX_SIZE,
+  pdfProfundo: true,
+  descripcion: "PDF de trazado cefalométrico",
+};
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -57,6 +77,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Archivo demasiado grande (máx 25 MB)." }, { status: 413 });
   }
 
+  if (!limiteSubidasPorUsuario(`dental:ortho-imagen:${ctx.userId}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
+  }
+
   const quotaErr = await storageQuotaError(ctx.clinicId, file.size);
   if (quotaErr) return quotaErr;
 
@@ -74,11 +98,24 @@ export async function POST(req: NextRequest) {
   if (visDenied) return visDenied;
 
   const arrayBuffer = await file.arrayBuffer();
-  const allowedMimes = kind === "tracing-pdf" ? [PDF_MIME] : IMAGE_MIMES;
-  const magicError = await validateMagicNumber(arrayBuffer, allowedMimes);
-  if (magicError) {
+  const nombreOriginal = (file as File).name ?? (kind === "tracing-pdf" ? "trazado.pdf" : "imagen.jpg");
+  const validado = await validarArchivo({
+    bytes: arrayBuffer,
+    nombreOriginal,
+    perfil: kind === "tracing-pdf" ? PERFIL_PDF : PERFIL_IMAGEN,
+  });
+  if (validado.ok === false) {
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      patientId,
+      ruta: "/api/orthodontics/imagen/upload",
+      motivo: validado.motivo,
+      codigo: validado.codigo,
+      nombreOriginal,
+    });
     return NextResponse.json(
-      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: magicError },
+      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: validado.motivo },
       { status: 400 },
     );
   }

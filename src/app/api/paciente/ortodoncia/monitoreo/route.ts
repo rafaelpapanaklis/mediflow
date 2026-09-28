@@ -13,30 +13,28 @@
 //   SIN análisis de IA (H15 es captura + revisión humana en esta ola).
 
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { uploadFileToStorage } from "@/lib/storage";
-import { validateMagicNumber } from "@/lib/validate-upload";
+import {
+  validarArchivo,
+  generarLlaveAlmacenamiento,
+  registrarSubidaRechazada,
+  limiteSubidasPorUsuario,
+  type PerfilSubida,
+} from "@/lib/uploads/validar-archivo";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ALLOWED: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/heic": "heic",
-  "image/heif": "heif",
+const PERFIL: PerfilSubida = {
+  id: "ORTHO_MONITOREO_PACIENTE",
+  mimesPermitidos: ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"],
+  maxBytes: 20 * 1024 * 1024,
+  imagen: true,
+  descripcion: "foto de monitoreo de ortodoncia",
 };
-const ALLOWED_TYPES = Object.keys(ALLOWED);
-const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
 const ANGLES = ["FRONTAL", "LATERAL", "SMILE", "INTRAORAL", "OTHER"];
-
-function sanitizeName(name: string): string {
-  const base = (name || "foto").split(/[\\/]/).pop() || "foto";
-  return base.replace(/[^a-zA-Z0-9._ ()-]/g, "_").replace(/_{2,}/g, "_").slice(0, 120) || "foto";
-}
 
 export async function POST(req: Request) {
   try {
@@ -75,27 +73,34 @@ export async function POST(req: Request) {
 
     const angle = ANGLES.includes(angleRaw) ? angleRaw : "OTHER";
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: "Tipo no permitido. Sube JPG, PNG o WEBP." }, { status: 400 });
-    }
-    if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "Foto demasiado grande (máx 20 MB)." }, { status: 413 });
+    if (!limiteSubidasPorUsuario(`paciente:monitoreo:${portal.account.id}`)) {
+      return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
     }
 
     const bytes = await file.arrayBuffer();
-    const magicError = await validateMagicNumber(bytes, ALLOWED_TYPES);
-    if (magicError) {
+    const validado = await validarArchivo({ bytes, nombreOriginal: file.name, perfil: PERFIL });
+    if (validado.ok === false) {
+      await registrarSubidaRechazada({
+        clinicId: link.clinicId,
+        patientId: link.patientId,
+        ruta: "/api/paciente/ortodoncia/monitoreo",
+        motivo: validado.motivo,
+        codigo: validado.codigo,
+        nombreOriginal: file.name,
+      });
       return NextResponse.json(
         { error: "El contenido del archivo no coincide con una imagen válida." },
         { status: 400 },
       );
     }
 
-    const ext = ALLOWED[file.type];
-    const storageKey = `${link.clinicId}/${link.patientId}/ortho-monitoreo/${randomUUID()}.${ext}`;
+    const storageKey = generarLlaveAlmacenamiento(
+      [link.clinicId, link.patientId, "ortho-monitoreo"],
+      validado.extensionReal,
+    );
 
     try {
-      await uploadFileToStorage(storageKey, bytes, file.type);
+      await uploadFileToStorage(storageKey, bytes, validado.mimeReal);
     } catch (e) {
       console.error("[paciente/ortodoncia/monitoreo] storage:", e);
       return NextResponse.json({ error: "No se pudo subir la foto" }, { status: 500 });
@@ -104,8 +109,8 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         storageKey,
-        fileName: sanitizeName(file.name),
-        mimeType: file.type,
+        fileName: validado.nombreSaneado,
+        mimeType: validado.mimeReal,
         sizeBytes: file.size,
         angle,
         patientNote,

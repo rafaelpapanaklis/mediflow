@@ -15,6 +15,11 @@ import {
 import { validateModel3D } from "@/lib/validate-upload";
 import { CBCT_LITE_SUFFIX } from "@/components/patient-3d/cbct-lite-shared";
 import { storageQuotaError } from "@/lib/storage-quota";
+import {
+  tieneExtensionPeligrosa,
+  registrarSubidaRechazada,
+  limiteSubidasPorUsuario,
+} from "@/lib/uploads/validar-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -237,6 +242,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "Storage no configurado" }, { status: 500 });
   }
 
+  if (!limiteSubidasPorUsuario(`dental:models-3d:${ctx.userId}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
+  }
+
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof Blob)) {
@@ -258,6 +267,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (file.size > MAX_SIZE) {
     return NextResponse.json({ error: "Archivo demasiado grande (máx 100 MB)." }, { status: 413 });
   }
+  // Defensa en profundidad sobre el nombre (p. ej. "escaneo.stl.exe"), aparte
+  // de la extensión ya validada arriba.
+  if (tieneExtensionPeligrosa(originalName)) {
+    return NextResponse.json({ error: "El nombre del archivo tiene una extensión no permitida." }, { status: 400 });
+  }
 
   // Nombre seguro para el path del bucket (conserva la extensión real).
   const safeName =
@@ -274,6 +288,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // una malla (no rompe modelos legítimos).
   const magicError = await validateModel3D(bytes, ext);
   if (magicError) {
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      patientId: params.id,
+      ruta: "/api/patients/[id]/models-3d",
+      motivo: magicError,
+      codigo: "tipo_no_permitido",
+      nombreOriginal: originalName,
+    });
     return NextResponse.json(
       { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: magicError },
       { status: 400 },

@@ -7,6 +7,7 @@ import {
   ComprobanteInvalidoError,
   CompraNoEncontradaError,
 } from "@/lib/inventory/comprobante.server";
+import { limiteSubidasPorUsuario } from "@/lib/uploads/validar-archivo";
 
 // ═══════════════════════════════════════════════════════════════════
 // COMPROBANTE de una compra como ARCHIVO (ws1-t4, ajuste 1) — foto o PDF,
@@ -21,6 +22,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const denied = denyIfMissingPermission(ctx, "inventory.edit");
   if (denied) return denied;
 
+  if (!limiteSubidasPorUsuario(`dental:comprobante:${ctx.userId}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
+  }
+
   const formData = await req.formData().catch(() => null);
   const file = formData?.get("file");
   if (!file || !(file instanceof File)) {
@@ -28,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   try {
-    const resultado = await subirComprobanteDeCompra({ clinicId: ctx.clinicId, purchaseId: params.id, file });
+    const resultado = await subirComprobanteDeCompra({ clinicId: ctx.clinicId, purchaseId: params.id, file, userId: ctx.userId });
     return NextResponse.json(resultado, { status: 201 });
   } catch (e) {
     if (e instanceof ComprasTablaFaltanteError) return NextResponse.json({ error: e.message }, { status: 503 });

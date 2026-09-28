@@ -10,6 +10,14 @@ import {
   DENTAL_LAB_FILE_MAX_MB,
   type DentalLabOrderFileDTO,
 } from "@/lib/laboratorios/types";
+import {
+  verificarPdfPeligroso,
+  pareceScriptOMarcado,
+  tieneExtensionPeligrosa,
+  registrarSubidaRechazada,
+  limiteSubidasPorUsuario,
+} from "@/lib/uploads/validar-archivo";
+import sharp from "sharp";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +100,10 @@ export async function POST(
     return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
   }
 
+  if (!limiteSubidasPorUsuario(`dental:lab-files:${ctx.userId}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();
@@ -119,16 +131,69 @@ export async function POST(
       { status: 400 },
     );
   }
+  // Defensa en profundidad sobre el NOMBRE declarado, aparte de la extensión
+  // "reconocida" de arriba — cubre "diseño.stl.exe" y similares.
+  if (tieneExtensionPeligrosa(file.name)) {
+    return NextResponse.json({ error: "El nombre del archivo tiene una extensión no permitida." }, { status: 400 });
+  }
 
   const bytes = await file.arrayBuffer();
+  const buf = Buffer.from(bytes);
+
+  const marcador = pareceScriptOMarcado(buf);
+  if (marcador) {
+    const motivo = `El contenido parece un script o marcado (${marcador.trim()}), no un archivo de laboratorio`;
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId, userId: ctx.userId, ruta: "/api/dental-labs/.../files",
+      motivo, codigo: "script_o_marcado", nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: motivo }, { status: 400 });
+  }
 
   // Validación de contenido real (no confiar en file.type del browser).
   if (RASTER_DOC_EXT.includes(ext)) {
     const magicError = await validateMagicNumber(bytes, VERIFIABLE_MIME);
-    if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+    if (magicError) {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId, userId: ctx.userId, ruta: "/api/dental-labs/.../files",
+        motivo: magicError, codigo: "tipo_no_permitido", nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: magicError }, { status: 400 });
+    }
+    if (ext === "pdf") {
+      const pdfError = verificarPdfPeligroso(buf);
+      if (pdfError) {
+        const motivo = `El PDF contiene ${pdfError}, no se acepta`;
+        await registrarSubidaRechazada({
+          clinicId: ctx.clinicId, userId: ctx.userId, ruta: "/api/dental-labs/.../files",
+          motivo, codigo: "pdf_peligroso", nombreOriginal: file.name,
+        });
+        return NextResponse.json({ error: motivo }, { status: 400 });
+      }
+    } else {
+      // jpg/png: exige decodificación real, no solo la firma de bytes.
+      try {
+        const meta = await sharp(buf).metadata();
+        if (!meta.width || !meta.height) throw new Error("sin dimensiones");
+        await sharp(buf).toBuffer();
+      } catch {
+        const motivo = "La imagen no se pudo decodificar (está corrupta o no es una imagen real)";
+        await registrarSubidaRechazada({
+          clinicId: ctx.clinicId, userId: ctx.userId, ruta: "/api/dental-labs/.../files",
+          motivo, codigo: "imagen_corrupta", nombreOriginal: file.name,
+        });
+        return NextResponse.json({ error: motivo }, { status: 400 });
+      }
+    }
   } else {
-    const sigError = validateDesignSignature(ext, Buffer.from(bytes));
-    if (sigError) return NextResponse.json({ error: sigError }, { status: 400 });
+    const sigError = validateDesignSignature(ext, buf);
+    if (sigError) {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId, userId: ctx.userId, ruta: "/api/dental-labs/.../files",
+        motivo: sigError, codigo: "tipo_no_permitido", nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: sigError }, { status: 400 });
+    }
   }
 
   // Path multi-tenant en el storage. Nombre con UUID (no enumerable por

@@ -11,38 +11,22 @@
 // · storageKey = clinicId/patientId/patient-uploads/<uuid>.<ext> en el bucket
 //   PRIVADO patient-files. Nunca se expone al cliente (se firma on-demand).
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { uploadFileToStorage } from "@/lib/storage";
-import { validateMagicNumber } from "@/lib/validate-upload";
+import {
+  PERFILES,
+  validarArchivo,
+  generarLlaveAlmacenamiento,
+  registrarSubidaRechazada,
+  limiteSubidasPorUsuario,
+} from "@/lib/uploads/validar-archivo";
 import type { PacienteSubidoKind } from "@/lib/patient-portal/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// MIME → extensión. Whitelist dura: solo documentos/imágenes que un paciente
-// razonablemente sube (estudios, identificación). NADA ejecutable.
-const ALLOWED: Record<string, string> = {
-  "application/pdf": "pdf",
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
-const ALLOWED_TYPES = Object.keys(ALLOWED);
-const MAX_SIZE = 15 * 1024 * 1024; // 15 MB
 const KINDS: PacienteSubidoKind[] = ["ESTUDIO", "IDENTIFICACION", "OTRO"];
-
-/** Nombre visible saneado (sin path traversal ni caracteres raros). */
-function sanitizeName(name: string): string {
-  const base = (name || "archivo").split(/[\\/]/).pop() || "archivo";
-  return (
-    base
-      .replace(/[^a-zA-Z0-9._ ()-]/g, "_")
-      .replace(/_{2,}/g, "_")
-      .slice(0, 120) || "archivo"
-  );
-}
 
 export async function POST(req: Request) {
   try {
@@ -72,34 +56,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Clínica no válida" }, { status: 400 });
     }
 
+    if (!limiteSubidasPorUsuario(`paciente:documentos:${ctx.account.id}`)) {
+      return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
+    }
+
     const kind: PacienteSubidoKind = KINDS.includes(kindRaw as PacienteSubidoKind)
       ? (kindRaw as PacienteSubidoKind)
       : "OTRO";
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { error: "Tipo no permitido. Sube PDF, JPG, PNG o WEBP." },
-        { status: 400 },
-      );
-    }
-    if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "Archivo demasiado grande (máx 15 MB)." }, { status: 413 });
-    }
-
     const bytes = await file.arrayBuffer();
-    const magicError = await validateMagicNumber(bytes, ALLOWED_TYPES);
-    if (magicError) {
-      return NextResponse.json(
-        { error: "El contenido del archivo no coincide con un PDF o imagen válida." },
-        { status: 400 },
-      );
+    const validado = await validarArchivo({
+      bytes,
+      nombreOriginal: file.name,
+      perfil: PERFILES.DOCUMENTO_PACIENTE,
+    });
+    if (validado.ok === false) {
+      await registrarSubidaRechazada({
+        clinicId: link.clinicId,
+        userId: ctx.account.id,
+        patientId: link.patientId,
+        ruta: "/api/paciente/documentos/subir",
+        motivo: validado.motivo,
+        codigo: validado.codigo,
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: validado.motivo }, { status: 400 });
     }
 
-    const ext = ALLOWED[file.type];
-    const storageKey = `${link.clinicId}/${link.patientId}/patient-uploads/${randomUUID()}.${ext}`;
+    const storageKey = generarLlaveAlmacenamiento(
+      [link.clinicId, link.patientId, "patient-uploads"],
+      validado.extensionReal,
+    );
 
     try {
-      await uploadFileToStorage(storageKey, bytes, file.type);
+      await uploadFileToStorage(storageKey, bytes, validado.mimeReal);
     } catch (e) {
       console.error("[paciente/documentos/subir] storage:", e);
       return NextResponse.json({ error: "No se pudo subir el archivo" }, { status: 500 });
@@ -110,8 +100,8 @@ export async function POST(req: Request) {
         clinicId: link.clinicId,
         patientId: link.patientId,
         accountId: ctx.account.id,
-        fileName: sanitizeName(file.name),
-        fileType: file.type,
+        fileName: validado.nombreSaneado,
+        fileType: validado.mimeReal,
         storageKey,
         sizeBytes: file.size,
         kind,

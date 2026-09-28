@@ -43,6 +43,7 @@ import {
   safeStudyFileName,
   studyStoragePath,
 } from "@/lib/uploads/patient-study-upload";
+import { limiteSubidasPorUsuario, tieneExtensionPeligrosa } from "@/lib/uploads/validar-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,6 +84,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const declaredSize = Number(body?.size);
 
   if (!rawName) return NextResponse.json({ error: "Falta el nombre del archivo" }, { status: 400 });
+
+  if (!limiteSubidasPorUsuario(`dental:uploads-sign:${ctx.userId}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
+  }
+
+  // Defensa en profundidad sobre el nombre (p. ej. "escaneo.stl.exe"): la
+  // whitelist de extensión de abajo ya bloquea esto, pero un nombre con doble
+  // extensión peligrosa se rechaza explícitamente antes de gastar una signed
+  // upload URL.
+  if (tieneExtensionPeligrosa(rawName)) {
+    return NextResponse.json({ error: "El nombre del archivo tiene una extensión no permitida." }, { status: 400 });
+  }
 
   const ext = extOfName(rawName);
   if (!isStudyExt(ext)) {

@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
+import sharp from "sharp";
 import { BUCKETS, signMaybeUrl } from "@/lib/storage";
 import { validateMagicNumber } from "@/lib/validate-upload";
+import { pareceScriptOMarcado } from "@/lib/uploads/validar-archivo";
 import { toPublicView } from "@/lib/quotes/serialize";
 import { leerCondiciones } from "@/lib/quotes/condiciones-pago-db";
 
@@ -108,10 +110,31 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (signatureBuffer.length > MAX_SIGNATURE_BYTES) {
     return NextResponse.json({ error: "La firma excede el tamaño permitido (máx 5 MB)." }, { status: 413 });
   }
+  // Ruta PÚBLICA (solo protegida por el token): sniff de script/HTML antes del
+  // magic-number, porque file-type no reconoce SVG/HTML por firma de bytes.
+  const marcadorFirma = pareceScriptOMarcado(signatureBuffer);
+  if (marcadorFirma) {
+    return NextResponse.json(
+      { error: "Archivo no válido: el contenido no coincide con la extensión" },
+      { status: 400 },
+    );
+  }
   const magicError = await validateMagicNumber(signatureBuffer, ["image/png", "image/jpeg", "image/webp"]);
   if (magicError) {
     return NextResponse.json(
       { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: magicError },
+      { status: 400 },
+    );
+  }
+  // Decodificación real: una firma es una imagen chica; si sharp no la puede
+  // abrir, no es una imagen real (defensa extra al ser ruta pública).
+  try {
+    const metadata = await sharp(signatureBuffer).metadata();
+    if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+    await sharp(signatureBuffer).toBuffer();
+  } catch {
+    return NextResponse.json(
+      { error: "Archivo no válido: el contenido no coincide con la extensión" },
       { status: 400 },
     );
   }

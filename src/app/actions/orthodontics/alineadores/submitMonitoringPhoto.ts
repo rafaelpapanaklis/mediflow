@@ -30,6 +30,19 @@ export async function submitMonitoringPhoto(
   if (isFailure(auth)) return auth;
   const { patientId, clinicId } = auth.data;
 
+  // Server action = endpoint RPC llamable directo por cualquier cliente
+  // autenticado, sin pasar por /api/paciente/ortodoncia/monitoreo (que sí
+  // genera el storageKey en el servidor). Sin este candado, un paciente
+  // podía mandar CUALQUIER storageKey —de otro paciente o de otra clínica—
+  // y quedaba registrado como "su" foto de monitoreo; al revisarla, la
+  // clínica terminaba pidiendo una signed URL de un archivo ajeno (fuga
+  // cross-tenant vía IDOR). El prefijo debe ser EXACTO al que arma
+  // generarLlaveAlmacenamiento en la ruta de subida (revisión ws1-t8).
+  const prefijoEsperado = `${clinicId}/${patientId}/ortho-monitoreo/`;
+  if (!input.storageKey.startsWith(prefijoEsperado) || input.storageKey.includes("..")) {
+    return fail("Foto inválida");
+  }
+
   try {
     const created = await prisma.orthodonticMonitoringPhoto.create({
       data: {

@@ -7,6 +7,16 @@ import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { BUCKETS, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
+import {
+  PERFILES,
+  validarArchivo,
+  generarLlaveAlmacenamiento,
+  registrarSubidaRechazada,
+  limiteSubidasPorUsuario,
+} from "@/lib/uploads/validar-archivo";
+import { extractAuditMeta } from "@/lib/audit";
+
+export const runtime = "nodejs";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -106,13 +116,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "file y patientId requeridos" }, { status: 400 });
   }
 
-  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf", "image/bmp", "image/tiff"];
-  const MAX_SIZE = 50 * 1024 * 1024; // 50MB
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: "Tipo de archivo no permitido" }, { status: 400 });
-  }
-  if (file.size > MAX_SIZE) {
-    return NextResponse.json({ error: "Archivo demasiado grande (máx 50MB)" }, { status: 400 });
+  if (!limiteSubidasPorUsuario(`dental:xrays:${ctx.userId}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
   }
 
   // Tenant + visibilidad por paciente en un solo query (barrido Ola 3): el GET
@@ -129,19 +134,35 @@ export async function POST(req: NextRequest) {
   const quotaErr = await storageQuotaError(ctx.clinicId, file.size);
   if (quotaErr) return quotaErr;
 
-  const supabase = getAdminSupabase();
-  const ext  = (file.name.split(".").pop() ?? "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "jpg";
-  const path = `${ctx.clinicId}/${patientId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-
   const bytes = await file.arrayBuffer();
 
-  const { validateMagicNumber } = await import("@/lib/validate-upload");
-  const magicError = await validateMagicNumber(bytes, ALLOWED_TYPES);
-  if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+  const validado = await validarArchivo({
+    bytes,
+    nombreOriginal: file.name,
+    perfil: PERFILES.RADIOGRAFIA,
+  });
+  if (validado.ok === false) {
+    const { ipAddress, userAgent } = extractAuditMeta(req);
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      patientId,
+      ruta: "/api/xrays",
+      motivo: validado.motivo,
+      codigo: validado.codigo,
+      nombreOriginal: file.name,
+      ipAddress,
+      userAgent,
+    });
+    return NextResponse.json({ error: validado.motivo }, { status: 400 });
+  }
+
+  const supabase = getAdminSupabase();
+  const path = generarLlaveAlmacenamiento([ctx.clinicId, patientId], validado.extensionReal);
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKETS.PATIENT_FILES)
-    .upload(path, bytes, { contentType: file.type, upsert: false });
+    .upload(path, bytes, { contentType: validado.mimeReal, upsert: false });
 
   if (uploadError) {
     console.error("Storage upload error:", uploadError);
@@ -155,10 +176,10 @@ export async function POST(req: NextRequest) {
       patientId,
       clinicId:   ctx.clinicId,
       uploadedBy: ctx.userId,
-      name:       file.name,
+      name:       validado.nombreSaneado,
       url:        path,
       size:       file.size,
-      mimeType:   file.type,
+      mimeType:   validado.mimeReal,
       category:   category as any,
       toothNumber,
       notes,

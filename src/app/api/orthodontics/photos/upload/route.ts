@@ -7,27 +7,39 @@ import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { validateMagicNumber } from "@/lib/validate-upload";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import type { OrthoPhotoSetType } from "@prisma/client";
 import { storageQuotaError } from "@/lib/storage-quota";
+import {
+  validarArchivo,
+  registrarSubidaRechazada,
+  limiteSubidasPorUsuario,
+} from "@/lib/uploads/validar-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const BUCKET = "patient-files";
-const MAX_IMAGE_SIZE = 25 * 1024 * 1024; // 25 MB — holgado para una foto de cámara/celular.
-const IMAGE_MIMES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "image/tiff",
-  "image/avif",
-  "image/heic",
-  "image/heif",
-];
+// Perfil propio (no PERFILES.FOTO_CLINICA): esta ruta ya aceptaba gif/tiff/avif
+// además del set clínico canónico — se conserva ese alcance, ahora validado
+// por firma real + decodificación real en vez de solo el MIME declarado.
+const PERFIL_FOTO_SET: import("@/lib/uploads/validar-archivo").PerfilSubida = {
+  id: "ORTHO_FOTO_SET",
+  mimesPermitidos: [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/tiff",
+    "image/avif",
+    "image/heic",
+    "image/heif",
+  ],
+  maxBytes: 25 * 1024 * 1024,
+  imagen: true,
+  descripcion: "foto del set fotográfico de ortodoncia",
+};
 
 function fileCategoryFromSetType(setType: OrthoPhotoSetType) {
   switch (setType) {
@@ -77,8 +89,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Tope de tamaño ANTES de cargar bytes en memoria / pasar a sharp.
-  if (file.size > MAX_IMAGE_SIZE) {
+  if (file.size > PERFIL_FOTO_SET.maxBytes) {
     return NextResponse.json({ error: "Imagen demasiado grande (máx 25 MB)." }, { status: 413 });
+  }
+
+  if (!limiteSubidasPorUsuario(`dental:ortho-fotos:${ctx.userId}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera unos minutos." }, { status: 429 });
   }
 
   // Tope de almacenamiento por plan (enforcement) — antes de leer/subir bytes.
@@ -115,14 +131,29 @@ export async function POST(req: NextRequest) {
 
   // Lee buffer + procesa con sharp.
   const arrayBuffer = await file.arrayBuffer();
+  const nombreOriginal = (file as File).name ?? "foto.jpg";
 
-  // Blindaje: valida la FIRMA real del contenido (no la extensión) ANTES de
-  // pasar a sharp. Frena un ejecutable/zip renombrado a .jpg y evita que sharp
-  // truene con un 500 al recibir basura.
-  const magicError = await validateMagicNumber(arrayBuffer, IMAGE_MIMES);
-  if (magicError) {
+  // Blindaje: valida la FIRMA real + decodificación real del contenido (no la
+  // extensión ni el Content-Type) ANTES de pasar a sharp. Frena un
+  // ejecutable/script/zip renombrado a .jpg y evita que sharp truene con un
+  // 500 al recibir basura.
+  const validado = await validarArchivo({
+    bytes: arrayBuffer,
+    nombreOriginal,
+    perfil: PERFIL_FOTO_SET,
+  });
+  if (validado.ok === false) {
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      patientId: set.patientId,
+      ruta: "/api/orthodontics/photos/upload",
+      motivo: validado.motivo,
+      codigo: validado.codigo,
+      nombreOriginal,
+    });
     return NextResponse.json(
-      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: magicError },
+      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: validado.motivo },
       { status: 400 },
     );
   }

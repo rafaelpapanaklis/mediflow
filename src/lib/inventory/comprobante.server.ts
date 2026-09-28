@@ -18,10 +18,15 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { BUCKETS, uploadFileToStorage, removeFileFromStorage, signMaybeUrl } from "@/lib/storage";
-import { validateMagicNumber } from "@/lib/validate-upload";
+import {
+  PERFILES,
+  validarArchivo,
+  generarLlaveAlmacenamiento,
+  registrarSubidaRechazada,
+} from "@/lib/uploads/validar-archivo";
 
-export const COMPROBANTE_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-export const COMPROBANTE_MAX_SIZE = 15 * 1024 * 1024; // 15MB — es una foto/PDF de un ticket, no un escaneo
+export const COMPROBANTE_ALLOWED_TYPES = PERFILES.COMPROBANTE.mimesPermitidos;
+export const COMPROBANTE_MAX_SIZE = PERFILES.COMPROBANTE.maxBytes; // 10MB — es una foto/PDF de un ticket, no un escaneo
 
 // Mismo criterio de tolerancia que compras.server.ts (ver su nota completa):
 // P2021/P2022 + PrismaClientValidationError + TypeError del cliente viejo.
@@ -56,14 +61,42 @@ export interface ComprobanteSubido {
 }
 
 export async function subirComprobanteDeCompra(
-  params: { clinicId: string; purchaseId: string; file: File },
+  params: { clinicId: string; purchaseId: string; file: File; userId?: string },
   db: PrismaClient = prisma,
 ): Promise<ComprobanteSubido> {
-  if (!COMPROBANTE_ALLOWED_TYPES.includes(params.file.type)) {
-    throw new ComprobanteInvalidoError("Tipo de archivo no permitido (solo foto o PDF).");
+  // Validación de tipo/tamaño real ANTES de tocar la base o el storage — igual
+  // que antes de este cambio: un archivo inválido no debe gastar ni una
+  // consulta a Prisma. Atajo barato por tamaño DECLARADO primero (sin leer el
+  // archivo completo a memoria) y luego el contenido real.
+  if (params.file.size > PERFILES.COMPROBANTE.maxBytes) {
+    const maxMb = Math.round(PERFILES.COMPROBANTE.maxBytes / (1024 * 1024));
+    await registrarSubidaRechazada({
+      clinicId: params.clinicId,
+      userId: params.userId,
+      ruta: "/api/inventory/purchases/[id]/comprobante",
+      motivo: `Archivo demasiado grande (máx ${maxMb} MB)`,
+      codigo: "demasiado_grande",
+      nombreOriginal: params.file.name,
+    });
+    throw new ComprobanteInvalidoError(`Archivo demasiado grande (máx ${maxMb}MB).`);
   }
-  if (params.file.size > COMPROBANTE_MAX_SIZE) {
-    throw new ComprobanteInvalidoError("Archivo demasiado grande (máx 15MB).");
+
+  const bytes = await params.file.arrayBuffer();
+  const validado = await validarArchivo({
+    bytes,
+    nombreOriginal: params.file.name,
+    perfil: PERFILES.COMPROBANTE,
+  });
+  if (validado.ok === false) {
+    await registrarSubidaRechazada({
+      clinicId: params.clinicId,
+      userId: params.userId,
+      ruta: "/api/inventory/purchases/[id]/comprobante",
+      motivo: validado.motivo,
+      codigo: validado.codigo,
+      nombreOriginal: params.file.name,
+    });
+    throw new ComprobanteInvalidoError(validado.motivo);
   }
 
   let compra: { id: string; receiptFilePath: string | null } | null;
@@ -78,19 +111,17 @@ export async function subirComprobanteDeCompra(
   }
   if (!compra) throw new CompraNoEncontradaError();
 
-  const bytes = await params.file.arrayBuffer();
-  const magicError = await validateMagicNumber(bytes, COMPROBANTE_ALLOWED_TYPES);
-  if (magicError) throw new ComprobanteInvalidoError(magicError);
+  const path = generarLlaveAlmacenamiento(
+    [params.clinicId, "inventory-purchases", params.purchaseId],
+    validado.extensionReal,
+  );
 
-  const ext = (params.file.name.split(".").pop() ?? "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "jpg";
-  const path = `${params.clinicId}/inventory-purchases/${params.purchaseId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-
-  await uploadFileToStorage(path, bytes, params.file.type, BUCKETS.PATIENT_FILES);
+  await uploadFileToStorage(path, bytes, validado.mimeReal, BUCKETS.PATIENT_FILES);
 
   try {
     await db.inventoryPurchase.update({
       where: { id: params.purchaseId },
-      data:  { receiptFilePath: path, receiptFileName: params.file.name, receiptFileMime: params.file.type },
+      data:  { receiptFilePath: path, receiptFileName: validado.nombreSaneado, receiptFileMime: validado.mimeReal },
     });
   } catch (e) {
     // El archivo ya subió al bucket pero no se pudo enlazar en la base —
@@ -109,5 +140,5 @@ export async function subirComprobanteDeCompra(
   }
 
   const receiptFileUrl = await signMaybeUrl(path, undefined, BUCKETS.PATIENT_FILES);
-  return { receiptFileUrl, receiptFileName: params.file.name };
+  return { receiptFileUrl, receiptFileName: validado.nombreSaneado };
 }
