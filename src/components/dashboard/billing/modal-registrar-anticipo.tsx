@@ -13,9 +13,9 @@
 // (el clic atravesaba a "Registrar pago" de debajo). Por eso usa Dialog/
 // DialogContent de verdad, no una capa propia.
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { ArrowLeftRight, Banknote, CreditCard, Loader2, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Banknote, CreditCard, Info, Loader2, type LucideIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { Input } from "@/components/ui/input";
@@ -50,22 +50,44 @@ export interface ModalRegistrarAnticipoProps {
   onClose: () => void;
   invoiceId: string;
   saldo: number;
+  /**
+   * ws1-t1 (M3): el anticipo PENDING de esta factura, si lo hay — «Registrar
+   * anticipo recibido» sobre esa factura casi siempre es ESE dinero llegando
+   * (el que ya se pidió), no el saldo completo. Prellena con su monto y lo
+   * menciona; sigue siendo editable si de verdad llegó un monto distinto.
+   */
+  anticipoPendiente?: { id: string; amount: number; metodo: string } | null;
   /** Avisa al que lo montó (para refrescar la factura). */
   onListo?: () => void;
   /** ¿Diseño nuevo? Solo decide la ropa; si no llega, se detecta. */
   rediseno?: boolean;
 }
 
-export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, onListo, rediseno: redisenoProp }: ModalRegistrarAnticipoProps) {
+export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, anticipoPendiente, onListo, rediseno: redisenoProp }: ModalRegistrarAnticipoProps) {
   const redisenoDetectado = useRedisenoActivo();
   const rediseno = redisenoProp ?? redisenoDetectado;
   const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
   // Un campo: la maqueta propia y, con el diseño nuevo, el rótulo de la familia.
   const campo = `${a.campo} ${rediseno ? c.campo : ""}`;
-  const [monto, setMonto] = useState(() => (saldo > 0 ? String(saldo) : ""));
+  // ws1-t1 (M3): prellena con el anticipo PENDING si lo hay (lo más probable
+  // es que sea ESE dinero); sin uno, el saldo completo, como antes.
+  const prefill = () => (anticipoPendiente && anticipoPendiente.amount > 0 ? String(anticipoPendiente.amount) : saldo > 0 ? String(saldo) : "");
+  const [monto, setMonto] = useState(prefill);
   const [method, setMethod] = useState<MetodoRegistro>("cash");
   const [reference, setReference] = useState("");
   const [enviando, setEnviando] = useState(false);
+
+  // Este modal no se desmonta entre aperturas (vive dentro de
+  // invoice-detail-modal.tsx, que sí se remonta, pero no en cada clic de
+  // "Registrar anticipo recibido"): sin este efecto, reabrirlo repetía el
+  // prellenado de la primera vez en vez del anticipo pendiente ACTUAL.
+  useEffect(() => {
+    if (!open) return;
+    setMonto(prefill());
+    setMethod("cash");
+    setReference("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, anticipoPendiente?.id, anticipoPendiente?.amount, saldo]);
 
   const registrar = useCallback(async () => {
     const montoNum = Number(monto);
@@ -120,6 +142,19 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, onList
               <span className={a.resumenRotulo}>Saldo de la factura</span>
               <span className={a.resumenCifra}>{fmt.format(saldo)}</span>
             </div>
+          )}
+
+          {/* ws1-t1 (M3): esta factura YA tiene un anticipo pedido y sin
+              cobrar — lo más probable es que este registro sea ESE dinero
+              llegando, no un cobro aparte. */}
+          {anticipoPendiente && anticipoPendiente.amount > 0 && (
+            <p className={`${a.nota} ${a.notaInfo}`}>
+              <Info size={16} strokeWidth={1.75} aria-hidden />
+              <span>
+                Ya hay un anticipo pendiente de <strong>{fmt.format(anticipoPendiente.amount)}</strong>
+                {anticipoPendiente.metodo === "transferencia" ? " por transferencia" : ""}: si es este dinero el que llegó, deja el monto como está.
+              </span>
+            </p>
           )}
 
           <div className={campo}>

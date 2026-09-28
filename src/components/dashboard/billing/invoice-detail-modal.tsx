@@ -134,10 +134,32 @@ interface InvoiceDetailModalProps {
 
 type SubAction = null | "refund" | "edit-price" | "discount" | "cancel" | "cfdi";
 
-export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated, initialAction = null, clinicTaxMode, rediseno = false }: InvoiceDetailModalProps) {
+export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, onClose, onMutated, initialAction = null, clinicTaxMode, rediseno = false }: InvoiceDetailModalProps) {
   const t = useT();
   const router = useRouter();
   const confirmDialog = useConfirm();
+  // ws1-t1 (M2): «Registrar anticipo recibido» cambia `paid`/`balance`/status
+  // de la factura, pero el objeto `invoice` es un PROP del padre (la fila que
+  // clicaron en la lista) — `onMutated()` refresca ESA lista, no este prop ya
+  // capturado, así que el modal seguía mostrando Pagado/Saldo viejos hasta
+  // cerrar y reabrir. En vez de depender de que los 5 sitios que montan este
+  // modal (Caja, Agenda, ficha del paciente…) sepan resincronizar su prop,
+  // el modal trae su propia factura fresca tras esa acción y la usa por
+  // encima del prop mientras siga abierto para el mismo id.
+  const [facturaViva, setFacturaViva] = useState<Invoice | null>(null);
+  useEffect(() => { setFacturaViva(null); }, [invoiceProp?.id, open]);
+  const invoice = facturaViva ?? invoiceProp;
+  const refrescarFactura = useCallback(async () => {
+    if (!invoiceProp?.id) return;
+    try {
+      const r = await fetch(`/api/invoices/${invoiceProp.id}`);
+      if (!r.ok) return;
+      const fresca = await r.json();
+      setFacturaViva(fresca);
+    } catch {
+      // Silencioso: la próxima apertura del modal trae el dato fresco igual.
+    }
+  }, [invoiceProp?.id]);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [sub, setSub] = useState<SubAction>(null);
   const [busy, setBusy] = useState(false);
@@ -226,6 +248,10 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // solo lectura, para el desglose Total / Anticipo / Pendiente. Se calla
   // (queda en 0) si la ruta falla o la factura no tiene ninguno.
   const [anticipoPagado, setAnticipoPagado] = useState(0);
+  // ws1-t1 (M3, B2): el anticipo PENDING de esta factura, si lo hay — para
+  // prellenar «Registrar anticipo recibido» con ESE monto (no el saldo
+  // completo) y para avisar en el diálogo de «Cancelar factura».
+  const [anticipoPendiente, setAnticipoPendiente] = useState<{ id: string; amount: number; metodo: string } | null>(null);
   const [pidiendoAnticipo, setPidiendoAnticipo] = useState(false);
   const [registrandoAnticipo, setRegistrandoAnticipo] = useState(false);
   // QA t2 (fase 2): los botones «Pedir anticipo»/«Registrar anticipo
@@ -237,21 +263,30 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   const [puedeRegistrarAnticipo, setPuedeRegistrarAnticipo] = useState(false);
   const [puedeEnviarRecibo, setPuedeEnviarRecibo] = useState(false);
   const [enviandoRecibo, setEnviandoRecibo] = useState(false);
+  // ws1-t1 (M2, M3): un tick propio para volver a pedir este GET tras «Pedir
+  // anticipo» / «Registrar anticipo recibido» sin esperar a que cambie
+  // `invoice?.id` (que no cambia: es la MISMA factura con otro anticipo).
+  const [anticipoTick, setAnticipoTick] = useState(0);
   useEffect(() => {
-    if (!open || !invoice?.id) { setAnticipoPagado(0); setPuedeDepositar(false); setPuedeRegistrarAnticipo(false); setPuedeEnviarRecibo(false); return; }
+    if (!open || !invoice?.id) { setAnticipoPagado(0); setAnticipoPendiente(null); setPuedeDepositar(false); setPuedeRegistrarAnticipo(false); setPuedeEnviarRecibo(false); return; }
     let vivo = true;
     fetch(`/api/invoices/${invoice.id}/anticipo`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!vivo) return;
         setAnticipoPagado(typeof d?.anticipoPagado === "number" ? d.anticipoPagado : 0);
+        setAnticipoPendiente(
+          d?.pendiente && typeof d.pendiente.amount === "number"
+            ? { id: d.pendiente.id, amount: d.pendiente.amount, metodo: d.pendiente.metodo }
+            : null,
+        );
         setPuedeDepositar(d?.puedeDepositar === true);
         setPuedeRegistrarAnticipo(d?.puedeRegistrar === true);
         setPuedeEnviarRecibo(d?.puedeEnviarRecibo === true);
       })
-      .catch(() => { if (vivo) { setAnticipoPagado(0); setPuedeDepositar(false); setPuedeRegistrarAnticipo(false); setPuedeEnviarRecibo(false); } });
+      .catch(() => { if (vivo) { setAnticipoPagado(0); setAnticipoPendiente(null); setPuedeDepositar(false); setPuedeRegistrarAnticipo(false); setPuedeEnviarRecibo(false); } });
     return () => { vivo = false; };
-  }, [open, invoice?.id]);
+  }, [open, invoice?.id, anticipoTick]);
 
   // «Enviar recibo» (ws1-t3 fase 3): nunca automático, solo al pulsarlo.
   const enviarRecibo = useCallback(async () => {
@@ -1073,6 +1108,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           </DialogHeader>
           <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
             <p className={cx("text-xs text-muted-foreground", c.texto)}>{t("clinical.invoiceDetail.cancelWarning")}</p>
+            {/* ws1-t1 (B2): cancelar cierra el anticipo pendiente (y, si
+                apartaba una cita, quita el apartado) — que no se lea como
+                sorpresa a mitad de la confirmación. */}
+            {anticipoPendiente && (
+              <p className={cx("text-xs text-muted-foreground", c.texto)} role="alert">
+                {t("clinical.invoiceDetail.cancelWarningAnticipo", { monto: fmtMXNdec(anticipoPendiente.amount) })}
+              </p>
+            )}
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.reasonOptional")}</Label>
               <textarea
@@ -1256,7 +1299,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
         onClose={() => setPidiendoAnticipo(false)}
         origen="factura"
         id={invoice.id}
-        onListo={() => { void onMutated(); }}
+        onListo={() => { void onMutated(); setAnticipoTick((n) => n + 1); }}
       />
 
       <ModalRegistrarAnticipo
@@ -1264,7 +1307,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
         onClose={() => setRegistrandoAnticipo(false)}
         invoiceId={invoice.id}
         saldo={invoice.balance}
-        onListo={() => { void onMutated(); }}
+        anticipoPendiente={anticipoPendiente}
+        onListo={() => { void onMutated(); void refrescarFactura(); setAnticipoTick((n) => n + 1); }}
       />
     </>
   );
