@@ -34,6 +34,7 @@ import { getEffectivePermissions } from "@/lib/auth/permissions";
 import { ACCIONES_SABINA, SABINA_TOOLS } from "../../engine-catalog";
 import { ejecutarSabina, type TurnoModelo } from "../../engine";
 import { prepararCobro } from "../../dinero/cobrar-factura";
+import { prepararAviso } from "../../dinero/avisar-saldo";
 import { facturaDeOrtodoncia } from "../../dinero/orto-candado";
 import type { SabinaCtx } from "../../tipos";
 import { revalidarPropuestaAgenda } from "../agenda-acciones";
@@ -367,6 +368,25 @@ test("elegirTipoDeCita y duracionDeTipo: las reglas, sin base", () => {
   assert.equal(uno("", caso), "ninguno");
   assert.equal(uno("control", { ...caso, status: "RETENTION" }), "varios");
 
+  // 🔴 Una clínica que añadió un tipo «Control» a secas: «su control» puede ser
+  // cualquiera de los dos. Se pregunta; jamás se guarda el control de un caso
+  // con un texto que el módulo no reconoce.
+  const conCorto = [...catalogo, { id: "tipo-9", label: "Control" }];
+  for (const motivo of ["su control", "control", "CONTROL"]) {
+    const e = elegirTipoDeCita(motivo, conCorto, caso);
+    assert.equal(e.tipo, "varios", motivo);
+    assert.deepEqual(
+      (e as any).opciones.map((t: any) => t.label),
+      [TIPO_CITA_CONTROL_ORTO, "Control de retención", "Control"],
+      motivo,
+    );
+  }
+  // La opción elegida llega letra por letra, y ya no se pregunta: si no, la
+  // propuesta no se podría revalidar nunca.
+  assert.equal((elegirTipoDeCita("Control", conCorto, caso) as any).cita?.id, "tipo-9");
+  assert.equal((elegirTipoDeCita(TIPO_CITA_CONTROL_ORTO, conCorto, caso) as any).cita?.id, "control");
+  assert.equal((elegirTipoDeCita("su control de ortodoncia", conCorto, caso) as any).cita?.id, "control");
+
   assert.equal(duracionDeTipo({ label: "Lo que sea", durationMin: 40 }), 40);
   assert.equal(duracionDeTipo({ label: "Retiro de aparatología" }), 60);
   assert.equal(duracionDeTipo({ label: "Entrega de retenedores", durationMin: 0 }), 30);
@@ -444,6 +464,23 @@ test("🔴 un control cobrado aparte o un extra del caso tampoco se cobran", asy
   assert.equal(await facturaDeOrtodoncia(sesion(db, { clinicId: CL_SUR }), { id: "inv-orto-ana" }), null);
 });
 
+test("🔴 tampoco manda el aviso de saldo de ortodoncia por WhatsApp: es cobrar por otra puerta", async () => {
+  const { db, datos, escrituras } = montar();
+  conFolios(datos);
+  const ana = datos.patients.find((p: any) => p.id === "p-ana");
+  ana.phone = "+52 55 1234 5678";
+  const ctx = sesion(db); // administradora: tiene whatsapp.send
+
+  const r = await prepararAviso(ctx, { factura: "MF-0900" });
+  assert.equal(r.tipo, "no_se_puede", JSON.stringify(r));
+  const frase = (r as { frase: string }).frase;
+  assert.match(frase, /^No mando avisos de saldo de ortodoncia\./);
+  assert.match(frase, /le quedan \$16,000\.00 por pagar/);
+  assert.ok(frase.includes("(/dashboard/orthodontics/cobranza)"), frase);
+  assert.match(frase, /No preparé ningún mensaje\.$/);
+  assert.deepEqual(escrituras, []);
+});
+
 test("🔴 lo que NO es de ortodoncia se sigue cobrando, aunque el paciente tenga un caso", async () => {
   const { db, datos } = montar();
   conFolios(datos);
@@ -478,7 +515,7 @@ test("🔴 si no se puede comprobar si es de ortodoncia, no se cobra", async () 
       if (clave === "$queryRaw") {
         return async (q: any) => {
           if (/orthodonticTreatmentPlanId/.test((q?.strings ?? []).join(""))) {
-            throw Object.assign(new Error('column "orthodonticTreatmentPlanId" does not exist'), { code: "P2010", meta: { code: "42703" } });
+            throw Object.assign(new Error("Raw query failed. Code: `42703`. Message: `column \"orthodonticTreatmentPlanId\" does not exist`"), { code: "P2010", meta: { code: "42703" } });
           }
           return objetivo.$queryRaw(q);
         };
@@ -487,6 +524,21 @@ test("🔴 si no se puede comprobar si es de ortodoncia, no se cobra", async () 
     },
   });
   assert.equal((await prepararCobro(recepcion(sinColumna), { factura: "MF-0003", monto: 500, metodo: "cash" })).tipo, "propuesta");
+
+  // Pero «does not exist» de OTRA cosa no es una columna ausente: no se cobra.
+  const otroError = new Proxy(db as any, {
+    get(objetivo, clave) {
+      if (clave === "$queryRaw") {
+        return async () => {
+          throw Object.assign(new Error("Raw query failed. Code: `42883`. Message: `operator does not exist: uuid = text`"), { code: "P2010", meta: { code: "42883" } });
+        };
+      }
+      return objetivo[clave];
+    },
+  });
+  const r2 = await prepararCobro(recepcion(otroError), { factura: "MF-0003", monto: 500, metodo: "cash" });
+  assert.equal(r2.tipo, "no_se_puede");
+  assert.match((r2 as any).frase, /No pude comprobar/);
 });
 
 test("🔴 por el motor entero: «cóbrale su mensualidad a Ana» no deja ninguna tarjeta, y sí el enlace", async () => {

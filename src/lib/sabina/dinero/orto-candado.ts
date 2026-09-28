@@ -8,6 +8,10 @@
  * es de ortodoncia, `cobrar_factura` no prepara tarjeta: contesta con el dato y
  * con el enlace.
  *
+ * Y lo mismo `avisar_saldo_whatsapp`: mandarle al paciente «debes $X» de su
+ * ortodoncia es cobrarle por otra puerta, y con un texto que no es el
+ * recordatorio de mensualidad del módulo. El aviso sale de Cobranza.
+ *
  * ── CUÁNDO UNA FACTURA ES DE ORTODONCIA ────────────────────────────────
  * Las dos formas en que el módulo liga una factura a un caso:
  *  · es LA factura del tratamiento (`orthodontic_treatment_plans.invoiceId`: el
@@ -40,12 +44,19 @@ export interface FacturaDeOrtodoncia {
   clase: "tratamiento" | "del_caso";
 }
 
+/**
+ * ¿El error es «esa tabla o esa columna todavía no existe»? SOLO por su código:
+ * P2021/P2022 de Prisma, o 42P01/42703 de Postgres (como lo trae un
+ * `$queryRaw`: en `meta.code`, o en el mensaje como «Code: `42703`»). Nunca por
+ * el texto «does not exist»: también lo dicen «operator does not exist» o «role
+ * does not exist», y tragarse uno de esos sería dar por comprobada una factura
+ * que no se pudo comprobar.
+ */
 function esRelacionAusente(e: unknown): boolean {
-  const code = (e as { code?: string; meta?: { code?: string } } | null)?.code;
-  if (code === "P2021" || code === "P2022") return true;
-  // SQL crudo contra una columna que aún no existe: Postgres 42703 (o 42P01, tabla).
-  const texto = `${(e as { message?: string } | null)?.message ?? ""} ${(e as { meta?: { code?: string } } | null)?.meta?.code ?? ""}`;
-  return /42703|42P01|does not exist|no existe/i.test(texto);
+  const err = e as { code?: string; message?: string; meta?: { code?: string } } | null;
+  if (err?.code === "P2021" || err?.code === "P2022") return true;
+  const dePostgres = err?.meta?.code ?? /Code: `?(\w{5})`?/.exec(err?.message ?? "")?.[1];
+  return dePostgres === "42703" || dePostgres === "42P01";
 }
 
 /**
@@ -85,6 +96,17 @@ export async function facturaDeOrtodoncia(ctx: SabinaCtx, f: Pick<FacturaLeida, 
     if (!esRelacionAusente(e)) throw e;
   }
   return null;
+}
+
+/**
+ * Lo que Sabina contesta en vez de mandar el aviso de saldo por WhatsApp.
+ */
+export async function fraseNoAvisaOrtodoncia(ctx: SabinaCtx, f: FacturaLeida, orto: FacturaDeOrtodoncia): Promise<string> {
+  const cobro = await fraseNoCobraOrtodoncia(ctx, f, orto);
+  return cobro
+    .replace(/^No cobro ortodoncia\./, "No mando avisos de saldo de ortodoncia.")
+    .replace(/Se cobra en /, "El recordatorio de mensualidad se manda desde ")
+    .replace(/ No preparé ningún cobro\.$/, " No preparé ningún mensaje.");
 }
 
 /**

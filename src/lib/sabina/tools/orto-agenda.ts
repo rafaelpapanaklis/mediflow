@@ -176,8 +176,14 @@ const PIDE_CONTROL = /\b(control(es)?|ajustes?|activacion(es)?|cambio de (arco|l
 /**
  * El tipo de cita del catálogo que corresponde a lo que dijo el usuario.
  *
+ *  0. El texto de un tipo LETRA POR LETRA (lo que manda una opción elegida, y
+ *     lo que llega al revalidar la propuesta): ése, sin interpretar nada.
  *  1. Si nombra un tipo del catálogo («control de retención», «urgencia de
- *     ortodoncia»), ése. Si nombra un trozo que cabe en varios, se pregunta.
+ *     ortodoncia»), ése. 🔴 Salvo que su nombre sea un trozo del de otro tipo
+ *     (una clínica que añadió «Control» a secas): entonces «su control» puede
+ *     ser cualquiera de los dos, y se PREGUNTA. Lo encontró el refutador: sin
+ *     esto, el control de un caso se guardaba como «Control», que el módulo no
+ *     reconoce.
  *  2. Con caso activo, «su control», «su ajuste», «ortodoncia», «brackets» es
  *     su Control (o se pregunta, si está en retención y hay control de retención).
  *  3. Sin caso, solo es de ortodoncia si lo dice (`detectaInteresOrtodoncia`, el
@@ -190,18 +196,22 @@ export function elegirTipoDeCita(motivo: string, catalogo: readonly TipoDeCita[]
   const porId = (id: string) => catalogo.find((t) => t.id === id);
   const hablaDeOrto = detectaInteresOrtodoncia(m);
 
-  // 1a. El texto exacto de un tipo: no hay nada que interpretar. Es también lo
-  // que llega al revalidar la propuesta, así que tiene que dar siempre lo mismo.
-  const exacto = catalogo.find((t) => nombreComparable(t.label) === m);
-  if (exacto) return { tipo: "uno", cita: exacto };
+  // 0. Letra por letra: es una opción ya elegida, o la propuesta que se revalida.
+  const literal = catalogo.find((t) => t.label === (motivo ?? "").trim());
+  if (literal) return { tipo: "uno", cita: literal };
 
-  // 1b. El nombre entero de un tipo dentro de la frase («su control de retención del jueves»).
-  const nombrados = catalogo.filter((t) => m.includes(nombreComparable(t.label)));
-  if (nombrados.length === 1) return { tipo: "uno", cita: nombrados[0] };
-  if (nombrados.length > 1) {
-    // El más largo contiene a los demás («control de retención» ⊃ «control»).
-    const masLargo = [...nombrados].sort((a, b) => b.label.length - a.label.length)[0];
-    return { tipo: "uno", cita: masLargo };
+  // 1. El nombre de un tipo, igual o dentro de la frase («su control de
+  // retención del jueves»). Si caben varios, el más largo contiene a los demás.
+  const nombrados = catalogo
+    .filter((t) => m.includes(nombreComparable(t.label)))
+    .sort((a, b) => b.label.length - a.label.length);
+  if (nombrados.length > 0) {
+    const elegido = nombrados[0];
+    const nombre = nombreComparable(elegido.label);
+    // ¿Su nombre es un trozo del de OTRO tipo? Entonces no se sabe cuál quiso decir.
+    const confundibles = catalogo.filter((t) => t.id !== elegido.id && nombreComparable(t.label).includes(nombre));
+    if (confundibles.length > 0) return { tipo: "varios", opciones: [...confundibles, elegido] };
+    return { tipo: "uno", cita: elegido };
   }
 
   if (caso) {

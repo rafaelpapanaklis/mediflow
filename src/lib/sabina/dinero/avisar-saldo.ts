@@ -47,6 +47,8 @@ import {
   telefonoParcial,
   type FacturaLeida,
 } from "./comun";
+import { soloLectura } from "../engine-solo-lectura";
+import { facturaDeOrtodoncia, fraseNoAvisaOrtodoncia } from "./orto-candado";
 import { errorDelCuerpo, rechazoDeDinero } from "./respuestas";
 
 /** Los del handler: cobrables SIN el borrador. */
@@ -264,6 +266,20 @@ export async function prepararAviso(ctx: SabinaCtx, p: ParamsAviso): Promise<Sab
   if (r.tipo === "no") return { tipo: "no_se_puede", frase: r.frase };
   const f = r.valor;
 
+  // 🔴 Ortodoncia (ws1-t11): Sabina no cobra ortodoncia, y avisarle al paciente
+  // de su saldo es cobrarle por otra puerta. Mismo candado que `cobrar_factura`.
+  let orto;
+  try {
+    orto = await facturaDeOrtodoncia(ctx, f);
+  } catch (e) {
+    console.error("[sabina/dinero] no se pudo comprobar si la factura es de ortodoncia", { folio: f.folio, e });
+    return {
+      tipo: "no_se_puede",
+      frase: `No pude comprobar si la factura ${f.folio} es de un caso de ortodoncia, así que no preparé el aviso. Inténtalo otra vez en un momento.`,
+    };
+  }
+  if (orto) return { tipo: "no_se_puede", frase: await fraseNoAvisaOrtodoncia(ctx, f, orto) };
+
   const m = await mensajeDe(ctx, f);
   if (m.tipo === "no") return { tipo: "no_se_puede", frase: m.frase };
 
@@ -341,9 +357,23 @@ export const accionAvisarSaldo = definirAccion<ParamsAviso, DatosAviso>({
     return [m.modo, texto, f.status, f.balance].join("|");
   },
 
-  async ejecutar(llave, _ctx, d) {
+  async ejecutar(llave, ctx, d) {
     if (!ID_SEGURO.test(d.facturaId)) {
       return { ok: false, tipo: "error", frase: "Esa propuesta no se pudo ejecutar tal como estaba. No se mandó nada." };
+    }
+    // Ortodoncia, otra vez al ejecutar: una factura que se ligó a un caso después
+    // de la tarjeta tampoco se avisa. Bajo el candado de solo lectura.
+    try {
+      const orto = await soloLectura(`ortodoncia ${d.folio}`, () => facturaDeOrtodoncia(ctx, { id: d.facturaId }));
+      if (orto) {
+        return {
+          ok: false,
+          tipo: "invalido",
+          frase: `La factura ${d.folio} es de un caso de ortodoncia y yo no mando avisos de saldo de ortodoncia. No se mandó nada: el recordatorio sale desde Cobranza de ortodoncia.`,
+        };
+      }
+    } catch {
+      return { ok: false, tipo: "error", frase: `No pude comprobar la factura ${d.folio} antes de mandar el aviso. No se mandó nada; inténtalo otra vez.` };
     }
     const { POST } = await import("@/app/api/invoices/[id]/send-whatsapp/route");
     let r;
