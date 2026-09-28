@@ -8,7 +8,7 @@
 //      fases con la actual marcada.
 
 import { Activity, ChevronRight, ClipboardCheck, Layers, Pencil, Plus, Settings } from "lucide-react";
-import { Btn, Card, StatChip, fmtDate, fmtPct } from "../atoms";
+import { Btn, Card, StatChip, fmtDayLong, fmtPct } from "../atoms";
 import { Pill } from "../atoms/Pill";
 import { ProgressBar } from "../atoms/ProgressBar";
 import {
@@ -139,8 +139,8 @@ export function SectionHero(props: SectionHeroProps) {
             ariaLabel={`Mes ${t.monthCurrent} de ${t.monthTotal}`}
           />
           <div className={`${orto.tonoApagado} flex justify-between gap-3 mt-[6px] text-[11.5px]`}>
-            <span>Inicio · {fmtDate(t.startDate)}</span>
-            <span className="text-right">Fin estimado · {fmtDate(t.estimatedEndDate)}</span>
+            <span>Inicio · {fmtDayLong(t.startDate)}</span>
+            <span className="text-right">Fin estimado · {fmtDayLong(t.estimatedEndDate)}</span>
           </div>
         </div>
 

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   fmtDay,
+  fmtDayLong,
   fmtMoney,
   fmtPct,
   fmtMm,
@@ -51,5 +52,21 @@ describe("format helpers", () => {
     assert.match(dia, /oct/i);
     assert.equal(fmtDay(null), "—");
     assert.equal(fmtDay(""), "—");
+  });
+
+  it("fmtDay/fmtDayLong toman el DÍA aunque llegue como datetime UTC (H8)", () => {
+    // `installedAt`/`estimatedEndDate` viajan como
+    // "2026-07-28T00:00:00.000Z" (un <input type="date"> pasado por
+    // `new Date(v).toISOString()`), no como "2026-07-28" a secas. En una
+    // zona negativa (México) esto se leía como "27 jul".
+    const dia = fmtDay("2026-07-28T00:00:00.000Z");
+    assert.match(dia, /^28/);
+    assert.match(dia, /jul/i);
+
+    const largo = fmtDayLong("2026-07-28T00:00:00.000Z");
+    assert.match(largo, /^28/);
+    assert.match(largo, /jul/i);
+    assert.match(largo, /2026/);
+    assert.equal(fmtDayLong(null), "—");
   });
 });

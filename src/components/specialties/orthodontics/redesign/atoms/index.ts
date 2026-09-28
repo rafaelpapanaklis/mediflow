@@ -31,6 +31,7 @@ export {
   fmtDate,
   fmtDateShort,
   fmtDay,
+  fmtDayLong,
   fmtTime,
   fmtPct,
   fmtMm,
