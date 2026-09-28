@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PLAN_STATUS } from "@/lib/payment-plans/status";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { logMutation } from "@/lib/audit";
 
 // PATCH /api/payment-plans/[id] — register a payment on an installment
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -70,6 +71,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     include: { payments: { orderBy: { installment: "asc" } }, patient: { select: { firstName: true, lastName: true } } },
   });
 
+  // P4 — bitácora: quién cobró qué cuota, cuándo y con qué método (hallazgo
+  // REPORTE-ws1-t8.md). No se toca la respuesta ni el status code.
+  const cobrada = updated.find((p) => p.id === installmentId);
+  await logMutation({
+    req,
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    entityType: "payment-plan",
+    entityId: params.id,
+    action: "update",
+    before: { installmentId, paidAt: null, method: null, planStatus: plan.status },
+    after: {
+      installmentId,
+      paidAt: cobrada?.paidAt ?? null,
+      method: method ?? null,
+      notes: notes ?? null,
+      planStatus: allPaid ? PLAN_STATUS.COMPLETED : plan.status,
+    },
+  });
+
   return NextResponse.json(result);
 }
 
@@ -98,5 +119,19 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   }
 
   await prisma.paymentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data: { status: PLAN_STATUS.CANCELLED } });
+
+  // P4 — bitácora: cancelar un plan detiene el cobro de todo lo que falte;
+  // "void" (no borra la fila, invalida el plan — hallazgo REPORTE-ws1-t8.md).
+  await logMutation({
+    req,
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    entityType: "payment-plan",
+    entityId: params.id,
+    action: "void",
+    before: { status: plan.status },
+    after: { status: PLAN_STATUS.CANCELLED },
+  });
+
   return NextResponse.json({ success: true });
 }

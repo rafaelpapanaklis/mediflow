@@ -9,6 +9,8 @@
  *   · el vencimiento es 00:00 de ese día en México (06:00Z), el mismo día de
  *     cada mes;
  *   · una letra ya pagada no se vuelve a «cobrar» (antes se le pisaba la fecha).
+ *   · P4 (ws1-t3, ajuste): POST/PATCH/DELETE dejan fila en AuditLog (antes esta
+ *     ruta no auditaba nada — REPORTE-ws1-t8.md) SIN cambiar ninguna respuesta.
  */
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
@@ -16,11 +18,13 @@ import assert from "node:assert/strict";
 const db = {
   plans: [] as any[],
   letras: [] as any[],
+  auditRows: [] as any[],
 };
 
 function reset() {
   db.plans = [];
   db.letras = [];
+  db.auditRows = [];
 }
 
 /** Aplica solo los filtros que la ruta usa; cualquier otro revienta (sin falsos verdes). */
@@ -78,6 +82,16 @@ const prismaStub: any = {
       return { count: ls.length };
     },
     findMany: async ({ where }: any) => db.letras.filter((l) => coincide(l, where)),
+  },
+  // P4 (ws1-t3, ajuste): logMutation llama a prisma.auditLog.create con el
+  // MISMO prisma mockeado de arriba — sin este doble, logAudit lo atrapa en
+  // su try/catch (nunca revienta la ruta) pero no deja rastro que probar.
+  auditLog: {
+    create: async ({ data }: any) => {
+      const row = { id: `audit${db.auditRows.length + 1}`, ...data };
+      db.auditRows.push(row);
+      return row;
+    },
   },
   $transaction: async (fn: any) => fn(prismaStub),
 };
@@ -192,4 +206,36 @@ test("PATCH: al pagar la última letra el plan queda COMPLETED; uno cancelado no
   const r = await leer(await PATCH(req({ installmentId: letra.id }), P2));
   assert.equal(r.status, 400);
   assert.equal(letra.paidAt, null);
+});
+
+// ── P4 (ws1-t3, ajuste): bitácora, sin tocar las respuestas ──────────────
+
+test("POST/PATCH/DELETE dejan fila en AuditLog — mismas respuestas de siempre", async () => {
+  reset();
+  const { POST } = await import("@/app/api/payment-plans/route");
+  const { PATCH, DELETE } = await import("@/app/api/payment-plans/[id]/route");
+
+  const creado = await leer(await POST(req({ ...base, totalAmount: 200, installments: 2 })));
+  assert.equal(creado.status, 201, creado.body?.error);
+  assert.equal(db.auditRows.length, 1, "POST audita la creación del plan");
+  assert.equal(db.auditRows[0].entityType, "payment-plan");
+  assert.equal(db.auditRows[0].action, "create");
+  assert.equal(db.auditRows[0].entityId, creado.body.id);
+  assert.equal(db.auditRows[0].clinicId, "c1");
+  assert.equal(db.auditRows[0].userId, "u1");
+
+  const P = { params: { id: creado.body.id } };
+  const letra = db.letras[0];
+  const cobrado = await leer(await PATCH(req({ installmentId: letra.id, method: "cash" }), P));
+  assert.equal(cobrado.status, 200, cobrado.body?.error);
+  assert.equal(db.auditRows.length, 2, "PATCH audita el cobro de la cuota");
+  assert.equal(db.auditRows[1].entityType, "payment-plan");
+  assert.equal(db.auditRows[1].action, "update");
+
+  const cancelado = await leer(await DELETE(req({}), P));
+  assert.equal(cancelado.status, 200);
+  assert.deepEqual(cancelado.body, { success: true }, "la respuesta de DELETE no cambió");
+  assert.equal(db.auditRows.length, 3, "DELETE audita la cancelación");
+  assert.equal(db.auditRows[2].action, "void");
+  assert.equal(db.auditRows[2].entityId, creado.body.id);
 });

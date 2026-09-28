@@ -42,6 +42,12 @@ export type AuditEntityType =
   | "subscription"
   | "quote"
   | "cash-register"
+  // Plan de pagos genérico (/api/payment-plans) — P4, hallazgo de la
+  // auditoría de Ortodoncia (REPORTE-ws1-t8.md): esta ruta no dejaba
+  // ninguna fila en AuditLog. No es exclusivo de Ortodoncia (lo usa
+  // cualquier tratamiento a plazos), de ahí un tipo propio y no uno de
+  // ortodoncia.
+  | "payment-plan"
   // Plataforma / admin (WS2 · cobertura de auditoría en /admin). Tipan tanto las
   // filas clinic-scoped que SÍ entran a AuditLog (p.ej. "admin-billing",
   // "ai-wallet", anclando a la clínica + un usuario suyo) como los eventos

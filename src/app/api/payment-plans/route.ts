@@ -7,6 +7,7 @@ import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
 import { todayInTz, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { logMutation } from "@/lib/audit";
 
 // GET /api/payment-plans?patientId=xxx
 export async function GET(req: NextRequest) {
@@ -136,6 +137,25 @@ export async function POST(req: NextRequest) {
   const result = await prisma.paymentPlan.findUnique({
     where:   { id: plan.id },
     include: { payments: { orderBy: { installment: "asc" } } },
+  });
+
+  // P4 — bitácora: esta ruta no dejaba ningún rastro de quién armó el plan
+  // de pagos ni con qué condiciones (hallazgo REPORTE-ws1-t8.md).
+  await logMutation({
+    req,
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    entityType: "payment-plan",
+    entityId: plan.id,
+    action: "create",
+    after: {
+      patientId,
+      invoiceId: invoiceId ?? null,
+      totalAmount: letras.totalAmount,
+      downPayment: letras.downPayment,
+      installments: letras.installments,
+      frequency: letras.frequency,
+    },
   });
 
   return NextResponse.json(result, { status: 201 });

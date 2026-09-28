@@ -105,6 +105,7 @@ export const AUDIT_ENTITY_OPTIONS = [
   "clinic",
   "subscription",
   "quote",
+  "payment-plan",
   "pediatric-record",
 ] as const;
 
@@ -145,6 +146,7 @@ const ENTITY_LABELS: Record<string, string> = {
   clinic: "Clínica",
   subscription: "Suscripción",
   quote: "Presupuesto",
+  "payment-plan": "Plan de pagos",
 };
 
 export function entityLabel(entityType: string): string {
