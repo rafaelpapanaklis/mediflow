@@ -36,12 +36,31 @@ export function PhotoLineAnalyzer({ imageUrl, view, initialPoints, pixelsPerMm, 
   const [containerSize, setContainerSize] = useState<Size | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // No se puede llamar a onChange (setState del padre) dentro del updater de
+  // setPoints — React lo advierte ("Cannot update a component while
+  // rendering a different component") porque el updater puede correr
+  // durante el render. En vez de eso, un efecto separado avisa al padre
+  // cuando `points` cambia de verdad; skipNextChangeRef calla el aviso que
+  // dispara el reseteo por cambio de foto (eso no es una edición del
+  // usuario, es la carga inicial).
+  const skipNextChangeRef = useRef(true);
+
   // Reinicia al cambiar de foto — un análisis viejo sobre una foto nueva no tiene sentido.
   useEffect(() => {
     setPoints(initialPoints ?? {});
     setImageSize(null);
+    skipNextChangeRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrl]);
+
+  useEffect(() => {
+    if (skipNextChangeRef.current) {
+      skipNextChangeRef.current = false;
+      return;
+    }
+    if (imageSize) onChange?.(points, imageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -58,16 +77,9 @@ export function PhotoLineAnalyzer({ imageUrl, view, initialPoints, pixelsPerMm, 
   const labelById = Object.fromEntries(FACIAL_LANDMARKS.map((l) => [l.id, l.label]));
   const ready = imageSize !== null && containerSize !== null;
 
-  const setPoint = useCallback(
-    (id: FacialLandmarkId, x: number, y: number) => {
-      setPoints((prev) => {
-        const next = { ...prev, [id]: { x, y } };
-        if (imageSize) onChange?.(next, imageSize);
-        return next;
-      });
-    },
-    [onChange, imageSize],
-  );
+  const setPoint = useCallback((id: FacialLandmarkId, x: number, y: number) => {
+    setPoints((prev) => ({ ...prev, [id]: { x, y } }));
+  }, []);
 
   /** Punto en px NATURALES de la foto a partir de un evento de puntero, o null si cae fuera de la foto (franja negra). */
   const naturalPoint = (e: { clientX: number; clientY: number }) => {
@@ -195,10 +207,7 @@ export function PhotoLineAnalyzer({ imageUrl, view, initialPoints, pixelsPerMm, 
           <Btn
             variant="ghost"
             size="sm"
-            onClick={() => {
-              setPoints({});
-              if (imageSize) onChange?.({}, imageSize);
-            }}
+            onClick={() => setPoints({})}
           >
             Reiniciar
           </Btn>
