@@ -34,6 +34,7 @@ import type {
   WireStepDTO,
 } from "@/components/specialties/orthodontics/redesign/types";
 import { PHASE_LABELS } from "@/components/specialties/orthodontics/redesign/types";
+import { resolveCurrentWire } from "./current-wire";
 
 // Tipos auxiliares para include shapes que load-data devolverá.
 
@@ -133,7 +134,10 @@ export function adaptToOrthoRedesignViewModel(
   const l = input.legacy;
   const wireSteps = (input.wireSteps ?? []).map(adaptWireStep);
   const wireById = new Map(wireSteps.map((w) => [w.id, w]));
-  const wireCurrent = wireSteps.find((w) => w.status === "ACTIVE") ?? null;
+  const treatmentCards = (input.treatmentCards ?? []).map((c) => adaptCard(c, wireById));
+  // Ola 1 (ws1-t4, Control y agenda) — C1: "arco actual" = el último anotado en un control
+  // firmado, no el status ACTIVE de la secuencia planeada. Ver current-wire.ts.
+  const wireCurrent = resolveCurrentWire(wireSteps, treatmentCards);
 
   const treatment = adaptTreatment({
     legacy: l,
@@ -154,7 +158,7 @@ export function adaptToOrthoRedesignViewModel(
     treatment,
     diagnosis,
     wireSequence: wireSteps,
-    treatmentCards: (input.treatmentCards ?? []).map((c) => adaptCard(c, wireById)),
+    treatmentCards,
     tads: (input.tads ?? []).map(adaptTad),
     auxMechanics: input.auxMechanics ? adaptAux(input.auxMechanics) : null,
     phaseTransitions: (input.phaseTransitions ?? []).map(adaptTransition),
