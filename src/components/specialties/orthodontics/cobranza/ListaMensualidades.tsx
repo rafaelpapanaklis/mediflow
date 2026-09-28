@@ -86,7 +86,16 @@ function comoFactura(it: MensualidadPorCobrar): PaymentInvoice {
   };
 }
 
-export function ListaMensualidades() {
+export function ListaMensualidades({
+  alCobrar,
+}: {
+  /**
+   * Se llama después de guardar cada cobro (ws1-t3, H16). La usa la pantalla
+   * «Cobranza» del módulo de Ortodoncia para volver a pedir sus totales; en
+   * Caja no se pasa y todo sigue como siempre.
+   */
+  alCobrar?: () => void;
+} = {}) {
   const [items, setItems] = useState<MensualidadPorCobrar[] | null>(null);
   const [rediseno, setRediseno] = useState(false);
   const [cobrandoCola, setCobrandoCola] = useState<MensualidadPorCobrar[] | null>(null);
@@ -119,6 +128,7 @@ export function ListaMensualidades() {
     const resto = cobrandoCola.slice(1);
     setCobrandoCola(resto.length > 0 ? resto : null);
     recargar();
+    alCobrar?.();
   }
 
   return (
