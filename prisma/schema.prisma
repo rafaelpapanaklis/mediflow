@@ -18723,3 +18723,36 @@ model ClinicBankAccount {
 
   @@map("clinic_bank_accounts")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ORTODONCIA — OLA 1 · «Acceso y permisos» (ws1-t3), sql/ortodoncia-configuracion.sql
+//
+// Configuración del submenú "Configuración" del módulo: doctor tratante por
+// defecto (se pre-rellena al abrir un caso nuevo — A5/A11 lo dejan editable
+// caso por caso), catálogo propio de tipos de cita de ortodoncia (C7:
+// valoración, toma de registros, colocación, control, urgencia, retiro,
+// control de retención — la parte «Control y agenda» solo cablea el chip de
+// "Control de ortodoncia" en new-appointment-dialog.tsx; el resto del
+// catálogo vive aquí hasta que alguien lo conecte al selector) y plantillas
+// de mensaje. Una fila por clínica.
+//
+// Sin @relation a User/Clinic a propósito (mismo criterio que
+// ClinicBankAccount, arriba): esos dos modelos los tocan otras pantallas de
+// esta ola a la vez. El código tolera que la tabla aún no exista (P2021,
+// SQL sin aplicar) y devuelve defaults — ver src/lib/orthodontics/clinic-settings-db.ts.
+// ═══════════════════════════════════════════════════════════════════════
+model OrthodonticsClinicSettings {
+  clinicId                String   @id
+  defaultTreatingDoctorId String?
+  /// Array JSON de { id, label } — catálogo de tipos de cita propios de
+  /// Ortodoncia (C7). null = usa el catálogo por defecto en código.
+  appointmentTypes        Json?
+  /// Plantillas de mensaje (recordatorio de control, aviso de mensualidad
+  /// vencida, etc.) como { [clave]: texto }. null = usa las plantillas por
+  /// defecto del módulo.
+  messageTemplates        Json?
+  updatedBy               String?
+  updatedAt               DateTime @default(now()) @updatedAt
+
+  @@map("orthodontics_clinic_settings")
+}
