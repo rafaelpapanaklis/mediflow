@@ -34,6 +34,8 @@ import { useCobro } from "@/components/dashboard/factura-un-popup/use-cobro";
 import { BloquePlan } from "@/components/dashboard/plan-de-pagos/bloque-plan";
 import { DestinoDelAbono } from "@/components/dashboard/plan-de-pagos/destino-abono";
 import { useCondicionesDeFactura } from "@/components/dashboard/plan-de-pagos/use-condiciones";
+import { usePagosConCfdi } from "@/components/dashboard/plan-de-pagos/use-pagos-cfdi";
+import { PaymentCfdiButton } from "./payment-cfdi-button";
 import { SeccionCobro, DescuentoEnLinea, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 // Mercado Pago como método de pago (ws1-t1): el método en el cobro y el bloque
@@ -239,6 +241,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // Solo con el diseño nuevo: con el interruptor apagado este modal es, byte
   // por byte, el de siempre, y ni siquiera se pregunta por las condiciones.
   const condicionesPago = useCondicionesDeFactura(invoice?.id, open && rediseno);
+  // CFDI por pago (ws1-t1): solo tiene sentido pintarlo donde YA se pinta el
+  // plan de pagos (rediseno) — sin eso no hay "cuota 3 de 18" que explicar.
+  const { cfdiPorPago, recargarCfdiPorPago } = usePagosConCfdi(invoice?.id, open && rediseno);
   // ¿La clínica cobra con Mercado Pago? (ws1-t1) Sin cuenta: false, y nada cambia.
   // `true`, no `open`: se pregunta al montar la ficha, no al abrir el modal.
   // Preguntarlo al abrir hacía que el botón de Mercado Pago apareciera de golpe
@@ -869,21 +874,44 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 <div className={cx("bg-card border border-border rounded-lg divide-y divide-border", c.lista)}>
                   {invoice.payments.map((p: any) => {
                     const isRefund = p.method === "refund";
+                    // CFDI por pago (ws1-t1): solo en facturas a plazos, solo
+                    // cobros reales (no reembolsos), y solo donde ya se pinta
+                    // el plan de pagos — sin eso "mensualidad 3 de 18" no
+                    // significa nada en pantalla.
+                    const admiteCfdiPorPago = rediseno && !isCancelled && !isDraft && !isRefund && condicionesPago?.modo === "plazos";
                     return (
-                      <div key={p.id} className={cx("px-3 py-2 flex items-center justify-between text-xs", c.fila)}>
-                        <div className={cx("min-w-0", c.filaTextos)}>
-                          <div className={rediseno ? `${c.filaTitulo} ${isRefund ? c.cifraPeligro : ""}` : `font-medium ${isRefund ? "" : "text-foreground"}`} style={isRefund && !rediseno ? { color: "var(--danger)" } : undefined}>
-                            {METHOD_LABEL_KEYS[p.method] ? t(METHOD_LABEL_KEYS[p.method]) : (p.method ?? "—")}
+                      <div key={p.id} className={cx("px-3 py-2 flex flex-col gap-1", c.fila)}>
+                        <div className="flex items-center justify-between">
+                          <div className={cx("min-w-0", c.filaTextos)}>
+                            <div className={rediseno ? `${c.filaTitulo} ${isRefund ? c.cifraPeligro : ""}` : `font-medium ${isRefund ? "" : "text-foreground"}`} style={isRefund && !rediseno ? { color: "var(--danger)" } : undefined}>
+                              {METHOD_LABEL_KEYS[p.method] ? t(METHOD_LABEL_KEYS[p.method]) : (p.method ?? "—")}
+                            </div>
+                            <div className={cx("text-[10px] text-muted-foreground", c.filaDetalle)}>
+                              {formatDate(p.paidAt)}
+                              {p.reference ? ` · ${p.reference}` : ""}
+                              {p.notes ? ` · ${p.notes}` : ""}
+                            </div>
                           </div>
-                          <div className={cx("text-[10px] text-muted-foreground", c.filaDetalle)}>
-                            {formatDate(p.paidAt)}
-                            {p.reference ? ` · ${p.reference}` : ""}
-                            {p.notes ? ` · ${p.notes}` : ""}
+                          <div className={cx("font-mono font-bold", `${c.cifra} ${isRefund ? c.cifraPeligro : c.cifraExito}`)} style={rediseno ? undefined : { color: isRefund ? "var(--danger)" : "var(--success)" }}>
+                            {isRefund ? "−" : ""}{fmtMXNdec(p.amount)}
                           </div>
                         </div>
-                        <div className={cx("font-mono font-bold", `${c.cifra} ${isRefund ? c.cifraPeligro : c.cifraExito}`)} style={rediseno ? undefined : { color: isRefund ? "var(--danger)" : "var(--success)" }}>
-                          {isRefund ? "−" : ""}{fmtMXNdec(p.amount)}
-                        </div>
+                        {admiteCfdiPorPago && (
+                          <PaymentCfdiButton
+                            paymentId={p.id}
+                            amount={p.amount}
+                            method={p.method}
+                            clinicTaxMode={clinicTaxMode}
+                            defaultReceptor={{
+                              rfc:     invoice.patient?.rfcPaciente,
+                              nombre:  invoice.patient?.razonSocialPac,
+                              regimen: invoice.patient?.regimenFiscalPac,
+                              cp:      invoice.patient?.cpPaciente,
+                            }}
+                            cfdi={cfdiPorPago[p.id]}
+                            onStamped={() => { recargarCfdiPorPago(); onMutated(); }}
+                          />
+                        )}
                       </div>
                     );
                   })}

@@ -423,9 +423,15 @@ export function SectionFinance(props: SectionFinanceProps) {
             ) : null}
 
             <div className={`${orto.tarjetaPie} text-[11.5px] text-[color:var(--pr-texto-3)]`}>
-              El CFDI de las mensualidades (PPD con complemento de pago) y el cobro automático con
-              tarjeta todavía no están disponibles aquí: dependen de cómo decida timbrar el contador
-              de la clínica.
+              {/* ws1-t1 (sep-2026): decisión de Rafael — cada pago se factura
+                  como su propio CFDI PUE (igual que la suscripción del plan),
+                  NO como PPD. El botón vive en el detalle de la factura
+                  (Facturación / ficha del paciente → esta factura →
+                  "Facturar este pago", junto a cada pago). El cobro
+                  automático con tarjeta sigue sin estar disponible aquí. */}
+              El CFDI de cada mensualidad se factura desde la factura del tratamiento: ábrela en
+              Facturación o en la ficha del paciente y usa «Facturar este pago» junto al pago que
+              quieras timbrar. El cobro automático con tarjeta todavía no está disponible aquí.
             </div>
           </>
         )}
