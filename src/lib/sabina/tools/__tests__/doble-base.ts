@@ -69,7 +69,51 @@ export interface Datos {
   clinicMercadoPagos?: Fila[];
   appointmentDeposits?: Fila[];
   appointmentDepositPayments?: Fila[];
+  /**
+   * ws1-t11 (Sabina sabe de ortodoncia): lo que leen los cargadores del módulo
+   * (`loadOrthoCases`, `loadOrthoControles`, `loadOrthoData`…) y las tres
+   * lecturas propias de `orto_caso`. `clinicModules` + `modules` son el módulo
+   * contratado de cada sede.
+   */
+  modules?: Fila[];
+  clinicModules?: Fila[];
+  orthodonticDiagnoses?: Fila[];
+  orthodonticTreatmentPlans?: Fila[];
+  orthodonticPhases?: Fila[];
+  orthoPaymentPlans?: Fila[];
+  orthoInstallments?: Fila[];
+  orthoPhotoSets?: Fila[];
+  orthodonticControlAppointments?: Fila[];
+  orthodonticDigitalRecords?: Fila[];
+  orthoWireSteps?: Fila[];
+  orthoTreatmentCards?: Fila[];
+  orthoCardElastics?: Fila[];
+  orthoCardIprPoints?: Fila[];
+  orthoCardBrokenBrackets?: Fila[];
+  orthodonticAligners?: Fila[];
+  patientCredits?: Fila[];
 }
+
+/** Los modelos de ortodoncia (ws1-t11): entidad de Prisma → tabla del doble. */
+const MODELOS_ORTO: Record<string, keyof Datos> = {
+  module: "modules",
+  clinicModule: "clinicModules",
+  orthodonticDiagnosis: "orthodonticDiagnoses",
+  orthodonticTreatmentPlan: "orthodonticTreatmentPlans",
+  orthodonticPhase: "orthodonticPhases",
+  orthoPaymentPlan: "orthoPaymentPlans",
+  orthoInstallment: "orthoInstallments",
+  orthoPhotoSet: "orthoPhotoSets",
+  orthodonticControlAppointment: "orthodonticControlAppointments",
+  orthodonticDigitalRecord: "orthodonticDigitalRecords",
+  orthoWireStep: "orthoWireSteps",
+  orthoTreatmentCard: "orthoTreatmentCards",
+  orthoCardElastic: "orthoCardElastics",
+  orthoCardIprPoint: "orthoCardIprPoints",
+  orthoCardBrokenBracket: "orthoCardBrokenBrackets",
+  orthodonticAligner: "orthodonticAligners",
+  patientCredit: "patientCredits",
+};
 
 interface Relacion {
   modelo: string;
@@ -127,6 +171,22 @@ const RELACIONES: Record<string, Record<string, Relacion>> = {
     patient: { modelo: "patients", via: (r, p) => r.patientId === p.id, lista: false },
     appointment: { modelo: "appointments", via: (r, a) => r.appointmentId === a.id, lista: false },
   },
+  // ws1-t11 — ortodoncia.
+  clinicModule: {
+    module: { modelo: "modules", via: (c, m) => c.moduleId === m.id, lista: false },
+  },
+  orthodonticDiagnosis: {
+    patient: { modelo: "patients", via: (d, p) => d.patientId === p.id, lista: false },
+  },
+  orthodonticTreatmentPlan: {
+    patient: { modelo: "patients", via: (t, p) => t.patientId === p.id, lista: false },
+    treatingDoctor: { modelo: "users", via: (t, u) => t.treatingDoctorId === u.id, lista: false },
+  },
+  orthoTreatmentCard: {
+    elastics: { modelo: "orthoCardElastics", via: (c, e) => e.cardId === c.id, lista: true },
+    iprPoints: { modelo: "orthoCardIprPoints", via: (c, e) => e.cardId === c.id, lista: true },
+    brokenBrackets: { modelo: "orthoCardBrokenBrackets", via: (c, e) => e.cardId === c.id, lista: true },
+  },
 };
 
 const MODELO_DE: Record<string, string> = {
@@ -161,6 +221,7 @@ const MODELO_DE: Record<string, string> = {
   clinicMercadoPago: "clinicMercadoPagos",
   appointmentDeposit: "appointmentDeposits",
   appointmentDepositPayment: "appointmentDepositPayments",
+  ...MODELOS_ORTO,
 };
 
 /** Cuántas consultas se han hecho, por modelo y operación. Para vigilar el pooler. */
@@ -204,6 +265,7 @@ export function crearBase(datos: Datos): BaseDoble {
     appointmentDeposits: datos.appointmentDeposits ?? [],
     appointmentDepositPayments: datos.appointmentDepositPayments ?? [],
   };
+  for (const tabla of Object.values(MODELOS_ORTO)) tablas[tabla] = datos[tabla] ?? [];
   const contador: Contador = { llamadas: [] };
 
   function filtrar(entidad: string, where: any): Fila[] {
@@ -312,6 +374,12 @@ export function crearBase(datos: Datos): BaseDoble {
     odontogramEntry: delegado("odontogramEntry") as any,
     clinicMercadoPago: delegado("clinicMercadoPago") as any,
     appointmentDeposit: delegado("appointmentDeposit") as any,
+    // ws1-t11 — ortodoncia: los modelos que leen los cargadores del módulo.
+    ...Object.fromEntries(Object.keys(MODELOS_ORTO).map((entidad) => [entidad, delegado(entidad)])),
+    // Las tres que `SabinaDb` declara (las lee `orto_caso` por `ctx.db`), con su nombre.
+    orthoTreatmentCard: delegado("orthoTreatmentCard") as any,
+    orthoWireStep: delegado("orthoWireStep") as any,
+    orthodonticAligner: delegado("orthodonticAligner") as any,
     /**
      * A propósito LANZA. El doble no habla SQL, y eso ejercita el camino
      * DEGRADADO del buscador —el `contains` de siempre— que es el que el repo

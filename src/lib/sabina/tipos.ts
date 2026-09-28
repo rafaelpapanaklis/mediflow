@@ -232,6 +232,23 @@ export interface SabinaDb {
   appointmentDeposit: {
     findMany(args: any): Promise<any[]>;
   };
+  /**
+   * Ortodoncia (ws1-t11) — solo lectura, y solo para `orto_caso`. Son las tres
+   * lecturas de la ficha del caso que el panel hace dentro de funciones que
+   * Sabina no puede llamar (ver ./tools/orto-motor). Todo lo demás de ortodoncia
+   * lo leen los cargadores del propio módulo. Las tres llevan `clinicId`, y aun
+   * así el paciente se comprueba ANTES (visibilidad y ARCO) con `loadOrthoData`.
+   */
+  orthoTreatmentCard: {
+    findMany(args: any): Promise<any[]>;
+    groupBy(args: any): Promise<any[]>;
+  };
+  orthoWireStep: {
+    findMany(args: any): Promise<any[]>;
+  };
+  orthodonticAligner: {
+    findFirst(args: any): Promise<any | null>;
+  };
   $queryRaw(query: any): Promise<any[]>;
 }
 

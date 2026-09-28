@@ -23,6 +23,9 @@ import { pacientesConEtiqueta } from "./tools/pacientes-con-etiqueta";
 import { proximasCitas } from "./tools/proximas-citas";
 import { estadoMercadoPago } from "./tools/estado-mercado-pago";
 import { ayudaDelPanel } from "./tools/ayuda-del-panel";
+import { ortoCaso } from "./tools/orto-caso";
+import { ortoControles } from "./tools/orto-controles";
+import { ortoCobranza } from "./tools/orto-cobranza";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -62,7 +65,13 @@ import { ayudaDelPanel } from "./tools/ayuda-del-panel";
    lo mismo que pinta Configuración → Anticipos por WhatsApp —no conecta, no
    cambia ajustes, no manda links—, y `ayuda_del_panel`, que no lee la base:
    devuelve los pasos en pantalla de UN tema de ./ayuda-del-panel. Pruebas en
-   tools/__tests__/sabe-del-panel.test.ts. */
+   tools/__tests__/sabe-del-panel.test.ts. Y las tres de ORTODONCIA (ws1-t11,
+   28-sep-2026): `orto_caso`, `orto_controles` y `orto_cobranza`. Leen con el
+   motor del módulo (los mismos cargadores que sus pantallas), solo en sedes con
+   el módulo contratado, y dan el enlace a la pantalla donde se hace cada cosa.
+   🔴 Son consultas, no acciones: Sabina no abre casos, no agenda controles, no
+   firma hojas y no cobra mensualidades. Pruebas en
+   tools/__tests__/ortodoncia.test.ts. */
 const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   ...CATALOGO_SABINA,
   proponerHorarios,
@@ -84,6 +93,9 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   proximasCitas,
   estadoMercadoPago,
   ayudaDelPanel,
+  ortoCaso,
+  ortoControles,
+  ortoCobranza,
 ];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────
