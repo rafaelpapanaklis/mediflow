@@ -119,7 +119,10 @@ export async function sweepCobranzaClinica(
   if (!settings.enabled) return res;
 
   const hoy = hoyEnZona(now, clinic.timezone || "America/Mexico_City");
-  const facturas = await cargarFacturasCandidatas(clinic.id);
+  // ws1-t10 (H·F "Pausa"/"Abandono"): el barrido automático, a diferencia del
+  // bot (que contesta si le PREGUNTAN), no debe insistir con un caso que la
+  // clínica ya pausó o marcó abandonado.
+  const facturas = await cargarFacturasCandidatas(clinic.id, { excluirPausadosOAbandonados: true });
   res.candidatas = facturas.length;
   if (facturas.length === 0) return res;
 

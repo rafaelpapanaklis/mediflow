@@ -63,6 +63,9 @@ export { updateOrthoAppliances } from "./updateOrthoAppliances";
 // ─── Alta del caso (ws1-t6, Ola 1) ──────────────────────────────────────
 export { getCaseIntakeOptions } from "./getCaseIntakeOptions";
 export { exportReferralProgressLetterPdf } from "./exportReferralProgressLetterPdf";
+// ws1-t10 (decisión 5, Rafael): un tutor ya registrado de OTRO paciente
+// (hermanos) para reusar el mismo Guardian como responsable de pago.
+export { buscarTutoresDeLaClinica, type TutorDeLaClinica } from "./buscarTutoresDeLaClinica";
 
 // ─── Acceso y permisos · Configuración (ws1-t3, Ola 1) ──────────────────
 export { getOrthoClinicSettings } from "./getOrthoClinicSettings";

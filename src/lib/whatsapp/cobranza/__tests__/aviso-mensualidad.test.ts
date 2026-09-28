@@ -33,6 +33,12 @@ let encolados: any[];
 let condiciones: Map<string, CondicionesPago>;
 /** Clínicas que devuelve `clinic.findMany`. */
 let clinicas: any[];
+/**
+ * Planes de ortodoncia con responsable de pago (A11) — ws1-t10 (H·F "Menor
+ * con tutor"): `invoiceId` → teléfono del Guardian. Vacío por defecto: la
+ * mayoría de las facturas no son de un caso de ortodoncia con tutor.
+ */
+let planesOrtoConResponsable: any[];
 
 const plazos = (over: Partial<CondicionesPago> = {}): CondicionesPago => ({
   modo: "plazos",
@@ -75,6 +81,7 @@ beforeEach(() => {
   encolados = [];
   condiciones = new Map([["inv1", plazos()]]);
   clinicas = [clinica(ENCENDIDO)];
+  planesOrtoConResponsable = [];
 });
 
 (mock as any).module("@/lib/prisma", {
@@ -111,6 +118,12 @@ beforeEach(() => {
       },
       clinic: {
         findMany: async () => clinicas,
+      },
+      orthodonticTreatmentPlan: {
+        findMany: async ({ where }: any) => {
+          assert.equal(where.clinicId, "c1", "el responsable de pago se lee por clínica");
+          return planesOrtoConResponsable.filter((p) => where.invoiceId.in.includes(p.invoiceId));
+        },
       },
     },
   },
@@ -342,6 +355,40 @@ test("la fila encolada es la que la cola de siempre sabe enviar", async () => {
   assert.match(fila.message, /Ana/, "el mensaje lleva el nombre del paciente");
   assert.match(fila.message, /Clínica QA/);
   assert.match(fila.message, /\$1,000\.00/, "y el importe, formateado en pesos");
+});
+
+test("ws1-t10 (H·F «Menor con tutor»): con responsable de pago, el aviso va a SU teléfono, no al del niño", async () => {
+  planesOrtoConResponsable = [
+    { invoiceId: "inv1", responsibleGuardian: { phone: "555 111 2222" } },
+  ];
+  const r = await barrer();
+  assert.equal(r.encolados, 1);
+  assert.equal(encolados[0].patientPhone, "555 111 2222", "no el 999 260 2093 del paciente");
+});
+
+test("sin responsable de pago (o sin caso de ortodoncia), el aviso sigue yendo al paciente", async () => {
+  planesOrtoConResponsable = [{ invoiceId: "inv1", responsibleGuardian: null }];
+  const r = await barrer();
+  assert.equal(r.encolados, 1);
+  assert.equal(encolados[0].patientPhone, "999 260 2093");
+});
+
+test("ws1-t10 (H·F «Pausa»): un caso ON_HOLD no genera aviso automático de su mensualidad", async () => {
+  planesOrtoConResponsable = [{ invoiceId: "inv1", status: "ON_HOLD", responsibleGuardian: null }];
+  const r = await barrer();
+  assert.equal(r.encolados, 0, "la clínica ya pausó la cobranza desde el caso; el barrido no debe insistir");
+});
+
+test("ws1-t10 (H·F «Abandono»): un caso DROPPED_OUT tampoco", async () => {
+  planesOrtoConResponsable = [{ invoiceId: "inv1", status: "DROPPED_OUT", responsibleGuardian: null }];
+  const r = await barrer();
+  assert.equal(r.encolados, 0);
+});
+
+test("un caso EN CURSO (IN_PROGRESS) sigue avisando normal", async () => {
+  planesOrtoConResponsable = [{ invoiceId: "inv1", status: "IN_PROGRESS", responsibleGuardian: null }];
+  const r = await barrer();
+  assert.equal(r.encolados, 1, "solo pausa/abandono detienen el aviso; un plan en curso no");
 });
 
 test("la plantilla de la clínica manda sobre la de fábrica", async () => {

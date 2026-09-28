@@ -46,7 +46,18 @@ const MAX_FACTURAS = 500;
  */
 export async function cargarFacturasCandidatas(
   clinicId: string,
-  opts?: { patientId?: string; limite?: number },
+  opts?: {
+    patientId?: string;
+    limite?: number;
+    /**
+     * ws1-t10 (H·F "Pausa"/"Abandono") — el barrido AUTOMÁTICO no debe seguir
+     * insistiendo con la mensualidad de un caso pausado o abandonado. El bot
+     * (`resumenDeSaldoDePaciente`, quien PREGUNTÓ) sigue sin este filtro: si
+     * el paciente pregunta cuánto debe, la deuda real no se le esconde
+     * porque la clínica dejó de perseguirla.
+     */
+    excluirPausadosOAbandonados?: boolean;
+  },
 ): Promise<FacturaCandidata[]> {
   if (!clinicId) return [];
 
@@ -76,25 +87,76 @@ export async function cargarFacturasCandidatas(
 
   // Las condiciones van en UNA consulta para todas (la tabla no está en Prisma;
   // se lee por SQL crudo y vuelve a cruzar contra invoices."clinicId").
-  const { porFactura } = await leerCondicionesDeFacturas(prisma, {
-    clinicId,
-    invoiceIds: facturas.map((f) => f.id),
-  });
+  const [{ porFactura }, casosOrtoPorInvoiceId] = await Promise.all([
+    leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds: facturas.map((f) => f.id) }),
+    casosDeOrtodonciaPorInvoiceId(clinicId, facturas.map((f) => f.id)),
+  ]);
 
-  return facturas.map((f) => ({
-    invoiceId: f.id,
-    status: String(f.status),
-    total: f.total,
-    condiciones: porFactura.get(f.id) ?? null,
-    // `pagosDesdeFilas` le pone el signo al reembolso: en `payments` un
-    // reembolso es method "refund" con amount POSITIVO.
-    pagos: pagosDesdeFilas(f.payments),
-    patientId: f.patientId,
-    patientNombre: (f.patient?.firstName || "").trim() || "paciente",
-    patientPhone: f.patient?.phone ?? null,
-    pacienteActivo: f.patient?.status === "ACTIVE",
-    pacienteBorrado: !!f.patient?.deletedAt,
-  }));
+  return facturas
+    // ws1-t10 (H·F "Pausa"/"Abandono") — mientras el caso está PAUSADO o en
+    // ABANDONO, el barrido automático no genera aviso de esta factura: antes
+    // "las mensualidades siguen venciendo... y el aviso automático le sigue
+    // llegando" aunque la clínica ya hubiera detenido la cobranza en la
+    // pantalla del caso. Solo cubre la factura PRINCIPAL del plan (modo
+    // PRECIO_TOTAL); las de «pago por control» no pasan por aquí.
+    .filter((f) => {
+      if (!opts?.excluirPausadosOAbandonados) return true;
+      const estadoCaso = casosOrtoPorInvoiceId.get(f.id)?.status;
+      return estadoCaso !== "ON_HOLD" && estadoCaso !== "DROPPED_OUT";
+    })
+    .map((f) => ({
+      invoiceId: f.id,
+      status: String(f.status),
+      total: f.total,
+      condiciones: porFactura.get(f.id) ?? null,
+      // `pagosDesdeFilas` le pone el signo al reembolso: en `payments` un
+      // reembolso es method "refund" con amount POSITIVO.
+      pagos: pagosDesdeFilas(f.payments),
+      patientId: f.patientId,
+      patientNombre: (f.patient?.firstName || "").trim() || "paciente",
+      // ws1-t10 (H·F "Menor con tutor") — si esta factura es la de un caso de
+      // ortodoncia CON responsable de pago (Guardian, A11), el aviso de
+      // cobranza va a SU teléfono, no al del niño: antes "los WhatsApp de
+      // cobro van al teléfono del niño" pase lo que pase. Sin responsable (o
+      // sin módulo de ortodoncia), tal cual como siempre: el teléfono del
+      // paciente.
+      patientPhone: casosOrtoPorInvoiceId.get(f.id)?.guardianPhone ?? f.patient?.phone ?? null,
+      pacienteActivo: f.patient?.status === "ACTIVE",
+      pacienteBorrado: !!f.patient?.deletedAt,
+    }));
+}
+
+interface CasoOrtoDeInvoice {
+  status: string;
+  guardianPhone: string | null;
+}
+
+/**
+ * `invoiceId` → estado del caso de ortodoncia y teléfono de su responsable de
+ * pago, para las facturas que sean la principal de un plan. Best-effort: sin
+ * el módulo de ortodoncia, sin caso ligado, o sin las columnas todavía
+ * aplicadas, el mapa sale vacío y cada factura se trata como no-ortodoncia
+ * (se avisa igual, y al teléfono del paciente).
+ */
+async function casosDeOrtodonciaPorInvoiceId(
+  clinicId: string,
+  invoiceIds: string[],
+): Promise<Map<string, CasoOrtoDeInvoice>> {
+  if (invoiceIds.length === 0) return new Map();
+  try {
+    const planes = await prisma.orthodonticTreatmentPlan.findMany({
+      where: { clinicId, invoiceId: { in: invoiceIds }, deletedAt: null },
+      select: { invoiceId: true, status: true, responsibleGuardian: { select: { phone: true } } },
+    });
+    const salida = new Map<string, CasoOrtoDeInvoice>();
+    for (const p of planes) {
+      if (p.invoiceId) salida.set(p.invoiceId, { status: String(p.status), guardianPhone: p.responsibleGuardian?.phone ?? null });
+    }
+    return salida;
+  } catch (e) {
+    console.error("[whatsapp:cobranza] caso de ortodoncia no disponible todavía:", e);
+    return new Map();
+  }
 }
 
 /**

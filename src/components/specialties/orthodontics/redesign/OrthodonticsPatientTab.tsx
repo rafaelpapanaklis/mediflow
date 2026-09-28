@@ -53,7 +53,8 @@ import {
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
-import type { DrawerNewCaseDiagnosisPayload, DrawerNewCasePlanPayload } from "./drawers/DrawerNewCase";
+import { DrawerNewCase, type DrawerNewCaseDiagnosisPayload, type DrawerNewCasePlanPayload } from "./drawers/DrawerNewCase";
+import { Btn } from "./atoms/Btn";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
 
@@ -205,6 +206,9 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
   // explícitamente `false`, nunca en `null`/cargando).
   const [generalConsentSigned, setGeneralConsentSigned] = useState<boolean | null>(null);
   const diagnosisId = orthoRedesignVM?.diagnosis?.id ?? null;
+  // ws1-t10 (F "Termina y regresa") — abrir un caso NUEVO cuando el último ya
+  // cerró (terminado o abandono). Ver el aviso más abajo, antes de `return`.
+  const [abrirNuevoCasoTrasCierre, setAbrirNuevoCasoTrasCierre] = useState(false);
 
   const refetchGeneralConsentSigned = useCallback(async () => {
     if (!diagnosisId) return;
@@ -327,6 +331,35 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
 
   return (
     <>
+      {/* ws1-t10 (F "Termina y regresa") — antes no había forma de abrir un
+          SEGUNDO caso: la ficha solo sabía enseñar el último plan, y con
+          cualquiera existente (incluido uno terminado o abandonado) el alta
+          nunca se ofrecía. Con el caso último ya cerrado, se ofrece un
+          diagnóstico y plan NUEVOS — el viejo (fotos, consentimientos,
+          controles, factura) se queda ligado a SU plan, tal cual como está;
+          esto solo abre uno adicional, no lo reemplaza. */}
+      {(orthoData?.plan?.status === "COMPLETED" || orthoData?.plan?.status === "DROPPED_OUT") && (
+        <div style={{ marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 14px", borderRadius: 10, border: "1px solid var(--pr-borde-suave)", background: "var(--pr-fondo-2)" }}>
+          <span className="text-xs text-[color:var(--pr-texto-3)]">
+            {orthoData?.plan?.status === "COMPLETED" ? "Este caso terminó." : "Este caso se marcó como abandono."} Si regresa por un tratamiento nuevo, ábrele otro caso.
+          </span>
+          <Btn variant="secondary" size="sm" onClick={() => setAbrirNuevoCasoTrasCierre(true)}>
+            Abrir un caso nuevo
+          </Btn>
+        </div>
+      )}
+      {abrirNuevoCasoTrasCierre && (
+        <DrawerNewCase
+          patientId={patient.id}
+          patientFullName={fullName}
+          existingDiagnosisId={null}
+          onClose={() => setAbrirNuevoCasoTrasCierre(false)}
+          onConfirm={async (payload) => {
+            await crearCaso(payload);
+            setAbrirNuevoCasoTrasCierre(false);
+          }}
+        />
+      )}
       {/* La banda «Ortodoncia · paciente» (hallazgo 21) era el escalón entre
           la ficha nueva y un módulo que conservaba su ropa vieja. El módulo
           ya habla el idioma de la ficha y abre con la cabecera del paciente,

@@ -25,6 +25,13 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { cargarCobranzaDelCaso } from "@/lib/orthodontics/cobranza-db";
 import { textoMensualidadPorVencer, textoMensualidadVencida } from "@/lib/orthodontics/mensaje-mensualidad";
+import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
+import {
+  CLAVE_MENSUALIDAD_VENCIDA,
+  plantillaUsable,
+  renderAvisoMensualidadVencida,
+} from "@/lib/orthodontics/plantillas-mensaje";
+import { formatoPesos } from "@/lib/anticipos/core";
 import { lastSentOfKind } from "@/lib/orthodontics/whatsapp-dedupe";
 import { formatDateHuman } from "@/lib/whatsapp/bot/booking-parse";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
@@ -62,7 +69,7 @@ export async function sendMensualidadReminder(
   });
   if (visibilidad) return fail("Paciente no encontrado");
 
-  const [patient, clinic] = await Promise.all([
+  const [patient, clinic, responsable] = await Promise.all([
     prisma.patient.findFirst({
       where: { id: input.patientId, clinicId: ctx.clinicId, deletedAt: null },
       select: { firstName: true, lastName: true, phone: true },
@@ -71,9 +78,18 @@ export async function sendMensualidadReminder(
       where: { id: ctx.clinicId },
       select: { name: true, timezone: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true, waTemplates: true },
     }),
+    // ws1-t10 (H·F "Menor con tutor") — si el caso tiene responsable de pago
+    // (Guardian, A11), el recordatorio va a SU teléfono, no al del niño.
+    // Best-effort: sin la columna todavía aplicada, o sin responsable, cae al
+    // teléfono del paciente, como siempre.
+    prisma.orthodonticTreatmentPlan.findFirst({
+      where: { id: input.treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
+      select: { responsibleGuardian: { select: { phone: true } } },
+    }).catch((e) => { console.error("[ortho] sendMensualidadReminder: responsibleGuardian no disponible:", e); return null; }),
   ]);
   if (!patient) return fail("Paciente no encontrado");
-  if (!patient.phone) return fail("El paciente no tiene teléfono registrado.");
+  const telefonoDestino = responsable?.responsibleGuardian?.phone || patient.phone;
+  if (!telefonoDestino) return fail("El paciente no tiene teléfono registrado.");
   if (!clinic) return fail("Clínica no encontrada");
 
   const resumen = await cargarCobranzaDelCaso({
@@ -89,16 +105,35 @@ export async function sendMensualidadReminder(
   if (vencido <= 0 && !proxima) return fail("Este caso está al día: no hay nada que recordar.");
 
   const paciente = `${patient.firstName} ${patient.lastName}`.trim();
+
+  // ws1-t5 (ronda 6): si la clínica redactó su «Aviso de mensualidad vencida»
+  // en Configuración de Ortodoncia, ESE es el texto (para enviar y para
+  // copiar). Sin plantilla —o si no se pudo leer— sale el de siempre.
+  const plantillaVencida =
+    vencido > 0
+      ? await loadOrthoClinicSettings(ctx.clinicId)
+          .then((cfg) => plantillaUsable(cfg.messageTemplates, CLAVE_MENSUALIDAD_VENCIDA))
+          .catch(() => null)
+      : null;
+  const datosVencida = {
+    paciente,
+    clinica: clinic.name,
+    fechaHumana: resumen.vencidas[0]?.vencimiento
+      ? formatDateHuman(resumen.vencidas[0].vencimiento, clinic.timezone)
+      : "—",
+    montoMxn: Math.round(vencido),
+  };
+
   const texto =
     vencido > 0
-      ? textoMensualidadVencida({
-          paciente,
-          clinica: clinic.name,
-          fechaHumana: resumen.vencidas[0]?.vencimiento
-            ? formatDateHuman(resumen.vencidas[0].vencimiento, clinic.timezone)
-            : "—",
-          montoMxn: Math.round(vencido),
-        })
+      ? plantillaVencida
+        ? renderAvisoMensualidadVencida(plantillaVencida, {
+            paciente: datosVencida.paciente,
+            clinica: datosVencida.clinica,
+            fecha: datosVencida.fechaHumana,
+            monto: formatoPesos(datosVencida.montoMxn),
+          })
+        : textoMensualidadVencida(datosVencida)
       : textoMensualidadPorVencer({
           paciente,
           clinica: clinic.name,
@@ -107,7 +142,7 @@ export async function sendMensualidadReminder(
         });
 
   const ahora = new Date();
-  const yaEnviado = await lastSentOfKind(ctx.clinicId, patient.phone, "payment_notice", ahora).catch(() => null);
+  const yaEnviado = await lastSentOfKind(ctx.clinicId, telefonoDestino, "payment_notice", ahora).catch(() => null);
   if (yaEnviado) {
     return ok({
       texto,
@@ -120,12 +155,13 @@ export async function sendMensualidadReminder(
     return ok({ texto, enviado: false, motivoNoEnviado: "WhatsApp no está conectado en esta clínica." });
   }
 
-  const abierta = isWithin24hWindow(await lastInboundAtForPhone(ctx.clinicId, patient.phone).catch(() => null), ahora);
+  const abierta = isWithin24hWindow(await lastInboundAtForPhone(ctx.clinicId, telefonoDestino).catch(() => null), ahora);
   if (!abierta) {
+    const quien = responsable?.responsibleGuardian?.phone ? "El responsable de pago" : "El paciente";
     return ok({
       texto,
       enviado: false,
-      motivoNoEnviado: "El paciente no ha escrito en las últimas 24 h: copia el texto y compártelo por otro medio.",
+      motivoNoEnviado: `${quien} no ha escrito en las últimas 24 h: copia el texto y compártelo por otro medio.`,
     });
   }
 
@@ -138,7 +174,7 @@ export async function sendMensualidadReminder(
         waConnected: clinic.waConnected,
         waTemplates: clinic.waTemplates,
       },
-      to: patient.phone,
+      to: telefonoDestino,
       body: texto,
       kind: "payment_notice",
     });

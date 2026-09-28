@@ -25,6 +25,14 @@ export interface OrthoTabData {
   isMinor: boolean;
   patientAge: number | null;
   guardianName?: string | null;
+  /**
+   * ws1-t10 (H·F "Menor con tutor") — el parentesco («madre», «tutor_legal»)
+   * del RESPONSABLE DE PAGO real del caso (`responsibleGuardianId`, A11),
+   * cuando existe. `null` = `guardianName` sigue siendo el de
+   * `PediatricProfile` (o no hay ninguno): antes la cabecera SOLO sabía de
+   * este segundo, casi siempre vacío fuera del módulo de Pediatría.
+   */
+  responsibleGuardianRelation?: string | null;
   hasPediatricProfile: boolean;
   pediatricHabits: readonly string[];
   diagnosis: OrthodonticDiagnosisRow | null;
@@ -150,6 +158,28 @@ export async function loadOrthoData(
     return Math.max(0, differenceInMonths(new Date(), plan.installedAt));
   })();
 
+  // ws1-t10 (H·F "Menor con tutor") — el responsable de pago REAL del caso
+  // (A11) manda sobre el `PediatricProfile.guardianName` de arriba, que
+  // depende de un módulo distinto (Pediatría) y casi siempre está vacío.
+  // Best-effort: sin la columna `responsibleGuardianId` todavía aplicada
+  // (sql/ortodoncia-alta-caso.sql), `plan.responsibleGuardianId` es
+  // `undefined` (no lanza) y esto no hace nada.
+  let responsibleGuardianRelation: string | null = null;
+  if (plan?.responsibleGuardianId) {
+    try {
+      const responsable = await prisma.guardian.findUnique({
+        where: { id: plan.responsibleGuardianId },
+        select: { fullName: true, parentesco: true },
+      });
+      if (responsable) {
+        guardianName = responsable.fullName;
+        responsibleGuardianRelation = responsable.parentesco;
+      }
+    } catch (e) {
+      console.error("[ortho] loadOrthoData: responsibleGuardian no disponible todavía:", e);
+    }
+  }
+
   // Revisión cruzada (REPORTE-ws1-t1.md): factura REAL del tratamiento
   // (Cobro, F2) — el número que cuenta una vez que el caso tiene
   // `invoiceId`, no `plan.totalCostMxn`. `clinicId` en el where: aunque
@@ -166,6 +196,7 @@ export async function loadOrthoData(
     isMinor,
     patientAge: age,
     guardianName,
+    responsibleGuardianRelation,
     hasPediatricProfile,
     pediatricHabits,
     diagnosis,
