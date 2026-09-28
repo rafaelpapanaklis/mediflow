@@ -20,6 +20,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { hasPermission } from "@/lib/auth/permissions";
 
 const SUBMENU = [
   { href: "/dashboard/orthodontics/tablero", label: "Tablero" },
@@ -39,6 +40,12 @@ export default async function OrthodonticsModuleLayout({
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const active = await hasActiveOrthodonticsModule(user.clinicId);
   if (!active) redirect("/dashboard");
+  // P3 (Ola 1, ws1-t3): "specialties.orthodontics" es el permiso UI del
+  // módulo — sin él (por ejemplo, alguien a quien la clínica se lo quitó
+  // desde Equipo → Permisos) tampoco entra por URL directa.
+  if (!hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride }, "specialties.orthodontics")) {
+    redirect("/dashboard");
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

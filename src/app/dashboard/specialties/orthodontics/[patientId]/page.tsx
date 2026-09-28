@@ -7,8 +7,9 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, FileText } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessModule } from "@/lib/marketplace/access-control";
-import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
-import { ORTHODONTICS_MODULE_KEY, PEDIATRICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { hasPermission } from "@/lib/auth/permissions";
+import { PEDIATRICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadOrthoData } from "@/lib/orthodontics/load-data";
 import { OrthodonticsClient } from "@/components/specialties/orthodontics/OrthodonticsClient";
 
@@ -19,9 +20,12 @@ export default async function OrthodonticsPatientDetailPage({
 }) {
   const user = await getCurrentUser();
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
-  const access = await canAccessModule(user.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) {
-    redirect(await destinoModuloVencido(user.clinicId, ORTHODONTICS_MODULE_KEY));
+  // Ola 1 (A1, ws1-t3): guarda REAL (ClinicModule activo), no el atajo de
+  // trial de canAccessModule/evaluateAccess — ver src/lib/orthodontics/access.ts.
+  // Más "specialties.orthodontics" (P3): sin el permiso, tampoco entra por URL.
+  const active = await hasActiveOrthodonticsModule(user.clinicId);
+  if (!active || !hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride }, "specialties.orthodontics")) {
+    redirect("/dashboard");
   }
   const pediAccess = await canAccessModule(user.clinicId, PEDIATRICS_MODULE_KEY);
 

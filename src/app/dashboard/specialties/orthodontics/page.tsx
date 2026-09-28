@@ -5,9 +5,8 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { canAccessModule } from "@/lib/marketplace/access-control";
-import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
-import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { hasPermission } from "@/lib/auth/permissions";
 import { buildKanbanData } from "@/lib/orthodontics/build-kanban-data";
 import { loadOrthodonticPatients } from "@/lib/orthodontics/load-patients";
 import { OrthodonticsSpecialtyClient } from "@/components/specialties/orthodontics/OrthodonticsSpecialtyClient";
@@ -15,9 +14,12 @@ import { OrthodonticsSpecialtyClient } from "@/components/specialties/orthodonti
 export default async function OrthodonticsIndexPage() {
   const user = await getCurrentUser();
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
-  const access = await canAccessModule(user.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) {
-    redirect(await destinoModuloVencido(user.clinicId, ORTHODONTICS_MODULE_KEY));
+  // Ola 1 (A1, ws1-t3): guarda REAL (ClinicModule activo), no el atajo de
+  // trial de canAccessModule/evaluateAccess — ver src/lib/orthodontics/access.ts.
+  // Más "specialties.orthodontics" (P3): sin el permiso, tampoco entra por URL.
+  const active = await hasActiveOrthodonticsModule(user.clinicId);
+  if (!active || !hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride }, "specialties.orthodontics")) {
+    redirect("/dashboard");
   }
 
   // Visibilidad por paciente: viewer de sesión para filtrar los reads.
