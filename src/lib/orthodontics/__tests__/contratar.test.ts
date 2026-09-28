@@ -30,6 +30,7 @@ import {
   RUTA_CONTRATAR_ORTODONCIA,
   RUTA_MODULO_ORTODONCIA,
   cicloInicial,
+  combinarSedesHermanas,
   decidirEntradaAContratar,
   decidirEntradaAlModulo,
   leerEstadoCompra,
@@ -363,4 +364,73 @@ test("el interruptor de la vista previa responde 404 en producción y no toca la
   const ruta = sinComentarios(leer(INTERRUPTOR));
   assert.match(ruta, /if \(process\.env\.NODE_ENV === "production"\) \{\s*return new NextResponse\("Not found", \{ status: 404 \}\);/);
   assert.ok(!/prisma|@\/lib\/auth/.test(ruta), "solo pone o quita una cookie");
+});
+
+// ── 7. Cada sede se contrata aparte (ws1-t2, ronda 5) ────────────────
+//
+// Decisión de Rafael: cada `Clinic` es su propia sede y contrata Ortodoncia
+// por su cuenta — una no le presta el módulo a otra. La página lo dice claro
+// y, si el dueño tiene más sedes, enseña cuáles ya la tienen.
+
+test("combinarSedesHermanas: sin otras sedes propias, la lista sale vacía", () => {
+  assert.deepEqual(combinarSedesHermanas([], "clinic-1", new Map(), new Set()), []);
+});
+
+test("combinarSedesHermanas: la sede ACTUAL nunca aparece (su estado ya lo dice la tarjeta de precio)", () => {
+  const propias = [
+    { clinicId: "clinic-1", clinicName: "Sede Centro" },
+    { clinicId: "clinic-2", clinicName: "Sede Norte" },
+  ];
+  const categorias = new Map([["clinic-1", "DENTAL"], ["clinic-2", "DENTAL"]]);
+  const r = combinarSedesHermanas(propias, "clinic-1", categorias, new Set());
+  assert.deepEqual(r.map((s) => s.clinicId), ["clinic-2"]);
+});
+
+test("combinarSedesHermanas: una sede hermana de OTRA especialidad no sale (Ortodoncia es dental)", () => {
+  const propias = [
+    { clinicId: "clinic-1", clinicName: "Sede Centro (dental)" },
+    { clinicId: "clinic-2", clinicName: "Barbería del mismo dueño" },
+  ];
+  const categorias = new Map([["clinic-1", "DENTAL"], ["clinic-2", "BARBERSHOP"]]);
+  const r = combinarSedesHermanas(propias, "clinic-1", categorias, new Set());
+  assert.deepEqual(r, []);
+});
+
+test("combinarSedesHermanas: 'activo' sale de qué sedes ya tienen el módulo, sin mezclar pacientes", () => {
+  const propias = [
+    { clinicId: "clinic-1", clinicName: "Sede Centro" },
+    { clinicId: "clinic-2", clinicName: "Sede Norte" },
+    { clinicId: "clinic-3", clinicName: "Sede Sur" },
+  ];
+  const categorias = new Map([["clinic-1", "DENTAL"], ["clinic-2", "DENTAL"], ["clinic-3", "DENTAL"]]);
+  const r = combinarSedesHermanas(propias, "clinic-1", categorias, new Set(["clinic-2"]));
+  assert.deepEqual(r, [
+    { clinicId: "clinic-2", nombre: "Sede Norte", activo: true },
+    { clinicId: "clinic-3", nombre: "Sede Sur", activo: false },
+  ]);
+  // Nada aquí es un dato clínico: solo id, nombre y un booleano.
+  for (const sede of r) assert.deepEqual(Object.keys(sede).sort(), ["activo", "clinicId", "nombre"]);
+});
+
+test("combinarSedesHermanas: sin categoría resuelta (la sede no se encontró), no sale — falla cerrado", () => {
+  const propias = [{ clinicId: "clinic-2", clinicName: "Sede Norte" }];
+  const r = combinarSedesHermanas(propias, "clinic-1", new Map(), new Set(["clinic-2"]));
+  assert.deepEqual(r, [], "sin categoría confirmada como DENTAL, no se asume nada");
+});
+
+test("la página pide las sedes hermanas con el clinicId Y el supabaseId de la SESIÓN, y le manda el nombre de la sede actual a la vista", () => {
+  const pagina = sinComentarios(leer(PAGINA));
+  assert.match(pagina, /sedesHermanasConOrtodoncia\(user\.supabaseId, user\.clinicId\)/, "sale de la sesión, no de la URL");
+  assert.match(pagina, /sedeActualNombre=\{user\.clinic\.name\}/);
+  assert.match(pagina, /sedesHermanas=\{sedesHermanas\}/);
+});
+
+test("la vista dice claro para qué sede es esto, y solo pinta 'tus otras sedes' si hay alguna", () => {
+  const vista = sinComentarios(leer(VISTA));
+  assert.match(vista, /Esto contrata Ortodoncia para <strong>\{sedeActualNombre\}<\/strong>/);
+  assert.match(vista, /Cada sede se contrata por separado/);
+  assert.match(vista, /\{sedesHermanas\.length > 0 && \(/, "la lista de sedes es condicional");
+  assert.match(vista, /sedesHermanas\.map\(\(sede\) => \(/);
+  // Sin dato de paciente en la vista: solo nombre y si ya la tiene.
+  assert.ok(!/patientId|paciente/i.test(vista.slice(vista.indexOf("Tus otras sedes"))));
 });

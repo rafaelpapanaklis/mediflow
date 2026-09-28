@@ -24,6 +24,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth/permissions";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { sedesHermanasConOrtodoncia } from "@/lib/orthodontics/contratar-sedes";
 import { getModuleAnnualPriceMxn } from "@/lib/marketplace/module-annual-price";
 import { pagoDeModuloConfirmado } from "@/lib/marketplace/module-checkout-session";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
@@ -83,7 +84,13 @@ export default async function ContratarOrtodonciaPage({
   });
   if (entrada.tipo === "redirigir") redirect(entrada.a);
 
-  const anualMxn = modulo?.isActive ? await getModuleAnnualPriceMxn(prisma, modulo.id) : null;
+  const [anualMxn, sedesHermanas] = await Promise.all([
+    modulo?.isActive ? getModuleAnnualPriceMxn(prisma, modulo.id) : Promise.resolve(null),
+    // Decisión de Rafael (ws1-t2, ronda 5): cada sede contrata Ortodoncia por
+    // su cuenta. Si el dueño tiene otras sedes dentales, la página le enseña
+    // cuáles ya la tienen — sin tocar ni un dato de paciente.
+    sedesHermanasConOrtodoncia(user.supabaseId, user.clinicId),
+  ]);
   const precios = resumirPrecios(
     modulo?.isActive ? { mensualMxn: modulo.priceMxnMonthly, anualMxn } : null,
   );
@@ -99,6 +106,8 @@ export default async function ContratarOrtodonciaPage({
         compra={compra}
         moduloActivo={moduloActivo}
         vistaPrevia={vistaPrevia && activoReal}
+        sedeActualNombre={user.clinic.name}
+        sedesHermanas={sedesHermanas}
       />
     </RaizModulo>
   );

@@ -204,3 +204,31 @@ export function vistaPreviaSinModulo(e: { nodeEnv: string | undefined; cookie: s
 export function moduloActivoALaVista(moduloActivoReal: boolean, vistaPrevia: boolean): boolean {
   return moduloActivoReal && !vistaPrevia;
 }
+
+/* ── 7. Cada sede se contrata aparte (ws1-t2, ronda 5) ────────────────── */
+
+/** Una sede HERMANA del mismo dueño, con si ya tiene el módulo. Sin ningún dato de paciente. */
+export interface SedeHermana {
+  clinicId: string;
+  nombre: string;
+  /** `hasActiveOrthodonticsModule` de ESA sede. */
+  activo: boolean;
+}
+
+/**
+ * De las sedes propias del dueño (`getOwnedBranches`, en `contratar-sedes.ts`
+ * — el I/O vive fuera de este archivo puro): quita la ACTUAL (su estado ya lo
+ * enseña la tarjeta de precio) y las que no son dentales (Ortodoncia es un
+ * módulo dental; una barbería del mismo dueño no tiene nada que contratar
+ * aquí), y les pega si ya tienen el módulo activo.
+ */
+export function combinarSedesHermanas(
+  propias: Array<{ clinicId: string; clinicName: string }>,
+  clinicIdActual: string,
+  categoriaPorId: Map<string, string | null | undefined>,
+  activas: Set<string>,
+): SedeHermana[] {
+  return propias
+    .filter((s) => s.clinicId !== clinicIdActual && categoriaPorId.get(s.clinicId) === "DENTAL")
+    .map((s) => ({ clinicId: s.clinicId, nombre: s.clinicName, activo: activas.has(s.clinicId) }));
+}

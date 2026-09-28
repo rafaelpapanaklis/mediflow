@@ -76,6 +76,28 @@
   color: var(--pr-texto-2);
 }
 
+/* Para qué sede es esto (ws1-t2, ronda 5): cada `Clinic` es su propia sede. */
+.sedeNota {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 0;
+  max-width: 62ch;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--pr-texto-3);
+}
+
+.sedeNota svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sedeNota strong {
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
 /* ── Rejilla: lo que incluye + el precio ───────────────────────────────
    En ancho, el precio va a la derecha y se queda a la vista al bajar. En
    estrecho va ARRIBA: lo primero que pidió ver Rafael al dar clic es el
@@ -366,6 +388,72 @@
   font-size: 12.5px;
   line-height: 1.4;
 }
+
+/* ── Tus otras sedes (ws1-t2, ronda 5) ──────────────────────────────────
+   Debajo de la tarjeta del precio: solo se pinta si el dueño tiene otras
+   sedes dentales. Sin datos de pacientes — solo nombre y si ya la tienen. */
+
+.sedes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+}
+
+.sedesTitulo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--pr-texto-2);
+}
+
+.sedesTitulo svg {
+  color: var(--pr-texto-3);
+}
+
+.sedesLista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sede {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.sedeNombre {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pr-texto-2);
+}
+
+.sedeActiva,
+.sedeInactiva {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sedeActiva { color: var(--pr-exito); }
+.sedeInactiva { color: var(--pr-texto-3); }
 
 /* ── Lo que incluye ──────────────────────────────────────────────────── */
 

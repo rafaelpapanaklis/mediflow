@@ -6,8 +6,11 @@
 // que salga el precio mensual o anual con botón para cambiar. Y también TODO
 // lo que contiene, tal vez en categorías, para que sea fácil leer y entender».
 import {
+  Building2,
   CalendarClock,
   Check,
+  CheckCircle2,
+  Circle,
   Eye,
   FolderOpen,
   Images,
@@ -30,6 +33,7 @@ import {
   type CicloCobro,
   type EstadoCompra,
   type ResumenDePrecios,
+  type SedeHermana,
 } from "@/lib/orthodontics/contratar";
 import { TarjetaPrecio } from "./TarjetaPrecio";
 import { EsperandoActivacion } from "./EsperandoActivacion";
@@ -52,6 +56,8 @@ export function VistaContratar({
   compra,
   moduloActivo,
   vistaPrevia,
+  sedeActualNombre,
+  sedesHermanas,
 }: {
   precios: ResumenDePrecios;
   cicloInicial: CicloCobro | null;
@@ -62,6 +68,11 @@ export function VistaContratar({
   moduloActivo: boolean;
   /** Se está viendo la clínica «como si no tuviera el módulo» (solo fuera de producción). */
   vistaPrevia: boolean;
+  /** Nombre de la sede que está contratando — cada `Clinic` es su propia sede. */
+  sedeActualNombre: string;
+  /** Otras sedes DENTALES del mismo dueño (ws1-t2, ronda 5). Vacío si no tiene
+   *  ninguna otra, o ninguna hermana es dental. Sin datos de pacientes. */
+  sedesHermanas: SedeHermana[];
 }) {
   return (
     <div className={s.pagina}>
@@ -112,6 +123,11 @@ export function VistaContratar({
             Casos, controles y mensualidades en un solo lugar. Tu recepción sabe quién debe y cuánto, y tú ves todos tus
             casos de un vistazo.
           </p>
+          <p className={s.sedeNota}>
+            <Building2 size={13} strokeWidth={2} aria-hidden />
+            Esto contrata Ortodoncia para <strong>{sedeActualNombre}</strong>. Cada sede se contrata por separado: el
+            módulo de una no cubre a las demás.
+          </p>
         </div>
       </header>
 
@@ -159,6 +175,30 @@ export function VistaContratar({
             // módulo y, en ese rato, un segundo clic abriría otra suscripción.
             pagoEnCurso={compra === "ok" || compra === "pendiente"}
           />
+
+          {sedesHermanas.length > 0 && (
+            <section className={s.sedes} aria-label="Tus otras sedes">
+              <h2 className={s.sedesTitulo}>
+                <Building2 size={14} strokeWidth={1.9} aria-hidden />
+                Tus otras sedes
+              </h2>
+              <ul className={s.sedesLista}>
+                {sedesHermanas.map((sede) => (
+                  <li key={sede.clinicId} className={s.sede}>
+                    <span className={s.sedeNombre}>{sede.nombre}</span>
+                    <span className={sede.activo ? s.sedeActiva : s.sedeInactiva}>
+                      {sede.activo ? (
+                        <CheckCircle2 size={13} strokeWidth={2} aria-hidden />
+                      ) : (
+                        <Circle size={13} strokeWidth={2} aria-hidden />
+                      )}
+                      {sede.activo ? "Ya la tiene" : "Aún no"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </aside>
       </div>
     </div>

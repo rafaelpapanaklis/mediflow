@@ -36,3 +36,28 @@ export async function hasActiveOrthodonticsModule(
   });
   return cm !== null;
 }
+
+/**
+ * Igual criterio que `hasActiveOrthodonticsModule`, pero para VARIAS sedes a
+ * la vez — la página de contratar (ws1-t2, ronda 5) lo usa para enseñarle al
+ * dueño cuáles de sus OTRAS sedes ya tienen el módulo, sin pagar una consulta
+ * por sede. Devuelve el subconjunto de `clinicIds` con el módulo activo Y
+ * vigente.
+ */
+export async function activeOrthodonticsModuleClinicIds(
+  clinicIds: string[],
+  now: Date = new Date(),
+): Promise<Set<string>> {
+  const ids = Array.from(new Set(clinicIds.filter((id): id is string => !!id)));
+  if (ids.length === 0) return new Set();
+  const rows = await prisma.clinicModule.findMany({
+    where: {
+      clinicId: { in: ids },
+      status: "active",
+      currentPeriodEnd: { gt: now },
+      module: { key: ORTHODONTICS_MODULE_KEY },
+    },
+    select: { clinicId: true },
+  });
+  return new Set(rows.map((r) => r.clinicId));
+}
