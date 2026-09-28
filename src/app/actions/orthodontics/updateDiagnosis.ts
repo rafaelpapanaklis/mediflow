@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { updateDiagnosisSchema } from "@/lib/validation/orthodontics";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
+import { validarArchivosInicialesDelDiagnostico, validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -32,6 +33,27 @@ export async function updateDiagnosis(
     where: { id: parsed.data.diagnosisId, clinicId: ctx.clinicId, deletedAt: null },
   });
   if (!before) return fail("Diagnóstico no encontrado");
+
+  // X1: el doctor que refirió tiene que ser del directorio de ESTA clínica
+  // (repetir el que ya estaba guardado no se re-valida).
+  const personaAjena = await validarPersonasDelCaso({
+    clinicId: ctx.clinicId,
+    patientId: before.patientId,
+    pedidas: { referredByDoctorId: parsed.data.referredByDoctorId },
+    actuales: { referredByDoctorId: before.referredByDoctorId },
+  });
+  if (personaAjena) return fail(personaAjena);
+  // Solo lo que cambia: repetir los archivos que ya tenía no se re-valida.
+  const cambia = (nuevo: string | null | undefined, actual: string | null) =>
+    nuevo && nuevo !== actual ? nuevo : null;
+  const archivoAjeno = await validarArchivosInicialesDelDiagnostico({
+    clinicId: ctx.clinicId,
+    patientId: before.patientId,
+    initialPhotoSetId: cambia(parsed.data.initialPhotoSetId, before.initialPhotoSetId),
+    initialCephFileId: cambia(parsed.data.initialCephFileId, before.initialCephFileId),
+    initialScanFileId: cambia(parsed.data.initialScanFileId, before.initialScanFileId),
+  });
+  if (archivoAjeno) return fail(archivoAjeno);
 
   const { diagnosisId, patientId, ...rest } = parsed.data;
   const data: Record<string, unknown> = {};

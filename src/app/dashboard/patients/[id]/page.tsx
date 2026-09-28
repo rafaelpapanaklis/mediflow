@@ -459,8 +459,11 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   const responsibleGuardianId = orthoData?.plan?.responsibleGuardianId ?? null;
   if (responsibleGuardianId) {
     const guardian = await prisma.guardian
-      .findUnique({
-        where: { id: responsibleGuardianId },
+      // X1: con filtro de clínica — la del paciente, que puede ser otra sede
+      // visible del grupo (el Guardian puede ser el de un hermano,
+      // decisión 5, así que no se filtra por paciente).
+      .findFirst({
+        where: { id: responsibleGuardianId, clinicId: patient.clinicId, deletedAt: null },
         select: { fullName: true, parentesco: true },
       })
       .catch(() => null);

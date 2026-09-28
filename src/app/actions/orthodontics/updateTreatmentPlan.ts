@@ -7,6 +7,7 @@ import { updateTreatmentPlanSchema } from "@/lib/validation/orthodontics";
 import { aplicarEfectosDeEstado } from "@/lib/orthodontics/efectos-estado-caso";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { auditOrtho, getOrthoPlanActionContext } from "./_helpers";
+import { validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -33,6 +34,22 @@ export async function updateTreatmentPlan(
     where: { id: parsed.data.treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
   });
   if (!before) return fail("Plan no encontrado");
+
+  // X1: un doctor tratante o responsable de pago NUEVO tiene que ser de esta
+  // clínica; repetir el que ya tenía no se vuelve a comprobar.
+  const personaAjena = await validarPersonasDelCaso({
+    clinicId: ctx.clinicId,
+    patientId: before.patientId,
+    pedidas: {
+      treatingDoctorId: parsed.data.treatingDoctorId,
+      responsibleGuardianId: parsed.data.responsibleGuardianId,
+    },
+    actuales: {
+      treatingDoctorId: before.treatingDoctorId,
+      responsibleGuardianId: before.responsibleGuardianId,
+    },
+  });
+  if (personaAjena) return fail(personaAjena);
 
   // Validación específica: si status pasa a DROPPED_OUT, exige droppedOutReason.
   if (parsed.data.status === "DROPPED_OUT") {

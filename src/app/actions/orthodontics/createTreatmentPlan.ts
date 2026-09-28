@@ -14,6 +14,7 @@ import {
   getOrthoPlanActionContext,
   loadPatientForOrtho,
 } from "./_helpers";
+import { validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -42,6 +43,18 @@ export async function createTreatmentPlan(
   if (!dx) return fail("Diagnóstico no encontrado");
   if (dx.treatmentPlan)
     return fail("Ya existe un plan para este diagnóstico", dx.treatmentPlan.id);
+
+  // X1: el doctor tratante y el responsable de pago tienen que ser de ESTA
+  // clínica (el id llega del cliente).
+  const personaAjena = await validarPersonasDelCaso({
+    clinicId: ctx.clinicId,
+    patientId: parsed.data.patientId,
+    pedidas: {
+      treatingDoctorId: parsed.data.treatingDoctorId,
+      responsibleGuardianId: parsed.data.responsibleGuardianId,
+    },
+  });
+  if (personaAjena) return fail(personaAjena);
 
   const installedAt = parsed.data.installedAt ? new Date(parsed.data.installedAt) : null;
 

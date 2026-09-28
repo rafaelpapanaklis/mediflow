@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createDiagnosisSchema } from "@/lib/validation/orthodontics";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
+import { validarArchivosInicialesDelDiagnostico, validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
 import {
   auditOrtho,
   getOrthoActionContext,
@@ -25,6 +26,23 @@ export async function createDiagnosis(
 
   const patient = await loadPatientForOrtho({ ctx, patientId: parsed.data.patientId });
   if (isFailure(patient)) return patient;
+
+  // X1: el doctor que refirió llega del navegador — tiene que ser del
+  // directorio de ESTA clínica.
+  const personaAjena = await validarPersonasDelCaso({
+    clinicId: ctx.clinicId,
+    patientId: parsed.data.patientId,
+    pedidas: { referredByDoctorId: parsed.data.referredByDoctorId },
+  });
+  if (personaAjena) return fail(personaAjena);
+  const archivoAjeno = await validarArchivosInicialesDelDiagnostico({
+    clinicId: ctx.clinicId,
+    patientId: parsed.data.patientId,
+    initialPhotoSetId: parsed.data.initialPhotoSetId,
+    initialCephFileId: parsed.data.initialCephFileId,
+    initialScanFileId: parsed.data.initialScanFileId,
+  });
+  if (archivoAjeno) return fail(archivoAjeno);
 
   // Ola 1 (ws1-t6) — A12/A13: campos nuevos (sql/ortodoncia-alta-caso.sql,
   // aún sin pegar en Supabase al escribir esto). Si la columna no existe
