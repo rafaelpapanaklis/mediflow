@@ -50,6 +50,9 @@ import {
   getCaseIntakeOptions,
 } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
+import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
+import type { DrawerNewCaseDiagnosisPayload, DrawerNewCasePlanPayload } from "./drawers/DrawerNewCase";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
 
@@ -242,6 +245,66 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     return () => clearInterval(timer);
   }, [diagnosisId, generalConsentSigned, refetchGeneralConsentSigned]);
 
+  // Abrir el caso: lo usan las dos caras de la pestaña — la completa (el
+  // asistente que abre `OrthodonticsRedesignClient`) y la limpia del paciente
+  // que nunca tuvo caso (`OrtodonciaSinCaso`).
+  const crearCaso = async (payload: {
+    diagnosis: DrawerNewCaseDiagnosisPayload | null;
+    plan: DrawerNewCasePlanPayload | null;
+  }) => {
+    let diagnosisId = orthoRedesignVM?.diagnosis?.id ?? null;
+    if (payload.diagnosis) {
+      const res = await createDiagnosis({ patientId: patient.id, ...payload.diagnosis });
+      if (isFailure(res)) {
+        toast.error(res.error);
+        return;
+      }
+      diagnosisId = res.data.id;
+      if (
+        !res.data.altaCasoFieldsSaved &&
+        (payload.diagnosis.referredByDoctorId || payload.diagnosis.inObservation)
+      ) {
+        toast(t("patients.ortho.altaCasoSqlPending"));
+      }
+    }
+    if (!diagnosisId) {
+      toast.error(t("patients.ortho.noPlan"));
+      return;
+    }
+    if (payload.plan) {
+      const res = await createTreatmentPlan({
+        diagnosisId,
+        patientId: patient.id,
+        ...payload.plan,
+      });
+      if (isFailure(res)) {
+        toast.error(res.error);
+        return;
+      }
+      if (!res.data.altaCasoFieldsSaved && (payload.plan.treatingDoctorId || payload.plan.responsibleGuardianId || payload.plan.newResponsibleGuardian)) {
+        toast(t("patients.ortho.altaCasoSqlPending"));
+      }
+      toast.success(t("patients.ortho.caseOpened"));
+    } else {
+      toast.success(t("patients.ortho.caseOpenedObservation"));
+    }
+    router.refresh();
+  };
+
+  // Qué cara toca (decisión de Rafael, 28-sep-2026; la regla y sus tests, en
+  // src/lib/orthodontics/pestana-ficha.ts). `orthoData` solo llega cuando la
+  // sede tiene el módulo; su `plan` es el último del paciente, en el estado
+  // que sea, y su `diagnosis`, el último diagnóstico.
+  const vista = vistaDePestanaOrto({
+    moduloActivo: orthoData !== null && orthoData !== undefined,
+    tienePlan: Boolean(orthoData?.plan),
+    tieneDiagnostico: Boolean(orthoData?.diagnosis),
+  });
+  if (vista === "oculta") return null;
+  if (vista === "solo-abrir-caso") {
+    return <OrtodonciaSinCaso patientId={patient.id} patientFullName={fullName} onCreateCase={crearCaso} />;
+  }
+
   return (
     <>
       {/* La banda «Ortodoncia · paciente» (hallazgo 21) era el escalón entre
@@ -377,45 +440,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
           // ver `onCreateCase` más abajo — así que S1 ya no es el único
           // camino para abrir un caso y se puede ocultar cuando Rafael lo
           // decida (REPORTE-ws1-t1.md, «Ojo» de esta parte).
-          onCreateCase={async (payload) => {
-            let diagnosisId = orthoRedesignVM.diagnosis?.id ?? null;
-            if (payload.diagnosis) {
-              const res = await createDiagnosis({ patientId: patient.id, ...payload.diagnosis });
-              if (isFailure(res)) {
-                toast.error(res.error);
-                return;
-              }
-              diagnosisId = res.data.id;
-              if (
-                !res.data.altaCasoFieldsSaved &&
-                (payload.diagnosis.referredByDoctorId || payload.diagnosis.inObservation)
-              ) {
-                toast(t("patients.ortho.altaCasoSqlPending"));
-              }
-            }
-            if (!diagnosisId) {
-              toast.error(t("patients.ortho.noPlan"));
-              return;
-            }
-            if (payload.plan) {
-              const res = await createTreatmentPlan({
-                diagnosisId,
-                patientId: patient.id,
-                ...payload.plan,
-              });
-              if (isFailure(res)) {
-                toast.error(res.error);
-                return;
-              }
-              if (!res.data.altaCasoFieldsSaved && (payload.plan.treatingDoctorId || payload.plan.responsibleGuardianId || payload.plan.newResponsibleGuardian)) {
-                toast(t("patients.ortho.altaCasoSqlPending"));
-              }
-              toast.success(t("patients.ortho.caseOpened"));
-            } else {
-              toast.success(t("patients.ortho.caseOpenedObservation"));
-            }
-            router.refresh();
-          }}
+          onCreateCase={crearCaso}
           onOpenImagingRecords={() => {
             // A9 · enlaza a lo que ya existe en el expediente (radiografías,
             // panorámica, lateral de cráneo, modelos 3D) en vez de mandar al

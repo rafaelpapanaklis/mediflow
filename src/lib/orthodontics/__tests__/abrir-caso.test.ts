@@ -88,17 +88,21 @@ test("el aviso de la dirección no da ningún permiso", () => {
 });
 
 test("la ficha abre el asistente de alta al llegar con el aviso, y lo quita de la dirección", () => {
-  const ficha = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
-  assert.match(ficha, /direccion\.get\(PARAMETRO_ABRIR_CASO\)/);
-  assert.match(
-    ficha,
-    /if \(debeAbrirElAlta\(\{ parametro, tieneCaso, puedeCrear: puedeCrearCaso \}\)\) setDrawer\(\{ kind: "new-case" \}\);/,
-    "el mismo asistente de siempre (DrawerNewCase), no otro",
-  );
-  assert.match(ficha, /direccion\.delete\(PARAMETRO_ABRIR_CASO\);/, "recargar no lo vuelve a abrir");
+  // La regla vive en un hook que comparten las dos caras de la pestaña.
+  const gancho = leer("src/components/specialties/orthodontics/redesign/useAbrirAltaAlLlegar.ts");
+  assert.match(gancho, /direccion\.get\(PARAMETRO_ABRIR_CASO\)/);
+  assert.match(gancho, /if \(debeAbrirElAlta\(\{ parametro, tieneCaso, puedeCrear \}\)\) abrir\(\);/);
+  assert.match(gancho, /direccion\.delete\(PARAMETRO_ABRIR_CASO\);/, "recargar no lo vuelve a abrir");
   // `null` y no el estado de Next: con el estado copiado, Next no se entera y
   // su siguiente refresco devuelve el aviso a la dirección (visto en vivo).
-  assert.match(ficha, /window\.history\.replaceState\(null, "", /);
+  assert.match(gancho, /window\.history\.replaceState\(null, "", /);
+
+  const ficha = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
+  assert.match(
+    ficha,
+    /useAbrirAltaAlLlegar\(\{\s*tieneCaso: Boolean\(t\.treatmentPlanId\),\s*puedeCrear: Boolean\(props\.onCreateCase\),\s*abrir: \(\) => setDrawer\(\{ kind: "new-case" \}\),/,
+    "el mismo asistente de siempre (DrawerNewCase), no otro",
+  );
 });
 
 test("las etiquetas de la lista, dichas para la clínica", () => {

@@ -162,10 +162,12 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
   // Ortodoncia (ws1-t3, Ola 1): a diferencia de sus hermanas de arriba, YA
   // tiene módulo real — la pestaña no es un placeholder "Próximamente", es
   // el módulo funcionando. `opts.showOrthodontics` sale de
-  // `orthoData !== null` (patient-detail-client.tsx): solo es true cuando el
-  // PACIENTE tiene un caso de ortodoncia abierto (decisión de Rafael:
-  // "pestaña Ortodoncia solo en pacientes con caso abierto"), no solo por
-  // tener el módulo contratado.
+  // `orthoData !== null` (patient-detail-client.tsx), que solo llega cuando la
+  // SEDE tiene el módulo contratado de verdad. Decisión de Rafael del
+  // 28-sep-2026: con el módulo la pestaña sale para TODOS los pacientes —
+  // completa si tiene o tuvo caso, y solo con «Abrir caso de ortodoncia» si
+  // nunca lo tuvo (ver src/lib/orthodontics/pestana-ficha.ts). Sin el módulo,
+  // no aparece.
   if (opts.showOrthodontics) items.push({ id: "ortodoncia",  labelKey: "patients.tabs.ortodoncia",  icon: Smile,      section: "dental", isNew: true });
 
   items.push(

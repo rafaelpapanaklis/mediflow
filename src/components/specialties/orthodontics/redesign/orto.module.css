@@ -1039,6 +1039,33 @@
   color: var(--pr-texto-3);
 }
 
+/* La pestaña de quien nunca tuvo caso: el vacío ES la pantalla. */
+.vacioSinCaso {
+  gap: 10px;
+  padding: clamp(32px, 6vw, 64px) 20px;
+  border: 0;
+  background: transparent;
+}
+
+.vacioSinCaso .vacioIcono {
+  width: 48px;
+  height: 48px;
+}
+
+.vacioSinCaso .vacioTitulo {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+}
+
+.vacioSinCaso .vacioPista {
+  max-width: 52ch;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 /* Vacío de una línea, dentro de un bloque que ya tiene su título. */
 .vacioLinea {
   font-size: 12.5px;

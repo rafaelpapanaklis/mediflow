@@ -8,7 +8,7 @@
 import { Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
-import { PARAMETRO_ABRIR_CASO, debeAbrirElAlta } from "@/lib/orthodontics/abrir-caso";
+import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
 import { SectionHero } from "./sections/SectionHero";
 import { SectionDiagnosis } from "./sections/SectionDiagnosis";
 import { SectionPlan } from "./sections/SectionPlan";
@@ -325,19 +325,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   // asistente de alta se abre solo, sin tener que buscar el botón. El aviso
   // no da ningún permiso (ver `debeAbrirElAlta`), y se quita de la dirección
   // para que recargar o volver atrás no lo abra otra vez.
-  const puedeCrearCaso = Boolean(props.onCreateCase);
-  const tieneCaso = Boolean(t.treatmentPlanId);
-  useEffect(() => {
-    const direccion = new URLSearchParams(window.location.search);
-    const parametro = direccion.get(PARAMETRO_ABRIR_CASO);
-    if (parametro === null) return;
-    if (debeAbrirElAlta({ parametro, tieneCaso, puedeCrear: puedeCrearCaso })) setDrawer({ kind: "new-case" });
-    direccion.delete(PARAMETRO_ABRIR_CASO);
-    const resto = direccion.toString();
-    // Con `null`, no con `window.history.state`: así Next se entera del cambio
-    // y no vuelve a poner el aviso en la dirección en su siguiente refresco.
-    window.history.replaceState(null, "", `${window.location.pathname}${resto ? `?${resto}` : ""}${window.location.hash}`);
-  }, [tieneCaso, puedeCrearCaso]);
+  // La regla y el porqué, en `useAbrirAltaAlLlegar` (la comparte la vista
+  // limpia del paciente que nunca tuvo caso, `OrtodonciaSinCaso`).
+  useAbrirAltaAlLlegar({
+    tieneCaso: Boolean(t.treatmentPlanId),
+    puedeCrear: Boolean(props.onCreateCase),
+    abrir: () => setDrawer({ kind: "new-case" }),
+  });
 
   // Hallazgo ws1-t4 §5/§11: la cabecera, «Estado de cuenta» (RightRail),
   // «Cobro del tratamiento» (SectionFinance) y el resumen de mensualidades

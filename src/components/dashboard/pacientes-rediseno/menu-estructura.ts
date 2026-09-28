@@ -8,6 +8,11 @@ import { APARTADOS_FUERA_DEL_MENU } from "@/components/dashboard/presupuestos-en
  *   Resumen · Nueva consulta · Odontograma · Plan de tratamiento · Citas · Facturación
  *      │ Clínico ▾   │ Archivos ▾
  *
+ * Y un séptimo, «Ortodoncia», SOLO en las sedes que tienen el módulo (Rafael,
+ * 28-sep-2026): iba escondida dentro de «Más» por no estar en ninguna lista.
+ * Va al final de los fijos, así los seis acordados no se mueven de sitio. Sin
+ * el módulo `buildPatientNavItems` no la devuelve y la barra queda en seis.
+ *
  * «Más» existió hasta ws1-t3 con «Referencias» dentro; Rafael lo quitó (ver
  * `APARTADOS_FUERA_DEL_MENU`). El grupo sigue existiendo como red: solo se
  * pinta si aparece un apartado que ninguna lista conoce.
@@ -30,6 +35,7 @@ export const FIJOS = [
   "tratamiento",
   "agenda", // «Citas»
   "facturacion",
+  "ortodoncia", // solo con el módulo de Ortodoncia en la sede
 ] as const;
 
 export const GRUPO_CLINICO = [
