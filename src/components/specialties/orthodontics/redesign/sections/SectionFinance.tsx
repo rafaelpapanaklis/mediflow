@@ -34,6 +34,7 @@ import { DrawerCambiarPlanDePago } from "../drawers/DrawerCambiarPlanDePago";
 import { DrawerCobrarExtra } from "../drawers/DrawerCobrarExtra";
 import { DrawerConfigCobro } from "../drawers/DrawerConfigCobro";
 import { DrawerElegirDescuento } from "../drawers/DrawerElegirDescuento";
+import { DrawerLigarFactura } from "../drawers/DrawerLigarFactura";
 import { DrawerPromesaDePago } from "../drawers/DrawerPromesaDePago";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import { resolverPromesaDePago } from "@/app/actions/orthodontics/cobro/resolverPromesaDePago";
@@ -61,6 +62,7 @@ export interface SectionFinanceProps {
 
 type DrawerKind =
   | { kind: "abrir-plan" }
+  | { kind: "ligar-factura" }
   | { kind: "cobrar" }
   | { kind: "extra" }
   | { kind: "cambiar-plan" }
@@ -257,6 +259,11 @@ export function SectionFinance(props: SectionFinanceProps) {
               ) : null}
               <Btn variant="primary" className="mt-1" icon={<Plus size={15} strokeWidth={1.75} aria-hidden />} onClick={() => setDrawer({ kind: "abrir-plan" })}>
                 {esPorControl ? "Abrir factura de colocación/enganche" : "Abrir plan de pago"}
+              </Btn>
+              {/* ws1-t4 #75: si la factura del tratamiento ya existe (presupuesto
+                  aceptado, o hecha en Facturación), se LIGA en vez de crear otra. */}
+              <Btn variant="ghost" size="sm" onClick={() => setDrawer({ kind: "ligar-factura" })}>
+                Ya tengo la factura: ligarla al caso
               </Btn>
             </div>
           </div>
@@ -462,6 +469,14 @@ export function SectionFinance(props: SectionFinanceProps) {
             else if (r.data.aviso) { window.alert(r.data.aviso); }
             cerrarYRecargar();
           }}
+        />
+      ) : null}
+
+      {drawer?.kind === "ligar-factura" ? (
+        <DrawerLigarFactura
+          treatmentPlanId={props.treatmentPlanId}
+          onClose={() => setDrawer(null)}
+          onLigada={cerrarYRecargar}
         />
       ) : null}
 

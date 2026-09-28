@@ -69,10 +69,17 @@ export async function abrirPlanDePago(args: {
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: args.invoiceId, clinicId: ctx.clinicId },
-    select: { id: true, patientId: true },
+    select: { id: true, patientId: true, status: true, orthodonticTreatmentPlan: { select: { id: true } } },
   });
   if (!invoice) return fail("La factura no existe o es de otra clínica");
   if (invoice.patientId !== caso.patientId) return fail("La factura no es de este paciente");
+  // ws1-t4 #75: ahora también se LIGA una factura que ya existía. Una cancelada
+  // no puede ser el plan, y la que ya es el plan de OTRO caso no se comparte
+  // (dos casos sobre la misma factura contarían su dinero dos veces).
+  if (invoice.status === "CANCELLED") return fail("Esa factura está cancelada: no puede ser el plan de pago");
+  if (invoice.orthodonticTreatmentPlan && invoice.orthodonticTreatmentPlan.id !== args.treatmentPlanId) {
+    return fail("Esa factura ya es el plan de pago de otro caso");
+  }
 
   // Solo si SIGUE sin plan vigente (defensivo contra doble clic / dos
   // pestañas): la misma factura cancelada de antes, o ninguna.
