@@ -40,7 +40,33 @@ describe("computeELine", () => {
 
   it("faltando pronasale/pogonion, todo null (no revienta)", () => {
     const r = computeELine({});
-    assert.deepEqual(r, { upperLipPx: null, lowerLipPx: null, upperLipMm: null, lowerLipMm: null });
+    assert.deepEqual(r, {
+      upperLipPx: null,
+      lowerLipPx: null,
+      upperLipMm: null,
+      lowerLipMm: null,
+      upperLipRatio: null,
+      lowerLipRatio: null,
+    });
+  });
+
+  it("H19: sin calibración, la proporción (ratio) no depende del zoom/tamaño de la foto", () => {
+    const points: FacialPoints = {
+      PRONASALE: { x: 0, y: 0 },
+      SOFT_POGONION: { x: 0, y: 100 },
+      LABRALE_SUPERIUS: { x: 10, y: 50 },
+    };
+    const zoomed: FacialPoints = {
+      PRONASALE: { x: 0, y: 0 },
+      SOFT_POGONION: { x: 0, y: 300 }, // misma foto, 3x más resolución/zoom
+      LABRALE_SUPERIUS: { x: 30, y: 150 },
+    };
+    const r1 = computeELine(points);
+    const r2 = computeELine(zoomed);
+    // Los px crudos SÍ cambian con el zoom (10 vs 30) — por eso no son una
+    // unidad clínica sin calibrar. La proporción es la misma.
+    assert.notEqual(r1.upperLipPx, r2.upperLipPx);
+    assert.equal(r1.upperLipRatio, r2.upperLipRatio);
   });
 });
 
@@ -79,5 +105,16 @@ describe("computeMidlineDeviation", () => {
     const r = computeMidlineDeviation(points, 2);
     assert.equal(Math.abs(r.deviationPx!), 4);
     assert.equal(r.deviationMm, 2);
+  });
+
+  it("H19: sin calibración, deviationRatio es proporcional a la línea glabela-mentón, no un conteo de px", () => {
+    const points: FacialPoints = {
+      GLABELLA: { x: 50, y: 0 },
+      MENTON_SOFT: { x: 50, y: 200 },
+      DENTAL_MIDLINE: { x: 54, y: 150 },
+    };
+    const r = computeMidlineDeviation(points);
+    assert.equal(Math.abs(r.deviationRatio!), 0.02); // 4 / 200, mismo signo que deviationPx
+    assert.equal(Math.sign(r.deviationRatio!), Math.sign(r.deviationPx!));
   });
 });
