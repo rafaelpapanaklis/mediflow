@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { orthoValoracionParaLanding } from "@/lib/orthodontics/whatsapp-bot-booking";
 import { BookingClient } from "./booking-client";
 
 const CATEGORY_SERVICES: Record<string, string[]> = {
@@ -80,9 +81,14 @@ export default async function ReservarPage({ params, searchParams }: Props) {
     ? landingServiceNames
     : (CATEGORY_SERVICES[category] ?? CATEGORY_SERVICES.OTHER);
 
+  // ws1-t1 (Ortodoncia conectada a la reserva web) — misma "Valoración de
+  // ortodoncia" que la landing `[slug]`, solo si el módulo está contratado en
+  // esta sede. No lanza: esta página no debe caerse por esto.
+  const orthoValoracion = await orthoValoracionParaLanding(clinic.id).catch(() => null);
+
   return (
     <BookingClient
-      clinic={clinic as any}
+      clinic={{ ...(clinic as any), orthoValoracion }}
       preselectedService={searchParams.service ?? null}
       categoryServices={categoryServices}
     />

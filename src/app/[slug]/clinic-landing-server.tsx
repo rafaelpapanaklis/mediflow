@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { orthoValoracionParaLanding } from "@/lib/orthodontics/whatsapp-bot-booking";
 import { LivePreviewBridge } from "./_shared/live-preview";
 import { ClinicLandingClient } from "./landing-client";
 import { TemplateFuturista } from "./templates/template-futurista";
@@ -106,6 +107,11 @@ export async function ClinicLandingServer({
 
   if (!clinic) notFound();
   const c = clinic as any;
+  // ws1-t1 (Ortodoncia conectada a la reserva web) — solo si el módulo está
+  // contratado en ESTA clínica; sin eso `orthoValoracion` queda null y la
+  // página se ve exactamente igual que hoy. No lanza: una clínica no dental,
+  // o sin el módulo, no debe poder tumbar su propia landing pública por esto.
+  c.orthoValoracion = await orthoValoracionParaLanding(clinic.id).catch(() => null);
 
   /* Sin publicar, el visitante ve el cartel de "pronto".
      En el EDITOR no: la clínica que todavía no publica es justamente la que

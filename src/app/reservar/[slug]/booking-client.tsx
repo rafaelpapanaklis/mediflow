@@ -15,6 +15,7 @@ import {
   normalizeServices,
   type BookingFlowService,
 } from "@/app/[slug]/_shared/booking-flow";
+import { conValoracionDeOrtodoncia } from "@/lib/orthodontics/landing-servicio-valoracion";
 import {
   currentBookingNext,
   useBookingReopen,
@@ -32,6 +33,8 @@ interface Clinic {
   landingServices?: unknown;
   landingWhatsapp?: string | null;
   landingThemeColor?: string | null;
+  /** ws1-t1 (Ortodoncia conectada a la reserva web) — null si el módulo no está activo en esta sede. */
+  orthoValoracion?: { name: string; durationMin: number } | null;
   schedules: { dayOfWeek: number; enabled: boolean; openTime: string; closeTime: string }[];
   users: Doctor[];
 }
@@ -51,8 +54,8 @@ export function BookingClient({
   // mini-web, quedan los nombres por categoría que ya venían de la página.
   const services: BookingFlowService[] = (() => {
     const propios = normalizeServices(clinic.landingServices);
-    if (propios.length > 0) return propios;
-    return normalizeServices(categoryServices ?? []);
+    const base = propios.length > 0 ? propios : normalizeServices(categoryServices ?? []);
+    return conValoracionDeOrtodoncia(base, clinic.orthoValoracion);
   })();
 
   // Al volver del login/registro se reabre en el hueco que ya había elegido.

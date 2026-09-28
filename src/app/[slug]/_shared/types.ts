@@ -18,6 +18,15 @@ export interface LandingClinic {
   /* Landing v3 (sql/landing-copy.sql): { claveDelManifiesto: texto } con TODO
      el texto suelto que reescribió la clínica. Leerlo por copyMap/copyValue. */
   landingCopy?:unknown;
+  /**
+   * ws1-t1 (Ortodoncia conectada a la reserva web) — "Valoración de
+   * ortodoncia" del catálogo de Configuración, SOLO si el módulo está
+   * contratado en esta clínica. `null` si no aplica: la reserva se ve
+   * exactamente como hoy. Se inyecta como un servicio más en
+   * `booking-modal.tsx` (`toBookingClinic`), nunca en `landingServices`
+   * (ese es JSON que edita la clínica a mano; esto no se guarda ahí).
+   */
+  orthoValoracion?: { name: string; durationMin: number } | null;
   users:LandingDoctor[]; schedules:LandingSchedule[];
 }
 export interface TemplateProps { clinic:LandingClinic; highlights?:string[]; }

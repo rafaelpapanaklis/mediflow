@@ -13,6 +13,7 @@
    que las plantillas no tengan que cambiar su import.
    ============================================================ */
 import { BookingFlowModal, normalizeServices, type BookingFlowClinic } from "./booking-flow";
+import { conValoracionDeOrtodoncia } from "@/lib/orthodontics/landing-servicio-valoracion";
 import type { LandingClinic } from "./types";
 import type { PendingBooking } from "./booking-session";
 
@@ -34,7 +35,7 @@ export function toBookingClinic(clinic: LandingClinic): BookingFlowClinic {
       services: u.services,
     })),
     schedules: clinic.schedules,
-    services: normalizeServices(clinic.landingServices),
+    services: conValoracionDeOrtodoncia(normalizeServices(clinic.landingServices), clinic.orthoValoracion),
   };
 }
 
