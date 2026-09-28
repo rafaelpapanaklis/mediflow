@@ -13,6 +13,25 @@ export function esCitaControlOrto(tipo: string | null | undefined): boolean {
   return tipo === TIPO_CITA_CONTROL_ORTO;
 }
 
+/**
+ * H40: citas de un caso de ortodoncia en las que también tiene sentido abrir la
+ * hoja de control (urgencia por bracket caído, colocación, retiro, control de
+ * retención), no solo el «Control de ortodoncia» mensual. SOLO decide si el
+ * panel de la cita ofrece la hoja: la facturación automática sigue colgada de
+ * `esCitaControlOrto` (signTreatmentCard.ts) y no cambia.
+ */
+const TIPOS_CITA_CON_HOJA = [
+  TIPO_CITA_CONTROL_ORTO,
+  "Urgencia de ortodoncia",
+  "Colocación de aparatología",
+  "Retiro de aparatología",
+  "Control de retención",
+];
+
+export function esCitaOrtoConHoja(tipo: string | null | undefined): boolean {
+  return tipo != null && TIPOS_CITA_CON_HOJA.includes(tipo);
+}
+
 // Ola 1 (ws1-t4, Control y agenda, sep-2026) — C7 del documento de alcance
 // («NUEVO Tipos de cita de ortodoncia»): el catálogo de motivos vivía aquí,
 // como lista fija. Ola 1 (ws1-t3, Acceso y permisos, ajuste): unificado con

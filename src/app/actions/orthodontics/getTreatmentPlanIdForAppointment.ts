@@ -51,6 +51,7 @@ export async function getTreatmentPlanIdForAppointment(
   const perms = { role: ctx.role as any, permissionsOverride: ctx.permissionsOverride };
   const access = resolveTreatmentPlanAccess({
     canClinical: hasPermission(perms, "medicalRecord.view"),
+    canClinicalEdit: hasPermission(perms, "medicalRecord.edit"),
     canBilling: hasPermission(perms, "billing.view"),
   });
   if (!access.allowed) {

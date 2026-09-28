@@ -391,7 +391,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               CEPH_ANALYSIS_PDF: t("patients.ortho.recordCeph"),
               SCAN_STL: t("patients.ortho.recordStl"),
             };
-            const RECORD_KIND: Record<string, "ceph" | "stl" | "other"> = {
+            const RECORD_KIND: Record<string, "ceph" | "stl" | "pano" | "other"> = {
               CEPH_ANALYSIS_PDF: "ceph",
               SCAN_STL: "stl",
             };
@@ -402,7 +402,20 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                 : (typeof r.capturedAt === "string" ? r.capturedAt : null),
               kind: RECORD_KIND[r.recordType] ?? "other",
             };
-          }) ?? []}
+          }).concat(
+            // H56: también lo que ya está en el expediente (Radiografías).
+            (orthoData?.archivosDelPaciente ?? []).map((a) => ({
+              label: a.name,
+              date: a.date,
+              kind: (a.category === "XRAY_PANORAMIC"
+                ? "pano"
+                : a.category === "XRAY_CEPHALOMETRIC" || a.category === "CEPH_ANALYSIS_PDF"
+                  ? "ceph"
+                  : a.category === "SCAN_STL"
+                    ? "stl"
+                    : "other") as "pano" | "ceph" | "stl" | "other",
+            })),
+          ) ?? []}
           historicalPhotoSets={orthoRedesignBundle?.historicalPhotoSets ?? []}
           installments={orthoRedesignBundle?.installments ?? []}
           quoteScenarios={orthoRedesignBundle?.quoteScenarios ?? []}

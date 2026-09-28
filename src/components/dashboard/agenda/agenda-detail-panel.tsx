@@ -38,6 +38,7 @@ import {
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { RanuraCita } from "@/components/specialties/orthodontics/agenda/RanuraCita";
 import { AgendaEditAppointmentModal } from "./agenda-edit-appointment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import {
@@ -523,6 +524,10 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
           {`Una cita en "${STATUS_LABELS[appt.status]}" ya no cambia de estado: es el final del recorrido.`}
         </div>
       )}
+
+      {/* H42: la agenda de siempre también ofrece «Registrar control» (la
+          ranura se calla sola si la cita no es de ortodoncia). */}
+      <RanuraCita dto={appt} />
 
       <div className={styles.detailActions}>
         {/* Acciones de transición de status (filtradas por matriz). */}

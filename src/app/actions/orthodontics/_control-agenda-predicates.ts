@@ -17,9 +17,15 @@
 export function resolveTreatmentPlanAccess(perms: {
   canClinical: boolean;
   canBilling: boolean;
+  /**
+   * H67: quien solo puede VER el expediente no debe ver «Registrar control»
+   * (firmar exige editar y el botón daba error de permiso). Sin este dato,
+   * se cae al criterio de antes (`canClinical`).
+   */
+  canClinicalEdit?: boolean;
 }): { allowed: boolean; canOpenClinicalCard: boolean } {
   return {
     allowed: perms.canClinical || perms.canBilling,
-    canOpenClinicalCard: perms.canClinical,
+    canOpenClinicalCard: perms.canClinicalEdit ?? perms.canClinical,
   };
 }

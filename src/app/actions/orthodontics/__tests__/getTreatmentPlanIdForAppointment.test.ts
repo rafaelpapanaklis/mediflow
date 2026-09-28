@@ -31,3 +31,15 @@ describe("resolveTreatmentPlanAccess", () => {
     assert.equal(access.canOpenClinicalCard, false);
   });
 });
+
+describe("resolveTreatmentPlanAccess — H67", () => {
+  it("solo ver el expediente: entra, pero sin botón de hoja", () => {
+    const access = resolveTreatmentPlanAccess({ canClinical: true, canBilling: false, canClinicalEdit: false });
+    assert.equal(access.allowed, true);
+    assert.equal(access.canOpenClinicalCard, false);
+  });
+  it("editar el expediente: con botón", () => {
+    const access = resolveTreatmentPlanAccess({ canClinical: true, canBilling: false, canClinicalEdit: true });
+    assert.equal(access.canOpenClinicalCard, true);
+  });
+});

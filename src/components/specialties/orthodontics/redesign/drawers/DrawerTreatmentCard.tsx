@@ -41,6 +41,9 @@ import { EvolutionTemplatePicker } from "@/components/clinical-shared/EvolutionT
 import { aplicarPlantillaAlControl, huecosPorLlenar } from "@/lib/orthodontics/consulta-ortodoncia";
 import { AgendarProximoControlButton } from "@/components/specialties/orthodontics/AgendarProximoControlButton";
 import { AvisarProximoControlButton } from "@/components/specialties/orthodontics/AvisarProximoControlButton";
+import { addWireStep } from "@/app/actions/orthodontics/addWireStep";
+import { isFailure } from "@/app/actions/orthodontics/result";
+import { WIRE_GAUGE_RECT, WIRE_GAUGE_ROUND, WIRE_MATERIAL_OPTIONS } from "./wire-options";
 import { initialState, reducer, type DrawerState } from "./treatment-card-state";
 import orto from "../orto.module.css";
 
@@ -80,6 +83,11 @@ export interface DrawerTreatmentCardProps {
   card: TreatmentCardDTO | null;
   /** Catálogo de wire steps planificados para el dropdown wire-to. */
   availableWires: WireStepDTO[];
+  /**
+   * H48: con el plan, el select de arco deja «Otro arco…» para escribir el que
+   * se puso hoy y sumarlo a la secuencia (antes solo ofrecía lo planeado).
+   */
+  treatmentPlanId?: string;
   /** Para una nueva cita, se sugieren defaults: número, fase, mes, wire actual. */
   defaultsForNew?: {
     cardNumber: number;
@@ -218,7 +226,11 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     : `Control ${props.card!.cardNumber}`;
 
   const wireFromLabel = wireText(props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null);
-  const wireToCurrent = props.availableWires.find((w) => w.id === state.wireToId) ?? null;
+  // H48: arcos escritos en esta hoja (ya guardados en la secuencia del caso).
+  const [otroArco, setOtroArco] = useState(false);
+  const [arcosNuevos, setArcosNuevos] = useState<WireStepDTO[]>([]);
+  const todosLosArcos = [...props.availableWires, ...arcosNuevos];
+  const wireToCurrent = todosLosArcos.find((w) => w.id === state.wireToId) ?? null;
   const wireToLabel = wireText(wireToCurrent);
 
   // Plantillas de nota (Rafael, 28-sep-2026): las seis de ortodoncia que ya
@@ -403,20 +415,39 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 ) : (
                   <select
                     value={state.wireToId ?? ""}
-                    onChange={(e) =>
-                      dispatch({ kind: "set-wire-to", value: e.target.value || null })
-                    }
+                    onChange={(e) => {
+                      if (e.target.value === "__otro__") {
+                        setOtroArco(true);
+                        return;
+                      }
+                      setOtroArco(false);
+                      dispatch({ kind: "set-wire-to", value: e.target.value || null });
+                    }}
                     className={orto.entrada}
                     aria-label="Arco nuevo"
                   >
                     <option value="">Sin cambio</option>
-                    {props.availableWires.map((w) => (
+                    {todosLosArcos.map((w) => (
                       <option key={w.id} value={w.id}>
                         {wireText(w)}
                       </option>
                     ))}
+                    {props.treatmentPlanId ? <option value="__otro__">Otro arco…</option> : null}
                   </select>
                 )}
+                {otroArco && props.treatmentPlanId ? (
+                  <OtroArcoForm
+                    treatmentPlanId={props.treatmentPlanId}
+                    phaseKey={todosLosArcos[todosLosArcos.length - 1]?.phaseKey ?? "ALIGNMENT"}
+                    nextOrder={todosLosArcos.length + 1}
+                    onCreated={(w) => {
+                      setArcosNuevos((prev) => [...prev, w]);
+                      dispatch({ kind: "set-wire-to", value: w.id });
+                      setOtroArco(false);
+                    }}
+                    onCancel={() => setOtroArco(false)}
+                  />
+                ) : null}
               </div>
             </div>
           </section>
@@ -1001,7 +1032,7 @@ function BrokenBlock(props: {
   list: BrokenBracketDTO[];
   readOnly: boolean;
   onAdd: (b: BrokenBracketDTO) => void;
-  onUpdate: (id: string, patch: Partial<Pick<BrokenBracketDTO, "toothFdi">>) => void;
+  onUpdate: (id: string, patch: Partial<Pick<BrokenBracketDTO, "toothFdi" | "brokenDate">>) => void;
   onMarkRebonded: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
@@ -1056,6 +1087,19 @@ function BrokenBlock(props: {
                       aria-label="Diente FDI del bracket caído"
                     />
                   </div>
+                  {/* H50: «se me cayó hace diez días» — la fecha ya no es siempre hoy. */}
+                  <input
+                    type="date"
+                    value={b.brokenDate.slice(0, 10)}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) =>
+                      e.target.value
+                        ? props.onUpdate(b.id, { brokenDate: new Date(`${e.target.value}T12:00:00`).toISOString() })
+                        : undefined
+                    }
+                    className={orto.entrada}
+                    aria-label="Fecha en que se cayó el bracket"
+                  />
                 </>
               )}
               <span className="ml-auto flex items-center gap-2">
@@ -1175,6 +1219,89 @@ function HygieneBlock(props: {
         </div>
       </div>
     </section>
+  );
+}
+
+function OtroArcoForm(props: {
+  treatmentPlanId: string;
+  phaseKey: WireStepDTO["phaseKey"];
+  nextOrder: number;
+  onCreated: (w: WireStepDTO) => void;
+  onCancel: () => void;
+}) {
+  const [material, setMaterial] = useState("NITI_SUPER");
+  const [gauge, setGauge] = useState("014");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const shape = gauge.includes("x") ? "RECT" : "ROUND";
+  const guardar = async () => {
+    setGuardando(true);
+    setError(null);
+    try {
+      const res = await addWireStep({
+        treatmentPlanId: props.treatmentPlanId,
+        phase: props.phaseKey,
+        material,
+        shape,
+        gauge,
+        archUpper: true,
+        archLower: true,
+        durationWeeks: 6,
+        auxiliaries: [],
+      });
+      if (isFailure(res)) {
+        setError(res.error);
+        return;
+      }
+      const dbMaterial = material.startsWith("NITI") ? "NITI" : material === "TMA" ? "TMA" : "SS";
+      props.onCreated({
+        id: res.data.wireStepId,
+        orderIndex: props.nextOrder,
+        phaseKey: props.phaseKey,
+        material: dbMaterial,
+        shape,
+        gauge,
+        purpose: null,
+        archUpper: true,
+        archLower: true,
+        durationWeeks: 6,
+        auxiliaries: [],
+        notes: null,
+        status: "PLANNED",
+        plannedDate: null,
+        appliedDate: null,
+        completedDate: null,
+      });
+    } finally {
+      setGuardando(false);
+    }
+  };
+  return (
+    <div className="mt-2 flex flex-col gap-[6px]">
+      <select value={material} onChange={(e) => setMaterial(e.target.value)} className={orto.entrada} aria-label="Material del arco">
+        {WIRE_MATERIAL_OPTIONS.map((m) => (
+          <option key={m.key} value={m.key}>
+            {m.label}
+          </option>
+        ))}
+      </select>
+      <select value={gauge} onChange={(e) => setGauge(e.target.value)} className={orto.entrada} aria-label="Calibre del arco">
+        {[...WIRE_GAUGE_ROUND, ...WIRE_GAUGE_RECT].map((g) => (
+          <option key={g.key} value={g.key}>
+            {g.label}
+          </option>
+        ))}
+      </select>
+      {error ? <div className="text-[12px]" role="alert">{error}</div> : null}
+      <div className="flex gap-2">
+        <Btn variant="secondary" size="sm" onClick={guardar} disabled={guardando}>
+          {guardando ? "Guardando…" : "Agregar arco"}
+        </Btn>
+        <Btn variant="secondary" size="sm" onClick={props.onCancel}>
+          Cancelar
+        </Btn>
+      </div>
+    </div>
   );
 }
 

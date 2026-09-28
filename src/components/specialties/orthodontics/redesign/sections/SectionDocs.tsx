@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { FileText, Plus } from "lucide-react";
+import Link from "next/link";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
@@ -56,7 +57,7 @@ export interface SectionDocsProps {
 
 const CATALOG_AMPLIADO = [
   "Alineadores serie 1-30",
-  "Refinement 1-5",
+  "Refinamiento 1-5",
   "Retenedor Hawley sup/inf",
   "Retenedor Essix sup/inf",
   "Retenedor fijo lingual 3-3",
@@ -185,6 +186,14 @@ function LabOrdersPanel({ rows }: { rows: LabOrderRow[] }) {
           ))}
         </div>
       </div>
+      {/* H53: los pedidos a laboratorios de la plataforma viven en otra lista. */}
+      <p className="mt-[12px] text-xs text-[color:var(--pr-texto-2)]">
+        Aquí se guardan las órdenes de ortodoncia. Los pedidos enviados a un laboratorio de la plataforma están en{" "}
+        <Link href="/dashboard/ordenes-laboratorio" className={orto.enlace}>
+          Órdenes de laboratorio
+        </Link>
+        .
+      </p>
     </div>
   );
 }

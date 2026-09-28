@@ -161,6 +161,7 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaCo
         <DrawerTreatmentCard
           card={ctx.card}
           availableWires={ctx.availableWires}
+          treatmentPlanId={treatmentPlanId}
           availablePhotoSets={ctx.availablePhotoSets}
           appointmentId={appointmentId}
           defaultsForNew={

@@ -2,15 +2,16 @@
 // Drawer G18 — Lab order wizard.
 // 480px lateral con catalog ampliado por categorías + form de detalles.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Send, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { DateField } from "@/components/ui/date-field";
+import { listLabPartners } from "@/app/actions/clinical-shared/lab-orders";
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
 
 const CATALOG: ReadonlyArray<{ group: string; items: string[] }> = [
-  { group: "Alineadores", items: ["Alineadores serie 1-30", "Refinement 1-5"] },
+  { group: "Alineadores", items: ["Alineadores serie 1-30", "Refinamiento 1-5"] },
   {
     group: "Retención",
     items: [
@@ -31,7 +32,6 @@ const CATALOG: ReadonlyArray<{ group: string; items: string[] }> = [
   },
 ];
 
-const LABS = ["Lab Cendres MX", "Lab Guzmán Ortho", "Lab interno"];
 
 export interface DrawerLabOrderProps {
   onClose: () => void;
@@ -39,15 +39,44 @@ export interface DrawerLabOrderProps {
     catalog: string;
     description: string;
     lab: string;
+    /** H52/H53: el laboratorio real de la clínica (lab_partners), si se eligió uno. */
+    labPartnerId?: string | null;
     expectedDate: string | null;
   }) => Promise<void> | void;
+  /** H54: tipo de aparatología del caso; sin alineadores no se ofrecen los de alineadores. */
+  aparatologia?: string | null;
+}
+
+/** Sin dato del caso se ofrece todo; con dato, «Alineadores» solo si el caso los usa. */
+export function catalogoParaCaso(aparatologia: string | null | undefined) {
+  if (!aparatologia || /ALIGN/i.test(aparatologia)) return CATALOG;
+  return CATALOG.filter((g) => g.group !== "Alineadores");
 }
 
 export function DrawerLabOrder(props: DrawerLabOrderProps) {
   const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [cat, setCat] = useState<string | null>(null);
   const [description, setDescription] = useState("");
-  const [lab, setLab] = useState(LABS[0]);
+  const [socios, setSocios] = useState<Array<{ id: string; name: string }>>([]);
+  const [cargandoSocios, setCargandoSocios] = useState(true);
+  const [labId, setLabId] = useState("");
+  const [labTexto, setLabTexto] = useState("");
+  useEffect(() => {
+    let vivo = true;
+    listLabPartners()
+      .then((res) => {
+        if (!vivo || !res || !res.ok) return;
+        const activos = res.data.filter((p) => p.isActive !== false).map((p) => ({ id: p.id, name: p.name }));
+        setSocios(activos);
+        if (activos[0]) setLabId(activos[0].id);
+      })
+      .catch(() => undefined)
+      .finally(() => vivo && setCargandoSocios(false));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+  const lab = socios.find((p) => p.id === labId)?.name ?? labTexto.trim();
   const [expectedDate, setExpectedDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -59,6 +88,7 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
         catalog: cat,
         description,
         lab,
+        labPartnerId: labId || null,
         expectedDate: expectedDate || null,
       });
     } finally {
@@ -106,7 +136,7 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
           <div className={`${orto.ceja} mb-1`}>
             1. Elige del catálogo
           </div>
-          {CATALOG.map((g) => (
+          {catalogoParaCaso(props.aparatologia).map((g) => (
             <div key={g.group}>
               <div className="text-xs font-medium text-[color:var(--pr-texto-2)] mb-1.5">
                 {g.group}
@@ -150,18 +180,28 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
                   <div className={`${orto.ceja} mb-1`}>
                     Lab
                   </div>
-                  <select
-                    value={lab}
-                    onChange={(e) => setLab(e.target.value)}
-                    className={`${orto.entrada} w-full`}
-                    aria-label="Laboratorio"
-                  >
-                    {LABS.map((l) => (
-                      <option key={l} value={l}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
+                  {socios.length > 0 ? (
+                    <select
+                      value={labId}
+                      onChange={(e) => setLabId(e.target.value)}
+                      className={`${orto.entrada} w-full`}
+                      aria-label="Laboratorio"
+                    >
+                      {socios.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={labTexto}
+                      onChange={(e) => setLabTexto(e.target.value)}
+                      placeholder={cargandoSocios ? "Cargando…" : "Nombre del laboratorio"}
+                      className={`${orto.entrada} w-full`}
+                      aria-label="Laboratorio"
+                    />
+                  )}
                 </div>
                 <div>
                   <div className={`${orto.ceja} mb-1`}>

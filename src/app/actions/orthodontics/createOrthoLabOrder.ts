@@ -16,6 +16,8 @@ const inputSchema = z.object({
   description: z.string().max(500),
   /** Texto libre del lab. */
   lab: z.string().max(120),
+  /** Laboratorio real de la clínica (lab_partners); opcional. */
+  labPartnerId: z.string().min(1).nullable().optional(),
   expectedDate: z
     .string()
     .nullable()
@@ -35,10 +37,22 @@ export async function createOrthoLabOrder(
   const patient = await loadPatientForOrtho({ ctx, patientId: parsed.data.patientId });
   if (isFailure(patient)) return patient;
 
+  // H52/H53: si se eligió un laboratorio de la clínica, debe ser de ESTA clínica.
+  let partnerId: string | null = null;
+  if (parsed.data.labPartnerId) {
+    const partner = await prisma.labPartner.findFirst({
+      where: { id: parsed.data.labPartnerId, clinicId: ctx.clinicId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!partner) return fail("Laboratorio inválido");
+    partnerId = partner.id;
+  }
+
   try {
     const created = await prisma.labOrder.create({
       data: {
         clinicId: ctx.clinicId,
+        partnerId,
         patientId: patient.data.id,
         module: "orthodontics",
         authorId: ctx.userId,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
-import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
+import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { getTreatmentPlanIdForAppointment } from "@/app/actions/orthodontics/getTreatmentPlanIdForAppointment";
 import { ESTADO_VACIO_RANURA_CITA, resolverEstadoRanuraCita } from "./ranura-cita-estado";
 import { ResumenCobranza } from "../cobranza/ResumenCobranza";
@@ -36,7 +36,7 @@ export interface RanuraCitaProps {
 }
 
 export function RanuraCita({ dto }: RanuraCitaProps) {
-  const esControl = esCitaControlOrto(dto.reason ?? null);
+  const esControl = esCitaOrtoConHoja(dto.reason ?? null);
   const [state, setState] = useState(ESTADO_VACIO_RANURA_CITA);
   // H41: si la consulta se aborta (dev lento, 502) reintenta una vez y, si
   // vuelve a fallar, avisa con «Reintentar» en vez de quedarse vacía.

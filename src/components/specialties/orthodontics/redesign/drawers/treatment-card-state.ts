@@ -60,7 +60,7 @@ export type DrawerAction =
   | { kind: "remove-ipr"; id: string }
   | { kind: "toggle-ipr"; id: string }
   | { kind: "add-bracket"; value: BrokenBracketDTO }
-  | { kind: "update-bracket"; id: string; patch: Partial<Pick<BrokenBracketDTO, "toothFdi">> }
+  | { kind: "update-bracket"; id: string; patch: Partial<Pick<BrokenBracketDTO, "toothFdi" | "brokenDate">> }
   | { kind: "remove-bracket"; id: string }
   | { kind: "mark-rebonded"; id: string }
   | { kind: "learn-card-id"; id: string };

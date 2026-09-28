@@ -303,6 +303,7 @@ export interface OrthodonticsRedesignClientProps {
     catalog: string;
     description: string;
     lab: string;
+    labPartnerId?: string | null;
     expectedDate: string | null;
   }) => Promise<void> | void;
   // (onCreateReferralLetter ahora vive arriba en la sección "Cierre 100%"
@@ -686,6 +687,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           key={cardForDrawer.id}
           card={cardForDrawer}
           availableWires={vm.wireSequence}
+          treatmentPlanId={t.treatmentPlanId || undefined}
           onClose={closeDrawer}
           onSave={props.onCardDraftSaved}
           onSign={props.onCardSigned}
@@ -703,6 +705,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           card={nuevoControlCtx.existingCard}
           appointmentId={nuevoControlCtx.appointmentId}
           availableWires={nuevoControlCtx.availableWires}
+          treatmentPlanId={t.treatmentPlanId || undefined}
           availablePhotoSets={nuevoControlCtx.availablePhotoSets}
           onClose={closeDrawer}
           onSave={props.onCardDraftSaved}
@@ -724,6 +727,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             lastIndications: nuevoControlCtx.defaultsForNew.lastIndications,
           }}
           availableWires={nuevoControlCtx.availableWires}
+          treatmentPlanId={t.treatmentPlanId || undefined}
           availablePhotoSets={nuevoControlCtx.availablePhotoSets}
           onClose={closeDrawer}
           onSave={props.onCardDraftSaved}
@@ -742,6 +746,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             monthTotal: t.monthTotal > 0 ? t.monthTotal : null,
           }}
           availableWires={vm.wireSequence}
+          treatmentPlanId={t.treatmentPlanId || undefined}
           onClose={closeDrawer}
           onSave={props.onCardDraftSaved}
           onSign={props.onCardSigned}
@@ -783,6 +788,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       {/* Drawer Lab Order G18 */}
       {drawer?.kind === "laborder" ? (
         <DrawerLabOrder
+          aparatologia={t.appliance.type}
           onClose={closeDrawer}
           onSend={async (payload) => {
             await props.onCreateLabOrder?.(payload);

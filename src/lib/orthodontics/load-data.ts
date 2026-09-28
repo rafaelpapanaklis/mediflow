@@ -45,6 +45,12 @@ export interface OrthoTabData {
   controls: OrthodonticControlAppointmentRow[];
   digitalRecords: OrthodonticDigitalRecordRow[];
   /**
+   * H56: radiografías y escaneos que el paciente ya tiene en su expediente
+   * (Radiografías, etc.), para verlos también en «Registros digitales» del
+   * caso: antes subías allá, volvías y esto seguía vacío.
+   */
+  archivosDelPaciente?: { id: string; name: string; category: string; date: string }[];
+  /**
    * Revisión cruzada de la Ola 1 (REPORTE-ws1-t1.md, "## Revisión
    * cruzada" → "## Arreglos de la revisión"): cuando `plan.invoiceId` no es
    * null (Cobro, ws1-t1, ya abrió el plan de pago), estos dos son el total
@@ -132,7 +138,7 @@ export async function loadOrthoData(
     }),
   ]);
 
-  const [phases, paymentPlan] = await Promise.all([
+  const [phases, paymentPlan, archivosRaw] = await Promise.all([
     plan
       ? prisma.orthodonticPhase.findMany({
           where: { treatmentPlanId: plan.id },
@@ -144,7 +150,37 @@ export async function loadOrthoData(
           where: { treatmentPlanId: plan.id, clinicId: input.clinicId },
         })
       : Promise.resolve(null),
+    prisma.patientFile
+      .findMany({
+        where: {
+          patientId: patient.id,
+          clinicId: input.clinicId,
+          category: {
+            in: [
+              "XRAY_PANORAMIC",
+              "XRAY_CEPHALOMETRIC",
+              "XRAY_CBCT",
+              "XRAY_PERIAPICAL",
+              "XRAY_BITEWING",
+              "XRAY_OCCLUSAL",
+              "SCAN_STL",
+              "CEPH_ANALYSIS_PDF",
+            ],
+          },
+        },
+        select: { id: true, name: true, category: true, takenAt: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      })
+      .catch(() => [] as { id: string; name: string; category: string; takenAt: Date | null; createdAt: Date }[]),
   ]);
+
+  const archivosDelPaciente = archivosRaw.map((a) => ({
+    id: a.id,
+    name: a.name,
+    category: String(a.category),
+    date: (a.takenAt ?? a.createdAt).toISOString(),
+  }));
 
   const installments = paymentPlan
     ? await prisma.orthoInstallment.findMany({
@@ -208,6 +244,7 @@ export async function loadOrthoData(
     photoSets,
     controls,
     digitalRecords,
+    archivosDelPaciente,
     invoiceTotal,
     invoicePaid,
   };
