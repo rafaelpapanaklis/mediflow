@@ -334,6 +334,7 @@ model Clinic {
 
   // Ortodoncia — Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
   orthoCephalometryAnalyses OrthodonticCephalometryAnalysis[]
+  orthoFacialAnalyses       OrthodonticFacialAnalysis[]
   orthoAligners             OrthodonticAligner[]
   orthoAlignerEvents        OrthodonticAlignerEvent[]
   orthoElasticsLogs         OrthodonticElasticsLog[]
@@ -1255,6 +1256,7 @@ model User {
 
   // Ortodoncia — Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
   orthoCephAnalysesCreated  OrthodonticCephalometryAnalysis[] @relation("OrthoCephAnalysisCreatedBy")
+  orthoFacialAnalysesCreated OrthodonticFacialAnalysis[]      @relation("OrthoFacialAnalysisCreatedBy")
   orthoAlignerEventsCreated OrthodonticAlignerEvent[]         @relation("OrthoAlignerEventCreatedBy")
   orthoMonitoringPhotosReviewed OrthodonticMonitoringPhoto[]  @relation("OrthoMonitoringPhotoReviewedBy")
 
@@ -1514,6 +1516,7 @@ model Patient {
 
   // Ortodoncia — Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
   orthoCephalometryAnalyses OrthodonticCephalometryAnalysis[]
+  orthoFacialAnalyses       OrthodonticFacialAnalysis[]
   orthoAligners             OrthodonticAligner[]
   orthoElasticsLogs         OrthodonticElasticsLog[]
   orthoMonitoringPhotos     OrthodonticMonitoringPhoto[]
@@ -2581,6 +2584,7 @@ model PatientFile {
   // OrthodonticMonitoringPhoto, mismo patrón que PatientUpload/documentos.
   orthoCephXrayFor       OrthodonticCephalometryAnalysis[] @relation("OrthoCephXrayFile")
   orthoCephTracingPdfFor OrthodonticCephalometryAnalysis[] @relation("OrthoCephTracingPdfFile")
+  orthoFacialAnalysisPhotoFor OrthodonticFacialAnalysis[]  @relation("OrthoFacialAnalysisPhotoFile")
 
   // Implants module — radiografías peri-implantarias, foto intraoperatoria
   // de la cirugía, foto del paciente para el carnet, PDF del carnet,
@@ -6390,6 +6394,7 @@ model OrthodonticTreatmentPlan {
 
   // Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
   cephalometryAnalyses OrthodonticCephalometryAnalysis[]
+  facialAnalyses       OrthodonticFacialAnalysis[]
   aligner              OrthodonticAligner?
   elasticsLogs         OrthodonticElasticsLog[]
   monitoringPhotos     OrthodonticMonitoringPhoto[]
@@ -7305,6 +7310,58 @@ model OrthodonticCephalometryAnalysis {
   @@index([treatmentPlanId])
   @@index([clinicId])
   @@map("orthodontic_cephalometry_analyses")
+}
+
+// Ortodoncia — Parte 7 «Imagen y análisis», análisis facial en fotos
+// (ws1-t10, hallazgo H19 de la revisión en vivo ws1-t9). SQL a mano en
+// sql/ortodoncia-analisis-facial.sql (aditivo, no aplicado). Un registro
+// por caso+vista (perfil/frente): se actualiza al volver a marcar — el
+// objetivo es que el análisis se pueda reabrir, no llevar una serie
+// temporal como cefalometría.
+model OrthodonticFacialAnalysis {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  /// "PERFIL" | "FRENTE". String + CHECK, no enum nativo — mismo patrón que
+  /// OrthodonticCephalometryAnalysis.kind.
+  view String
+
+  /// Puntos marcados a mano, en px NATURALES de la foto (naturalWidth/
+  /// naturalHeight en el momento de marcar — ver imageWidth/imageHeight),
+  /// NUNCA en % de un recuadro: ese fue el defecto (H19) que deformaba
+  /// línea E, ángulo nasolabial y línea media. Partial<Record<FacialLandmarkId,{x,y}>>.
+  points Json @default("{}")
+  /// Ancho/alto naturales de la foto cuando se marcaron los puntos.
+  imageWidth  Int?
+  imageHeight Int?
+  /// Medidas recalculadas en el servidor a partir de `points` — nunca se
+  /// confía en un número que mande el cliente.
+  measurements Json @default("{}")
+  /// px por mm si se calibró con una referencia conocida en la foto. Sin
+  /// esto, las medidas lineales se reportan como proporción (ver
+  /// `measurements`), nunca en "px" a secas: un px no es una unidad clínica.
+  calibrationPxPerMm Float?
+
+  photoFileId String?
+  photoFile   PatientFile? @relation("OrthoFacialAnalysisPhotoFile", fields: [photoFileId], references: [id], onDelete: SetNull)
+
+  createdByUserId String?
+  createdByUser   User?   @relation("OrthoFacialAnalysisCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([treatmentPlanId, view])
+  @@index([clinicId])
+  @@index([patientId])
+  @@map("orthodontic_facial_analyses")
 }
 
 // ─── Parte 8 «Alineadores y cumplimiento» (ws1-t8, ola 1, sep-2026) ──────
