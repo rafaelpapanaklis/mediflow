@@ -36,6 +36,8 @@
 //     CONTINÚA esa hoja en vez de crear una segunda del mismo día.
 
 import { prisma } from "@/lib/prisma";
+import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
+import { duracionSugeridaProximoControl } from "@/lib/orthodontics/duracion-proximo-control";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import { tarjetaDeControlDeHoy } from "@/lib/orthodontics/redesign/control-del-dia";
@@ -105,6 +107,9 @@ export interface TreatmentCardAgendaContext {
     lastPendingBrackets: BracketPendiente[];
     /** Fila 12: nota S/O/A/P con la que arranca la hoja (soap-prefill). */
     soapPrefill: SOAP;
+    /** Duración sugerida de «Próximo control»: la de «Control de ortodoncia»
+     * en Configuración → tipos de cita (antes, 30 min fijos). */
+    proximoControlMin: number | null;
   };
   /** C4: foto-sets del caso para ligar el de esta visita. */
   availablePhotoSets: Array<{ id: string; label: string }>;
@@ -121,6 +126,8 @@ export async function buildTreatmentCardContext(
   plan: {
     id: string;
     patientId: string;
+    /** Para leer la duración sugerida de «Próximo control» de Configuración. */
+    clinicId?: string;
     installedAt: Date | null;
     startDate: Date | null;
     /** Fila 12: para la nota precargada. Opcionales: sin ellos la nota sale más genérica. */
@@ -197,6 +204,9 @@ export async function buildTreatmentCardContext(
     bracketsPendientesFdi: lastPendingBrackets.map((b) => b.toothFdi),
   });
 
+  const ajustes = plan.clinicId ? await loadOrthoClinicSettings(plan.clinicId).catch(() => null) : null;
+  const proximoControlMin = duracionSugeridaProximoControl(ajustes?.appointmentTypes);
+
   return {
     treatmentPlanId: plan.id,
     patientId: plan.patientId,
@@ -214,6 +224,7 @@ export async function buildTreatmentCardContext(
       lastIndications: lastSignedCard?.indications ?? null,
       lastPendingBrackets,
       soapPrefill,
+      proximoControlMin,
     },
     availablePhotoSets: photoSets.map((s) => ({
       id: s.id,

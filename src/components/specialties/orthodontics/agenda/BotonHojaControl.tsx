@@ -38,6 +38,8 @@ import {
 export interface BotonHojaControlProps {
   appointmentId: string;
   treatmentPlanId: string;
+  /** Para una fila de tabla/lista: botón chico y del ancho de su texto (no el de panel lateral). */
+  compacto?: boolean;
 }
 
 interface LoadedContext {
@@ -55,12 +57,13 @@ interface LoadedContext {
     lastIndications: string | null;
     /** Fila 12: brackets caídos que el control anterior dejó sin recementar. */
     lastPendingBrackets: Array<{ toothFdi: number; brokenDate: string; notes: string | null }>;
+    proximoControlMin?: number | null;
     /** Fila 12: nota con la que arranca la hoja. */
     soapPrefill: SOAP;
   };
 }
 
-export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaControlProps) {
+export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = false }: BotonHojaControlProps) {
   const [loading, setLoading] = useState(false);
   const [ctx, setCtx] = useState<LoadedContext | null>(null);
   const [open, setOpen] = useState(false);
@@ -149,8 +152,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaCo
     <>
       <Btn
         variant="primary"
-        size="md"
-        className="w-full"
+        size={compacto ? "sm" : "md"}
+        className={compacto ? "" : "w-full"}
         icon={loading ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" aria-hidden /> : <FileText size={15} strokeWidth={1.75} aria-hidden />}
         onClick={abrir}
         disabled={loading}
@@ -181,6 +184,7 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaCo
                   lastElastics: ctx.defaultsForNew.lastElastics,
                   lastIndications: ctx.defaultsForNew.lastIndications,
                   lastPendingBrackets: ctx.defaultsForNew.lastPendingBrackets,
+                  proximoControlMin: ctx.defaultsForNew.proximoControlMin,
                   soapPrefill: ctx.defaultsForNew.soapPrefill,
                 }
           }

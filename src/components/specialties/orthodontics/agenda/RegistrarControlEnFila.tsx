@@ -49,5 +49,5 @@ export function RegistrarControlEnFila({ appointmentId, patientId, reason }: Reg
 
   if (!esControl || !state.treatmentPlanId || !state.canOpenClinicalCard) return null;
 
-  return <BotonHojaControl appointmentId={appointmentId} treatmentPlanId={state.treatmentPlanId} />;
+  return <BotonHojaControl appointmentId={appointmentId} treatmentPlanId={state.treatmentPlanId} compacto />;
 }

@@ -365,8 +365,10 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     // de crear una segunda (hallazgo 7). Si el self-fetch falla, se abre
     // igual con los defaults locales de `newCardDefaults` (sin cita ligada)
     // — degradación, no bloqueo: el control se sigue pudiendo registrar.
-    const res = await getTreatmentCardContextForPatient(t.treatmentPlanId);
-    setNuevoControlCtx(isFailure(res) ? null : res.data);
+    // Si la consulta se cae (red, servidor reiniciando) tampoco se queda sin
+    // abrir: mismo degradado que un fallo devuelto por la action.
+    const res = await getTreatmentCardContextForPatient(t.treatmentPlanId).catch(() => null);
+    setNuevoControlCtx(!res || isFailure(res) ? null : res.data);
     setDrawer({ kind: "tcard-new" });
   }, [t.treatmentPlanId]);
 
@@ -763,6 +765,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             // Fila 12: la hoja nueva también hereda los brackets pendientes y
             // la nota precargada del control anterior.
             lastPendingBrackets: nuevoControlCtx.defaultsForNew.lastPendingBrackets,
+            proximoControlMin: nuevoControlCtx.defaultsForNew.proximoControlMin,
             soapPrefill: nuevoControlCtx.defaultsForNew.soapPrefill,
           }}
           availableWires={nuevoControlCtx.availableWires}

@@ -184,7 +184,7 @@ export function VistaTablero({
                         registra desde aquí mismo; con hoja ya hecha, el hueco
                         vuelve a ser "Enviar indicaciones". */}
                     {!c.hasCard && c.treatmentPlanId ? (
-                      <BotonHojaControl appointmentId={c.appointmentId} treatmentPlanId={c.treatmentPlanId} />
+                      <BotonHojaControl appointmentId={c.appointmentId} treatmentPlanId={c.treatmentPlanId} compacto />
                     ) : c.indications ? (
                       <EnviarIndicacionesButton appointmentId={c.appointmentId} />
                     ) : (

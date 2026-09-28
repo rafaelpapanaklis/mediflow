@@ -111,6 +111,8 @@ export interface DrawerTreatmentCardProps {
      */
     lastElastics?: Array<{ elasticClass: OrthoElasticClass; config: string; zone: OrthoElasticZone }>;
     lastIndications?: string | null;
+    /** Duración sugerida de «Próximo control», de Configuración. */
+    proximoControlMin?: number | null;
     /**
      * Fila 12: brackets que la última hoja FIRMADA dejó caídos sin
      * recementar — siguen pendientes en esta.
@@ -836,6 +838,7 @@ function precargaDesdeDefaults(d: DrawerTreatmentCardProps["defaultsForNew"]): P
     brackets: d.lastPendingBrackets ?? [],
     indications: d.lastIndications ?? null,
     nota: d.soapPrefill ?? null,
+    duracionProximoMin: d.proximoControlMin ?? null,
   };
 }
 

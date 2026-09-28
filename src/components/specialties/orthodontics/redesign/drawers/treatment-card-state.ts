@@ -73,6 +73,8 @@ export interface PrecargaHoja {
   brackets?: ReadonlyArray<{ toothFdi: number; brokenDate: string; notes?: string | null }>;
   indications?: string | null;
   nota?: SOAP | null;
+  /** Duración sugerida de «Próximo control» (Configuración); sin dato, 30. */
+  duracionProximoMin?: number | null;
 }
 
 export type DrawerAction =
@@ -157,7 +159,7 @@ export function initialState(
     photoSetId: null,
     wireToId: p.arcoId ?? null,
     nextDate: null,
-    nextDurationMin: 30,
+    nextDurationMin: p.duracionProximoMin ?? 30,
     activationsNote: "",
     indications,
     learnedCardId: null,

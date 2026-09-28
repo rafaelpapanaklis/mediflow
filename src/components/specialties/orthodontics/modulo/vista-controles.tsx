@@ -279,7 +279,7 @@ function FilaDeControl({
       <div className={s.filaDerecha}>
         <span className={`${s.etiqueta} ${CLASE_ESTADO[estado.tono]}`}>{estado.texto}</span>
         {puedeRegistrarAqui && cita.treatmentPlanId ? (
-          <BotonHojaControl appointmentId={cita.appointmentId} treatmentPlanId={cita.treatmentPlanId} />
+          <BotonHojaControl appointmentId={cita.appointmentId} treatmentPlanId={cita.treatmentPlanId} compacto />
         ) : (
           hoja
         )}
