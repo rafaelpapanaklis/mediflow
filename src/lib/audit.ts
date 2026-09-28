@@ -86,7 +86,11 @@ export type AuditEntityType =
   | "ped-fluoride"
   | "ped-maintainer"
   | "ped-endodontic"
-  | "ped-consent";
+  | "ped-consent"
+  // Catálogo de procedimientos (ws1-t6, importador Dentalink "Aranceles y
+  // precios"): crear o actualizar el precio de un procedimiento del
+  // tarifario de la clínica.
+  | "procedure";
 
 export { PEDIATRIC_AUDIT_ACTIONS, type PediatricAuditAction } from "@/lib/pediatrics/audit";
 
