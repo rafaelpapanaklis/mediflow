@@ -87,18 +87,30 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   // facturas más recientes; filtrar sobre ellas contestaba "Sin resultados" a
   // un folio viejo que sí existe. Con texto en el buscador se consulta
   // GET /api/invoices (search + paginación de 20); sin texto, la lista local.
-  // Si el servidor falla se vuelve al filtro local de siempre.
-  const [remote, setRemote] = useState<{ invoices: any[]; total: number; page: number; limit: number } | null>(null);
+  // El filtro «Vencidas» también va al servidor (`status=overdue`): allá se
+  // decide con `computeReceivables` sobre TODAS las facturas de la clínica, no
+  // sobre las 100 cargadas. Si el servidor falla se vuelve al filtro local.
+  const [remote, setRemote] = useState<{
+    invoices: any[]; total: number; page: number; limit: number;
+    /** true = la lista ya viene filtrada a «Vencidas» por el servidor. */
+    vencidas: boolean;
+    /** Lo vencido de cada fila devuelta (solo con `vencidas`). */
+    overdueByInvoice?: Record<string, number>;
+  } | null>(null);
   const [page, setPage]           = useState(1);
   const [searching, setSearching] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   useEffect(() => {
     const q = search.trim();
-    if (!q) { setRemote(null); setSearching(false); return; }
+    const vencidas = status === "overdue";
+    if (!q && !vencidas) { setRemote(null); setSearching(false); return; }
     const ctrl = new AbortController();
     setSearching(true);
+    const params = new URLSearchParams({ page: String(page) });
+    if (q) params.set("search", q);
+    if (vencidas) params.set("status", "overdue");
     const timer = setTimeout(() => {
-      fetch(`/api/invoices?search=${encodeURIComponent(q)}&page=${page}`, { signal: ctrl.signal })
+      fetch(`/api/invoices?${params.toString()}`, { signal: ctrl.signal })
         .then(async (res) => {
           if (!res.ok) throw new Error(String(res.status));
           const data = await res.json();
@@ -107,6 +119,8 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             total:    Number(data.total) || 0,
             page:     Number(data.page)  || 1,
             limit:    Number(data.limit) || 20,
+            vencidas,
+            overdueByInvoice: data.overdueByInvoice && typeof data.overdueByInvoice === "object" ? data.overdueByInvoice : undefined,
           });
           setSearching(false);
         })
@@ -117,14 +131,17 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         });
     }, 300);
     return () => { clearTimeout(timer); ctrl.abort(); };
-  }, [search, page, refreshTick]);
+  }, [search, status, page, refreshTick]);
 
   // Vencida = tiene algo vencido según `computeReceivables` (fila 87): a plazos,
   // si alguna cuota ya pasó sin pagarse; un cargo de control de ortodoncia,
   // según su vencimiento; de un solo pago, por `dueDate`. El mismo criterio que
   // el KPI «Vencido» de arriba — aquí no se vuelve a decidir. NUNCA por status
   // OVERDUE: nadie lo escribe. Sin el mapa del servidor no se marca nada.
-  const isOverdue = (inv: any) => (overdueByInvoice?.[inv?.id] ?? 0) > 0;
+  // Una fila que llegó por el filtro «Vencidas» del servidor trae su propio
+  // vencido (misma función), por si es más nueva que el mapa de la página.
+  const isOverdue = (inv: any) =>
+    (overdueByInvoice?.[inv?.id] ?? remote?.overdueByInvoice?.[inv?.id] ?? 0) > 0;
 
   // Modals
   const [showNew, setShowNew]                     = useState(false);
@@ -180,7 +197,8 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         const match =
           status === "pending" ? ["PENDING", "PARTIAL"].includes(inv.status) :
           status === "paid"    ? inv.status === "PAID" :
-          status === "overdue" ? isOverdue(inv) :
+          // Con `remote.vencidas` el servidor ya filtró con la misma regla.
+          status === "overdue" ? (remote?.vencidas ? true : isOverdue(inv)) :
           status === "draft"   ? inv.status === "DRAFT" : true;
         if (!match) return false;
       }
@@ -328,7 +346,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             placeholder={t("billing.billingClient.searchPlaceholder")}
           />
         </div>
-        {search.trim() && (
+        {(search.trim() || status === "overdue") && (
           <span style={{ color: "var(--text-3)", fontSize: 12 }} aria-live="polite">
             {searching
               ? t("billing.billingClient.searching")
@@ -347,7 +365,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             <button
               key={f.value}
               type="button"
-              onClick={() => setStatus(f.value)}
+              onClick={() => { setStatus(f.value); setPage(1); }}
               className={`segment-new__btn ${status === f.value ? "segment-new__btn--active" : ""}`}
               style={{ flexShrink: 0, whiteSpace: "nowrap" }}
             >

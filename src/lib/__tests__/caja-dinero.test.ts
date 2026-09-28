@@ -22,6 +22,7 @@ import {
   cashOnHandPaymentWhere,
   computeOverdueAmount,
   computeReceivables,
+  whereFacturasVencidas,
   deriveWindow,
   expectedCashOf,
   invoiceDiscountPortion,
@@ -486,4 +487,20 @@ test("fila 87 · la píldora «Vencida» de Facturas es la de computeReceivables
   // Enero y febrero pagados: al corriente aunque `dueDate` ya pasó.
   const alCorriente = overdueOfInvoice({ ...base, balance: 2_000, cobros: [{ amount: 2_000, method: "cash" }] }, todayStart, HOY);
   assert.equal(alCorriente, 0);
+});
+
+test("filtro «Vencidas» de /api/invoices: sale del mapa de computeReceivables, con el clinicId, y sin vencidas no hay where", async () => {
+  assert.equal(whereFacturasVencidas("cl-1", { vencidoPorFactura: {} }), null, "ninguna vencida: no se consulta");
+  assert.equal(whereFacturasVencidas("", { vencidoPorFactura: { a: 5 } }), null, "sin clínica: jamás un where sin tenant");
+  assert.deepEqual(whereFacturasVencidas("cl-1", { vencidoPorFactura: { a: 500, b: 0, c: 12.5 } }), { clinicId: "cl-1", id: { in: ["a", "c"] } });
+  // Y es la MISMA población que el KPI: de punta a punta con la base de mentira.
+  const { db } = baseDeSaldos({
+    facturas: [
+      { id: "n1", clinicId: "cl-1", status: "PENDING", balance: 5_000, total: 5_000, dueDate: new Date("2026-01-01T06:00:00Z") },
+      { id: "n2", clinicId: "cl-1", status: "PENDING", balance: 1_200, total: 1_200, dueDate: new Date("2026-03-01T06:00:00Z") },
+      { id: "c1", clinicId: "cl-1", status: "PENDING", balance: 800, total: 800, dueDate: null },
+    ],
+  });
+  const saldos = await computeReceivables("cl-1", new Date("2026-02-10T18:00:00Z"), db, async () => new Map([["c1", "2026-02-09"]]));
+  assert.deepEqual(whereFacturasVencidas("cl-1", saldos), { clinicId: "cl-1", id: { in: ["c1", "n1"] } });
 });

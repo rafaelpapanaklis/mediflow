@@ -148,7 +148,8 @@ export function CajaNueva(p: CajaNuevaProps) {
             <Cifra etiqueta={t("cashRegister.nueva.facturadoHoy")} icono={Receipt}       valor={fmtMXNdec(caja.billedToday)} />
             <Cifra etiqueta={t("cashRegister.nueva.cobradoHoy")}   icono={TrendingUp}    valor={fmtMXNdec(p.collectedToday)} hero />
             <Cifra etiqueta={t("cashRegister.nueva.porCobrar")}    icono={Wallet}        valor={fmtMXNdec(caja.pendingToday)} />
-            <Cifra etiqueta={t("cashRegister.nueva.vencido")}      icono={AlertTriangle} valor={fmtMXNdec(caja.overdueToday)} peligro={caja.overdueToday > 0} />
+            <Cifra etiqueta={t("cashRegister.nueva.vencido")}      icono={AlertTriangle} valor={fmtMXNdec(caja.overdueToday)} peligro={caja.overdueToday > 0}
+              nota={caja.receivablesIncompleto ? t("billing.billingClient.partialReceivablesShort") : undefined} />
           </section>
 
           {!abierta || !reg || !totals ? (
@@ -337,17 +338,20 @@ export function CajaNueva(p: CajaNuevaProps) {
 /* ── Piezas ─────────────────────────────────────────────────────────── */
 
 /** Una celda de la tira del día: etiqueta con ícono e importe. */
-function Cifra({ etiqueta, icono: Icono, valor, hero, peligro }: {
+function Cifra({ etiqueta, icono: Icono, valor, hero, peligro, nota }: {
   etiqueta: string;
   icono: LucideIcon;
   valor: string;
   hero?: boolean;
   peligro?: boolean;
+  /** Aclaración corta bajo la cifra (p. ej. «Cifra parcial: es un mínimo»). */
+  nota?: string;
 }) {
   return (
     <div className={s.tiraCelda}>
       <div className={s.tiraEtiqueta}><Icono size={13} strokeWidth={1.75} aria-hidden /> {etiqueta}</div>
       <div className={`${s.tiraValor} ${hero ? s.tiraValorHero : ""} ${peligro ? s.tiraValorPeligro : ""}`}>{valor}</div>
+      {nota && <div className={s.tiraNota}>{nota}</div>}
     </div>
   );
 }

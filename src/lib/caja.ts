@@ -848,6 +848,20 @@ export async function computeReceivables(
 }
 
 /**
+ * El `where` de «facturas VENCIDAS» para una lista (el filtro «Vencidas» de
+ * GET /api/invoices): las que `computeReceivables` dio por vencidas, y nada
+ * más — la misma regla que el KPI «Vencido», sin volver a decidirla. Siempre
+ * con el `clinicId` de quien pregunta. `null` = ninguna vencida (no consultes:
+ * un `in: []` no aporta nada y un `where` vacío traería todas).
+ */
+export function whereFacturasVencidas(clinicId: string, saldos: Pick<SaldosDeLaClinica, "vencidoPorFactura">): Prisma.InvoiceWhereInput | null {
+  if (!clinicId) return null;
+  const ids = Object.keys(saldos.vencidoPorFactura).filter((id) => (saldos.vencidoPorFactura[id] ?? 0) > 0);
+  if (ids.length === 0) return null;
+  return { clinicId, id: { in: ids } };
+}
+
+/**
  * Resumen de facturación del día natural (México), independiente del turno:
  *  - billedToday:  Σ total de facturas EMITIDAS hoy (excluye DRAFT/CANCELLED).
  *  - pendingToday: Σ saldo por cobrar de esas mismas facturas de hoy.

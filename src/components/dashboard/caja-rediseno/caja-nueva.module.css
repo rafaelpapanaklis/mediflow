@@ -233,6 +233,13 @@
   color: var(--pr-peligro);
 }
 
+.tiraNota {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--pr-texto-3);
+}
+
 @container caja (max-width: 640px) {
   .tira {
     grid-template-columns: repeat(2, minmax(0, 1fr));

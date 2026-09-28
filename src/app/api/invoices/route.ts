@@ -17,6 +17,7 @@ import {
 } from "@/lib/invoices/next-invoice-number";
 import { DEFAULT_INVOICE_TZ, parseInvoiceDueDate } from "@/lib/invoices/due-date";
 import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
+import { computeReceivables, whereFacturasVencidas } from "@/lib/caja";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -33,6 +34,20 @@ async function getCtx() {
     timezone: (ctx.clinic?.timezone as string | null | undefined) || DEFAULT_INVOICE_TZ,
   };
 }
+
+// Los 4 fiscales del paciente prellenan el modal de timbrado en Caja: una fila
+// que llega por búsqueda (o por el filtro «Vencidas») debe comportarse igual
+// que una del snapshot de la página. La visibilidad por paciente ya dejó fuera
+// a los restringidos, así que aquí no hay nada que enmascarar.
+const INCLUDE_LISTA = {
+  patient: {
+    select: {
+      id: true, firstName: true, lastName: true,
+      rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true,
+    },
+  },
+  payments: true,
+} as const;
 
 export async function GET(req: NextRequest) {
   const ctx = await getCtx();
@@ -61,6 +76,31 @@ export async function GET(req: NextRequest) {
   // en AND porque `where.OR` de arriba (búsqueda por texto) lo volvería permisivo.
   const visibility = relatedPatientVisibilityAnd({ userId: ctx.userId, role: ctx.role, clinicId });
   if (visibility.length) where.AND = visibility;
+  // `?status=overdue` — el filtro «Vencidas» de Facturas, en el SERVIDOR (no
+  // sobre las 100 que trae la página). Vencida = lo que `computeReceivables`
+  // da por vencido, la MISMA regla del KPI «Vencido»: a plazos, alguna cuota
+  // vencida sin pagar; un cargo de control de ortodoncia, según su
+  // vencimiento; de un solo pago, por `dueDate`. Con la misma visibilidad por
+  // paciente de arriba como filtro extra, y el clinicId de la sesión.
+  let incompleto = false;
+  if (searchParams.get("status") === "overdue") {
+    const saldos = await computeReceivables(clinicId, new Date(), prisma, undefined, {
+      filtro: visibility.length ? { AND: visibility } : undefined,
+      timezone: ctx.timezone,
+    });
+    incompleto = saldos.incompleto;
+    const vencidas = whereFacturasVencidas(clinicId, saldos);
+    if (!vencidas) return NextResponse.json({ invoices: [], total: 0, page, limit, overdueByInvoice: {}, incompleto });
+    where.id = vencidas.id;
+    const [total, invoices] = await Promise.all([
+      prisma.invoice.count({ where }),
+      prisma.invoice.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit, include: INCLUDE_LISTA }),
+    ]);
+    // Lo vencido de CADA fila devuelta, para la píldora (sin mandar el mapa entero).
+    const overdueByInvoice: Record<string, number> = {};
+    for (const inv of invoices) overdueByInvoice[inv.id] = saldos.vencidoPorFactura[inv.id] ?? 0;
+    return NextResponse.json({ invoices, total, page, limit, overdueByInvoice, incompleto });
+  }
   const [total, invoices] = await Promise.all([
     prisma.invoice.count({ where }),
     prisma.invoice.findMany({
@@ -68,22 +108,10 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * limit,
       take: limit,
-      include: {
-        // Los 4 fiscales del paciente prellenan el modal de timbrado en Caja:
-        // una fila que llega por búsqueda debe comportarse igual que una del
-        // snapshot de la página. La visibilidad de arriba ya dejó fuera a los
-        // pacientes restringidos, así que aquí no hay nada que enmascarar.
-        patient: {
-          select: {
-            id: true, firstName: true, lastName: true,
-            rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true,
-          },
-        },
-        payments: true,
-      },
+      include: INCLUDE_LISTA,
     }),
   ]);
-  return NextResponse.json({ invoices, total, page, limit });
+  return NextResponse.json({ invoices, total, page, limit, incompleto });
 }
 
 export async function POST(req: NextRequest) {

@@ -3257,6 +3257,7 @@
       "kpiOverdue": "Vencido",
       "kpiThisMonth": "Este mes",
       "kpiCredit": "Saldo a favor",
+      "partialReceivablesShort": "Cifra parcial: es un mínimo",
       "partialReceivables": "Cifra parcial: hay más facturas abiertas de las que se alcanzan a sumar; «Por cobrar» y «Vencido» son un mínimo.",
       "searchPlaceholder": "Buscar por paciente o folio…",
       "emptyNoInvoices": "No hay facturas todavía",
