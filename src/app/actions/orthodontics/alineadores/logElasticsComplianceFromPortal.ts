@@ -2,36 +2,38 @@
 // Ortodoncia — Parte 8 «Alineadores y cumplimiento» (ws1-t8, ola 1, sep-2026). H14.
 // El paciente marca desde el portal si usó sus elásticos/alineador hoy y
 // cuántas horas. Auth de paciente — ver _patient-context.ts.
+//
+// ws1-t5 (ronda 6, hallazgo 95): «hoy» lo decide el SERVIDOR con la zona
+// horaria de la clínica. Antes lo mandaba el navegador en UTC y, en México,
+// lo que se marcaba después de las 18:00 quedaba guardado en el día
+// siguiente. `logDate` se sigue aceptando para no romper una pestaña vieja,
+// pero ya no se usa.
 
 import { prisma } from "@/lib/prisma";
+import { diaDeLaClinica, fechaDeRegistro } from "@/lib/patient-portal/ortodoncia-portal";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 import { getOrthoPatientPortalContext, isMissingRelation } from "./_patient-context";
 
 export interface LogElasticsComplianceFromPortalInput {
   treatmentPlanId: string;
-  logDate: string; // YYYY-MM-DD, normalmente "hoy" en la zona del paciente
+  /** @deprecated El día lo calcula el servidor en la zona de la clínica. */
+  logDate?: string;
   wornHours?: number | null;
   usedElastics: boolean;
-}
-
-function toDateOnly(logDate: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(logDate)) return null;
-  const d = new Date(`${logDate}T00:00:00.000Z`);
-  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 export async function logElasticsComplianceFromPortal(
   input: LogElasticsComplianceFromPortalInput,
 ): Promise<ActionResult<{ id: string }>> {
-  const date = toDateOnly(input.logDate);
-  if (!date) return fail("Fecha inválida");
-  if (input.wornHours != null && (input.wornHours < 0 || input.wornHours > 24)) {
+  if (input.wornHours != null && (!Number.isFinite(input.wornHours) || input.wornHours < 0 || input.wornHours > 24)) {
     return fail("Horas inválidas");
   }
 
-  const auth = await getOrthoPatientPortalContext(input.treatmentPlanId);
+  // Escritura: caso abierto y módulo activo (fila 16 del mapa).
+  const auth = await getOrthoPatientPortalContext(input.treatmentPlanId, { escritura: true });
   if (isFailure(auth)) return auth;
-  const { patientId, clinicId } = auth.data;
+  const { patientId, clinicId, zonaHoraria } = auth.data;
+  const date = fechaDeRegistro(diaDeLaClinica(new Date(), zonaHoraria));
 
   try {
     const saved = await prisma.orthodonticElasticsLog.upsert({

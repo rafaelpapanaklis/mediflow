@@ -26,7 +26,8 @@ export async function submitMonitoringPhoto(
   if (!input.storageKey) return fail("Falta la foto");
   if (!ANGLES.includes(input.angle)) return fail("Ángulo inválido");
 
-  const auth = await getOrthoPatientPortalContext(input.treatmentPlanId);
+  // Escritura: caso abierto y módulo activo (ws1-t5, fila 16 del mapa).
+  const auth = await getOrthoPatientPortalContext(input.treatmentPlanId, { escritura: true });
   if (isFailure(auth)) return auth;
   const { patientId, clinicId } = auth.data;
 

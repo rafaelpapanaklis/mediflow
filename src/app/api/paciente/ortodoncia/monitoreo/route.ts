@@ -11,11 +11,16 @@
 //   PRIVADO patient-files (mismo bucket que patient_uploads).
 // · Solo sube el binario y crea el registro (vía submitMonitoringPhoto) —
 //   SIN análisis de IA (H15 es captura + revisión humana en esta ola).
+// · ws1-t5 (ronda 6, fila 16 del mapa): solo se aceptan fotos de un caso
+//   ABIERTO en una clínica con el módulo ACTIVO. Se comprueba ANTES de subir
+//   el binario: un caso terminado no debe dejar archivos sueltos.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { uploadFileToStorage } from "@/lib/storage";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { permisosDelCaso } from "@/lib/patient-portal/ortodoncia-portal";
 import {
   validarArchivo,
   generarLlaveAlmacenamiento,
@@ -59,7 +64,7 @@ export async function POST(req: Request) {
 
     const plan = await prisma.orthodonticTreatmentPlan.findUnique({
       where: { id: treatmentPlanId },
-      select: { clinicId: true, patientId: true, deletedAt: true },
+      select: { clinicId: true, patientId: true, deletedAt: true, status: true },
     });
     if (!plan || plan.deletedAt) {
       return NextResponse.json({ error: "Caso no encontrado" }, { status: 404 });
@@ -69,6 +74,14 @@ export async function POST(req: Request) {
     );
     if (!link) {
       return NextResponse.json({ error: "Sin acceso a este caso" }, { status: 403 });
+    }
+
+    const permisos = permisosDelCaso(plan.status, await hasActiveOrthodonticsModule(plan.clinicId));
+    if (permisos.soloLectura) {
+      return NextResponse.json(
+        { error: permisos.aviso ?? "Este caso es de solo lectura." },
+        { status: 409 },
+      );
     }
 
     const angle = ANGLES.includes(angleRaw) ? angleRaw : "OTHER";
