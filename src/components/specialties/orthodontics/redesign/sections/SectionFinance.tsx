@@ -98,7 +98,7 @@ function imprimirConvenio(data: {
     `<tr><td style="border:1px solid #999;padding:6px 10px;text-align:left">${a}</td><td style="border:1px solid #999;padding:6px 10px;text-align:left">${b}</td></tr>`;
   const filaCuota = (c: CuotaConEstado) =>
     `<tr>
-      <td style="border:1px solid #999;padding:6px 10px;text-align:left">${c.esEnganche ? "Enganche" : `Mes ${c.numero}`}</td>
+      <td style="border:1px solid #999;padding:6px 10px;text-align:left">${c.esEnganche ? "Enganche" : `Mensualidad ${c.numero}`}</td>
       <td style="border:1px solid #999;padding:6px 10px;text-align:left">${fmtDay(c.vencimiento)}</td>
       <td style="border:1px solid #999;padding:6px 10px;text-align:left">${fmtMoney(c.importe)}</td>
     </tr>`;
@@ -106,7 +106,7 @@ function imprimirConvenio(data: {
     data.cuotas.length > 0
       ? `<table style="width:100%;border-collapse:collapse">
           <thead><tr>
-            <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Cuota</th>
+            <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Pago</th>
             <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Vence</th>
             <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Importe</th>
           </tr></thead>

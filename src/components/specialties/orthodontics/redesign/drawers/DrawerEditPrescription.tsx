@@ -84,7 +84,7 @@ export function DrawerEditPrescription(props: DrawerEditPrescriptionProps) {
         tabIndex={-1} className={orto.cajon} role="dialog" aria-modal="true">
         <header className={orto.cajonCabeza}>
           <div>
-            <div className={orto.cajonCeja}>Plan de tratamiento</div>
+            <div className={orto.cajonCeja}>Aparatología y arcos</div>
             <h3 className={orto.cajonTitulo}>Cambiar prescripción</h3>
           </div>
           <button type="button" onClick={props.onClose} aria-label="Cerrar" className={orto.botonIcono}><X className="w-5 h-5" aria-hidden /></button>

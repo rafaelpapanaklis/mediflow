@@ -51,8 +51,8 @@ export function SectionPlan(props: SectionPlanProps) {
     <Card
       id="plan"
       icon={<Layers size={15} strokeWidth={1.75} />}
-      title="Plan de tratamiento"
-      eyebrow="Aparatología, secuencia de arcos, IPR y mecánicas auxiliares"
+      title="Aparatología y arcos"
+      eyebrow="Lo que lleva el paciente: aparatología, secuencia de arcos, IPR y mecánicas auxiliares"
     >
       <PrescriptionBlock treatment={t} onEdit={props.onEditPrescription} />
       <WireSequenceBlock

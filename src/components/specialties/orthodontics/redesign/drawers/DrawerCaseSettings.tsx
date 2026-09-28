@@ -154,7 +154,7 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
               Caso de ortodoncia
             </div>
             <h3 id="case-settings-title" className={orto.cajonTitulo}>
-              Ajustes del caso
+              Datos del caso
             </h3>
           </div>
           <button type="button" onClick={props.onClose} aria-label="Cerrar" className={orto.botonIcono}>

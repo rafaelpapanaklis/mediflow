@@ -39,7 +39,9 @@ const SECTIONS: ReadonlyArray<SectionEntry> = [
   { id: "hero", label: "Resumen", Icon: Activity },
   { id: "tcards", label: "Controles", Icon: ClipboardList },
   { id: "diagnosis", label: "Diagnóstico", Icon: Smile },
-  { id: "plan", label: "Plan de tratamiento", Icon: Layers },
+  // «Aparatología y arcos», no «Plan de tratamiento»: ese nombre ya es el de
+  // la pestaña general de la ficha (ws1-t4 ronda 6, sección H de la revisión).
+  { id: "plan", label: "Aparatología y arcos", Icon: Layers },
   { id: "photos", label: "Fotos", Icon: Camera },
   { id: "finance", label: "Cobro", Icon: DollarSign },
   { id: "retention", label: "Retención", Icon: Shield, future: true },

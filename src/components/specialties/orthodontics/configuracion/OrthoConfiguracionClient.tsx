@@ -47,7 +47,7 @@ export interface OrthoConfiguracionClientProps {
 }
 
 const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
-  PRECIO_TOTAL: "El caso tiene un precio total con enganche y mensualidades, como hoy.",
+  PRECIO_TOTAL: "El caso tiene un precio total, que se paga con un enganche y mensualidades.",
   PAGO_POR_CONTROL:
     "Sin precio total: cada control atendido se cobra aparte con el precio de «Control de ortodoncia» del catálogo, y la colocación/enganche va en su propia factura.",
 };
@@ -261,7 +261,7 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
           <Tarjeta
             icono={Wallet}
             titulo="Modo de cobro"
-            sub="Cómo se cobra el tratamiento. Solo aplica a los casos que se abran DESPUÉS de guardar — un caso ya abierto conserva el modo con el que nació."
+            sub="Cómo se cobra el tratamiento. Es el modo que se propone al abrir un caso nuevo. Un caso ya abierto conserva el modo con el que se abrió."
           >
             <div className={s.tarjetaCuerpo} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {(Object.keys(ORTHO_BILLING_MODE_LABELS) as OrthoBillingMode[]).map((modo) => {
