@@ -25,7 +25,14 @@ import { saveTreatmentCardDraft } from "@/app/actions/orthodontics/saveTreatment
 import { signTreatmentCard } from "@/app/actions/orthodontics/signTreatmentCard";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import orto from "../redesign/orto.module.css";
-import { PHASE_LABELS, type TreatmentCardDTO, type WireStepDTO, type OrthoPhaseKey } from "../redesign/types";
+import {
+  PHASE_LABELS,
+  type TreatmentCardDTO,
+  type WireStepDTO,
+  type OrthoPhaseKey,
+  type OrthoElasticClass,
+  type OrthoElasticZone,
+} from "../redesign/types";
 
 export interface BotonHojaControlProps {
   appointmentId: string;
@@ -43,6 +50,8 @@ interface LoadedContext {
     wireFrom: WireStepDTO | null;
     visitDate: string;
     durationMin: number;
+    lastElastics: Array<{ elasticClass: OrthoElasticClass; config: string; zone: OrthoElasticZone }>;
+    lastIndications: string | null;
   };
 }
 
@@ -118,7 +127,17 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaCo
     if (avisoControlSinFacturar) {
       toast.error(avisoControlSinFacturar, { duration: 8000 });
     }
-    cerrar();
+    // M11 (Ronda 6): al FIRMAR, el cajón se queda abierto — es él quien
+    // ahora ofrece Agendar/Avisar el próximo control con el cardId que
+    // devuelve la firma (ver DrawerTreatmentCard.tsx, `justSigned`). Antes
+    // este botón cerraba el cajón en los dos casos y esa pantalla nunca
+    // llegaba a pintarse desde la Agenda. "Guardar borrador" sigue
+    // cerrando: eso no cambió.
+    if (!firmar) {
+      cerrar();
+      return;
+    }
+    return res.data.cardId;
   };
 
   return (
@@ -143,6 +162,7 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaCo
           card={ctx.card}
           availableWires={ctx.availableWires}
           availablePhotoSets={ctx.availablePhotoSets}
+          appointmentId={appointmentId}
           defaultsForNew={
             ctx.card
               ? undefined
@@ -152,6 +172,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaCo
                   monthAt: ctx.defaultsForNew.monthAt,
                   wireFrom: ctx.defaultsForNew.wireFrom,
                   visitDate: ctx.defaultsForNew.visitDate,
+                  lastElastics: ctx.defaultsForNew.lastElastics,
+                  lastIndications: ctx.defaultsForNew.lastIndications,
                 }
           }
           onClose={cerrar}

@@ -65,6 +65,14 @@ export type DrawerCardSubmit = {
   activationsNote: string | null;
   /** C3: indicaciones para el paciente de ESTA visita (texto libre). */
   indications: string | null;
+  /**
+   * M6 (ws1-t8, Ronda 6): la cita de Agenda que originó esta hoja, tomada de
+   * `props.appointmentId` — "una sola forma de registrar el control" incluye
+   * que el CAJÓN sea quien manda este dato, no cada llamador por su cuenta
+   * (antes solo `BotonHojaControl.tsx` lo sabía, desde su propio prop; la
+   * ficha no lo mandaba nunca — hallazgo 6).
+   */
+  appointmentId: string | null;
 };
 
 export interface DrawerTreatmentCardProps {
@@ -81,6 +89,14 @@ export interface DrawerTreatmentCardProps {
     visitDate: string;
     /** Duración estimada del caso, en meses. La usan las plantillas de nota («Mes 4 de 18»). */
     monthTotal?: number | null;
+    /**
+     * M12 (ws1-t8, Ronda 6 — hallazgo 12, "la hoja empieza en blanco cada
+     * vez"): lo que la última hoja FIRMADA dejó anotado, para no recapturar
+     * elásticos e indicaciones en cada control. Solo se usan una vez, al
+     * crear (mismo criterio que ya usa `wireFrom` para precargar el arco).
+     */
+    lastElastics?: Array<{ elasticClass: OrthoElasticClass; config: string; zone: OrthoElasticZone }>;
+    lastIndications?: string | null;
   };
   /**
    * C4: foto-sets ya existentes del caso (subidos desde la sección de fotos)
@@ -89,6 +105,15 @@ export interface DrawerTreatmentCardProps {
    * siempre — nadie más está obligado a pasarla.
    */
   availablePhotoSets?: Array<{ id: string; label: string }>;
+  /**
+   * M6 (ws1-t8, Ronda 6): la cita de Agenda que origina esta hoja, si la
+   * hay. `BotonHojaControl.tsx` (Agenda) y `OrthodonticsRedesignClient.tsx`
+   * (ficha) la resuelven ANTES de abrir el cajón — los dos con el mismo
+   * cargador (`getTreatmentCardContextForAppointment`/`...ForPatient`) — y
+   * el cajón la manda tal cual en `buildSubmit()` para que `onSave`/`onSign`
+   * no tengan que llevar su propia copia. `null` = control sin cita ligada.
+   */
+  appointmentId?: string | null;
   onClose: () => void;
   /**
    * Devuelve el `cardId` con el que quedó la tarjeta (creada o
@@ -139,6 +164,40 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
       if (wf) dispatch({ kind: "set-wire-to", value: wf.id });
     }
   }, [isNew, props.defaultsForNew, state.wireToId]);
+
+  // M12 (Ronda 6, hallazgo 12): precarga elásticos vigentes e indicaciones
+  // de la última hoja FIRMADA — una sola vez, mismo criterio que el arco de
+  // arriba. Si el doctor los borra todos a mano, no se vuelven a poner solos
+  // (el guard es "sigue vacío", igual que `state.wireToId === null` arriba).
+  useEffect(() => {
+    if (isNew && state.elastics.length === 0 && props.defaultsForNew?.lastElastics?.length) {
+      props.defaultsForNew.lastElastics.forEach((e) => {
+        dispatch({
+          kind: "add-elastic",
+          value: { ...e, id: `heredado-${Math.random().toString(36).slice(2)}` },
+        });
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, props.defaultsForNew, state.elastics.length]);
+
+  useEffect(() => {
+    if (isNew && !state.indications && props.defaultsForNew?.lastIndications) {
+      dispatch({ kind: "set-indications", value: props.defaultsForNew.lastIndications });
+    }
+  }, [isNew, props.defaultsForNew, state.indications]);
+
+  // M11 (Ronda 6, hallazgo 11): tras firmar, el cajón se queda abierto en
+  // vez de cerrarse en silencio, y ofrece agendar/avisar el próximo control
+  // EN EL MOMENTO — antes solo aparecía al reabrir una hoja ya firmada.
+  // `justSigned` no depende de `props.card` (el padre puede no remontar el
+  // componente con el card fresco): se arma con lo que el propio `onSign`
+  // devolvió.
+  const [justSigned, setJustSigned] = useState<{
+    cardId: string;
+    nextDate: string | null;
+    nextDurationMin: number | null;
+  } | null>(null);
 
   const headerTitle = useMemo(() => {
     if (isNew && props.defaultsForNew) {
@@ -215,6 +274,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     nextDurationMin: state.nextDurationMin,
     activationsNote: state.activationsNote.trim() ? state.activationsNote : null,
     indications: state.indications.trim() ? state.indications : null,
+    appointmentId: props.appointmentId ?? null,
   });
 
   const canSign =
@@ -222,6 +282,67 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     state.soap.o.trim().length > 0 &&
     state.soap.a.trim().length > 0 &&
     state.soap.p.trim().length > 0;
+
+  // M11 (Ronda 6): control recién firmado en ESTA sesión del cajón —
+  // pantalla de cierre con Agendar/Avisar en el momento, en vez de cerrar en
+  // silencio (hallazgo 11 y 13). No usa `isReadOnly`/`props.card` porque el
+  // padre no siempre remonta el componente con el card ya firmado.
+  if (justSigned) {
+    return (
+      <>
+        <div className={orto.velo} onClick={props.onClose} aria-hidden />
+        <aside
+          ref={cajonRef}
+          tabIndex={-1}
+          className={orto.cajon}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="drawer-tcard-title"
+        >
+          <header className={orto.cajonCabeza}>
+            <div className={orto.cajonTextos}>
+              <div className={orto.cajonCeja}>Control firmado</div>
+              <h3 id="drawer-tcard-title" className={`${orto.cajonTitulo} flex items-center gap-2`}>
+                <Check size={17} strokeWidth={2.2} className={orto.tonoExito} aria-hidden />
+                Listo
+              </h3>
+            </div>
+            <button type="button" onClick={props.onClose} aria-label="Cerrar" className={orto.botonIcono}>
+              <X size={18} strokeWidth={1.75} aria-hidden />
+            </button>
+          </header>
+          <div className={orto.cajonCuerpo}>
+            <section className={orto.bloque}>
+              <div className={orto.bloqueCabeza}>
+                <h4 className={orto.bloqueTitulo}>Próximo control</h4>
+              </div>
+              {justSigned.nextDate ? (
+                <>
+                  <div className={orto.caja} style={{ marginBottom: 10 }}>
+                    {new Date(justSigned.nextDate).toLocaleString("es-MX", {
+                      weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+                    })}
+                    {justSigned.nextDurationMin ? ` · ${justSigned.nextDurationMin} min` : ""}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-[8px]">
+                    <AgendarProximoControlButton cardId={justSigned.cardId} />
+                    <AvisarProximoControlButton cardId={justSigned.cardId} />
+                  </div>
+                </>
+              ) : (
+                <div className={orto.vacioLinea}>Sin próximo control capturado en esta hoja.</div>
+              )}
+            </section>
+          </div>
+          <footer className={orto.cajonPie}>
+            <Btn variant="ghost" size="md" onClick={props.onClose} className="ml-auto">
+              Cerrar
+            </Btn>
+          </footer>
+        </aside>
+      </>
+    );
+  }
 
   return (
     <>
@@ -628,8 +749,16 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 if (enVuelo) return;
                 setEnVuelo(true);
                 try {
-                  const id = await props.onSign!(buildSubmit());
-                  if (id) dispatch({ kind: "learn-card-id", id });
+                  const submit = buildSubmit();
+                  const id = await props.onSign!(submit);
+                  if (id) {
+                    dispatch({ kind: "learn-card-id", id });
+                    // M11: solo se ofrece Agendar/Avisar si el llamador
+                    // confirmó un cardId real — si falló, `id` viene
+                    // falsy y el error ya se mostró por su cuenta
+                    // (toast/aviso propio de cada caller).
+                    setJustSigned({ cardId: id, nextDate: submit.nextDate, nextDurationMin: submit.nextDurationMin });
+                  }
                 } finally {
                   setEnVuelo(false);
                 }
