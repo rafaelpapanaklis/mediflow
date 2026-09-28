@@ -50,12 +50,16 @@ test("caso 1 — sin el módulo en la sede, la pestaña no aparece", () => {
   );
   assert.ok(!menu.grupos.some((g) => g.items.some((i) => i.id === "ortodoncia")));
 
-  // La ficha solo enciende la pestaña cuando llegan los datos de ortodoncia,
-  // y esos solo se cargan si la sede tiene el módulo de verdad.
+  // La ficha solo enciende la pestaña cuando llegan los datos de ortodoncia
+  // (o la cara administrativa, X2), y esos solo se cargan si la sede tiene el
+  // módulo de verdad —o conserva la lectura de un caso, decisión 3— y la
+  // persona tiene las llaves (vistaOrtoPorPermisos).
   const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
-  assert.match(ficha, /const showOrthodontics = orthoData !== null && orthoData !== undefined;/);
+  assert.match(ficha, /const hayDatosOrto = orthoData !== null && orthoData !== undefined;/);
+  assert.match(ficha, /const showOrthodontics = hayDatosOrto \|\| orthoSoloAdministrativo;/);
   const pagina = leer("src/app/dashboard/patients/[id]/page.tsx");
-  assert.match(pagina, /if \(isDental && \(await hasActiveOrthodonticsModule\(user\.clinicId\)\)\) \{/);
+  assert.match(pagina, /await hasActiveOrthodonticsModule\(user\.clinicId\)/);
+  assert.match(pagina, /if \(orthoVista === "clinica"\) \{\s*const redesign = await loadOrthoRedesignData\(/);
 });
 
 // ── Caso 2: tiene o tuvo caso ────────────────────────────────────────────

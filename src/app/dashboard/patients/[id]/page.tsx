@@ -24,7 +24,7 @@ import type { ImplantFull } from "@/lib/types/implants";
 import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
-import { accesoDeOrtodonciaEnLaFicha } from "@/lib/orthodontics/pestana-ficha";
+import { accesoDeOrtodonciaEnLaFicha, vistaOrtoPorPermisos } from "@/lib/orthodontics/pestana-ficha";
 import { COOKIE_VISTA_PREVIA_SIN_MODULO, moduloActivoALaVista, vistaPreviaSinModulo } from "@/lib/orthodontics/contratar";
 import { pacienteTuvoCasoDeOrtodoncia } from "@/lib/orthodontics/tuvo-caso";
 import {
@@ -429,14 +429,24 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     await hasActiveOrthodonticsModule(user.clinicId),
     vistaPreviaSinModulo({ nodeEnv: process.env.NODE_ENV, cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value }),
   );
-  const orthoAcceso = isDental
+  // X2 / MAPA 19: además del contrato, dos llaves de la PERSONA — la del
+  // módulo (sin ella no hay pestaña) y la del expediente (sin ella solo la
+  // cara administrativa, y lo clínico ni se carga). Ver vistaOrtoPorPermisos.
+  const orthoLlaveModulo = hasPermission(permsUser, "specialties.orthodontics");
+  const orthoAcceso = isDental && orthoLlaveModulo
     ? accesoDeOrtodonciaEnLaFicha({
         moduloActivo: orthoModuloActivo,
         tuvoCaso: orthoModuloActivo ? false : await pacienteTuvoCasoDeOrtodoncia(user.clinicId, patient.id),
       })
     : "oculto";
   const orthoSoloLectura = orthoAcceso === "solo-lectura";
-  if (orthoAcceso !== "oculto") {
+  const orthoVista = vistaOrtoPorPermisos({
+    acceso: orthoAcceso,
+    llaveModulo: orthoLlaveModulo,
+    verExpediente: hasPermission(permsUser, "medicalRecord.view"),
+  });
+  const orthoSoloAdministrativo = orthoVista === "administrativa";
+  if (orthoVista === "clinica") {
     const redesign = await loadOrthoRedesignData({
       clinicId: user.clinicId,
       patientId: patient.id,
@@ -454,9 +464,22 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // registrada (A11, "Alta del caso"). `treatingDoctorId` ya viaja en
   // `orthoData.plan`; el nombre/parentesco del tutor pide una consulta
   // aparte — una sola fila por `id`, tolerante a que no exista.
-  const orthoTreatingDoctorId = orthoData?.plan?.treatingDoctorId ?? null;
+  // En la cara administrativa (sin expediente) el caso no se carga, pero el
+  // consentimiento que prepara recepción sigue queriendo al doctor tratante y
+  // al tutor: solo esas dos columnas del último plan, con filtro de clínica.
+  let orthoPlanAdministrativo: { treatingDoctorId: string | null; responsibleGuardianId: string | null } | null = null;
+  if (orthoSoloAdministrativo) {
+    orthoPlanAdministrativo = await prisma.orthodonticTreatmentPlan
+      .findFirst({
+        where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: { treatingDoctorId: true, responsibleGuardianId: true },
+      })
+      .catch(() => null);
+  }
+  const orthoTreatingDoctorId = orthoData?.plan?.treatingDoctorId ?? orthoPlanAdministrativo?.treatingDoctorId ?? null;
   let orthoResponsibleGuardian: { nombre: string; relacion: string } | null = null;
-  const responsibleGuardianId = orthoData?.plan?.responsibleGuardianId ?? null;
+  const responsibleGuardianId = orthoData?.plan?.responsibleGuardianId ?? orthoPlanAdministrativo?.responsibleGuardianId ?? null;
   if (responsibleGuardianId) {
     const guardian = await prisma.guardian
       // X1: con filtro de clínica — la del paciente, que puede ser otra sede
@@ -613,6 +636,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           implants={implants}
           orthoData={orthoData}
           orthoSoloLectura={orthoSoloLectura}
+          orthoSoloAdministrativo={orthoSoloAdministrativo}
           orthoRedesignVM={orthoRedesignVM}
           orthoRedesignBundle={orthoRedesignBundle}
           orthoTreatingDoctorId={orthoTreatingDoctorId}

@@ -81,3 +81,37 @@ export function esAccionDeEscritura(etiqueta: string): boolean {
     .toLowerCase();
   return /\b(registrar|iniciar consulta|agendar|reagendar|reprogramar|cobrar|editar|avanzar|guardar|firmar|nuevo|nueva|abrir|enviar|generar|subir|crear|confirmar|aplicar|agregar|anadir|eliminar|borrar|marcar|recordar|pedir|solicitar|cambiar|reasignar|pausar|reanudar|terminar|finalizar|condonar|imprimir orden)\b/.test(t);
 }
+
+// ── Quién ve qué de la pestaña (X2 / MAPA 19) ───────────────────────────────
+//
+// Dos llaves, además del contrato de la sede (`AccesoOrtoFicha`):
+//  · `specialties.orthodontics` — la llave del módulo. Sin ella la pestaña no
+//    sale: quitarle «Ortodoncia» a una doctora en Equipo → Permisos le quita el
+//    menú Y la pestaña de la ficha.
+//  · `medicalRecord.view` — la misma que exigen las lecturas clínicas del
+//    módulo (`getOrthoActionContext({ write: false })`). Sin ella (recepción,
+//    solo lectura) la pestaña sale en su cara ADMINISTRATIVA: citas y cobro,
+//    sin diagnóstico, plan clínico, hojas, fotos ni cefalometría — y esos datos
+//    ni se cargan en el servidor.
+// El contrato manda primero: sin módulo y sin caso que conservar no hay pestaña
+// para nadie; sin módulo CON caso se conserva la lectura (decisión 3, NOM-004)
+// para quien tenga las dos llaves.
+
+export type VistaOrtoPorPermisos =
+  /** No hay pestaña: la sede no la tiene o la persona no tiene la llave del módulo. */
+  | "oculta"
+  /** Pestaña con solo lo administrativo (citas, cobro) y el aviso «Lo clínico del caso lo ven doctores». */
+  | "administrativa"
+  /** La pestaña de siempre, con lo clínico. */
+  | "clinica";
+
+export function vistaOrtoPorPermisos(e: {
+  acceso: AccesoOrtoFicha;
+  /** `hasPermission(usuario, "specialties.orthodontics")`, con overrides. */
+  llaveModulo: boolean;
+  /** `hasPermission(usuario, "medicalRecord.view")`, con overrides. */
+  verExpediente: boolean;
+}): VistaOrtoPorPermisos {
+  if (e.acceso === "oculto" || !e.llaveModulo) return "oculta";
+  return e.verExpediente ? "clinica" : "administrativa";
+}

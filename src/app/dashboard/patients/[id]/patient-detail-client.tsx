@@ -104,6 +104,7 @@ import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-ac
 import { buildEmptySuggestion } from "@/lib/patient-detail/empty-suggestion";
 import { OrthodonticsPatientTab } from "@/components/specialties/orthodontics/redesign/OrthodonticsPatientTab";
 import { SoloLectura } from "@/components/specialties/orthodontics/redesign/SoloLectura";
+import { OrtodonciaAdministrativa } from "@/components/specialties/orthodontics/redesign/OrtodonciaAdministrativa";
 
 // Fallback de carga de los módulos lazy (pestañas de especialidad). Componente
 // cliente para poder traducir el texto con useT — el `loading` de dynamicImport
@@ -290,6 +291,13 @@ interface Props {
    */
   orthoSoloLectura?: boolean;
   /**
+   * X2 / MAPA 19: la persona tiene la llave del módulo pero no el expediente
+   * (recepción, solo lectura). La pestaña sale, sin lo clínico —que ni se
+   * cargó—: aviso «Lo clínico del caso lo ven doctores» y accesos a citas y
+   * cobro. `orthoData` llega `null` en este caso.
+   */
+  orthoSoloAdministrativo?: boolean;
+  /**
    * ViewModel del rediseño Fase 1 ortodoncia patient-detail. Cuando viene
    * presente, se renderiza el shell nuevo (Hero+Diagnóstico+Plan+G1) en el
    * tab "ortodoncia". Si es null, fallback al cliente legacy.
@@ -436,6 +444,7 @@ export function PatientDetailClient({
   implants,
   orthoData,
   orthoSoloLectura = false,
+  orthoSoloAdministrativo = false,
   orthoRedesignVM,
   orthoRedesignBundle,
   orthoTreatingDoctorId = null,
@@ -481,13 +490,14 @@ export function PatientDetailClient({
   const showPeriodontics = Boolean(perioData);
   const showEndodontics  = endoSummaries !== null && endoSummaries !== undefined;
   const showImplants     = implants !== null && implants !== undefined;
-  const showOrthodontics = orthoData !== null && orthoData !== undefined;
+  const hayDatosOrto = orthoData !== null && orthoData !== undefined;
+  const showOrthodontics = hayDatosOrto || orthoSoloAdministrativo;
   // El caso de ortodoncia, resumido para la portada y la pestaña Plan
   // (ws1-t4 ronda 6). Sale de `orthoData`, que ya está cargado: ni una
   // consulta más. Sin módulo o sin permiso, `null` y no se pinta nada.
   const casoOrtodoncia = useMemo(
-    () => (showOrthodontics ? resumenOrtoParaFicha(orthoData) : null),
-    [showOrthodontics, orthoData],
+    () => (hayDatosOrto ? resumenOrtoParaFicha(orthoData) : null),
+    [hayDatosOrto, orthoData],
   );
   // Items de la tab bar móvil — MISMA fuente de verdad que el QuickNav de
   // escritorio (patient-nav-items.ts): mismos items, orden, labels y gating.
@@ -1996,7 +2006,13 @@ export function PatientDetailClient({
               OrthodonticsPatientTab (movimiento mecánico, mismo
               comportamiento) — ver REPORTE-ws1-t1.md. Esta ficha ya NO
               importa acciones ni tipos de ortodoncia directamente. */}
-          {tab === "ortodoncia" && (
+          {tab === "ortodoncia" && orthoSoloAdministrativo && (
+            <OrtodonciaAdministrativa
+              onVerCitas={() => setTab("agenda")}
+              onVerCobro={canViewBilling ? openBillingTab : null}
+            />
+          )}
+          {tab === "ortodoncia" && !orthoSoloAdministrativo && (
             <SoloLectura activo={orthoSoloLectura}>
             <OrthodonticsPatientTab
               patient={patient}

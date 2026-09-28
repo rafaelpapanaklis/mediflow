@@ -41,7 +41,7 @@ const bloque = (inicio: string) => {
 test("el resumen del caso sale de lo ya cargado y solo con módulo y permisos", () => {
   assert.match(
     ficha,
-    /const casoOrtodoncia = useMemo\(\s*\(\) => \(showOrthodontics \? resumenOrtoParaFicha\(orthoData\) : null\)/,
+    /const casoOrtodoncia = useMemo\(\s*\(\) => \(hayDatosOrto \? resumenOrtoParaFicha\(orthoData\) : null\)/,
   );
   // Ni una consulta nueva: el archivo puro no sabe de prisma ni de fetch.
   const puro = sinComentarios(leer("lib/orthodontics/resumen-para-ficha.ts"));
