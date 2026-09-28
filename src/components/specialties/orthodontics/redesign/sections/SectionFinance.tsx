@@ -123,7 +123,7 @@ function imprimirConvenio(data: {
       ${fila("Total del tratamiento", fmtMoney(data.total))}
       ${fila("Pagado", fmtMoney(data.paid))}
       ${fila("Saldo pendiente", fmtMoney(data.balance))}
-      ${data.discountLabel ? fila("Descuento aplicado", `${data.discountLabel} (${data.discountPct}%)`) : ""}
+      ${data.discountLabel ? fila("Descuento acordado", `${data.discountLabel} (${data.discountPct}%)`) : ""}
     </tbody>
   </table>
   ${tablaCuotas}
@@ -326,14 +326,14 @@ export function SectionFinance(props: SectionFinanceProps) {
               <div className={`${orto.aviso} ${orto.avisoAlerta} mx-[18px] mt-[14px]`} style={{ alignItems: "flex-start", justifyContent: "flex-start" }}>
                 <AlertTriangle size={15} strokeWidth={1.75} className={`${orto.tonoAlerta} shrink-0 mt-[1px]`} aria-hidden />
                 <span className={orto.avisoTexto}>
-                  Recargo por atraso sugerido: <strong className="tabular-nums">{fmtMoney(panel.recargoSugerido)}</strong>. No se cobra solo: súmalo al monto en el cobro si la clínica decide aplicarlo.
+                  Recargo por atraso sugerido: <strong className="tabular-nums">{fmtMoney(panel.recargoSugerido)}</strong>. No se cobra solo ni se suma a la mensualidad (un monto de más se abonaría a la cuota siguiente): si la clínica decide aplicarlo, cóbralo con «Cobrar extra».
                 </span>
               </div>
             ) : null}
 
             {panel.billingDelCaso.discountLabel ? (
               <div className="mx-[18px] mt-[14px] text-xs text-[color:var(--pr-texto-3)]">
-                Descuento aplicado a este caso: <strong>{panel.billingDelCaso.discountLabel}</strong> ({panel.billingDelCaso.discountPct}%)
+                Descuento acordado para este caso (es un apunte: ya debe estar en el precio de la factura): <strong>{panel.billingDelCaso.discountLabel}</strong> ({panel.billingDelCaso.discountPct}%)
               </div>
             ) : null}
 

@@ -58,3 +58,12 @@ test("detalle de factura: «Marcar pagada» no se ofrece en una factura a plazos
   const src = leer("components/dashboard/billing/invoice-detail-modal.tsx");
   assert.match(src, /\{!esPlanAPlazos\(condicionesPago\) && \(\s*<ButtonNew[\s\S]{0,120}onClick=\{handleMarkPaid\}/);
 });
+
+// ws1-t4 #78/#79 — la ficha de finanzas no promete lo que no hace.
+test("ficha de finanzas: el descuento se llama «acordado» y el recargo se cobra con «Cobrar extra»", () => {
+  const src = leer("components/specialties/orthodontics/redesign/sections/SectionFinance.tsx");
+  assert.doesNotMatch(src, /Descuento aplicado/);
+  assert.doesNotMatch(src, /súmalo al monto/);
+  assert.match(src, /Descuento acordado/);
+  assert.match(src, /cóbralo con «Cobrar extra»/);
+});
