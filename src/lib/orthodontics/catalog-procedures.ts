@@ -100,12 +100,26 @@ export interface OrthoProcedureSeed {
   description: string;
 }
 
+// ── Lo que se anota DENTRO de la hoja de control (fila 35 de la revisión de
+// uso, ws1-t4 ronda 6; decisión del gerente) ──────────────────────────────
+// «Activación», «Cambio de arco» y «Ajuste de aparatología» eran tres
+// procedimientos más para la misma visita: todos son «el control del mes».
+// Ya no se siembran ni se ofrecen para agendar (menú del bot); lo que una
+// clínica ya tenga se queda en su catálogo, sin borrar nada.
+export const HECHOS_DENTRO_DEL_CONTROL: readonly string[] = ["Activación", "Cambio de arco", "Ajuste de aparatología"];
+
+/** ¿Se ofrece este procedimiento como servicio para agendar? PURO. */
+export function seOfreceParaAgendar(p: { name: string; category: string | null }): boolean {
+  return !(p.category === ORTHO_CATALOG_CATEGORY && HECHOS_DENTRO_DEL_CONTROL.includes(p.name));
+}
+
+// Fila 34 (ws1-t4 ronda 6): cada procedimiento que también es un tipo de cita
+// se llama igual que el tipo de cita (`DEFAULT_ORTHO_APPOINTMENT_TYPES`,
+// clinic-settings-db.ts): «Toma de registros de ortodoncia» (antes «Estudio
+// de registros…») y «Urgencia de ortodoncia» (antes «… fuera de control»).
 export const DEFAULT_ORTHO_PROCEDURES: readonly OrthoProcedureSeed[] = [
   // ── Incluidos en el tratamiento (no se cobran aparte) ──────────────────
-  { name: "Activación", basePrice: 0, orthoIncludedInTreatment: true, description: "Incluido en el tratamiento." },
-  { name: "Cambio de arco", basePrice: 0, orthoIncludedInTreatment: true, description: "Incluido en el tratamiento." },
   { name: "Colocación de elásticos", basePrice: 0, orthoIncludedInTreatment: true, description: "Incluido en el tratamiento." },
-  { name: "Ajuste de aparatología", basePrice: 0, orthoIncludedInTreatment: true, description: "Incluido en el tratamiento." },
 
   // ── El control: su cobro depende del modo de cobro de la clínica ───────
   {
@@ -117,13 +131,13 @@ export const DEFAULT_ORTHO_PROCEDURES: readonly OrthoProcedureSeed[] = [
 
   // ── Con costo aparte ─────────────────────────────────────────────────
   { name: "Valoración de ortodoncia", basePrice: 500, orthoIncludedInTreatment: false, description: "Con costo aparte." },
-  { name: "Estudio de registros de ortodoncia", basePrice: 1500, orthoIncludedInTreatment: false, description: "Con costo aparte." },
+  { name: "Toma de registros de ortodoncia", basePrice: 1500, orthoIncludedInTreatment: false, description: "Con costo aparte." },
   { name: "Colocación de aparatología", basePrice: 3000, orthoIncludedInTreatment: false, description: "Con costo aparte." },
   { name: "Reposición de bracket", basePrice: 350, orthoIncludedInTreatment: false, description: "Con costo aparte, pasadas las reposiciones incluidas del caso." },
   { name: "Retenedor superior", basePrice: 1800, orthoIncludedInTreatment: false, description: "Con costo aparte." },
   { name: "Retenedor inferior", basePrice: 1800, orthoIncludedInTreatment: false, description: "Con costo aparte." },
   { name: "Retiro de aparatología", basePrice: 1200, orthoIncludedInTreatment: false, description: "Con costo aparte." },
-  { name: "Urgencia de ortodoncia fuera de control", basePrice: 400, orthoIncludedInTreatment: false, description: "Con costo aparte." },
+  { name: "Urgencia de ortodoncia", basePrice: 400, orthoIncludedInTreatment: false, description: "Fuera del control del mes. Con costo aparte." },
   { name: "Microimplante (TAD)", basePrice: 2500, orthoIncludedInTreatment: false, description: "Con costo aparte." },
   { name: "Alineadores de refinamiento", basePrice: 4500, orthoIncludedInTreatment: false, description: "Con costo aparte." },
 ];

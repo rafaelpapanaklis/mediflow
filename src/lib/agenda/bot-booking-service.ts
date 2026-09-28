@@ -7,6 +7,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende, doctorNoAtiendeSlot, ventanaDelDoctor } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { apartadoVencido, sinApartadoVencido } from "@/lib/agenda/apartado";
+import { HECHOS_DENTRO_DEL_CONTROL, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
 
 /**
  * Servicio server-side reutilizable para que el bot de WhatsApp agende y
@@ -509,7 +510,15 @@ export async function getClinicName(clinicId: string): Promise<string> {
 
 export async function listBookableServices(clinicId: string) {
   return prisma.procedureCatalog.findMany({
-    where: { clinicId, isActive: true },
+    // Fila 35 (ws1-t4 ronda 6): «Activación», «Cambio de arco» y «Ajuste de
+    // aparatología» de ortodoncia no se agendan — se anotan dentro de la hoja
+    // del control. Si la clínica ya los tiene, siguen en su catálogo; solo no
+    // salen en el menú del bot.
+    where: {
+      clinicId,
+      isActive: true,
+      NOT: { category: ORTHO_CATALOG_CATEGORY, name: { in: [...HECHOS_DENTRO_DEL_CONTROL] } },
+    },
     orderBy: { name: "asc" },
     select: { id: true, name: true, duration: true },
     take: 24,

@@ -76,11 +76,11 @@ test("al editarlo se le pone la llave solo al control de siempre que aún no la 
 });
 
 test("sembrar no crea un segundo control si la clínica renombró el suyo", () => {
-  const nombres = new Set(["Activación", "Ajuste mensual"]);
+  const nombres = new Set(["Colocación de elásticos", "Ajuste mensual"]);
   const conControl = faltantesPorSembrar(nombres, true).map((p) => p.name);
   assert.ok(!conControl.includes(TIPO_CITA_CONTROL_ORTO));
-  assert.ok(!conControl.includes("Activación"));
-  assert.ok(conControl.includes("Cambio de arco"));
+  assert.ok(!conControl.includes("Colocación de elásticos"));
+  assert.ok(conControl.includes("Retiro de aparatología"));
   const sinControl = faltantesPorSembrar(nombres, false).map((p) => p.name);
   assert.ok(sinControl.includes(TIPO_CITA_CONTROL_ORTO));
 });
