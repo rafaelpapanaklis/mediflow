@@ -50,3 +50,22 @@ export function denyIfMissingPermission(user: UserLike, key: PermissionKey): Nex
   }
   return null;
 }
+
+/**
+ * Igual que `denyIfMissingPermission`, pero permite CUALQUIERA de varias
+ * keys (OR, no AND) — para una acción que dos permisos distintos habilitan
+ * a propósito, sin que uno le quite alcance al otro (p. ej.
+ * "billing.deposit.register" habilita solo esto; "billing.charge" habilita
+ * esto Y toda la Caja — quien ya tiene la más amplia no se queda afuera).
+ */
+export function denyIfMissingAnyPermission(user: UserLike, keys: PermissionKey[]): NextResponse | null {
+  const userForPerm = {
+    role: user.role,
+    permissionsOverride: user.permissionsOverride ?? [],
+  };
+  if (keys.some((key) => hasPermission(userForPerm, key))) return null;
+  return NextResponse.json(
+    { error: `Permiso requerido: ${keys.join(" o ")}` },
+    { status: 403 },
+  );
+}

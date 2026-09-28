@@ -112,6 +112,14 @@ export const ALL_PERMISSIONS = {
   // DOCTOR por default, sin tocar qué más puede cobrar (Caja, pagos de
   // factura siguen exigiendo billing.charge, que el doctor no tiene).
   "billing.deposit":      "Pedir anticipos",
+  // REGISTRAR el anticipo que recepción/el doctor ya tiene en la mano
+  // (efectivo, transferencia o terminal) — POST /api/invoices/[id]/anticipo/
+  // registrar. Key APARTE de "billing.charge" (decisión de Rafael,
+  // sep-2026): "billing.charge" abre TODA la Caja (cobrar cualquier pago de
+  // cualquier factura); esto solo aplica el anticipo de UNA factura ya
+  // identificada. Quien ya tiene "billing.charge" también puede — no se le
+  // quita nada a quien ya cobraba en Caja, ver los dos route handlers.
+  "billing.deposit.register": "Registrar anticipo recibido",
   "analytics.view":       "Ver Analytics",
   // ws1-t4: POST/DELETE /api/gastos pedían "analytics.view" — key que
   // TERMINA en ".view", así que READONLY la recibía por construcción (línea
@@ -176,7 +184,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Planes de tratamiento", keys: ["treatments.view", "treatments.edit"] },
   { title: "Comunicación",   keys: ["inbox.view", "inbox.send", "inbox.delete", "whatsapp.view", "whatsapp.send"] },
   { title: "Catálogo",       keys: ["resources.view", "resources.edit", "inventory.view", "inventory.edit", "suppliers.view", "suppliers.order"] },
-  { title: "Facturación",    keys: ["billing.view", "billing.create", "billing.charge", "billing.deposit", "billing.refund", "billing.edit"] },
+  { title: "Facturación",    keys: ["billing.view", "billing.create", "billing.charge", "billing.deposit", "billing.deposit.register", "billing.refund", "billing.edit"] },
   { title: "Reportes y TV",  keys: ["analytics.view", "reports.view", "expenses.edit", "tvModes.view", "tvModes.edit"] },
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
   { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
@@ -259,7 +267,13 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     // anticipo no es "cobrar" en el sentido de Caja — es mandar un link de
     // pago, el paciente paga en línea y el webhook lo aplica solo. El doctor
     // sigue sin poder registrar pagos a mano ni reembolsar.
-    "billing.view", "billing.create", "billing.edit", "billing.deposit",
+    //
+    // "billing.deposit.register" TAMBIÉN por default (decisión de Rafael,
+    // sep-2026): registrar el anticipo que ya se recibió (efectivo,
+    // transferencia, terminal) es una extensión natural de poder pedirlo —
+    // la clínica que no quiera dárselo se lo quita en Equipo → Permisos, key
+    // por key, sin tocar el resto de lo que el doctor ya puede hacer.
+    "billing.view", "billing.create", "billing.edit", "billing.deposit", "billing.deposit.register",
     "resources.view", "suppliers.view",
     // ws1-t4: GET /api/inventory ahora exige "inventory.view" (antes no
     // exigía nada). El doctor lo necesita para el selector de insumos al
@@ -287,7 +301,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     // billing.edit: la recepción con Caja borra borradores y edita facturas desde
     // el detalle — DELETE y PATCH de /api/invoices/[id] ahora lo exigen (edit-price ya).
     // billing.deposit (ws1-t3): pedir un anticipo desde la cita o la factura.
-    "billing.view", "billing.create", "billing.charge", "billing.edit", "billing.deposit",
+    // billing.deposit.register: ya tiene billing.charge, así que registrar
+    // el anticipo recibido ya le funcionaba por ahí — se agrega igual de
+    // forma explícita (decisión de Rafael, sep-2026) para que la clínica
+    // pueda apagar una sin apagar la otra desde Equipo → Permisos.
+    "billing.view", "billing.create", "billing.charge", "billing.edit", "billing.deposit", "billing.deposit.register",
     // Recepción prepara la carta y se la manda al paciente por WhatsApp (el
     // envío exige consents.create además de whatsapp.send). Revocar NO: eso es
     // del profesional responsable.

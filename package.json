@@ -123,6 +123,7 @@
     "test:avisos-recepcion": "tsx --test --experimental-test-module-mocks src/lib/anticipos/__tests__/avisos-recepcion.test.ts",
     "test:wa-reminder-pick": "tsx --test src/lib/whatsapp/__tests__/reminder-pick.test.ts",
     "test:wa-permissions": "tsx --test src/lib/auth/__tests__/whatsapp-write-permission.test.ts",
+    "test:billing-deposit-register": "tsx --test src/lib/auth/__tests__/billing-deposit-register.test.ts",
     "test:wa-delivery": "tsx --test src/lib/whatsapp/__tests__/delivery-status.test.ts",
     "test:wa-errors": "tsx --test src/lib/whatsapp/__tests__/wa-errors.test.ts",
     "test:cobranza-aviso": "tsx --test --experimental-test-module-mocks src/lib/whatsapp/cobranza/__tests__/aviso-mensualidad.test.ts",

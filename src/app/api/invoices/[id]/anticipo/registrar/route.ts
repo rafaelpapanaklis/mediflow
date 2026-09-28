@@ -3,11 +3,12 @@
 // dinero (lo ve en caja o en el estado de cuenta) y lo registra a mano — sin
 // esperar ningún webhook.
 //
-// Permiso "billing.charge" (no "billing.deposit"): PEDIR un anticipo es una
-// acción de agenda/recepción que el doctor también puede hacer; REGISTRAR
-// dinero recibido es cobrar, y hoy solo lo hace quien ya puede cobrar en Caja
-// (decisión pendiente de confirmar con Rafael si el doctor también debería:
-// ver el reporte).
+// Permiso "billing.deposit.register" (o "billing.charge", que además abre
+// toda la Caja) — decisión de Rafael, sep-2026: el doctor puede registrar un
+// anticipo si la clínica se lo da en Equipo → Permisos, sin que eso le
+// abra el resto de Caja (billing.charge sigue siendo la key amplia). Por
+// default lo tienen ADMIN, SUPER_ADMIN, RECEPTIONIST y DOCTOR — ver
+// ROLE_DEFAULT_PERMISSIONS en @/lib/auth/permissions.
 //
 // Multi-tenant: clinicId de la sesión; visibilidad por paciente antes de
 // tocar nada.
@@ -16,7 +17,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getAuthContext } from "@/lib/auth-context";
-import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { denyIfMissingAnyPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { registrarAnticipoRecibido } from "@/lib/anticipos/panel.server";
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const ctx = await getAuthContext();
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  const denied = denyIfMissingPermission(ctx, "billing.charge");
+  const denied = denyIfMissingAnyPermission(ctx, ["billing.deposit.register", "billing.charge"]);
   if (denied) return denied;
 
   const inv = await prisma.invoice.findFirst({ where: { id: params.id, clinicId: ctx.clinicId }, select: { patientId: true } });

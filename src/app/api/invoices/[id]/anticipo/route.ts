@@ -16,7 +16,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getAuthContext } from "@/lib/auth-context";
-import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { denyIfMissingAnyPermission, denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { canalesAnticipoPanel, elegibilidadCitaDeInvoice, estadoAnticipoDeFactura, pedirAnticipoDeFactura, sugeridoParaFactura } from "@/lib/anticipos/panel.server";
@@ -90,7 +90,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     // anticipo recibido" con esto; el servidor los vuelve a exigir igual en
     // el POST correspondiente.
     puedeDepositar: denyIfMissingPermission(ctx, "billing.deposit") === null,
-    puedeRegistrar: denyIfMissingPermission(ctx, "billing.charge") === null,
+    puedeRegistrar: denyIfMissingAnyPermission(ctx, ["billing.deposit.register", "billing.charge"]) === null,
     puedeEnviarRecibo: denyIfMissingPermission(ctx, "whatsapp.send") === null,
   });
 }
