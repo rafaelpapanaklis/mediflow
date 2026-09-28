@@ -171,7 +171,8 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
     "control, alineadores, último y próximo control, y sus mensualidades. Úsala para «¿cómo va el caso de …?», " +
     "con `paciente` (nombre, teléfono o folio; no hace falta buscar_paciente antes) o con el `patientId` del " +
     "contexto. Solo lee lo registrado: no diagnostica, no cobra y no registra controles; da el enlace a su ficha. " +
-    "Para agendarle su control usa agendar_cita.",
+    "Úsala también cuando pidan COBRAR algo de ortodoncia (una mensualidad, un control, un extra): no se cobra " +
+    "desde aquí; contesta con lo que debe y el enlace. Para agendarle su control usa agendar_cita.",
   parametros,
   permiso: PERMISO_ORTO,
 
