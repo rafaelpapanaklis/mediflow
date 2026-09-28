@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSupplierContext } from "@/lib/supplier-auth";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { SUPPLIER_PRODUCTS_BUCKET, type SupplierProductImageDTO } from "@/lib/suppliers/types";
+import {
+  pareceScriptOMarcado,
+  tieneExtensionPeligrosa,
+  limiteSubidasPorUsuario,
+  registrarSubidaRechazada,
+} from "@/lib/uploads/validar-archivo";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +42,10 @@ export async function POST(req: NextRequest, { params }: { params: { productId: 
     return NextResponse.json({ error: "Tu cuenta de proveedor no está aprobada." }, { status: 403 });
   }
 
+  if (!limiteSubidasPorUsuario(ctx.supplierId)) {
+    return NextResponse.json({ error: "Demasiadas subidas, espera unos minutos." }, { status: 429 });
+  }
+
   // Multi-tenant guard: el producto DEBE pertenecer al proveedor en sesión.
   const owned = await prisma.supplierProduct.findFirst({
     where: { id: params.productId, supplierId: ctx.supplierId },
@@ -56,6 +67,16 @@ export async function POST(req: NextRequest, { params }: { params: { productId: 
   const file = formData.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "No se recibió ninguna imagen." }, { status: 400 });
 
+  if (tieneExtensionPeligrosa(file.name)) {
+    await registrarSubidaRechazada({
+      ruta: "/api/proveedores/products/[productId]/images",
+      motivo: "nombre con extensión peligrosa",
+      codigo: "extension_peligrosa",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "Nombre de archivo no permitido." }, { status: 400 });
+  }
+
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json(
       { error: "Tipo de archivo no permitido. Usa JPG, PNG, WebP o GIF." },
@@ -67,10 +88,47 @@ export async function POST(req: NextRequest, { params }: { params: { productId: 
   }
 
   const bytes = await file.arrayBuffer();
+  const buf = Buffer.from(bytes);
+
+  const marcador = pareceScriptOMarcado(buf);
+  if (marcador) {
+    await registrarSubidaRechazada({
+      ruta: "/api/proveedores/products/[productId]/images",
+      motivo: `contenido parece script o marcado (${marcador.trim()})`,
+      codigo: "script_o_marcado",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "El archivo no es una imagen válida." }, { status: 400 });
+  }
 
   // El MIME del browser es falseable: validamos el magic number real.
   const magicError = await validateMagicNumber(bytes, ALLOWED_TYPES);
-  if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+  if (magicError) {
+    await registrarSubidaRechazada({
+      ruta: "/api/proveedores/products/[productId]/images",
+      motivo: magicError,
+      codigo: "tipo_no_permitido",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: magicError }, { status: 400 });
+  }
+
+  // gif no se decodifica con sharp aquí (no hay verificación estática simple
+  // con esta versión de sharp) — el magic-number check ya basta para gif.
+  if (file.type !== "image/gif") {
+    try {
+      await sharp(buf).metadata();
+      await sharp(buf).toBuffer();
+    } catch {
+      await registrarSubidaRechazada({
+        ruta: "/api/proveedores/products/[productId]/images",
+        motivo: "la imagen no se pudo decodificar",
+        codigo: "imagen_corrupta",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: "La imagen está corrupta o no es una imagen real." }, { status: 400 });
+    }
+  }
 
   const ext =
     (file.name.split(".").pop() ?? "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "jpg";

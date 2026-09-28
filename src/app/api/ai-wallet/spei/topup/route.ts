@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { fileTypeFromBuffer } from "file-type";
+import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { BUCKETS } from "@/lib/storage";
 import { SPEI_ACCOUNT } from "@/lib/spei/config";
+import {
+  verificarPdfPeligroso,
+  tieneExtensionPeligrosa,
+  limiteSubidasPorUsuario,
+  registrarSubidaRechazada,
+} from "@/lib/uploads/validar-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +46,10 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
 
+  if (!limiteSubidasPorUsuario(ctx.userId)) {
+    return NextResponse.json({ error: "Demasiadas subidas, espera unos minutos." }, { status: 429 });
+  }
+
   let form: FormData;
   try {
     form = await req.formData();
@@ -70,14 +81,67 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "El comprobante supera el limite de 10 MB" }, { status: 400 });
   }
 
+  // `file` es un Blob (no siempre trae `name`) — el check de extensión sólo
+  // aplica cuando sí lo trae, sin romper el tipo.
+  const nombreOriginal = (file as File).name ?? "";
+  if (nombreOriginal && tieneExtensionPeligrosa(nombreOriginal)) {
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      ruta: "/api/ai-wallet/spei/topup",
+      motivo: "nombre con extensión peligrosa",
+      codigo: "extension_peligrosa",
+      nombreOriginal,
+    });
+    return NextResponse.json({ error: "Nombre de archivo no permitido" }, { status: 400 });
+  }
+
   // Validacion por magic number (el MIME declarado por el browser es falseable).
   const buffer = Buffer.from(await file.arrayBuffer());
   const detected = await fileTypeFromBuffer(buffer);
   if (!detected || !(ALLOWED_PROOF_TYPES as readonly string[]).includes(detected.mime)) {
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      ruta: "/api/ai-wallet/spei/topup",
+      motivo: "tipo real no permitido",
+      codigo: "tipo_no_permitido",
+      nombreOriginal,
+    });
     return NextResponse.json(
       { error: "Tipo de archivo no permitido. Sube una imagen JPG/PNG o un PDF." },
       { status: 400 },
     );
+  }
+
+  if (detected.mime === "application/pdf") {
+    const motivoPdf = verificarPdfPeligroso(buffer);
+    if (motivoPdf) {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        ruta: "/api/ai-wallet/spei/topup",
+        motivo: `PDF con ${motivoPdf}`,
+        codigo: "pdf_peligroso",
+        nombreOriginal,
+      });
+      return NextResponse.json({ error: "El PDF no se puede aceptar por seguridad" }, { status: 400 });
+    }
+  } else {
+    try {
+      await sharp(buffer).metadata();
+      await sharp(buffer).toBuffer();
+    } catch {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        ruta: "/api/ai-wallet/spei/topup",
+        motivo: "la imagen no se pudo decodificar",
+        codigo: "imagen_corrupta",
+        nombreOriginal,
+      });
+      return NextResponse.json({ error: "La imagen está corrupta o no es una imagen real" }, { status: 400 });
+    }
   }
 
   // Bucket privado, prefijo dedicado, nombre aleatorio (no filtra info).

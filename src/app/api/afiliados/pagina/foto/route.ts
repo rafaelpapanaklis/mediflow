@@ -32,6 +32,12 @@ import { validateMagicNumber } from "@/lib/validate-upload";
 import { BUCKETS } from "@/lib/storage";
 import { buildDraftPatch, canEditPage } from "@/lib/affiliates/page-config";
 import { PARTNER_PAGE_SELECT, loadPartnerPage, toPageState } from "@/lib/affiliates/page-store";
+import {
+  pareceScriptOMarcado,
+  tieneExtensionPeligrosa,
+  limiteSubidasPorUsuario,
+  registrarSubidaRechazada,
+} from "@/lib/uploads/validar-archivo";
 
 // sharp es nativo: exige el runtime de Node, no el edge.
 export const runtime = "nodejs";
@@ -92,6 +98,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
+  if (!limiteSubidasPorUsuario(ctx.affiliateId)) {
+    return NextResponse.json({ error: "Demasiadas subidas, espera unos minutos." }, { status: 429 });
+  }
+
   const row = await loadPartnerPage(ctx.affiliateId);
   if (!row) return NextResponse.json({ error: "Afiliado no encontrado" }, { status: 404 });
   if (!canEditPage(row.pageStatus)) {
@@ -111,6 +121,16 @@ export async function POST(req: NextRequest) {
   const file = formData.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "No se recibió ninguna imagen." }, { status: 400 });
 
+  if (tieneExtensionPeligrosa(file.name)) {
+    await registrarSubidaRechazada({
+      ruta: "/api/afiliados/pagina/foto",
+      motivo: "nombre con extensión peligrosa",
+      codigo: "extension_peligrosa",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "Nombre de archivo no permitido." }, { status: 400 });
+  }
+
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json({ error: "Tipo de archivo no permitido. Usa JPG, PNG o WebP." }, { status: 400 });
   }
@@ -119,11 +139,46 @@ export async function POST(req: NextRequest) {
   }
 
   const bytes = await file.arrayBuffer();
+  const rawBuf = Buffer.from(bytes);
+
+  const marcador = pareceScriptOMarcado(rawBuf);
+  if (marcador) {
+    await registrarSubidaRechazada({
+      ruta: "/api/afiliados/pagina/foto",
+      motivo: `contenido parece script o marcado (${marcador.trim()})`,
+      codigo: "script_o_marcado",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "El archivo no es una imagen válida." }, { status: 400 });
+  }
 
   // El MIME del navegador es falseable: se valida la firma real ANTES de
   // pasarle nada a sharp, que además reventaría con un 500 ante basura.
   const magicError = await validateMagicNumber(bytes, ALLOWED_TYPES);
-  if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+  if (magicError) {
+    await registrarSubidaRechazada({
+      ruta: "/api/afiliados/pagina/foto",
+      motivo: magicError,
+      codigo: "tipo_no_permitido",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: magicError }, { status: 400 });
+  }
+
+  // Decodificación real (sharp también recorta/reencodea abajo, pero eso
+  // pasa dentro del mismo try — aquí solo dejamos constancia de que este
+  // chequeo previo existe por si el pipeline de recorte cambiara).
+  try {
+    await sharp(rawBuf).metadata();
+  } catch {
+    await registrarSubidaRechazada({
+      ruta: "/api/afiliados/pagina/foto",
+      motivo: "la imagen no se pudo decodificar",
+      codigo: "imagen_corrupta",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "La imagen está corrupta o no es una imagen real." }, { status: 400 });
+  }
 
   let processed: Buffer;
   try {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { getAuthContext } from "@/lib/auth-context";
 import { BUCKETS } from "@/lib/storage";
 import {
@@ -7,6 +8,13 @@ import {
   SUPPORT_MAX_FILE_BYTES,
   SupportError,
 } from "@/lib/support/types";
+import {
+  verificarPdfPeligroso,
+  pareceScriptOMarcado,
+  tieneExtensionPeligrosa,
+  limiteSubidasPorUsuario,
+  registrarSubidaRechazada,
+} from "@/lib/uploads/validar-archivo";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /api/support/attachments — upload multipart de adjuntos (lado CLÍNICA).
@@ -32,10 +40,26 @@ export async function POST(req: NextRequest) {
     const ctx = await getAuthContext();
     if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
+    if (!limiteSubidasPorUsuario(ctx.userId)) {
+      return NextResponse.json({ error: "Demasiadas subidas, espera unos minutos." }, { status: 429 });
+    }
+
     const formData = await req.formData().catch(() => null);
     const file = formData?.get("file") as File | null;
     if (!file || typeof file === "string") {
       return NextResponse.json({ error: "file requerido" }, { status: 400 });
+    }
+
+    if (tieneExtensionPeligrosa(file.name)) {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        ruta: "/api/support/attachments",
+        motivo: "nombre con extensión peligrosa",
+        codigo: "extension_peligrosa",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: "Nombre de archivo no permitido" }, { status: 400 });
     }
 
     if (!(SUPPORT_ALLOWED_MIME as readonly string[]).includes(file.type)) {
@@ -49,12 +73,69 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = await file.arrayBuffer();
+    const buf = Buffer.from(bytes);
+
+    const marcador = pareceScriptOMarcado(buf);
+    if (marcador) {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        ruta: "/api/support/attachments",
+        motivo: `contenido parece script o marcado (${marcador.trim()})`,
+        codigo: "script_o_marcado",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: "El archivo no es válido" }, { status: 400 });
+    }
 
     // El MIME del browser es falseable: validamos los primeros bytes igual
     // que xrays (los 5 tipos permitidos tienen firma reconocible).
     const { validateMagicNumber } = await import("@/lib/validate-upload");
     const magicError = await validateMagicNumber(bytes, [...SUPPORT_ALLOWED_MIME]);
-    if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+    if (magicError) {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        ruta: "/api/support/attachments",
+        motivo: magicError,
+        codigo: "tipo_no_permitido",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: magicError }, { status: 400 });
+    }
+
+    const { fileTypeFromBuffer } = await import("file-type");
+    const detected = await fileTypeFromBuffer(buf);
+
+    if (detected?.mime === "application/pdf") {
+      const motivoPdf = verificarPdfPeligroso(buf);
+      if (motivoPdf) {
+        await registrarSubidaRechazada({
+          clinicId: ctx.clinicId,
+          userId: ctx.userId,
+          ruta: "/api/support/attachments",
+          motivo: `PDF con ${motivoPdf}`,
+          codigo: "pdf_peligroso",
+          nombreOriginal: file.name,
+        });
+        return NextResponse.json({ error: "El PDF no se puede aceptar por seguridad" }, { status: 400 });
+      }
+    } else if (detected?.mime.startsWith("image/") && detected.mime !== "image/gif") {
+      try {
+        await sharp(buf).metadata();
+        await sharp(buf).toBuffer();
+      } catch {
+        await registrarSubidaRechazada({
+          clinicId: ctx.clinicId,
+          userId: ctx.userId,
+          ruta: "/api/support/attachments",
+          motivo: "la imagen no se pudo decodificar",
+          codigo: "imagen_corrupta",
+          nombreOriginal: file.name,
+        });
+        return NextResponse.json({ error: "La imagen está corrupta o no es una imagen real" }, { status: 400 });
+      }
+    }
 
     const ext =
       (file.name.split(".").pop() ?? "bin")

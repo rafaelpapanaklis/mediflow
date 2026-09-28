@@ -17,11 +17,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdmin } from "@supabase/supabase-js";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import sharp from "sharp";
+import { getAdminSession } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { BUCKETS } from "@/lib/storage";
 import { SQL_PENDING_MESSAGE } from "@/lib/account-manager/admin";
+import {
+  pareceScriptOMarcado,
+  tieneExtensionPeligrosa,
+  limiteSubidasPorUsuario,
+  registrarSubidaRechazada,
+} from "@/lib/uploads/validar-archivo";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +44,12 @@ function getAdminSupabase() {
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!limiteSubidasPorUsuario(`admin:foto-am:${admin.user.id}`)) {
+    return NextResponse.json({ error: "Demasiadas subidas, espera unos minutos." }, { status: 429 });
+  }
 
   let exists: { id: string } | null;
   try {
@@ -58,6 +70,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const file = formData.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "No se recibió ninguna imagen." }, { status: 400 });
 
+  if (tieneExtensionPeligrosa(file.name)) {
+    await registrarSubidaRechazada({
+      ruta: "/api/admin/account-managers/[id]/photo",
+      motivo: "nombre con extensión peligrosa",
+      codigo: "extension_peligrosa",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "Nombre de archivo no permitido." }, { status: 400 });
+  }
+
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json({ error: "Tipo de archivo no permitido. Usa JPG, PNG o WebP." }, { status: 400 });
   }
@@ -66,10 +88,45 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const bytes = await file.arrayBuffer();
+  const buf = Buffer.from(bytes);
+
+  const marcador = pareceScriptOMarcado(buf);
+  if (marcador) {
+    await registrarSubidaRechazada({
+      ruta: "/api/admin/account-managers/[id]/photo",
+      motivo: `contenido parece script o marcado (${marcador.trim()})`,
+      codigo: "script_o_marcado",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "El archivo no es una imagen válida." }, { status: 400 });
+  }
 
   // El MIME del browser es falseable: validamos el magic number real.
   const magicError = await validateMagicNumber(bytes, ALLOWED_TYPES);
-  if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+  if (magicError) {
+    await registrarSubidaRechazada({
+      ruta: "/api/admin/account-managers/[id]/photo",
+      motivo: magicError,
+      codigo: "tipo_no_permitido",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: magicError }, { status: 400 });
+  }
+
+  // Decodificación real: una imagen "válida" por magic number pero corrupta o
+  // adversarial (bomba de descompresión) truena aquí antes de guardarse.
+  try {
+    await sharp(buf).metadata();
+    await sharp(buf).toBuffer();
+  } catch {
+    await registrarSubidaRechazada({
+      ruta: "/api/admin/account-managers/[id]/photo",
+      motivo: "la imagen no se pudo decodificar",
+      codigo: "imagen_corrupta",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "La imagen está corrupta o no es una imagen real." }, { status: 400 });
+  }
 
   const ext =
     (file.name.split(".").pop() ?? "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "jpg";

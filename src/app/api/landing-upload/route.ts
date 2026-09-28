@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { BUCKETS } from "@/lib/storage";
 import { allPhotoSlotIds } from "@/app/[slug]/_shared/template-manifest";
 import { LOGO_ALLOWED_MIME_TYPES } from "@/lib/clinic-logo";
+import {
+  verificarPdfPeligroso,
+  pareceScriptOMarcado,
+  tieneExtensionPeligrosa,
+  limiteSubidasPorUsuario,
+  registrarSubidaRechazada,
+} from "@/lib/uploads/validar-archivo";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -49,6 +57,10 @@ export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (!limiteSubidasPorUsuario(ctx.userId)) {
+    return NextResponse.json({ error: "Demasiadas subidas, espera unos minutos." }, { status: 429 });
+  }
+
   const formData = await req.formData();
   const file     = formData.get("file") as File | null;
   // "cover" | "gallery" | "avatar" o el id de una RANURA del manifiesto
@@ -57,6 +69,18 @@ export async function POST(req: NextRequest) {
   const field    = formData.get("field") as string | null;
 
   if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
+
+  if (tieneExtensionPeligrosa(file.name)) {
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      ruta: "/api/landing-upload",
+      motivo: "nombre con extensión peligrosa",
+      codigo: "extension_peligrosa",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "Nombre de archivo no permitido" }, { status: 400 });
+  }
 
   const destino = (field ?? "").trim();
   if (!destino || (!CAMPOS_LEGADO.includes(destino) && destino !== CAMPO_LOGO && !allPhotoSlotIds().includes(destino))) {
@@ -107,9 +131,73 @@ export async function POST(req: NextRequest) {
 
   const supabase = getAdminSupabase();
   const bytes    = await file.arrayBuffer();
+  const buf      = Buffer.from(bytes);
+
+  const marcador = pareceScriptOMarcado(buf);
+  if (marcador) {
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      ruta: "/api/landing-upload",
+      motivo: `contenido parece script o marcado (${marcador.trim()})`,
+      codigo: "script_o_marcado",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "El archivo no es válido" }, { status: 400 });
+  }
 
   const magicError = await validateMagicNumber(bytes, ALLOWED_TYPES);
-  if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+  if (magicError) {
+    await registrarSubidaRechazada({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      ruta: "/api/landing-upload",
+      motivo: magicError,
+      codigo: "tipo_no_permitido",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: magicError }, { status: 400 });
+  }
+
+  const { fileTypeFromBuffer } = await import("file-type");
+  const detected = await fileTypeFromBuffer(buf);
+
+  if (detected?.mime === "application/pdf") {
+    const motivoPdf = verificarPdfPeligroso(buf);
+    if (motivoPdf) {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        ruta: "/api/landing-upload",
+        motivo: `PDF con ${motivoPdf}`,
+        codigo: "pdf_peligroso",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: "El PDF no se puede aceptar por seguridad" }, { status: 400 });
+    }
+  } else if (
+    detected?.mime.startsWith("image/") &&
+    // gif/bmp/heic/heif: sharp de este repo no los decodifica de forma
+    // fiable (bmp no tiene soporte en absoluto; heic/heif solo AVIF vía
+    // libheif empaquetado) — forzar el decode aquí rechazaría archivos
+    // legítimos. Se quedan con el magic-number + resto de defensas de arriba.
+    !["image/gif", "image/bmp", "image/heic", "image/heif"].includes(detected.mime)
+  ) {
+    try {
+      await sharp(buf).metadata();
+      await sharp(buf).toBuffer();
+    } catch {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        ruta: "/api/landing-upload",
+        motivo: "la imagen no se pudo decodificar",
+        codigo: "imagen_corrupta",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: "La imagen está corrupta o no es una imagen real" }, { status: 400 });
+    }
+  }
 
   const { error } = await supabase.storage
     .from(BUCKETS.CLINIC_PUBLIC)
