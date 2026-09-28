@@ -250,3 +250,9 @@ test("las vistas nuevas no calculan fechas con la zona del servidor", () => {
     assert.doesNotMatch(codigo, /new Date\(/, `${rel}: «hoy» lo decide el servidor, en la zona de la clínica`);
   }
 });
+
+test("Cobranza dice «Próximo pago»: el enganche también cuenta (decisión del gerente, ws1-t4 ronda 6)", () => {
+  const cobranza = leer("src/components/specialties/orthodontics/modulo/vista-cobranza.tsx");
+  assert.match(cobranza, />Próximo pago</);
+  assert.doesNotMatch(cobranza, /Próxima mensualidad/);
+});
