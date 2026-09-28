@@ -144,7 +144,7 @@ export function faltantesDelAlta(e: EstadoAlta): string[] {
     faltan.push(`el plan de retención (lleva ${retencion} de ${MIN_RETENCION} caracteres)`);
   }
   if (e.modoResponsable === "existing" && e.tutorElegidoId === "") {
-    faltan.push("elegir al tutor responsable del pago (o marcar «Sin definir»)");
+    faltan.push("elegir al responsable del pago (o marcar «Sin definir»)");
   }
   if (e.modoResponsable === "new") {
     if (e.tutorNombre.trim().length < MIN_NOMBRE_TUTOR) faltan.push("el nombre del responsable del pago");

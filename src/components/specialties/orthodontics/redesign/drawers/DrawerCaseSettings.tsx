@@ -206,7 +206,7 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
             ) : null}
             <div className="flex gap-2">
               <ModeBtn active={guardianMode === "keep"} onClick={() => setGuardianMode("keep")}>Dejar como está</ModeBtn>
-              <ModeBtn active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId || guardians.length === 0}>Tutor registrado</ModeBtn>
+              <ModeBtn active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId || guardians.length === 0}>Ya registrado</ModeBtn>
               <ModeBtn active={guardianMode === "new"} onClick={() => setGuardianMode("new")} disabled={!columnsExist.responsibleGuardianId}>Nuevo</ModeBtn>
             </div>
             {guardianMode === "existing" ? (

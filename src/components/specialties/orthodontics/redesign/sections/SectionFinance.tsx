@@ -123,7 +123,7 @@ function imprimirConvenio(data: {
     <tbody>
       ${fila("Total del tratamiento", fmtMoney(data.total))}
       ${fila("Pagado", fmtMoney(data.paid))}
-      ${fila("Saldo pendiente", fmtMoney(data.balance))}
+      ${fila("Por cobrar", fmtMoney(data.balance))}
       ${data.discountLabel ? fila("Descuento acordado", `${data.discountLabel} (${data.discountPct}%)`) : ""}
     </tbody>
   </table>
@@ -273,8 +273,8 @@ export function SectionFinance(props: SectionFinanceProps) {
                   <div className={`${orto.datoValor} ${orto.datoValorGrande} ${orto.tonoExito}`}>{fmtMoney(panel.invoice!.paid)}</div>
                 </div>
                 <div className={orto.dato}>
-                  <div className={orto.datoEtiqueta}>Saldo pendiente</div>
-                  <div className={`${orto.datoValor} ${orto.datoValorGrande} ${panel.invoice!.balance > 0 ? orto.tonoPeligro : ""}`}>{fmtMoney(panel.invoice!.balance)}</div>
+                  <div className={orto.datoEtiqueta}>Por cobrar</div>
+                  <div className={`${orto.datoValor} ${orto.datoValorGrande} ${(panel.cobranza?.vencidas.length ?? 0) > 0 ? orto.tonoPeligro : ""}`}>{fmtMoney(panel.invoice!.balance)}</div>
                   {panel.cobranza?.saldoAFavor ? (
                     <div className={`${orto.datoSub} ${orto.tonoExito}`}>Saldo a favor: {fmtMoney(panel.cobranza.saldoAFavor)}</div>
                   ) : null}

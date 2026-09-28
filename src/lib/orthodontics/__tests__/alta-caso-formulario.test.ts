@@ -121,9 +121,9 @@ test("todo lo que falta, en el orden del formulario", () => {
   ]);
   assert.match(fraseDeFaltantes(faltan, false)!, /^Para abrir el caso falta: .+; .+ y el teléfono del responsable del pago \(mínimo 7 cifras\)\.$/);
 
-  // «Tutor registrado» sin elegir a nadie: antes se guardaba el caso SIN responsable, en silencio.
+  // «Ya registrado» sin elegir a nadie: antes se guardaba el caso SIN responsable, en silencio.
   assert.deepEqual(faltantesDelAlta({ ...COMPLETA, modoResponsable: "existing", tutorElegidoId: "" }), [
-    "elegir al tutor responsable del pago (o marcar «Sin definir»)",
+    "elegir al responsable del pago (o marcar «Sin definir»)",
   ]);
   assert.deepEqual(faltantesDelAlta({ ...COMPLETA, modoResponsable: "existing", tutorElegidoId: "g1" }), []);
 
@@ -252,4 +252,18 @@ test("el alta propone el modo de la clínica y deja elegir otro solo para este c
   // Y un caso abierto no cambia de modo: la edición no lo acepta.
   const validacion = leer("src/lib/validation/orthodontics.ts");
   assert.match(validacion, /updateTreatmentPlanSchema = createTreatmentPlanSchema\.omit\(\{ billingMode: true \}\)/);
+});
+
+// ── Sección H (ws1-t4 ronda 6): un solo nombre para cada cosa ──
+
+test("el alta habla de «responsable» para el dinero y de «datos del caso», no de «tutor» ni «plan»", () => {
+  assert.doesNotMatch(CAJON, />Tutor registrado</);
+  assert.doesNotMatch(CAJON, /"Plan de tratamiento · "/);
+  assert.match(CAJON, /<SectionTitle>Datos del caso<\/SectionTitle>/);
+  assert.match(CAJON, /placeholder="Nombre o teléfono del responsable"/);
+  const ajustes = leer("src/components/specialties/orthodontics/redesign/drawers/DrawerCaseSettings.tsx");
+  assert.doesNotMatch(ajustes, />Tutor registrado</);
+  const cobro = leer("src/components/specialties/orthodontics/redesign/sections/SectionFinance.tsx");
+  assert.doesNotMatch(cobro, /Saldo pendiente/);
+  assert.match(cobro, /Por cobrar/);
 });

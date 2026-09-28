@@ -439,7 +439,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
               Abrir caso de ortodoncia
             </div>
             <h3 id="new-case-title" className={orto.cajonTitulo}>
-              {needsDiagnosis ? "Diagnóstico y plan · " : "Plan de tratamiento · "}
+              {needsDiagnosis ? "Diagnóstico y datos del caso · " : "Datos del caso · "}
               {props.patientFullName}
             </h3>
           </div>
@@ -451,7 +451,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
           {loadingOptions ? (
             <div className="flex items-center gap-2 text-xs text-[color:var(--pr-texto-3)]">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> Cargando doctores y tutores…
+              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> Cargando doctores y responsables…
             </div>
           ) : null}
 
@@ -646,7 +646,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
 
           {!inObservation ? (
             <section className="space-y-4">
-              <SectionTitle>Plan de tratamiento</SectionTitle>
+              <SectionTitle>Datos del caso</SectionTitle>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Aparatología">
                   <Select value={technique} onChange={setTechnique} options={TECHNIQUE_OPTIONS} />
@@ -748,13 +748,13 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 ) : null}
                 <div className="flex gap-2">
                   <GuardianModeButton active={guardianMode === "none"} onClick={() => setGuardianMode("none")}>Sin definir</GuardianModeButton>
-                  <GuardianModeButton active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId}>Tutor registrado</GuardianModeButton>
+                  <GuardianModeButton active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId}>Ya registrado</GuardianModeButton>
                   <GuardianModeButton active={guardianMode === "new"} onClick={() => setGuardianMode("new")} disabled={!columnsExist.responsibleGuardianId}>Nuevo</GuardianModeButton>
                 </div>
                 {guardianMode === "existing" ? (
                   <div className="space-y-2">
                     {guardians.length > 0 ? (
-                      <Field label="Tutor de este paciente">
+                      <Field label="Responsable de este paciente">
                         <select value={responsibleGuardianId} onChange={(e) => setResponsibleGuardianId(e.target.value)} className={inputCls}>
                           <option value="">— elegir —</option>
                           {guardians.map((g) => (
@@ -763,11 +763,11 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                         </select>
                       </Field>
                     ) : null}
-                    <Field label="¿Hermano ya registrado? Busca a su tutor por nombre o teléfono">
+                    <Field label="¿Ya paga lo de un hermano? Búscalo por nombre o teléfono">
                       <input
                         value={tutorQuery}
                         onChange={(e) => setTutorQuery(e.target.value)}
-                        placeholder="Nombre o teléfono del tutor"
+                        placeholder="Nombre o teléfono del responsable"
                         className={inputCls}
                       />
                     </Field>
@@ -784,14 +784,14 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                               onClick={() => { setResponsibleGuardianId(tut.id); setTutorQuery(""); setTutoresDeHermanos([]); }}
                               className={`w-full text-left text-xs rounded-[8px] border px-2 py-1.5 ${responsibleGuardianId === tut.id ? "border-[color:var(--pr-acento)]" : "border-[color:var(--pr-borde-suave)]"}`}
                             >
-                              {tut.fullName} · {tut.parentesco} · {tut.phone} — tutor de {tut.patientName}
+                              {tut.fullName} · {tut.parentesco} · {tut.phone} — responsable de {tut.patientName}
                             </button>
                           </li>
                         ))}
                       </ul>
                     ) : null}
                     {responsibleGuardianId && !guardians.some((g) => g.id === responsibleGuardianId) && tutoresDeHermanos.length === 0 && !tutorQuery ? (
-                      <p className="text-[11px] text-[color:var(--pr-texto-3)]">Tutor de un hermano ya elegido.</p>
+                      <p className="text-[11px] text-[color:var(--pr-texto-3)]">Responsable de un hermano ya elegido.</p>
                     ) : null}
                   </div>
                 ) : null}
