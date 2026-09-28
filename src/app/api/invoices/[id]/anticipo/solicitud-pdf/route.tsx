@@ -22,6 +22,24 @@ export const runtime = "nodejs"; // @react-pdf/renderer no corre en edge
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+/**
+ * Nombre de archivo seguro para Content-Disposition (Ajuste 3, QA t2): el
+ * nombre del paciente lleva acentos/ñ, y un `filename="…"` con bytes UTF-8
+ * crudos es un header inválido — algunos clientes lo mangling en vez de
+ * mostrarlo. `filename` lleva la variante ASCII (se pierden los acentos, pero
+ * el header nunca se rompe); `filename*` la UTF-8 completa (RFC 5987), que es
+ * la que usan los navegadores modernos para el nombre real de descarga.
+ * Mismo patrón que ya usa /api/whatsapp/media/[messageId]/route.ts.
+ */
+function contentDisposition(kind: "inline" | "attachment", filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\;]/g, "_").slice(0, 150);
+  const utf8 = encodeURIComponent(filename.slice(0, 150)).replace(
+    /['()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `${kind}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
+}
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const limited = rateLimit(req, 20);
   if (limited) return limited;
@@ -79,7 +97,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${pdf.fileName}"`,
+        "Content-Disposition": contentDisposition("inline", pdf.fileName),
         "Cache-Control": "private, no-cache, no-store, must-revalidate",
       },
     });

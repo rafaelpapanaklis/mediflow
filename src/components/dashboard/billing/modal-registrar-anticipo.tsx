@@ -5,10 +5,21 @@
 // esperar ningún link ni webhook. Crea el Payment con su MÉTODO REAL
 // (alimenta arqueo y CFDI) y, si hay cita ligada y sigue SCHEDULED, la
 // confirma y le quita el apartado.
+//
+// Ajuste 3 (QA t2, hallazgo B1): igual que modal-pedir-anticipo.tsx, este
+// modal se abre DESDE el <Dialog> de Radix del detalle de la factura. Un
+// <div role="dialog"> a mano hereda el `pointer-events: none` que Radix pone
+// en todo lo que no sea su propio Content mientras un Dialog está abierto
+// (el clic atravesaba a "Registrar pago" de debajo). Por eso usa Dialog/
+// DialogContent de verdad, no una capa propia.
 
 import { useCallback, useState } from "react";
 import toast from "react-hot-toast";
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -72,91 +83,52 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, onList
     }
   }, [monto, method, reference, invoiceId, onListo, onClose]);
 
-  if (!open) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="registrar-anticipo-title"
-      onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "grid", placeItems: "center", padding: 16 }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="bg-card border border-border rounded-2xl shadow-2xl"
-        style={{ width: "100%", maxWidth: 420, maxHeight: "90vh", overflow: "auto", color: "var(--text-1)" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border-1, #e5e7eb)" }}>
-          <h2 id="registrar-anticipo-title" style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
-            Registrar anticipo recibido
-          </h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-            <X size={20} />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Registrar anticipo recibido</DialogTitle>
+        </DialogHeader>
 
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
-          <p style={{ fontSize: 13, color: "var(--text-2)" }}>
+        <div className="px-6 py-4 space-y-3.5 flex-1 overflow-y-auto min-h-0 text-sm">
+          <p className="text-xs text-muted-foreground">
             Para cuando el dinero YA llegó (efectivo, transferencia o terminal): se registra como pago real de la
             factura y, si la cita seguía apartada, queda confirmada.
           </p>
-          {saldo > 0 && <p style={{ fontSize: 13, color: "var(--text-2)" }}>Saldo de la factura: {fmt.format(saldo)}</p>}
+          {saldo > 0 && <p className="text-xs text-muted-foreground">Saldo de la factura: {fmt.format(saldo)}</p>}
 
-          <Campo etiqueta="Monto recibido (MXN)">
-            <input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0.00" style={inputStyle} />
-          </Campo>
+          <div className="space-y-1.5">
+            <Label>Monto recibido (MXN)</Label>
+            <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0.00" />
+          </div>
 
-          <Campo etiqueta="Método">
-            <select value={method} onChange={(e) => setMethod(e.target.value as MetodoRegistro)} style={inputStyle}>
+          <div className="space-y-1.5">
+            <Label>Método</Label>
+            <select
+              value={method}
+              onChange={(e) => setMethod(e.target.value as MetodoRegistro)}
+              className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
+            >
               {METODOS.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
-          </Campo>
+          </div>
 
           {method === "transfer" && (
-            <Campo etiqueta="Referencia de la transferencia">
-              <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Clave de rastreo, folio…" style={inputStyle} />
-            </Campo>
+            <div className="space-y-1.5">
+              <Label>Referencia de la transferencia</Label>
+              <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Clave de rastreo, folio…" />
+            </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-            <button
-              type="button"
-              onClick={registrar}
-              disabled={enviando}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8,
-                border: "none", background: "var(--accent, #2563eb)", color: "#fff", fontSize: 13, fontWeight: 600,
-                cursor: enviando ? "not-allowed" : "pointer", opacity: enviando ? 0.6 : 1,
-              }}
-            >
-              {enviando ? <Loader2 size={14} className="animate-spin" /> : null}
+          <div className="flex gap-2 flex-wrap pt-1">
+            <ButtonNew variant="primary" icon={enviando ? <Loader2 size={14} className="animate-spin" /> : undefined} onClick={registrar} disabled={enviando}>
               {enviando ? "Registrando…" : "Registrar anticipo"}
-            </button>
+            </ButtonNew>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "8px 10px",
-  borderRadius: 8,
-  border: "1px solid var(--border-1, #d1d5db)",
-  fontSize: 14,
-  background: "var(--bg-1, #fff)",
-  color: "inherit",
-};
-
-function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, fontWeight: 600, color: "var(--text-2)" }}>
-      {etiqueta}
-      {children}
-    </label>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -51,9 +51,15 @@ export interface DatosAnticipoTransferencia {
 }
 
 export function textoAnticipoTransferencia(d: DatosAnticipoTransferencia): string {
-  const cuando = d.fechaHumana && d.hora ? ` de tu cita del ${d.fechaHumana} a las ${d.hora}` : "";
+  // Ajuste 3 (QA t2): "para apartar" solo tiene sentido con una cita de por
+  // medio — una factura suelta (sin appointmentId) no se "aparta". Con cita,
+  // la frase manda el verbo; sin ella, se pide el anticipo sin más.
+  const conCita = d.fechaHumana && d.hora;
+  const inicio = conCita
+    ? `Hola ${d.paciente}, para apartar tu cita del ${d.fechaHumana} a las ${d.hora} en ${d.clinica} te pedimos un anticipo de ${formatoPesos(d.monto)} por transferencia.`
+    : `Hola ${d.paciente}, en ${d.clinica} te pedimos un anticipo de ${formatoPesos(d.monto)} por transferencia.`;
   return [
-    `Hola ${d.paciente}, para apartar${cuando} en ${d.clinica} te pedimos un anticipo de ${formatoPesos(d.monto)} por transferencia.`,
+    inicio,
     `Banco: ${d.banco}`,
     `Beneficiario: ${d.beneficiario}`,
     `CLABE: ${d.clabeAgrupada}`,
