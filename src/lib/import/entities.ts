@@ -37,6 +37,7 @@ import { appointmentHistoryHandler } from "./citas-historial/handler";
 import { orthoCasesHandler } from "./ortho-casos/handler";
 import { labExpenseHandler } from "./laboratorio-historial/handler";
 import { installmentPlansHandler } from "./cuotas-plan/handler";
+import { procedureCatalogHandler } from "./aranceles/handler";
 import {
   crearLectorMontos,
   horaAdjunta,
@@ -3618,4 +3619,5 @@ export const HANDLERS: Record<string, EntityHandler> = {
   orthoCases: orthoCasesHandler,
   labExpenseHistory: labExpenseHandler,
   installmentPlans: installmentPlansHandler,
+  procedureCatalog: procedureCatalogHandler,
 };

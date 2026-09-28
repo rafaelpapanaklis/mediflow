@@ -203,6 +203,9 @@ export const ENTITY_IMPORT_ORDER: Entity[] = [
   "treatmentNotes",
   // Historial de gastos de laboratorio (ws1-t2): solo necesita patients.
   "labExpenseHistory",
+  // Aranceles (ws1-t6): catálogo sin paciente. Va después de todo lo que
+  // matchea procedimientos por nombre (quotes) para no alterar su resolución.
+  "procedureCatalog",
 ];
 
 /** Posición en el orden de dependencia; sin identificar queda siempre al final. */

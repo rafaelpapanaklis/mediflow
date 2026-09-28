@@ -871,7 +871,11 @@
         "installmentNumber": "Installment number",
         "installmentAmount": "Installment amount",
         "dueDate": "Due date",
-        "installmentStatus": "Status"
+        "installmentStatus": "Status",
+        "procedureName": "Procedure name",
+        "procedureCode": "Code",
+        "procedureCategory": "Category",
+        "procedurePrice": "Price"
       },
       "launch": "Import my clinic",
       "assistedCta": "Assisted migration",
@@ -979,6 +983,8 @@
         "labExpenseHistoryMeta": "Read-only history of lab actions and costs per patient",
         "installmentPlans": "Upcoming installments",
         "installmentPlansMeta": "The calendar of a debt already counted in your balances: it spreads dates, it doesn't add new money",
+        "procedureCatalog": "Procedures and prices",
+        "procedureCatalogMeta": "The clinic's price list (name, code, category, price). An existing procedure with a different price is not changed unless you turn off «Skip duplicates»",
         "soloNote": "Balances, payment history, appointments, medical history, notes, estimates, active treatments, the dental chart and treatment notes are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first.",
         "filesCta": "Have x-rays, photos or PDFs? Upload them in bulk →",
         "multiCta": "Several files (patients, appointments, balances…)? Upload them all at once →"
@@ -1120,7 +1126,8 @@
           "appointmentHistory": "Appointment history",
           "orthoCases": "Orthodontic cases",
           "labExpenseHistory": "Lab expenses",
-          "installmentPlans": "Upcoming installments"
+          "installmentPlans": "Upcoming installments",
+          "procedureCatalog": "Procedures and prices"
         }
       },
       "result": {
@@ -1153,6 +1160,7 @@
         "pillOrthoCases": "orthodontic cases",
         "pillLabExpenseHistory": "lab expenses",
         "pillInstallmentPlans": "installment plan payments",
+        "pillProcedureCatalog": "procedures and prices",
         "omittedLine": {
           "one": "{count} row was left out on purpose (past or cancelled appointment, or already imported).",
           "other": "{count} rows were left out on purpose (past or cancelled appointments, or already imported)."

@@ -23,6 +23,7 @@ const PILL_KEY: Record<Entity, string> = {
   orthoCases: "pillOrthoCases",
   labExpenseHistory: "pillLabExpenseHistory",
   installmentPlans: "pillInstallmentPlans",
+  procedureCatalog: "pillProcedureCatalog",
 };
 
 interface Props {

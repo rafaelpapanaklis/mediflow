@@ -290,6 +290,15 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "status", label: "Estado", labelKey: "shell.importClinic.fields.installmentStatus" },
     { value: "description", label: "Concepto", labelKey: "shell.importClinic.fields.concept" },
   ],
+  procedureCatalog: [
+    NO_IMPORT,
+    { value: "name", label: "Nombre del procedimiento", labelKey: "shell.importClinic.fields.procedureName" },
+    { value: "code", label: "Código", labelKey: "shell.importClinic.fields.procedureCode" },
+    { value: "category", label: "Categoría", labelKey: "shell.importClinic.fields.procedureCategory" },
+    { value: "price", label: "Precio", labelKey: "shell.importClinic.fields.procedurePrice" },
+    { value: "externalId", label: "ID en el sistema de origen", labelKey: "shell.importClinic.fields.externalId" },
+    { value: "description", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
+  ],
 };
 
 const ENDPOINTS: Record<Entity, string> = {
@@ -309,6 +318,7 @@ const ENDPOINTS: Record<Entity, string> = {
   orthoCases: "/api/import/ortho-cases",
   labExpenseHistory: "/api/import/lab-expenses",
   installmentPlans: "/api/import/installment-plans",
+  procedureCatalog: "/api/import/procedure-catalog",
 };
 
 const PREVIEW_TIMEOUT_MS = 60_000;

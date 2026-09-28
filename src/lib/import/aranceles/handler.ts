@@ -64,7 +64,7 @@ function rowDbErrorMessage(_e: any): string {
 // tocando en paralelo ahora mismo). El cast evita bloquear el typecheck de
 // este archivo mientras tanto — t12 lo puede quitar en cuanto lo registre
 // (mismo patrón que installmentPlans en ../cuotas-plan/handler.ts).
-const PROCEDURE_CATALOG_ENTITY = "procedureCatalog" as Entity;
+const PROCEDURE_CATALOG_ENTITY: Entity = "procedureCatalog";
 
 export const procedureCatalogHandler: EntityHandler = {
   entity: PROCEDURE_CATALOG_ENTITY,

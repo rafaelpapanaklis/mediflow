@@ -244,6 +244,8 @@ export const DATA_TYPES: DataType[] = [
   { id: "laboratorio", labelKey: "labExpenseHistory", descKey: "labExpenseHistoryMeta", icon: "stack", badge: "easy", on: false, entity: "labExpenseHistory", solo: true },
   // Cuotas/mensualidades por vencer migradas (ws1-t6): reparte en fechas una deuda ya contada.
   { id: "cuotasplan", labelKey: "installmentPlans", descKey: "installmentPlansMeta", icon: "money", badge: "easy", on: false, entity: "installmentPlans", solo: true },
+  // Aranceles y precios migrados (ws1-t6): el catálogo de procedimientos.
+  { id: "aranceles", labelKey: "procedureCatalog", descKey: "procedureCatalogMeta", icon: "money", badge: "easy", on: false, entity: "procedureCatalog", solo: true },
 ];
 
 // Límites de archivo del paso 4.

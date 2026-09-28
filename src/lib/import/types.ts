@@ -51,7 +51,9 @@ export type Entity =
   // Historial de gastos de laboratorio migrado (ws1-t2, importador Dentalink).
   | "labExpenseHistory"
   // Cuotas/mensualidades por vencer migradas (ws1-t6, importador Dentalink).
-  | "installmentPlans";
+  | "installmentPlans"
+  // Aranceles y precios migrados (ws1-t6, importador Dentalink): catálogo de procedimientos.
+  | "procedureCatalog";
 
 /**
  * Mapeo columna(header tal cual en el archivo) -> campo canónico de la entidad.

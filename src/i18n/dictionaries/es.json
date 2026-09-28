@@ -871,7 +871,11 @@
         "installmentNumber": "Número de cuota",
         "installmentAmount": "Monto de la cuota",
         "dueDate": "Fecha de vencimiento",
-        "installmentStatus": "Estado"
+        "installmentStatus": "Estado",
+        "procedureName": "Nombre del procedimiento",
+        "procedureCode": "Código",
+        "procedureCategory": "Categoría",
+        "procedurePrice": "Precio"
       },
       "launch": "Importar mi clínica",
       "assistedCta": "Migración asistida",
@@ -979,6 +983,8 @@
         "labExpenseHistoryMeta": "Historial de acciones y costos de laboratorio por paciente, de solo lectura",
         "installmentPlans": "Cuotas por vencer",
         "installmentPlansMeta": "El calendario de una deuda que ya está contada en tus saldos: reparte fechas, no suma dinero nuevo",
+        "procedureCatalog": "Aranceles y precios",
+        "procedureCatalogMeta": "El tarifario de la clínica (nombre, código, categoría, precio). Si un precio ya existe distinto, no se cambia salvo que apagues «Omitir duplicados»",
         "soloNote": "Saldos, historial de pagos, citas, expedientes, notas, presupuestos, tratamientos activos, el odontograma y las notas de tratamiento se importan de uno en uno, cada uno con su propia revisión: son datos de dinero, de agenda o clínicos y conviene verlos antes.",
         "filesCta": "¿Tienes radiografías, fotos o PDFs? Súbelos en bloque →",
         "multiCta": "¿Varios archivos (pacientes, citas, saldos…)? Súbelos todos a la vez →"
@@ -1120,7 +1126,8 @@
           "appointmentHistory": "Historial de citas",
           "orthoCases": "Casos de ortodoncia",
           "labExpenseHistory": "Gastos de laboratorio",
-          "installmentPlans": "Cuotas por vencer"
+          "installmentPlans": "Cuotas por vencer",
+          "procedureCatalog": "Aranceles y precios"
         }
       },
       "result": {
@@ -1153,6 +1160,7 @@
         "pillOrthoCases": "casos de ortodoncia",
         "pillLabExpenseHistory": "gastos de laboratorio",
         "pillInstallmentPlans": "cuotas del plan de pagos",
+        "pillProcedureCatalog": "aranceles y precios",
         "omittedLine": {
           "one": "{count} fila se dejó fuera a propósito (cita pasada o cancelada, o ya importada antes).",
           "other": "{count} filas se dejaron fuera a propósito (citas pasadas o canceladas, o ya importadas antes)."
