@@ -62,6 +62,7 @@ export { updateOrthoAppliances } from "./updateOrthoAppliances";
 
 // ─── Alta del caso (ws1-t6, Ola 1) ──────────────────────────────────────
 export { getCaseIntakeOptions } from "./getCaseIntakeOptions";
+export { exportReferralProgressLetterPdf } from "./exportReferralProgressLetterPdf";
 
 // ─── Acceso y permisos · Configuración (ws1-t3, Ola 1) ──────────────────
 export { getOrthoClinicSettings } from "./getOrthoClinicSettings";

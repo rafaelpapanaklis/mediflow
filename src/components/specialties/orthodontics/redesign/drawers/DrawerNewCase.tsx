@@ -134,6 +134,9 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   const [referringDoctors, setReferringDoctors] = useState<
     Array<{ id: string; fullName: string; clinicName: string | null }>
   >([]);
+  // A5/A11 — igual que en DrawerCaseSettings: si el SQL aún no está pegado,
+  // se sabe ANTES de elegir doctor/responsable, no después de guardar.
+  const [columnsExist, setColumnsExist] = useState({ treatingDoctorId: true, responsibleGuardianId: true });
 
   useEffect(() => {
     let cancelled = false;
@@ -142,6 +145,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       setDoctors(res.data.doctors);
       setGuardians(res.data.guardians);
       setReferringDoctors(res.data.referringDoctors);
+      setColumnsExist(res.data.columnsExist);
     }).finally(() => {
       if (!cancelled) setLoadingOptions(false);
     });
@@ -436,23 +440,39 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                   Doctor tratante (A5)
                 </div>
                 <Field label="Quién lleva el caso">
-                  <select value={treatingDoctorId} onChange={(e) => setTreatingDoctorId(e.target.value)} className={inputCls}>
+                  <select
+                    value={treatingDoctorId}
+                    onChange={(e) => setTreatingDoctorId(e.target.value)}
+                    className={inputCls}
+                    disabled={!columnsExist.treatingDoctorId}
+                  >
                     <option value="">— sin asignar —</option>
                     {doctors.map((d) => (
                       <option key={d.id} value={d.id}>{d.fullName}</option>
                     ))}
                   </select>
                 </Field>
+                {!columnsExist.treatingDoctorId ? (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    Falta pegar el SQL de la Ola 0 (sql/ortodoncia-nucleo.sql) — no se puede asignar todavía.
+                  </p>
+                ) : null}
               </div>
 
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
                 <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
                   Responsable del pago (A11)
                 </div>
+                {!columnsExist.responsibleGuardianId ? (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    Falta pegar el SQL de esta parte (sql/ortodoncia-alta-caso.sql) — no se puede elegir
+                    responsable todavía.
+                  </p>
+                ) : null}
                 <div className="flex gap-2">
                   <GuardianModeButton active={guardianMode === "none"} onClick={() => setGuardianMode("none")}>Sin definir</GuardianModeButton>
-                  <GuardianModeButton active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={guardians.length === 0}>Tutor registrado</GuardianModeButton>
-                  <GuardianModeButton active={guardianMode === "new"} onClick={() => setGuardianMode("new")}>Nuevo</GuardianModeButton>
+                  <GuardianModeButton active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId || guardians.length === 0}>Tutor registrado</GuardianModeButton>
+                  <GuardianModeButton active={guardianMode === "new"} onClick={() => setGuardianMode("new")} disabled={!columnsExist.responsibleGuardianId}>Nuevo</GuardianModeButton>
                 </div>
                 {guardianMode === "existing" ? (
                   <Field label="Tutor">

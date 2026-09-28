@@ -6,7 +6,7 @@
 // Todo vía updateTreatmentPlan (server action existente, con bitácora).
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, Shield, X } from "lucide-react";
+import { FileText, Loader2, Save, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { getCaseIntakeOptions } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
@@ -68,6 +68,12 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
   const [newGuardianName, setNewGuardianName] = useState("");
   const [newGuardianPhone, setNewGuardianPhone] = useState("");
   const [newGuardianRelation, setNewGuardianRelation] = useState("madre");
+  // A5/A11 — si el SQL de esta parte (sql/ortodoncia-alta-caso.sql) o el de
+  // la Ola 0 (treatingDoctorId) aún no está pegado, se sabe ANTES de elegir
+  // (comprobado contra information_schema, no inferido de un valor en null).
+  const [columnsExist, setColumnsExist] = useState({ treatingDoctorId: true, responsibleGuardianId: true });
+  // A13 — solo si el caso ya tiene quién lo refirió se ofrece la carta de avance.
+  const [referredByDoctor, setReferredByDoctor] = useState<{ fullName: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +81,8 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
       if (cancelled || isFailure(res)) return;
       setDoctors(res.data.doctors);
       setGuardians(res.data.guardians);
+      setColumnsExist(res.data.columnsExist);
+      setReferredByDoctor(res.data.referredByDoctor);
       if (res.data.currentPlan) {
         setStatus(res.data.currentPlan.status);
         setInitialStatus(res.data.currentPlan.status);
@@ -156,12 +164,22 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
             </div>
           ) : null}
           <Field label="Doctor tratante (A5)">
-            <select value={treatingDoctorId} onChange={(e) => setTreatingDoctorId(e.target.value)} className={inputCls}>
+            <select
+              value={treatingDoctorId}
+              onChange={(e) => setTreatingDoctorId(e.target.value)}
+              className={inputCls}
+              disabled={!columnsExist.treatingDoctorId}
+            >
               <option value="">— sin asignar —</option>
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.fullName}</option>
               ))}
             </select>
+            {!columnsExist.treatingDoctorId ? (
+              <p className="text-[11px] text-amber-600 mt-1 dark:text-amber-400">
+                Falta pegar el SQL de la Ola 0 (sql/ortodoncia-nucleo.sql) — no se puede guardar todavía.
+              </p>
+            ) : null}
           </Field>
 
           <Field label="Fecha de colocación (A6)">
@@ -175,10 +193,16 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
             <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
               Responsable del pago (A11)
             </div>
+            {!columnsExist.responsibleGuardianId ? (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                Falta pegar el SQL de esta parte (sql/ortodoncia-alta-caso.sql) — no se puede elegir
+                responsable todavía.
+              </p>
+            ) : null}
             <div className="flex gap-2">
               <ModeBtn active={guardianMode === "keep"} onClick={() => setGuardianMode("keep")}>Dejar como está</ModeBtn>
-              <ModeBtn active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={guardians.length === 0}>Tutor registrado</ModeBtn>
-              <ModeBtn active={guardianMode === "new"} onClick={() => setGuardianMode("new")}>Nuevo</ModeBtn>
+              <ModeBtn active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId || guardians.length === 0}>Tutor registrado</ModeBtn>
+              <ModeBtn active={guardianMode === "new"} onClick={() => setGuardianMode("new")} disabled={!columnsExist.responsibleGuardianId}>Nuevo</ModeBtn>
             </div>
             {guardianMode === "existing" ? (
               <select value={responsibleGuardianId} onChange={(e) => setResponsibleGuardianId(e.target.value)} className={inputCls}>
@@ -226,6 +250,45 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
               </Field>
             ) : null}
           </div>
+
+          {referredByDoctor ? (
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
+                Carta de avance (A13) · referido por {referredByDoctor.fullName}
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Se abre en una pestaña nueva — descárgala o compártela tú mismo; no se envía sola.
+              </p>
+              <div className="flex gap-2">
+                <Btn
+                  variant="secondary"
+                  size="sm"
+                  icon={<FileText className="w-3.5 h-3.5" aria-hidden />}
+                  onClick={() =>
+                    window.open(
+                      `/api/orthodontics/treatment-plans/${props.treatmentPlanId}/referral-progress-pdf?stage=inicio`,
+                      "_blank",
+                    )
+                  }
+                >
+                  PDF de inicio
+                </Btn>
+                <Btn
+                  variant="secondary"
+                  size="sm"
+                  icon={<FileText className="w-3.5 h-3.5" aria-hidden />}
+                  onClick={() =>
+                    window.open(
+                      `/api/orthodontics/treatment-plans/${props.treatmentPlanId}/referral-progress-pdf?stage=termino`,
+                      "_blank",
+                    )
+                  }
+                >
+                  PDF de término
+                </Btn>
+              </div>
+            </div>
+          ) : null}
 
           {error ? (
             <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded p-2 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-300">

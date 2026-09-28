@@ -21,6 +21,17 @@ export interface CaseIntakeOptions {
   guardians: Array<{ id: string; fullName: string; parentesco: string; phone: string }>;
   referringDoctors: Array<{ id: string; fullName: string; clinicName: string | null }>;
   generalConsentSigned: boolean | null;
+  /** A13 — quién refirió al caso, si ya está guardado en el diagnóstico. */
+  referredByDoctor: { id: string; fullName: string; clinicName: string | null } | null;
+  /**
+   * Existencia REAL de las columnas de A5/A11 en la base, comprobada contra
+   * `information_schema` — no inferida de que salgan en null (un caso real
+   * sin doctor asignado se ve igual que uno sin la columna). Con esto
+   * DrawerNewCase/DrawerCaseSettings pueden deshabilitar el select ANTES de
+   * elegir, con explicación, en vez de que el usuario elija y se entere
+   * después de guardar que no se guardó nada.
+   */
+  columnsExist: { treatingDoctorId: boolean; responsibleGuardianId: boolean };
   /** Solo si se pidió `treatmentPlanId` — valores actuales para DrawerCaseSettings. */
   currentPlan: {
     status: string;
@@ -92,6 +103,40 @@ export async function getCaseIntakeOptions(
     }
   }
 
+  // A13 — quién refirió al paciente, resuelto desde el diagnóstico del caso
+  // (no del plan): tolerante a que la columna aún no exista.
+  let referredByDoctor: CaseIntakeOptions["referredByDoctor"] = null;
+  try {
+    const dx = await prisma.orthodonticDiagnosis.findFirst({
+      where: { patientId, clinicId: ctx.clinicId, deletedAt: null },
+      orderBy: { diagnosedAt: "desc" },
+      select: { referredByDoctor: { select: { id: true, fullName: true, clinicName: true } } },
+    });
+    referredByDoctor = dx?.referredByDoctor ?? null;
+  } catch (e) {
+    console.error("[ortho] getCaseIntakeOptions: referredByDoctorId no disponible todavía:", e);
+  }
+
+  // Comprobación REAL de las columnas (no inferida de valores en null).
+  let columnsExist: CaseIntakeOptions["columnsExist"] = {
+    treatingDoctorId: false,
+    responsibleGuardianId: false,
+  };
+  try {
+    const cols = await prisma.$queryRaw<Array<{ column_name: string }>>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'orthodontic_treatment_plans'
+        AND column_name IN ('treatingDoctorId', 'responsibleGuardianId')
+    `;
+    const names = new Set(cols.map((c) => c.column_name));
+    columnsExist = {
+      treatingDoctorId: names.has("treatingDoctorId"),
+      responsibleGuardianId: names.has("responsibleGuardianId"),
+    };
+  } catch (e) {
+    console.error("[ortho] getCaseIntakeOptions: no se pudo comprobar columnsExist:", e);
+  }
+
   const [doctorsRaw, guardiansRaw, referringRaw] = await Promise.all([
     prisma.user.findMany({
       where: { clinicId: ctx.clinicId, role: "DOCTOR", isActive: true },
@@ -145,6 +190,8 @@ export async function getCaseIntakeOptions(
       clinicName: r.clinicName,
     })),
     generalConsentSigned,
+    referredByDoctor,
+    columnsExist,
     currentPlan,
   });
 }
