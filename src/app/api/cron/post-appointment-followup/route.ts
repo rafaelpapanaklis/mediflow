@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
+import { motivoSinEncuesta } from "@/lib/reminders/seguimiento-post-cita";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,10 @@ export const maxDuration = 300;
  * WhatsAppReminder (PENDING, type FOLLOWUP). El envío real lo hace
  * /api/cron/whatsapp-queue en batches. Dedupe por appointmentId con UNA sola
  * query por clínica (sin N+1). Default OFF.
+ *
+ * Los controles de ortodoncia (mensuales y de retención) NO llevan encuesta:
+ * son visitas de rutina y al paciente le llegaba una por mes durante todo el
+ * tratamiento. Ver src/lib/reminders/seguimiento-post-cita.ts.
  */
 export async function GET(req: NextRequest) {
   if (!process.env.CRON_SECRET) {
@@ -46,7 +51,7 @@ export async function GET(req: NextRequest) {
         status: { in: ["COMPLETED", "CHECKED_OUT"] },
         startsAt: { gte: windowStart, lte: windowEnd },
       },
-      select: { id: true, patient: { select: { firstName: true, phone: true } } },
+      select: { id: true, type: true, patient: { select: { firstName: true, phone: true } } },
     });
     if (appts.length === 0) continue;
 
@@ -66,8 +71,12 @@ export async function GET(req: NextRequest) {
 
     const rows: Prisma.WhatsAppReminderCreateManyInput[] = [];
     for (const appt of appts) {
-      if (!appt.patient?.phone) { skipped++; continue; }
-      if (done.has(appt.id)) { skipped++; continue; }
+      const motivo = motivoSinEncuesta({
+        tipo: appt.type,
+        telefono: appt.patient?.phone,
+        yaPreguntada: done.has(appt.id),
+      });
+      if (motivo) { skipped++; continue; }
 
       rows.push({
         clinicId:      clinic.id,
