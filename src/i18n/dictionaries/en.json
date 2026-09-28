@@ -844,7 +844,11 @@
         "fechaAbono": "Payment date",
         "proximaVisita": "Next visit",
         "surface": "Tooth surface",
-        "condition": "Finding / condition"
+        "condition": "Finding / condition",
+        "paymentExternalId": "Payment ID in the source system",
+        "paymentAmount": "Amount paid",
+        "paymentMethod": "Payment method",
+        "paymentDate": "Payment date"
       },
       "launch": "Import my clinic",
       "assistedCta": "Assisted migration",
@@ -924,6 +928,8 @@
         "patientsMeta": "Name, contact, date of birth",
         "balances": "Balances",
         "balancesMeta": "Debts and credits per patient",
+        "paymentHistory": "Payment history",
+        "paymentHistoryMeta": "Payments that already happened in your previous system. They don't change the current balance or enter Caja: they stay read-only on the patient's record",
         "appointments": "Upcoming appointments",
         "appointmentsMeta": "Future appointments only (past ones are not imported). Reviewed before importing",
         "medicalHistory": "Medical history",
@@ -938,7 +944,7 @@
         "odontogramMeta": "Per-tooth, per-surface state: caries, restorations, crowns, missing teeth… anything we don't recognize is flagged for matching",
         "treatmentNotes": "Treatment progress notes",
         "treatmentNotesMeta": "Added to the session of the imported active treatment when the folio matches; otherwise filed in the record as migrated",
-        "soloNote": "Balances, appointments, medical history, notes, estimates, active treatments, the dental chart and treatment notes are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first.",
+        "soloNote": "Balances, payment history, appointments, medical history, notes, estimates, active treatments, the dental chart and treatment notes are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first.",
         "filesCta": "Have x-rays, photos or PDFs? Upload them in bulk →",
         "multiCta": "Several files (patients, appointments, balances…)? Upload them all at once →"
       },
@@ -1066,6 +1072,7 @@
         "ent": {
           "patients": "Patients",
           "balances": "Balances",
+          "paymentHistory": "Payment history",
           "appointments": "Appointments",
           "medicalHistory": "Medical history",
           "clinicalNotes": "Notes",
@@ -1083,6 +1090,7 @@
         },
         "pillPatients": "patients",
         "pillBalances": "in balances",
+        "pillPaymentHistory": "migrated payments",
         "pillAppointments": "upcoming appointments",
         "reportLine": {
           "one": "{count} row with an error wasn't imported.",
