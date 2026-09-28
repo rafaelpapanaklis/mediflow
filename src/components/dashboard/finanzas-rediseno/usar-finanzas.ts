@@ -195,6 +195,9 @@ export function useFinanzas() {
   return {
     period, selectPeriod,
     customFrom, setCustomFrom, customTo, setCustomTo, customValid, applyCustom,
+    // El periodo tal como se le pide al servidor y el contador de recargas:
+    // el bloque «Ortodoncia» pide lo suyo con los mismos.
+    query, reloadKey,
     data, gastos, loading, error, reintentar,
     showModal, openModal, closeModal,
     mCategoria, setMCategoria, mMonto, setMMonto, mFecha, setMFecha, mNota, setMNota,

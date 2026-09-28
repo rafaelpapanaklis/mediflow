@@ -10,8 +10,8 @@ import {
   refundPaymentWhere,
   revenuePaymentWhere,
 } from "@/lib/caja";
-import { MX_OFFSET_MS, bucketKeyOf, eachBucket } from "@/lib/analytics/query";
-import { NOT_A_SALE_STATUSES, expenseWindowEnd, serieEnd } from "@/lib/finanzas-periodo";
+import { bucketKeyOf, eachBucket } from "@/lib/analytics/query";
+import { NOT_A_SALE_STATUSES, expenseWindowEnd, resolveFinanzasWindow, serieEnd } from "@/lib/finanzas-periodo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,47 +29,6 @@ export const dynamic = "force-dynamic";
 // clinicId sale de la sesión (jamás de query). El contrato JSON está
 // acordado con el equipo de UI — NO renombrar claves.
 // ═══════════════════════════════════════════════════════════════════
-
-/** Inicio del día natural de México para `now` (réplica de caja.ts, que no lo exporta). */
-function startOfTodayMx(now: Date): Date {
-  const mx = new Date(now.getTime() - MX_OFFSET_MS);
-  return new Date(Date.UTC(mx.getUTCFullYear(), mx.getUTCMonth(), mx.getUTCDate()) + MX_OFFSET_MS);
-}
-
-/** Día 1 del mes de México (con delta de meses), expresado como instante UTC. */
-function startOfMonthMx(now: Date, monthDelta = 0): Date {
-  const mx = new Date(now.getTime() - MX_OFFSET_MS);
-  return new Date(Date.UTC(mx.getUTCFullYear(), mx.getUTCMonth() + monthDelta, 1) + MX_OFFSET_MS);
-}
-
-const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-/** Resuelve la ventana [from, to] del periodo pedido (default "mes"). */
-function resolveWindow(sp: URLSearchParams): { from: Date; to: Date } | { error: string } {
-  const now = new Date();
-  const period = sp.get("period") ?? "mes";
-  if (period === "hoy") return { from: startOfTodayMx(now), to: now };
-  if (period === "mes_anterior") {
-    const currentStart = startOfMonthMx(now, 0);
-    return { from: startOfMonthMx(now, -1), to: new Date(currentStart.getTime() - 1) };
-  }
-  if (period === "custom") {
-    const fromRaw = sp.get("from") ?? "";
-    const toRaw = sp.get("to") ?? "";
-    if (!DATE_ONLY_RE.test(fromRaw) || !DATE_ONLY_RE.test(toRaw)) {
-      return { error: "period=custom requiere from y to en formato YYYY-MM-DD." };
-    }
-    // Fecha sin hora = día natural de México (-06:00), igual que analytics/query.ts.
-    const from = new Date(`${fromRaw}T00:00:00.000-06:00`);
-    const to = new Date(`${toRaw}T23:59:59.999-06:00`);
-    if (isNaN(from.getTime()) || isNaN(to.getTime()) || from > to) {
-      return { error: "Rango de fechas inválido (from debe ser <= to)." };
-    }
-    return { from, to };
-  }
-  // "mes" (default y cualquier valor desconocido): del día 1 MX a ahora.
-  return { from: startOfMonthMx(now, 0), to: now };
-}
 
 /** La tabla expenses puede no existir aún (sql/expenses.sql se corre a mano). */
 function isMissingTable(e: any): boolean {
@@ -91,7 +50,7 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   const { clinicId } = ctx;
 
-  const win = resolveWindow(new URL(req.url).searchParams);
+  const win = resolveFinanzasWindow(new URL(req.url).searchParams);
   if ("error" in win) return NextResponse.json({ error: win.error }, { status: 400 });
   const { from, to } = win;
   // Los gastos de «este mes» llegan al FIN del mes, no a ahora: un gasto con

@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN, fmtMXNdec } from "@/lib/format";
+import { BloqueOrtodoncia } from "@/components/dashboard/finanzas-rediseno/bloque-ortodoncia";
 
 // ── Contrato de datos (no renombrar claves) ────────────────────────
 interface SeriePoint { fecha: string; ingresos: number; gastos: number }
@@ -601,6 +602,9 @@ export function FinanzasClient() {
           </div>
         </div>
       )}
+
+      {/* ── Ortodoncia: solo aparece si la clínica tiene el módulo (o casos) ── */}
+      <BloqueOrtodoncia consulta={query} recarga={reloadKey} />
 
       {/* ── Modal: Registrar gasto ── */}
       {showModal && (

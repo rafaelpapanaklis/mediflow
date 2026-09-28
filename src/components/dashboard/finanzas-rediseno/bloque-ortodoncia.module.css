@@ -1,0 +1,290 @@
+/* El bloque «Ortodoncia» de Finanzas (ws1-t5, ronda 6 — fila 90).
+ *
+ * Se monta en las DOS pantallas de Finanzas: la del diseño nuevo (tokens
+ * `--m2-*`, que pone `RaizFinanzas`) y la de siempre (tokens de globals.css).
+ * Por eso cada color lleva los dos: el `--m2-*` primero y, si no existe, el de
+ * globals. No declara ninguna paleta propia. */
+
+.bloque {
+  margin-top: 14px;
+  min-width: 0;
+  background: var(--m2-tarjeta, var(--bg-elev, #fff));
+  border: 1px solid var(--m2-tarjeta-borde, var(--border-soft, #e5e7eb));
+  border-radius: 12px;
+  box-shadow: var(--m2-sombra, none);
+  color: var(--m2-texto, var(--text-1));
+  font-size: 13px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  container-type: inline-size;
+  container-name: orto;
+}
+
+.cabeza {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 18px 12px;
+}
+
+.icono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--m2-iniciales-fondo, var(--brand-softer, #eef2ff));
+  color: var(--m2-iniciales-texto, var(--brand, #4d3fc6));
+}
+
+.textos {
+  flex: 1;
+  min-width: 0;
+}
+
+.titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  line-height: 1.25;
+  color: var(--m2-texto, var(--text-1));
+}
+
+.sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--m2-texto-3, var(--text-3));
+}
+
+.enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m2-activo-texto, var(--brand, #4d3fc6));
+  text-decoration: none;
+  border-radius: 8px;
+}
+
+.enlace:hover {
+  text-decoration: underline;
+}
+
+.enlace:focus-visible {
+  outline: 2px solid var(--m2-activo, var(--brand, #4d3fc6));
+  outline-offset: 2px;
+}
+
+.aviso {
+  margin: 0 18px 12px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--m2-texto-2, var(--text-2));
+  background: var(--m2-buscador-fondo, var(--bg-elev-2, #f4f4f5));
+}
+
+.cuerpo {
+  padding: 0 18px 18px;
+}
+
+/* ── Las cuatro cifras ───────────────────────────────────────────── */
+
+.cifras {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cifra {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--m2-borde, var(--border-soft, #e5e7eb));
+  border-radius: 10px;
+}
+
+.cifraEtiqueta {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  color: var(--m2-texto-3, var(--text-3));
+  overflow-wrap: break-word;
+}
+
+.cifraValor {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: var(--m2-texto, var(--text-1));
+}
+
+.cifraValorPeligro {
+  color: var(--danger-strong, #991b1b);
+}
+
+.cifraPista {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--m2-texto-3, var(--text-3));
+}
+
+/* ── Las dos listas ──────────────────────────────────────────────── */
+
+.par {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.lista {
+  min-width: 0;
+}
+
+.listaTitulo {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--m2-texto, var(--text-1));
+}
+
+.listaCabecera,
+.fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7ch 11ch;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.listaCabecera {
+  padding: 0 0 7px;
+  border-bottom: 1px solid var(--m2-borde, var(--border-soft, #e5e7eb));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3, var(--text-3));
+}
+
+.fila {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--m2-borde, var(--border-soft, #e5e7eb));
+}
+
+.fila:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.nombre {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.num {
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.numApagado {
+  font-weight: 500;
+  color: var(--m2-texto-3, var(--text-3));
+}
+
+.tramo {
+  padding: 8px 0;
+}
+
+.tramoArriba {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.tramoCasos {
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--m2-texto-3, var(--text-3));
+}
+
+.barra {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--m2-buscador-fondo, var(--bg-elev-2, #f4f4f5));
+  overflow: hidden;
+}
+
+.barraRelleno {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--danger, #dc2626);
+  opacity: 0.8;
+  transition: width 0.3s;
+}
+
+.vacio {
+  margin: 0;
+  padding: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--m2-texto-3, var(--text-3));
+}
+
+.error {
+  margin: 0;
+  padding: 0 18px 16px;
+  font-size: 12.5px;
+  color: var(--m2-texto-3, var(--text-3));
+}
+
+.reintentar {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--m2-activo-texto, var(--brand, #4d3fc6));
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.esqueleto {
+  height: 92px;
+  margin: 0 18px 18px;
+  border-radius: 10px;
+  background: var(--m2-buscador-fondo, var(--bg-elev-2, #f4f4f5));
+}
+
+@container orto (max-width: 760px) {
+  .cifras {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .par {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container orto (max-width: 380px) {
+  .cifras {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

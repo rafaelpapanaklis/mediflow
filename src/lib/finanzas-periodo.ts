@@ -43,3 +43,54 @@ export function serieEnd(to: Date, expenseDates: Date[]): Date {
   for (const d of expenseDates) if (d > end) end = d;
   return end;
 }
+
+// ── La ventana del periodo ─────────────────────────────────────────
+// Vivía dentro de /api/finanzas. Salió aquí para que el bloque «Ortodoncia»
+// (/api/finanzas/ortodoncia) hable EXACTAMENTE del mismo periodo que el resto
+// de la pantalla: misma función, no una copia.
+
+/** Inicio del día natural de México para `now`, como instante UTC. */
+export function startOfTodayMx(now: Date): Date {
+  const mx = new Date(now.getTime() - MX_OFFSET_MS);
+  return new Date(Date.UTC(mx.getUTCFullYear(), mx.getUTCMonth(), mx.getUTCDate()) + MX_OFFSET_MS);
+}
+
+/** Día 1 del mes de México (con delta de meses), como instante UTC. */
+export function startOfMonthMx(now: Date, monthDelta = 0): Date {
+  const mx = new Date(now.getTime() - MX_OFFSET_MS);
+  return new Date(Date.UTC(mx.getUTCFullYear(), mx.getUTCMonth() + monthDelta, 1) + MX_OFFSET_MS);
+}
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * La ventana [from, to] del periodo pedido: `hoy`, `mes` (default y cualquier
+ * valor desconocido), `mes_anterior` o `custom` con `from`/`to` "YYYY-MM-DD".
+ */
+export function resolveFinanzasWindow(
+  sp: { get(name: string): string | null },
+  now: Date = new Date(),
+): { from: Date; to: Date } | { error: string } {
+  const period = sp.get("period") ?? "mes";
+  if (period === "hoy") return { from: startOfTodayMx(now), to: now };
+  if (period === "mes_anterior") {
+    const currentStart = startOfMonthMx(now, 0);
+    return { from: startOfMonthMx(now, -1), to: new Date(currentStart.getTime() - 1) };
+  }
+  if (period === "custom") {
+    const fromRaw = sp.get("from") ?? "";
+    const toRaw = sp.get("to") ?? "";
+    if (!DATE_ONLY_RE.test(fromRaw) || !DATE_ONLY_RE.test(toRaw)) {
+      return { error: "period=custom requiere from y to en formato YYYY-MM-DD." };
+    }
+    // Fecha sin hora = día natural de México (-06:00), igual que analytics/query.ts.
+    const from = new Date(`${fromRaw}T00:00:00.000-06:00`);
+    const to = new Date(`${toRaw}T23:59:59.999-06:00`);
+    if (isNaN(from.getTime()) || isNaN(to.getTime()) || from > to) {
+      return { error: "Rango de fechas inválido (from debe ser <= to)." };
+    }
+    return { from, to };
+  }
+  // "mes" (default y cualquier valor desconocido): del día 1 MX a ahora.
+  return { from: startOfMonthMx(now, 0), to: now };
+}

@@ -10,7 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { NOT_A_SALE_STATUSES, expenseWindowEnd, serieEnd } from "../finanzas-periodo";
+import { NOT_A_SALE_STATUSES, expenseWindowEnd, resolveFinanzasWindow, serieEnd } from "../finanzas-periodo";
 import { bucketKeyOf, eachBucket } from "../analytics/query";
 
 // 5 de septiembre de 2026, 10:00 en México (UTC-6).
@@ -95,4 +95,39 @@ test("/api/finanzas: ventas y porDoctor excluyen DRAFT; nada filtra ya solo CANC
   assert.equal((src.match(/notIn:\s*\[\.\.\.NOT_A_SALE_STATUSES\]/g) ?? []).length, 2);
   // El único `not: "CANCELLED"` que queda es el de las citas, que no se tocó.
   assert.equal((src.match(/not:\s*"CANCELLED"/g) ?? []).length, 1);
+});
+
+// ── La ventana del periodo (ws1-t5, ronda 6): la comparten /api/finanzas y el
+// bloque «Ortodoncia» (/api/finanzas/ortodoncia), para que hablen del mismo mes.
+const sp = (q: string) => new URLSearchParams(q);
+
+test("ventana · «mes» va del día 1 de México a ahora; es también el default", () => {
+  const w = resolveFinanzasWindow(sp("period=mes"), AHORA);
+  assert.ok(!("error" in w));
+  if ("error" in w) return;
+  assert.equal(w.from.toISOString(), new Date("2026-09-01T00:00:00.000-06:00").toISOString());
+  assert.equal(w.to.getTime(), AHORA.getTime());
+  assert.deepEqual(resolveFinanzasWindow(sp(""), AHORA), w);
+  assert.deepEqual(resolveFinanzasWindow(sp("period=cualquiera"), AHORA), w);
+});
+
+test("ventana · «hoy» y «mes_anterior»", () => {
+  const hoy = resolveFinanzasWindow(sp("period=hoy"), AHORA);
+  assert.ok(!("error" in hoy));
+  if (!("error" in hoy)) assert.equal(hoy.from.toISOString(), new Date("2026-09-05T00:00:00.000-06:00").toISOString());
+  const ant = resolveFinanzasWindow(sp("period=mes_anterior"), AHORA);
+  assert.ok(!("error" in ant));
+  if (!("error" in ant)) {
+    assert.equal(ant.from.toISOString(), new Date("2026-08-01T00:00:00.000-06:00").toISOString());
+    assert.equal(ant.to.toISOString(), new Date("2026-08-31T23:59:59.999-06:00").toISOString());
+  }
+});
+
+test("ventana · «custom» exige las dos fechas, bien formadas y en orden", () => {
+  const ok = resolveFinanzasWindow(sp("period=custom&from=2026-09-01&to=2026-09-03"), AHORA);
+  assert.ok(!("error" in ok));
+  if (!("error" in ok)) assert.equal(ok.to.toISOString(), new Date("2026-09-03T23:59:59.999-06:00").toISOString());
+  assert.ok("error" in resolveFinanzasWindow(sp("period=custom&from=2026-09-01"), AHORA));
+  assert.ok("error" in resolveFinanzasWindow(sp("period=custom&from=01/09/2026&to=2026-09-03"), AHORA));
+  assert.ok("error" in resolveFinanzasWindow(sp("period=custom&from=2026-09-05&to=2026-09-03"), AHORA));
 });

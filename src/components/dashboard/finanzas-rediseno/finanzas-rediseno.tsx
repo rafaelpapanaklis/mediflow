@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { fmtMXN, fmtMXNdec } from "@/lib/format";
 import { CATEGORIAS, PERIODOS, useFinanzas, type Gasto, type PeriodKey } from "./usar-finanzas";
+import { BloqueOrtodoncia } from "./bloque-ortodoncia";
 import s from "./finanzas.module.css";
 
 // recharts pesa ~95 kB: fuera del bundle inicial, como en «Hoy».
@@ -524,6 +525,9 @@ export function FinanzasRediseno() {
           </div>
         </div>
       )}
+
+      {/* Ortodoncia: solo aparece si la clínica tiene el módulo (o casos). */}
+      <BloqueOrtodoncia consulta={f.query} recarga={f.reloadKey} />
 
       {/* Diálogo: Registrar gasto */}
       {f.showModal && (
