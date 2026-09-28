@@ -162,11 +162,19 @@ export const NAV_ITEMS: NavItemDef[] = [
     categories: ["DENTAL"],
     permission: "specialties.periodontics",
     moduleKey: PERIODONTICS_MODULE_KEY, comingSoon: true },
-  { id: "orthodontics", section: "specialties", label: "Ortodoncia", href: "/dashboard/specialties/orthodontics",
+  // Ola 1 (ws1-t3, sep-2026): a diferencia de sus hermanas de arriba,
+  // Ortodoncia YA tiene módulo real (/dashboard/orthodontics, con submenú
+  // propio) — deja de ser "Próximamente" y de vivir detrás de HIDE_SPECIALTIES
+  // (ver shouldShowItem). moduleKey sigue siendo ORTHODONTICS_MODULE_KEY, pero
+  // OJO: quien arma `clinicModuleKeys` (dashboard/layout.tsx) tiene que meter
+  // esa key SOLO cuando hasActiveOrthodonticsModule(clinicId) es true — NUNCA
+  // el atajo de trial de getActiveClinicModuleKeys/canAccessModule, que abre
+  // todas las especialidades durante el periodo de prueba de la clínica.
+  { id: "orthodontics", section: "specialties", label: "Ortodoncia", href: "/dashboard/orthodontics",
     icon: Smile,
     categories: ["DENTAL"],
     permission: "specialties.orthodontics",
-    moduleKey: ORTHODONTICS_MODULE_KEY, comingSoon: true },
+    moduleKey: ORTHODONTICS_MODULE_KEY },
   { id: "implants",     section: "specialties", label: "Implantología", href: "/dashboard/specialties/implants",
     icon: Anchor,
     categories: ["DENTAL"],
@@ -258,8 +266,11 @@ export function shouldShowItem(
   // Items exclusivos del menú de suspensión (Facturación) NUNCA salen en el
   // flujo normal; el sidebar los renderiza aparte cuando isExpired.
   if (item.suspendedOnly) return false;
-  // Oculta toda la sección de especialidades (aún en desarrollo). Ver HIDE_SPECIALTIES.
-  if (HIDE_SPECIALTIES && item.section === "specialties") return false;
+  // Oculta toda la sección de especialidades AÚN EN DESARROLLO. Ver
+  // HIDE_SPECIALTIES. Ortodoncia queda exenta (ws1-t3, Ola 1): ya tiene
+  // módulo real, así que su propio moduleKey/permission deciden si se ve —
+  // no la bandera genérica de "todavía no existe nada aquí".
+  if (HIDE_SPECIALTIES && item.section === "specialties" && item.id !== "orthodontics") return false;
   // Oculta Proveedores / Mis compras / Laboratorios / Mis órdenes de laboratorio
   // mientras el área no sea pública. Ver HIDE_SUPPLY_MODULES.
   if (HIDE_SUPPLY_MODULES && SUPPLY_NAV_IDS.includes(item.id)) return false;

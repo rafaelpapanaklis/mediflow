@@ -26,6 +26,8 @@ import { ChatLauncher } from "@/components/dashboard/chat/chat-launcher";
 import { SabinaLanzador } from "@/components/dashboard/sabina/lanzador";
 import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { I18nProvider } from "@/i18n/i18n-provider";
 import { getDict } from "@/i18n/dictionaries";
 import { makeT } from "@/i18n/t";
@@ -185,12 +187,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // tiempo: con la clínica encendida sale el nuevo en TODAS las pantallas.
   // Falla cerrado: sin la tabla, sin fila o con error devuelve false y se pinta
   // el menú de siempre. clinic.id sale de la sesión (getCurrentUser).
-  const [allClinics, clinicModuleKeys, onboardingCompleted, menuDosNiveles] = await Promise.all([
-    getUserClinics(),
-    isExpired ? Promise.resolve<string[]>([]) : getActiveClinicModuleKeys(clinic.id),
-    isExpired ? Promise.resolve<string[]>([]) : getOnboardingCompleted(clinic.id, clinic.waConnected),
-    menuDosNivelesEncendido(clinic.id),
-  ]);
+  const isDentalClinic = ((clinic as any).category ?? "OTHER") === "DENTAL";
+  const [allClinics, clinicModuleKeysRaw, onboardingCompleted, menuDosNiveles, orthodonticsModuleActive] =
+    await Promise.all([
+      getUserClinics(),
+      isExpired ? Promise.resolve<string[]>([]) : getActiveClinicModuleKeys(clinic.id),
+      isExpired ? Promise.resolve<string[]>([]) : getOnboardingCompleted(clinic.id, clinic.waConnected),
+      menuDosNivelesEncendido(clinic.id),
+      // Ola 1 (ws1-t3): Ortodoncia NO usa el atajo de trial de arriba — exige
+      // ClinicModule real. Ver src/lib/orthodontics/access.ts.
+      isExpired || !isDentalClinic ? Promise.resolve(false) : hasActiveOrthodonticsModule(clinic.id),
+    ]);
+  // getActiveClinicModuleKeys mete "orthodontics" para CUALQUIER clínica
+  // dental en trial (mismo atajo que el resto de especialidades); lo
+  // corregimos aquí con el resultado del check real antes de que llegue al
+  // sidebar (sidebar-nav.ts ya no distingue trial de compra real).
+  const clinicModuleKeys = orthodonticsModuleActive
+    ? (clinicModuleKeysRaw.includes(ORTHODONTICS_MODULE_KEY)
+        ? clinicModuleKeysRaw
+        : [...clinicModuleKeysRaw, ORTHODONTICS_MODULE_KEY])
+    : clinicModuleKeysRaw.filter((k) => k !== ORTHODONTICS_MODULE_KEY);
 
   // Multi-Clínica Fase 1 — cupo de sucursales para el switcher del sidebar.
   // Sin queries extra: las sedes que este dueño ya tiene salen de allClinics
