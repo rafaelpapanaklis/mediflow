@@ -358,8 +358,10 @@ test("una fecha sin hora no se recorre un día al pintarla", () => {
 test("el próximo control se pinta en la hora de la clínica", () => {
   // Martes 29-sep 19:00 en México = miércoles 30-sep 01:00 UTC.
   const texto = fechaConHoraEnClinica("2026-09-30T01:00:00.000Z", MX);
-  assert.match(texto, /mar/);
-  assert.match(texto, /29/);
-  assert.match(texto, /19:00/);
+  assert.equal(texto, "martes 29 de septiembre a las 19:00");
+  // La misma cita, vista desde una clínica en Tijuana, es a las 18:00.
+  assert.equal(fechaConHoraEnClinica("2026-09-30T01:00:00.000Z", "America/Tijuana"), "martes 29 de septiembre a las 18:00");
+  // Medianoche se escribe 00:00, no 24:00.
+  assert.equal(fechaConHoraEnClinica("2026-09-30T06:00:00.000Z", MX), "miércoles 30 de septiembre a las 00:00");
   assert.equal(fechaConHoraEnClinica("no es fecha", MX), "");
 });

@@ -384,21 +384,24 @@ export function fechaSinHora(dia: string): string {
   }).format(new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))));
 }
 
-/** «lun 5 oct, 10:30» de un instante, en la hora de la CLÍNICA. */
+/** «martes 29 de septiembre a las 19:00» de un instante, en la hora de la CLÍNICA. */
 export function fechaConHoraEnClinica(iso: string, zonaHoraria: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const opciones: Intl.DateTimeFormatOptions = {
-    weekday: "short",
+    weekday: "long",
     day: "numeric",
-    month: "short",
+    month: "long",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   };
+  let partes: Intl.DateTimeFormatPart[];
   try {
-    return new Intl.DateTimeFormat("es-MX", { ...opciones, timeZone: zonaHoraria || ZONA_POR_DEFECTO }).format(d);
+    partes = new Intl.DateTimeFormat("es-MX", { ...opciones, timeZone: zonaHoraria || ZONA_POR_DEFECTO }).formatToParts(d);
   } catch {
-    return new Intl.DateTimeFormat("es-MX", { ...opciones, timeZone: ZONA_POR_DEFECTO }).format(d);
+    partes = new Intl.DateTimeFormat("es-MX", { ...opciones, timeZone: ZONA_POR_DEFECTO }).formatToParts(d);
   }
+  const parte = (tipo: Intl.DateTimeFormatPartTypes) => partes.find((p) => p.type === tipo)?.value ?? "";
+  return `${parte("weekday")} ${parte("day")} de ${parte("month")} a las ${parte("hour")}:${parte("minute")}`;
 }
