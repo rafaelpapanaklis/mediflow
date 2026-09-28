@@ -1,5 +1,6 @@
 import { todayInTz } from "@/lib/agenda/time-utils";
 import {
+  detectaInteresOrtodoncia,
   formatDateHuman,
   formatTimeHuman,
   isAffirmative,
@@ -150,6 +151,27 @@ export interface BookingDeps {
   ): Promise<{ name: string; duration: number | null } | null>;
   findThreadExternalId(threadId: string, clinicId: string): Promise<string | null>;
   findAppointmentById(id: string, clinicId: string): Promise<UpcomingAppt | null>;
+  /**
+   * ws1-t1 (Ortodoncia conectada al bot) — ¿este paciente tiene un caso de
+   * ortodoncia activo en esta sede (para ofrecerle su Control directo, con su
+   * doctor tratante), o el módulo tiene un tipo "Valoración de ortodoncia"
+   * que ofrecer a un prospecto que la mencionó? Opcional: sin este dep (o con
+   * uno que siempre devuelva "nada que ofrecer") el flujo de agendar es
+   * exactamente el de siempre — así los dobles de test existentes, que no lo
+   * traen, no tienen que cambiar.
+   */
+  getOrthoBookingContext?(
+    clinicId: string,
+    patientId: string | null,
+  ): Promise<{
+    casoActivo: {
+      treatmentPlanId: string;
+      treatingDoctorId: string | null;
+      label: string;
+      durationMin: number;
+    } | null;
+    valoracion: { label: string; durationMin: number } | null;
+  }>;
 }
 
 const MAX_SLOTS_SHOWN = 12;
@@ -286,14 +308,60 @@ async function startCreate(
   config: BotConfigDTO,
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
-  const services = await deps.listBookableServices(input.clinicId);
-  const state: BookingState = {
+  const base: BookingState = {
     flow: "booking",
     mode: "create",
     step: "service",
     patientId: input.patient?.id ?? undefined,
     fallbackToHuman: config.fallbackToHuman,
   };
+
+  // ws1-t1 (Ortodoncia conectada al bot) — antes del catálogo normal: ¿este
+  // paciente ya tiene un caso de ortodoncia activo en esta sede, o el mensaje
+  // que pidió "agendar" menciona ortodoncia/brackets/alineadores? Solo en
+  // sedes con el módulo contratado; sin `getOrthoBookingContext` (dep
+  // opcional) el flujo es exactamente el de siempre.
+  const ortho = await deps.getOrthoBookingContext?.(input.clinicId, input.patient?.id ?? null);
+
+  if (ortho?.casoActivo) {
+    const caso = ortho.casoActivo;
+    const state: BookingState = {
+      ...base,
+      serviceId: null,
+      serviceName: caso.label,
+      durationMin: caso.durationMin,
+    };
+    if (caso.treatingDoctorId) {
+      const doctores = await deps.listBookableDoctors(input.clinicId);
+      const tratante = doctores.find((d) => d.id === caso.treatingDoctorId);
+      if (tratante) {
+        state.doctorId = tratante.id;
+        state.doctorName = `${tratante.firstName} ${tratante.lastName}`.trim();
+        state.step = "date";
+        return step(
+          `Veo que tienes un tratamiento de ortodoncia activo. Te agendo tu *${caso.label}* con ${state.doctorName}. 🦷\n${askDateText(state)}`,
+          "create",
+          state,
+        );
+      }
+      // El doctor tratante ya no está disponible (baja, cambio de rol): sigue
+      // el flujo normal de elegir doctor, sin perder el servicio ya resuelto.
+    }
+    return advanceToDoctorOrDate(input, state, deps);
+  }
+
+  if (ortho?.valoracion && detectaInteresOrtodoncia(input.incomingText)) {
+    const state: BookingState = {
+      ...base,
+      serviceId: null,
+      serviceName: ortho.valoracion.label,
+      durationMin: ortho.valoracion.durationMin,
+    };
+    return advanceToDoctorOrDate(input, state, deps);
+  }
+
+  const services = await deps.listBookableServices(input.clinicId);
+  const state: BookingState = { ...base };
 
   if (services.length === 0) {
     state.serviceId = null;

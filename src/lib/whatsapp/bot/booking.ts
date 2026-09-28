@@ -10,6 +10,7 @@ import {
 } from "@/lib/agenda/bot-booking-service";
 import { findOrCreateWhatsAppPatient } from "./booking-helpers";
 import { anticipoParaAnunciar, crearCitaDesdeBot } from "@/lib/anticipos/servicio.server";
+import { getOrthoBookingContext } from "@/lib/orthodontics/whatsapp-bot-booking";
 import { runBookingTurn, type BookingDeps } from "./booking-core";
 import type { BotConfigDTO, BotTurnInput, BotTurnResult } from "./types";
 
@@ -61,6 +62,7 @@ const realDeps: BookingDeps = {
         doctor: { select: { firstName: true, lastName: true } },
       },
     }),
+  getOrthoBookingContext,
 };
 
 /** Entrypoint que consume el motor (engine.ts). deps inyectable para tests. */

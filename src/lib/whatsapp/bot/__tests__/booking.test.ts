@@ -365,3 +365,119 @@ describe("bot booking — horario propio del doctor", () => {
     assert.equal(c.state?.step, "slot");
   });
 });
+
+// ws1-t1 (Ortodoncia conectada al bot) — sedes con el módulo activo: un
+// paciente con caso activo se salta el catálogo y va directo a su Control con
+// su doctor tratante; un prospecto que menciona ortodoncia va directo a
+// Valoración. Sin `getOrthoBookingContext` (dep opcional, como en el resto de
+// este archivo) o sin nada que ofrecer, el flujo es el de siempre.
+describe("bot booking — ortodoncia (ws1-t1)", () => {
+  const orthoDeps = (over: Partial<BookingDeps> = {}) =>
+    makeDeps({
+      getOrthoBookingContext: async () => ({
+        casoActivo: {
+          treatmentPlanId: "plan1",
+          treatingDoctorId: "doc1",
+          label: "Control de ortodoncia",
+          durationMin: 30,
+        },
+        valoracion: { label: "Valoración de ortodoncia", durationMin: 45 },
+      }),
+      ...over,
+    });
+
+  it("paciente con caso activo: se salta servicio Y doctor, va directo a fecha con su tratante", async () => {
+    const created: any[] = [];
+    const deps = orthoDeps({
+      createBotAppointment: async (p) => {
+        created.push(p);
+        return { ok: true, appointmentId: "appt1" };
+      },
+    });
+    const c = makeConvo(makeConfig(), deps, { id: "patOrto", phone: "5215512345678" });
+    const r = await c.say("quiero una cita");
+    assert.match(r.reply ?? "", /Control de ortodoncia/);
+    assert.match(r.reply ?? "", /Ana García/);
+    assert.equal(c.state?.step, "date");
+    assert.equal(c.state?.doctorId, "doc1");
+    assert.equal(c.state?.serviceName, "Control de ortodoncia");
+    assert.equal(c.state?.durationMin, 30);
+
+    await c.say("mañana");
+    await c.say("1"); // primer horario
+    const conf = await c.say("sí");
+    assert.equal(conf.intent, BotIntent.BOOK_APPOINTMENT);
+    assert.equal(created.length, 1);
+    assert.equal(created[0].reason, "Control de ortodoncia", "Appointment.type sale exacto");
+    assert.equal(created[0].doctorId, "doc1");
+    assert.equal(created[0].durationMin, 30);
+  });
+
+  it("doctor tratante ya no disponible: sigue el flujo normal de elegir doctor, sin perder el servicio", async () => {
+    const deps = orthoDeps({
+      getOrthoBookingContext: async () => ({
+        casoActivo: {
+          treatmentPlanId: "plan1",
+          treatingDoctorId: "doc-ya-no-existe",
+          label: "Control de ortodoncia",
+          durationMin: 30,
+        },
+        valoracion: null,
+      }),
+      // dos doctores: no se auto-asigna, pregunta.
+      listBookableDoctors: async () => [
+        { id: "doc1", firstName: "Ana", lastName: "García" },
+        { id: "doc2", firstName: "Luis", lastName: "Pérez" },
+      ],
+    });
+    const c = makeConvo(makeConfig(), deps, { id: "patOrto", phone: "5215512345678" });
+    const r = await c.say("quiero una cita");
+    assert.equal(c.state?.step, "doctor");
+    assert.match(r.reply ?? "", /profesional/);
+    assert.equal(c.state?.serviceName, "Control de ortodoncia", "el servicio no se pierde");
+  });
+
+  it("prospecto sin caso que menciona ortodoncia: va directo a Valoración (pasa por elegir doctor)", async () => {
+    const deps = orthoDeps({
+      getOrthoBookingContext: async () => ({ casoActivo: null, valoracion: { label: "Valoración de ortodoncia", durationMin: 45 } }),
+    });
+    const c = makeConvo(makeConfig(), deps, { id: "patNuevo", phone: "5215512345678" });
+    const r = await c.say("hola, quiero información de ortodoncia y brackets");
+    assert.equal(c.state?.serviceName, "Valoración de ortodoncia");
+    assert.equal(c.state?.durationMin, 45);
+    assert.equal(c.state?.step, "date", "un solo doctor: se auto-asigna y pasa a fecha");
+    assert.match(r.reply ?? "", /Valoración de ortodoncia/);
+  });
+
+  it("prospecto que NO menciona ortodoncia: catálogo normal de siempre, aunque el módulo esté activo", async () => {
+    // Este prospecto no tiene caso todavía: sin eso, aunque el dep exista, no
+    // hay "caso activo" que ofrecerle — solo aplicaría Valoración, y solo si
+    // el texto la menciona.
+    const deps = orthoDeps({
+      getOrthoBookingContext: async () => ({
+        casoActivo: null,
+        valoracion: { label: "Valoración de ortodoncia", durationMin: 45 },
+      }),
+    });
+    const c = makeConvo(makeConfig(), deps, { id: "patNuevo", phone: "5215512345678" });
+    const r = await c.say("quiero una cita");
+    assert.match(r.reply ?? "", /Limpieza/);
+    assert.equal(c.state?.step, "service");
+  });
+
+  it("sin caso activo y sin valoración configurada: catálogo normal", async () => {
+    const deps = orthoDeps({
+      getOrthoBookingContext: async () => ({ casoActivo: null, valoracion: null }),
+    });
+    const c = makeConvo(makeConfig(), deps, { id: "patNuevo", phone: "5215512345678" });
+    const r = await c.say("quiero agendar, tengo brackets");
+    assert.match(r.reply ?? "", /Limpieza/);
+  });
+
+  it("sin el dep (clínica sin el módulo, o dep no cableado): flujo idéntico al de siempre", async () => {
+    const deps = makeDeps(); // sin getOrthoBookingContext
+    const c = makeConvo(makeConfig(), deps, { id: "patNuevo", phone: "5215512345678" });
+    const r = await c.say("quiero una cita, tengo un caso de ortodoncia");
+    assert.match(r.reply ?? "", /Limpieza/);
+  });
+});

@@ -119,6 +119,17 @@ export function foldAccents(text: string): string {
 }
 
 /**
+ * ws1-t1 (Ortodoncia conectada al bot) — ¿el mensaje que pidió agendar
+ * menciona ortodoncia? Deliberadamente estrecho, mismo criterio que
+ * `detectaIntencionDeSaldo`/`detectaIntencionDeControlOrto` (saldo-core.ts):
+ * un falso positivo aquí le ofrecería "Valoración de ortodoncia" a alguien
+ * que solo quería una limpieza.
+ */
+export function detectaInteresOrtodoncia(texto: string): boolean {
+  return /\b(ortodon\w*|brackets?|alineador(es)?|invisalign)\b/.test(foldAccents(texto ?? ""));
+}
+
+/**
  * Distancia de edición Damerau-Levenshtein (sustitución, inserción, borrado y
  * transposición de adyacentes) entre `stem` y el MEJOR PREFIJO de `token`: lo
  * que sobra al final del token NO cuenta.
