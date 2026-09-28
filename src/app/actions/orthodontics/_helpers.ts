@@ -6,9 +6,8 @@ import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
-import { canAccessModule } from "@/lib/marketplace/access-control";
-import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
-import { hasPermission } from "@/lib/auth/permissions";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { fail, type ActionResult } from "./result";
 
 /**
@@ -25,8 +24,13 @@ export async function getOrthoActionContext(
     return fail("La clínica no soporta el módulo de Ortodoncia");
   }
 
-  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) {
+  // Revisión cruzada (Ola 1): esto usaba canAccessModule/evaluateAccess, el
+  // atajo que abre TODOS los módulos de especialidad durante el trial de
+  // CUALQUIER clínica dental — el mismo bug que A1 ya cerró en el sidebar,
+  // el layout del dashboard, la pestaña del paciente y las páginas del
+  // módulo. Afectaba a las ~48 server actions que dependen de este archivo.
+  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
   }
 
@@ -46,11 +50,20 @@ export async function getOrthoActionContext(
  * "clínico" (`medicalRecord.edit`, en `getOrthoActionContext` arriba) — así
  * recepción cobra sin ver el diagnóstico, y el doctor ve/registra sin poder
  * cobrar (salvo que la clínica le dé el permiso desde Equipo → Permisos).
- * Lo usa la parte «Cobro» (`actions/orthodontics/cobro/*`); este archivo no
- * decide SU lógica de negocio, solo el gate de acceso.
+ *
+ * ÚNICA fuente de este gate (revisión cruzada): "Cobro" tenía su propio
+ * `getCobroActionContext` en `cobro/_ctx.ts` haciendo EXACTAMENTE lo mismo
+ * (carrera de 73s entre ambas partes) — ese archivo se quedó solo con
+ * `loadCasoParaCobro`/`auditarCobro` y sus 8 actions migraron aquí, por lo
+ * que el parámetro es la key EXACTA (no un booleano `write`: Cobro usa
+ * cuatro keys distintas — `billing.view`, `billing.create`, `billing.edit`,
+ * `billing.charge` — según la action). Las 4 actions legacy de dinero
+ * (`recordInstallmentPayment`, `confirmCollect`, `createPaymentPlan`,
+ * `recalculatePaymentStatus`) también migraron aquí desde
+ * `getOrthoActionContext` (exigían `medicalRecord.edit` para cobrar).
  */
 export async function getOrthoBillingActionContext(
-  opts?: { write?: boolean },
+  permiso: PermissionKey = "billing.charge",
 ): Promise<ActionResult<{ ctx: AuthContext }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
@@ -59,14 +72,13 @@ export async function getOrthoBillingActionContext(
     return fail("La clínica no soporta el módulo de Ortodoncia");
   }
 
-  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) {
+  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
   }
 
-  const requiredKey = opts?.write === false ? "billing.view" : "billing.charge";
-  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
-    return fail(`Sin permisos: ${requiredKey}`);
+  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, permiso)) {
+    return fail(`Sin permisos: ${permiso}`);
   }
 
   return { ok: true, data: { ctx } };
@@ -90,8 +102,8 @@ export async function getOrthoConfigActionContext(
     return fail("La clínica no soporta el módulo de Ortodoncia");
   }
 
-  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) {
+  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
   }
 
@@ -101,6 +113,64 @@ export async function getOrthoConfigActionContext(
   }
 
   return { ok: true, data: { ctx } };
+}
+
+/**
+ * Campos del plan de tratamiento que, SOLOS (sin ningún otro campo clínico
+ * en el mismo payload), se pueden tocar con `billing.*` aunque falte
+ * `medicalRecord.edit` — A11, hallazgo de la revisión cruzada: recepción
+ * tiene `billing.*` pero no `medicalRecord.edit` por default, y asignar o
+ * cambiar quién es el responsable del pago es justo su trabajo, no uno
+ * clínico. Cualquier otro campo del plan (técnica, costo, status…) en el
+ * MISMO payload sigue exigiendo `medicalRecord.edit` completo.
+ */
+const RESPONSIBLE_GUARDIAN_ONLY_FIELDS: ReadonlySet<string> = new Set([
+  "treatmentPlanId",
+  "diagnosisId",
+  "patientId",
+  "responsibleGuardianId",
+  "newResponsibleGuardian",
+]);
+
+/**
+ * Como `getOrthoActionContext`, pero para `createTreatmentPlan`/
+ * `updateTreatmentPlan`: si el payload CRUDO (antes de validar con zod, para
+ * no depender de qué defaults rellene el schema) solo trae campos de
+ * `RESPONSIBLE_GUARDIAN_ONLY_FIELDS`, acepta también `billing.*` en vez de
+ * exigir `medicalRecord.edit`. Con cualquier otro campo en el payload, se
+ * comporta exactamente igual que `getOrthoActionContext` (solo clínico).
+ */
+export async function getOrthoPlanActionContext(
+  rawInput: unknown,
+  opts?: { write?: boolean },
+): Promise<ActionResult<{ ctx: AuthContext }>> {
+  const ctx = await getAuthContext();
+  if (!ctx) return fail("No autenticado");
+
+  if (ctx.clinicCategory !== "DENTAL") {
+    return fail("La clínica no soporta el módulo de Ortodoncia");
+  }
+
+  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  if (!active) {
+    return fail("Módulo Ortodoncia no activo para esta clínica");
+  }
+
+  const rawKeys =
+    rawInput && typeof rawInput === "object" ? Object.keys(rawInput as Record<string, unknown>) : [];
+  const onlyResponsibleGuardian =
+    rawKeys.length > 0 && rawKeys.every((k) => RESPONSIBLE_GUARDIAN_ONLY_FIELDS.has(k));
+
+  const perm = { role: ctx.role as any, permissionsOverride: ctx.permissionsOverride };
+  const clinicalKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
+  if (hasPermission(perm, clinicalKey)) return { ok: true, data: { ctx } };
+
+  const billingKey = opts?.write === false ? "billing.view" : "billing.charge";
+  if (onlyResponsibleGuardian && hasPermission(perm, billingKey)) {
+    return { ok: true, data: { ctx } };
+  }
+
+  return fail(`Sin permisos: ${clinicalKey}`);
 }
 
 /**
