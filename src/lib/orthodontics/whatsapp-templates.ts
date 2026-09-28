@@ -39,7 +39,7 @@ export const ORTHO_WHATSAPP_TEMPLATES = {
     `Hola ${patientName}, llevas ${monthInTreatment} meses de tratamiento. Estás en fase ${phaseLabel}. ¡Vas excelente! Sigue así con tu higiene y elásticos. — {doctorName}`.trim(),
 
   PRE_INSTALLATION_INSTRUCTIONS: (patientName: string) =>
-    `Hola ${patientName}, mañana es tu cita de instalación de aparatología. Llega con dientes muy bien lavados, ten 1 hora disponible y trae elásticos si te indicamos. — {clinicName}`.trim(),
+    `Hola ${patientName}, mañana es tu cita de colocación de aparatología. Llega con dientes muy bien lavados, ten 1 hora disponible y trae elásticos si te indicamos. — {clinicName}`.trim(),
 } as const;
 
 export type OrthoWhatsAppTemplateKey = keyof typeof ORTHO_WHATSAPP_TEMPLATES;
