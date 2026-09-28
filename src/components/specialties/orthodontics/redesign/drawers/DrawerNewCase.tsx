@@ -47,6 +47,7 @@ import {
   type ModoResponsable,
 } from "@/lib/orthodontics/alta-caso-formulario";
 import { useCajon } from "../atoms/useCajon";
+import { usePresupuestoDelAlta } from "./usePresupuestoDelAlta";
 import orto from "../orto.module.css";
 
 const ANGLE_OPTIONS = [
@@ -247,6 +248,12 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   const [installedAt, setInstalledAt] = useState("");
   // (c) Vacío a propósito: el precio lo escribe la clínica, no el código.
   const [totalCost, setTotalCost] = useState("");
+  // Mapa 14: si el alta llega desde un presupuesto aceptado, propone su
+  // importe de ortodoncia (sin pisar lo que ya se escribió).
+  const presupuesto = usePresupuestoDelAlta(props.patientId);
+  useEffect(() => {
+    if (presupuesto) setTotalCost((c) => (c.trim() === "" ? String(presupuesto.importe) : c));
+  }, [presupuesto]);
   const [anchorage, setAnchorage] = useState("MODERATE");
   const [extractions, setExtractions] = useState(false);
   const [iprRequired, setIprRequired] = useState(false);
@@ -657,7 +664,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                     options={MODO_DE_COBRO_OPTIONS}
                   />
                 </Field>
-                <Field label={textosCosto.rotulo} hint={textosCosto.pista} htmlFor={idCosto}>
+                <Field label={textosCosto.rotulo} hint={presupuesto && totalCost === String(presupuesto.importe) ? presupuesto.nota : textosCosto.pista} htmlFor={idCosto}>
                   <input
                     id={idCosto}
                     type="text"
