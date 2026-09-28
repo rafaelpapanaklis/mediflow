@@ -17,6 +17,8 @@ import { fmtMXN } from "@/lib/format";
 // Diseño (ws1-t5): la ropa de la ventana y la maqueta de las líneas.
 import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.module.css";
 import { ropaVentana } from "@/components/dashboard/cobros-inventario-rediseno/ventana";
+// ws1-t5 (arreglo): el HOY de la clínica, no el de UTC.
+import { hoyEnZona } from "@/lib/inventory/fecha-calendario";
 
 interface ItemOpcion { id: string; name: string; unit: string; }
 interface ProveedorOpcion { id: string; name: string; }
@@ -28,10 +30,8 @@ export interface ResultadoCompra {
   total: number;
 }
 
-const hoyISO = () => new Date().toISOString().slice(0, 10);
-
 export function CompraModal({
-  items, proveedores, onRegistrada, onClose, rediseno = false,
+  items, proveedores, onRegistrada, onClose, rediseno = false, timezone = null,
 }: {
   items: ItemOpcion[];
   proveedores: ProveedorOpcion[];
@@ -39,6 +39,8 @@ export function CompraModal({
   onClose: () => void;
   /** ¿Diseño nuevo? Solo decide la ropa de la ventana. */
   rediseno?: boolean;
+  /** Zona horaria de la clínica: de ella sale la fecha que se propone. */
+  timezone?: string | null;
 }) {
   const ropa = ropaVentana(rediseno, "media");
   // Se genera UNA vez por apertura del modal y se reenvía tal cual en un
@@ -48,7 +50,10 @@ export function CompraModal({
     typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
   );
   const [providerId, setProviderId] = useState("");
-  const [date, setDate] = useState(hoyISO());
+  // ws1-t5 (arreglo): antes era `new Date().toISOString().slice(0, 10)`, que
+  // es el día en UTC: a partir de las 18:00 de México proponía MAÑANA y la
+  // compra (y su gasto) quedaban con la fecha del día siguiente.
+  const [date, setDate] = useState(() => hoyEnZona(timezone));
   const [receiptRef, setReceiptRef] = useState("");
   const [lines, setLines] = useState<LineaForm[]>([{ itemId: "", quantity: "", unitCost: "", lotNumber: "", expiresAt: "" }]);
   const [guardando, setGuardando] = useState(false);

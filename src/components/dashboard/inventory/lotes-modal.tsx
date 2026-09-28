@@ -15,9 +15,12 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 // bordes pedían `--border-1`, que no existe: las filas salían sin borde.
 import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.module.css";
 import { ropaVentana } from "@/components/dashboard/cobros-inventario-rediseno/ventana";
+import { formatearFechaCalendario } from "@/lib/inventory/fecha-calendario";
 
-const fmtFecha = (iso: string) =>
-  new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(iso));
+// ws1-t5 (arreglo): la caducidad es un DÍA de calendario, sin zona. Antes se
+// pintaba con la zona del navegador, y un lote guardado como
+// 2026-09-01T00:00Z salía «caduca 31 ago 2026» visto desde México.
+const fmtFecha = formatearFechaCalendario;
 
 interface Lote {
   id: string;

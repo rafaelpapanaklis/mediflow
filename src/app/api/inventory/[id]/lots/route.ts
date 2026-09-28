@@ -5,6 +5,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { createLot, esErrorDeLotesNoAplicados, listLotsForItem } from "@/lib/inventory/lots.server";
+import { parseFechaCalendario } from "@/lib/inventory/fecha-calendario";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -38,8 +39,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   let expiresAt: Date | null = null;
   if (body.expiresAt) {
-    const d = new Date(body.expiresAt);
-    if (isNaN(d.getTime())) return NextResponse.json({ error: "Fecha de caducidad inválida" }, { status: 400 });
+    // ws1-t5 (arreglo): la caducidad es un día de calendario; se guarda
+    // siempre igual (medianoche UTC de ese día), venga de aquí o de una
+    // compra. Ver fecha-calendario.ts.
+    const d = parseFechaCalendario(String(body.expiresAt));
+    if (!d) return NextResponse.json({ error: "Fecha de caducidad inválida" }, { status: 400 });
     expiresAt = d;
   }
 

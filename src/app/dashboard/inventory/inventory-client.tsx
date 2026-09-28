@@ -26,6 +26,10 @@ import invStyles from "@/components/dashboard/inventario-rediseno/inventario-red
 // cabe, fichas en teléfono, caducidad sin saltos. Solo lee tokens del panel.
 import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.module.css";
 import { ropaVentana } from "@/components/dashboard/cobros-inventario-rediseno/ventana";
+// ARREGLOS (ws1-t5): la pantalla solo pinta lo que el servidor confirmó, y el
+// enlace de cada aviso de Hoy abre su filtro. Reglas puras, con sus tests.
+import { cantidadDe, esArticulo, leerRespuesta } from "@/lib/inventory/respuesta-cliente";
+import { filtroDeInventario } from "@/lib/inventory/avisos-existencias";
 // WS1-T5 — lotes y caducidad: modal propio y aislado, ver el archivo.
 import { LotesModal } from "@/components/dashboard/inventory/lotes-modal";
 // ws1-t4 — "Registrar compra": modal propio y aislado, mismo criterio.
@@ -237,9 +241,16 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
 export function InventoryClient({
   initialItems,
   rediseno = false,
+  timezone = null,
 }: {
   initialItems: Item[];
   specialty?: string;
+  /**
+   * La zona horaria de la clínica. Para que «Registrar compra» proponga el
+   * HOY de la clínica y no el de UTC (que después de las 18:00 de México ya
+   * es mañana). Sin ella se usa la zona por defecto del panel.
+   */
+  timezone?: string | null;
   /**
    * ¿La clínica tiene encendido el diseño nuevo? Es el MISMO interruptor del
    * menú de dos niveles (`clinic_feature_flags` → `menu-dos-niveles`). En
@@ -304,10 +315,11 @@ export function InventoryClient({
   // URLSearchParams directo (sin useSearchParams, para no exigir un
   // <Suspense> nuevo en esta pantalla).
   useEffect(() => {
-    const f = new URLSearchParams(window.location.search).get("filter");
-    if (f === "low") setTab("poco");
-    else if (f === "por-caducar") setTab("por_caducar");
-    else if (f === "caducado") setTab("caducado");
+    // ws1-t5 (arreglo): Hoy separa ahora «agotados» de «stock bajo», y el
+    // aviso de agotados enlaza con ?filter=out. La traducción del parámetro
+    // al filtro vive en `filtroDeInventario`, con su test.
+    const filtro = filtroDeInventario(new URLSearchParams(window.location.search).get("filter"));
+    if (filtro) setTab(filtro);
   }, []);
 
   async function crearProveedorRapido() {
@@ -376,10 +388,19 @@ export function InventoryClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quantity: qty }),
       });
-      const updated = await res.json();
-      setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: updated.quantity } : i));
+      // ws1-t5 (arreglo): antes se pintaba `updated.quantity` sin mirar si el
+      // servidor había dicho que sí. Con un 403/404/500 el cuerpo es
+      // `{ error }` y la existencia quedaba `undefined` en pantalla. Ahora,
+      // si no se guardó, la fila no cambia y la edición sigue abierta.
+      const r = await leerRespuesta(res);
+      const cantidad = r.ok ? cantidadDe(r.datos) : null;
+      if (!r.ok || cantidad === null) {
+        toast.error(r.error ?? t("common.genericError"));
+        return;
+      }
+      setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: cantidad } : i));
       setEditQty(prev => { const n = { ...prev }; delete n[id]; return n; });
-      toast.success(`${item.name}: ${updated.quantity} ${item.unit}`);
+      toast.success(`${item.name}: ${cantidad} ${item.unit}`);
     } catch { toast.error(t("common.genericError")); } finally {
       setLoadingIds(s => { const n = new Set(s); n.delete(id); return n; });
     }
@@ -393,20 +414,33 @@ export function InventoryClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ change: delta }),
       });
-      const updated = await res.json();
-      setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: updated.quantity } : i));
+      // ws1-t5 (arreglo): igual que arriba — solo se pinta lo confirmado.
+      const r = await leerRespuesta(res);
+      const cantidad = r.ok ? cantidadDe(r.datos) : null;
+      if (!r.ok || cantidad === null) {
+        toast.error(r.error ?? t("common.genericError"));
+        return;
+      }
+      setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: cantidad } : i));
     } catch { toast.error(t("common.genericError")); } finally {
       setLoadingIds(s => { const n = new Set(s); n.delete(id); return n; });
     }
   }
 
   async function updateMinQty(id: string, min: number) {
-    await fetch(`/api/inventory/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ minQuantity: min }),
-    });
-    setItems(prev => prev.map(i => i.id === id ? { ...i, minQuantity: min } : i));
+    // ws1-t5 (arreglo): antes cambiaba el mínimo en pantalla sin mirar la
+    // respuesta, y un fallo de red quedaba como promesa rechazada sin aviso.
+    // Mismo patrón que updateUnitCost, aquí abajo.
+    try {
+      const res = await fetch(`/api/inventory/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ minQuantity: min }),
+      });
+      const r = await leerRespuesta(res);
+      if (!r.ok) { toast.error(r.error ?? t("common.genericError")); return; }
+      setItems(prev => prev.map(i => i.id === id ? { ...i, minQuantity: min } : i));
+    } catch { toast.error(t("common.genericError")); }
   }
 
   // ws1-t4: costo unitario editable en la misma tabla (mismo patrón que
@@ -454,7 +488,16 @@ export function InventoryClient({
           providerId: newItem.providerId || null,
         }),
       });
-      const created = await res.json();
+      // ws1-t5 (arreglo): antes se metía en la lista lo que viniera, aunque
+      // fuera el cuerpo de un error (`{ error: "Nombre y categoría…" }`), y
+      // la ventana se cerraba diciendo «artículo agregado». Ahora, si no se
+      // creó, la ventana sigue abierta con lo escrito y dice por qué.
+      const r = await leerRespuesta<Item>(res);
+      if (!r.ok || !esArticulo(r.datos)) {
+        toast.error(r.error ?? t("common.genericError"));
+        return;
+      }
+      const created = r.datos as Item;
       setItems(prev => [...prev, created]);
       setShowAdd(false);
       setNewItem({ name:"", description:"", category:"Instrumental básico", customCategory:"", quantity:0, minQuantity:5, unit:"pza", iconId:"fresa-jeringa", unitCost:0, providerId:"" });
@@ -481,9 +524,16 @@ export function InventoryClient({
       variant: "danger",
       confirmText: t("common.delete"),
     }))) return;
-    await fetch(`/api/inventory/${id}`, { method: "DELETE" });
-    setItems(prev => prev.filter(i => i.id !== id));
-    toast.success(t("procurement.inventoryClient.deleted"));
+    // ws1-t5 (arreglo): antes la fila desaparecía de la lista y salía
+    // «eliminado» aunque el servidor hubiera respondido error (volvía a
+    // aparecer al recargar). Ahora solo se quita si de verdad se borró.
+    try {
+      const res = await fetch(`/api/inventory/${id}`, { method: "DELETE" });
+      const r = await leerRespuesta(res);
+      if (!r.ok) { toast.error(r.error ?? t("common.genericError")); return; }
+      setItems(prev => prev.filter(i => i.id !== id));
+      toast.success(t("procurement.inventoryClient.deleted"));
+    } catch { toast.error(t("common.genericError")); }
   }
 
   // Diseño (ws1-t5): la ropa de las ventanas y los textos del estado vacío.
@@ -1055,6 +1105,7 @@ export function InventoryClient({
           proveedores={proveedores}
           onRegistrada={aplicarResultadoCompra}
           rediseno={rediseno}
+          timezone={timezone}
           onClose={() => setShowCompra(false)}
         />
       )}

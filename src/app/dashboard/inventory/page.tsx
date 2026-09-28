@@ -174,6 +174,9 @@ export default async function InventoryPage() {
       initialItems={items as any}
       specialty={user.clinic.specialty}
       rediseno={rediseno}
+      // ws1-t5 (arreglo): la zona de la clínica, para que «Registrar compra»
+      // proponga su HOY y no el de UTC.
+      timezone={user.clinic.timezone ?? null}
     />
   );
 }

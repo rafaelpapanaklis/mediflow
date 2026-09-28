@@ -7,6 +7,7 @@ import {
 } from "@/lib/agenda/api-helpers";
 import { aggregateAdminPeriodKpis } from "@/lib/agenda/server";
 import { getExpiryAlerts } from "@/lib/inventory/lots.server";
+import { avisosDeExistencias } from "@/lib/inventory/avisos-existencias";
 import {
   periodRangeUtc,
   getTzParts,
@@ -294,23 +295,25 @@ async function buildAlerts(
 ): Promise<HomeAdminAlert[]> {
   const alerts: HomeAdminAlert[] = [];
 
-  // Inventario bajo (quantity <= minQuantity)
+  // Existencias. ws1-t5 (arreglo): antes era UN aviso, «N insumos bajo
+  // nivel», que contaba `quantity <= minQuantity` y metía lo agotado y lo
+  // bajo en el mismo saco (109 = 108 agotados + 1 bajo), con un enlace a un
+  // filtro donde solo salía 1. Ahora se cuentan por separado —en la misma
+  // consulta, sin un viaje más a la base— y cada aviso abre su filtro.
   try {
-    const lowStock = await prisma.$queryRaw<{ count: bigint }[]>`
-      SELECT COUNT(*)::bigint AS count
+    const filas = await prisma.$queryRaw<{ agotados: bigint; bajos: bigint }[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE "quantity" <= 0)::bigint AS agotados,
+        COUNT(*) FILTER (WHERE "quantity" > 0 AND "quantity" <= "minQuantity")::bigint AS bajos
       FROM "inventory_items"
       WHERE "clinicId" = ${clinicId}
-        AND "quantity" <= "minQuantity"
     `;
-    const n = Number(lowStock[0]?.count ?? 0);
-    if (n > 0) {
-      alerts.push({
-        id: "inv-low",
-        tone: "danger",
-        title: `Inventario crítico: ${n} insumo${n === 1 ? "" : "s"} bajo nivel`,
-        href: "/dashboard/inventory?filter=low",
-      });
-    }
+    alerts.push(
+      ...avisosDeExistencias({
+        agotados: Number(filas[0]?.agotados ?? 0),
+        bajos: Number(filas[0]?.bajos ?? 0),
+      }),
+    );
   } catch (err) {
     console.error("[admin alerts] lowStock query failed:", err);
     /* skip — la alerta se omite, no rompemos el endpoint */

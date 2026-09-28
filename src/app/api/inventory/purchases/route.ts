@@ -9,6 +9,7 @@ import {
   ArticuloNoEncontradoError,
 } from "@/lib/inventory/compras.server";
 import { providerPerteneceAClinica } from "@/lib/inventory/proveedores.server";
+import { parseFechaCalendario } from "@/lib/inventory/fecha-calendario";
 
 // ═══════════════════════════════════════════════════════════════════
 // COMPRAS / ENTRADAS de inventario (ws1-t4). "Editar inventario" — mismo
@@ -56,7 +57,11 @@ export async function POST(req: NextRequest) {
     // automático compra→lote, ver compras.server.ts → crearLoteDeLineaDeCompra).
     // Sin ninguno de los dos, la línea sigue entrando a "sin lote" como hoy.
     lotNumber: l?.lotNumber ? String(l.lotNumber).trim() || null : null,
-    expiresAt: l?.expiresAt ? parseFecha(String(l.expiresAt)) : null,
+    // ws1-t5 (arreglo): la caducidad es un día de calendario y se guarda
+    // igual que en el alta de lote (medianoche UTC de ese día). Antes pasaba
+    // por `parseFecha`, que le ponía la hora de México (06:00Z): dos formas
+    // de guardar lo mismo. Una fecha ilegible sigue dando «sin caducidad».
+    expiresAt: l?.expiresAt ? parseFechaCalendario(String(l.expiresAt)) : null,
   }));
   if (lines.length === 0 || lines.some((l) => !l.itemId)) {
     return NextResponse.json({ error: "La compra necesita al menos una línea con artículo." }, { status: 400 });
