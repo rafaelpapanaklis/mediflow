@@ -274,6 +274,14 @@ export interface TreatmentCardDTO {
   elastics: ElasticDTO[];
   iprPoints: IPRPointDTO[];
   brokenBrackets: BrokenBracketDTO[];
+  /**
+   * Ola 1 (ws1-t4, Control y agenda, sep-2026) — C2/C3: columnas nuevas
+   * (sql/ortodoncia-control-agenda.sql). Opcionales a propósito: el adapter
+   * de la ficha (adapter.ts, fuera de este archivo) puede no rellenarlas
+   * todavía — tratar como "" si faltan, no como error.
+   */
+  activationsNote?: string | null;
+  indications?: string | null;
 }
 
 export interface TADDTO {
