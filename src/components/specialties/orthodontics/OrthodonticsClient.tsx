@@ -25,6 +25,7 @@ import { PhotoSetWizard } from "./photos/PhotoSetWizard";
 import { ControlAppointmentWizard } from "./controls/ControlAppointmentWizard";
 import { RecordPaymentDrawer } from "./payments/RecordPaymentDrawer";
 import { PhotoCompareSlider } from "./photos/PhotoCompareSlider";
+import { MigratedOrthoCasesCard } from "./MigratedOrthoCasesCard";
 
 export interface OrthodonticsClientProps {
   patientId: string;
@@ -119,6 +120,8 @@ export function OrthodonticsClient(props: OrthodonticsClientProps) {
 
   return (
     <>
+      <MigratedOrthoCasesCard patientId={props.patientId} />
+
       <OrthodonticsTab
         patientId={props.patientId}
         patientName={props.patientName}
