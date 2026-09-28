@@ -137,8 +137,11 @@ export async function createTreatmentPlan(
   // encuentra fila/tabla ya devuelve el default (PRECIO_TOTAL) — nunca
   // lanza. `defaults(clinicId)` si la clínica jamás guardó Configuración
   // también cae en PRECIO_TOTAL, que es el comportamiento de siempre.
+  //
+  // Fila 32 (ws1-t4 ronda 6, decisión 2): si el alta eligió otro modo para
+  // ESTE caso, manda ese; el de la clínica queda como propuesta.
   const clinicSettings = await loadOrthoClinicSettings(ctx.clinicId);
-  const billingModeDelCaso = clinicSettings.billingMode;
+  const billingModeDelCaso = parsed.data.billingMode ?? clinicSettings.billingMode;
 
   try {
     let altaCasoFieldsSaved = wantsAltaCasoFields;

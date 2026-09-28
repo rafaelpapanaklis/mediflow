@@ -77,7 +77,7 @@ export function textosDelCosto(modo: OrthoBillingMode): { rotulo: string; pista:
     return {
       rotulo: "Costo estimado del tratamiento (MXN)",
       pista:
-        "Tu clínica cobra por control: no se factura un total. Escribe el estimado que le diste al paciente; queda solo como referencia del caso.",
+        "Este caso se cobra por control: no se factura un total. Escribe el estimado que le diste al paciente; queda solo como referencia del caso.",
     };
   }
   return {
@@ -85,6 +85,18 @@ export function textosDelCosto(modo: OrthoBillingMode): { rotulo: string; pista:
     pista:
       "Escribe el precio acordado con el paciente. Es la referencia del caso; lo que de verdad se cobra es la factura del tratamiento («Cobro del tratamiento» → «Abrir plan de pago»): confírmalo ahí antes de firmar el acuerdo.",
   };
+}
+
+/**
+ * Fila 32 (ws1-t4 ronda 6, decisión 2 del gerente): el modo de cobro se elige
+ * al ABRIR cada caso, con el de la clínica como propuesta, y no se cambia a
+ * medio caso. La pista dice de dónde salió y que queda fijo.
+ */
+export function pistaDelModoDelCaso(elegido: OrthoBillingMode, deLaClinica: OrthoBillingMode): string {
+  const fijo = "Se decide ahora: no se cambia con el caso abierto.";
+  return elegido === deLaClinica
+    ? `Es como cobra tu clínica (Configuración). Elige otro si este paciente va distinto. ${fijo}`
+    : `Distinto de como cobra tu clínica: solo para este caso. ${fijo}`;
 }
 
 export interface EstadoAlta {

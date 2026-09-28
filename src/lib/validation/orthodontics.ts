@@ -165,9 +165,13 @@ export const createTreatmentPlanSchema = z.object({
     })
     .optional()
     .nullable(),
+  // Fila 32 (ws1-t4 ronda 6, decisión 2): el modo de cobro se elige al ABRIR
+  // el caso; sin él, el de la clínica. No existe en la edición (abajo): un
+  // caso abierto no cambia de modo.
+  billingMode: z.enum(["PRECIO_TOTAL", "PAGO_POR_CONTROL"]).optional(),
 });
 
-export const updateTreatmentPlanSchema = createTreatmentPlanSchema.partial().extend({
+export const updateTreatmentPlanSchema = createTreatmentPlanSchema.omit({ billingMode: true }).partial().extend({
   treatmentPlanId: z.string().min(1),
   status: z.enum(ORTHO_TREATMENT_STATUS).optional(),
   onHoldReason: z.string().max(500).optional().nullable(),

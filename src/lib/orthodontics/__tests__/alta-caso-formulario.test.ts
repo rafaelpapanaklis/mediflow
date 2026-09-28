@@ -28,6 +28,7 @@ import {
   referenteParaGuardar,
   referenteYaRegistrado,
   telefonoTutorValido,
+  pistaDelModoDelCaso,
   textosDelCosto,
   type EstadoAlta,
 } from "../alta-caso-formulario";
@@ -183,7 +184,10 @@ test("el rótulo del costo depende de cómo cobra la clínica", () => {
   assert.match(CAJON, /const textosCosto = textosDelCosto\(billingMode\);/);
   assert.match(CAJON, /setBillingMode\(res\.data\.billingMode\);/);
   const opciones = leer("src/app/actions/orthodontics/getCaseIntakeOptions.ts");
-  assert.match(opciones, /billingMode = \(await loadOrthoClinicSettings\(ctx\.clinicId\)\)\.billingMode;/, "el modo sale de la clínica de la SESIÓN");
+  // Desde a80e849f (ws1-t5) se lee junto con el doctor por defecto; sigue
+  // siendo la clínica de la SESIÓN.
+  assert.match(opciones, /const settings = await loadOrthoClinicSettings\(ctx\.clinicId\);/, "el modo sale de la clínica de la SESIÓN");
+  assert.match(opciones, /billingMode = settings\.billingMode;/);
 });
 
 // ── (b) Quién lo refirió ────────────────────────────────────────────────
@@ -224,4 +228,28 @@ test("un referente que ya está en la lista no se guarda dos veces", () => {
   assert.equal(referenteYaRegistrado(lista, ""), null);
   assert.equal(referenteYaRegistrado([], "Dra. Laura Méndez"), null);
   assert.match(CAJON, /const repetido = referenteYaRegistrado\(referringDoctors, referenteNuevo\.fullName\);/);
+});
+
+// ── Fila 32 (ws1-t4 ronda 6, decisión 2): el modo de cobro se elige al abrir el caso ──
+
+test("el alta propone el modo de la clínica y deja elegir otro solo para este caso", () => {
+  assert.match(pistaDelModoDelCaso("PRECIO_TOTAL", "PRECIO_TOTAL"), /como cobra tu clínica/);
+  assert.match(pistaDelModoDelCaso("PAGO_POR_CONTROL", "PRECIO_TOTAL"), /solo para este caso/);
+  for (const [a, b] of [["PRECIO_TOTAL", "PRECIO_TOTAL"], ["PAGO_POR_CONTROL", "PRECIO_TOTAL"]] as const) {
+    assert.match(pistaDelModoDelCaso(a, b), /no se cambia con el caso abierto/);
+  }
+  assert.match(textosDelCosto("PAGO_POR_CONTROL").pista, /Este caso se cobra por control/);
+
+  // El cajón manda el modo elegido, arrancando en el de la clínica.
+  assert.match(CAJON, /setModoDeLaClinica\(res\.data\.billingMode\);/);
+  assert.match(CAJON, /pistaDelModoDelCaso\(billingMode, modoDeLaClinica\)/);
+  assert.match(CAJON, /\n\s+billingMode,\n\s+\};\n/);
+
+  // El servidor usa el del alta y, sin él, el de la clínica de la sesión.
+  const accion = leer("src/app/actions/orthodontics/createTreatmentPlan.ts");
+  assert.match(accion, /const billingModeDelCaso = parsed\.data\.billingMode \?\? clinicSettings\.billingMode;/);
+
+  // Y un caso abierto no cambia de modo: la edición no lo acepta.
+  const validacion = leer("src/lib/validation/orthodontics.ts");
+  assert.match(validacion, /updateTreatmentPlanSchema = createTreatmentPlanSchema\.omit\(\{ billingMode: true \}\)/);
 });

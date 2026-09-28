@@ -27,7 +27,12 @@ import { getCaseIntakeOptions, buscarTutoresDeLaClinica, type TutorDeLaClinica }
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { createDoctorContact } from "@/app/actions/clinical-shared/referrals";
 import { isFailure as referenteFallo } from "@/lib/clinical-shared/result";
-import { ORTHO_BILLING_MODE_DEFAULT, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
+import {
+  ORTHO_BILLING_MODE_DEFAULT,
+  ORTHO_BILLING_MODE_LABELS,
+  normalizarOrthoBillingMode,
+  type OrthoBillingMode,
+} from "@/lib/orthodontics/billing-mode";
 import {
   MOTIVO_TELEFONO_TUTOR,
   errorReferenteNuevo,
@@ -35,6 +40,7 @@ import {
   faltantesDelAlta,
   fraseDeFaltantes,
   leerCostoTotal,
+  pistaDelModoDelCaso,
   referenteParaGuardar,
   referenteYaRegistrado,
   textosDelCosto,
@@ -57,6 +63,11 @@ const DENTAL_PHASE_OPTIONS = [
   { v: "MIXED_LATE", l: "Mixta tardía" },
   { v: "PERMANENT", l: "Permanente" },
 ] as const;
+
+const MODO_DE_COBRO_OPTIONS = (["PRECIO_TOTAL", "PAGO_POR_CONTROL"] as const).map((v) => ({
+  v,
+  l: ORTHO_BILLING_MODE_LABELS[v],
+}));
 
 const TECHNIQUE_OPTIONS = [
   { v: "METAL_BRACKETS", l: "Brackets metálicos" },
@@ -141,6 +152,8 @@ export interface DrawerNewCasePlanPayload {
   treatingDoctorId: string | null;
   responsibleGuardianId: string | null;
   newResponsibleGuardian: { fullName: string; phone: string; parentesco: string } | null;
+  /** Fila 32 (ws1-t4 ronda 6): el modo de cobro de ESTE caso; propuesto el de la clínica. */
+  billingMode: OrthoBillingMode;
 }
 
 export interface DrawerNewCaseProps {
@@ -171,6 +184,8 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   // se sabe ANTES de elegir doctor/responsable, no después de guardar.
   const [columnsExist, setColumnsExist] = useState({ treatingDoctorId: true, responsibleGuardianId: true });
   const [billingMode, setBillingMode] = useState<OrthoBillingMode>(ORTHO_BILLING_MODE_DEFAULT);
+  /** Cómo cobra la clínica: la propuesta para el modo de este caso (fila 32). */
+  const [modoDeLaClinica, setModoDeLaClinica] = useState<OrthoBillingMode>(ORTHO_BILLING_MODE_DEFAULT);
   const [treatingDoctorId, setTreatingDoctorId] = useState("");
   /** El doctor que propuso Configuración, para decir de dónde salió. */
   const [doctorPropuesto, setDoctorPropuesto] = useState("");
@@ -184,6 +199,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       setReferringDoctors(res.data.referringDoctors);
       setColumnsExist(res.data.columnsExist);
       setBillingMode(res.data.billingMode);
+      setModoDeLaClinica(res.data.billingMode);
       // ws1-t5 (ronda 6): el alta arranca con el «Doctor tratante por defecto»
       // de Configuración (o el único ortodoncista de la clínica). Solo si
       // nadie eligió ya a otro mientras cargaba, y si la columna existe.
@@ -388,6 +404,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                     parentesco: newGuardianRelation,
                   }
                 : null,
+            billingMode,
           };
 
       await props.onConfirm({ diagnosis, plan });
@@ -632,6 +649,13 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 </Field>
                 <Field label="Fecha de colocación (opcional)">
                   <input type="date" value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} className={inputCls} />
+                </Field>
+                <Field label="Cómo se cobra este caso" hint={pistaDelModoDelCaso(billingMode, modoDeLaClinica)}>
+                  <Select
+                    value={billingMode}
+                    onChange={(v) => setBillingMode(normalizarOrthoBillingMode(v))}
+                    options={MODO_DE_COBRO_OPTIONS}
+                  />
                 </Field>
                 <Field label={textosCosto.rotulo} hint={textosCosto.pista} htmlFor={idCosto}>
                   <input
