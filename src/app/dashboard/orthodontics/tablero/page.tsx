@@ -10,12 +10,20 @@
 //
 // Diseño (ws1-t3): esta página solo carga los datos, igual que antes; cómo se
 // pintan vive en `modulo/vista-tablero.tsx`.
+//
+// Primeros pasos (ws1-t5): mientras a la clínica le falte elegir cómo cobra,
+// su doctor tratante, abrir un caso o su plan de pago, el Tablero lo dice
+// arriba, a quien puede hacerlo (quien administra la clínica). Con todo hecho
+// el bloque no se pinta.
 export const dynamic = "force-dynamic";
 
 import { getCurrentUser } from "@/lib/auth";
 import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { loadOrthoTableroData, loadTodayControlsWithIndications } from "@/lib/orthodontics/tablero-data";
+import { loadPrimerosPasosOrtodoncia } from "@/lib/orthodontics/primeros-pasos-db";
+import { hasPermission } from "@/lib/auth/permissions";
 import { VistaTablero } from "@/components/specialties/orthodontics/modulo/vista-tablero";
+import { PrimerosPasosOrtodoncia } from "@/components/specialties/orthodontics/modulo/primeros-pasos";
 
 export default async function OrthodonticsTableroPage() {
   await exigirModuloOrtodoncia();
@@ -26,5 +34,20 @@ export default async function OrthodonticsTableroPage() {
     loadTodayControlsWithIndications(user.clinicId, user.clinic.timezone, viewer),
   ]);
 
-  return <VistaTablero data={data} controlesHoy={controlesHoy} zonaHoraria={user.clinic.timezone} />;
+  // Después de la tanda de arriba, no junto a ella: son tres lecturas más y
+  // el pooler se satura por encima de 7 a la vez. Solo para quien puede
+  // cambiar la Configuración; a los demás el bloque les pediría pasos que no
+  // pueden dar.
+  const puedeConfigurar = hasPermission(
+    { role: user.role, permissionsOverride: user.permissionsOverride },
+    "settings.view",
+  );
+  const primerosPasos = puedeConfigurar ? await loadPrimerosPasosOrtodoncia(user.clinicId) : null;
+
+  return (
+    <>
+      {primerosPasos && <PrimerosPasosOrtodoncia pasos={primerosPasos} />}
+      <VistaTablero data={data} controlesHoy={controlesHoy} zonaHoraria={user.clinic.timezone} />
+    </>
+  );
 }
