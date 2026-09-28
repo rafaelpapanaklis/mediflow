@@ -103,9 +103,11 @@ export const SPECIALTIES: Record<string, Specialty> = {
     // Contenido reescrito en ws1-t11 (sep-2026): cada frase describe algo que el
     // módulo de ortodoncia SÍ hace. Antes de añadir una promesa, comprueba que
     // la función existe (tabla promesa → archivo en REPORTE-ws1-t11.md). Nada
-    // de IA que traza sola, cobro automático a tarjeta ni CFDI por mensualidad:
-    // no existen. La franja de métricas son datos del producto, no resultados
-    // de clínicas (esos no los tenemos medidos).
+    // de cobro automático a tarjeta ni CFDI por mensualidad: no existen. Y nada
+    // de hacer la cefalometría dentro del panel: Rafael canceló el trazado (28-sep-2026);
+    // lo que hay es guardar el PDF que entrega el centro radiológico o el
+    // programa del doctor. La franja de métricas son datos del producto, no
+    // resultados de clínicas (esos no los tenemos medidos).
     tagline: "Casos, controles y mensualidades", eyebrow: "Para ortodoncistas",
     heroTitle: "Casos, controles y mensualidades en un solo lugar.",
     heroSub:   "Abre el caso con su diagnóstico y su plan, lleva cada control desde la agenda con su hoja de control y cobra las mensualidades en Caja. Tu recepción sabe quién debe y cuánto.",
@@ -116,7 +118,7 @@ export const SPECIALTIES: Record<string, Specialty> = {
       feature("Controles en la agenda", "Agenda con 7 tipos de cita de ortodoncia. Al abrir un control llenas su hoja: arco, elásticos, activaciones, indicaciones y cuándo toca el siguiente. La firmas y queda ligada a esa cita.", "braces"),
       feature("Recepción y Caja", "Caja muestra las mensualidades vencidas, las de hoy y las de los próximos 7 días, cada una con su botón de cobrar. Los hermanos con el mismo responsable de pago aparecen juntos.", "box"),
       feature("Tablero y alertas", "Pacientes activos, controles de hoy, saldos vencidos y lo que va a entrar por mensualidades en los próximos 6 meses. Las alertas te dicen quién debe, quién no tiene control agendado y quién faltó.", "bell"),
-      feature("Cefalometría con trazado manual", "Sube la radiografía lateral y marca tú los puntos. El sistema calcula SNA, SNB, ANB, FMA e IMPA al momento, los compara con la norma y superpone el trazado inicial con el más reciente.", "scan"),
+      feature("Cefalometría en el caso", "Guarda en el caso el PDF de la cefalometría que te entrega el centro radiológico o tu programa, junto a las radiografías y las fotos del paciente. Lo abres desde su ficha cuando lo necesitas.", "scan"),
       feature("Fotos con líneas", "Juegos de fotos iniciales, de avance y finales. Sobre la foto marcas la línea E, el ángulo nasolabial y la línea media. Incluye análisis de Bolton y PDF comparativo.", "camera"),
       feature("Alineadores y elásticos", "Registra el alineador actual, el total y cada cuándo se cambia: el sistema calcula cuál debería traer hoy el paciente y te avisa si va atrasado. De los elásticos ves el cumplimiento de los últimos 14 días.", "tooth"),
       feature("Portal del paciente y WhatsApp", "Tu paciente ve su mensualidad, su saldo y su próximo control, registra sus elásticos y te manda fotos de seguimiento. El recordatorio de cita sale solo por WhatsApp; el de mensualidad lo envías con un clic.", "hand"),
@@ -124,7 +126,7 @@ export const SPECIALTIES: Record<string, Specialty> = {
     mockupKey: "ortho",
     testimonial: { q: "Los pacientes de ortodoncia me abandonaban en el mes 10 por falta de motivación. Con el timeline fotográfico ven el cambio y se quedan hasta el final. Subí retención 34%.", name: "Dr. Alejandro Kuri", role: "Ortodoncista · Smile Studio", city: "Guadalajara", metric: "+34% retención" },
     faqs: [
-      ["¿La cefalometría se traza sola?", "No. El trazado es manual: tú marcas los puntos sobre la radiografía lateral y el sistema hace las cuentas (SNA, SNB, ANB, FMA e IMPA) y las compara con la norma. No hay IA que trace por ti."],
+      ["¿Dónde guardo la cefalometría del paciente?", "En su caso. Subes el PDF que te entrega el centro radiológico o tu programa de cefalometría y queda guardado junto a sus radiografías y fotos, para consultarlo cuando quieras. El análisis lo haces con tu centro o tu programa; aquí lo guardas y lo tienes a la mano."],
       ["¿Puedo cobrar por control en lugar de mensualidades fijas?", "Sí. Cada clínica elige cómo cobra sus casos: precio total con enganche y mensualidades, o un cobro por cada control."],
       ["¿Las mensualidades se cobran solas a la tarjeta?", "No. El cobro lo registra tu equipo en Caja, con el método de pago que use el paciente. Lo que hace el sistema es avisarte quién tiene una mensualidad vencida, cuánto debe y desde cuándo."],
       ["¿Cada mensualidad se factura (CFDI) en automático?", "No. Cada pago queda registrado con su recibo. El CFDI se timbra desde la factura, con un botón, cuando lo necesitas; no sale solo con cada mensualidad."],

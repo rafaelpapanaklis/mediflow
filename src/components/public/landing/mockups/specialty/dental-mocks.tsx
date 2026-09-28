@@ -296,9 +296,10 @@ export const OdontogramMock: React.FC = () => {
 // Maqueta ilustrativa (datos de ejemplo), pero cada pieza corresponde a algo
 // que el módulo real SÍ tiene: el caso con su mes y fase, el arco actual, la
 // hoja de control ligada a la cita, el estado de cuenta de mensualidades, los
-// juegos de fotos (iniciales / de avance / finales), las 5 medidas del trazado
-// cefalométrico manual y lo que el paciente registra en su portal. Nada de
-// timeline automático, de IA que trace ni de cobro automático: no existen.
+// juegos de fotos (iniciales / de avance / finales), los registros guardados
+// (el PDF de la cefalometría del centro radiológico y la radiografía lateral)
+// y lo que el paciente registra en su portal. Nada de timeline automático, de
+// cefalometría hecha dentro del panel ni de cobro automático: no existen.
 export const OrthoMock: React.FC = () => {
   const mesActual = 5;
   const mesesTotales = 18;
@@ -313,12 +314,9 @@ export const OrthoMock: React.FC = () => {
     ["Elásticos", "Clase II · 3/16\""],
     ["Próximo control", "En 4 semanas"],
   ];
-  const medidas: Array<[string, string]> = [
-    ["SNA", "82°"],
-    ["SNB", "78°"],
-    ["ANB", "4°"],
-    ["FMA", "26°"],
-    ["IMPA", "93°"],
+  const registros: Array<[string, string, string]> = [
+    ["PDF", "Cefalometría", "Centro radiológico · 12 feb"],
+    ["JPG", "Radiografía lateral de cráneo", "12 feb"],
   ];
   const juegos: Array<[string, boolean]> = [
     ["Iniciales", true],
@@ -509,30 +507,35 @@ export const OrthoMock: React.FC = () => {
       >
         <div style={tarjeta}>
           <Row style={{ marginBottom: 10, justifyContent: "space-between" }}>
-            <SectionTitle>Cefalometría</SectionTitle>
-            <Tag color="#a78bfa">Trazado manual</Tag>
+            <SectionTitle>Registros del caso</SectionTitle>
+            <Tag color="#a78bfa">2 archivos</Tag>
           </Row>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
-            {medidas.map(([nombre, valor]) => (
+          <div style={{ display: "grid", gap: 6 }}>
+            {registros.map(([tipo, nombre, detalle]) => (
               <div
                 key={nombre}
                 style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
                   padding: "6px 8px",
                   borderRadius: 6,
                   background: "rgba(255,255,255,0.03)",
                   border: "1px solid var(--app-border)",
                 }}
               >
-                <div
+                <span
                   style={{
                     fontSize: 9,
-                    color: "var(--fg-muted)",
+                    color: "#a78bfa",
                     fontFamily: "var(--font-mono, ui-monospace, monospace)",
+                    letterSpacing: "0.06em",
                   }}
                 >
-                  {nombre}
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{valor}</div>
+                  {tipo}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 500, flex: 1, minWidth: 0 }}>{nombre}</span>
+                <span style={{ fontSize: 10, color: "var(--fg-muted)" }}>{detalle}</span>
               </div>
             ))}
           </div>
