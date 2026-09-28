@@ -52,6 +52,7 @@ import {
 } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
+import { RUTA_CONTRATAR_ORTODONCIA } from "@/lib/orthodontics/contratar";
 import { elegirSetParaFoto } from "@/lib/orthodontics/redesign/set-de-foto-por-visita";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
 import { DrawerNewCase, type DrawerNewCaseDiagnosisPayload, type DrawerNewCasePlanPayload } from "./drawers/DrawerNewCase";
@@ -164,6 +165,12 @@ export interface OrthodonticsPatientTabProps {
    *  para no tocar a quien monta la pestaña. */
   rediseno: boolean;
   orthoData: OrthoTabData | null | undefined;
+  /**
+   * La sede ya no tiene el módulo pero este paciente tiene o tuvo un caso:
+   * se enseña para LEER (NOM-004: el expediente no se oculta) y no se ofrece
+   * abrir otro caso. Crear y cobrar los rechaza además el servidor.
+   */
+  soloLectura?: boolean;
   orthoRedesignVM: OrthoRedesignViewModel | null | undefined;
   orthoRedesignBundle: OrthoRedesignBundle | null | undefined;
   /** Antes `() => setTab("agenda")` en patient-detail-client.tsx. */
@@ -191,6 +198,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     completedCount,
     pediatricsModuleActive,
     orthoData,
+    soloLectura = false,
     orthoRedesignVM,
     orthoRedesignBundle,
     onScheduleNext,
@@ -339,7 +347,15 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
           diagnóstico y plan NUEVOS — el viejo (fotos, consentimientos,
           controles, factura) se queda ligado a SU plan, tal cual como está;
           esto solo abre uno adicional, no lo reemplaza. */}
-      {(orthoData?.plan?.status === "COMPLETED" || orthoData?.plan?.status === "DROPPED_OUT") && (
+      {soloLectura && (
+        <div role="status" style={{ marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "10px 14px", borderRadius: 10, border: "1px solid var(--pr-borde-suave)", background: "var(--pr-fondo-2)" }}>
+          <span className="text-xs text-[color:var(--pr-texto-2)]">
+            <strong>Solo lectura.</strong> El módulo de Ortodoncia no está activo en esta sede: el expediente se conserva y se puede consultar, pero no se pueden registrar controles, abrir casos ni cobrar hasta que se vuelva a contratar.
+          </span>
+          <a className="text-xs underline" href={RUTA_CONTRATAR_ORTODONCIA}>Ver cómo volver a contratarlo</a>
+        </div>
+      )}
+      {!soloLectura && (orthoData?.plan?.status === "COMPLETED" || orthoData?.plan?.status === "DROPPED_OUT") && (
         <div style={{ marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 14px", borderRadius: 10, border: "1px solid var(--pr-borde-suave)", background: "var(--pr-fondo-2)" }}>
           <span className="text-xs text-[color:var(--pr-texto-3)]">
             {orthoData?.plan?.status === "COMPLETED" ? "Este caso terminó." : "Este caso se marcó como abandono."} Si regresa por un tratamiento nuevo, ábrele otro caso.
@@ -887,6 +903,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               catalog: payload.catalog,
               description: payload.description,
               lab: payload.lab,
+              labPartnerId: payload.labPartnerId ?? null,
               expectedDate: payload.expectedDate,
             });
             if (isFailure(res)) {

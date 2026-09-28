@@ -47,3 +47,23 @@ export const ESTADOS_QUE_CUENTAN_COMO_CASO = [
   "COMPLETED",
   "DROPPED_OUT",
 ] as const;
+
+// ── Sin el módulo, el expediente se sigue leyendo (decisión 3 del gerente) ──
+//
+// Si la clínica deja de pagar el módulo conserva la LECTURA de los casos que ya
+// tiene (NOM-004: el expediente no se oculta), pero no puede crear ni cobrar.
+// Ese «no puede» lo hace cumplir el servidor (`getOrthoActionContext` & co.
+// rechazan sin módulo activo); esto solo decide qué se ENSEÑA.
+
+export type AccesoOrtoFicha =
+  /** Módulo activo: la pestaña de siempre. */
+  | "completo"
+  /** Módulo vencido pero el paciente tiene o tuvo un caso: se lee, no se escribe. */
+  | "solo-lectura"
+  /** Sin módulo y sin nada de ortodoncia que conservar: no hay pestaña. */
+  | "oculto";
+
+export function accesoDeOrtodonciaEnLaFicha(e: { moduloActivo: boolean; tuvoCaso: boolean }): AccesoOrtoFicha {
+  if (e.moduloActivo) return "completo";
+  return e.tuvoCaso ? "solo-lectura" : "oculto";
+}

@@ -212,6 +212,7 @@
     "test:blog-import": "tsx --test src/lib/blog/__tests__/import-drip.test.ts",
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",
     "test:plan-de-pagos": "tsx --test src/lib/invoices/__tests__/plan-de-pagos.test.ts",
+    "test:orto-lectura-sin-modulo": "tsx --test src/lib/orthodontics/__tests__/lectura-sin-modulo.test.ts",
     "test:monto-cobro-h68": "tsx --test src/lib/invoices/__tests__/monto-cobro-h68.test.ts",
     "test:factura-cancelada-h-f": "tsx --test src/lib/orthodontics/__tests__/factura-cancelada-h-f.test.ts",
     "test:cfdi-pago-concepto": "tsx --test src/lib/invoices/__tests__/cfdi-pago-concepto.test.ts",

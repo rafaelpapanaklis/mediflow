@@ -282,6 +282,12 @@ interface Props {
    */
   orthoData?: OrthoTabData | null;
   /**
+   * El módulo de Ortodoncia no está activo pero el paciente tiene o tuvo un
+   * caso: la pestaña se LEE (NOM-004) y no ofrece crear ni cobrar. `orthoData`
+   * llega igual. Sin esto, la sede sin módulo no vería su expediente.
+   */
+  orthoSoloLectura?: boolean;
+  /**
    * ViewModel del rediseño Fase 1 ortodoncia patient-detail. Cuando viene
    * presente, se renderiza el shell nuevo (Hero+Diagnóstico+Plan+G1) en el
    * tab "ortodoncia". Si es null, fallback al cliente legacy.
@@ -427,6 +433,7 @@ export function PatientDetailClient({
   endoSoapPrefill,
   implants,
   orthoData,
+  orthoSoloLectura = false,
   orthoRedesignVM,
   orthoRedesignBundle,
   orthoTreatingDoctorId = null,
@@ -1016,7 +1023,7 @@ export function PatientDetailClient({
   // «Ortodoncia»; nada de Nutrición, Psicología, Medicina ni «Reset». Las
   // demás verticales siguen como estaban. Reglas y tests:
   // pacientes-rediseno/tipos-de-consulta.ts.
-  const tiposConsulta = tiposDeConsulta({ categoria: clinicCategory, moduloOrtodoncia: showOrthodontics });
+  const tiposConsulta = tiposDeConsulta({ categoria: clinicCategory, moduloOrtodoncia: showOrthodontics && !orthoSoloLectura });
   const formularioConsulta = formularioDeConsulta(currentSpecialty, clinicCategory);
   const puedeRestablecerTipo =
     permiteRestablecerTipo(clinicCategory) && Boolean(overrideSpecialty) && overrideSpecialty !== detectedSpecialty;
@@ -1775,7 +1782,7 @@ export function PatientDetailClient({
                       isChild: Boolean(patient.isChild) || (ageYears !== null && ageYears < 18),
                       dentition: pediatricsData?.dentition,
                       hasPerioModule: perioData !== null && perioData !== undefined,
-                      hasOrthoModule: (orthoData !== null && orthoData !== undefined) || orthoRedesignVM !== null,
+                      hasOrthoModule: !orthoSoloLectura && ((orthoData !== null && orthoData !== undefined) || orthoRedesignVM !== null),
                       hasEndoModule: endoSummaries !== null && endoSummaries !== undefined,
                       hasImplantsModule: implants !== null && implants !== undefined,
                       clinicSpecialty: specialty ?? "",
@@ -1996,6 +2003,7 @@ export function PatientDetailClient({
               pediatricsModuleActive={pediatricsModuleActive}
               rediseno={rediseno}
               orthoData={orthoData}
+              soloLectura={orthoSoloLectura}
               orthoRedesignVM={orthoRedesignVM}
               orthoRedesignBundle={orthoRedesignBundle}
               onScheduleNext={() => setTab("agenda")}

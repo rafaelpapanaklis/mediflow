@@ -24,6 +24,8 @@ import type { ImplantFull } from "@/lib/types/implants";
 import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { accesoDeOrtodonciaEnLaFicha } from "@/lib/orthodontics/pestana-ficha";
+import { pacienteTuvoCasoDeOrtodoncia } from "@/lib/orthodontics/tuvo-caso";
 import {
   loadOrthoRedesignData,
   type OrthoRedesignBundle,
@@ -416,7 +418,19 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   let orthoData: OrthoTabData | null = null;
   let orthoRedesignVM: OrthoRedesignViewModel | null = null;
   let orthoRedesignBundle: OrthoRedesignBundle | null = null;
-  if (isDental && (await hasActiveOrthodonticsModule(user.clinicId))) {
+  // Decisión 3 del gerente: sin el módulo (venció, o nunca lo pagó) el paciente
+  // que YA tiene o tuvo un caso conserva la LECTURA de su expediente (NOM-004:
+  // no se oculta); crear o cobrar sigue bloqueado por el servidor. Solo se
+  // pregunta por el caso cuando falta el módulo: con módulo, cero consultas más.
+  const orthoModuloActivo = isDental && (await hasActiveOrthodonticsModule(user.clinicId));
+  const orthoAcceso = isDental
+    ? accesoDeOrtodonciaEnLaFicha({
+        moduloActivo: orthoModuloActivo,
+        tuvoCaso: orthoModuloActivo ? false : await pacienteTuvoCasoDeOrtodoncia(user.clinicId, patient.id),
+      })
+    : "oculto";
+  const orthoSoloLectura = orthoAcceso === "solo-lectura";
+  if (orthoAcceso !== "oculto") {
     const redesign = await loadOrthoRedesignData({
       clinicId: user.clinicId,
       patientId: patient.id,
@@ -589,6 +603,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           endoSoapPrefill={endoSoapPrefill}
           implants={implants}
           orthoData={orthoData}
+          orthoSoloLectura={orthoSoloLectura}
           orthoRedesignVM={orthoRedesignVM}
           orthoRedesignBundle={orthoRedesignBundle}
           orthoTreatingDoctorId={orthoTreatingDoctorId}
