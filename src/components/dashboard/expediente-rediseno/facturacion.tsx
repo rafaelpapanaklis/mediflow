@@ -4,6 +4,7 @@ import { Plus, Receipt } from "lucide-react";
 import type { PatientBillingInvoice } from "@/components/dashboard/patient-detail/billing-tab";
 import { PagosMigradosCard } from "@/components/dashboard/patient-detail/pagos-migrados-card";
 import { GastosLaboratorioMigradosCard } from "@/components/dashboard/patient-detail/gastos-laboratorio-migrados-card";
+import { CuotasMigradasCard } from "@/components/dashboard/patient-detail/cuotas-migradas-card";
 import { FichasFactura } from "@/components/dashboard/factura-ficha-rediseno/fichas-factura";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { useT } from "@/i18n/i18n-provider";
@@ -39,8 +40,9 @@ export interface FacturacionProps {
   onNueva: () => void;
   /** Clic en la fila — abre el detalle de factura del padre. */
   onAbrir: (inv: PatientBillingInvoice) => void;
-  /** «Cobrar» por fila — abre el pago directo del padre. */
-  onCobrar: (inv: PatientBillingInvoice) => void;
+  /** «Cobrar» por fila — abre el pago directo del padre, con las condiciones
+   *  ya cargadas para proponer la mensualidad/lo vencido (ws1-t10, H68). */
+  onCobrar: (inv: PatientBillingInvoice, condiciones: CondicionesPago | null) => void;
   /** «Timbrar» — abre el detalle con el formulario SAT desplegado. */
   onTimbrar: (inv: PatientBillingInvoice) => void;
   /** «Duplicar» — abre Nueva factura con los mismos conceptos y el mismo trato. */
@@ -86,6 +88,7 @@ export function Facturacion({ patientId, facturas, facturApiEnabled, onNueva, on
 
       <PagosMigradosCard patientId={patientId} />
       <GastosLaboratorioMigradosCard patientId={patientId} />
+      <CuotasMigradasCard patientId={patientId} />
     </RaizExpediente>
   );
 }
