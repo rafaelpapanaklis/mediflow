@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
+import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { signMaybeUrls } from "@/lib/storage";
 import {
@@ -269,16 +270,26 @@ export async function loadOrthoRedesignData(
     ? await readLatestCompliancePct(input.clinicId, planId)
     : 0;
 
-  // Doctor de la próxima cita — resuelve desde attendedById del control
-  // futuro más cercano. Sin esto, el adapter caía en bug "doctor = patientName"
-  // (placeholder heredado de Fase 1).
-  const nextAppointmentDoctor = await resolveNextAppointmentDoctor(
+  // H10 (QA ws1-t9): la cita real que Recepción crea desde la Agenda vive
+  // en `Appointment` (mismo origen que ya usan Tablero y Alertas,
+  // tablero-data.ts) — `OrthodonticControlAppointment` es una tabla aparte
+  // que solo llena el asistente del módulo de especialidad en pausa
+  // (ControlAppointmentWizard) y que hoy nadie usa. Preferimos la cita real;
+  // si no hay ninguna, caemos al resolve legacy (y `deriveNextAppointment`
+  // sigue mirando `l.controls` como antes).
+  const nextRealAppointment = await resolveNextRealAppointment(
     input.clinicId,
     input.patientId,
   );
-  // Sillón de la próxima cita — heredado del PatientFlow activo si existe.
+  const nextAppointmentDoctor =
+    nextRealAppointment?.doctor ??
+    (await resolveNextAppointmentDoctor(input.clinicId, input.patientId));
+  // Sillón de la próxima cita — de la cita real si la tiene; si no, heredado
+  // del PatientFlow activo.
   const nextAppointmentChair =
-    (patientFlow as { chair?: string | null } | null)?.chair ?? null;
+    nextRealAppointment?.chair ??
+    (patientFlow as { chair?: string | null } | null)?.chair ??
+    null;
 
   // ── Construye bundle ──────────────────────────────────────────────────
   const historicalPhotoSets = await adaptPhotoSets(legacy.photoSets);
@@ -333,6 +344,7 @@ export async function loadOrthoRedesignData(
     elasticsCompliancePct,
     nextAppointmentDoctor,
     nextAppointmentChair,
+    nextRealAppointment,
     // Revisión cruzada (REPORTE-ws1-t1.md, "## Arreglos de la revisión"):
     // `legacy` ya trae la factura real resuelta (load-data.ts) — el adapter
     // solo la usa cuando `plan.invoiceId` no es null, así que pasarla aquí
@@ -475,6 +487,54 @@ async function adaptPhotoSets(
 }
 
 /**
+ * H10 (QA ws1-t9): la próxima cita de control REAL — la que Recepción crea
+ * desde la Agenda normal (`Appointment`, type = TIPO_CITA_CONTROL_ORTO).
+ * Mismo origen y mismo filtro que ya usa el Tablero
+ * (`tablero-data.ts#loadTodayControlsWithIndications`): sin esto, la ficha
+ * solo miraba `OrthodonticControlAppointment` (una tabla aparte que llena
+ * un asistente del módulo de especialidad en pausa y que nadie usa hoy) y
+ * decía "Sin programar" con una cita de hoy ya visible en Agenda/Tablero.
+ */
+async function resolveNextRealAppointment(
+  clinicId: string,
+  patientId: string,
+): Promise<{
+  startsAt: Date;
+  endsAt: Date;
+  doctor: { firstName: string; lastName: string } | null;
+  chair: string | null;
+} | null> {
+  try {
+    const next = await prisma.appointment.findFirst({
+      where: {
+        clinicId,
+        patientId,
+        type: TIPO_CITA_CONTROL_ORTO,
+        startsAt: { gte: new Date() },
+        status: { not: "CANCELLED" },
+      },
+      orderBy: { startsAt: "asc" },
+      select: {
+        startsAt: true,
+        endsAt: true,
+        doctor: { select: { firstName: true, lastName: true } },
+        resource: { select: { name: true } },
+      },
+    });
+    if (!next) return null;
+    return {
+      startsAt: next.startsAt,
+      endsAt: next.endsAt,
+      doctor: next.doctor,
+      chair: next.resource?.name ?? null,
+    };
+  } catch (e) {
+    console.error("[ortho-redesign] resolveNextRealAppointment failed:", e);
+    return null;
+  }
+}
+
+/**
  * Resuelve el doctor (firstName + lastName) que atenderá la próxima cita
  * ortodóntica del paciente. Busca el OrthodonticControlAppointment con
  * scheduledAt > now más cercano, lee su `attendedById` y trae el User.
@@ -482,6 +542,9 @@ async function adaptPhotoSets(
  * Sin este resolve, el adapter usaba `l.patientName` como placeholder
  * (bug heredado del Fase 1) — la UI mostraba "Gabriela Hernández Ruiz"
  * como doctor de la próxima cita.
+ *
+ * H10: fallback si no hay cita REAL (ver `resolveNextRealAppointment`) —
+ * clínicas que todavía usan el asistente legacy siguen viendo doctor.
  */
 async function resolveNextAppointmentDoctor(
   clinicId: string,

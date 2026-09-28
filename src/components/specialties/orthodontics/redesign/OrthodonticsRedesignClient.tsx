@@ -61,6 +61,7 @@ import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
 import layout from "./ortho-redesign-layout.module.css";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
+import { proximaFechaDeVisitaPorDefecto } from "@/lib/orthodontics/redesign/next-card-visit-default";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
 import type {
@@ -360,7 +361,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           phase: t.phase ?? "Sin fase",
           monthAt: t.monthCurrent,
           wireFrom: t.wireCurrent,
-          visitDate: new Date().toISOString(),
+          // H22 (QA ws1-t9): con la instantánea del instante en que se abre
+          // el cajón, "Próximo control en N semanas" heredaba esa hora
+          // (03:24, lo que fuera la hora del servidor) en vez de una hora de
+          // consulta. Si hay una cita de control de HOY, se usa su hora real
+          // — mismo criterio que ya usa BotonHojaControl al abrir desde la
+          // Agenda (getTreatmentCardContextForAppointment.ts: appt.startsAt).
+          visitDate: proximaFechaDeVisitaPorDefecto(vm.nextAppointment?.date),
         }
       : undefined;
 

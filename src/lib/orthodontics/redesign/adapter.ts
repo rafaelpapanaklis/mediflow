@@ -127,6 +127,19 @@ export interface AdapterInput {
    *  con metadata adicional). Por ahora se hereda del PatientFlow activo. */
   nextAppointmentChair?: string | null;
   /**
+   * H10 (QA ws1-t9): la cita de control REAL (`Appointment`, la que crea la
+   * Agenda) más cercana en el futuro, si existe. `deriveNextAppointment` la
+   * prefiere sobre `legacy.controls` (`OrthodonticControlAppointment`, una
+   * tabla aparte que hoy nadie llena) — sin esto la ficha decía "Sin
+   * programar" con una cita de hoy ya visible en Agenda/Tablero/Alertas.
+   */
+  nextRealAppointment?: {
+    startsAt: Date;
+    endsAt: Date;
+    doctor: { firstName: string; lastName: string } | null;
+    chair: string | null;
+  } | null;
+  /**
    * Revisión cruzada de la Ola 1 (ver REPORTE-ws1-t1.md, "## Revisión
    * cruzada"): cuando el caso YA tiene `orthodonticTreatmentPlan.invoiceId`
    * (Cobro, ws1-t1, ya abrió el plan de pago), el número que cuenta es el de
@@ -184,6 +197,7 @@ export function adaptToOrthoRedesignViewModel(
     nextAppointment: deriveNextAppointment(l, {
       doctor: input.nextAppointmentDoctor ?? null,
       chair: input.nextAppointmentChair ?? null,
+      real: input.nextRealAppointment ?? null,
     }),
     aiSuggestions: [],
     whatsappRecent: [],
@@ -450,20 +464,42 @@ function deriveNextAppointment(
   ctx: {
     doctor: { firstName: string; lastName: string } | null;
     chair: string | null;
+    /** H10: la cita real de la Agenda, si existe — ver `nextRealAppointment`. */
+    real?: { startsAt: Date; endsAt: Date } | null;
   },
 ) {
-  // Toma el próximo control con scheduledAt > now y attendance != NO_SHOW.
+  // Doctor real (resuelto en loader desde attendedById/doctorId). Antes el
+  // código ponía l.patientName como placeholder — bug detectado en audit E2E.
+  // Si no se pudo resolver, fallback "Doctor asignado" en vez de patientName.
+  const doctorName = ctx.doctor
+    ? `Dr/a. ${ctx.doctor.firstName} ${ctx.doctor.lastName}`.trim()
+    : "Doctor asignado";
+
+  // H10 (QA ws1-t9): la cita REAL de la Agenda manda sobre `l.controls`
+  // (OrthodonticControlAppointment, tabla legacy que hoy nadie llena) — sin
+  // esto la ficha decía "Sin programar" con una cita de hoy ya en Agenda.
+  if (ctx.real) {
+    const durationMin = Math.max(
+      15,
+      Math.round((ctx.real.endsAt.getTime() - ctx.real.startsAt.getTime()) / 60000),
+    );
+    return {
+      date: ctx.real.startsAt.toISOString(),
+      durationMin,
+      type: "Control mensual ortodoncia",
+      doctor: doctorName,
+      chair: ctx.chair,
+      prep: [],
+    };
+  }
+
+  // Fallback: la tabla legacy, por si alguna clínica sigue usando el
+  // asistente de citas de control del módulo de especialidad en pausa.
   const now = Date.now();
   const upcoming = l.controls
     .filter((c) => c.scheduledAt.getTime() >= now && c.attendance !== "NO_SHOW")
     .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())[0];
   if (!upcoming) return null;
-  // Doctor real (resuelto en loader desde attendedById). Antes el código
-  // ponía l.patientName como placeholder — bug detectado en audit E2E.
-  // Si no se pudo resolver, fallback "Doctor asignado" en vez de patientName.
-  const doctorName = ctx.doctor
-    ? `Dr/a. ${ctx.doctor.firstName} ${ctx.doctor.lastName}`.trim()
-    : "Doctor asignado";
   return {
     date: upcoming.scheduledAt.toISOString(),
     durationMin: 30,
