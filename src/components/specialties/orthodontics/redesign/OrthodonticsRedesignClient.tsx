@@ -334,7 +334,9 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     if (debeAbrirElAlta({ parametro, tieneCaso, puedeCrear: puedeCrearCaso })) setDrawer({ kind: "new-case" });
     direccion.delete(PARAMETRO_ABRIR_CASO);
     const resto = direccion.toString();
-    window.history.replaceState(window.history.state, "", `${window.location.pathname}${resto ? `?${resto}` : ""}${window.location.hash}`);
+    // Con `null`, no con `window.history.state`: así Next se entera del cambio
+    // y no vuelve a poner el aviso en la dirección en su siguiente refresco.
+    window.history.replaceState(null, "", `${window.location.pathname}${resto ? `?${resto}` : ""}${window.location.hash}`);
   }, [tieneCaso, puedeCrearCaso]);
 
   // Hallazgo ws1-t4 §5/§11: la cabecera, «Estado de cuenta» (RightRail),

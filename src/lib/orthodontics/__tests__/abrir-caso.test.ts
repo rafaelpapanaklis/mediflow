@@ -96,7 +96,9 @@ test("la ficha abre el asistente de alta al llegar con el aviso, y lo quita de l
     "el mismo asistente de siempre (DrawerNewCase), no otro",
   );
   assert.match(ficha, /direccion\.delete\(PARAMETRO_ABRIR_CASO\);/, "recargar no lo vuelve a abrir");
-  assert.match(ficha, /window\.history\.replaceState\(/);
+  // `null` y no el estado de Next: con el estado copiado, Next no se entera y
+  // su siguiente refresco devuelve el aviso a la dirección (visto en vivo).
+  assert.match(ficha, /window\.history\.replaceState\(null, "", /);
 });
 
 test("las etiquetas de la lista, dichas para la clínica", () => {
