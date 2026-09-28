@@ -15,7 +15,11 @@
 // ws1-t5 ronda 6 (hallazgo 96): sexta sección, «Fotos del paciente por
 // revisar». El portal le dice al paciente «tu clínica la revisará» y aquí
 // nadie se enteraba de que había llegado una foto.
-import type { ReactNode } from "react";
+//
+// ws1-t4 ronda 6 (fila 22, segunda mitad): «Posponer 7 días» en las cuatro
+// secciones que no son dinero ni fotos. Lo pospuesto ya llega quitado de
+// `alerts` y aquí solo se cuenta en el subtítulo.
+import { Children, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -36,6 +40,8 @@ import type { NoShowEntry, OrthoAlertsData } from "@/lib/orthodontics/alerts-dat
 import { notaCorta, resumenDeFotos, type FotosPorRevisarEntry } from "@/lib/orthodontics/fotos-paciente";
 import { EnviarRecordatorioButton } from "@/components/specialties/orthodontics/EnviarRecordatorioButton";
 import { AgendarControlBoton } from "./agendar-control";
+import { PosponerAlertaBoton } from "./posponer-alerta";
+import { DIAS_DE_POSPOSICION } from "@/lib/orthodontics/alertas-pospuestas";
 import { fechaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, type Tono } from "./piezas";
 import s from "./modulo.module.css";
@@ -56,10 +62,13 @@ export function VistaAlertas({
   alerts,
   zonaHoraria,
   puedeAgendar = false,
+  puedePosponer = false,
 }: {
   alerts: OrthoAlertsData;
   /** Permiso `agenda.create`, decidido en el servidor: sin él no sale «Agendar control». */
   puedeAgendar?: boolean;
+  /** Permiso `medicalRecord.view` (el que pide `posponerAlerta`): sin él no sale «Posponer 7 días». */
+  puedePosponer?: boolean;
   /** `clinic.timezone`: el día de una falta se pinta en la zona de la clínica, no en la del servidor. */
   zonaHoraria: string | null;
 }) {
@@ -72,6 +81,7 @@ export function VistaAlertas({
     alerts.noShows.length +
     alerts.finishingSoon.length +
     alerts.pastDue.length;
+  const pospuestas = alerts.pospuestas ?? 0;
 
   const resumen: { id: string; etiqueta: string; cuenta: number; icono: LucideIcon; tono: Tono }[] = [
     { id: "mensualidad-vencida", etiqueta: "Mensualidad vencida", cuenta: alerts.overduePayments.length, icono: AlertTriangle, tono: "peligro" },
@@ -86,9 +96,12 @@ export function VistaAlertas({
     <Pantalla
       titulo="Alertas"
       sub={
-        totalAlerts === 0
+        (totalAlerts === 0
           ? "Sin alertas pendientes."
-          : `${totalAlerts} caso${totalAlerts === 1 ? "" : "s"} que revisar.`
+          : `${totalAlerts} caso${totalAlerts === 1 ? "" : "s"} que revisar.`) +
+        (pospuestas > 0
+          ? ` ${pospuestas} pospuesta${pospuestas === 1 ? "" : "s"}: vuelve${pospuestas === 1 ? "" : "n"} sola${pospuestas === 1 ? "" : "s"} a los ${DIAS_DE_POSPOSICION} días.`
+          : "")
       }
     >
       <nav className={s.resumen} aria-label="Alertas por tipo">
@@ -148,6 +161,7 @@ export function VistaAlertas({
             detalle="Sin cita de control agendada"
           >
             {puedeAgendar && <AgendarControlBoton patientId={p.patientId} patientName={p.patientName} />}
+            {puedePosponer && <PosponerAlertaBoton patientId={p.patientId} patientName={p.patientName} tipo="sin-proximo-control" />}
           </PatientRow>
         ))}
       </AlertSection>
@@ -168,6 +182,7 @@ export function VistaAlertas({
             detalle={`Faltó el ${fmtDate(n.scheduledAt)}`}
           >
             {puedeAgendar && <AgendarControlBoton patientId={n.patientId} patientName={n.patientName} />}
+            {puedePosponer && <PosponerAlertaBoton patientId={n.patientId} patientName={n.patientName} tipo="no-asistio" />}
           </PatientRow>
         ))}
       </AlertSection>
@@ -186,7 +201,9 @@ export function VistaAlertas({
             patientId={e.patientId}
             patientName={e.patientName}
             detalle={`Mes ${e.monthInTreatment} de ${e.estimatedDurationMonths}`}
-          />
+          >
+            {puedePosponer && <PosponerAlertaBoton patientId={e.patientId} patientName={e.patientName} tipo="proximo-a-terminar" />}
+          </PatientRow>
         ))}
       </AlertSection>
 
@@ -205,7 +222,9 @@ export function VistaAlertas({
             patientName={e.patientName}
             detalle={`${Math.abs(e.remainingMonths)} mes${Math.abs(e.remainingMonths) === 1 ? "" : "es"} de retraso`}
             detallePeligro
-          />
+          >
+            {puedePosponer && <PosponerAlertaBoton patientId={e.patientId} patientName={e.patientName} tipo="pasado-de-fecha" />}
+          </PatientRow>
         ))}
       </AlertSection>
 
@@ -306,8 +325,9 @@ function PatientRow({
         </Link>
         <div className={detallePeligro ? `${s.detalle} ${s.detallePeligro}` : s.detalle}>{detalle}</div>
       </div>
-      {/* `children` puede llegar como `false` (sin permiso): ahí no se pinta la caja. */}
-      {children ? <div className={s.filaDerecha}>{children}</div> : null}
+      {/* `children` puede llegar como `false` (sin permiso), o como varios
+          `false`: ahí no se pinta la caja. */}
+      {Children.toArray(children).length > 0 ? <div className={s.filaDerecha}>{children}</div> : null}
     </li>
   );
 }

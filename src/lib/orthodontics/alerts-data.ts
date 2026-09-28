@@ -27,6 +27,9 @@ import {
   type OverduePatientEntry,
 } from "./specialty-kpis";
 import { agruparFotosPorRevisar, type FotosPorRevisarEntry } from "./fotos-paciente";
+import { historialDeControles } from "./controles-modulo";
+import { quitarPospuestas, vigentes } from "./alertas-pospuestas";
+import { cargarPosposiciones } from "./alertas-pospuestas-db";
 import { cargarFotosPorRevisar } from "./fotos-paciente-db";
 
 export interface NoShowEntry {
@@ -52,6 +55,11 @@ export interface OrthoAlertsData {
    * Opcional: una vista armada a mano sin este dato se pinta como «sin fotos».
    */
   patientPhotos?: FotosPorRevisarEntry[];
+  /**
+   * ws1-t4 ronda 6 (fila 22) — cuántas filas no salen porque alguien las
+   * pospuso 7 días. Ya vienen quitadas de las listas de arriba.
+   */
+  pospuestas?: number;
 }
 
 const NO_SHOW_WINDOW_DAYS = 30;
@@ -89,8 +97,15 @@ export async function loadOrthoAlerts(
     appointments.filter((a) => a.startsAt >= ahora && a.status !== "CANCELLED").map((a) => a.patientId),
   );
 
+  // H44: una falta deja de contar en cuanto el paciente ya vino después
+  // (Controles ya lo daba por al día; Alertas lo seguía marcando 30 días).
+  const historial = historialDeControles(appointments, ahora);
   const noShows: NoShowEntry[] = appointments
     .filter((a) => a.status === "NO_SHOW" && a.startsAt < ahora)
+    .filter((a) => {
+      const vino = historial.ultimoAtendido.get(a.patientId);
+      return !vino || vino < a.startsAt;
+    })
     .map((a) => ({
       patientId: a.patientId,
       patientName: `${a.patient.firstName} ${a.patient.lastName}`.trim(),
@@ -99,13 +114,21 @@ export async function loadOrthoAlerts(
 
   // ws1-t5 (96): nunca lanza; sin tabla o con la base caída, no hay avisos.
   const fotos = await cargarFotosPorRevisar(clinicId, viewer);
+  // ws1-t4 ronda 6 (fila 22): nunca lanza; sin tabla, nada pospuesto.
+  const activas = vigentes(await cargarPosposiciones(clinicId, ahora), ahora);
+
+  const sinControl = quitarPospuestas(listMissingNextControl(cases, futureControlPatientIds), "sin-proximo-control", activas);
+  const faltas = quitarPospuestas(noShows, "no-asistio", activas);
+  const porTerminar = quitarPospuestas(listFinishingSoon(cases, ahora), "proximo-a-terminar", activas);
+  const pasados = quitarPospuestas(listPastDue(cases, ahora), "pasado-de-fecha", activas);
 
   return {
     patientPhotos: agruparFotosPorRevisar(fotos),
     overduePayments: listOverduePatients(cases),
-    missingNextControl: listMissingNextControl(cases, futureControlPatientIds),
-    noShows,
-    finishingSoon: listFinishingSoon(cases, ahora),
-    pastDue: listPastDue(cases, ahora),
+    missingNextControl: sinControl.quedan,
+    noShows: faltas.quedan,
+    finishingSoon: porTerminar.quedan,
+    pastDue: pasados.quedan,
+    pospuestas: sinControl.pospuestas + faltas.pospuestas + porTerminar.pospuestas + pasados.pospuestas,
   };
 }

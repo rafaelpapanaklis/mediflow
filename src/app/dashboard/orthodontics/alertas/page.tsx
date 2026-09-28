@@ -29,5 +29,19 @@ export default async function OrthodonticsAlertasPage() {
     "agenda.create",
   );
 
-  return <VistaAlertas alerts={alerts} zonaHoraria={user.clinic.timezone} puedeAgendar={puedeAgendar} />;
+  // «Posponer 7 días» (ws1-t4 ronda 6, fila 22): el permiso que exige
+  // `posponerAlerta`. Posponer no toca el expediente; basta con poder verlo.
+  const puedePosponer = hasPermission(
+    { role: user.role, permissionsOverride: user.permissionsOverride },
+    "medicalRecord.view",
+  );
+
+  return (
+    <VistaAlertas
+      alerts={alerts}
+      zonaHoraria={user.clinic.timezone}
+      puedeAgendar={puedeAgendar}
+      puedePosponer={puedePosponer}
+    />
+  );
 }
