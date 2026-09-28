@@ -835,7 +835,12 @@
         "patientExternalId": "Patient ID in the source system",
         "externalId": "ID in the source system",
         "balanceExternalId": "Balance ID in the source system",
-        "apptStatus": "Appointment status"
+        "apptStatus": "Appointment status",
+        "estado": "Procedure status (done/pending)",
+        "fechaRealizado": "Date it was done",
+        "abonado": "Amount already paid",
+        "fechaAbono": "Payment date",
+        "proximaVisita": "Next visit"
       },
       "launch": "Import my clinic",
       "assistedCta": "Assisted migration",
@@ -923,7 +928,9 @@
         "clinicalNotesMeta": "Brought in marked as migrated, with their original date and author",
         "quotes": "Estimates",
         "quotesMeta": "Patient history: they don't create invoices or charges",
-        "soloNote": "Balances, appointments, medical history, notes and estimates are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first."
+        "treatmentPlans": "Active treatments",
+        "treatmentPlansMeta": "Estimates already in progress: come in as a live, continuable plan, with what's done and what's paid",
+        "soloNote": "Balances, appointments, medical history, notes, estimates and active treatments are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first."
       },
       "step4": {
         "title": "Upload your file",
@@ -1044,7 +1051,8 @@
           "appointments": "Appointments",
           "medicalHistory": "Medical history",
           "clinicalNotes": "Notes",
-          "quotes": "Estimates"
+          "quotes": "Estimates",
+          "treatmentPlans": "Active treatments"
         }
       },
       "result": {
@@ -1067,6 +1075,7 @@
         "pillMedicalHistory": "histories completed",
         "pillClinicalNotes": "notes migrated",
         "pillQuotes": "estimates",
+        "pillTreatmentPlans": "active treatments",
         "omittedLine": {
           "one": "{count} row was left out on purpose (past or cancelled appointment, or already imported).",
           "other": "{count} rows were left out on purpose (past or cancelled appointments, or already imported)."

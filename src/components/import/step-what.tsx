@@ -1,7 +1,7 @@
 "use client";
 
 // Paso 3 · Qué importar — checkboxes con badges Recomendado / Fácil / Avanzado.
-import { Users, CircleDollarSign, CalendarDays, Layers, FileText, ClipboardList, Check } from "lucide-react";
+import { Users, CircleDollarSign, CalendarDays, Layers, FileText, ClipboardList, Activity, Check } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { DATA_TYPES, type DataType } from "./import-client";
@@ -13,6 +13,7 @@ const ICONS: Record<DataType["icon"], LucideIcon> = {
   stack: Layers,
   file: FileText,
   clipboard: ClipboardList,
+  activity: Activity,
 };
 
 function Badge({ t, kind }: { t: TFunction; kind: DataType["badge"] }) {

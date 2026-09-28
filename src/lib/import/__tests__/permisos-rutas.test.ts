@@ -51,6 +51,7 @@ async function llamar(ruta: string): Promise<number> {
 const CITAS = "../../../app/api/import/appointments/route";
 const SALDOS = "../../../app/api/import/balances/route";
 const ASISTIDA = "../../../app/api/import/assisted/route";
+const TRATAMIENTOS = "../../../app/api/import/treatment-plans/route";
 
 test("citas: exige agenda.create además del rol", async () => {
   sesion = sesionDe("ADMIN");
@@ -93,4 +94,23 @@ test("migración asistida: antes no tenía ningún control de rol; ahora solo AD
   assert.equal(await llamar(ASISTIDA), 403);
   sesion = null;
   assert.equal(await llamar(ASISTIDA), 401);
+});
+
+test("tratamientos activos: exige billing.create Y treatments.edit (crea factura Y plan de un solo golpe)", async () => {
+  sesion = sesionDe("ADMIN");
+  assert.equal(await llamar(TRATAMIENTOS), 400, "un admin pasa el gate");
+  sesion = sesionDe("RECEPTIONIST");
+  assert.equal(await llamar(TRATAMIENTOS), 400, "recepción tiene las dos llaves por defecto");
+  // Sin billing.create (aunque conserve treatments.edit): no se crea la factura.
+  sesion = sesionDe("RECEPTIONIST", ["patients.view", "treatments.edit"]);
+  assert.equal(await llamar(TRATAMIENTOS), 403);
+  // Sin treatments.edit (aunque conserve billing.create): no se crea el plan.
+  sesion = sesionDe("RECEPTIONIST", ["patients.view", "billing.create"]);
+  assert.equal(await llamar(TRATAMIENTOS), 403);
+  sesion = sesionDe("DOCTOR");
+  assert.equal(await llamar(TRATAMIENTOS), 403, "el doctor no importa tratamientos en masa");
+  sesion = sesionDe("READONLY");
+  assert.equal(await llamar(TRATAMIENTOS), 403);
+  sesion = null;
+  assert.equal(await llamar(TRATAMIENTOS), 401);
 });

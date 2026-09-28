@@ -59,6 +59,9 @@ const dentalink: OriginProfile = {
   sheetNames: {
     appointments: ["Citas pacientes"],
     balances: ["Pacientes morosos"],
+    // «Tratamientos activos» (ws1-t6, 27-sep-2026): sin export real delante,
+    // igual que el resto de sheetNames de este archivo — solo PROPONE.
+    treatmentPlans: ["Tratamientos activos", "Presupuestos activos"],
   },
   entityMappings: {
     // «Citas pacientes» (Agenda). «Hora fin» NO se mapea: la duración sale de «Duración»
@@ -156,6 +159,46 @@ const dentalink: OriginProfile = {
       "Total": "total",
       "Estado": "status",
       "Profesional": "doctor",
+    },
+    // «Tratamientos activos» (ws1-t6, 27-sep-2026): mismas columnas que
+    // «Prestaciones/presupuestos» arriba, más lo que distingue un tratamiento
+    // EN CURSO de la historia: quién lo hizo, si ya se hizo y cuándo, y lo ya
+    // abonado. Sin export real delante — igual que el resto del archivo:
+    // `verified` sigue en false, y si no casan el paso de mapeo se corrige a mano.
+    treatmentPlans: {
+      "Id paciente": "patientExternalId",
+      "ID Paciente": "patientExternalId",
+      "Paciente": "name",
+      "Nombre paciente": "name",
+      "Celular": "phone",
+      "N° Presupuesto": "folio",
+      "Nº Presupuesto": "folio",
+      "N° Tratamiento": "folio",
+      "Fecha creación": "date",
+      "Fecha presupuesto": "date",
+      "Tratamiento": "title",
+      "Nombre tratamiento": "title",
+      "Prestación": "procedure",
+      "Prestaciones": "procedure",
+      "Pieza": "tooth",
+      "Diente": "tooth",
+      "Valor": "price",
+      "Valor unitario": "price",
+      "Dcto.": "discount",
+      "Descuento": "discount",
+      "Total": "total",
+      "Profesional": "doctor",
+      "Dentista": "doctor",
+      "Estado prestación": "estado",
+      "Estado de la prestación": "estado",
+      "Fecha realización": "fechaRealizado",
+      "Fecha de realización": "fechaRealizado",
+      "Abonado": "abonado",
+      "Monto abonado": "abonado",
+      "Fecha abono": "fechaAbono",
+      "Fecha de abono": "fechaAbono",
+      "Próxima cita": "proximaVisita",
+      "Próxima visita": "proximaVisita",
     },
   },
 };

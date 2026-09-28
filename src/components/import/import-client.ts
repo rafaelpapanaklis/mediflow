@@ -191,7 +191,7 @@ export interface DataType {
   /** Clave i18n del nombre, bajo shell.importClinic.step3.*. */
   labelKey: string;
   descKey: string;
-  icon: "users" | "money" | "calendar" | "stack" | "file" | "clipboard";
+  icon: "users" | "money" | "calendar" | "stack" | "file" | "clipboard" | "activity";
   badge: "rec" | "easy" | "adv";
   /** Seleccionado por defecto. */
   on: boolean;
@@ -206,7 +206,7 @@ export interface DataType {
 }
 
 /** Entidades clínicas: van solas y nunca reimportan duplicados (ver entities.ts). */
-export const CLINICAL_ENTITIES: ReadonlySet<Entity> = new Set<Entity>(["medicalHistory", "clinicalNotes", "quotes"]);
+export const CLINICAL_ENTITIES: ReadonlySet<Entity> = new Set<Entity>(["medicalHistory", "clinicalNotes", "quotes", "treatmentPlans"]);
 
 export const DATA_TYPES: DataType[] = [
   { id: "pacientes", labelKey: "patients", descKey: "patientsMeta", icon: "users", badge: "rec", on: true, entity: "patients" },
@@ -218,6 +218,9 @@ export const DATA_TYPES: DataType[] = [
   { id: "expedientes", labelKey: "medicalHistory", descKey: "medicalHistoryMeta", icon: "clipboard", badge: "adv", on: false, entity: "medicalHistory", solo: true },
   { id: "notas", labelKey: "clinicalNotes", descKey: "clinicalNotesMeta", icon: "file", badge: "adv", on: false, entity: "clinicalNotes", solo: true },
   { id: "presupuestos", labelKey: "quotes", descKey: "quotesMeta", icon: "stack", badge: "adv", on: false, entity: "quotes", solo: true },
+  // Tratamientos activos: como presupuestos, pero entra VIVO (plan continuable +
+  // factura + abonos). Va solo, con su propia revisión (dinero + plan clínico).
+  { id: "tratamientosactivos", labelKey: "treatmentPlans", descKey: "treatmentPlansMeta", icon: "activity", badge: "adv", on: false, entity: "treatmentPlans", solo: true },
 ];
 
 // Límites de archivo del paso 4.

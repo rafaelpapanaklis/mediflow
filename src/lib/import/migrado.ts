@@ -251,6 +251,52 @@ export function folioDeNotas(notes: string | null | undefined): string | null {
   return null;
 }
 
+const SENTINEL_ACTIVO = "Tratamiento activo migrado de ";
+const FOLIO_ORIGINAL_ACTIVO = "Folio original (tratamiento activo): ";
+
+/**
+ * ¿Estas notas son de un tratamiento activo migrado (no un presupuesto ACCEPTED
+ * cualquiera)? Sirve para acotar la deduplicación por día+total SOLO a lo que
+ * esta importación misma creó — sin esto, un presupuesto aceptado normal del
+ * panel que coincidiera en paciente+día+total se marcaría "ya importado" por error.
+ */
+export function esNotaDeTratamientoActivo(notes: string | null | undefined): boolean {
+  return !!notes && notes.startsWith(SENTINEL_ACTIVO);
+}
+
+/**
+ * Las notas con las que queda un TRATAMIENTO ACTIVO migrado (Quote status=ACCEPTED,
+ * con TreatmentPlan + Invoice ya ligados). A propósito NO usa el prefijo de
+ * `migratedQuoteNotes` (FOLIO_ORIGINAL): un mismo folio que ya se migró como
+ * HISTORIA (quotesHandler, status MIGRATED) y ahora se migra como tratamiento
+ * VIVO no deben confundirse entre sí — folioDeNotas() y folioDeNotaActiva()
+ * leen líneas distintas, así que un archivo no duplica al otro y viceversa.
+ */
+export function activeTreatmentNotes(args: {
+  origen: string;
+  importadoEl: Date;
+  timezone: string;
+  folio: string;
+  doctor: string;
+}): string {
+  const lineas = [
+    `${SENTINEL_ACTIVO}${args.origen} el ${formatConsentDate(args.importadoEl, args.timezone)}. ` +
+      `Continúa como plan de tratamiento vivo: lo ya realizado y lo abonado se aplican; lo pendiente sigue abierto.`,
+  ];
+  if (args.folio) lineas.push(`${FOLIO_ORIGINAL_ACTIVO}${args.folio}`);
+  if (args.doctor) lineas.push(`Doctor original: ${args.doctor}`);
+  return lineas.join("\n");
+}
+
+/** El folio original de un tratamiento activo migrado, leído de sus notas (o null). */
+export function folioDeNotaActiva(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  for (const line of notes.split("\n")) {
+    if (line.startsWith(FOLIO_ORIGINAL_ACTIVO)) return line.slice(FOLIO_ORIGINAL_ACTIVO.length).trim() || null;
+  }
+  return null;
+}
+
 /** Id con la forma de los cuid de Prisma (c + 24 minúsculas/dígitos), para insertar cabecera y líneas en lote. */
 export function newId(): string {
   const bytes = randomBytes(24);

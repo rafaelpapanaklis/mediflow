@@ -835,7 +835,12 @@
         "patientExternalId": "ID del paciente en el sistema de origen",
         "externalId": "ID en el sistema de origen",
         "balanceExternalId": "ID del saldo en el sistema de origen",
-        "apptStatus": "Estado de la cita"
+        "apptStatus": "Estado de la cita",
+        "estado": "Estado de la prestación (hecha/pendiente)",
+        "fechaRealizado": "Fecha en que se hizo",
+        "abonado": "Monto ya abonado",
+        "fechaAbono": "Fecha del abono",
+        "proximaVisita": "Próxima visita"
       },
       "launch": "Importar mi clínica",
       "assistedCta": "Migración asistida",
@@ -923,7 +928,9 @@
         "clinicalNotesMeta": "Entran marcadas como migradas, con su fecha y su autor originales",
         "quotes": "Presupuestos",
         "quotesMeta": "Historia del paciente: no generan factura ni cobro",
-        "soloNote": "Saldos, citas, expedientes, notas y presupuestos se importan de uno en uno, cada uno con su propia revisión: son datos de dinero, de agenda o clínicos y conviene verlos antes."
+        "treatmentPlans": "Tratamientos activos",
+        "treatmentPlansMeta": "Presupuestos con avance: entran como plan vivo y continuable, con lo hecho y lo abonado",
+        "soloNote": "Saldos, citas, expedientes, notas, presupuestos y tratamientos activos se importan de uno en uno, cada uno con su propia revisión: son datos de dinero, de agenda o clínicos y conviene verlos antes."
       },
       "step4": {
         "title": "Sube tu archivo",
@@ -1044,7 +1051,8 @@
           "appointments": "Citas",
           "medicalHistory": "Expedientes",
           "clinicalNotes": "Notas",
-          "quotes": "Presupuestos"
+          "quotes": "Presupuestos",
+          "treatmentPlans": "Tratamientos activos"
         }
       },
       "result": {
@@ -1067,6 +1075,7 @@
         "pillMedicalHistory": "expedientes completados",
         "pillClinicalNotes": "notas migradas",
         "pillQuotes": "presupuestos",
+        "pillTreatmentPlans": "tratamientos activos",
         "omittedLine": {
           "one": "{count} fila se dejó fuera a propósito (cita pasada o cancelada, o ya importada antes).",
           "other": "{count} filas se dejaron fuera a propósito (citas pasadas o canceladas, o ya importadas antes)."

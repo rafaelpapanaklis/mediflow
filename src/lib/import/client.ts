@@ -149,6 +149,29 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "status", label: "Estado original", labelKey: "shell.importClinic.fields.quoteStatus" },
     { value: "doctor", label: "Doctor / Profesional", labelKey: "shell.importClinic.fields.doctor" },
   ],
+  treatmentPlans: [
+    NO_IMPORT,
+    { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "patientExternalId", label: "ID del paciente en el sistema de origen", labelKey: "shell.importClinic.fields.patientExternalId" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "folio", label: "Folio del presupuesto", labelKey: "shell.importClinic.fields.folio" },
+    { value: "date", label: "Fecha", labelKey: "shell.importClinic.fields.date" },
+    { value: "title", label: "Título", labelKey: "shell.importClinic.fields.title" },
+    { value: "doctor", label: "Doctor / Profesional", labelKey: "shell.importClinic.fields.doctor" },
+    { value: "procedure", label: "Procedimiento", labelKey: "shell.importClinic.fields.procedure" },
+    { value: "tooth", label: "Pieza / diente", labelKey: "shell.importClinic.fields.tooth" },
+    { value: "quantity", label: "Cantidad", labelKey: "shell.importClinic.fields.quantity" },
+    { value: "price", label: "Precio unitario", labelKey: "shell.importClinic.fields.price" },
+    { value: "discount", label: "Descuento", labelKey: "shell.importClinic.fields.discount" },
+    { value: "total", label: "Importe de la línea", labelKey: "shell.importClinic.fields.total" },
+    { value: "estado", label: "Estado de la prestación (hecha/pendiente)", labelKey: "shell.importClinic.fields.estado" },
+    { value: "fechaRealizado", label: "Fecha en que se hizo", labelKey: "shell.importClinic.fields.fechaRealizado" },
+    { value: "abonado", label: "Monto ya abonado", labelKey: "shell.importClinic.fields.abonado" },
+    { value: "fechaAbono", label: "Fecha del abono", labelKey: "shell.importClinic.fields.fechaAbono" },
+    { value: "proximaVisita", label: "Próxima visita", labelKey: "shell.importClinic.fields.proximaVisita" },
+  ],
 };
 
 const ENDPOINTS: Record<Entity, string> = {
@@ -158,6 +181,7 @@ const ENDPOINTS: Record<Entity, string> = {
   medicalHistory: "/api/import/medical-history",
   clinicalNotes: "/api/import/clinical-notes",
   quotes: "/api/import/quotes",
+  treatmentPlans: "/api/import/treatment-plans",
 };
 
 const PREVIEW_TIMEOUT_MS = 60_000;
@@ -223,6 +247,15 @@ function rowDetail(entity: Entity, data: Record<string, any>): string | undefine
     if (data.procedure) parts.push(String(data.procedure));
     if (data.toothFdi) parts.push(`#${data.toothFdi}`);
     if (typeof data.lineTotal === "number") parts.push(formatMoney(data.lineTotal));
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "treatmentPlans") {
+    const parts: string[] = [];
+    if (data.procedure) parts.push(String(data.procedure));
+    if (data.toothFdi) parts.push(`#${data.toothFdi}`);
+    if (typeof data.lineTotal === "number") parts.push(formatMoney(data.lineTotal));
+    parts.push(data.hecho ? "Hecha" : "Pendiente");
+    if (typeof data.abonado === "number" && data.abonado > 0) parts.push(`Abonado: ${formatMoney(data.abonado)}`);
     return parts.length ? parts.join(" · ") : undefined;
   }
   if (entity === "medicalHistory") {
