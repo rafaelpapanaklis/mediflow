@@ -31,10 +31,22 @@ export interface EnqueueOrthoWhatsAppInput {
  * Encola UN reminder. Idempotente: si ya existe uno equivalente para esa
  * clínica + template + fecha + teléfono, lo omite.
  */
+// Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S13, QUITAR: estos avisos
+// salen con números en cero («mensualidad #0 por $0», ver
+// recalculatePaymentStatus.ts) o duplican el recordatorio general de la
+// Agenda (APPOINTMENT_REMINDER_24H, W1). Se apagan aquí, el único choke
+// point que usan los 4 sitios que encolan (createControlAppointment,
+// createTreatmentPlan, recalculatePaymentStatus, el cron diario) — nadie más
+// tiene que cambiar. Ocultar, no borrar: en `false` la función no encola
+// nada, pero se queda intacta por si Acceso/Cobro deciden revivirla ya
+// arreglada. Ver bloque S, REPORTE-ws1-t1.md.
+const ORTHO_WHATSAPP_ENQUEUE_ENABLED = false;
+
 export async function enqueueOrthoWhatsApp(
   db: Db,
   input: EnqueueOrthoWhatsAppInput,
 ): Promise<{ enqueued: boolean; reminderId?: string }> {
+  if (!ORTHO_WHATSAPP_ENQUEUE_ENABLED) return { enqueued: false };
   if (!input.patientPhone) {
     // Sin teléfono no tiene sentido encolar — el worker fallaría al enviar.
     return { enqueued: false };

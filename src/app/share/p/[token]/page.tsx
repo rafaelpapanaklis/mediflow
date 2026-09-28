@@ -3,7 +3,8 @@
 // Despacha por módulo:
 //   - periodontics → PerioShareView (perio-específico, sprint perio)
 //   - implants     → ImplantShareTimeline (timeline visual de fases)
-//   - orthodontics → OrthoSharePage + elastics calendar
+//   - orthodontics → OrthoSharePage (elastics calendar oculto, bloque S15
+//     de ws1-t1 — ver REPORTE-ws1-t1.md)
 //   - pediatrics y resto → vista genérica con stats vía resolvePublicShareToken
 
 import { notFound } from "next/navigation";
@@ -13,7 +14,6 @@ import { isFailure } from "@/lib/clinical-shared/result";
 import ImplantShareTimeline from "./ImplantShareTimeline";
 import { PerioShareView } from "./PerioShareView";
 import { OrthoSharePage } from "@/components/share/OrthoSharePage";
-import { OrthoElasticsCalendar } from "@/components/share/OrthoElasticsCalendar";
 
 // NO cachear (ni ISR ni CDN): el token abre el expediente compartido de UN
 // paciente. Una copia en caché sería dato clínico servido desde el CDN, y
@@ -102,7 +102,11 @@ export default async function PublicSharePage(props: PageProps) {
             summary={v.summary}
             stats={v.orthoStats}
           />
-          <OrthoElasticsCalendar token={props.params.token} />
+          {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S15, QUITAR: el
+              calendario de elásticos existe, pero nada crea el enlace que
+              llega aquí y lo marcado solo se guarda en el teléfono del
+              paciente. Ocultar, no borrar: OrthoElasticsCalendar se queda
+              en su archivo. */}
         </div>
       </main>
     );
