@@ -36,6 +36,7 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import type { OrthoTableroData, TodayControlEntry } from "@/lib/orthodontics/tablero-data";
 import { DIAS_VENTANA_VALORACIONES } from "@/lib/orthodontics/valoraciones-tablero";
 import { EnviarIndicacionesButton } from "@/components/specialties/orthodontics/EnviarIndicacionesButton";
+import { BotonHojaControl } from "@/components/specialties/orthodontics/agenda/BotonHojaControl";
 import { horaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, Vacio } from "./piezas";
 import s from "./modulo.module.css";
@@ -175,7 +176,14 @@ export function VistaTablero({
                     </Link>
                   </div>
                   <div className={s.filaDerecha}>
-                    {c.indications ? (
+                    {/* M3 (Ronda 6, «El día de la ortodoncista»): la fila del
+                        control de hoy es de donde MÁS falta hacía el botón —
+                        es la lista completa del día. Sin hoja todavía, se
+                        registra desde aquí mismo; con hoja ya hecha, el hueco
+                        vuelve a ser "Enviar indicaciones". */}
+                    {!c.hasCard && c.treatmentPlanId ? (
+                      <BotonHojaControl appointmentId={c.appointmentId} treatmentPlanId={c.treatmentPlanId} />
+                    ) : c.indications ? (
                       <EnviarIndicacionesButton appointmentId={c.appointmentId} />
                     ) : (
                       <span className={s.nota}>Sin indicaciones cargadas</span>

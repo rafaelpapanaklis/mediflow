@@ -106,6 +106,14 @@ export async function loadOrthoControles(
     }
   }
 
+  // M3 (Ronda 6): un paciente puede tener más de un plan histórico (caso
+  // previo cerrado) — `cases` ya viene ordenado/filtrado por `loadOrthoCases`
+  // así que basta el primero que aparezca por paciente, sin consulta extra.
+  const planIdPorPaciente = new Map<string, string>();
+  for (const caso of cases) {
+    if (!planIdPorPaciente.has(caso.patientId)) planIdPorPaciente.set(caso.patientId, caso.planId);
+  }
+
   const deLaVentana: CitaDeControl[] = enVentana.map((c) => ({
     appointmentId: c.id,
     patientId: c.patientId,
@@ -114,6 +122,7 @@ export async function loadOrthoControles(
     startsAt: c.startsAt,
     status: c.status,
     hoja: hojas.get(c.id) ?? null,
+    treatmentPlanId: planIdPorPaciente.get(c.patientId) ?? null,
   }));
 
   // Una hoja de control registrada también es un control hecho, aunque nadie

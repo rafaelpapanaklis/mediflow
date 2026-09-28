@@ -43,6 +43,12 @@ export interface CitaDeControl {
   status: EstadoDeCita | string;
   /** `null` = aún no se registra la hoja de ese control. */
   hoja: "DRAFT" | "SIGNED" | null;
+  /**
+   * M3 (ws1-t8, Ronda 6): caso activo del paciente, para poder ofrecer
+   * "Registrar control" en la fila misma cuando `hoja` todavía es `null`.
+   * Opcional — los tests de este archivo no lo necesitan.
+   */
+  treatmentPlanId?: string | null;
 }
 
 export interface DiaDeControles {

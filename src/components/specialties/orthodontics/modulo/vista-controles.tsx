@@ -35,6 +35,7 @@ import {
   type TonoEstado,
 } from "@/lib/orthodontics/controles-modulo";
 import { AgendarControlBoton } from "./agendar-control";
+import { BotonHojaControl } from "@/components/specialties/orthodontics/agenda/BotonHojaControl";
 import { horaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, Vacio, type Tono } from "./piezas";
 import s from "./modulo.module.css";
@@ -150,7 +151,7 @@ export function VistaControles({
         ) : (
           <ul className={s.tarjetaLista}>
             {semana.hoy.map((c) => (
-              <FilaDeControl key={c.appointmentId} cita={c} dia={hoy} zonaHoraria={zonaHoraria} />
+              <FilaDeControl key={c.appointmentId} cita={c} dia={hoy} zonaHoraria={zonaHoraria} esHoy />
             ))}
           </ul>
         )}
@@ -246,11 +247,14 @@ function FilaDeControl({
   cita,
   dia,
   zonaHoraria,
+  esHoy = false,
 }: {
   cita: CitaDeControl;
   /** "YYYY-MM-DD" del día de la cita en la zona de la clínica: a dónde lleva «Ver en la Agenda». */
   dia: string;
   zonaHoraria: string | null;
+  /** M3 (Ronda 6): esta fila es la de HOY — habilita "Registrar control". */
+  esHoy?: boolean;
 }) {
   const estado = estadoDeCita(cita.status);
   const cancelada = cita.status === "CANCELLED";
@@ -265,6 +269,12 @@ function FilaDeControl({
   } else if (cita.hoja === "DRAFT") {
     hoja = <span className={s.nota}>Hoja de control sin firmar</span>;
   }
+  // M3 (ws1-t8, Ronda 6): esta misma fila (usada por «Controles de hoy» Y
+  // por «próximos 7 días») es de donde el reporte pide registrar el control
+  // — solo tiene sentido HOY (sin hoja todavía, sin cancelar): un control de
+  // dentro de tres días no se firma antes de que pase.
+  const puedeRegistrarAqui =
+    esHoy && !cancelada && cita.hoja === null && Boolean(cita.treatmentPlanId);
 
   return (
     <li className={cancelada ? `${s.fila} ${s.filaApilable} ${s.filaApagada}` : `${s.fila} ${s.filaApilable}`}>
@@ -285,7 +295,11 @@ function FilaDeControl({
           Ver en la Agenda
           <ChevronRight size={14} aria-hidden />
         </Link>
-        {hoja}
+        {puedeRegistrarAqui && cita.treatmentPlanId ? (
+          <BotonHojaControl appointmentId={cita.appointmentId} treatmentPlanId={cita.treatmentPlanId} />
+        ) : (
+          hoja
+        )}
       </div>
     </li>
   );

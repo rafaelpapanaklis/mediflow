@@ -19,6 +19,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { formatShortTime } from "@/lib/home/greet";
 import type { AppointmentDTO } from "@/lib/home/types";
 import { destinoDeLaCitaEnHoy } from "@/lib/orthodontics/hoy";
+import { RegistrarControlEnFila } from "@/components/specialties/orthodontics/agenda/RegistrarControlEnFila";
 import { EtiquetaEstado } from "./piezas";
 import s from "./hoy.module.css";
 
@@ -75,6 +76,14 @@ export function FilaCita({ appt, compacta, onCheckIn, onCall, onWhatsApp }: Prop
           {t("home.apptRow.minutesWaiting", { count: appt.minutesWaiting })}
         </span>
       )}
+
+      {/* M3 (ws1-t8, Ronda 6): hallazgo 3 — "Hoy" era una de las tres
+          pantallas que listaban controles de ortodoncia sin poder
+          registrarlos. Se autocalifica sola (nada se pinta si la cita no es
+          un control o el paciente no tiene caso) — igual que RanuraCita.tsx
+          en el panel de la Agenda. Fuera del `!compacta`: también vive en la
+          vista del doctor. */}
+      <RegistrarControlEnFila appointmentId={appt.id} patientId={appt.patient.id} reason={appt.reason} />
 
       {!compacta && (
         <div className={s.filaAcciones}>

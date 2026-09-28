@@ -321,6 +321,17 @@ export interface TodayControlEntry {
   treatmentPlanId: string | null;
   /** C3 (Control y agenda) — null = sin hoja de control todavía para esta cita. */
   indications: string | null;
+  /**
+   * M3 (ws1-t8, Ronda 6, «El día de la ortodoncista»): ¿esta cita YA tiene
+   * hoja de control? Antes `treatmentPlanId` solo se resolvía a través de
+   * una hoja EXISTENTE (`card?.treatmentPlanId`) — para las citas de HOY que
+   * todavía no tienen hoja (el caso más común: es la razón de que estén en
+   * esta lista) eso dejaba `treatmentPlanId: null` y ningún botón podía
+   * abrir "Registrar control" desde aquí. Ahora se resuelve siempre desde
+   * el caso activo del paciente. Opcional para no romper fixtures/vistas
+   * previas que ya armaban este DTO a mano antes de este campo.
+   */
+  hasCard?: boolean;
 }
 
 /**
@@ -356,11 +367,29 @@ export async function loadTodayControlsWithIndications(
   });
   if (appointments.length === 0) return [];
 
-  const cards = await prisma.orthoTreatmentCard.findMany({
-    where: { clinicId, appointmentId: { in: appointments.map((a) => a.id) } },
-    select: { appointmentId: true, treatmentPlanId: true, indications: true },
-  });
+  // M3: menos de 7 consultas por Promise.all (regla del pooler) — dos aquí.
+  const [cards, plans] = await Promise.all([
+    prisma.orthoTreatmentCard.findMany({
+      where: { clinicId, appointmentId: { in: appointments.map((a) => a.id) } },
+      select: { appointmentId: true, treatmentPlanId: true, indications: true },
+    }),
+    prisma.orthodonticTreatmentPlan.findMany({
+      where: {
+        clinicId,
+        deletedAt: null,
+        patientId: { in: appointments.map((a) => a.patientId) },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, patientId: true },
+    }),
+  ]);
   const cardByAppointmentId = new Map(cards.map((c) => [c.appointmentId, c]));
+  // Un paciente puede tener más de un plan histórico (caso previo cerrado);
+  // se toma el más reciente — mismo criterio que getTreatmentPlanIdForAppointment.ts.
+  const planIdByPatientId = new Map<string, string>();
+  for (const p of plans) {
+    if (!planIdByPatientId.has(p.patientId)) planIdByPatientId.set(p.patientId, p.id);
+  }
 
   return appointments.map((a) => {
     const card = cardByAppointmentId.get(a.id);
@@ -369,8 +398,9 @@ export async function loadTodayControlsWithIndications(
       patientId: a.patientId,
       patientName: `${a.patient.firstName} ${a.patient.lastName}`.trim(),
       startsAt: a.startsAt,
-      treatmentPlanId: card?.treatmentPlanId ?? null,
+      treatmentPlanId: card?.treatmentPlanId ?? planIdByPatientId.get(a.patientId) ?? null,
       indications: card?.indications ?? null,
+      hasCard: Boolean(card),
     };
   });
 }
