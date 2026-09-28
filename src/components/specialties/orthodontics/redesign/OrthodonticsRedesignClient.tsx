@@ -18,6 +18,7 @@ import {
 } from "./sections/SectionPhotos";
 import { SectionFinance } from "./sections/SectionFinance";
 import { ResumenCobranza } from "../cobranza/ResumenCobranza";
+import { AlineadoresPanel } from "../alineadores/AlineadoresPanel";
 import {
   SectionRetention,
   type RetainerCheckupDTO,
@@ -369,6 +370,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
                   : props.onStartDiagnosisWizard
             }
             onUploadRecord={props.onOpenImagingRecords ?? props.onStartDiagnosisWizard}
+            treatmentPlanId={t.treatmentPlanId}
+            patientId={t.patientId}
           />
 
           <SectionPlan
@@ -426,6 +429,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           {t.treatmentPlanId ? (
             <ResumenCobranza treatmentPlanId={t.treatmentPlanId} patientName={vm.patient.fullName} />
           ) : null}
+
+          {/* Parte 8 «Alineadores y cumplimiento» (ws1-t8, ola 1, sep-2026):
+              ranura nueva, mismo patrón self-fetch que ResumenCobranza. Se
+              calla si no hay caso de alineadores ni cumplimiento registrado. */}
+          {t.treatmentPlanId ? <AlineadoresPanel treatmentPlanId={t.treatmentPlanId} /> : null}
 
           <SectionRetention
             regimen={props.retentionRegimen ?? null}

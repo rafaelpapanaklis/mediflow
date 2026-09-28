@@ -13,6 +13,7 @@ import { Btn, Card, KV } from "../atoms";
 import { Pill } from "../atoms/Pill";
 import { fmtDateShort, fmtMm } from "../atoms/format";
 import { SKELETAL_PATTERN_LABELS, type DiagnosisDTO } from "../types";
+import { ImagenYAnalisisCard } from "../../imagen/ImagenYAnalisisCard";
 
 export interface DigitalRecordEntry {
   label: string;
@@ -31,6 +32,11 @@ export interface SectionDiagnosisProps {
   onStartWizard?: () => void;
   onEdit?: () => void;
   onUploadRecord?: () => void;
+  /** Parte 7 «Imagen y análisis» (ws1-t8, ola 1, sep-2026): habilita la
+   *  ranura de cefalometría/fotos/3D en vez de la tarjeta decorativa. Sin
+   *  esto (patientId sin caso todavía) se sigue viendo el placeholder. */
+  treatmentPlanId?: string;
+  patientId?: string;
 }
 
 const HABIT_LABELS: Record<string, string> = {
@@ -103,7 +109,11 @@ export function SectionDiagnosis(props: SectionDiagnosisProps) {
           midlineLowerDeviated={props.midlineLowerDeviated}
         />
         <SkeletalAtmCard d={d} />
-        <CephalometryCard />
+        {props.treatmentPlanId && props.patientId ? (
+          <ImagenYAnalisisCard treatmentPlanId={props.treatmentPlanId} patientId={props.patientId} />
+        ) : (
+          <CephalometryCard />
+        )}
         <DigitalRecordsCard
           records={props.digitalRecords ?? []}
           onUpload={props.onUploadRecord}
