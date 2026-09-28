@@ -213,6 +213,7 @@
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",
     "test:plan-de-pagos": "tsx --test src/lib/invoices/__tests__/plan-de-pagos.test.ts",
     "test:orto-cfdi-responsable": "tsx --test src/lib/orthodontics/__tests__/receptor-responsable.test.ts",
+    "test:orto-cobranza-extras": "tsx --test src/lib/orthodontics/__tests__/cobranza-extras.test.ts",
     "test:facturas-ligables": "tsx --test src/lib/orthodontics/cobro/__tests__/facturas-ligables.test.ts",
     "test:orto-lectura-sin-modulo": "tsx --test src/lib/orthodontics/__tests__/lectura-sin-modulo.test.ts",
     "test:monto-cobro-h68": "tsx --test src/lib/invoices/__tests__/monto-cobro-h68.test.ts",

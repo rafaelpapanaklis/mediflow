@@ -106,6 +106,10 @@ export interface OrthoCaseSummary {
   statusUpdatedAt: Date;
   /** H45: días que el caso estuvo «En pausa» (de la bitácora). Sin dato = 0. */
   diasEnPausa?: number;
+  /** #80: lo que el caso debe en extras (reposiciones, retenedores…), aparte de las mensualidades. Sin dato = nada. */
+  extrasPendientes?: { monto: number; cantidad: number };
+  /** #72: nombre del responsable de pago (tutor), si el caso lo tiene. */
+  responsableNombre?: string | null;
   /** `null` = sin factura de tratamiento, o sin condiciones cargadas: nada que cobrar todavía (T3/L1 lo ignoran, no lo cuentan como "al día"). */
   cobranza: CobranzaDelCaso | null;
 }

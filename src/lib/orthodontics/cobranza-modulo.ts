@@ -58,6 +58,11 @@ export interface FilaCobranza {
   porCobrar: number;
   cuotasPagadas: number;
   cuotasTotales: number;
+  /** #80: lo que debe en extras (reposiciones, retenedores…) — aparte de las mensualidades. */
+  extrasPendientes?: number;
+  extrasCantidad?: number;
+  /** #72: el responsable de pago (tutor) del caso. */
+  responsableNombre?: string | null;
 }
 
 export interface ResumenDeCobranza {
@@ -68,6 +73,8 @@ export interface ResumenDeCobranza {
   alCorriente: number;
   sinPlan: number;
   total: number;
+  /** #80: lo que se debe en extras entre todos los casos, en pesos. */
+  extras?: number;
 }
 
 const aCentavos = (pesos: number) => Math.round((Number(pesos) || 0) * 100);
@@ -106,7 +113,11 @@ export function filasDeCobranza(cases: OrthoCaseSummary[], hoy: string): FilaCob
 
   for (const c of cases) {
     const casoActivo = ACTIVE_PLAN_STATUSES.includes(c.status);
+    const extrasPendientes = c.extrasPendientes?.monto ?? 0;
     const base = {
+      extrasPendientes,
+      extrasCantidad: c.extrasPendientes?.cantidad ?? 0,
+      responsableNombre: c.responsableNombre ?? null,
       planId: c.planId,
       patientId: c.patientId,
       patientName: c.patientName,
@@ -118,7 +129,7 @@ export function filasDeCobranza(cases: OrthoCaseSummary[], hoy: string): FilaCob
     const cob = c.cobranza;
     const cuotasTotales = cob ? cob.pagadas.length + cob.vencidas.length + cob.proximas.length : 0;
     if (!cob || cuotasTotales === 0) {
-      if (!casoActivo) continue;
+      if (!casoActivo && extrasPendientes <= 0) continue;
       filas.push({
         ...base,
         situacion: "sin-plan",
@@ -146,7 +157,7 @@ export function filasDeCobranza(cases: OrthoCaseSummary[], hoy: string): FilaCob
       null,
     );
     const porCobrarC = aCentavos(cob.saldoTotal);
-    if (!casoActivo && porCobrarC <= 0) continue;
+    if (!casoActivo && porCobrarC <= 0 && extrasPendientes <= 0) continue;
 
     const diasParaLaProxima = proxima?.vencimiento ? diasEntre(hoy, proxima.vencimiento) : null;
     let situacion: SituacionCobranza;
@@ -190,6 +201,7 @@ export function resumenDeCobranza(filas: FilaCobranza[]): ResumenDeCobranza {
   let vencidoC = 0;
   let porVencerC = 0;
   let porCobrarC = 0;
+  let extrasC = 0;
   const r: ResumenDeCobranza = {
     vencido: { casos: 0, cuotas: 0, importe: 0 },
     porVencer: { casos: 0, importe: 0 },
@@ -200,6 +212,7 @@ export function resumenDeCobranza(filas: FilaCobranza[]): ResumenDeCobranza {
   };
   for (const f of filas) {
     porCobrarC += aCentavos(f.porCobrar);
+    extrasC += aCentavos(f.extrasPendientes ?? 0);
     if (f.situacion === "vencido") {
       r.vencido.casos += 1;
       r.vencido.cuotas += f.cuotasVencidas;
@@ -216,6 +229,7 @@ export function resumenDeCobranza(filas: FilaCobranza[]): ResumenDeCobranza {
   r.vencido.importe = aPesos(vencidoC);
   r.porVencer.importe = aPesos(porVencerC);
   r.porCobrar = aPesos(porCobrarC);
+  r.extras = aPesos(extrasC);
   return r;
 }
 

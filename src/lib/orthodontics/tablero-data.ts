@@ -38,6 +38,7 @@ import { cobranzaDelCasoUnificada } from "./cobranza-caso";
 import { normalizarOrthoBillingMode } from "./billing-mode";
 import { cargarModosDeCobro } from "./billing-mode-db";
 import { cargarCargosDeControlPorCasos } from "./cobranza-controles-db";
+import { extrasPendientesPorCasos } from "./cobro/extras-db";
 import {
   computeActiveCasesCount,
   computeMonthlyProjection,
@@ -190,6 +191,12 @@ export async function loadOrthoCases(
   }
   const cargosControlPorPlan = await cargarCargosDeControlPorCasos(clinicId, planIdsPorControl);
   const pausaPorPlan = await cargarDiasEnPausaPorCaso(clinicId, plans.map((p) => p.id), ahora, plans);
+  // #80 / #72: extras que se deben y responsable de pago, una consulta cada uno
+  // para todos los casos; si alguna falla, la pantalla sale como antes.
+  const [extrasPorPlan, responsablePorPlan] = await Promise.all([
+    extrasPendientesPorCasos(clinicId, plans.map((p) => p.id)),
+    cargarResponsablesDeCasos(clinicId, plans.map((p) => p.id)),
+  ]);
 
   const invoiceIdByPlanId = new Map<string, string>();
   const cases: OrthoCaseSummary[] = plans.map((p) => {
@@ -215,11 +222,29 @@ export async function loadOrthoCases(
       droppedOutAt: p.droppedOutAt,
       statusUpdatedAt: p.statusUpdatedAt,
       diasEnPausa: pausaPorPlan.get(p.id) ?? 0,
+      extrasPendientes: extrasPorPlan.get(p.id),
+      responsableNombre: responsablePorPlan.get(p.id) ?? null,
       cobranza,
     };
   });
 
   return { cases, invoiceIdByPlanId, invoicesById };
+}
+
+/** #72: el responsable de pago de cada caso (una consulta). Nunca lanza: sin dato, nadie. */
+async function cargarResponsablesDeCasos(clinicId: string, planIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!clinicId || planIds.length === 0) return out;
+  try {
+    const filas = await prisma.orthodonticTreatmentPlan.findMany({
+      where: { clinicId, id: { in: planIds }, responsibleGuardianId: { not: null } },
+      select: { id: true, responsibleGuardian: { select: { fullName: true } } },
+    });
+    for (const f of filas) if (f.responsibleGuardian?.fullName) out.set(f.id, f.responsibleGuardian.fullName);
+  } catch (e) {
+    if (!esRelacionAusente(e)) console.warn("[ortho] no se pudo leer el responsable de pago:", e);
+  }
+  return out;
 }
 
 /**

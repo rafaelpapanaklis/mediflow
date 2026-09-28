@@ -328,5 +328,6 @@ test("sin casos: lista vacía y resumen en cero", () => {
     alCorriente: 0,
     sinPlan: 0,
     total: 0,
+    extras: 0,
   });
 });

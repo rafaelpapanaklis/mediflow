@@ -301,6 +301,9 @@ export function VistaCobranza({
                             <div className={s.detalle}>
                               {[f.treatingDoctorName, cerrado].filter(Boolean).join(" · ") || "Sin doctor tratante"}
                             </div>
+                            {f.responsableNombre ? (
+                              <div className={s.detalle} data-responsable>Responsable: {f.responsableNombre}</div>
+                            ) : null}
                           </div>
                         </div>
                       </td>
@@ -322,9 +325,18 @@ export function VistaCobranza({
                             )}
                           </>
                         ) : (
-                          <span className={`${s.importe} ${s.importeApagado}`}>
-                            {f.situacion === "sin-plan" ? "—" : "Al día"}
-                          </span>
+                          <>
+                            <span className={`${s.importe} ${s.importeApagado}`}>
+                              {f.situacion === "sin-plan" ? "—" : "Al día"}
+                            </span>
+                            {/* #80: «Al día» habla de las mensualidades; si hay extras
+                                sin pagar, que no parezca que no debe nada. */}
+                            {(f.extrasPendientes ?? 0) > 0 ? (
+                              <div className={`${s.detalle} ${s.detallePeligro}`} data-extras>
+                                Debe {(f.extrasCantidad ?? 0) === 1 ? "un extra" : `${f.extrasCantidad} extras`}: {fmtMoney(f.extrasPendientes ?? 0)}
+                              </div>
+                            ) : null}
+                          </>
                         )}
                       </td>
                       <td role="cell" className={s.num} data-etiqueta="Próximo pago">
@@ -346,7 +358,10 @@ export function VistaCobranza({
                       </td>
                       <td role="cell" className={s.num} data-etiqueta="Por cobrar">
                         {f.situacion === "sin-plan" ? (
-                          <span className={`${s.importe} ${s.importeApagado}`}>—</span>
+                          <>
+                            <span className={`${s.importe} ${s.importeApagado}`}>—</span>
+                            {(f.extrasPendientes ?? 0) > 0 ? <div className={s.detalle}>+ {fmtMoney(f.extrasPendientes ?? 0)} en extras</div> : null}
+                          </>
                         ) : (
                           <>
                             <span className={s.importe}>{fmtMoney(f.porCobrar)}</span>
@@ -354,6 +369,7 @@ export function VistaCobranza({
                               {f.cuotasPagadas} de {f.cuotasTotales} pago{f.cuotasTotales === 1 ? "" : "s"} cubierto
                               {f.cuotasTotales === 1 ? "" : "s"}
                             </div>
+                            {(f.extrasPendientes ?? 0) > 0 ? <div className={s.detalle}>+ {fmtMoney(f.extrasPendientes ?? 0)} en extras</div> : null}
                           </>
                         )}
                       </td>
