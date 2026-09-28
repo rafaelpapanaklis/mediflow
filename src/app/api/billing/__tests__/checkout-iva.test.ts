@@ -511,7 +511,11 @@ test("ningún camino de renovación crea sesiones: `subscriptions.update` solo e
   // ws1-t2: module-cancel/route.ts SOLO pide `cancel_at_period_end: true`
   // (agenda la baja al fin del periodo YA pagado) — no cambia precio, no
   // cambia tasa, no crea sesión nueva.
+  // ws1-t5: toggle-clinic-module.ts (el interruptor de /admin) hace lo mismo
+  // sobre la suscripción de un módulo: `cancel_at_period_end: true` al
+  // apagarlo y `false` al deshacer la baja. Tampoco toca precio ni tasa.
   assert.deepEqual(con, [
+    "src/app/actions/admin/toggle-clinic-module.ts",
     "src/app/api/billing/change-plan/route.ts",
     "src/app/api/marketplace/module-cancel/route.ts",
     "src/lib/stripe-subscriptions.ts",
