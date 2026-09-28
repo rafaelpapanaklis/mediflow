@@ -169,7 +169,9 @@ export async function buildTreatmentCardContext(
   // Hallazgo 7: si no hay una ligada a ESTA cita, ¿hay una de HOY de este
   // mismo caso (por otra cita, o sin cita)? Se continúa esa en vez de crear
   // una segunda del mismo día.
-  const deHoy = linkedToAppt ? null : tarjetaDeControlDeHoy(cards, clinicTimezone);
+  // «Hoy» es el día de ESTA cita, no el del reloj: visto en vivo, abrir la
+  // cita de mañana enseñaba la hoja firmada de hoy en vez de una nueva.
+  const deHoy = linkedToAppt ? null : tarjetaDeControlDeHoy(cards, clinicTimezone, appt?.startsAt ?? new Date());
   const raw = linkedToAppt ?? deHoy;
   const existingCard = raw ? adaptCard(raw, wireById) : null;
 
