@@ -5,7 +5,7 @@
 // cumplimiento registrado. H12 (seguimiento) + H14 (cumplimiento de
 // elásticos, vista de clínica) + H15 (bandeja de fotos de monitoreo).
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Circle, Layers } from "lucide-react";
 import { Card } from "../redesign/atoms/Card";
 import { Btn } from "../redesign/atoms/Btn";
@@ -17,6 +17,13 @@ import { getElasticsCompliance, type ElasticsComplianceView } from "@/app/action
 import { listMonitoringPhotos, type MonitoringPhotoRow } from "@/app/actions/orthodontics/alineadores/listMonitoringPhotos";
 import { reviewMonitoringPhoto } from "@/app/actions/orthodontics/alineadores/reviewMonitoringPhoto";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import {
+  EJEMPLO_SISTEMA,
+  PISTA_SISTEMA,
+  ROTULO_SISTEMA,
+  avisoNombreSistema,
+  limpiarNombreSistema,
+} from "@/lib/orthodontics/alineadores/nombre-sistema";
 import orto from "../redesign/orto.module.css";
 
 export interface AlineadoresPanelProps {
@@ -101,6 +108,9 @@ function AlignerTrackingBlock({
     startedAt: aligner?.startedAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
   });
   const [error, setError] = useState<string | null>(null);
+  const idSistema = useId();
+  const idInicio = useId();
+  const avisoSistema = avisoNombreSistema(form.systemName);
 
   if (showSetup && !aligner) {
     return (
@@ -112,20 +122,33 @@ function AlignerTrackingBlock({
           </div>
         ) : null}
         <div className="flex flex-col gap-[10px]">
-          <input
-            aria-label="Sistema de alineadores"
-            placeholder="Sistema (ej. Invisalign, marca propia)"
-            value={form.systemName}
-            onChange={(e) => setForm({ ...form, systemName: e.target.value })}
-            className={`${orto.entrada} w-full`}
-          />
+          {/* H25 (QA en vivo, 28-sep-2026): este campo no tenía rótulo a la
+              vista y se confundía con el total. Ver nombre-sistema.ts. */}
+          <div className={orto.campo}>
+            <label htmlFor={idSistema} className={orto.campoEtiqueta}>
+              {ROTULO_SISTEMA}
+            </label>
+            <input
+              id={idSistema}
+              type="text"
+              placeholder={EJEMPLO_SISTEMA}
+              value={form.systemName}
+              onChange={(e) => setForm({ ...form, systemName: e.target.value })}
+              aria-describedby={`${idSistema}-pista`}
+              className={`${orto.entrada} w-full`}
+            />
+            <p id={`${idSistema}-pista`} className={`${orto.campoPista} ${avisoSistema ? orto.tonoAlerta : ""}`} role={avisoSistema ? "status" : undefined}>
+              {avisoSistema ?? PISTA_SISTEMA}
+            </p>
+          </div>
           <div className={orto.rejilla2} style={{ gap: 10 }}>
             <NumberField label="Total de alineadores" value={form.totalTrays} onChange={(v) => setForm({ ...form, totalTrays: v })} />
             <NumberField label="Alineador actual" value={form.currentTray} onChange={(v) => setForm({ ...form, currentTray: v })} />
             <NumberField label="Cambio cada (días)" value={form.changeIntervalDays} onChange={(v) => setForm({ ...form, changeIntervalDays: v })} />
             <div className={orto.campo}>
-              <label className={orto.campoEtiqueta}>Fecha de inicio</label>
+              <label htmlFor={idInicio} className={orto.campoEtiqueta}>Fecha de inicio</label>
               <input
+                id={idInicio}
                 type="date"
                 value={form.startedAt}
                 onChange={(e) => setForm({ ...form, startedAt: e.target.value })}
@@ -139,7 +162,11 @@ function AlignerTrackingBlock({
             onClick={() => {
               setError(null);
               startTransition(async () => {
-                const res = await upsertAlignerCase({ treatmentPlanId, ...form });
+                const res = await upsertAlignerCase({
+                  treatmentPlanId,
+                  ...form,
+                  systemName: limpiarNombreSistema(form.systemName),
+                });
                 if (isFailure(res)) setError(res.error);
                 else onSaved();
               });
@@ -217,10 +244,12 @@ function QuickEventBtn({
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  const id = useId();
   return (
     <div className={orto.campo}>
-      <label className={orto.campoEtiqueta}>{label}</label>
+      <label htmlFor={id} className={orto.campoEtiqueta}>{label}</label>
       <input
+        id={id}
         type="number"
         inputMode="numeric"
         min={1}
