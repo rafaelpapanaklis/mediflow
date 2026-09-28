@@ -17,6 +17,8 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Banknote } from "lucide-react";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
+import { fmtDay } from "../redesign/atoms/format";
+import orto from "../redesign/orto.module.css";
 
 export interface ResumenCobranzaProps {
   treatmentPlanId: string;
@@ -53,34 +55,36 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
 
   return (
     <div
-      className={`rounded-lg border p-3 text-xs flex items-center justify-between gap-3 flex-wrap ${
-        vencida
-          ? "border-rose-200 bg-rose-50 dark:border-rose-800 dark:bg-rose-900/20"
-          : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60"
-      }`}
+      className={`${orto.aviso} ${vencida ? orto.avisoPeligro : ""}`}
+      style={vencida ? { color: "var(--pr-texto-2)" } : undefined}
       role="status"
     >
-      <div className="flex items-center gap-2">
-        {vencida ? <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden /> : null}
-        <div>
-          <span className={vencida ? "text-rose-800 dark:text-rose-200" : "text-slate-700 dark:text-slate-200"}>
+      <div className={`${orto.avisoTexto} flex items-start gap-2`}>
+        {vencida ? (
+          <AlertTriangle size={16} strokeWidth={1.75} className={`${orto.tonoPeligro} shrink-0 mt-[1px]`} aria-hidden />
+        ) : null}
+        <div className="min-w-0">
+          <div className={`text-[13px] font-semibold ${vencida ? orto.tonoPeligro : orto.tonoTexto}`}>
             {cuota
-              ? `${vencida ? "Vencida" : "Próxima"}: ${fmt.format(cuota.falta)}${cuota.vencimiento ? ` · vence ${cuota.vencimiento}` : ""}`
-              : "Sin cuotas pendientes"}
-          </span>
-          <span className="text-slate-400 dark:text-slate-500"> · saldo total {fmt.format(panel.invoice.balance)}</span>
-          {panel.cobranza.saldoAFavor > 0 ? (
-            <span className="text-emerald-600 dark:text-emerald-400"> · saldo a favor {fmt.format(panel.cobranza.saldoAFavor)}</span>
-          ) : null}
+              ? `${vencida ? "Mensualidad vencida" : "Próxima mensualidad"}: ${fmt.format(cuota.falta)}`
+              : "Sin mensualidades pendientes"}
+          </div>
+          <div className="text-xs text-[color:var(--pr-texto-3)]">
+            {cuota?.vencimiento ? `${vencida ? "Venció" : "Vence"} el ${fmtDay(cuota.vencimiento)} · ` : ""}
+            Saldo total {fmt.format(panel.invoice.balance)}
+            {panel.cobranza.saldoAFavor > 0 ? (
+              <span className={orto.tonoExito}> · saldo a favor {fmt.format(panel.cobranza.saldoAFavor)}</span>
+            ) : null}
+          </div>
         </div>
       </div>
       {panel.invoice.balance > 0 ? (
         <button
           type="button"
           onClick={() => setCobrando(true)}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700"
+          className={`${orto.boton} ${orto.botonChico} ${vencida ? orto.botonPrincipal : ""}`}
         >
-          <Banknote className="w-3 h-3" aria-hidden /> Cobrar
+          <Banknote size={14} strokeWidth={1.75} aria-hidden /> Cobrar
         </button>
       ) : null}
       {cobrando ? (

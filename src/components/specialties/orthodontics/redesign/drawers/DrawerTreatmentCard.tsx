@@ -36,6 +36,7 @@ import {
   type TreatmentCardDTO,
   type WireStepDTO,
 } from "../types";
+import orto from "../orto.module.css";
 
 export type DrawerCardSubmit = {
   cardId: string | null;
@@ -238,17 +239,21 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
 
   const headerTitle = useMemo(() => {
     if (isNew && props.defaultsForNew) {
-      return `${fmtDate(props.defaultsForNew.visitDate)} · ${props.defaultsForNew.phase}`;
+      // La ficha manda la CLAVE de la fase («ALIGNMENT») y la Agenda su
+      // nombre ya traducido: aquí se muestra siempre el nombre.
+      const fase = props.defaultsForNew.phase;
+      const nombre = (PHASE_LABELS as Record<string, string>)[fase] ?? fase;
+      return `${fmtDate(props.defaultsForNew.visitDate)} · ${nombre}`;
     }
     if (props.card) {
       return `${fmtDate(props.card.visitDate)} · ${PHASE_LABELS[props.card.phaseKey]}`;
     }
-    return "Nueva cita";
+    return "Nuevo control";
   }, [isNew, props.card, props.defaultsForNew]);
 
   const headerEyebrow = isNew
-    ? "Nueva cita de control"
-    : `Cita #${props.card!.cardNumber}`;
+    ? "Nuevo control"
+    : `Control ${props.card!.cardNumber}`;
 
   const wireFromLabel = wireText(props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null);
   const wireToCurrent = props.availableWires.find((w) => w.id === state.wireToId) ?? null;
@@ -295,27 +300,20 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
 
   return (
     <>
-      <div
-        className="fixed inset-0 bg-slate-900/30 z-40 dark:bg-slate-950/60"
-        onClick={props.onClose}
-        aria-hidden
-      />
+      <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
-        className="fixed top-0 right-0 bottom-0 w-full sm:w-[520px] bg-white border-l border-slate-200 z-50 shadow-2xl flex flex-col dark:bg-slate-900 dark:border-slate-800"
+        className={orto.cajon}
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-tcard-title"
       >
-        <header className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-violet-50/40 dark:bg-violet-900/10 dark:border-slate-800">
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium dark:text-violet-300">
+        <header className={orto.cajonCabeza}>
+          <div className={orto.cajonTextos}>
+            <div className={orto.cajonCeja}>
               {headerEyebrow}
-              {isReadOnly ? <span className="ml-2 text-slate-500">· firmada</span> : null}
+              {isReadOnly ? <span className={orto.tonoApagado}> · firmado</span> : null}
             </div>
-            <h3
-              id="drawer-tcard-title"
-              className="text-base font-semibold text-slate-900 mt-0.5 dark:text-slate-100"
-            >
+            <h3 id="drawer-tcard-title" className={orto.cajonTitulo}>
               {headerTitle}
             </h3>
           </div>
@@ -323,30 +321,35 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             type="button"
             onClick={props.onClose}
             aria-label="Cerrar"
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            className={orto.botonIcono}
           >
-            <X className="w-4 h-4" aria-hidden />
+            <X size={18} strokeWidth={1.75} aria-hidden />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto">
-          {/* WIRE */}
-          <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
-              Wire (G3)
+        <div className={orto.cajonCuerpo}>
+          {/* ARCO */}
+          <section className={orto.bloque}>
+            <div className={orto.bloqueCabeza}>
+              <h4 className={orto.bloqueTitulo}>Arco</h4>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <div className="text-[10px] text-slate-400 dark:text-slate-500">Actual</div>
-                <div className="text-sm font-mono font-semibold text-slate-900 dark:text-slate-100">
+            <div className="flex items-end gap-3">
+              <div className="flex-1 min-w-0">
+                <div className={orto.campoEtiqueta}>Actual</div>
+                <div className="flex items-center h-[38px] text-[13.5px] font-semibold">
                   {wireFromLabel}
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-violet-500" aria-hidden />
-              <div className="flex-1">
-                <div className="text-[10px] text-slate-400 dark:text-slate-500">Nuevo</div>
+              <ChevronRight
+                size={16}
+                strokeWidth={1.75}
+                className={`${orto.tonoApagado} mb-[11px] flex-none`}
+                aria-hidden
+              />
+              <div className="flex-1 min-w-0">
+                <div className={`${orto.campoEtiqueta} mb-[5px]`}>Nuevo</div>
                 {isReadOnly ? (
-                  <div className="text-sm font-mono font-semibold text-violet-700 dark:text-violet-300">
+                  <div className={`${orto.tonoVioleta} flex items-center h-[38px] text-[13.5px] font-semibold`}>
                     {wireToLabel}
                   </div>
                 ) : (
@@ -355,8 +358,8 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                     onChange={(e) =>
                       dispatch({ kind: "set-wire-to", value: e.target.value || null })
                     }
-                    className="w-full text-sm font-mono bg-white border border-slate-200 rounded px-2 py-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                    aria-label="Wire nuevo"
+                    className={orto.entrada}
+                    aria-label="Arco nuevo"
                   >
                     <option value="">Sin cambio</option>
                     {props.availableWires.map((w) => (
@@ -397,20 +400,12 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           />
 
           {/* ACTIVACIONES (C2) */}
-          <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
-              Activaciones de esta visita
+          <section className={orto.bloque}>
+            <div className={orto.bloqueCabeza}>
+              <h4 className={orto.bloqueTitulo}>Activaciones de esta visita</h4>
             </div>
             {isReadOnly ? (
-              <div
-                className={`text-sm rounded border px-2.5 py-1.5 min-h-[34px] ${
-                  state.activationsNote
-                    ? "bg-white border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
-                    : "bg-slate-50 border-dashed border-slate-200 text-slate-300 italic dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-600"
-                }`}
-              >
-                {state.activationsNote || "Sin activaciones anotadas."}
-              </div>
+              <Lectura vacio="Sin activaciones anotadas.">{state.activationsNote}</Lectura>
             ) : (
               <textarea
                 value={state.activationsNote}
@@ -419,48 +414,40 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 }
                 rows={2}
                 placeholder="Vueltas del expansor, activación de resortes o arcos auxiliares…"
-                className="w-full text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 resize-y dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                className={orto.entrada}
                 aria-label="Activaciones de esta visita"
               />
             )}
           </section>
 
           {/* SOAP */}
-          <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
-              Nota SOAP estructurada
+          <section className={orto.bloque}>
+            <div className={orto.bloqueCabeza}>
+              <h4 className={orto.bloqueTitulo}>Nota de evolución</h4>
               {!isReadOnly && !canSign ? (
-                <span className="ml-2 text-amber-600 dark:text-amber-400">
-                  · requiere los 4 campos para firmar
+                <span className={`${orto.bloqueNota} ${orto.tonoAlerta}`}>
+                  Los 4 campos son obligatorios para firmar
                 </span>
               ) : null}
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-[10px]">
               {(
                 [
-                  ["s", "Subjective"],
-                  ["o", "Objective"],
-                  ["a", "Assessment"],
-                  ["p", "Plan"],
+                  ["s", "Subjetivo", "Lo que refiere el paciente…"],
+                  ["o", "Objetivo", "Lo que encuentras en la exploración…"],
+                  ["a", "Análisis", "Tu valoración de cómo va el caso…"],
+                  ["p", "Plan", "Lo que sigue para la próxima visita…"],
                 ] as const
-              ).map(([key, label]) => (
-                <div key={key}>
-                  <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5 dark:text-slate-500">
-                    <span className="font-mono text-violet-600 font-bold mr-1 dark:text-violet-300">
+              ).map(([key, label, pista]) => (
+                <div key={key} className={orto.campo}>
+                  <div className={orto.campoEtiqueta}>
+                    <span className={`${orto.tonoVioleta} font-bold mr-[5px]`}>
                       {key.toUpperCase()}
                     </span>
                     {label}
                   </div>
                   {isReadOnly ? (
-                    <div
-                      className={`text-sm rounded border px-2.5 py-1.5 min-h-[34px] ${
-                        state.soap[key]
-                          ? "bg-white border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
-                          : "bg-slate-50 border-dashed border-slate-200 text-slate-300 italic dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-600"
-                      }`}
-                    >
-                      {state.soap[key] || "Pendiente…"}
-                    </div>
+                    <Lectura vacio="Sin anotar.">{state.soap[key]}</Lectura>
                   ) : (
                     <textarea
                       value={state.soap[key]}
@@ -468,8 +455,8 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                         dispatch({ kind: "set-soap", field: key, value: e.target.value })
                       }
                       rows={2}
-                      placeholder={`Escribe la sección ${label.toLowerCase()}…`}
-                      className="w-full text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 resize-y dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                      placeholder={pista}
+                      className={orto.entrada}
                       aria-label={`SOAP ${label}`}
                     />
                   )}
@@ -479,27 +466,19 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           </section>
 
           {/* INDICACIONES (C3) */}
-          <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
-              Indicaciones para el paciente
+          <section className={orto.bloque}>
+            <div className={orto.bloqueCabeza}>
+              <h4 className={orto.bloqueTitulo}>Indicaciones para el paciente</h4>
             </div>
             {isReadOnly ? (
-              <div
-                className={`text-sm rounded border px-2.5 py-1.5 min-h-[34px] ${
-                  state.indications
-                    ? "bg-white border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
-                    : "bg-slate-50 border-dashed border-slate-200 text-slate-300 italic dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-600"
-                }`}
-              >
-                {state.indications || "Sin indicaciones para esta visita."}
-              </div>
+              <Lectura vacio="Sin indicaciones para esta visita.">{state.indications}</Lectura>
             ) : (
               <textarea
                 value={state.indications}
                 onChange={(e) => dispatch({ kind: "set-indications", value: e.target.value })}
                 rows={2}
                 placeholder="Horas de elásticos, higiene, qué no comer, qué hacer si se despega un bracket…"
-                className="w-full text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 resize-y dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                className={orto.entrada}
                 aria-label="Indicaciones para el paciente"
               />
             )}
@@ -517,17 +496,17 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           />
 
           {/* FOTO (C4: liga un foto-set ya subido cuando hay catálogo disponible) */}
-          <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
-              Foto de progreso
+          <section className={orto.bloque}>
+            <div className={orto.bloqueCabeza}>
+              <h4 className={orto.bloqueTitulo}>Fotos de progreso</h4>
             </div>
             {props.availablePhotoSets && props.availablePhotoSets.length > 0 ? (
               isReadOnly ? (
-                <div className="text-sm text-slate-700 dark:text-slate-300">
+                <div className={`${orto.tonoTexto2} text-[13px]`}>
                   {state.photoSetId
                     ? (props.availablePhotoSets.find((s) => s.id === state.photoSetId)?.label ??
-                      "Foto-set vinculado")
-                    : "Sin foto-set ligado a esta visita."}
+                      "Juego de fotos vinculado")
+                    : "Sin fotos ligadas a esta visita."}
                 </div>
               ) : (
                 <select
@@ -535,10 +514,10 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                   onChange={(e) =>
                     dispatch({ kind: "set-photo-set", value: e.target.value || null })
                   }
-                  className="w-full text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                  aria-label="Foto-set de esta visita"
+                  className={orto.entrada}
+                  aria-label="Fotos de esta visita"
                 >
-                  <option value="">Sin foto-set ligado</option>
+                  <option value="">Sin fotos ligadas</option>
                   {props.availablePhotoSets.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.label}
@@ -547,37 +526,30 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 </select>
               )
             ) : state.hasProgressPhoto ? (
-              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded px-3 py-2 text-sm dark:bg-emerald-900/20 dark:border-emerald-800">
-                <Check
-                  className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
-                  aria-hidden
-                />
-                <span className="text-emerald-700 dark:text-emerald-300">
-                  Foto-set capturada
-                </span>
+              <div className={`${orto.caja} ${orto.cajaExito} flex items-center gap-2 text-[13px]`}>
+                <Check size={16} strokeWidth={1.75} className={orto.tonoExito} aria-hidden />
+                <span className={orto.tonoExito}>Fotos de progreso tomadas</span>
                 {!isReadOnly ? (
                   <button
                     type="button"
                     onClick={() => dispatch({ kind: "set-has-photo", value: false })}
-                    className="ml-auto text-xs text-emerald-700 underline dark:text-emerald-300"
+                    className={`${orto.enlace} ml-auto`}
                   >
                     Quitar
                   </button>
                 ) : null}
               </div>
             ) : isReadOnly ? (
-              <div className="text-sm text-slate-400 italic dark:text-slate-500">
-                Sin foto registrada en esta cita.
-              </div>
+              <div className={orto.vacioLinea}>Sin fotos registradas en este control.</div>
             ) : (
               <Btn
                 variant="violet-soft"
                 size="md"
-                className="w-full justify-center"
-                icon={<Camera className="w-4 h-4" aria-hidden />}
+                className="w-full"
+                icon={<Camera size={15} strokeWidth={1.75} aria-hidden />}
                 onClick={() => dispatch({ kind: "set-has-photo", value: true })}
               >
-                Capturar foto-set ahora
+                Marcar que se tomaron fotos
               </Btn>
             )}
           </section>
@@ -586,31 +558,31 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               hoja — Recepción es quien la agenda de verdad, con un clic,
               cuando cobra; ver REPORTE-ws1-t4.md) */}
           {!isReadOnly ? (
-            <section className="px-6 py-4">
-              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
-                Próximo control en…
+            <section className={orto.bloque}>
+              <div className={orto.bloqueCabeza}>
+                <h4 className={orto.bloqueTitulo}>Próximo control en…</h4>
               </div>
-              <div className="flex gap-1.5 mb-2">
-                {[2, 4, 6, 8].map((weeks) => (
-                  <button
-                    key={weeks}
-                    type="button"
-                    onClick={() =>
-                      dispatch({
-                        kind: "set-next-date",
-                        value: addWeeks(
-                          props.card?.visitDate ?? props.defaultsForNew?.visitDate ?? null,
-                          weeks,
-                        ),
-                      })
-                    }
-                    className="text-[11px] px-2 py-1 rounded bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-300"
-                  >
-                    {weeks} sem
-                  </button>
-                ))}
+              <div className="flex gap-[6px] flex-wrap mb-[10px]">
+                {[2, 4, 6, 8].map((weeks) => {
+                  const fecha = addWeeks(
+                    props.card?.visitDate ?? props.defaultsForNew?.visitDate ?? null,
+                    weeks,
+                  );
+                  const elegido = state.nextDate != null && state.nextDate === fecha;
+                  return (
+                    <button
+                      key={weeks}
+                      type="button"
+                      aria-pressed={elegido}
+                      onClick={() => dispatch({ kind: "set-next-date", value: fecha })}
+                      className={[orto.chip, elegido ? orto.chipActivo : ""].filter(Boolean).join(" ")}
+                    >
+                      {weeks} semanas
+                    </button>
+                  );
+                })}
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className={orto.rejilla2}>
                 <input
                   type="datetime-local"
                   value={state.nextDate ? state.nextDate.slice(0, 16) : ""}
@@ -622,7 +594,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                         : null,
                     })
                   }
-                  className="text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                  className={orto.entrada}
                   aria-label="Fecha próxima cita"
                 />
                 <select
@@ -630,7 +602,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                   onChange={(e) =>
                     dispatch({ kind: "set-next-duration", value: parseInt(e.target.value, 10) })
                   }
-                  className="text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                  className={orto.entrada}
                   aria-label="Duración próxima cita"
                 >
                   {[15, 30, 45, 60, 90].map((m) => (
@@ -644,48 +616,56 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           ) : null}
         </div>
 
-        <footer className="px-6 py-3 border-t border-slate-200 flex items-center justify-between bg-slate-50 dark:bg-slate-900/40 dark:border-slate-800 gap-2 flex-wrap">
+        <footer className={orto.cajonPie}>
           {props.card && props.onSharePatient ? (
             <Btn
               variant="ghost"
-              size="sm"
-              icon={<MessageCircle className="w-3.5 h-3.5" aria-hidden />}
+              size="md"
+              className="mr-auto"
+              icon={<MessageCircle size={15} strokeWidth={1.75} aria-hidden />}
               onClick={() => props.onSharePatient!(props.card!.id)}
             >
-              Compartir paciente
+              Compartir con el paciente
             </Btn>
-          ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
-            <Btn variant="secondary" size="md" onClick={props.onClose}>
-              {isReadOnly ? "Cerrar" : "Cancelar"}
+          ) : null}
+          <Btn variant="ghost" size="md" onClick={props.onClose}>
+            {isReadOnly ? "Cerrar" : "Cancelar"}
+          </Btn>
+          {!isReadOnly && props.onSave ? (
+            <Btn
+              variant="secondary"
+              size="md"
+              onClick={() => void props.onSave!(buildSubmit())}
+            >
+              Guardar borrador
             </Btn>
-            {!isReadOnly && props.onSave ? (
-              <Btn
-                variant="secondary"
-                size="md"
-                onClick={() => void props.onSave!(buildSubmit())}
-              >
-                Guardar borrador
-              </Btn>
-            ) : null}
-            {!isReadOnly && props.onSign ? (
-              <Btn
-                variant="primary"
-                size="md"
-                icon={<Check className="w-3.5 h-3.5" aria-hidden />}
-                onClick={() => void props.onSign!(buildSubmit())}
-                disabled={!canSign}
-                title={!canSign ? "Captura S/O/A/P para firmar la cita" : undefined}
-              >
-                Firmar cita
-              </Btn>
-            ) : null}
-          </div>
+          ) : null}
+          {!isReadOnly && props.onSign ? (
+            <Btn
+              variant="primary"
+              size="md"
+              icon={<Check size={15} strokeWidth={1.75} aria-hidden />}
+              onClick={() => void props.onSign!(buildSubmit())}
+              disabled={!canSign}
+              title={!canSign ? "Completa los 4 campos de la nota para firmar el control" : undefined}
+            >
+              Firmar control
+            </Btn>
+          ) : null}
         </footer>
       </aside>
     </>
+  );
+}
+
+/** Un campo en modo lectura (control ya firmado). */
+function Lectura({ children, vacio }: { children: string; vacio: string }) {
+  return children ? (
+    <div className={`${orto.caja} text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere]`}>
+      {children}
+    </div>
+  ) : (
+    <div className={orto.vacioLinea}>{vacio}</div>
   );
 }
 
@@ -707,53 +687,42 @@ function ElasticsBlock(props: {
     });
   };
   return (
-    <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-          Elásticos
-        </div>
-        {!props.readOnly ? (
-          <div className="flex gap-1">
-            {(["CLASE_I", "CLASE_II", "CLASE_III", "BOX"] as const).map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => onPick(c)}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-300"
-              >
-                + {ELASTIC_CLASS_LABELS[c]}
-              </button>
-            ))}
-          </div>
-        ) : null}
+    <section className={orto.bloque}>
+      <div className={orto.bloqueCabeza}>
+        <h4 className={orto.bloqueTitulo}>Elásticos</h4>
       </div>
-      {props.elastics.length === 0 ? (
-        <div className="text-xs text-slate-400 dark:text-slate-500">
-          Sin elásticos esta cita
+      {!props.readOnly ? (
+        <div className="flex gap-[6px] flex-wrap mb-[10px]">
+          {(["CLASE_I", "CLASE_II", "CLASE_III", "BOX"] as const).map((c) => (
+            <button key={c} type="button" onClick={() => onPick(c)} className={orto.chip}>
+              <Plus size={13} strokeWidth={2} aria-hidden />
+              {ELASTIC_CLASS_LABELS[c]}
+            </button>
+          ))}
         </div>
+      ) : null}
+      {props.elastics.length === 0 ? (
+        <div className={orto.vacioLinea}>Sin elásticos en este control.</div>
       ) : (
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-[6px]">
           {props.elastics.map((e) => (
-            <div
-              key={e.id}
-              className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-700"
-            >
-              <span className="font-mono text-slate-900 dark:text-slate-100">
+            <div key={e.id} className={`${orto.caja} flex items-center gap-2 text-[13px]`}>
+              <span className="font-semibold">
                 {ELASTIC_CLASS_LABELS[e.elasticClass]} {e.config}
               </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
+              <span className={`${orto.tonoApagado} ml-auto text-xs`}>
                 {ELASTIC_ZONE_LABELS[e.zone]}
-                {!props.readOnly ? (
-                  <button
-                    type="button"
-                    onClick={() => props.onRemove(e.id)}
-                    aria-label="Quitar elástico"
-                    className="ml-2 text-slate-400 hover:text-rose-500"
-                  >
-                    <Trash2 className="w-3 h-3 inline" aria-hidden />
-                  </button>
-                ) : null}
               </span>
+              {!props.readOnly ? (
+                <button
+                  type="button"
+                  onClick={() => props.onRemove(e.id)}
+                  aria-label="Quitar elástico"
+                  className={`${orto.botonIcono} ${orto.botonIconoPeligro} -my-1 -mr-1`}
+                >
+                  <Trash2 size={14} strokeWidth={1.75} aria-hidden />
+                </button>
+              ) : null}
             </div>
           ))}
         </div>
@@ -774,50 +743,53 @@ function IprBlock(props: {
     props.onAdd({ id, toothA: 13, toothB: 14, amountMm: 0.3, done: true });
   };
   return (
-    <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-          IPR realizado
-        </div>
+    <section className={orto.bloque}>
+      <div className={orto.bloqueCabeza}>
+        <h4 className={orto.bloqueTitulo}>IPR realizado</h4>
         {!props.readOnly ? (
-          <Btn
-            variant="ghost"
-            size="sm"
-            icon={<Plus className="w-3 h-3" aria-hidden />}
-            onClick={onAddRow}
-          >
+          <button type="button" onClick={onAddRow} className={orto.chip}>
+            <Plus size={13} strokeWidth={2} aria-hidden />
             Agregar
-          </Btn>
+          </button>
         ) : null}
       </div>
       {props.points.length === 0 ? (
-        <div className="text-xs text-slate-400 dark:text-slate-500">Sin IPR esta cita</div>
+        <div className={orto.vacioLinea}>Sin IPR en este control.</div>
       ) : (
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="flex flex-col gap-[6px]">
           {props.points.map((p) => (
             <div
               key={p.id}
-              className={`flex items-center justify-between rounded px-2.5 py-1.5 text-xs border ${
-                p.done
-                  ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800"
-                  : "bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700"
-              }`}
+              className={`${orto.caja} ${p.done ? orto.cajaExito : ""} flex items-center gap-2 text-[13px]`}
             >
-              <span className="font-mono text-slate-900 dark:text-slate-100">
+              <span className="font-semibold">
                 {p.toothA}-{p.toothB}
               </span>
-              <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">
+              <span className={`${p.done ? orto.tonoExito : orto.tonoTexto2} font-semibold`}>
                 {p.amountMm.toFixed(1)} mm
               </span>
+              <span className={`${orto.tonoApagado} ml-auto text-xs`}>
+                {p.done ? "Realizado" : "Pendiente"}
+              </span>
               {!props.readOnly ? (
-                <button
-                  type="button"
-                  onClick={() => props.onToggle(p.id)}
-                  className="text-[10px] text-slate-500 underline"
-                  aria-label={p.done ? "Marcar pendiente" : "Marcar realizado"}
-                >
-                  {p.done ? "✓" : "○"}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => props.onToggle(p.id)}
+                    className={orto.enlace}
+                    aria-label={p.done ? "Marcar pendiente" : "Marcar realizado"}
+                  >
+                    {p.done ? "Dejar pendiente" : "Marcar realizado"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => props.onRemove(p.id)}
+                    aria-label="Quitar IPR"
+                    className={`${orto.botonIcono} ${orto.botonIconoPeligro} -my-1 -mr-1`}
+                  >
+                    <Trash2 size={14} strokeWidth={1.75} aria-hidden />
+                  </button>
+                </>
               ) : null}
             </div>
           ))}
@@ -845,54 +817,54 @@ function BrokenBlock(props: {
     });
   };
   return (
-    <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-          Brackets caídos / re-bonding
-        </div>
+    <section className={orto.bloque}>
+      <div className={orto.bloqueCabeza}>
+        <h4 className={orto.bloqueTitulo}>Brackets caídos</h4>
         {!props.readOnly ? (
-          <Btn
-            variant="ghost"
-            size="sm"
-            icon={<Plus className="w-3 h-3" aria-hidden />}
-            onClick={onAddRow}
-          >
+          <button type="button" onClick={onAddRow} className={orto.chip}>
+            <Plus size={13} strokeWidth={2} aria-hidden />
             Reportar
-          </Btn>
+          </button>
         ) : null}
       </div>
       {props.list.length === 0 ? (
-        <div className="text-xs text-slate-400 dark:text-slate-500">
-          Ningún bracket caído
-        </div>
+        <div className={orto.vacioLinea}>Ningún bracket caído.</div>
       ) : (
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-[6px]">
           {props.list.map((b) => (
             <div
               key={b.id}
-              className="flex items-center justify-between bg-rose-50 border border-rose-200 rounded px-3 py-2 text-sm dark:bg-rose-900/20 dark:border-rose-800"
+              className={`${orto.caja} ${b.reBondedDate ? "" : orto.cajaPeligro} flex items-center gap-2 text-[13px]`}
             >
-              <span className="font-mono text-slate-900 dark:text-slate-100">
-                Diente {b.toothFdi}
-              </span>
-              <span className="text-xs flex items-center gap-2">
+              <span className="font-semibold">Diente {b.toothFdi}</span>
+              <span className="ml-auto flex items-center gap-2">
                 {b.reBondedDate ? (
                   <Pill color="emerald" size="xs">
-                    Re-bondeado
+                    Recementado
                   </Pill>
                 ) : (
-                  <span className="text-rose-700 dark:text-rose-300">Pendiente</span>
+                  <span className={`${orto.tonoPeligro} text-xs font-semibold`}>Pendiente</span>
                 )}
                 {!props.readOnly && !b.reBondedDate ? (
                   <button
                     type="button"
                     onClick={() => props.onMarkRebonded(b.id)}
-                    className="text-[10px] text-rose-700 underline dark:text-rose-300"
+                    className={orto.enlace}
                   >
-                    Marcar re-bond
+                    Marcar recementado
                   </button>
                 ) : null}
               </span>
+              {!props.readOnly ? (
+                <button
+                  type="button"
+                  onClick={() => props.onRemove(b.id)}
+                  aria-label="Quitar bracket caído"
+                  className={`${orto.botonIcono} ${orto.botonIconoPeligro} -my-1 -mr-1`}
+                >
+                  <Trash2 size={14} strokeWidth={1.75} aria-hidden />
+                </button>
+              ) : null}
             </div>
           ))}
         </div>
@@ -911,35 +883,36 @@ function HygieneBlock(props: {
   onWhiteSpots: (v: boolean) => void;
 }) {
   return (
-    <section className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 dark:text-slate-400">
-        Higiene
+    <section className={orto.bloque}>
+      <div className={orto.bloqueCabeza}>
+        <h4 className={orto.bloqueTitulo}>Higiene</h4>
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        <div className="bg-slate-50 border border-slate-200 rounded p-2.5 dark:bg-slate-800 dark:border-slate-700">
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">Placa</div>
+      <div className={orto.rejilla3}>
+        <div className={orto.campo}>
+          <div className={orto.campoEtiqueta}>Placa (%)</div>
           {props.readOnly ? (
-            <div className="text-sm font-mono font-semibold text-slate-900 mt-0.5 dark:text-slate-100">
+            <div className="flex items-center h-[38px] text-[13.5px] font-semibold">
               {props.plaquePct ?? "—"}%
             </div>
           ) : (
             <input
               type="number"
+              inputMode="numeric"
               min={0}
               max={100}
               value={props.plaquePct ?? ""}
               onChange={(e) =>
                 props.onPlaque(e.target.value === "" ? null : parseInt(e.target.value, 10))
               }
-              className="w-full mt-0.5 text-sm font-mono bg-white border border-slate-200 rounded px-1.5 py-0.5 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+              className={orto.entrada}
               aria-label="Placa porcentaje"
             />
           )}
         </div>
-        <div className="bg-slate-50 border border-slate-200 rounded p-2.5 dark:bg-slate-800 dark:border-slate-700">
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">Gingivitis</div>
+        <div className={orto.campo}>
+          <div className={orto.campoEtiqueta}>Gingivitis</div>
           {props.readOnly ? (
-            <div className="text-sm font-medium text-slate-900 mt-0.5 dark:text-slate-100">
+            <div className="flex items-center h-[38px] text-[13.5px] font-semibold">
               {props.gingivitis ? GINGIVITIS_LABELS[props.gingivitis] : "—"}
             </div>
           ) : (
@@ -950,7 +923,7 @@ function HygieneBlock(props: {
                   e.target.value === "" ? null : (e.target.value as OrthoGingivitisLevel),
                 )
               }
-              className="w-full mt-0.5 text-sm bg-white border border-slate-200 rounded px-1.5 py-0.5 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+              className={orto.entrada}
               aria-label="Gingivitis nivel"
             >
               <option value="">—</option>
@@ -962,20 +935,20 @@ function HygieneBlock(props: {
             </select>
           )}
         </div>
-        <div className="bg-slate-50 border border-slate-200 rounded p-2.5 dark:bg-slate-800 dark:border-slate-700">
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">White spots</div>
+        <div className={orto.campo}>
+          <div className={orto.campoEtiqueta}>Manchas blancas</div>
           {props.readOnly ? (
-            <div className="text-sm font-medium text-slate-900 mt-0.5 dark:text-slate-100">
+            <div className="flex items-center h-[38px] text-[13.5px] font-semibold">
               {props.whiteSpots ? "Sí" : "No"}
             </div>
           ) : (
-            <label className="mt-0.5 inline-flex items-center gap-1 text-sm dark:text-slate-200">
+            <label className={`${orto.casilla} h-[38px]`}>
               <input
                 type="checkbox"
                 checked={props.whiteSpots}
                 onChange={(e) => props.onWhiteSpots(e.target.checked)}
-              />{" "}
-              Detectados
+              />
+              Presentes
             </label>
           )}
         </div>

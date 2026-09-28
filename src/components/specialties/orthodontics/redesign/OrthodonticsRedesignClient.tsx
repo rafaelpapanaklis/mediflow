@@ -57,6 +57,8 @@ import {
 import { DrawerCaseSettings, type DrawerCaseSettingsPayload } from "./drawers/DrawerCaseSettings";
 import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
 import layout from "./ortho-redesign-layout.module.css";
+import orto from "./orto.module.css";
+import { RAIZ_ORTO } from "./raiz";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
 import type {
@@ -319,35 +321,36 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   const tStatus = props.treatmentStatus ?? "en-tratamiento";
 
   return (
-    <div
-      className={`bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 py-6 min-h-[calc(100vh-200px)] overflow-x-hidden ${layout.shell}`}
-    >
-      <div className="max-w-[1920px] mx-auto">
-        {props.patientHeader ? (
-          <div className="mb-4 lg:mb-6">
-            <PatientHeaderG16
-              patient={props.patientHeader.patient}
-              patientFlow={props.patientHeader.patientFlow ?? vm.patientFlow}
-              nextAppointment={
-                props.patientHeader.nextAppointment ?? vm.nextAppointment
-              }
-              outstandingAmount={props.patientHeader.outstandingAmount}
-              lastVisitAt={props.patientHeader.lastVisitAt}
-              totalVisits={props.patientHeader.totalVisits}
-              onStartVisit={props.patientHeader.onStartVisit}
-              onScheduleNext={props.patientHeader.onScheduleNext}
-              onCollect={props.patientHeader.onCollect}
-              onMore={props.patientHeader.onMore}
-            />
-          </div>
-        ) : null}
-      </div>
-      <div className={`max-w-[1920px] mx-auto ${layout.grid}`}>
+    <div className={`${RAIZ_ORTO} ${orto.lienzo}`}>
+      {props.patientHeader ? (
+        <PatientHeaderG16
+          patient={props.patientHeader.patient}
+          patientFlow={props.patientHeader.patientFlow ?? vm.patientFlow}
+          nextAppointment={props.patientHeader.nextAppointment ?? vm.nextAppointment}
+          outstandingAmount={props.patientHeader.outstandingAmount}
+          lastVisitAt={props.patientHeader.lastVisitAt}
+          totalVisits={props.patientHeader.totalVisits}
+          onStartVisit={props.patientHeader.onStartVisit}
+          onScheduleNext={props.patientHeader.onScheduleNext}
+          onCollect={props.patientHeader.onCollect}
+          onMore={props.patientHeader.onMore}
+          // Registrar el control es lo que se hace veinte veces al día: va
+          // arriba, a la vista, y manda sobre los demás botones. Mismo
+          // cajón que abría «Nueva cita» en el resumen.
+          onStartControl={
+            t.status !== "no-iniciado" ? () => setDrawer({ kind: "tcard-new" }) : undefined
+          }
+          controlIsToday={isToday(vm.nextAppointment?.date)}
+        />
+      ) : null}
+      <div className={layout.grid}>
         {/* Sub-sidebar contextual del módulo (lg+) */}
         <OrthodonticsModuleSidebar treatmentStatus={tStatus} />
 
-        {/* Main column */}
-        <main className="min-w-0 space-y-4">
+        {/* Columna principal. El orden sigue al día de trabajo: resumen,
+            controles (lo último que se hizo, antes de registrar lo de hoy)
+            y después el expediente del caso. */}
+        <div className={orto.columna}>
           <SectionHero
             treatment={t}
             hasUpcomingControlToday={isToday(vm.nextAppointment?.date)}
@@ -362,7 +365,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onOpenCaseSettings={
               props.onUpdateCaseSettings ? () => setDrawer({ kind: "case-settings" }) : undefined
             }
-            onStartControl={() => setDrawer({ kind: "tcard-new" })}
+            // Con la cabecera del paciente montada, «Registrar control» vive
+            // ahí (arriba, siempre a la vista); aquí solo si no hay cabecera.
+            onStartControl={
+              props.patientHeader ? undefined : () => setDrawer({ kind: "tcard-new" })
+            }
             onAdvancePhase={t.phase ? () => setDrawer({ kind: "advance-phase" }) : undefined}
           />
 
@@ -371,6 +378,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           {vm.diagnosis && props.generalConsentSigned === false ? (
             <ConsentMissingBanner patientId={vm.patient.id} />
           ) : null}
+
+          <SectionTreatmentCards
+            cards={vm.treatmentCards}
+            nextAppointment={vm.nextAppointment}
+            onOpenCard={(id) => setDrawer({ kind: "tcard", cardId: id })}
+            onStartNewCard={() => setDrawer({ kind: "tcard-new" })}
+          />
 
           {/* Ola 1 (ws1-t4, Control y agenda) — C8 */}
           <HygieneTrendCard treatmentCards={vm.treatmentCards} />
@@ -408,13 +422,6 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               props.onAddWireStep ?? (() => setDrawer({ kind: "wirestep" }))
             }
             onAddTad={props.onAddTad}
-          />
-
-          <SectionTreatmentCards
-            cards={vm.treatmentCards}
-            nextAppointment={vm.nextAppointment}
-            onOpenCard={(id) => setDrawer({ kind: "tcard", cardId: id })}
-            onStartNewCard={() => setDrawer({ kind: "tcard-new" })}
           />
 
           {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S12, QUITAR
@@ -497,11 +504,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S14, QUITAR: el
               pie de desarrollo ("11 gaps integrados...") hacía parecer roto
               el módulo a un ojo clínico. Ocultar, no borrar. */}
-        </main>
+        </div>
 
-        {/* Right rail */}
-        <div className="w-full">
-          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto pr-1">
+        {/* Columna de la derecha */}
+        <div className="min-w-0">
+          <div className={orto.rielPegajoso}>
             <RightRail
               treatment={t}
               nextAppointment={vm.nextAppointment}
@@ -749,14 +756,14 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
  */
 function ConsentMissingBanner({ patientId }: { patientId: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-      <span>
-        <strong>Falta el consentimiento informado firmado</strong> (A10) — el caso no tiene un
-        consentimiento general de ortodoncia firmado en la pestaña &ldquo;Consentimientos&rdquo;.
+    <div className={`${orto.aviso} ${orto.avisoAlerta}`} role="status">
+      <span className={orto.avisoTexto}>
+        <strong>Falta el consentimiento informado firmado.</strong> El caso no tiene un
+        consentimiento general de ortodoncia firmado en «Consentimientos».
       </span>
       <a
         href={`/dashboard/patients/${patientId}?tab=consentimientos`}
-        className="whitespace-nowrap rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-900/40"
+        className={`${orto.boton} ${orto.botonChico}`}
       >
         Ir a Consentimientos
       </a>
@@ -795,9 +802,9 @@ function derivePlanIprFromCards(vm: OrthoRedesignViewModel) {
 function PhaseTransitionAuditTeaser({ count }: { count: number }) {
   if (count === 0) return null;
   return (
-    <div className="text-[11px] text-slate-500 px-1 dark:text-slate-400">
+    <div className={`${orto.tonoApagado} px-1 text-[11.5px]`}>
       <Sparkles className="w-3 h-3 inline mr-1" aria-hidden />
-      Audit trail: {count} transición{count === 1 ? "" : "es"} de fase registrada
+      Historial de fases: {count} cambio{count === 1 ? "" : "s"} de fase registrado
       {count === 1 ? "" : "s"}.
     </div>
   );

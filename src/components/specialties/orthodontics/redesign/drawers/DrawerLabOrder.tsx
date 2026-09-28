@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Send, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { DateField } from "@/components/ui/date-field";
+import orto from "../orto.module.css";
 
 const CATALOG: ReadonlyArray<{ group: string; items: string[] }> = [
   { group: "Aligners", items: ["Alineadores serie 1-30", "Refinement 1-5"] },
@@ -24,7 +25,7 @@ const CATALOG: ReadonlyArray<{ group: string; items: string[] }> = [
     items: ["Expansor RPE Hyrax", "Expansor Quad-Helix", "Expansor McNamara"],
   },
   {
-    group: "Records",
+    group: "Registros",
     items: ["Modelos estudio digital", "Modelos impresos sup+inf"],
   },
 ];
@@ -66,24 +67,24 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
   return (
     <>
       <div
-        className="fixed inset-0 bg-slate-900/30 z-40 dark:bg-slate-950/60"
+        className={orto.velo}
         onClick={props.onClose}
         aria-hidden
       />
       <aside
-        className="fixed top-0 right-0 bottom-0 w-full sm:w-[480px] bg-white border-l border-slate-200 z-50 shadow-2xl flex flex-col dark:bg-slate-900 dark:border-slate-800"
+        className={orto.cajon}
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-laborder-title"
       >
-        <header className="px-6 py-4 border-b border-slate-100 bg-violet-50/40 flex items-center justify-between dark:border-slate-800 dark:bg-violet-900/10">
+        <header className={orto.cajonCabeza}>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium dark:text-violet-300">
-              G18 · Lab order wizard
+            <div className={orto.cajonCeja}>
+              Laboratorio
             </div>
             <h3
               id="drawer-laborder-title"
-              className="text-base font-semibold text-slate-900 mt-0.5 dark:text-slate-100"
+              className={orto.cajonTitulo}
             >
               Nueva orden de laboratorio
             </h3>
@@ -92,18 +93,18 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
             type="button"
             onClick={props.onClose}
             aria-label="Cerrar"
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            className={orto.botonIcono}
           >
             <X className="w-4 h-4" aria-hidden />
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1 dark:text-slate-400">
-            1. Selecciona del catalog
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className={`${orto.ceja} mb-1`}>
+            1. Elige del catálogo
           </div>
           {CATALOG.map((g) => (
             <div key={g.group}>
-              <div className="text-xs font-medium text-slate-700 mb-1.5 dark:text-slate-300">
+              <div className="text-xs font-medium text-[color:var(--pr-texto-2)] mb-1.5">
                 {g.group}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -112,10 +113,10 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
                     key={it}
                     type="button"
                     onClick={() => setCat(it)}
-                    className={`text-left text-xs px-3 py-2 rounded border transition-colors focus:outline-none ${
+                    className={`text-left text-xs px-3 py-2 rounded-[8px] border transition-colors ${
                       cat === it
-                        ? "border-violet-500 bg-violet-50 text-violet-900 font-medium dark:bg-violet-900/20 dark:border-violet-500 dark:text-violet-200"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+                        ? "border-[color:var(--pr-activo)] bg-[color:var(--pr-activo-suave)] text-[color:var(--orto-violeta)] font-medium"
+                        : "border-[color:var(--pr-borde)] bg-[color:var(--pr-tarjeta)] text-[color:var(--pr-texto-2)] hover:border-[color:var(--pr-borde)]"
                     }`}
                   >
                     {it}
@@ -126,29 +127,29 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
           ))}
 
           {cat ? (
-            <div className="pt-3 border-t border-slate-200 space-y-3 dark:border-slate-700">
+            <div className="pt-3 border-t border-[color:var(--pr-borde)] space-y-3">
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1 dark:text-slate-400">
+                <div className={`${orto.ceja} mb-1`}>
                   2. Detalles
                 </div>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded px-3 py-2 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                  className={`${orto.entrada} w-full`}
                   placeholder="Descripción específica (ej. 'Hawley sup arco vestibular')"
                   aria-label="Descripción"
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1 dark:text-slate-400">
+                  <div className={`${orto.ceja} mb-1`}>
                     Lab
                   </div>
                   <select
                     value={lab}
                     onChange={(e) => setLab(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded px-3 py-2 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                    className={`${orto.entrada} w-full`}
                     aria-label="Laboratorio"
                   >
                     {LABS.map((l) => (
@@ -159,13 +160,13 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
                   </select>
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1 dark:text-slate-400">
+                  <div className={`${orto.ceja} mb-1`}>
                     Fecha entrega
                   </div>
                   <DateField
                     value={expectedDate}
                     onChange={(e) => setExpectedDate(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded px-3 py-2 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                    className="w-full text-[13px] border border-[color:var(--pr-borde)] rounded-[8px] px-3 py-2"
                     aria-label="Fecha entrega"
                   />
                 </div>
@@ -173,7 +174,7 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
             </div>
           ) : null}
         </div>
-        <footer className="px-6 py-3 border-t border-slate-100 bg-slate-50 flex justify-end gap-2 dark:border-slate-800 dark:bg-slate-900/40">
+        <footer className={orto.cajonPie}>
           <Btn variant="secondary" size="md" onClick={props.onClose}>
             Cancelar
           </Btn>

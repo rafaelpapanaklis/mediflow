@@ -1,11 +1,11 @@
 "use client";
-// Sección D — Treatment Card · Citas mensuales (G1 ⭐).
+// Sección D — Controles (la hoja de control de cada visita).
 //
-// 3 tabs: Próxima cita / Historial / Calendario.
-// Click en una row del historial → abre DrawerTreatmentCard (ver hermano).
+// 3 vistas: Historial / Próxima cita / Calendario.
+// Click en una fila del historial → abre DrawerTreatmentCard (ver hermano).
 
 import { useState } from "react";
-import { Plus, Zap } from "lucide-react";
+import { CalendarClock, ClipboardCheck, ClipboardList } from "lucide-react";
 import { Btn, Card } from "../atoms";
 import { TimelineRow } from "../atoms/TimelineRow";
 import {
@@ -14,6 +14,7 @@ import {
   type TreatmentCardDTO,
 } from "../types";
 import { fmtDate, fmtDateShort } from "../atoms/format";
+import orto from "../orto.module.css";
 
 type Tab = "next" | "history" | "calendar";
 
@@ -27,41 +28,39 @@ export interface SectionTreatmentCardsProps {
 }
 
 export function SectionTreatmentCards(props: SectionTreatmentCardsProps) {
-  const [tab, setTab] = useState<Tab>("next");
+  // Con controles ya registrados, lo primero que se quiere ver al abrir al
+  // paciente es el último (qué arco lleva, qué se dejó anotado).
+  const [tab, setTab] = useState<Tab>(props.cards.length > 0 ? "history" : "next");
 
   const sorted = [...props.cards].sort((a, b) => b.cardNumber - a.cardNumber);
 
   const tabs: ReadonlyArray<{ id: Tab; label: string; count?: number }> = [
-    { id: "next", label: "Próxima cita" },
     { id: "history", label: "Historial", count: sorted.length },
+    { id: "next", label: "Próxima cita" },
     { id: "calendar", label: "Calendario" },
   ];
 
   return (
     <Card
       id="tcards"
-      eyebrow="Sección D · G1 — Gap más grande cerrado"
-      title="Treatment Card · Citas mensuales"
-      accent="violet"
+      icon={<ClipboardList size={15} strokeWidth={1.75} />}
+      title="Controles"
+      eyebrow="La hoja de control de cada visita"
       action={
         props.onStartNewCard ? (
           <Btn
-            variant="primary"
+            variant="violet-soft"
             size="sm"
-            icon={<Plus className="w-3.5 h-3.5" aria-hidden />}
+            icon={<ClipboardCheck size={14} strokeWidth={1.75} aria-hidden />}
             onClick={props.onStartNewCard}
           >
-            Nueva cita
+            Registrar control
           </Btn>
         ) : null
       }
     >
-      <nav
-        className="px-6 pt-3 border-b border-slate-100 dark:border-slate-800"
-        role="tablist"
-        aria-label="Vista de Treatment Card"
-      >
-        <div className="flex gap-1">
+      <div className="px-[18px] pt-[14px]">
+        <div className={orto.segmento} role="tablist" aria-label="Vista de los controles">
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -69,34 +68,25 @@ export function SectionTreatmentCards(props: SectionTreatmentCardsProps) {
               role="tab"
               aria-selected={tab === t.id}
               onClick={() => setTab(t.id)}
-              className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors focus:outline-none ${
-                tab === t.id
-                  ? "border-violet-600 text-violet-700 font-medium dark:text-violet-300"
-                  : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
+              className={[orto.segmentoBoton, tab === t.id ? orto.segmentoActivo : ""]
+                .filter(Boolean)
+                .join(" ")}
             >
               {t.label}
-              {t.count != null ? (
-                <span className="ml-1.5 text-[10px] font-mono text-slate-400 dark:text-slate-500">
-                  {t.count}
-                </span>
-              ) : null}
+              {t.count != null ? <span className={orto.segmentoCuenta}>{t.count}</span> : null}
             </button>
           ))}
         </div>
-      </nav>
+      </div>
 
       {tab === "next" ? (
-        <NextTabPanel
-          next={props.nextAppointment}
-          onStart={props.onStartNewCard}
-          confirmLabel={props.confirmLabel ?? "Confirmar WhatsApp"}
-        />
+        <NextTabPanel next={props.nextAppointment} onStart={props.onStartNewCard} />
       ) : null}
       {tab === "history" ? (
         <HistoryTabPanel
           cards={sorted}
           onOpenCard={props.onOpenCard}
+          onStart={props.onStartNewCard}
         />
       ) : null}
       {tab === "calendar" ? <CalendarTabPanel cards={sorted} /> : null}
@@ -107,69 +97,59 @@ export function SectionTreatmentCards(props: SectionTreatmentCardsProps) {
 function NextTabPanel({
   next,
   onStart,
-  confirmLabel,
 }: {
   next: NextAppointmentDTO | null;
   onStart?: () => void;
-  confirmLabel: string;
 }) {
   if (!next) {
     return (
-      <div className="p-6 text-sm text-slate-500 dark:text-slate-400">
-        Sin próxima cita programada.
+      <div className={orto.tarjetaCuerpo}>
+        <div className={orto.vacio}>
+          <span className={orto.vacioIcono} aria-hidden>
+            <CalendarClock size={17} strokeWidth={1.75} />
+          </span>
+          <p className={orto.vacioTitulo}>Sin próxima cita programada</p>
+          <p className={orto.vacioPista}>
+            Agenda el siguiente control desde «Agendar próxima», arriba.
+          </p>
+        </div>
       </div>
     );
   }
   return (
-    <div className="p-6">
-      <div className="bg-violet-50 border border-violet-200 rounded-lg p-5 dark:bg-violet-900/20 dark:border-violet-800">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium dark:text-violet-300">
-              Próxima cita
-            </div>
-            <div className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-100">
+    <div className={orto.tarjetaCuerpo}>
+      <div className={`${orto.caja} ${orto.cajaVioleta}`} style={{ padding: "14px 16px" }}>
+        <div className="flex items-start justify-between gap-x-4 gap-y-3 flex-wrap">
+          <div className="min-w-0">
+            <div className={`${orto.datoValor} ${orto.datoValorGrande}`} style={{ marginTop: 0, whiteSpace: "normal" }}>
               {fmtDate(next.date)}
             </div>
-            <div className="text-sm text-slate-600 mt-0.5 dark:text-slate-400">
+            <div className={`${orto.tonoTexto2} mt-[3px] text-[13px]`}>
               {next.type} · {next.durationMin} min
               {next.chair ? ` · ${next.chair}` : ""}
             </div>
-            <div className="text-xs text-slate-500 mt-1 dark:text-slate-500">
-              con {next.doctor}
-            </div>
+            <div className={`${orto.tonoApagado} mt-[1px] text-xs`}>con {next.doctor}</div>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <Btn variant="secondary" size="sm">
-              {confirmLabel}
+          {/* «Confirmar WhatsApp» no tenía acción conectada (un botón que no
+              hacía nada): se deja de pintar hasta que exista el envío. */}
+          {onStart ? (
+            <Btn
+              variant="primary"
+              size="md"
+              icon={<ClipboardCheck size={15} strokeWidth={1.75} aria-hidden />}
+              onClick={onStart}
+            >
+              Registrar control
             </Btn>
-            {onStart ? (
-              <Btn
-                variant="primary"
-                size="sm"
-                icon={<Zap className="w-3.5 h-3.5" aria-hidden />}
-                onClick={onStart}
-              >
-                Comenzar cita
-              </Btn>
-            ) : null}
-          </div>
+          ) : null}
         </div>
         {next.prep.length > 0 ? (
-          <div className="mt-4 pt-4 border-t border-violet-200/60 dark:border-violet-800">
-            <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium mb-2 dark:text-violet-300">
-              Plan para esta cita (sugerencia IA)
-            </div>
-            <ul className="space-y-1">
+          <div className="mt-[14px] pt-[12px] border-t border-[color:var(--orto-violeta-borde)]">
+            <div className={`${orto.ceja} mb-2`}>Sugerido para esta cita</div>
+            <ul className="flex flex-col gap-[5px]">
               {next.prep.map((p, i) => (
-                <li
-                  key={i}
-                  className="text-sm text-slate-700 flex items-center gap-2 dark:text-slate-300"
-                >
-                  <span
-                    className="w-4 h-4 rounded border border-violet-300 bg-white flex items-center justify-center dark:bg-slate-900 dark:border-violet-700"
-                    aria-hidden
-                  />
+                <li key={i} className={`${orto.tonoTexto2} flex items-start gap-2 text-[13px]`}>
+                  <span className={`${orto.punto} ${orto.tonoVioleta} mt-[6px]`} aria-hidden />
                   {p}
                 </li>
               ))}
@@ -184,19 +164,40 @@ function NextTabPanel({
 function HistoryTabPanel({
   cards,
   onOpenCard,
+  onStart,
 }: {
   cards: TreatmentCardDTO[];
   onOpenCard?: (id: string) => void;
+  onStart?: () => void;
 }) {
   if (cards.length === 0) {
     return (
-      <div className="p-6 text-sm text-slate-500 dark:text-slate-400">
-        Aún no hay citas registradas en este tratamiento.
+      <div className={orto.tarjetaCuerpo}>
+        <div className={orto.vacio}>
+          <span className={orto.vacioIcono} aria-hidden>
+            <ClipboardList size={17} strokeWidth={1.75} />
+          </span>
+          <p className={orto.vacioTitulo}>Aún no hay controles registrados</p>
+          <p className={orto.vacioPista}>
+            Cada control guarda el arco, los elásticos, la higiene y la nota de la visita.
+          </p>
+          {onStart ? (
+            <Btn
+              variant="primary"
+              size="md"
+              className="mt-1"
+              icon={<ClipboardCheck size={15} strokeWidth={1.75} aria-hidden />}
+              onClick={onStart}
+            >
+              Registrar el primer control
+            </Btn>
+          ) : null}
+        </div>
       </div>
     );
   }
   return (
-    <div className="p-6 space-y-3">
+    <div className={`${orto.tarjetaCuerpo} flex flex-col gap-2`}>
       {cards.map((card, i) => (
         <TimelineRow
           key={card.id}
@@ -231,62 +232,56 @@ function CalendarTabPanel({ cards }: { cards: TreatmentCardDTO[] }) {
   const lastCard = cards[0];
 
   return (
-    <div className="p-6">
-      <div className="grid grid-cols-7 gap-2 text-[10px] uppercase tracking-wider text-slate-400 mb-2 dark:text-slate-500">
-        {["L", "M", "X", "J", "V", "S", "D"].map((d, i) => (
-          <div key={i} className="text-center">
-            {d}
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-2">
-        {Array.from({ length: totalCells }, (_, i) => {
-          const day = i - dayOfWeekOffset + 1;
-          const inMonth = day >= 1 && day <= lastOfMonth.getDate();
-          const isToday = inMonth && day === today.getDate();
-          const isAppt = inMonth && dayHasCard.has(day);
-          return (
-            <div
-              key={i}
-              className={`aspect-square rounded-md border text-xs flex flex-col items-center justify-start p-1.5 ${
-                !inMonth
-                  ? "border-transparent"
-                  : isToday
-                    ? "border-violet-500 bg-violet-50 dark:bg-violet-900/30 dark:border-violet-700"
-                    : isAppt
-                      ? "border-violet-200 bg-white dark:bg-slate-900 dark:border-violet-700/40"
-                      : "border-slate-100 bg-white dark:bg-slate-900 dark:border-slate-800"
-              }`}
-            >
-              {inMonth ? (
-                <>
-                  <span
-                    className={`text-[11px] ${
-                      isToday
-                        ? "font-bold text-violet-700 dark:text-violet-300"
-                        : "text-slate-600 dark:text-slate-400"
-                    }`}
-                  >
-                    {day}
-                  </span>
-                  {isAppt ? (
-                    <span
-                      className="mt-1 w-1.5 h-1.5 rounded-full bg-violet-500"
-                      aria-hidden
-                    />
-                  ) : null}
-                </>
-              ) : null}
+    <div className={orto.tarjetaCuerpo}>
+      <div className="max-w-[420px]">
+        <div className="text-[13px] font-semibold capitalize mb-[10px]">{monthLabel}</div>
+        <div className={`${orto.datoEtiqueta} grid grid-cols-7 gap-[6px] mb-[6px]`}>
+          {["L", "M", "X", "J", "V", "S", "D"].map((d, i) => (
+            <div key={i} className="text-center">
+              {d}
             </div>
-          );
-        })}
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-[6px]">
+          {Array.from({ length: totalCells }, (_, i) => {
+            const day = i - dayOfWeekOffset + 1;
+            const inMonth = day >= 1 && day <= lastOfMonth.getDate();
+            const isToday = inMonth && day === today.getDate();
+            const isAppt = inMonth && dayHasCard.has(day);
+            return (
+              <div
+                key={i}
+                className={`h-[38px] rounded-[8px] border text-xs flex flex-col items-center justify-center gap-[3px] ${
+                  !inMonth
+                    ? "border-transparent"
+                    : isToday
+                      ? "border-[color:var(--pr-activo)] bg-[color:var(--pr-activo-suave)]"
+                      : isAppt
+                        ? "border-[color:var(--orto-violeta-borde)] bg-[color:var(--pr-tarjeta)]"
+                        : "border-[color:var(--pr-borde-suave)] bg-[color:var(--pr-tarjeta-2)]"
+                }`}
+              >
+                {inMonth ? (
+                  <>
+                    <span className={isToday ? `${orto.tonoVioleta} font-bold` : orto.tonoTexto2}>
+                      {day}
+                    </span>
+                    {isAppt ? <span className={`${orto.punto} ${orto.tonoVioleta}`} aria-hidden /> : null}
+                  </>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <div className="mt-4 text-[11px] text-slate-500 dark:text-slate-400">
-        <span className="capitalize">{monthLabel}</span> · {dayHasCard.size} cita
-        {dayHasCard.size === 1 ? "" : "s"} registrada{dayHasCard.size === 1 ? "" : "s"} este
-        mes.
+      <div className={`${orto.tonoApagado} mt-[12px] text-xs`}>
+        {dayHasCard.size} control{dayHasCard.size === 1 ? "" : "es"} registrado
+        {dayHasCard.size === 1 ? "" : "s"} este mes.
         {lastCard ? (
-          <span> Última: {fmtDateShort(lastCard.visitDate)} · fase {PHASE_LABELS[lastCard.phaseKey]}.</span>
+          <span>
+            {" "}
+            Último: {fmtDateShort(lastCard.visitDate)} · fase {PHASE_LABELS[lastCard.phaseKey]}.
+          </span>
         ) : null}
       </div>
     </div>

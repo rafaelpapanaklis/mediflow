@@ -17,6 +17,7 @@ import { Pill } from "../atoms/Pill";
 import { ProgressBar } from "../atoms/ProgressBar";
 import { fmtDate } from "../atoms/format";
 import { PHOTO_SLOTS, PhotoSlotIcon } from "./PhotoSlotIcon";
+import orto from "../orto.module.css";
 
 export type PhotoStage = "T0" | "T1" | "T2" | "CONTROL";
 
@@ -169,15 +170,12 @@ export function SectionPhotos(props: SectionPhotosProps) {
   return (
     <Card
       id="photos"
-      eyebrow="Sección E"
-      title="Fotos clínicas · 10 vistas anatómicas estándar"
+      icon={<Camera size={15} strokeWidth={1.75} />}
+      title="Fotos clínicas"
+      eyebrow="10 vistas estándar por etapa"
       action={
-        <div className="flex items-center gap-2">
-          <div
-            className="flex bg-slate-100 rounded-md p-0.5 dark:bg-slate-800"
-            role="tablist"
-            aria-label="Etapa fotográfica"
-          >
+        <>
+          <div className={orto.segmento} role="tablist" aria-label="Etapa fotográfica">
             {(["T0", "T1", "T2", "CONTROL"] as const).map((s) => (
               <button
                 key={s}
@@ -185,13 +183,12 @@ export function SectionPhotos(props: SectionPhotosProps) {
                 role="tab"
                 aria-selected={stage === s}
                 onClick={() => setStage(s)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${
-                  stage === s
-                    ? "bg-white text-violet-700 shadow-sm dark:bg-slate-900 dark:text-violet-300"
-                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
-                }`}
+                title={`Etapa ${s}`}
+                className={[orto.segmentoBoton, stage === s ? orto.segmentoActivo : ""]
+                  .filter(Boolean)
+                  .join(" ")}
               >
-                {s}
+                {STAGE_LABEL[s]}
               </button>
             ))}
           </div>
@@ -199,31 +196,28 @@ export function SectionPhotos(props: SectionPhotosProps) {
             <Btn
               variant="primary"
               size="sm"
-              icon={<Plus className="w-3.5 h-3.5" aria-hidden />}
+              icon={<Plus size={14} strokeWidth={1.75} aria-hidden />}
               onClick={props.onCompare}
             >
-              Comparar T0 vs actual
+              Comparar inicio y actual
             </Btn>
           ) : null}
-        </div>
+        </>
       }
     >
       {showG15Final ? (
-        <div className="mx-6 mt-5 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3 dark:bg-amber-900/20 dark:border-amber-800">
+        <div className={`${orto.aviso} ${orto.avisoAlerta} mx-[18px] mt-[16px]`} style={{ alignItems: "flex-start" }}>
           <AlertTriangle
-            className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5 dark:text-amber-400"
+            size={17}
+            strokeWidth={1.75}
+            className={`${orto.tonoAlerta} flex-shrink-0 mt-[1px]`}
             aria-hidden
           />
-          <div className="flex-1">
-            <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-              G15 · Faltan registros mid-treatment a los 12 meses
-            </div>
-            <div className="text-xs text-amber-800 mt-0.5 dark:text-amber-300">
-              El sistema dispara automáticamente foto-set 10 vistas + RX panorámica +
-              comparativa con T0 al cumplirse 12m del tratamiento. Próxima ventana: en{" "}
-              {Math.max(0, 12 - props.monthCurrent)} mes
-              {Math.max(0, 12 - props.monthCurrent) === 1 ? "" : "es"}.
-            </div>
+          <div className={orto.avisoTexto}>
+            <strong>Tocan los registros de los 12 meses.</strong>{" "}
+            Juego de 10 fotos, radiografía panorámica y comparativa con el inicio. Próxima
+            ventana: en {Math.max(0, 12 - props.monthCurrent)} mes
+            {Math.max(0, 12 - props.monthCurrent) === 1 ? "" : "es"}.
           </div>
           {props.onScheduleG15 ? (
             <Btn variant="secondary" size="sm" onClick={props.onScheduleG15}>
@@ -233,27 +227,25 @@ export function SectionPhotos(props: SectionPhotosProps) {
         </div>
       ) : null}
 
-      <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/40 dark:border-slate-800 dark:bg-slate-900/40">
-        <div className="flex items-center gap-3">
-          <Pill color="violet" size="xs">
-            Etapa {stage}
-          </Pill>
-          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Click en un slot para subir · click en una foto subida para expandir
+      <div className="px-[18px] py-[12px] border-b border-[color:var(--pr-borde-suave)] flex items-center justify-between gap-x-4 gap-y-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <Pill color="violet">{STAGE_LABEL[stage]}</Pill>
+          <div className="text-xs text-[color:var(--pr-texto-3)]">
+            Pulsa un recuadro para subir la foto; pulsa una foto para verla en grande.
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-xs text-slate-600 font-mono dark:text-slate-400">
-            {uploaded}/{total} capturadas
+          <div className="text-xs font-semibold text-[color:var(--pr-texto-2)] tabular-nums whitespace-nowrap">
+            {uploaded} de {total}
           </div>
-          <div className="w-32">
+          <div className="w-28">
             <ProgressBar value={uploaded} max={total} color="violet" />
           </div>
         </div>
       </div>
 
       <PhotoGrid
-        title="Extraorales · 3 vistas faciales"
+        title="Extraorales · 3 vistas"
         slots={extraoral}
         uploads={uploads}
         pending={pending}
@@ -262,7 +254,7 @@ export function SectionPhotos(props: SectionPhotosProps) {
       />
 
       <PhotoGrid
-        title="Intraorales · 7 vistas dentales"
+        title="Intraorales · 7 vistas"
         slots={intraoral}
         uploads={uploads}
         pending={pending}
@@ -270,11 +262,9 @@ export function SectionPhotos(props: SectionPhotosProps) {
         onView={(s, p) => setLightbox({ slotId: s.id, label: s.label, group: s.group, photo: p })}
       />
 
-      <div className="px-6 py-5">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-3 dark:text-slate-400">
-          Foto-sets históricos por etapa
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="px-[18px] py-[16px]">
+        <div className={`${orto.ceja} mb-3`}>Juegos de fotos por etapa</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-[10px]">
           {props.historicalSets.map((p) => (
             <HistoricalSetCard
               key={p.stage}
@@ -283,25 +273,23 @@ export function SectionPhotos(props: SectionPhotosProps) {
             />
           ))}
           {t2Pending ? (
-            <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 flex flex-col items-center justify-center text-center dark:border-slate-700">
+            <div className={orto.vacio}>
               <Pill color="slate" size="xs">
-                T2
+                {STAGE_LABEL.T2}
               </Pill>
-              <div className="text-sm font-semibold text-slate-700 mt-2 dark:text-slate-300">
-                6 meses · pendiente
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5 dark:text-slate-400">
-                Ventana ago 2026
-              </div>
+              <p className={orto.vacioTitulo}>Juego de los 6 meses pendiente</p>
+              <p className={orto.vacioPista}>
+                Elige la etapa «{STAGE_LABEL.T2}» arriba y sube las fotos.
+              </p>
               {props.onCaptureSet ? (
                 <Btn
-                  variant="ghost"
+                  variant="secondary"
                   size="sm"
-                  icon={<Plus className="w-3.5 h-3.5" aria-hidden />}
-                  className="mt-3"
+                  icon={<Plus size={14} strokeWidth={1.75} aria-hidden />}
+                  className="mt-1"
                   onClick={props.onCaptureSet}
                 >
-                  Capturar set
+                  Capturar juego
                 </Btn>
               ) : null}
             </div>
@@ -337,11 +325,11 @@ function PhotoGrid({
   onView: (slot: (typeof PHOTO_SLOTS)[number], photo: UploadEntry) => void;
 }) {
   return (
-    <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-3 dark:text-slate-400">
+    <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
+      <div className={`${orto.ceja} mb-3`}>
         {title}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-[12px]">
         {slots.map((slot) => (
           <PhotoSlot
             key={slot.id}
@@ -378,10 +366,10 @@ function PhotoSlot({
         <button
           type="button"
           onClick={() => (has ? onView(photo) : fileRef.current?.click())}
-          className={`group relative w-full aspect-[4/3] rounded-lg border-2 overflow-hidden transition-all focus:outline-none focus:ring-2 focus:ring-violet-300 ${
+          className={`group relative w-full aspect-[4/3] rounded-[10px] border overflow-hidden transition-colors ${
             has
-              ? "border-violet-300 bg-white hover:border-violet-500 hover:shadow-md dark:bg-slate-900 dark:border-violet-700"
-              : "border-dashed border-slate-300 bg-slate-50 hover:border-violet-400 hover:bg-violet-50/40 dark:bg-slate-900/40 dark:border-slate-700"
+              ? "border-[color:var(--orto-violeta-borde)] bg-[color:var(--pr-tarjeta)] hover:border-[color:var(--pr-activo)]"
+              : "border-dashed border-[color:var(--pr-borde)] bg-[color:var(--pr-tarjeta-2)] hover:border-[color:var(--pr-activo)] hover:bg-[color:var(--pr-activo-suave)]"
           }`}
           aria-label={has ? `Expandir ${slot.label}` : `Subir ${slot.label}`}
         >
@@ -393,20 +381,20 @@ function PhotoSlot({
                 className="absolute inset-0 w-full h-full object-cover"
               />
               {isPending ? (
-                <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center">
-                  <Loader2 className="w-5 h-5 text-white animate-spin" aria-hidden />
+                <div className="absolute inset-0 bg-[color:var(--orto-velo)] flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-[color:var(--pr-activo-texto)] animate-spin" aria-hidden />
                 </div>
               ) : (
-                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                  <span className="bg-white/95 text-slate-900 text-[11px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
+                <div className="absolute inset-0 group-hover:bg-[color:var(--orto-velo)] group-focus-visible:bg-[color:var(--orto-velo)] transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">
+                  <span className="bg-[color:var(--pr-tarjeta)] text-[color:var(--pr-texto)] text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
                     <Search className="w-3 h-3" aria-hidden />
-                    Expandir
+                    Ver en grande
                   </span>
                 </div>
               )}
               <span
-                className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-white ${
-                  isPending ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-[color:var(--pr-tarjeta)] ${
+                  isPending ? "bg-[color:var(--pr-alerta)] animate-pulse" : "bg-[color:var(--pr-exito)]"
                 }`}
                 aria-hidden
               />
@@ -416,7 +404,7 @@ function PhotoSlot({
               <div className="absolute inset-3 opacity-70 group-hover:opacity-100 transition-opacity">
                 <PhotoSlotIcon kind={slot.icon} />
               </div>
-              <div className="absolute bottom-1.5 left-0 right-0 flex items-center justify-center gap-1 text-[10px] font-medium text-violet-700 opacity-0 group-hover:opacity-100 transition-opacity dark:text-violet-300">
+              <div className="absolute bottom-1.5 left-0 right-0 flex items-center justify-center gap-1 text-[11px] font-semibold text-[color:var(--orto-violeta)] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
                 <Plus className="w-3 h-3" aria-hidden /> Subir foto
               </div>
             </>
@@ -435,11 +423,11 @@ function PhotoSlot({
           aria-label={`Subir ${slot.label}`}
         />
       </div>
-      <div className="text-[11px] font-medium text-slate-700 mt-2 text-center dark:text-slate-300">
+      <div className="text-xs font-semibold text-[color:var(--pr-texto-2)] mt-[6px] text-center">
         {slot.label}
       </div>
       {has ? (
-        <div className="text-[9px] text-slate-400 mt-0.5 dark:text-slate-500">
+        <div className="text-[11px] text-[color:var(--pr-texto-3)] mt-0.5">
           {photo.uploadedAt}
         </div>
       ) : null}
@@ -460,7 +448,7 @@ function PhotoLightbox({
 }) {
   return (
     <div
-      className="fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-8"
+      className={orto.visor}
       role="dialog"
       aria-modal="true"
       aria-label={`Foto ${label}`}
@@ -470,21 +458,21 @@ function PhotoLightbox({
         type="button"
         onClick={onClose}
         aria-label="Cerrar"
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
+        className={orto.visorCerrar}
       >
         <X className="w-5 h-5" aria-hidden />
       </button>
-      <div className="absolute top-4 left-4 text-white">
-        <div className="text-[10px] uppercase tracking-wider text-violet-300 font-medium">
+      <div className={orto.visorRotulo}>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.06em] opacity-70">
           {group === "extraoral" ? "Extraoral" : "Intraoral"}
         </div>
-        <div className="text-lg font-semibold">{label}</div>
-        <div className="text-xs text-slate-300 mt-0.5">{photo.uploadedAt}</div>
+        <div className="text-[17px] font-semibold">{label}</div>
+        <div className="text-xs opacity-70 mt-0.5">{photo.uploadedAt}</div>
       </div>
       <img
         src={photo.url}
         alt={label}
-        className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+        className="max-w-full max-h-full object-contain rounded-[10px]"
         onClick={(e) => e.stopPropagation()}
       />
     </div>
@@ -499,33 +487,33 @@ function HistoricalSetCard({
   onView?: () => void;
 }) {
   return (
-    <div className="border border-slate-200 rounded-lg p-4 dark:border-slate-700">
-      <div className="flex items-center justify-between mb-3">
-        <div>
+    <div className={orto.caja} style={{ padding: "12px 14px" }}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
           <Pill color="violet" size="xs">
-            {set.stage}
+            {STAGE_LABEL[set.stage]}
           </Pill>
-          <div className="text-sm font-semibold text-slate-900 mt-1.5 dark:text-slate-100">
+          <div className="text-[13px] font-semibold text-[color:var(--pr-texto)] mt-1.5">
             {set.label ?? STAGE_LABEL[set.stage]}
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+          <div className="text-[11px] text-[color:var(--pr-texto-3)]">
             {fmtDate(set.date)}
           </div>
         </div>
-        <div className="text-right text-[10px] text-slate-400 dark:text-slate-500">
-          <div>{set.photoCount}/10 fotos</div>
-          <div>{set.hasRxPan ? "Pan ✓" : "Pan —"}</div>
-          <div>{set.hasRxLatCef ? "Cef ✓" : "Cef —"}</div>
+        <div className="text-right text-[11px] text-[color:var(--pr-texto-3)]">
+          <div className="font-semibold text-[color:var(--pr-texto-2)]">{set.photoCount} de 10 fotos</div>
+          <div>Panorámica {set.hasRxPan ? "✓" : "—"}</div>
+          <div>Lateral {set.hasRxLatCef ? "✓" : "—"}</div>
         </div>
       </div>
       <div className="grid grid-cols-5 gap-1">
         {Array.from({ length: 10 }, (_, i) => (
           <div
             key={i}
-            className={`aspect-square rounded-sm ${
+            className={`aspect-square rounded-[8px] ${
               i < set.photoCount
-                ? "bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600"
-                : "bg-slate-50 border border-dashed border-slate-200 dark:bg-slate-900/40 dark:border-slate-700"
+                ? "bg-[color:var(--pr-borde)]"
+                : "bg-[color:var(--pr-tarjeta-2)] border border-dashed border-[color:var(--pr-borde)]"
             }`}
             aria-hidden
           />
@@ -535,11 +523,11 @@ function HistoricalSetCard({
         <Btn
           variant="violet-soft"
           size="sm"
-          className="mt-3 w-full justify-center"
+          className="mt-3 w-full"
           onClick={onView}
-          icon={<Camera className="w-3.5 h-3.5" aria-hidden />}
+          icon={<Camera size={14} strokeWidth={1.75} aria-hidden />}
         >
-          Ver set completo
+          Ver juego completo
         </Btn>
       ) : null}
     </div>

@@ -7,6 +7,7 @@ import { getTreatmentPlanIdForAppointment } from "@/app/actions/orthodontics/get
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { ResumenCobranza } from "../cobranza/ResumenCobranza";
 import { BotonHojaControl } from "./BotonHojaControl";
+import { RAIZ_ORTO } from "../redesign/raiz";
 
 // Ortodoncia — Ola 1 (ws1-t4, Control y agenda, sep-2026): única ranura del
 // panel de la cita (agenda-nueva/panel-cita.tsx). Se autocalifica sola: solo
@@ -70,7 +71,10 @@ export function RanuraCita({ dto }: RanuraCitaProps) {
   if (!esControl || !state.treatmentPlanId) return null;
 
   return (
-    <div className="space-y-3">
+    // La Agenda solo presta sus propios tokens: la ranura monta los del
+    // módulo para verse igual que dentro de la ficha (y el cajón de la hoja
+    // de control, que cuelga de aquí, también).
+    <div className={`${RAIZ_ORTO} flex flex-col gap-[10px]`}>
       <ResumenCobranza treatmentPlanId={state.treatmentPlanId} />
       {state.canOpenClinicalCard ? (
         <BotonHojaControl appointmentId={dto.id} treatmentPlanId={state.treatmentPlanId} />

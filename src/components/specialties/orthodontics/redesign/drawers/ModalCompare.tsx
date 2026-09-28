@@ -10,6 +10,7 @@ import { Pill } from "../atoms/Pill";
 import { PHOTO_SLOTS } from "../sections/PhotoSlotIcon";
 import type { PhotoStage } from "../sections/SectionPhotos";
 import { fmtDate } from "../atoms/format";
+import orto from "../orto.module.css";
 
 export interface CompareSet {
   stage: PhotoStage;
@@ -36,25 +37,25 @@ export function ModalCompare(props: ModalCompareProps) {
   return (
     <>
       <div
-        className="fixed inset-0 bg-slate-900/60 z-40 dark:bg-slate-950/80"
+        className={orto.velo}
         onClick={props.onClose}
         aria-hidden
       />
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 pointer-events-none"
+        className={orto.ventanaMarco}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-compare-title"
       >
-        <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-5xl pointer-events-auto max-h-[90vh] flex flex-col dark:bg-slate-900 dark:border-slate-800">
-          <header className="px-6 py-4 border-b border-slate-100 flex items-center justify-between dark:border-slate-800">
+        <div className="bg-[color:var(--pr-tarjeta)] rounded-[14px] shadow-xl border border-[color:var(--pr-borde)] w-full max-w-5xl pointer-events-auto max-h-[90vh] flex flex-col">
+          <header className={orto.cajonCabeza}>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium dark:text-violet-300">
+              <div className={orto.cajonCeja}>
                 M5 · Visual proof
               </div>
               <h3
                 id="modal-compare-title"
-                className="text-lg font-semibold text-slate-900 dark:text-slate-100"
+                className="text-[17px] font-semibold text-[color:var(--pr-texto)]"
               >
                 Comparativa antes / actual
               </h3>
@@ -63,14 +64,14 @@ export function ModalCompare(props: ModalCompareProps) {
               type="button"
               onClick={props.onClose}
               aria-label="Cerrar"
-              className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              className={orto.botonIcono}
             >
               <X className="w-5 h-5" aria-hidden />
             </button>
           </header>
 
-          <div className="px-6 py-3 border-b border-slate-100 flex items-center gap-2 flex-wrap dark:border-slate-800">
-            <span className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="px-5 py-3 border-b border-[color:var(--pr-borde-suave)] flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-[color:var(--pr-texto-3)]">
               Comparar T0 vs:
             </span>
             {(["T1", "T2", "CONTROL"] as const).map((s) => (
@@ -84,8 +85,8 @@ export function ModalCompare(props: ModalCompareProps) {
                 disabled={!props.availableRightStages.includes(s)}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
                   stage === s
-                    ? "border-violet-500 bg-violet-50 text-violet-900 font-medium dark:bg-violet-900/20"
-                    : "border-slate-200 bg-white text-slate-600 dark:bg-slate-900 dark:border-slate-700"
+                    ? "border-[color:var(--pr-activo)] bg-[color:var(--pr-activo-suave)] text-[color:var(--orto-violeta)] font-medium"
+                    : "border-[color:var(--pr-borde)] bg-[color:var(--pr-tarjeta)] text-[color:var(--pr-texto-2)]"
                 }`}
               >
                 {s}
@@ -105,7 +106,7 @@ export function ModalCompare(props: ModalCompareProps) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
             <CompareColumn
               label="T0 · inicial"
               date={props.setT0?.takenAt ?? null}
@@ -145,11 +146,11 @@ function CompareColumn({
           {label}
         </Pill>
         {date ? (
-          <span className="text-[10px] text-slate-400 font-mono dark:text-slate-500">
+          <span className="text-[11px] text-[color:var(--pr-texto-3)] tabular-nums">
             {fmtDate(date)}
           </span>
         ) : (
-          <span className="text-[10px] text-slate-400 italic">sin fecha</span>
+          <span className="text-[11px] text-[color:var(--pr-texto-3)] italic">sin fecha</span>
         )}
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
@@ -158,7 +159,7 @@ function CompareColumn({
           return (
             <div
               key={slot.id}
-              className="aspect-square rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden dark:bg-slate-800 dark:border-slate-700"
+              className="aspect-square rounded-[8px] border border-[color:var(--pr-borde)] bg-[color:var(--pr-tarjeta-2)] flex items-center justify-center overflow-hidden"
               title={slot.label}
             >
               {url ? (
@@ -170,7 +171,7 @@ function CompareColumn({
                 />
               ) : (
                 <Camera
-                  className="w-4 h-4 text-slate-300 dark:text-slate-600"
+                  className="w-4 h-4 text-[color:var(--pr-texto-3)]"
                   aria-hidden
                 />
               )}

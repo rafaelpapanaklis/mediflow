@@ -16,53 +16,12 @@ import {
   PHASE_ORDER,
   type OrthoPhaseKey,
 } from "../types";
+import orto from "../orto.module.css";
 
-export interface PhaseCriterion {
-  key: string;
-  label: string;
-  /** Hint clínico breve si la criteria no es obvia. */
-  hint?: string;
-}
-
-/**
- * Checklist clínico por fase de origen. El doctor confirma cada item antes
- * de poder avanzar a la siguiente. Diseñado contra el SPEC §HANDOFF #2 con
- * el vocabulario clínico real (NiTi, MBT, Clase II, etc.).
- */
-export const PHASE_CRITERIA: Record<OrthoPhaseKey, PhaseCriterion[]> = {
-  ALIGNMENT: [
-    { key: "all-bonded", label: "Todos los brackets cementados de canino a canino" },
-    { key: "no-rotation", label: "Rotaciones corregidas <2 mm" },
-    { key: "wire-rectangular", label: "Wire NiTi rectangular tolerado sin molestia" },
-    { key: "photos-t0", label: "Foto-set T0 capturado y revisado" },
-  ],
-  LEVELING: [
-    { key: "wire-ss", label: "Curva de Spee nivelada a SS rectangular" },
-    { key: "overjet-stable", label: "Overjet estable, sin compensación dental" },
-    { key: "elastics-tolerated", label: "Elásticos Clase II/III tolerados ≥2 sem" },
-    { key: "hygiene-ok", label: "Higiene <30% placa en última cita" },
-  ],
-  SPACE_CLOSURE: [
-    { key: "spaces-closed", label: "Espacios cerrados o pendientes documentados" },
-    { key: "anchorage-ok", label: "Anclaje verificado (TADs/Clase II/molar block)" },
-    { key: "midlines-ok", label: "Líneas medias con desviación ≤1 mm" },
-    { key: "torque-control", label: "Control de torque en incisivos confirmado" },
-  ],
-  DETAILS: [
-    { key: "ipr-done", label: "IPR planeado completado al 100%" },
-    { key: "settling", label: "Settling iniciado en próximo control" },
-    { key: "cosmetic-bonding", label: "Bonding cosmético / acabado revisado" },
-  ],
-  FINISHING: [
-    { key: "occlusion-class-i", label: "Oclusión Clase I funcional verificada" },
-    { key: "panoramic-final", label: "Panorámica final tomada (paralelismo)" },
-    { key: "patient-approved", label: "Paciente aprobó resultado estético" },
-    { key: "retainers-ordered", label: "LabOrder de retenedores enviada" },
-  ],
-  RETENTION: [
-    { key: "retention-confirmed", label: "Retención permanente confirmada" },
-  ],
-};
+// El checklist vive en `phase-criteria.ts` (se importa también desde las
+// pruebas, sin el componente). Se reexporta para quien ya lo tomaba de aquí.
+import { PHASE_CRITERIA, type PhaseCriterion } from "./phase-criteria";
+export { PHASE_CRITERIA, type PhaseCriterion };
 
 export interface ModalAdvancePhaseProps {
   fromPhase: OrthoPhaseKey;
@@ -98,7 +57,7 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
   if (!toPhase) {
     return (
       <ModalShell title="No hay siguiente fase" onClose={props.onClose}>
-        <div className="px-6 py-5 text-sm text-slate-600 dark:text-slate-400">
+        <div className="px-5 py-5 text-[13px] text-[color:var(--pr-texto-2)]">
           El paciente está en la última fase canónica ({PHASE_LABELS[props.fromPhase]}). No
           hay avance posible.
         </div>
@@ -145,15 +104,15 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
       title={
         <span className="flex items-center gap-2">
           {PHASE_LABELS[props.fromPhase]}
-          <ChevronRight className="w-4 h-4 text-violet-500" aria-hidden />
+          <ChevronRight className="w-4 h-4 text-[color:var(--orto-violeta)]" aria-hidden />
           {PHASE_LABELS[toPhase]}
         </span>
       }
       eyebrow="Avanzar fase ortodóntica"
       onClose={props.onClose}
     >
-      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-        <div className="text-[11px] text-slate-500 mb-2 dark:text-slate-400">
+      <div className="px-5 py-4 border-b border-[color:var(--pr-borde-suave)]">
+        <div className="text-[11px] text-[color:var(--pr-texto-3)] mb-2">
           Confirma cada criterio clínico antes de avanzar. La acción queda en el audit
           trail con tu firma.
         </div>
@@ -162,7 +121,7 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
             const on = checked.has(c.key);
             return (
               <li key={c.key}>
-                <label className="flex items-start gap-3 px-3 py-2 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer dark:border-slate-700 dark:hover:bg-slate-800">
+                <label className="flex items-start gap-3 px-3 py-2 rounded-[8px] border border-[color:var(--pr-borde)] hover:bg-[color:var(--pr-hover)] cursor-pointer">
                   <input
                     type="checkbox"
                     checked={on}
@@ -172,13 +131,13 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
                   />
                   <div className="flex-1 min-w-0">
                     <div
-                      className={`text-sm ${on ? "text-emerald-700 dark:text-emerald-400" : "text-slate-700 dark:text-slate-300"}`}
+                      className={`text-[13px] ${on ? "text-[color:var(--pr-exito)]" : "text-[color:var(--pr-texto-2)]"}`}
                     >
                       {on ? "✅ " : ""}
                       {c.label}
                     </div>
                     {c.hint ? (
-                      <div className="text-[11px] text-slate-500 mt-0.5 dark:text-slate-400">
+                      <div className="text-[11px] text-[color:var(--pr-texto-3)] mt-0.5">
                         {c.hint}
                       </div>
                     ) : null}
@@ -189,41 +148,41 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
           })}
         </ul>
         {criteria.length === 0 ? (
-          <div className="text-sm text-slate-500 italic dark:text-slate-400">
+          <div className="text-[13px] text-[color:var(--pr-texto-3)] italic">
             Esta fase no tiene checklist específico.
           </div>
         ) : null}
       </div>
 
-      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1 dark:text-slate-400">
+      <div className="px-5 py-4 border-b border-[color:var(--pr-borde-suave)]">
+        <div className={`${orto.ceja} mb-1`}>
           Notas clínicas (opcional)
         </div>
         <textarea
           value={doctorNotes}
           onChange={(e) => setDoctorNotes(e.target.value)}
           rows={2}
-          placeholder="Observaciones para el audit trail…"
-          className="w-full text-sm bg-white border border-slate-200 rounded px-2.5 py-1.5 resize-y dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+          placeholder="Observaciones del cambio de fase…"
+          className={`${orto.entrada} w-full resize-y`}
         />
       </div>
 
       {props.canOverride && !allChecked ? (
-        <div className="px-6 py-4 border-b border-slate-100 bg-amber-50/40 dark:border-slate-800 dark:bg-amber-900/10">
+        <div className="px-5 py-4 border-b border-[color:var(--pr-borde-suave)] bg-[color:var(--pr-alerta-suave)]">
           <div className="flex items-start gap-2">
             <AlertTriangle
-              className="w-4 h-4 text-amber-600 mt-0.5 dark:text-amber-400"
+              className="w-4 h-4 text-[color:var(--pr-alerta)] mt-0.5"
               aria-hidden
             />
             <div className="flex-1">
-              <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                Override del checklist
+              <div className="text-[13px] font-medium text-[color:var(--pr-texto)]">
+                Avanzar sin cumplir la lista
               </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400">
-                Solo doctor titular. Requiere razón clínica + PIN. Se registra como override
-                en el audit trail.
+              <div className="text-[11px] text-[color:var(--pr-texto-2)]">
+                Solo el doctor titular. Pide razón clínica y PIN, y queda registrado en el
+                historial de fases.
               </div>
-              <label className="mt-2 inline-flex items-center gap-2 text-sm cursor-pointer dark:text-slate-300">
+              <label className="mt-2 inline-flex items-center gap-2 text-[13px] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={overrideMode}
@@ -234,7 +193,7 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
               {overrideMode ? (
                 <div className="mt-2 space-y-2">
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5 dark:text-slate-400">
+                    <div className={`${orto.ceja} mb-0.5`}>
                       Razón clínica (mín. 10 caracteres)
                     </div>
                     <textarea
@@ -242,11 +201,11 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
                       onChange={(e) => setOverrideReason(e.target.value)}
                       rows={2}
                       placeholder="Ej. Paciente viaja al extranjero, fase saltada por logística…"
-                      className="w-full text-sm bg-white border border-amber-300 rounded px-2.5 py-1.5 resize-y dark:bg-slate-800 dark:border-amber-700 dark:text-slate-200"
+                      className={`${orto.entrada} w-full resize-y`}
                     />
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5 dark:text-slate-400 inline-flex items-center gap-1">
+                    <div className="text-[11px] uppercase tracking-wider text-[color:var(--pr-texto-3)] mb-0.5 inline-flex items-center gap-1">
                       <Lock className="w-3 h-3" aria-hidden /> PIN del titular
                     </div>
                     <input
@@ -254,7 +213,7 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
                       value={overridePin}
                       onChange={(e) => setOverridePin(e.target.value)}
                       placeholder="••••"
-                      className="w-32 text-sm bg-white border border-amber-300 rounded px-2.5 py-1.5 dark:bg-slate-800 dark:border-amber-700 dark:text-slate-200"
+                      className={`${orto.entrada} w-32`}
                       autoComplete="off"
                     />
                   </div>
@@ -310,7 +269,7 @@ function ModalShell({
   return (
     <>
       <div
-        className="fixed inset-0 bg-slate-900/30 z-40 dark:bg-slate-950/60"
+        className={orto.velo}
         onClick={onClose}
         aria-hidden
       />
@@ -318,23 +277,23 @@ function ModalShell({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-advance-phase-title"
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        className={orto.ventanaMarco}
         onClick={onClose}
       >
         <div
           onClick={(e) => e.stopPropagation()}
-          className="bg-white border border-slate-200 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col dark:bg-slate-900 dark:border-slate-800"
+          className="bg-[color:var(--pr-tarjeta)] border border-[color:var(--pr-borde)] rounded-[14px] shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
         >
-          <header className="px-6 py-4 border-b border-slate-100 flex items-start justify-between dark:border-slate-800">
+          <header className={orto.cajonCabeza}>
             <div>
               {eyebrow ? (
-                <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium dark:text-violet-300">
+                <div className={orto.cajonCeja}>
                   {eyebrow}
                 </div>
               ) : null}
               <h3
                 id="modal-advance-phase-title"
-                className="text-base font-semibold text-slate-900 mt-0.5 dark:text-slate-100"
+                className={orto.cajonTitulo}
               >
                 {title}
               </h3>
@@ -343,7 +302,7 @@ function ModalShell({
               type="button"
               onClick={onClose}
               aria-label="Cerrar"
-              className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              className={orto.botonIcono}
             >
               <X className="w-4 h-4" aria-hidden />
             </button>
@@ -357,7 +316,7 @@ function ModalShell({
 
 function ModalFooter({ children }: { children: React.ReactNode }) {
   return (
-    <footer className="px-6 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2 flex-wrap dark:border-slate-800 dark:bg-slate-900/40">
+    <footer className={`${orto.cajonPie} ${orto.cajonPieReparto}`}>
       {children}
     </footer>
   );

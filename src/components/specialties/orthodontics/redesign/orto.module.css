@@ -1,0 +1,1650 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Ortodoncia — la pestaña del paciente, sus cajones y sus piezas sueltas
+   (agenda, imagen, cobranza).
+
+   Habla el MISMO idioma que la ficha del paciente y que el menú de dos
+   niveles: Instrument Sans, tarjetas blancas de borde suave, violeta de
+   acento y aire. Los colores NO viven aquí: salen de los tokens `--pr-*`
+   (`pacientes-rediseno/rediseno.module.css`) y `--m2-*`
+   (`menu-dos-niveles/menu-dos-niveles.module.css`), que monta `RAIZ_ORTO`
+   (`raiz.ts`). Aquí no hay ni un hex.
+
+   Lo único que se declara son ALIAS derivados de esos tokens (`--orto-*`):
+   el violeta de texto, los bordes tintados de cada estado y el velo de los
+   cajones. Cambian solos con el tema porque se calculan sobre tokens que ya
+   cambian.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  --orto-violeta: var(--m2-iniciales-texto);
+  --orto-violeta-borde: color-mix(in srgb, var(--pr-activo) 30%, transparent);
+  --orto-exito-borde: color-mix(in srgb, var(--pr-exito) 30%, transparent);
+  --orto-alerta-borde: color-mix(in srgb, var(--pr-alerta) 32%, transparent);
+  --orto-peligro-borde: color-mix(in srgb, var(--pr-peligro) 30%, transparent);
+  --orto-velo: color-mix(in srgb, var(--pr-texto) 42%, transparent);
+  --orto-sobre-color: var(--pr-tarjeta);
+
+  min-width: 0;
+  font-family: var(--font-menu), var(--font-sans), system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--pr-texto);
+}
+
+/* En oscuro `--pr-texto` es casi blanco: un velo hecho con él sería niebla
+   clara sobre un panel oscuro. Se calcula sobre el fondo. */
+:global(.dark) .raiz {
+  --orto-velo: color-mix(in srgb, var(--pr-fondo) 74%, transparent);
+}
+
+/* `tipografia-panel.tsx` deja `font-variant-numeric: normal` en la raíz del
+   menú (que aquí se monta por sus tokens); las cifras de ancho fijo se
+   devuelven a los hijos, igual que hacen Hoy y el Expediente. */
+.raiz > * {
+  font-variant-numeric: tabular-nums;
+}
+
+.raiz *,
+.raiz *::before,
+.raiz *::after {
+  box-sizing: border-box;
+}
+
+/* Foco de teclado: el mismo anillo que la ficha, en todo lo que se pulsa. */
+.raiz :where(button, a, summary, [role="tab"], [role="button"], [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.raiz :where(input, select, textarea):focus-visible {
+  outline: none;
+  border-color: var(--pr-activo);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+/* globals.css pinta en oscuro todo campo con `!important` (fondo --card):
+   dentro del módulo manda el token de la ficha. */
+:global(.dark) .raiz :where(input, select, textarea) {
+  background-color: var(--pr-tarjeta-2) !important;
+  border-color: var(--pr-borde) !important;
+  color: var(--pr-texto) !important;
+}
+
+:global(.dark) .raiz :where(input, textarea)::placeholder {
+  color: var(--pr-texto-3) !important;
+}
+
+.raiz :where(input[type="checkbox"], input[type="radio"]) {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  accent-color: var(--pr-activo);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .raiz *,
+  .raiz *::before,
+  .raiz *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ═══ Marco de la pestaña ═════════════════════════════════════════════ */
+
+.lienzo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.columna {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* La columna de la derecha se queda a la vista al bajar (solo en ancho). */
+.riel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .rielPegajoso {
+    position: sticky;
+    top: 76px;
+    max-height: calc(100vh - 92px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    /* El anillo de foco de las tarjetas no se corta contra el borde. */
+    padding: 2px;
+    margin: -2px;
+  }
+}
+
+/* ═══ Cabecera del paciente ═══════════════════════════════════════════ */
+
+.cabecera {
+  padding: 16px 18px 14px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra);
+  min-width: 0;
+}
+
+.cabeceraPrincipal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.cabeceraInfo {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.cabeceraNombre {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+}
+
+.cabeceraMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--pr-texto-3);
+}
+
+.cabeceraMeta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.metaSep {
+  color: var(--pr-borde);
+}
+
+.cabeceraAvisos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.cabeceraAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.datos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pr-borde-suave);
+}
+
+@media (max-width: 640px) {
+  .cabecera {
+    padding: 14px 14px 12px;
+  }
+  .avatar {
+    width: 46px;
+    height: 46px;
+    font-size: 16px;
+    border-radius: 12px;
+  }
+  .cabeceraNombre {
+    font-size: 19px;
+  }
+  .cabeceraInfo {
+    flex-basis: calc(100% - 64px);
+  }
+  .cabeceraAcciones {
+    flex: 1 1 100%;
+  }
+  .cabeceraAcciones > * {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+  .datos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Dato: etiqueta corta + valor + nota. Sin cajas dentro de la caja. */
+.dato {
+  min-width: 0;
+  color: var(--pr-texto);
+}
+
+.datoEtiqueta {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.datoValor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+  overflow-wrap: anywhere;
+}
+
+.datoValorGrande {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+
+.datoSub {
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+}
+
+.datoNota {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* ═══ Tarjeta ═════════════════════════════════════════════════════════ */
+
+.tarjeta {
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra);
+  min-width: 0;
+  /* El menú de la ficha es pegajoso: al saltar a una sección desde el
+     índice, el título no queda debajo de él. */
+  scroll-margin-top: 84px;
+}
+
+.tarjetaCabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+}
+
+.tarjetaIcono {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+}
+
+.tarjetaIconoExito { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.tarjetaIconoAlerta { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.tarjetaIconoPeligro { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+.tarjetaIconoNeutro { background: var(--pr-hover); color: var(--pr-texto-2); }
+
+.tarjetaTextos {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.tarjetaTitulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.15px;
+  color: var(--pr-texto);
+}
+
+.tarjetaSub {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+.tarjetaAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tarjetaPie {
+  padding: 11px 18px;
+  border-top: 1px solid var(--pr-borde-suave);
+  border-radius: 0 0 var(--pr-radio) var(--pr-radio);
+  background: var(--pr-tarjeta-2);
+}
+
+.tarjetaCuerpo {
+  padding: 16px 18px 18px;
+}
+
+/* Rótulo de un grupo dentro de una tarjeta o de un cajón. */
+.ceja {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+/* ═══ Botones ═════════════════════════════════════════════════════════ */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, filter 0.12s;
+}
+
+.boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.boton:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.botonChico {
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  gap: 6px;
+}
+
+.botonGrande {
+  height: 42px;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.botonPrincipal {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+.botonSuave {
+  background: var(--pr-activo-suave);
+  border-color: transparent;
+  color: var(--orto-violeta);
+}
+
+.botonFantasma {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pr-texto-2);
+}
+
+.botonExito {
+  background: var(--pr-exito);
+  border-color: var(--pr-exito);
+  color: var(--orto-sobre-color);
+}
+
+.botonExitoSuave {
+  background: var(--pr-exito-suave);
+  border-color: transparent;
+  color: var(--pr-exito);
+}
+
+.botonPeligro {
+  background: var(--pr-peligro);
+  border-color: var(--pr-peligro);
+  color: var(--orto-sobre-color);
+}
+
+.botonPeligroSuave {
+  background: var(--pr-tarjeta);
+  border-color: var(--orto-peligro-borde);
+  color: var(--pr-peligro);
+}
+
+@media (hover: hover) {
+  .boton:hover:not(:disabled) {
+    background: var(--pr-tarjeta-2);
+    border-color: var(--pr-texto-3);
+  }
+  .botonPrincipal:hover:not(:disabled) {
+    background: var(--pr-activo);
+    border-color: var(--pr-activo);
+    filter: brightness(1.08);
+  }
+  .botonSuave:hover:not(:disabled) {
+    background: var(--pr-activo-suave);
+    border-color: var(--orto-violeta-borde);
+  }
+  .botonFantasma:hover:not(:disabled) {
+    background: var(--pr-hover);
+    border-color: transparent;
+    color: var(--pr-texto);
+  }
+  .botonExito:hover:not(:disabled) {
+    background: var(--pr-exito);
+    border-color: var(--pr-exito);
+    filter: brightness(1.06);
+  }
+  .botonExitoSuave:hover:not(:disabled) {
+    background: var(--pr-exito-suave);
+    border-color: var(--orto-exito-borde);
+  }
+  .botonPeligro:hover:not(:disabled) {
+    background: var(--pr-peligro);
+    border-color: var(--pr-peligro);
+    filter: brightness(1.06);
+  }
+  .botonPeligroSuave:hover:not(:disabled) {
+    background: var(--pr-peligro-suave);
+    border-color: var(--orto-peligro-borde);
+  }
+}
+
+/* En pantalla táctil el botón chico crece: 30 px no se aciertan con el dedo. */
+@media (pointer: coarse) {
+  .botonChico {
+    height: 36px;
+    padding: 0 13px;
+  }
+}
+
+/* Un <label> que viste de botón y guarda dentro su <input type="file">: el
+   foco de teclado cae en el campo, así que el anillo lo pinta la etiqueta. */
+.botonSubir {
+  position: relative;
+}
+
+.botonSubir:focus-within {
+  box-shadow: var(--pr-foco);
+}
+
+.botonSubir[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Botón de solo icono (cerrar, quitar). */
+.botonIcono {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pr-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.botonIcono:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+@media (hover: hover) {
+  .botonIcono:hover {
+    background: var(--pr-hover);
+    color: var(--pr-texto);
+  }
+  .botonIconoPeligro:hover {
+    background: var(--pr-peligro-suave);
+    color: var(--pr-peligro);
+  }
+}
+
+/* Enlace de texto dentro de una tarjeta («Ver todo», «Quitar»). */
+.enlace {
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--orto-violeta);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.enlace:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+@media (hover: hover) {
+  .enlace:hover {
+    text-decoration: underline;
+  }
+}
+
+/* Chip de acción rápida («+ Clase II», «4 sem»): se pulsa muchas veces al
+   día, así que tiene cuerpo de botón y no de etiqueta. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.chipNeutro {
+  border-color: var(--pr-borde);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto-2);
+}
+
+.chipActivo {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+/* Opción elegida dentro de un grupo de opciones (fase, calibre…). */
+.chipElegido {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+}
+
+@media (hover: hover) {
+  .chip:hover:not(:disabled) {
+    border-color: var(--orto-violeta-borde);
+  }
+  .chipNeutro:hover:not(:disabled) {
+    border-color: var(--pr-texto-3);
+    background: var(--pr-tarjeta-2);
+  }
+  .chipActivo:hover:not(:disabled) {
+    border-color: var(--pr-activo);
+    filter: brightness(1.08);
+  }
+  .chipElegido:hover:not(:disabled) {
+    border-color: var(--pr-activo);
+    background: var(--pr-activo-suave);
+  }
+}
+
+@media (pointer: coarse) {
+  .chip {
+    height: 36px;
+    padding: 0 13px;
+  }
+}
+
+/* ═══ Etiquetas de estado ═════════════════════════════════════════════ */
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 21px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.etiquetaChica {
+  min-height: 19px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+}
+
+.etiquetaNeutra { background: var(--pr-hover); color: var(--pr-texto-2); }
+.etiquetaVioleta { background: var(--pr-activo-suave); color: var(--orto-violeta); }
+.etiquetaExito { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.etiquetaAlerta { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.etiquetaPeligro { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+.etiquetaContorno {
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto-2);
+  box-shadow: inset 0 0 0 1px var(--pr-borde);
+}
+
+.punto {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .puntoVivo {
+    animation: ortoLatido 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes ortoLatido {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ═══ Filas etiqueta / valor ══════════════════════════════════════════ */
+
+.fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--pr-borde-suave);
+  font-size: 13px;
+  /* El color del valor se hereda de aquí: así cualquier clase de tono que
+     le ponga quien llama (éxito, peligro…) manda sin pelearse por orden. */
+  color: var(--pr-texto);
+}
+
+/* Lista de una sola columna: la primera y la última fila pegan a los bordes. */
+.filas {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.filas > .fila:first-child { padding-top: 0; }
+.filas > .fila:last-child { border-bottom: 0; padding-bottom: 0; }
+
+/* Dos columnas de filas (diagnóstico): cada fila conserva su línea. */
+.filas2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+  min-width: 0;
+}
+
+@media (max-width: 420px) {
+  .filas2 { grid-template-columns: minmax(0, 1fr); }
+}
+
+.filaEtiqueta {
+  flex-shrink: 0;
+  color: var(--pr-texto-3);
+}
+
+.filaValor {
+  min-width: 0;
+  text-align: right;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.filaTotal {
+  font-size: 13.5px;
+}
+
+.filaTotal .filaEtiqueta {
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+.filaTotal .filaValor {
+  font-weight: 700;
+}
+
+/* ═══ Barra de avance ═════════════════════════════════════════════════ */
+
+.barra {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--pr-hover);
+  overflow: hidden;
+}
+
+.barraRelleno {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--pr-activo);
+  transition: width 0.25s ease;
+}
+
+.barraExito { background: var(--pr-exito); }
+.barraAlerta { background: var(--pr-alerta); }
+.barraPeligro { background: var(--pr-peligro); }
+
+/* ═══ Índice de secciones ═════════════════════════════════════════════ */
+
+.indice {
+  /* En la rejilla, el índice mide lo que mide su lista (no se estira al alto
+     de la columna central) y así puede quedarse pegado al bajar. */
+  align-self: start;
+  padding: 10px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra);
+}
+
+.indiceTitulo {
+  padding: 4px 8px 8px;
+}
+
+.indiceLista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.indiceItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.indiceItem svg {
+  flex: none;
+  color: var(--pr-texto-3);
+}
+
+.indiceItemActivo {
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+  font-weight: 600;
+}
+
+.indiceItemActivo svg {
+  color: var(--orto-violeta);
+}
+
+.indiceItemApagado {
+  color: var(--pr-texto-3);
+}
+
+.indicePie {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--pr-borde-suave);
+}
+
+@media (hover: hover) {
+  .indiceItem:hover {
+    background: var(--pr-hover);
+    color: var(--pr-texto);
+  }
+  .indiceItemActivo:hover {
+    background: var(--pr-activo-suave);
+    color: var(--orto-violeta);
+  }
+}
+
+/* Con columna propia (ventana ancha), el índice acompaña al bajar. */
+@media (min-width: 1360px) {
+  .indice {
+    position: sticky;
+    top: 76px;
+  }
+}
+
+/* En pantallas sin sitio para la columna del índice, el índice es una tira
+   de chips que se desliza de lado DENTRO de su caja: la página no gana
+   scroll lateral. */
+@media (max-width: 1359.98px) {
+  .indice {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+  }
+  .indiceTitulo {
+    display: none;
+  }
+  /* «Recargar» se queda, reducido a su icono, al final de la tira. */
+  .indicePie {
+    flex: none;
+    margin: 0;
+    padding: 0 0 0 4px;
+    border-top: 0;
+    border-left: 1px solid var(--pr-borde-suave);
+  }
+  .indicePie span {
+    display: none;
+  }
+  .indiceLista {
+    flex: 1;
+    min-width: 0;
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .indiceLista::-webkit-scrollbar {
+    display: none;
+  }
+  .indiceItem {
+    width: auto;
+    flex: none;
+    min-height: 36px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+}
+
+/* ═══ Pestañas dentro de una tarjeta ══════════════════════════════════ */
+
+.segmento {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--m2-buscador-fondo);
+  max-width: 100%;
+}
+
+.segmentoBoton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.segmentoActivo {
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-weight: 600;
+  box-shadow: var(--pr-sombra);
+}
+
+.segmentoCuenta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pr-texto-3);
+}
+
+@media (hover: hover) {
+  .segmentoBoton:hover {
+    color: var(--pr-texto);
+  }
+}
+
+@media (pointer: coarse) {
+  .segmentoBoton {
+    height: 34px;
+  }
+}
+
+/* En el teléfono las pestañas se reparten el ancho de la tarjeta. */
+@media (max-width: 480px) {
+  .segmento {
+    display: flex;
+    width: 100%;
+  }
+  .segmentoBoton {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 0 9px;
+  }
+}
+
+/* ═══ Estados vacíos ══════════════════════════════════════════════════ */
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 16px;
+  border: 1px dashed var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  text-align: center;
+}
+
+.vacioAmplio {
+  padding: 34px 16px;
+}
+
+.vacioIcono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+}
+
+.vacioTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+.vacioPista {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+/* Vacío de una línea, dentro de un bloque que ya tiene su título. */
+.vacioLinea {
+  font-size: 12.5px;
+  color: var(--pr-texto-3);
+}
+
+/* ═══ Avisos ══════════════════════════════════════════════════════════ */
+
+.aviso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  font-size: 12.5px;
+  color: var(--pr-texto-2);
+}
+
+.avisoTexto {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.avisoAlerta {
+  border-color: var(--orto-alerta-borde);
+  background: var(--pr-alerta-suave);
+}
+
+.avisoAlerta strong { color: var(--pr-alerta); }
+
+.avisoPeligro {
+  border-color: var(--orto-peligro-borde);
+  background: var(--pr-peligro-suave);
+  color: var(--pr-peligro);
+}
+
+.avisoExito {
+  border-color: var(--orto-exito-borde);
+  background: var(--pr-exito-suave);
+}
+
+.avisoVioleta {
+  border-color: var(--orto-violeta-borde);
+  background: var(--pr-activo-suave);
+}
+
+/* ═══ Filas de lista (historial de controles) ═════════════════════════ */
+
+.listaFila {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  min-width: 0;
+}
+
+button.listaFila,
+.listaFilaEnlace {
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+button.listaFila:focus-visible,
+.listaFilaEnlace:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+@media (hover: hover) {
+  button.listaFila:hover,
+  .listaFilaEnlace:hover {
+    border-color: var(--orto-violeta-borde);
+    background: var(--pr-tarjeta);
+  }
+}
+
+.numero {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ═══ Cajones y ventanas ══════════════════════════════════════════════ */
+
+/* Planos: por encima del botón flotante de Sabina (58), que si no tapa el
+   botón principal del pie; por debajo de su panel (69/70) y de los diálogos
+   del panel (90+). */
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--orto-velo);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: ortoFundido 180ms ease-out;
+}
+
+.cajon {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100vw;
+  background: var(--pr-tarjeta);
+  border-left: 1px solid var(--pr-borde);
+  box-shadow: -16px 0 48px color-mix(in srgb, var(--pr-texto) 14%, transparent);
+  color: var(--pr-texto);
+  font-size: 13px;
+  line-height: 1.4;
+  animation: ortoEntra 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (min-width: 640px) {
+  .cajon { width: 520px; }
+  .cajonAncho { width: 680px; }
+  .cajonEstrecho { width: 440px; }
+}
+
+.ventanaMarco {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.ventana {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 32px);
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--pr-texto) 22%, transparent);
+  color: var(--pr-texto);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: auto;
+  animation: ortoAparece 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ventanaAncha { max-width: 880px; }
+.ventanaMuyAncha { max-width: 1120px; }
+
+.cajonCabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+}
+
+.cajonTextos {
+  min-width: 0;
+}
+
+.cajonCeja {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--orto-violeta);
+}
+
+.cajonTitulo {
+  margin: 1px 0 0;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+}
+
+.cajonSub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+.cajonCuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cajonCuerpoRelleno {
+  padding: 18px 20px 22px;
+}
+
+.cajonPie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--pr-borde-suave);
+  background: var(--pr-tarjeta-2);
+}
+
+.ventana .cajonPie {
+  border-radius: 0 0 var(--pr-radio) var(--pr-radio);
+}
+
+.cajonPieNota {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 160px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+}
+
+@media (max-width: 480px) {
+  .cajonCabeza { padding: 12px 16px; }
+  .cajonCuerpoRelleno { padding: 16px 16px 20px; }
+  .cajonPie { padding-left: 16px; padding-right: 16px; }
+  /* En el teléfono los botones del pie se reparten el ancho: el principal
+     no queda arrinconado ni hay que apuntar a un botón de 80 px. */
+  .cajonPie > .boton,
+  .cajonPieBotones > .boton {
+    flex: 1 1 auto;
+  }
+  .cajonPieBotones {
+    flex: 1 1 100%;
+  }
+}
+
+.cajonPieBotones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Pie con una nota a la izquierda y los botones a la derecha. */
+.cajonPieReparto {
+  justify-content: space-between;
+}
+
+.cajonPieReparto > :last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Un bloque del cajón: rótulo + contenido, separados por una línea. */
+.bloque {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+}
+
+.bloque:last-child {
+  border-bottom: 0;
+}
+
+.bloqueCabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.bloqueTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
+  color: var(--pr-texto);
+}
+
+.bloqueNota {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--pr-texto-3);
+}
+
+@media (max-width: 480px) {
+  .bloque { padding: 14px 16px; }
+}
+
+@keyframes ortoFundido {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ortoEntra {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes ortoAparece {
+  from { transform: translateY(8px) scale(0.985); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* ═══ Visor de fotos ═════════════════════════════════════════════════
+   Una foto clínica se mira sobre negro en los DOS temas: es la única pieza
+   del módulo que no sigue a los tokens de superficie, a propósito. */
+
+.visor {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 16px 16px;
+  background: color-mix(in srgb, black 90%, transparent);
+  color: white;
+  animation: ortoFundido 180ms ease-out;
+}
+
+.visorRotulo {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 64px;
+}
+
+.visorCerrar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, white 14%, transparent);
+  color: white;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.visorCerrar:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px white;
+}
+
+@media (hover: hover) {
+  .visorCerrar:hover {
+    background: color-mix(in srgb, white 24%, transparent);
+  }
+}
+
+/* ═══ Formularios ═════════════════════════════════════════════════════ */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.campoEtiqueta {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+.campoPista {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+.entrada {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+textarea.entrada {
+  height: auto;
+  min-height: 64px;
+  padding: 9px 11px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.entrada::placeholder {
+  color: var(--pr-texto-3);
+}
+
+.entrada:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .entrada:hover:not(:disabled) {
+    border-color: var(--pr-texto-3);
+  }
+}
+
+/* En iOS un campo con letra de menos de 16 px hace zoom al enfocarlo. */
+@media (pointer: coarse) {
+  .entrada {
+    font-size: 16px;
+    height: 42px;
+  }
+}
+
+/* Campo de una cifra corta (ancho de un diente): sin relleno lateral y sin
+   las flechas del navegador, que se comían el número. */
+.entradaCorta {
+  padding: 0 2px;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.entradaCorta::-webkit-outer-spin-button,
+.entradaCorta::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Rejilla de medidas (SNA, SNB…): las casillas se acomodan al ancho. */
+.medidas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+}
+
+.casilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  font-size: 13px;
+  color: var(--pr-texto-2);
+  cursor: pointer;
+}
+
+.rejilla2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rejilla3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rejilla4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+
+@media (max-width: 560px) {
+  .rejilla3,
+  .rejilla4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 380px) {
+  .rejilla2,
+  .rejilla3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Caja anidada: un dato dentro de una tarjeta o de un cajón. */
+.caja {
+  padding: 10px 12px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  min-width: 0;
+}
+
+.cajaVioleta {
+  border-color: var(--orto-violeta-borde);
+  background: var(--pr-activo-suave);
+}
+
+.cajaExito {
+  border-color: var(--orto-exito-borde);
+  background: var(--pr-exito-suave);
+}
+
+.cajaAlerta {
+  border-color: var(--orto-alerta-borde);
+  background: var(--pr-alerta-suave);
+}
+
+.cajaPeligro {
+  border-color: var(--orto-peligro-borde);
+  background: var(--pr-peligro-suave);
+}
+
+/* ═══ Tablas ══════════════════════════════════════════════════════════ */
+
+.tablaCaja {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tabla th {
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--pr-texto-3);
+}
+
+.tabla td {
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+  color: var(--pr-texto);
+  vertical-align: middle;
+}
+
+.tabla tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tabla .cifra {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Tabla dentro de un bloque con relleno propio: celdas más ceñidas. */
+.tablaDensa th { padding: 8px 12px; }
+.tablaDensa td { padding: 9px 12px; }
+
+.tablaFilaActiva td {
+  background: var(--pr-activo-suave);
+}
+
+@media (hover: hover) {
+  .tabla tbody tr:hover td {
+    background: var(--pr-hover);
+  }
+}
+
+/* ═══ Tonos (texto) ═══════════════════════════════════════════════════
+   Al FINAL a propósito: tienen la misma especificidad que las clases de
+   arriba y tienen que ganarles por orden (un valor en rojo sigue en rojo
+   aunque la clase del valor diga otro color). */
+
+.tonoTexto { color: var(--pr-texto); }
+.tonoTexto2 { color: var(--pr-texto-2); }
+.tonoApagado { color: var(--pr-texto-3); }
+.tonoVioleta { color: var(--orto-violeta); }
+.tonoExito { color: var(--pr-exito); }
+.tonoAlerta { color: var(--pr-alerta); }
+.tonoPeligro { color: var(--pr-peligro); }

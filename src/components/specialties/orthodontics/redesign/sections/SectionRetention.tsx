@@ -9,10 +9,11 @@
 // Trigger automático al avanzar fase a Retención: crear LabOrder retainer +
 // agendar 5 revisiones (lo dispara advancePhase server action).
 
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Shield } from "lucide-react";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
 import { fmtDateShort } from "../atoms/format";
+import orto from "../orto.module.css";
 
 export type RetainerArchwireGauge = "G_0175" | "G_0195" | "G_021";
 
@@ -78,18 +79,17 @@ export function SectionRetention(props: SectionRetentionProps) {
   return (
     <Card
       id="retention"
-      eyebrow="Sección G · G9 régimen retención automatizado"
+      icon={<Shield size={15} strokeWidth={1.75} />}
       title="Retención"
+      eyebrow="Retenedores, régimen de uso y controles"
       action={
-        <Pill color={isActive ? "emerald" : "slate"} size="xs">
-          {isActive ? "Activa" : "Programada — inicia tras debonding"}
+        <Pill color={isActive ? "emerald" : "slate"}>
+          {isActive ? "Activa" : "Empieza al retirar los brackets"}
         </Pill>
       }
     >
-      <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800">
-        <div className="text-xs uppercase tracking-wider text-slate-500 font-medium mb-3 dark:text-slate-400">
-          Tipo de retenedor
-        </div>
+      <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
+        <h4 className={`${orto.bloqueTitulo} mb-[10px]`}>Tipo de retenedor</h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <RetainerCard
             label="Superior"
@@ -110,42 +110,37 @@ export function SectionRetention(props: SectionRetentionProps) {
         </div>
       </div>
 
-      <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800">
-        <div className="text-xs uppercase tracking-wider text-slate-500 font-medium mb-3 dark:text-slate-400">
-          Régimen de uso
-        </div>
+      <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
+        <h4 className={`${orto.bloqueTitulo} mb-[10px]`}>Régimen de uso</h4>
+        {/* Dos tramos en fila: el primero nunca mide menos que su rótulo (en el
+            teléfono, al 20 % del ancho, «24 h · año 1» se salía de su caja). */}
         <div
-          className="relative h-10 bg-slate-50 border border-slate-200 rounded-md overflow-hidden dark:bg-slate-800 dark:border-slate-700"
+          className="flex h-9 border border-[color:var(--orto-violeta-borde)] rounded-[10px] overflow-hidden"
           role="img"
-          aria-label="Régimen 24/7 año 1 luego nocturno años 2-5"
+          aria-label="Régimen: 24 horas el primer año y después nocturno del año 2 al 5"
         >
           <div
-            className="absolute inset-y-0 left-0 bg-violet-200 flex items-center justify-center text-[11px] font-semibold text-violet-900 dark:bg-violet-900/40 dark:text-violet-200"
+            className="flex-none min-w-[88px] bg-[color:var(--pr-activo)] flex items-center justify-center px-2 text-[11px] font-semibold text-[color:var(--pr-activo-texto)] whitespace-nowrap"
             style={{ width: "20%" }}
           >
-            24/7 · año 1
+            24 h · año 1
           </div>
-          <div
-            className="absolute inset-y-0 bg-violet-100/60 flex items-center justify-center text-[11px] font-medium text-violet-800 dark:bg-violet-900/20 dark:text-violet-300"
-            style={{ left: "20%", width: "80%" }}
-          >
+          <div className="flex-1 min-w-0 bg-[color:var(--pr-activo-suave)] flex items-center justify-center px-2 text-[11px] font-semibold text-[color:var(--orto-violeta)] whitespace-nowrap">
             Nocturno · años 2-5
           </div>
         </div>
-        <div className="mt-2 flex justify-between text-[10px] text-slate-400 font-mono dark:text-slate-500">
-          <span>Debond</span>
-          <span>+12m</span>
-          <span>+24m</span>
-          <span>+36m</span>
-          <span>+60m</span>
+        <div className="mt-2 flex justify-between text-[11px] text-[color:var(--pr-texto-3)] tabular-nums">
+          <span>Retiro</span>
+          <span>1 año</span>
+          <span>2 años</span>
+          <span>3 años</span>
+          <span>5 años</span>
         </div>
       </div>
 
-      <div className="px-6 py-5">
+      <div className="px-[18px] py-[16px]">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h4 className="text-xs uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-            Auto-scheduling de controles
-          </h4>
+          <h4 className={orto.bloqueTitulo}>Controles de retención</h4>
           <PreSurveyToggle
             enabled={r.preSurveyEnabled}
             onChange={(v) => void props.onTogglePreSurvey?.(v)}
@@ -173,16 +168,10 @@ function RetainerCard({
   mono?: boolean;
 }) {
   return (
-    <div className="border border-violet-200 bg-violet-50 rounded-lg p-3 dark:bg-violet-900/20 dark:border-violet-800">
-      <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium dark:text-violet-300">
-        {label}
-      </div>
-      <div
-        className={`mt-1 text-base font-semibold text-slate-900 dark:text-slate-100 ${mono ? "font-mono" : ""}`}
-      >
-        {value}
-      </div>
-      <div className="text-[11px] text-slate-500 mt-0.5 dark:text-slate-400">{sub}</div>
+    <div className={orto.caja}>
+      <div className={orto.datoEtiqueta}>{label}</div>
+      <div className={`${orto.datoValor} ${mono ? "tabular-nums" : ""}`}>{value}</div>
+      <div className={orto.datoSub}>{sub}</div>
     </div>
   );
 }
@@ -196,25 +185,23 @@ function PreSurveyToggle({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <MessageCircle
-        className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"
-        aria-hidden
-      />
-      <span className="text-[11px] text-slate-700 dark:text-slate-300">
-        Pre-formulario {`"`}¿estás usándolo?{`"`} {enabled ? "activo" : "desactivado"}
+      <MessageCircle size={14} strokeWidth={1.75} className={orto.tonoApagado} aria-hidden />
+      <span className="text-xs text-[color:var(--pr-texto-2)]" id="orto-pre-encuesta">
+        Preguntar antes «¿estás usando tu retenedor?»
       </span>
       <button
         type="button"
         role="switch"
         aria-checked={enabled}
+        aria-labelledby="orto-pre-encuesta"
         onClick={() => onChange(!enabled)}
-        className={`w-7 h-4 rounded-full relative transition-colors ${
-          enabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
+        className={`w-9 h-5 rounded-full relative transition-colors flex-none ${
+          enabled ? "bg-[color:var(--pr-activo)]" : "bg-[color:var(--pr-texto-3)]"
         }`}
       >
         <span
-          className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${
-            enabled ? "right-0.5" : "left-0.5"
+          className={`absolute top-[2px] w-4 h-4 bg-[color:var(--pr-tarjeta)] rounded-full transition-all ${
+            enabled ? "left-[18px]" : "left-[2px]"
           }`}
           aria-hidden
         />
@@ -225,14 +212,11 @@ function PreSurveyToggle({
 
 function CheckupCard({ checkup }: { checkup: RetainerCheckupDTO }) {
   return (
-    <div className="border border-slate-200 rounded-md p-3 text-center bg-white dark:bg-slate-900 dark:border-slate-700">
-      <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
-        Control
+    <div className={`${orto.caja} text-center flex flex-col items-center gap-[3px]`}>
+      <div className="text-[15px] font-bold leading-tight">
+        {checkup.monthsFromDebond} {checkup.monthsFromDebond === 1 ? "mes" : "meses"}
       </div>
-      <div className="text-base font-bold text-slate-900 mt-0.5 dark:text-slate-100">
-        {checkup.monthsFromDebond}m
-      </div>
-      <div className="text-[10px] text-slate-500 mt-1 dark:text-slate-400">
+      <div className="text-[11.5px] text-[color:var(--pr-texto-3)]">
         {fmtDateShort(checkup.scheduledDate)}
       </div>
       <Pill color={STATUS_COLOR[checkup.status]} size="xs">

@@ -1,17 +1,19 @@
 "use client";
-// PatientHeader con G16 (patient flow) — componente del shell del patient-detail
-// del rediseño Ortodoncia. Renderiza:
-//   - Avatar circular violet con iniciales
-//   - Nombre + datos demográficos + tutor + alergia badge rose
-//   - G16 badge emerald (si paciente está en clínica) con sillón asignado
-//   - 4 stats horizontales: PRÓXIMA CITA / SALDO / ÚLTIMA VISITA / VISITAS TOTALES
-//   - Botones acción derecha: Iniciar consulta · Agendar próxima · Cobrar · ⋯
+// Cabecera del paciente dentro de la pestaña de Ortodoncia. Habla el mismo
+// idioma que la cabecera de la ficha (`.heroRediseno`): avatar cuadrado de
+// esquinas redondas, nombre a 22 px, una línea de datos y los botones a la
+// derecha. Debajo, cuatro datos del caso separados por una línea — sin cajas
+// dentro de la caja.
+//
+// El botón que MANDA es «Registrar control»: es lo que se hace veinte veces
+// al día en esta pantalla. Los demás conservan su sitio y su función.
 
-import { Calendar, DollarSign, MoreHorizontal, Phone, Play } from "lucide-react";
+import { Calendar, ClipboardCheck, DollarSign, MoreHorizontal, Phone, Play } from "lucide-react";
 import { Btn } from "./atoms/Btn";
 import { Pill } from "./atoms/Pill";
 import { fmtDate, fmtDateShort, fmtMoney, fmtTime } from "./atoms/format";
 import { FLOW_STATUS_LABELS, type NextAppointmentDTO, type PatientFlowDTO } from "./types";
+import orto from "./orto.module.css";
 
 export interface PatientHeaderProps {
   /** Datos del paciente. */
@@ -44,6 +46,10 @@ export interface PatientHeaderProps {
   onScheduleNext?: () => void;
   onCollect?: () => void;
   onMore?: () => void;
+  /** Abre la hoja de control de hoy. Solo llega con un caso abierto. */
+  onStartControl?: () => void;
+  /** Hay un control agendado para hoy: cambia el rótulo del botón. */
+  controlIsToday?: boolean;
 }
 
 export function PatientHeaderG16(props: PatientHeaderProps) {
@@ -53,74 +59,73 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
 
   const sexLabel = p.sex === "F" ? "F" : p.sex === "M" ? "M" : p.sex === "X" ? "—" : null;
   const ageLabel = p.age != null ? `${p.age} años` : "edad —";
+  const meta: React.ReactNode[] = [ageLabel];
+  if (sexLabel) meta.push(sexLabel);
+  if (p.phone) {
+    meta.push(
+      <>
+        <Phone size={12} strokeWidth={1.75} aria-hidden /> {p.phone}
+      </>,
+    );
+  }
+  if (p.email) meta.push(p.email);
+  if (p.bloodType) meta.push(p.bloodType);
+  if (p.guardianLabel) meta.push(`Tutor: ${p.guardianLabel}`);
 
   return (
-    <header className="bg-white border border-slate-200 rounded-xl p-5 dark:bg-slate-900 dark:border-slate-800">
-      <div className="flex items-start gap-5 flex-wrap">
-        {/* Avatar — mockup: 80px, fondo violet-100 con texto violet-700.
-            La sombra reproduce el ring + glow del shell.jsx. */}
-        <div
-          className="w-20 h-20 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-xl font-bold flex-shrink-0 shadow-[0_0_0_1px_rgba(124,58,237,0.15),0_6px_16px_-6px_rgba(124,58,237,0.4)] dark:bg-violet-900/40 dark:text-violet-200"
-          aria-hidden
-        >
+    <header className={orto.cabecera}>
+      <div className={orto.cabeceraPrincipal}>
+        <div className={orto.avatar} aria-hidden>
           {p.avatarInitials}
         </div>
 
-        {/* Title block */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <h1 className="text-2xl font-bold text-slate-900 leading-tight tracking-tight dark:text-slate-100">
-              {p.fullName}
-            </h1>
-            <Pill color="violet" size="xs">
-              <span className="font-mono">#{p.id.slice(0, 8)}</span>
-            </Pill>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-slate-600 flex-wrap dark:text-slate-300">
-            <span>{ageLabel}</span>
-            {sexLabel ? <Sep>{sexLabel}</Sep> : null}
-            {p.phone ? (
-              <Sep>
-                <Phone className="w-3 h-3 inline -mt-0.5" aria-hidden /> {p.phone}
-              </Sep>
-            ) : null}
-            {p.email ? <Sep>{p.email}</Sep> : null}
-            {p.bloodType ? <Sep>{p.bloodType}</Sep> : null}
-            {p.guardianLabel ? <Sep>Tutor: {p.guardianLabel}</Sep> : null}
-          </div>
-          {/* Allergy + Flow badges */}
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
-            {p.criticalAllergies ? (
-              <Pill color="rose" size="xs">
-                ⚠ Alergia: {p.criticalAllergies}
-              </Pill>
-            ) : null}
-            {flow ? (
-              // Flow badge — mockup usa amber para "en clínica" (no emerald).
-              // El dot pulsa y el sufijo G16 va con tracking ancho.
-              <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-full px-2 py-0.5 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-200">
-                <span
-                  className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse"
-                  aria-hidden
-                />
-                En clínica · {FLOW_STATUS_LABELS[flow.status].toLowerCase()} desde{" "}
-                {fmtTime(flow.enteredAt)}
-                {flow.chair ? ` · ${flow.chair}` : ""}
-                <span className="ml-1 text-[9px] uppercase tracking-wider opacity-70">
-                  G16
-                </span>
+        <div className={orto.cabeceraInfo}>
+          <h1 className={orto.cabeceraNombre}>{p.fullName}</h1>
+          <div className={orto.cabeceraMeta}>
+            {meta.map((m, i) => (
+              <span key={i}>
+                {i > 0 ? (
+                  <span className={orto.metaSep} aria-hidden>
+                    ·
+                  </span>
+                ) : null}
+                {m}
               </span>
-            ) : null}
+            ))}
           </div>
+          {p.criticalAllergies || flow ? (
+            <div className={orto.cabeceraAvisos}>
+              {p.criticalAllergies ? (
+                <Pill color="rose">Alergia: {p.criticalAllergies}</Pill>
+              ) : null}
+              {flow ? (
+                <Pill color="amber">
+                  <span className={`${orto.punto} ${orto.puntoVivo}`} aria-hidden />
+                  En clínica · {FLOW_STATUS_LABELS[flow.status].toLowerCase()} desde{" "}
+                  {fmtTime(flow.enteredAt)}
+                  {flow.chair ? ` · ${flow.chair}` : ""}
+                </Pill>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2 flex-wrap items-start">
+        <div className={orto.cabeceraAcciones}>
+          {props.onStartControl ? (
+            <Btn
+              variant="primary"
+              size="lg"
+              icon={<ClipboardCheck size={16} strokeWidth={1.75} aria-hidden />}
+              onClick={props.onStartControl}
+            >
+              {props.controlIsToday ? "Registrar control de hoy" : "Registrar control"}
+            </Btn>
+          ) : null}
           {props.onStartVisit ? (
             <Btn
-              variant="violet-soft"
+              variant={props.onStartControl ? "secondary" : "primary"}
               size="md"
-              icon={<Play className="w-3.5 h-3.5" aria-hidden />}
+              icon={<Play size={15} strokeWidth={1.75} aria-hidden />}
               onClick={props.onStartVisit}
             >
               Iniciar consulta
@@ -128,9 +133,9 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
           ) : null}
           {props.onScheduleNext ? (
             <Btn
-              variant="ghost"
+              variant="secondary"
               size="md"
-              icon={<Calendar className="w-3.5 h-3.5" aria-hidden />}
+              icon={<Calendar size={15} strokeWidth={1.75} aria-hidden />}
               onClick={props.onScheduleNext}
             >
               Agendar próxima
@@ -138,38 +143,31 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
           ) : null}
           {props.onCollect ? (
             <Btn
-              variant="emerald"
+              variant="secondary"
               size="md"
-              icon={<DollarSign className="w-3.5 h-3.5" aria-hidden />}
+              icon={<DollarSign size={15} strokeWidth={1.75} aria-hidden />}
               onClick={props.onCollect}
             >
               Cobrar
             </Btn>
           ) : null}
           {props.onMore ? (
-            <Btn
-              variant="ghost"
-              size="md"
-              onClick={props.onMore}
-              aria-label="Más opciones"
-            >
-              <MoreHorizontal className="w-4 h-4" aria-hidden />
+            <Btn variant="secondary" size="md" onClick={props.onMore} aria-label="Más opciones">
+              <MoreHorizontal size={16} strokeWidth={1.75} aria-hidden />
             </Btn>
           ) : null}
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="mt-5 pt-5 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-4 dark:border-slate-800">
+      <div className={orto.datos}>
         <Stat
           label="Próxima cita"
           value={next ? fmtDate(next.date) : "Sin programar"}
-          sub={
-            next ? `${fmtTime(next.date)} · ${next.type}` : "Agenda una nueva cita"
-          }
+          sub={next ? `${fmtTime(next.date)} · ${next.type}` : "Agenda una nueva cita"}
+          muted={!next}
         />
         <Stat
-          label="Saldo ortodoncia"
+          label="Saldo de ortodoncia"
           value={fmtMoney(props.outstandingAmount)}
           sub={props.outstandingAmount > 0 ? "Pendiente" : "Al día"}
           tone={props.outstandingAmount > 0 ? "rose" : "emerald"}
@@ -180,7 +178,7 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
           sub={props.lastVisitAt ? `hace ${daysAgo(props.lastVisitAt)} días` : ""}
         />
         <Stat
-          label="Visitas totales"
+          label="Visitas"
           value={String(props.totalVisits.count)}
           sub={props.totalVisits.sinceLabel ?? ""}
         />
@@ -189,43 +187,32 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
   );
 }
 
-function Sep({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-        ·
-      </span>
-      <span>{children}</span>
-    </>
-  );
-}
-
 function Stat({
   label,
   value,
   sub,
   tone,
+  muted,
 }: {
   label: string;
   value: string;
   sub: string;
   tone?: "emerald" | "rose";
+  muted?: boolean;
 }) {
   const valueCls =
     tone === "rose"
-      ? "text-rose-700 dark:text-rose-400"
+      ? orto.tonoPeligro
       : tone === "emerald"
-        ? "text-emerald-700 dark:text-emerald-400"
-        : "text-slate-900 dark:text-slate-100";
+        ? orto.tonoExito
+        : muted
+          ? orto.tonoTexto2
+          : "";
   return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-slate-400 font-medium dark:text-slate-500">
-        {label}
-      </div>
-      <div className={`mt-0.5 text-sm font-semibold ${valueCls}`}>{value}</div>
-      {sub ? (
-        <div className="text-[11px] text-slate-500 dark:text-slate-400">{sub}</div>
-      ) : null}
+    <div className={orto.dato}>
+      <div className={orto.datoEtiqueta}>{label}</div>
+      <div className={[orto.datoValor, valueCls].filter(Boolean).join(" ")}>{value}</div>
+      {sub ? <div className={orto.datoSub}>{sub}</div> : null}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { FileText, RefreshCw, Star } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
+import orto from "../orto.module.css";
 
 export interface ReferralCodeDTO {
   code: string;
@@ -60,55 +61,56 @@ export function SectionPostTreatment(props: SectionPostTreatmentProps) {
   return (
     <Card
       id="post"
-      eyebrow="Sección H · G11 NPS + Google review"
+      icon={<Star size={15} strokeWidth={1.75} />}
       title="Post-tratamiento"
+      eyebrow="Comparativa final, satisfacción y referidos"
       action={
-        <Pill color={isActive ? "emerald" : "slate"} size="xs">
-          {isActive ? "Activa" : "Activa al completar debonding"}
+        <Pill color={isActive ? "emerald" : "slate"}>
+          {isActive ? "Activa" : "Al terminar el tratamiento"}
         </Pill>
       }
     >
-      <div className="px-6 py-5 grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/50 dark:bg-slate-900/40 dark:border-slate-700">
+      <div className="px-[18px] py-[16px] grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className={orto.caja} style={{ padding: "14px" }}>
           <div className="flex items-center gap-2 mb-2">
             <FileText
-              className="w-4 h-4 text-violet-600 dark:text-violet-300"
+              className="w-4 h-4 text-[color:var(--orto-violeta)]"
               aria-hidden
             />
-            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <div className="text-[13px] font-semibold text-[color:var(--pr-texto)]">
               PDF antes/después
             </div>
           </div>
-          <div className="text-[11px] text-slate-500 mb-3 dark:text-slate-400">
-            Comparativa T0 vs final con branding clínica · listo para imprimir y entregar
-            al paciente.
+          <div className="text-xs text-[color:var(--pr-texto-3)] mb-3">
+            Comparativa del inicio contra el final, con los datos de la clínica, lista para
+            imprimir y entregar al paciente.
           </div>
           {props.onGeneratePdf ? (
             <Btn
               variant="secondary"
               size="sm"
-              className="w-full justify-center"
+              className="w-full"
               disabled={!isActive}
               onClick={props.onGeneratePdf}
             >
-              {isActive ? "Generar PDF" : "Generar (al debond)"}
+              {isActive ? "Generar PDF" : "Disponible al terminar"}
             </Btn>
           ) : null}
         </div>
 
-        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/50 dark:bg-slate-900/40 dark:border-slate-700">
+        <div className={orto.caja} style={{ padding: "14px" }}>
           <div className="flex items-center gap-2 mb-2">
             <Star
-              className="w-4 h-4 text-amber-500 dark:text-amber-400"
+              className="w-4 h-4 text-[color:var(--orto-violeta)]"
               aria-hidden
             />
-            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Encuesta NPS
+            <div className="text-[13px] font-semibold text-[color:var(--pr-texto)]">
+              Encuesta de satisfacción
             </div>
           </div>
-          <div className="text-[11px] text-slate-500 mb-3 dark:text-slate-400">
-            Envío automático WhatsApp +3 días post-debond. Si NPS ≥ 9 → trigger Google
-            review.
+          <div className="text-xs text-[color:var(--pr-texto-3)] mb-3">
+            Se manda por WhatsApp 3 días después de retirar los brackets. Con 9 o 10 se
+            invita al paciente a dejar su reseña en Google.
           </div>
           <div className="flex items-center justify-between mb-2">
             <Pill
@@ -119,16 +121,16 @@ export function SectionPostTreatment(props: SectionPostTreatmentProps) {
             </Pill>
             {props.npsSchedules.some((n) => n.googleReviewTriggered) ? (
               <Pill color="emerald" size="xs">
-                Google review enviada
+                Reseña de Google pedida
               </Pill>
             ) : null}
           </div>
           {props.npsSchedules.length > 0 ? (
-            <div className="space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
+            <div className="space-y-1 text-[11px] text-[color:var(--pr-texto-2)]">
               {props.npsSchedules.map((n) => (
                 <div key={n.npsType} className="flex justify-between">
-                  <span>NPS {NPS_LABEL[n.npsType]}</span>
-                  <span className="font-mono">
+                  <span>Encuesta {NPS_LABEL[n.npsType]}</span>
+                  <span className="tabular-nums">
                     {n.status === "RESPONDED" && n.npsScore != null
                       ? `${n.npsScore}/10`
                       : n.status.toLowerCase()}
@@ -141,7 +143,7 @@ export function SectionPostTreatment(props: SectionPostTreatmentProps) {
             <Btn
               variant="secondary"
               size="sm"
-              className="w-full justify-center mt-3"
+              className="w-full mt-3"
               onClick={props.onConfigureNps}
             >
               Configurar
@@ -149,33 +151,32 @@ export function SectionPostTreatment(props: SectionPostTreatmentProps) {
           ) : null}
         </div>
 
-        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/50 dark:bg-slate-900/40 dark:border-slate-700">
+        <div className={orto.caja} style={{ padding: "14px" }}>
           <div className="flex items-center gap-2 mb-2">
             <RefreshCw
-              className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
+              className="w-4 h-4 text-[color:var(--orto-violeta)]"
               aria-hidden
             />
-            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Programa referidos
+            <div className="text-[13px] font-semibold text-[color:var(--pr-texto)]">
+              Referidos
             </div>
           </div>
-          <div className="text-[11px] text-slate-500 mb-1 dark:text-slate-400">
-            Código personalizado del paciente:
+          <div className="text-xs text-[color:var(--pr-texto-3)] mb-1">
+            Código del paciente
           </div>
           <button
             type="button"
             onClick={props.onCopyReferralCode}
-            className="font-mono text-base font-bold text-violet-700 mb-2 hover:underline dark:text-violet-300"
+            className="tabular-nums text-[15px] font-bold text-[color:var(--orto-violeta)] mb-2 hover:underline"
             aria-label={`Copiar código ${code}`}
           >
             {code}
           </button>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-            {referralCount} referido{referralCount === 1 ? "" : "s"} · placeholder G12
-            (Fase 3)
+          <div className="text-[11px] text-[color:var(--pr-texto-3)]">
+            {referralCount} referido{referralCount === 1 ? "" : "s"}
           </div>
           {props.referralCode?.rewardLabel ? (
-            <div className="mt-2 text-[10px] text-emerald-700 dark:text-emerald-400">
+            <div className="mt-2 text-[11px] text-[color:var(--pr-exito)]">
               Premio configurado: {props.referralCode.rewardLabel}
             </div>
           ) : null}

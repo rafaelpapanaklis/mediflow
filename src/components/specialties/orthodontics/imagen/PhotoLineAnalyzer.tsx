@@ -8,6 +8,7 @@ import { useCallback, useRef, useState } from "react";
 import { FACIAL_LANDMARKS, type FacialLandmarkId, type FacialPoints } from "@/lib/orthodontics/fotos/landmarks";
 import { computeELine, computeMidlineDeviation, computeNasolabialAngle } from "@/lib/orthodontics/fotos/facial-analysis";
 import { Btn } from "../redesign/atoms/Btn";
+import orto from "../redesign/orto.module.css";
 
 export interface PhotoLineAnalyzerProps {
   imageUrl: string;
@@ -64,17 +65,17 @@ export function PhotoLineAnalyzer({ imageUrl, view, initialPoints, onChange }: P
           if (c) setPoint(dragging, c.x, c.y);
         }}
         onPointerUp={() => setDragging(null)}
-        className="relative w-full rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-black select-none"
+        className="relative w-full rounded-[10px] overflow-hidden border border-[color:var(--pr-borde)] bg-black select-none"
         style={{ aspectRatio: "3 / 4", cursor: pending ? "crosshair" : "default" }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={imageUrl} alt={`Foto de ${view}`} className="absolute inset-0 w-full h-full object-contain pointer-events-none" draggable={false} />
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full pointer-events-none">
           {view === "perfil" && points.PRONASALE && points.SOFT_POGONION ? (
-            <line x1={points.PRONASALE.x} y1={points.PRONASALE.y} x2={points.SOFT_POGONION.x} y2={points.SOFT_POGONION.y} stroke="#22c55e" strokeWidth="0.4" />
+            <line x1={points.PRONASALE.x} y1={points.PRONASALE.y} x2={points.SOFT_POGONION.x} y2={points.SOFT_POGONION.y} stroke="var(--pr-exito)" strokeWidth="0.4" />
           ) : null}
           {view === "frente" && points.GLABELLA && points.MENTON_SOFT ? (
-            <line x1={points.GLABELLA.x} y1={points.GLABELLA.y} x2={points.MENTON_SOFT.x} y2={points.MENTON_SOFT.y} stroke="#22c55e" strokeWidth="0.4" />
+            <line x1={points.GLABELLA.x} y1={points.GLABELLA.y} x2={points.MENTON_SOFT.x} y2={points.MENTON_SOFT.y} stroke="var(--pr-exito)" strokeWidth="0.4" />
           ) : null}
         </svg>
         {(Object.keys(points) as FacialLandmarkId[])
@@ -90,7 +91,8 @@ export function PhotoLineAnalyzer({ imageUrl, view, initialPoints, onChange }: P
                   e.stopPropagation();
                   setDragging(id);
                 }}
-                className="absolute w-3.5 h-3.5 -ml-[7px] -mt-[7px] rounded-full bg-violet-500 border-2 border-white shadow"
+                // Sobre una foto el punto lleva aro blanco en los dos temas.
+                className="absolute w-3.5 h-3.5 -ml-[7px] -mt-[7px] rounded-full bg-[color:var(--pr-activo)] border-2 border-white"
                 style={{ left: `${p.x}%`, top: `${p.y}%` }}
                 title={labelById[id]}
               />
@@ -98,18 +100,18 @@ export function PhotoLineAnalyzer({ imageUrl, view, initialPoints, onChange }: P
           })}
       </div>
 
-      <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+      <div className="mt-3 text-xs text-[color:var(--pr-texto-3)]">
         {pending ? (
           <>
-            Marca: <b className="text-slate-700 dark:text-slate-200">{labelById[pending]}</b>
+            Marca: <b className="text-[color:var(--pr-texto-2)]">{labelById[pending]}</b>
           </>
         ) : (
-          <span className="text-emerald-600 dark:text-emerald-400">Puntos completos.</span>
+          <span className="text-[color:var(--pr-exito)]">Puntos completos.</span>
         )}
       </div>
 
       {points && Object.keys(points).length > 0 ? (
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className={`${orto.rejilla2} mt-3`} style={{ gap: 6 }}>
           {view === "perfil" ? (
             <>
               <Metric label="Línea E — labio sup." value={eLine?.upperLipPx != null ? `${Math.round(eLine.upperLipPx)} px` : "—"} />
@@ -142,9 +144,9 @@ export function PhotoLineAnalyzer({ imageUrl, view, initialPoints, onChange }: P
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-slate-50 dark:bg-slate-800/60 py-2 px-3">
-      <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{value}</div>
+    <div className={orto.caja} style={{ padding: "8px 10px" }}>
+      <div className={orto.datoEtiqueta}>{label}</div>
+      <div className="text-[14px] font-bold">{value}</div>
     </div>
   );
 }

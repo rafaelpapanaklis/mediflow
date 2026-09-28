@@ -11,48 +11,12 @@ import { Btn } from "../atoms/Btn";
 import { Pill } from "../atoms/Pill";
 import { PHASE_LABELS, PHASE_ORDER } from "../types";
 import type { OrthoPhaseKey } from "../types";
+import orto from "../orto.module.css";
 
-export const WIRE_MATERIAL_OPTIONS: ReadonlyArray<{
-  key: string;
-  label: string;
-  hint: string;
-}> = [
-  {
-    key: "NITI_SUPER",
-    label: "NiTi superelástico",
-    hint: "Alineación inicial · fuerzas constantes ligeras",
-  },
-  {
-    key: "NITI_THERMO",
-    label: "NiTi termoactivado",
-    hint: "Activación por temperatura corporal",
-  },
-  {
-    key: "NITI_CONV",
-    label: "NiTi convencional",
-    hint: "Casos rutinarios estándar",
-  },
-  { key: "SS", label: "Acero (SS)", hint: "Mecánicas de cierre y working" },
-  { key: "TMA", label: "TMA / β-titanio", hint: "Detalles, finishing, springs" },
-  {
-    key: "MULTI",
-    label: "Multi-stranded",
-    hint: "Trenzado · arcos retención provisional",
-  },
-  { key: "CRCO", label: "Cr-Co (Elgiloy)", hint: "Quad-helix, Nance, custom" },
-];
-
-export const WIRE_GAUGE_ROUND = [
-  { key: "014", label: ".014" },
-  { key: "016", label: ".016" },
-  { key: "018", label: ".018" },
-] as const;
-
-export const WIRE_GAUGE_RECT = [
-  { key: "16x22", label: "16x22" },
-  { key: "17x25", label: "17x25" },
-  { key: "19x25", label: "19x25" },
-] as const;
+// El catálogo vive en `wire-options.ts` (se importa también desde las pruebas,
+// sin el componente). Se reexporta para quien ya lo tomaba de aquí.
+import { WIRE_GAUGE_RECT, WIRE_GAUGE_ROUND, WIRE_MATERIAL_OPTIONS } from "./wire-options";
+export { WIRE_GAUGE_RECT, WIRE_GAUGE_ROUND, WIRE_MATERIAL_OPTIONS };
 
 const AUXILIARIES = [
   "Loops omega",
@@ -129,24 +93,24 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
   return (
     <>
       <div
-        className="fixed inset-0 bg-slate-900/30 z-40 dark:bg-slate-950/60"
+        className={orto.velo}
         onClick={props.onClose}
         aria-hidden
       />
       <aside
-        className="fixed top-0 right-0 bottom-0 w-full sm:w-[480px] bg-white border-l border-slate-200 z-50 shadow-2xl flex flex-col dark:bg-slate-900 dark:border-slate-800"
+        className={orto.cajon}
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-wire-title"
       >
-        <header className="px-6 py-4 border-b border-slate-100 bg-violet-50/40 flex items-center justify-between dark:border-slate-800 dark:bg-violet-900/10">
+        <header className={orto.cajonCabeza}>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium dark:text-violet-300">
-              G3 · Wire step wizard
+            <div className={orto.cajonCeja}>
+              Secuencia de arcos
             </div>
             <h3
               id="drawer-wire-title"
-              className="text-base font-semibold text-slate-900 mt-0.5 dark:text-slate-100"
+              className={orto.cajonTitulo}
             >
               Nuevo paso de arco
             </h3>
@@ -155,12 +119,12 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
             type="button"
             onClick={props.onClose}
             aria-label="Cerrar"
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            className={orto.botonIcono}
           >
             <X className="w-4 h-4" aria-hidden />
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
           <Field label="Fase">
             <div className="flex flex-wrap gap-1.5">
               {PHASE_ORDER.map((p) => (
@@ -168,11 +132,7 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
                   key={p}
                   type="button"
                   onClick={() => setPhase(p)}
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors focus:outline-none ${
-                    phase === p
-                      ? "border-violet-500 bg-violet-50 text-violet-900 font-medium dark:bg-violet-900/20 dark:border-violet-500 dark:text-violet-200"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
-                  }`}
+                  className={[orto.chip, phase === p ? orto.chipElegido : orto.chipNeutro].join(" ")}
                 >
                   {PHASE_LABELS[p]}
                 </button>
@@ -187,14 +147,14 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
                   key={opt.key}
                   type="button"
                   onClick={() => setMaterial(opt.key)}
-                  className={`text-left text-xs px-3 py-2 rounded border transition-colors focus:outline-none ${
+                  className={`text-left text-xs px-3 py-2 rounded-[8px] border transition-colors ${
                     material === opt.key
-                      ? "border-violet-500 bg-violet-50 text-violet-900 dark:bg-violet-900/20 dark:border-violet-500 dark:text-violet-200"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+                      ? "border-[color:var(--pr-activo)] bg-[color:var(--pr-activo-suave)] text-[color:var(--orto-violeta)]"
+                      : "border-[color:var(--pr-borde)] bg-[color:var(--pr-tarjeta)] text-[color:var(--pr-texto-2)] hover:border-[color:var(--pr-borde)]"
                   }`}
                 >
                   <div className="font-medium">{opt.label}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5 dark:text-slate-400">
+                  <div className="text-[11px] text-[color:var(--pr-texto-3)] mt-0.5">
                     {opt.hint}
                   </div>
                 </button>
@@ -212,11 +172,7 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
                     setShape(s);
                     setGauge(s === "ROUND" ? "014" : "16x22");
                   }}
-                  className={`text-xs px-3 py-1.5 rounded border ${
-                    shape === s
-                      ? "border-violet-500 bg-violet-50 text-violet-900 font-medium dark:bg-violet-900/20"
-                      : "border-slate-200 bg-white text-slate-700 dark:bg-slate-900 dark:border-slate-700"
-                  }`}
+                  className={[orto.chip, shape === s ? orto.chipElegido : orto.chipNeutro].join(" ")}
                 >
                   {s === "ROUND" ? "Redondo" : "Rectangular"}
                 </button>
@@ -228,11 +184,7 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
                   key={g.key}
                   type="button"
                   onClick={() => setGauge(g.key)}
-                  className={`font-mono text-xs px-2.5 py-1 rounded border ${
-                    gauge === g.key
-                      ? "border-violet-500 bg-violet-50 text-violet-900 font-semibold dark:bg-violet-900/20"
-                      : "border-slate-200 bg-white text-slate-700 dark:bg-slate-900 dark:border-slate-700"
-                  }`}
+                  className={[orto.chip, gauge === g.key ? orto.chipElegido : orto.chipNeutro].join(" ")}
                 >
                   {g.label}
                 </button>
@@ -262,7 +214,7 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
               max={26}
               value={durationWeeks}
               onChange={(e) => setDurationWeeks(Number(e.target.value) || 6)}
-              className="w-24 text-sm border border-slate-200 rounded px-3 py-2 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              className={`${orto.entrada} w-24`}
             />
           </Field>
 
@@ -275,11 +227,7 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
                     key={a}
                     type="button"
                     onClick={() => toggleAux(a)}
-                    className={`text-xs px-2.5 py-1 rounded-full border ${
-                      on
-                        ? "border-violet-500 bg-violet-50 text-violet-900 dark:bg-violet-900/20"
-                        : "border-slate-200 bg-white text-slate-600 dark:bg-slate-900 dark:border-slate-700"
-                    }`}
+                    className={[orto.chip, on ? orto.chipElegido : orto.chipNeutro].join(" ")}
                   >
                     {a}
                   </button>
@@ -303,7 +251,7 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
               value={purpose}
               onChange={(e) => setPurpose(e.target.value)}
               placeholder="Ej. cerrar diastema, alineación inicial superior"
-              className="w-full text-sm border border-slate-200 rounded px-3 py-2 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              className={`${orto.entrada} w-full`}
             />
           </Field>
 
@@ -312,11 +260,11 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-slate-200 rounded px-3 py-2 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              className={`${orto.entrada} w-full`}
             />
           </Field>
         </div>
-        <footer className="px-6 py-3 border-t border-slate-100 bg-slate-50 flex justify-end gap-2 dark:border-slate-800 dark:bg-slate-900/40">
+        <footer className={orto.cajonPie}>
           <Btn variant="secondary" size="md" onClick={props.onClose}>
             Cancelar
           </Btn>
@@ -338,7 +286,7 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1.5 dark:text-slate-400">
+      <div className={`${orto.ceja} mb-1.5`}>
         {label}
       </div>
       {children}
@@ -361,14 +309,10 @@ function Toggle({
       onClick={onChange}
       role="switch"
       aria-checked={checked}
-      className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded border focus:outline-none ${
-        checked
-          ? "border-violet-500 bg-violet-50 text-violet-900 dark:bg-violet-900/20"
-          : "border-slate-200 bg-white text-slate-600 dark:bg-slate-900 dark:border-slate-700"
-      }`}
+      className={[orto.chip, checked ? orto.chipElegido : orto.chipNeutro].join(" ")}
     >
       <span
-        className={`w-3 h-3 rounded-full ${checked ? "bg-violet-500" : "bg-slate-300 dark:bg-slate-600"}`}
+        className={`w-3 h-3 rounded-full ${checked ? "bg-[color:var(--pr-activo)]" : "bg-[color:var(--pr-borde)]"}`}
         aria-hidden
       />
       {label}

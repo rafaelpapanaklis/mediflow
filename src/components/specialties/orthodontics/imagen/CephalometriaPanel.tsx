@@ -1,235 +1,221 @@
 "use client";
 // Ortodoncia — Parte 7 «Imagen y análisis» (ws1-t8, ola 1, sep-2026). H1/H3/H4.
 // Ranura montada dentro de SectionDiagnosis (reemplaza la tarjeta
-// decorativa «Próximamente»). Self-fetch: se calla si no hay nada todavía.
+// decorativa «Próximamente»).
+//
+// ⚠ TRAZADO MANUAL CANCELADO (decisión de Rafael, 28-sep-2026, ws1-t4).
+// El trazador de la Ola 1 mide MAL los ángulos: guarda los puntos en
+// porcentaje de un recuadro 3:4, no en píxeles de la placa, así que SNA, SNB,
+// ANB, FMA e IMPA salen deformados en cuanto la radiografía no tiene esa
+// proporción. Un ángulo equivocado en un expediente es peor que ninguno.
+// Por eso aquí YA NO se montan:
+//   · `CephalometricTracer`  (marcar puntos sobre la placa) ni sus botones
+//     «Subir radiografía lateral» / «Nuevo trazado (control)»;
+//   · `CephalometricOverlay` (superposición antes/después) ni su botón;
+//   · la tabla de ángulos calculados a partir de esos puntos.
+// Los dos archivos siguen en esta carpeta, sin tocar, y los trazados manuales
+// que ya existan siguen en la base: solo se dejan de pintar. Para volver a
+// montarlos hay que corregir primero la geometría.
+//
+// Lo que queda, al frente: GUARDAR EL PDF DEL TRAZADO que entrega el centro
+// radiológico o el programa del doctor (Dolphin, Nemoceph, WebCeph…) y la
+// lista de los trazados guardados, para abrirlos.
 
-import { useEffect, useState, useTransition } from "react";
-import { Camera, FileText, Layers2, Sparkles } from "lucide-react";
-import { Btn } from "../redesign/atoms/Btn";
+import { useEffect, useState } from "react";
+import { ExternalLink, FileText, Loader2, Upload } from "lucide-react";
 import { Pill } from "../redesign/atoms/Pill";
-import { listCephalometricAnalyses, type CephalometricAnalysisRow } from "@/app/actions/orthodontics/imagen/listCephalometricAnalyses";
+import { fmtDate } from "../redesign/atoms/format";
+import {
+  listCephalometricAnalyses,
+  type CephalometricAnalysisRow,
+} from "@/app/actions/orthodontics/imagen/listCephalometricAnalyses";
 import { saveCephalometricAnalysis } from "@/app/actions/orthodontics/imagen/saveCephalometricAnalysis";
-import { CephalometricTracer } from "./CephalometricTracer";
-import { CephalometricOverlay } from "./CephalometricOverlay";
-import type { CephPoints } from "@/lib/orthodontics/cefalometria/landmarks";
-import { CEPH_ANALYSIS_LABELS, evaluateAgainstNorms, type CephAnalysisType, type CephNormSet } from "@/lib/orthodontics/cefalometria/norms";
-import { getConfiguredCephAutoTraceProvider } from "@/lib/orthodontics/imagen/integraciones-futuras";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import orto from "../redesign/orto.module.css";
 
 export interface CephalometriaPanelProps {
   treatmentPlanId: string;
   patientId: string;
 }
 
-type Mode = "list" | "upload" | "trace" | "overlay";
+type Etapa = CephalometricAnalysisRow["kind"];
+
+const ETAPA_LABEL: Record<Etapa, string> = {
+  INITIAL: "Inicial",
+  PROGRESS: "Control",
+  FINAL: "Final",
+};
 
 export function CephalometriaPanel({ treatmentPlanId, patientId }: CephalometriaPanelProps) {
   const [rows, setRows] = useState<CephalometricAnalysisRow[] | null>(null);
-  const [mode, setMode] = useState<Mode>("list");
-  const [analysisType, setAnalysisType] = useState<CephAnalysisType>("STEINER");
-  const [normSet, setNormSet] = useState<CephNormSet>("STANDARD");
-  const [draftPoints, setDraftPoints] = useState<CephPoints>({});
-  const [newXrayFileId, setNewXrayFileId] = useState<string | null>(null);
-  const [newXrayUrl, setNewXrayUrl] = useState<string | null>(null);
-  const [isSaving, startSaving] = useTransition();
+  const [etapa, setEtapa] = useState<Etapa | null>(null);
+  const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const aiAvailable = Boolean(getConfiguredCephAutoTraceProvider());
 
   useEffect(() => {
     listCephalometricAnalyses(treatmentPlanId).then((res) => {
-      if (res.ok) setRows(res.data);
+      // Si la lista no se puede leer, se pinta vacía en vez de quedarse en
+      // «Cargando…» para siempre.
+      setRows(res.ok ? res.data : []);
     });
   }, [treatmentPlanId]);
 
-  if (rows === null) return null; // primer render server: nada que mostrar mientras carga
+  // Solo los trazados que traen su PDF. Los manuales (puntos sobre la placa)
+  // se quedan en la base pero no se pintan — ver la nota de arriba.
+  const guardados = (rows ?? []).filter((r) => r.tracingPdfFileUrl);
+  // Sin elegir, la etapa sale sola: el primero es el inicial y los demás, de control.
+  const etapaElegida: Etapa = etapa ?? (guardados.length === 0 ? "INITIAL" : "PROGRESS");
 
-  const latest = rows[rows.length - 1] ?? null;
-
-  async function handleFilePicked(file: File, kind: "xray" | "tracing-pdf") {
+  async function guardarPdf(file: File) {
     setError(null);
-    const form = new FormData();
-    form.append("file", file);
-    form.append("patientId", patientId);
-    form.append("kind", kind);
-    const res = await fetch("/api/orthodontics/imagen/upload", { method: "POST", body: form });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json.error ?? "No se pudo subir el archivo");
-      return;
-    }
-    if (kind === "xray") {
-      setNewXrayFileId(json.fileId);
-      setNewXrayUrl(`/api/files/${json.fileId}`); // el visor real firma la URL; placeholder de ruta
-      setMode("trace");
-    }
-  }
-
-  function handleSave() {
-    setError(null);
-    startSaving(async () => {
-      const res = await saveCephalometricAnalysis({
-        treatmentPlanId,
-        kind: rows!.length === 0 ? "INITIAL" : "PROGRESS",
-        analysisType,
-        normSet,
-        points: draftPoints,
-        lateralXrayFileId: newXrayFileId,
-      });
-      if (isFailure(res)) {
-        setError(res.error);
+    setGuardando(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("patientId", patientId);
+      form.append("kind", "tracing-pdf");
+      const res = await fetch("/api/orthodontics/imagen/upload", { method: "POST", body: form });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.fileId) {
+        setError(json?.error ?? "No se pudo subir el PDF");
         return;
       }
-      const list = await listCephalometricAnalyses(treatmentPlanId);
-      if (list.ok) setRows(list.data);
-      setMode("list");
-      setDraftPoints({});
-      setNewXrayFileId(null);
-    });
+      // El PDF se liga al caso como un trazado sin puntos: así aparece en la
+      // lista de abajo. (Antes el archivo se subía y aquí no se volvía a ver.)
+      const guardado = await saveCephalometricAnalysis({
+        treatmentPlanId,
+        kind: etapaElegida,
+        analysisType: "STEINER",
+        normSet: "STANDARD",
+        points: {},
+        tracingPdfFileId: json.fileId,
+      });
+      if (isFailure(guardado)) {
+        setError(guardado.error);
+        return;
+      }
+      const lista = await listCephalometricAnalyses(treatmentPlanId);
+      if (lista.ok) setRows(lista.data);
+      setEtapa(null);
+    } catch {
+      setError("No se pudo guardar el PDF. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setGuardando(false);
+    }
   }
 
   return (
-    <div className="bg-white p-5 dark:bg-slate-900">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-xs uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-          Cefalometría
-        </h4>
-        {!aiAvailable ? (
-          <Pill color="slate" size="xs">
-            Trazado manual
-          </Pill>
-        ) : null}
-      </div>
+    <div className="px-[18px] py-[14px]">
+      <h4 className={`${orto.bloqueTitulo} mb-[3px]`}>Trazado cefalométrico</h4>
+      <p className="text-xs text-[color:var(--pr-texto-3)] mb-3">
+        Guarda el PDF del trazado que entrega el centro radiológico o tu programa (Dolphin,
+        Nemoceph, WebCeph…).
+      </p>
 
       {error ? (
-        <div className="mb-3 text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-md px-3 py-2 dark:bg-rose-950/30 dark:border-rose-900 dark:text-rose-300">
+        <div className={`${orto.aviso} ${orto.avisoPeligro} mb-3`} role="alert">
           {error}
         </div>
       ) : null}
 
-      {mode === "list" ? (
-        rows.length === 0 ? (
-          <div className="rounded-md border border-dashed border-slate-200 dark:border-slate-700 py-8 text-center">
-            <Sparkles className="w-5 h-5 text-violet-400 mx-auto mb-2" aria-hidden />
-            <p className="text-xs text-slate-500 mb-3 dark:text-slate-400">
-              Sin trazado cefalométrico todavía.
-            </p>
-            <div className="flex items-center justify-center gap-2">
-              <UploadButton label="Subir radiografía lateral" icon={<Camera className="w-3.5 h-3.5" />} onPick={(f) => handleFilePicked(f, "xray")} />
-              <UploadButton label="Guardar PDF del centro radiológico" icon={<FileText className="w-3.5 h-3.5" />} onPick={(f) => handleFilePicked(f, "tracing-pdf")} />
-            </div>
+      <div className="flex items-end gap-2 flex-wrap">
+        <label className={orto.campo} style={{ flex: "0 1 130px" }}>
+          <span className={orto.campoEtiqueta}>Etapa</span>
+          <select
+            value={etapaElegida}
+            onChange={(e) => setEtapa(e.target.value as Etapa)}
+            className={orto.entrada}
+            disabled={guardando}
+          >
+            {(Object.keys(ETAPA_LABEL) as Etapa[]).map((k) => (
+              <option key={k} value={k}>
+                {ETAPA_LABEL[k]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label
+          className={`${orto.boton} ${orto.botonPrincipal} ${orto.botonSubir}`}
+          style={{ height: 38, flex: "1 1 190px" }}
+          aria-disabled={guardando}
+        >
+          {guardando ? (
+            <Loader2 size={15} strokeWidth={1.75} className="animate-spin" aria-hidden />
+          ) : (
+            <Upload size={15} strokeWidth={1.75} aria-hidden />
+          )}
+          {guardando ? "Guardando…" : "Guardar el PDF del trazado"}
+          <input
+            type="file"
+            accept="application/pdf"
+            className="sr-only"
+            disabled={guardando}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void guardarPdf(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+
+      <div className="mt-[16px]">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className={orto.ceja}>Trazados guardados</span>
+          {guardados.length > 0 ? (
+            <span className="text-xs font-semibold text-[color:var(--pr-texto-3)]">
+              {guardados.length}
+            </span>
+          ) : null}
+        </div>
+        {rows === null ? (
+          // Reserva el alto de una fila: al llegar la lista no hay salto.
+          <div className={orto.vacioLinea} style={{ minHeight: 44 }} role="status">
+            Cargando…
+          </div>
+        ) : guardados.length === 0 ? (
+          <div className={orto.vacioLinea} style={{ minHeight: 44 }}>
+            Todavía no hay trazados guardados en este caso.
           </div>
         ) : (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <select
-                value={analysisType}
-                onChange={(e) => setAnalysisType(e.target.value as CephAnalysisType)}
-                className="text-xs border border-slate-200 rounded-md px-2 py-1 dark:bg-slate-800 dark:border-slate-700"
-              >
-                {Object.entries(CEPH_ANALYSIS_LABELS).map(([k, label]) => (
-                  <option key={k} value={k}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={normSet}
-                onChange={(e) => setNormSet(e.target.value as CephNormSet)}
-                className="text-xs border border-slate-200 rounded-md px-2 py-1 dark:bg-slate-800 dark:border-slate-700"
-              >
-                <option value="STANDARD">Norma clásica</option>
-                <option value="MEXICAN">Norma mexicana</option>
-              </select>
-            </div>
-
-            <ResultsTable row={latest!} analysisType={analysisType} normSet={normSet} />
-
-            <div className="mt-3 flex items-center gap-2">
-              <UploadButton label="Nuevo trazado (control)" icon={<Camera className="w-3.5 h-3.5" />} onPick={(f) => handleFilePicked(f, "xray")} />
-              {rows.length >= 2 ? (
-                <Btn variant="secondary" size="sm" icon={<Layers2 className="w-3.5 h-3.5" />} onClick={() => setMode("overlay")}>
-                  Superposición antes/después
-                </Btn>
-              ) : null}
-            </div>
-          </div>
-        )
-      ) : null}
-
-      {mode === "trace" && newXrayUrl ? (
-        <div>
-          <CephalometricTracer imageUrl={newXrayUrl} onChange={setDraftPoints} />
-          <div className="mt-3 flex justify-end gap-2">
-            <Btn variant="ghost" size="sm" onClick={() => setMode("list")}>
-              Cancelar
-            </Btn>
-            <Btn size="sm" onClick={handleSave} disabled={isSaving}>
-              {isSaving ? "Guardando…" : "Guardar trazado"}
-            </Btn>
-          </div>
-        </div>
-      ) : null}
-
-      {mode === "overlay" ? (
-        <div>
-          <CephalometricOverlay initial={rows[0]} final={rows[rows.length - 1]} />
-          <div className="mt-3 flex justify-end">
-            <Btn variant="ghost" size="sm" onClick={() => setMode("list")}>
-              Cerrar
-            </Btn>
-          </div>
-        </div>
-      ) : null}
+          <ul className="flex flex-col gap-[6px]">
+            {/* El más reciente arriba. */}
+            {[...guardados].reverse().map((r) => (
+              <li key={r.id}>
+                <a
+                  href={r.tracingPdfFileUrl!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`${orto.listaFila} ${orto.listaFilaEnlace}`}
+                  style={{ alignItems: "center", padding: "9px 11px" }}
+                >
+                  <FileText
+                    size={16}
+                    strokeWidth={1.75}
+                    className={`${orto.tonoVioleta} flex-none`}
+                    aria-hidden
+                  />
+                  <span className="flex-1 min-w-0 text-[13px] font-semibold">
+                    Trazado del {fmtDate(r.createdAt)}
+                  </span>
+                  <Pill
+                    color={r.kind === "INITIAL" ? "violet" : r.kind === "FINAL" ? "emerald" : "slate"}
+                    size="xs"
+                  >
+                    {ETAPA_LABEL[r.kind]}
+                  </Pill>
+                  <span
+                    className={`${orto.tonoVioleta} inline-flex items-center gap-1 text-xs font-semibold flex-none`}
+                  >
+                    Abrir
+                    <ExternalLink size={13} strokeWidth={1.75} aria-hidden />
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
-  );
-}
-
-function ResultsTable({
-  row,
-  analysisType,
-  normSet,
-}: {
-  row: CephalometricAnalysisRow;
-  analysisType: CephAnalysisType;
-  normSet: CephNormSet;
-}) {
-  const evals = evaluateAgainstNorms(row.measurements, analysisType, normSet);
-  const colorFor = (interp: string) =>
-    interp === "normal"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : interp === "sin-medida" || interp === "sin-norma"
-        ? "text-slate-400"
-        : "text-amber-600 dark:text-amber-400";
-  return (
-    <div className="grid grid-cols-5 gap-2 text-center">
-      {evals.map((e) => (
-        <div key={e.key} className="rounded-md bg-slate-50 dark:bg-slate-800/60 py-2">
-          <div className="text-[10px] uppercase tracking-wide text-slate-400">{e.key}</div>
-          <div className={`text-sm font-semibold ${colorFor(e.interpretation)}`}>
-            {e.value !== null ? `${e.value}°` : "—"}
-          </div>
-          <div className="text-[9px] text-slate-400">{e.norm ? `norma ${e.norm.mean}°` : "sin norma"}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function UploadButton({ label, icon, onPick }: { label: string; icon: React.ReactNode; onPick: (f: File) => void }) {
-  return (
-    <label className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
-      {icon}
-      {label}
-      <input
-        type="file"
-        accept="image/*,application/pdf"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onPick(f);
-          e.target.value = "";
-        }}
-      />
-    </label>
   );
 }

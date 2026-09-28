@@ -1,19 +1,19 @@
 "use client";
-// Sección B — Diagnóstico ortodóntico (4 sub-cards en grid 2×2).
+// Sección B — Diagnóstico de ortodoncia (4 bloques en rejilla 2×2).
 //
-// 1. Clasificación clínica (Angle, overbite, overjet, crowding, mordida cruzada,
-//    líneas medias).
-// 2. Patrón skeletal & ATM (mesofacial/dolicofacial/braquifacial, hábitos chips,
-//    ATM clicking/dolor).
-// 3. Cefalometría placeholder G2 (Próximamente Fase 3 con preview blurry).
-// 4. Records digitales (foto-set T0, RX panorámica, lateral cef, link STL).
+// 1. Clasificación clínica (Angle, overbite, overjet, apiñamiento, mordida
+//    cruzada, líneas medias).
+// 2. ATM y hábitos (patrón esquelético, hábitos, ruidos/dolor de ATM).
+// 3. Imagen y análisis (cefalometría, fotos con líneas, modelo 3D).
+// 4. Registros digitales (radiografías, escaneos).
 
-import { Camera, FileText, Layers, Pencil, Plus, Sparkles } from "lucide-react";
+import { Camera, FileText, Layers, Pencil, Plus, Smile } from "lucide-react";
 import { Btn, Card, KV } from "../atoms";
 import { Pill } from "../atoms/Pill";
 import { fmtDateShort, fmtMm } from "../atoms/format";
 import { SKELETAL_PATTERN_LABELS, type DiagnosisDTO } from "../types";
 import { ImagenYAnalisisCard } from "../../imagen/ImagenYAnalisisCard";
+import orto from "../orto.module.css";
 
 export interface DigitalRecordEntry {
   label: string;
@@ -49,35 +49,36 @@ const HABIT_LABELS: Record<string, string> = {
   OTHER: "otro hábito",
 };
 
+const ICONO = { size: 15, strokeWidth: 1.75 } as const;
+
 export function SectionDiagnosis(props: SectionDiagnosisProps) {
   const d = props.diagnosis;
 
   if (!d) {
     return (
-      <Card id="diagnosis" eyebrow="Sección B" title="Diagnóstico ortodóntico">
-        <div className="px-6 py-10 flex flex-col items-center text-center gap-3">
-          <div
-            className="w-12 h-12 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center dark:bg-violet-900/30 dark:text-violet-300"
-            aria-hidden
-          >
-            <Sparkles className="w-6 h-6" aria-hidden />
+      <Card id="diagnosis" icon={<Smile {...ICONO} />} title="Diagnóstico">
+        <div className={orto.tarjetaCuerpo}>
+          <div className={orto.vacio}>
+            <span className={orto.vacioIcono} aria-hidden>
+              <Smile size={17} strokeWidth={1.75} />
+            </span>
+            <p className={orto.vacioTitulo}>Sin diagnóstico capturado</p>
+            <p className={orto.vacioPista}>
+              Clase de Angle, overbite, overjet, apiñamiento, mordidas y hábitos: es lo
+              primero que pide el plan de tratamiento.
+            </p>
+            {props.onStartWizard ? (
+              <Btn
+                variant="secondary"
+                size="md"
+                className="mt-1"
+                icon={<Plus size={15} strokeWidth={1.75} aria-hidden />}
+                onClick={props.onStartWizard}
+              >
+                Capturar diagnóstico
+              </Btn>
+            ) : null}
           </div>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            Sin diagnóstico capturado
-          </h3>
-          <p className="max-w-md text-sm text-slate-500 dark:text-slate-400">
-            Captura Angle, overbite, overjet, mordida cruzada y hábitos para iniciar el plan.
-          </p>
-          {props.onStartWizard ? (
-            <Btn
-              variant="primary"
-              size="md"
-              icon={<Plus className="w-4 h-4" aria-hidden />}
-              onClick={props.onStartWizard}
-            >
-              Iniciar wizard de diagnóstico
-            </Btn>
-          ) : null}
         </div>
       </Card>
     );
@@ -86,14 +87,14 @@ export function SectionDiagnosis(props: SectionDiagnosisProps) {
   return (
     <Card
       id="diagnosis"
-      eyebrow="Sección B"
-      title="Diagnóstico ortodóntico"
+      icon={<Smile {...ICONO} />}
+      title="Diagnóstico"
       action={
         props.onEdit ? (
           <Btn
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            icon={<Pencil className="w-3.5 h-3.5" aria-hidden />}
+            icon={<Pencil size={14} strokeWidth={1.75} aria-hidden />}
             onClick={props.onEdit}
           >
             Editar
@@ -101,7 +102,9 @@ export function SectionDiagnosis(props: SectionDiagnosisProps) {
         ) : null
       }
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-100 dark:bg-slate-800">
+      {/* Rejilla 2×2 con una línea fina entre bloques: el fondo de la rejilla
+          es la línea y cada bloque tapa el suyo. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-[color:var(--pr-borde-suave)] rounded-b-[14px] overflow-hidden">
         <ClassificationCard
           d={d}
           midlineUpper={props.midlineUpper}
@@ -122,6 +125,8 @@ export function SectionDiagnosis(props: SectionDiagnosisProps) {
     </Card>
   );
 }
+
+const BLOQUE = "bg-[color:var(--pr-tarjeta)] px-[18px] py-[16px] min-w-0";
 
 function ClassificationCard({
   d,
@@ -150,11 +155,9 @@ function ClassificationCard({
   const lowerIsDeviated =
     midlineLowerDeviated ?? (d.midlineDeviationMm != null && Math.abs(d.midlineDeviationMm) > 0);
   return (
-    <div className="bg-white p-5 dark:bg-slate-900">
-      <h4 className="text-xs uppercase tracking-wider text-slate-500 font-medium mb-3 dark:text-slate-400">
-        Clasificación clínica
-      </h4>
-      <div className="grid grid-cols-2 gap-3">
+    <div className={BLOQUE}>
+      <h4 className={`${orto.ceja} mb-[10px]`}>Clasificación clínica</h4>
+      <div className={orto.filas2}>
         <KV k="Angle der." v={angleLabel(d.angleClassRight)} />
         <KV k="Angle izq." v={angleLabel(d.angleClassLeft)} />
         <KV k="Overbite" v={fmtMm(d.overbiteMm)} />
@@ -162,39 +165,25 @@ function ClassificationCard({
         <KV k="Apiñam. sup." v={fmtMm(d.crowdingUpperMm ?? null)} />
         <KV k="Apiñam. inf." v={fmtMm(d.crowdingLowerMm ?? null)} />
         <KV k="Línea sup." v={upperLabel} />
-        <KV
-          k="Línea inf."
-          v={lowerLabel}
-          vClass={
-            lowerIsDeviated
-              ? "text-rose-600 font-medium dark:text-rose-400"
-              : "text-slate-900 font-medium dark:text-slate-100"
-          }
-        />
+        <KV k="Línea inf." v={lowerLabel} vClass={lowerIsDeviated ? orto.tonoPeligro : ""} />
       </div>
       {d.crossbite || d.openBiteDetails ? (
-        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <div className="text-[11px] text-slate-500 mb-1 dark:text-slate-400">
-            Mordida cruzada / abierta
-          </div>
-          <div className="flex flex-wrap gap-1">
+        <div className="mt-[12px]">
+          <div className={`${orto.campoEtiqueta} mb-[5px]`}>Mordida cruzada / abierta</div>
+          <div className="flex flex-wrap gap-[5px]">
             {d.crossbite ? (
-              <Pill color="amber" size="xs">
-                {d.crossbiteDetails ?? "cruzada"}
-              </Pill>
+              <Pill color="amber">{d.crossbiteDetails ?? "cruzada"}</Pill>
             ) : null}
             {d.openBite && d.openBiteDetails ? (
-              <Pill color="amber" size="xs">
-                {d.openBiteDetails}
-              </Pill>
+              <Pill color="amber">{d.openBiteDetails}</Pill>
             ) : null}
           </div>
         </div>
       ) : null}
       {d.clinicalSummary ? (
-        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <div className="text-[11px] text-slate-500 mb-1 dark:text-slate-400">Resumen</div>
-          <p className="text-xs text-slate-700 leading-relaxed dark:text-slate-300">
+        <div className="mt-[12px]">
+          <div className={`${orto.campoEtiqueta} mb-[3px]`}>Resumen clínico</div>
+          <p className={`${orto.tonoTexto2} text-[13px] leading-relaxed [overflow-wrap:anywhere]`}>
             {d.clinicalSummary}
           </p>
         </div>
@@ -204,58 +193,46 @@ function ClassificationCard({
 }
 
 function SkeletalAtmCard({ d }: { d: DiagnosisDTO }) {
-  // Hábitos & ATM se renderizan en una sola card combinada para que coincidan con
-  // el handoff de Claude Design (B → "ATM & HÁBITOS").
+  // Hábitos y ATM van en un solo bloque.
   return (
-    <div className="bg-white p-5 dark:bg-slate-900">
-      <h4 className="text-xs uppercase tracking-wider text-slate-500 font-medium mb-3 dark:text-slate-400">
-        ATM &amp; hábitos
-      </h4>
-      <div className="space-y-2">
+    <div className={BLOQUE}>
+      <h4 className={`${orto.ceja} mb-[10px]`}>ATM y hábitos</h4>
+      <div className={orto.filas}>
         <KV
-          k="Patrón skeletal"
-          v={d.skeletalPattern ? SKELETAL_PATTERN_LABELS[d.skeletalPattern] : "no clasificado"}
+          k="Patrón esquelético"
+          v={d.skeletalPattern ? SKELETAL_PATTERN_LABELS[d.skeletalPattern] : "sin clasificar"}
+          vClass={d.skeletalPattern ? "" : orto.tonoApagado}
         />
         <KV
-          k="Ruidos ATM"
+          k="Ruidos de ATM"
           v={
             d.tmjClickingPresent
-              ? d.tmjNotes ?? "click presente"
-              : "ausente"
+              ? d.tmjNotes ?? "chasquido presente"
+              : "ausentes"
           }
-          vClass={
-            d.tmjClickingPresent
-              ? "text-rose-700 font-medium dark:text-rose-400"
-              : "text-slate-900 font-medium dark:text-slate-100"
-          }
+          vClass={d.tmjClickingPresent ? orto.tonoPeligro : ""}
         />
         <KV
-          k="Dolor ATM"
+          k="Dolor de ATM"
           v={d.tmjPainPresent ? "presente" : "ausente"}
-          vClass={
-            d.tmjPainPresent
-              ? "text-rose-700 font-medium dark:text-rose-400"
-              : "text-slate-900 font-medium dark:text-slate-100"
-          }
+          vClass={d.tmjPainPresent ? orto.tonoPeligro : ""}
         />
       </div>
-      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-        <div className="text-[11px] text-slate-500 mb-1 dark:text-slate-400">
-          Hábitos parafuncionales
-        </div>
+      <div className="mt-[12px]">
+        <div className={`${orto.campoEtiqueta} mb-[5px]`}>Hábitos parafuncionales</div>
         {d.habits.length === 0 ? (
-          <span className="text-xs text-slate-400 dark:text-slate-500">Sin hábitos registrados</span>
+          <span className={orto.vacioLinea}>Sin hábitos registrados.</span>
         ) : (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-[5px]">
             {d.habits.map((h) => (
-              <Pill key={h} color="rose" size="xs">
+              <Pill key={h} color="rose">
                 {HABIT_LABELS[h] ?? h.toLowerCase()}
               </Pill>
             ))}
           </div>
         )}
         {d.habitsDescription ? (
-          <p className="text-[11px] text-slate-500 mt-2 leading-snug dark:text-slate-400">
+          <p className={`${orto.tonoApagado} text-xs mt-2 leading-snug`}>
             {d.habitsDescription}
           </p>
         ) : null}
@@ -264,46 +241,16 @@ function SkeletalAtmCard({ d }: { d: DiagnosisDTO }) {
   );
 }
 
+/** Sin caso abierto todavía no hay dónde guardar el trazado. */
 function CephalometryCard() {
   return (
-    <div className="bg-white p-5 dark:bg-slate-900">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-xs uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-          Cefalometría
-        </h4>
-        <Pill color="amber" size="xs">
-          G2 · Próximamente
-        </Pill>
-      </div>
-      <div className="h-32 rounded-md bg-gradient-to-br from-violet-50 via-slate-50 to-violet-100/40 border border-dashed border-slate-200 flex items-center justify-center relative overflow-hidden dark:from-violet-900/10 dark:via-slate-800 dark:to-violet-900/20 dark:border-slate-700">
-        <svg viewBox="0 0 200 100" className="absolute inset-0 w-full h-full opacity-20" aria-hidden>
-          <path
-            d="M30 70 Q50 20 110 35 Q160 45 170 80"
-            stroke="#7c3aed"
-            strokeWidth="1.5"
-            fill="none"
-          />
-          <circle cx="60" cy="40" r="2" fill="#7c3aed" />
-          <circle cx="100" cy="35" r="2" fill="#7c3aed" />
-          <circle cx="130" cy="50" r="2" fill="#7c3aed" />
-        </svg>
-        <div className="relative text-center">
-          <Sparkles className="w-5 h-5 text-violet-500 mx-auto mb-1" aria-hidden />
-          <div className="text-xs text-slate-700 font-medium dark:text-slate-200">
-            Landmarking AI · Steiner / Ricketts / Tweed
-          </div>
-          <div className="text-[10px] text-slate-500 mt-0.5 dark:text-slate-400">
-            Integración WebCeph · Fase 3
-          </div>
-        </div>
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-slate-400 dark:text-slate-500">
-        <div>SNA · —</div>
-        <div>SNB · —</div>
-        <div>ANB · —</div>
-        <div>U1-NA · —</div>
-        <div>L1-NB · —</div>
-        <div>FMA · —</div>
+    <div className={BLOQUE}>
+      <h4 className={`${orto.ceja} mb-[10px]`}>Cefalometría</h4>
+      <div className={orto.vacio}>
+        <p className={orto.vacioTitulo}>Disponible al abrir el caso</p>
+        <p className={orto.vacioPista}>
+          El trazado cefalométrico se guarda dentro del caso de ortodoncia.
+        </p>
       </div>
     </div>
   );
@@ -317,35 +264,28 @@ function DigitalRecordsCard({
   onUpload?: () => void;
 }) {
   const ICONS: Record<DigitalRecordEntry["kind"], React.ReactNode> = {
-    photo: <Camera className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" aria-hidden />,
-    ceph: <FileText className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" aria-hidden />,
-    pano: <FileText className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" aria-hidden />,
-    stl: <Layers className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" aria-hidden />,
-    other: <FileText className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" aria-hidden />,
+    photo: <Camera size={14} strokeWidth={1.75} className={orto.tonoApagado} aria-hidden />,
+    ceph: <FileText size={14} strokeWidth={1.75} className={orto.tonoApagado} aria-hidden />,
+    pano: <FileText size={14} strokeWidth={1.75} className={orto.tonoApagado} aria-hidden />,
+    stl: <Layers size={14} strokeWidth={1.75} className={orto.tonoApagado} aria-hidden />,
+    other: <FileText size={14} strokeWidth={1.75} className={orto.tonoApagado} aria-hidden />,
   };
   return (
-    <div className="bg-white p-5 dark:bg-slate-900">
-      <h4 className="text-xs uppercase tracking-wider text-slate-500 font-medium mb-3 dark:text-slate-400">
-        Records digitales
-      </h4>
+    <div className={BLOQUE}>
+      <h4 className={`${orto.ceja} mb-[10px]`}>Registros digitales</h4>
       {records.length === 0 ? (
-        <div className="text-xs text-slate-400 mb-3 dark:text-slate-500">
-          Sin registros digitales todavía.
+        <div className={orto.vacioLinea}>
+          Sin radiografías ni escaneos ligados a este caso.
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-[6px]">
           {records.map((r) => (
-            <div
-              key={r.label}
-              className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800"
-            >
+            <div key={r.label} className={`${orto.caja} flex items-center justify-between gap-2`}>
               <div className="flex items-center gap-2 min-w-0">
                 {ICONS[r.kind]}
-                <span className="text-sm text-slate-700 truncate dark:text-slate-300">
-                  {r.label}
-                </span>
+                <span className="text-[13px] [overflow-wrap:anywhere]">{r.label}</span>
               </div>
-              <Pill color="emerald" size="xs">
+              <Pill color="slate" size="xs">
                 {fmtDateShort(r.date)}
               </Pill>
             </div>
@@ -354,13 +294,13 @@ function DigitalRecordsCard({
       )}
       {onUpload ? (
         <Btn
-          variant="violet-soft"
+          variant="secondary"
           size="sm"
-          className="mt-3 w-full justify-center"
-          icon={<Plus className="w-3.5 h-3.5" aria-hidden />}
+          className="mt-3"
+          icon={<Plus size={14} strokeWidth={1.75} aria-hidden />}
           onClick={onUpload}
         >
-          Subir nuevo registro
+          Abrir radiografías y escaneos
         </Btn>
       ) : null}
     </div>

@@ -25,20 +25,20 @@ export function SectionPlaceholder(props: SectionPlaceholderProps) {
         </Pill>
       }
     >
-      <div className="px-6 py-6">
+      <div className="px-[18px] py-6">
         <div className="flex items-start gap-4">
           <div
-            className="w-12 h-12 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center flex-shrink-0 dark:bg-violet-900/30 dark:text-violet-300"
+            className="w-12 h-12 rounded-[14px] bg-[color:var(--pr-activo-suave)] text-[color:var(--orto-violeta)] flex items-center justify-center flex-shrink-0"
             aria-hidden
           >
             {props.icon}
           </div>
           <div className="flex-1 min-w-0">
-            <ul className="space-y-1.5 text-sm text-slate-600 dark:text-slate-400">
+            <ul className="space-y-1.5 text-[13px] text-[color:var(--pr-texto-2)]">
               {props.bullets.map((b, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span
-                    className="w-1.5 h-1.5 rounded-full bg-violet-300 mt-1.5 flex-shrink-0 dark:bg-violet-600"
+                    className="w-1.5 h-1.5 rounded-full bg-[color:var(--orto-violeta-borde)] mt-1.5 flex-shrink-0"
                     aria-hidden
                   />
                   <span>{b}</span>

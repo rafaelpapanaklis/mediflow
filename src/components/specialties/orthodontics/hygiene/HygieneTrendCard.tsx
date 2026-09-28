@@ -7,10 +7,11 @@
 // `redesign/sections/` en esta misma Ola 1. Recibe `treatmentCards` ya cargadas por el padre (la
 // ficha ya las trae para `SectionTreatmentCards`); no hace fetch propio.
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import { Card } from "../redesign/atoms/Card";
 import { Pill } from "../redesign/atoms/Pill";
 import { fmtDateShort } from "../redesign/atoms/format";
+import orto from "../redesign/orto.module.css";
 import {
   buildHygieneTrend,
   detectHygieneWorsening,
@@ -31,16 +32,17 @@ export function HygieneTrendCard({ treatmentCards }: HygieneTrendCardProps) {
 
   return (
     <Card
-      eyebrow="Últimos controles"
+      icon={<Sparkles size={15} strokeWidth={1.75} />}
       title="Higiene y cooperación"
+      eyebrow="Placa y encías en los últimos controles"
       accent={alert.worsening ? "rose" : "emerald"}
     >
-      <div className="px-6 py-4 space-y-3">
+      <div className={`${orto.tarjetaCuerpo} flex flex-col gap-3`}>
         {alert.worsening ? (
-          <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-sm text-rose-700 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-300">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
-            <div>
-              <div className="font-medium">Empeoró en los últimos controles</div>
+          <div className={`${orto.aviso} ${orto.avisoPeligro}`} style={{ alignItems: "flex-start", justifyContent: "flex-start" }}>
+            <AlertTriangle size={16} strokeWidth={1.75} className="flex-shrink-0 mt-[1px]" aria-hidden />
+            <div className={orto.avisoTexto}>
+              <div className="font-semibold">Empeoró en los últimos controles</div>
               <ul className="list-disc list-inside mt-0.5">
                 {alert.reasons.map((r) => (
                   <li key={r}>{r}</li>
@@ -55,30 +57,30 @@ export function HygieneTrendCard({ treatmentCards }: HygieneTrendCardProps) {
             <div
               key={p.cardId}
               className="flex-1 flex flex-col items-center justify-end gap-1"
-              title={`Cita #${p.cardNumber} · ${fmtDateShort(p.visitDate)}`}
+              title={`Control ${p.cardNumber} · ${fmtDateShort(p.visitDate)} · placa ${p.plaquePct ?? "—"}%`}
             >
               <div
-                className={`w-full rounded-sm ${plaqueBarColor(p.plaquePct)}`}
+                className={`w-full max-w-[28px] rounded-[4px] ${plaqueBarColor(p.plaquePct)}`}
                 style={{ height: `${Math.max(4, p.plaquePct ?? 0)}%` }}
                 aria-hidden
               />
-              <span className="text-[9px] text-slate-400 dark:text-slate-500">
+              <span className="text-[11px] text-[color:var(--pr-texto-3)] whitespace-nowrap">
                 {fmtDateShort(p.visitDate)}
               </span>
             </div>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[color:var(--pr-texto-3)]">
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-400" aria-hidden /> Placa
+            <span className="inline-block w-2.5 h-2.5 rounded-[3px] bg-[color:var(--pr-exito)]" aria-hidden /> Placa
             baja
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400" aria-hidden /> Media
+            <span className="inline-block w-2.5 h-2.5 rounded-[3px] bg-[color:var(--pr-alerta)]" aria-hidden /> Media
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-rose-400" aria-hidden /> Alta
+            <span className="inline-block w-2.5 h-2.5 rounded-[3px] bg-[color:var(--pr-peligro)]" aria-hidden /> Alta
           </span>
         </div>
 
@@ -97,10 +99,10 @@ export function HygieneTrendCard({ treatmentCards }: HygieneTrendCardProps) {
 }
 
 function plaqueBarColor(plaquePct: number | null): string {
-  if (plaquePct == null) return "bg-slate-200 dark:bg-slate-700";
-  if (plaquePct < 25) return "bg-emerald-400";
-  if (plaquePct < 50) return "bg-amber-400";
-  return "bg-rose-400";
+  if (plaquePct == null) return "bg-[color:var(--pr-borde)]";
+  if (plaquePct < 25) return "bg-[color:var(--pr-exito)]";
+  if (plaquePct < 50) return "bg-[color:var(--pr-alerta)]";
+  return "bg-[color:var(--pr-peligro)]";
 }
 
 function gingivitisColor(g: TreatmentCardDTO["hygiene"]["gingivitis"]): "emerald" | "amber" | "rose" | "slate" {

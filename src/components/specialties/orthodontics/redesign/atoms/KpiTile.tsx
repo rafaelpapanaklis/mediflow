@@ -1,22 +1,25 @@
-// Atom: KpiTile — tile estilo "KPI dashboard" del producto DaleControl.
-// Label small caps + icon en badge + valor grande + delta + sub.
+// Atom: indicador compacto (etiqueta + icono + cifra + nota), con la escala
+// de los indicadores compactos del Expediente: cifra de 22 px/700 que no
+// parte de renglón.
 
 import type { ReactNode } from "react";
+import orto from "../orto.module.css";
 
 type Tone = "violet" | "emerald" | "amber" | "rose" | "sky";
 
-const ICON_BG: Record<Tone, string> = {
-  violet: "bg-violet-50 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300",
-  emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300",
-  amber: "bg-amber-50 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300",
-  rose: "bg-rose-50 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300",
-  sky: "bg-sky-50 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300",
+// El idioma del panel no tiene azul «info»: lo informativo va en violeta.
+const ICON_TONE: Record<Tone, string> = {
+  violet: "",
+  emerald: orto.tarjetaIconoExito,
+  amber: orto.tarjetaIconoAlerta,
+  rose: orto.tarjetaIconoPeligro,
+  sky: "",
 };
 
 const DELTA_COLOR: Record<"emerald" | "rose" | "amber", string> = {
-  emerald: "text-emerald-600 dark:text-emerald-400",
-  rose: "text-rose-600 dark:text-rose-400",
-  amber: "text-amber-600 dark:text-amber-400",
+  emerald: orto.tonoExito,
+  rose: orto.tonoPeligro,
+  amber: orto.tonoAlerta,
 };
 
 export interface KpiTileProps {
@@ -41,31 +44,20 @@ export function KpiTile({
   className = "",
 }: KpiTileProps) {
   return (
-    <div
-      className={`bg-white border border-slate-200 rounded-lg p-5 dark:bg-slate-900 dark:border-slate-800 ${className}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide dark:text-slate-400">
-          {label}
-        </div>
+    <div className={[orto.tarjeta, className].filter(Boolean).join(" ")} style={{ padding: "14px 16px" }}>
+      <div className="flex items-center justify-between gap-3">
+        <div className={orto.datoEtiqueta}>{label}</div>
         {icon ? (
-          <div
-            className={`w-7 h-7 rounded-md flex items-center justify-center ${ICON_BG[tone]}`}
-            aria-hidden
-          >
+          <div className={[orto.tarjetaIcono, ICON_TONE[tone]].filter(Boolean).join(" ")} aria-hidden>
             {icon}
           </div>
         ) : null}
       </div>
-      <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-3xl font-semibold text-slate-900 dark:text-slate-100">
-          {value}
-        </span>
-        {delta ? <span className={`text-sm ${DELTA_COLOR[deltaTone]}`}>{delta}</span> : null}
+      <div className={`${orto.datoValor} ${orto.datoValorGrande}`} style={{ marginTop: 8 }}>
+        <span>{value}</span>
+        {delta ? <span className={`${orto.datoNota} ${DELTA_COLOR[deltaTone]}`}>{delta}</span> : null}
       </div>
-      {sub ? (
-        <div className="mt-1 text-sm text-slate-400 dark:text-slate-500">{sub}</div>
-      ) : null}
+      {sub ? <div className={orto.datoSub}>{sub}</div> : null}
     </div>
   );
 }

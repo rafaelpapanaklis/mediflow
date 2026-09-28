@@ -1,14 +1,18 @@
-// Atom: Stat (etiqueta uppercase + valor mono grande + sub + delta opcional).
-// Utilizado en hero y headers de sección.
+// Atom: dato de resumen (etiqueta corta + valor + nota). Lo usan el resumen
+// del tratamiento y los encabezados de sección. El valor mide 15 px/650 —lo
+// mismo que las métricas de la cabecera del paciente— porque casi siempre es
+// TEXTO («MBT .022», «NiTi 0.014»), no una cifra suelta: a 24 px partía en
+// dos renglones en cuanto la columna se estrechaba.
 
 import type { ReactNode } from "react";
+import orto from "../orto.module.css";
 
 type DeltaColor = "emerald" | "rose" | "amber";
 
 const DELTA: Record<DeltaColor, string> = {
-  emerald: "text-emerald-600 dark:text-emerald-400",
-  rose: "text-rose-600 dark:text-rose-400",
-  amber: "text-amber-600 dark:text-amber-400",
+  emerald: orto.tonoExito,
+  rose: orto.tonoPeligro,
+  amber: orto.tonoAlerta,
 };
 
 export interface StatChipProps {
@@ -29,19 +33,13 @@ export function StatChip({
   className = "",
 }: StatChipProps) {
   return (
-    <div className={className}>
-      <div className="text-[11px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-        {label}
+    <div className={[orto.dato, className].filter(Boolean).join(" ")}>
+      <div className={orto.datoEtiqueta}>{label}</div>
+      <div className={orto.datoValor}>
+        <span>{value}</span>
+        {delta ? <span className={`${orto.datoNota} ${DELTA[deltaColor]}`}>{delta}</span> : null}
       </div>
-      <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-100">
-          {value}
-        </span>
-        {delta ? <span className={`text-xs ${DELTA[deltaColor]}`}>{delta}</span> : null}
-      </div>
-      {sub ? (
-        <div className="text-[11px] text-slate-500 mt-0.5 dark:text-slate-400">{sub}</div>
-      ) : null}
+      {sub ? <div className={orto.datoSub}>{sub}</div> : null}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  fmtDay,
   fmtMoney,
   fmtPct,
   fmtMm,
@@ -41,5 +42,14 @@ describe("format helpers", () => {
     assert.equal(clinicalSeverityColor(29), "amber");
     assert.equal(clinicalSeverityColor(30), "rose");
     assert.equal(clinicalSeverityColor(60), "rose");
+  });
+  it("fmtDay pinta el día de calendario sin correrlo por la zona horaria", () => {
+    // `new Date("2026-10-05")` es medianoche UTC: en México (UTC-6) se leía
+    // como el 4 de octubre. El vencimiento de una mensualidad es un DÍA.
+    const dia = fmtDay("2026-10-05");
+    assert.match(dia, /^05/);
+    assert.match(dia, /oct/i);
+    assert.equal(fmtDay(null), "—");
+    assert.equal(fmtDay(""), "—");
   });
 });

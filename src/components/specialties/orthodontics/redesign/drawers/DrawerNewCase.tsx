@@ -18,6 +18,7 @@ import { Loader2, Sparkles, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { getCaseIntakeOptions } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import orto from "../orto.module.css";
 
 const ANGLE_OPTIONS = [
   { v: "CLASS_I", l: "Clase I" },
@@ -280,31 +281,31 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
 
   return (
     <>
-      <div className="fixed inset-0 bg-slate-900/50 z-40 dark:bg-slate-950/70" onClick={props.onClose} aria-hidden />
+      <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
-        className="fixed top-0 right-0 bottom-0 w-full sm:w-[680px] bg-white border-l border-slate-200 z-50 shadow-2xl flex flex-col dark:bg-slate-900 dark:border-slate-800"
+        className={`${orto.cajon} ${orto.cajonAncho}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-case-title"
       >
-        <header className="px-6 py-4 border-b border-slate-100 bg-violet-50/50 flex items-center justify-between dark:border-slate-800 dark:bg-violet-900/10">
+        <header className={orto.cajonCabeza}>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium dark:text-violet-300">
-              Alta del caso ortodóntico
+            <div className={orto.cajonCeja}>
+              Abrir caso de ortodoncia
             </div>
-            <h3 id="new-case-title" className="text-base font-semibold text-slate-900 mt-0.5 dark:text-slate-100">
+            <h3 id="new-case-title" className={orto.cajonTitulo}>
               {needsDiagnosis ? "Diagnóstico y plan · " : "Plan de tratamiento · "}
               {props.patientFullName}
             </h3>
           </div>
-          <button type="button" onClick={props.onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+          <button type="button" onClick={props.onClose} aria-label="Cerrar" className={orto.botonIcono}>
             <X className="w-5 h-5" aria-hidden />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
           {loadingOptions ? (
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-2 text-xs text-[color:var(--pr-texto-3)]">
               <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> Cargando doctores y tutores…
             </div>
           ) : null}
@@ -313,10 +314,10 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
             <section className="space-y-4">
               <SectionTitle>Diagnóstico ortodóntico</SectionTitle>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Angle der.">
+                <Field label="Angle derecha">
                   <Select value={angleR} onChange={setAngleR} options={ANGLE_OPTIONS} />
                 </Field>
-                <Field label="Angle izq.">
+                <Field label="Angle izquierda">
                   <Select value={angleL} onChange={setAngleL} options={ANGLE_OPTIONS} />
                 </Field>
                 <Field label="Overbite (mm)">
@@ -331,10 +332,10 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 <Field label="Fase dental">
                   <Select value={dentalPhase} onChange={setDentalPhase} options={DENTAL_PHASE_OPTIONS} />
                 </Field>
-                <Field label="Apiñam. sup. (mm)">
+                <Field label="Apiñamiento sup. (mm)">
                   <NumberInput value={crowdU} onChange={setCrowdU} step={0.5} min={0} max={20} />
                 </Field>
-                <Field label="Apiñam. inf. (mm)">
+                <Field label="Apiñamiento inf. (mm)">
                   <NumberInput value={crowdL} onChange={setCrowdL} step={0.5} min={0} max={20} />
                 </Field>
               </div>
@@ -366,14 +367,14 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
               </div>
               <Field label="Resumen clínico (mín. 40 caracteres)">
                 <textarea value={summary} onChange={(e) => setSummary(e.target.value)} className={`${inputCls} min-h-[90px]`} placeholder="Clase, problema principal, etiología, plan general…" />
-                <div className={`text-[11px] mt-1 ${summaryValid ? "text-emerald-600" : "text-amber-600"}`}>
+                <div className={`text-[11px] mt-1 ${summaryValid ? "text-[color:var(--pr-exito)]" : "text-[color:var(--pr-alerta)]"}`}>
                   {summary.trim().length} / 40 mínimo
                 </div>
               </Field>
 
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-                  Origen del paciente (A13)
+              <div className="pt-2 border-t border-[color:var(--pr-borde-suave)] space-y-3">
+                <div className={orto.ceja}>
+                  Origen del paciente
                 </div>
                 <Field label="Quién lo refirió (opcional)">
                   <select value={referredByDoctorId} onChange={(e) => setReferredByDoctorId(e.target.value)} className={inputCls}>
@@ -387,14 +388,14 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 </Field>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <div className="pt-2 border-t border-[color:var(--pr-borde-suave)] space-y-3">
+                <label className="flex items-start gap-2 text-[13px] text-[color:var(--pr-texto-2)]">
                   <input type="checkbox" checked={inObservation} onChange={(e) => setInObservation(e.target.checked)} className="mt-0.5" />
                   <span>
-                    <span className="font-medium">Paciente en observación (A12)</span>
+                    <span className="font-medium">Paciente en observación</span>
                     <br />
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      Aún no inicia tratamiento — se revisa periódicamente hasta que convenga empezar. No se
+                    <span className="text-xs text-[color:var(--pr-texto-3)]">
+                      Aún no inicia tratamiento: se revisa periódicamente hasta que convenga empezar. No se
                       abre plan de tratamiento todavía.
                     </span>
                   </span>
@@ -412,7 +413,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
             <section className="space-y-4">
               <SectionTitle>Plan de tratamiento</SectionTitle>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Técnica / aparatología">
+                <Field label="Aparatología">
                   <Select value={technique} onChange={setTechnique} options={TECHNIQUE_OPTIONS} />
                 </Field>
                 <Field label="Duración estimada (meses)">
@@ -423,7 +424,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 </Field>
                 <Field
                   label="Costo total (MXN)"
-                  hint="Precio de referencia para abrir el caso. El monto que de verdad se cobra es el de la factura del tratamiento (Sección F, «Abrir plan de pago») — confírmalo ahí antes de firmar el acuerdo financiero con el paciente."
+                  hint="Precio de referencia para abrir el caso. El monto que de verdad se cobra es el de la factura del tratamiento («Cobro del tratamiento» → «Abrir plan de pago»): confírmalo ahí antes de firmar el acuerdo con el paciente."
                 >
                   <NumberInput value={totalCost} onChange={setTotalCost} step={100} min={1} max={1_000_000} />
                 </Field>
@@ -436,19 +437,19 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <Checkbox label="Extracciones" checked={extractions} onChange={setExtractions} />
-                <Checkbox label="IPR requerido" checked={iprRequired} onChange={setIprRequired} />
-                <Checkbox label="TADs requeridos" checked={tadsRequired} onChange={setTadsRequired} />
+                <Checkbox label="Requiere IPR" checked={iprRequired} onChange={setIprRequired} />
+                <Checkbox label="Requiere TADs" checked={tadsRequired} onChange={setTadsRequired} />
               </div>
               <Field label="Plan de retención (mín. 20 caracteres)">
                 <textarea value={retention} onChange={(e) => setRetention(e.target.value)} className={`${inputCls} min-h-[70px]`} />
-                <div className={`text-[11px] mt-1 ${retentionValid ? "text-emerald-600" : "text-amber-600"}`}>
+                <div className={`text-[11px] mt-1 ${retentionValid ? "text-[color:var(--pr-exito)]" : "text-[color:var(--pr-alerta)]"}`}>
                   {retention.trim().length} / 20 mínimo
                 </div>
               </Field>
 
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-                  Doctor tratante (A5)
+              <div className="pt-2 border-t border-[color:var(--pr-borde-suave)] space-y-3">
+                <div className={orto.ceja}>
+                  Doctor tratante
                 </div>
                 <Field label="Quién lleva el caso">
                   <select
@@ -464,18 +465,18 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                   </select>
                 </Field>
                 {!columnsExist.treatingDoctorId ? (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  <p className="text-[11px] text-[color:var(--pr-alerta)]">
                     Falta pegar el SQL de la Ola 0 (sql/ortodoncia-nucleo.sql) — no se puede asignar todavía.
                   </p>
                 ) : null}
               </div>
 
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium dark:text-slate-400">
-                  Responsable del pago (A11)
+              <div className="pt-2 border-t border-[color:var(--pr-borde-suave)] space-y-3">
+                <div className={orto.ceja}>
+                  Responsable del pago
                 </div>
                 {!columnsExist.responsibleGuardianId ? (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  <p className="text-[11px] text-[color:var(--pr-alerta)]">
                     Falta pegar el SQL de esta parte (sql/ortodoncia-alta-caso.sql) — no se puede elegir
                     responsable todavía.
                   </p>
@@ -513,14 +514,14 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
           ) : null}
 
           {error ? (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded p-2 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-300">
+            <div className="bg-[color:var(--pr-peligro-suave)] border border-[color:var(--orto-peligro-borde)] text-[color:var(--pr-peligro)] text-xs rounded-[8px] p-2">
               {error}
             </div>
           ) : null}
         </div>
 
-        <footer className="px-6 py-4 border-t border-slate-100 flex justify-between items-center dark:border-slate-800">
-          <span className="text-[11px] text-slate-500 inline-flex items-center gap-1 dark:text-slate-400">
+        <footer className={`${orto.cajonPie} ${orto.cajonPieReparto}`}>
+          <span className="text-[11px] text-[color:var(--pr-texto-3)] inline-flex items-center gap-1">
             <Sparkles className="w-3 h-3" aria-hidden /> Queda dentro de la ficha del paciente
           </span>
           <div className="flex gap-2">
@@ -537,7 +538,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold dark:text-slate-400">
+    <h4 className={orto.ceja}>
       {children}
     </h4>
   );
@@ -546,9 +547,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-slate-700 mb-1 dark:text-slate-300">{label}</label>
+      <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)] mb-1">{label}</label>
       {children}
-      {hint ? <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-[11px] text-[color:var(--pr-texto-3)]">{hint}</p> : null}
     </div>
   );
 }
@@ -599,7 +600,7 @@ function NumberInput({
 
 function Checkbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+    <label className="flex items-center gap-2 text-[13px] text-[color:var(--pr-texto-2)]">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
@@ -622,10 +623,10 @@ function GuardianModeButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`px-3 py-1.5 text-xs font-medium rounded-[8px] border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
         active
-          ? "bg-violet-600 border-violet-600 text-white"
-          : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          ? "bg-[color:var(--pr-activo)] border-[color:var(--pr-activo)] text-[color:var(--pr-activo-texto)]"
+          : "border-[color:var(--pr-borde)] text-[color:var(--pr-texto-2)] hover:bg-[color:var(--pr-hover)]"
       }`}
     >
       {children}
@@ -634,4 +635,4 @@ function GuardianModeButton({
 }
 
 const inputCls =
-  "w-full px-3 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200";
+  orto.entrada;

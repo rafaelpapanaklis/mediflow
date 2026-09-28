@@ -20,7 +20,6 @@ import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { getInitials } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
-import { SalidaOrtodoncia } from "@/components/dashboard/bloques-rediseno/salidas";
 import type { OrthoTabData } from "@/lib/orthodontics/load-data";
 import type { OrthoRedesignViewModel } from "./types";
 import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
@@ -51,13 +50,26 @@ import {
   getCaseIntakeOptions,
 } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import orto from "./orto.module.css";
+import { RAIZ_ORTO } from "./raiz";
 
 // Fallback de carga de los módulos lazy — idéntico al de
 // patient-detail-client.tsx (componente cliente para poder traducir con
 // useT dentro del árbol que ya tiene el I18nProvider).
 function ModuleLoading({ labelKey }: { labelKey: string }) {
   const t = useT();
-  return <div className="text-xs text-muted-foreground p-4">{t(labelKey)}</div>;
+  // Ocupa el alto de la cabecera del paciente: cuando el módulo termina de
+  // bajar, lo de debajo no da un salto.
+  return (
+    <div className={`${RAIZ_ORTO} ${orto.lienzo}`} role="status" aria-live="polite">
+      <div
+        className={`${orto.cabecera} ${orto.tonoApagado} flex items-center justify-center text-xs`}
+        style={{ minHeight: 168 }}
+      >
+        {t(labelKey)}
+      </div>
+    </div>
+  );
 }
 
 // Fase 1 rediseño usa OrthodonticsRedesignClient (Hero + Diagnóstico + Plan +
@@ -141,7 +153,9 @@ export interface OrthodonticsPatientTabProps {
   lastAppt: { date: any } | undefined;
   completedCount: number;
   pediatricsModuleActive: boolean;
-  /** Interruptor `menu-dos-niveles`: solo con él encendido se pinta la banda SalidaOrtodoncia. */
+  /** Interruptor `menu-dos-niveles`. Ya no decide nada aquí: el módulo viste
+   *  el idioma nuevo por sí mismo (ver más abajo). Se conserva en la firma
+   *  para no tocar a quien monta la pestaña. */
   rediseno: boolean;
   orthoData: OrthoTabData | null | undefined;
   orthoRedesignVM: OrthoRedesignViewModel | null | undefined;
@@ -161,7 +175,6 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     lastAppt,
     completedCount,
     pediatricsModuleActive,
-    rediseno,
     orthoData,
     orthoRedesignVM,
     orthoRedesignBundle,
@@ -193,12 +206,12 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
 
   return (
     <>
-      {/* Hallazgo 21: con el rediseño, una banda en el idioma nuevo presenta
-          el módulo (que conserva su cabecera y su ropa). Con la bandera
-          apagada no se pinta nada aquí. */}
-      {orthoRedesignVM && rediseno && (
-        <SalidaOrtodoncia titulo={t("patients.tabs.ortodoncia")} paciente={fullName} />
-      )}
+      {/* La banda «Ortodoncia · paciente» (hallazgo 21) era el escalón entre
+          la ficha nueva y un módulo que conservaba su ropa vieja. El módulo
+          ya habla el idioma de la ficha y abre con la cabecera del paciente,
+          así que la banda repetía el nombre una tercera vez y empujaba el
+          contenido 75 px: se deja de montar (SalidaOrtodoncia sigue en su
+          archivo). */}
       {orthoRedesignVM && (
         <OrthodonticsRedesignClient
           vm={orthoRedesignVM}

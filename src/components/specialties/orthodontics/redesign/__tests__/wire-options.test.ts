@@ -6,7 +6,7 @@ import {
   WIRE_MATERIAL_OPTIONS,
   WIRE_GAUGE_ROUND,
   WIRE_GAUGE_RECT,
-} from "../drawers/DrawerWireStep";
+} from "../drawers/wire-options";
 
 describe("WIRE_MATERIAL_OPTIONS", () => {
   it("incluye los 7 materiales del mockup canónico", () => {

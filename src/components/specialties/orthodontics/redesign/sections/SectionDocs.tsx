@@ -5,11 +5,12 @@
 // LabOrder catalog ampliado con 8 chips clickeables al pie del tab Lab.
 
 import { useState } from "react";
-import { FileText, MoreHorizontal, Plus } from "lucide-react";
+import { FileText, Plus } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
 import { fmtDate, fmtDateShort } from "../atoms/format";
+import orto from "../orto.module.css";
 
 export interface LabOrderRow {
   id: string;
@@ -75,23 +76,24 @@ const STATUS_PILL: Record<LabOrderRow["status"], "emerald" | "slate" | "amber" |
 type TabKey = "lab" | "consent" | "ref" | "wa";
 
 const TABS: ReadonlyArray<{ id: TabKey; label: string; badge?: string }> = [
-  { id: "lab", label: "Lab orders", badge: "G18" },
+  { id: "lab", label: "Laboratorio" },
   { id: "consent", label: "Consentimientos" },
-  { id: "ref", label: "Cartas referencia" },
-  { id: "wa", label: "WhatsApp log" },
+  { id: "ref", label: "Cartas de referencia" },
+  { id: "wa", label: "WhatsApp" },
 ];
 
 export function SectionDocs(props: SectionDocsProps) {
   const [tab, setTab] = useState<TabKey>("lab");
 
   return (
-    <Card id="docs" eyebrow="Sección I" title="Documentos & comunicación">
-      <nav
-        className="px-6 pt-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2 dark:border-slate-800"
-        role="tablist"
-        aria-label="Documentos"
-      >
-        <div className="flex gap-1 flex-wrap">
+    <Card
+      id="docs"
+      icon={<FileText size={15} strokeWidth={1.75} />}
+      title="Documentos y comunicación"
+      eyebrow="Órdenes de laboratorio, consentimientos, cartas y mensajes"
+    >
+      <div className="px-[18px] pt-[14px] flex items-center justify-between flex-wrap gap-2">
+        <div className={orto.segmento} role="tablist" aria-label="Documentos">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -99,11 +101,9 @@ export function SectionDocs(props: SectionDocsProps) {
               role="tab"
               aria-selected={tab === t.id}
               onClick={() => setTab(t.id)}
-              className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors focus:outline-none ${
-                tab === t.id
-                  ? "border-violet-600 text-violet-700 font-medium dark:text-violet-300"
-                  : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
+              className={[orto.segmentoBoton, tab === t.id ? orto.segmentoActivo : ""]
+                .filter(Boolean)
+                .join(" ")}
             >
               {t.label}
               {t.badge ? (
@@ -116,15 +116,15 @@ export function SectionDocs(props: SectionDocsProps) {
         </div>
         {tab === "lab" && props.onNewLabOrder ? (
           <Btn
-            variant="primary"
+            variant="violet-soft"
             size="sm"
-            icon={<Plus className="w-3.5 h-3.5" aria-hidden />}
+            icon={<Plus size={14} strokeWidth={1.75} aria-hidden />}
             onClick={props.onNewLabOrder}
           >
-            Nueva orden lab
+            Nueva orden de laboratorio
           </Btn>
         ) : null}
-      </nav>
+      </div>
 
       {tab === "lab" ? <LabOrdersPanel rows={props.labOrders} /> : null}
       {tab === "consent" ? <ConsentsPanel rows={props.consents} /> : null}
@@ -138,67 +138,48 @@ export function SectionDocs(props: SectionDocsProps) {
 
 function LabOrdersPanel({ rows }: { rows: LabOrderRow[] }) {
   return (
-    <div className="p-6">
+    <div className="p-[18px]">
       {rows.length === 0 ? (
-        <div className="text-sm text-slate-500 italic dark:text-slate-400">
-          Sin órdenes de laboratorio creadas.
-        </div>
+        <div className={orto.vacioLinea}>Aún no hay órdenes de laboratorio para este caso.</div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              <tr className="border-b border-slate-100 dark:border-slate-800">
-                <th className="text-left py-2 font-medium">Tipo</th>
-                <th className="text-left py-2 font-medium">Descripción</th>
-                <th className="text-left py-2 font-medium">Lab</th>
-                <th className="text-left py-2 font-medium">Fecha</th>
-                <th className="text-left py-2 font-medium">Status</th>
-                <th />
+        <div className={`${orto.tablaCaja} border border-[color:var(--pr-borde-suave)] rounded-[10px]`}>
+          <table className={`${orto.tabla} ${orto.tablaDensa}`} style={{ minWidth: 560 }}>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Descripción</th>
+                <th>Laboratorio</th>
+                <th>Fecha</th>
+                <th>Estado</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((o) => (
-                <tr
-                  key={o.id}
-                  className="border-b border-slate-50 hover:bg-slate-50/50 dark:border-slate-800/40 dark:hover:bg-slate-800/40"
-                >
-                  <td className="py-2.5 font-medium text-slate-900 dark:text-slate-100">
-                    {o.catalog}
-                  </td>
-                  <td className="py-2.5 text-slate-600 dark:text-slate-400">
-                    {o.description}
-                  </td>
-                  <td className="py-2.5 text-slate-600 dark:text-slate-400">{o.lab}</td>
-                  <td className="py-2.5 text-slate-500 dark:text-slate-400">
+                <tr key={o.id}>
+                  <td className="font-semibold">{o.catalog}</td>
+                  <td className={orto.tonoTexto2}>{o.description}</td>
+                  <td className={orto.tonoTexto2}>{o.lab}</td>
+                  <td className={`${orto.tonoApagado} whitespace-nowrap`}>
                     {fmtDateShort(o.orderedAt)}
                   </td>
-                  <td className="py-2.5">
+                  <td>
                     <Pill color={STATUS_PILL[o.status]} size="xs">
                       {o.status}
                     </Pill>
                   </td>
-                  <td className="py-2.5 text-right">
-                    <button
-                      type="button"
-                      className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                      aria-label="Más opciones"
-                    >
-                      <MoreHorizontal className="w-4 h-4" aria-hidden />
-                    </button>
-                  </td>
+                  {/* El botón «···» de cada fila no tenía acción conectada: se
+                      deja de pintar hasta que exista el menú. */}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <div className="mt-4 bg-violet-50/40 border border-violet-100 rounded-lg p-4 dark:bg-violet-900/20 dark:border-violet-800">
-        <div className="text-[10px] uppercase tracking-wider text-violet-700 font-medium mb-2 dark:text-violet-300">
-          Catalog ampliado · G18
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 text-xs">
+      <div className="mt-[14px]">
+        <div className={`${orto.ceja} mb-2`}>Qué se puede pedir</div>
+        <div className="flex flex-wrap gap-[5px]">
           {CATALOG_AMPLIADO.map((c) => (
-            <Pill key={c} color="white" size="xs">
+            <Pill key={c} color="slate">
               {c}
             </Pill>
           ))}
@@ -210,35 +191,29 @@ function LabOrdersPanel({ rows }: { rows: LabOrderRow[] }) {
 
 function ConsentsPanel({ rows }: { rows: ConsentRow[] }) {
   return (
-    <div className="p-6">
+    <div className="p-[18px]">
       {rows.length === 0 ? (
-        <div className="text-sm text-slate-500 italic dark:text-slate-400">
-          Sin consentimientos registrados todavía.
-        </div>
+        <div className={orto.vacioLinea}>Sin consentimientos registrados todavía.</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {rows.map((c) => (
             <div
               key={c.name}
-              className={`border rounded-lg p-3 ${
-                c.signed
-                  ? "border-emerald-200 bg-emerald-50/40 dark:border-emerald-800 dark:bg-emerald-900/20"
-                  : "border-amber-200 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-900/20"
-              }`}
+              className={`${orto.caja} ${c.signed ? "" : orto.cajaAlerta}`}
             >
-              <div className="flex items-start justify-between mb-1">
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="text-[13px] font-semibold text-[color:var(--pr-texto)]">
                   {c.name}
                 </div>
                 <Pill color={c.signed ? "emerald" : "amber"} size="xs">
                   {c.signed ? "Firmado" : "Pendiente"}
                 </Pill>
               </div>
-              <div className="text-[11px] text-slate-600 mb-1 dark:text-slate-400">
+              <div className="text-xs text-[color:var(--pr-texto-2)] mb-1">
                 {c.risks}
               </div>
               {c.date ? (
-                <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                <div className="text-[11px] text-[color:var(--pr-texto-3)]">
                   {fmtDate(c.date)}
                 </div>
               ) : null}
@@ -259,24 +234,22 @@ function ReferralPanel({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="p-6 text-sm text-slate-500 dark:text-slate-400">
-        <div className="border border-dashed border-slate-200 rounded-lg p-8 text-center dark:border-slate-700">
-          <FileText
-            className="w-6 h-6 text-slate-300 mx-auto mb-2 dark:text-slate-600"
-            aria-hidden
-          />
-          <div className="text-slate-700 font-medium dark:text-slate-300">
-            Sin cartas de referencia generadas
-          </div>
-          <div className="text-xs text-slate-400 mt-1 dark:text-slate-500">
-            Generar carta para periodoncista, endodoncista o cirujano maxilofacial.
-          </div>
+      <div className="p-[18px]">
+        <div className={orto.vacio}>
+          <span className={orto.vacioIcono} aria-hidden>
+            <FileText size={17} strokeWidth={1.75} />
+          </span>
+          <p className={orto.vacioTitulo}>Sin cartas de referencia</p>
+          <p className={orto.vacioPista}>
+            Para enviar al paciente con el periodoncista, el endodoncista o el cirujano
+            maxilofacial.
+          </p>
           {onNew ? (
             <Btn
-              variant="violet-soft"
+              variant="secondary"
               size="sm"
-              className="mt-3"
-              icon={<Plus className="w-3.5 h-3.5" aria-hidden />}
+              className="mt-1"
+              icon={<Plus size={14} strokeWidth={1.75} aria-hidden />}
               onClick={onNew}
             >
               Nueva carta de referencia
@@ -287,17 +260,17 @@ function ReferralPanel({
     );
   }
   return (
-    <div className="p-6 space-y-2">
+    <div className="p-[18px] space-y-2">
       {rows.map((r) => (
         <div
           key={r.id}
-          className="border border-slate-200 rounded-lg p-3 flex items-start justify-between gap-3 dark:border-slate-700"
+          className={`${orto.caja} flex items-start justify-between gap-3`}
         >
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <div className="text-[13px] font-semibold text-[color:var(--pr-texto)]">
               Para {r.recipient}
             </div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="text-[11px] text-[color:var(--pr-texto-3)]">
               {r.reason}
             </div>
           </div>
@@ -308,7 +281,7 @@ function ReferralPanel({
             >
               {r.status}
             </Pill>
-            <div className="text-[10px] text-slate-400 mt-1 dark:text-slate-500">
+            <div className="text-[11px] text-[color:var(--pr-texto-3)] mt-1">
               {fmtDateShort(r.sentAt)}
             </div>
           </div>
@@ -331,28 +304,24 @@ function ReferralPanel({
 function WhatsAppPanel({ entries }: { entries: WhatsAppLogEntry[] }) {
   if (entries.length === 0) {
     return (
-      <div className="p-6 text-sm text-slate-500 italic dark:text-slate-400">
-        Sin mensajes WhatsApp registrados todavía.
+      <div className={`p-[18px] ${orto.vacioLinea}`}>
+        Todavía no hay mensajes de WhatsApp con este paciente.
       </div>
     );
   }
   return (
-    <div className="p-6">
+    <div className="p-[18px]">
       <div className="space-y-2">
         {entries.map((w) => (
           <div
             key={w.id}
-            className={`flex items-start gap-3 border border-slate-200 rounded-lg p-3 dark:border-slate-700 ${
-              w.direction === "in"
-                ? "bg-emerald-50/40 dark:bg-emerald-900/10"
-                : "bg-white dark:bg-slate-900"
-            }`}
+            className={`${orto.caja} flex items-start gap-3`}
           >
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                 w.direction === "in"
-                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                  : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+                  ? "bg-[color:var(--pr-exito-suave)] text-[color:var(--pr-exito)]"
+                  : "bg-[color:var(--pr-activo-suave)] text-[color:var(--orto-violeta)]"
               }`}
               aria-hidden
             >
@@ -360,7 +329,7 @@ function WhatsAppPanel({ entries }: { entries: WhatsAppLogEntry[] }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                <span className="text-xs font-medium text-slate-900 dark:text-slate-100">
+                <span className="text-xs font-semibold text-[color:var(--pr-texto)]">
                   {w.direction === "in"
                     ? w.patientName ?? "Paciente"
                     : "DaleControl → paciente"}
@@ -370,11 +339,11 @@ function WhatsAppPanel({ entries }: { entries: WhatsAppLogEntry[] }) {
                     {w.template}
                   </Pill>
                 ) : null}
-                <span className="text-[11px] text-slate-400 ml-auto dark:text-slate-500">
+                <span className="text-[11px] text-[color:var(--pr-texto-3)] ml-auto">
                   {w.at}
                 </span>
               </div>
-              <div className="text-sm text-slate-700 dark:text-slate-300">{w.preview}</div>
+              <div className="text-[13px] text-[color:var(--pr-texto-2)]">{w.preview}</div>
             </div>
           </div>
         ))}

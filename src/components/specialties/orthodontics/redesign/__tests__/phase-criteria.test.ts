@@ -2,7 +2,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { PHASE_CRITERIA } from "../drawers/ModalAdvancePhase";
+import { PHASE_CRITERIA } from "../drawers/phase-criteria";
 import { PHASE_ORDER } from "../types";
 
 describe("PHASE_CRITERIA", () => {

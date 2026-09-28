@@ -6,6 +6,7 @@
 
 import { Check, DollarSign, FileText, Send, Shield, Sparkles, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
+import orto from "../orto.module.css";
 
 export interface DrawerSignAtHomeProps {
   patientFirstName?: string;
@@ -33,46 +34,46 @@ export function DrawerSignAtHome(props: DrawerSignAtHomeProps) {
     {
       title: "1. Contrato de servicios",
       sub: summary,
-      icon: <FileText className="w-4 h-4 text-emerald-700 dark:text-emerald-400" aria-hidden />,
+      icon: <FileText className="w-4 h-4 text-[color:var(--pr-exito)]" aria-hidden />,
     },
     {
       title: "2. Consentimientos clínicos",
       sub: "Brackets + TADs + asentimiento menor (3 docs)",
-      icon: <Shield className="w-4 h-4 text-emerald-700 dark:text-emerald-400" aria-hidden />,
+      icon: <Shield className="w-4 h-4 text-[color:var(--pr-exito)]" aria-hidden />,
     },
     {
       title: "3. Pago enganche",
       sub: `$${downAmount.toLocaleString("es-MX")} MXN · Stripe / MercadoPago / Conekta`,
-      icon: <DollarSign className="w-4 h-4 text-emerald-700 dark:text-emerald-400" aria-hidden />,
+      icon: <DollarSign className="w-4 h-4 text-[color:var(--pr-exito)]" aria-hidden />,
     },
     {
       title: "4. Factura CFDI 4.0",
       sub: "Timbre automático Facturapi al confirmar pago",
-      icon: <Check className="w-4 h-4 text-emerald-700 dark:text-emerald-400" aria-hidden />,
+      icon: <Check className="w-4 h-4 text-[color:var(--pr-exito)]" aria-hidden />,
     },
   ];
 
   return (
     <>
       <div
-        className="fixed inset-0 bg-slate-900/30 z-40 dark:bg-slate-950/60"
+        className={orto.velo}
         onClick={props.onClose}
         aria-hidden
       />
       <aside
-        className="fixed top-0 right-0 bottom-0 w-full sm:w-[480px] bg-white border-l border-slate-200 z-50 shadow-2xl flex flex-col dark:bg-slate-900 dark:border-slate-800"
+        className={orto.cajon}
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-signhome-title"
       >
-        <header className="px-6 py-4 border-b border-slate-100 bg-emerald-50/40 flex items-center justify-between dark:border-slate-800 dark:bg-emerald-900/10">
+        <header className={orto.cajonCabeza}>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-emerald-700 font-medium dark:text-emerald-400">
+            <div className="text-[11px] uppercase tracking-wider text-[color:var(--pr-exito)] font-medium">
               G6 · Sign@Home WhatsApp
             </div>
             <h3
               id="drawer-signhome-title"
-              className="text-base font-semibold text-slate-900 mt-0.5 dark:text-slate-100"
+              className={orto.cajonTitulo}
             >
               Liga única firma + cobro
             </h3>
@@ -81,74 +82,74 @@ export function DrawerSignAtHome(props: DrawerSignAtHomeProps) {
             type="button"
             onClick={props.onClose}
             aria-label="Cerrar"
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            className={orto.botonIcono}
           >
             <X className="w-4 h-4" aria-hidden />
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          <div className="text-xs text-slate-600 dark:text-slate-400">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="text-xs text-[color:var(--pr-texto-2)]">
             Se enviará un link tokenizado por WhatsApp a {phone} que incluye los 4 pasos en
             una sola sesión:
           </div>
           {steps.map((step) => (
             <div
               key={step.title}
-              className="border border-slate-200 rounded-lg p-3 flex items-start gap-3 dark:border-slate-700"
+              className="border border-[color:var(--pr-borde)] rounded-[10px] p-3 flex items-start gap-3"
             >
               <div
-                className="w-9 h-9 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0 dark:bg-emerald-900/30"
+                className="w-9 h-9 rounded-[8px] bg-[color:var(--pr-exito-suave)] flex items-center justify-center flex-shrink-0"
                 aria-hidden
               >
                 {step.icon}
               </div>
               <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                <div className="text-[13px] font-semibold text-[color:var(--pr-texto)]">
                   {step.title}
                 </div>
-                <div className="text-[11px] text-slate-500 mt-0.5 dark:text-slate-400">
+                <div className="text-[11px] text-[color:var(--pr-texto-3)] mt-0.5">
                   {step.sub}
                 </div>
               </div>
             </div>
           ))}
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 dark:bg-slate-800 dark:border-slate-700">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1 dark:text-slate-400">
+          <div className="bg-[color:var(--pr-tarjeta-2)] border border-[color:var(--pr-borde)] rounded-[10px] p-3">
+            <div className={`${orto.ceja} mb-1`}>
               Token portal paciente · M3
             </div>
             {/* Token de portal, se copia-pega tal cual: letra de máquina real
                 incluso con Instrument Sans en el resto del panel (WS1-T6). */}
-            <div className="mono-tecnico text-xs bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-600 truncate dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
+            <div className="mono-tecnico text-xs bg-[color:var(--pr-tarjeta)] border border-[color:var(--pr-borde)] rounded-[8px] px-2 py-1.5 text-[color:var(--pr-texto-2)] truncate">
               /share/p/{tokenPreview}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1 dark:text-slate-500">
+            <div className="text-[11px] text-[color:var(--pr-texto-3)] mt-1">
               Reusa portal tokenizado existente · expira en 72h
             </div>
           </div>
-          <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 dark:bg-violet-900/20 dark:border-violet-800">
+          <div className="bg-[color:var(--pr-activo-suave)] border border-[color:var(--orto-violeta-borde)] rounded-[10px] p-3">
             <div className="flex items-center gap-2 mb-1.5">
               <Sparkles
-                className="w-3.5 h-3.5 text-violet-700 dark:text-violet-300"
+                className="w-3.5 h-3.5 text-[color:var(--orto-violeta)]"
                 aria-hidden
               />
-              <div className="text-xs font-semibold text-violet-900 dark:text-violet-200">
+              <div className="text-xs font-semibold text-[color:var(--orto-violeta)]">
                 Vista previa mensaje
               </div>
             </div>
-            <div className="text-xs text-slate-700 leading-relaxed dark:text-slate-300">
+            <div className="text-xs text-[color:var(--pr-texto-2)] leading-relaxed">
               Hola {props.patientFirstName ?? "paciente"}, para iniciar tu tratamiento
               ortodóntico completa estos 4 pasos en este link seguro:{" "}
-              <span className="text-violet-700 underline dark:text-violet-300">
+              <span className="text-[color:var(--orto-violeta)] underline">
                 dalecontrol.com/share/p/{tokenPreview.slice(0, 12)}…
               </span>
             </div>
           </div>
-          <div className="text-[11px] text-slate-400 italic dark:text-slate-500">
+          <div className="text-[11px] text-[color:var(--pr-texto-3)] italic">
             TODO Twilio API key requerida para envío real WhatsApp · stub guarda token y
             marca como SENT.
           </div>
         </div>
-        <footer className="px-6 py-3 border-t border-slate-100 bg-slate-50 flex justify-end gap-2 dark:border-slate-800 dark:bg-slate-900/40">
+        <footer className={orto.cajonPie}>
           <Btn variant="secondary" size="md" onClick={props.onClose}>
             Cancelar
           </Btn>

@@ -30,6 +30,7 @@ export {
   fmtMoney,
   fmtDate,
   fmtDateShort,
+  fmtDay,
   fmtTime,
   fmtPct,
   fmtMm,

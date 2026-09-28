@@ -1,12 +1,14 @@
-// Atom: Progress bar simple.
+// Atom: barra de avance (6 px, como la del estado de cuenta de la ficha).
+
+import orto from "../orto.module.css";
 
 type Color = "violet" | "emerald" | "amber" | "rose";
 
 const COLORS: Record<Color, string> = {
-  violet: "bg-violet-600",
-  emerald: "bg-emerald-600",
-  amber: "bg-amber-500",
-  rose: "bg-rose-600",
+  violet: "",
+  emerald: orto.barraExito,
+  amber: orto.barraAlerta,
+  rose: orto.barraPeligro,
 };
 
 export interface ProgressBarProps {
@@ -27,7 +29,7 @@ export function ProgressBar({
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   return (
     <div
-      className={`w-full h-1.5 bg-slate-100 rounded-full overflow-hidden dark:bg-slate-800 ${className}`}
+      className={[orto.barra, className].filter(Boolean).join(" ")}
       role="progressbar"
       aria-valuenow={Math.round(pct)}
       aria-valuemin={0}
@@ -35,7 +37,7 @@ export function ProgressBar({
       aria-label={ariaLabel}
     >
       <div
-        className={`h-full ${COLORS[color]} rounded-full transition-all`}
+        className={[orto.barraRelleno, COLORS[color]].filter(Boolean).join(" ")}
         style={{ width: `${pct}%` }}
       />
     </div>

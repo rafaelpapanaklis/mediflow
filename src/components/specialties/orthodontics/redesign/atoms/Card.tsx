@@ -1,70 +1,61 @@
-// Atom: Card wrapper estándar del rediseño ortho.
-// Tokens del mockup Claude Design:
-//   bg-white border border-slate-200 rounded-xl (sin shadow)
-//   header px-6 py-4 con border-b border-slate-100
-//   body sin padding por defecto (cada sección lo aplica)
-//   footer px-6 py-3 border-t border-slate-100 bg-slate-50/50
+// Atom: tarjeta de sección del módulo de Ortodoncia.
+// La misma tarjeta que la ficha del paciente: chip de icono de 28 px, título
+// 14 px/650 y, debajo, una línea que explica (no una clave interna). La
+// cabecera envuelve: con muchas acciones, los botones bajan a su renglón en
+// vez de estrujar el título.
 
 import type { ReactNode } from "react";
+import orto from "../orto.module.css";
 
 type AccentColor = "violet" | "emerald" | "amber" | "rose" | "slate";
 
-const ACCENT_DOT: Record<AccentColor, string> = {
-  violet: "bg-violet-500",
-  emerald: "bg-emerald-500",
-  amber: "bg-amber-500",
-  rose: "bg-rose-500",
-  slate: "bg-slate-400",
+const ICON_TONE: Record<AccentColor, string> = {
+  violet: "",
+  emerald: orto.tarjetaIconoExito,
+  amber: orto.tarjetaIconoAlerta,
+  rose: orto.tarjetaIconoPeligro,
+  slate: orto.tarjetaIconoNeutro,
 };
 
 export interface CardProps {
   id?: string;
-  eyebrow?: string;
+  /** Línea de apoyo bajo el título. */
+  eyebrow?: ReactNode;
   title?: ReactNode;
+  /** Icono de la sección (lucide, 15 px). Se pinta en un chip a la izquierda. */
+  icon?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
   footer?: ReactNode;
+  /** Tono del chip del icono. */
   accent?: AccentColor;
 }
 
 export function Card(props: CardProps) {
-  const { id, eyebrow, title, action, children, className = "", footer, accent } = props;
+  const { id, eyebrow, title, icon, action, children, className = "", footer, accent } = props;
   const hasHeader = Boolean(title || action || eyebrow);
   return (
-    <section
-      id={id}
-      className={`bg-white border border-slate-200 rounded-xl dark:bg-slate-900 dark:border-slate-800 ${className}`}
-    >
+    <section id={id} className={[orto.tarjeta, className].filter(Boolean).join(" ")}>
       {hasHeader ? (
-        <header className="flex items-end justify-between gap-4 px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="min-w-0">
-            {eyebrow ? (
-              <div className="text-[10px] uppercase tracking-wider text-slate-400 font-medium mb-1 dark:text-slate-500">
-                {eyebrow}
-              </div>
-            ) : null}
-            {title ? (
-              <h3 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2 dark:text-slate-100">
-                {accent ? (
-                  <span
-                    className={`inline-block w-1.5 h-1.5 rounded-full ${ACCENT_DOT[accent]}`}
-                    aria-hidden
-                  />
-                ) : null}
-                {title}
-              </h3>
-            ) : null}
+        <header className={orto.tarjetaCabeza}>
+          {icon ? (
+            <span
+              className={[orto.tarjetaIcono, accent ? ICON_TONE[accent] : ""].filter(Boolean).join(" ")}
+              aria-hidden
+            >
+              {icon}
+            </span>
+          ) : null}
+          <div className={orto.tarjetaTextos}>
+            {title ? <h3 className={orto.tarjetaTitulo}>{title}</h3> : null}
+            {eyebrow ? <div className={orto.tarjetaSub}>{eyebrow}</div> : null}
           </div>
-          {action ? <div className="flex-shrink-0">{action}</div> : null}
+          {action ? <div className={orto.tarjetaAcciones}>{action}</div> : null}
         </header>
       ) : null}
       <div>{children}</div>
-      {footer ? (
-        <footer className="px-6 py-3 border-t border-slate-100 bg-slate-50/50 rounded-b-xl dark:border-slate-800 dark:bg-slate-900/40">
-          {footer}
-        </footer>
-      ) : null}
+      {footer ? <footer className={orto.tarjetaPie}>{footer}</footer> : null}
     </section>
   );
 }

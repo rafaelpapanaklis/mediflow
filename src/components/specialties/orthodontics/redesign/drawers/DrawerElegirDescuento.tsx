@@ -9,6 +9,7 @@ import { Check, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { elegirDescuentoDelCaso } from "@/app/actions/orthodontics/cobro/elegirDescuentoDelCaso";
 import type { ReglaDescuento } from "@/lib/orthodontics/cobro/reglas";
+import orto from "../orto.module.css";
 
 export interface DrawerElegirDescuentoProps {
   treatmentPlanId: string;
@@ -40,50 +41,50 @@ export function DrawerElegirDescuento(props: DrawerElegirDescuentoProps) {
 
   return (
     <>
-      <div className="fixed inset-0 bg-slate-900/50 z-40 dark:bg-slate-950/70" onClick={props.onClose} aria-hidden />
+      <div className={orto.velo} onClick={props.onClose} aria-hidden />
       <aside
-        className="fixed top-0 right-0 bottom-0 w-full sm:w-[380px] bg-white border-l border-slate-200 z-50 shadow-2xl flex flex-col dark:bg-slate-900 dark:border-slate-800"
+        className={`${orto.cajon} ${orto.cajonEstrecho}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-elegir-descuento-title"
       >
-        <header className="px-6 py-4 border-b border-slate-100 flex items-center justify-between dark:border-slate-800">
-          <h3 id="drawer-elegir-descuento-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">F9 · Descuento de este caso</h3>
-          <button type="button" onClick={props.onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+        <header className={orto.cajonCabeza}>
+          <h3 id="drawer-elegir-descuento-title" className={orto.cajonTitulo}>Descuento de este caso</h3>
+          <button type="button" onClick={props.onClose} aria-label="Cerrar" className={orto.botonIcono}>
             <X className="w-5 h-5" aria-hidden />
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto p-6 space-y-2">
+        <div className="flex-1 overflow-y-auto p-5 space-y-2">
           {props.reglas.length === 0 ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">La clínica todavía no configuró reglas de descuento (F9).</p>
+            <p className="text-xs text-[color:var(--pr-texto-3)]">La clínica todavía no tiene reglas de descuento. Se configuran en «Política de cobro».</p>
           ) : (
             <>
               <button
                 type="button"
                 onClick={() => setSeleccion(null)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-md border text-sm text-left ${seleccion === null ? "border-violet-400 bg-violet-50 dark:bg-violet-900/20" : "border-slate-200 dark:border-slate-700"}`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-[8px] border text-[13px] text-left ${seleccion === null ? "border-[color:var(--pr-activo)] bg-[color:var(--pr-activo-suave)]" : "border-[color:var(--pr-borde)]"}`}
               >
                 <span>Sin descuento</span>
-                {seleccion === null ? <Check className="w-4 h-4 text-violet-600" aria-hidden /> : null}
+                {seleccion === null ? <Check className="w-4 h-4 text-[color:var(--orto-violeta)]" aria-hidden /> : null}
               </button>
               {props.reglas.map((r) => (
                 <button
                   key={r.id}
                   type="button"
                   onClick={() => setSeleccion(r.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md border text-sm text-left ${seleccion === r.id ? "border-violet-400 bg-violet-50 dark:bg-violet-900/20" : "border-slate-200 dark:border-slate-700"}`}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-[8px] border text-[13px] text-left ${seleccion === r.id ? "border-[color:var(--pr-activo)] bg-[color:var(--pr-activo-suave)]" : "border-[color:var(--pr-borde)]"}`}
                 >
                   <span>{r.etiqueta}</span>
                   <span className="flex items-center gap-2">
-                    <span className="font-mono text-xs text-slate-500">{r.porcentaje}%</span>
-                    {seleccion === r.id ? <Check className="w-4 h-4 text-violet-600" aria-hidden /> : null}
+                    <span className="tabular-nums text-xs text-[color:var(--pr-texto-3)]">{r.porcentaje}%</span>
+                    {seleccion === r.id ? <Check className="w-4 h-4 text-[color:var(--orto-violeta)]" aria-hidden /> : null}
                   </span>
                 </button>
               ))}
             </>
           )}
         </div>
-        <footer className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2 dark:border-slate-800">
+        <footer className={orto.cajonPie}>
           <Btn variant="ghost" size="md" onClick={props.onClose}>Cancelar</Btn>
           <Btn variant="emerald" size="md" onClick={guardar} disabled={guardando}>{guardando ? "Guardando..." : "Guardar"}</Btn>
         </footer>

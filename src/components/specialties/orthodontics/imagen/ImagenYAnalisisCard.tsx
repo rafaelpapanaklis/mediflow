@@ -11,6 +11,7 @@ import { CephalometriaPanel } from "./CephalometriaPanel";
 import { BoltonPanel } from "./BoltonPanel";
 import { PhotoLineAnalyzer } from "./PhotoLineAnalyzer";
 import type { FacialPoints } from "@/lib/orthodontics/fotos/landmarks";
+import orto from "../redesign/orto.module.css";
 
 export interface ImagenYAnalisisCardProps {
   treatmentPlanId: string;
@@ -20,32 +21,35 @@ export interface ImagenYAnalisisCardProps {
 type Tab = "cefalometria" | "fotos" | "modelo3d";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: "cefalometria", label: "Cefalometría", icon: <Ruler className="w-3.5 h-3.5" /> },
-  { id: "fotos", label: "Fotos con líneas", icon: <Camera className="w-3.5 h-3.5" /> },
-  { id: "modelo3d", label: "Modelo 3D · Bolton", icon: <Sparkles className="w-3.5 h-3.5" /> },
+  { id: "cefalometria", label: "Trazado", icon: <Ruler size={14} strokeWidth={1.75} aria-hidden /> },
+  { id: "fotos", label: "Fotos", icon: <Camera size={14} strokeWidth={1.75} aria-hidden /> },
+  { id: "modelo3d", label: "Bolton", icon: <Sparkles size={14} strokeWidth={1.75} aria-hidden /> },
 ];
 
 export function ImagenYAnalisisCard({ treatmentPlanId, patientId }: ImagenYAnalisisCardProps) {
   const [tab, setTab] = useState<Tab>("cefalometria");
 
   return (
-    <div>
-      <div className="flex items-center gap-1 px-5 pt-4 border-b border-slate-100 dark:border-slate-800">
+    <div className="bg-[color:var(--pr-tarjeta)] min-w-0">
+      <div className="px-[18px] pt-[16px]">
+        <h4 className={`${orto.ceja} mb-[10px]`}>Imagen y análisis</h4>
+        <div className={orto.segmento} role="tablist" aria-label="Imagen y análisis">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
+            role="tab"
+            aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-t-md border-b-2 -mb-px transition-colors ${
-              tab === t.id
-                ? "border-violet-500 text-violet-700 dark:text-violet-300"
-                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-            }`}
+            className={[orto.segmentoBoton, tab === t.id ? orto.segmentoActivo : ""]
+              .filter(Boolean)
+              .join(" ")}
           >
             {t.icon}
             {t.label}
           </button>
         ))}
+        </div>
       </div>
 
       {tab === "cefalometria" ? <CephalometriaPanel treatmentPlanId={treatmentPlanId} patientId={patientId} /> : null}
@@ -78,8 +82,8 @@ function FacialAnalysisTab({ patientId }: { patientId: string }) {
   }
 
   return (
-    <div className="bg-white p-5 dark:bg-slate-900">
-      <div className="flex items-center gap-2 mb-3">
+    <div className="px-[18px] py-[14px]">
+      <div className="flex items-center gap-2 flex-wrap mb-3">
         <select
           value={view}
           onChange={(e) => {
@@ -87,18 +91,20 @@ function FacialAnalysisTab({ patientId }: { patientId: string }) {
             setImageUrl(null);
             setPoints({});
           }}
-          className="text-xs border border-slate-200 rounded-md px-2 py-1 dark:bg-slate-800 dark:border-slate-700"
+          className={orto.entrada}
+          style={{ width: "auto", flex: "1 1 150px" }}
+          aria-label="Vista de la foto"
         >
           <option value="perfil">Foto de perfil</option>
           <option value="frente">Foto de frente</option>
         </select>
-        <label className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
-          <Camera className="w-3.5 h-3.5" />
+        <label className={`${orto.boton} ${orto.botonSubir}`}>
+          <Camera size={15} strokeWidth={1.75} aria-hidden />
           {imageUrl ? "Cambiar foto" : "Subir foto"}
           <input
             type="file"
             accept="image/*"
-            className="hidden"
+            className="sr-only"
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) handlePick(f);
@@ -109,7 +115,7 @@ function FacialAnalysisTab({ patientId }: { patientId: string }) {
       </div>
 
       {error ? (
-        <div className="mb-3 text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-md px-3 py-2 dark:bg-rose-950/30 dark:border-rose-900 dark:text-rose-300">
+        <div className={`${orto.aviso} ${orto.avisoPeligro} mb-3`} role="alert">
           {error}
         </div>
       ) : null}
@@ -117,8 +123,9 @@ function FacialAnalysisTab({ patientId }: { patientId: string }) {
       {imageUrl ? (
         <PhotoLineAnalyzer imageUrl={imageUrl} view={view} initialPoints={points} onChange={setPoints} />
       ) : (
-        <div className="rounded-md border border-dashed border-slate-200 dark:border-slate-700 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-          Sube una foto de {view} para marcar líneas y ángulos.
+        <div className={orto.vacio}>
+          <p className={orto.vacioTitulo}>Sin foto de {view}</p>
+          <p className={orto.vacioPista}>Sube una para marcar líneas y ángulos.</p>
         </div>
       )}
     </div>

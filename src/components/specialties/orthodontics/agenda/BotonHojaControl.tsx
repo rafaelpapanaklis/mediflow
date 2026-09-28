@@ -23,6 +23,7 @@ import { getTreatmentCardContextForAppointment } from "@/app/actions/orthodontic
 import { saveTreatmentCardDraft } from "@/app/actions/orthodontics/saveTreatmentCardDraft";
 import { signTreatmentCard } from "@/app/actions/orthodontics/signTreatmentCard";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import orto from "../redesign/orto.module.css";
 import { PHASE_LABELS, type TreatmentCardDTO, type WireStepDTO, type OrthoPhaseKey } from "../redesign/types";
 
 export interface BotonHojaControlProps {
@@ -112,16 +113,20 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaCo
   return (
     <>
       <Btn
-        variant="violet-soft"
+        variant="primary"
         size="md"
-        className="w-full justify-center"
-        icon={loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <FileText className="w-4 h-4" aria-hidden />}
+        className="w-full"
+        icon={loading ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" aria-hidden /> : <FileText size={15} strokeWidth={1.75} aria-hidden />}
         onClick={abrir}
         disabled={loading}
       >
-        Nueva hoja de control
+        {loading ? "Abriendo…" : "Registrar control"}
       </Btn>
-      {error ? <div className="text-xs text-rose-600 mt-1 dark:text-rose-400">{error}</div> : null}
+      {error ? (
+        <div className={`${orto.aviso} ${orto.avisoPeligro}`} role="alert">
+          {error}
+        </div>
+      ) : null}
       {open && ctx ? (
         <DrawerTreatmentCard
           card={ctx.card}
