@@ -25,6 +25,7 @@ import {
   MAX_FALLOS,
   RESULTADOS_FALLIDOS,
   TEXTOS,
+  detectaIntencionDeControlOrto,
   detectaIntencionDeSaldo,
   elegirPorFecha,
   parseFechaNacimiento,
@@ -568,4 +569,79 @@ test("una fecha que no existe en el calendario no cuadra con nada", async () => 
 test("el 29 de febrero de un año bisiesto sí existe", async () => {
   assert.equal(parseFechaNacimiento("29/02/2000"), "2000-02-29");
   assert.equal(parseFechaNacimiento("29/02/1999"), null);
+});
+
+/* ═══ 7. ws1-t1 — PRÓXIMO CONTROL DE ORTODONCIA ═════════════════════════
+ * El paciente pregunta por su próximo control (con o sin mencionar dinero) y
+ * el bot lo responde con la MISMA verificación de teléfono que "¿cuánto
+ * debo?" — es el mismo flujo, enriquecido con `proximoControl`. */
+
+test("detecta la pregunta por el control, estrecha como la de dinero", () => {
+  for (const frase of [
+    "¿cuándo es mi próximo control?",
+    "cuándo tengo control",
+    "¿cuándo me toca mi control?",
+    "mi cita de control",
+    "quiero saber de mi control de ortodoncia",
+  ]) {
+    assert.ok(detectaIntencionDeControlOrto(frase), frase);
+  }
+  for (const frase of ["hola", "quiero agendar una cita", "el control de calidad del laboratorio"]) {
+    assert.ok(!detectaIntencionDeControlOrto(frase), frase);
+  }
+});
+
+test("pregunta SOLO por el control (sin dinero) y el bot contesta la fecha", async () => {
+  saldos.p1 = { ...resumenCon(0, 0), vencimiento: null, tieneVencidas: false, proximoControl: "2026-11-03" };
+  const r = await correr("¿cuándo es mi próximo control?");
+  assert.match(r!.reply!, /control de ortodoncia.*2026-11-03/is);
+  sinDinero(r!.reply, "sin cobranza pendiente, no debe hablar de mensualidad ni de pendiente");
+  assert.deepEqual(lecturas, ["p1"]);
+});
+
+test("pregunta por dinero y el bot añade también el próximo control, si lo tiene", async () => {
+  saldos.p1 = { ...resumenCon(2000, 18000), proximoControl: "2026-11-03" };
+  const r = await correr("¿cuánto debo?");
+  assert.ok(r!.reply!.includes("$2,000.00"), "sigue diciendo la cuota");
+  assert.match(r!.reply!, /control de ortodoncia.*2026-11-03/is, "y ahora también el control");
+});
+
+test("sin cobranza y sin control, sigue siendo sinPlan", async () => {
+  saldos.p1 = null;
+  const r = await correr("¿cuándo es mi próximo control?");
+  assert.equal(r!.reply, TEXTOS.sinPlan);
+});
+
+test("el interruptor de la clínica también apaga la pregunta de control", async () => {
+  const r = await correr("¿cuándo es mi próximo control?", null, config({ canAnswerBalance: false }));
+  assert.equal(r, null);
+  assert.deepEqual(lecturas, []);
+});
+
+test("número compartido: el control también se desambigua por fecha de nacimiento", async () => {
+  pacientes = [ANA, LUIS];
+  saldos.p2 = { ...resumenCon(0, 0), vencimiento: null, proximoControl: "2026-12-01" };
+  const { segundo } = await preguntaYControl("2015-06-01");
+  assert.match(segundo.reply!, /control de ortodoncia.*2026-12-01/is);
+  assert.deepEqual(lecturas, ["p2"]);
+});
+
+async function preguntaYControl(fechaISO: string) {
+  const [anio, mes, dia] = fechaISO.split("-");
+  const primero = await correr("¿cuándo es mi control?");
+  const segundo = await correr(`${dia}/${mes}/${anio}`, primero!.newBotState ?? null);
+  return { primero: primero!, segundo: segundo! };
+}
+
+test("textoDelSaldo: sin cobranza, solo la línea del control", () => {
+  const texto = textoDelSaldo(
+    { vencimiento: null, importeCuota: 0, numeroCuota: 0, esEnganche: false, totalCuotas: 0, pendiente: 0, tieneVencidas: false, proximoControl: "2026-05-20" },
+    { importe: (n) => `$${n}`, fecha: (iso) => iso },
+  );
+  assert.equal(texto, "Tu próximo *control de ortodoncia* es el *2026-05-20*.");
+});
+
+test("textoDelSaldo: sin el campo proximoControl, se comporta exactamente igual que antes", () => {
+  const texto = textoDelSaldo(resumenCon(2000, 18000), { importe: (n) => `$${n}`, fecha: (iso) => iso });
+  assert.doesNotMatch(texto, /control/i);
 });

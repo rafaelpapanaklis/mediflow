@@ -29,6 +29,7 @@ import { dinero } from "@/lib/quotes/condiciones-pago";
 import { resumenDeSaldoDePaciente } from "@/lib/whatsapp/cobranza/datos";
 import { fechaLarga, hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { getCobranzaSettings } from "@/lib/reminders/config";
+import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import {
   MAX_FALLOS,
   RESULTADOS_FALLIDOS,
@@ -136,6 +137,35 @@ export async function fallosRecientesDeSaldo(
   }
 }
 
+/**
+ * "YYYY-MM-DD" de la próxima cita "Control de ortodoncia" del paciente, o
+ * `null` si no tiene ninguna (o no es paciente de ortodoncia). Mismo patrón
+ * de tolerancia P2021/P2022 que el resto de `lib/orthodontics/`: si el caso
+ * de ortodoncia todavía no existe en esta base, no tumba la respuesta de
+ * saldo, solo se queda sin ese dato.
+ */
+async function proximoControlDe(clinicId: string, patientId: string): Promise<string | null> {
+  if (!clinicId || !patientId) return null;
+  try {
+    const cita = await prisma.appointment.findFirst({
+      where: {
+        clinicId,
+        patientId,
+        type: TIPO_CITA_CONTROL_ORTO,
+        startsAt: { gte: new Date() },
+        status: { not: "CANCELLED" },
+      },
+      orderBy: { startsAt: "asc" },
+      select: { startsAt: true },
+    });
+    return cita ? cita.startsAt.toISOString().slice(0, 10) : null;
+  } catch (e) {
+    const code = (e as { code?: string } | null)?.code;
+    if (code === "P2021" || code === "P2022") return null;
+    throw e;
+  }
+}
+
 /** Las dependencias reales. Las pruebas pasan dobles en su lugar. */
 export function realSaldoDeps(timezone: string): SaldoDeps {
   return {
@@ -170,8 +200,30 @@ export function realSaldoDeps(timezone: string): SaldoDeps {
       }));
     },
 
-    resumenDeSaldo(clinicId, patientId) {
-      return resumenDeSaldoDePaciente(clinicId, patientId, hoyEnZona(new Date(), timezone));
+    async resumenDeSaldo(clinicId, patientId) {
+      // ws1-t1 (Ortodoncia conectada al bot) — además del saldo genérico (que
+      // ya cubre las facturas a plazos del caso de ortodoncia en modo PRECIO_
+      // TOTAL, mismo motor plan-de-pagos.ts), se añade el próximo "Control de
+      // ortodoncia" en la Agenda, si tiene uno. Es una lectura más sobre la
+      // MISMA pregunta de "¿cómo va mi tratamiento?": no dispara ningún
+      // WhatsApp nuevo, solo enriquece la respuesta que ya se manda.
+      const [resumen, proximoControl] = await Promise.all([
+        resumenDeSaldoDePaciente(clinicId, patientId, hoyEnZona(new Date(), timezone)),
+        proximoControlDe(clinicId, patientId),
+      ]);
+      if (!resumen && !proximoControl) return null;
+      return {
+        ...(resumen ?? {
+          vencimiento: null,
+          importeCuota: 0,
+          numeroCuota: 0,
+          esEnganche: false,
+          totalCuotas: 0,
+          pendiente: 0,
+          tieneVencidas: false,
+        }),
+        proximoControl,
+      };
     },
 
     registrarConsulta: registrarConsultaDeSaldo,

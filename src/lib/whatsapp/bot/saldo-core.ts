@@ -87,6 +87,14 @@ export interface ResumenSaldo {
   pendiente: number;
   /** Ya venció alguna cuota y sigue debiendo. */
   tieneVencidas: boolean;
+  /**
+   * ws1-t1 (Ortodoncia conectada al bot) — "YYYY-MM-DD" de la próxima cita
+   * "Control de ortodoncia" del paciente, o `undefined`/`null` cuando no
+   * tiene ninguna (o no es paciente de ortodoncia). Opcional a propósito: los
+   * dobles existentes en `saldo.test.ts` que arman un `ResumenSaldo` sin este
+   * campo siguen compilando y comportándose exactamente igual.
+   */
+  proximoControl?: string | null;
 }
 
 /** Un paciente candidato de ese teléfono. */
@@ -227,6 +235,26 @@ export function detectaIntencionDeSaldo(texto: string): boolean {
 }
 
 /**
+ * ¿Están preguntando por su PRÓXIMO CONTROL de ortodoncia (sin mencionar
+ * dinero)? ws1-t1 — mismo criterio de estrechez que `detectaIntencionDeSaldo`:
+ * un falso positivo aquí le contestaría a cualquier paciente (tenga o no un
+ * caso de ortodoncia) como si lo tuviera. Igual de estrecho: exige "control"
+ * junto a una palabra de "cuándo/próximo/mi cita", nunca "control" solo (una
+ * clínica dental normal también usa esa palabra para otras cosas).
+ */
+export function detectaIntencionDeControlOrto(texto: string): boolean {
+  const n = foldAccents(texto ?? "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (!n) return false;
+  const patrones = [
+    /\b(proximo|siguiente)\s+control\b/,
+    /\bcuando\s+(es|tengo|me toca)\b.*\bcontrol\b/,
+    /\bmi\s+(cita\s+de\s+)?control\b/,
+    /\bcontrol\s+de\s+ortodoncia\b/,
+  ];
+  return patrones.some((r) => r.test(n));
+}
+
+/**
  * Fecha de nacimiento, ESTRICTA: día, mes y año de cuatro cifras.
  *
  * No se reutiliza `parseDateInput` (el de agendar) a propósito: aquel entiende
@@ -310,32 +338,51 @@ export const TEXTOS = {
     "Por seguridad, esto mejor lo vemos contigo directamente. Escríbenos por aquí y " +
     "en un momento te atiende una persona del consultorio. 🙌",
   sinPlan:
-    "No tienes mensualidades pendientes por ahora. Si tienes dudas de un pago, " +
-    "escríbenos y con gusto lo revisamos.",
+    "No tienes mensualidades pendientes por ahora, ni un próximo control agendado. Si tienes " +
+    "dudas de un pago o de tu tratamiento, escríbenos y con gusto lo revisamos.",
 } as const;
 
-/** Arma la respuesta del saldo. Lo mínimo: la próxima cuota y lo pendiente. */
+/**
+ * Arma la respuesta del saldo. Lo mínimo: la próxima cuota y lo pendiente.
+ *
+ * ws1-t1 (Ortodoncia conectada al bot) — si además trae `proximoControl`
+ * (caso de ortodoncia con una cita "Control de ortodoncia" agendada), se
+ * añade una línea. `hayCobranza` decide si se pintan las líneas de dinero:
+ * un caso de ortodoncia sin nada pendiente (`resumenDeSaldo` puede devolver
+ * un `ResumenSaldo` con los campos de dinero en cero SOLO para poder traer el
+ * `proximoControl`, ver `saldo.ts`) no debe leer "tu mensualidad es de $0.00".
+ */
 export function textoDelSaldo(
   r: ResumenSaldo,
   fmt: { importe: (n: number) => string; fecha: (iso: string) => string },
 ): string {
-  const cual = r.esEnganche
-    ? "tu *enganche*"
-    : r.totalCuotas > 0
-      ? `tu *mensualidad ${r.numeroCuota} de ${r.totalCuotas}*`
-      : "tu *próxima mensualidad*";
-
+  const hayCobranza = r.vencimiento !== null || r.pendiente > 0 || r.tieneVencidas;
   const lineas: string[] = [];
-  if (r.vencimiento) {
-    lineas.push(`${cap(cual)} es de *${fmt.importe(r.importeCuota)}* y vence el *${fmt.fecha(r.vencimiento)}*.`);
-  } else {
-    lineas.push(`${cap(cual)} es de *${fmt.importe(r.importeCuota)}*.`);
+
+  if (hayCobranza) {
+    const cual = r.esEnganche
+      ? "tu *enganche*"
+      : r.totalCuotas > 0
+        ? `tu *mensualidad ${r.numeroCuota} de ${r.totalCuotas}*`
+        : "tu *próxima mensualidad*";
+    if (r.vencimiento) {
+      lineas.push(`${cap(cual)} es de *${fmt.importe(r.importeCuota)}* y vence el *${fmt.fecha(r.vencimiento)}*.`);
+    } else {
+      lineas.push(`${cap(cual)} es de *${fmt.importe(r.importeCuota)}*.`);
+    }
+    lineas.push(`Te queda pendiente *${fmt.importe(r.pendiente)}* en total.`);
+    if (r.tieneVencidas) {
+      lineas.push("Tienes un pago atrasado. Si ya lo hiciste, mándanos tu comprobante.");
+    }
   }
-  lineas.push(`Te queda pendiente *${fmt.importe(r.pendiente)}* en total.`);
-  if (r.tieneVencidas) {
-    lineas.push("Tienes un pago atrasado. Si ya lo hiciste, mándanos tu comprobante.");
+
+  if (r.proximoControl) {
+    lineas.push(`Tu próximo *control de ortodoncia* es el *${fmt.fecha(r.proximoControl)}*.`);
   }
-  lineas.push("Si ya pagaste, no hagas caso a este mensaje. 🙌");
+
+  if (hayCobranza) {
+    lineas.push("Si ya pagaste, no hagas caso a este mensaje. 🙌");
+  }
   return lineas.join("\n");
 }
 
@@ -363,8 +410,9 @@ export async function runSaldoTurn(
   const enCurso = isSaldoInProgress(input.botState);
   const texto = (input.incomingText ?? "").trim();
 
-  // 2. ¿Va conmigo? O hay una desambiguación a medias, o están preguntando.
-  if (!enCurso && !detectaIntencionDeSaldo(texto)) return null;
+  // 2. ¿Va conmigo? O hay una desambiguación a medias, o están preguntando
+  //    (por dinero, o —ws1-t1— por su próximo control de ortodoncia).
+  if (!enCurso && !detectaIntencionDeSaldo(texto) && !detectaIntencionDeControlOrto(texto)) return null;
 
   const telefono = (input.patient?.phone ?? "").trim();
   const clinicId = input.clinicId;
@@ -392,8 +440,8 @@ export async function runSaldoTurn(
       if (eleccion.tipo === "ninguno") {
         return derivar(deps, clinicId, input, null, telefono, "fechaSinCoincidencia");
       }
-      // Ni fecha ni pregunta de dinero: esto ya no va conmigo.
-      if (eleccion.tipo === "ilegible" && !detectaIntencionDeSaldo(texto)) return null;
+      // Ni fecha ni pregunta de dinero o de control: esto ya no va conmigo.
+      if (eleccion.tipo === "ilegible" && !detectaIntencionDeSaldo(texto) && !detectaIntencionDeControlOrto(texto)) return null;
     }
     return contesta(deps, clinicId, input, pacientes[0], telefono);
   }
