@@ -67,3 +67,5 @@ export { exportReferralProgressLetterPdf } from "./exportReferralProgressLetterP
 // ─── Acceso y permisos · Configuración (ws1-t3, Ola 1) ──────────────────
 export { getOrthoClinicSettings } from "./getOrthoClinicSettings";
 export { updateOrthoClinicSettings } from "./updateOrthoClinicSettings";
+export { listarProcedimientosDeOrtodonciaAction } from "./catalogo/listarProcedimientos";
+export { sembrarProcedimientosSugeridosOrtodoncia } from "./catalogo/sembrarProcedimientosSugeridos";

@@ -14,6 +14,7 @@
 
 import { useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
+import toast from "react-hot-toast";
 import { Btn } from "../redesign/atoms/Btn";
 import {
   DrawerTreatmentCard,
@@ -106,6 +107,16 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId }: BotonHojaCo
     if (isFailure(res)) {
       setError(res.error);
       return;
+    }
+    // «Nada en silencio» (ws1-t1, Ola 2): en modo PAGO_POR_CONTROL, si el
+    // control no se pudo facturar solo (catálogo sin precio, o un error al
+    // crear la factura), la firma clínica SÍ se guarda — pero Recepción
+    // tiene que enterarse para cobrarlo a mano.
+    const avisoControlSinFacturar = firmar
+      ? (res.data as { avisoControlSinFacturar?: string }).avisoControlSinFacturar
+      : undefined;
+    if (avisoControlSinFacturar) {
+      toast.error(avisoControlSinFacturar, { duration: 8000 });
     }
     cerrar();
   };

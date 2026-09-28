@@ -21,7 +21,7 @@
 // `src/app/api/invoices/**`. F6 (CFDI de mensualidades) y F13 (cobro
 // automático con tarjeta) quedan pendientes de Rafael — ver el hueco abajo.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { AlertTriangle, Banknote, CalendarClock, Percent, Plus, Printer, Settings2, Wallet } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
@@ -46,6 +46,16 @@ export interface SectionFinanceProps {
   treatmentPlanId: string;
   patientId: string;
   patientName?: string;
+  /**
+   * Hallazgo ws1-t4 §11 (ráfaga de ~15 llamadas al abrir la pestaña):
+   * `OrthodonticsRedesignClient` carga `cargarPanelDeCobro` UNA vez y la
+   * comparte con `ResumenCobranza` (mismo caso, mismo número, una sola
+   * consulta) — si llega, esta sección deja de auto-cargar la suya. Sin
+   * esto (p. ej. cualquier otro montaje futuro de esta sección) sigue
+   * auto-cargando como siempre: compatible hacia atrás.
+   */
+  panel?: PanelDeCobro | null | "cargando" | "error";
+  onReload?: () => void;
 }
 
 type DrawerKind =
@@ -62,6 +72,24 @@ function calendarioCompleto(cobranza: NonNullable<PanelDeCobro["cobranza"]>): Cu
   return [...cobranza.pagadas, ...cobranza.vencidas, ...cobranza.proximas].sort((a, b) => a.numero - b.numero);
 }
 
+/**
+ * Hallazgo ws1-t4 §8: «Imprimir convenio» llamaba a `window.print()` a
+ * secas, que imprime la PESTAÑA ENTERA (secciones de arriba y abajo
+ * incluidas). Vista de impresión propia: una clase en `<body>` que el CSS
+ * de `orto.module.css` usa para esconder todo menos `.convenioImprimible`
+ * SOLO en el diálogo de impresión (`@media print`) — en pantalla ese
+ * bloque nunca se ve. `afterprint` quita la clase sola; el timeout es el
+ * respaldo para navegadores que no disparan ese evento tras cancelar.
+ */
+function imprimirConvenio() {
+  const CLASE = "orto-imprimiendo-convenio";
+  document.body.classList.add(CLASE);
+  const limpiar = () => document.body.classList.remove(CLASE);
+  window.addEventListener("afterprint", limpiar, { once: true });
+  window.setTimeout(limpiar, 5000);
+  window.print();
+}
+
 const ICONO_SECCION = <Wallet size={15} strokeWidth={1.75} />;
 const SUB_SECCION = "Plan de pago, mensualidades y extras";
 
@@ -71,18 +99,30 @@ const ESTILO_CUOTA: Record<CuotaConEstado["estado"], string> = {
   porVencer: orto.tonoTexto2,
 };
 
+/** Solo para la tabla de `.convenioImprimible` — no hay hoja de estilos de impresión que reusar para bordes de tabla. */
+const CELDA_CONVENIO: CSSProperties = { border: "1px solid #999", padding: "6px 10px", textAlign: "left" };
+const CELDA_CONVENIO_CABECERA: CSSProperties = { ...CELDA_CONVENIO, fontWeight: 700, background: "#eee" };
+
 export function SectionFinance(props: SectionFinanceProps) {
-  const [panel, setPanel] = useState<PanelDeCobro | null | "cargando" | "error">("cargando");
+  const compartido = props.panel !== undefined;
+  const [panelPropio, setPanelPropio] = useState<PanelDeCobro | null | "cargando" | "error">("cargando");
+  const panel = compartido ? props.panel! : panelPropio;
+
   const [drawer, setDrawer] = useState<DrawerKind>(null);
 
-  const recargar = useCallback(() => {
-    setPanel("cargando");
+  const recargarPropio = useCallback(() => {
+    setPanelPropio("cargando");
     cargarPanelDeCobro(props.treatmentPlanId).then((r) => {
-      setPanel(r.ok ? r.data : "error");
-    }).catch(() => setPanel("error"));
+      setPanelPropio(r.ok ? r.data : "error");
+    }).catch(() => setPanelPropio("error"));
   }, [props.treatmentPlanId]);
 
-  useEffect(() => { recargar(); }, [recargar]);
+  const recargar = compartido ? props.onReload ?? (() => {}) : recargarPropio;
+
+  useEffect(() => {
+    if (!compartido) recargarPropio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compartido, recargarPropio]);
 
   function cerrarYRecargar() {
     setDrawer(null);
@@ -118,6 +158,9 @@ export function SectionFinance(props: SectionFinanceProps) {
     ? { id: panel.invoice.id, invoiceNumber: panel.invoice.invoiceNumber ?? "", total: panel.invoice.total, paid: panel.invoice.paid, balance: panel.invoice.balance, status: panel.invoice.status, patientName: props.patientName }
     : null;
 
+  const esPorControl = panel.billingMode === "PAGO_POR_CONTROL";
+  const hayDeudaDeControles = Boolean(panel.cobranza && (panel.cobranza.vencidas.length > 0 || panel.cobranza.proximas.length > 0));
+
   return (
     <>
       <Card
@@ -126,11 +169,16 @@ export function SectionFinance(props: SectionFinanceProps) {
         title="Cobro del tratamiento"
         eyebrow={SUB_SECCION}
         action={
-          panel.puedeConfigurarPolitica ? (
-            <Btn variant="secondary" size="sm" icon={<Settings2 size={14} strokeWidth={1.75} aria-hidden />} onClick={() => setDrawer({ kind: "config" })}>
-              Política de cobro
-            </Btn>
-          ) : null
+          <div className="flex items-center gap-2">
+            <Pill color={esPorControl ? "violet" : "slate"} size="xs">
+              {panel.billingModeLabel}
+            </Pill>
+            {panel.puedeConfigurarPolitica ? (
+              <Btn variant="secondary" size="sm" icon={<Settings2 size={14} strokeWidth={1.75} aria-hidden />} onClick={() => setDrawer({ kind: "config" })}>
+                Política de cobro
+              </Btn>
+            ) : null}
+          </div>
         }
       >
         {!panel.invoiceId ? (
@@ -139,14 +187,23 @@ export function SectionFinance(props: SectionFinanceProps) {
               <span className={orto.vacioIcono} aria-hidden>
                 <Wallet size={17} strokeWidth={1.75} />
               </span>
-              <p className={orto.vacioTitulo}>Este caso todavía no tiene un plan de pago</p>
-              <p className={orto.vacioPista}>
-                {panel.redisenoFacturas
-                  ? "Abre la factura del tratamiento con su precio, enganche y mensualidades."
-                  : "El diseño nuevo de facturación está apagado en esta clínica: solo se puede abrir un pago único (sin mensualidades)."}
+              <p className={orto.vacioTitulo}>
+                {esPorControl ? "Este caso todavía no tiene la factura de colocación/enganche" : "Este caso todavía no tiene un plan de pago"}
               </p>
+              <p className={orto.vacioPista}>
+                {esPorControl
+                  ? "En «Pago por control» los controles atendidos se cobran aparte, en Caja — esta factura es solo la colocación/enganche del aparato."
+                  : panel.redisenoFacturas
+                    ? "Abre la factura del tratamiento con su precio, enganche y mensualidades."
+                    : "El diseño nuevo de facturación está apagado en esta clínica: solo se puede abrir un pago único (sin mensualidades)."}
+              </p>
+              {esPorControl && hayDeudaDeControles ? (
+                <p className={`${orto.vacioPista} ${orto.tonoPeligro}`}>
+                  Ya hay controles con factura sin pagar (saldo {fmtMoney(panel.cobranza!.saldoTotal)}) — cóbralos desde Caja.
+                </p>
+              ) : null}
               <Btn variant="primary" className="mt-1" icon={<Plus size={15} strokeWidth={1.75} aria-hidden />} onClick={() => setDrawer({ kind: "abrir-plan" })}>
-                Abrir plan de pago
+                {esPorControl ? "Abrir factura de colocación/enganche" : "Abrir plan de pago"}
               </Btn>
             </div>
           </div>
@@ -192,7 +249,7 @@ export function SectionFinance(props: SectionFinanceProps) {
                     Registrar promesa de pago
                   </Btn>
                 ) : null}
-                <Btn variant="ghost" size="md" icon={<Printer size={15} strokeWidth={1.75} aria-hidden />} onClick={() => window.print()}>
+                <Btn variant="ghost" size="md" icon={<Printer size={15} strokeWidth={1.75} aria-hidden />} onClick={imprimirConvenio}>
                   Imprimir convenio
                 </Btn>
               </div>
@@ -291,6 +348,63 @@ export function SectionFinance(props: SectionFinanceProps) {
           </>
         )}
       </Card>
+
+      {/* Solo existe para el diálogo de impresión (§8 arriba) — en pantalla
+          `.convenioImprimible` es `display: none`. */}
+      {panel.invoiceId && panel.invoice ? (
+        <div className={orto.convenioImprimible}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Convenio de pago</h2>
+          <p style={{ marginBottom: 16 }}>
+            {props.patientName ?? "Paciente"} · {fmtDateShort(new Date().toISOString())}
+          </p>
+          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 20 }}>
+            <tbody>
+              <tr>
+                <td style={CELDA_CONVENIO}>Total del tratamiento</td>
+                <td style={CELDA_CONVENIO}>{fmtMoney(panel.invoice.total)}</td>
+              </tr>
+              <tr>
+                <td style={CELDA_CONVENIO}>Pagado</td>
+                <td style={CELDA_CONVENIO}>{fmtMoney(panel.invoice.paid)}</td>
+              </tr>
+              <tr>
+                <td style={CELDA_CONVENIO}>Saldo pendiente</td>
+                <td style={CELDA_CONVENIO}>{fmtMoney(panel.invoice.balance)}</td>
+              </tr>
+              {panel.billingDelCaso.discountLabel ? (
+                <tr>
+                  <td style={CELDA_CONVENIO}>Descuento aplicado</td>
+                  <td style={CELDA_CONVENIO}>
+                    {panel.billingDelCaso.discountLabel} ({panel.billingDelCaso.discountPct}%)
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+          {panel.cobranza && calendarioCompleto(panel.cobranza).length > 0 ? (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={CELDA_CONVENIO_CABECERA}>Cuota</th>
+                  <th style={CELDA_CONVENIO_CABECERA}>Vence</th>
+                  <th style={CELDA_CONVENIO_CABECERA}>Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calendarioCompleto(panel.cobranza).map((q) => (
+                  <tr key={`${q.esEnganche ? "e" : "p"}-${q.numero}`}>
+                    <td style={CELDA_CONVENIO}>{q.esEnganche ? "Enganche" : `Mes ${q.numero}`}</td>
+                    <td style={CELDA_CONVENIO}>{fmtDay(q.vencimiento)}</td>
+                    <td style={CELDA_CONVENIO}>{fmtMoney(q.importe)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+          <p style={{ marginTop: 40 }}>_________________________________</p>
+          <p>Firma del paciente / responsable</p>
+        </div>
+      ) : null}
 
       {drawer?.kind === "abrir-plan" ? (
         <InvoiceEditorModal

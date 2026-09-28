@@ -13,11 +13,11 @@
 
 import { useId, useState } from "react";
 import toast from "react-hot-toast";
-import { CalendarClock, Lock, MessageSquareText, Plus, Stethoscope, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarClock, ClipboardList, Lock, MessageSquareText, Plus, Stethoscope, Trash2, Wallet } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { Pantalla, Tarjeta } from "@/components/specialties/orthodontics/modulo/piezas";
 import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
-import { updateOrthoClinicSettings } from "@/app/actions/orthodontics";
+import { updateOrthoClinicSettings, listarProcedimientosDeOrtodonciaAction, sembrarProcedimientosSugeridosOrtodoncia } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import type {
   OrthoAppointmentTypeOption,
@@ -25,11 +25,20 @@ import type {
 } from "@/lib/orthodontics/clinic-settings-db";
 import type { OrthoConfigDoctorOption } from "@/app/actions/orthodontics/getOrthoClinicSettings";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
+import { ORTHO_BILLING_MODE_LABELS, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
+import type { OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
 
 export interface OrthoConfiguracionClientProps {
   settings: OrthoClinicSettings;
   doctors: OrthoConfigDoctorOption[];
+  procedimientos: OrthoProcedureRow[];
 }
+
+const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
+  PRECIO_TOTAL: "El caso tiene un precio total con enganche y mensualidades, como hoy.",
+  PAGO_POR_CONTROL:
+    "Sin precio total: cada control atendido se cobra aparte con el precio de «Control de ortodoncia» del catálogo, y la colocación/enganche va en su propia factura.",
+};
 
 function nuevoIdTipoCita(existentes: OrthoAppointmentTypeOption[]): string {
   let n = existentes.length + 1;
@@ -50,7 +59,7 @@ const PLANTILLAS_CLAVES: { clave: string; etiqueta: string; ayuda: string }[] = 
   },
 ];
 
-export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguracionClientProps) {
+export function OrthoConfiguracionClient({ settings, doctors, procedimientos: procedimientosIniciales }: OrthoConfiguracionClientProps) {
   const [defaultTreatingDoctorId, setDefaultTreatingDoctorId] = useState<string>(
     settings.defaultTreatingDoctorId ?? "",
   );
@@ -58,7 +67,37 @@ export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguraci
     settings.appointmentTypes,
   );
   const [templates, setTemplates] = useState<Record<string, string>>(settings.messageTemplates);
+  const [billingMode, setBillingMode] = useState<OrthoBillingMode>(settings.billingMode);
   const [saving, setSaving] = useState(false);
+  const [procedimientos, setProcedimientos] = useState<OrthoProcedureRow[]>(procedimientosIniciales);
+  const [sembrando, setSembrando] = useState(false);
+
+  const controlDelCatalogo = procedimientos.find((p) => p.name === TIPO_CITA_CONTROL_ORTO);
+  const controlTienePrecio = Boolean(controlDelCatalogo?.isActive && controlDelCatalogo.basePrice > 0);
+
+  async function cargarSugeridos() {
+    setSembrando(true);
+    try {
+      const res = await sembrarProcedimientosSugeridosOrtodoncia();
+      if (isFailure(res)) {
+        toast.error(res.error);
+        return;
+      }
+      setProcedimientos(res.data.procedimientos);
+      toast.success(
+        res.data.creados > 0
+          ? `${res.data.creados} procedimientos sugeridos agregados — ajusta precios y "incluido/con costo" abajo.`
+          : "El catálogo de ortodoncia ya tenía procedimientos.",
+      );
+    } finally {
+      setSembrando(false);
+    }
+  }
+
+  async function recargarProcedimientos() {
+    const res = await listarProcedimientosDeOrtodonciaAction();
+    if (!isFailure(res)) setProcedimientos(res.data.procedimientos);
+  }
 
   function actualizarTipo(id: string, campo: "id" | "label", valor: string) {
     setAppointmentTypes((arr) => arr.map((t) => (t.id === id ? { ...t, [campo]: valor } : t)));
@@ -92,6 +131,7 @@ export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguraci
         defaultTreatingDoctorId: defaultTreatingDoctorId || null,
         appointmentTypes,
         messageTemplates: templates,
+        billingMode,
       });
       if (isFailure(res)) {
         toast.error(res.error);
@@ -147,6 +187,72 @@ export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguraci
                   </div>
                 )}
               </div>
+            </div>
+          </Tarjeta>
+
+          <Tarjeta
+            icono={Wallet}
+            titulo="Modo de cobro"
+            sub="Cómo se cobra el tratamiento. Solo aplica a los casos que se abran DESPUÉS de guardar — un caso ya abierto conserva el modo con el que nació."
+          >
+            <div className={s.tarjetaCuerpo} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {(Object.keys(ORTHO_BILLING_MODE_LABELS) as OrthoBillingMode[]).map((modo) => {
+                const activo = billingMode === modo;
+                return (
+                  <label
+                    key={modo}
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      padding: "11px 13px",
+                      border: `1px solid ${activo ? "var(--pr-activo)" : "var(--pr-borde)"}`,
+                      borderRadius: "var(--pr-radio-s)",
+                      background: activo ? "var(--pr-activo-suave)" : "var(--pr-tarjeta-2)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="billingMode"
+                      value={modo}
+                      checked={activo}
+                      onChange={() => setBillingMode(modo)}
+                      style={{ marginTop: 3, flexShrink: 0 }}
+                    />
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--pr-texto)" }}>
+                        {ORTHO_BILLING_MODE_LABELS[modo]}
+                      </span>
+                      <span style={{ display: "block", fontSize: 12, lineHeight: 1.45, color: "var(--pr-texto-3)", marginTop: 2 }}>
+                        {EXPLICACION_MODO[modo]}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+              {billingMode === "PAGO_POR_CONTROL" && !controlTienePrecio ? (
+                <div
+                  role="alert"
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "flex-start",
+                    padding: "10px 12px",
+                    borderRadius: "var(--pr-radio-s)",
+                    background: "var(--pr-alerta-suave)",
+                    color: "var(--pr-alerta)",
+                    fontSize: 12,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <AlertTriangle size={15} strokeWidth={1.9} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden />
+                  <span>
+                    El catálogo no tiene «{TIPO_CITA_CONTROL_ORTO}» activo con precio — los controles no se facturarán
+                    solos hasta que lo agregues en «Procedimientos de ortodoncia», abajo.
+                  </span>
+                </div>
+              ) : null}
             </div>
           </Tarjeta>
 
@@ -235,6 +341,40 @@ export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguraci
           </div>
         </Tarjeta>
 
+        <div style={{ gridColumn: "1 / -1" }}>
+          <Tarjeta
+            icono={ClipboardList}
+            titulo="Procedimientos de ortodoncia"
+            sub={`Precio y si va incluido en el tratamiento o se cobra aparte. «${TIPO_CITA_CONTROL_ORTO}» no tiene ese interruptor: en «${ORTHO_BILLING_MODE_LABELS.PRECIO_TOTAL}» va incluido en la mensualidad, en «${ORTHO_BILLING_MODE_LABELS.PAGO_POR_CONTROL}» se cobra con el precio de aquí.`}
+          >
+            <div className={s.tarjetaCuerpo}>
+              {procedimientos.length === 0 ? (
+                <div className={s.vacio}>
+                  <span className={s.vacioIcono} aria-hidden>
+                    <ClipboardList size={17} strokeWidth={1.75} />
+                  </span>
+                  <p className={s.vacioTitulo}>Todavía no hay procedimientos de ortodoncia en el catálogo.</p>
+                  <p className={s.vacioPista}>
+                    Puedes cargar una lista sugerida (precios de arranque, editables después) o agregarlos uno por
+                    uno desde Procedimientos.
+                  </p>
+                  <div className={s.vacioAcciones}>
+                    <ButtonNew type="button" variant="primary" onClick={cargarSugeridos} disabled={sembrando}>
+                      {sembrando ? "Cargando…" : "Cargar procedimientos sugeridos"}
+                    </ButtonNew>
+                  </div>
+                </div>
+              ) : (
+                <ul style={{ display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
+                  {procedimientos.map((p) => (
+                    <FilaProcedimiento key={p.id} procedimiento={p} onGuardado={recargarProcedimientos} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Tarjeta>
+        </div>
+
         <div className={s.barraGuardar}>
           <ButtonNew type="button" variant="primary" onClick={guardar} disabled={saving}>
             {saving ? "Guardando…" : "Guardar cambios"}
@@ -242,5 +382,129 @@ export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguraci
         </div>
       </div>
     </Pantalla>
+  );
+}
+
+/** Una fila del catálogo de ortodoncia: precio + incluido/con costo, con su propio guardado (PATCH /api/procedures/[id] — el mismo endpoint del modal de Procedimientos de siempre). */
+function FilaProcedimiento({ procedimiento, onGuardado }: { procedimiento: OrthoProcedureRow; onGuardado: () => void }) {
+  const esControl = procedimiento.name === TIPO_CITA_CONTROL_ORTO;
+  const [basePrice, setBasePrice] = useState(String(procedimiento.basePrice));
+  const [incluido, setIncluido] = useState<boolean | null>(procedimiento.orthoIncludedInTreatment);
+  const [guardando, setGuardando] = useState(false);
+  const idPrecio = useId();
+
+  const precioValido = basePrice.trim() !== "" && Number.isFinite(Number(basePrice)) && Number(basePrice) >= 0;
+  const dirty =
+    (precioValido && Number(basePrice) !== procedimiento.basePrice) ||
+    (!esControl && incluido !== procedimiento.orthoIncludedInTreatment);
+
+  async function guardarFila() {
+    if (!precioValido) {
+      toast.error("Precio inválido.");
+      return;
+    }
+    setGuardando(true);
+    try {
+      const body: Record<string, unknown> = { basePrice: Number(basePrice) };
+      if (!esControl) body.orthoIncludedInTreatment = incluido;
+      const res = await fetch(`/api/procedures/${procedimiento.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error ?? "No se pudo guardar el procedimiento.");
+        return;
+      }
+      toast.success(`«${procedimiento.name}» actualizado.`);
+      onGuardado();
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <li
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 12px",
+        border: "1px solid var(--pr-borde)",
+        borderRadius: "var(--pr-radio-s)",
+        background: "var(--pr-tarjeta-2)",
+      }}
+    >
+      <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--pr-texto)" }}>{procedimiento.name}</span>
+        {esControl ? (
+          <span style={{ display: "block", fontSize: 11.5, color: "var(--pr-texto-3)", marginTop: 2 }}>
+            Su cobro depende del modo de cobro de la clínica (arriba), no de un interruptor aquí.
+          </span>
+        ) : null}
+        {!procedimiento.isActive ? (
+          <span style={{ display: "block", fontSize: 11.5, color: "var(--pr-alerta)", marginTop: 2 }}>
+            Inactivo — no aparece al facturar.
+          </span>
+        ) : null}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "0 0 120px" }}>
+        <label className={s.campoEtiqueta} htmlFor={idPrecio}>
+          Precio
+        </label>
+        <input
+          id={idPrecio}
+          type="number"
+          min={0}
+          step="0.01"
+          className="input-new"
+          value={basePrice}
+          onChange={(e) => setBasePrice(e.target.value)}
+          style={{ minHeight: 34, padding: "6px 9px" }}
+        />
+      </div>
+
+      {!esControl ? (
+        <div style={{ display: "flex", gap: 6, flex: "0 0 auto" }} role="radiogroup" aria-label={`Incluido o con costo — ${procedimiento.name}`}>
+          {([
+            { valor: true, etiqueta: "Incluido" },
+            { valor: false, etiqueta: "Con costo aparte" },
+          ] as const).map((op) => {
+            const activo = incluido === op.valor;
+            return (
+              <button
+                key={String(op.valor)}
+                type="button"
+                role="radio"
+                aria-checked={activo}
+                onClick={() => setIncluido(op.valor)}
+                style={{
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: "var(--pr-radio-s)",
+                  border: `1px solid ${activo ? "var(--pr-activo)" : "var(--pr-borde)"}`,
+                  background: activo ? "var(--pr-activo-suave)" : "var(--pr-tarjeta)",
+                  color: activo ? "var(--pr-activo)" : "var(--pr-texto-2)",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {op.etiqueta}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {dirty ? (
+        <ButtonNew type="button" variant="secondary" size="sm" onClick={guardarFila} disabled={guardando}>
+          {guardando ? "Guardando…" : "Guardar"}
+        </ButtonNew>
+      ) : null}
+    </li>
   );
 }

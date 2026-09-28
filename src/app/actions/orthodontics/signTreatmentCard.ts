@@ -18,7 +18,7 @@ import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
-import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
+import { esCitaControlOrto, TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { buscarPrecioControlOrto } from "@/lib/orthodontics/catalog-procedures";
@@ -114,7 +114,7 @@ export type SignTreatmentCardInput = z.input<typeof inputSchema>;
 
 export async function signTreatmentCard(
   input: unknown,
-): Promise<ActionResult<{ cardId: string }>> {
+): Promise<ActionResult<{ cardId: string; avisoControlSinFacturar?: string }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -320,12 +320,18 @@ export async function signTreatmentCard(
     // que el bloque de columnas nuevas de arriba: nada de esto puede
     // revertir una firma ya hecha. Sin catálogo o factura ya existente
     // (re-firma de la misma hoja), no pasa nada — no se duplica.
+    //
+    // «Nada en silencio» (pregunta de Rafael, ws1-t1): si el control no se
+    // pudo facturar, `avisoControlSinFacturar` viaja de vuelta al cliente
+    // para que muestre un toast — un `console.warn` nadie lo ve en Recepción.
+    let avisoControlSinFacturar: string | undefined;
     if (citaDeControl && esCitaControlOrto(citaDeControl.type)) {
       try {
         const modo = normalizarOrthoBillingMode(await cargarModoDeCobro(plan.clinicId, plan.id));
         if (modo === "PAGO_POR_CONTROL") {
           const precio = await buscarPrecioControlOrto(plan.clinicId);
           if (!precio) {
+            avisoControlSinFacturar = `Este control no se facturó: falta precio de "${TIPO_CITA_CONTROL_ORTO}" en el catálogo (Configuración → Procedimientos de ortodoncia).`;
             console.warn("[ortho] signTreatmentCard: modo PAGO_POR_CONTROL sin \"Control de ortodoncia\" en el catálogo — no se facturó este control");
           } else {
             const factura = await crearFacturaDesdeCita({
@@ -338,11 +344,13 @@ export async function signTreatmentCard(
             if (factura.ok && factura.invoice) {
               await vincularExtraAlCaso({ invoiceId: factura.invoice.id, treatmentPlanId: plan.id, clinicId: plan.clinicId });
             } else if (factura.error && factura.error !== "invoice_already_exists") {
+              avisoControlSinFacturar = "Este control no se facturó: hubo un problema al crear la factura. Cóbralo a mano desde Caja.";
               console.warn("[ortho] signTreatmentCard: no se pudo facturar el control (modo PAGO_POR_CONTROL):", factura.error, factura.reason);
             }
           }
         }
       } catch (e) {
+        avisoControlSinFacturar = "Este control no se facturó: hubo un problema al crear la factura. Cóbralo a mano desde Caja.";
         console.warn("[ortho] signTreatmentCard: falló la facturación automática del control (no revierte la firma):", e);
       }
     }
@@ -362,7 +370,7 @@ export async function signTreatmentCard(
 
     revalidatePath(`/dashboard/specialties/orthodontics/${plan.patientId}`);
     revalidatePath(`/dashboard/patients/${plan.patientId}`);
-    return ok({ cardId });
+    return ok({ cardId, ...(avisoControlSinFacturar ? { avisoControlSinFacturar } : {}) });
   } catch (e) {
     console.error("[ortho] signTreatmentCard failed:", e);
     return fail("No se pudo firmar la cita");
