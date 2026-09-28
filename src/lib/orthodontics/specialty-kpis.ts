@@ -8,7 +8,7 @@ import type {
   OrthoSpecialtyKpis,
 } from "./load-patients";
 
-const ACTIVE_PLAN_STATUSES: OrthoTreatmentStatus[] = [
+export const ACTIVE_PLAN_STATUSES: OrthoTreatmentStatus[] = [
   "PLANNED",
   "IN_PROGRESS",
   "ON_HOLD",
@@ -48,4 +48,251 @@ export function computeOrthoKpis(
     overduePaymentsAmountMxn,
     finishingSoon,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tablero y alertas (Ola 1, ws1-t2) — T1-T7 y L1-L5, alcance-ortodoncia.html.
+//
+// Decisión 1 de la arquitectura (REPORTE-ws1-t8.md): el dinero vive en la
+// factura a plazos del tratamiento, NUNCA en OrthoPaymentPlan/OrthoInstallment
+// (esas tablas quedan ocultas — bloque S). Por eso estos KPIs NO usan
+// `computeOrthoKpis` de arriba (que sí lee el modelo viejo, y sigue vivo solo
+// para la vista antigua `/dashboard/specialties/orthodontics`, S1, todavía sin
+// ocultar): reciben el resumen de `cobranzaDelCaso` (cobranza-caso.ts) ya
+// calculado por el cargador (tablero-data.ts / alerts-data.ts), que lee la
+// factura real. Puro: sin Prisma, sin `Date.now()` implícito.
+//
+// Decisión 2: los controles son citas de la Agenda (`TIPO_CITA_CONTROL_ORTO`),
+// no `OrthodonticControlAppointment`. Estas funciones tampoco conocen ese
+// modelo viejo — reciben citas ya filtradas por el cargador.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import type { CobranzaDelCaso } from "./cobranza-caso";
+import { differenceInMonths } from "date-fns";
+
+/**
+ * ¿Mismo mes calendario, en UTC? A propósito NO se usa `isSameMonth` de
+ * date-fns (compara en la zona LOCAL del proceso): una `installedAt` guardada
+ * a medianoche UTC cruza de mes al leerse en un servidor con offset negativo
+ * — el mismo bug que ya tiene `load-patients.ts` con `startOfDay(now)` del
+ * servidor (ver cabecero de cobranza-caso.ts). "Este mes" aquí es el mes de
+ * `ahora` en UTC, consistente con `computeMonthlyProjection` (que ya bucketea
+ * en UTC) — no es la zona de la clínica, pero tampoco depende del huso del
+ * proceso.
+ */
+export function isSameCalendarMonthUtc(a: Date, b: Date): boolean {
+  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth();
+}
+
+/** Un caso (plan de tratamiento) con su resumen de cobranza ya resuelto. */
+export interface OrthoCaseSummary {
+  planId: string;
+  patientId: string;
+  patientName: string;
+  treatingDoctorId: string | null;
+  treatingDoctorName: string | null;
+  status: OrthoTreatmentStatus;
+  installedAt: Date | null;
+  estimatedDurationMonths: number | null;
+  droppedOutAt: Date | null;
+  statusUpdatedAt: Date;
+  /** `null` = sin factura de tratamiento, o sin condiciones cargadas: nada que cobrar todavía (T3/L1 lo ignoran, no lo cuentan como "al día"). */
+  cobranza: CobranzaDelCaso | null;
+}
+
+/** T1 — casos con un plan en estado "en tratamiento" (excluye DIAGNOSIS_ONLY, COMPLETED, DROPPED_OUT). */
+export function computeActiveCasesCount(cases: OrthoCaseSummary[]): number {
+  return cases.filter((c) => ACTIVE_PLAN_STATUSES.includes(c.status)).length;
+}
+
+export interface OverdueBalanceSummary {
+  /** Cuántos casos tienen al menos una cuota vencida sin saldar. */
+  count: number;
+  /** Suma de lo que falta por pagar de esas cuotas vencidas, en pesos. */
+  amountMxn: number;
+}
+
+/** T3 / L1 — saldos vencidos, leídos de la factura del tratamiento (nunca de OrthoPaymentPlan). */
+export function computeOverdueBalances(cases: OrthoCaseSummary[]): OverdueBalanceSummary {
+  let count = 0;
+  let amount = 0;
+  for (const c of cases) {
+    const vencidas = c.cobranza?.vencidas ?? [];
+    if (vencidas.length === 0) continue;
+    count++;
+    amount += vencidas.reduce((s, q) => s + q.falta, 0);
+  }
+  return { count, amountMxn: Math.round(amount) };
+}
+
+export interface OverduePatientEntry {
+  patientId: string;
+  patientName: string;
+  amountMxn: number;
+  /** "YYYY-MM-DD" de la cuota vencida más vieja. */
+  oldestDueDate: string | null;
+}
+
+/** L1 — lista "mensualidad vencida" para la pantalla de Alertas. */
+export function listOverduePatients(cases: OrthoCaseSummary[]): OverduePatientEntry[] {
+  const out: OverduePatientEntry[] = [];
+  for (const c of cases) {
+    const vencidas = c.cobranza?.vencidas ?? [];
+    if (vencidas.length === 0) continue;
+    const amountMxn = Math.round(vencidas.reduce((s, q) => s + q.falta, 0));
+    const oldest = vencidas.reduce<string | null>((min, q) => {
+      if (!q.vencimiento) return min;
+      return min === null || q.vencimiento < min ? q.vencimiento : min;
+    }, null);
+    out.push({ patientId: c.patientId, patientName: c.patientName, amountMxn, oldestDueDate: oldest });
+  }
+  return out.sort((a, b) => b.amountMxn - a.amountMxn);
+}
+
+export interface DurationAlertEntry {
+  patientId: string;
+  patientName: string;
+  monthInTreatment: number;
+  estimatedDurationMonths: number;
+  /** Negativo = ya pasó su fecha estimada. */
+  remainingMonths: number;
+}
+
+/** L4 — "tratamiento próximo a terminar": IN_PROGRESS con 0 o 1 mes restante. */
+export function listFinishingSoon(cases: OrthoCaseSummary[], ahora: Date): DurationAlertEntry[] {
+  return durationAlertEntries(cases, ahora).filter(
+    (e) => e.remainingMonths >= 0 && e.remainingMonths <= 1,
+  );
+}
+
+/** L5 — "tratamiento pasado de su fecha": ya rebasó la duración estimada. */
+export function listPastDue(cases: OrthoCaseSummary[], ahora: Date): DurationAlertEntry[] {
+  return durationAlertEntries(cases, ahora).filter((e) => e.remainingMonths < 0);
+}
+
+function durationAlertEntries(cases: OrthoCaseSummary[], ahora: Date): DurationAlertEntry[] {
+  return cases
+    .filter((c) => c.status === "IN_PROGRESS" && c.installedAt !== null && c.estimatedDurationMonths !== null)
+    .map((c) => {
+      const monthInTreatment = Math.max(0, differenceInMonths(ahora, c.installedAt!));
+      const estimatedDurationMonths = c.estimatedDurationMonths!;
+      return {
+        patientId: c.patientId,
+        patientName: c.patientName,
+        monthInTreatment,
+        estimatedDurationMonths,
+        remainingMonths: estimatedDurationMonths - monthInTreatment,
+      };
+    });
+}
+
+export interface MonthlyProjectionBucket {
+  /** "YYYY-MM". */
+  monthKey: string;
+  amountMxn: number;
+}
+
+/** T6 — lo que va a entrar por mensualidades, sumando las cuotas "próximas" de cada caso, por mes. */
+export function computeMonthlyProjection(
+  cases: OrthoCaseSummary[],
+  ahora: Date,
+  months = 6,
+): MonthlyProjectionBucket[] {
+  const buckets = new Map<string, number>();
+  for (let i = 0; i < months; i++) {
+    const d = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() + i, 1));
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    buckets.set(key, 0);
+  }
+  for (const c of cases) {
+    for (const q of c.cobranza?.proximas ?? []) {
+      if (!q.vencimiento) continue;
+      const key = q.vencimiento.slice(0, 7);
+      if (buckets.has(key)) buckets.set(key, buckets.get(key)! + q.falta);
+    }
+  }
+  return Array.from(buckets, ([monthKey, amountMxn]) => ({ monthKey, amountMxn: Math.round(amountMxn) }));
+}
+
+export interface PlacementsAndRemovals {
+  /** Tratamientos que colocaron aparatología este mes (`installedAt`). */
+  placements: number;
+  /** Tratamientos que retiraron aparatología este mes (pasaron a RETENTION o COMPLETED). */
+  removals: number;
+}
+
+/** T7 — colocaciones y retiros del mes. */
+export function computePlacementsAndRemovals(cases: OrthoCaseSummary[], ahora: Date): PlacementsAndRemovals {
+  const placements = cases.filter(
+    (c) => c.installedAt !== null && isSameCalendarMonthUtc(c.installedAt, ahora),
+  ).length;
+  const removals = cases.filter(
+    (c) =>
+      (c.status === "RETENTION" || c.status === "COMPLETED") &&
+      isSameCalendarMonthUtc(c.statusUpdatedAt, ahora),
+  ).length;
+  return { placements, removals };
+}
+
+export interface ProductionByDoctor {
+  doctorId: string | null;
+  doctorName: string;
+  amountMxn: number;
+}
+
+/** T4 — producción del mes (cobrado en facturas ligadas a un caso), por doctor tratante. */
+export function computeProductionByDoctor(
+  payments: Array<{ doctorId: string | null; doctorName: string; amountMxn: number }>,
+): ProductionByDoctor[] {
+  const map = new Map<string, ProductionByDoctor>();
+  for (const p of payments) {
+    const key = p.doctorId ?? "__sin_doctor__";
+    const existing = map.get(key) ?? { doctorId: p.doctorId, doctorName: p.doctorName, amountMxn: 0 };
+    existing.amountMxn += p.amountMxn;
+    map.set(key, existing);
+  }
+  return Array.from(map.values())
+    .map((p) => ({ ...p, amountMxn: Math.round(p.amountMxn) }))
+    .sort((a, b) => b.amountMxn - a.amountMxn);
+}
+
+export interface ValoracionesSummary {
+  total: number;
+  aceptadas: number;
+  /** Presentadas, ni aceptadas ni rechazadas: para llamar. */
+  pendientes: number;
+}
+
+/** T5 — de las valoraciones (presupuestos) de pacientes con caso de ortodoncia, cuántas convierten. */
+export function computeValoracionesSummary(
+  quotes: Array<{ status: string; acceptedAt: Date | null; rejectedAt: Date | null }>,
+): ValoracionesSummary {
+  const total = quotes.length;
+  const aceptadas = quotes.filter((q) => q.status === "ACCEPTED" || q.acceptedAt !== null).length;
+  const pendientes = quotes.filter(
+    (q) => q.status === "PRESENTED" && q.acceptedAt === null && q.rejectedAt === null,
+  ).length;
+  return { total, aceptadas, pendientes };
+}
+
+export interface MissingNextControlEntry {
+  patientId: string;
+  patientName: string;
+}
+
+/** L2 — "falta de control": caso activo sin ninguna cita de control futura en la Agenda. */
+export function listMissingNextControl(
+  cases: OrthoCaseSummary[],
+  patientIdsWithFutureControl: ReadonlySet<string>,
+): MissingNextControlEntry[] {
+  const seen = new Set<string>();
+  const out: MissingNextControlEntry[] = [];
+  for (const c of cases) {
+    if (!ACTIVE_PLAN_STATUSES.includes(c.status)) continue;
+    if (patientIdsWithFutureControl.has(c.patientId)) continue;
+    if (seen.has(c.patientId)) continue;
+    seen.add(c.patientId);
+    out.push({ patientId: c.patientId, patientName: c.patientName });
+  }
+  return out;
 }
