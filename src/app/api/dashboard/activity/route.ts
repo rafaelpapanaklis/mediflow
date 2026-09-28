@@ -7,6 +7,13 @@ import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { dateISOInTz } from "@/lib/agenda/legacy-helpers";
 import { cachedByKey, claveDeClinica } from "@/lib/route-cache";
+import { hasPermission } from "@/lib/auth/permissions";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import {
+  eventoDeCasoAbierto,
+  eventoDeCitaCompletada,
+  eventoDePago,
+} from "@/lib/orthodontics/actividad-campana";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +29,7 @@ const CACHE_TTL_MS = 30_000;
 
 interface ActivityEvent {
   id: string;
-  type: "payment" | "patient_new" | "appointment_completed" | "booking_request";
+  type: "payment" | "patient_new" | "appointment_completed" | "booking_request" | "ortho_case";
   title: string;
   subtitle?: string;
   amount?: number;
@@ -72,7 +79,18 @@ export async function GET(req: NextRequest) {
   // clínica (o al revés, que un admin viera la lista recortada de un doctor);
   // el rol, porque la visibilidad cambia con él y un cambio de rol no puede
   // heredar la lista del rol anterior.
-  const [solicitudes, [paidInvoices, newPatients, doneAppointments], agendaNueva] = await Promise.all([
+  //
+  // ORTODONCIA (ws1-t5): la campana sabe de ortodoncia SOLO en sedes dentales
+  // con el módulo contratado de verdad y para quien tiene el permiso del
+  // módulo. Va DENTRO de la misma caché (clínica + persona + rol), acotado a
+  // la clínica de la sesión y con la misma visibilidad por paciente. Si algo
+  // de ortodoncia falla (tablas sin crear, base ocupada), la campana sale
+  // igual que antes, sin esos eventos.
+  const quien = { role: ctx.role as any, permissionsOverride: ctx.permissionsOverride };
+  const puedeOrtodoncia =
+    ctx.clinicCategory === "DENTAL" && !ctx.isPlanExpired && hasPermission(quien, "specialties.orthodontics");
+
+  const [solicitudes, [paidInvoices, newPatients, doneAppointments, orto], agendaNueva] = await Promise.all([
     cachedByKey(
       claveDeClinica("activity-solicitudes", ctx.clinicId),
       CACHE_TTL_MS,
@@ -100,8 +118,8 @@ export async function GET(req: NextRequest) {
     cachedByKey(
       claveDeClinica("activity-recent", ctx.clinicId, ctx.userId, ctx.role),
       CACHE_TTL_MS,
-      () =>
-        Promise.all([
+      async () => {
+        const [facturas, pacientes, citas, casosNuevos] = await Promise.all([
           prisma.invoice.findMany({
             where: { clinicId: ctx.clinicId, status: { in: ["PAID", "PARTIAL"] }, ...(relatedVis.length ? { AND: relatedVis } : {}) },
             select: { id: true, paid: true, paymentMethod: true, paidAt: true, updatedAt: true,
@@ -117,12 +135,55 @@ export async function GET(req: NextRequest) {
           }),
           prisma.appointment.findMany({
             where: { clinicId: ctx.clinicId, status: "COMPLETED", ...(relatedVis.length ? { AND: relatedVis } : {}) },
-            select: { id: true, updatedAt: true, startsAt: true,
+            select: { id: true, updatedAt: true, startsAt: true, type: true, patientId: true,
               patient: { select: { firstName: true, lastName: true } } },
             orderBy: { updatedAt: "desc" },
             take: 10,
           }),
-        ]),
+          puedeOrtodoncia
+            ? hasActiveOrthodonticsModule(ctx.clinicId)
+                .then((activo) =>
+                  activo
+                    ? prisma.orthodonticTreatmentPlan.findMany({
+                        where: {
+                          clinicId: ctx.clinicId,
+                          deletedAt: null,
+                          ...(relatedVis.length ? { AND: relatedVis } : {}),
+                        },
+                        select: {
+                          id: true, patientId: true, createdAt: true,
+                          patient: { select: { firstName: true, lastName: true } },
+                        },
+                        orderBy: { createdAt: "desc" },
+                        take: 10,
+                      })
+                    : null,
+                )
+                .catch(() => null)
+            : Promise.resolve(null),
+        ]);
+
+        // `casosNuevos === null` = sin acceso a ortodoncia (o no se pudo leer).
+        // ¿Cuáles de los pagos son del plan de pago de un caso? Una consulta,
+        // solo si hay acceso y hay pagos que mirar.
+        let facturasDeCaso: string[] = [];
+        if (casosNuevos !== null && facturas.length > 0) {
+          facturasDeCaso = await prisma.orthodonticTreatmentPlan
+            .findMany({
+              where: { clinicId: ctx.clinicId, deletedAt: null, invoiceId: { in: facturas.map((f) => f.id) } },
+              select: { invoiceId: true },
+            })
+            .then((filas) => filas.map((f) => f.invoiceId).filter((id): id is string => !!id))
+            .catch(() => []);
+        }
+
+        return [
+          facturas,
+          pacientes,
+          citas,
+          { acceso: casosNuevos !== null, casosNuevos: casosNuevos ?? [], facturasDeCaso },
+        ] as const;
+      },
     ),
     menuDosNivelesEncendido(ctx.clinicId),
   ]);
@@ -152,8 +213,7 @@ export async function GET(req: NextRequest) {
     ...paidInvoices.map(i => ({
       id: `inv-${i.id}`,
       type: "payment" as const,
-      title: `Pago recibido — ${i.patient.firstName} ${i.patient.lastName}`,
-      subtitle: `$${Number(i.paid).toLocaleString("es-MX")}${i.paymentMethod ? ` · ${i.paymentMethod}` : ""}`,
+      ...eventoDePago(i, { esDeOrtodoncia: orto.facturasDeCaso.includes(i.id) }),
       amount: Number(i.paid),
       href: `/dashboard/billing?focus=${i.id}`,
       at: i.paidAt ?? i.updatedAt,
@@ -168,10 +228,10 @@ export async function GET(req: NextRequest) {
     ...doneAppointments.map(a => ({
       id: `app-${a.id}`,
       type: "appointment_completed" as const,
-      title: `Cita completada — ${a.patient.firstName} ${a.patient.lastName}`,
-      href: hrefCita(a),
+      ...eventoDeCitaCompletada(a, { accesoOrtodoncia: orto.acceso, hrefDeLaCita: hrefCita(a) }),
       at: a.updatedAt,
     })),
+    ...orto.casosNuevos.map(eventoDeCasoAbierto),
     ...solicitudes.map(s => ({
       id: `req-${s.id}`,
       type: "booking_request" as const,

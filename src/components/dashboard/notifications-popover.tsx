@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, Banknote, UserPlus, CheckCircle2, CalendarClock } from "lucide-react";
+import { Bell, Banknote, UserPlus, CheckCircle2, CalendarClock, Smile } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { isAbortError } from "@/lib/fetch-safe";
@@ -14,7 +14,7 @@ import c from "@/components/dashboard/topbar-rediseno/piezas-topbar.module.css";
 
 interface ActivityEvent {
   id: string;
-  type: "payment" | "patient_new" | "appointment_completed" | "booking_request";
+  type: "payment" | "patient_new" | "appointment_completed" | "booking_request" | "ortho_case";
   title: string;
   subtitle?: string;
   amount?: number;
@@ -27,6 +27,8 @@ const TYPE_ICON = {
   patient_new: { Icon: UserPlus, color: "#a78bfa" },
   appointment_completed: { Icon: CheckCircle2, color: "#38bdf8" },
   booking_request: { Icon: CalendarClock, color: "#fbbf24" },
+  // Caso de ortodoncia abierto (ws1-t5): el mismo icono que el módulo en el menú.
+  ortho_case: { Icon: Smile, color: "#a78bfa" },
 };
 /** Un tipo desconocido (feed más nuevo que este bundle) no debe tumbar la campana. */
 const FALLBACK_ICON = { Icon: Bell, color: "#94a3b8" };
@@ -37,6 +39,7 @@ const TONO_NUEVO: Record<ActivityEvent["type"], string> = {
   patient_new: c.tonoMarca,
   appointment_completed: c.tonoInfo,
   booking_request: c.tonoAlerta,
+  ortho_case: c.tonoMarca,
 };
 
 /**
