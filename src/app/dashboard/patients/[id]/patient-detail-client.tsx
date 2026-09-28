@@ -27,6 +27,9 @@ import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patie
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { PaymentModal } from "@/components/dashboard/billing/payment-modal";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
+import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
+import { todayLocalISO } from "@/lib/billing/paid-at";
+import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { BillingTab } from "@/components/dashboard/patient-detail/billing-tab";
 import { ConsentsTab } from "@/components/dashboard/patient-detail/consents-tab";
 import { NotaEvolucionPanel } from "@/components/dashboard/nota-evolucion/nota-evolucion-panel";
@@ -570,6 +573,10 @@ export function PatientDetailClient({
   // PaymentModal montado abajo ("Cobrar ahora" del rail/hero y "Cobrar" por
   // fila del tab Facturación).
   const [directPayInvoice, setDirectPayInvoice] = useState<any | null>(null);
+  // ws1-t10 (H68): la mensualidad o lo vencido de `directPayInvoice`, si es a
+  // plazos — 0 (saldo completo) sin eso. `openDirectPayment` la calcula ANTES
+  // de abrir el modal para que el campo nunca nazca en el saldo íntegro.
+  const [directPayMontoSugerido, setDirectPayMontoSugerido] = useState(0);
   // Evita confirmar dos veces un DRAFT con doble click mientras el POST vuela.
   const confirmingDraftRef = useRef(false);
   useEffect(() => {
@@ -605,9 +612,23 @@ export function PatientDetailClient({
   // detalle. Un DRAFT primero se confirma (DRAFT → PENDING, mismo endpoint
   // que handleConfirmAndPay del detalle) y el snapshot local se actualiza
   // para que la fila no siga ofreciendo confirmar un borrador que ya avanzó.
-  const openDirectPayment = async (inv: any) => {
+  //
+  // `condiciones`, si quien llama ya las tiene (la fila de Facturación, que
+  // las carga para `BloquePlan`) — ws1-t10 (H68): sin esto el campo nacía en
+  // el saldo COMPLETO del tratamiento. Sin el parámetro (el atajo "Cobrar
+  // ahora" de HeroCard/SideCards, que no tiene ninguna fila cargada) se leen
+  // aquí con la misma ruta de solo lectura que usa la ficha de factura.
+  const openDirectPayment = async (inv: any, condiciones?: CondicionesPago | null) => {
     if (!canViewBilling || !inv) return;
     let target = inv;
+    let condicionesFinal = condiciones;
+    if (condicionesFinal === undefined) {
+      condicionesFinal = await fetch(`/api/invoices/condiciones?ids=${encodeURIComponent(inv.id)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d?.condiciones?.[inv.id] ?? null)
+        .catch(() => null);
+    }
+    setDirectPayMontoSugerido(montoSugeridoDeCobro(condicionesFinal ?? null, inv.total, inv.paid, todayLocalISO()));
     if (inv.status === "DRAFT") {
       if (confirmingDraftRef.current) return;
       confirmingDraftRef.current = true;
@@ -3082,7 +3103,7 @@ export function PatientDetailClient({
               facturApiEnabled={facturApiEnabled}
               onNueva={() => setShowNewInvoice(true)}
               onAbrir={(inv) => setInvoiceDetailOpen(inv)}
-              onCobrar={(inv) => { void openDirectPayment(inv); }}
+              onCobrar={(inv, condiciones) => { void openDirectPayment(inv, condiciones); }}
               onTimbrar={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
               // «Duplicar» de la ficha: Nueva factura abre con los mismos
               // conceptos y el mismo trato (solo diseño nuevo).
@@ -3375,6 +3396,7 @@ export function PatientDetailClient({
         } : null}
         onClose={() => setDirectPayInvoice(null)}
         onSuccess={() => { setDirectPayInvoice(null); router.refresh(); }}
+        montoSugerido={directPayMontoSugerido}
       />
     </div>
   );

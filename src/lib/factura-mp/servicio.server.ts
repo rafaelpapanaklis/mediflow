@@ -25,9 +25,13 @@ import { createPreference, expirePreference, getPayment } from "@/lib/mercadopag
 import type { CreatePreferenceOptions, CreatePreferenceResult, MercadoPagoPayment } from "@/lib/mercadopago";
 import { credencialDeCobro, plataformaAnticipos, urlBaseApp, type CredencialDeCobro } from "@/lib/anticipos/cuenta.server";
 import { aCentavos, redondear2 } from "@/lib/anticipos/core";
+import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
+import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
+import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import {
   ESTADOS_DE_REVERSO,
   METODO_MERCADO_PAGO,
+  MINIMO_LINK_MXN,
   VIGENCIA_DIAS,
   evaluarPagoDeFactura,
   linkReutilizable,
@@ -176,13 +180,25 @@ export async function obtenerLinkDeFactura(
 
         const inv = await tx.invoice.findFirst({
           where: { id: invoiceId, clinicId },
-          select: { id: true, invoiceNumber: true, status: true, total: true, paid: true, clinic: { select: { name: true } } },
+          select: { id: true, invoiceNumber: true, status: true, total: true, paid: true, clinic: { select: { name: true, timezone: true } } },
         });
         if (!inv) return fallo("no_encontrada");
         const motivo = motivoSinLink(inv);
         if (motivo) return fallo(motivo);
-        const saldo = saldoPorCobrar(inv);
         const ahora = d.ahora();
+        // ws1-t10 (H68/F92): en una factura A PLAZOS el link es por la
+        // mensualidad/lo vencido, NO el saldo completo del tratamiento — el
+        // portal anunciaba "Próxima mensualidad $3,000" y este link cobraba
+        // los $39,000 que quedaban del plan. Sin condiciones a plazos
+        // (`montoSugeridoDeCobro` da 0) se cae al saldo completo, como
+        // siempre para un pago único.
+        const { porFactura: condicionesPorFactura } = await leerCondicionesDeFacturas(tx, {
+          clinicId, invoiceIds: [invoiceId],
+        });
+        const hoy = hoyEnZona(ahora, inv.clinic?.timezone || "America/Mexico_City");
+        const saldo = montoSugeridoDeCobro(condicionesPorFactura.get(invoiceId) ?? null, inv.total, inv.paid, hoy)
+          || saldoPorCobrar(inv);
+        if (saldo < MINIMO_LINK_MXN) return fallo("bajo_minimo");
 
         const pendientes = await tx.invoicePaymentLink.findMany({
           where: { invoiceId, clinicId, status: "PENDING" },

@@ -264,3 +264,29 @@ export function destinoDelAbono(
   });
   return salida;
 }
+
+/* ── Qué monto proponer al cobrar ─────────────────────────────────────── */
+
+/**
+ * ws1-t10 (H68/F92) — el monto que un botón «Cobrar» (o un link de Mercado
+ * Pago) debe proponer para una factura A PLAZOS: lo vencido si algo venció, si
+ * no la cuota por la que va. NUNCA el saldo completo del tratamiento: eso era
+ * el bug (cobrar la cuota de $2,000 de un plan de $36,000 abría el campo en
+ * $36,000, o el paciente veía "paga $39,000" cuando el portal le anunció
+ * "próxima mensualidad $3,000").
+ *
+ * Sin condiciones a plazos (pago único) devuelve 0: quien llama debe caer al
+ * saldo completo, como siempre — este helper NO decide eso, `montoInicialDeCobro`
+ * (de PaymentModal) y cada caller ya saben caer al saldo cuando esto da 0.
+ */
+export function montoSugeridoDeCobro(
+  condiciones: CondicionesPago | null | undefined,
+  total: number,
+  pagado: number,
+  hoy: string,
+): number {
+  const cuotas = calendarioDeCuotas(condiciones, total);
+  if (cuotas.length === 0) return 0;
+  const estado = estadoDelPlan(cuotas, [{ importe: pagado }], hoy);
+  return estado.importeVencido > 0 ? estado.importeVencido : (estado.cuotaActual?.falta ?? 0);
+}

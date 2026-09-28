@@ -584,3 +584,33 @@ describe("el trato de la factura", () => {
     assert.equal(normalizarCondiciones({ modo: "plazos", metodo: "mercadopago", numPagos: 3 }, 1000).metodo, null);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ws1-t10 (H68/F92) — en una factura A PLAZOS el link es por la mensualidad o
+// lo vencido, NUNCA el saldo completo del tratamiento: el portal anunciaba
+// "Próxima mensualidad $3,000" y el link cobraba los $39,000 que quedaban del
+// plan. `DobleBase` no simula `invoice_payment_terms` (raw SQL): sin la tabla,
+// `leerCondicionesDeFacturas` no lanza y cae en "ninguna" — por eso el
+// escenario de arriba ("el monto lo decide el servidor") YA prueba la rama sin
+// condiciones a plazos (cae al saldo completo, como siempre). Aquí se vigila
+// el CABLEADO: que el saldo a cobrar salga de `montoSugeridoDeCobro` antes de
+// caer al saldo completo, y que el mínimo se compruebe sobre ESE monto.
+describe("el link de una factura a plazos, por lo vencido/la mensualidad (H68/F92)", () => {
+  const src = readFileSync(join(__dirname, "..", "servicio.server.ts"), "utf8");
+  it("lee las condiciones de la factura antes de fijar el monto a cobrar", () => {
+    const iCondiciones = src.indexOf("leerCondicionesDeFacturas(tx,");
+    const iSaldo = src.indexOf("const saldo = montoSugeridoDeCobro(");
+    assert.ok(iCondiciones > 0 && iSaldo > iCondiciones, "las condiciones se leen ANTES de calcular el saldo a cobrar");
+  });
+  it("el saldo a cobrar es la mensualidad/lo vencido, y solo cae al saldo completo sin condiciones a plazos", () => {
+    assert.match(src, /const saldo = montoSugeridoDeCobro\(condicionesPorFactura\.get\(invoiceId\) \?\? null, inv\.total, inv\.paid, hoy\)\s*\n\s*\|\| saldoPorCobrar\(inv\);/);
+  });
+  it("el mínimo del link ($10 MXN) se comprueba sobre el monto YA ajustado, no sobre el saldo completo", () => {
+    const iSaldo = src.indexOf("const saldo = montoSugeridoDeCobro(");
+    const iMinimo = src.indexOf("if (saldo < MINIMO_LINK_MXN)");
+    assert.ok(iSaldo > 0 && iMinimo > iSaldo, "el mínimo se comprueba DESPUÉS de calcular `saldo`, y sobre esa variable");
+  });
+  it("`hoy` respeta la zona horaria de la clínica de la factura, no UTC a secas", () => {
+    assert.match(src, /const hoy = hoyEnZona\(ahora, inv\.clinic\?\.timezone \|\| "America\/Mexico_City"\);/);
+  });
+});

@@ -59,6 +59,11 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
 
   const cuota = panel.cobranza.cuotaDeHoy;
   const vencida = cuota?.estado === "vencida";
+  // ws1-t10 (H68): antes este botón abría PaymentModal SIN `montoSugerido`, y
+  // el campo nacía en el saldo COMPLETO del tratamiento aunque el aviso de
+  // arriba dijera "Próxima mensualidad $1,000". Mismo cálculo que ya usa
+  // SectionFinance (`panel.cobranza.vencidas` primero, si no `cuotaDeHoy`).
+  const montoSugerido = panel.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) || cuota?.falta || 0;
   const invoiceComoPago: PaymentInvoice = {
     id: panel.invoice.id,
     invoiceNumber: panel.invoice.invoiceNumber ?? "",
@@ -94,7 +99,7 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
           </div>
         </div>
       </div>
-      {panel.invoice.balance > 0 ? (
+      {panel.invoice.balance > 0 && panel.invoice.status !== "CANCELLED" ? (
         <button
           type="button"
           onClick={() => setCobrando(true)}
@@ -110,6 +115,7 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
           onClose={() => setCobrando(false)}
           onSuccess={() => { setCobrando(false); recargar(); }}
           rediseno={panel.redisenoFacturas}
+          montoSugerido={montoSugerido}
         />
       ) : null}
     </div>

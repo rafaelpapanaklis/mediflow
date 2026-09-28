@@ -98,7 +98,13 @@ test("misma validación y mismos valores iniciales que la ventana de cobro", () 
   assert.ok(viejo.includes("const isOverpay = amountNum > invoice.balance + 0.001;"));
   assert.ok(nuevo.includes("const isOverpay = amountNum > balance + 0.001;"));
   assert.ok(nuevo.includes("const balance = factura?.balance ?? 0;"));
-  assert.ok(nuevo.includes("setAmount(String(balance ?? 0));"), "el monto arranca en el saldo");
+  // ws1-t10 (H68): el monto arranca en la MENSUALIDAD/lo vencido si la factura
+  // es a plazos, y solo cae al saldo completo sin eso — misma función que la
+  // ventana de cobro, no una copia con su propio criterio.
+  assert.ok(viejo.includes("setAmount(String(montoInicialDeCobro(montoSugerido, invoice.balance ?? 0)));"), "la ventana de cobro no cambió su monto inicial");
+  assert.ok(nuevo.includes("setAmount(String(montoInicialDeCobro(montoSugerido, balance ?? 0)));"), "el cobro en el detalle no usa la misma regla de monto inicial");
+  assert.match(viejo, /import \{ montoInicialDeCobro \} from "\.\/monto-inicial-cobro";/);
+  assert.match(nuevo, /import \{ montoInicialDeCobro \} from "@\/components\/dashboard\/billing\/monto-inicial-cobro";/);
 });
 
 test("un borrador se confirma ANTES de cobrar, con la misma llamada, y no dos veces", () => {

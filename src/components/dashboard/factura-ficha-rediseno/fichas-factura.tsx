@@ -71,7 +71,12 @@ export interface FichasFacturaProps<F extends FacturaDeFicha> {
   textoVacio: string;
   /** Tocar la ficha y «Editar»: el detalle de factura de siempre. */
   onAbrir: (inv: F) => void;
-  onCobrar: (inv: F) => void;
+  /**
+   * «Cobrar» por fila. Manda las condiciones YA CARGADAS (las mismas de
+   * `BloquePlan`) para que quien abra el pago pueda proponer la mensualidad o
+   * lo vencido en vez del saldo completo (ws1-t10, H68) sin otra consulta.
+   */
+  onCobrar: (inv: F, condiciones: CondicionesPago | null) => void;
   onTimbrar: (inv: F) => void;
   /** ¿Se ofrece el cobro? Por defecto, la regla del expediente
    *  (`isChargeableInvoice`, borrador incluido: allí «Cobrar» lo confirma
@@ -114,7 +119,7 @@ export function FichasFactura<F extends FacturaDeFicha>({
               contacto={extras.contacto[inv.id]}
               cargandoContacto={extras.cargando}
               onAbrir={() => onAbrir(inv)}
-              onCobrar={() => onCobrar(inv)}
+              onCobrar={() => onCobrar(inv, extras.condiciones[inv.id] ?? inv.condicionesPago ?? null)}
               onTimbrar={() => onTimbrar(inv)}
               onDuplicar={(c) => onDuplicar(inv, c)}
             />

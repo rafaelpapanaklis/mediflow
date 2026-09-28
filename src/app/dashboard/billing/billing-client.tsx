@@ -21,6 +21,8 @@ import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { isInvoiceOverdue } from "@/lib/invoices/due-date";
+import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
+import { todayLocalISO } from "@/lib/billing/paid-at";
 // La ficha de factura del diseño nuevo (solo con `rediseno`): lo bueno de
 // Presupuestos. Ver components/dashboard/factura-ficha-rediseno/.
 import { FichasFactura } from "@/components/dashboard/factura-ficha-rediseno/fichas-factura";
@@ -119,6 +121,9 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   // Modals
   const [showNew, setShowNew]                     = useState(false);
   const [paymentInvoice, setPaymentInvoice]       = useState<(PaymentInvoice & { _patientName?: string }) | null>(null);
+  // ws1-t10 (H68): la mensualidad o lo vencido de `paymentInvoice`, si es a
+  // plazos — 0 (saldo completo) para una factura de un solo pago.
+  const [paymentMontoSugerido, setPaymentMontoSugerido] = useState(0);
   const [detailInvoice, setDetailInvoice]         = useState<any | null>(null);
   const [cfdiFor, setCfdiFor]                     = useState<any | null>(null);
   // «Duplicar» de la ficha (solo diseño nuevo): Nueva factura abre con el mismo
@@ -255,8 +260,18 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
     }
   }
 
-  function openPaymentForRow(e: React.MouseEvent, inv: any) {
+  // ws1-t10 (H68): tabla vieja (sin `menu-dos-niveles`) — sin las condiciones
+  // ya cargadas por `FichasFactura`, se leen aquí ANTES de abrir el modal
+  // (PaymentModal solo recalcula el monto al abrir: `[open, invoice]`, no si
+  // `montoSugerido` cambia después) para que el campo no nazca en el saldo
+  // completo de una factura a plazos.
+  async function openPaymentForRow(e: React.MouseEvent, inv: any) {
     e.stopPropagation();  // no abrir el detalle si se cliqueó "Registrar pago"
+    const condiciones = await fetch(`/api/invoices/condiciones?ids=${encodeURIComponent(inv.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.condiciones?.[inv.id] ?? null)
+      .catch(() => null);
+    setPaymentMontoSugerido(montoSugeridoDeCobro(condiciones, inv.total, inv.paid, todayLocalISO()));
     setPaymentInvoice({
       id: inv.id, invoiceNumber: inv.invoiceNumber,
       total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
@@ -344,11 +359,14 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           textoCobrar={t("billing.billingClient.registerPayment")}
           textoVacio={invoices.length === 0 ? t("billing.billingClient.emptyNoInvoices") : t("billing.billingClient.emptyNoResults")}
           onAbrir={(inv) => setDetailInvoice(inv)}
-          onCobrar={(inv) => setPaymentInvoice({
-            id: inv.id, invoiceNumber: inv.invoiceNumber,
-            total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
-            patientName: patientNameOf(inv),
-          })}
+          onCobrar={(inv, condiciones) => {
+            setPaymentMontoSugerido(montoSugeridoDeCobro(condiciones, inv.total, inv.paid, todayLocalISO()));
+            setPaymentInvoice({
+              id: inv.id, invoiceNumber: inv.invoiceNumber,
+              total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
+              patientName: patientNameOf(inv),
+            });
+          }}
           onTimbrar={(inv) => openCfdiModal(inv)}
           onDuplicar={(inv, condiciones) => {
             setDuplicar({
@@ -531,6 +549,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           setPaymentInvoice(null);
           refresh();
         }}
+        montoSugerido={paymentMontoSugerido}
       />
 
       {/* Modal: Timbrar CFDI — flujo SAT específico, no se reemplaza. */}

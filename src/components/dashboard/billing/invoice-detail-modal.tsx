@@ -21,6 +21,8 @@ import { formatDate } from "@/lib/utils";
 import { fmtMXNdec } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
+import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
+import { todayLocalISO } from "@/lib/billing/paid-at";
 // Ropa del diseño nuevo (solo con `rediseno`): tokens del menú de dos niveles
 // y las clases que visten este modal y su familia. Ver factura-rediseno/.
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
@@ -231,16 +233,22 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // terminar corre el mismo handlePaymentSuccess. Con el interruptor apagado
   // `cobrable` es false: el hook no hace nada y sigue saliendo PaymentModal.
   const cobrable = rediseno && !!invoice && ["DRAFT", "PENDING", "PARTIAL", "OVERDUE"].includes(invoice.status);
+  // ws1-t10 (H68): antes solo se leían las condiciones con el diseño nuevo
+  // (para BloquePlan). El monto inicial del cobro las necesita EN LOS DOS
+  // caminos — con y sin el interruptor, `PaymentModal` de abajo también abre
+  // con el saldo completo si no sabe que la factura es a plazos.
+  const condicionesPago = useCondicionesDeFactura(invoice?.id, open);
+  // ws1-t10 (H68): la mensualidad o lo vencido, no el saldo completo del
+  // tratamiento. 0 sin condiciones a plazos: cada consumidor cae al saldo.
+  const montoSugerido = invoice ? montoSugeridoDeCobro(condicionesPago, invoice.total, invoice.paid, todayLocalISO()) : 0;
   const cobro = useCobro({
     abierta: open,
     factura: cobrable && invoice ? { id: invoice.id, balance: invoice.balance } : null,
     confirmarAntes: invoice?.status === "DRAFT",
     alOcupar: setBusy,
     alCobrar: handlePaymentSuccess,
+    montoSugerido,
   });
-  // Solo con el diseño nuevo: con el interruptor apagado este modal es, byte
-  // por byte, el de siempre, y ni siquiera se pregunta por las condiciones.
-  const condicionesPago = useCondicionesDeFactura(invoice?.id, open && rediseno);
   // CFDI por pago (ws1-t1): solo tiene sentido pintarlo donde YA se pinta el
   // plan de pagos (rediseno) — sin eso no hay "cuota 3 de 18" que explicar.
   const { cfdiPorPago, recargarCfdiPorPago } = usePagosConCfdi(invoice?.id, open && rediseno);
@@ -1332,6 +1340,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
         } : null}
         onClose={() => setPaymentOpen(false)}
         onSuccess={handlePaymentSuccess}
+        montoSugerido={montoSugerido}
       />
 
       <ModalPedirAnticipo

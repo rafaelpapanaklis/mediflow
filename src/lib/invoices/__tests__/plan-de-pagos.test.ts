@@ -265,7 +265,11 @@ test("sin fechas: `conFechas` es false, para que nadie presuma de «al corriente
 test("montaje: tras el interruptor, sin borradores, y el destino no tapa el cobro", () => {
   const detalle = leer("src/components/dashboard/billing/invoice-detail-modal.tsx");
   assert.match(detalle, /rediseno && !isCancelled && !isDraft && \(\s*<BloquePlan/);
-  assert.match(detalle, /useCondicionesDeFactura\(invoice\?\.id, open && rediseno\)/);
+  // ws1-t10 (H68): las condiciones se leen SIEMPRE que el detalle está abierto
+  // (no solo con el interruptor) — el monto inicial del cobro las necesita en
+  // el camino viejo también; BloquePlan sigue pintándose solo con `rediseno`.
+  assert.match(detalle, /useCondicionesDeFactura\(invoice\?\.id, open\)/);
+  assert.match(detalle, /montoSugeridoDeCobro\(condicionesPago, invoice\.total, invoice\.paid, todayLocalISO\(\)\)/, "el monto inicial del cobro usa la mensualidad/lo vencido, no el saldo completo");
   assert.match(leer("src/components/dashboard/billing/payment-modal.tsx"), /\{rediseno && \(\s*<DestinoDelAbono/);
   assert.match(leer("src/components/dashboard/factura-ficha-rediseno/fichas-factura.tsx"), /!anulada && inv\.status !== "DRAFT" && <BloquePlan/);
   assert.match(leer("src/components/dashboard/plan-de-pagos/destino-abono.tsx"), /const MAX_FILAS = 3;/);

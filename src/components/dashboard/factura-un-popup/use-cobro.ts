@@ -8,6 +8,7 @@ import { fmtMXNdec } from "@/lib/format";
 import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
 import { useT } from "@/i18n/i18n-provider";
 import type { MetodoDelCobro } from "@/components/dashboard/billing/payment-modal";
+import { montoInicialDeCobro } from "@/components/dashboard/billing/monto-inicial-cobro";
 
 /**
  * EL COBRO DENTRO DEL DETALLE DE LA FACTURA (ws1-t2, solo con `menu-dos-niveles`).
@@ -46,9 +47,17 @@ export interface OpcionesCobro {
   alOcupar: (ocupado: boolean) => void;
   /** Lo mismo que corría al cobrar en la segunda ventana (refrescar y cerrar). */
   alCobrar: () => void;
+  /**
+   * ws1-t10 (H68) — la mensualidad o lo vencido de una factura a plazos, si
+   * la hay: MISMO parámetro y misma regla que `PaymentModal.montoSugerido`
+   * (`monto-inicial-cobro.ts`). Sin esto el campo nacía en el saldo COMPLETO
+   * del tratamiento, letra por letra el mismo bug que ya se corrigió en la
+   * ventana de cobro de siempre.
+   */
+  montoSugerido?: number;
 }
 
-export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar }: OpcionesCobro) {
+export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar, montoSugerido }: OpcionesCobro) {
   const t = useT();
   const [amount, setAmount]       = useState("");
   const [method, setMethod]       = useState<MetodoDelCobro>("cash");
@@ -65,12 +74,12 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar 
   // Mismos valores iniciales que la ventana de cobro al abrirse.
   useEffect(() => {
     if (!abierta || id === null) return;
-    setAmount(String(balance ?? 0));
+    setAmount(String(montoInicialDeCobro(montoSugerido, balance ?? 0)));
     setMethod("cash");
     setPaidAt(todayLocalISO());
     setReference("");
     setNotes("");
-  }, [abierta, id, balance]);
+  }, [abierta, id, balance, montoSugerido]);
 
   const amountNum = Number(amount);
   const isOverpay = amountNum > balance + 0.001;
