@@ -125,8 +125,8 @@ function TemplateDiagram({
    EDITOR
    ============================================================ */
 export function ManifestEditor({
-  templateId, sections, photos, saving,
-  onSaveSections, onSavePhotos, onDraftSections, onUpload, rediseno = false, categoria = null,
+  templateId, sections, photos, saving, categoria = null,
+  onSaveSections, onSavePhotos, onDraftSections, onUpload, rediseno = false,
 }: ManifestEditorProps) {
   const manifest = useMemo(() => manifestOf(templateId), [templateId]);
 
