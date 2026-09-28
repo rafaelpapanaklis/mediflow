@@ -25,6 +25,14 @@ export interface EnqueueOrthoWhatsAppInput {
   templateKey: OrthoWhatsAppTemplateKey;
   scheduledFor: Date;
   patientPhone?: string | null;
+  /**
+   * Argumentos dinámicos del template (installmentNumber, fecha, amountMxn,
+   * daysOverdue, pendingMxn…) — `queue-worker.ts` los lee de
+   * `WhatsAppReminder.payload` y, sin ellos, cae a 0/"" (el bug de
+   * "mensualidad #0 por $0", ws1-t2). Opcional: los templates sin argumentos
+   * (APPOINTMENT_REMINDER_24H, PRE_INSTALLATION_INSTRUCTIONS) no lo necesitan.
+   */
+  payload?: Record<string, unknown>;
 }
 
 /**
@@ -77,6 +85,7 @@ export async function enqueueOrthoWhatsApp(
       scheduledFor: input.scheduledFor,
       message: messageKey,
       patientPhone: input.patientPhone,
+      payload: (input.payload ?? undefined) as Prisma.InputJsonValue | undefined,
     },
     select: { id: true },
   });
