@@ -1,6 +1,9 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { cobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
+import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import type { Prisma, ClinicCategory } from "@prisma/client";
 import type {
   AgendaAppointmentDTO,
@@ -160,6 +163,83 @@ function conDepositoPagado(dtos: AgendaAppointmentDTO[], pagados: Set<string>): 
   return dtos.map((d) => (pagados.has(d.id) ? { ...d, depositoPagado: true } : d));
 }
 
+/**
+ * Ortodoncia — R4 (ws1-t5): qué PACIENTES del rango pintado tienen una
+ * mensualidad vencida. UNA sola tanda de consultas por RANGO (nunca por
+ * tarjeta), acotada a los `patientId` que ya trajo el rango — no a la
+ * clínica entera. Reusa `cobranzaDelCaso` (el contrato puro de Ola 0, sin
+ * tocarlo) en memoria por caso.
+ *
+ * Corta temprano y barato para el caso común (clínica sin Ortodoncia, o sin
+ * categoría DENTAL): ni una consulta a `orthodonticTreatmentPlan`.
+ * `hasActiveOrthodonticsModule` (no `canAccessModule`) para no encender esto
+ * en clínicas dentales en trial que no contrataron el módulo — mismo
+ * criterio que Ola 0 (`src/lib/orthodontics/access.ts`).
+ */
+async function pacientesConMensualidadVencida(
+  clinicId: string,
+  category: ClinicCategory,
+  patientIds: string[],
+): Promise<Set<string>> {
+  if (category !== "DENTAL" || patientIds.length === 0) return new Set();
+  try {
+    if (!(await hasActiveOrthodonticsModule(clinicId))) return new Set();
+
+    const planes = await prisma.orthodonticTreatmentPlan.findMany({
+      where: { clinicId, deletedAt: null, invoiceId: { not: null }, patientId: { in: patientIds } },
+      select: { patientId: true, invoiceId: true },
+    });
+    if (planes.length === 0) return new Set();
+
+    const invoiceIds = planes.map((p) => p.invoiceId).filter((id): id is string => !!id);
+    const [clinica, condicionesResult, invoices] = await Promise.all([
+      prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }),
+      leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds }),
+      prisma.invoice.findMany({
+        where: { id: { in: invoiceIds }, clinicId },
+        select: { id: true, total: true, payments: { select: { amount: true, method: true } } },
+      }),
+    ]);
+
+    const zonaHoraria = clinica?.timezone || "America/Mexico_City";
+    const ahora = new Date();
+    const invoiceById = new Map(invoices.map((i) => [i.id, i]));
+    const vencidos = new Set<string>();
+
+    for (const plan of planes) {
+      if (!plan.invoiceId) continue;
+      const invoice = invoiceById.get(plan.invoiceId);
+      if (!invoice) continue;
+      const resumen = cobranzaDelCaso({
+        condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null,
+        totalFactura: invoice.total,
+        cobros: invoice.payments,
+        saldoAFavorPrevio: 0,
+        ahora,
+        zonaHoraria,
+      });
+      if (resumen.vencidas.length > 0) vencidos.add(plan.patientId);
+    }
+    return vencidos;
+  } catch (e) {
+    // Núcleo de ortodoncia sin aplicar (P2021/P2022): la agenda se calla,
+    // nunca se rompe — mismo criterio que cobranza-db.ts (Ola 0).
+    const code = (e as { code?: string })?.code;
+    if (code === "P2021" || code === "P2022") return new Set();
+    throw e;
+  }
+}
+
+function conMensualidadVencida(
+  dtos: AgendaAppointmentDTO[],
+  vencidos: Set<string>,
+): AgendaAppointmentDTO[] {
+  if (vencidos.size === 0) return dtos;
+  return dtos.map((d) =>
+    d.patient.id && vencidos.has(d.patient.id) ? { ...d, ortoMensualidadVencida: true } : d,
+  );
+}
+
 export async function fetchAppointmentsForDay(
   dateISO: string,
   config: ClinicTimeConfig,
@@ -195,8 +275,11 @@ export async function fetchAppointmentsForDay(
   });
 
   const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
-  const pagados = await citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id));
-  return conDepositoPagado(dtos, pagados);
+  const [pagados, vencidos] = await Promise.all([
+    citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id)),
+    pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
+  ]);
+  return conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos);
 }
 
 export async function fetchAppointmentsForRange(
@@ -227,8 +310,11 @@ export async function fetchAppointmentsForRange(
   });
 
   const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
-  const pagados = await citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id));
-  return conDepositoPagado(dtos, pagados);
+  const [pagados, vencidos] = await Promise.all([
+    citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id)),
+    pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
+  ]);
+  return conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos);
 }
 
 export async function fetchPendingValidation(

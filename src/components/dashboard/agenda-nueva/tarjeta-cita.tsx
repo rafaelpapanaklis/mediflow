@@ -17,12 +17,12 @@
  * barra izquierda de 3 px es el color del responsable. Ni un hex aquí dentro.
  */
 
-import { Armchair, Ban, Check, Circle, Clock, UserX } from "lucide-react";
+import { Armchair, Ban, Check, Circle, Clock, DollarSign, UserX } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { IconoEstado } from "@/lib/agenda-nueva/estados";
 import type { CitaVista } from "@/lib/agenda-nueva/vista-modelo";
-import { AGENDA_SOMBRAS } from "@/lib/agenda-nueva/tokens";
+import { AGENDA_SOMBRAS, AGENDA_TOKENS } from "@/lib/agenda-nueva/tokens";
 import s from "./agenda-nueva.module.css";
 
 /** Debajo de esto la segunda línea no cabe: el README la oculta bajo 30 min. */
@@ -123,9 +123,10 @@ export function TarjetaCita({
       data-cita={cita.id}
       aria-pressed={seleccionada}
       title={
-        arrastrable
+        (arrastrable
           ? `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip} · Arrastra para moverla`
-          : `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip}`
+          : `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip}`) +
+        (cita.avisoMensualidadVencida ? " · Mensualidad de ortodoncia vencida" : "")
       }
       style={{
         top: geometria.top,
@@ -145,6 +146,12 @@ export function TarjetaCita({
         >
           {cita.nombrePaciente}
         </span>
+
+        {cita.avisoMensualidadVencida && (
+          <span className={s.tarjetaAvisoOrto} aria-hidden>
+            <DollarSign size={13} color={AGENDA_TOKENS.rojoTexto} strokeWidth={2.6} />
+          </span>
+        )}
 
         {variante === "dia" ? (
           <>

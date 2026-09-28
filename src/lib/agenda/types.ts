@@ -95,6 +95,16 @@ export interface AgendaAppointmentDTO extends HomeAppointmentDTO {
    * rango pedido); las rutas de mutación no lo tocan y queda `undefined`
    * (se trata como falso) hasta el siguiente refetch — no se inventa. */
   depositoPagado?: boolean;
+  /**
+   * Ortodoncia — R4 (ws1-t5): ¿el paciente de esta cita tiene una mensualidad
+   * VENCIDA en su caso de ortodoncia (contrato `cobranzaDelCaso`, Ola 0)? Solo
+   * lo rellenan fetchAppointmentsForDay/Range (una consulta aparte por RANGO,
+   * nunca por tarjeta), y solo si la clínica es DENTAL y tiene el módulo
+   * Ortodoncia realmente contratado (`hasActiveOrthodonticsModule`, no el
+   * atajo de trial). `undefined` = no aplica (clínica sin módulo, cita sin
+   * caso de ortodoncia, o al corriente) — se trata como falso.
+   */
+  ortoMensualidadVencida?: boolean;
 }
 
 export interface ResourceDTO {

@@ -1268,6 +1268,13 @@
   place-items: center;
 }
 
+/* Ortodoncia — R4 (ws1-t5): marca de mensualidad vencida, junto al nombre. */
+.tarjetaAvisoOrto {
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
 /* ═══ Paneles laterales ═════════════════════════════════════════════════ */
 
 .panel {

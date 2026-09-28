@@ -80,6 +80,14 @@ export interface CitaVista {
    * que Rafael pidió ver de un vistazo, no un dato más entre otros.
    */
   notaAnticipo: string | null;
+  /**
+   * Ortodoncia — R4 (ws1-t5): el paciente de esta cita tiene una mensualidad
+   * VENCIDA en su caso de ortodoncia. Es una MARCA (badge), no sustituye nada:
+   * a diferencia de `notaAnticipo`, no hay ninguna cita que se quede sin decir
+   * su estado normal por esto. `dto.ortoMensualidadVencida` ya viene resuelto
+   * por rango (server.ts) — aquí solo se lee.
+   */
+  avisoMensualidadVencida: boolean;
   /** El DTO crudo, por si el panel necesita algo que no está aquí. */
   dto: AgendaAppointmentDTO;
 }
@@ -263,6 +271,7 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
     minutosEnConsulta,
     motivoCancelacion: dto.cancelReason ?? null,
     notaAnticipo,
+    avisoMensualidadVencida: dto.ortoMensualidadVencida === true,
     dto,
   };
 }

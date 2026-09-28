@@ -328,3 +328,30 @@ test("una cita CHECKED_IN con depositoPagado: sin nota — ya hay cosas más urg
   assert.equal(v.notaAnticipo, null);
   assert.match(v.detalle, /llegó|sala de espera/);
 });
+
+/* ── Ortodoncia — R4 (ws1-t5): avisoMensualidadVencida (marca, no nota) ── */
+
+test("ortoMensualidadVencida true: avisoMensualidadVencida true, y no toca notaAnticipo", () => {
+  const v = aCitaVista(cita({ status: "CONFIRMED", ortoMensualidadVencida: true }), CTX);
+  assert.equal(v.avisoMensualidadVencida, true);
+  assert.equal(v.notaAnticipo, null, "la marca es aparte: no sustituye la nota de anticipo");
+});
+
+test("ortoMensualidadVencida ausente (undefined): avisoMensualidadVencida false — clínica sin módulo o cita sin caso", () => {
+  const v = aCitaVista(cita(), CTX);
+  assert.equal(v.avisoMensualidadVencida, false);
+});
+
+test("ortoMensualidadVencida false explícito: avisoMensualidadVencida false", () => {
+  const v = aCitaVista(cita({ ortoMensualidadVencida: false }), CTX);
+  assert.equal(v.avisoMensualidadVencida, false);
+});
+
+test("una cita con anticipo apartado Y mensualidad de ortodoncia vencida: las dos señales conviven", () => {
+  const v = aCitaVista(
+    cita({ status: "SCHEDULED", holdExpiresAt: "2026-09-02T18:30:00.000Z", ortoMensualidadVencida: true }),
+    CTX,
+  );
+  assert.equal(v.notaAnticipo, "Apartada · paga antes de 12:30");
+  assert.equal(v.avisoMensualidadVencida, true);
+});
