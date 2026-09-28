@@ -124,7 +124,7 @@ export async function sendMensualidadReminder(
       },
       to: patient.phone,
       body: texto,
-      kind: "deposit_request",
+      kind: "payment_notice",
     });
     return ok({ texto, enviado: true });
   } catch (e) {
