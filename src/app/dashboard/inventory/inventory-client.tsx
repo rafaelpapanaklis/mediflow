@@ -430,7 +430,11 @@ export function InventoryClient({
             {t("procurement.inventoryClient.subtitle", { items: items.length, units: kpis.totalQty.toLocaleString("es-MX") })}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* Ajuste 2 (QA 2i, panel.108): a 390 esta barra medía 471 px de ancho
+            fijo y desbordaba la página en horizontal (scrollWidth 472/390 =
+            82 px de scroll lateral). flexWrap la deja pasar a dos líneas en
+            móvil sin tocar nada a 1440 (ahí siempre cupo en una). */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <ButtonNew variant="ghost" onClick={() => setShowHistorial(true)}>
             Historial de compras
           </ButtonNew>
@@ -615,7 +619,11 @@ export function InventoryClient({
                     <td>
                       <select
                         className="input-new"
-                        style={{ height: 28, fontSize: 12.5, maxWidth: 140 }}
+                        // Ajuste 2 (QA 2f, panel.108): a 1440 el texto salía
+                        // cortado ("Sin pr…") — 140px no le alcanzaba a "Sin
+                        // proveedor" con la flecha nativa del <select>. Hay
+                        // espacio de sobra en esta columna a ese ancho.
+                        style={{ height: 28, fontSize: 12.5, maxWidth: 190, minWidth: 110, width: "100%" }}
                         value={item.providerId ?? ""}
                         onChange={e => updateProvider(item.id, e.target.value)}
                       >
