@@ -14,6 +14,7 @@ import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { useT } from "@/i18n/i18n-provider";
 import { lineaDelCasoTraducida, type ResumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
 import { fechaCorta, fechaConAno, diasHasta } from "./fechas";
+import { etiquetaDeCobro } from "./cobros";
 import s from "./rediseno.module.css";
 
 /**
@@ -529,7 +530,11 @@ export function Resumen({
           ) : cobros.length > 0 ? (
             <div className={s.lista}>
               {cobros.map((inv: any) => {
-                const pagada = (inv.balance ?? 0) <= 0;
+                // La etiqueta la decide la MISMA función que en Facturación
+                // (el estado de la factura), no el saldo: una factura a medio
+                // pagar es «Parcial» aquí y allá.
+                const etiqueta = etiquetaDeCobro(inv);
+                const pagada = etiqueta.saldada;
                 return (
                   <div key={inv.id} className={s.listaFila}>
                     <span
@@ -543,12 +548,10 @@ export function Resumen({
                     <span className={`${s.listaDerecha} ${s.importe}`}>
                       {formatCurrency(inv.total ?? 0)}
                       <span
-                        className={`${s.etiqueta} ${pagada ? s.etiquetaExito : s.etiquetaAlerta}`}
+                        className={[s.etiqueta, (s as any)[etiqueta.clase]].filter(Boolean).join(" ")}
                         style={{ marginLeft: 8 }}
                       >
-                        {pagada
-                          ? t("pacientesRediseno.resumen.pagada")
-                          : t("pacientesRediseno.resumen.pendiente")}
+                        {t(etiqueta.labelKey)}
                       </span>
                     </span>
                   </div>
