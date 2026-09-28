@@ -195,10 +195,18 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
     if (modulo !== "activo") return { ...base, ...sinModulo(modulo) };
 
     // Quién es. Con la sede ya comprobada, y antes de leer nada de ortodoncia.
-    const quien = await resolverPaciente(ctx, dbDe(ctx) as unknown as AgendaDb, {
+    const dbPacientes = dbDe(ctx) as unknown as AgendaDb;
+    let quien = await resolverPaciente(ctx, dbPacientes, {
       pacienteId: params.patientId ?? null,
       paciente: params.paciente ?? null,
     });
+    // Un `patientId` que no es un id (el modelo puso el folio o el nombre): se
+    // busca por el texto, con las mismas reglas de clínica y de visibilidad.
+    if (quien.tipo === "no" && params.patientId) {
+      quien = await resolverPaciente(ctx, dbPacientes, {
+        paciente: (params.paciente ?? "").trim() || params.patientId.trim(),
+      });
+    }
     if (quien.tipo === "pregunta") {
       return {
         ...base,

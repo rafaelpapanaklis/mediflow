@@ -191,6 +191,25 @@ test("🔴 el doctor tratante ocupado o con la agenda bloqueada: no se agenda en
   assert.match(d2.frase, /Congreso de ortodoncia/);
 });
 
+test("🔴 un `pacienteId` que no es un id (el modelo puso el folio o el nombre) no tumba la cita: se busca por el texto", async () => {
+  const { db } = montar();
+  for (const params of [
+    { pacienteId: "P0001" },
+    { pacienteId: "Ana Perez" },
+    { pacienteId: "id-inventado-123", paciente: "Ana Perez" },
+  ]) {
+    const d = await agendar(recepcion(db), { ...params, fecha: DIA, hora: "11:00", motivo: "control de ortodoncia" });
+    assert.equal(d.estado, "propuesta", `${JSON.stringify(params)} → ${JSON.stringify(d)}`);
+    assert.equal(d.propuesta.peticion.cuerpo.patientId, "p-ana");
+    assert.equal(d.propuesta.peticion.cuerpo.doctorId, U_DOC_N);
+  }
+  // Lo que no podía ver, sigue sin verlo: ni por id, ni por folio, ni por nombre.
+  for (const params of [{ pacienteId: "p-priv" }, { pacienteId: "P0006" }, { pacienteId: "p-sur-1", paciente: "Sofia SUR" }]) {
+    const d = await agendar(recepcion(db), { ...params, fecha: DIA, hora: "11:00", motivo: "control" });
+    assert.equal(d.estado, "no_se_puede", JSON.stringify(params));
+  }
+});
+
 test("si el usuario nombra a otro doctor, manda el usuario — y la tarjeta avisa de que no es el tratante", async () => {
   const { db } = montar();
   const d = await agendar(recepcion(db), { paciente: "Ana Perez", doctor: "Rojas", fecha: DIA, hora: "11:00", motivo: "control de ortodoncia" });

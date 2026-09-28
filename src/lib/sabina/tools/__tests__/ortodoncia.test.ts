@@ -177,6 +177,10 @@ test("caso: fase, mes N de M y el arco del último control FIRMADO (no el del bo
 
 test("🔴 caso por NOMBRE, teléfono o folio: `buscar_paciente` no da ids, así que tiene que poder sin él", async () => {
   const { db } = montar();
+  // Y si el modelo mete el folio o el nombre en `patientId`, también.
+  for (const patientId of ["P0001", "Ana Perez"]) {
+    assert.equal((await ok(ortoCaso, admin(db), { patientId })).datos.paciente, "Ana Perez", patientId);
+  }
   for (const paciente of ["Ana Perez", "ana perez", "P0001", "Perez"]) {
     const r = await ok(ortoCaso, admin(db), { paciente });
     assert.equal(r.datos.paciente, "Ana Perez", paciente);
@@ -599,8 +603,13 @@ test("🔴 doctor: la paciente restringida no existe para él — ni su caso, ni
     assert.equal(caso.datos.caso, null);
     assert.doesNotMatch(todo(caso), /En curso|6,?000|mes \d/, "salió algo del caso de la restringida");
   }
+  // La misma frase que para uno que no existe (solo cambia lo que tecleó quien pregunta).
   const inventado = await ok(ortoCaso, ctx, { patientId: "no-existe" });
-  assert.equal(inventado.datos.noEncontrado, (await ok(ortoCaso, ctx, { patientId: "p-priv" })).datos.noEncontrado);
+  const sinLoTecleado = (frase: string) => frase.replace(/«[^»]*»/, "«…»");
+  assert.equal(
+    sinLoTecleado(inventado.datos.noEncontrado),
+    sinLoTecleado((await ok(ortoCaso, ctx, { patientId: "p-priv" })).datos.noEncontrado),
+  );
 
   for (const p of PREGUNTAS.filter((x) => x.tool !== ortoCaso)) {
     const r = await ok(p.tool, ctx, p.params);

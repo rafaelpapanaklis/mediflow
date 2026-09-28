@@ -88,7 +88,15 @@ export const agendarCita = definirHerramienta<ParamsAgendarCita, DatosAccionAgen
     }
     const db = dbAgendaDe(ctx);
 
-    const paciente = await resolverPaciente(ctx, db, { pacienteId: p.pacienteId, paciente: p.paciente });
+    let paciente = await resolverPaciente(ctx, db, { pacienteId: p.pacienteId, paciente: p.paciente });
+    // El modelo a veces rellena `pacienteId` con algo que no es un id (el folio,
+    // el nombre): `buscar_paciente` no le da ids y aun así lo intenta. Visto en
+    // vivo el 28-sep-2026. Si ese id no existe, se busca por el texto, con las
+    // mismas reglas de clínica y de visibilidad: lo que no podía ver, sigue sin verlo.
+    if (paciente.tipo === "no" && p.pacienteId) {
+      const texto = (p.paciente ?? "").trim() || p.pacienteId.trim();
+      paciente = await resolverPaciente(ctx, db, { paciente: texto });
+    }
     if (paciente.tipo === "no") return { estado: "no_se_puede", causa: paciente.causa, frase: paciente.frase };
 
     // ¿Es una cita de ortodoncia? Solo se puede saber con el paciente ya resuelto.
