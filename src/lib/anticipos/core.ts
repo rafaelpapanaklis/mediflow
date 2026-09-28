@@ -213,6 +213,62 @@ export function validarPlazoPanelHoras(horas: number): string | null {
 }
 
 /**
+ * ws1-t1 (M1): las horas que le quedan a un anticipo para el texto al
+ * paciente/recepción — SIEMPRE del `expiresAt` real (que ya viene acotado al
+ * inicio de la cita, nunca pasa de ahí), NUNCA de las horas que se pidieron.
+ * Antes los dos endpoints de «Pedir anticipo» usaban el `horas` del body tal
+ * cual llegaba, así que un anticipo pedido a 24 h con la cita en 10 h decía
+ * «tienes 24 h» aunque el link/las transferencias vencieran en 10.
+ */
+export function horasHastaVencer(expiresAt: string | Date, ahora: Date = new Date()): number {
+  const ms = new Date(expiresAt).getTime() - ahora.getTime();
+  return Math.max(1, Math.round(ms / 3_600_000));
+}
+
+/** Lo que Mercado Pago dice de un intento que no se aprobó, en español (Configuración → Anticipos). */
+export const ESTADOS_MP_TEXTO: Record<string, string> = {
+  rejected: "rechazado",
+  in_process: "en revisión",
+  pending: "pendiente",
+  cancelled: "cancelado",
+  refunded: "devuelto",
+  charged_back: "contracargo",
+  otra_cuenta: "pagó en la cuenta de Mercado Pago anterior; vuelve a conectar esa cuenta para aplicarlo",
+};
+
+export interface AnticipoRecienteParaNotas {
+  estado: string;
+  /** Inicio de la cita (ISO) o null si nunca hubo una ligada. */
+  cita: string | null;
+  citaConfirmada: boolean;
+  ultimoEstadoMp: string | null;
+  ultimoDetalleMp: string | null;
+  avisoError: string | null;
+  anomalias: string[];
+}
+
+/**
+ * Las notas de la fila de «Últimos anticipos» (Configuración → Anticipos).
+ * PURA, para poder probarla sin montar el componente: sin el filtro por
+ * `r.cita`, un PAID sin ninguna cita ligada (anticipo registrado a mano sobre
+ * una factura suelta) decía «el horario ya se había liberado: quedó como
+ * saldo a favor» — falso, nunca hubo un hueco que perder (ws1-t1, M6).
+ */
+export function notasAnticipoReciente(r: AnticipoRecienteParaNotas): string[] {
+  const notas: string[] = [];
+  if (r.estado === "PAID" && r.cita) {
+    notas.push(r.citaConfirmada ? "Cita confirmada" : "El horario ya se había liberado: quedó como saldo a favor");
+  }
+  if ((r.estado === "PENDING" || r.estado === "EXPIRED") && r.ultimoEstadoMp && r.ultimoEstadoMp !== "approved") {
+    const detalle = r.ultimoEstadoMp === "otra_cuenta" && r.ultimoDetalleMp ? ` (${r.ultimoDetalleMp})` : "";
+    notas.push(`Último intento: ${ESTADOS_MP_TEXTO[r.ultimoEstadoMp] ?? r.ultimoEstadoMp}${detalle}`);
+  }
+  if (r.avisoError) notas.push(`Aviso al paciente no enviado: ${r.avisoError}`);
+  notas.push(...r.anomalias);
+  return notas;
+}
+
+/**
  * Ajuste 2 (decisión de Rafael) — «Pedir anticipo» SOLO en citas futuras:
  * `SCHEDULED` o `CONFIRMED`, y con inicio posterior a ahora. Una cita ya
  * atendida (CHECKED_IN en adelante), cancelada/no asistida, o SCHEDULED/

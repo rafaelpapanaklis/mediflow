@@ -12,7 +12,9 @@ import {
   citaEsFuturaParaAnticipo,
   esMetodoRegistroAnticipo,
   evaluarPago,
+  horasHastaVencer,
   metodoRegistroADeposito,
+  notasAnticipoReciente,
   refDeAnticipo,
   sugeridoAnticipoPanel,
   validarConfiguracion,
@@ -232,6 +234,66 @@ describe("validarPlazoPanelHoras", () => {
     assert.match(validarPlazoPanelHoras(0) ?? "", /horas/);
     assert.match(validarPlazoPanelHoras(49) ?? "", /horas/);
     assert.match(validarPlazoPanelHoras(1.5) ?? "", /horas/);
+  });
+});
+
+// ws1-t1 (M1, QA ws1-t10): el texto al paciente/recepción decía «tienes 24 h»
+// aunque el plazo ya viniera recortado al inicio de la cita (10 h) — porque
+// los dos endpoints de «Pedir anticipo» usaban el `horas` PEDIDO en vez del
+// `expiresAt` REAL que ya devuelve pedirAnticipoDeFactura/DeCita.
+describe("horasHastaVencer — SIEMPRE del expiresAt real, nunca del plazo pedido (M1)", () => {
+  const ahora = new Date("2026-09-28T02:00:00Z");
+
+  it("cita en 10 h con 24 h pedidas: el texto debe decir 10, no 24", () => {
+    const vence = new Date(ahora.getTime() + 10 * 3600_000); // recortado por la cita
+    assert.equal(horasHastaVencer(vence, ahora), 10);
+  });
+
+  it("redondea al entero más cercano", () => {
+    const vence = new Date(ahora.getTime() + 2.6 * 3600_000);
+    assert.equal(horasHastaVencer(vence, ahora), 3);
+  });
+
+  it("nunca da 0 ni negativo (piso en 1) aunque ya casi venza o el reloj se adelante", () => {
+    assert.equal(horasHastaVencer(new Date(ahora.getTime() + 5_000), ahora), 1);
+    assert.equal(horasHastaVencer(new Date(ahora.getTime() - 3600_000), ahora), 1);
+  });
+
+  it("acepta ISO string, igual que lo que manda el API (deposit.expiresAt)", () => {
+    assert.equal(horasHastaVencer(new Date(ahora.getTime() + 5 * 3600_000).toISOString(), ahora), 5);
+  });
+});
+
+// ws1-t1 (M6, QA ws1-t10): «Últimos anticipos» describía un anticipo PAID
+// registrado a mano SOBRE UNA FACTURA SUELTA (sin ninguna cita ligada, p. ej.
+// QA-1001) con «el horario ya se había liberado: quedó como saldo a favor» —
+// falso, ese texto es del caso CON cita (bot o panel) cuyo hueco se perdió.
+describe("notasAnticipoReciente (M6)", () => {
+  const base = { estado: "PAID", cita: null as string | null, citaConfirmada: false, ultimoEstadoMp: null, ultimoDetalleMp: null, avisoError: null, anomalias: [] as string[] };
+
+  it("PAID SIN cita ligada: sin nota de «horario liberado» — nunca hubo hueco", () => {
+    const notas = notasAnticipoReciente({ ...base, estado: "PAID", cita: null, citaConfirmada: false });
+    assert.deepEqual(notas, []);
+  });
+
+  it("PAID CON cita, confirmada: «Cita confirmada»", () => {
+    const notas = notasAnticipoReciente({ ...base, cita: "2026-09-28T10:00:00Z", citaConfirmada: true });
+    assert.deepEqual(notas, ["Cita confirmada"]);
+  });
+
+  it("PAID CON cita, NO confirmada: sí es «el horario ya se había liberado…» (caso real)", () => {
+    const notas = notasAnticipoReciente({ ...base, cita: "2026-09-28T10:00:00Z", citaConfirmada: false });
+    assert.deepEqual(notas, ["El horario ya se había liberado: quedó como saldo a favor"]);
+  });
+
+  it("PENDING con último intento rechazado por Mercado Pago: lo anota", () => {
+    const notas = notasAnticipoReciente({ ...base, estado: "PENDING", ultimoEstadoMp: "rejected" });
+    assert.deepEqual(notas, ["Último intento: rechazado"]);
+  });
+
+  it("avisoError y anomalías se acumulan, sin pisar lo anterior", () => {
+    const notas = notasAnticipoReciente({ ...base, avisoError: "no llegó", anomalias: ["Pago mp-1: raro"] });
+    assert.deepEqual(notas, ["Aviso al paciente no enviado: no llegó", "Pago mp-1: raro"]);
   });
 });
 

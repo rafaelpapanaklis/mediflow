@@ -20,7 +20,7 @@ import { denyIfMissingAnyPermission, denyIfMissingPermission } from "@/lib/auth/
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { canalesAnticipoPanel, elegibilidadCitaDeInvoice, estadoAnticipoDeFactura, pedirAnticipoDeFactura, sugeridoParaFactura } from "@/lib/anticipos/panel.server";
-import type { MetodoPedirAnticipo } from "@/lib/anticipos/core";
+import { horasHastaVencer, type MetodoPedirAnticipo } from "@/lib/anticipos/core";
 import { textoAnticipoPanel, textoAnticipoTransferencia } from "@/lib/anticipos/mensaje-panel";
 import { leerDatosBancarios } from "@/lib/anticipos/datos-bancarios.server";
 import { clabeAgrupada } from "@/lib/billing/spei-directo-core";
@@ -63,11 +63,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   });
   if (!inv) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
-  const [canales, sugerido, estado, elegibilidad] = await Promise.all([
+  const [canales, sugerido, estado, elegibilidad, clinica] = await Promise.all([
     canalesAnticipoPanel(ctx.clinicId),
     sugeridoParaFactura(ctx.clinicId, inv.total),
     estadoAnticipoDeFactura(ctx.clinicId, params.id),
     elegibilidadCitaDeInvoice(ctx.clinicId, inv.appointmentId),
+    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }),
   ]);
 
   return NextResponse.json({
@@ -78,6 +79,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     saldo: Math.max(0, inv.total - inv.paid),
     total: inv.total,
     pagado: inv.paid,
+    // ws1-t1 (M4): la zona de la CLÍNICA, no la del navegador — el modal la
+    // usa para el «vence el…» del anticipo pendiente (mismo criterio que el
+    // chip de la agenda y el PDF).
+    zonaHoraria: clinica?.timezone || "America/Mexico_City",
     anticipoPagado: estado.anticipoPagado,
     pendiente: estado.pendiente,
     // Ajuste 2: solo citas futuras (SCHEDULED/CONFIRMED, inicio después de
@@ -151,7 +156,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const tz = datos?.clinic?.timezone || "America/Mexico_City";
   const paciente = datos?.patient ? `${datos.patient.firstName} ${datos.patient.lastName ?? ""}`.trim() : "Paciente";
   const cita = datos?.appointment;
-  const horasTexto = horas ?? Math.max(1, Math.round((new Date(deposit.expiresAt).getTime() - Date.now()) / 3_600_000));
+  // ws1-t1 (M1): SIEMPRE del `expiresAt` real, nunca del `horas` pedido — el
+  // plazo se acota al inicio de la cita (pedirAnticipoDeFactura), así que un
+  // "24" pedido con la cita en 10 h vence en 10 h de verdad; el texto tiene
+  // que decir eso, no lo que se pidió.
+  const horasTexto = horasHastaVencer(deposit.expiresAt);
   const fechaHumana = cita ? formatDateHuman(toISODate(cita.startsAt, tz), tz) : null;
   const horaTexto = cita ? formatTimeHuman(cita.startsAt, tz) : null;
 
@@ -203,7 +212,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
   }
 
-  let whatsapp: { enviado: boolean; motivo?: string } = { enviado: false, motivo: "No se pidió enviar." };
+  // ws1-t1 (B8): sin `motivo` cuando nadie pidió enviar — "no se pidió
+  // enviar" no es un fallo que avisar, y el modal lo pintaba como si lo
+  // fuera (caja de alerta) con solo pulsar "Pedir anticipo" a secas.
+  let whatsapp: { enviado: boolean; motivo?: string } = { enviado: false };
   if (body?.enviarWhatsapp === true) {
     const puedeEnviar = denyIfMissingPermission(ctx, "whatsapp.send") === null;
     const phone = datos?.patient?.phone?.trim();
