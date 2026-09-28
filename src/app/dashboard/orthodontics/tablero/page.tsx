@@ -2,6 +2,11 @@
 // dirección: activos, controles de hoy, saldos vencidos, producción,
 // conversión de valoraciones, lo que va a entrar por mensualidades y
 // colocaciones/retiros del mes. La guarda de módulo ya corrió en el layout.
+//
+// La lista de "Controles de hoy" monta EnviarIndicacionesButton (Paciente y
+// WhatsApp, W5 — reasignado a esta parte): manda por WhatsApp las
+// indicaciones (C3, "Control y agenda") ya cargadas en la hoja de control de
+// esa cita, si las hay.
 export const dynamic = "force-dynamic";
 
 import {
@@ -16,7 +21,8 @@ import {
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
-import { loadOrthoTableroData } from "@/lib/orthodontics/tablero-data";
+import { loadOrthoTableroData, loadTodayControlsWithIndications } from "@/lib/orthodontics/tablero-data";
+import { EnviarIndicacionesButton } from "@/components/specialties/orthodontics/EnviarIndicacionesButton";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
@@ -29,9 +35,16 @@ function fmtMonthKey(monthKey: string): string {
   return MESES[(m ?? 1) - 1] ?? monthKey;
 }
 
+function fmtHora(d: Date): string {
+  return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+}
+
 export default async function OrthodonticsTableroPage() {
   const user = await getCurrentUser();
-  const data = await loadOrthoTableroData(user.clinicId, user.clinic.timezone);
+  const [data, controlesHoy] = await Promise.all([
+    loadOrthoTableroData(user.clinicId, user.clinic.timezone),
+    loadTodayControlsWithIndications(user.clinicId, user.clinic.timezone),
+  ]);
 
   return (
     <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 20 }}>
@@ -68,6 +81,46 @@ export default async function OrthodonticsTableroPage() {
           icon={Wrench}
         />
       </section>
+
+      {controlesHoy.length > 0 && (
+        <section
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            background: "var(--surface-1)",
+          }}
+        >
+          <header style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderBottom: "1px solid var(--border)" }}>
+            <CalendarCheck size={16} aria-hidden />
+            <h2 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>Controles de hoy</h2>
+          </header>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {controlesHoy.map((c) => (
+              <li
+                key={c.appointmentId}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "10px 16px",
+                  borderTop: "1px solid var(--border-soft, var(--border))",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>{c.patientName}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>{fmtHora(c.startsAt)}</div>
+                </div>
+                {c.indications ? (
+                  <EnviarIndicacionesButton appointmentId={c.appointmentId} />
+                ) : (
+                  <span style={{ fontSize: 11, color: "var(--text-3)" }}>Sin indicaciones cargadas</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section
         style={{

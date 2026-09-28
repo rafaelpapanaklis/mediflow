@@ -1,30 +1,20 @@
 "use client";
-// Ortodoncia — Paciente y WhatsApp (ws1-t2, W2): botón "Enviar recordatorio"
-// de mensualidad, montado en la fila L1 (Mensualidad vencida) de Alertas.
-// Dentro de la ventana de 24 h manda WhatsApp; fuera de ella (o sin WhatsApp
-// conectado) ofrece copiar el texto.
+// Ortodoncia — Paciente y WhatsApp (ws1-t2, W5): botón "Enviar indicaciones"
+// del control de hoy, montado en la lista de "Controles de hoy" del Tablero.
 
 import { useState } from "react";
-import { sendMensualidadReminder } from "@/app/actions/orthodontics/whatsapp/sendMensualidadReminder";
+import { sendControlInstructions } from "@/app/actions/orthodontics/whatsapp/sendControlInstructions";
 import { isFailure } from "@/app/actions/orthodontics/result";
 
-export function EnviarRecordatorioButton({
-  patientId,
-  treatmentPlanId,
-}: {
-  patientId: string;
-  treatmentPlanId: string;
-}) {
+export function EnviarIndicacionesButton({ appointmentId }: { appointmentId: string }) {
   const [estado, setEstado] = useState<"idle" | "cargando" | "enviado" | "copiar" | "error">("idle");
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [texto, setTexto] = useState<string | null>(null);
 
-  async function enviar(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  async function enviar() {
     setEstado("cargando");
     setMensaje(null);
-    const r = await sendMensualidadReminder({ patientId, treatmentPlanId });
+    const r = await sendControlInstructions({ appointmentId });
     if (isFailure(r)) {
       setEstado("error");
       setMensaje(r.error);
@@ -39,9 +29,7 @@ export function EnviarRecordatorioButton({
     }
   }
 
-  async function copiar(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  async function copiar() {
     if (!texto) return;
     try {
       await navigator.clipboard.writeText(texto);
@@ -52,7 +40,7 @@ export function EnviarRecordatorioButton({
   }
 
   if (estado === "enviado") {
-    return <span style={{ fontSize: 11, color: "#34d399" }}>Recordatorio enviado</span>;
+    return <span style={{ fontSize: 11, color: "#34d399" }}>Enviadas</span>;
   }
 
   return (
@@ -72,7 +60,7 @@ export function EnviarRecordatorioButton({
           cursor: estado === "cargando" ? "default" : "pointer",
         }}
       >
-        {estado === "cargando" ? "Enviando…" : estado === "copiar" ? "Copiar texto" : "Enviar recordatorio"}
+        {estado === "cargando" ? "Enviando…" : estado === "copiar" ? "Copiar texto" : "Enviar indicaciones"}
       </button>
       {mensaje && (
         <span style={{ fontSize: 10, color: estado === "error" ? "var(--danger, #ef4444)" : "var(--text-3)", maxWidth: 200, textAlign: "right" }}>
