@@ -13,6 +13,11 @@
 //     su botón Cobrar y su cobro a hermanos. Se pide sola y exige el permiso
 //     de Caja; sin él no sale y aquí se dice por qué.
 //  3. El estado de cuenta de cada caso: qué debe, desde cuándo, qué sigue.
+//
+// ws1-t4 ronda 6 (revisión de lógica de uso, filas 14 y 20): la pantalla puede
+// abrir ya filtrada (`?filtro=vencido`, desde el indicador del Tablero), y los
+// casos SIN plan de pago dejan de contarse como «al corriente»: van en su
+// propio aviso, con su filtro.
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -85,14 +90,17 @@ export function VistaCobranza({
   filas,
   resumen,
   puedeCobrar,
+  filtroInicial = "todos",
 }: {
   filas: FilaCobranza[];
   resumen: ResumenDeCobranza;
+  /** Lo que pidió la dirección (`?filtro=`), ya saneado en el servidor. */
+  filtroInicial?: FiltroCobranza;
   /** Permiso de Caja (`billing.view`), decidido en el servidor: sin él la lista de cobro no sale. */
   puedeCobrar: boolean;
 }) {
   const router = useRouter();
-  const [filtro, setFiltro] = useState<FiltroCobranza>("todos");
+  const [filtro, setFiltro] = useState<FiltroCobranza>(filtroInicial);
   const [consulta, setConsulta] = useState("");
 
   const visibles = useMemo(() => filtrarCobranza(filas, filtro, consulta), [filas, filtro, consulta]);
@@ -121,8 +129,8 @@ export function VistaCobranza({
     },
     {
       id: "al-corriente",
-      valor: String(resumen.alCorriente + resumen.sinPlan),
-      etiqueta: `Al corriente${resumen.sinPlan > 0 ? ` · ${resumen.sinPlan} sin plan de pago` : ""}`,
+      valor: String(resumen.alCorriente),
+      etiqueta: `Al corriente · ${resumen.alCorriente === 1 ? "paga puntual" : "pagan puntual"}`,
       icono: CheckCircle2,
       tono: "exito",
     },
@@ -179,6 +187,23 @@ export function VistaCobranza({
           );
         })}
       </div>
+
+      {resumen.sinPlan > 0 && (
+        <p className={`${s.enOrden} ${s.enOrdenSuelto} ${s.enOrdenAviso}`}>
+          <Wallet size={15} strokeWidth={1.9} aria-hidden />
+          {resumen.sinPlan === 1
+            ? "1 caso activo todavía no tiene plan de pago."
+            : `${resumen.sinPlan} casos activos todavía no tienen plan de pago.`}{" "}
+          <button
+            type="button"
+            className={`${s.enlace} ${s.enlaceBoton}`}
+            aria-pressed={filtro === "sin-plan"}
+            onClick={() => setFiltro(filtro === "sin-plan" ? "todos" : "sin-plan")}
+          >
+            {filtro === "sin-plan" ? "Ver todos los casos" : resumen.sinPlan === 1 ? "Ver cuál es" : "Ver cuáles son"}
+          </button>
+        </p>
+      )}
 
       {/* Por cobrar ahora: la lista de Caja, tal cual. Al cobrar se vuelve a
           pedir la pantalla para que los totales y la tabla digan lo nuevo. */}

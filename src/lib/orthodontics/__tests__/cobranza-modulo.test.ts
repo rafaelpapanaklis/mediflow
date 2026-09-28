@@ -19,6 +19,7 @@ import {
   HORIZONTE_POR_VENCER_DIAS,
   diasEntre,
   entraEnFiltro,
+  leerFiltroCobranza,
   filasDeCobranza,
   filtrarCobranza,
   fraseDeAtraso,
@@ -108,7 +109,9 @@ test("H16: la página de Cobranza carga los casos de verdad (antes: «Esta panta
   assert.match(pagina, /await exigirModuloOrtodoncia\(\);/, "la guarda del módulo, también en la página");
   assert.match(pagina, /loadOrthoCases\(user\.clinicId, zona, viewer, ahora\)/, "clínica y visibilidad, de la sesión");
   assert.match(pagina, /filasDeCobranza\(cases, hoyEnZona\(ahora, zona\)\)/, "«hoy» en la zona de la clínica");
-  assert.match(pagina, /<VistaCobranza filas=\{filas\} resumen=\{resumenDeCobranza\(filas\)\} puedeCobrar=\{puedeCobrar\} \/>/);
+  assert.match(pagina, /<VistaCobranza\s+filas=\{filas\}\s+resumen=\{resumenDeCobranza\(filas\)\}\s+puedeCobrar=\{puedeCobrar\}/);
+  // ws1-t4 ronda 6: puede abrir ya filtrada (el indicador del Tablero), con el filtro saneado en el servidor.
+  assert.match(pagina, /filtroInicial=\{leerFiltroCobranza\(searchParams\?\.filtro\)\}/);
   assert.match(pagina, /"billing\.view"/, "cobrar exige el permiso de Caja");
 
   // Reutiliza lo que ya existe: el motor de cobranza y la lista de Caja.
@@ -279,11 +282,18 @@ test("filtro y buscador", () => {
   assert.equal(filtrarCobranza(filas, "todos", "").length, 4);
   assert.deepEqual(filtrarCobranza(filas, "vencido", "").map((f) => f.planId), ["plan-adulto"]);
   assert.deepEqual(filtrarCobranza(filas, "por-vencer", "").map((f) => f.planId), ["v"]);
+  // Fila 20 de la revisión de lógica de uso: quien no tiene plan de pago NO
+  // está «al corriente» (eso es pagar puntual). Va en su propio filtro.
   assert.deepEqual(
     filtrarCobranza(filas, "al-corriente", "").map((f) => f.planId),
-    ["plan-menor", "n"],
-    "sin plan entra en «al corriente»",
+    ["plan-menor"],
+    "sin plan de pago no es «al corriente»",
   );
+  assert.deepEqual(filtrarCobranza(filas, "sin-plan", "").map((f) => f.planId), ["n"]);
+  assert.equal(leerFiltroCobranza("vencido"), "vencido", "el indicador del Tablero llega ya filtrado");
+  assert.equal(leerFiltroCobranza(["sin-plan", "todos"]), "sin-plan");
+  assert.equal(leerFiltroCobranza("lo-que-sea"), "todos");
+  assert.equal(leerFiltroCobranza(undefined), "todos");
   assert.deepEqual(filtrarCobranza(filas, "todos", "nunez").map((f) => f.planId), ["n"], "sin acentos");
   assert.deepEqual(filtrarCobranza(filas, "todos", "  RENATA ").map((f) => f.planId), ["plan-adulto"], "también por doctor");
   assert.deepEqual(filtrarCobranza(filas, "vencido", "menor"), [], "el buscador no se salta el filtro");

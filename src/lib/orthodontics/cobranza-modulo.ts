@@ -219,14 +219,28 @@ export function resumenDeCobranza(filas: FilaCobranza[]): ResumenDeCobranza {
   return r;
 }
 
-export type FiltroCobranza = "todos" | "vencido" | "por-vencer" | "al-corriente";
+export type FiltroCobranza = "todos" | "vencido" | "por-vencer" | "al-corriente" | "sin-plan";
 
-/** ¿Entra esta fila en el filtro? «Al corriente» junta a quien va al día, a quien ya saldó y a quien aún no tiene plan. */
+const FILTROS: readonly FiltroCobranza[] = ["todos", "vencido", "por-vencer", "al-corriente", "sin-plan"];
+
+/** Lo que llega en la dirección (`?filtro=`), saneado. Lo que no se conoce es «todos». */
+export function leerFiltroCobranza(valor: string | string[] | undefined): FiltroCobranza {
+  const v = Array.isArray(valor) ? valor[0] : valor;
+  return FILTROS.indexOf(v as FiltroCobranza) !== -1 ? (v as FiltroCobranza) : "todos";
+}
+
+/**
+ * ¿Entra esta fila en el filtro? «Al corriente» junta a quien va al día y a
+ * quien ya saldó. Quien todavía NO tiene plan de pago va aparte (ws1-t4 ronda
+ * 6, fila 20 de la revisión de lógica de uso): «al corriente» quiere decir que
+ * paga puntual, y a ese paciente nunca se le ha cobrado.
+ */
 export function entraEnFiltro(fila: FilaCobranza, filtro: FiltroCobranza): boolean {
   if (filtro === "todos") return true;
   if (filtro === "vencido") return fila.situacion === "vencido";
   if (filtro === "por-vencer") return fila.situacion === "por-vencer";
-  return fila.situacion === "al-corriente" || fila.situacion === "saldado" || fila.situacion === "sin-plan";
+  if (filtro === "sin-plan") return fila.situacion === "sin-plan";
+  return fila.situacion === "al-corriente" || fila.situacion === "saldado";
 }
 
 /** Minúsculas y sin acentos: «nunez» encuentra a «Núñez». */

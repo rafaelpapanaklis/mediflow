@@ -15,12 +15,16 @@ import { getCurrentUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/auth/permissions";
 import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { loadOrthoCases } from "@/lib/orthodontics/tablero-data";
-import { filasDeCobranza, resumenDeCobranza } from "@/lib/orthodontics/cobranza-modulo";
+import { filasDeCobranza, resumenDeCobranza, leerFiltroCobranza } from "@/lib/orthodontics/cobranza-modulo";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { zonaValida } from "@/components/specialties/orthodontics/modulo/fechas";
 import { VistaCobranza } from "@/components/specialties/orthodontics/modulo/vista-cobranza";
 
-export default async function OrthodonticsCobranzaPage() {
+export default async function OrthodonticsCobranzaPage({
+  searchParams,
+}: {
+  searchParams?: { filtro?: string | string[] };
+}) {
   await exigirModuloOrtodoncia();
   const user = await getCurrentUser();
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
@@ -36,5 +40,13 @@ export default async function OrthodonticsCobranzaPage() {
     "billing.view",
   );
 
-  return <VistaCobranza filas={filas} resumen={resumenDeCobranza(filas)} puedeCobrar={puedeCobrar} />;
+  return (
+    <VistaCobranza
+      filas={filas}
+      resumen={resumenDeCobranza(filas)}
+      puedeCobrar={puedeCobrar}
+      // «Casos con vencido» del Tablero llega aquí con `?filtro=vencido`.
+      filtroInicial={leerFiltroCobranza(searchParams?.filtro)}
+    />
+  );
 }

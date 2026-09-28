@@ -310,6 +310,14 @@
   box-shadow: var(--pr-foco);
 }
 
+/* Un botón que se lee como enlace, dentro de una frase (ws1-t4 ronda 6). */
+.enlaceBoton {
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .botonIcono {
   display: grid;
   place-items: center;
