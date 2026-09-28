@@ -32,6 +32,7 @@ import piel from "@/components/dashboard/sabina-rx-ia-rediseno/rediseno.module.c
 import { CLASES_REDISENO_LOTE } from "@/components/dashboard/sabina-rx-ia-rediseno/raiz";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
+import { findingRegions, type AiFinding } from "./finding-regions";
 
 interface Patient {
   id: string;
@@ -39,17 +40,6 @@ interface Patient {
   lastName: string;
   patientNumber: string;
   _count: { files: number };
-}
-
-interface AiFinding {
-  id: string;
-  title: string;
-  description?: string;
-  tooth?: string | number;
-  severity: "alta" | "media" | "baja" | "informativo";
-  confidence?: number;
-  /** Posición en % dentro de la imagen para el overlay bidireccional. */
-  region?: { x: number; y: number; w: number; h: number };
 }
 
 interface XrayAnalysis {
@@ -300,35 +290,6 @@ function isImage(mime: string) {
   return mime.startsWith("image/");
 }
 
-/**
- * Asigna una región de overlay a cada finding usando coords reales si vienen
- * en el JSON; si no, distribuye automáticamente en una grilla 4x2 dentro del
- * 60% central de la imagen para que se vean al menos como referencia visual.
- */
-function findingRegions(findings: AiFinding[]): Array<AiFinding & { region: NonNullable<AiFinding["region"]> }> {
-  const cols = 4;
-  const sx = 12;   // margen izq %
-  const sy = 18;   // margen sup %
-  const w = 18;    // ancho box %
-  const h = 22;    // alto box %
-  const gx = 2.5;  // gap x %
-  const gy = 6;    // gap y %
-  return findings.map((f, i) => {
-    if (f.region) return { ...f, region: f.region };
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    return {
-      ...f,
-      region: {
-        x: sx + col * (w + gx),
-        y: sy + row * (h + gy),
-        w,
-        h,
-      },
-    };
-  });
-}
-
 export function XraysClient({
   patients,
   recentFiles: initialFiles,
@@ -530,10 +491,15 @@ export function XraysClient({
   }, [selectedPatientId]);
 
   const aiAnalysis: XrayAnalysis | null = activeFile?.xrayAnalysis ?? null;
-  const findings: Array<AiFinding & { region: NonNullable<AiFinding["region"]> }> = useMemo(
-    () => (aiAnalysis?.findings ? findingRegions(aiAnalysis.findings) : []),
-    [aiAnalysis],
-  );
+  // Tal cual llegan del análisis, sin inventar posición: el modelo
+  // (`report_radiograph_analysis`, api/xrays/[id]/analyze/route.ts) no pide
+  // ni devuelve coordenadas hoy, así que casi ningún finding trae `region`
+  // real. Antes, uno sin `region` se colocaba solo en una grilla 4x2 fija y
+  // se dibujaba como si la IA hubiera señalado ese punto exacto — engañaba
+  // al doctor. Ahora el overlay (abajo) solo dibuja los que sí traen
+  // `region`; la lista los enseña a todos, con un aviso discreto para los
+  // que no la traen.
+  const findings: AiFinding[] = useMemo(() => aiAnalysis?.findings ?? [], [aiAnalysis]);
   /**
    * "Por severidad" — hallazgo 43. Era un botón de ordenar sin ordenar. Es un
    * interruptor: encendido agrupa los hallazgos de alta a informativo; apagado
@@ -1303,9 +1269,11 @@ export function XraysClient({
                 </div>
               )}
 
-              {/* AI overlays */}
+              {/* AI overlays — SOLO los findings con `region` real
+                  (findingRegions, finding-regions.ts). Uno sin coordenadas no
+                  se dibuja: ver el comentario ahí. */}
               <div className={c.aiOverlay} data-visible={aiVisible}>
-                {findings.map((f) => (
+                {findingRegions(findings).map((f) => (
                   <button
                     type="button"
                     key={f.id}
@@ -1556,6 +1524,14 @@ export function XraysClient({
                             </span>
                             {f.confidence != null && <span>· {Math.round(f.confidence * 100)}%</span>}
                           </div>
+                          {!f.region && (
+                            <div
+                              className={c.findingMeta}
+                              style={{ color: tk("var(--text-3)", "var(--m2-texto-3)"), fontStyle: "italic" }}
+                            >
+                              {t("pages.xrays.findingNoRegion")}
+                            </div>
+                          )}
                         </div>
                         <div className={c.findingActions}>
                           <button

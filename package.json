@@ -40,6 +40,7 @@
     "test:reschedule-flow": "tsx --test src/lib/agenda/__tests__/reschedule-flow.test.ts",
     "test:home-revenue": "tsx --test src/lib/home/__tests__/revenue-buckets.test.ts",
     "test:agenda-metrics": "tsx --test src/lib/agenda/__tests__/slot-metrics.test.ts",
+    "test:xrays-finding-regions": "tsx --test src/app/dashboard/xrays/__tests__/finding-regions.test.ts",
     "test:hover-slot": "tsx --test src/lib/agenda/__tests__/hover-slot.test.ts",
     "test:agenda-legend": "tsx --test src/lib/agenda/__tests__/doctor-legend.test.ts",
     "test:campos-nom004": "tsx --test src/lib/__tests__/campos-nom004.test.ts",

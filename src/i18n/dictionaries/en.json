@@ -9402,6 +9402,7 @@
       "bySeverity": "By severity",
       "findingAriaLabel": "Finding F{id}: {title}, severity {severity}",
       "toothInline": "tooth {tooth}",
+      "findingNoRegion": "No location marked on the image",
       "accept": "Accept",
       "acceptFinding": "Accept finding: {title}",
       "accepted": "Accepted: {title}",

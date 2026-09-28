@@ -9402,6 +9402,7 @@
       "bySeverity": "Por severidad",
       "findingAriaLabel": "Hallazgo F{id}: {title}, severidad {severity}",
       "toothInline": "diente {tooth}",
+      "findingNoRegion": "Sin ubicación marcada en la imagen",
       "accept": "Aceptar",
       "acceptFinding": "Aceptar hallazgo: {title}",
       "accepted": "Aceptado: {title}",
