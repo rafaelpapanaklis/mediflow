@@ -417,7 +417,19 @@ export function FinanzasRediseno() {
                       {gastos.map((g: Gasto) => (
                         <tr key={g.id}>
                           <td className={s.celdaFecha}>{fmtDayShort(g.date)}</td>
-                          <td><span className={s.chip}>{g.category}</span></td>
+                          <td>
+                            <span className={s.chip}>{g.category}</span>
+                            {/* ws1-t6 (arreglo B6) — mismo criterio que finanzas-client.tsx: el
+                                gasto que nació de una compra de inventario lleva su proveedor. */}
+                            {g.purchaseId && (
+                              <span
+                                className={s.chipCompra}
+                                title={g.providerName ? `Compra de inventario — ${g.providerName}` : "Compra de inventario"}
+                              >
+                                Compra{g.providerName ? ` · ${g.providerName}` : ""}
+                              </span>
+                            )}
+                          </td>
                           <td className={s.celdaNota}>{g.note || ""}</td>
                           <td className={`${s.num} ${s.numPeligro}`}>{fmtMXNdec(g.amount)}</td>
                           <td className={s.celdaAccion}>

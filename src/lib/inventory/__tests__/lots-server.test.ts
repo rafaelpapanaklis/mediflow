@@ -63,6 +63,36 @@ describe("reconciliación: drift fuera del sistema de lotes", () => {
     assert.equal(lots[0].remaining, 35);
   });
 
+  it("N1 (ws1-t10 ronda 4): quantityPrecise YA puesto y desincronizado no recorta lotes recién comprados", async () => {
+    // Reproduce el bug tal cual la QA: un consumo previo deja quantityPrecise
+    // puesto (8), luego una "compra" (fuera de mi alcance: solo sube
+    // quantity y crea su propio lote, como hace compras.server.ts) sube
+    // quantity a 11 SIN tocar quantityPrecise, que queda congelado en 8.
+    db.tablas.inventoryItem.push(itemBase({ id: "item-9", quantity: 8, quantityPrecise: 8 }));
+    db.tablas.inventoryLot.push({
+      id: "sin-lote", clinicId: CLINIC, itemId: "item-9", lotNumber: null,
+      expiresAt: null, quantity: 8, remaining: 8,
+      unitCost: null, purchaseLineId: null, createdAt: new Date(), updatedAt: new Date(),
+    });
+    // "Compra" de 3 más: t4 sube quantity y crea SU lote (crearLoteDeLineaDeCompra),
+    // sin tocar quantityPrecise — exactamente el desfase de N1.
+    db.tablas.inventoryItem.find(i => i.id === "item-9")!.quantity = 11;
+    db.tablas.inventoryLot.push({
+      id: "lote-compra", clinicId: CLINIC, itemId: "item-9", lotNumber: "L-2026-09",
+      expiresAt: new Date("2027-01-01"), quantity: 3, remaining: 3,
+      unitCost: 10, purchaseLineId: "linea-x", createdAt: new Date(), updatedAt: new Date(),
+    });
+
+    // Antes del arreglo: reconcileAndLock usaba quantityPrecise (8, obsoleto)
+    // como aggregate y recortaba 3 del lote recién comprado. Con el arreglo,
+    // detecta que round(quantityPrecise) !== quantity y usa quantity (11).
+    const lots = await listLotsForItem(CLINIC, "item-9", db as any);
+    const suma = lots.reduce((s, l) => s + l.remaining, 0);
+    assert.equal(suma, 11, "no debe recortar lo recién comprado");
+    assert.equal(lots.find(l => l.id === "lote-compra")!.remaining, 3);
+    assert.equal(lots.find(l => l.id === "sin-lote")!.remaining, 8);
+  });
+
   it("una compra/ajuste externo (t4) sube quantity sin tocar lotes: el consumo lo absorbe en sin-lote antes de descontar", async () => {
     db.tablas.inventoryItem.push(itemBase({ quantity: 10 }));
     db.tablas.inventoryLot.push({

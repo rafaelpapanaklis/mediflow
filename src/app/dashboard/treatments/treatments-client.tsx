@@ -169,8 +169,12 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
           procedureId: selProcedureId || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      // ws1-t6 (arreglo N5, ws1-t10 ronda 4): un 500 crudo (p.ej. el
+      // timeout de la transacción) puede cortar la conexión sin cuerpo
+      // JSON — `res.json()` reventaba con "Unexpected end of JSON input"
+      // (en inglés, técnico) y ESE era el mensaje que veía el usuario.
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || t("pages.treatments.sessionError"));
 
       // Update state locally (optimistic update)
       setTreatments(prev => prev.map(tp => {

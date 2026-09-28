@@ -86,6 +86,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     let recetaConsumida: { itemId: string; itemName: string; qtyConsumed: number }[] = [];
 
     try {
+      // ws1-t6 (arreglo N5, ws1-t10 ronda 4): el timeout por defecto de
+      // $transaction (5 s) se quedaba corto cuando la receta trae varios
+      // insumos — cada uno hace su propio FOR UPDATE dentro de la misma
+      // transacción (consumeFefoTx, lots.server.ts) y con dev.108 cargado
+      // sumaban más de 5 s: "Transaction already closed… timeout 5000 ms,
+      // however 4971 ms passed", 500 crudo. Mismo valor que ya usan otras
+      // transacciones largas del repo (spei-directo.ts, barber/booking.ts).
       await prisma.$transaction(async tx => {
         let session;
         try {
@@ -149,7 +156,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             updatedAt:        new Date(),
           },
         });
-      });
+      }, { maxWait: 10_000, timeout: 15_000 });
     } catch (err: any) {
       if (err instanceof InsufficientStockError) {
         return NextResponse.json({ error: err.message }, { status: 400 });

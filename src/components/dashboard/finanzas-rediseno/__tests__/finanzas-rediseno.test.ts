@@ -111,3 +111,21 @@ test("«Por doctor» avisa de que es lo facturado, no lo cobrado", () => {
   assert.match(pantalla, /Lo facturado en el periodo, no lo cobrado/);
   assert.doesNotMatch(pantalla, /Ingresos generados/);
 });
+
+// B6 de la QA en vivo de ws1-t10 (sigue en la ronda 4): el arreglo de
+// finanzas-client.tsx (proveedor de la compra + aviso al borrar) nunca
+// llegó al rediseño, que es lo que ve la clínica (page.tsx: el interruptor
+// menu-dos-niveles decide, y en la QA está encendido).
+test("B6: el gasto de una compra muestra proveedor y avisa distinto al borrar (mismo criterio que finanzas-client.tsx)", () => {
+  const datos = readFileSync(join(CARPETA, "usar-finanzas.ts"), "utf8");
+  assert.match(datos, /purchaseId\??:\s*string \| null/, "Gasto debe traer purchaseId");
+  assert.match(datos, /providerName\??:\s*string \| null/, "Gasto debe traer providerName");
+
+  const deleteGasto = /async function deleteGasto\(id: string\) \{([\s\S]*?)\n  \}/.exec(datos)?.[1] ?? "";
+  assert.match(deleteGasto, /purchaseId/, "deleteGasto debe distinguir un gasto nacido de una compra");
+  assert.match(deleteGasto, /NO revierte las existencias/, "el aviso debe advertir que no revierte inventario");
+
+  const pantalla = readFileSync(join(CARPETA, "finanzas-rediseno.tsx"), "utf8");
+  assert.match(pantalla, /g\.purchaseId/, "la tabla debe leer purchaseId para pintar la insignia");
+  assert.match(pantalla, /Compra\{g\.providerName/, "la insignia debe nombrar al proveedor cuando lo hay");
+});

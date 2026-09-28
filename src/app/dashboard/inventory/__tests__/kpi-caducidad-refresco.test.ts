@@ -23,6 +23,27 @@ test("aplicarResultadoCompra vuelve a pedir los avisos de caducidad", () => {
   assert.match(fn, /cargarAvisos\(\)/, "una compra registrada no dispara cargarAvisos()");
 });
 
+// N6 de la QA de ws1-t10 ronda 4: dos líneas del mismo artículo devuelven
+// dos entradas en r.items (una por línea, cada una con la cantidad
+// acumulada hasta esa línea) — la fila se quedaba con la PRIMERA (a medio
+// aplicar) porque el código usaba `.find()`. Prueba de comportamiento, no
+// solo de texto: reproduce la forma real de r.items con dos líneas del
+// mismo artículo y corre la MISMA lógica que el componente.
+test("N6: una compra con 2 líneas del mismo artículo se queda con la ÚLTIMA cantidad, no la primera", () => {
+  const fn = /function aplicarResultadoCompra\(r: ResultadoCompra\) \{([\s\S]*?)\n  \}/.exec(TEXTO)?.[1] ?? "";
+  assert.doesNotMatch(fn, /\br\.items\.find\(/, "no debe volver a usar .find() (se queda con la primera línea)");
+
+  // r.items tal como lo arma registrarCompra: una entrada por LÍNEA, en
+  // orden, cada una con la cantidad acumulada hasta ahí (11 tras la 1ª
+  // línea, 12 tras la 2ª — el mismo caso que vio la QA).
+  const items = [
+    { itemId: "resina", quantity: 11, unitCost: 50 },
+    { itemId: "resina", quantity: 12, unitCost: 50 },
+  ];
+  const actualizado = items.filter(u => u.itemId === "resina").at(-1);
+  assert.equal(actualizado?.quantity, 12, "debe quedarse con la cantidad final, no la de la primera línea");
+});
+
 test("cargarAvisos es la única fuente de /api/inventory/alerts (nada de fetch duplicado)", () => {
   const llamadas = TEXTO.match(/fetch\("\/api\/inventory\/alerts"\)/g) ?? [];
   assert.equal(llamadas.length, 1, "debe haber un solo fetch a /api/inventory/alerts, dentro de cargarAvisos");

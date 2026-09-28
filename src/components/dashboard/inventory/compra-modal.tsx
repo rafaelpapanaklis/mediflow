@@ -11,7 +11,7 @@
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import toast from "react-hot-toast";
-import { Plus, Trash2, X } from "lucide-react";
+import { Info, Plus, Trash2, X } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN } from "@/lib/format";
 // Diseño (ws1-t5): la ropa de la ventana y la maqueta de las líneas.
@@ -59,6 +59,10 @@ export function CompraModal({
   const [guardando, setGuardando] = useState(false);
 
   const total = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitCost) || 0), 0);
+  // ws1-t6 (arreglo N12, ws1-t10 ronda 4): «hoy» de la CLÍNICA, no la fecha
+  // elegida de la compra — es contra lo que compara estadoDeCaducidad en el
+  // servidor (lots.server.ts) para pintar un lote como "Caducado".
+  const hoy = hoyEnZona(timezone);
 
   function actualizarLinea(idx: number, patch: Partial<LineaForm>) {
     setLines(prev => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
@@ -194,6 +198,17 @@ export function CompraModal({
                       <label className="field-new__label" htmlFor={`compra-caduca-${idx}`}>Caduca (opcional)</label>
                       <input id={`compra-caduca-${idx}`} type="date" className="input-new" value={line.expiresAt}
                         onChange={e => actualizarLinea(idx, { expiresAt: e.target.value })} />
+                      {/* N12 — la compra aceptaba un lote ya caducado sin
+                          avisar. No bloquea, solo avisa (mismo criterio que
+                          el resto de la ola — B1, B4: informar, no impedir);
+                          si Rafael prefiere bloquearlo, ver el reporte de
+                          ws1-t6. */}
+                      {line.expiresAt && line.expiresAt < hoy && (
+                        <p className={inv.pista}>
+                          <Info size={13} strokeWidth={1.75} aria-hidden />
+                          Ya caducó: el lote nace &ldquo;Caducado&rdquo;.
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}

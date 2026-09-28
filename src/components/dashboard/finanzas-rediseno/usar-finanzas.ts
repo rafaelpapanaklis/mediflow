@@ -30,7 +30,12 @@ export interface FinanzasResumen {
   porDoctor: DoctorRow[];
   saldos:    { porCobrar: number; vencido: number };
 }
-export interface Gasto { id: string; date: string; category: string; amount: number; note: string | null }
+export interface Gasto {
+  id: string; date: string; category: string; amount: number; note: string | null;
+  /** ws1-t6 (arreglo B6) — el gasto nació de una compra de inventario (InventoryPurchase). */
+  purchaseId?: string | null;
+  providerName?: string | null;
+}
 
 export type PeriodKey = "hoy" | "mes" | "mes_anterior" | "custom";
 
@@ -154,7 +159,16 @@ export function useFinanzas() {
   }
 
   async function deleteGasto(id: string) {
-    if (!window.confirm("¿Eliminar este gasto?")) return;
+    // ws1-t6 (arreglo B6, ws1-t10 ronda 4): mismo aviso que ya tenía
+    // finanzas-client.tsx (la vista vieja) — un gasto que nació de una
+    // compra de inventario (`purchaseId`) queda huérfano al borrarlo: las
+    // existencias y el costo que sumó esa compra NO se revierten. No se
+    // bloquea (decisión de Rafael, ver el reporte de ws1-t6); se avisa antes.
+    const gasto = gastos.find((g) => g.id === id);
+    const aviso = gasto?.purchaseId
+      ? "Este gasto viene de una compra de inventario. Borrarlo NO revierte las existencias ni el costo que sumó esa compra: los números dejarán de cuadrar entre Finanzas e Inventario.\n\n¿Eliminar de todas formas?"
+      : "¿Eliminar este gasto?";
+    if (!window.confirm(aviso)) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/gastos?id=${encodeURIComponent(id)}`, { method: "DELETE" });

@@ -538,7 +538,11 @@ export function InventoryClient({
   // no viaja en `ResultadoCompra`.
   function aplicarResultadoCompra(r: ResultadoCompra) {
     setItems(prev => prev.map(i => {
-      const actualizado = r.items.find(u => u.itemId === i.id);
+      // ws1-t6 (arreglo N6, ws1-t10 ronda 4): dos líneas del mismo artículo
+      // llegan como DOS entradas en r.items (una por línea, cada una con la
+      // cantidad acumulada hasta esa línea) — find() se quedaba con la
+      // primera (a medio aplicar). Se toma la ÚLTIMA: ya vio todas las líneas.
+      const actualizado = r.items.filter(u => u.itemId === i.id).at(-1);
       return actualizado ? { ...i, quantity: actualizado.quantity, unitCost: actualizado.unitCost } : i;
     }));
     cargarAvisos();

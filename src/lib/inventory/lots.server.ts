@@ -165,6 +165,26 @@ async function ensureSinLote(tx: Tx, clinicId: string, itemId: string): Promise<
   return created.id;
 }
 
+// ws1-t6 (arreglo N1, ws1-t10 ronda 4) — qué número es la fuente de verdad
+// para reconciliar. Diseño (schema.prisma, bloque INVENTARIO B): mientras
+// quantityPrecise esté SINCRONIZADO, es la fuente fina y quantity es su
+// redondeo. El bug: la compra (aplicarEntradaDeCompra, costo.server.ts) y el
+// ajuste manual (api/inventory/[id]/route.ts) solo suben `quantity` — nunca
+// tocan `quantityPrecise` — así que en cuanto un artículo ya tenía
+// quantityPrecise puesto (por cualquier alta/consumo de lote anterior),
+// quedaba CONGELADO: la siguiente reconciliación lo seguía usando como
+// aggregate, con `quantity` ya movido por la compra, y recortaba lotes recién
+// comprados para igualar un número viejo (existencias que se "perdían").
+// Si los dos números están en línea (round(quantityPrecise) === quantity) se
+// usa el decimal, que conserva la fracción; si NO lo están, `quantity` es la
+// escritura más fresca — se usa él y quantityPrecise se resincroniza solo en
+// el siguiente syncItemAggregate.
+function aggregateDeItem(item: { quantity: number; quantityPrecise: Prisma.Decimal | number | null }): number {
+  if (item.quantityPrecise == null) return item.quantity;
+  const precise = Number(item.quantityPrecise);
+  return Math.round(precise) === item.quantity ? precise : item.quantity;
+}
+
 async function reconcileAndLock(tx: Tx, clinicId: string, itemId: string): Promise<LotForFefo[]> {
   // Bloquea el artículo: serializa cualquier consumo/alta/baja concurrente
   // sobre este mismo artículo (mismo patrón que el FOR UPDATE de facturas).
@@ -177,15 +197,15 @@ async function reconcileAndLock(tx: Tx, clinicId: string, itemId: string): Promi
   await (tx as PrismaClient).$queryRaw`SELECT "id" FROM "inventory_lots" WHERE "itemId" = ${itemId} FOR UPDATE`;
   const lots = await (tx as PrismaClient).inventoryLot.findMany({ where: { clinicId, itemId } });
 
+  const aggregate = aggregateDeItem(item);
+
   if (lots.length === 0) {
-    const aggregate = item.quantityPrecise != null ? Number(item.quantityPrecise) : item.quantity;
     const nuevo = await (tx as PrismaClient).inventoryLot.create({
       data: { clinicId, itemId, lotNumber: null, expiresAt: null, quantity: aggregate, remaining: aggregate },
     });
     return [{ id: nuevo.id, expiresAt: null, remaining: round3(aggregate) }];
   }
 
-  const aggregate  = item.quantityPrecise != null ? Number(item.quantityPrecise) : item.quantity;
   const asFefo: LotForFefo[] = lots.map(l => ({ id: l.id, expiresAt: l.expiresAt, remaining: Number(l.remaining) }));
   const lotsSum = round3(asFefo.reduce((s, l) => s + Math.max(0, l.remaining), 0));
   const delta   = round3(aggregate - lotsSum);
