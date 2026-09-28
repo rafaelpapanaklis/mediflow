@@ -11,6 +11,7 @@ import { Foto, Txt, useEnEdicion } from "./_shared/edit-context";
 // plantillas (17 KB) sin que la página pública lo necesite para nada.
 import { dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
 import { copyMap, copyValue, photoOf, sectionMap, showSection } from "./_shared/landing-data";
+import { porDefectoSegunGiro } from "./_shared/textos-por-giro";
 
 const DAYS_SHORT = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 
@@ -70,6 +71,10 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
      el literal de siempre: en la pagina publica no se mueve un pixel. */
   const copias = copyMap(clinic);
   const C = (clave: string) => copyValue(copias, clave);
+  /* Texto por defecto según el giro: una clínica DENTAL ve la versión dental de
+     tres frases; las demás, el literal de siempre. Si la clínica escribió el
+     suyo, <Txt> pinta el suyo. */
+  const G = (literal: string) => porDefectoSegunGiro(clinic.category, literal);
   const hayOpiniones = testimonials.length > 0 || (googleReviews?.reviews.length ?? 0) > 0;
   const verServicios = showSection(S, "servicios", services.length > 0);
   const verEquipo    = showSection(S, "equipo",    clinic.users.length > 0);
@@ -278,7 +283,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                 valor={S.servicios?.titulo} porDefecto="Lo que ofrecemos" />
               <Txt as="p" className="text-gray-400 text-lg"
                 campo={dirSeccion("servicios", "subtitulo")}
-                valor={S.servicios?.subtitulo} porDefecto="Tratamientos con tecnología de vanguardia para tu salud y bienestar" />
+                valor={S.servicios?.subtitulo} porDefecto={G("Tratamientos con tecnología de vanguardia para tu salud y bienestar")} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {services.map((svc:any, i:number) => (
@@ -326,13 +331,13 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
             <div className="text-center mb-16">
               <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
                 campo={dirCopia("equipo.kicker")}
-                valor={C("equipo.kicker")} porDefecto="Equipo médico" />
+                valor={C("equipo.kicker")} porDefecto={G("Equipo médico")} />
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-4"
                 campo={dirSeccion("equipo", "titulo")}
                 valor={S.equipo?.titulo} porDefecto="Nuestros especialistas" />
               <Txt as="p" className="text-gray-400 text-lg max-w-lg mx-auto"
                 campo={dirSeccion("equipo", "subtitulo")}
-                valor={S.equipo?.subtitulo} porDefecto="Profesionales certificados comprometidos con tu salud" />
+                valor={S.equipo?.subtitulo} porDefecto={G("Profesionales certificados comprometidos con tu salud")} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {clinic.users.map(doc => (

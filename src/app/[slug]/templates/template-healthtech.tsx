@@ -19,6 +19,7 @@ import { Foto, Txt, useEnEdicion } from "../_shared/edit-context";
 // plantillas (17 KB) sin que la página pública lo necesite para nada.
 import { dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
 import { copyMap, copyText, copyValue, photoOf, sectionMap, sectionTitle, showSection } from "../_shared/landing-data";
+import { porDefectoSegunGiro } from "../_shared/textos-por-giro";
 import {
   SmartImg, Stars, GoogleG, useScrolled, useActiveSection, Reveal,
   scrollToId, useLightbox, Lightbox, tint, shade, alpha, mix, hexAdjust,
@@ -502,7 +503,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
         <section id="equipo" className="py-20 sm:py-28" style={{ background: tintedSurface }}>
           <div className="max-w-7xl mx-auto px-5 sm:px-8">
             <SectionHead tk={tk} seccion="equipo" claveKicker="equipo.kicker" editando={editando}
-              kicker="Equipo médico" kickerValor={C("equipo.kicker")}
+              kicker={porDefectoSegunGiro(clinic.category, "Equipo médico")} kickerValor={C("equipo.kicker")}
               title="Especialistas en quienes confiar" titleValor={S.equipo?.titulo}
               sub="Profesionales certificados, comprometidos con tu bienestar." subValor={S.equipo?.subtitulo} />
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-14">

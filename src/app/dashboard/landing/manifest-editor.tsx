@@ -9,6 +9,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ImageIcon, Loader2, Lock, Trash2, Upload } from "lucide-react";
 import toast from "react-hot-toast";
+import { porDefectoSegunGiro } from "@/app/[slug]/_shared/textos-por-giro";
 import {
   manifestOf,
   type ManifestPhotoSlot,
@@ -48,6 +49,12 @@ export interface ManifestEditorProps {
   onUpload: (file: File, slotId: string) => Promise<string>;
   /** Interruptor `menu-dos-niveles` (ws1-t3). Sin él, este editor es el de siempre. */
   rediseno?: boolean;
+  /**
+   * `Clinic.category` (viene del servidor). Solo para que el texto en gris
+   * —«lo que sale si lo dejas vacío»— sea el MISMO que pinta la plantilla:
+   * en una clínica dental algunos textos por defecto son la versión dental.
+   */
+  categoria?: string | null;
 }
 
 /* ============================================================
@@ -119,7 +126,7 @@ function TemplateDiagram({
    ============================================================ */
 export function ManifestEditor({
   templateId, sections, photos, saving,
-  onSaveSections, onSavePhotos, onDraftSections, onUpload, rediseno = false,
+  onSaveSections, onSavePhotos, onDraftSections, onUpload, rediseno = false, categoria = null,
 }: ManifestEditorProps) {
   const manifest = useMemo(() => manifestOf(templateId), [templateId]);
 
@@ -264,10 +271,10 @@ export function ManifestEditor({
                   <label className={rd.etiqueta}>{txt.etiqueta}</label>
                   {txt.campo === "subtitulo" ? (
                     <textarea value={valorTexto(txt.seccion, txt.campo)} onChange={e => setTexto(txt.seccion, txt.campo, e.target.value)}
-                      placeholder={txt.porDefecto} rows={2} className={rd.textarea} />
+                      placeholder={porDefectoSegunGiro(categoria, txt.porDefecto)} rows={2} className={rd.textarea} />
                   ) : (
                     <input value={valorTexto(txt.seccion, txt.campo)} onChange={e => setTexto(txt.seccion, txt.campo, e.target.value)}
-                      placeholder={txt.porDefecto} className={rd.input} />
+                      placeholder={porDefectoSegunGiro(categoria, txt.porDefecto)} className={rd.input} />
                   )}
                 </div>
               ))}
@@ -409,7 +416,7 @@ export function ManifestEditor({
                   <textarea
                     value={valorTexto(txt.seccion, txt.campo)}
                     onChange={e => setTexto(txt.seccion, txt.campo, e.target.value)}
-                    placeholder={txt.porDefecto}
+                    placeholder={porDefectoSegunGiro(categoria, txt.porDefecto)}
                     rows={2}
                     className={`${INPUT} resize-none`}
                   />
@@ -417,7 +424,7 @@ export function ManifestEditor({
                   <input
                     value={valorTexto(txt.seccion, txt.campo)}
                     onChange={e => setTexto(txt.seccion, txt.campo, e.target.value)}
-                    placeholder={txt.porDefecto}
+                    placeholder={porDefectoSegunGiro(categoria, txt.porDefecto)}
                     className={INPUT}
                   />
                 )}

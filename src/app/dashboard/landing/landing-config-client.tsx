@@ -36,6 +36,9 @@ interface Clinic {
   landingFacebook: string|null; landingTiktok: string|null; landingMapEmbed: string|null;
   landingTagline: string|null;
   landingTemplate: string|null; landingYearsExperience: number|null; landingPatients: string|null;
+  /** `Clinic.category` (la fila viene del servidor). Solo decide la versión de
+      algunos textos por defecto que se enseñan en gris. */
+  category?: string|null;
   /* Landing v2 — opcionales: una clínica que nunca abrió el editor nuevo los
      tiene en null y el manifiesto rellena los valores por defecto. */
   landingSections?: unknown; landingPhotos?: unknown;
@@ -684,6 +687,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
           {tab === "diseno" && plantillaLeeManifiesto(templateSel) && (
             <ManifestEditor
               rediseno
+              categoria={initial.category ?? null}
               templateId={templateSel}
               sections={draftSections ?? savedSections}
               photos={savedPhotos}
@@ -1412,6 +1416,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
 
       {tab === "diseno" && plantillaLeeManifiesto(templateSel) && (
         <ManifestEditor
+          categoria={initial.category ?? null}
           templateId={templateSel}
           /* El borrador manda: así cambiar de pestaña y volver no pierde lo
              que la clínica llevaba escrito (ni descuadra la vista previa). */
