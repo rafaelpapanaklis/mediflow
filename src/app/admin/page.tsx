@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { computeMrr, loadIncludedBranchIds, loadPlanPrices } from "@/lib/admin/mrr";
+import { computeMrrModulos, loadModulosContratados } from "@/lib/admin/modulos";
 import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { comparePaymentDateDesc, paymentDate } from "@/lib/admin/payment-date";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -101,7 +102,8 @@ function acumula(
  *    los gates que bloquean subidas y altas.
  *
  * Consultas: 2 de precios/sedes (con sus propias tandas), luego tandas de 2,
- * 5 y 3, y las dos tandas de uso (4 + 3). Nunca más de 7 en vuelo.
+ * 5 y 3, las dos tandas de uso (4 + 3) y las 2 de módulos, en fila. Nunca más
+ * de 7 en vuelo.
  */
 async function renderAdminDashboard() {
   const now = new Date();
@@ -210,7 +212,13 @@ async function renderAdminDashboard() {
   const speiPendientes = await listarPendientesAdmin()
     .catch((e) => { console.error("[admin] SPEI por confirmar:", e); return null; });
 
+  // Módulos contratados (clinic_modules): lo que cada clínica paga por ellos
+  // suma al MRR. Dos consultas en fila; si fallan, el MRR sale solo con planes
+  // y se avisa.
+  const modulos = await loadModulosContratados();
+
   if (!sedesIncluidas) avisos.push("sedes incluidas (el MRR las cuenta a precio de lista)");
+  if (!modulos.medido) avisos.push("módulos contratados (el MRR sale solo con los planes)");
   if (!ultimaCitaRows) avisos.push("última cita de cada clínica");
   if (!pagadasRows) avisos.push("histórico de pagos por clínica");
   if (!accesoRows) avisos.push("accesos al panel");
@@ -269,6 +277,10 @@ async function renderAdminDashboard() {
   const conSede = <T extends { id: string }>(c: T) => ({ ...c, includedBranch: !!sedesIncluidas?.has(c.id) });
   const mrrActive = computeMrr(activeClinics.map(conSede), planPrices);
   const mrrTrial  = computeMrr(trialClinics.map(conSede), planPrices);
+  // Mismo universo que el roster: un módulo de una clínica archivada no suma.
+  const mrrModulos = modulos.medido
+    ? computeMrrModulos(modulos.filas, now, new Set(vivas.map((c) => c.id)))
+    : null;
 
   // ── Deuda por clínica, de las mismas filas que el KPI «por cobrar» ─────────
   const deudaPorClinica = new Map<string, { fallidos: number; monto: number }>();
@@ -376,7 +388,8 @@ async function renderAdminDashboard() {
     facturacion,
     negocio: {
       mrr: mrrActive,
-      mrrPotencial: mrrActive.total + mrrTrial.total,
+      mrrModulos,
+      mrrPotencial: mrrActive.total + mrrTrial.total + (mrrModulos?.total ?? 0),
       activas: activeClinics.length,
       enTrial: trialClinics.length,
       vencidas: expiredClinics.length,

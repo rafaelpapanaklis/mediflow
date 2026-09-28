@@ -13,6 +13,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { fechaAdmin } from "@/lib/admin/zona-horaria";
 import type { AdminMrr } from "@/lib/admin/mrr-core";
+import type { MrrModulos } from "@/lib/admin/modulos-core";
 import type { PuntoNegocio, Rango } from "@/lib/admin/serie-negocio";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { PlanStatusBadge, type PlanClinicLike } from "@/components/admin/plan-status-badge";
@@ -56,6 +57,11 @@ export interface DatosPortada {
   facturacion: { hoy: number; mes: number; anio: number; porCobrar: number; fallidos: number; medido: boolean };
   negocio: {
     mrr: AdminMrr;
+    /**
+     * Lo que entra por módulos (clinic_modules), aparte de los planes. `null` o
+     * ausente = no se pudo medir: el MRR se pinta solo con los planes.
+     */
+    mrrModulos?: MrrModulos | null;
     mrrPotencial: number;
     activas: number;
     enTrial: number;
@@ -88,6 +94,46 @@ const METODO: Record<string, string> = {
 
 function ultimoDe(v: number[]): number {
   return v.length ? v[v.length - 1] : 0;
+}
+
+/**
+ * La tarjeta del MRR: planes + módulos. Aparte de `PortadaVista` para poder
+ * verla con datos de ejemplo sin armar la portada entera.
+ */
+export function TarjetaMrr({ negocio }: { negocio: Pick<DatosPortada["negocio"], "mrr" | "mrrModulos" | "mrrPotencial"> }) {
+  return (
+    <Tarjeta title="MRR" action={<Link href="/admin/clientes" className="ad-enlace">Clientes <ArrowUpRight size={13} /></Link>}>
+      {/* Planes + módulos: lo que cada clínica paga por sus módulos también es ingreso del mes. */}
+      <div className="ad-cifra__n ad-num ad-cifra__n--brand" style={{ fontSize: 30 }} data-mrr-total>
+        {formatCurrency(negocio.mrr.total + (negocio.mrrModulos?.total ?? 0))}
+      </div>
+      <div className="ad-cifra__pie">
+        {negocio.mrrModulos && negocio.mrrModulos.total > 0 && (
+          <>planes {formatCurrency(negocio.mrr.total)} + módulos {formatCurrency(negocio.mrrModulos.total)}{" · "}</>
+        )}
+        {negocio.mrr.clinics} {negocio.mrr.clinics === 1 ? "clínica paga" : "clínicas pagan"}
+        {negocio.mrr.includedBranches > 0 && ` · ${negocio.mrr.includedBranches} sede${negocio.mrr.includedBranches === 1 ? "" : "s"} incluida${negocio.mrr.includedBranches === 1 ? "" : "s"} a $0`}
+        {" · potencial "}{formatCurrency(negocio.mrrPotencial)} con los trials
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+        {negocio.mrr.byPlan.filter((p) => p.clinics > 0).map((p) => (
+          <Chip key={p.plan} tono={p.plan === "CLINIC" ? "brand" : p.plan === "PRO" ? "info" : "neutral"} title={`${p.clinics} × ${formatCurrency(p.listPrice)}${p.negotiated ? ` · ${p.negotiated} con precio negociado` : ""}${p.conserved ? ` · ${p.conserved} con precio conservado` : ""}`}>
+            {p.plan} · {p.clinics} · {formatCurrency(p.total)}
+          </Chip>
+        ))}
+        {negocio.mrr.byPlan.every((p) => p.clinics === 0) && <span className="ad-suave">Ninguna clínica activa.</span>}
+        {(negocio.mrrModulos?.porModulo ?? []).map((m) => (
+          <Chip
+            key={`modulo-${m.moduleKey}`}
+            tono="success"
+            title={`Módulo ${m.moduleName}: ${m.clinicas} ${m.clinicas === 1 ? "clínica lo tiene" : "clínicas lo tienen"} · ${m.pagando} ${m.pagando === 1 ? "paga" : "pagan"}${m.cortesia ? ` · ${m.cortesia} de cortesía` : ""}. Importes de lo que pagó cada una, sin IVA.`}
+          >
+            {m.moduleName} · {m.clinicas} · {formatCurrency(m.total)}
+          </Chip>
+        ))}
+      </div>
+    </Tarjeta>
+  );
 }
 
 export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date }) {
@@ -157,22 +203,7 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
 
       {/* ── 4. El negocio en números ── */}
       <div className="ad-grid-3">
-        <Tarjeta title="MRR" action={<Link href="/admin/clientes" className="ad-enlace">Clientes <ArrowUpRight size={13} /></Link>}>
-          <div className="ad-cifra__n ad-num ad-cifra__n--brand" style={{ fontSize: 30 }}>{formatCurrency(d.negocio.mrr.total)}</div>
-          <div className="ad-cifra__pie">
-            {d.negocio.mrr.clinics} {d.negocio.mrr.clinics === 1 ? "clínica paga" : "clínicas pagan"}
-            {d.negocio.mrr.includedBranches > 0 && ` · ${d.negocio.mrr.includedBranches} sede${d.negocio.mrr.includedBranches === 1 ? "" : "s"} incluida${d.negocio.mrr.includedBranches === 1 ? "" : "s"} a $0`}
-            {" · potencial "}{formatCurrency(d.negocio.mrrPotencial)} con los trials
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
-            {d.negocio.mrr.byPlan.filter((p) => p.clinics > 0).map((p) => (
-              <Chip key={p.plan} tono={p.plan === "CLINIC" ? "brand" : p.plan === "PRO" ? "info" : "neutral"} title={`${p.clinics} × ${formatCurrency(p.listPrice)}${p.negotiated ? ` · ${p.negotiated} con precio negociado` : ""}${p.conserved ? ` · ${p.conserved} con precio conservado` : ""}`}>
-                {p.plan} · {p.clinics} · {formatCurrency(p.total)}
-              </Chip>
-            ))}
-            {d.negocio.mrr.byPlan.every((p) => p.clinics === 0) && <span className="ad-suave">Ninguna clínica activa.</span>}
-          </div>
-        </Tarjeta>
+        <TarjetaMrr negocio={d.negocio} />
 
         <Tarjeta title="Clínicas" action={<Link href="/admin/clinics" className="ad-enlace">Ver todas <ArrowUpRight size={13} /></Link>}>
           <div className="ad-cifra__n ad-num" style={{ fontSize: 30 }}>{d.negocio.total}</div>
