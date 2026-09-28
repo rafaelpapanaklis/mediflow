@@ -75,3 +75,24 @@ export function encogidoEfectivo(
   if (!enFicha) return preferencia;
   return eleccionEnFicha ?? true;
 }
+
+/**
+ * ¿Hay que cerrar el segundo nivel del menú (Administración) al cambiar de
+ * pantalla? Solo al ENTRAR al módulo de Ortodoncia desde fuera.
+ *
+ * Por qué hace falta: a la ficha se llega desde Pacientes, que está en el
+ * primer nivel, así que recoger ese nivel ya deja solo la barra de iconos.
+ * Ortodoncia vive DENTRO del segundo nivel (Administración → Especialidades):
+ * sin esto, al hacer clic se recogía la barra y el panel de 248 px se quedaba
+ * acoplado, o sea que el menú seguía ahí. Cerrarlo al entrar es lo que deja
+ * la pantalla igual que la ficha.
+ *
+ * Solo al entrar: moverse entre pestañas del módulo no cierra nada, así que
+ * quien vuelva a abrir Administración estando dentro lo conserva abierto.
+ */
+export function cierraSegundoNivelAlEntrar(
+  anterior: string | null | undefined,
+  actual: string | null | undefined,
+): boolean {
+  return zonaRecogida(actual) === ZONA_ORTODONCIA && zonaRecogida(anterior) !== ZONA_ORTODONCIA;
+}

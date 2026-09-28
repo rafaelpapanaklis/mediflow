@@ -46,6 +46,7 @@ import { CLASES_MENU } from "./clases";
 import { escucharCambioDeMenu } from "@/lib/menu-personalizado/avisos";
 import { EditorMenu } from "./personalizar/editor-menu";
 import { useEncogidoEnFicha } from "@/components/dashboard/menu-recogido-en-paciente/use-encogido-en-ficha";
+import { cierraSegundoNivelAlEntrar } from "@/components/dashboard/menu-recogido-en-paciente/recogido";
 import s from "./menu-dos-niveles.module.css";
 
 /** El menú que esta persona se armó a mano, leído en el servidor. */
@@ -221,13 +222,16 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
 
   // Cambiar de pantalla: el cajón del teléfono se cierra; el segundo nivel solo
   // se cierra si estaba encima de la pantalla (entre 1024 y 1279 px). Acoplado
-  // se queda abierto para saltar entre pantallas de administración.
+  // se queda abierto para saltar entre pantallas de administración. La
+  // excepción es ENTRAR al módulo de Ortodoncia (ws1-t3): ahí se cierra también
+  // acoplado, para que el menú quede en la barra de iconos como en la ficha.
   const rutaAnterior = useRef(pathname);
   useEffect(() => {
     if (rutaAnterior.current === pathname) return;
+    const anterior = rutaAnterior.current;
     rutaAnterior.current = pathname;
     setCajonAbierto(false);
-    if (esSuperpuesto) cerrarAdmin();
+    if (esSuperpuesto || cierraSegundoNivelAlEntrar(anterior, pathname)) cerrarAdmin();
   }, [pathname, esSuperpuesto, cerrarAdmin]);
 
   useEffect(() => {

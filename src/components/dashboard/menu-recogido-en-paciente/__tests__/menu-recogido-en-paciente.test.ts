@@ -23,7 +23,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ZONA_ORTODONCIA, encogidoEfectivo, esFichaDePaciente, pacienteDeFicha, zonaRecogida } from "../recogido";
+import { ZONA_ORTODONCIA, cierraSegundoNivelAlEntrar, encogidoEfectivo, esFichaDePaciente, pacienteDeFicha, zonaRecogida } from "../recogido";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..", "..");
 const leer = (rel: string) => readFileSync(join(RAIZ, rel), "utf8");
@@ -265,6 +265,33 @@ test("Ortodoncia con React de verdad: el primer render ya sale recogido (sin sal
   assert.equal(pinta(false, "/dashboard/orthodontics/tablero"), '<aside data-encogido="true"></aside>');
   assert.equal(pinta(true, "/dashboard/orthodontics/cobranza"), '<aside data-encogido="true"></aside>');
   assert.equal(pinta(false, "/dashboard/specialties/orthodontics"), '<aside data-encogido="false"></aside>');
+});
+
+test("Ortodoncia: el segundo nivel (Administración) se cierra al ENTRAR al módulo, y solo entonces", () => {
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/orthodontics"), true, "clic en Ortodoncia desde Administración");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/settings", "/dashboard/orthodontics/tablero"), true);
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/patients/p1", "/dashboard/orthodontics/pacientes"), true, "volver de la ficha al módulo también es entrar");
+  assert.equal(cierraSegundoNivelAlEntrar(null, "/dashboard/orthodontics/tablero"), true);
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/orthodontics", "/dashboard/orthodontics/tablero"), false, "la redirección inicial no es otra entrada");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/orthodontics/tablero", "/dashboard/orthodontics/cobranza"), false, "entre pestañas no se cierra lo que la persona abrió");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/orthodontics/tablero", "/dashboard/agenda"), false, "al salir no se toca");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/inventory"), false, "el resto del panel sigue igual");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/patients", "/dashboard/patients/p1"), false, "la ficha no cambia: nadie lo pidió");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/specialties/orthodontics"), false, "la pantalla vieja tampoco");
+});
+
+test("el menú cierra el segundo nivel con esa regla, en el mismo efecto que ya lo cerraba al cambiar de pantalla", () => {
+  const menu = leer("src/components/dashboard/menu-dos-niveles/menu-dos-niveles.tsx");
+  assert.match(
+    menu,
+    /import \{ cierraSegundoNivelAlEntrar \} from "@\/components\/dashboard\/menu-recogido-en-paciente\/recogido";/,
+  );
+  assert.match(
+    menu,
+    /if \(esSuperpuesto \|\| cierraSegundoNivelAlEntrar\(anterior, pathname\)\) cerrarAdmin\(\);/,
+    "reutiliza cerrarAdmin: no hay un segundo mecanismo de cierre",
+  );
+  assert.equal((menu.match(/cierraSegundoNivelAlEntrar\(/g) ?? []).length, 1, "se usa una sola vez");
 });
 
 // ── 4. El cableado en el menú compartido ─────────────────────────────
