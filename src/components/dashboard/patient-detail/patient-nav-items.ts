@@ -110,7 +110,6 @@ const HIDDEN_SPECIALTY_IDS = new Set<string>([
   "pediatria",
   "periodoncia",
   "endodoncia",
-  "ortodoncia",
 ]);
 
 /**
@@ -160,7 +159,14 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
   if (opts.showPeriodontics) items.push({ id: "periodoncia", labelKey: "patients.tabs.periodoncia", icon: HeartPulse, section: "dental", disabled: true, disabledReason: "Próximamente" });
   if (opts.showEndodontics)  items.push({ id: "endodoncia",  labelKey: "patients.tabs.endodoncia",  icon: Zap,        section: "dental", disabled: true, disabledReason: "Próximamente" });
   if (opts.showImplants)     items.push({ id: "implantes",   labelKey: "patients.tabs.implantes",   icon: Anchor,     section: "dental", disabled: true, disabledReason: "Próximamente" });
-  if (opts.showOrthodontics) items.push({ id: "ortodoncia",  labelKey: "patients.tabs.ortodoncia",  icon: Smile,      section: "dental", disabled: true, disabledReason: "Próximamente" });
+  // Ortodoncia (ws1-t3, Ola 1): a diferencia de sus hermanas de arriba, YA
+  // tiene módulo real — la pestaña no es un placeholder "Próximamente", es
+  // el módulo funcionando. `opts.showOrthodontics` sale de
+  // `orthoData !== null` (patient-detail-client.tsx): solo es true cuando el
+  // PACIENTE tiene un caso de ortodoncia abierto (decisión de Rafael:
+  // "pestaña Ortodoncia solo en pacientes con caso abierto"), no solo por
+  // tener el módulo contratado.
+  if (opts.showOrthodontics) items.push({ id: "ortodoncia",  labelKey: "patients.tabs.ortodoncia",  icon: Smile,      section: "dental", isNew: true });
 
   items.push(
     // Herramientas transversales — imagen, documentos y plan.

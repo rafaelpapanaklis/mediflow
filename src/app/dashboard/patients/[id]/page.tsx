@@ -20,8 +20,9 @@ import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import type { ImplantFull } from "@/lib/types/implants";
-import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY, ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import {
   loadOrthoRedesignData,
   type OrthoRedesignBundle,
@@ -404,14 +405,17 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     })) as unknown as ImplantFull[];
   }
 
-  // Ortodoncia — solo DENTAL con el módulo activo. Sin gate por edad. El
-  // helper loadOrthoData devuelve null cuando el paciente no existe o
-  // está soft-deleted (caso ya descartado arriba via notFound), por eso
-  // el null aquí solo refleja "módulo inactivo" para el cliente.
+  // Ortodoncia — solo DENTAL con el módulo REAL activo (ws1-t3, Ola 1):
+  // hasActiveOrthodonticsModule, NO clinicModuleKeys.includes(...), que abre
+  // TODAS las especialidades durante el trial de cualquier clínica dental
+  // (ver src/lib/orthodontics/access.ts). Sin gate por edad. El helper
+  // loadOrthoData devuelve null cuando el paciente no existe o está
+  // soft-deleted (caso ya descartado arriba via notFound), por eso el null
+  // aquí solo refleja "módulo inactivo" para el cliente.
   let orthoData: OrthoTabData | null = null;
   let orthoRedesignVM: OrthoRedesignViewModel | null = null;
   let orthoRedesignBundle: OrthoRedesignBundle | null = null;
-  if (isDental && clinicModuleKeys.includes(ORTHODONTICS_MODULE_KEY)) {
+  if (isDental && (await hasActiveOrthodonticsModule(user.clinicId))) {
     const redesign = await loadOrthoRedesignData({
       clinicId: user.clinicId,
       patientId: patient.id,
