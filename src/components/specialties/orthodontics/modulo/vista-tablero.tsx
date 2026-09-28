@@ -6,6 +6,19 @@
 // Sin atajos a otros apartados del módulo (Rafael, 28-sep-2026): «Alertas» y
 // «Pacientes en tratamiento» salían como botones en la cabecera y repetían el
 // submenú, que está justo encima. Para moverse por el módulo, el submenú.
+//
+// ws1-t4 ronda 6 (revisión de lógica de uso, filas 14, 16 y 17):
+//  - Cada indicador LLEVA a la lista que lo explica, ya filtrada (los casos
+//    con vencido, los colocados este mes…). Antes era un número sin salida.
+//    No es un atajo que repita el submenú: cada uno lleva su filtro o su
+//    ancla, y un candado en `modulo-diseno.test.ts` vigila que siga así.
+//  - «Valoraciones» son citas de valoración de los últimos 90 días y cuántas
+//    abrieron caso (antes, presupuestos de cualquier cosa y fecha).
+//  - «Cobrado este mes»: es dinero que entró, no producción.
+//  - El primer pago de un caso es el «enganche»: «anticipo» ya significa otra
+//    cosa en Caja.
+//  - El nombre de cada control de hoy abre el caso del paciente.
+// «Ver agenda» se queda como está: es la salida a la Agenda que Rafael dejó.
 import {
   Activity,
   AlertCircle,
@@ -17,9 +30,11 @@ import {
   Wallet,
   Wrench,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import type { OrthoTableroData, TodayControlEntry } from "@/lib/orthodontics/tablero-data";
+import { DIAS_VENTANA_VALORACIONES } from "@/lib/orthodontics/valoraciones-tablero";
 import { EnviarIndicacionesButton } from "@/components/specialties/orthodontics/EnviarIndicacionesButton";
 import { horaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, Vacio } from "./piezas";
@@ -46,6 +61,15 @@ function fraseDeExcluidos(fuera: OrthoTableroData["projectionExcluded"]): string
   return `No cuenta ${fmtMoney(fuera.amountMxn)} de ${partes.join(" y ")}: esa deuda sigue en Cobranza.`;
 }
 
+/** Un indicador que lleva a su lista. El nombre accesible dice a dónde va. */
+function Indicador({ href, destino, children }: { href: string; destino: string; children: ReactNode }) {
+  return (
+    <Link href={href} className={s.kpiEnlace} aria-label={destino}>
+      {children}
+    </Link>
+  );
+}
+
 function anchoBarra(importe: number, mayor: number): string {
   if (mayor <= 0 || importe <= 0) return "0%";
   return `${Math.max(2, Math.round((importe / mayor) * 100))}%`;
@@ -70,29 +94,54 @@ export function VistaTablero({
       sub="Casos activos, cobranza al corriente y alertas de un vistazo."
     >
       <section className={s.kpis} aria-label="Indicadores">
-        <KpiCard label="Pacientes activos" value={String(data.activeCasesCount)} icon={Activity} hero />
-        <KpiCard label="Controles de hoy" value={String(data.controlsToday)} icon={CalendarCheck} />
-        <KpiCard
-          label="Saldos vencidos"
-          value={String(data.overdue.count)}
-          icon={AlertCircle}
-          accent={data.overdue.count > 0 ? "danger" : undefined}
-          delta={
-            data.overdue.amountMxn > 0
-              ? { value: fmtMoney(data.overdue.amountMxn), direction: "down", sub: " adeudo" }
-              : undefined
-          }
-        />
-        <KpiCard
-          label="Colocaciones este mes"
-          value={String(data.placementsAndRemovals.placements)}
-          icon={Wrench}
-        />
-        <KpiCard
-          label="Retiros este mes"
-          value={String(data.placementsAndRemovals.removals)}
-          icon={Smile}
-        />
+        <Indicador
+          href="/dashboard/orthodontics/pacientes?estado=activos"
+          destino={`Casos activos: ${data.activeCasesCount}. Ver los casos activos`}
+        >
+          <KpiCard label="Casos activos" value={String(data.activeCasesCount)} icon={Activity} hero />
+        </Indicador>
+        <Indicador
+          href="/dashboard/orthodontics/controles#controles-de-hoy"
+          destino={`Controles de hoy: ${data.controlsToday}. Ver los controles de hoy`}
+        >
+          <KpiCard label="Controles de hoy" value={String(data.controlsToday)} icon={CalendarCheck} />
+        </Indicador>
+        <Indicador
+          href="/dashboard/orthodontics/cobranza?filtro=vencido"
+          destino={`Casos con mensualidades vencidas: ${data.overdue.count}. Ver quién debe`}
+        >
+          <KpiCard
+            label="Casos con vencido"
+            value={String(data.overdue.count)}
+            icon={AlertCircle}
+            accent={data.overdue.count > 0 ? "danger" : undefined}
+            delta={
+              data.overdue.amountMxn > 0
+                ? { value: fmtMoney(data.overdue.amountMxn), direction: "down", sub: " vencido" }
+                : undefined
+            }
+          />
+        </Indicador>
+        <Indicador
+          href="/dashboard/orthodontics/pacientes?ver=colocados-este-mes"
+          destino={`Colocaciones este mes: ${data.placementsAndRemovals.placements}. Ver esos casos`}
+        >
+          <KpiCard
+            label="Colocaciones este mes"
+            value={String(data.placementsAndRemovals.placements)}
+            icon={Wrench}
+          />
+        </Indicador>
+        <Indicador
+          href="/dashboard/orthodontics/pacientes?ver=retirados-este-mes"
+          destino={`Retiros este mes: ${data.placementsAndRemovals.removals}. Ver esos casos`}
+        >
+          <KpiCard
+            label="Retiros este mes"
+            value={String(data.placementsAndRemovals.removals)}
+            icon={Smile}
+          />
+        </Indicador>
       </section>
 
       <div className={s.rejillaPrincipal}>
@@ -121,7 +170,9 @@ export function VistaTablero({
                 <li key={c.appointmentId} className={`${s.fila} ${s.filaApilable}`}>
                   <span className={s.hora}>{horaEnZona(c.startsAt, zonaHoraria)}</span>
                   <div className={s.filaCuerpo}>
-                    <span className={s.nombre}>{c.patientName}</span>
+                    <Link href={`/dashboard/patients/${c.patientId}?tab=ortodoncia`} className={s.nombre}>
+                      {c.patientName}
+                    </Link>
                   </div>
                   <div className={s.filaDerecha}>
                     {c.indications ? (
@@ -139,7 +190,7 @@ export function VistaTablero({
         <Tarjeta
           icono={ClipboardList}
           titulo="Valoraciones"
-          sub="Las que se convierten en tratamiento."
+          sub={`Citas de valoración de los últimos ${data.valoraciones.dias ?? DIAS_VENTANA_VALORACIONES} días.`}
         >
           <div className={s.tarjetaCuerpo}>
             <div className={s.cifras}>
@@ -152,7 +203,7 @@ export function VistaTablero({
               <div className={s.cifra}>
                 <div className={s.cifraValor}>{data.valoraciones.aceptadas}</div>
                 <div className={s.cifraEtiqueta}>
-                  aceptada{data.valoraciones.aceptadas === 1 ? "" : "s"}
+                  {data.valoraciones.aceptadas === 1 ? "abrió caso" : "abrieron caso"}
                 </div>
               </div>
               <div className={s.cifra}>
@@ -160,20 +211,26 @@ export function VistaTablero({
                 <div className={s.cifraEtiqueta}>por llamar</div>
               </div>
             </div>
-            <p className={s.pie}>Valoraciones de pacientes con caso de ortodoncia.</p>
+            <p className={s.pie}>
+              Pacientes que vinieron a su valoración. «Por llamar» son los que todavía no abren caso.
+              {(data.valoraciones.agendadas ?? 0) > 0 &&
+                ` Además hay ${data.valoraciones.agendadas} ${
+                  data.valoraciones.agendadas === 1 ? "valoración agendada" : "valoraciones agendadas"
+                }.`}
+            </p>
           </div>
         </Tarjeta>
       </div>
 
       <div className={s.rejillaPar}>
-        <Tarjeta icono={TrendingUp} tono="exito" titulo="Producción del mes" sub="Cobros de ortodoncia menos reembolsos, para el doctor que llevaba el caso el día del pago.">
+        <Tarjeta icono={TrendingUp} tono="exito" titulo="Cobrado este mes" sub="Cobros de ortodoncia menos reembolsos, para el doctor que llevaba el caso el día del pago.">
           <div className={s.tarjetaCuerpo}>
             {data.productionByDoctor.length === 0 ? (
               <Vacio
                 icono={TrendingUp}
                 tono="neutro"
                 titulo="Sin cobros de ortodoncia este mes"
-                pista="En cuanto se cobre una mensualidad o un anticipo de un caso, aparece aquí por doctor."
+                pista="En cuanto se cobre una mensualidad o el enganche de un caso, aparece aquí por doctor."
               />
             ) : (
               <ul className={s.barras}>

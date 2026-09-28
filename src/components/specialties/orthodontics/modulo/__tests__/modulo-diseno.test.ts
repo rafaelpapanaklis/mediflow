@@ -133,6 +133,31 @@ test("el submenú conserva los seis apartados, con su nombre, marca el abierto y
 // módulo solo queda el submenú. Los botones de ACCIÓN («Abrir caso», «Cobrar»,
 // «Agendar control») y los enlaces que salen del módulo (la Agenda, la ficha
 // del paciente) se quedan: no repiten ninguna entrada.
+//
+// ws1-t4 ronda 6 (fila 14 de la revisión de lógica de uso): los INDICADORES del
+// Tablero llevan a la lista que los explica. No son atajos que repitan el
+// submenú: cada uno lleva su FILTRO o su ANCLA (los casos con vencido, los
+// colocados este mes, los controles de hoy). Un enlace pelado a un apartado
+// sigue prohibido, también en el Tablero.
+const ENLACES_DE_INDICADOR = [
+  "/dashboard/orthodontics/pacientes?estado=activos",
+  "/dashboard/orthodontics/controles#controles-de-hoy",
+  "/dashboard/orthodontics/cobranza?filtro=vencido",
+  "/dashboard/orthodontics/pacientes?ver=colocados-este-mes",
+  "/dashboard/orthodontics/pacientes?ver=retirados-este-mes",
+];
+
+test("los indicadores del Tablero llevan a su lista, siempre con filtro o ancla", () => {
+  const tablero = sinComentarios(leer("src/components/specialties/orthodontics/modulo/vista-tablero.tsx"));
+  const destinos = Array.from(tablero.matchAll(/<Indicador\s+href="([^"]+)"/g), (m) => m[1]);
+  assert.deepEqual(destinos, ENLACES_DE_INDICADOR, "cada indicador, con su lista");
+  for (const enlace of destinos) {
+    assert.match(enlace, /[?#]/, `${enlace}: sin filtro ni ancla sería un atajo al submenú`);
+  }
+  const tarjetas = tablero.match(/<KpiCard\s/g) ?? [];
+  assert.equal(tarjetas.length, destinos.length, "ningún indicador se queda sin salida");
+});
+
 test("sin atajos duplicados: ninguna vista del módulo enlaza a otro apartado del submenú", () => {
   const layout = leer("src/app/dashboard/orthodontics/layout.tsx");
   const apartados = Array.from(layout.matchAll(/\{ href: "(\/dashboard\/orthodontics\/[a-z]+)"/g), (m) => m[1]);
@@ -151,7 +176,11 @@ test("sin atajos duplicados: ninguna vista del módulo enlaza a otro apartado de
     ...apartados.map((a) => `src/app${a}/page.tsx`),
   ];
   for (const rel of vistas) {
-    const codigo = sinComentarios(leer(rel));
+    let codigo = sinComentarios(leer(rel));
+    // Los indicadores del Tablero, y solo ellos, llevan a su lista filtrada.
+    if (rel.endsWith("modulo/vista-tablero.tsx")) {
+      for (const enlace of ENLACES_DE_INDICADOR) codigo = codigo.split(`"${enlace}"`).join('""');
+    }
     for (const a of apartados) {
       assert.ok(!codigo.includes(`"${a}"`) && !codigo.includes(`\`${a}`), `${rel}: atajo a ${a}, que ya está en el submenú`);
     }
