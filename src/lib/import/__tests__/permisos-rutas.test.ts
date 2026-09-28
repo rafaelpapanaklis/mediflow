@@ -60,6 +60,7 @@ const ARCHIVOS_ABORT = "../../../app/api/import/patient-files/abort/route";
 const ODONTOGRAMA = "../../../app/api/import/odontogram/route";
 const NOTAS_TRATAMIENTO = "../../../app/api/import/treatment-notes/route";
 const HISTORIAL_PAGOS = "../../../app/api/import/payment-history/route";
+const GASTOS_LABORATORIO = "../../../app/api/import/lab-expenses/route";
 
 test("citas: exige agenda.create además del rol", async () => {
   sesion = sesionDe("ADMIN");
@@ -171,6 +172,21 @@ test("historial de pagos migrado: exige billing.create además del rol, mismo ca
   assert.equal(await llamar(HISTORIAL_PAGOS), 403);
   sesion = null;
   assert.equal(await llamar(HISTORIAL_PAGOS), 401);
+});
+
+test("historial de gastos de laboratorio migrado: exige billing.create además del rol, mismo candado que saldos e historial de pagos (ws1-t2)", async () => {
+  sesion = sesionDe("ADMIN");
+  assert.equal(await llamar(GASTOS_LABORATORIO), 400);
+  sesion = sesionDe("RECEPTIONIST");
+  assert.equal(await llamar(GASTOS_LABORATORIO), 400, "recepción tiene billing.create por defecto");
+  sesion = sesionDe("RECEPTIONIST", ["agenda.view", "agenda.create", "patients.create"]);
+  assert.equal(await llamar(GASTOS_LABORATORIO), 403, "sin billing.create no se crea historial de gastos por importación");
+  sesion = sesionDe("DOCTOR");
+  assert.equal(await llamar(GASTOS_LABORATORIO), 403);
+  sesion = sesionDe("READONLY");
+  assert.equal(await llamar(GASTOS_LABORATORIO), 403);
+  sesion = null;
+  assert.equal(await llamar(GASTOS_LABORATORIO), 401);
 });
 
 test("archivos en bloque (match/sign/confirm/abort): las 4 exigen xrays.upload además del rol, igual que registrar un archivo a mano", async () => {

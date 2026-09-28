@@ -60,6 +60,7 @@
     "test:documento-salidas": "tsx --tsconfig tsconfig.test.json --test src/lib/patient-documents/__tests__/documento-salidas.test.tsx",
     "test:nota-evolucion-documento": "tsx --test src/app/api/patient-documents/__tests__/nota-evolucion.test.ts",
     "test:pagos-historial-migrado": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/pagos-historial.test.ts",
+    "test:laboratorio-historial-migrado": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/laboratorio-historial.test.ts",
     "test:evolucion-libre": "tsx --tsconfig tsconfig.test.json --test src/app/api/patient-documents/__tests__/evolucion-libre.test.ts",
     "test:expediente-rediseno": "tsx --test src/components/dashboard/expediente-rediseno/__tests__/expediente-rediseno.test.ts",
     "test:plan-tratamiento-rediseno": "tsx --test src/components/dashboard/plan-tratamiento-rediseno/__tests__/plan-tratamiento-rediseno.test.ts",
