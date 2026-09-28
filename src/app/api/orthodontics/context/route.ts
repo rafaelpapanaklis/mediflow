@@ -40,6 +40,13 @@ export async function GET(req: NextRequest) {
       orthodontics: true,
       moduleActive: true,
       appointmentTypes: settings.appointmentTypes.map((t) => t.label),
+      // Sección I: los minutos que la clínica fijó por tipo en Configuración,
+      // para que «Nueva cita» proponga la duración al elegir el motivo
+      // (`duracionSugeridaDeOrtodoncia`). `null` = sin valor propio.
+      appointmentTypeDurations: settings.appointmentTypes.map((t) => ({
+        label: t.label,
+        durationMin: typeof t.durationMin === "number" && t.durationMin > 0 ? t.durationMin : null,
+      })),
       appointmentDuration: suggestOrthoAppointmentDuration(reason),
     });
   }

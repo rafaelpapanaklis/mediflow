@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, Loader2, MessageCircle, AlertTriangle, Baby, CalendarPlus } from "lucide-react";
@@ -33,6 +33,11 @@ import { parseBloqueos, type BloqueoDTO } from "@/components/dashboard/bloqueos/
 import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
 import type { TFunction } from "@/i18n/t";
 import { getResourceSchedule } from "@/lib/agenda/mutations";
+import {
+  duracionSugeridaDeOrtodoncia,
+  type DuracionSugerida,
+  type TipoDeCitaConDuracion,
+} from "@/lib/orthodontics/duracion-cita-sugerida";
 import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import type {
   OpenNewAppointmentParams,
@@ -131,6 +136,15 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   // resuelve el módulo con `hasActiveOrthodonticsModule` (guarda real, sin
   // el atajo de trial) y ahora también trae `appointmentTypes`.
   const [orthoAppointmentReasons, setOrthoAppointmentReasons] = useState<string[]>([]);
+  // Sección I (revisión de lógica de uso): duración sugerida por tipo de cita
+  // de ortodoncia. Los minutos por tipo vienen de Configuración de Ortodoncia
+  // (mismo fetch de arriba); solo se proponen si el paciente elegido tiene un
+  // caso de ortodoncia en curso, y NUNCA encima de una duración que el
+  // usuario ya cambió a mano en esta apertura.
+  const [orthoTiposConDuracion, setOrthoTiposConDuracion] = useState<TipoDeCitaConDuracion[]>([]);
+  const [orthoCasoActivo, setOrthoCasoActivo] = useState(false);
+  const [orthoDuracionSugerida, setOrthoDuracionSugerida] = useState<DuracionSugerida | null>(null);
+  const duracionTocadaAMano = useRef(false);
   // Los presets propios de ortodoncia NO pasan por `t()`: son el texto
   // exacto que queda en `Appointment.type` (ver clinic-settings-db.ts).
   const reasonPresets = orthoAppointmentReasons.length > 0
@@ -223,6 +237,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   useEffect(() => {
     if (!isOpen) {
       setOrthoAppointmentReasons([]);
+      setOrthoTiposConDuracion([]);
       return;
     }
     let cancelled = false;
@@ -232,9 +247,22 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
         if (cancelled) return;
         const tipos = Array.isArray(body?.appointmentTypes) ? body.appointmentTypes : [];
         setOrthoAppointmentReasons(tipos.filter((t: unknown): t is string => typeof t === "string" && t.length > 0));
+        const conDuracion = Array.isArray(body?.appointmentTypeDurations) ? body.appointmentTypeDurations : [];
+        setOrthoTiposConDuracion(
+          conDuracion
+            .filter((x: unknown): x is { label: string; durationMin: unknown } =>
+              typeof (x as { label?: unknown } | null)?.label === "string")
+            .map((x: { label: string; durationMin: unknown }) => ({
+              label: x.label,
+              durationMin: typeof x.durationMin === "number" ? x.durationMin : null,
+            })),
+        );
       })
       .catch(() => {
-        if (!cancelled) setOrthoAppointmentReasons([]);
+        if (!cancelled) {
+          setOrthoAppointmentReasons([]);
+          setOrthoTiposConDuracion([]);
+        }
       });
     return () => {
       cancelled = true;
@@ -250,6 +278,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     setSubmitting(false);
     setPediatricContext(null);
     setBloqueoPendiente(null);
+    duracionTocadaAMano.current = false;
+    setOrthoDuracionSugerida(null);
 
     const initialSlot = params?.initialSlot;
     if (initialSlot?.startsAt) {
@@ -322,6 +352,43 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       });
     return () => { cancelled = true; };
   }, [patient]);
+
+  // Ortodoncia (sección I) — ¿el paciente elegido tiene un caso en curso? Solo
+  // se pregunta si la clínica tiene el módulo (hay catálogo de motivos). El
+  // endpoint ya filtra por clínica de la sesión y visibilidad del paciente.
+  const hayModuloOrto = orthoAppointmentReasons.length > 0;
+  useEffect(() => {
+    if (!patient || !hayModuloOrto) {
+      setOrthoCasoActivo(false);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/orthodontics/context?patientId=${encodeURIComponent(patient.id)}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!cancelled) setOrthoCasoActivo(Boolean(body?.hasActivePlan));
+      })
+      .catch(() => {
+        if (!cancelled) setOrthoCasoActivo(false);
+      });
+    return () => { cancelled = true; };
+  }, [patient, hayModuloOrto]);
+
+  // Al elegir (o escribir) un motivo de ortodoncia para un paciente con caso,
+  // propone la duración de ese tipo de cita — salvo que el usuario ya la haya
+  // cambiado a mano.
+  useEffect(() => {
+    if (!orthoCasoActivo) {
+      setOrthoDuracionSugerida(null);
+      return;
+    }
+    const sugerida = duracionSugeridaDeOrtodoncia(reason, orthoTiposConDuracion);
+    setOrthoDuracionSugerida(sugerida);
+    if (sugerida && !duracionTocadaAMano.current) {
+      setDuration(sugerida.minutos);
+      setCustomDurationInput("");
+    }
+  }, [reason, orthoCasoActivo, orthoTiposConDuracion]);
 
   /**
    * ¿El hueco elegido cae dentro de un bloqueo? Devuelve el bloqueo o `null`.
@@ -618,8 +685,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                       presets={DURATION_PRESETS_MIN}
                       duration={duration}
                       customInput={customDurationInput}
-                      onSelectPreset={(d) => { setDuration(d); setCustomDurationInput(""); }}
+                      onSelectPreset={(d) => { duracionTocadaAMano.current = true; setDuration(d); setCustomDurationInput(""); }}
                       onCustomChange={(raw) => {
+                        duracionTocadaAMano.current = true;
                         setCustomDurationInput(raw);
                         if (raw === "") return;
                         const n = parseInt(raw, 10);
@@ -628,6 +696,12 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                         setDuration(clamped);
                       }}
                     />
+                    {orthoDuracionSugerida ? (
+                      <span {...(nueva ? { className: nc.pediatriaTexto } : { style: pediatricHintStyle })}>
+                        {`Sugerida para «${orthoDuracionSugerida.tipo}»: ${orthoDuracionSugerida.minutos} min`}
+                        {orthoDuracionSugerida.origen === "configuracion" ? " (Configuración de Ortodoncia)" : ""}
+                      </span>
+                    ) : null}
                   </Field>
                 </div>
 
