@@ -119,7 +119,9 @@ export async function resumenOrtodonciaDeHoy(): Promise<ActionResult<ResumenOrto
     const r = await listarMensualidadesPorCobrar().catch(() => null);
     if (r && r.ok) {
       const items = r.data.items.filter((it) => it.estado === "vencida");
-      vencidas = { count: items.length, total: items.reduce((s, it) => s + it.monto, 0) };
+      // ws1-t4 #84: se cuentan CUOTAS (mensualidades), no casos: Caja rotula «3 vencidas»
+      // por las cuotas de la fila, y Hoy decía «1 mensualidad vencida» por el mismo caso.
+      vencidas = { count: items.reduce((s, it) => s + Math.max(1, it.cantidadVencidas), 0), total: items.reduce((s, it) => s + it.monto, 0) };
     } else {
       vencidas = { count: 0, total: 0 };
     }

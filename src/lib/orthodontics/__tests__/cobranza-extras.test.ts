@@ -65,3 +65,11 @@ test("panel de la cita: sin «Pedir anticipo» en un control, y el «Cobrar» si
   assert.match(src, /!esCitaOrtoConHoja\(dto\.reason \?\? null\) &&\s*permissions\.canDeposit/);
   assert.match(src, /cóbralo desde el recuadro de Ortodoncia/);
 });
+
+// ws1-t4 #84 — Hoy y Caja cuentan las mismas «vencidas»: cuotas.
+test("Hoy y Caja cuentan cuotas vencidas, no casos", () => {
+  const hoy = leer("app/actions/orthodontics/hoy/resumenDeHoy.ts");
+  assert.match(hoy, /count: items\.reduce\(\(s, it\) => s \+ Math\.max\(1, it\.cantidadVencidas\), 0\)/);
+  const caja = leer("components/specialties/orthodontics/cobranza/ListaMensualidades.tsx");
+  assert.match(caja, /reduce\(\(n, it\) => n \+ Math\.max\(1, it\.cantidadVencidas\), 0\)/);
+});

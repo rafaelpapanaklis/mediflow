@@ -116,7 +116,8 @@ export function ListaMensualidades({
   if (!items || items.length === 0) return null;
 
   const total = items.reduce((s, it) => s + it.monto, 0);
-  const vencidas = items.filter((it) => it.estado === "vencida").length;
+  // ws1-t4 #84: cuotas vencidas (no filas): el mismo criterio que el aviso de Hoy.
+  const vencidas = items.filter((it) => it.estado === "vencida").reduce((n, it) => n + Math.max(1, it.cantidadVencidas), 0);
   const grupos = agrupar(items);
 
   function iniciarCobro(grupo: MensualidadPorCobrar[]) {
