@@ -39,6 +39,8 @@ import {
 import { useCajon } from "../atoms/useCajon";
 import { EvolutionTemplatePicker } from "@/components/clinical-shared/EvolutionTemplatePicker";
 import { aplicarPlantillaAlControl, huecosPorLlenar } from "@/lib/orthodontics/consulta-ortodoncia";
+import { AgendarProximoControlButton } from "@/components/specialties/orthodontics/AgendarProximoControlButton";
+import { AvisarProximoControlButton } from "@/components/specialties/orthodontics/AvisarProximoControlButton";
 import { initialState, reducer, type DrawerState } from "./treatment-card-state";
 import orto from "../orto.module.css";
 
@@ -554,6 +556,29 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                   ))}
                 </select>
               </div>
+            </section>
+          ) : state.nextDate ? (
+            // ws1-t1 ronda 2 — punto pendiente de la ronda 1: firmado el
+            // control, se ofrece agendarlo de una vez (createBotAppointment,
+            // mismos candados que cualquier alta) y avisar al paciente si
+            // hay ventana de 24 h. Ambos usan cardId, no appointmentId: el
+            // card puede no venir todavía de una cita real.
+            <section className={orto.bloque}>
+              <div className={orto.bloqueCabeza}>
+                <h4 className={orto.bloqueTitulo}>Próximo control</h4>
+              </div>
+              <div className={orto.caja} style={{ marginBottom: 10 }}>
+                {new Date(state.nextDate).toLocaleString("es-MX", {
+                  weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+                })}
+                {state.nextDurationMin ? ` · ${state.nextDurationMin} min` : ""}
+              </div>
+              {props.card?.id ? (
+                <div className="flex flex-wrap items-center gap-[8px]">
+                  <AgendarProximoControlButton cardId={props.card.id} />
+                  <AvisarProximoControlButton cardId={props.card.id} />
+                </div>
+              ) : null}
             </section>
           ) : null}
         </div>

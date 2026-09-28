@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { inter } from "@/fonts/inter-400-700";
 import { MapPin, Phone, Clock, Stethoscope, BadgeCheck, Instagram, Facebook } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { buildMetadata, SITE_URL, localBusinessLd } from "@/lib/seo";
 import { categoryLabel, type DirectoryClinic, type ClinicCategoryValue } from "@/lib/directory/types";
 import { getPublicReviews } from "@/lib/reviews/service";
@@ -98,6 +99,11 @@ export default async function ClinicProfilePage({ params }: { params: { slug: st
   });
   if (!clinic) notFound();
 
+  // ws1-t1 ronda 2 — "que su ficha pública diga que atiende ortodoncia" si el
+  // módulo está contratado en esta sede. Nunca lanza: una ficha pública no
+  // puede caerse por esto.
+  const orthoActivo = await hasActiveOrthodonticsModule(clinic.id).catch(() => false);
+
   const reviews = await getPublicReviews(clinic.id, 1);
   const theme = clinic.landingThemeColor || "#7c3aed";
   const services = parseServices(clinic.landingServices);
@@ -114,6 +120,9 @@ export default async function ClinicProfilePage({ params }: { params: { slug: st
     seen.add(key);
     featuredServices.push(name);
   }
+  // ws1-t1 ronda 2 — "Ortodoncia" como chip destacado si el módulo está
+  // activo, sin duplicar si la clínica ya tiene un servicio con ese nombre.
+  if (orthoActivo && !seen.has("ortodoncia")) featuredServices.unshift("Ortodoncia");
 
   const dirClinic: DirectoryClinic = {
     id: clinic.id,
@@ -208,6 +217,11 @@ export default async function ClinicProfilePage({ params }: { params: { slug: st
                       <BadgeCheck size={15} style={{ color: theme }} aria-hidden="true" /> {clinic.landingYearsExperience} años de experiencia
                     </span>
                   ) : null}
+                  {orthoActivo && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden="true">🦷</span> Atiende ortodoncia
+                    </span>
+                  )}
                 </div>
 
                 {(clinic.landingTagline || clinic.description) && (
