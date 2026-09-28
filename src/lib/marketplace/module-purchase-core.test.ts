@@ -15,6 +15,8 @@ import {
   resolveModuleCheckoutReturnUrls,
   computeAnnualPriceMxn,
   hasActiveAccess,
+  hasDuplicatePurchaseInFlight,
+  resolveActivationConflict,
   resolveModuleDeletion,
   resolveModulePriceMxn,
   resolveModuleSubscriptionSync,
@@ -243,4 +245,81 @@ test("comprar un módulo: solo el dueño o un administrador", () => {
   for (const r of ["DOCTOR", "RECEPTIONIST", "READONLY", "", null, undefined]) {
     assert.equal(canPurchaseModules(r), false, String(r));
   }
+});
+
+// ── 8. Doble pago: ¿hay una compra de este módulo ya en curso? (ws1-t2) ──
+test("hasDuplicatePurchaseInFlight: sin sesiones ni suscripciones → false", () => {
+  assert.equal(hasDuplicatePurchaseInFlight({ sessions: [], subscriptions: [] }), false);
+});
+
+test("hasDuplicatePurchaseInFlight: una sesión 'open' → true (la primera pestaña sigue esperando el pago)", () => {
+  assert.equal(
+    hasDuplicatePurchaseInFlight({ sessions: [{ status: "open" }], subscriptions: [] }),
+    true,
+  );
+});
+
+test("hasDuplicatePurchaseInFlight: sesiones 'complete'/'expired' → false (no bloquean una compra nueva)", () => {
+  assert.equal(
+    hasDuplicatePurchaseInFlight({ sessions: [{ status: "complete" }, { status: "expired" }], subscriptions: [] }),
+    false,
+  );
+});
+
+test("hasDuplicatePurchaseInFlight: suscripción 'incomplete' (primer cobro pendiente) → true", () => {
+  assert.equal(
+    hasDuplicatePurchaseInFlight({ sessions: [], subscriptions: [{ status: "incomplete" }] }),
+    true,
+  );
+});
+
+test("hasDuplicatePurchaseInFlight: suscripción 'active'/'past_due'/'unpaid'/'trialing' → true", () => {
+  for (const status of ["active", "past_due", "unpaid", "trialing", "paused"]) {
+    assert.equal(hasDuplicatePurchaseInFlight({ sessions: [], subscriptions: [{ status } as any] }), true, status);
+  }
+});
+
+test("hasDuplicatePurchaseInFlight: suscripción 'canceled'/'incomplete_expired' → false (ya se puede comprar de nuevo)", () => {
+  assert.equal(
+    hasDuplicatePurchaseInFlight({ sessions: [], subscriptions: [{ status: "canceled" }, { status: "incomplete_expired" }] }),
+    false,
+  );
+});
+
+// ── 9. Red de seguridad del webhook: dos suscripciones a la vez (ws1-t2) ─
+test("resolveActivationConflict: sin ClinicModule previo → activa normal", () => {
+  assert.deepEqual(resolveActivationConflict(null, "sub_nueva"), { type: "activate" });
+});
+
+test("resolveActivationConflict: el previo no está activo (cancelado/pausado) → activa normal", () => {
+  assert.deepEqual(
+    resolveActivationConflict({ status: "cancelled", stripeSubscriptionId: "sub_vieja" }, "sub_nueva"),
+    { type: "activate" },
+  );
+});
+
+test("resolveActivationConflict: el previo es un admin grant (sin stripeSubscriptionId) → activa normal (la compra real lo reemplaza)", () => {
+  assert.deepEqual(
+    resolveActivationConflict({ status: "active", stripeSubscriptionId: null }, "sub_nueva"),
+    { type: "activate" },
+  );
+});
+
+test("resolveActivationConflict: es la MISMA suscripción renovándose → activa normal", () => {
+  assert.deepEqual(
+    resolveActivationConflict({ status: "active", stripeSubscriptionId: "sub_1" }, "sub_1"),
+    { type: "activate" },
+  );
+});
+
+test("resolveActivationConflict: DOS suscripciones de tarjeta activas distintas → cancela la que llega", () => {
+  const r = resolveActivationConflict({ status: "active", stripeSubscriptionId: "sub_1" }, "sub_2");
+  assert.equal(r.type, "cancel_incoming");
+});
+
+test("resolveActivationConflict: la que llega es un pago único (SPEI/OXXO, sin subscriptionId) → activa normal", () => {
+  assert.deepEqual(
+    resolveActivationConflict({ status: "active", stripeSubscriptionId: "sub_1" }, null),
+    { type: "activate" },
+  );
 });

@@ -4,7 +4,8 @@
 // ÚNICO — ver clinic-settings-db.ts — que new-appointment-dialog.tsx pide a
 // /api/orthodontics/context y ofrece como chips de motivo al agendar) y
 // plantillas de mensaje. La entrada "Control de ortodoncia" es de solo
-// lectura: la Agenda la reconoce por su texto exacto (esCitaControlOrto).
+// lectura: la Agenda la reconoce por su texto exacto (esCitaControlOrto). Esa
+// fila fija se reconoce aquí por su CLAVE (tipos-de-cita.ts), no por el texto.
 //
 // Diseño (ws1-t3): mismos campos, mismas validaciones y el mismo guardado.
 // Cambia cómo se pinta: tarjetas del rediseño, campos con su etiqueta
@@ -13,7 +14,7 @@
 
 import { useId, useState } from "react";
 import toast from "react-hot-toast";
-import { AlertTriangle, CalendarClock, ClipboardList, Lock, MessageSquareText, Plus, Stethoscope, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, Ban, CalendarClock, ClipboardList, Lock, MessageSquareText, Plus, Stethoscope, Trash2, Wallet } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { Pantalla, Tarjeta } from "@/components/specialties/orthodontics/modulo/piezas";
 import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
@@ -25,6 +26,7 @@ import type {
 } from "@/lib/orthodontics/clinic-settings-db";
 import type { OrthoConfigDoctorOption } from "@/app/actions/orthodontics/getOrthoClinicSettings";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
+import { esTipoFijo, motivoDeRechazo, nuevaClave } from "@/lib/orthodontics/tipos-de-cita";
 import { ORTHO_BILLING_MODE_LABELS, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import type { OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
 
@@ -32,6 +34,15 @@ export interface OrthoConfiguracionClientProps {
   settings: OrthoClinicSettings;
   doctors: OrthoConfigDoctorOption[];
   procedimientos: OrthoProcedureRow[];
+  /**
+   * La tarjeta "Suscripción" (ws1-t2, 28-sep-2026) — `null` si no hay nada
+   * que cancelar desde aquí: sin permiso (no dueño/administrador), módulo
+   * activado por soporte ("admin"), pagado con SPEI/OXXO (sin suscripción
+   * que cancelar), o ya cancelado. El servidor ya decidió todo esto
+   * (`canRequestModuleCancellation` + `canPurchaseModules`); aquí solo se
+   * pinta o no.
+   */
+  suscripcion: { currentPeriodEnd: string | null } | null;
 }
 
 const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
@@ -39,12 +50,6 @@ const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
   PAGO_POR_CONTROL:
     "Sin precio total: cada control atendido se cobra aparte con el precio de «Control de ortodoncia» del catálogo, y la colocación/enganche va en su propia factura.",
 };
-
-function nuevoIdTipoCita(existentes: OrthoAppointmentTypeOption[]): string {
-  let n = existentes.length + 1;
-  while (existentes.some((t) => t.id === `tipo-${n}`)) n++;
-  return `tipo-${n}`;
-}
 
 const PLANTILLAS_CLAVES: { clave: string; etiqueta: string; ayuda: string }[] = [
   {
@@ -59,7 +64,7 @@ const PLANTILLAS_CLAVES: { clave: string; etiqueta: string; ayuda: string }[] = 
   },
 ];
 
-export function OrthoConfiguracionClient({ settings, doctors, procedimientos: procedimientosIniciales }: OrthoConfiguracionClientProps) {
+export function OrthoConfiguracionClient({ settings, doctors, procedimientos: procedimientosIniciales, suscripcion }: OrthoConfiguracionClientProps) {
   const [defaultTreatingDoctorId, setDefaultTreatingDoctorId] = useState<string>(
     settings.defaultTreatingDoctorId ?? "",
   );
@@ -105,7 +110,7 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
 
   function quitarTipo(id: string) {
     const tipo = appointmentTypes.find((t) => t.id === id);
-    if (tipo?.label === TIPO_CITA_CONTROL_ORTO) {
+    if (tipo && esTipoFijo(tipo)) {
       toast.error(`No se puede quitar "${TIPO_CITA_CONTROL_ORTO}" — la Agenda lo usa para reconocer los controles.`);
       return;
     }
@@ -113,16 +118,15 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
   }
 
   function agregarTipo() {
-    setAppointmentTypes((arr) => [...arr, { id: nuevoIdTipoCita(arr), label: "" }]);
+    setAppointmentTypes((arr) => [...arr, { id: nuevaClave(arr), label: "" }]);
   }
 
   async function guardar() {
-    if (appointmentTypes.length === 0) {
-      toast.error("Deja al menos un tipo de cita en el catálogo.");
-      return;
-    }
-    if (appointmentTypes.some((t) => !t.id.trim() || !t.label.trim())) {
-      toast.error("Cada tipo de cita necesita clave y nombre.");
+    // La misma regla que aplica el servidor (tipos-de-cita.ts): vacío, sin
+    // nombre, sin la fila fija o con dos tipos que se llaman igual.
+    const rechazo = motivoDeRechazo(appointmentTypes);
+    if (rechazo) {
+      toast.error(rechazo);
       return;
     }
     setSaving(true);
@@ -140,6 +144,42 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
       toast.success("Configuración de Ortodoncia guardada.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Suscripción del módulo (ws1-t2, 28-sep-2026) — "Cancelar módulo".
+  const [cancelando, setCancelando] = useState(false);
+  const [cancelado, setCancelado] = useState(false);
+
+  async function cancelarModulo() {
+    const fecha = suscripcion?.currentPeriodEnd
+      ? new Date(suscripcion.currentPeriodEnd).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+      : "el fin del periodo ya pagado";
+    const confirmado = window.confirm(
+      `¿Cancelar el módulo de Ortodoncia?\n\nSeguirá activo hasta el ${fecha} (ya está pagado). ` +
+        "Después de esa fecha ya no se cobrará, y el menú vuelve a pedir contratarlo. " +
+        "Los pacientes, casos y todo lo que ya se guardó NO se borran.",
+    );
+    if (!confirmado) return;
+    setCancelando(true);
+    try {
+      const res = await fetch("/api/marketplace/module-cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleKey: "orthodontics" }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(data?.error ?? "No se pudo cancelar. Intenta de nuevo.");
+        return;
+      }
+      setCancelado(true);
+      toast.success(data?.message ?? "El módulo se cancelará al final del periodo ya pagado.");
+    } catch (err) {
+      toast.error("No se pudo cancelar. Intenta de nuevo.");
+      console.error("[ortho.configuracion.cancelarModulo]", err);
+    } finally {
+      setCancelando(false);
     }
   }
 
@@ -264,7 +304,9 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
             <div className={s.tarjetaCuerpo}>
               <ul className={s.tipos}>
                 {appointmentTypes.map((tipo, i) => {
-                  const esControl = tipo.label === TIPO_CITA_CONTROL_ORTO;
+                  // La fila fija se reconoce por su CLAVE: teclear su mismo
+                  // texto en un tipo nuevo ya no lo bloquea a media escritura.
+                  const esControl = esTipoFijo(tipo);
                   return (
                     <li key={tipo.id} className={s.tipo}>
                       <input
@@ -374,6 +416,53 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
             </div>
           </Tarjeta>
         </div>
+
+        {suscripcion && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <Tarjeta
+              icono={Ban}
+              titulo="Suscripción"
+              sub="Cancelar el módulo de Ortodoncia. No borra pacientes, casos ni ningún dato ya guardado."
+            >
+              <div className={s.tarjetaCuerpo} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {cancelado ? (
+                  <div
+                    role="status"
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "flex-start",
+                      padding: "10px 12px",
+                      borderRadius: "var(--pr-radio-s)",
+                      background: "var(--pr-alerta-suave)",
+                      color: "var(--pr-alerta)",
+                      fontSize: 12,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    <AlertTriangle size={15} strokeWidth={1.9} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden />
+                    <span>
+                      Cancelación programada. El módulo sigue activo hasta el fin del periodo ya pagado; después ya no
+                      se cobra y el menú vuelve a pedir contratarlo.
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ margin: 0, fontSize: 13, color: "var(--pr-texto-2)" }}>
+                      Se apaga al final del periodo que ya está pagado — no se cobra ni un día de más, y nada de lo
+                      guardado (pacientes, casos, hojas de control, facturas) se borra.
+                    </p>
+                    <div>
+                      <ButtonNew type="button" variant="danger" onClick={cancelarModulo} disabled={cancelando}>
+                        {cancelando ? "Cancelando…" : "Cancelar módulo"}
+                      </ButtonNew>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Tarjeta>
+          </div>
+        )}
 
         <div className={s.barraGuardar}>
           <ButtonNew type="button" variant="primary" onClick={guardar} disabled={saving}>

@@ -46,6 +46,7 @@ import { PLAN_MARKETING } from "@/lib/plan-shared";
 import {
   MODULE_SUBSCRIPTION_KIND,
   buildActivateModuleWrite,
+  resolveActivationConflict,
   resolveModuleDeletion,
   resolveModuleSubscriptionSync,
   type ModuleBillingCycle,
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest) {
             if (isPaidNow) {
               const subscriptionId =
                 typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
-              await activateModulePurchase(moduleClinicId, moduleKey, {
+              await activateModulePurchase(stripe, moduleClinicId, moduleKey, {
                 billing: session.metadata?.billing === "annual" ? "annual" : "monthly",
                 method: (session.metadata?.method as "card" | "spei" | "oxxo" | undefined) ?? "card",
                 amountMxn: (session.amount_subtotal ?? session.amount_total ?? 0) / 100,
@@ -224,7 +225,7 @@ export async function POST(req: NextRequest) {
           const moduleClinicId = session.metadata?.clinicId;
           const moduleKey = session.metadata?.moduleKey;
           if (moduleClinicId && moduleKey) {
-            await activateModulePurchase(moduleClinicId, moduleKey, {
+            await activateModulePurchase(stripe, moduleClinicId, moduleKey, {
               billing: session.metadata?.billing === "annual" ? "annual" : "monthly",
               method: (session.metadata?.method as "card" | "spei" | "oxxo" | undefined) ?? "spei",
               amountMxn: (session.amount_subtotal ?? session.amount_total ?? 0) / 100,
@@ -1020,6 +1021,7 @@ async function activatePlatformSubscription(
  * upsert real reemplaza este admin grant".
  */
 async function activateModulePurchase(
+  stripe: Stripe,
   clinicId: string,
   moduleKey: string,
   opts: {
@@ -1035,8 +1037,39 @@ async function activateModulePurchase(
 
   const before = await prisma.clinicModule.findUnique({
     where: { clinicId_moduleId: { clinicId, moduleId: mod.id } },
-    select: { status: true },
+    select: { status: true, stripeSubscriptionId: true },
   });
+
+  // DOBLE PAGO, red de seguridad final (ws1-t2, 28-sep-2026): el checkout ya
+  // rechaza si hay una sesión/suscripción en curso, pero dos pagos que se
+  // completan casi a la vez en dos pestañas pueden llegar aquí los dos. Si
+  // ya hay una suscripción de tarjeta ACTIVA con OTRO stripeSubscriptionId,
+  // la que llega ahora se cancela en Stripe (nunca vuelve a cobrar) y NO se
+  // toca `clinic_modules` — gana la que activó primero.
+  const conflicto = resolveActivationConflict(before, opts.stripeSubscriptionId);
+  if (conflicto.type === "cancel_incoming") {
+    if (opts.stripeSubscriptionId) {
+      try {
+        await stripe.subscriptions.cancel(opts.stripeSubscriptionId);
+      } catch (e) {
+        console.error("[webhook] no se pudo cancelar la suscripción duplicada:", e);
+      }
+    }
+    await logAudit({
+      clinicId,
+      userId: clinicId,
+      entityType: "subscription",
+      entityId: opts.stripeSubscriptionId ?? opts.source.sessionId,
+      action: "update",
+      changes: {
+        _source: {
+          before: null,
+          after: { ...opts.source, kind: MODULE_SUBSCRIPTION_KIND, moduleKey, resultado: "cancelada_por_duplicada", motivo: conflicto.reason },
+        },
+      },
+    });
+    return;
+  }
 
   const now = new Date();
   const periodEnd = opts.billing === "annual" ? addYears(now, 1) : addMonths(now, 1);

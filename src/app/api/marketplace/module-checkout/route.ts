@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type Stripe from "stripe";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -7,6 +8,7 @@ import { ivaParaCobro } from "@/lib/billing/iva-cobro";
 import {
   canPurchaseModules,
   hasActiveAccess,
+  hasDuplicatePurchaseInFlight,
   resolveModuleCheckoutReturnUrls,
   resolveModulePriceMxn,
   MODULE_SUBSCRIPTION_KIND,
@@ -49,6 +51,14 @@ const BodySchema = z.object({
  * - Si la clínica YA tiene el módulo activo (comprado o "admin"), 409: no
  *   se genera ninguna sesión — así una activación "admin" (Rafael Clínica,
  *   clínica de prueba) nunca puede pisarse con una compra real.
+ * - DOBLE PAGO (ws1-t2, 28-sep-2026): lo anterior no bastaba — con dos
+ *   pestañas se podían abrir dos Checkout Sessions antes de que la primera
+ *   se pagara. Si ya existe un `stripeCustomerId`, se le pregunta a Stripe
+ *   si hay una sesión "open" o una suscripción de este módulo que no esté
+ *   ya cerrada (`hasDuplicatePurchaseInFlight`); si la hay, 409 sin tocar
+ *   Stripe más. Red de seguridad final en el webhook
+ *   (`resolveActivationConflict`), por si dos pagos se completan casi a la
+ *   vez en dos pestañas distintas.
  * - Webhook: la activación real ocurre en /api/webhooks/stripe cuando
  *   llega `checkout.session.completed` (tarjeta) o
  *   `checkout.session.async_payment_succeeded` (SPEI/OXXO) con
@@ -122,6 +132,33 @@ export async function POST(req: NextRequest) {
     });
     customerId = customer.id;
     await prisma.clinic.update({ where: { id: clinic.id }, data: { stripeCustomerId: customerId } });
+  } else {
+    // DOBLE PAGO (ws1-t2, 28-sep-2026): `hasActiveAccess` de arriba solo
+    // bloquea si el módulo YA quedó activo. Con dos pestañas (o llamando al
+    // endpoint dos veces seguidas) se podían abrir dos Checkout Sessions
+    // ANTES de que la primera se pagara. Aquí se pregunta a Stripe, de
+    // verdad, si ya hay una sesión abierta o una suscripción en curso de
+    // ESTE módulo para esta clínica — solo tiene sentido si ya existe un
+    // customer (uno nuevo no pudo haber comprado nada todavía).
+    const [sesiones, suscripciones] = await Promise.all([
+      stripe.checkout.sessions.list({ customer: customerId, limit: 20 }),
+      stripe.subscriptions.list({ customer: customerId, status: "all", limit: 20 }),
+    ]);
+    const esDeEsteModulo = (metadata: Stripe.Metadata | null | undefined) =>
+      metadata?.kind === MODULE_SUBSCRIPTION_KIND && metadata?.moduleKey === mod.key;
+    const enCurso = hasDuplicatePurchaseInFlight({
+      sessions: sesiones.data.filter((s) => esDeEsteModulo(s.metadata)).map((s) => ({ status: s.status })),
+      subscriptions: suscripciones.data.filter((s) => esDeEsteModulo(s.metadata)).map((s) => ({ status: s.status })),
+    });
+    if (enCurso) {
+      return NextResponse.json(
+        {
+          error: "Ya hay un pago de este módulo en curso para esta clínica. Espera a que termine (o revisa tu correo/banco) antes de intentarlo otra vez.",
+          code: "compra_en_curso",
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const baseUrl =

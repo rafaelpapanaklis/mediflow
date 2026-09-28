@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
-import { canRequestModuleCancellation } from "@/lib/marketplace/module-purchase-core";
+import { canPurchaseModules, canRequestModuleCancellation } from "@/lib/marketplace/module-purchase-core";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -25,10 +25,22 @@ const BodySchema = z.object({ moduleKey: z.string().min(1) });
  * Un módulo activado por soporte ("admin", ej. Rafael Clínica) o pagado
  * con SPEI/OXXO (pago único, sin suscripción) no tiene nada que cancelar
  * aquí — `canRequestModuleCancellation` lo rechaza con un mensaje claro.
+ *
+ * Solo dueño o administrador (`canPurchaseModules`, misma regla que el
+ * checkout) — cancelar un cobro recurrente compromete a la clínica igual
+ * que contratarlo. La pantalla ya esconde el botón a los demás roles; esto
+ * es la comprobación real, en el servidor.
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
+
+  if (!canPurchaseModules(user.role)) {
+    return NextResponse.json(
+      { error: "Solo el dueño o un administrador de la clínica puede cancelar módulos. Pídeselo a tu administrador.", code: "solo_administrador" },
+      { status: 403 },
+    );
+  }
 
   let body: unknown;
   try {

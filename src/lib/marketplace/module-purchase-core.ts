@@ -272,6 +272,101 @@ export function resolveModuleCheckoutReturnUrls(input: {
   };
 }
 
+/* ── 6b. Doble pago (ws1-t2, 28-sep-2026) ─────────────────────────────── */
+
+/**
+ * `hasActiveAccess` (arriba) solo bloquea la compra si el módulo YA quedó
+ * activo — con dos pestañas (o llamando al endpoint dos veces seguidas) se
+ * podían abrir dos sesiones de Stripe ANTES de que la primera se pagara y
+ * el webhook alcanzara a activar nada. Esto añade la segunda mitad: si ya
+ * hay una sesión de checkout ABIERTA o una suscripción de ESTE módulo EN
+ * CURSO para esta clínica, tampoco se crea una sesión nueva.
+ */
+
+/** Una Checkout Session de Stripe, ya filtrada a las de este módulo+clínica. */
+export interface OpenModuleCheckoutSession {
+  /** `session.status` de Stripe: "open" | "complete" | "expired". */
+  status: string | null;
+}
+
+/** Una Subscription de Stripe, ya filtrada a las de este módulo+clínica. */
+export interface OpenModuleSubscription {
+  /** `subscription.status` de Stripe. */
+  status: string;
+}
+
+/** Solo una sesión "open" bloquea — "complete" ya la procesó (o está por
+ * procesar) el webhook, y "expired" ya no puede pagarse. */
+const BLOCKING_SESSION_STATUSES = new Set(["open"]);
+
+/** Cualquier suscripción que no esté YA cerrada bloquea otra compra nueva:
+ * "incomplete" (esperando el primer cobro), "trialing"/"active" (viva),
+ * "past_due"/"unpaid" (reintentando, sigue viva). Solo "canceled" e
+ * "incomplete_expired" dejan comprar de nuevo. */
+const BLOCKING_SUBSCRIPTION_STATUSES = new Set([
+  "incomplete",
+  "trialing",
+  "active",
+  "past_due",
+  "unpaid",
+  "paused",
+]);
+
+/**
+ * ¿Hay una compra de este módulo YA en curso para esta clínica? Si es así,
+ * el checkout debe rechazar con 409 ANTES de crear una sesión nueva de
+ * Stripe — nunca después.
+ */
+export function hasDuplicatePurchaseInFlight(args: {
+  sessions: OpenModuleCheckoutSession[];
+  subscriptions: OpenModuleSubscription[];
+}): boolean {
+  return (
+    args.sessions.some((s) => s.status !== null && BLOCKING_SESSION_STATUSES.has(s.status)) ||
+    args.subscriptions.some((s) => BLOCKING_SUBSCRIPTION_STATUSES.has(s.status))
+  );
+}
+
+/* ── 6c. Red de seguridad en el webhook: si igual se coló una segunda ──── */
+
+export interface ActiveModuleSubscriptionState {
+  status: string;
+  stripeSubscriptionId: string | null;
+}
+
+export type ActivationConflictResolution =
+  | { type: "activate" }
+  | { type: "cancel_incoming"; reason: string };
+
+/**
+ * Última red de seguridad, por si el checkout de arriba no alcanzó a
+ * atajarlo (dos pagos que se completan casi al mismo tiempo, uno en cada
+ * pestaña): si YA hay una suscripción de tarjeta activa de este módulo con
+ * OTRO `stripeSubscriptionId`, la que llega ahora se cancela en vez de
+ * pisar a la primera — así nunca quedan dos suscripciones cobrando el
+ * mismo módulo en paralelo. Gana la primera que activó el webhook, sea
+ * cual sea el orden en que Stripe mande los eventos.
+ *
+ * Solo compara SUSCRIPCIONES DE TARJETA (las que sí se cobran solas para
+ * siempre si nadie las cancela): un pago único de SPEI/OXXO no tiene
+ * `stripeSubscriptionId` y no puede "seguir cobrando" — para ese caso, la
+ * defensa de verdad es el checkout de arriba, no esta función.
+ */
+export function resolveActivationConflict(
+  existing: ActiveModuleSubscriptionState | null,
+  incomingSubscriptionId: string | null,
+): ActivationConflictResolution {
+  if (!existing) return { type: "activate" };
+  if (existing.status !== "active") return { type: "activate" };
+  if (!existing.stripeSubscriptionId) return { type: "activate" };
+  if (!incomingSubscriptionId) return { type: "activate" };
+  if (existing.stripeSubscriptionId === incomingSubscriptionId) return { type: "activate" };
+  return {
+    type: "cancel_incoming",
+    reason: "La clínica ya tenía una suscripción de tarjeta activa de este módulo; se cancela la nueva para no cobrar dos veces.",
+  };
+}
+
 /* ── 7. Quién puede comprar ────────────────────────────────────────────── */
 
 /**
