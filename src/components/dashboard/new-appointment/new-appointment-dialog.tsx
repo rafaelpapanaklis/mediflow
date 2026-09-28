@@ -44,6 +44,7 @@ import {
   useVestir,
   type AparienciaNuevaCita,
 } from "./apariencia";
+import { ORTHO_APPOINTMENT_REASONS } from "@/lib/orthodontics/agenda-constants";
 import nc from "./nueva-cita.module.css";
 
 const REASON_PRESET_KEYS = [
@@ -81,7 +82,6 @@ interface BootData {
 export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "clasica" }: Props) {
   const t = useT();
   const router = useRouter();
-  const reasonPresets = REASON_PRESET_KEYS.map((key) => t(key));
 
   const [boot, setBoot] = useState<BootData | null>(null);
   const [bootLoading, setBootLoading] = useState(false);
@@ -120,6 +120,19 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     longerBlockSuggestion: { minMin: number; maxMin: number } | null;
     primaryGuardianName: string | null;
   } | null>(null);
+  // Ortodoncia (ws1-t4, Control y agenda, sep-2026) — C7: si el módulo está
+  // activo para esta clínica, se ofrecen chips de motivo propios de
+  // ortodoncia (Valoración, Control de ortodoncia…). A propósito NO depende
+  // del paciente elegido (a diferencia de pediatricContext): una valoración
+  // es justo la cita SIN caso abierto todavía. Reusa el endpoint existente
+  // `/api/orthodontics/context` (SPEC §8.10, sin más llamadores hasta hoy) en
+  // vez de crear uno nuevo — ya resuelve el módulo con `canAccessModule`.
+  const [orthoActive, setOrthoActive] = useState(false);
+  // Los presets propios de ortodoncia NO pasan por `t()` (ver
+  // ORTHO_APPOINTMENT_REASONS) — se anexan tal cual al final.
+  const reasonPresets = orthoActive
+    ? [...REASON_PRESET_KEYS.map((key) => t(key)), ...ORTHO_APPOINTMENT_REASONS]
+    : REASON_PRESET_KEYS.map((key) => t(key));
 
   // Resource working hours. undefined = not yet loaded (or no resource).
   // null = resource is always-open (no schedule rows). Object = schedule.
@@ -199,6 +212,26 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       })
       .finally(() => setBootLoading(false));
   }, [isOpen, boot, onClose]);
+
+  // Ortodoncia — C7: gate por clínica, una vez por apertura del modal.
+  useEffect(() => {
+    if (!isOpen) {
+      setOrthoActive(false);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/orthodontics/context", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!cancelled) setOrthoActive(Boolean(body?.orthodontics));
+      })
+      .catch(() => {
+        if (!cancelled) setOrthoActive(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !boot) return;
