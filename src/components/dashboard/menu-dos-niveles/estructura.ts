@@ -24,13 +24,27 @@ export type GrupoId =
   | "catalogo"
   | "mas";
 
-/** Primer nivel (barra estrecha), en el orden del diseño aprobado. */
+/**
+ * Primer nivel (barra estrecha), en el orden del diseño aprobado.
+ *
+ * Ortodoncia vive AQUÍ desde el 28-sep-2026 (decisión de Rafael del 27-sep,
+ * H17 de la QA en vivo): antes estaba al fondo de Administración →
+ * Especialidades y había que bajar para encontrarla. Sin el módulo contratado
+ * sale igual, con su candado (`conCandados`), y lleva a la página de
+ * contratar. Solo la ven las clínicas dentales y quien tiene el permiso: eso
+ * lo sigue decidiendo `shouldShowItem`, aquí solo el sitio.
+ *
+ * Quien ya se había armado su menú la conserva donde la puso; si la tenía en
+ * el sitio de fábrica de antes, se le muda sola (`REUBICADAS`, en
+ * src/lib/menu-personalizado/diseno.ts).
+ */
 export const NIVEL1_IDS: readonly string[] = [
   "home",         // Hoy
   "appointments", // Agenda
   "patients",     // Pacientes
   "inbox",        // Mensajes (antes «Inbox»)
   "billing",      // Caja
+  "orthodontics", // Ortodoncia (con candado si no está contratada)
   "sabina",       // Sabina
 ];
 
@@ -55,7 +69,8 @@ export const GRUPOS: readonly { id: GrupoId; ids: readonly string[] }[] = [
   },
   { id: "pacientes", ids: ["landing", "resenas", "tv-modes", "messages"] },
   { id: "sistema", ids: ["settings", "auditoria", "soporte"] },
-  { id: "especialidades", ids: ["pediatrics", "endodontics", "periodontics", "orthodontics", "implants"] },
+  // Sin Ortodoncia: subió al primer nivel (ver NIVEL1_IDS).
+  { id: "especialidades", ids: ["pediatrics", "endodontics", "periodontics", "implants"] },
   { id: "catalogo", ids: ["packages", "suppliers", "compras", "laboratorios", "ordenes-laboratorio"] },
   { id: "mas", ids: ["ai", "marketplace"] },
 ];

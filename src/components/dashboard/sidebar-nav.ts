@@ -120,6 +120,22 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users,         permission: "patients.view" },
   { id: "inbox",        section: "workspace", label: "Inbox",       href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread",   permission: "inbox.view", moduleKey: "inbox" },
   { id: "messages",     section: "workspace", label: "Whatsapp / Bot",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread", permission: "whatsapp.view", moduleKey: "whatsapp" },
+  // Ortodoncia, en el MENÚ PRINCIPAL (decisión de Rafael del 27-sep-2026, H17
+  // de la QA en vivo): antes vivía en la sección "specialties", que en el menú
+  // de dos niveles cae al fondo de Administración. Tiene módulo real
+  // (/dashboard/orthodontics, con submenú propio). moduleKey sigue siendo
+  // ORTHODONTICS_MODULE_KEY, pero OJO: quien arma `clinicModuleKeys`
+  // (dashboard/layout.tsx) tiene que meter esa key SOLO cuando
+  // hasActiveOrthodonticsModule(clinicId) es true — NUNCA el atajo de trial de
+  // getActiveClinicModuleKeys/canAccessModule, que abre todas las
+  // especialidades durante el periodo de prueba de la clínica.
+  // Sin el módulo, la opción NO se esconde: sale con candado y lleva a la
+  // página de contratar (ver `conCandados`, más abajo).
+  { id: "orthodontics", section: "workspace", label: "Ortodoncia", href: "/dashboard/orthodontics",
+    icon: Smile,
+    categories: ["DENTAL"],
+    permission: "specialties.orthodontics",
+    moduleKey: ORTHODONTICS_MODULE_KEY },
   { id: "marketplace",  section: "workspace", label: "Marketplace", href: "/dashboard/marketplace",   icon: ShoppingBag,   permission: "marketplace.view", moduleKey: "marketplace", comingSoon: true },
 
   { id: "ai",           section: "clinico", label: "IA asistente", href: "/dashboard/ai-assistant", icon: Sparkles, moduleKey: "ai-assistant" },
@@ -168,21 +184,8 @@ export const NAV_ITEMS: NavItemDef[] = [
     categories: ["DENTAL"],
     permission: "specialties.periodontics",
     moduleKey: PERIODONTICS_MODULE_KEY, comingSoon: true },
-  // Ola 1 (ws1-t3, sep-2026): a diferencia de sus hermanas de arriba,
-  // Ortodoncia YA tiene módulo real (/dashboard/orthodontics, con submenú
-  // propio) — deja de ser "Próximamente" y de vivir detrás de HIDE_SPECIALTIES
-  // (ver shouldShowItem). moduleKey sigue siendo ORTHODONTICS_MODULE_KEY, pero
-  // OJO: quien arma `clinicModuleKeys` (dashboard/layout.tsx) tiene que meter
-  // esa key SOLO cuando hasActiveOrthodonticsModule(clinicId) es true — NUNCA
-  // el atajo de trial de getActiveClinicModuleKeys/canAccessModule, que abre
-  // todas las especialidades durante el periodo de prueba de la clínica.
-  // 28-sep-2026 (ws1-t3): sin el módulo, la opción YA NO se esconde: sale con
-  // candado y lleva a la página de contratar (ver `conCandados`, más abajo).
-  { id: "orthodontics", section: "specialties", label: "Ortodoncia", href: "/dashboard/orthodontics",
-    icon: Smile,
-    categories: ["DENTAL"],
-    permission: "specialties.orthodontics",
-    moduleKey: ORTHODONTICS_MODULE_KEY },
+  // Ortodoncia ya no está aquí: subió al MENÚ PRINCIPAL (sección "workspace",
+  // más arriba) el 28-sep-2026.
   { id: "implants",     section: "specialties", label: "Implantología", href: "/dashboard/specialties/implants",
     icon: Anchor,
     categories: ["DENTAL"],
@@ -309,9 +312,9 @@ export function shouldShowItem(
   // flujo normal; el sidebar los renderiza aparte cuando isExpired.
   if (item.suspendedOnly) return false;
   // Oculta toda la sección de especialidades AÚN EN DESARROLLO. Ver
-  // HIDE_SPECIALTIES. Ortodoncia queda exenta (ws1-t3, Ola 1): ya tiene
-  // módulo real, así que su propio moduleKey/permission deciden si se ve —
-  // no la bandera genérica de "todavía no existe nada aquí".
+  // HIDE_SPECIALTIES. Ortodoncia no entra: ya tiene módulo real y vive en el
+  // menú principal, así que su propio moduleKey/permission deciden si se ve.
+  // (La excepción por id se queda por si alguien la devolviera a esta sección.)
   if (HIDE_SPECIALTIES && item.section === "specialties" && item.id !== "orthodontics") return false;
   // Oculta Proveedores / Mis compras / Laboratorios / Mis órdenes de laboratorio
   // mientras el área no sea pública. Ver HIDE_SUPPLY_MODULES.

@@ -10,6 +10,7 @@
 // cada carga, nunca este archivo.
 
 import {
+  FABRICA_ACTUAL,
   MAX_LARGO_NOMBRE,
   MAX_SECCIONES,
   MAX_SUBMENUS,
@@ -41,6 +42,8 @@ export function mismoContenedor(a: Contenedor, b: Contenedor): boolean {
 function copia(diseno: DisenoMenu): DisenoMenu {
   return {
     v: diseno.v,
+    // La fábrica con la que se armó viaja con el diseño (ver diseno.ts).
+    ...(diseno.fabrica !== undefined ? { fabrica: diseno.fabrica } : {}),
     entradas: diseno.entradas.map((e) =>
       e.tipo === "opcion"
         ? { ...e }
@@ -297,5 +300,5 @@ export function desplazarSeccion(diseno: DisenoMenu, submenuId: string, seccionI
 
 /** Diseño vacío de arranque (por si algún día hiciera falta empezar de cero). */
 export function disenoVacio(): DisenoMenu {
-  return { v: VERSION_DISENO, entradas: [] };
+  return { v: VERSION_DISENO, fabrica: FABRICA_ACTUAL, entradas: [] };
 }

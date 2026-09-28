@@ -274,13 +274,42 @@ test("candado: no destapa ninguna otra opción, y un módulo sin página de cont
   assert.ok(!conOtro.includes("implants"));
 });
 
-test("candado: va en el segundo nivel, en Especialidades, y marca Administración al estar en la página de contratar", () => {
+// 28-sep-2026 (ws1-t3, H17 de la QA en vivo; decisión de Rafael del 27-sep):
+// Ortodoncia sale en el MENÚ PRINCIPAL, no al fondo de Administración →
+// Especialidades. Con el módulo, abre el módulo; sin él, con candado.
+test("H17: Ortodoncia va en el primer nivel, entre Caja y Sabina — con el módulo y con candado", () => {
+  const conModulo = armarMenu(opcionesVisibles(persona("SUPER_ADMIN"), "DENTAL", [...MODULOS_PRO, "orthodontics"]));
+  assert.deepEqual(conModulo.nivel1.map((it) => it.id), ["home", "appointments", "patients", "inbox", "billing", "orthodontics", "sabina"]);
+  assert.equal(conModulo.nivel1.find((it) => it.id === "orthodontics")!.href, "/dashboard/orthodontics");
+  assert.ok(!conModulo.grupos.some((g) => g.items.some((it) => it.id === "orthodontics")), "ya no está en Administración");
+  assert.ok(!conModulo.grupos.some((g) => g.id === "especialidades"), "y Especialidades, vacía, no aparece");
+  assert.equal(segundoNivelActivo("/dashboard/orthodontics/tablero", conModulo.grupos), false, "estar en Ortodoncia ya no marca Administración");
+
+  // El doctor y recepción también la tienen a la vista.
+  for (const role of ["DOCTOR", "RECEPTIONIST"] as UserRole[]) {
+    const menu = armarMenu(opcionesVisibles(persona(role), "DENTAL", [...MODULOS_PRO, "orthodontics"]));
+    assert.ok(menu.nivel1.some((it) => it.id === "orthodontics"), role);
+  }
+  // Quien no es clínica dental no la ve en ningún nivel.
+  const medicina = armarMenu(opcionesVisibles(persona("SUPER_ADMIN"), "MEDICINE", [...MODULOS_PRO, "orthodontics"], CON_CANDADO));
+  assert.ok(![...medicina.nivel1, ...medicina.grupos.flatMap((g) => g.items)].some((it) => it.id === "orthodontics"));
+
+  // En el menú de siempre también sube: sale de la sección «specialties».
+  const item = NAV_ITEMS.find((it) => it.id === "orthodontics")!;
+  assert.equal(item.section, "workspace");
+  assert.ok(NIVEL1_IDS.includes("orthodontics"));
+  assert.ok(!GRUPOS.some((g) => g.ids.includes("orthodontics")));
+});
+
+test("candado: va en el primer nivel y NO marca Administración", () => {
   const menu = armarMenu(opcionesVisibles(persona("SUPER_ADMIN"), "DENTAL", MODULOS_PRO, CON_CANDADO));
-  const esp = menu.grupos.find((g) => g.id === "especialidades");
-  assert.deepEqual(esp?.items.map((it) => it.id), ["orthodontics"]);
-  assert.equal(menu.nivel1.some((it) => it.id === "orthodontics"), false);
-  assert.equal(segundoNivelActivo("/dashboard/contratar/ortodoncia", menu.grupos), true);
-  assert.equal(segundoNivelActivo("/dashboard/orthodontics/tablero", menu.grupos), false, "el candado no pinta como abierto un módulo que no se tiene");
+  assert.deepEqual(menu.nivel1.map((it) => it.id), ["home", "appointments", "patients", "inbox", "billing", "orthodontics", "sabina"]);
+  const orto = menu.nivel1.find((it) => it.id === "orthodontics")!;
+  assert.equal(orto.locked, true);
+  assert.equal(orto.href, "/dashboard/contratar/ortodoncia");
+  assert.ok(!menu.grupos.some((g) => g.id === "especialidades"));
+  assert.equal(segundoNivelActivo("/dashboard/contratar/ortodoncia", menu.grupos), false, "la página de contratar es del primer nivel");
+  assert.equal(segundoNivelActivo("/dashboard/orthodontics/tablero", menu.grupos), false);
   // La miga: la página no es una opción de NAV_ITEMS (la del candado es una
   // copia), así que sale del mapa de la barra superior.
   // (topbar.tsx es de cliente y no se puede importar aquí: se lee su texto.)

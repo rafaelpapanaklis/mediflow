@@ -37,7 +37,9 @@ import {
 } from "@/components/dashboard/sidebar-nav";
 import { GRUPOS, NIVEL1_IDS, armarMenu, opcionesVisibles } from "@/components/dashboard/menu-dos-niveles/estructura";
 import {
+  FABRICA_ACTUAL,
   MAX_SUBMENUS,
+  REUBICADAS,
   SUBMENU_ADMIN,
   VERSION_DISENO,
   aplicarDiseno,
@@ -303,6 +305,125 @@ test("TODA opción de fábrica que falte en un menú guardado aparece (no solo p
   }
 });
 
+// ── La fábrica muda una opción de sitio (28-sep-2026, ws1-t3, H17) ──────
+// Ortodoncia subió de Administración → Especialidades al menú principal
+// (decisión de Rafael). Quien personalizó su menú ANTES la tiene guardada en el
+// sitio viejo aunque nunca la tocara: sin la mudanza se le quedaría ahí.
+
+const CON_ORTODONCIA = [...MODULOS_PRO, "orthodontics"];
+
+/** El diseño que tenía guardado alguien ANTES de la mudanza: Ortodoncia en Especialidades y sin `fabrica`. */
+function guardadoAntesDeLaMudanza(cambio: (d: DisenoMenu) => DisenoMenu = (d) => d): DisenoMenu {
+  const visibles = visiblesDe("SUPER_ADMIN", "DENTAL", CON_ORTODONCIA);
+  const hoy = disenoDesdeArmado(aplicarDiseno(null, visibles));
+  const deAntes: DisenoMenu = {
+    v: VERSION_DISENO,
+    entradas: hoy.entradas
+      .filter((e) => e.tipo !== "opcion" || e.id !== "orthodontics")
+      .map((e) =>
+        e.tipo === "opcion"
+          ? e
+          : {
+              ...e,
+              secciones: [
+                ...e.secciones,
+                { id: "especialidades", nombre: null, opciones: ["orthodontics"] },
+              ],
+            },
+      ),
+  };
+  // Tal como sale de la base: JSON, y saneado.
+  return normalizarDiseno(JSON.parse(JSON.stringify(cambio(deAntes))))!;
+}
+
+const primerNivelDe = (armado: ReturnType<typeof aplicarDiseno>) =>
+  armado.entradas.filter((e) => e.tipo === "opcion").map((e) => (e as { item: NavItemDef }).item.id);
+
+test("mudanza: de fábrica, Ortodoncia está en el menú principal, entre Caja y Sabina", () => {
+  const visibles = visiblesDe("SUPER_ADMIN", "DENTAL", CON_ORTODONCIA);
+  assert.deepEqual(primerNivelDe(aplicarDiseno(null, visibles)), ["home", "appointments", "patients", "inbox", "billing", "orthodontics", "sabina"]);
+  assert.deepEqual(ubicacionPorDefecto("orthodontics"), { submenu: null, seccion: null });
+  assert.equal(disenoPorDefecto().fabrica, FABRICA_ACTUAL);
+  assert.deepEqual(REUBICADAS, [{ id: "orthodontics", desde: 2, submenu: SUBMENU_ADMIN, seccion: "especialidades" }]);
+});
+
+test("mudanza: quien la tenía guardada en el sitio viejo la ve ahora en el menú principal", () => {
+  const visibles = visiblesDe("SUPER_ADMIN", "DENTAL", CON_ORTODONCIA);
+  // Personalizó OTRA cosa (subió Reportes) y no tocó Ortodoncia.
+  const guardado = guardadoAntesDeLaMudanza((d) => moverOpcion(d, "reports", CONTENEDOR_RAIZ, 0));
+  assert.equal(guardado.fabrica, undefined, "los diseños de antes no traen la fábrica");
+  assert.deepEqual(ubicacionDe(guardado, "orthodontics"), { submenuId: SUBMENU_ADMIN, seccionId: "especialidades", indice: 0 });
+
+  const armado = aplicarDiseno(guardado, visibles);
+  assert.deepEqual(primerNivelDe(armado), ["reports", "home", "appointments", "patients", "inbox", "billing", "orthodontics", "sabina"]);
+  const admin = armado.entradas.find((e) => e.tipo === "submenu") as Extract<(typeof armado.entradas)[number], { tipo: "submenu" }>;
+  assert.ok(!admin.secciones.some((s) => ids(s.items).includes("orthodontics")), "ya no está en Administración");
+  assert.ok(!admin.secciones.some((s) => s.id === "especialidades"), "y la sección vacía no se pinta");
+  // Lo que subió a mano sigue donde lo dejó.
+  assert.equal(retrato(armado)[0], "reports");
+});
+
+test("mudanza: con candado (módulo sin contratar) también sube", () => {
+  const conCandado = opcionesVisibles(persona("SUPER_ADMIN"), "DENTAL", MODULOS_PRO, ["orthodontics"]);
+  const armado = aplicarDiseno(guardadoAntesDeLaMudanza(), conCandado);
+  const orto = armado.entradas.find((e) => e.tipo === "opcion" && e.item.id === "orthodontics") as { item: NavItemDef } | undefined;
+  assert.ok(orto, "está en el menú principal");
+  assert.equal(orto!.item.locked, true);
+  assert.equal(orto!.item.href, "/dashboard/contratar/ortodoncia");
+});
+
+test("mudanza: quien la había puesto en OTRO sitio la conserva ahí", () => {
+  const visibles = visiblesDe("SUPER_ADMIN", "DENTAL", CON_ORTODONCIA);
+  // La tenía en «clinica», arriba del todo: eso sí lo eligió.
+  const guardado = guardadoAntesDeLaMudanza((d) =>
+    moverOpcion(d, "orthodontics", { submenuId: SUBMENU_ADMIN, seccionId: "clinica" }, 0),
+  );
+  const armado = aplicarDiseno(guardado, visibles);
+  assert.ok(!primerNivelDe(armado).includes("orthodontics"));
+  const admin = armado.entradas.find((e) => e.tipo === "submenu") as Extract<(typeof armado.entradas)[number], { tipo: "submenu" }>;
+  assert.equal(ids(admin.secciones.find((s) => s.id === "clinica")!.items)[0], "orthodontics");
+});
+
+test("mudanza: después, quien la devuelve a Especialidades se queda con ella ahí (no rebota)", () => {
+  const visibles = visiblesDe("SUPER_ADMIN", "DENTAL", CON_ORTODONCIA);
+  // Abre «Personalizar» (ya mudada), y la arrastra de vuelta a Especialidades.
+  const enElEditor = disenoDesdeArmado(aplicarDiseno(guardadoAntesDeLaMudanza(), visibles, { conservarVacios: true }));
+  assert.equal(enElEditor.fabrica, FABRICA_ACTUAL);
+  assert.deepEqual(ubicacionDe(enElEditor, "orthodontics")?.submenuId, null, "en el editor sale ya en el menú principal");
+  const devuelta = moverOpcion(enElEditor, "orthodontics", { submenuId: SUBMENU_ADMIN, seccionId: "especialidades" }, 0);
+  assert.equal(devuelta.fabrica, FABRICA_ACTUAL, "mover no pierde la fábrica");
+
+  // Lo que guarda el servidor (saneado + fusionado con lo anterior) y lo que lee después.
+  const guardadoNuevo = normalizarDiseno(JSON.parse(JSON.stringify(fusionarOcultas(guardadoAntesDeLaMudanza(), normalizarDiseno(devuelta)!))))!;
+  assert.equal(guardadoNuevo.fabrica, FABRICA_ACTUAL);
+  const armado = aplicarDiseno(guardadoNuevo, visibles);
+  assert.ok(!primerNivelDe(armado).includes("orthodontics"), "es su decisión: se respeta");
+  const admin = armado.entradas.find((e) => e.tipo === "submenu") as Extract<(typeof armado.entradas)[number], { tipo: "submenu" }>;
+  assert.deepEqual(ids(admin.secciones.find((s) => s.id === "especialidades")!.items), ["orthodontics"]);
+});
+
+test("mudanza: a quien NO la ve y guarda su menú, no se le vuelve a meter en el sitio viejo", () => {
+  // Un contador (sin specialties.orthodontics) con el menú guardado de antes.
+  const previo = guardadoAntesDeLaMudanza();
+  const visiblesSin = visiblesDe("SUPER_ADMIN", "DENTAL", MODULOS_PRO); // sin módulo: no la ve
+  const borrador = normalizarDiseno(disenoDesdeArmado(aplicarDiseno(previo, visiblesSin, { conservarVacios: true })))!;
+  assert.ok(!idsDelDiseno(borrador).includes("orthodontics"));
+  const aGuardar = fusionarOcultas(previo, borrador);
+  assert.ok(!idsDelDiseno(aGuardar).includes("orthodontics"), "se deja caer: no queda anclada al sitio viejo con la fábrica nueva");
+  // El día que la vea, va al menú principal.
+  const armado = aplicarDiseno(aGuardar, visiblesDe("SUPER_ADMIN", "DENTAL", CON_ORTODONCIA));
+  assert.ok(primerNivelDe(armado).includes("orthodontics"));
+});
+
+test("mudanza: la fábrica guardada se sanea (un valor raro cuenta como la de antes)", () => {
+  const base = { v: VERSION_DISENO, entradas: [{ tipo: "opcion", id: "home" }] };
+  assert.equal(normalizarDiseno({ ...base, fabrica: 2 })!.fabrica, 2);
+  for (const raro of [0, -1, 1.5, 99, "2", null, {}, NaN]) {
+    assert.equal(normalizarDiseno({ ...base, fabrica: raro })!.fabrica, undefined, String(raro));
+  }
+  assert.equal(normalizarDiseno(base)!.fabrica, undefined);
+});
+
 test("si el sitio de fábrica ya no existe, la opción nueva sale al final del menú principal", () => {
   const visibles = visiblesDe("SUPER_ADMIN");
   // La persona borró «Administración» entera (después de vaciarla).
@@ -312,8 +433,11 @@ test("si el sitio de fábrica ya no existe, la opción nueva sale al final del m
   };
   const armado = aplicarDiseno(soloPrimerNivel, visibles);
   assert.equal(armado.entradas.filter((e) => e.tipo === "submenu").length, 0, "no debería inventar submenús");
-  const primeros = armado.entradas.slice(0, NIVEL1_IDS.length).map((e) => (e as { item: NavItemDef }).item.id);
-  assert.deepEqual(primeros, ids(aplicarDiseno(null, visibles).entradas.slice(0, NIVEL1_IDS.length).map((e) => (e as { item: NavItemDef }).item)));
+  // Del primer nivel de fábrica, lo que ESTA persona ve: Ortodoncia está en
+  // NIVEL1_IDS desde el 28-sep-2026, pero sin el módulo ni el candado no sale.
+  const enPrimerNivel = NIVEL1_IDS.filter((id) => ids(visibles).includes(id)).length;
+  const primeros = armado.entradas.slice(0, enPrimerNivel).map((e) => (e as { item: NavItemDef }).item.id);
+  assert.deepEqual(primeros, ids(aplicarDiseno(null, visibles).entradas.slice(0, enPrimerNivel).map((e) => (e as { item: NavItemDef }).item)));
   // Todo lo que vivía en Administración sigue estando, al final y accesible.
   const todos = armado.entradas.map((e) => (e as { item?: NavItemDef }).item?.id).filter(Boolean);
   for (const it of visibles) assert.ok(todos.includes(it.id), `se perdió ${it.id}`);

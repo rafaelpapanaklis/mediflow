@@ -13,6 +13,11 @@
 //    (`NIVEL1_IDS` / `GRUPOS` de estructura.ts), y si ese sitio ya no existe
 //    porque la persona lo borró, al final del menú principal.
 //  · Personalizar NO añade opciones: todo lo que se pinta sale de `visibles`.
+//  · Si el menú DE FÁBRICA muda una opción de sitio (28-sep-2026: Ortodoncia
+//    subió de Administración → Especialidades al menú principal), a quien la
+//    tenía en el sitio de fábrica de ANTES se le muda también. A quien la
+//    había movido a otro sitio, o la vuelve a colocar después de la mudanza,
+//    se le respeta. Ver `REUBICADAS`.
 //
 // Sin React ni Next a propósito: lo comparten el servidor (API) y el navegador,
 // y lo prueban los tests en node.
@@ -25,6 +30,42 @@ export const VERSION_DISENO = 1;
 
 /** Id del submenú de fábrica («Administración»). */
 export const SUBMENU_ADMIN = "admin";
+
+/**
+ * Revisión del menú DE FÁBRICA. Sube cada vez que la fábrica muda una opción
+ * de sitio, y cada diseño guarda con cuál se hizo (`DisenoMenu.fabrica`).
+ *
+ *   1 — el de siempre.
+ *   2 — 28-sep-2026: Ortodoncia sube al primer nivel (decisión de Rafael).
+ */
+export const FABRICA_ACTUAL = 2;
+
+/**
+ * Las mudanzas de la fábrica. Un diseño guardado con una fábrica ANTERIOR a
+ * `desde` que tenga la opción justo en su sitio viejo no la eligió ahí: es
+ * donde la puso la fábrica. Esa opción se trata como «sin colocar» y cae en
+ * el sitio nuevo. Si la persona la tenía en cualquier OTRO sitio, no se toca.
+ *
+ * Sin esto, a quien personalizó su menú (aunque solo moviera otra cosa)
+ * Ortodoncia se le quedaría para siempre al fondo de Administración.
+ */
+export const REUBICADAS: readonly { id: string; desde: number; submenu: string; seccion: string }[] = [
+  { id: "orthodontics", desde: 2, submenu: SUBMENU_ADMIN, seccion: "especialidades" },
+];
+
+/** Con qué fábrica se guardó un diseño (los de antes del campo, con la 1). */
+function fabricaDe(diseno: DisenoMenu): number {
+  const f = diseno.fabrica;
+  return typeof f === "number" && Number.isInteger(f) && f >= 1 && f <= FABRICA_ACTUAL ? f : 1;
+}
+
+/** ¿Este id, guardado en esta sección, está en un sitio del que la fábrica ya se mudó? */
+function seMudo(diseno: DisenoMenu, id: string, submenu: string, seccion: string): boolean {
+  const fabrica = fabricaDe(diseno);
+  return REUBICADAS.some(
+    (r) => r.id === id && fabrica < r.desde && r.submenu === submenu && r.seccion === seccion,
+  );
+}
 
 // Topes. Existen para que un payload raro no haga crecer la fila ni la pantalla.
 export const MAX_SUBMENUS = 12;
@@ -49,6 +90,12 @@ export type EntradaGuardada =
 
 export interface DisenoMenu {
   v: number;
+  /**
+   * Con qué menú de fábrica delante se guardó este diseño (ver
+   * `FABRICA_ACTUAL`). Ausente = 1: los diseños guardados antes de que
+   * existiera el campo. No es la versión del FORMATO (esa es `v`).
+   */
+  fabrica?: number;
   entradas: EntradaGuardada[];
 }
 
@@ -78,6 +125,7 @@ export interface MenuArmadoPersonal {
 export function disenoPorDefecto(): DisenoMenu {
   return {
     v: VERSION_DISENO,
+    fabrica: FABRICA_ACTUAL,
     entradas: [
       ...NIVEL1_IDS.map((id) => ({ tipo: "opcion" as const, id })),
       {
@@ -142,6 +190,8 @@ export function esSeccionDeFabrica(id: string): boolean {
  *     sitio ya no existe, al final del menú principal.
  *  3. Los contenedores que quedan vacíos no se pintan (igual que hoy con un
  *     grupo sin opciones), pero siguen guardados: en «Personalizar» se ven.
+ *  4. Una opción guardada en un sitio del que la fábrica ya se mudó
+ *     (`REUBICADAS`) cuenta como no colocada: la regla 2 la lleva al sitio nuevo.
  */
 export function aplicarDiseno(
   diseno: DisenoMenu | null,
@@ -181,7 +231,10 @@ export function aplicarDiseno(
       secciones.push({
         id: s.id,
         nombre: s.nombre,
-        items: s.opciones.map(tomar).filter((it): it is NavItemDef => it !== null),
+        items: s.opciones
+          .filter((id) => !seMudo(base, id, e.id, s.id))
+          .map(tomar)
+          .filter((it): it is NavItemDef => it !== null),
       });
     }
     entradas.push({ tipo: "submenu", id: e.id, nombre: e.nombre, secciones });
@@ -197,10 +250,15 @@ export function aplicarDiseno(
   return { entradas: opciones?.conservarVacios ? entradas : podar(entradas) };
 }
 
-/** El diseño (solo ids) que corresponde a un menú ya armado. Lo usa el editor. */
+/**
+ * El diseño (solo ids) que corresponde a un menú ya armado. Lo usa el editor.
+ * Sale con la fábrica de HOY: lo armado ya pasó por las mudanzas, así que lo
+ * que la persona coloque a partir de aquí es decisión suya y se respeta.
+ */
 export function disenoDesdeArmado(armado: MenuArmadoPersonal): DisenoMenu {
   return {
     v: VERSION_DISENO,
+    fabrica: FABRICA_ACTUAL,
     entradas: armado.entradas.map((e) =>
       e.tipo === "opcion"
         ? { tipo: "opcion", id: e.item.id }
@@ -357,7 +415,10 @@ export function normalizarDiseno(dato: unknown): DisenoMenu | null {
   }
 
   if (entradas.length === 0) return null;
-  return { v: VERSION_DISENO, entradas };
+  // La fábrica con la que se guardó viaja con el diseño. Un valor raro (o
+  // ninguno) se lee como la 1: como mucho se repite una mudanza, nunca se pierde.
+  const fabrica = fabricaDe({ v: VERSION_DISENO, fabrica: (crudo as { fabrica?: unknown }).fabrica as number, entradas });
+  return fabrica > 1 ? { v: VERSION_DISENO, fabrica, entradas } : { v: VERSION_DISENO, entradas };
 }
 
 /** Todos los ids de opción que menciona un diseño. */
@@ -416,12 +477,17 @@ export function fusionarOcultas(
   );
   for (const e of guardadoPrevio.entradas) {
     if (e.tipo !== "submenu") continue;
-    for (const s of e.secciones) recorrer(clave(e.id, s.id), s.opciones);
+    // Una oculta que estaba en un sitio del que la fábrica se mudó NO se
+    // vuelve a meter ahí: se deja caer, y cuando se vea irá al sitio nuevo.
+    for (const s of e.secciones) {
+      recorrer(clave(e.id, s.id), s.opciones.filter((id) => !seMudo(guardadoPrevio, id, e.id, s.id)));
+    }
   }
   if (pendientes.length === 0) return borrador;
 
   const salida: DisenoMenu = {
     v: borrador.v,
+    ...(borrador.fabrica !== undefined ? { fabrica: borrador.fabrica } : {}),
     entradas: borrador.entradas.map((e) =>
       e.tipo === "opcion" ? { ...e } : { ...e, secciones: e.secciones.map((s) => ({ ...s, opciones: [...s.opciones] })) },
     ),
