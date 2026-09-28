@@ -138,7 +138,10 @@
 
 .nav {
   position: sticky;
-  top: 16px;
+  /* 56 de la barra superior + 16 de aire. Con `16px` a secas la navegación
+     se pegaba DEBAJO de la barra, que le tapaba «Mi clínica» (ws1-t3,
+     28-sep-2026, al devolverle a la barra sus 56 px). */
+  top: 72px;
   display: flex;
   flex-direction: column;
   gap: 2px;

@@ -792,6 +792,14 @@ button.tarjeta {
   align-items: center;
   gap: 12px;
   height: 56px;
+  /* Sin esto la barra medía 35 px en vez de 56 en toda pantalla más alta que
+     la ventana (28-sep-2026, ws1-t3). Es hija de una columna flexible con tope
+     de alto (`lg:max-h-screen`, en dashboard/layout.tsx): cuando el contenido
+     no cabe, flexbox encoge a quien se deja, y el contenido de la página no
+     se deja — la barra sí, hasta el alto de lo que lleva dentro. Las migas
+     quedaban pegadas al borde y todo lo que se pega DEBAJO de la barra
+     (submenú de Ortodoncia, barra de consulta…) dejaba 21 px de hueco. */
+  flex-shrink: 0;
   padding: 0 clamp(12px, 1.6vw, 24px);
   background: var(--m2-n2-fondo);
   border-bottom: 1px solid var(--m2-borde);

@@ -343,6 +343,46 @@ test("candado: el menú lo pinta con el ícono de candado de la fuente y sigue s
   assert.match(viejo, /\{item\.locked && ` · \$\{t\("menuDosNiveles\.moduloConCandadoCorto"\)\}`\}/, "recogido, el aviso va en el tooltip");
 });
 
+// ── La barra superior no se encoge (ws1-t3, 28-sep-2026) ─────────────
+// En toda pantalla más alta que la ventana la barra medía 35 px en vez de 56:
+// es hija de una columna flexible con tope de alto y flexbox la encogía. Las
+// migas quedaban pegadas al borde y lo que se pega debajo dejaba 21 px de hueco.
+
+/** El cuerpo de una regla `.clase { … }` de una hoja, sin comentarios. */
+function regla(hoja: string, clase: string): string {
+  const css = leer(hoja).replace(/\/\*[\s\S]*?\*\//g, "");
+  const m = new RegExp(`(?:^|\\n)\\.${clase} \\{([^}]*)\\}`).exec(css);
+  assert.ok(m, `${hoja}: existe .${clase}`);
+  return m![1];
+}
+
+test("21 px: la barra superior mide siempre 56 px, también en pantallas largas", () => {
+  const barra = regla("src/components/dashboard/menu-dos-niveles/menu-dos-niveles.module.css", "barra");
+  assert.match(barra, /height: 56px;/);
+  assert.match(barra, /flex-shrink: 0;/, "sin esto flexbox la encoge a 35 px cuando el contenido no cabe");
+  assert.match(barra, /position: sticky;/);
+  assert.match(barra, /top: 0;/);
+  // La causa sigue ahí (y tiene que seguir: es lo que hace que desplace la
+  // columna y no la ventana): una columna flexible con tope de alto.
+  const layout = leer("src/app/dashboard/layout.tsx");
+  assert.match(layout, /className="flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto"/);
+});
+
+test("21 px: lo que se pega DEBAJO de la barra deja sus 56 px libres", () => {
+  // Con la barra a 35 px, un panel pegado a 16 px quedaba medio tapado; a 56
+  // quedaría tapado del todo («Mi clínica» en Configuración). 56 + 16 = 72.
+  for (const [hoja, clase] of [
+    ["src/components/dashboard/configuracion-rediseno/configuracion.module.css", "nav"],
+    ["src/components/dashboard/pagina-web-rediseno/pagina-web.module.css", "previa"],
+  ]) {
+    const r = regla(hoja, clase);
+    assert.match(r, /position: sticky;/, `${hoja} .${clase}`);
+    assert.match(r, /top: 72px;/, `${hoja} .${clase}: 56 de la barra + 16 de aire`);
+  }
+  // El submenú de Ortodoncia ya contaba con los 56.
+  assert.match(regla("src/components/specialties/orthodontics/modulo/modulo.module.css", "submenuPegajoso"), /top: 56px;/);
+});
+
 // ── Íconos ───────────────────────────────────────────────────────────
 
 test("la lista de íconos de la fuente está ordenada y sin repetidos (así se pide a Google)", () => {

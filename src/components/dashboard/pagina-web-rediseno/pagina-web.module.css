@@ -889,7 +889,10 @@
   width: 420px;
   flex-shrink: 0;
   position: sticky;
-  top: 16px;
+  /* 56 de la barra superior + 16 de aire: con `16px` a secas la cabecera de
+     la vista previa se pegaba debajo de la barra (ws1-t3, 28-sep-2026). Cabe:
+     72 + 28 de cabecera + el marco de `100vh - 130px` = `100vh - 30px`. */
+  top: 72px;
 }
 
 .previaCabecera {
