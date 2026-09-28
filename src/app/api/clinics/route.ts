@@ -17,6 +17,7 @@ import { persistentRateLimit } from "@/lib/failban";
 import { logMutation } from "@/lib/audit";
 import { logError } from "@/lib/safe-log";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
+import { categoriaDeSucursal } from "@/lib/clinic/categoria-fija";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -146,12 +147,17 @@ export async function POST(req: NextRequest) {
     // subscriptionStatus "active". FOLLOW-UP conocido: si la suscripción madre
     // vence, estas sedes se quedan "active" — hay que sincronizarlas (ver
     // ORQUESTA.md, follow-up a).
+    // La sucursal de una clínica DENTAL nace DENTAL, mande lo que mande el
+    // diálogo (la categoría de la madre sale de la sesión, no del body). Las
+    // madres de otra categoría siguen eligiendo. Ver @/lib/clinic/categoria-fija.
+    const category = categoriaDeSucursal(ctx.clinicCategory, data.category);
+
     const clinic = await prisma.clinic.create({
       data: {
         name: data.name,
         slug,
-        category: data.category as any,
-        specialty: data.category.toLowerCase(),
+        category: category as any,
+        specialty: category.toLowerCase(),
         country: ctx.clinic.country ?? "MX",
         locale: ctx.clinic.locale ?? "es",
         state: data.state || null,
@@ -176,7 +182,7 @@ export async function POST(req: NextRequest) {
             firstName: ctx.user.firstName,
             lastName: ctx.user.lastName,
             role: "SUPER_ADMIN",
-            specialty: data.category.toLowerCase(),
+            specialty: category.toLowerCase(),
             // La sede nueva HEREDA la exigencia de cambiar contraseña. La marca
             // es por fila pero la contraseña es una sola (Supabase Auth, global
             // por supabaseId): una fila nueva en false sería una sede donde la

@@ -6,6 +6,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
+import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
 import { PATIENT_SHARING_ENABLED } from "@/lib/branches-shared";
 import type { BranchDefaults, BranchQuota, OwnedBranchRow } from "@/lib/branches-shared";
 
@@ -95,6 +96,11 @@ export function NewBranchDialog({ open, onClose, defaults, quota, onCreated }: P
     }
   }
 
+  // La sucursal de una clínica DENTAL nace DENTAL: no se pinta el selector
+  // (la categoría viaja igual en el form y POST /api/clinics la vuelve a
+  // imponer leyendo la de la madre en la sesión). Otras categorías eligen.
+  const categoriaFija = esCategoriaFija(defaults.category);
+
   // 17 categorías del directorio + OTHER (el enum ClinicCategory completo).
   const categoryOptions = [
     ...DIRECTORY_CATEGORIES.map((c) => ({ value: c.category as string, label: c.label })),
@@ -156,19 +162,21 @@ export function NewBranchDialog({ open, onClose, defaults, quota, onCreated }: P
                 />
               </div>
 
-              <div className="field-new">
-                <label className="field-new__label" htmlFor="branch-category">{t("sidebar.branches.category")}</label>
-                <select
-                  id="branch-category"
-                  className="input-new"
-                  value={form.category}
-                  onChange={(e) => set("category", e.target.value)}
-                >
-                  {categoryOptions.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
+              {!categoriaFija && (
+                <div className="field-new">
+                  <label className="field-new__label" htmlFor="branch-category">{t("sidebar.branches.category")}</label>
+                  <select
+                    id="branch-category"
+                    className="input-new"
+                    value={form.category}
+                    onChange={(e) => set("category", e.target.value)}
+                  >
+                    {categoryOptions.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0 14px" }}>
                 <div className="field-new">
