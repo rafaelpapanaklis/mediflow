@@ -116,17 +116,19 @@ test("conteos por tipo de usuario — clínica dental, plan Profesional o en pru
   const cuenta = (role: UserRole, mods: string[]) => opcionesVisibles(persona(role), "DENTAL", mods).length;
   assert.deepEqual(
     ROLES.slice(0, 5).map((r) => cuenta(r, MODULOS_PRO)),
-    [25, 25, 10, 10, 15],
+    // +1 en los cuatro primeros: «Antes/Después» para dental (decisión de
+    // Rafael, ws1-t4 ronda 6), con xrays.view; solo lectura no la tiene.
+    [26, 26, 11, 11, 15],
     "Profesional: dueño, administrador, doctor, recepción, solo lectura",
   );
   assert.deepEqual(
     ROLES.slice(0, 5).map((r) => cuenta(r, MODULOS_BASICO)),
-    [22, 22, 9, 9, 14],
+    [23, 23, 10, 10, 14],
     "Básico",
   );
 });
 
-test("dueño, plan Profesional: dónde acaba cada una de las 25 opciones", () => {
+test("dueño, plan Profesional: dónde acaba cada una de las 26 opciones", () => {
   const menu = armarMenu(opcionesVisibles(persona("SUPER_ADMIN"), "DENTAL", MODULOS_PRO));
   assert.deepEqual(menu.nivel1.map((it) => it.id), ["home", "appointments", "patients", "inbox", "billing", "sabina"]);
   assert.deepEqual(
@@ -134,13 +136,13 @@ test("dueño, plan Profesional: dónde acaba cada una de las 25 opciones", () =>
     [
       // Saldo IA debajo de Analítica (ws1-t5).
       ["dinero", ["finanzas", "analytics", "saldo-ia", "reports"]],
-      ["clinica", ["team", "resources", "inventory", "procedures", "plantillas", "clinic-layout"]],
+      ["clinica", ["team", "resources", "inventory", "procedures", "plantillas", "clinic-layout", "before-after"]],
       ["pacientes", ["landing", "resenas", "tv-modes", "messages"]],
       ["sistema", ["settings", "auditoria", "soporte"]],
       ["mas", ["ai", "marketplace"]],
     ],
   );
-  assert.equal(idsDe(menu).length, 25);
+  assert.equal(idsDe(menu).length, 26);
 });
 
 // ── Saldo IA (ws1-t5) ────────────────────────────────────────────────
@@ -175,7 +177,8 @@ test("doctor, plan Profesional: primer nivel sin «WhatsApp y recordatorios» y 
   assert.deepEqual(menu.nivel1.map((it) => it.id), ["home", "appointments", "patients", "inbox", "billing", "sabina"]);
   assert.deepEqual(menu.grupos.map((g) => [g.id, g.items.map((it) => it.id)]), [
     // Plantillas (WS1-T1): las escribe el doctor, así que es lo único de «clinica» que ve.
-    ["clinica", ["plantillas"]],
+    // …y «Antes/Después» (ws1-t4 ronda 6): el doctor toma y ve esas fotos.
+    ["clinica", ["plantillas", "before-after"]],
     ["sistema", ["soporte"]],
     ["mas", ["ai", "marketplace"]],
   ]);

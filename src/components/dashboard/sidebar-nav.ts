@@ -153,7 +153,12 @@ export const NAV_ITEMS: NavItemDef[] = [
     permission: "inventory.view" },
   { id: "before-after", section: "clinico", label: "Antes/Después", href: "/dashboard/before-after",
     icon: Camera,
-    categories: ["DERMATOLOGY", "AESTHETIC_MEDICINE", "BEAUTY_CENTER", "HAIR_RESTORATION", "LASER_HAIR_REMOVAL"] },
+    // DENTAL (decisión de Rafael, 28-sep-2026, ws1-t4 ronda 6): la página
+    // se queda para dental; antes solo se llegaba escribiendo la dirección.
+    // En el menú de dos niveles cae sola en Administración → Clínica.
+    categories: ["DENTAL", "DERMATOLOGY", "AESTHETIC_MEDICINE", "BEAUTY_CENTER", "HAIR_RESTORATION", "LASER_HAIR_REMOVAL"],
+    // La misma key que exige la página: quien no puede abrirla no la ve.
+    permission: "xrays.view" },
   { id: "formulas",     section: "clinico", label: "Fórmulas",      href: "/dashboard/formulas",
     icon: FlaskConical,
     categories: ["BROW_LASH", "HAIR_SALON", "ALTERNATIVE_MEDICINE"] },

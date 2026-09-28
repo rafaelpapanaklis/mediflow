@@ -114,3 +114,8 @@ test("Teleconsulta: oculta en dental (va a la Agenda), abierta en las demás cat
   assert.equal(paginaPermitidaParaCategoria("/dashboard/teleconsulta", "MEDICINE"), true);
   assert.equal(paginaPermitidaParaCategoria("/dashboard/teleconsulta", null), false, "sin categoría falla cerrado");
 });
+
+test("«Antes/Después» sale en el menú de una clínica dental (decisión de Rafael, ws1-t4 ronda 6)", () => {
+  const item = NAV_ITEMS.find((i) => i.id === "before-after");
+  assert.ok(item?.categories?.includes("DENTAL"));
+});
