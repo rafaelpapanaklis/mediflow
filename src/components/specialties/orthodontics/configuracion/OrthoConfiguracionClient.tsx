@@ -131,7 +131,7 @@ export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguraci
           </h2>
           <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
             Catálogo propio del módulo (valoración, toma de registros, colocación, control,
-            urgencia, retiro, control de retención). El chip de "Control de ortodoncia" en la
+            urgencia, retiro, control de retención). El chip de &quot;Control de ortodoncia&quot; en la
             Agenda es aparte — este catálogo es de referencia para el resto de tipos.
           </p>
         </div>
