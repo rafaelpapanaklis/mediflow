@@ -11,6 +11,7 @@ import { validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import { controlesConOtroDoctor } from "@/lib/orthodontics/controles-con-otro-doctor-db";
+import { avisoDePrecioDesfasado } from "@/lib/orthodontics/cobro/precio-desfasado";
 
 // Ola 1 (ws1-t6) — columnas de sql/ortodoncia-alta-caso.sql (A5/A11): si el
 // update las toca y aún no existen (P2021/P2022), reintenta sin ellas.
@@ -18,7 +19,7 @@ const ALTA_CASO_PLAN_FIELDS = ["treatingDoctorId", "responsibleGuardianId"] as c
 
 export async function updateTreatmentPlan(
   input: unknown,
-): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; controlesConOtroDoctor: number }>> {
+): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; controlesConOtroDoctor: number; avisoPrecioDesfasado?: string }>> {
   // A11 (revisión cruzada): si el payload SOLO trae treatmentPlanId +
   // responsibleGuardianId/newResponsibleGuardian, acepta billing.* además de
   // medicalRecord.edit — recepción arma/cambia quién paga sin necesitar el
@@ -182,7 +183,28 @@ export async function updateTreatmentPlan(
         treatingDoctorId: doctorNuevo,
       }).then((l) => l.length).catch(() => 0);
     }
-    return ok({ id: updated.id, altaCasoFieldsSaved, controlesConOtroDoctor: controlesFuturosConOtroDoctor });
+    // F «Cambio de técnica o de precio»: si el precio de referencia del caso ya no
+    // cuadra con la factura del tratamiento, se avisa (no se toca la factura).
+    let avisoPrecioDesfasado: string | undefined;
+    const facturaDelCaso = (updated as { invoiceId?: string | null }).invoiceId ?? null;
+    if (facturaDelCaso && (parsed.data.totalCostMxn !== undefined || parsed.data.technique !== undefined)) {
+      try {
+        const inv = await prisma.invoice.findFirst({
+          where: { id: facturaDelCaso, clinicId: ctx.clinicId },
+          select: { total: true, status: true },
+        });
+        if (inv && inv.status !== "CANCELLED") {
+          avisoPrecioDesfasado = avisoDePrecioDesfasado({
+            totalFactura: inv.total,
+            precioDelCaso: Number(updated.totalCostMxn),
+            cambioTecnica: parsed.data.technique !== undefined && parsed.data.technique !== before.technique,
+          });
+        }
+      } catch (e) {
+        console.warn("[ortho] updateTreatmentPlan: no se pudo comparar el precio con la factura:", e);
+      }
+    }
+    return ok({ id: updated.id, altaCasoFieldsSaved, controlesConOtroDoctor: controlesFuturosConOtroDoctor, ...(avisoPrecioDesfasado ? { avisoPrecioDesfasado } : {}) });
   } catch (e) {
     console.error("[ortho] updateTreatmentPlan failed:", e);
     return fail("No se pudo actualizar el plan");

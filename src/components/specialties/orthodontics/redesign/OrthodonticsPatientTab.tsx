@@ -569,6 +569,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               toast(t("patients.ortho.altaCasoSqlPending"));
             }
             toast.success(t("patients.ortho.caseSettingsSaved"));
+            if (res.data.avisoPrecioDesfasado) toast(res.data.avisoPrecioDesfasado, { duration: 12000 });
             // F «Cambio de doctor»: los controles YA agendados se quedaban con el
             // doctor anterior. Se ofrece pasarlos al nuevo (solo los que no chocan
             // con su agenda; los demás se quedan y se avisa).
