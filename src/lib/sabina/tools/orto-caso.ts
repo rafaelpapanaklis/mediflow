@@ -22,9 +22,15 @@
  *    mensualidades, y se le dice que lo clínico no lo puede ver.
  *  · los controles → `agenda.view` · las mensualidades → `billing.view`.
  *
- * El paciente pasa por la visibilidad del panel y por `deletedAt` dentro de
- * `loadOrthoData`: uno de otra clínica, uno restringido o uno archivado por
- * ARCO sale como «sin datos», igual que uno que no existe.
+ * ── EL PACIENTE ─────────────────────────────────────────────────────────
+ * Llega por `patientId` (el de la ficha que está abierta: lo pone el contexto de
+ * pantalla) o por `paciente` (nombre, teléfono o folio). `buscar_paciente` NO le
+ * da ids al modelo, así que sin `paciente` la pregunta solo funcionaría con la
+ * ficha abierta. Se resuelve con `resolverPaciente`, el buscador de «Nueva
+ * cita» que ya usan la agenda y las facturas: clínica de la sesión, visibilidad
+ * del panel y `deletedAt`. Si hay varios, se PREGUNTA cuál; nunca se elige.
+ * Uno de otra clínica, uno restringido o uno archivado por ARCO sale igual que
+ * uno que no existe: «no lo encuentro entre los pacientes que puedes ver».
  *
  * 🔴 NO DIAGNOSTICA NI OPINA DEL TRATAMIENTO. Repite lo registrado.
  */
@@ -32,7 +38,9 @@
 import { z } from "zod";
 import { DIAS_SIN_CONTROL_URGENTE, fraseSinControl } from "@/lib/orthodontics/controles-modulo";
 import { fraseDeAtraso, fraseDeProxima, fraseDeVencidos } from "@/lib/orthodontics/cobranza-modulo";
-import { definirHerramienta, pesos } from "./base";
+import type { AgendaDb } from "./agenda-comun";
+import { resolverPaciente } from "./agenda-resolvedores";
+import { dbDe, definirHerramienta, lineasDeLista, pesos } from "./base";
 import { fechaDe, horaDe } from "./fechas";
 import {
   PERMISO_ORTO,
@@ -49,8 +57,10 @@ import {
 import type { SabinaCtx } from "../tipos";
 
 const parametros = z.object({
-  /** Paciente a consultar. Resuélvelo ANTES con buscar_paciente: nunca lo inventes. */
-  patientId: z.string().min(1),
+  /** El id del paciente, SOLO si lo tienes del contexto de pantalla. Nunca lo inventes. */
+  patientId: z.string().min(1).max(64).optional(),
+  /** Nombre, teléfono o folio del paciente, tal como lo dijo quien pregunta. */
+  paciente: z.string().max(120).optional(),
 });
 
 export type ParamsOrtoCaso = z.infer<typeof parametros>;
@@ -80,8 +90,10 @@ const MATERIAL: Record<string, string> = { NITI: "NiTi", SS: "SS", TMA: "TMA", B
 
 export interface DatosOrtoCaso {
   modulo: EstadoModulo;
-  /** `true` = ese paciente no existe para quien pregunta. Decide `sin_datos`. */
-  sinPaciente: boolean;
+  /** El paciente no está entre los que puede ver quien pregunta: la frase, lista para decirla. */
+  noEncontrado: string | null;
+  /** Hay varios pacientes posibles (o falta decir cuál): la pregunta y sus opciones. */
+  aclarar: { pregunta: string; opciones: string[] } | null;
   paciente: string | null;
   caso: {
     estado: string;
@@ -155,17 +167,18 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
   nombre: "orto_caso",
   descripcion:
     "Cómo va el caso de ORTODONCIA de un paciente: estado, mes N de M, fase, arco actual, higiene del último " +
-    "control, alineadores, último y próximo control, y sus mensualidades. Úsala para «¿cómo va el caso de …?». " +
-    "Solo lee lo registrado: no diagnostica, no agenda, no cobra y no registra controles; da el enlace a su ficha.",
+    "control, alineadores, último y próximo control, y sus mensualidades. Úsala para «¿cómo va el caso de …?», " +
+    "con `paciente` (nombre, teléfono o folio; no hace falta buscar_paciente antes) o con el `patientId` del " +
+    "contexto. Solo lee lo registrado: no diagnostica, no agenda, no cobra y no registra controles; da el enlace a su ficha.",
   parametros,
   permiso: PERMISO_ORTO,
 
   async ejecutar(ctx: SabinaCtx, params): Promise<DatosOrtoCaso> {
     const motor = await import("./orto-motor");
-    const enlace = enlaceDelCaso(params.patientId);
     const base: DatosOrtoCaso = {
       modulo: "activo",
-      sinPaciente: false,
+      noEncontrado: null,
+      aclarar: null,
       paciente: null,
       caso: null,
       tieneValoracion: false,
@@ -173,11 +186,29 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
       controles: null,
       cobranza: null,
       omitidas: [],
-      enlace,
+      enlace: "",
     };
 
     const modulo = await motor.estadoDelModulo(ctx);
     if (modulo !== "activo") return { ...base, ...sinModulo(modulo) };
+
+    // Quién es. Con la sede ya comprobada, y antes de leer nada de ortodoncia.
+    const quien = await resolverPaciente(ctx, dbDe(ctx) as unknown as AgendaDb, {
+      pacienteId: params.patientId ?? null,
+      paciente: params.paciente ?? null,
+    });
+    if (quien.tipo === "pregunta") {
+      return {
+        ...base,
+        aclarar: {
+          pregunta: quien.pregunta.texto,
+          opciones: quien.pregunta.opciones.map((o) => `${o.etiqueta}${o.detalle ? ` (${o.detalle})` : ""}`),
+        },
+      };
+    }
+    if (quien.tipo !== "ok") return { ...base, noEncontrado: (quien as { frase: string }).frase };
+    const patientId = quien.valor.id;
+    const enlace = enlaceDelCaso(patientId);
 
     const omitidas: OmitidaOrto[] = [];
     const puede = anotador(ctx, omitidas);
@@ -187,10 +218,10 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
       cobranza: puede("mensualidades", "billing.view"),
     };
 
-    const leido = await motor.leerCaso(ctx, params.patientId, ver);
-    if (!leido) return { ...base, sinPaciente: true };
+    const leido = await motor.leerCaso(ctx, patientId, ver);
+    if (!leido) return { ...base, noEncontrado: "No encuentro a ese paciente entre los pacientes que puedes ver." };
     // Sin caso no hay partes que omitir: lo que se dice es que no tiene caso.
-    if (!leido.caso) return { ...base, paciente: leido.paciente, tieneValoracion: leido.tieneValoracion };
+    if (!leido.caso) return { ...base, enlace, paciente: leido.paciente, tieneValoracion: leido.tieneValoracion };
 
     const zona = motor.zonaDe(ctx);
     const fila = leido.cobranza?.fila ?? null;
@@ -257,13 +288,14 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
     };
   },
 
-  // Solo el paciente que no existe para quien pregunta. Un paciente sin caso es
-  // una respuesta («no tiene caso de ortodoncia»), y una sede sin módulo, otra.
-  vacio: (d) => d.modulo === "activo" && d.sinPaciente,
+  // Nunca es «sin datos»: «no lo encuentro», «¿cuál de los dos?», «no tiene caso
+  // de ortodoncia» y «esta sede no tiene el módulo» son cuatro respuestas
+  // distintas, y un «no hay datos» las confunde todas.
+  vacio: () => false,
 
   avisoObligatorio(d) {
     if (d.modulo !== "activo") return avisoSinModulo(d.modulo);
-    if (d.sinPaciente) return null;
+    if (d.noEncontrado || d.aclarar) return null;
     return avisoEnlace(
       d.caso ? "registrar el control, cobrar o cambiar algo del caso" : "abrir el caso de ortodoncia",
       d.caso ? "su ficha de ortodoncia" : "la ficha del paciente",
@@ -273,6 +305,14 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
 
   resumir(d) {
     if (d.modulo !== "activo") return avisoSinModulo(d.modulo).frase;
+    if (d.noEncontrado) {
+      return `${d.noEncontrado} Dilo así: NO digas que no tiene caso de ortodoncia ni que no hay datos, porque no se llegó a mirar.`;
+    }
+    if (d.aclarar) {
+      const opciones = lineasDeLista(d.aclarar.opciones, (o) => o);
+      const una = !opciones && d.aclarar.opciones[0] ? ` ${d.aclarar.opciones[0]}.` : "";
+      return `${d.aclarar.pregunta}${una}${opciones}\nPregúntaselo a quien escribe y NO elijas tú; cuando conteste, vuelve a llamar con \`paciente\`.`;
+    }
     const ficha = `[su ficha de ortodoncia](${d.enlace})`;
     if (!d.caso) {
       const valorado = d.tieneValoracion ? " Tiene una valoración de ortodoncia registrada, sin plan de tratamiento." : "";

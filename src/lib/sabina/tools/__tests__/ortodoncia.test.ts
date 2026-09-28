@@ -80,8 +80,10 @@ function montar(): { db: BaseDoble; escrituras: string[] } {
     get(objetivo, clave) {
       const valor = objetivo[clave];
       if (clave === "contador" || typeof clave !== "string" || valor === undefined) return valor;
+      // El buscador de pacientes consulta en SQL crudo por `ctx.db`: es una
+      // lectura, y el doble la rechaza a su manera (camino degradado).
+      if (clave === "$queryRaw") return valor.bind(objetivo);
       if (typeof valor === "function") {
-        // `$queryRaw` lo contesta ./preparar-orto; cualquier otra `$cosa` escribe.
         escrituras.push(`${clave}`);
         throw new Error(`escritura prohibida: ${clave}`);
       }
@@ -173,6 +175,34 @@ test("caso: fase, mes N de M y el arco del último control FIRMADO (no el del bo
   assert.ok(r.resumen.includes(`(${d.enlace})`), "el resumen no lleva el enlace a la ficha");
 });
 
+test("🔴 caso por NOMBRE, teléfono o folio: `buscar_paciente` no da ids, así que tiene que poder sin él", async () => {
+  const { db } = montar();
+  for (const paciente of ["Ana Perez", "ana perez", "P0001", "Perez"]) {
+    const r = await ok(ortoCaso, admin(db), { paciente });
+    assert.equal(r.datos.paciente, "Ana Perez", paciente);
+    assert.deepEqual([r.datos.caso.mes, r.datos.caso.de], [7, 24], paciente);
+    assert.equal(r.datos.enlace, "/dashboard/patients/p-ana?tab=ortodoncia");
+  }
+});
+
+test("🔴 caso: si hay varios pacientes posibles se PREGUNTA cuál — no se elige, y no se lee ningún caso", async () => {
+  const { db } = montar();
+  const r = await ok(ortoCaso, admin(db), { paciente: "Masivo" });
+  assert.equal(r.datos.caso, null);
+  assert.match(r.datos.aclarar.pregunta, /muchos pacientes que coinciden/i);
+  assert.match(r.resumen, /NO elijas tú/);
+  assert.equal(ortoCaso.avisoObligatorio!(r.datos), null);
+  assert.ok(!leidos(db).some((l) => l.startsWith("ortho")), "se leyó un caso sin saber de quién");
+
+  // Una sola coincidencia por un pedazo de palabra: se confirma antes.
+  const pedazo = await ok(ortoCaso, admin(db), { paciente: "eto" });
+  assert.match(pedazo.datos.aclarar.pregunta, /¿Te refieres a Beto Munoz\?/);
+
+  // Sin decir de quién: se pregunta.
+  const nadie = await ok(ortoCaso, admin(db), {});
+  assert.match(nadie.datos.aclarar.pregunta, /¿Para qué paciente\?/);
+});
+
 test("caso: la higiene es la del último control firmado, con el aviso del panel de que empeora", async () => {
   const { db } = montar();
   const d = (await ok(ortoCaso, admin(db), { patientId: "p-ana" })).datos;
@@ -211,7 +241,7 @@ test("caso: alineadores — cuál trae y cuál debería traer hoy", async () => 
 test("caso: alineadores en pausa o terminados — no se dice que «va atrás», el calendario siguió corriendo solo", () => {
   const datos = (estado: string) =>
     ({
-      modulo: "activo", sinPaciente: false, paciente: "Dora Sanchez", tieneValoracion: false, omitidas: [],
+      modulo: "activo", noEncontrado: null, aclarar: null, paciente: "Dora Sanchez", tieneValoracion: false, omitidas: [],
       enlace: "/dashboard/patients/p-dora?tab=ortodoncia",
       caso: { estado: "En curso", mes: 3, de: 12, inicio: null, finEstimado: null },
       clinico: {
@@ -561,8 +591,15 @@ test("🔴 doctor: la paciente restringida no existe para él — ni su caso, ni
   const { db } = montar();
   const ctx = doctor(db);
 
-  const caso = await correrHerramienta(ortoCaso, ctx, { patientId: "p-priv" });
-  assert.deepEqual(caso, { ok: false, motivo: "sin_datos" }, "el caso de la restringida salió para un doctor");
+  // Ni por su id ni por su nombre: y la respuesta es la misma que para alguien que no existe.
+  for (const params of [{ patientId: "p-priv" }, { paciente: "Paula Restringida" }, { paciente: "P0006" }]) {
+    const caso = await ok(ortoCaso, ctx, params);
+    assert.match(caso.datos.noEncontrado, /No encuentro a .* entre los pacientes que puedes ver/);
+    assert.equal(caso.datos.caso, null);
+    assert.doesNotMatch(todo(caso), /En curso|6,?000|mes \d/, "salió algo del caso de la restringida");
+  }
+  const inventado = await ok(ortoCaso, ctx, { patientId: "no-existe" });
+  assert.equal(inventado.datos.noEncontrado, (await ok(ortoCaso, ctx, { patientId: "p-priv" })).datos.noEncontrado);
 
   for (const p of PREGUNTAS.filter((x) => x.tool !== ortoCaso)) {
     const r = await ok(p.tool, ctx, p.params);
@@ -584,8 +621,11 @@ test("🔴 doctor: la paciente restringida no existe para él — ni su caso, ni
 
 test("🔴 un paciente archivado por ARCO no tiene caso que contar", async () => {
   const { db } = montar();
-  const r = await correrHerramienta(ortoCaso, admin(db), { patientId: "p-borrado" });
-  assert.deepEqual(r, { ok: false, motivo: "sin_datos" });
+  for (const params of [{ patientId: "p-borrado" }, { paciente: "Borrado ARCO" }]) {
+    const r = await ok(ortoCaso, admin(db), params);
+    assert.match(r.datos.noEncontrado, /No encuentro a/);
+    assert.equal(r.datos.paciente, null);
+  }
 });
 
 test("🔴 sin facturación: `orto_cobranza` dice `sin_permiso` sin leer, y el caso sale sin el dinero", async () => {
@@ -650,14 +690,19 @@ test("🔴 aislamiento: el norte no ve nada del sur, y el sur no ve nada del nor
     assert.doesNotMatch(todo(r), /SUR|Sofia|99,?999/, `${p.dice}: se coló la clínica del sur`);
   }
   // El paciente del sur, pedido desde el norte con su id: no existe.
-  assert.deepEqual(await correrHerramienta(ortoCaso, admin(db), { patientId: "p-sur-1" }), { ok: false, motivo: "sin_datos" });
+  for (const params of [{ patientId: "p-sur-1" }, { paciente: "Sofia SUR" }, { paciente: "S0001" }]) {
+    const r = await ok(ortoCaso, admin(db), params);
+    assert.match(r.datos.noEncontrado, /No encuentro a/, JSON.stringify(params));
+    assert.doesNotMatch(todo(r), /ARCO DEL SUR|99,?999|TMA/);
+  }
 
   const sur = adminDelSur(db);
   for (const p of PREGUNTAS.filter((x) => x.tool !== ortoCaso)) {
     const r = await ok(p.tool, sur, p.params);
     assert.doesNotMatch(todo(r), /Ana|Beto|Carla|Dora|Elias|Paula/, `${p.dice}: se coló la clínica del norte`);
   }
-  assert.deepEqual(await correrHerramienta(ortoCaso, sur, { patientId: "p-ana" }), { ok: false, motivo: "sin_datos" });
+  assert.match((await ok(ortoCaso, sur, { paciente: "Ana Perez" })).datos.noEncontrado, /No encuentro a/);
+  assert.match((await ok(ortoCaso, sur, { patientId: "p-ana" })).datos.noEncontrado, /No encuentro a/);
 
   // Y el sur sí ve lo suyo: el filtro es la clínica, no que la herramienta venga vacía.
   const suyo = await ok(ortoCaso, sur, { patientId: "p-sur-1" });
