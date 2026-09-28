@@ -346,7 +346,7 @@
     "test:orto-geometria": "tsx --test src/lib/orthodontics/__tests__/geometria-plana.test.ts",
     "test:orto-cefalometria": "tsx --test src/lib/orthodontics/cefalometria/__tests__/measurements.test.ts src/lib/orthodontics/cefalometria/__tests__/norms.test.ts",
     "test:orto-cefalometria-completa": "tsx --test src/lib/orthodontics/cefalometria/__tests__/plane-lines.test.ts src/lib/orthodontics/cefalometria/__tests__/calibration.test.ts src/lib/orthodontics/cefalometria/__tests__/norms-extended.test.ts src/lib/orthodontics/cefalometria/__tests__/full-analysis.test.ts src/lib/orthodontics/cefalometria/__tests__/backward-compat.test.ts src/lib/orthodontics/cefalometria/analyses/__tests__/steiner.test.ts src/lib/orthodontics/cefalometria/analyses/__tests__/ricketts.test.ts src/lib/orthodontics/cefalometria/analyses/__tests__/mcnamara.test.ts src/lib/orthodontics/cefalometria/analyses/__tests__/downs-tweed.test.ts src/lib/orthodontics/cefalometria/pdf/__tests__/build-ceph-report-data.test.ts",
-    "test:orto-fotos-analisis": "tsx --test src/lib/orthodontics/fotos/__tests__/facial-analysis.test.ts",
+    "test:orto-fotos-analisis": "tsx --test src/lib/orthodontics/fotos/__tests__/facial-analysis.test.ts src/lib/orthodontics/fotos/__tests__/image-coords.test.ts",
     "test:orto-alineadores": "tsx --test src/lib/orthodontics/alineadores/__tests__/expected-tray.test.ts src/lib/orthodontics/alineadores/__tests__/bolton.test.ts",
     "test:orto-elastics-compliance": "tsx --test src/lib/orthodontics/__tests__/elastics-compliance.test.ts",
     "test:orto-alta-caso": "tsx --test src/lib/orthodontics/__tests__/alta-caso-tolerance.test.ts",
@@ -354,6 +354,7 @@
     "test:orto-imagen-context": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/imagen/__tests__/_context.test.ts",
     "//test:orto-imagen-list-signed-urls": "Necesita --experimental-test-module-mocks: mock.module sustituye @/lib/prisma, ../_context y @/lib/storage (hallazgo ws1-t11 — listCephalometricAnalyses devolvía el path crudo del bucket en vez de firmarlo).",
     "test:orto-imagen-list-signed-urls": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/imagen/__tests__/listCephalometricAnalyses.test.ts",
+    "test:orto-imagen-facial-analysis": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/imagen/__tests__/getFacialAnalysis.test.ts src/app/actions/orthodontics/imagen/__tests__/saveFacialAnalysis.test.ts",
     "test:orto-adapter-invoice-total": "tsx --test src/lib/orthodontics/redesign/__tests__/adapter-invoice-total.test.ts"
   },
   "prisma": {
