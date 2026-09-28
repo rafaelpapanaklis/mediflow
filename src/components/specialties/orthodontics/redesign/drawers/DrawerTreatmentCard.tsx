@@ -212,12 +212,14 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     if (props.card) {
       return `${fmtDate(props.card.visitDate)} · ${PHASE_LABELS[props.card.phaseKey]}`;
     }
-    return "Nuevo control";
+    return "Hoja de control";
   }, [isNew, props.card, props.defaultsForNew]);
 
+  // Sección H (ws1-t4 ronda 6): «control» es la visita, «hoja de control»
+  // lo que se registra de ella.
   const headerEyebrow = isNew
-    ? "Nuevo control"
-    : `Control ${props.card!.cardNumber}`;
+    ? "Hoja de control nueva"
+    : `Hoja del control ${props.card!.cardNumber}`;
 
   const wireFromLabel = wireText(props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null);
   // H48: arcos escritos en esta hoja (ya guardados en la secuencia del caso).
@@ -486,7 +488,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           {/* ACTIVACIONES (C2) */}
           <section className={orto.bloque}>
             <div className={orto.bloqueCabeza}>
-              <h4 className={orto.bloqueTitulo}>Activaciones de esta visita</h4>
+              <h4 className={orto.bloqueTitulo}>Activaciones de este control</h4>
             </div>
             {isReadOnly ? (
               <Lectura vacio="Sin activaciones anotadas.">{state.activationsNote}</Lectura>
@@ -499,7 +501,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 rows={2}
                 placeholder="Vueltas del expansor, activación de resortes o arcos auxiliares…"
                 className={orto.entrada}
-                aria-label="Activaciones de esta visita"
+                aria-label="Activaciones de este control"
               />
             )}
           </section>
@@ -543,7 +545,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                   ["s", "Subjetivo (opcional)", "Lo que refiere el paciente…"],
                   ["o", "Objetivo (opcional)", "Lo que encuentras en la exploración…"],
                   ["a", "Análisis (opcional)", "Tu valoración de cómo va el caso…"],
-                  ["p", "Plan", "Lo que sigue para la próxima visita…"],
+                  ["p", "Plan", "Lo que sigue para el próximo control…"],
                 ] as const
               ).map(([key, label, pista]) => (
                 <div key={key} className={orto.campo}>
@@ -579,7 +581,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               {!isReadOnly && state.delAnterior.indicaciones ? <DelAnterior /> : null}
             </div>
             {isReadOnly ? (
-              <Lectura vacio="Sin indicaciones para esta visita.">{state.indications}</Lectura>
+              <Lectura vacio="Sin indicaciones para este control.">{state.indications}</Lectura>
             ) : (
               <textarea
                 value={state.indications}
@@ -614,7 +616,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                   {state.photoSetId
                     ? (props.availablePhotoSets.find((s) => s.id === state.photoSetId)?.label ??
                       "Juego de fotos vinculado")
-                    : "Sin fotos ligadas a esta visita."}
+                    : "Sin fotos ligadas a este control."}
                 </div>
               ) : (
                 <select
@@ -623,7 +625,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                     dispatch({ kind: "set-photo-set", value: e.target.value || null })
                   }
                   className={orto.entrada}
-                  aria-label="Fotos de esta visita"
+                  aria-label="Fotos de este control"
                 >
                   <option value="">Sin fotos ligadas</option>
                   {props.availablePhotoSets.map((s) => (
