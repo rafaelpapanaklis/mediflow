@@ -23,6 +23,7 @@ import { Search, SearchX, Users } from "lucide-react";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { fechaEnZona } from "@/components/specialties/orthodontics/modulo/fechas";
 import { Vacio } from "@/components/specialties/orthodontics/modulo/piezas";
 import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 
@@ -58,10 +59,8 @@ function fmtMoney(n: number): string {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
 }
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
-}
+// Fecha de calendario ("YYYY-MM-DD"): se pinta tal cual, sin zona horaria.
+const fmtDate = (iso: string | null) => fechaEnZona(iso, null);
 
 export function OrthoPacientesTable({ rows }: { rows: OrthoPacienteRow[] }) {
   const router = useRouter();

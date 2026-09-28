@@ -222,7 +222,6 @@ test("el módulo de Ortodoncia es una zona; la pantalla vieja de especialidades 
   // La página de contratar vive fuera de la ruta del módulo: ahí el menú se
   // queda como la persona lo tiene.
   assert.equal(zonaRecogida("/dashboard/contratar/ortodoncia"), null);
-  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/contratar/ortodoncia"), false, "el candado no cierra Administración");
   // pacienteDeFicha no se entera del módulo: sigue hablando solo de pacientes.
   assert.equal(pacienteDeFicha("/dashboard/orthodontics/tablero"), null);
 });
@@ -271,17 +270,29 @@ test("Ortodoncia con React de verdad: el primer render ya sale recogido (sin sal
   assert.equal(pinta(false, "/dashboard/specialties/orthodontics"), '<aside data-encogido="false"></aside>');
 });
 
-test("Ortodoncia: el segundo nivel (Administración) se cierra al ENTRAR al módulo, y solo entonces", () => {
+test("el segundo nivel (Administración) se cierra al ENTRAR a una zona recogida, y solo entonces", () => {
+  // Ortodoncia
   assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/orthodontics"), true, "clic en Ortodoncia desde Administración");
   assert.equal(cierraSegundoNivelAlEntrar("/dashboard/settings", "/dashboard/orthodontics/tablero"), true);
-  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/patients/p1", "/dashboard/orthodontics/pacientes"), true, "volver de la ficha al módulo también es entrar");
   assert.equal(cierraSegundoNivelAlEntrar(null, "/dashboard/orthodontics/tablero"), true);
   assert.equal(cierraSegundoNivelAlEntrar("/dashboard/orthodontics", "/dashboard/orthodontics/tablero"), false, "la redirección inicial no es otra entrada");
   assert.equal(cierraSegundoNivelAlEntrar("/dashboard/orthodontics/tablero", "/dashboard/orthodontics/cobranza"), false, "entre pestañas no se cierra lo que la persona abrió");
+  // La ficha del paciente (decisión de Rafael, 28-sep-2026)
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/patients", "/dashboard/patients/p1"), true, "abrir un paciente desde la lista");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/settings", "/dashboard/patients/p1?tab=citas"), true, "abrirlo desde el buscador, con Administración abierta");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/patients/p1", "/dashboard/patients/p1/orthodontics"), false, "dentro de la misma ficha no se cierra");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/patients/p1", "/dashboard/patients/p2"), true, "otro paciente es otra zona, igual que para recoger");
+  // De una zona a otra también es entrar
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/patients/p1", "/dashboard/orthodontics/pacientes"), true);
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/orthodontics/pacientes", "/dashboard/patients/p1?tab=ortodoncia"), true);
+  // Fuera de las zonas, el panel sigue como siempre
   assert.equal(cierraSegundoNivelAlEntrar("/dashboard/orthodontics/tablero", "/dashboard/agenda"), false, "al salir no se toca");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/patients/p1", "/dashboard/patients"), false, "volver a la lista no es entrar");
   assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/inventory"), false, "el resto del panel sigue igual");
-  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/patients", "/dashboard/patients/p1"), false, "la ficha no cambia: nadie lo pidió");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/patients"), false, "la lista de pacientes no es la ficha");
   assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/specialties/orthodontics"), false, "la pantalla vieja tampoco");
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/xrays/abc"), false);
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/contratar/ortodoncia"), false, "el candado no cierra Administración");
 });
 
 test("el menú cierra el segundo nivel con esa regla, en el mismo efecto que ya lo cerraba al cambiar de pantalla", () => {
@@ -296,6 +307,22 @@ test("el menú cierra el segundo nivel con esa regla, en el mismo efecto que ya 
     "reutiliza cerrarAdmin: no hay un segundo mecanismo de cierre",
   );
   assert.equal((menu.match(/cierraSegundoNivelAlEntrar\(/g) ?? []).length, 1, "se usa una sola vez");
+});
+
+test("con el menú recogido, cada fila conserva su nombre para un lector de pantalla", () => {
+  const menu = leer("src/components/dashboard/menu-dos-niveles/menu-dos-niveles.tsx");
+  // Recogido solo queda el ícono, que es decorativo (aria-hidden): el nombre
+  // tiene que ir en la propia fila. Son tres sitios: la fila de
+  // Administración, los enlaces y (desde antes) la opción con candado.
+  assert.equal(
+    (menu.match(/aria-label=\{compacto \? texto : undefined\}/g) ?? []).length,
+    2,
+    "la fila de Administración y los enlaces del primer nivel",
+  );
+  const fila = menu.slice(menu.indexOf("const filaSubmenu = ("), menu.indexOf("return compacto ? conTooltip(`submenu-"));
+  assert.match(fila, /aria-label=\{compacto \? texto : undefined\}/, "el botón de Administración");
+  const icono = leer("src/components/dashboard/menu-dos-niveles/icono.tsx");
+  assert.match(icono, /aria-hidden/, "el ícono sigue siendo decorativo: no es él quien da el nombre");
 });
 
 // ── 4. El cableado en el menú compartido ─────────────────────────────

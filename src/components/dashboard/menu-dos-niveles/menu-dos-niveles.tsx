@@ -226,8 +226,9 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   // Cambiar de pantalla: el cajón del teléfono se cierra; el segundo nivel solo
   // se cierra si estaba encima de la pantalla (entre 1024 y 1279 px). Acoplado
   // se queda abierto para saltar entre pantallas de administración. La
-  // excepción es ENTRAR al módulo de Ortodoncia (ws1-t3): ahí se cierra también
-  // acoplado, para que el menú quede en la barra de iconos como en la ficha.
+  // excepción es ENTRAR a una zona recogida (la ficha de un paciente o el
+  // módulo de Ortodoncia, ws1-t3): ahí se cierra también acoplado, para que el
+  // menú quede solo en la barra de iconos.
   const rutaAnterior = useRef(pathname);
   useEffect(() => {
     if (rutaAnterior.current === pathname) return;
@@ -377,6 +378,9 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
         key={item.id}
         href={item.href}
         aria-current={activo ? "page" : undefined}
+        // Recogido, el enlace se queda solo con su ícono (decorativo): el
+        // nombre va aquí. Desplegado lo da el propio texto.
+        aria-label={compacto ? texto : undefined}
         className={cx(claseBase, activo && s.itemActivo)}
       >
         <Icono nombre={icono} relleno={activo} className={iconoEstilo} />
@@ -505,6 +509,9 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
         aria-expanded={abierto}
         aria-controls="menu-dos-niveles-admin"
         data-fila-submenu={entrada.id}
+        // Recogido solo queda el ícono, que es decorativo: sin esto el botón no
+        // tiene nombre y un lector de pantalla lee «apps».
+        aria-label={compacto ? texto : undefined}
         onClick={alPulsar}
       >
         <Icono nombre={esSubmenuDeFabrica(entrada.id) ? "apps" : "folder"} />

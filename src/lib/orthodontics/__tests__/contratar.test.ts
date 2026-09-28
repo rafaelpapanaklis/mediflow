@@ -294,7 +294,7 @@ test("siete categorías, en el orden pedido, con líneas cortas", () => {
   for (const c of CONTENIDO_ORTODONCIA) {
     assert.ok(c.titulo.length <= 34, `${c.id}: título corto`);
     assert.ok(c.resumen.length <= 95, `${c.id}: resumen de una línea`);
-    assert.ok(c.puntos.length >= 3 && c.puntos.length <= 6, `${c.id}: entre 3 y 6 puntos`);
+    assert.ok(c.puntos.length >= 3 && c.puntos.length <= 7, `${c.id}: entre 3 y 7 puntos`);
     for (const p of c.puntos) {
       assert.ok(p.length <= 110, `${c.id}: «${p}» es largo`);
       assert.ok(!/[.]$/.test(p), `${c.id}: «${p}» sin punto final`);
@@ -312,18 +312,22 @@ test("no se promete lo cancelado: ni hacer la cefalometría en el panel ni anál
   assert.match(texto, /PDF de la cefalometría/, "lo que sí hay: guardar el PDF");
 });
 
-test("lo que todavía no funciona en pantalla está anotado, y NO se lista", () => {
+test("lo pendiente no se pinta nunca; y «fotos con líneas» se lista porque la imagen ya se ve", () => {
   const listado = CONTENIDO_ORTODONCIA.flatMap((c) => c.puntos);
-  assert.ok(PENDIENTE_DE_LISTAR.length > 0);
   for (const p of PENDIENTE_DE_LISTAR) {
     assert.ok(!listado.includes(p.linea), `«${p.linea}» no se promete todavía`);
     assert.ok(p.porQue.length > 20, "con su porqué");
   }
-  assert.ok(!/línea E|nasolabial/i.test(listado.join("\n")));
-  // La vista solo pinta lo listado.
   const vista = sinComentarios(leer(VISTA));
   assert.match(vista, /CONTENIDO_ORTODONCIA\.map\(/);
   assert.ok(!/PENDIENTE_DE_LISTAR/.test(vista));
+
+  assert.ok(listado.some((p) => /Fotos con líneas/.test(p)));
+  // La promesa va atada a la pantalla: la foto sale del enlace firmado que
+  // devuelve la subida, no de /api/files/<id> (que no existe y daba 404).
+  const tarjeta = sinComentarios(leer("src/components/specialties/orthodontics/imagen/ImagenYAnalisisCard.tsx"));
+  assert.match(tarjeta, /setImageUrl\(json\.signedUrl\);/);
+  assert.ok(!/\/api\/files\//.test(tarjeta), "ya no pide la imagen a una ruta que no existe");
 });
 
 test("«a plazos o por control» se lista porque hay una pantalla donde elegirlo", () => {

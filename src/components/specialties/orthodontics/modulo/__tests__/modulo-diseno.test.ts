@@ -31,6 +31,7 @@ const ARCHIVOS = [
   "src/components/specialties/orthodontics/modulo/submenu.tsx",
   "src/components/specialties/orthodontics/modulo/vista-tablero.tsx",
   "src/components/specialties/orthodontics/modulo/vista-alertas.tsx",
+  "src/components/specialties/orthodontics/modulo/fechas.ts",
   "src/components/specialties/orthodontics/contratar/contratar.module.css",
   "src/components/specialties/orthodontics/contratar/vista-contratar.tsx",
   "src/components/specialties/orthodontics/contratar/TarjetaPrecio.tsx",
@@ -92,24 +93,33 @@ test("el layout pasa por el guardia del módulo y monta la raíz y el submenú",
   assert.ok(layout.indexOf("await exigirModuloOrtodoncia()") < layout.indexOf("<RaizModulo>"));
 });
 
-test("el submenú conserva los seis apartados, con su nombre, y marca el abierto", () => {
+test("el submenú conserva los seis apartados, con su nombre, marca el abierto y en el teléfono usa nombres cortos", () => {
   const layout = leer("src/app/dashboard/orthodontics/layout.tsx");
   const apartados = Array.from(
-    layout.matchAll(/\{ href: "(\/dashboard\/orthodontics\/[a-z]+)", label: "([^"]+)" \}/g),
-    (m) => [m[1].split("/").pop(), m[2]],
+    layout.matchAll(/\{ href: "(\/dashboard\/orthodontics\/[a-z]+)", label: "([^"]+)", corto: "([^"]+)" \}/g),
+    (m) => [m[1].split("/").pop(), m[2], m[3]],
   );
   assert.deepEqual(apartados, [
-    ["tablero", "Tablero"],
-    ["pacientes", "Pacientes en tratamiento"],
-    ["cobranza", "Cobranza de mensualidades"],
-    ["controles", "Controles / agenda"],
-    ["alertas", "Alertas"],
-    ["configuracion", "Configuración"],
+    ["tablero", "Tablero", "Tablero"],
+    ["pacientes", "Pacientes en tratamiento", "Pacientes"],
+    ["cobranza", "Cobranza de mensualidades", "Cobranza"],
+    ["controles", "Controles / agenda", "Controles"],
+    ["alertas", "Alertas", "Alertas"],
+    ["configuracion", "Configuración", "Ajustes"],
   ]);
+  for (const [, largo, corto] of apartados) assert.ok((corto as string).length <= 10 && (corto as string).length <= (largo as string).length);
+
   const submenu = leer("src/components/specialties/orthodontics/modulo/submenu.tsx");
   assert.match(submenu, /^"use client";/, "lee la ruta: es de cliente");
   assert.match(submenu, /aria-current=\{activo \? "page" : undefined\}/);
+  assert.match(submenu, /aria-label=\{a\.label\}/, "el lector de pantalla lee siempre el nombre completo");
+  assert.match(submenu, /<span className=\{s\.submenuCorto\} aria-hidden>/);
   for (const [clave] of apartados) assert.match(submenu, new RegExp(`\\b${clave}: `), `ícono de ${clave}`);
+
+  // SOLO en el teléfono: fuera de esa media query el corto no se ve.
+  const css = leer(HOJA).replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, /\.submenuCorto \{\s*display: none;\s*\}/);
+  assert.match(css, /@media \(max-width: 639\.98px\) \{\s*\.submenuLargo \{\s*display: none;\s*\}\s*\.submenuCorto \{\s*display: inline;\s*\}/);
 });
 
 test("los carteles «Próximamente» no enseñan nombres de archivos ni de oleadas", () => {

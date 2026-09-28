@@ -22,6 +22,8 @@ import s from "./modulo.module.css";
 export interface ApartadoSubmenu {
   href: string;
   label: string;
+  /** Nombre corto, SOLO para el teléfono. Sin él, se pinta el completo. */
+  corto?: string;
 }
 
 /** Por la última parte de la ruta; un apartado que no esté aquí sale sin ícono. */
@@ -64,10 +66,23 @@ export function SubmenuOrtodoncia({ apartados }: { apartados: readonly ApartadoS
               key={a.href}
               href={a.href}
               aria-current={activo ? "page" : undefined}
+              aria-label={a.label}
               className={activo ? `${s.submenuItem} ${s.submenuItemActivo}` : s.submenuItem}
             >
               {Icono && <Icono size={15} strokeWidth={1.9} aria-hidden />}
-              {a.label}
+              {a.corto && a.corto !== a.label ? (
+                <>
+                  {/* Los dos nombres van en la página y la hoja enseña uno según
+                      el ancho: así no hay salto al cargar. El lector de
+                      pantalla lee siempre el completo (aria-label). */}
+                  <span className={s.submenuLargo}>{a.label}</span>
+                  <span className={s.submenuCorto} aria-hidden>
+                    {a.corto}
+                  </span>
+                </>
+              ) : (
+                a.label
+              )}
             </Link>
           );
         })}

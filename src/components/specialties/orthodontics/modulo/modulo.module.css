@@ -157,6 +157,26 @@
   box-shadow: inset 0 0 0 2px var(--pr-activo), inset 0 0 0 4px var(--pr-activo-texto);
 }
 
+/* Nombres cortos SOLO en el teléfono (decisión de Rafael): «Pacientes» en vez
+   de «Pacientes en tratamiento». Teléfono = ventana de menos de 640 px; en
+   una tableta caben los nombres completos y se quedan. */
+.submenuCorto {
+  display: none;
+}
+
+@media (max-width: 639.98px) {
+  .submenuLargo {
+    display: none;
+  }
+  .submenuCorto {
+    display: inline;
+  }
+  .submenuItem {
+    padding: 0 10px;
+    gap: 6px;
+  }
+}
+
 /* ── Pantalla: cabecera + columna de bloques ─────────────────────────── */
 
 .pantalla {

@@ -29,13 +29,16 @@ import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { RaizModulo } from "@/components/specialties/orthodontics/modulo/piezas";
 import { SubmenuOrtodoncia } from "@/components/specialties/orthodontics/modulo/submenu";
 
+// `corto`: el nombre que se pinta SOLO en el teléfono (decisión de Rafael,
+// 28-sep-2026). En escritorio, y para los lectores de pantalla, el nombre es
+// siempre el completo.
 const SUBMENU = [
-  { href: "/dashboard/orthodontics/tablero", label: "Tablero" },
-  { href: "/dashboard/orthodontics/pacientes", label: "Pacientes en tratamiento" },
-  { href: "/dashboard/orthodontics/cobranza", label: "Cobranza de mensualidades" },
-  { href: "/dashboard/orthodontics/controles", label: "Controles / agenda" },
-  { href: "/dashboard/orthodontics/alertas", label: "Alertas" },
-  { href: "/dashboard/orthodontics/configuracion", label: "Configuración" },
+  { href: "/dashboard/orthodontics/tablero", label: "Tablero", corto: "Tablero" },
+  { href: "/dashboard/orthodontics/pacientes", label: "Pacientes en tratamiento", corto: "Pacientes" },
+  { href: "/dashboard/orthodontics/cobranza", label: "Cobranza de mensualidades", corto: "Cobranza" },
+  { href: "/dashboard/orthodontics/controles", label: "Controles / agenda", corto: "Controles" },
+  { href: "/dashboard/orthodontics/alertas", label: "Alertas", corto: "Alertas" },
+  { href: "/dashboard/orthodontics/configuracion", label: "Configuración", corto: "Ajustes" },
 ] as const;
 
 export default async function OrthodonticsModuleLayout({

@@ -21,5 +21,5 @@ export default async function OrthodonticsAlertasPage() {
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   const alerts = await loadOrthoAlerts(user.clinicId, user.clinic.timezone, viewer);
 
-  return <VistaAlertas alerts={alerts} />;
+  return <VistaAlertas alerts={alerts} zonaHoraria={user.clinic.timezone} />;
 }

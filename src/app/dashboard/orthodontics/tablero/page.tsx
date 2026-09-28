@@ -26,5 +26,5 @@ export default async function OrthodonticsTableroPage() {
     loadTodayControlsWithIndications(user.clinicId, user.clinic.timezone, viewer),
   ]);
 
-  return <VistaTablero data={data} controlesHoy={controlesHoy} />;
+  return <VistaTablero data={data} controlesHoy={controlesHoy} zonaHoraria={user.clinic.timezone} />;
 }

@@ -15,9 +15,9 @@
  *     el menú vuelve exactamente como la persona lo tenía; y al abrir otro
  *     paciente (o volver a abrir el mismo desde la lista) se recoge otra vez.
  *
- * Solo la ficha de Pacientes. Las pantallas de especialidad
- * (/dashboard/specialties/<x>/<patientId>) y radiografías (/dashboard/xrays)
- * no cambian: «no cambies el menú en ninguna otra pantalla».
+ * Las pantallas de especialidad (/dashboard/specialties/<x>/<patientId>) y
+ * radiografías (/dashboard/xrays) no cambian: «no cambies el menú en ninguna
+ * otra pantalla».
  *
  * Y, desde el 28-sep-2026, el módulo de Ortodoncia (pedido de Rafael, ws1-t3:
  * «que ortodoncia al darle click y cargue se esconda el menú completamente
@@ -78,21 +78,28 @@ export function encogidoEfectivo(
 
 /**
  * ¿Hay que cerrar el segundo nivel del menú (Administración) al cambiar de
- * pantalla? Solo al ENTRAR al módulo de Ortodoncia desde fuera.
+ * pantalla? Al ENTRAR a una zona recogida: la ficha de un paciente o el
+ * módulo de Ortodoncia.
  *
- * Por qué hace falta: a la ficha se llega desde Pacientes, que está en el
- * primer nivel, así que recoger ese nivel ya deja solo la barra de iconos.
- * Ortodoncia vive DENTRO del segundo nivel (Administración → Especialidades):
- * sin esto, al hacer clic se recogía la barra y el panel de 248 px se quedaba
- * acoplado, o sea que el menú seguía ahí. Cerrarlo al entrar es lo que deja
- * la pantalla igual que la ficha.
+ * Por qué hace falta: recoger el primer nivel deja la barra de iconos, pero
+ * si el panel de Administración (248 px) estaba acoplado se queda al lado, o
+ * sea que el menú sigue ahí. Pasa al entrar a Ortodoncia (vive DENTRO de
+ * Administración) y al abrir un paciente con el panel abierto (por ejemplo
+ * desde el buscador). Cerrarlo al entrar es lo que deja solo la barra.
  *
- * Solo al entrar: moverse entre pestañas del módulo no cierra nada, así que
- * quien vuelva a abrir Administración estando dentro lo conserva abierto.
+ * Primero fue solo Ortodoncia; desde el 28-sep-2026 también la ficha
+ * (decisión de Rafael: «sí, que la ficha del paciente también cierre el
+ * panel de Administración»).
+ *
+ * Solo al entrar: moverse DENTRO de la zona (entre pestañas del módulo, o
+ * entre pantallas de la misma ficha) no cierra nada, así que quien vuelva a
+ * abrir Administración estando dentro lo conserva abierto. Pasar de un
+ * paciente a otro sí es entrar: es otra zona, igual que para recoger.
  */
 export function cierraSegundoNivelAlEntrar(
   anterior: string | null | undefined,
   actual: string | null | undefined,
 ): boolean {
-  return zonaRecogida(actual) === ZONA_ORTODONCIA && zonaRecogida(anterior) !== ZONA_ORTODONCIA;
+  const zona = zonaRecogida(actual);
+  return zona !== null && zona !== zonaRecogida(anterior);
 }

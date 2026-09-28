@@ -19,6 +19,7 @@ import Link from "next/link";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import type { OrthoTableroData, TodayControlEntry } from "@/lib/orthodontics/tablero-data";
 import { EnviarIndicacionesButton } from "@/components/specialties/orthodontics/EnviarIndicacionesButton";
+import { horaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, Vacio } from "./piezas";
 import s from "./modulo.module.css";
 
@@ -33,10 +34,6 @@ function fmtMonthKey(monthKey: string): string {
   return MESES[(m ?? 1) - 1] ?? monthKey;
 }
 
-function fmtHora(d: Date): string {
-  return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
-}
-
 /** Ancho de una barra: el importe en proporción al mayor de su lista. */
 function anchoBarra(importe: number, mayor: number): string {
   if (mayor <= 0 || importe <= 0) return "0%";
@@ -46,9 +43,12 @@ function anchoBarra(importe: number, mayor: number): string {
 export function VistaTablero({
   data,
   controlesHoy,
+  zonaHoraria,
 }: {
   data: OrthoTableroData;
   controlesHoy: TodayControlEntry[];
+  /** `clinic.timezone`: la hora de cada control se pinta en la zona de la clínica, no en la del servidor. */
+  zonaHoraria: string | null;
 }) {
   const mayorProduccion = Math.max(0, ...data.productionByDoctor.map((p) => p.amountMxn));
   const mayorProyeccion = Math.max(0, ...data.monthlyProjection.map((b) => b.amountMxn));
@@ -120,7 +120,7 @@ export function VistaTablero({
             <ul className={s.tarjetaLista}>
               {controlesHoy.map((c) => (
                 <li key={c.appointmentId} className={`${s.fila} ${s.filaApilable}`}>
-                  <span className={s.hora}>{fmtHora(c.startsAt)}</span>
+                  <span className={s.hora}>{horaEnZona(c.startsAt, zonaHoraria)}</span>
                   <div className={s.filaCuerpo}>
                     <span className={s.nombre}>{c.patientName}</span>
                   </div>

@@ -21,6 +21,7 @@
 import { prisma } from "@/lib/prisma";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import { normalizarOrthoBillingMode, ORTHO_BILLING_MODE_DEFAULT, type OrthoBillingMode } from "./billing-mode";
+import { ID_TIPO_CITA_CONTROL, normalizarCatalogo } from "./tipos-de-cita";
 
 function esTablaAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
@@ -46,12 +47,13 @@ export interface OrthoAppointmentTypeOption {
  * `TIPO_CITA_CONTROL_ORTO`: `esCitaControlOrto()` compara por ese string
  * exacto contra `Appointment.type`, así que si una clínica edita este
  * catálogo desde Configuración, el ID "control" — sea cual sea el índice
- * que ocupe — sigue siendo el texto que la Agenda reconoce como control. */
+ * que ocupe — sigue siendo el texto que la Agenda reconoce como control.
+ * Esa fila es la FIJA, y se reconoce por su clave (`tipos-de-cita.ts`). */
 export const DEFAULT_ORTHO_APPOINTMENT_TYPES: readonly OrthoAppointmentTypeOption[] = [
   { id: "valoracion", label: "Valoración de ortodoncia" },
   { id: "toma-registros", label: "Toma de registros de ortodoncia" },
   { id: "colocacion", label: "Colocación de aparatología" },
-  { id: "control", label: TIPO_CITA_CONTROL_ORTO },
+  { id: ID_TIPO_CITA_CONTROL, label: TIPO_CITA_CONTROL_ORTO },
   { id: "urgencia", label: "Urgencia de ortodoncia" },
   { id: "retiro", label: "Retiro de aparatología" },
   { id: "control-retencion", label: "Control de retención" },
@@ -96,8 +98,12 @@ export async function loadOrthoClinicSettings(clinicId: string): Promise<OrthoCl
     return {
       clinicId,
       defaultTreatingDoctorId: row.defaultTreatingDoctorId,
+      // `normalizarCatalogo`: la fila fija sale siempre con su clave y su
+      // texto exacto, y sin el duplicado que podía dejar el fallo de reconocerla
+      // por el texto. Solo cambia lo que se ENTREGA; la fila guardada se
+      // corrige la próxima vez que la clínica guarde.
       appointmentTypes: esArrayDeOpciones(row.appointmentTypes)
-        ? row.appointmentTypes
+        ? normalizarCatalogo(row.appointmentTypes)
         : [...DEFAULT_ORTHO_APPOINTMENT_TYPES],
       messageTemplates: (row.messageTemplates as Record<string, string> | null) ?? {},
       billingMode: normalizarOrthoBillingMode((row as { billingMode?: unknown }).billingMode),

@@ -94,6 +94,7 @@ export const CONTENIDO_ORTODONCIA: readonly CategoriaIncluida[] = [
     resumen: "Los registros del caso, juntos y a la mano.",
     puntos: [
       "Fotos por etapa: inicial, 3 meses, 6 meses y control",
+      "Fotos con líneas: línea E, ángulo nasolabial y línea media",
       "El PDF de la cefalometría que te entrega tu centro radiológico, guardado en el caso",
       "Acceso a las radiografías del paciente desde su caso",
       "Alineadores: cuál debería traer hoy y si va atrasado",
@@ -116,13 +117,8 @@ export const CONTENIDO_ORTODONCIA: readonly CategoriaIncluida[] = [
 
 /**
  * Lo que NO se lista todavía, y por qué. No se pinta en ningún sitio: está
- * aquí para que quien lo termine sepa qué línea añadir arriba.
+ * aquí para que quien lo termine sepa qué línea añadir arriba. Hoy, vacío:
+ * «a plazos o por control» entró con el selector de Configuración (0356a7a2)
+ * y «fotos con líneas» con el arreglo de la imagen (aaf61f42).
  */
-export const PENDIENTE_DE_LISTAR: readonly { categoria: CategoriaIncluida["id"]; linea: string; porQue: string }[] = [
-  {
-    categoria: "imagen",
-    linea: "Fotos con líneas: línea E, ángulo nasolabial y línea media",
-    porQue:
-      "La pantalla existe, pero pide la imagen a /api/files/<id>, una ruta que no existe (responde 404), y los puntos marcados no se guardan.",
-  },
-];
+export const PENDIENTE_DE_LISTAR: readonly { categoria: CategoriaIncluida["id"]; linea: string; porQue: string }[] = [];

@@ -21,17 +21,12 @@ import type {
 } from "@/lib/orthodontics/specialty-kpis";
 import type { NoShowEntry, OrthoAlertsData } from "@/lib/orthodontics/alerts-data";
 import { EnviarRecordatorioButton } from "@/components/specialties/orthodontics/EnviarRecordatorioButton";
+import { fechaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, type Tono } from "./piezas";
 import s from "./modulo.module.css";
 
 function fmtMoney(n: number): string {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
-}
-
-function fmtDate(d: Date | string | null): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(`${d}T00:00:00`) : d;
-  return date.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 const CLASE_TONO: Record<Tono, string> = {
@@ -42,7 +37,15 @@ const CLASE_TONO: Record<Tono, string> = {
   neutro: s.tonoNeutro,
 };
 
-export function VistaAlertas({ alerts }: { alerts: OrthoAlertsData }) {
+export function VistaAlertas({
+  alerts,
+  zonaHoraria,
+}: {
+  alerts: OrthoAlertsData;
+  /** `clinic.timezone`: el día de una falta se pinta en la zona de la clínica, no en la del servidor. */
+  zonaHoraria: string | null;
+}) {
+  const fmtDate = (d: Date | string | null) => fechaEnZona(d, zonaHoraria);
   const totalAlerts =
     alerts.overduePayments.length +
     alerts.missingNextControl.length +

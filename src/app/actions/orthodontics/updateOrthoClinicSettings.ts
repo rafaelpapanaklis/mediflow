@@ -14,7 +14,7 @@ import {
   loadOrthoClinicSettings,
   type OrthoAppointmentTypeOption,
 } from "@/lib/orthodontics/clinic-settings-db";
-import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
+import { motivoDeRechazo } from "@/lib/orthodontics/tipos-de-cita";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -72,16 +72,14 @@ export async function updateOrthoClinicSettings(
     label: t.label,
   }));
 
-  // El texto "Control de ortodoncia" es lo que la Agenda compara contra
-  // Appointment.type (esCitaControlOrto, agenda-constants.ts) para resolver
-  // la ranura de control, la hoja de control y las listas de Recepción. Si
-  // la clínica edita el catálogo hasta perder esa entrada, esas piezas se
-  // quedan sin forma de reconocer un control — se rechaza antes de guardar.
-  if (!appointmentTypes.some((t) => t.label === TIPO_CITA_CONTROL_ORTO)) {
-    return fail(
-      `El catálogo tiene que conservar un tipo de cita con el texto exacto "${TIPO_CITA_CONTROL_ORTO}" — la Agenda lo usa para reconocer los controles.`,
-    );
-  }
+  // La fila fija se reconoce por su CLAVE ("control"), no por su texto
+  // (ws1-t3, 28-sep-2026), y tiene que llevar el texto exacto que la Agenda
+  // compara contra Appointment.type (esCitaControlOrto) para resolver la
+  // ranura de control, la hoja de control y las listas de Recepción. Ninguna
+  // otra fila puede llamarse igual. Es la MISMA regla que aplica la pantalla;
+  // aquí se repite porque lo que llega del cliente no se da por bueno.
+  const rechazo = motivoDeRechazo(appointmentTypes);
+  if (rechazo) return fail(rechazo);
 
   const billingMode = data.billingMode ? normalizarOrthoBillingMode(data.billingMode) : before.billingMode;
 
