@@ -15,6 +15,7 @@ import { EmptyAppointmentsToday } from "@/components/dashboard/empty-states";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { useT } from "@/i18n/i18n-provider";
 import type { HomeDoctorData } from "@/lib/home/types";
+import { OrtodonciaEnHoy } from "./ortodoncia-en-hoy";
 
 interface Props {
   user: { displayName: string };
@@ -54,6 +55,10 @@ export function HomeDoctor({ user, clinic, data }: Props) {
         <Greeting userFullName={user.displayName} trailing={trailing} clinicTimezone={clinic.timezone} />
         <HomeQuickActions />
       </div>
+
+      {/* ws1-t5 — los controles de ortodoncia de hoy de este doctor. Se calla
+          solo si no hay ninguno o si la sede no tiene el módulo. */}
+      <OrtodonciaEnHoy soloControles />
 
       {data.nextAppointment && <HeroNextPatient appt={data.nextAppointment} />}
 

@@ -155,6 +155,11 @@ test("los «Hoy» montan el aviso y el aviso usa las reglas", () => {
   assert.match(aviso, /destinoDeMensualidadesVencidas\(resumen\.puedeVerModulo\)/);
   assert.ok(!aviso.includes('href="/dashboard/caja'), "el aviso sigue mandando siempre a Caja");
   assert.match(leer("components/dashboard/home/aviso-mensualidades-vencidas.tsx"), /<OrtodonciaEnHoy \/>/);
+  // El Hoy del doctor: sus controles, sin el dinero.
+  for (const hoy of ["components/dashboard/hoy-rediseno/hoy-doctor.tsx", "components/dashboard/home/home-doctor.tsx"]) {
+    assert.match(leer(hoy), /<OrtodonciaEnHoy soloControles \/>/, `${hoy} no enseña los controles de hoy`);
+  }
+  assert.match(leer("components/dashboard/hoy-rediseno/hoy-doctor.tsx"), /destinoDeLaCitaEnHoy\(/);
   for (const hoy of [
     "components/dashboard/hoy-rediseno/hoy-admin.tsx",
     "components/dashboard/hoy-rediseno/hoy-recepcion.tsx",

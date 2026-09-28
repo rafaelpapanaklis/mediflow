@@ -26,6 +26,8 @@ import type { HomeDoctorData } from "@/lib/home/types";
 import { AccionesRapidas, BarraAtajos, Iniciales, Saludo, Tarjeta, Vacio } from "./piezas";
 import { FilaCita } from "./fila-cita";
 import { VacioCitasHoy } from "./hoy-recepcion";
+import { OrtodonciaEnHoy } from "../home/ortodoncia-en-hoy";
+import { destinoDeLaCitaEnHoy } from "@/lib/orthodontics/hoy";
 import s from "./hoy.module.css";
 
 interface Props {
@@ -57,6 +59,11 @@ export function HoyDoctor({ user, clinic, data }: Props) {
         <Saludo nombreCompleto={user.displayName} cola={cola} zonaHorariaClinica={clinic.timezone} />
         <AccionesRapidas />
       </div>
+
+      {/* ws1-t5 — los controles de ortodoncia de hoy de este doctor: cuántos
+          faltan por registrar y cuál sigue. Se calla solo si no hay ninguno o
+          si la sede no tiene el módulo. Sin dinero: eso va en el Hoy del dueño. */}
+      <OrtodonciaEnHoy soloControles />
 
       {data.nextAppointment && <SiguientePaciente appt={data.nextAppointment} />}
 
@@ -236,7 +243,10 @@ function SiguientePaciente({ appt }: { appt: SiguienteCita }) {
         <button
           type="button"
           className={s.boton}
-          onClick={() => router.push(`/dashboard/patients/${appt.patient.id}`)}
+          // Un control de ortodoncia abre el caso del paciente, no la ficha general.
+          onClick={() =>
+            router.push(destinoDeLaCitaEnHoy({ patientId: appt.patient.id, motivo: appt.reason }))
+          }
         >
           <FileText size={16} strokeWidth={1.75} aria-hidden />
           {t("home.heroNextPatient.viewRecord")}
