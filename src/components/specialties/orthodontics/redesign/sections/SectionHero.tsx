@@ -76,7 +76,7 @@ export function SectionHero(props: SectionHeroProps) {
           ) : null}
           {props.onEditPlan ? (
             <Btn variant="secondary" size="sm" icon={<Pencil className="w-3.5 h-3.5" aria-hidden />} onClick={props.onEditPlan}>
-              Editar plan
+              Editar plan de tratamiento
             </Btn>
           ) : null}
           {props.onStartControl ? (

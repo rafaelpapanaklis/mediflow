@@ -76,6 +76,18 @@ Cédula profesional: {doctorLicense}
  * installmentAmount, paymentDayOfMonth, startDate, endDate,
  * preferredPaymentMethod, removalAppointmentCost, rfc, razonSocial,
  * regimenFiscal, usoCfdi, city, day, month, year, signerRole.
+ *
+ * Revisión cruzada (ver REPORTE-ws1-t1.md, "## Revisión cruzada"): esta
+ * plantilla NO se toca (wording legal, coordinación con Rafael + asesor
+ * jurídico) — pero quien la renderice (hoy `FinancialAgreementModal.tsx`,
+ * sin llamador todavía) tiene que sustituir `{totalCostMxn}`,
+ * `{initialDownPayment}`, `{installmentCount}` e `{installmentAmount}` con
+ * los valores de la factura REAL del tratamiento
+ * (`orthodonticTreatmentPlan.invoiceId` → `invoice`/`invoice_payment_terms`)
+ * cuando ya exista, NUNCA con `OrthodonticTreatmentPlan.totalCostMxn` ni con
+ * `OrthoPaymentPlan` (legacy, decisión 1 de la arquitectura): un acuerdo
+ * financiero que el paciente firma con un número distinto del que
+ * realmente se le cobra es el hallazgo que reportó esta ola.
  */
 export const FINANCIAL_AGREEMENT_TEXT = `
 ACUERDO FINANCIERO PARA TRATAMIENTO ORTODÓNTICO

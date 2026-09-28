@@ -7,6 +7,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
+import { canSeePatient } from "@/lib/patient-visibility";
 import { getOrthoActionContext } from "../_helpers";
 import { fail, isFailure, type ActionResult } from "../result";
 
@@ -36,10 +37,29 @@ export async function getOrthoImagingContext(
 
   const plan = await prisma.orthodonticTreatmentPlan.findUnique({
     where: { id: treatmentPlanId },
-    select: { id: true, clinicId: true, patientId: true, deletedAt: true },
+    select: {
+      id: true,
+      clinicId: true,
+      patientId: true,
+      deletedAt: true,
+      patient: { select: { visibleUserIds: true } },
+    },
   });
   if (!plan || plan.deletedAt) return fail("Caso de ortodoncia no encontrado");
   if (plan.clinicId !== ctx.clinicId) return fail("Sin acceso a este caso");
+
+  // Visibilidad por paciente (hallazgo de la revisión cruzada de ws1-t1):
+  // mismo criterio que `loadPatientForOrtho` en `_helpers.ts` — un paciente
+  // restringido no existe para quien no está en su visibleUserIds (mismo
+  // mensaje que "no encontrado", sin confirmar existencia del caso).
+  if (
+    !canSeePatient(
+      { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId },
+      plan.patient.visibleUserIds,
+    )
+  ) {
+    return fail("Caso de ortodoncia no encontrado");
+  }
 
   return { ok: true, data: { ctx, treatmentPlanId, patientId: plan.patientId } };
 }

@@ -99,6 +99,14 @@ export interface DrawerNewCasePlanPayload {
   technique: string;
   estimatedDurationMonths: number;
   installedAt: string | null;
+  /**
+   * Precio de referencia al abrir el caso — todavía no hay factura (el caso
+   * se crea aquí, la factura la abre Cobro DESPUÉS, "Abrir plan de pago").
+   * Revisión cruzada (ver REPORTE-ws1-t1.md): cuando exista
+   * `orthodonticTreatmentPlan.invoiceId`, el número que cuenta es
+   * `invoice.total`, no este campo — no hay forma de sincronizarlos aquí
+   * porque en este drawer la factura todavía no existe.
+   */
   totalCostMxn: number;
   anchorageType: string;
   extractionsRequired: boolean;
@@ -413,7 +421,10 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 <Field label="Fecha de colocación (opcional)">
                   <input type="date" value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} className={inputCls} />
                 </Field>
-                <Field label="Costo total (MXN)">
+                <Field
+                  label="Costo total (MXN)"
+                  hint="Precio de referencia para abrir el caso. El monto que de verdad se cobra es el de la factura del tratamiento (Sección F, «Abrir plan de pago») — confírmalo ahí antes de firmar el acuerdo financiero con el paciente."
+                >
                   <NumberInput value={totalCost} onChange={setTotalCost} step={100} min={1} max={1_000_000} />
                 </Field>
                 <Field label="Anclaje">
@@ -532,11 +543,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="block text-xs font-semibold text-slate-700 mb-1 dark:text-slate-300">{label}</label>
       {children}
+      {hint ? <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{hint}</p> : null}
     </div>
   );
 }

@@ -126,6 +126,22 @@ export interface AdapterInput {
   /** Sillón de la próxima cita (si la próxima cita tiene controlAppointmentId
    *  con metadata adicional). Por ahora se hereda del PatientFlow activo. */
   nextAppointmentChair?: string | null;
+  /**
+   * Revisión cruzada de la Ola 1 (ver REPORTE-ws1-t1.md, "## Revisión
+   * cruzada"): cuando el caso YA tiene `orthodonticTreatmentPlan.invoiceId`
+   * (Cobro, ws1-t1, ya abrió el plan de pago), el número que cuenta es el de
+   * la factura real (`invoice.total`/`invoice.paid`), no `totalCostMxn`/
+   * `paymentPlan.paidAmount` (que el caso solo tipeó como referencia al
+   * abrirse, antes de que existiera la factura).
+   *
+   * Opcionales y sin efecto si no se pasan: quien arme `AdapterInput`
+   * (`load-data.ts`/`OrthodonticsPatientTab.tsx`, fuera de esta ronda) tiene
+   * que resolver la factura real cuando `plan.invoiceId` no sea null y
+   * pasarla aquí — mientras eso no pase, el comportamiento de hoy
+   * (`totalCostMxn`) sigue exactamente igual.
+   */
+  realInvoiceTotal?: number | null;
+  realInvoicePaid?: number | null;
 }
 
 export function adaptToOrthoRedesignViewModel(
@@ -144,6 +160,8 @@ export function adaptToOrthoRedesignViewModel(
     wireCurrent,
     attendancePct: input.attendancePct,
     elasticsCompliancePct: input.elasticsCompliancePct,
+    realInvoiceTotal: input.realInvoiceTotal ?? null,
+    realInvoicePaid: input.realInvoicePaid ?? null,
   });
 
   const diagnosis = l.diagnosis ? adaptDiagnosis(l.diagnosis) : null;
@@ -177,12 +195,22 @@ function adaptTreatment(args: {
   wireCurrent: WireStepDTO | null;
   attendancePct: number;
   elasticsCompliancePct: number;
+  realInvoiceTotal: number | null;
+  realInvoicePaid: number | null;
 }): OrthoTreatmentDTO {
   const l = args.legacy;
   const plan = l.plan;
   const phaseInProgress = l.phases.find((p) => p.status === "IN_PROGRESS")?.phaseKey ?? null;
-  const totalCost = plan ? toNumber(plan.totalCostMxn) : 0;
-  const paid = l.paymentPlan ? toNumber(l.paymentPlan.paidAmount) : 0;
+  // Revisión cruzada (REPORTE-ws1-t1.md): con factura real abierta
+  // (plan.invoiceId), el total/pagado de verdad vienen de esa factura, no
+  // del precio tipeado al abrir el caso ni del plan de pagos legacy.
+  const hayFacturaReal = Boolean(plan?.invoiceId) && args.realInvoiceTotal != null;
+  const totalCost = hayFacturaReal ? (args.realInvoiceTotal as number) : plan ? toNumber(plan.totalCostMxn) : 0;
+  const paid = hayFacturaReal
+    ? (args.realInvoicePaid ?? 0)
+    : l.paymentPlan
+      ? toNumber(l.paymentPlan.paidAmount)
+      : 0;
 
   let status: OrthoTreatmentDTO["status"] = "no-iniciado";
   if (plan) {

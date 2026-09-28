@@ -161,7 +161,7 @@ export function SectionFinance(props: SectionFinanceProps) {
                   Cobrar extra
                 </Btn>
                 <Btn variant="ghost" size="sm" icon={<CalendarClock className="w-3.5 h-3.5" aria-hidden />} onClick={() => setDrawer({ kind: "cambiar-plan" })}>
-                  Cambiar plan
+                  Cambiar plan de pago
                 </Btn>
                 <Btn variant="ghost" size="sm" icon={<Percent className="w-3.5 h-3.5" aria-hidden />} onClick={() => setDrawer({ kind: "descuento" })}>
                   Descuento aplicado
