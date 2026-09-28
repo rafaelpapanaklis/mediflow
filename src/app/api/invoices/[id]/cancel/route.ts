@@ -89,6 +89,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       after:  { status: "CANCELLED", reason: reasonText || undefined },
     });
 
+    // Mercado Pago (ws1-t1): esta rama es "sin nada pagado" (`invoice.paid`
+    // sigue en 0 mientras un anticipo solo está PENDING, nunca cobrado), pero
+    // puede tener igual un anticipo pendiente y una cita apartada — antes solo
+    // se cerraban en la rama de abajo ("con algo pagado"), así que cancelar una
+    // factura con un anticipo PENDING sin cobrar dejaba el anticipo vivo y la
+    // cita apartada. Nunca lanza.
+    await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
+    await cerrarAnticiposDePanel({ clinicId, invoiceId: params.id });
+
     revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${invoice.patientId}`);
     return NextResponse.json({ success: true });
