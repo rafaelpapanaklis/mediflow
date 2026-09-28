@@ -59,10 +59,26 @@ interface FilaCargo {
   status: string;
   dueDate: Date | null;
   createdAt: Date;
+  zona: string | null;
 }
 
 function aFechaISO(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+/** El día de calendario de un instante en la zona de la clínica: "YYYY-MM-DD". */
+function diaEnZonaDeClinica(instante: Date, zona: string | null | undefined): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: zona || "America/Mexico_City",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(instante);
+  } catch {
+    // Zona inválida guardada en la clínica: la de México, como el resto del panel.
+    return diaEnZonaDeClinica(instante, "America/Mexico_City");
+  }
 }
 
 /**
@@ -70,9 +86,17 @@ function aFechaISO(d: Date): string {
  * ella al firmar la hoja), el día en que se creó. UNA sola regla, exportada
  * para que Caja y Finanzas digan «vencido» con el mismo criterio que Cobranza
  * de ortodoncia (fila 87 de la revisión de lógica de uso).
+ *
+ * El día de creación se toma en la zona de la clínica (Caja compara contra el
+ * «hoy» de la clínica): un control firmado a las 18:30 del 28 en México vence
+ * el 28, no el 29 de UTC. `dueDate` ya es una fecha de calendario y se lee tal cual.
  */
-export function vencimientoDeCargoDeControl(dueDate: Date | null, createdAt: Date): string {
-  return aFechaISO(dueDate ?? createdAt);
+export function vencimientoDeCargoDeControl(
+  dueDate: Date | null,
+  createdAt: Date,
+  zonaClinica?: string | null,
+): string {
+  return dueDate ? aFechaISO(dueDate) : diaEnZonaDeClinica(createdAt, zonaClinica);
 }
 
 /**
@@ -93,9 +117,11 @@ export async function cargarCargosDeControlPorCasos(
   try {
     const filas = await prisma.$queryRaw<FilaCargo[]>`
       SELECT i."orthodonticTreatmentPlanId" AS "planId", i."id" AS "invoiceId",
-             i."invoiceNumber", i."total", i."paid", i."status", i."dueDate", i."createdAt"
+             i."invoiceNumber", i."total", i."paid", i."status", i."dueDate", i."createdAt",
+             c."timezone" AS "zona"
         FROM "invoices" i
         JOIN "appointments" a ON a."id" = i."appointmentId"
+        JOIN "clinics" c ON c."id" = i."clinicId"
        WHERE i."clinicId" = ${clinicId}
          AND i."orthodonticTreatmentPlanId" IN (${Prisma.join(treatmentPlanIds)})
          AND i."appointmentId" IS NOT NULL
@@ -108,7 +134,7 @@ export async function cargarCargosDeControlPorCasos(
         total: Number(f.total) || 0,
         pagado: Number(f.paid) || 0,
         status: f.status,
-        vencimiento: vencimientoDeCargoDeControl(f.dueDate, f.createdAt),
+        vencimiento: vencimientoDeCargoDeControl(f.dueDate, f.createdAt, f.zona),
       };
       const lista = salida.get(f.planId);
       if (lista) lista.push(cargo);
@@ -143,17 +169,18 @@ export async function cargarVencimientosDeCargosDeControl(clinicId: string): Pro
   if (!clinicId) return salida;
   if (!(await columnaExiste())) return salida;
   try {
-    const filas = await prisma.$queryRaw<{ invoiceId: string; dueDate: Date | null; createdAt: Date }[]>`
-      SELECT i."id" AS "invoiceId", i."dueDate", i."createdAt"
+    const filas = await prisma.$queryRaw<{ invoiceId: string; dueDate: Date | null; createdAt: Date; zona: string | null }[]>`
+      SELECT i."id" AS "invoiceId", i."dueDate", i."createdAt", c."timezone" AS "zona"
         FROM "invoices" i
         JOIN "appointments" a ON a."id" = i."appointmentId"
+        JOIN "clinics" c ON c."id" = i."clinicId"
        WHERE i."clinicId" = ${clinicId}
          AND i."orthodonticTreatmentPlanId" IS NOT NULL
          AND i."appointmentId" IS NOT NULL
          AND a."type" = ${TIPO_CITA_CONTROL_ORTO}
          AND i."balance" > 0
          AND i."status" NOT IN ('DRAFT', 'CANCELLED')`;
-    for (const f of filas) salida.set(f.invoiceId, vencimientoDeCargoDeControl(f.dueDate, f.createdAt));
+    for (const f of filas) salida.set(f.invoiceId, vencimientoDeCargoDeControl(f.dueDate, f.createdAt, f.zona));
     return salida;
   } catch (e) {
     console.warn("[ortodoncia:cargos-control] no se pudieron leer los vencimientos:", e);
