@@ -11,14 +11,15 @@
 // nunca reemplaza cuál es).
 
 import { prisma } from "@/lib/prisma";
-import { getCobroActionContext, loadCasoParaCobro, auditarCobro } from "./_ctx";
+import { getOrthoBillingActionContext } from "../_helpers";
+import { loadCasoParaCobro, auditarCobro } from "./_ctx";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
 export async function abrirPlanDePago(args: {
   treatmentPlanId: string;
   invoiceId: string;
 }): Promise<ActionResult<{ invoiceId: string }>> {
-  const ctxResult = await getCobroActionContext("billing.create");
+  const ctxResult = await getOrthoBillingActionContext("billing.create");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
 

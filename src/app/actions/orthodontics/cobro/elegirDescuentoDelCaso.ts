@@ -5,7 +5,8 @@
 // (`guardarConfigDeCobro`) se usó en este caso, para que la ficha lo enseñe
 // consistente sin que cada quien recuerde el número de memoria.
 
-import { getCobroActionContext, loadCasoParaCobro, auditarCobro } from "./_ctx";
+import { getOrthoBillingActionContext } from "../_helpers";
+import { loadCasoParaCobro, auditarCobro } from "./_ctx";
 import { guardarDescuentoDelCaso } from "@/lib/orthodontics/cobro/caso-db";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
@@ -15,7 +16,7 @@ export async function elegirDescuentoDelCaso(args: {
   label: string | null;
   pct: number | null;
 }): Promise<ActionResult<{ guardado: true }>> {
-  const ctxResult = await getCobroActionContext("billing.create");
+  const ctxResult = await getOrthoBillingActionContext("billing.create");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
 

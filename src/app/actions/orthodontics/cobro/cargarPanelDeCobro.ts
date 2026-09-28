@@ -27,7 +27,8 @@ import { listarPromesasDelCaso, type PromesaDePago } from "@/lib/orthodontics/co
 import { calcularRecargo, diasEntre } from "@/lib/orthodontics/cobro/reglas";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
-import { getCobroActionContext, loadCasoParaCobro } from "./_ctx";
+import { getOrthoBillingActionContext } from "../_helpers";
+import { loadCasoParaCobro } from "./_ctx";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
 const ROLES_DE_DIRECCION = new Set(["SUPER_ADMIN", "ADMIN"]);
@@ -62,7 +63,7 @@ export interface PanelDeCobro {
 }
 
 export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<ActionResult<PanelDeCobro>> {
-  const ctxResult = await getCobroActionContext("billing.view");
+  const ctxResult = await getOrthoBillingActionContext("billing.view");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
 

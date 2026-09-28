@@ -4,7 +4,8 @@
 // parte — la promesa queda visible en la Sección F para que recepción la
 // revise al día siguiente desde la lista de vencidas.
 
-import { getCobroActionContext, loadCasoParaCobro, auditarCobro } from "./_ctx";
+import { getOrthoBillingActionContext } from "../_helpers";
+import { loadCasoParaCobro, auditarCobro } from "./_ctx";
 import { crearPromesaDePago, type PromesaDePago } from "@/lib/orthodontics/cobro/promesas-db";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
@@ -14,7 +15,7 @@ export async function registrarPromesaDePago(args: {
   promisedDate: string;
   note?: string | null;
 }): Promise<ActionResult<PromesaDePago>> {
-  const ctxResult = await getCobroActionContext("billing.charge");
+  const ctxResult = await getOrthoBillingActionContext("billing.charge");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
 

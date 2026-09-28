@@ -12,7 +12,8 @@
 // el precio ni fuerza $0 en la factura — eso lo escribe quien la crea.
 
 import { prisma } from "@/lib/prisma";
-import { getCobroActionContext, loadCasoParaCobro, auditarCobro } from "./_ctx";
+import { getOrthoBillingActionContext } from "../_helpers";
+import { loadCasoParaCobro, auditarCobro } from "./_ctx";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { consumirReposicionIncluida } from "@/lib/orthodontics/cobro/caso-db";
 import { fail, isFailure, ok, type ActionResult } from "../result";
@@ -28,7 +29,7 @@ export async function registrarExtraCobrado(args: {
   invoiceId: string;
   esReposicionIncluida: boolean;
 }): Promise<ActionResult<RegistrarExtraResultado>> {
-  const ctxResult = await getCobroActionContext("billing.charge");
+  const ctxResult = await getOrthoBillingActionContext("billing.charge");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
 

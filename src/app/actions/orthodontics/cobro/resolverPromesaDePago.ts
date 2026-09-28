@@ -3,7 +3,8 @@
 // se canceló). Nunca sobre una ya resuelta (resolverPromesaDePago en
 // promesas-db.ts lo hace atómico con el WHERE).
 
-import { getCobroActionContext, loadCasoParaCobro, auditarCobro } from "./_ctx";
+import { getOrthoBillingActionContext } from "../_helpers";
+import { loadCasoParaCobro, auditarCobro } from "./_ctx";
 import { resolverPromesaDePago as resolverEnDb } from "@/lib/orthodontics/cobro/promesas-db";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
@@ -12,7 +13,7 @@ export async function resolverPromesaDePago(args: {
   promiseId: string;
   resultado: "cumplida" | "cancelada";
 }): Promise<ActionResult<{ resuelto: true }>> {
-  const ctxResult = await getCobroActionContext("billing.charge");
+  const ctxResult = await getOrthoBillingActionContext("billing.charge");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
 

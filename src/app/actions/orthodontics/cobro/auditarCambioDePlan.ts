@@ -6,7 +6,8 @@
 // alcance). Esta action solo dice QUÉ cambió y POR QUÉ, después de que el
 // PUT ya confirmó.
 
-import { getCobroActionContext, loadCasoParaCobro, auditarCobro } from "./_ctx";
+import { getOrthoBillingActionContext } from "../_helpers";
+import { loadCasoParaCobro, auditarCobro } from "./_ctx";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { isFailure, ok, type ActionResult } from "../result";
 
@@ -16,7 +17,7 @@ export async function auditarCambioDePlan(args: {
   antes: CondicionesPago;
   despues: CondicionesPago;
 }): Promise<ActionResult<{ registrado: true }>> {
-  const ctxResult = await getCobroActionContext("billing.edit");
+  const ctxResult = await getOrthoBillingActionContext("billing.edit");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
 

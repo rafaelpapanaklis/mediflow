@@ -7,7 +7,8 @@
 // configuración de módulo: dueño/administrador). Recepción cobra con estas
 // reglas; no las cambia.
 
-import { getCobroActionContext, auditarCobro } from "./_ctx";
+import { getOrthoBillingActionContext } from "../_helpers";
+import { auditarCobro } from "./_ctx";
 import { guardarConfigDeCobro as guardarEnDb, leerConfigDeCobro } from "@/lib/orthodontics/cobro/config-db";
 import type { ReglaDescuento, TipoValorRecargo } from "@/lib/orthodontics/cobro/reglas";
 import { fail, isFailure, ok, type ActionResult } from "../result";
@@ -24,7 +25,7 @@ export interface GuardarConfigDeCobroInput {
 }
 
 export async function guardarConfigDeCobro(input: GuardarConfigDeCobroInput): Promise<ActionResult<{ guardado: true }>> {
-  const ctxResult = await getCobroActionContext("billing.edit");
+  const ctxResult = await getOrthoBillingActionContext("billing.edit");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
   if (!ROLES_DE_DIRECCION.has(ctx.role)) {

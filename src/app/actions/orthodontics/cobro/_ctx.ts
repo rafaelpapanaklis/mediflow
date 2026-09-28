@@ -1,37 +1,18 @@
-// Ortodoncia — Cobro (ws1-t1, Ola 1). Contexto propio de ESTE bloque, NO
-// `getOrthoActionContext` de `../_helpers.ts`: ese exige `medicalRecord.edit`
-// para TODO, dinero incluido — el hallazgo P1 de REPORTE-ws1-t8.md ("Dinero
-// con billing.charge; recepción sí, doctor no") que le toca arreglar a
-// «Acceso y permisos», no a esta parte. Como este bloque es dinero desde el
-// primer archivo, sus propias actions piden la key de `billing.*` que
-// corresponda — nunca `medicalRecord.*` — para que recepción (que tiene
-// `billing.charge` pero no `medicalRecord.edit`) sí pueda cobrar.
+// Ortodoncia — Cobro (ws1-t1, Ola 1). Lo que este bloque necesita PARA SÍ,
+// aparte del gate de acceso (que ya no vive aquí — ver abajo).
 //
-// `_helpers.ts` es de «Acceso y permisos» en exclusiva (MAPA DE PARTES,
-// REPORTE-ws1-t1.md de la Ola 0): este archivo no lo toca, solo reimplementa
-// aquí lo mínimo que Cobro necesita.
+// Revisión cruzada (Ola 1): este archivo tenía su propio `getCobroActionContext`,
+// duplicado casi exacto de `getOrthoBillingActionContext` (`../_helpers.ts`,
+// «Acceso y permisos») — carrera de 73 segundos entre ambas partes al
+// construirse la misma pieza en paralelo sin poder coordinarse en tiempo
+// real. Se retiró de aquí: las 8 actions de `cobro/*.ts` ahora importan
+// `getOrthoBillingActionContext` directo de `../_helpers`. Este archivo se
+// queda solo con lo que sigue siendo EXCLUSIVO de Cobro.
 
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
-import { getAuthContext } from "@/lib/auth-context";
-import { canAccessModule } from "@/lib/marketplace/access-control";
-import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
-import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { fail, type ActionResult } from "../result";
-
-/** Auth + categoría DENTAL + módulo orthodontics activo + permiso de FACTURACIÓN (no clínico). */
-export async function getCobroActionContext(permiso: PermissionKey): Promise<ActionResult<{ ctx: AuthContext }>> {
-  const ctx = await getAuthContext();
-  if (!ctx) return fail("No autenticado");
-  if (ctx.clinicCategory !== "DENTAL") return fail("La clínica no soporta el módulo de Ortodoncia");
-  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) return fail("Módulo Ortodoncia no activo para esta clínica");
-  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, permiso)) {
-    return fail(`Sin permisos: ${permiso}`);
-  }
-  return { ok: true, data: { ctx } };
-}
 
 export interface CasoParaCobro {
   id: string;
