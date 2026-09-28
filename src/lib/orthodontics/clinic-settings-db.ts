@@ -19,6 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { prisma } from "@/lib/prisma";
+import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 
 function esTablaAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
@@ -37,14 +38,21 @@ export interface OrthoAppointmentTypeOption {
 }
 
 /** Catálogo por defecto (C7, alcance-ortodoncia.html): se usa mientras la
- * clínica no guarde el suyo propio en Configuración. */
+ * clínica no guarde el suyo propio en Configuración. ÚNICA fuente de estos
+ * textos (Ola 1, ws1-t3, ajuste de unificación) — antes había una segunda
+ * lista fija en `agenda-constants.ts` (`ORTHO_APPOINTMENT_REASONS`, ws1-t4)
+ * que podía divergir de esta. El label de "control" es EXACTAMENTE
+ * `TIPO_CITA_CONTROL_ORTO`: `esCitaControlOrto()` compara por ese string
+ * exacto contra `Appointment.type`, así que si una clínica edita este
+ * catálogo desde Configuración, el ID "control" — sea cual sea el índice
+ * que ocupe — sigue siendo el texto que la Agenda reconoce como control. */
 export const DEFAULT_ORTHO_APPOINTMENT_TYPES: readonly OrthoAppointmentTypeOption[] = [
-  { id: "valoracion", label: "Valoración" },
-  { id: "toma-registros", label: "Toma de registros" },
-  { id: "colocacion", label: "Colocación" },
-  { id: "control", label: "Control" },
-  { id: "urgencia", label: "Urgencia (bracket despegado, alambre que lastima)" },
-  { id: "retiro", label: "Retiro" },
+  { id: "valoracion", label: "Valoración de ortodoncia" },
+  { id: "toma-registros", label: "Toma de registros de ortodoncia" },
+  { id: "colocacion", label: "Colocación de aparatología" },
+  { id: "control", label: TIPO_CITA_CONTROL_ORTO },
+  { id: "urgencia", label: "Urgencia de ortodoncia" },
+  { id: "retiro", label: "Retiro de aparatología" },
   { id: "control-retencion", label: "Control de retención" },
 ];
 

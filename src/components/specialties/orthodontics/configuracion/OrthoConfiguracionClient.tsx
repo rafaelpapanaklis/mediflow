@@ -1,10 +1,10 @@
 "use client";
 // Ortodoncia — Configuración del submenú (Ola 1, ws1-t3 · «Acceso y
-// permisos»). Doctor tratante por defecto, catálogo de tipos de cita (C7:
-// valoración, toma de registros, colocación, control, urgencia, retiro,
-// control de retención — la parte «Control y agenda» solo cablea el chip de
-// "Control de ortodoncia" en la Agenda; el resto del catálogo se administra
-// aquí) y plantillas de mensaje.
+// permisos»). Doctor tratante por defecto, catálogo de tipos de cita (C7,
+// ÚNICO — ver clinic-settings-db.ts — que new-appointment-dialog.tsx pide a
+// /api/orthodontics/context y ofrece como chips de motivo al agendar) y
+// plantillas de mensaje. La entrada "Control de ortodoncia" es de solo
+// lectura: la Agenda la reconoce por su texto exacto (esCitaControlOrto).
 
 import { useState } from "react";
 import toast from "react-hot-toast";
@@ -18,6 +18,7 @@ import type {
   OrthoClinicSettings,
 } from "@/lib/orthodontics/clinic-settings-db";
 import type { OrthoConfigDoctorOption } from "@/app/actions/orthodontics/getOrthoClinicSettings";
+import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 
 export interface OrthoConfiguracionClientProps {
   settings: OrthoClinicSettings;
@@ -58,6 +59,11 @@ export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguraci
   }
 
   function quitarTipo(id: string) {
+    const tipo = appointmentTypes.find((t) => t.id === id);
+    if (tipo?.label === TIPO_CITA_CONTROL_ORTO) {
+      toast.error(`No se puede quitar "${TIPO_CITA_CONTROL_ORTO}" — la Agenda lo usa para reconocer los controles.`);
+      return;
+    }
     setAppointmentTypes((arr) => arr.filter((t) => t.id !== id));
   }
 
@@ -130,30 +136,39 @@ export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguraci
             Tipos de cita de Ortodoncia
           </h2>
           <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
-            Catálogo propio del módulo (valoración, toma de registros, colocación, control,
-            urgencia, retiro, control de retención). El chip de &quot;Control de ortodoncia&quot; en la
-            Agenda es aparte — este catálogo es de referencia para el resto de tipos.
+            Estos textos son los que aparecen como chips de motivo al agendar una cita en la
+            Agenda, cuando el módulo de Ortodoncia está activo — un solo catálogo, editable aquí.
           </p>
         </div>
         <div className="space-y-2">
-          {appointmentTypes.map((tipo) => (
-            <div key={tipo.id} className="flex items-center gap-2">
-              <Input
-                value={tipo.label}
-                placeholder="Nombre visible"
-                onChange={(e) => actualizarTipo(tipo.id, "label", e.target.value)}
-                style={{ flex: 1 }}
-              />
-              <button
-                type="button"
-                onClick={() => quitarTipo(tipo.id)}
-                className="underline"
-                style={{ fontSize: 12, color: "var(--danger-strong, #dc2626)" }}
-              >
-                Quitar
-              </button>
-            </div>
-          ))}
+          {appointmentTypes.map((tipo) => {
+            const esControl = tipo.label === TIPO_CITA_CONTROL_ORTO;
+            return (
+              <div key={tipo.id} className="flex items-center gap-2">
+                <Input
+                  value={tipo.label}
+                  placeholder="Nombre visible"
+                  onChange={(e) => actualizarTipo(tipo.id, "label", e.target.value)}
+                  disabled={esControl}
+                  title={esControl ? "La Agenda reconoce los controles por este texto exacto — no se puede editar." : undefined}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => quitarTipo(tipo.id)}
+                  disabled={esControl}
+                  className="underline"
+                  style={{
+                    fontSize: 12,
+                    color: esControl ? "var(--text-3)" : "var(--danger-strong, #dc2626)",
+                    cursor: esControl ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Quitar
+                </button>
+              </div>
+            );
+          })}
         </div>
         <button
           type="button"

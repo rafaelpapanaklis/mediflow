@@ -14,19 +14,13 @@ export function esCitaControlOrto(tipo: string | null | undefined): boolean {
 }
 
 // Ola 1 (ws1-t4, Control y agenda, sep-2026) — C7 del documento de alcance
-// («NUEVO Tipos de cita de ortodoncia»): el catálogo de motivos que
-// `new-appointment-dialog.tsx` ofrece como chips cuando el módulo de
-// Ortodoncia está activo. A propósito NO pasan por `t()` (i18n): igual que
-// TIPO_CITA_CONTROL_ORTO, son el valor exacto que queda en
-// `Appointment.type` (texto libre) y que el resto de partes (Recepción, el
-// tablero) van a comparar por string — traducirlos rompería esa
-// comparación en clínicas con la UI en inglés. Español fijo, a propósito.
-export const ORTHO_APPOINTMENT_REASONS: readonly string[] = [
-  "Valoración de ortodoncia",
-  "Toma de registros de ortodoncia",
-  "Colocación de aparatología",
-  TIPO_CITA_CONTROL_ORTO,
-  "Urgencia de ortodoncia",
-  "Retiro de aparatología",
-  "Control de retención",
-];
+// («NUEVO Tipos de cita de ortodoncia»): el catálogo de motivos vivía aquí,
+// como lista fija. Ola 1 (ws1-t3, Acceso y permisos, ajuste): unificado con
+// el catálogo editable de Configuración (`src/lib/orthodontics/
+// clinic-settings-db.ts`, `DEFAULT_ORTHO_APPOINTMENT_TYPES`) — esa lista es
+// ahora la ÚNICA fuente de los textos (y de sus valores por defecto);
+// `new-appointment-dialog.tsx` los pide vía `/api/orthodontics/context`, que
+// devuelve el catálogo de la clínica (el suyo si lo personalizó en
+// Configuración, si no los defaults). Sin este re-export: quien necesite el
+// catálogo para agendar importa de `clinic-settings-db.ts`, no de aquí — así
+// no vuelven a existir dos listas que puedan divergir.

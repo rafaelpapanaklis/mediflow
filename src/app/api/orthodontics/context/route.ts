@@ -5,10 +5,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { differenceInMonths } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
-import { canAccessModule } from "@/lib/marketplace/access-control";
-import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { suggestOrthoAppointmentDuration } from "@/lib/orthodontics/appointment-durations";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +22,24 @@ export async function GET(req: NextRequest) {
   if (ctx.clinicCategory !== "DENTAL") {
     return NextResponse.json({ orthodontics: false });
   }
-  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) {
+  // Ola 1 (ws1-t3, A1): guarda REAL (ClinicModule activo), no el atajo de
+  // trial de canAccessModule/evaluateAccess — ver src/lib/orthodontics/access.ts.
+  // Este endpoint alimenta los chips de motivo de new-appointment-dialog.tsx:
+  // con el atajo de trial, cualquier clínica dental en prueba los vería sin
+  // haber contratado el módulo.
+  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  if (!active) {
     return NextResponse.json({ orthodontics: false });
   }
 
-  // Sin patientId, devolvemos solo flag + suggestion de duración.
+  // Sin patientId, devolvemos flag + catálogo de tipos de cita (C7) +
+  // suggestion de duración — es lo que pide new-appointment-dialog.tsx.
   if (!patientId) {
+    const settings = await loadOrthoClinicSettings(ctx.clinicId);
     return NextResponse.json({
       orthodontics: true,
       moduleActive: true,
+      appointmentTypes: settings.appointmentTypes.map((t) => t.label),
       appointmentDuration: suggestOrthoAppointmentDuration(reason),
     });
   }

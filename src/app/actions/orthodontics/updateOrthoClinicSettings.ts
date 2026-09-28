@@ -14,6 +14,7 @@ import {
   loadOrthoClinicSettings,
   type OrthoAppointmentTypeOption,
 } from "@/lib/orthodontics/clinic-settings-db";
+import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const appointmentTypeSchema = z.object({
@@ -65,6 +66,17 @@ export async function updateOrthoClinicSettings(
     id: t.id,
     label: t.label,
   }));
+
+  // El texto "Control de ortodoncia" es lo que la Agenda compara contra
+  // Appointment.type (esCitaControlOrto, agenda-constants.ts) para resolver
+  // la ranura de control, la hoja de control y las listas de Recepción. Si
+  // la clínica edita el catálogo hasta perder esa entrada, esas piezas se
+  // quedan sin forma de reconocer un control — se rechaza antes de guardar.
+  if (!appointmentTypes.some((t) => t.label === TIPO_CITA_CONTROL_ORTO)) {
+    return fail(
+      `El catálogo tiene que conservar un tipo de cita con el texto exacto "${TIPO_CITA_CONTROL_ORTO}" — la Agenda lo usa para reconocer los controles.`,
+    );
+  }
 
   try {
     await guardarOrthoClinicSettings({

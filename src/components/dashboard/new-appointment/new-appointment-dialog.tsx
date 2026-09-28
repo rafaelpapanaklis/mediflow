@@ -44,7 +44,6 @@ import {
   useVestir,
   type AparienciaNuevaCita,
 } from "./apariencia";
-import { ORTHO_APPOINTMENT_REASONS } from "@/lib/orthodontics/agenda-constants";
 import nc from "./nueva-cita.module.css";
 
 const REASON_PRESET_KEYS = [
@@ -120,18 +119,22 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     longerBlockSuggestion: { minMin: number; maxMin: number } | null;
     primaryGuardianName: string | null;
   } | null>(null);
-  // Ortodoncia (ws1-t4, Control y agenda, sep-2026) — C7: si el módulo está
-  // activo para esta clínica, se ofrecen chips de motivo propios de
-  // ortodoncia (Valoración, Control de ortodoncia…). A propósito NO depende
-  // del paciente elegido (a diferencia de pediatricContext): una valoración
-  // es justo la cita SIN caso abierto todavía. Reusa el endpoint existente
-  // `/api/orthodontics/context` (SPEC §8.10, sin más llamadores hasta hoy) en
-  // vez de crear uno nuevo — ya resuelve el módulo con `canAccessModule`.
-  const [orthoActive, setOrthoActive] = useState(false);
-  // Los presets propios de ortodoncia NO pasan por `t()` (ver
-  // ORTHO_APPOINTMENT_REASONS) — se anexan tal cual al final.
-  const reasonPresets = orthoActive
-    ? [...REASON_PRESET_KEYS.map((key) => t(key)), ...ORTHO_APPOINTMENT_REASONS]
+  // Ortodoncia (ws1-t4, Control y agenda; unificado ws1-t3, Acceso y
+  // permisos, ajuste) — C7: si el módulo está activo para esta clínica, se
+  // ofrecen chips de motivo propios de ortodoncia (Valoración, Control de
+  // ortodoncia…), con el catálogo QUE LA CLÍNICA CONFIGURÓ en
+  // /dashboard/orthodontics/configuracion (o los defaults si no lo tocó —
+  // ver clinic-settings-db.ts). A propósito NO depende del paciente elegido
+  // (a diferencia de pediatricContext): una valoración es justo la cita SIN
+  // caso abierto todavía. Reusa el endpoint existente
+  // `/api/orthodontics/context` (SPEC §8.10) en vez de crear uno nuevo — ya
+  // resuelve el módulo con `hasActiveOrthodonticsModule` (guarda real, sin
+  // el atajo de trial) y ahora también trae `appointmentTypes`.
+  const [orthoAppointmentReasons, setOrthoAppointmentReasons] = useState<string[]>([]);
+  // Los presets propios de ortodoncia NO pasan por `t()`: son el texto
+  // exacto que queda en `Appointment.type` (ver clinic-settings-db.ts).
+  const reasonPresets = orthoAppointmentReasons.length > 0
+    ? [...REASON_PRESET_KEYS.map((key) => t(key)), ...orthoAppointmentReasons]
     : REASON_PRESET_KEYS.map((key) => t(key));
 
   // Resource working hours. undefined = not yet loaded (or no resource).
@@ -213,20 +216,25 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       .finally(() => setBootLoading(false));
   }, [isOpen, boot, onClose]);
 
-  // Ortodoncia — C7: gate por clínica, una vez por apertura del modal.
+  // Ortodoncia — C7: catálogo de motivos por clínica, una vez por apertura
+  // del modal ([] cuando el módulo no está activo, la clínica no lo
+  // configuró con nada raro, o falla el fetch — fail-closed: sin catálogo,
+  // sin chips extra, igual que antes de esta pantalla).
   useEffect(() => {
     if (!isOpen) {
-      setOrthoActive(false);
+      setOrthoAppointmentReasons([]);
       return;
     }
     let cancelled = false;
     fetch("/api/orthodontics/context", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
-        if (!cancelled) setOrthoActive(Boolean(body?.orthodontics));
+        if (cancelled) return;
+        const tipos = Array.isArray(body?.appointmentTypes) ? body.appointmentTypes : [];
+        setOrthoAppointmentReasons(tipos.filter((t: unknown): t is string => typeof t === "string" && t.length > 0));
       })
       .catch(() => {
-        if (!cancelled) setOrthoActive(false);
+        if (!cancelled) setOrthoAppointmentReasons([]);
       });
     return () => {
       cancelled = true;
