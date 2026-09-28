@@ -12,3 +12,21 @@ export const TIPO_CITA_CONTROL_ORTO = "Control de ortodoncia";
 export function esCitaControlOrto(tipo: string | null | undefined): boolean {
   return tipo === TIPO_CITA_CONTROL_ORTO;
 }
+
+// Ola 1 (ws1-t4, Control y agenda, sep-2026) — C7 del documento de alcance
+// («NUEVO Tipos de cita de ortodoncia»): el catálogo de motivos que
+// `new-appointment-dialog.tsx` ofrece como chips cuando el módulo de
+// Ortodoncia está activo. A propósito NO pasan por `t()` (i18n): igual que
+// TIPO_CITA_CONTROL_ORTO, son el valor exacto que queda en
+// `Appointment.type` (texto libre) y que el resto de partes (Recepción, el
+// tablero) van a comparar por string — traducirlos rompería esa
+// comparación en clínicas con la UI en inglés. Español fijo, a propósito.
+export const ORTHO_APPOINTMENT_REASONS: readonly string[] = [
+  "Valoración de ortodoncia",
+  "Toma de registros de ortodoncia",
+  "Colocación de aparatología",
+  TIPO_CITA_CONTROL_ORTO,
+  "Urgencia de ortodoncia",
+  "Retiro de aparatología",
+  "Control de retención",
+];
