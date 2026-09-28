@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { validateMagicNumber } from "@/lib/validate-upload";
+import {
+  limiteSubidasPorUsuario,
+  pareceScriptOMarcado,
+  registrarSubidaRechazada,
+  tieneExtensionPeligrosa,
+} from "@/lib/uploads/validar-archivo";
 import {
   REALTY_MAX_PHOTO_BYTES,
   REALTY_PHOTO_MIME,
@@ -53,6 +60,13 @@ export async function POST(req: NextRequest) {
   });
   if (rl) return rl;
 
+  if (!limiteSubidasPorUsuario(`realty:staging:${ctx.accountId}`, 30)) {
+    return NextResponse.json(
+      { error: "Demasiadas subidas en poco tiempo. Espera un momento e inténtalo de nuevo.", code: "invalid" },
+      { status: 429 },
+    );
+  }
+
   try {
     const form = await req.formData();
     const propertyId = String(form.get("propertyId") ?? "");
@@ -84,6 +98,18 @@ export async function POST(req: NextRequest) {
 
     // Las mismas tres capas que la subida normal de fotos: tipo declarado,
     // tamaño y número mágico. El tipo que manda el navegador se puede mentir.
+    if (tieneExtensionPeligrosa(file.name)) {
+      await registrarSubidaRechazada({
+        ruta: "studio/staging:POST",
+        motivo: "extensión peligrosa en el nombre",
+        codigo: "extension_peligrosa",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "El nombre del archivo tiene una extensión no permitida.", code: "invalid" },
+        { status: 400 },
+      );
+    }
     if (!REALTY_PHOTO_MIME.includes(file.type)) {
       return NextResponse.json(
         { error: "Solo JPG, PNG o WebP.", code: "invalid" },
@@ -94,10 +120,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "La foto pesa de más.", code: "invalid" }, { status: 400 });
     }
     const raw = await file.arrayBuffer();
+    const marcador = pareceScriptOMarcado(Buffer.from(raw));
+    if (marcador) {
+      await registrarSubidaRechazada({
+        ruta: "studio/staging:POST",
+        motivo: `contenido parece script o marcado (${marcador.trim()})`,
+        codigo: "script_o_marcado",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "El contenido del archivo no parece una imagen válida.", code: "invalid" },
+        { status: 400 },
+      );
+    }
     // Devuelve el MOTIVO (string) o null si está bien — no un booleano.
     const magicError = await validateMagicNumber(raw, REALTY_PHOTO_MIME);
     if (magicError) {
+      await registrarSubidaRechazada({
+        ruta: "studio/staging:POST",
+        motivo: magicError,
+        codigo: "tipo_no_permitido",
+        nombreOriginal: file.name,
+      });
       return NextResponse.json({ error: magicError, code: "invalid" }, { status: 400 });
+    }
+    try {
+      const metadata = await sharp(Buffer.from(raw)).metadata();
+      if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+      await sharp(Buffer.from(raw)).toBuffer();
+    } catch {
+      await registrarSubidaRechazada({
+        ruta: "studio/staging:POST",
+        motivo: "la imagen no se pudo decodificar (está corrupta o no es una imagen real)",
+        codigo: "imagen_corrupta",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "La imagen no se pudo decodificar (está corrupta o no es una imagen real).", code: "invalid" },
+        { status: 400 },
+      );
     }
     const bytes = Buffer.from(raw);
 

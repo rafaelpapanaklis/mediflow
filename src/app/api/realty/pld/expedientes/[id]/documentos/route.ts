@@ -12,6 +12,7 @@
 // saber cuánto hay que conservarlo, porque entonces la UI creería que se
 // puede borrar.
 import { NextResponse } from "next/server";
+import { fileTypeFromBuffer } from "file-type";
 import { prisma } from "@/lib/prisma";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import {
@@ -21,6 +22,13 @@ import {
   assertRealtyStorageRoom,
   uploadRealtyFile,
 } from "@/lib/realty/media";
+import {
+  limiteSubidasPorUsuario,
+  pareceScriptOMarcado,
+  registrarSubidaRechazada,
+  tieneExtensionPeligrosa,
+  verificarPdfPeligroso,
+} from "@/lib/uploads/validar-archivo";
 import { pldStoragePath } from "@/lib/realty/pld/almacen";
 import { registrarAcceso } from "@/lib/realty/pld/bitacora";
 import {
@@ -63,6 +71,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
     if (!expediente) return noEncontrado("Ese expediente ya no existe.");
 
+    if (!limiteSubidasPorUsuario(`realty:pld-doc:${ctx.accountId}`, 60)) {
+      return NextResponse.json(
+        { error: "Demasiadas subidas en poco tiempo. Espera un momento e inténtalo de nuevo." },
+        { status: 429 },
+      );
+    }
+
     const resueltos = await getPldParams();
     if (!resueltos.ok) {
       return NextResponse.json(
@@ -86,6 +101,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const file = form.get("file");
     if (!(file instanceof File)) return malaPeticion("No se recibió ningún documento.");
+    if (tieneExtensionPeligrosa(file.name)) {
+      await registrarSubidaRechazada({
+        ruta: "pld/expedientes/[id]/documentos:POST",
+        motivo: "extensión peligrosa en el nombre",
+        codigo: "extension_peligrosa",
+        nombreOriginal: file.name,
+      });
+      return malaPeticion("El nombre del archivo tiene una extensión no permitida.");
+    }
     if (!REALTY_DOC_MIME.includes(file.type)) {
       return malaPeticion("Tipo de archivo no permitido. Usa PDF, JPG, PNG o WebP.");
     }
@@ -100,10 +124,43 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         : "OTRO";
 
     const bytes = await file.arrayBuffer();
+    const buf = Buffer.from(bytes);
+    const marcador = pareceScriptOMarcado(buf);
+    if (marcador) {
+      await registrarSubidaRechazada({
+        ruta: "pld/expedientes/[id]/documentos:POST",
+        motivo: `contenido parece script o marcado (${marcador.trim()})`,
+        codigo: "script_o_marcado",
+        nombreOriginal: file.name,
+      });
+      return malaPeticion("El contenido del archivo no parece un documento válido.");
+    }
     // El MIME que manda el navegador es una sugerencia. Esto mira los
     // primeros bytes del archivo de verdad.
     const magicError = await validateMagicNumber(bytes, REALTY_DOC_MIME);
-    if (magicError) return malaPeticion(magicError);
+    if (magicError) {
+      await registrarSubidaRechazada({
+        ruta: "pld/expedientes/[id]/documentos:POST",
+        motivo: magicError,
+        codigo: "tipo_no_permitido",
+        nombreOriginal: file.name,
+      });
+      return malaPeticion(magicError);
+    }
+
+    const tipoReal = await fileTypeFromBuffer(buf);
+    if (tipoReal?.mime === "application/pdf") {
+      const motivoPdf = verificarPdfPeligroso(buf);
+      if (motivoPdf) {
+        await registrarSubidaRechazada({
+          ruta: "pld/expedientes/[id]/documentos:POST",
+          motivo: motivoPdf,
+          codigo: "pdf_peligroso",
+          nombreOriginal: file.name,
+        });
+        return malaPeticion(`El PDF contiene ${motivoPdf}, no se acepta.`);
+      }
+    }
 
     const count = await prisma.realtyPldDocument.count({
       where: { accountId: ctx.accountId, fileId: expediente.id },

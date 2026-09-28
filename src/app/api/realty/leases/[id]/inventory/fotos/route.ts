@@ -14,6 +14,7 @@
 // leer y caducan en cinco minutos.
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse, type NextRequest } from "next/server";
+import sharp from "sharp";
 import { assertRealtyPermission, getRealtyContext } from "@/lib/realty-auth";
 import {
   EVIDENCE_MAX_BYTES,
@@ -27,6 +28,11 @@ import {
 } from "@/lib/realty/leases";
 import { formatRealtyStorage } from "@/lib/realty/plan-shared";
 import { prisma } from "@/lib/prisma";
+import {
+  limiteSubidasPorUsuario,
+  pareceScriptOMarcado,
+  registrarSubidaRechazada,
+} from "@/lib/uploads/validar-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +56,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
     if (!lease) {
       return NextResponse.json({ error: "No encontramos ese contrato." }, { status: 404 });
+    }
+
+    if (!limiteSubidasPorUsuario(`realty:inventario:${ctx.accountId}`, 60)) {
+      return NextResponse.json(
+        { error: "Demasiadas subidas en poco tiempo. Espera un momento e inténtalo de nuevo." },
+        { status: 429 },
+      );
     }
 
     const storage = await getStorageState(ctx);
@@ -78,10 +91,45 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
+    const marcador = pareceScriptOMarcado(Buffer.from(bytes));
+    if (marcador) {
+      await registrarSubidaRechazada({
+        ruta: "leases/[id]/inventory/fotos:POST",
+        motivo: `contenido parece script o marcado (${marcador.trim()})`,
+        codigo: "script_o_marcado",
+        nombreOriginal: "foto-evidencia",
+      });
+      return NextResponse.json(
+        { error: "El contenido del archivo no parece una imagen válida." },
+        { status: 400 },
+      );
+    }
     const mime = sniffImageMime(bytes);
     if (!mime) {
+      await registrarSubidaRechazada({
+        ruta: "leases/[id]/inventory/fotos:POST",
+        motivo: "tipo real no reconocido como imagen",
+        codigo: "tipo_no_permitido",
+        nombreOriginal: "foto-evidencia",
+      });
       return NextResponse.json(
         { error: "Ese archivo no es una foto (solo JPG, PNG o WebP)." },
+        { status: 400 },
+      );
+    }
+    try {
+      const metadata = await sharp(Buffer.from(bytes)).metadata();
+      if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+      await sharp(Buffer.from(bytes)).toBuffer();
+    } catch {
+      await registrarSubidaRechazada({
+        ruta: "leases/[id]/inventory/fotos:POST",
+        motivo: "la imagen no se pudo decodificar (está corrupta o no es una imagen real)",
+        codigo: "imagen_corrupta",
+        nombreOriginal: "foto-evidencia",
+      });
+      return NextResponse.json(
+        { error: "La imagen no se pudo decodificar (está corrupta o no es una imagen real)." },
         { status: 400 },
       );
     }

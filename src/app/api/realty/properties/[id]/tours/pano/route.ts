@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { assertOwnedProperty } from "@/lib/realty/properties";
@@ -11,6 +12,12 @@ import {
   realtyStoragePath,
   uploadRealtyFile,
 } from "@/lib/realty/media";
+import {
+  limiteSubidasPorUsuario,
+  pareceScriptOMarcado,
+  registrarSubidaRechazada,
+  tieneExtensionPeligrosa,
+} from "@/lib/uploads/validar-archivo";
 import { gateRealty, notFound, realtyApiError } from "../../../_helpers";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +47,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const property = await assertOwnedProperty(ctx, params.id);
     if (!property) return notFound();
 
+    if (!limiteSubidasPorUsuario(`realty:pano:${ctx.accountId}`, 60)) {
+      return NextResponse.json(
+        { error: "Demasiadas subidas en poco tiempo. Espera un momento e inténtalo de nuevo." },
+        { status: 429 },
+      );
+    }
+
     let form: FormData;
     try {
       form = await req.formData();
@@ -50,6 +64,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const file = form.get("file");
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "No se recibió ninguna imagen." }, { status: 400 });
+    }
+    if (tieneExtensionPeligrosa(file.name)) {
+      await registrarSubidaRechazada({
+        ruta: "properties/[id]/tours/pano:POST",
+        motivo: "extensión peligrosa en el nombre",
+        codigo: "extension_peligrosa",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "El nombre del archivo tiene una extensión no permitida." },
+        { status: 400 },
+      );
     }
     if (!REALTY_PHOTO_MIME.includes(file.type)) {
       return NextResponse.json(
@@ -65,8 +91,45 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const bytes = await file.arrayBuffer();
+    const marcador = pareceScriptOMarcado(Buffer.from(bytes));
+    if (marcador) {
+      await registrarSubidaRechazada({
+        ruta: "properties/[id]/tours/pano:POST",
+        motivo: `contenido parece script o marcado (${marcador.trim()})`,
+        codigo: "script_o_marcado",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "El contenido del archivo no parece una imagen válida." },
+        { status: 400 },
+      );
+    }
     const magicError = await validateMagicNumber(bytes, REALTY_PHOTO_MIME);
-    if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+    if (magicError) {
+      await registrarSubidaRechazada({
+        ruta: "properties/[id]/tours/pano:POST",
+        motivo: magicError,
+        codigo: "tipo_no_permitido",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: magicError }, { status: 400 });
+    }
+    try {
+      const metadata = await sharp(Buffer.from(bytes)).metadata();
+      if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+      await sharp(Buffer.from(bytes)).toBuffer();
+    } catch {
+      await registrarSubidaRechazada({
+        ruta: "properties/[id]/tours/pano:POST",
+        motivo: "la imagen no se pudo decodificar (está corrupta o no es una imagen real)",
+        codigo: "imagen_corrupta",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "La imagen no se pudo decodificar (está corrupta o no es una imagen real)." },
+        { status: 400 },
+      );
+    }
 
     const count = await prisma.realtyPropertyTour.count({
       where: { accountId: ctx.accountId, propertyId: property.id, kind: "PANO_PROPIA" },

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fileTypeFromBuffer } from "file-type";
 import { prisma } from "@/lib/prisma";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { assertOwnedProperty } from "@/lib/realty/properties";
@@ -11,6 +12,13 @@ import {
   realtyStoragePath,
   uploadRealtyFile,
 } from "@/lib/realty/media";
+import {
+  limiteSubidasPorUsuario,
+  pareceScriptOMarcado,
+  registrarSubidaRechazada,
+  tieneExtensionPeligrosa,
+  verificarPdfPeligroso,
+} from "@/lib/uploads/validar-archivo";
 import { enumParam, gateRealty, notFound, realtyApiError } from "../../_helpers";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +48,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const property = await assertOwnedProperty(ctx, params.id);
     if (!property) return notFound();
 
+    if (!limiteSubidasPorUsuario(`realty:doc:${ctx.accountId}`, 60)) {
+      return NextResponse.json(
+        { error: "Demasiadas subidas en poco tiempo. Espera un momento e inténtalo de nuevo." },
+        { status: 429 },
+      );
+    }
+
     let form: FormData;
     try {
       form = await req.formData();
@@ -50,6 +65,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const file = form.get("file");
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "No se recibió ningún documento." }, { status: 400 });
+    }
+    if (tieneExtensionPeligrosa(file.name)) {
+      await registrarSubidaRechazada({
+        ruta: "properties/[id]/documents:POST",
+        motivo: "extensión peligrosa en el nombre",
+        codigo: "extension_peligrosa",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "El nombre del archivo tiene una extensión no permitida." },
+        { status: 400 },
+      );
     }
     if (!REALTY_DOC_MIME.includes(file.type)) {
       return NextResponse.json(
@@ -65,8 +92,47 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const bytes = await file.arrayBuffer();
+    const buf = Buffer.from(bytes);
+    const marcador = pareceScriptOMarcado(buf);
+    if (marcador) {
+      await registrarSubidaRechazada({
+        ruta: "properties/[id]/documents:POST",
+        motivo: `contenido parece script o marcado (${marcador.trim()})`,
+        codigo: "script_o_marcado",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "El contenido del archivo no parece un documento válido." },
+        { status: 400 },
+      );
+    }
     const magicError = await validateMagicNumber(bytes, REALTY_DOC_MIME);
-    if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+    if (magicError) {
+      await registrarSubidaRechazada({
+        ruta: "properties/[id]/documents:POST",
+        motivo: magicError,
+        codigo: "tipo_no_permitido",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: magicError }, { status: 400 });
+    }
+
+    const tipoReal = await fileTypeFromBuffer(buf);
+    if (tipoReal?.mime === "application/pdf") {
+      const motivoPdf = verificarPdfPeligroso(buf);
+      if (motivoPdf) {
+        await registrarSubidaRechazada({
+          ruta: "properties/[id]/documents:POST",
+          motivo: motivoPdf,
+          codigo: "pdf_peligroso",
+          nombreOriginal: file.name,
+        });
+        return NextResponse.json(
+          { error: `El PDF contiene ${motivoPdf}, no se acepta.` },
+          { status: 400 },
+        );
+      }
+    }
 
     const count = await prisma.realtyPropertyDocument.count({
       where: { accountId: ctx.accountId, propertyId: property.id },

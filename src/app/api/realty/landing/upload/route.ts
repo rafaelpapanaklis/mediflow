@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { BUCKETS } from "@/lib/storage";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { rateLimitKey } from "@/lib/rate-limit";
@@ -10,6 +11,12 @@ import {
 } from "@/lib/realty-auth";
 import { realtyPlanHasFeature } from "@/lib/realty/plan-shared";
 import { esRanuraDeFotoRealtyWeb } from "@/lib/realty/landing";
+import {
+  limiteSubidasPorUsuario,
+  pareceScriptOMarcado,
+  registrarSubidaRechazada,
+  tieneExtensionPeligrosa,
+} from "@/lib/uploads/validar-archivo";
 
 /* ═══════════════════════════════════════════════════════════════════════
    SUBIR UNA FOTO DE LA WEB PÚBLICA (logo, portada, retrato, oficina…).
@@ -87,6 +94,12 @@ export async function POST(req: NextRequest) {
       { status: 429 },
     );
   }
+  if (!limiteSubidasPorUsuario(`realty:landing:${ctx.accountId}`, 30)) {
+    return NextResponse.json(
+      { error: "Demasiadas subidas en poco tiempo. Espera un momento e inténtalo de nuevo." },
+      { status: 429 },
+    );
+  }
 
   let form: FormData;
   try {
@@ -104,6 +117,18 @@ export async function POST(req: NextRequest) {
   if (!destino || (!DESTINOS_EXTRA.includes(destino) && !esRanuraDeFotoRealtyWeb(destino))) {
     return NextResponse.json({ error: "Destino inválido" }, { status: 400 });
   }
+  if (tieneExtensionPeligrosa(file.name)) {
+    await registrarSubidaRechazada({
+      ruta: "landing/upload:POST",
+      motivo: "extensión peligrosa en el nombre",
+      codigo: "extension_peligrosa",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json(
+      { error: "El nombre del archivo tiene una extensión no permitida." },
+      { status: 400 },
+    );
+  }
   if (!TIPOS.includes(file.type)) {
     return NextResponse.json({ error: "Solo aceptamos JPG, PNG o WebP." }, { status: 400 });
   }
@@ -112,8 +137,42 @@ export async function POST(req: NextRequest) {
   }
 
   const bytes = await file.arrayBuffer();
+  const marcador = pareceScriptOMarcado(Buffer.from(bytes));
+  if (marcador) {
+    await registrarSubidaRechazada({
+      ruta: "landing/upload:POST",
+      motivo: `contenido parece script o marcado (${marcador.trim()})`,
+      codigo: "script_o_marcado",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "El contenido no parece una imagen válida." }, { status: 400 });
+  }
   const malo = await validateMagicNumber(bytes, TIPOS);
-  if (malo) return NextResponse.json({ error: "Ese archivo no es una imagen." }, { status: 400 });
+  if (malo) {
+    await registrarSubidaRechazada({
+      ruta: "landing/upload:POST",
+      motivo: malo,
+      codigo: "tipo_no_permitido",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "Ese archivo no es una imagen." }, { status: 400 });
+  }
+  try {
+    const metadata = await sharp(Buffer.from(bytes)).metadata();
+    if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+    await sharp(Buffer.from(bytes)).toBuffer();
+  } catch {
+    await registrarSubidaRechazada({
+      ruta: "landing/upload:POST",
+      motivo: "la imagen no se pudo decodificar (está corrupta o no es una imagen real)",
+      codigo: "imagen_corrupta",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json(
+      { error: "La imagen no se pudo decodificar (está corrupta o no es una imagen real)." },
+      { status: 400 },
+    );
+  }
 
   const ext =
     (file.name.split(".").pop() ?? "webp").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() ||

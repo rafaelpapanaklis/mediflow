@@ -1,7 +1,9 @@
 import { randomUUID } from "crypto";
 import { NextResponse, type NextRequest } from "next/server";
+import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
+import { pareceScriptOMarcado, registrarSubidaRechazada } from "@/lib/uploads/validar-archivo";
 import {
   PORTAL_ISSUE_MAX_PHOTOS,
   PORTAL_ISSUE_MAX_PHOTO_BYTES,
@@ -128,11 +130,43 @@ export async function POST(req: NextRequest) {
         if (bytesSubidos + bytes.length > PORTAL_ISSUE_MAX_TOTAL_BYTES) {
           throw new PhotoRechazada("Son demasiadas fotos juntas. Manda menos.", 413);
         }
+        const marcador = pareceScriptOMarcado(Buffer.from(bytes));
+        if (marcador) {
+          await registrarSubidaRechazada({
+            ruta: "portal/inquilino/fallas:POST",
+            motivo: `contenido parece script o marcado (${marcador.trim()})`,
+            codigo: "script_o_marcado",
+            nombreOriginal: "foto-falla",
+          });
+          throw new PhotoRechazada("El contenido de esa foto no parece una imagen válida.", 400);
+        }
         // El Content-Type del multipart lo escribe el cliente: aquí se lee el
         // tipo REAL por firma de bytes.
         const mime = sniffImageMime(bytes);
         if (!mime) {
+          await registrarSubidaRechazada({
+            ruta: "portal/inquilino/fallas:POST",
+            motivo: "tipo real no reconocido como imagen",
+            codigo: "tipo_no_permitido",
+            nombreOriginal: "foto-falla",
+          });
           throw new PhotoRechazada("Ese archivo no es una imagen (solo JPG, PNG o WebP).", 400);
+        }
+        try {
+          const metadata = await sharp(Buffer.from(bytes)).metadata();
+          if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+          await sharp(Buffer.from(bytes)).toBuffer();
+        } catch {
+          await registrarSubidaRechazada({
+            ruta: "portal/inquilino/fallas:POST",
+            motivo: "la imagen no se pudo decodificar (está corrupta o no es una imagen real)",
+            codigo: "imagen_corrupta",
+            nombreOriginal: "foto-falla",
+          });
+          throw new PhotoRechazada(
+            "La imagen no se pudo decodificar (está corrupta o no es una imagen real).",
+            400,
+          );
         }
         const path = `${scope.accountId}/mantenimiento/${leaseId}/${randomUUID()}.${photoExtension(mime)}`;
         await uploadPortalPhoto(path, bytes, mime);
