@@ -1,0 +1,227 @@
+/**
+ * Alta del caso de ortodoncia — H18 de la QA en vivo (28-sep-2026).
+ *
+ * Run: npx tsx --test src/lib/orthodontics/__tests__/alta-caso-formulario.test.ts
+ *
+ * Reproduce los tres fallos:
+ *  (a) tutor nuevo sin teléfono: el botón quedaba gris y nadie decía por qué;
+ *  (b) «Quién lo refirió» vacío y sin forma de agregar a nadie;
+ *  (c) «Costo total» con 45000 escrito en el código.
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  MAX_COSTO_TOTAL,
+  MIN_NOMBRE_TUTOR,
+  MIN_RESUMEN,
+  MIN_RETENCION,
+  MIN_TELEFONO_TUTOR,
+  MAX_TELEFONO_TUTOR,
+  MOTIVO_TELEFONO_TUTOR,
+  errorReferenteNuevo,
+  errorTelefonoTutor,
+  faltantesDelAlta,
+  fraseDeFaltantes,
+  leerCostoTotal,
+  referenteParaGuardar,
+  referenteYaRegistrado,
+  telefonoTutorValido,
+  textosDelCosto,
+  type EstadoAlta,
+} from "../alta-caso-formulario";
+
+const RAIZ = join(__dirname, "..", "..", "..", "..");
+const leer = (rel: string) => readFileSync(join(RAIZ, rel), "utf8");
+const CAJON = leer("src/components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx");
+/** El cajón sin comentarios: un «45000» en una explicación no precarga nada. */
+const CAJON_CODIGO = CAJON.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+/** Un alta completa y correcta: de aquí se va rompiendo una cosa cada vez. */
+const COMPLETA: EstadoAlta = {
+  necesitaDiagnostico: true,
+  enObservacion: false,
+  resumen: "Clase II división 1 con apiñamiento moderado inferior y sobremordida.",
+  proximaRevision: "",
+  retencion: "Retenedor fijo lingual 3-3 inferior y Hawley superior.",
+  costoTotal: "36000",
+  modoResponsable: "none",
+  tutorElegidoId: "",
+  tutorNombre: "",
+  tutorTelefono: "",
+};
+
+// ── (a) El teléfono del tutor ────────────────────────────────────────────
+
+test("H18a: tutor nuevo sin teléfono → el alta dice QUÉ falta (antes: botón gris sin explicación)", () => {
+  const faltan = faltantesDelAlta({ ...COMPLETA, modoResponsable: "new", tutorNombre: "Mamá Pruebas", tutorTelefono: "" });
+  assert.deepEqual(faltan, [`el teléfono del responsable del pago (mínimo ${MIN_TELEFONO_TUTOR} cifras)`]);
+  assert.equal(
+    fraseDeFaltantes(faltan, false),
+    "Para abrir el caso falta: el teléfono del responsable del pago (mínimo 7 cifras).",
+  );
+});
+
+test("H18a: el campo dice que es obligatorio y POR QUÉ", () => {
+  assert.match(MOTIVO_TELEFONO_TUTOR, /^Obligatorio\./);
+  assert.match(MOTIVO_TELEFONO_TUTOR, /quien paga/);
+  assert.match(CAJON, /<Field label="Teléfono \(obligatorio\)" hint=\{MOTIVO_TELEFONO_TUTOR\}/);
+  // Y junto al botón, lo que falta.
+  assert.match(CAJON, /\{fraseFaltantes\}/);
+  assert.match(CAJON, /aria-describedby=\{fraseFaltantes \? idFaltantes : undefined\}/);
+  assert.match(CAJON, /const canSubmit = faltantes\.length === 0;/, "el botón y la explicación salen de la MISMA lista");
+});
+
+test("el teléfono se mide en cifras, no en caracteres", () => {
+  assert.equal(telefonoTutorValido("5512345"), true);
+  assert.equal(telefonoTutorValido("55 1234 5678"), true);
+  assert.equal(telefonoTutorValido("+52 55 1234 5678"), true);
+  assert.equal(telefonoTutorValido("551234"), false, "6 cifras");
+  assert.equal(telefonoTutorValido("55-12-34"), false, "8 caracteres pero 6 cifras: antes pasaba el botón y fallaba al guardar");
+  assert.equal(telefonoTutorValido("       "), false);
+  assert.equal(telefonoTutorValido("1".repeat(MAX_TELEFONO_TUTOR + 1)), false, "no cabe en el servidor");
+
+  assert.equal(errorTelefonoTutor(""), null, "vacío no regaña: lo dice la lista de faltantes");
+  assert.equal(errorTelefonoTutor("5512"), "Lleva 4 cifras: faltan 3 para el mínimo de 7.");
+  assert.equal(errorTelefonoTutor("5"), "Lleva 1 cifra: faltan 6 para el mínimo de 7.");
+  assert.equal(errorTelefonoTutor("5512345678"), null);
+});
+
+test("los mínimos son los del servidor (createTreatmentPlanSchema / createDiagnosisSchema)", () => {
+  const esquema = leer("src/lib/validation/orthodontics.ts");
+  assert.match(esquema, new RegExp(`fullName: z\\.string\\(\\)\\.min\\(${MIN_NOMBRE_TUTOR}\\)\\.max\\(200\\)`));
+  assert.match(esquema, new RegExp(`phone: z\\.string\\(\\)\\.min\\(${MIN_TELEFONO_TUTOR}\\)\\.max\\(${MAX_TELEFONO_TUTOR}\\)`));
+  assert.match(esquema, new RegExp(`retentionPlanText: z\\.string\\(\\)\\.min\\(${MIN_RETENCION}\\)`));
+  assert.match(esquema, /totalCostMxn: z\.number\(\)\.positive\(\)\.max\(10_000_000\)/);
+  assert.equal(MAX_COSTO_TOTAL, 10_000_000);
+  assert.equal(MIN_RESUMEN, 40);
+});
+
+test("todo lo que falta, en el orden del formulario", () => {
+  assert.deepEqual(faltantesDelAlta(COMPLETA), [], "completa: se puede abrir");
+  assert.equal(fraseDeFaltantes([], false), null);
+
+  const faltan = faltantesDelAlta({
+    ...COMPLETA,
+    resumen: "corto",
+    costoTotal: "",
+    retencion: "poco",
+    modoResponsable: "new",
+    tutorNombre: "",
+    tutorTelefono: "55",
+  });
+  assert.deepEqual(faltan, [
+    "el resumen clínico (lleva 5 de 40 caracteres)",
+    "el costo del tratamiento",
+    "el plan de retención (lleva 4 de 20 caracteres)",
+    "el nombre del responsable del pago",
+    "el teléfono del responsable del pago (mínimo 7 cifras)",
+  ]);
+  assert.match(fraseDeFaltantes(faltan, false)!, /^Para abrir el caso falta: .+; .+ y el teléfono del responsable del pago \(mínimo 7 cifras\)\.$/);
+
+  // «Tutor registrado» sin elegir a nadie: antes se guardaba el caso SIN responsable, en silencio.
+  assert.deepEqual(faltantesDelAlta({ ...COMPLETA, modoResponsable: "existing", tutorElegidoId: "" }), [
+    "elegir al tutor responsable del pago (o marcar «Sin definir»)",
+  ]);
+  assert.deepEqual(faltantesDelAlta({ ...COMPLETA, modoResponsable: "existing", tutorElegidoId: "g1" }), []);
+
+  // Con diagnóstico ya hecho, el resumen no se pide.
+  assert.deepEqual(faltantesDelAlta({ ...COMPLETA, necesitaDiagnostico: false, resumen: "" }), []);
+});
+
+test("paciente en observación: sin plan, solo diagnóstico y próxima revisión", () => {
+  const obs = { ...COMPLETA, enObservacion: true, costoTotal: "", retencion: "", modoResponsable: "new" as const };
+  assert.deepEqual(faltantesDelAlta(obs), ["la fecha de la próxima revisión"]);
+  assert.deepEqual(faltantesDelAlta({ ...obs, proximaRevision: "2026-12-01" }), []);
+  assert.equal(
+    fraseDeFaltantes(["la fecha de la próxima revisión"], true),
+    "Para guardarlo en observación falta: la fecha de la próxima revisión.",
+  );
+});
+
+// ── (c) El costo total ───────────────────────────────────────────────────
+
+test("H18c: el costo nace VACÍO — ningún precio escrito en el código", () => {
+  assert.match(CAJON, /const \[totalCost, setTotalCost\] = useState\(""\);/);
+  assert.doesNotMatch(CAJON_CODIGO, /45[_,.]?000/, "el 45000 de antes ya no está");
+  // Ni ese ni ningún otro importe por defecto en el estado del cajón.
+  assert.doesNotMatch(CAJON_CODIGO, /useState\(\s*\d{4,}\s*\)/);
+  assert.match(CAJON, /totalCostMxn: costo as number,/, "se manda lo que se escribió");
+});
+
+test("H18c: sin costo no se abre el caso, y lo dice", () => {
+  assert.deepEqual(faltantesDelAlta({ ...COMPLETA, costoTotal: "" }), ["el costo del tratamiento"]);
+  assert.deepEqual(faltantesDelAlta({ ...COMPLETA, costoTotal: "   " }), ["el costo del tratamiento"]);
+  for (const malo of ["0", "-500", "abc", "36k", "1e5", "12.345"]) {
+    assert.deepEqual(faltantesDelAlta({ ...COMPLETA, costoTotal: malo }), ["un costo del tratamiento válido (mayor que cero)"], malo);
+  }
+});
+
+test("el costo se lee como lo escribe una persona", () => {
+  assert.equal(leerCostoTotal("36000"), 36000);
+  assert.equal(leerCostoTotal("36,000"), 36000);
+  assert.equal(leerCostoTotal("$36,000"), 36000);
+  assert.equal(leerCostoTotal(" 36 000 "), 36000);
+  assert.equal(leerCostoTotal("36000.50"), 36000.5);
+  assert.equal(leerCostoTotal(""), null);
+  assert.equal(leerCostoTotal("0"), null);
+  assert.equal(leerCostoTotal("0.00"), null);
+  assert.equal(leerCostoTotal(String(MAX_COSTO_TOTAL)), MAX_COSTO_TOTAL);
+  assert.equal(leerCostoTotal(String(MAX_COSTO_TOTAL + 1)), null, "el servidor lo rechazaría");
+});
+
+test("el rótulo del costo depende de cómo cobra la clínica", () => {
+  const total = textosDelCosto("PRECIO_TOTAL");
+  assert.equal(total.rotulo, "Costo total (MXN)");
+  assert.match(total.pista, /Abrir plan de pago/);
+  const control = textosDelCosto("PAGO_POR_CONTROL");
+  assert.match(control.rotulo, /estimado/i);
+  assert.match(control.pista, /cobra por control/);
+  assert.match(control.pista, /no se factura un total/);
+
+  assert.match(CAJON, /const textosCosto = textosDelCosto\(billingMode\);/);
+  assert.match(CAJON, /setBillingMode\(res\.data\.billingMode\);/);
+  const opciones = leer("src/app/actions/orthodontics/getCaseIntakeOptions.ts");
+  assert.match(opciones, /billingMode = \(await loadOrthoClinicSettings\(ctx\.clinicId\)\)\.billingMode;/, "el modo sale de la clínica de la SESIÓN");
+});
+
+// ── (b) Quién lo refirió ────────────────────────────────────────────────
+
+test("H18b: con la lista vacía se puede agregar un referente ahí mismo", () => {
+  assert.match(CAJON, /Aún no hay referentes registrados en la clínica\. Agrega el primero aquí mismo\./);
+  assert.match(CAJON, /const res = await createDoctorContact\(datos\);/, "reutiliza el directorio que ya existe");
+  assert.match(CAJON, /setReferredByDoctorId\(res\.data\.id\);/, "el recién agregado queda elegido");
+  // La acción que guarda saca la clínica de la sesión, nunca del formulario.
+  const accion = leer("src/app/actions/clinical-shared/referrals.ts");
+  assert.match(accion, /const ctx = await getAuthContext\(\);[\s\S]{0,200}clinicId: ctx\.clinicId,/);
+  assert.doesNotMatch(CAJON, /clinicId/, "el cajón no manda ninguna clínica");
+});
+
+test("el referente nuevo: nombre obligatorio, lo demás opcional", () => {
+  assert.equal(errorReferenteNuevo({ fullName: "", clinicName: "", phone: "" }), "Escribe el nombre de quien lo refirió.");
+  assert.equal(errorReferenteNuevo({ fullName: " A ", clinicName: "", phone: "" }), "Escribe el nombre de quien lo refirió.");
+  assert.equal(errorReferenteNuevo({ fullName: "Dra. Laura Méndez", clinicName: "", phone: "" }), null);
+  assert.match(errorReferenteNuevo({ fullName: "x".repeat(121), clinicName: "", phone: "" })!, /demasiado largo/);
+  assert.match(errorReferenteNuevo({ fullName: "Dra. Laura", clinicName: "c".repeat(121), phone: "" })!, /consultorio/);
+  assert.match(errorReferenteNuevo({ fullName: "Dra. Laura", clinicName: "", phone: "5".repeat(41) })!, /teléfono/);
+
+  assert.deepEqual(referenteParaGuardar({ fullName: "  Dra.  Laura   Méndez ", clinicName: "  ", phone: " 55 1234 5678 " }), {
+    fullName: "Dra. Laura Méndez",
+    clinicName: null,
+    phone: "55 1234 5678",
+  });
+});
+
+test("un referente que ya está en la lista no se guarda dos veces", () => {
+  const lista = [
+    { id: "r1", fullName: "Dra. Laura Méndez" },
+    { id: "r2", fullName: "Dr. José Núñez" },
+  ];
+  assert.equal(referenteYaRegistrado(lista, "dra. laura mendez")?.id, "r1", "sin mayúsculas ni acentos");
+  assert.equal(referenteYaRegistrado(lista, "  Dr.  José   Núñez ")?.id, "r2");
+  assert.equal(referenteYaRegistrado(lista, "Dra. Laura"), null, "un nombre parecido NO es el mismo");
+  assert.equal(referenteYaRegistrado(lista, ""), null);
+  assert.equal(referenteYaRegistrado([], "Dra. Laura Méndez"), null);
+  assert.match(CAJON, /const repetido = referenteYaRegistrado\(referringDoctors, referenteNuevo\.fullName\);/);
+});

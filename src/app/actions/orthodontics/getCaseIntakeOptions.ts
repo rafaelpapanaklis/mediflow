@@ -13,6 +13,8 @@
 //     el sistema propio de consentimientos de ortodoncia, que se oculta).
 
 import { prisma } from "@/lib/prisma";
+import { ORTHO_BILLING_MODE_DEFAULT, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
+import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -41,6 +43,12 @@ export interface CaseIntakeOptions {
     treatingDoctorId: string | null;
     responsibleGuardianId: string | null;
   } | null;
+  /**
+   * Cómo cobra la clínica HOY (ws1-t3, H18c): es el modo con el que nacerá el
+   * caso. El alta lo usa para rotular el campo del costo — en «Pago por
+   * control» no se factura un total, así que ahí es un estimado.
+   */
+  billingMode: OrthoBillingMode;
 }
 
 export async function getCaseIntakeOptions(
@@ -176,7 +184,17 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: ConsentForm no disponible:", e);
   }
 
+  // El modo de cobro de la clínica. best-effort: si no se puede leer, el de
+  // siempre (precio total) — el alta no se cae por esto.
+  let billingMode: OrthoBillingMode = ORTHO_BILLING_MODE_DEFAULT;
+  try {
+    billingMode = (await loadOrthoClinicSettings(ctx.clinicId)).billingMode;
+  } catch (e) {
+    console.error("[ortho] getCaseIntakeOptions: no se pudo leer el modo de cobro:", e);
+  }
+
   return ok({
+    billingMode,
     doctors: doctorsRaw.map((d) => ({ id: d.id, fullName: `${d.firstName} ${d.lastName}`.trim() })),
     guardians: guardiansRaw.map((g) => ({
       id: g.id,
