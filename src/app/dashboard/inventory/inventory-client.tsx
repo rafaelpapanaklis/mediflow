@@ -170,10 +170,19 @@ function LineaCaducidad({
   onVer: () => void;
 }) {
   const rotulo = cuantos === 1 ? singular : plural;
-  if (!listo || cuantos === 0) {
+  if (!listo) {
+    // Diferente de "0": "0" es un hecho (ya se sabe que no hay), "…" es que
+    // todavía no se sabe. Antes los dos usaban el mismo "—" y se confundían.
+    return (
+      <span className={inv.caducidadLinea} title="Cargando…">
+        <strong aria-hidden>…</strong> {rotulo}
+      </span>
+    );
+  }
+  if (cuantos === 0) {
     return (
       <span className={inv.caducidadLinea}>
-        <strong>{listo ? 0 : "—"}</strong> {rotulo}
+        <strong>0</strong> {rotulo}
       </span>
     );
   }
@@ -299,15 +308,21 @@ export function InventoryClient({
   }, []);
 
   // WS1-T5 (ajuste 3) — avisos de caducidad, mismo patrón que proveedores
-  // arriba: se piden una vez al cargar. Silencioso si el SQL de lotes aún
-  // no está aplicado (la API ya responde listas vacías en ese caso).
-  useEffect(() => {
-    fetch("/api/inventory/alerts")
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setAvisos({ porCaducar: d.porCaducar ?? [], caducado: d.caducado ?? [] }); })
-      .catch(() => {})
-      .finally(() => setAvisosListos(true));
-  }, []);
+  // arriba: se piden al cargar y se vuelven a pedir cada vez que una compra
+  // pudo haber traído un lote nuevo (B3 de la QA de ws1-t10: antes solo se
+  // pedían una vez y la tarjeta se quedaba vieja hasta recargar la página).
+  // Silencioso si el SQL de lotes aún no está aplicado (la API ya responde
+  // listas vacías en ese caso).
+  async function cargarAvisos() {
+    try {
+      const r = await fetch("/api/inventory/alerts");
+      const d = r.ok ? await r.json() : null;
+      if (d) setAvisos({ porCaducar: d.porCaducar ?? [], caducado: d.caducado ?? [] });
+    } catch {}
+    finally { setAvisosListos(true); }
+  }
+
+  useEffect(() => { cargarAvisos(); }, []);
 
   // WS1-T5 (ajuste 3) — el aviso de Hoy enlaza aquí con ?filter=low,
   // ?filter=por-caducar o ?filter=caducado. Antes ninguno hacía nada
@@ -516,13 +531,17 @@ export function InventoryClient({
   }
 
   // ws1-t4: aplica localmente lo que la transacción del servidor ya hizo
-  // (existencias + costo). Sin refetch — la respuesta trae los valores
-  // finales de cada artículo tocado.
+  // (existencias + costo). Sin refetch de items — la respuesta trae los
+  // valores finales de cada artículo tocado. Los avisos de caducidad sí se
+  // vuelven a pedir (B3 de la QA de ws1-t10): una línea con lote y fecha
+  // pudo haber creado o cambiado un lote por caducar/caducado, y ese cálculo
+  // no viaja en `ResultadoCompra`.
   function aplicarResultadoCompra(r: ResultadoCompra) {
     setItems(prev => prev.map(i => {
       const actualizado = r.items.find(u => u.itemId === i.id);
       return actualizado ? { ...i, quantity: actualizado.quantity, unitCost: actualizado.unitCost } : i;
     }));
+    cargarAvisos();
   }
 
   async function deleteItem(id: string) {

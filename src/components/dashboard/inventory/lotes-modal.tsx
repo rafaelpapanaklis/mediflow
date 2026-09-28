@@ -58,11 +58,17 @@ export function LotesModal({
   const askConfirm = useConfirm();
   const [lotes, setLotes] = useState<Lote[] | null>(null);
   const [cargando, setCargando] = useState(true);
+  // B5 de la QA de ws1-t10: si el GET fallaba (502, red caída…), `lotes`
+  // quedaba en `[]` y el vacío legítimo ("todavía no tiene lotes") se
+  // pintaba igual que un error de carga — invitaba a registrar de nuevo un
+  // lote que sí existía. Ahora el error tiene su propio estado y su mensaje.
+  const [error, setError] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [form, setForm] = useState({ lotNumber: "", expiresAt: "", quantity: "" });
 
   const cargar = useCallback(async () => {
     setCargando(true);
+    setError(false);
     try {
       const res = await fetch(`/api/inventory/${itemId}/lots`);
       if (!res.ok) throw new Error();
@@ -70,7 +76,8 @@ export function LotesModal({
       setLotes(data.lots);
     } catch {
       toast.error("No se pudieron cargar los lotes");
-      setLotes([]);
+      setLotes(null);
+      setError(true);
     } finally {
       setCargando(false);
     }
@@ -152,6 +159,12 @@ export function LotesModal({
               <div className={inv.espera} role="status">
                 <Loader2 size={20} className="animate-spin" aria-hidden />
                 Cargando lotes…
+              </div>
+            ) : error ? (
+              <div className={`${inv.espera} ${inv.esperaCorta}`}>
+                <p className={inv.esperaTitulo}>No se pudieron cargar los lotes</p>
+                <p className={inv.esperaTexto}>Puede que ya tenga lotes registrados. Vuelve a intentarlo antes de registrar uno nuevo.</p>
+                <ButtonNew variant="ghost" onClick={cargar} style={{ marginTop: 8 }}>Reintentar</ButtonNew>
               </div>
             ) : (
               <>
