@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { getAccessibleBranchIds, getBarberContext } from "@/lib/barber-auth";
 import { barberApiError, barberUnauthorized } from "@/lib/barber/branches";
 import {
@@ -9,6 +10,13 @@ import {
 } from "@/lib/barber/support";
 import { assertBarberPermission } from "@/lib/barber-auth";
 import { BARBER_FILES_BUCKET } from "@/lib/barber/types";
+import {
+  limiteSubidasPorUsuario,
+  pareceScriptOMarcado,
+  registrarSubidaRechazada,
+  tieneExtensionPeligrosa,
+  verificarPdfPeligroso,
+} from "@/lib/uploads/validar-archivo";
 
 // POST /api/barber/support/attachments — subida multipart de UN archivo.
 //
@@ -38,10 +46,28 @@ export async function POST(req: NextRequest) {
     // Subir un archivo es parte de escribir en un ticket.
     assertBarberPermission(ctx, "support.manage");
 
+    const cabe = limiteSubidasPorUsuario(`barber:soporte:${ctx.barbershopId}:${ctx.barberUserId}`);
+    if (!cabe) {
+      return NextResponse.json(
+        { error: "Demasiadas subidas en poco tiempo. Espera unos minutos." },
+        { status: 429 },
+      );
+    }
+
     const form = await req.formData().catch(() => null);
     const file = form?.get("file");
     if (!file || typeof file === "string") {
       return NextResponse.json({ error: "Falta el archivo." }, { status: 400 });
+    }
+
+    if (tieneExtensionPeligrosa(file.name)) {
+      await registrarSubidaRechazada({
+        ruta: "barber/support/attachments",
+        motivo: "El nombre del archivo tiene una extensión no permitida",
+        codigo: "extension_peligrosa",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: "Ese nombre de archivo no está permitido." }, { status: 400 });
     }
 
     // Sede destino: la propia, o una que la sesión ya alcance.
@@ -69,9 +95,65 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = await file.arrayBuffer();
+    const buf = Buffer.from(bytes);
+
+    const marcador = pareceScriptOMarcado(buf);
+    if (marcador) {
+      await registrarSubidaRechazada({
+        ruta: "barber/support/attachments",
+        motivo: `El contenido parece un script o marcado (${marcador.trim()})`,
+        codigo: "script_o_marcado",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: "Ese archivo no es válido." }, { status: 400 });
+    }
+
     const { validateMagicNumber } = await import("@/lib/validate-upload");
     const magicError = await validateMagicNumber(bytes, [...BARBER_SUPPORT_ALLOWED_MIME]);
-    if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+    if (magicError) {
+      await registrarSubidaRechazada({
+        ruta: "barber/support/attachments",
+        motivo: magicError,
+        codigo: "tipo_no_permitido",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: magicError }, { status: 400 });
+    }
+
+    const { fileTypeFromBuffer } = await import("file-type");
+    const detectado = await fileTypeFromBuffer(buf);
+
+    if (detectado?.mime === "application/pdf") {
+      const motivoPdf = verificarPdfPeligroso(buf);
+      if (motivoPdf) {
+        await registrarSubidaRechazada({
+          ruta: "barber/support/attachments",
+          motivo: `El PDF contiene ${motivoPdf}, no se acepta`,
+          codigo: "pdf_peligroso",
+          nombreOriginal: file.name,
+        });
+        return NextResponse.json({ error: "Ese PDF no se puede aceptar por seguridad." }, { status: 400 });
+      }
+    } else if (detectado?.mime.startsWith("image/") && detectado.mime !== "image/heic" && detectado.mime !== "image/heif") {
+      // Ninguno de los formatos de BARBER_SUPPORT_ALLOWED_MIME es HEIC/HEIF,
+      // pero se deja la exclusión por si el whitelist cambia algún día.
+      try {
+        const metadata = await sharp(buf).metadata();
+        if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+        await sharp(buf).toBuffer();
+      } catch {
+        await registrarSubidaRechazada({
+          ruta: "barber/support/attachments",
+          motivo: "La imagen no se pudo decodificar (está corrupta o no es una imagen real)",
+          codigo: "imagen_corrupta",
+          nombreOriginal: file.name,
+        });
+        return NextResponse.json(
+          { error: "La imagen no se pudo decodificar (está corrupta o no es una imagen real)." },
+          { status: 400 },
+        );
+      }
+    }
 
     const ext =
       (file.name.split(".").pop() ?? "bin")

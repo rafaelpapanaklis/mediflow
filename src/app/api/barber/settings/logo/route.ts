@@ -1,10 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { barberApiError } from "@/lib/barber/branches";
 import { setBarberLogo } from "@/lib/barber/settings";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { BUCKETS } from "@/lib/storage";
 import { gateSettings, revalidateShopWeb } from "../_gate";
+import {
+  limiteSubidasPorUsuario,
+  pareceScriptOMarcado,
+  registrarSubidaRechazada,
+  tieneExtensionPeligrosa,
+} from "@/lib/uploads/validar-archivo";
 
 /* ═══════════════════════════════════════════════════════════════════════
    LOGO DE LA BARBERÍA.
@@ -40,6 +47,14 @@ export async function POST(req: NextRequest) {
   if ("response" in gate) return gate.response;
   const { ctx } = gate;
 
+  const cabe = limiteSubidasPorUsuario(`barber:logo:${ctx.barbershopId}:${ctx.barberUserId}`);
+  if (!cabe) {
+    return NextResponse.json(
+      { error: "Demasiadas subidas en poco tiempo. Espera unos minutos." },
+      { status: 429 },
+    );
+  }
+
   let form: FormData;
   try {
     form = await req.formData();
@@ -49,6 +64,15 @@ export async function POST(req: NextRequest) {
   const file = form.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No llegó ninguna imagen." }, { status: 400 });
+  }
+  if (tieneExtensionPeligrosa(file.name)) {
+    await registrarSubidaRechazada({
+      ruta: "barber/settings/logo",
+      motivo: "El nombre del archivo tiene una extensión no permitida",
+      codigo: "extension_peligrosa",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "Ese nombre de archivo no está permitido." }, { status: 400 });
   }
   if (!TIPOS.includes(file.type)) {
     return NextResponse.json({ error: "Solo aceptamos JPG, PNG o WebP." }, { status: 400 });
@@ -62,9 +86,48 @@ export async function POST(req: NextRequest) {
   }
 
   const bytes = await file.arrayBuffer();
+
+  const marcador = pareceScriptOMarcado(Buffer.from(bytes));
+  if (marcador) {
+    await registrarSubidaRechazada({
+      ruta: "barber/settings/logo",
+      motivo: `El contenido parece un script o marcado (${marcador.trim()})`,
+      codigo: "script_o_marcado",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: "Ese archivo no es una imagen válida." }, { status: 400 });
+  }
+
   // El tipo que declara el navegador es falseable: esto mira los bytes.
   const malo = await validateMagicNumber(bytes, TIPOS);
-  if (malo) return NextResponse.json({ error: malo }, { status: 400 });
+  if (malo) {
+    await registrarSubidaRechazada({
+      ruta: "barber/settings/logo",
+      motivo: malo,
+      codigo: "tipo_no_permitido",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json({ error: malo }, { status: 400 });
+  }
+
+  // TIPOS aquí no incluye HEIC/HEIF: se fuerza la decodificación real siempre.
+  try {
+    const buf = Buffer.from(bytes);
+    const metadata = await sharp(buf).metadata();
+    if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+    await sharp(buf).toBuffer();
+  } catch {
+    await registrarSubidaRechazada({
+      ruta: "barber/settings/logo",
+      motivo: "La imagen no se pudo decodificar (está corrupta o no es una imagen real)",
+      codigo: "imagen_corrupta",
+      nombreOriginal: file.name,
+    });
+    return NextResponse.json(
+      { error: "La imagen no se pudo decodificar (está corrupta o no es una imagen real)." },
+      { status: 400 },
+    );
+  }
 
   const ext =
     (file.name.split(".").pop() ?? "webp").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "webp";

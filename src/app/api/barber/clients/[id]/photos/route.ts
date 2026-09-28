@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import {
   PHOTO_MAX_BYTES,
   listBarberClientPhotos,
@@ -7,6 +8,12 @@ import {
 } from "@/lib/barber/clients";
 import { alsoHas, gateBarberClients, serverError } from "../../_helpers";
 import type { BarberPhotoKind } from "@/lib/barber/types";
+import {
+  limiteSubidasPorUsuario,
+  pareceScriptOMarcado,
+  registrarSubidaRechazada,
+  tieneExtensionPeligrosa,
+} from "@/lib/uploads/validar-archivo";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +54,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if ("response" in gate) return gate.response;
 
   try {
+    const cabe = limiteSubidasPorUsuario(`barber:foto-cliente:${gate.ctx.barbershopId}:${gate.ctx.barberUserId}`, 60);
+    if (!cabe) {
+      return NextResponse.json(
+        { error: "Demasiadas subidas en poco tiempo. Espera unos minutos." },
+        { status: 429 },
+      );
+    }
+
     let form: FormData;
     try {
       form = await req.formData();
@@ -69,13 +84,69 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       );
     }
 
+    if (tieneExtensionPeligrosa(file.name)) {
+      await registrarSubidaRechazada({
+        ruta: "barber/clients/photos",
+        motivo: "El nombre del archivo tiene una extensión no permitida",
+        codigo: "extension_peligrosa",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "Ese nombre de archivo no está permitido." },
+        { status: 400 },
+      );
+    }
+
     const bytes = new Uint8Array(await file.arrayBuffer());
+
+    const marcador = pareceScriptOMarcado(Buffer.from(bytes));
+    if (marcador) {
+      await registrarSubidaRechazada({
+        ruta: "barber/clients/photos",
+        motivo: `El contenido parece un script o marcado (${marcador.trim()})`,
+        codigo: "script_o_marcado",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json(
+        { error: "Ese archivo no es una imagen válida." },
+        { status: 400 },
+      );
+    }
+
     const mime = sniffImageMime(bytes);
     if (!mime) {
+      await registrarSubidaRechazada({
+        ruta: "barber/clients/photos",
+        motivo: "Tipo real de archivo no reconocido como imagen",
+        codigo: "tipo_no_reconocido",
+        nombreOriginal: file.name,
+      });
       return NextResponse.json(
         { error: "Ese archivo no es una imagen (solo WebP, JPG o PNG)." },
         { status: 400 },
       );
+    }
+
+    // heic/heif no se fuerzan por sharp: libvips de este repo no decodifica
+    // HEIC real, solo AVIF pese al nombre "heif".
+    if (mime === "image/jpeg" || mime === "image/png" || mime === "image/webp") {
+      try {
+        const buf = Buffer.from(bytes);
+        const metadata = await sharp(buf).metadata();
+        if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
+        await sharp(buf).toBuffer();
+      } catch {
+        await registrarSubidaRechazada({
+          ruta: "barber/clients/photos",
+          motivo: "La imagen no se pudo decodificar (está corrupta o no es una imagen real)",
+          codigo: "imagen_corrupta",
+          nombreOriginal: file.name,
+        });
+        return NextResponse.json(
+          { error: "La imagen no se pudo decodificar (está corrupta o no es una imagen real)." },
+          { status: 400 },
+        );
+      }
     }
 
     const rawKind = String(form.get("kind") ?? "AFTER");
@@ -98,7 +169,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       mime,
       body: bytes,
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    if (!result.ok) {
+      await registrarSubidaRechazada({
+        ruta: "barber/clients/photos",
+        motivo: result.error,
+        codigo: "tipo_no_permitido",
+        nombreOriginal: file.name,
+      });
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
 
     return NextResponse.json(
       {
