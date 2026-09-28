@@ -3,11 +3,17 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createRoom, createMeetingToken } from "@/lib/daily";
+import { negarApiPorCategoria } from "@/lib/dashboard/guardia-categoria.server";
 
 export async function POST(req: NextRequest) {
   try {
     const ctx = await getAuthContext();
     if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+    // ws1-t4 ronda 6: en una clínica dental no se abren salas nuevas
+    // (teleconsulta oculta). La categoría sale de la sesión.
+    const fuera = negarApiPorCategoria("/dashboard/teleconsulta", ctx.clinicCategory);
+    if (fuera) return fuera;
 
     const { appointmentId } = await req.json();
 

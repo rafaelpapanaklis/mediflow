@@ -105,3 +105,12 @@ test("destino por defecto: el inicio del panel, que abre a cualquiera", () => {
   assert.equal(paginaPermitidaParaCategoria("/dashboard", "DENTAL"), true);
   assert.equal(paginaPermitidaParaCategoria("/dashboard", null), true);
 });
+
+test("Teleconsulta: oculta en dental (va a la Agenda), abierta en las demás categorías", () => {
+  assert.equal(paginaPermitidaParaCategoria("/dashboard/teleconsulta", "DENTAL"), false);
+  assert.equal(paginaPermitidaParaCategoria("/dashboard/teleconsulta/", "DENTAL"), false);
+  assert.equal(destinoSiNoPermitida("/dashboard/teleconsulta"), "/dashboard/agenda");
+  assert.equal(paginaPermitidaParaCategoria("/dashboard/teleconsulta", "PSYCHOLOGY"), true);
+  assert.equal(paginaPermitidaParaCategoria("/dashboard/teleconsulta", "MEDICINE"), true);
+  assert.equal(paginaPermitidaParaCategoria("/dashboard/teleconsulta", null), false, "sin categoría falla cerrado");
+});

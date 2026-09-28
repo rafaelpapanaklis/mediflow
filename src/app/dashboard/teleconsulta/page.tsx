@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-import { getCurrentUser } from "@/lib/auth";
+import { exigirCategoriaParaPagina } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { getServerT } from "@/i18n/server";
@@ -9,7 +9,10 @@ import styles from "./teleconsulta.module.css";
 
 export default async function TeleconsultaPage() {
   const { t } = await getServerT();
-  const user = await getCurrentUser();
+  // ws1-t4 ronda 6 (decisión de Rafael, 28-sep-2026): en una clínica dental
+  // la teleconsulta está oculta; quien llega por la dirección va a la Agenda.
+  // El guardia va aquí, en la página, no en un layout.
+  const user = await exigirCategoriaParaPagina("/dashboard/teleconsulta");
   const tz = user.clinic.timezone;
   const appointments = await prisma.appointment.findMany({
     where: { clinicId: user.clinicId, mode: "TELECONSULTATION" },

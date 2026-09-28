@@ -1,3 +1,4 @@
+import { modoDeLaCita } from "@/lib/agenda/teleconsulta-por-categoria";
 import { NextResponse, type NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -451,7 +452,9 @@ export async function POST(req: NextRequest) {
           // El formulario de /dashboard/appointments recoge notas y hasta ahora
           // se perdían: la ruta no las miraba (hallazgo 24).
           notes: body.notes ?? null,
-          mode: body.isTeleconsult ? "TELECONSULTATION" : "IN_PERSON",
+          // En una clínica sin teleconsulta (hoy, las dentales) la cita es
+          // presencial diga lo que diga la petición (ws1-t4 ronda 6).
+          mode: modoDeLaCita(session.clinic.category, body.isTeleconsult),
           source: "STAFF",
           requiresValidation: false,
           // ⛔ SIN TOCAR (WS1-T3). Esta columna apaga el no-solape; el rastro

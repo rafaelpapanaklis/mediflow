@@ -30,6 +30,7 @@ import {
 } from "@/components/dashboard/bloqueos/confirmar-bloqueo";
 import { BookingRequestsPanel } from "./booking-requests-panel";
 import { tiposDeCitaParaCategoria } from "@/lib/agenda/tipos-cita-clasica";
+import { teleconsultaDisponible } from "@/lib/agenda/teleconsulta-por-categoria";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
@@ -252,6 +253,9 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
                 </select>
               </div>
             </div>
+            {/* ws1-t4 ronda 6 (decisión de Rafael, 28-sep-2026): en una clínica
+                dental no se ofrece «Teleconsulta»; la cita es presencial. */}
+            {teleconsultaDisponible(clinicCategory) && (
             <div className="field-new">
               <label className="field-new__label">{t("appointments.form.mode")}</label>
               <div style={{ display: "flex", gap: 8 }}>
@@ -273,6 +277,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
                 </button>
               </div>
             </div>
+            )}
           </div>
         </div>
 

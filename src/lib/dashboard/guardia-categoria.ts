@@ -18,6 +18,7 @@
  * re-ejecutan al navegar entre páginas hermanas.
  */
 import { NAV_ITEMS } from "@/components/dashboard/sidebar-nav";
+import { TELECONSULTA_OCULTA_EN } from "@/lib/agenda/teleconsulta-por-categoria";
 
 /** A dónde se manda a quien abre una página que no es de su giro. */
 export const DESTINO_POR_DEFECTO = "/dashboard";
@@ -33,6 +34,10 @@ export const RUTAS_FUERA_DEL_MENU: Readonly<
   // «Reservas legacy»: la pantalla vieja de reservas de recursos. En una
   // clínica dental los sillones y consultorios se llevan en Recursos + Agenda.
   "/dashboard/resource-bookings": { noPermitidaEn: ["DENTAL"], destino: "/dashboard/resources" },
+  // «Teleconsulta» (decisión de Rafael, 28-sep-2026): oculta por ahora en las
+  // clínicas dentales. La lista de categorías vive en un solo sitio
+  // (`teleconsulta-por-categoria.ts`); quien llega por la dirección va a la Agenda.
+  "/dashboard/teleconsulta": { noPermitidaEn: TELECONSULTA_OCULTA_EN, destino: "/dashboard/agenda" },
 };
 
 /** Quita query, hash y la barra final: «/dashboard/packages/?x=1» → «/dashboard/packages». */
