@@ -328,13 +328,51 @@ test("saldos: «45.000» es AMBIGUO — no se importa hasta que el usuario confi
   assert.deepEqual(tabla("invoice").map((i) => i.total).sort((a, b) => a - b), [12500, 45000]);
 });
 
-test("saldos: si el mismo archivo demuestra el formato, «45.000» se resuelve solo (y se dice)", async () => {
+test("saldos: B1 (QA ws1-t10, ronda 2) — UNA sola muestra que demuestra el formato NO basta: sigue pendiente", async () => {
   reiniciar();
+  // Antes de la decisión del gerente del 28-sep-2026, una sola «1.250,50» bastaba
+  // para resolver «45.000» en silencio. Es dinero y el archivo puede mezclar
+  // columnas de sistemas distintos: ahora hace falta que el formato se repita.
   const dry = await correr("balances", saldos(["5551234567,45.000", "+56987654321,\"1.250,50\""]));
-  assert.equal(dry.validos, 2);
+  // «1.250,50» sí es inequívoca por sí sola (trae los dos separadores) y entra
+  // bien; solo «45.000» queda ambigua — pero ya NO se resuelve con la única
+  // muestra que demuestra el formato, porque una sola no basta.
+  assert.equal(dry.validos, 1, JSON.stringify(dry.preview.map((r: any) => r.data)));
+  assert.equal(dry.invalidos, 1);
+  assert.match(fila(dry, 2).errors[0], /ambiguo/);
+  assert.deepEqual(dry.unresolved.map((u: any) => [u.field, u.rows]), [["amountFormat", 1]]);
+
+  const sin = await correr("balances", saldos(["5551234567,45.000", "+56987654321,\"1.250,50\""]), { dryRun: false });
+  assert.equal(sin.created, 1, "solo la fila válida («1.250,50») se crea; la ambigua no");
+});
+
+test("saldos: B1 (QA ws1-t10, ronda 2) — DOS muestras que demuestran el MISMO formato sí resuelven, y avisan", async () => {
+  reiniciar();
+  const f = csv("saldos.csv", [
+    "Celular,Saldo,Concepto,Fecha",
+    "5551234567,45.000,Ambiguo,10/01/2030",
+    "+56987654321,\"1.250,50\",Demo1,11/01/2030",
+    "5551234567,\"2.500,00\",Demo2,12/01/2030",
+  ].join("\n"));
+  const dry = await correr("balances", f);
+  assert.equal(dry.validos, 3, JSON.stringify(dry.preview.map((r: any) => r.errors)));
   assert.equal(fila(dry, 2).data.amount, 45000);
   assert.match(fila(dry, 2).warnings.join(" "), /punto para miles/);
   assert.equal(dry.unresolved, undefined);
+});
+
+test("saldos: B1 (QA ws1-t10, ronda 2) — el archivo que demuestra los DOS formatos (contradicción real) sigue sin resolver nada solo", async () => {
+  reiniciar();
+  const f = csv("saldos.csv", [
+    "Celular,Saldo,Concepto,Fecha",
+    "5551234567,45.000,Ambiguo,10/01/2030",
+    "+56987654321,\"1.250,50\",DemoES1,11/01/2030",
+    "5551234567,\"2.500,00\",DemoES2,12/01/2030",
+    "+56987654321,\"1,250.00\",DemoUS,13/01/2030",
+  ].join("\n"));
+  const dry = await correr("balances", f);
+  assert.equal(fila(dry, 2).status, "error");
+  assert.match(fila(dry, 2).errors[0], /ambiguo/);
 });
 
 test("saldos: decidir «decimales» lee 45.000 como 45", async () => {

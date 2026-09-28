@@ -64,9 +64,19 @@ test("montos: «45.000» y «1,250» son AMBIGUOS y no se resuelven en silencio"
   assert.equal(r.valor, 45000, "la lectura provisional es la de miles, pero va marcada");
 });
 
-test("montos: un valor del mismo archivo que demuestra el formato resuelve los ambiguos", () => {
-  // «1.250,50» solo puede ser punto de miles → «45.000» es 45 000.
-  const es = crearLectorMontos(["45.000", "1.250,50"]);
+test("montos: UNA sola muestra que demuestra el formato NO basta (B1 del QA ws1-t10, ronda 2) — hacen falta 2", () => {
+  // Antes de la decisión del 28-sep-2026, una sola «1.250,50» resolvía «45.000»
+  // en silencio. Es dinero y el archivo puede mezclar columnas de sistemas
+  // distintos: ahora una sola muestra no es evidencia suficiente.
+  const unaSola = crearLectorMontos(["45.000", "1.250,50"]);
+  assert.equal(unaSola.estilo, null);
+  const r = unaSola.leer("45.000");
+  assert.equal(r.pendiente, "45.000");
+});
+
+test("montos: DOS muestras del mismo archivo que demuestran el MISMO formato sí resuelven los ambiguos", () => {
+  // Dos «…,50» de punto-miles → «45.000» es 45 000.
+  const es = crearLectorMontos(["45.000", "1.250,50", "2.500,00"]);
   assert.equal(es.estilo, "ES");
   const r = es.leer("45.000");
   assert.equal(r.pendiente, undefined);
@@ -75,13 +85,14 @@ test("montos: un valor del mismo archivo que demuestra el formato resuelve los a
   // Con coma decimal, «45,000» es 45 con tres decimales.
   assert.equal(es.leer("45,000").valor, 45);
 
-  // «1,250.50» demuestra el formato US: «45.000» es 45 con decimales, «45,000» es 45 000.
-  const us = crearLectorMontos(["45.000", "45,000", "1,250.50"]);
+  // Dos que demuestran US: «45.000» es 45 con decimales, «45,000» es 45 000.
+  const us = crearLectorMontos(["45.000", "45,000", "1,250.50", "2,500.00"]);
   assert.equal(us.estilo, "US");
   assert.equal(us.leer("45.000").valor, 45);
   assert.equal(us.leer("45,000").valor, 45000);
 
-  // Si el archivo se contradice, no se elige por él.
+  // Si el archivo se contradice (demuestra los DOS formatos), no se elige por
+  // él aunque cada uno aparezca una sola vez.
   const mixto = crearLectorMontos(["1.250,50", "1,250.50", "45.000"]);
   assert.equal(mixto.estilo, "mixto");
   assert.equal(mixto.leer("45.000").pendiente, "45.000");

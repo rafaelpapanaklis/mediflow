@@ -118,17 +118,24 @@ export interface LectorMontos {
 
 /**
  * Un lector por archivo. Mira TODOS los valores de las columnas de monto: si
- * alguno demuestra el formato («1.250,50» solo puede ser punto de miles), los
- * ambiguos se leen con ese formato. Si nada lo demuestra, quedan pendientes
- * hasta que el usuario decida (`decision`, que viene del valueMapping).
+ * el archivo demuestra el formato ≥2 VECES («1.250,50» solo puede ser punto de
+ * miles), los ambiguos se leen con ese formato. Es dinero: UNA sola muestra no
+ * es evidencia suficiente para un archivo con formatos mezclados (columnas
+ * pegadas de sistemas distintos), así que con una sola muestra el ambiguo
+ * sigue pendiente, igual que si el archivo no demostrara nada (decisión del
+ * 28-sep-2026 tras el QA de ws1-t10, hallazgo B1). Si nada lo demuestra lo
+ * suficiente, quedan pendientes hasta que el usuario decida (`decision`, que
+ * viene del valueMapping).
  */
 export function crearLectorMontos(muestras: unknown[], decision?: string | null): LectorMontos {
-  const vistos = new Set<EstiloNumerico>();
+  const conteo = new Map<EstiloNumerico, number>();
   for (const m of muestras) {
     const a = analizarMonto(m);
-    if (a.tipo === "ok" && a.estilo) vistos.add(a.estilo);
+    if (a.tipo === "ok" && a.estilo) conteo.set(a.estilo, (conteo.get(a.estilo) ?? 0) + 1);
   }
-  const estilo: LectorMontos["estilo"] = vistos.size === 0 ? null : vistos.size === 2 ? "mixto" : Array.from(vistos)[0];
+  const vistos = Array.from(conteo.keys());
+  const estilo: LectorMontos["estilo"] =
+    vistos.length === 2 ? "mixto" : vistos.length === 1 && (conteo.get(vistos[0]) ?? 0) >= 2 ? vistos[0] : null;
   const dec: DecisionMontos | null = decision === "miles" || decision === "decimales" ? decision : null;
 
   return {
