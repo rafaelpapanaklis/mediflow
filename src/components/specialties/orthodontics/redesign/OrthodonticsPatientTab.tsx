@@ -491,7 +491,14 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             // En tab Ortodoncia, derivamos lastVisitAt y totalVisits del
             // modelo OrthodonticControlAppointment (visitas reales del tx
             // ortodóntico), no del Appointment genérico.
-            lastVisitAt: (() => {
+            //
+            // ws1-t4 ronda 6 (fila 8): ese modelo ya no se llena — los
+            // controles viven en la Agenda y en las hojas —, así que la
+            // cabecera decía «0 visitas» a un paciente que viene cada mes.
+            // Con `vm.visitas` (citas de control atendidas + hojas, sin
+            // contar dos veces la misma visita) manda ese dato; lo de abajo
+            // queda solo para una vista armada sin él.
+            lastVisitAt: orthoRedesignVM.visitas ? orthoRedesignVM.visitas.ultima : (() => {
               const performed = (orthoData?.controls ?? []).filter(
                 (c: any) => c.performedAt,
               );
@@ -506,10 +513,11 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                 : performed[0].performedAt;
             })(),
             totalVisits: {
-              count:
-                (orthoData?.controls ?? []).filter(
-                  (c: any) => c.attendance === "ATTENDED" && c.performedAt,
-                ).length || completedCount,
+              count: orthoRedesignVM.visitas
+                ? orthoRedesignVM.visitas.total
+                : (orthoData?.controls ?? []).filter(
+                    (c: any) => c.attendance === "ATTENDED" && c.performedAt,
+                  ).length || completedCount,
               sinceLabel: orthoRedesignVM.treatment.startDate
                 ? t("patients.ortho.sinceLabel", { date: new Date(orthoRedesignVM.treatment.startDate).toLocaleDateString("es-MX", { month: "short", year: "numeric" }) })
                 : null,

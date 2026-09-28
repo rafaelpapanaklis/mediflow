@@ -2,6 +2,8 @@
 // (ws1-t4 ronda 6, filas 8 y 9 de la revisión de lógica de uso).
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   asistenciaDelCaso,
   proximaCitaDelCaso,
@@ -185,5 +187,16 @@ describe("usoDeElasticos", () => {
       20,
     );
     assert.equal(r.pct, 50);
+  });
+});
+
+describe("la cabecera del caso usa las visitas reales (fila 8, ws1-t4 ronda 6)", () => {
+  it("«Última visita» y «Visitas» salen de vm.visitas cuando viene", () => {
+    const pestana = readFileSync(
+      join(__dirname, "../../../../components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx"),
+      "utf8",
+    );
+    assert.match(pestana, /lastVisitAt: orthoRedesignVM\.visitas \? orthoRedesignVM\.visitas\.ultima :/);
+    assert.match(pestana, /count: orthoRedesignVM\.visitas\s*\?\s*orthoRedesignVM\.visitas\.total/);
   });
 });
