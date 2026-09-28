@@ -5,12 +5,18 @@
 // /api/orthodontics/context y ofrece como chips de motivo al agendar) y
 // plantillas de mensaje. La entrada "Control de ortodoncia" es de solo
 // lectura: la Agenda la reconoce por su texto exacto (esCitaControlOrto).
+//
+// Diseño (ws1-t3): mismos campos, mismas validaciones y el mismo guardado.
+// Cambia cómo se pinta: tarjetas del rediseño, campos con su etiqueta
+// enlazada, «Quitar» como botón con nombre y el tipo fijo con su candado y
+// su explicación a la vista (antes solo salía al pasar el ratón).
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import toast from "react-hot-toast";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { CalendarClock, Lock, MessageSquareText, Plus, Stethoscope, Trash2 } from "lucide-react";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { Pantalla, Tarjeta } from "@/components/specialties/orthodontics/modulo/piezas";
+import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 import { updateOrthoClinicSettings } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import type {
@@ -97,118 +103,144 @@ export function OrthoConfiguracionClient({ settings, doctors }: OrthoConfiguraci
     }
   }
 
+  const idDoctor = useId();
+  const idPlantilla = useId();
+
   return (
-    <div className="space-y-6">
-      <div className="card space-y-4" style={{ padding: 24, maxWidth: 640 }}>
-        <div>
-          <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-            Doctor tratante por defecto
-          </h2>
-          <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
-            Se pre-rellena al abrir un caso nuevo — cada caso lo puede cambiar por su cuenta.
-          </p>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Doctor</Label>
-          <select
-            className="input-new"
-            value={defaultTreatingDoctorId}
-            onChange={(e) => setDefaultTreatingDoctorId(e.target.value)}
-          >
-            <option value="">Sin doctor por defecto</option>
-            {doctors.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-          {doctors.length === 0 && (
-            <div style={{ fontSize: 12, color: "var(--text-3)" }}>
-              Esta clínica no tiene doctores dados de alta todavía (Equipo → Nuevo miembro).
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="card space-y-4" style={{ padding: 24, maxWidth: 640 }}>
-        <div>
-          <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-            Tipos de cita de Ortodoncia
-          </h2>
-          <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
-            Estos textos son los que aparecen como chips de motivo al agendar una cita en la
-            Agenda, cuando el módulo de Ortodoncia está activo — un solo catálogo, editable aquí.
-          </p>
-        </div>
-        <div className="space-y-2">
-          {appointmentTypes.map((tipo) => {
-            const esControl = tipo.label === TIPO_CITA_CONTROL_ORTO;
-            return (
-              <div key={tipo.id} className="flex items-center gap-2">
-                <Input
-                  value={tipo.label}
-                  placeholder="Nombre visible"
-                  onChange={(e) => actualizarTipo(tipo.id, "label", e.target.value)}
-                  disabled={esControl}
-                  title={esControl ? "La Agenda reconoce los controles por este texto exacto — no se puede editar." : undefined}
-                  style={{ flex: 1 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => quitarTipo(tipo.id)}
-                  disabled={esControl}
-                  className="underline"
-                  style={{
-                    fontSize: 12,
-                    color: esControl ? "var(--text-3)" : "var(--danger-strong, #dc2626)",
-                    cursor: esControl ? "not-allowed" : "pointer",
-                  }}
-                >
-                  Quitar
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        <button
-          type="button"
-          onClick={agregarTipo}
-          className="underline"
-          style={{ fontSize: 12, color: "var(--text-3)" }}
-        >
-          + Agregar tipo de cita
-        </button>
-      </div>
-
-      <div className="card space-y-4" style={{ padding: 24, maxWidth: 640 }}>
-        <div>
-          <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-            Plantillas de mensaje
-          </h2>
-          <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
-            Textos que usa el módulo para avisar por WhatsApp. Vacío = usa el texto por defecto.
-          </p>
-        </div>
-        {PLANTILLAS_CLAVES.map((p) => (
-          <div className="space-y-1.5" key={p.clave}>
-            <Label>{p.etiqueta}</Label>
-            <textarea
-              className="input-new resize-y"
-              style={{ height: "auto", padding: "10px 12px" }}
-              rows={3}
-              value={templates[p.clave] ?? ""}
-              onChange={(e) => setTemplates((t) => ({ ...t, [p.clave]: e.target.value }))}
-            />
-            <div style={{ fontSize: 11, color: "var(--text-3)" }}>{p.ayuda}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-end" style={{ maxWidth: 640 }}>
-        <Button onClick={guardar} disabled={saving}>
+    <Pantalla
+      titulo="Configuración"
+      sub="Lo que el módulo de Ortodoncia usa por defecto en esta clínica."
+      acciones={
+        <ButtonNew type="button" variant="primary" onClick={guardar} disabled={saving}>
           {saving ? "Guardando…" : "Guardar cambios"}
-        </Button>
+        </ButtonNew>
+      }
+    >
+      <div className={s.formulario}>
+        <div className={s.formularioColumna}>
+          <Tarjeta
+            icono={Stethoscope}
+            titulo="Doctor tratante por defecto"
+            sub="Se pre-rellena al abrir un caso nuevo — cada caso lo puede cambiar por su cuenta."
+          >
+            <div className={s.tarjetaCuerpo}>
+              <div className={s.campo}>
+                <label className={s.campoEtiqueta} htmlFor={idDoctor}>
+                  Doctor
+                </label>
+                <select
+                  id={idDoctor}
+                  className="input-new"
+                  value={defaultTreatingDoctorId}
+                  onChange={(e) => setDefaultTreatingDoctorId(e.target.value)}
+                >
+                  <option value="">Sin doctor por defecto</option>
+                  {doctors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                {doctors.length === 0 && (
+                  <div className={s.campoAyuda}>
+                    Esta clínica no tiene doctores dados de alta todavía (Equipo → Nuevo miembro).
+                  </div>
+                )}
+              </div>
+            </div>
+          </Tarjeta>
+
+          <Tarjeta
+            icono={CalendarClock}
+            titulo="Tipos de cita de Ortodoncia"
+            sub="Estos textos son los que aparecen como chips de motivo al agendar una cita en la Agenda, cuando el módulo de Ortodoncia está activo — un solo catálogo, editable aquí."
+          >
+            <div className={s.tarjetaCuerpo}>
+              <ul className={s.tipos}>
+                {appointmentTypes.map((tipo, i) => {
+                  const esControl = tipo.label === TIPO_CITA_CONTROL_ORTO;
+                  return (
+                    <li key={tipo.id} className={s.tipo}>
+                      <input
+                        type="text"
+                        className={s.campoEntrada}
+                        value={tipo.label}
+                        placeholder="Nombre visible"
+                        aria-label={`Tipo de cita ${i + 1}`}
+                        onChange={(e) => actualizarTipo(tipo.id, "label", e.target.value)}
+                        disabled={esControl}
+                        title={esControl ? "La Agenda reconoce los controles por este texto exacto — no se puede editar." : undefined}
+                      />
+                      {esControl ? (
+                        <span className={s.candado} title="Fijo: la Agenda lo usa para reconocer los controles.">
+                          <Lock size={15} strokeWidth={1.9} aria-hidden />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => quitarTipo(tipo.id)}
+                          className={s.botonIcono}
+                          aria-label={`Quitar ${tipo.label.trim() || `el tipo de cita ${i + 1}`}`}
+                          title="Quitar"
+                        >
+                          <Trash2 size={15} strokeWidth={1.9} aria-hidden />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className={s.pie}>
+                «{TIPO_CITA_CONTROL_ORTO}» es fijo: la Agenda reconoce los controles por ese texto exacto.
+              </p>
+              <div style={{ marginTop: 12 }}>
+                <ButtonNew
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={<Plus size={15} strokeWidth={1.9} aria-hidden />}
+                  onClick={agregarTipo}
+                >
+                  Agregar tipo de cita
+                </ButtonNew>
+              </div>
+            </div>
+          </Tarjeta>
+        </div>
+
+        <Tarjeta
+          icono={MessageSquareText}
+          titulo="Plantillas de mensaje"
+          sub="Textos que usa el módulo para avisar por WhatsApp. Vacío = usa el texto por defecto."
+        >
+          <div className={s.tarjetaCuerpo} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {PLANTILLAS_CLAVES.map((p) => (
+              <div className={s.campo} key={p.clave}>
+                <label className={s.campoEtiqueta} htmlFor={`${idPlantilla}-${p.clave}`}>
+                  {p.etiqueta}
+                </label>
+                <textarea
+                  id={`${idPlantilla}-${p.clave}`}
+                  className="input-new"
+                  rows={3}
+                  value={templates[p.clave] ?? ""}
+                  aria-describedby={`${idPlantilla}-${p.clave}-ayuda`}
+                  onChange={(e) => setTemplates((t) => ({ ...t, [p.clave]: e.target.value }))}
+                />
+                <div className={s.campoAyuda} id={`${idPlantilla}-${p.clave}-ayuda`}>
+                  {p.ayuda}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Tarjeta>
+
+        <div className={s.barraGuardar}>
+          <ButtonNew type="button" variant="primary" onClick={guardar} disabled={saving}>
+            {saving ? "Guardando…" : "Guardar cambios"}
+          </ButtonNew>
+        </div>
       </div>
-    </div>
+    </Pantalla>
   );
 }

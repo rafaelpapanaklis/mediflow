@@ -7,14 +7,18 @@ export const dynamic = "force-dynamic";
 import { getOrthoClinicSettings } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { OrthoConfiguracionClient } from "@/components/specialties/orthodontics/configuracion/OrthoConfiguracionClient";
+import { Pantalla } from "@/components/specialties/orthodontics/modulo/piezas";
+import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 
 export default async function OrthodonticsConfiguracionPage() {
   const res = await getOrthoClinicSettings();
   if (isFailure(res)) {
     return (
-      <div style={{ padding: 24, fontSize: 13, color: "var(--text-3)" }}>
-        No se pudo cargar la Configuración: {res.error}
-      </div>
+      <Pantalla titulo="Configuración">
+        <div className={s.error} role="alert">
+          No se pudo cargar la Configuración: {res.error}
+        </div>
+      </Pantalla>
     );
   }
   return <OrthoConfiguracionClient settings={res.data.settings} doctors={res.data.doctors} />;

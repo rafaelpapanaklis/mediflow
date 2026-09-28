@@ -1,10 +1,14 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Sparkles } from "lucide-react";
+import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 
 export interface OrthoModulePlaceholderProps {
   title: string;
   description: string;
   icon?: LucideIcon;
+  /** Diseño (ws1-t3): salidas útiles mientras la pantalla no existe. */
+  children?: ReactNode;
 }
 
 /**
@@ -17,85 +21,34 @@ export interface OrthoModulePlaceholderProps {
  * Server component a propósito (sin hooks): las seis páginas que lo montan
  * son server components y no hace falta pagar el bundle de un client
  * component por un cartel que se va a reemplazar entero.
+ *
+ * Diseño (ws1-t3): mismo cartel, vestido como el resto del módulo (tokens
+ * del rediseño, sin colores sueltos) y con salidas: dice dónde está HOY lo
+ * que la persona vino a buscar.
  */
 export function OrthoModulePlaceholder({
   title,
   description,
   icon: Icon = Sparkles,
+  children,
 }: OrthoModulePlaceholderProps) {
   return (
-    <div
-      style={{
-        minHeight: "50vh",
-        display: "grid",
-        placeItems: "center",
-        padding: "clamp(16px, 3vw, 40px)",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 520,
-          background: "var(--bg-elev)",
-          border: "1px solid var(--border-soft)",
-          borderRadius: 16,
-          padding: "clamp(24px, 4vw, 40px)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          textAlign: "center",
-          gap: 16,
-        }}
-      >
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            background: "var(--brand-grad, linear-gradient(135deg, #6d5efc, #8f7bff))",
-            display: "grid",
-            placeItems: "center",
-            color: "#fff",
-          }}
-        >
-          <Icon size={26} />
-        </div>
-
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "4px 12px",
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "var(--brand)",
-            background: "var(--brand-soft)",
-            border: "1px solid var(--border-brand)",
-          }}
-        >
-          Próximamente
-        </span>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              letterSpacing: "-0.01em",
-              color: "var(--text-1)",
-              margin: 0,
-            }}
-          >
-            {title}
-          </h1>
-          <p style={{ fontSize: 14, lineHeight: 1.6, color: "var(--text-2)", margin: 0 }}>
-            {description}
+    <div className={s.pantalla}>
+      <header className={s.cabeza}>
+        <div className={s.cabezaTextos}>
+          <h1 className={s.titulo}>{title}</h1>
+          <p className={s.subtitulo}>
+            <span className={`${s.etiqueta} ${s.etiquetaVioleta}`}>Próximamente</span>
           </p>
         </div>
+      </header>
+      <div className={`${s.vacio} ${s.vacioAlto}`}>
+        <span className={s.vacioIcono} aria-hidden>
+          <Icon size={18} strokeWidth={1.8} />
+        </span>
+        <p className={s.vacioTitulo}>Esta pantalla todavía no está lista</p>
+        <p className={s.vacioPista}>{description}</p>
+        {children && <div className={s.vacioAcciones}>{children}</div>}
       </div>
     </div>
   );

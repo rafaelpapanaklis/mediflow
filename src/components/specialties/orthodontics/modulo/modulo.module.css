@@ -1,0 +1,1405 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Módulo de Ortodoncia (/dashboard/orthodontics/**) — diseño (ws1-t3).
+
+   Tablero, Pacientes en tratamiento, Cobranza, Controles, Alertas,
+   Configuración y su submenú. NO es la pestaña Ortodoncia de la ficha.
+
+   Habla el idioma visual que Rafael ya aprobó y NO declara ningún token ni
+   ningún color: todo cuelga de `.raiz`, que se monta dentro de
+   `RaizRediseno` (`pacientes-rediseno/raiz.tsx`) y hereda de ahí los
+   `--pr-*` con su versión oscura y la Instrument Sans. Las medidas (radios,
+   alturas, tamaños de letra) son las de la ficha del paciente, Caja y «Hoy».
+
+   Las piezas del sistema de diseño que el módulo usa (`KpiCard`, `BadgeNew`,
+   `ButtonNew`, `AvatarNew`, `.input-new`) se visten aquí igual que en Caja:
+   dentro de `.raiz` las variables globales se redirigen a los tokens
+   aprobados y, debajo, van las medidas clase por clase.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  /* Texto */
+  --text-1: var(--pr-texto);
+  --text-2: var(--pr-texto-2);
+  --text-3: var(--pr-texto-3);
+  --text-4: var(--pr-texto-3);
+  /* Superficies y bordes */
+  --bg-elev: var(--pr-tarjeta);
+  --bg-elev-2: var(--pr-tarjeta-2);
+  --bg-hover: var(--pr-hover);
+  --border-soft: var(--pr-borde);
+  --border-strong: var(--pr-borde);
+  /* Radios y sombras */
+  --radius-lg: var(--pr-radio);
+  --radius: var(--pr-radio-s);
+  --shadow-1: var(--pr-sombra);
+  --shadow-2: var(--pr-sombra-2);
+  /* Acento y semánticos */
+  --brand: var(--pr-activo);
+  --brand-soft: var(--pr-activo-suave);
+  --brand-softer: var(--pr-activo-suave);
+  --success: var(--pr-exito);
+  --success-soft: var(--pr-exito-suave);
+  --warning: var(--pr-alerta);
+  --warning-soft: var(--pr-alerta-suave);
+  --danger: var(--pr-peligro);
+  --danger-soft: var(--pr-peligro-suave);
+  --kpi-value-max: 28px;
+
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  /* Sin padding lateral: ese lo pone el <main> del layout. */
+  padding: 0 0 clamp(24px, 2.8vw, 32px);
+  container-type: inline-size;
+  container-name: orto;
+  color: var(--pr-texto);
+  font-size: 13px;
+  line-height: 1.4;
+  /* Instrument Sans solo iguala el ancho de las cifras si se le pide. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Submenú del módulo ─────────────────────────────────────────────────
+   La misma barra que el menú de la ficha del paciente: tarjeta blanca, el
+   apartado abierto en violeta. Se queda pegada arriba al bajar, y si no
+   cabe (teléfono) la fila se DESLIZA dentro de la barra: no salta de línea
+   ni empuja la pantalla hacia los lados. */
+
+.submenuPegajoso {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 0 0 18px;
+  padding: 6px 0;
+  background: var(--pr-fondo);
+}
+
+.submenu {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.submenu::-webkit-scrollbar {
+  display: none;
+}
+
+.submenuItem {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--pr-radio-s);
+  color: var(--pr-texto-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+
+.submenuItem > svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+@media (hover: hover) {
+  .submenuItem:hover {
+    background: var(--pr-hover);
+    color: var(--pr-texto);
+  }
+}
+
+/* El foco va por dentro: la barra recorta lo que se sale (overflow-x). */
+.submenuItem:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--pr-activo);
+}
+
+.submenuItemActivo,
+.submenuItemActivo:hover {
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  font-weight: 600;
+}
+
+.submenuItemActivo > svg {
+  opacity: 1;
+}
+
+.submenuItemActivo:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--pr-activo), inset 0 0 0 4px var(--pr-activo-texto);
+}
+
+/* ── Pantalla: cabecera + columna de bloques ─────────────────────────── */
+
+.pantalla {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.cabeza {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.cabezaTextos {
+  min-width: 0;
+}
+
+.titulo {
+  margin: 0;
+  font-size: clamp(19px, 1.7vw, 23px);
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  color: var(--pr-texto);
+}
+
+.subtitulo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+.acciones {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Botones ───────────────────────────────────────────────────────────
+   `ButtonNew` vestido como en Caja; `.boton` es lo mismo para un enlace
+   (un <a> no puede ser `ButtonNew`). */
+
+.raiz :global(.btn-new),
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+.raiz :global(.btn-new:active:not(:disabled)) {
+  transform: none;
+}
+
+@media (hover: hover) {
+  .raiz :global(.btn-new--secondary:hover:not(:disabled)),
+  .boton:hover {
+    background: var(--pr-tarjeta-2);
+    border-color: var(--pr-texto-3);
+    color: var(--pr-texto);
+  }
+}
+
+:root .raiz.raiz :global(.btn-new--primary) {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  :root .raiz.raiz :global(.btn-new--primary:hover:not(:disabled)) {
+    background: var(--pr-activo);
+    filter: brightness(1.08);
+  }
+}
+
+.raiz :global(.btn-new--ghost) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--pr-texto-2);
+}
+
+@media (hover: hover) {
+  :root .raiz.raiz :global(.btn-new--ghost:hover:not(:disabled)) {
+    background: var(--pr-hover);
+    color: var(--pr-texto);
+  }
+}
+
+.raiz :global(.btn-new--sm),
+.botonPeq {
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.raiz :global(.btn-new:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.raiz :global(.btn-new:focus-visible),
+:root .raiz.raiz :global(.btn-new--primary:focus-visible),
+.boton:focus-visible,
+.botonIcono:focus-visible,
+.enlace:focus-visible,
+.nombre:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.botonIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pr-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .botonIcono:hover:not(:disabled) {
+    background: var(--pr-peligro-suave);
+    color: var(--pr-peligro);
+  }
+}
+
+.botonIcono:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: 6px;
+  color: var(--pr-activo);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .enlace:hover {
+    text-decoration: underline;
+  }
+}
+
+/* ── Indicadores ───────────────────────────────────────────────────────
+   Son cinco. Rejilla de seis pistas para que NUNCA quede una tarjeta
+   suelta con un hueco al lado: cinco en fila en ancho; tres arriba y dos
+   abajo en medio; y en el teléfono el primero a todo lo ancho y dos y dos. */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@container orto (max-width: 1040px) {
+  .kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .kpis > * {
+    grid-column: span 2;
+  }
+  .kpis > :nth-child(n + 4) {
+    grid-column: span 3;
+  }
+}
+
+@container orto (max-width: 560px) {
+  .kpis {
+    gap: 10px;
+  }
+  .kpis > *,
+  .kpis > :nth-child(n + 4) {
+    grid-column: span 3;
+  }
+  .kpis > :first-child {
+    grid-column: span 6;
+  }
+}
+
+.raiz :global(.kpi) {
+  min-width: 0;
+  padding: 15px 18px 16px;
+  border-radius: var(--pr-radio);
+  transition: none;
+}
+
+:root .raiz.raiz :global(.kpi),
+:root .raiz.raiz :global(.kpi:hover) {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  box-shadow: var(--pr-sombra);
+  transform: none;
+}
+
+/* La etiqueta NO se corta con puntos suspensivos: si no cabe («Colocaciones
+   este mes» en el teléfono) salta a un segundo renglón. La cabecera reserva
+   siempre el alto del ícono, que es el de dos renglones, así que las cifras
+   de una misma fila quedan a la misma altura. */
+.raiz :global(.kpi__top) {
+  align-items: flex-start;
+  min-height: 30px;
+  margin-bottom: 10px;
+}
+
+.raiz :global(.kpi__label) {
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+  color: var(--pr-texto-3);
+  overflow-wrap: anywhere;
+}
+
+:root .raiz.raiz :global(.kpi__icon) {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+  box-shadow: none;
+}
+
+:root .raiz.raiz :global(.kpi--accent .kpi__icon) {
+  background: var(--kpi-accent-soft);
+  color: var(--kpi-accent);
+}
+
+:root .raiz.raiz :global(.kpi--hero .kpi__icon) {
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+.raiz :global(.kpi__value) {
+  font-family: inherit;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.raiz :global(.kpi__delta) {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+.raiz :global(.kpi__delta-pill) {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+:root .raiz.raiz :global(.kpi__delta--down .kpi__delta-pill) {
+  background: var(--pr-peligro-suave);
+  color: var(--pr-peligro);
+}
+
+/* ── Tarjetas ────────────────────────────────────────────────────────── */
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra);
+}
+
+.tarjetaCabeza {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 18px 12px;
+}
+
+.tarjetaIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+.tonoExito { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.tonoAlerta { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.tonoPeligro { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+.tonoNeutro { background: var(--pr-hover); color: var(--pr-texto-3); }
+
+/* Con una sola línea el título queda centrado con el ícono; con subtítulo,
+   el ícono se queda arriba, junto al título. */
+.tarjetaTextos {
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.tarjetaTitulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  line-height: 1.25;
+  color: var(--pr-texto);
+}
+
+.tarjetaSub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+.tarjetaAccion {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.tarjetaCuerpo {
+  flex: 1;
+  min-width: 0;
+  padding: 0 18px 18px;
+}
+
+/* Cuerpo que es una lista de filas: menos aire lateral, las filas ya
+   llevan el suyo. */
+.tarjetaLista {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0 10px 10px;
+  list-style: none;
+}
+
+/* Contador a la derecha del título de una tarjeta. */
+.contador {
+  flex-shrink: 0;
+  min-width: 22px;
+  height: 21px;
+  padding: 0 7px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--pr-hover);
+  color: var(--pr-texto-2);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.contadorPeligro { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+.contadorAlerta { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+
+/* ── Rejillas ──────────────────────────────────────────────────────────
+   Se apilan por el ancho ÚTIL del módulo (contenedor), no por el de la
+   ventana: el menú lateral puede estar recogido o desplegado. */
+
+.rejillaPrincipal {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.rejillaPar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@container orto (max-width: 860px) {
+  .rejillaPrincipal,
+  .rejillaPar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Filas (control de hoy, alerta de un paciente) ───────────────────── */
+
+.fila {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  transition: background 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .fila:hover {
+    border-color: var(--pr-borde);
+    background: var(--pr-hover);
+  }
+}
+
+.filaCuerpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.nombre {
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--pr-texto);
+  text-decoration: none;
+  /* Un nombre largo salta de línea; no se corta ni empuja la fila. */
+  overflow-wrap: anywhere;
+}
+
+/* La fila entera abre la ficha: el enlace es el nombre, y se estira sobre
+   toda la fila. Los botones de la fila van por encima (`.filaDerecha`). */
+.nombreEstirado::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+@media (hover: hover) {
+  a.nombre:hover {
+    color: var(--pr-activo);
+  }
+}
+
+.detalle {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--pr-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.detallePeligro {
+  color: var(--pr-peligro);
+  font-weight: 600;
+}
+
+.filaDerecha {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  min-width: 0;
+  max-width: 60%;
+  text-align: right;
+}
+
+/* El aviso de un botón («Copiado», el motivo de no envío) va debajo, en su
+   propio renglón, sin ensanchar la fila. */
+.filaDerecha > .nota {
+  flex: 1 0 100%;
+}
+
+.hora {
+  flex: none;
+  min-width: 66px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.importe {
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--pr-texto);
+}
+
+.importePeligro { color: var(--pr-peligro); }
+.importeApagado { font-weight: 500; color: var(--pr-texto-3); }
+
+.nota {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--pr-texto-3);
+}
+
+.notaExito {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--pr-exito);
+}
+
+.notaPeligro { color: var(--pr-peligro); }
+
+/* En el teléfono, lo de la derecha baja debajo del nombre en vez de
+   apretarlo: nada se corta y nada empuja hacia los lados. */
+@container orto (max-width: 460px) {
+  .filaApilable {
+    flex-wrap: wrap;
+  }
+  .filaApilable > .filaDerecha {
+    flex: 1 0 100%;
+    max-width: none;
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+/* ── Barras (producción por doctor, lo que va a entrar) ──────────────── */
+
+.barras {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.barraFila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 6px;
+  font-size: 13px;
+}
+
+.barraEtiqueta {
+  min-width: 0;
+  color: var(--pr-texto-2);
+  overflow-wrap: anywhere;
+}
+
+.barraEtiqueta::first-letter {
+  text-transform: uppercase;
+}
+
+.barraPista {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--pr-hover);
+  overflow: hidden;
+}
+
+.barraRelleno {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--pr-activo);
+}
+
+.barraRellenoExito { background: var(--pr-exito); }
+
+/* ── Tres cifras en fila (valoraciones) ──────────────────────────────── */
+
+.cifras {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cifra {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+}
+
+.cifraValor {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  color: var(--pr-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.cifraEtiqueta {
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--pr-texto-3);
+}
+
+.pie {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+/* ── Estados vacíos ──────────────────────────────────────────────────── */
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  border: 1px dashed var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  text-align: center;
+}
+
+.vacioAlto {
+  min-height: 240px;
+  justify-content: center;
+}
+
+.vacioIcono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+.vacioTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+.vacioPista {
+  margin: 0;
+  max-width: 58ch;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+.vacioAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* «Todo en orden» de una alerta sin casos: una línea, no una caja. */
+.enOrden {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0 18px 16px;
+  font-size: 12.5px;
+  color: var(--pr-texto-3);
+}
+
+.enOrden > svg {
+  flex-shrink: 0;
+  color: var(--pr-exito);
+}
+
+/* ── Resumen de alertas: un atajo por tipo ───────────────────────────── */
+
+.resumen {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@container orto (max-width: 960px) {
+  .resumen {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .resumen > * {
+    grid-column: span 2;
+  }
+  .resumen > :nth-child(n + 4) {
+    grid-column: span 3;
+  }
+}
+
+@container orto (max-width: 560px) {
+  .resumen > *,
+  .resumen > :nth-child(n + 4) {
+    grid-column: span 3;
+  }
+  .resumen > :first-child {
+    grid-column: span 6;
+  }
+}
+
+.resumenItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  box-shadow: var(--pr-sombra);
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .resumenItem:hover {
+    background: var(--pr-tarjeta-2);
+    border-color: var(--pr-texto-3);
+  }
+}
+
+.resumenItem:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.resumenTextos {
+  min-width: 0;
+}
+
+.resumenValor {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.4px;
+  color: var(--pr-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.resumenEtiqueta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--pr-texto-3);
+}
+
+.resumenItemVacio .resumenValor {
+  color: var(--pr-texto-3);
+}
+
+/* Al saltar a una sección desde el resumen, que no quede tapada por el
+   submenú pegado arriba. */
+.ancla {
+  scroll-margin-top: 70px;
+}
+
+/* ── Buscador y tabla (Pacientes en tratamiento) ─────────────────────── */
+
+.barraHerramientas {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 18px 12px;
+}
+
+.buscador {
+  position: relative;
+  flex: 1 1 240px;
+  max-width: 340px;
+  min-width: 0;
+}
+
+.buscador > svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--pr-texto-3);
+  pointer-events: none;
+}
+
+.buscadorEntrada {
+  width: 100%;
+  height: 38px;
+  padding: 0 11px 0 33px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.buscadorEntrada::placeholder {
+  color: var(--pr-texto-3);
+  opacity: 0.75;
+}
+
+.buscadorEntrada:focus,
+.buscadorEntrada:focus-visible {
+  outline: none;
+  border-color: var(--pr-activo);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+.conteo {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+  white-space: nowrap;
+}
+
+.tablaCaja {
+  min-width: 0;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tabla th {
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--pr-borde);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tabla td {
+  position: relative;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+  color: var(--pr-texto);
+  vertical-align: middle;
+}
+
+.tabla tbody tr {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.tabla tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (hover: hover) {
+  .tabla tbody tr:hover {
+    background: var(--pr-hover);
+  }
+}
+
+.tabla tbody tr:focus-within {
+  background: var(--pr-hover);
+}
+
+.tabla .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.paciente {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pacienteTextos {
+  min-width: 0;
+}
+
+/* En estrecho la tabla se vuelve una lista de tarjetas: cada paciente es un
+   bloque con sus datos etiquetados. Nada de deslizar una tabla de lado. */
+@container orto (max-width: 640px) {
+  .tabla,
+  .tabla tbody,
+  .tabla tr,
+  .tabla td {
+    display: block;
+  }
+
+  .tabla thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .tabla tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 10px 10px;
+  }
+
+  .tabla tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px 12px;
+    padding: 11px 12px;
+    border: 1px solid var(--pr-borde-suave);
+    border-radius: var(--pr-radio-s);
+    background: var(--pr-tarjeta-2);
+  }
+
+  .tabla td,
+  .tabla tbody tr:last-child td {
+    padding: 0;
+    border: 0;
+  }
+
+  .tabla td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .tabla td[data-etiqueta]::before {
+    content: attr(data-etiqueta);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pr-texto-3);
+  }
+
+  .tabla .num {
+    text-align: left;
+  }
+
+  .tabla td.estado {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .tabla td.estado::before {
+    display: none;
+  }
+}
+
+/* ── Etiquetas de estado y avatar (sistema de diseño, vestidos) ──────── */
+
+.raiz :global(.badge-new) {
+  height: 21px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border-color: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+:root .raiz.raiz :global(.badge-new--success) { background: var(--pr-exito-suave); color: var(--pr-exito); }
+:root .raiz.raiz :global(.badge-new--warning) { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+:root .raiz.raiz :global(.badge-new--danger) { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+/* El lenguaje aprobado no tiene un azul «info»: va en el violeta suave. */
+:root .raiz.raiz :global(.badge-new--info),
+:root .raiz.raiz :global(.badge-new--brand) { background: var(--pr-activo-suave); color: var(--pr-activo); }
+:root .raiz.raiz :global(.badge-new--neutral) { background: var(--pr-hover); color: var(--pr-texto-3); }
+
+/* El avatar conserva el degradado propio de cada nombre (lo pone
+   `AvatarNew` en línea, para reconocer a la persona de un vistazo): aquí
+   solo se le da el tamaño de la fila. */
+:root .raiz.raiz :global(.avatar-new--sm) {
+  width: 30px;
+  height: 30px;
+  font-size: 11px;
+}
+
+/* ── Configuración: campos ───────────────────────────────────────────── */
+
+/* Dos columnas cuando hay sitio (menos bajar y subir): a la izquierda lo
+   del caso y la agenda, a la derecha los mensajes. En estrecho, una. */
+.formulario {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 14px;
+}
+
+.formularioColumna {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+@container orto (max-width: 900px) {
+  .formulario {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.campoEtiqueta {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--pr-texto-3);
+}
+
+.campoAyuda {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+.raiz :global(.input-new),
+.campoEntrada {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 11px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.raiz select:global(.input-new) {
+  height: 38px;
+  padding-block: 0;
+}
+
+.raiz textarea:global(.input-new) {
+  height: auto;
+  min-height: 84px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+@media (hover: hover) {
+  .raiz :global(.input-new:hover),
+  .campoEntrada:hover:not(:disabled) {
+    border-color: var(--pr-texto-3);
+  }
+}
+
+.raiz :global(.input-new:focus),
+.raiz :global(.input-new:focus-visible),
+.campoEntrada:focus,
+.campoEntrada:focus-visible {
+  outline: none;
+  border-color: var(--pr-activo);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+:root .raiz.raiz :global(.input-new::placeholder),
+.campoEntrada::placeholder {
+  color: var(--pr-texto-3);
+  opacity: 0.75;
+}
+
+/* El <option> lo pinta el sistema: que herede la tarjeta y no salga
+   claro sobre claro en el tema oscuro. */
+:root .raiz.raiz select:global(.input-new) option {
+  background-color: var(--pr-tarjeta);
+  color: var(--pr-texto);
+}
+
+.campoEntrada:disabled {
+  background: var(--pr-hover);
+  color: var(--pr-texto-2);
+  cursor: not-allowed;
+}
+
+.tipos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tipo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tipo > .campoEntrada {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Hueco del tamaño del botón «Quitar», para que el campo fijo mida lo
+   mismo que los demás y el candado quede en su sitio. */
+.candado {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  color: var(--pr-texto-3);
+}
+
+/* A la IZQUIERDA a propósito: abajo a la derecha vive el botón flotante de
+   Sabina, y un «Guardar» debajo de él no se puede pulsar. */
+.barraGuardar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.error {
+  padding: 12px 14px;
+  border: 1px solid var(--pr-peligro);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-peligro-suave);
+  color: var(--pr-peligro);
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .raiz *,
+  .raiz *::before,
+  .raiz *::after {
+    transition: none !important;
+  }
+}
+
+/* ── Etiqueta suelta (el «Próximamente» de un cartel) ────────────────── */
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  height: 21px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.etiquetaVioleta { background: var(--pr-activo-suave); color: var(--pr-activo); }
+
+/* ── Esqueleto de carga ────────────────────────────────────────────────
+   Lo que se ve al cambiar de apartado mientras llegan los datos. El submenú
+   NO se va (lo pinta el layout): solo cambia lo de debajo, con la misma
+   forma —cabecera, fila de indicadores, tarjetas— para que al llegar el
+   contenido nada salte de sitio. El gris sale de la tinta del texto, así
+   sirve igual en claro y en oscuro. */
+
+.hueso {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--pr-hover);
+  background: color-mix(in srgb, var(--pr-texto) 7%, transparent);
+}
+
+.hueso::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--pr-tarjeta) 50%, transparent 100%);
+  opacity: 0.55;
+  transform: translateX(-100%);
+  animation: ortoBrillo 1.6s ease-in-out infinite;
+}
+
+@keyframes ortoBrillo {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hueso::after { animation: none; }
+}
+
+.huesoTitulo { width: 220px; max-width: 60%; height: 24px; }
+.huesoSub { width: 320px; max-width: 80%; height: 13px; margin-top: 8px; border-radius: 6px; }
+.huesoKpi { height: 96px; border-radius: var(--pr-radio); }
+.huesoTarjeta { height: 220px; border-radius: var(--pr-radio); }

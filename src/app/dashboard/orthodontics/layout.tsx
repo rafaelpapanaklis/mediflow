@@ -16,11 +16,12 @@
 export const dynamic = "force-dynamic";
 
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { hasPermission } from "@/lib/auth/permissions";
+import { RaizModulo } from "@/components/specialties/orthodontics/modulo/piezas";
+import { SubmenuOrtodoncia } from "@/components/specialties/orthodontics/modulo/submenu";
 
 const SUBMENU = [
   { href: "/dashboard/orthodontics/tablero", label: "Tablero" },
@@ -47,35 +48,12 @@ export default async function OrthodonticsModuleLayout({
     redirect("/dashboard");
   }
 
+  // Diseño (ws1-t3): la raíz del módulo trae los tokens y la tipografía del
+  // rediseño; el submenú marca el apartado abierto y se queda pegado arriba.
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <nav
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-          borderBottom: "1px solid var(--border-soft)",
-          paddingBottom: 12,
-        }}
-      >
-        {SUBMENU.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            style={{
-              padding: "6px 12px",
-              borderRadius: 999,
-              fontSize: 13,
-              fontWeight: 600,
-              color: "var(--text-2)",
-              background: "var(--bg-elev-2)",
-            }}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+    <RaizModulo>
+      <SubmenuOrtodoncia apartados={SUBMENU} />
       {children}
-    </div>
+    </RaizModulo>
   );
 }

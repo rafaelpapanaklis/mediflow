@@ -5,8 +5,11 @@
 // conectado) ofrece copiar el texto.
 
 import { useState } from "react";
+import { Check, Copy, Send } from "lucide-react";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { sendMensualidadReminder } from "@/app/actions/orthodontics/whatsapp/sendMensualidadReminder";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 
 export function EnviarRecordatorioButton({
   patientId,
@@ -52,33 +55,41 @@ export function EnviarRecordatorioButton({
   }
 
   if (estado === "enviado") {
-    return <span style={{ fontSize: 11, color: "#34d399" }}>Recordatorio enviado</span>;
+    return (
+      <span className={s.notaExito} role="status">
+        <Check size={14} strokeWidth={2.2} aria-hidden />
+        Recordatorio enviado
+      </span>
+    );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-      <button
+    <>
+      <ButtonNew
         type="button"
+        variant="secondary"
+        size="sm"
+        icon={
+          estado === "copiar" ? (
+            <Copy size={14} strokeWidth={1.9} aria-hidden />
+          ) : (
+            <Send size={14} strokeWidth={1.9} aria-hidden />
+          )
+        }
         onClick={estado === "copiar" ? copiar : enviar}
         disabled={estado === "cargando"}
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          padding: "4px 10px",
-          borderRadius: 999,
-          border: "1px solid var(--border)",
-          background: "var(--surface-2)",
-          color: "var(--brand)",
-          cursor: estado === "cargando" ? "default" : "pointer",
-        }}
       >
         {estado === "cargando" ? "Enviando…" : estado === "copiar" ? "Copiar texto" : "Enviar recordatorio"}
-      </button>
+      </ButtonNew>
       {mensaje && (
-        <span style={{ fontSize: 10, color: estado === "error" ? "var(--danger, #ef4444)" : "var(--text-3)", maxWidth: 200, textAlign: "right" }}>
+        <span
+          className={estado === "error" ? `${s.nota} ${s.notaPeligro}` : s.nota}
+          style={{ maxWidth: 220 }}
+          role={estado === "error" ? "alert" : "status"}
+        >
           {mensaje}
         </span>
       )}
-    </div>
+    </>
   );
 }
