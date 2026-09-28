@@ -1678,6 +1678,46 @@ model MigratedOrthoCase {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// HISTORIAL DE GASTOS DE LABORATORIO MIGRADO (ws1-t2, sep-2026). El panel NO
+// tiene un módulo de costos de laboratorio (LabOrder/LabPartner son flujo
+// clínico de órdenes — spec/status/pdf — SIN campo de costo; ver
+// src/lib/clinical-shared/lab-orders.ts). Lo mínimo útil pedido por Rafael:
+// un renglón por acción de laboratorio YA pagada en el sistema anterior
+// (Dentalink "Laboratorio → Acciones/Costos" y equivalentes), de solo
+// lectura, igual criterio que MigratedPayment:
+//   · NUNCA toca `invoices`/`payments`/`patientCredit`: el saldo no cambia.
+//   · Se ve, de solo lectura, en la ficha del paciente ("Gastos de
+//     laboratorio (migrados)").
+// Sin relación Prisma a propósito (mismo criterio que MigratedPayment/
+// PatientCredit). Tabla creada a mano por
+// sql/laboratorio-historial-migrado.sql — el código tolera que aún no exista
+// (P2021/P2022).
+// ═══════════════════════════════════════════════════════════════════════════
+model MigratedLabExpense {
+  id           String   @id @default(cuid())
+  clinicId     String
+  patientId    String
+  /// Nombre del laboratorio externo tal cual venía en el archivo de origen (texto libre, sin FK a LabPartner).
+  labName      String?
+  /// La acción/prestación de laboratorio ("Corona zirconia", "Placa oclusal"…).
+  action       String
+  /// Costo para la CLÍNICA (lo que se le paga al laboratorio) — siempre positivo. Es el "gasto".
+  cost         Float
+  /// Precio que se le cobró al paciente por esa acción, si el archivo lo trae. Informativo: no genera factura ni cobro.
+  patientPrice Float?
+  doctorId     String?
+  /// Fecha ORIGINAL de la acción/solicitud de laboratorio (no la de importación).
+  incurredAt   DateTime
+  /// "Dentalink", o "otro sistema" si el asistente no dijo cuál era.
+  origin       String
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  @@index([clinicId, patientId, incurredAt])
+  @@map("migrated_lab_expenses")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Anticipo por WhatsApp con Mercado Pago (WS1-T5). Tablas creadas a mano por
 // sql/anticipo-whatsapp.sql — nunca con `prisma migrate`.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2804,6 +2844,58 @@ model PlanPayment {
   plan PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@map("plan_payments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CUOTAS POR VENCER MIGRADAS (ws1-t6, importador Dentalink, sep-2026).
+// 08c_Pagos_Por_Vencimiento trae el CALENDARIO de una deuda que YA está
+// contada en 04_Saldos (balancesHandler crea la factura "Saldo inicial
+// migrado" con el total, o el paciente ya tiene un MigratedOrthoCase — ws1-t1
+// — con su propio `totalAmount`). Esta tabla NUNCA suma dinero nuevo: solo
+// reparte esa deuda ya existente en fechas, para que la clínica sepa CUÁNDO
+// vence cada parte. `invoiceId`/`migratedOrthoCaseId` son solo el ANCLA
+// informativa (a qué deuda pertenece esta cuota) — de solo lectura, igual
+// criterio que MigratedPayment: NUNCA toca `invoices`/`payments`, así que
+// Caja, cortes de caja, CFDI y WhatsApp la ignoran sin código nuevo. Sin
+// relación Prisma a propósito (mismo criterio que MigratedPayment/
+// MigratedOrthoCase/MigratedLabExpense): Clinic/Patient/Invoice no cambian de
+// forma. Tabla creada a mano por sql/cuotas-por-vencer-migradas.sql — el
+// código tolera que aún no exista (P2021/P2022).
+// ═══════════════════════════════════════════════════════════════════════════
+model MigratedInstallment {
+  id        String @id @default(cuid())
+  clinicId  String
+  patientId String
+
+  /// Factura a la que pertenece esta cuota (la "Saldo inicial migrado" de
+  /// balancesHandler), si se pudo resolver. Informativa: nunca se escribe su
+  /// `total`/`balance` desde aquí.
+  invoiceId String?
+  /// Caso de ortodoncia migrado (ws1-t1) al que pertenece esta cuota, si el
+  /// paciente tiene uno. Informativa, igual criterio que `invoiceId`.
+  migratedOrthoCaseId String?
+  /// Folio/N° de tratamiento del plan en el sistema de origen, si venía —
+  /// agrupa las cuotas de un mismo plan al mostrarlas.
+  planExternalId String?
+
+  installmentNumber Int
+  amount            Float
+  dueDate           DateTime
+  /// PENDING | PAID | OVERDUE — texto libre, informativo (no enum: sin un
+  /// export real que confirme los valores exactos de Dentalink).
+  status String @default("PENDING")
+  /// Fecha en la que Dentalink ya la marcaba pagada, si el archivo la trae.
+  paidAt  DateTime?
+  concept String?
+
+  /// "Dentalink", o "otro sistema" si el asistente no dijo cuál era.
+  origin      String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([clinicId, patientId, dueDate])
+  @@index([clinicId, invoiceId])
+  @@map("migrated_installments")
 }
 
 // ── Consent Forms ─────────────────────────────────────────────────────
