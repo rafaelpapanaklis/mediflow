@@ -19,6 +19,7 @@ import { dayKeyIn, staleShiftOf } from "@/lib/caja-turno";
 import { CLASES_CAJA_REDISENO, clasesCaja } from "@/components/dashboard/caja-rediseno/raiz";
 import { CajaNueva } from "@/components/dashboard/caja-rediseno/caja-nueva";
 import { AvisoAnticiposPorRevisar } from "@/components/dashboard/billing/aviso-anticipos-por-revisar";
+import { ListaMensualidades } from "@/components/specialties/orthodontics/cobranza/ListaMensualidades";
 
 interface BillingProps {
   invoices:      any[];
@@ -451,9 +452,12 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     // rediseño (caja-rediseno/); apagado, ni una clase: el árbol es el de hoy.
     <div className={rediseno ? CLASES_CAJA_REDISENO : undefined} style={{ maxWidth: 1400, margin: "0 auto", width: "100%" }}>
       {/* ws1-t3 fase 1 — anticipos pedidos desde el panel que quedaron
-          marcados para revisar. Se calla sola si no hay ninguno. */}
-      <div style={{ padding: rediseno ? undefined : "clamp(14px, 1.6vw, 28px) clamp(14px, 1.6vw, 28px) 0" }}>
+          marcados para revisar. Se calla sola si no hay ninguno.
+          ws1-t5 — mensualidades de ortodoncia por cobrar (R2/R5). Se calla
+          sola si no hay ninguna. */}
+      <div style={{ padding: rediseno ? undefined : "clamp(14px, 1.6vw, 28px) clamp(14px, 1.6vw, 28px) 0", display: "flex", flexDirection: "column", gap: 12 }}>
         <AvisoAnticiposPorRevisar />
+        <ListaMensualidades />
       </div>
       {rediseno ? (
         /* CAJA REESTRUCTURADA (ws1-t6): la misma pantalla con cinco bloques en
