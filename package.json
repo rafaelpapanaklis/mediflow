@@ -361,6 +361,7 @@
     "test:orto-imagen-list-signed-urls": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/imagen/__tests__/listCephalometricAnalyses.test.ts",
     "test:orto-imagen-facial-analysis": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/imagen/__tests__/getFacialAnalysis.test.ts src/app/actions/orthodontics/imagen/__tests__/saveFacialAnalysis.test.ts",
     "test:orto-adapter-invoice-total": "tsx --test src/lib/orthodontics/redesign/__tests__/adapter-invoice-total.test.ts",
+    "test:orto-landing-valoracion": "tsx --test src/lib/orthodontics/__tests__/landing-servicio-valoracion.test.ts",
     "test:import-detectar-entidad": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/detectar-entidad.test.ts",
     "test:import-multi-archivo": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/multi-archivo.test.ts",
     "test:import-seguridad-archivos": "tsx --test --experimental-test-module-mocks src/lib/import/__tests__/seguridad-archivos.test.ts"

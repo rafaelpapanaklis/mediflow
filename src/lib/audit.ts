@@ -36,6 +36,11 @@ export type AuditEntityType =
   | "xray-analysis"
   | "ai-consult"
   | "patient-file"
+  // Subida rechazada por el validador compartido (WS1-T8, seguridad de
+  // subidas): archivo disfrazado, ejecutable, PDF con JS, tamaño excedido,
+  // etc. `entityId` es el patientId cuando lo hay, o "n/a" en rutas sin
+  // paciente (logos, soporte, comprobantes).
+  | "upload-rejected"
   | "prescription"
   | "user"
   | "clinic"
