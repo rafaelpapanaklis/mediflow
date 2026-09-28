@@ -10,6 +10,7 @@ import {
   calcularComision,
   calcularMontoAnticipo,
   citaEsFuturaParaAnticipo,
+  conPuntoFinal,
   esMetodoRegistroAnticipo,
   evaluarPago,
   horasHastaVencer,
@@ -344,5 +345,16 @@ describe("ws1-t3 fase 2 — «Registrar anticipo recibido»: método real y refe
     assert.equal(validarReferenciaRegistro("cash", undefined), null);
     assert.equal(validarReferenciaRegistro("debit", undefined), null);
     assert.equal(validarReferenciaRegistro("credit", undefined), null);
+  });
+});
+
+describe("conPuntoFinal (N8, QA ronda 4) — nunca deja 'p.m..'", () => {
+  it("agrega el punto si el texto no termina en uno", () => {
+    assert.equal(conPuntoFinal("28-sep, 04:00"), "28-sep, 04:00.");
+  });
+
+  it("NO lo duplica si el texto ya termina en punto (Intl deja 'p.m.'/'a.m.' con el suyo)", () => {
+    assert.equal(conPuntoFinal("28-sep, 04:00 p.m."), "28-sep, 04:00 p.m.");
+    assert.equal(conPuntoFinal("28-sep, 09:00 a.m."), "28-sep, 09:00 a.m.");
   });
 });

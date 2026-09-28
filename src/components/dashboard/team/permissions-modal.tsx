@@ -126,7 +126,7 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
         <div className="modal__header">
           <h2 className="modal__title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Shield size={16} strokeWidth={1.75} aria-hidden style={{ color: "var(--brand)" }} />
-            {t("settings.team.permissionsOf", { name: fullName })}
+            {t("settings.permissions.permissionsOf", { name: fullName })}
           </h2>
           <button
             type="button"

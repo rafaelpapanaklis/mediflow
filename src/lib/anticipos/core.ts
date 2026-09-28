@@ -434,6 +434,15 @@ export function formatoPesos(n: number): string {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
 }
 
+/**
+ * Cierra una frase con un punto final, sin duplicarlo si el texto ya termina
+ * en uno — «10:42 p.m.» (con SU punto, de Intl) más un punto fijo detrás en
+ * la plantilla dejaba «p.m..» (N8, QA ronda 4, modal «Pedir anticipo»).
+ */
+export function conPuntoFinal(texto: string): string {
+  return texto.endsWith(".") ? texto : `${texto}.`;
+}
+
 /** «10:42» en la zona de la clínica. */
 export function horaCorta(fecha: Date, tz: string): string {
   return new Intl.DateTimeFormat("es-MX", {

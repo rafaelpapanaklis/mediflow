@@ -141,21 +141,29 @@ export async function PUT(req: NextRequest) {
 
   const antes = pantalla.config;
   const antesPanel = pantalla.configPanel;
-  // La fila existe: la creó la conexión. updateMany por clinicId de la sesión.
-  await prisma.clinicMercadoPago.updateMany({
+  // ws1-t2 (N2, QA ronda 4) — upsert, NUNCA updateMany: sin cuenta de
+  // Mercado Pago conectada no hay fila en clinic_mercadopago (la crea la
+  // conexión), y el panel de "Pedir anticipo" se puede configurar SOLO con
+  // transferencia (sin MP). updateMany contra una fila que no existe
+  // "tiene éxito" con 0 filas tocadas — el PUT devolvía 200 y el toast decía
+  // «Guardado.» sin haber guardado nada, y encima el audit log de abajo
+  // registraba un cambio que nunca ocurrió.
+  const datosGuardado = {
+    ...(botTouched
+      ? {
+          depositEnabled: activo,
+          depositMode: modo,
+          depositAmount: Number.isFinite(monto) && monto >= 0 ? monto : 0,
+          depositPercent: modo === "percent" && Number.isInteger(porcentaje) ? Math.min(Math.max(porcentaje, 0), 100) : 0,
+          holdMinutes: minutos,
+        }
+      : {}),
+    ...(panelData ?? {}),
+  };
+  await prisma.clinicMercadoPago.upsert({
     where: { clinicId: ctx.clinicId },
-    data: {
-      ...(botTouched
-        ? {
-            depositEnabled: activo,
-            depositMode: modo,
-            depositAmount: Number.isFinite(monto) && monto >= 0 ? monto : 0,
-            depositPercent: modo === "percent" && Number.isInteger(porcentaje) ? Math.min(Math.max(porcentaje, 0), 100) : 0,
-            holdMinutes: minutos,
-          }
-        : {}),
-      ...(panelData ?? {}),
-    },
+    create: { clinicId: ctx.clinicId, ...datosGuardado },
+    update: datosGuardado,
   });
 
   await logAudit({

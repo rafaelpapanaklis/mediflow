@@ -275,6 +275,36 @@ describe("pedirAnticipoDeCita: crea la factura si hace falta", () => {
     assert.equal(r.error, "plazo_invalido");
     assert.equal(e.db.tablas.invoice.length, 0, "sin factura huérfana: A2");
   });
+
+  // N3 (QA ronda 4): antes el canal (Mercado Pago desconectado, o sin datos
+  // bancarios para transferencia) solo se comprobaba DENTRO de
+  // pedirAnticipoDeFactura, que ya corría con la factura recién creada por
+  // crearFacturaDesdeCita — un 409 "sin_mp" dejaba la factura viva de todos
+  // modos. Ahora se valida antes de tocar la base (resolverCanal).
+  it("sin factura, Mercado Pago desconectado (sin pedir transferencia): rechaza el CANAL y NO crea la factura", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 86_400_000) });
+    e.db.tablas.clinicMercadoPago[0].accessToken = undefined; // se desconectó
+    const r = await pedirAnticipoDeCita(
+      { clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 300, concepto: { serviceId: "svc1" } },
+      e.deps,
+    );
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "sin_mp");
+    assert.equal(e.db.tablas.invoice.length, 0, "sin factura huérfana: N3");
+  });
+
+  it("sin factura, transferencia pedida SIN datos bancarios cargados: rechaza el CANAL y NO crea la factura", async () => {
+    const e = escenario();
+    e.db.tablas.appointment.push({ id: "apt1", clinicId: "c1", patientId: "p1", doctorId: "d1", status: "SCHEDULED", startsAt: new Date(T0.getTime() + 86_400_000) });
+    const r = await pedirAnticipoDeCita(
+      { clinicId: "c1", appointmentId: "apt1", userId: "u1", monto: 300, concepto: { serviceId: "svc1" }, metodo: "transferencia" },
+      e.deps,
+    );
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "sin_mp");
+    assert.equal(e.db.tablas.invoice.length, 0, "sin factura huérfana: N3");
+  });
 });
 
 describe("Ajuste 2 (decisión de Rafael): SOLO citas futuras, y sin comisión de DaleControl", () => {

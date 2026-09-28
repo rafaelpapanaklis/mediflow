@@ -323,6 +323,51 @@ export async function pedirAnticipoDeFactura(
   }
 }
 
+/**
+ * UN SOLO TIPO, sin unión (mismo criterio que ResultadoPedirAnticipo: el
+ * repo no compila en `strict` y no estrecha bien por un booleano `ok`).
+ * `fallo` es null exactamente cuando el canal quedó resuelto.
+ */
+interface ResolverCanalResultado {
+  cred: CredencialDeCobro | null;
+  base: string | null;
+  banco: CuentaBancariaSede | null;
+  fallo: ResultadoPedirAnticipo | null;
+}
+
+/**
+ * Valida el canal (Mercado Pago o transferencia) SIN tocar ninguna factura.
+ * `pedirAnticipoDeFacturaImpl` la usa para la factura ya existente;
+ * `pedirAnticipoDeCitaImpl` la llama ANTES de crear la factura de la cita
+ * (N3, QA ronda 4): antes esto solo se comprobaba aquí dentro, así que una
+ * cita SIN factura con el canal roto (sin MP conectado, o desconectado entre
+ * abrir el modal y pedirlo) igual dejaba la factura creada — el 409 llegaba
+ * después de `crearFacturaDesdeCita`, no antes.
+ */
+async function resolverCanal(
+  d: DepsAnticipoPanel,
+  clinicId: string,
+  metodo: MetodoPedirAnticipo,
+): Promise<ResolverCanalResultado> {
+  if (metodo === "mercadopago") {
+    if (!d.plataformaLista()) return { cred: null, base: null, banco: null, fallo: fallo("sin_mp") };
+    const base = d.baseUrl();
+    const cred = await d.credencial(clinicId);
+    if (!cred || !base) return { cred: null, base: null, banco: null, fallo: fallo("sin_mp") };
+    return { cred, base, banco: null, fallo: null };
+  }
+  const banco = await d.datosBancarios(clinicId);
+  if (!banco) {
+    return {
+      cred: null,
+      base: null,
+      banco: null,
+      fallo: fallo("sin_mp", "Esta clínica no tiene datos bancarios cargados: agrégalos en Configuración → Anticipos."),
+    };
+  }
+  return { cred: null, base: null, banco, fallo: null };
+}
+
 async function pedirAnticipoDeFacturaImpl(
   args: { clinicId: string; invoiceId: string; userId: string; monto: number; horas?: number; metodo?: MetodoPedirAnticipo },
   over?: Partial<DepsAnticipoPanel>,
@@ -335,18 +380,9 @@ async function pedirAnticipoDeFacturaImpl(
   // Los dos canales son INDEPENDIENTES (fase 2): Mercado Pago exige cuenta
   // conectada; transferencia exige datos bancarios de la sede cargados. Cada
   // uno se valida SOLO con lo que va a usar.
-  let cred: CredencialDeCobro | null = null;
-  let base: string | null = null;
-  let banco: CuentaBancariaSede | null = null;
-  if (metodo === "mercadopago") {
-    if (!d.plataformaLista()) return fallo("sin_mp");
-    base = d.baseUrl();
-    cred = await d.credencial(clinicId);
-    if (!cred || !base) return fallo("sin_mp");
-  } else {
-    banco = await d.datosBancarios(clinicId);
-    if (!banco) return fallo("sin_mp", "Esta clínica no tiene datos bancarios cargados: agrégalos en Configuración → Anticipos.");
-  }
+  const canal = await resolverCanal(d, clinicId, metodo);
+  if (canal.fallo) return canal.fallo;
+  const { cred, base, banco } = canal;
   const ahora = d.ahora();
 
   const inv = await d.db.invoice.findFirst({
@@ -621,6 +657,12 @@ async function pedirAnticipoDeCitaImpl(
       "Esta cita ya pasó, ya se atendió o ya no está viva: el anticipo solo se puede pedir para citas futuras.",
     );
   }
+
+  // N3 (QA ronda 4): el canal se valida ANTES de crear la factura de la
+  // cita — ver `resolverCanal`.
+  const metodo: MetodoPedirAnticipo = args.metodo === "transferencia" ? "transferencia" : "mercadopago";
+  const canal = await resolverCanal(d, args.clinicId, metodo);
+  if (canal.fallo) return canal.fallo;
 
   const existente = await d.db.invoice.findUnique({ where: { appointmentId: appt.id }, select: { id: true } });
   let invoiceId = existente?.id ?? null;

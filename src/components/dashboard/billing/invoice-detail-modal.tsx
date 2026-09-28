@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { cfdiAvisoPersistente, cfdiImpideReintento } from "@/lib/cfdi-avisos";
-import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle, Wallet, HandCoins } from "lucide-react";
+import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle, Wallet, HandCoins, Clock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -730,6 +730,18 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     <Wallet size={12} strokeWidth={1.75} aria-hidden /> Anticipo
                   </span>
                   <span className={`${rediseno ? c.cifra : ""} ${ant.subfilaCifra}`}>{fmtMXNdec(anticipoPagado)}</span>
+                </div>
+              )}
+              {/* N15 (QA ronda 4): antes solo se enteraba de un anticipo
+                  PENDING quien abría «Cancelar» o «Registrar anticipo» — el
+                  resumen de arriba no lo mencionaba y parecía una factura
+                  sin nada en curso. */}
+              {anticipoPendiente && (
+                <div className={`${cx("flex justify-between", c.resumenFila)} ${ant.subfila}`}>
+                  <span className={`${cx("text-muted-foreground", c.rotulo)} ${ant.subfilaRotulo}`}>
+                    <Clock size={12} strokeWidth={1.75} aria-hidden /> Anticipo pendiente
+                  </span>
+                  <span className={`${rediseno ? c.cifra : ""} ${ant.subfilaCifra}`}>{fmtMXNdec(anticipoPendiente.amount)}</span>
                 </div>
               )}
               {/* Saldo. Cancelar NO pone `balance` a 0 en BD (solo cambia el

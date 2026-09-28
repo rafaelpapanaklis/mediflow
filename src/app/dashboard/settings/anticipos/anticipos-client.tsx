@@ -65,7 +65,11 @@ const MOTIVOS: Record<string, string> = {
 const ESTADOS: Record<string, { texto: string; tono: "neutro" | "info" | "exito" | "alerta" | "peligro" }> = {
   PENDING: { texto: "Esperando pago", tono: "info" },
   PAID: { texto: "Pagado", tono: "exito" },
-  EXPIRED: { texto: "Venció sin pago", tono: "neutro" },
+  // N11 (QA ronda 4): "Venció" solo pasa por el cron del plazo. Este mismo
+  // estado también lo pone `cerrarAnticiposDePanel` cuando la factura se
+  // canceló o cambió de precio con el anticipo todavía pendiente — "Cerrado"
+  // es cierto en los dos casos; "Venció" no lo era en el segundo.
+  EXPIRED: { texto: "Cerrado sin pago", tono: "neutro" },
   FAILED: { texto: "Sin link", tono: "peligro" },
 };
 

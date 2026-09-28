@@ -216,6 +216,17 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
  *     la vista y un 403 al pulsarlos: presupuestar exige billing.* y él no
  *     tenía ninguna. Se le devuelve cotizar y facturar, NO cobrar ni
  *     reembolsar. El porqué completo está junto a las keys, más abajo.
+ *
+ * ⚠️ N10 (QA ronda 4, ws1-t2) — al añadir una key NUEVA a un default de aquí
+ * abajo: como el override REEMPLAZA (no mergea), cualquier usuario que YA
+ * tenía permisos personalizados ANTES de que esa key existiera se queda sin
+ * ella para siempre, aunque su rol sí la traiga de fábrica — nunca tuvo
+ * oportunidad de marcarla. No es un bug de este archivo, es el precio de que
+ * el override pueda NEGAR de verdad (ver el test "override lleno REEMPLAZA"
+ * en __tests__/permissions-matrix.test.ts). Si la key nueva debe alcanzar
+ * también a los overrides ya guardados, hace falta un backfill SQL puntual
+ * — ver sql/ws1-t2-backfill-permisos-anticipo-override.sql como plantilla
+ * (billing.deposit / billing.deposit.register).
  */
 export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
   SUPER_ADMIN: [...ALL_PERMISSION_KEYS], // todo

@@ -39,6 +39,7 @@ import { Label } from "@/components/ui/label";
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import a from "@/components/dashboard/cobros-inventario-rediseno/anticipo.module.css";
 import { useRedisenoActivo } from "@/components/dashboard/cobros-inventario-rediseno/rediseno-activo";
+import { conPuntoFinal } from "@/lib/anticipos/core";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 // ws1-t1 (M4): SIEMPRE con la zona de la CLÍNICA (viene del GET), nunca la
@@ -47,6 +48,10 @@ const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" 
 // no era la real (mismo criterio que el chip de la agenda y el PDF).
 const fmtFecha = (iso: string, tz: string) =>
   new Intl.DateTimeFormat("es-MX", { timeZone: tz, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+// N8 (QA ronda 4): `fmtFecha` ya puede terminar en "p.m." (con su propio
+// punto, según la hora) — un punto final fijo detrás dejaba «p.m..» cuando
+// coincidían los dos. `conPuntoFinal` (core.ts) no lo duplica.
+const textoVence = (iso: string, tz: string) => conPuntoFinal(fmtFecha(iso, tz));
 
 type MetodoAnticipo = "mercadopago" | "transferencia";
 
@@ -287,7 +292,7 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo, redisen
               <p className={`${a.nota} ${a.notaAlerta}`}>
                 <Clock size={16} strokeWidth={1.75} aria-hidden />
                 <span>
-                  Ya hay un anticipo pendiente: <strong>{fmt.format(pendiente.amount)}</strong>, vence el {fmtFecha(pendiente.expiresAt, estado?.zonaHoraria || "America/Mexico_City")}.
+                  Ya hay un anticipo pendiente: <strong>{fmt.format(pendiente.amount)}</strong>, vence el {textoVence(pendiente.expiresAt, estado?.zonaHoraria || "America/Mexico_City")}
                   {pendiente.apartada ? " La cita sigue apartada mientras tanto." : ""}
                 </span>
               </p>
