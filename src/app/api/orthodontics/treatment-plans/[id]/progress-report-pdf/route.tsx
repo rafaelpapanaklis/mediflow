@@ -6,8 +6,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
-import { canAccessModule } from "@/lib/marketplace/access-control";
-import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { ProgressReportPdf } from "@/lib/orthodontics/pdf-templates/progress-report";
 import { PHOTO_VIEW_ORDER, VIEW_TO_COLUMN } from "@/lib/orthodontics/photo-set-helpers";
 import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
@@ -25,8 +24,10 @@ export async function GET(
   if (ctx.clinicCategory !== "DENTAL") {
     return NextResponse.json({ error: "Categoría no válida" }, { status: 403 });
   }
-  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) {
+  // Revisión cruzada (Ola 1): canAccessModule abría este PDF durante el
+  // trial de cualquier clínica dental. Migrado a hasActiveOrthodonticsModule.
+  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  if (!active) {
     return NextResponse.json({ error: "Módulo no activo" }, { status: 403 });
   }
 

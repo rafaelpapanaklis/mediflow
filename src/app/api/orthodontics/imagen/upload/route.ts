@@ -10,8 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { validateMagicNumber } from "@/lib/validate-upload";
-import { canAccessModule } from "@/lib/marketplace/access-control";
-import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { storageQuotaError } from "@/lib/storage-quota";
 
 export const runtime = "nodejs";
@@ -29,8 +28,10 @@ export async function POST(req: NextRequest) {
   if (ctx.clinicCategory !== "DENTAL") {
     return NextResponse.json({ error: "Categoría no válida" }, { status: 403 });
   }
-  const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) {
+  // Revisión cruzada (Ola 1): canAccessModule abre este endpoint durante el
+  // trial de cualquier clínica dental. Migrado a hasActiveOrthodonticsModule.
+  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  if (!active) {
     return NextResponse.json({ error: "Módulo no activo" }, { status: 403 });
   }
 

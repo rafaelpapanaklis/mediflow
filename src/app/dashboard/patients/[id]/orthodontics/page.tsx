@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { ORTHODONTICS_MODULE_KEY, PEDIATRICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadOrthoData } from "@/lib/orthodontics/load-data";
@@ -22,8 +23,11 @@ export default async function PatientOrthodonticsPage({
   const { t } = await getServerT();
   const user = await getCurrentUser();
   if (user.clinic.category !== "DENTAL") redirect(`/dashboard/patients/${params.id}`);
-  const access = await canAccessModule(user.clinicId, ORTHODONTICS_MODULE_KEY);
-  if (!access.hasAccess) {
+  // Revisión cruzada (Ola 1): canAccessModule abría esta vista durante el
+  // trial de cualquier clínica dental. Migrado a hasActiveOrthodonticsModule
+  // (mismo criterio que specialties/orthodontics/[patientId]/page.tsx, A1).
+  const active = await hasActiveOrthodonticsModule(user.clinicId);
+  if (!active) {
     redirect(await destinoModuloVencido(user.clinicId, ORTHODONTICS_MODULE_KEY));
   }
   const pediAccess = await canAccessModule(user.clinicId, PEDIATRICS_MODULE_KEY);
