@@ -60,6 +60,21 @@ for (const [lang, dic] of [["es", es], ["en", en]] as const) {
     assert.ok(/Saldo|Balance/.test(pac));
   });
 
+  test(`${lang}: paso 6 del ODONTOGRAMA — un hallazgo sin emparejar no ofrece "sin ligar" (no existe esa opción)`, () => {
+    const preview: any = {
+      totalRows: 1, columns: [], targetFields: [], stats: { valid: 1, errors: 0, duplicates: 0 },
+      rows: [{ row: 2, name: "María Hernández", phone: "5551234567", balance: "—", detail: "Mancha rarísima XYZ · #21", status: "ok" }],
+      unresolved: [{ field: "condition", key: "manchararisimaxyz", value: "Mancha rarísima XYZ", rows: 1 }],
+      options: { condition: [{ id: "caries", label: "Caries" }, { id: "pigmentation", label: "Pigmentación" }] },
+    };
+    const html = renderToStaticMarkup(
+      <StepReview t={t} entity="odontogram" unverifiedName={null} amountFormat={null} preview={preview} skipDup onToggleSkip={() => {}} decisions={{}} onDecide={() => {}} />,
+    );
+    assert.ok(!html.includes("«shell."), "clave sin traducir: " + (html.match(/«shell[^»]*»/g) ?? []).join());
+    assert.ok(html.includes("Mancha rarísima XYZ") && html.includes("Caries") && html.includes("Pigmentación"));
+    assert.ok(!/Solo el importe, sin ligar|Amount only, not linked/.test(html), "el odontograma no tiene un resguardo 'sin ligar'");
+  });
+
   test(`${lang}: selector de pestañas — sugerida preseleccionada y vista previa; sin propuesta no elige nada`, () => {
     const sheets = [
       { name: "Notas", rows: 1, columns: ["Texto"], sample: [["recordar"]] },

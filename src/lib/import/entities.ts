@@ -17,7 +17,7 @@ import { MAX_INVOICE_FOLIO_DIGITS } from "@/lib/invoices/next-invoice-number-cor
 import { computeTotals, formatFolio } from "@/lib/quotes/compute";
 import { invoiceFieldsFromQuote } from "@/lib/quotes/invoice-from-quote-core";
 import { consentTimeZone, formatConsentDate } from "@/lib/consent/dates";
-import { MAX_BODY_LENGTH, MAX_INPUT_LENGTH, isBlankHtml } from "@/lib/document-templates/sanitize";
+import { MAX_BODY_LENGTH, MAX_INPUT_LENGTH, escapeHtml, isBlankHtml } from "@/lib/document-templates/sanitize";
 import {
   MAX_TITLE_LENGTH,
   NOTA_KIND,
@@ -38,6 +38,9 @@ import {
 } from "./valores";
 import { APPT_AUTO_TYPE, getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
+// Catálogo REAL del odontograma (~45 hallazgos): es el mismo que pinta la
+// pestaña Odontograma (odontogram-v2), para no inventar un catálogo aparte.
+import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
 import {
   BATCH,
   EMAIL_RE,
@@ -1908,116 +1911,142 @@ export const clinicalNotesHandler: EntityHandler = {
   },
 
   async commit(rows, clinicId, _skipDuplicates, ctx) {
-    // Lo clínico NUNCA reimporta un duplicado, ni con «Omitir duplicados»
-    // apagado: la misma nota, el mismo presupuesto o el mismo antecedente dos
-    // veces no le sirven a nadie, y no se pueden borrar después.
-    const toInsert = pickInsertable(rows, true);
-    if (toInsert.length === 0) return { created: 0, skipped: 0 };
+    return commitExpedienteNotes(rows, clinicId, ctx);
+  },
+};
 
-    // La foto de la cabecera, armada en bloque: la clínica una vez y los
-    // pacientes en una consulta (la nota nativa la arma por nota; aquí son miles).
-    const [clinic, patients] = await Promise.all([
-      prisma.clinic.findUnique({
-        where: { id: clinicId },
-        select: { name: true, logoUrl: true, timezone: true, city: true, address: true, state: true, phone: true },
-      }),
-      prisma.patient.findMany({
-        where: { clinicId, id: { in: patientIdsOf(toInsert) } },
-        select: { id: true, firstName: true, lastName: true, patientNumber: true, curp: true, curpStatus: true },
-      }),
-    ]);
-    const tz = consentTimeZone(clinic?.timezone);
-    const limpio = (v: string | null | undefined): string | null => (v ?? "").trim() || null;
-    const direccion = limpio(clinic?.address)
-      ? [clinic?.address, clinic?.city, clinic?.state].map(limpio).filter(Boolean).join(", ")
-      : null;
-    const byId = new Map(patients.map((p) => [p.id, p]));
-    const origen = nombreOrigen(ctx.originName);
+/**
+ * Escribe un lote de notas de evolución en patient_documents (kind NOTA_EVOLUCION,
+ * status MIGRATED). Compartido por clinicalNotesHandler (TODAS sus filas) y
+ * treatmentNotesHandler (SOLO las filas que no ligaron con ninguna sesión de un
+ * tratamiento activo importado). Extraído aparte porque la foto de cabecera
+ * (clínica + paciente + CURP) y el saneado del cuerpo son la MISMA lógica en los
+ * dos casos: un paciente que migra su ficha y una nota que migra su tratamiento
+ * no pueden llevar cabeceras distintas.
+ *
+ * `rows[].data.treatmentRef` (opcional, solo de treatmentNotesHandler): una
+ * línea que dice de qué tratamiento migrado viene la nota cuando no había una
+ * sesión de esa fecha exacta a la que unirla — para no perder el rastro.
+ */
+async function commitExpedienteNotes(
+  rows: PreviewRow[],
+  clinicId: string,
+  ctx: ImportContext,
+): Promise<{ created: number; skipped: number }> {
+  // Lo clínico NUNCA reimporta un duplicado, ni con «Omitir duplicados»
+  // apagado: la misma nota, el mismo presupuesto o el mismo antecedente dos
+  // veces no le sirven a nadie, y no se pueden borrar después.
+  const toInsert = pickInsertable(rows, true);
+  if (toInsert.length === 0) return { created: 0, skipped: 0 };
 
-    const build = (slice: PreviewRow[]) =>
-      slice.map((r) => {
-        const p = byId.get(r.data.patientId);
-        const fecha = r.data.createdAt as Date;
-        const doctorNombre = (r.data.doctorName as string | undefined) ?? "";
-        const migracion: MarcaMigracion = {
-          origen,
-          fechaOriginal: r.data.date,
-          doctorOriginal: r.data.doctorOriginal ?? "",
-          importadoEl: ctx.now.toISOString(),
-          importadoPor: ctx.userId,
-          archivo: ctx.fileName,
-          huella: r.data.huella,
-        };
-        const encabezado: EncabezadoNota & { migracion: MarcaMigracion } = {
-          pacienteNombre: p ? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() : (r.data.name ?? ""),
-          fecha: formatConsentDate(fecha, tz),
-          clinicaNombre: clinic?.name ?? "",
-          logoUrl: limpio(clinic?.logoUrl),
-          doctorNombre,
-          // La cédula NO se rellena: no consta con cuál se escribió allí, y la
-          // foto nunca lleva un dato inventado (se omite la línea).
-          cedula: null,
-          clinicaDireccion: direccion,
-          clinicaTelefono: limpio(clinic?.phone),
-          doctorEspecialidad: null,
-          doctorCedulaEspecialidad: null,
-          pacienteNumero: limpio(p?.patientNumber),
-          pacienteCurp: limpio(p?.curp)?.toUpperCase() ?? null,
-          pacienteSinCurp: p?.curpStatus === "FOREIGN",
-          migracion,
-        };
-        const body =
-          migrationBannerHtml({ origen, fecha, timezone: tz, doctor: doctorNombre, importadoEl: ctx.now }) +
-          textToNoteHtml(r.data.text);
-        return {
-          clinicId,
-          patientId: r.data.patientId as string,
-          doctorId: r.data.doctorId as string,
-          templateId: null,
-          kind: NOTA_KIND,
-          // "Resina en 16 · migrada de Dentalink": la lista de notas se lee por el título.
-          title: migratedTitle(r.data.title as string, origen, MAX_TITLE_LENGTH, "a"),
-          body,
-          encabezado: encabezado as any,
-          status: MIGRATED_STATUS,
-          signedAt: null,
-          modoFirma: null,
-          // La fecha ORIGINAL: la lista de notas se ordena por aquí. Cuándo se
-          // importó queda en encabezado.migracion.importadoEl (y en updatedAt).
-          createdAt: fecha,
-        };
-      });
+  // La foto de la cabecera, armada en bloque: la clínica una vez y los
+  // pacientes en una consulta (la nota nativa la arma por nota; aquí son miles).
+  const [clinic, patients] = await Promise.all([
+    prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { name: true, logoUrl: true, timezone: true, city: true, address: true, state: true, phone: true },
+    }),
+    prisma.patient.findMany({
+      where: { clinicId, id: { in: patientIdsOf(toInsert) } },
+      select: { id: true, firstName: true, lastName: true, patientNumber: true, curp: true, curpStatus: true },
+    }),
+  ]);
+  const tz = consentTimeZone(clinic?.timezone);
+  const limpio = (v: string | null | undefined): string | null => (v ?? "").trim() || null;
+  const direccion = limpio(clinic?.address)
+    ? [clinic?.address, clinic?.city, clinic?.state].map(limpio).filter(Boolean).join(", ")
+    : null;
+  const byId = new Map(patients.map((p) => [p.id, p]));
+  const origen = nombreOrigen(ctx.originName);
 
-    // Un cuerpo que tras sanear no deja nada que leer, o que se pasa del tope,
-    // no se guarda: se reporta en su fila.
-    const writable: PreviewRow[] = [];
-    for (const r of toInsert) {
-      const html = textToNoteHtml(r.data.text);
-      if (isBlankHtml(html)) { r.status = "error"; r.errors.push("La nota está vacía"); continue; }
-      if (html.length > MAX_BODY_LENGTH) { r.status = "error"; r.errors.push("La nota es demasiado larga"); continue; }
-      writable.push(r);
-    }
+  const build = (slice: PreviewRow[]) =>
+    slice.map((r) => {
+      const p = byId.get(r.data.patientId);
+      const fecha = r.data.createdAt as Date;
+      const doctorNombre = (r.data.doctorName as string | undefined) ?? "";
+      const migracion: MarcaMigracion = {
+        origen,
+        fechaOriginal: r.data.date,
+        doctorOriginal: r.data.doctorOriginal ?? "",
+        importadoEl: ctx.now.toISOString(),
+        importadoPor: ctx.userId,
+        archivo: ctx.fileName,
+        huella: r.data.huella,
+      };
+      const encabezado: EncabezadoNota & { migracion: MarcaMigracion } = {
+        pacienteNombre: p ? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() : (r.data.name ?? ""),
+        fecha: formatConsentDate(fecha, tz),
+        clinicaNombre: clinic?.name ?? "",
+        logoUrl: limpio(clinic?.logoUrl),
+        doctorNombre,
+        // La cédula NO se rellena: no consta con cuál se escribió allí, y la
+        // foto nunca lleva un dato inventado (se omite la línea).
+        cedula: null,
+        clinicaDireccion: direccion,
+        clinicaTelefono: limpio(clinic?.phone),
+        doctorEspecialidad: null,
+        doctorCedulaEspecialidad: null,
+        pacienteNumero: limpio(p?.patientNumber),
+        pacienteCurp: limpio(p?.curp)?.toUpperCase() ?? null,
+        pacienteSinCurp: p?.curpStatus === "FOREIGN",
+        migracion,
+      };
+      // treatmentRef: solo lo trae treatmentNotesHandler, cuando el folio
+      // ligó con un tratamiento activo migrado pero esa fecha no tiene una
+      // sesión exacta a la que unirse — la nota igual dice de dónde viene.
+      const treatmentRef = r.data.treatmentRef as string | undefined;
+      const body =
+        migrationBannerHtml({ origen, fecha, timezone: tz, doctor: doctorNombre, importadoEl: ctx.now }) +
+        (treatmentRef ? `<p><i>${escapeHtml(treatmentRef)}</i></p>` : "") +
+        textToNoteHtml(r.data.text);
+      return {
+        clinicId,
+        patientId: r.data.patientId as string,
+        doctorId: r.data.doctorId as string,
+        templateId: null,
+        kind: NOTA_KIND,
+        // "Resina en 16 · migrada de Dentalink": la lista de notas se lee por el título.
+        title: migratedTitle(r.data.title as string, origen, MAX_TITLE_LENGTH, "a"),
+        body,
+        encabezado: encabezado as any,
+        status: MIGRATED_STATUS,
+        signedAt: null,
+        modoFirma: null,
+        // La fecha ORIGINAL: la lista de notas se ordena por aquí. Cuándo se
+        // importó queda en encabezado.migracion.importadoEl (y en updatedAt).
+        createdAt: fecha,
+      };
+    });
 
-    const createMany = (data: any[]) => prisma.patientDocument.createMany({ data });
-    let created = 0;
-    for (let i = 0; i < writable.length; i += BATCH) {
-      const slice = writable.slice(i, i + BATCH);
-      try {
-        created += (await createMany(build(slice))).count;
-      } catch {
-        for (const r of slice) {
-          try {
-            created += (await createMany(build([r]))).count;
-          } catch (e2: any) {
-            markRowError(r, e2);
-          }
+  // Un cuerpo que tras sanear no deja nada que leer, o que se pasa del tope,
+  // no se guarda: se reporta en su fila.
+  const writable: PreviewRow[] = [];
+  for (const r of toInsert) {
+    const html = textToNoteHtml(r.data.text);
+    if (isBlankHtml(html)) { r.status = "error"; r.errors.push("La nota está vacía"); continue; }
+    if (html.length > MAX_BODY_LENGTH) { r.status = "error"; r.errors.push("La nota es demasiado larga"); continue; }
+    writable.push(r);
+  }
+
+  const createMany = (data: any[]) => prisma.patientDocument.createMany({ data });
+  let created = 0;
+  for (let i = 0; i < writable.length; i += BATCH) {
+    const slice = writable.slice(i, i + BATCH);
+    try {
+      created += (await createMany(build(slice))).count;
+    } catch {
+      for (const r of slice) {
+        try {
+          created += (await createMany(build([r]))).count;
+        } catch (e2: any) {
+          markRowError(r, e2);
         }
       }
     }
-    const erroredNow = toInsert.filter((r) => r.status === "error").length;
-    return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
-  },
-};
+  }
+  const erroredNow = toInsert.filter((r) => r.status === "error").length;
+  return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
+}
 
 // ===========================================================================
 // PRESUPUESTOS — cada fila es una LÍNEA (un procedimiento); las líneas se
@@ -3065,6 +3094,491 @@ export const treatmentPlansHandler: EntityHandler = {
   },
 };
 
+// ===========================================================================
+// ODONTOGRAMA — una fila = una condición en (diente, cara opcional) del
+// odontograma VIVO del paciente (odontogram_entries, el MISMO que pinta la
+// pestaña Odontograma — odontogram-v2, nunca un catálogo inventado aparte).
+// Sin fecha: es el estado actual del diente, no una foto histórica (para eso
+// existe OdontogramSnapshot, ligado a una cita — fuera de alcance aquí).
+//
+// El hallazgo del archivo (texto libre: "Caries", "Corona", "Ausente"…) se
+// empareja contra el catálogo real (CONDITIONS, ~45 hallazgos) por id o por
+// nombre es/en; lo que no case entra como "sin emparejar" (mismo patrón que
+// `procedure` en quotesHandler/treatmentPlansHandler) para que el usuario
+// elija el equivalente — SIN decisión, la fila no se importa (a diferencia de
+// un procedimiento de presupuesto, aquí no hay una forma de guardar un
+// hallazgo "sin ligar": conditionId es obligatorio en odontogram_entries).
+//
+// Idempotente por el MISMO candado que ya usa /api/odontogram: la unique
+// compuesta (patientId, toothNumber, surface, conditionId). Reimportar el
+// mismo archivo no duplica.
+// ===========================================================================
+
+/** Dientes FDI reales — ESPEJO de /api/odontogram y /api/odontogram/sync (mantener en sync). */
+const ODO_FDI_TEETH = new Set<number>([
+  ...[1, 2, 3, 4].flatMap((q) => Array.from({ length: 8 }, (_, i) => q * 10 + 1 + i)),
+  ...[5, 6, 7, 8].flatMap((q) => Array.from({ length: 5 }, (_, i) => q * 10 + 1 + i)),
+]);
+
+/** Nombre normalizado (sin acentos/mayúsculas) → conditionId, por id o por es/en. */
+const ODO_CONDITION_BY_NAME = new Map<string, string>();
+const ODO_CONDITION_IDS = new Set(CONDITIONS.map((c) => c.id));
+for (const c of CONDITIONS) {
+  ODO_CONDITION_BY_NAME.set(norm(c.id), c.id);
+  ODO_CONDITION_BY_NAME.set(norm(c.es), c.id);
+  ODO_CONDITION_BY_NAME.set(norm(c.en), c.id);
+}
+
+/** Pieza dental en FDI: acepta "11", "1.1", "Diente 55"… y valida contra el set real. */
+function leerDienteFdi(v: unknown): number | null {
+  const s = cellText(v).replace(/[^0-9]/g, "");
+  if (!s) return null;
+  const n = Number(s);
+  return ODO_FDI_TEETH.has(n) ? n : null;
+}
+
+/**
+ * Cara del diente (M/D/V/L/O — el enum de la base NO tiene "I"): "incisal" se
+ * guarda como Oclusal, la misma cara "de mordida" que usa el catálogo para el
+ * sellante (`surfacesOnly: ["O"]"). Vacío = sin cara (diente completo).
+ */
+const ODO_SURFACE_MAP: Record<string, string> = {
+  m: "M", mesial: "M",
+  d: "D", distal: "D",
+  v: "V", vestibular: "V", bucal: "V", facial: "V", labial: "V",
+  l: "L", lingual: "L", palatino: "L", palatina: "L",
+  o: "O", oclusal: "O", occlusal: "O", i: "O", incisal: "O",
+};
+function leerSurface(v: unknown): { surface: string | null; error?: string } {
+  const s = cellText(v);
+  if (!s) return { surface: null };
+  const hit = ODO_SURFACE_MAP[norm(s)];
+  if (hit) return { surface: hit };
+  return { surface: null, error: `Cara "${s}" no reconocida (usa Mesial/Distal/Vestibular/Lingual/Oclusal): el hallazgo se guarda sin cara específica` };
+}
+
+export const odontogramHandler: EntityHandler = {
+  entity: "odontogram",
+  auditEntityType: "patient",
+  sheetNames: ["odontograma", "odontogram", "hallazgos", "hallazgosdentales", "hallazgosodontograma"],
+  headerVariants: {
+    ...IDENTITY_VARIANTS,
+    tooth: ["pieza", "diente", "piezadental", "numerodediente", "fdi", "organodentario", "numeropieza", "pza"],
+    surface: ["cara", "superficie", "surface"],
+    condition: ["hallazgo", "condicion", "diagnostico", "estado", "tratamientorealizado", "finding", "condition"],
+    notes: ["notas", "observaciones", "comentarios", "detalle", "notes"],
+  },
+
+  validateMapping(campos) {
+    if (!hasIdentity(campos)) return NEED_IDENTITY;
+    if (!campos.has("tooth")) return "Falta la columna de la pieza dental (FDI)";
+    if (!campos.has("condition")) return "Falta la columna del hallazgo/condición";
+    return null;
+  },
+
+  async process(rows, clinicId, ctx) {
+    const idx = await loadPatientIndex(clinicId, ctx);
+    const chosen = ctx.valueMapping.condition ?? {};
+    const out: PreviewRow[] = [];
+    const seen = new Set<string>();
+
+    for (const { row, mapped } of rows) {
+      const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
+      const res = resolvePatientRow(mapped, idx, true);
+      if (res.error) pr.errors.push(res.error);
+      if (res.warning) pr.warnings.push(res.warning);
+
+      const tooth = leerDienteFdi(mapped.tooth);
+      if (!tooth) pr.errors.push(`Pieza dental inválida "${cellText(mapped.tooth)}" (usa numeración FDI, p. ej. 16, 21, 36, 55)`);
+
+      const hallazgoTexto = oneLine(mapped.condition, 120);
+      if (!hallazgoTexto) pr.errors.push("Falta el hallazgo/condición");
+
+      const notes = mapped.notes ? oneLine(mapped.notes, 2000) : null;
+
+      if (pr.errors.length > 0) {
+        pr.status = "error";
+        pr.data = { name: res.fullName || undefined, tooth: tooth ?? undefined, condition: hallazgoTexto || undefined };
+        out.push(pr);
+        continue;
+      }
+
+      // Emparejar el hallazgo con el catálogo real (por id o por nombre es/en);
+      // lo que no case queda "sin emparejar" para que el usuario decida.
+      const key = norm(hallazgoTexto);
+      let conditionId: string | null = null;
+      const pick = chosen[key];
+      if (pick && pick !== VALUE_UNLINKED) {
+        if (ODO_CONDITION_IDS.has(pick)) conditionId = pick;
+        else pr.warnings.push("El equivalente elegido ya no está en el catálogo del odontograma: la fila no se importa hasta elegir otro");
+      } else if (!pick) {
+        const found = ODO_CONDITION_BY_NAME.get(key);
+        if (found) conditionId = found;
+        else {
+          pr.unresolved = [{ field: "condition", key, value: hallazgoTexto }];
+          pr.warnings.push(`Hallazgo "${hallazgoTexto}" no reconocido en el catálogo del odontograma: elige el equivalente para importar esta fila`);
+        }
+      }
+
+      if (!conditionId) {
+        // Sin equivalente todavía: no hay conditionId válido que guardar. No es
+        // un error (el usuario puede resolverlo en la vista previa), pero sin
+        // decisión la fila no se comete (ver commit()).
+        pr.data = { name: idx.nameById.get(res.id!) || res.fullName || undefined, tooth, condition: hallazgoTexto };
+        out.push(pr);
+        continue;
+      }
+
+      const catalogEntry = CONDITIONS.find((c) => c.id === conditionId)!;
+      let surface: string | null = null;
+      if (catalogEntry.target === "surface") {
+        const s = leerSurface(mapped.surface);
+        surface = s.surface;
+        if (!surface) pr.warnings.push(`«${catalogEntry.es}» suele llevar una cara (mesial/distal/vestibular/lingual/oclusal)${s.error ? `: ${s.error}` : ""}: se guarda sin cara específica`);
+      }
+      // Condición de diente completo: una columna de cara en el archivo se
+      // ignora sin aviso (ruido de una columna genérica, no un dato roto).
+
+      const dupKey = `${res.id}|${tooth}|${surface ?? ""}|${conditionId}`;
+      pr.data = {
+        patientId: res.id,
+        name: idx.nameById.get(res.id!) || res.fullName || undefined,
+        phone: mapped.phone ? parsePhone(mapped.phone) : undefined,
+        tooth,
+        surface,
+        condition: catalogEntry.es,
+        conditionId,
+        notes,
+        dupKey,
+      };
+      if (seen.has(dupKey)) {
+        pr.status = "duplicate";
+        pr.warnings.push("Mismo diente, cara y hallazgo repetidos en el archivo");
+      } else {
+        seen.add(dupKey);
+      }
+      out.push(pr);
+    }
+
+    // Contra la base: lo que YA está en el odontograma de estos pacientes —
+    // reimportar el mismo archivo no duplica (mismo candado que /api/odontogram).
+    const withCondition = out.filter((r) => r.status === "ok" && r.data.conditionId);
+    if (withCondition.length > 0) {
+      const existing = await prisma.odontogramEntry.findMany({
+        where: { patientId: { in: patientIdsOf(withCondition) } },
+        select: { patientId: true, toothNumber: true, surface: true, conditionId: true },
+      });
+      const dbKeys = new Set(existing.map((e) => `${e.patientId}|${e.toothNumber}|${e.surface ?? ""}|${e.conditionId}`));
+      for (const r of withCondition) {
+        if (dbKeys.has(r.data.dupKey)) {
+          r.status = "duplicate";
+          r.warnings.push("Este hallazgo ya está en el odontograma del paciente");
+        }
+      }
+    }
+    return out;
+  },
+
+  async valueOptions() {
+    return { condition: CONDITIONS.map((c) => ({ id: c.id, label: c.es })) };
+  },
+
+  async commit(rows, clinicId, _skipDuplicates) {
+    // Clínico: nunca reimporta un duplicado, ni con «omitir duplicados» apagado.
+    const toInsert = pickInsertable(rows, true);
+    if (toInsert.length === 0) return { created: 0, skipped: 0 };
+
+    const withCondition = toInsert.filter((r) => r.data.conditionId);
+    const patients = await prisma.patient.findMany({
+      where: { clinicId, id: { in: patientIdsOf(withCondition) } },
+      select: { id: true },
+    });
+    const validIds = new Set(patients.map((p) => p.id));
+    const insertable: PreviewRow[] = [];
+    for (const r of withCondition) {
+      if (validIds.has(r.data.patientId)) insertable.push(r);
+      else { r.status = "error"; r.errors.push("El paciente ya no existe en esta clínica"); }
+    }
+
+    const build = (slice: PreviewRow[]) =>
+      slice.map((r) => ({
+        patientId: r.data.patientId as string,
+        toothNumber: r.data.tooth as number,
+        surface: (r.data.surface as string | null) ?? null,
+        conditionId: r.data.conditionId as string,
+        notes: (r.data.notes as string | null) ?? null,
+      }));
+
+    let created = 0;
+    for (let i = 0; i < insertable.length; i += BATCH) {
+      const slice = insertable.slice(i, i + BATCH);
+      try {
+        created += (await prisma.odontogramEntry.createMany({ data: build(slice), skipDuplicates: true })).count;
+      } catch {
+        for (const r of slice) {
+          try {
+            created += (await prisma.odontogramEntry.createMany({ data: build([r]), skipDuplicates: true })).count;
+          } catch (e2: any) {
+            markRowError(r, e2);
+          }
+        }
+      }
+    }
+    const erroredNow = toInsert.filter((r) => r.status === "error").length;
+    return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
+  },
+};
+
+// ===========================================================================
+// NOTAS DE EVOLUCIÓN DE TRATAMIENTO — como clinicalNotesHandler (fecha, doctor
+// emparejado por nombre, texto), pero con una columna más: el FOLIO del
+// tratamiento activo migrado (treatmentPlansHandler) al que pertenece la nota.
+//
+// Si el folio liga con un tratamiento activo que ESTA clínica importó antes
+// (mismo sentinel que treatmentPlansHandler deja en Quote.notes) Y ese
+// tratamiento tiene una SESIÓN de exactamente esa fecha (un día con algo
+// "Realizado"), el texto se AGREGA (mergeText, sin repetir) a las notas de esa
+// sesión — así el detalle clínico de esa visita no se queda en «Migrado:
+// <procedimientos>». Si el folio no liga con nada, o liga pero esa fecha no
+// tiene sesión, la nota entra al expediente como MIGRATED (igual que
+// clinicalNotesHandler), con una línea que dice de qué tratamiento venía.
+// ===========================================================================
+
+export const treatmentNotesHandler: EntityHandler = {
+  entity: "treatmentNotes",
+  auditEntityType: "record",
+  sheetNames: ["notasdeevoluciondetratamiento", "evoluciondetratamiento", "notasdetratamientoactivo", "evolucionesdetratamiento"],
+  headerVariants: {
+    ...IDENTITY_VARIANTS,
+    folio: [
+      "folio", "numeropresupuesto", "numerodepresupuesto", "nopresupuesto", "nodepresupuesto", "npresupuesto",
+      "idpresupuesto", "folioplan", "numerodeplan", "nplan", "idplan", "nodeplan", "foliotratamiento",
+    ],
+    date: ["fecha", "fechadeatencion", "fechaatencion", "fechanota", "fechaevolucion", "fechadelanota", "fechaconsulta", "date"],
+    doctor: DOCTOR_VARIANTS,
+    title: ["titulo", "asunto", "tiponota", "tipodenota", "motivo", "motivodeconsulta", "tipo"],
+    text: [
+      "nota", "notas", "texto", "evolucion", "evoluciones", "descripcion", "detalle", "observaciones",
+      "notaclinica", "notadeevolucion", "contenido", "comentarios", "text",
+    ],
+  },
+
+  validateMapping(campos) {
+    if (!hasIdentity(campos)) return NEED_IDENTITY;
+    if (!campos.has("date")) return "Falta la columna de fecha de la nota";
+    if (!campos.has("text")) return "Falta la columna con el texto de la nota";
+    return null;
+  },
+
+  async process(rows, clinicId, ctx) {
+    const idx = await loadPatientIndex(clinicId, ctx);
+    const users = await prisma.user.findMany({ where: { clinicId }, select: { id: true, firstName: true, lastName: true } });
+    const byDoctor = new Map<string, string[]>();
+    const userName = new Map<string, string>();
+    for (const u of users) {
+      const full = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
+      pushKey(byDoctor, normName(full), u.id);
+      userName.set(u.id, full);
+    }
+
+    const seen = new Set<string>();
+    const out: PreviewRow[] = [];
+    for (const { row, mapped } of rows) {
+      const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
+      const res = resolvePatientRow(mapped, idx, true);
+      if (res.error) pr.errors.push(res.error);
+      if (res.warning) pr.warnings.push(res.warning);
+
+      const fecha = parseCalendarDay(mapped.date);
+      if (!fecha) pr.errors.push(`Fecha inválida "${cellText(mapped.date)}"`);
+      else if (isFutureDay(fecha, ctx.now)) pr.errors.push(`La fecha ${dayKey(fecha)} es posterior a hoy`);
+
+      const raw = cellText(mapped.text);
+      if (!raw) pr.errors.push("Falta el texto de la nota");
+      else if (raw.length > MAX_INPUT_LENGTH) pr.errors.push("La nota es demasiado larga");
+
+      const doctorRaw = oneLine(mapped.doctor, 120);
+      let doctorId = ctx.userId;
+      let doctorNombre = doctorRaw;
+      if (doctorRaw) {
+        const d = resolveByName(doctorRaw, byDoctor, "Doctor");
+        if (d.id) { doctorId = d.id; doctorNombre = userName.get(d.id) || doctorRaw; }
+        else pr.warnings.push(`${d.error}: la nota conserva ese nombre como autor original`);
+      } else {
+        pr.warnings.push("Sin doctor en el archivo: la nota queda sin autor original");
+      }
+
+      const folio = oneLine(mapped.folio, 40);
+
+      if (pr.errors.length > 0) {
+        pr.status = "error";
+        pr.data = { name: res.fullName || undefined, date: fecha ? dayKey(fecha) : undefined, doctorName: doctorNombre || undefined };
+        out.push(pr);
+        continue;
+      }
+
+      const day = dayKey(fecha!);
+      const huella = noteFingerprint(res.id!, day, raw);
+      const titulo = oneLine(mapped.title, MAX_TITLE_LENGTH) || "Nota de evolución";
+      pr.data = {
+        patientId: res.id,
+        doctorId,
+        name: idx.nameById.get(res.id!) || res.fullName || undefined,
+        phone: mapped.phone ? parsePhone(mapped.phone) : undefined,
+        date: day,
+        createdAt: fecha,
+        doctorName: doctorNombre || undefined,
+        doctorOriginal: doctorRaw,
+        title: titulo,
+        text: raw,
+        huella,
+        folio: folio || undefined,
+      };
+      if (seen.has(huella)) {
+        pr.status = "duplicate"; pr.warnings.push("Nota repetida en el archivo (mismo paciente, día y texto)");
+      } else {
+        seen.add(huella);
+      }
+      out.push(pr);
+    }
+
+    const okRows = out.filter((r) => r.status === "ok");
+    if (okRows.length === 0) return out;
+
+    // ── Ligar con un tratamiento activo migrado (por folio): mismo candado que
+    //    treatmentPlansHandler usa para reconocer lo que ÉL creó (sentinel en
+    //    Quote.notes) — nunca un presupuesto ACEPTADO cualquiera del panel.
+    const foliosPorPaciente = new Map<string, Set<string>>();
+    for (const r of okRows) {
+      if (!r.data.folio) continue;
+      const pid = r.data.patientId as string;
+      (foliosPorPaciente.get(pid) ?? foliosPorPaciente.set(pid, new Set()).get(pid)!).add(r.data.folio as string);
+    }
+    const treatmentByKey = new Map<string, { treatmentPlanId: string; title: string }>();
+    if (foliosPorPaciente.size > 0) {
+      const quotes = await prisma.quote.findMany({
+        where: { clinicId, status: "ACCEPTED", patientId: { in: Array.from(foliosPorPaciente.keys()) } },
+        select: { patientId: true, notes: true, treatmentPlanId: true, title: true },
+      });
+      for (const q of quotes) {
+        if (!q.treatmentPlanId || !esNotaDeTratamientoActivo(q.notes)) continue;
+        const f = folioDeNotaActiva(q.notes);
+        if (!f) continue;
+        const folios = foliosPorPaciente.get(q.patientId);
+        if (!folios?.has(f)) continue;
+        treatmentByKey.set(`${q.patientId}|${norm(f)}`, { treatmentPlanId: q.treatmentPlanId, title: q.title });
+      }
+    }
+
+    // Sesiones de esos planes, por día, con su texto actual (candado de
+    // idempotencia + insumo del merge en commit).
+    const planIds = Array.from(new Set(Array.from(treatmentByKey.values()).map((t) => t.treatmentPlanId)));
+    const sessionByPlanDay = new Map<string, { id: string; notes: string | null }>();
+    if (planIds.length > 0) {
+      const sessions = await prisma.treatmentSession.findMany({
+        where: { treatmentId: { in: planIds } },
+        select: { id: true, treatmentId: true, completedAt: true, notes: true },
+      });
+      for (const s of sessions) {
+        if (!s.completedAt) continue;
+        sessionByPlanDay.set(`${s.treatmentId}|${dayKey(calendarNoonUtc(s.completedAt))}`, { id: s.id, notes: s.notes });
+      }
+    }
+
+    // Notas de expediente YA migradas de estos pacientes (idempotencia de las
+    // que NO ligan con ningún tratamiento — mismo candado que clinicalNotesHandler).
+    let min = okRows[0].data.createdAt as Date;
+    let max = min;
+    for (const r of okRows) {
+      const d = r.data.createdAt as Date;
+      if (d < min) min = d;
+      if (d > max) max = d;
+    }
+    const existingDocs = await prisma.patientDocument.findMany({
+      where: { clinicId, kind: NOTA_KIND, status: MIGRATED_STATUS, patientId: { in: patientIdsOf(okRows) }, createdAt: { gte: min, lte: max } },
+      select: { encabezado: true },
+    });
+    const dbHuellas = new Set(existingDocs.map((e) => huellaDe(e.encabezado)).filter(Boolean) as string[]);
+
+    for (const r of okRows) {
+      const folio = r.data.folio as string | undefined;
+      const treat = folio ? treatmentByKey.get(`${r.data.patientId}|${norm(folio)}`) : undefined;
+      if (treat) {
+        const session = sessionByPlanDay.get(`${treat.treatmentPlanId}|${r.data.date}`);
+        if (session) {
+          r.data.targetSessionId = session.id;
+          r.data.treatmentTitle = treat.title;
+          const merge = mergeText(session.notes, r.data.text as string);
+          if (!merge.changed) {
+            r.status = "duplicate";
+            r.warnings.push("Esta nota ya está en la sesión de ese tratamiento");
+          }
+          continue; // ligada: no se compara contra el expediente
+        }
+        r.data.treatmentRef = `Nota del tratamiento migrado "${treat.title}" (folio ${folio}): sin sesión registrada justo el ${r.data.date}, se guarda en el expediente.`;
+      } else if (folio) {
+        r.warnings.push(`El folio ${folio} no corresponde a ningún tratamiento activo importado de este paciente: la nota se guarda en el expediente`);
+      }
+      if (dbHuellas.has(r.data.huella)) {
+        r.status = "duplicate";
+        r.warnings.push("Esta nota ya se había migrado");
+      }
+    }
+    return out;
+  },
+
+  toPreview(r) {
+    const { text, ...data } = r.data;
+    const snippet = typeof text === "string" && text.length > NOTE_SNIPPET ? `${text.slice(0, NOTE_SNIPPET)}…` : text;
+    return { ...r, data: { ...data, ...(snippet ? { text: snippet } : {}) } };
+  },
+
+  async commit(rows, clinicId, _skipDuplicates, ctx) {
+    const toInsert = pickInsertable(rows, true);
+    if (toInsert.length === 0) return { created: 0, skipped: 0 };
+
+    const linked = toInsert.filter((r) => r.data.targetSessionId);
+    const unlinked = toInsert.filter((r) => !r.data.targetSessionId);
+    let created = 0;
+
+    // ── Ligadas: se AGREGAN (mergeText, sin repetir) al texto de la sesión.
+    const porSesion = new Map<string, PreviewRow[]>();
+    for (const r of linked) {
+      const k = r.data.targetSessionId as string;
+      (porSesion.get(k) ?? porSesion.set(k, []).get(k)!).push(r);
+    }
+    if (porSesion.size > 0) {
+      const sessionIds = Array.from(porSesion.keys());
+      const current = await prisma.treatmentSession.findMany({ where: { id: { in: sessionIds } }, select: { id: true, notes: true } });
+      const notesById = new Map(current.map((s) => [s.id, s.notes as string | null]));
+      for (const [sessionId, group] of Array.from(porSesion.entries())) {
+        let notes = notesById.get(sessionId) ?? null;
+        let changedAny = false;
+        for (const r of group.sort((a, b) => a.row - b.row)) {
+          const merge = mergeText(notes, r.data.text as string);
+          if (merge.changed) { notes = merge.value; changedAny = true; }
+        }
+        if (!changedAny) continue;
+        try {
+          await prisma.treatmentSession.updateMany({ where: { id: sessionId }, data: { notes } });
+          created += group.length;
+        } catch (e: any) {
+          for (const r of group) markRowError(r, e);
+        }
+      }
+    }
+
+    // ── Sin ligar: al expediente, MISMA lógica que clinicalNotesHandler.
+    if (unlinked.length > 0) {
+      const { created: c2 } = await commitExpedienteNotes(unlinked, clinicId, ctx);
+      created += c2;
+    }
+
+    const erroredNow = toInsert.filter((r) => r.status === "error").length;
+    return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
+  },
+};
+
 export const HANDLERS: Record<string, EntityHandler> = {
   patients: patientsHandler,
   balances: balancesHandler,
@@ -3073,4 +3587,6 @@ export const HANDLERS: Record<string, EntityHandler> = {
   clinicalNotes: clinicalNotesHandler,
   quotes: quotesHandler,
   treatmentPlans: treatmentPlansHandler,
+  odontogram: odontogramHandler,
+  treatmentNotes: treatmentNotesHandler,
 };

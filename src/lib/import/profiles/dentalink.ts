@@ -200,6 +200,50 @@ const dentalink: OriginProfile = {
       "Próxima cita": "proximaVisita",
       "Próxima visita": "proximaVisita",
     },
+    // Odontograma (ws1-t12, 28-sep-2026): Dentalink NO documenta un export de
+    // odontograma en Reportes Excel ni en su API pública — no hay columnas que
+    // citar. Lo de abajo son los nombres más probables si BEVADENT logra sacar
+    // un listado plano (uno por pieza/cara); `verified` sigue en false y, sin
+    // columna reconocida, el paso de mapeo pide emparejar a mano.
+    odontogram: {
+      "Id paciente": "patientExternalId",
+      "ID Paciente": "patientExternalId",
+      "Paciente": "name",
+      "Nombre paciente": "name",
+      "Celular": "phone",
+      "Pieza": "tooth",
+      "Diente": "tooth",
+      "N° Diente": "tooth",
+      "Cara": "surface",
+      "Superficie": "surface",
+      "Hallazgo": "condition",
+      "Diagnóstico": "condition",
+      "Condición": "condition",
+      "Observación": "notes",
+      "Notas": "notes",
+    },
+    // Notas de evolución de TRATAMIENTO (ws1-t12): igual que clinicalNotes,
+    // más el folio del presupuesto/tratamiento al que pertenece la evolución
+    // — mismo campo que treatmentPlans, para que un archivo de evoluciones
+    // pueda ligar con un tratamiento activo ya importado.
+    treatmentNotes: {
+      "Id paciente": "patientExternalId",
+      "ID Paciente": "patientExternalId",
+      "Paciente": "name",
+      "Nombre paciente": "name",
+      "Celular": "phone",
+      "N° Presupuesto": "folio",
+      "Nº Presupuesto": "folio",
+      "N° Tratamiento": "folio",
+      "Fecha evolución": "date",
+      "Fecha de evolución": "date",
+      "Fecha atención": "date",
+      "Profesional": "doctor",
+      "Dentista": "doctor",
+      "Tratamiento": "title",
+      "Evolución": "text",
+      "Detalle evolución": "text",
+    },
   },
 };
 

@@ -57,6 +57,8 @@ const ARCHIVOS_MATCH = "../../../app/api/import/patient-files/match/route";
 const ARCHIVOS_SIGN = "../../../app/api/import/patient-files/sign/route";
 const ARCHIVOS_CONFIRM = "../../../app/api/import/patient-files/confirm/route";
 const ARCHIVOS_ABORT = "../../../app/api/import/patient-files/abort/route";
+const ODONTOGRAMA = "../../../app/api/import/odontogram/route";
+const NOTAS_TRATAMIENTO = "../../../app/api/import/treatment-notes/route";
 
 test("citas: exige agenda.create además del rol", async () => {
   sesion = sesionDe("ADMIN");
@@ -118,6 +120,41 @@ test("tratamientos activos: exige billing.create Y treatments.edit (crea factura
   assert.equal(await llamar(TRATAMIENTOS), 403);
   sesion = null;
   assert.equal(await llamar(TRATAMIENTOS), 401);
+});
+
+test("odontograma: solo quien puede escribir el odontograma en el panel (ADMIN/DOCTOR) — sin permiso extra", async () => {
+  sesion = sesionDe("ADMIN");
+  assert.equal(await llamar(ODONTOGRAMA), 400, "un admin pasa el gate");
+  sesion = sesionDe("DOCTOR");
+  assert.equal(await llamar(ODONTOGRAMA), 400, "el doctor escribe el odontograma en el panel, y también en bloque");
+  sesion = sesionDe("RECEPTIONIST");
+  assert.equal(await llamar(ODONTOGRAMA), 403, "recepción no escribe el odontograma, ni a mano ni en bloque");
+  sesion = sesionDe("READONLY");
+  assert.equal(await llamar(ODONTOGRAMA), 403);
+  sesion = null;
+  assert.equal(await llamar(ODONTOGRAMA), 401);
+});
+
+test("notas de tratamiento: exige medicalRecord.edit Y treatments.edit (puede escribir en el expediente o en una sesión)", async () => {
+  sesion = sesionDe("ADMIN");
+  assert.equal(await llamar(NOTAS_TRATAMIENTO), 400, "un admin pasa el gate");
+  // Recepción SÍ tiene treatments.edit por default, pero NO medicalRecord.edit
+  // (igual que /api/import/clinical-notes): una nota clínica no la migra quien
+  // no puede escribirla, aunque sea a un tratamiento.
+  sesion = sesionDe("RECEPTIONIST");
+  assert.equal(await llamar(NOTAS_TRATAMIENTO), 403, "recepción no tiene medicalRecord.edit por default");
+  sesion = sesionDe("RECEPTIONIST", ["patients.view", "medicalRecord.edit", "treatments.edit"]);
+  assert.equal(await llamar(NOTAS_TRATAMIENTO), 400, "con las dos llaves, recepción sí puede");
+  sesion = sesionDe("RECEPTIONIST", ["patients.view", "medicalRecord.edit"]);
+  assert.equal(await llamar(NOTAS_TRATAMIENTO), 403, "sin treatments.edit no se puede agregar a una sesión");
+  sesion = sesionDe("RECEPTIONIST", ["patients.view", "treatments.edit"]);
+  assert.equal(await llamar(NOTAS_TRATAMIENTO), 403, "sin medicalRecord.edit no se puede escribir en el expediente");
+  sesion = sesionDe("DOCTOR");
+  assert.equal(await llamar(NOTAS_TRATAMIENTO), 403, "el doctor no importa notas en masa (igual que el resto del importador)");
+  sesion = sesionDe("READONLY");
+  assert.equal(await llamar(NOTAS_TRATAMIENTO), 403);
+  sesion = null;
+  assert.equal(await llamar(NOTAS_TRATAMIENTO), 401);
 });
 
 test("archivos en bloque (match/sign/confirm/abort): las 4 exigen xrays.upload además del rol, igual que registrar un archivo a mano", async () => {

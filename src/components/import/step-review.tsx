@@ -59,17 +59,46 @@ interface Props {
   onDecide: (key: string, id: string) => void;
 }
 
-/** Procedimientos que no están en el tarifario: uno por fila, con su selector. */
+/**
+ * Configuración de cada campo que puede traer valores "sin emparejar" (motor:
+ * `pr.unresolved`). `procedure` (presupuestos/tratamientos activos) SIEMPRE
+ * tiene un resultado válido sin decidir nada: la línea entra "solo con su
+ * importe". `condition` (odontograma) NO: `conditionId` es obligatorio en
+ * odontogram_entries, así que sin elegir un equivalente la fila no se importa
+ * — por eso no ofrece la opción "sin ligar", solo un placeholder que deja la
+ * fila pendiente (y `preview.unresolved` la sigue reportando en cada vuelta).
+ */
+const UNRESOLVED_FIELD_CONFIG: Record<string, { titleKey: string; descKey: string; allowUnlinked: boolean }> = {
+  procedure: {
+    titleKey: "shell.importClinic.step6.unresolvedTitle",
+    descKey: "shell.importClinic.step6.unresolvedDesc",
+    allowUnlinked: true,
+  },
+  condition: {
+    titleKey: "shell.importClinic.step6.unresolvedTitleCondition",
+    descKey: "shell.importClinic.step6.unresolvedDescCondition",
+    allowUnlinked: false,
+  },
+};
+
+/** Valores (procedimiento del tarifario, hallazgo del odontograma…) que no casaron con el catálogo. */
 function Unresolved({ t, preview, decisions, onDecide }: Pick<Props, "t" | "preview" | "decisions" | "onDecide">) {
-  const items = (preview.unresolved ?? []).filter((u) => u.field === "procedure");
+  // Un solo campo con `unresolved` por vista previa (el motor no mezcla dos
+  // catálogos distintos en la misma entidad): se toma del primero que no sea
+  // el de montos ambiguos, que tiene su propio callout (AmountFormat).
+  const field = (preview.unresolved ?? []).find((u) => u.field !== "amountFormat")?.field;
+  if (!field) return null;
+  const config = UNRESOLVED_FIELD_CONFIG[field];
+  if (!config) return null;
+  const items = (preview.unresolved ?? []).filter((u) => u.field === field);
   if (items.length === 0) return null;
-  const options = preview.options?.procedure ?? [];
+  const options = preview.options?.[field] ?? [];
   return (
     <div className="imp-callout imp-callout--warn" style={{ marginTop: 14, alignItems: "flex-start" }}>
       <span className="imp-callout__ic" aria-hidden><Link2 size={21} /></span>
       <div className="imp-callout__txt" style={{ flex: 1, minWidth: 0 }}>
-        <b>{t("shell.importClinic.step6.unresolvedTitle", { count: items.length })}</b>
-        <p>{t("shell.importClinic.step6.unresolvedDesc")}</p>
+        <b>{t(config.titleKey, { count: items.length })}</b>
+        <p>{t(config.descKey)}</p>
         <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0, display: "grid", gap: 8 }}>
           {items.map((u, i) => {
             const id = `imp-eq-${i}`;
@@ -85,10 +114,14 @@ function Unresolved({ t, preview, decisions, onDecide }: Pick<Props, "t" | "prev
                   id={id}
                   className="input-new imp-select"
                   style={{ flex: "1 1 220px", minWidth: 0, maxWidth: "100%" }}
-                  value={decisions[u.key] ?? VALUE_UNLINKED}
+                  value={decisions[u.key] ?? (config.allowUnlinked ? VALUE_UNLINKED : "")}
                   onChange={(e) => onDecide(u.key, e.target.value)}
                 >
-                  <option value={VALUE_UNLINKED}>{t("shell.importClinic.step6.unresolvedUnlinked")}</option>
+                  {config.allowUnlinked ? (
+                    <option value={VALUE_UNLINKED}>{t("shell.importClinic.step6.unresolvedUnlinked")}</option>
+                  ) : (
+                    <option value="" disabled>{t("shell.importClinic.step6.unresolvedChoose")}</option>
+                  )}
                   {options.map((o) => (
                     <option key={o.id} value={o.id}>{o.label}</option>
                   ))}

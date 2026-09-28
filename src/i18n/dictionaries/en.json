@@ -840,7 +840,9 @@
         "fechaRealizado": "Date it was done",
         "abonado": "Amount already paid",
         "fechaAbono": "Payment date",
-        "proximaVisita": "Next visit"
+        "proximaVisita": "Next visit",
+        "surface": "Tooth surface",
+        "condition": "Finding / condition"
       },
       "launch": "Import my clinic",
       "assistedCta": "Assisted migration",
@@ -930,7 +932,11 @@
         "quotesMeta": "Patient history: they don't create invoices or charges",
         "treatmentPlans": "Active treatments",
         "treatmentPlansMeta": "Estimates already in progress: come in as a live, continuable plan, with what's done and what's paid",
-        "soloNote": "Balances, appointments, medical history, notes, estimates and active treatments are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first.",
+        "odontogram": "Dental chart",
+        "odontogramMeta": "Per-tooth, per-surface state: caries, restorations, crowns, missing teeth… anything we don't recognize is flagged for matching",
+        "treatmentNotes": "Treatment progress notes",
+        "treatmentNotesMeta": "Added to the session of the imported active treatment when the folio matches; otherwise filed in the record as migrated",
+        "soloNote": "Balances, appointments, medical history, notes, estimates, active treatments, the dental chart and treatment notes are imported one at a time, each with its own review: it is money, schedule or clinical data and worth checking first.",
         "filesCta": "Have x-rays, photos or PDFs? Upload them in bulk →"
       },
       "step4": {
@@ -1006,6 +1012,12 @@
         },
         "unresolvedDesc": "They come in with their name and amount, not linked to a procedure. If your catalog has an equivalent, pick it.",
         "unresolvedUnlinked": "Amount only, not linked",
+        "unresolvedTitleCondition": {
+          "one": "{count} finding isn't in the dental chart catalog",
+          "other": "{count} findings aren't in the dental chart catalog"
+        },
+        "unresolvedDescCondition": "Pick the equivalent for each one: without a choice, those rows aren't imported.",
+        "unresolvedChoose": "Pick an equivalent…",
         "unresolvedRows": {
           "one": "({count} row)",
           "other": "({count} rows)"
@@ -1053,7 +1065,9 @@
           "medicalHistory": "Medical history",
           "clinicalNotes": "Notes",
           "quotes": "Estimates",
-          "treatmentPlans": "Active treatments"
+          "treatmentPlans": "Active treatments",
+          "odontogram": "Dental chart",
+          "treatmentNotes": "Treatment notes"
         }
       },
       "result": {
@@ -1077,6 +1091,8 @@
         "pillClinicalNotes": "notes migrated",
         "pillQuotes": "estimates",
         "pillTreatmentPlans": "active treatments",
+        "pillOdontogram": "dental chart findings",
+        "pillTreatmentNotes": "treatment notes",
         "omittedLine": {
           "one": "{count} row was left out on purpose (past or cancelled appointment, or already imported).",
           "other": "{count} rows were left out on purpose (past or cancelled appointments, or already imported)."

@@ -172,6 +172,31 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "fechaAbono", label: "Fecha del abono", labelKey: "shell.importClinic.fields.fechaAbono" },
     { value: "proximaVisita", label: "Próxima visita", labelKey: "shell.importClinic.fields.proximaVisita" },
   ],
+  odontogram: [
+    NO_IMPORT,
+    { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "patientExternalId", label: "ID del paciente en el sistema de origen", labelKey: "shell.importClinic.fields.patientExternalId" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "tooth", label: "Pieza dental (FDI)", labelKey: "shell.importClinic.fields.tooth" },
+    { value: "surface", label: "Cara del diente", labelKey: "shell.importClinic.fields.surface" },
+    { value: "condition", label: "Hallazgo / condición", labelKey: "shell.importClinic.fields.condition" },
+    { value: "notes", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
+  ],
+  treatmentNotes: [
+    NO_IMPORT,
+    { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "patientExternalId", label: "ID del paciente en el sistema de origen", labelKey: "shell.importClinic.fields.patientExternalId" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "folio", label: "Folio del tratamiento", labelKey: "shell.importClinic.fields.folio" },
+    { value: "date", label: "Fecha", labelKey: "shell.importClinic.fields.date" },
+    { value: "doctor", label: "Doctor / Profesional", labelKey: "shell.importClinic.fields.doctor" },
+    { value: "title", label: "Título", labelKey: "shell.importClinic.fields.title" },
+    { value: "text", label: "Texto de la nota", labelKey: "shell.importClinic.fields.text" },
+  ],
 };
 
 const ENDPOINTS: Record<Entity, string> = {
@@ -182,6 +207,8 @@ const ENDPOINTS: Record<Entity, string> = {
   clinicalNotes: "/api/import/clinical-notes",
   quotes: "/api/import/quotes",
   treatmentPlans: "/api/import/treatment-plans",
+  odontogram: "/api/import/odontogram",
+  treatmentNotes: "/api/import/treatment-notes",
 };
 
 const PREVIEW_TIMEOUT_MS = 60_000;
@@ -256,6 +283,18 @@ function rowDetail(entity: Entity, data: Record<string, any>): string | undefine
     if (typeof data.lineTotal === "number") parts.push(formatMoney(data.lineTotal));
     parts.push(data.hecho ? "Hecha" : "Pendiente");
     if (typeof data.abonado === "number" && data.abonado > 0) parts.push(`Abonado: ${formatMoney(data.abonado)}`);
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "odontogram") {
+    const parts: string[] = [];
+    if (data.condition) parts.push(String(data.condition));
+    if (data.tooth) parts.push(`#${data.tooth}`);
+    if (data.surface) parts.push(String(data.surface));
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "treatmentNotes") {
+    const dia = typeof data.date === "string" ? data.date.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$3/$2/$1") : "";
+    const parts = [dia, data.title, data.doctorName, data.treatmentTitle ? `Tratamiento: ${data.treatmentTitle}` : undefined].filter(Boolean);
     return parts.length ? parts.join(" · ") : undefined;
   }
   if (entity === "medicalHistory") {

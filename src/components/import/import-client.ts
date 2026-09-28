@@ -206,7 +206,9 @@ export interface DataType {
 }
 
 /** Entidades clínicas: van solas y nunca reimportan duplicados (ver entities.ts). */
-export const CLINICAL_ENTITIES: ReadonlySet<Entity> = new Set<Entity>(["medicalHistory", "clinicalNotes", "quotes", "treatmentPlans"]);
+export const CLINICAL_ENTITIES: ReadonlySet<Entity> = new Set<Entity>([
+  "medicalHistory", "clinicalNotes", "quotes", "treatmentPlans", "odontogram", "treatmentNotes",
+]);
 
 export const DATA_TYPES: DataType[] = [
   { id: "pacientes", labelKey: "patients", descKey: "patientsMeta", icon: "users", badge: "rec", on: true, entity: "patients" },
@@ -221,6 +223,11 @@ export const DATA_TYPES: DataType[] = [
   // Tratamientos activos: como presupuestos, pero entra VIVO (plan continuable +
   // factura + abonos). Va solo, con su propia revisión (dinero + plan clínico).
   { id: "tratamientosactivos", labelKey: "treatmentPlans", descKey: "treatmentPlansMeta", icon: "activity", badge: "adv", on: false, entity: "treatmentPlans", solo: true },
+  // Odontograma: el estado por pieza/cara del odontograma vivo (odontogram_entries).
+  { id: "odontograma", labelKey: "odontogram", descKey: "odontogramMeta", icon: "clipboard", badge: "adv", on: false, entity: "odontogram", solo: true },
+  // Notas de evolución de tratamiento: como notas de evolución, pero se ligan a
+  // la sesión del tratamiento activo importado cuando el folio casa con uno.
+  { id: "notastratamiento", labelKey: "treatmentNotes", descKey: "treatmentNotesMeta", icon: "file", badge: "adv", on: false, entity: "treatmentNotes", solo: true },
 ];
 
 // Límites de archivo del paso 4.

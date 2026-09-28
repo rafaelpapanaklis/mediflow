@@ -136,6 +136,9 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   );
   const principalEntity: Entity = selectedEntities[0] ?? "patients";
 
+  /** Campo con `unresolved` de la vista previa actual ("procedure" o "condition"), si hay. */
+  const unresolvedField = preview?.unresolved?.find((u) => u.field !== "amountFormat")?.field;
+
   /** Decisiones ya tomadas que la vista previa debe respetar para mostrar lo que de verdad se va a importar. */
   function valueMappingActual(formato: string = formatoMontos): ValueMapping | undefined {
     return formato ? { amountFormat: { formato } } : undefined;
@@ -148,8 +151,17 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     if (u && options?.length) setMontosInfo({ options, example: u.value, rows: u.rows });
   }
 
-  /** Cada procedimiento sin equivalente arranca en «solo el importe» (nada se inventa ni se tira). */
+  /**
+   * Cada procedimiento sin equivalente arranca en «solo el importe» (nada se
+   * inventa ni se tira). Un hallazgo del odontograma sin equivalente NO tiene
+   * ese resguardo (conditionId es obligatorio): se deja SIN decisión, para
+   * que el motor lo siga reportando como `unresolved` en cada vuelta hasta
+   * que el usuario elija uno de verdad (ver UNRESOLVED_FIELD_CONFIG en
+   * step-review.tsx).
+   */
   function seedDecisions(res: PreviewResult) {
+    const field = (res.unresolved ?? []).find((u) => u.field !== "amountFormat")?.field;
+    if (field !== "procedure") { setDecisions({}); return; }
     setDecisions((prev) => {
       const next: Record<string, string> = {};
       for (const u of res.unresolved ?? []) {
@@ -445,7 +457,10 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
             ...(principal
               ? {
                   valueMapping: {
-                    ...(Object.keys(decisions).length > 0 ? { procedure: decisions } : {}),
+                    // El campo destino de `decisions` es el que el motor reportó como
+                    // `unresolved` en la última vista previa ("procedure" en presupuestos/
+                    // tratamientos activos, "condition" en el odontograma) — nunca fijo.
+                    ...(Object.keys(decisions).length > 0 && unresolvedField ? { [unresolvedField]: decisions } : {}),
                     ...(formatoMontos ? { amountFormat: { formato: formatoMontos } } : {}),
                   },
                 }

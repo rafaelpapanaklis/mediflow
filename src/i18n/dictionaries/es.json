@@ -840,7 +840,9 @@
         "fechaRealizado": "Fecha en que se hizo",
         "abonado": "Monto ya abonado",
         "fechaAbono": "Fecha del abono",
-        "proximaVisita": "Próxima visita"
+        "proximaVisita": "Próxima visita",
+        "surface": "Cara del diente",
+        "condition": "Hallazgo / condición"
       },
       "launch": "Importar mi clínica",
       "assistedCta": "Migración asistida",
@@ -930,7 +932,11 @@
         "quotesMeta": "Historia del paciente: no generan factura ni cobro",
         "treatmentPlans": "Tratamientos activos",
         "treatmentPlansMeta": "Presupuestos con avance: entran como plan vivo y continuable, con lo hecho y lo abonado",
-        "soloNote": "Saldos, citas, expedientes, notas, presupuestos y tratamientos activos se importan de uno en uno, cada uno con su propia revisión: son datos de dinero, de agenda o clínicos y conviene verlos antes.",
+        "odontogram": "Odontograma",
+        "odontogramMeta": "El estado por pieza y cara: caries, restauraciones, coronas, ausentes… Lo que no se reconozca se pide emparejar",
+        "treatmentNotes": "Notas de evolución de tratamiento",
+        "treatmentNotesMeta": "Se agregan a la sesión del tratamiento activo importado si el folio casa; si no, entran al expediente como migradas",
+        "soloNote": "Saldos, citas, expedientes, notas, presupuestos, tratamientos activos, el odontograma y las notas de tratamiento se importan de uno en uno, cada uno con su propia revisión: son datos de dinero, de agenda o clínicos y conviene verlos antes.",
         "filesCta": "¿Tienes radiografías, fotos o PDFs? Súbelos en bloque →"
       },
       "step4": {
@@ -1006,6 +1012,12 @@
         },
         "unresolvedDesc": "Entran con su nombre y su importe, sin ligar a un procedimiento. Si en tu catálogo tienen equivalente, elígelo.",
         "unresolvedUnlinked": "Solo el importe, sin ligar",
+        "unresolvedTitleCondition": {
+          "one": "{count} hallazgo no está en el catálogo del odontograma",
+          "other": "{count} hallazgos no están en el catálogo del odontograma"
+        },
+        "unresolvedDescCondition": "Elige el equivalente de cada uno: sin elegirlo, esas filas no se importan.",
+        "unresolvedChoose": "Elige un equivalente…",
         "unresolvedRows": {
           "one": "({count} fila)",
           "other": "({count} filas)"
@@ -1053,7 +1065,9 @@
           "medicalHistory": "Expedientes",
           "clinicalNotes": "Notas",
           "quotes": "Presupuestos",
-          "treatmentPlans": "Tratamientos activos"
+          "treatmentPlans": "Tratamientos activos",
+          "odontogram": "Odontograma",
+          "treatmentNotes": "Notas de tratamiento"
         }
       },
       "result": {
@@ -1077,6 +1091,8 @@
         "pillClinicalNotes": "notas migradas",
         "pillQuotes": "presupuestos",
         "pillTreatmentPlans": "tratamientos activos",
+        "pillOdontogram": "hallazgos en el odontograma",
+        "pillTreatmentNotes": "notas de tratamiento",
         "omittedLine": {
           "one": "{count} fila se dejó fuera a propósito (cita pasada o cancelada, o ya importada antes).",
           "other": "{count} filas se dejaron fuera a propósito (citas pasadas o canceladas, o ya importadas antes)."
