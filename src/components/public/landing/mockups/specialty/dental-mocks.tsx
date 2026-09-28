@@ -292,148 +292,141 @@ export const OdontogramMock: React.FC = () => {
   );
 };
 
-// ─── DENTAL: Ortho Timeline ──────────────────────────────────────────────────
+// ─── DENTAL: Ortho · caso, control y mensualidades ───────────────────────────
+// Maqueta ilustrativa (datos de ejemplo), pero cada pieza corresponde a algo
+// que el módulo real SÍ tiene: el caso con su mes y fase, el arco actual, la
+// hoja de control ligada a la cita, el estado de cuenta de mensualidades, los
+// juegos de fotos (iniciales / de avance / finales), las 5 medidas del trazado
+// cefalométrico manual y lo que el paciente registra en su portal. Nada de
+// timeline automático, de IA que trace ni de cobro automático: no existen.
 export const OrthoMock: React.FC = () => {
-  const months = [0, 3, 6, 9, 12, 15];
+  const mesActual = 5;
+  const mesesTotales = 18;
+  const datosCaso: Array<[string, string, string]> = [
+    ["Fase", "Alineación", "Brackets metálicos"],
+    ["Arco actual", "NiTi .016\"", "Último control firmado"],
+    ["Próximo control", "28 abr · 11:00", "Control de ortodoncia"],
+    ["Elásticos", "86%", "Uso · últimos 14 días"],
+  ];
+  const hoja: Array<[string, string]> = [
+    ["Arco", "NiTi .016\" sup. e inf."],
+    ["Elásticos", "Clase II · 3/16\""],
+    ["Próximo control", "En 4 semanas"],
+  ];
+  const medidas: Array<[string, string]> = [
+    ["SNA", "82°"],
+    ["SNB", "78°"],
+    ["ANB", "4°"],
+    ["FMA", "26°"],
+    ["IMPA", "93°"],
+  ];
+  const juegos: Array<[string, boolean]> = [
+    ["Iniciales", true],
+    ["De avance", true],
+    ["Finales", false],
+  ];
+  const tarjeta: React.CSSProperties = {
+    padding: 12,
+    borderRadius: 10,
+    background: "rgba(255,255,255,0.02)",
+    border: "1px solid var(--app-border)",
+  };
+  const fila: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: 11,
+    marginBottom: 5,
+  };
   return (
-    <MockShell title="Timeline · Ortodoncia" accent="#a78bfa">
-      <div
-        style={{
-          padding: 14,
-          borderRadius: 10,
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid var(--app-border)",
-          marginBottom: 12,
-        }}
-      >
-        <Row style={{ marginBottom: 12 }}>
-          <SectionTitle>Progreso · Caso CL-1821</SectionTitle>
-          <Tag color="#a78bfa">Mes 12/18</Tag>
+    <MockShell title="Caso de ortodoncia" accent="#a78bfa">
+      <div style={{ ...tarjeta, padding: 14, marginBottom: 12 }}>
+        <Row style={{ marginBottom: 12, justifyContent: "space-between" }}>
+          <Row>
+            <SectionTitle>Tratamiento activo</SectionTitle>
+            <Tag color="#a78bfa">
+              Mes {mesActual} de {mesesTotales}
+            </Tag>
+          </Row>
+          <Tag color="#34d399">Al corriente</Tag>
         </Row>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
-          {months.map((m) => (
-            <div key={m}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${mesesTotales}, 1fr)`,
+            gap: 3,
+            marginBottom: 14,
+          }}
+        >
+          {Array.from({ length: mesesTotales }, (_, i) => (
+            <div
+              key={i}
+              style={{
+                height: 6,
+                borderRadius: 6,
+                background:
+                  i < mesActual
+                    ? "linear-gradient(90deg, #a78bfa, #7c3aed)"
+                    : "rgba(255,255,255,0.06)",
+              }}
+            />
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+          {datosCaso.map(([etiqueta, valor, nota]) => (
+            <div key={etiqueta}>
               <div
                 style={{
-                  aspectRatio: "0.75",
-                  borderRadius: 8,
-                  background: `linear-gradient(180deg, rgba(167,139,250,${0.1 + m * 0.02}), rgba(167,139,250,0.04))`,
-                  border: "1px solid rgba(167,139,250,0.2)",
-                  position: "relative",
-                  overflow: "hidden",
-                  display: "grid",
-                  placeItems: "center",
-                }}
-              >
-                <svg viewBox="0 0 60 80" style={{ width: "75%" }}>
-                  <path
-                    d={`M10 40 Q30 ${60 - m * 1.2} 50 40`}
-                    stroke="rgba(255,255,255,0.4)"
-                    strokeWidth="1"
-                    fill="none"
-                  />
-                  {[15, 20, 25, 30, 35, 40, 45].map((x) => (
-                    <rect
-                      key={x}
-                      x={x - 1.5}
-                      y={42 - Math.max(0, 4 - m * 0.3)}
-                      width="3"
-                      height="5"
-                      fill="white"
-                      opacity={0.7 - m * 0.04}
-                      rx="0.5"
-                    />
-                  ))}
-                  <path
-                    d={`M10 42 Q30 ${58 - m * 1.1} 50 42`}
-                    stroke="#a78bfa"
-                    strokeWidth="0.8"
-                    fill="none"
-                    opacity={Math.max(0, 1 - m * 0.07)}
-                  />
-                </svg>
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 4,
-                    left: 4,
-                    padding: "1px 6px",
-                    borderRadius: 4,
-                    background: "rgba(0,0,0,0.5)",
-                    fontSize: 9,
-                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
-                    color: "white",
-                  }}
-                >
-                  Mes {m}
-                </div>
-              </div>
-              <div
-                style={{
-                  fontSize: 10,
+                  fontSize: 9,
                   color: "var(--fg-muted)",
-                  marginTop: 4,
-                  textAlign: "center",
+                  fontFamily: "var(--font-mono, ui-monospace, monospace)",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  marginBottom: 4,
                 }}
               >
-                {m === 0 ? "Inicio" : m === 15 ? "Actual" : `Ajuste ${m / 3}`}
+                {etiqueta}
               </div>
+              <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em" }}>{valor}</div>
+              <div style={{ fontSize: 10, color: "var(--fg-muted)", marginTop: 2 }}>{nota}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div
-          style={{
-            padding: 12,
-            borderRadius: 10,
-            background: "rgba(255,255,255,0.02)",
-            border: "1px solid var(--app-border)",
-          }}
-        >
-          <Row style={{ marginBottom: 8 }}>
-            <SectionTitle>Próximo ajuste</SectionTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 1fr", gap: 10 }}>
+        <div style={tarjeta}>
+          <Row style={{ marginBottom: 10, justifyContent: "space-between" }}>
+            <SectionTitle>Hoja de control</SectionTitle>
+            <Tag color="#34d399">Firmada</Tag>
           </Row>
-          <div style={{ fontSize: 11, color: "var(--fg-muted)", marginBottom: 8 }}>
-            28 abril · 11:00 · Dra. Morales
+          {hoja.map(([k, v]) => (
+            <div key={k} style={fila}>
+              <span style={{ color: "var(--fg-muted)" }}>{k}</span>
+              <span>{v}</span>
+            </div>
+          ))}
+          <div style={{ fontSize: 10, color: "var(--fg-muted)", marginTop: 8 }}>
+            Control del 31 mar · ligada a la cita
           </div>
-          <Row>
-            <Tag color="#a78bfa">Brackets MBT .018&quot;</Tag>
-          </Row>
         </div>
+
         <div
           style={{
-            padding: 12,
-            borderRadius: 10,
+            ...tarjeta,
             background: "rgba(167,139,250,0.08)",
             border: "1px solid rgba(167,139,250,0.25)",
           }}
         >
-          <Row style={{ marginBottom: 8 }}>
-            <SectionTitle>Plan financiero</SectionTitle>
+          <Row style={{ marginBottom: 10 }}>
+            <SectionTitle>Mensualidades</SectionTitle>
           </Row>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 11,
-              marginBottom: 4,
-            }}
-          >
+          <div style={fila}>
             <span>Total</span>
             <span>$42,000</span>
           </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 11,
-              marginBottom: 4,
-            }}
-          >
+          <div style={fila}>
             <span>Pagado</span>
-            <span style={{ color: "#34d399" }}>$28,000</span>
+            <span style={{ color: "#34d399" }}>$14,000</span>
           </div>
           <div
             style={{
@@ -441,16 +434,119 @@ export const OrthoMock: React.FC = () => {
               borderRadius: 4,
               background: "rgba(255,255,255,0.06)",
               overflow: "hidden",
+              margin: "8px 0",
             }}
           >
             <div
               style={{
-                width: "66%",
+                width: "33%",
                 height: "100%",
                 background: "linear-gradient(90deg, #a78bfa, #7c3aed)",
               }}
             />
           </div>
+          <div style={{ fontSize: 10, color: "var(--fg-muted)" }}>
+            Próxima: 5 may · $1,750
+          </div>
+        </div>
+
+        <div style={tarjeta}>
+          <Row style={{ marginBottom: 10 }}>
+            <SectionTitle>Fotos del caso</SectionTitle>
+          </Row>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+            {juegos.map(([nombre, tomado]) => (
+              <div key={nombre}>
+                <div
+                  style={{
+                    aspectRatio: "1",
+                    borderRadius: 6,
+                    background: tomado
+                      ? "linear-gradient(180deg, rgba(167,139,250,0.18), rgba(167,139,250,0.04))"
+                      : "rgba(255,255,255,0.02)",
+                    border: tomado
+                      ? "1px solid rgba(167,139,250,0.25)"
+                      : "1px dashed rgba(255,255,255,0.12)",
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  {tomado && (
+                    <svg viewBox="0 0 40 40" style={{ width: "80%" }}>
+                      <path
+                        d="M17 6 Q23 8 23 15 Q27 19 23 22 Q25 25 23 27 Q24 32 18 34"
+                        stroke="rgba(255,255,255,0.45)"
+                        strokeWidth="1"
+                        fill="none"
+                      />
+                      <line x1="29" y1="17" x2="25" y2="33" stroke="#a78bfa" strokeWidth="0.9" />
+                    </svg>
+                  )}
+                </div>
+                <div
+                  style={{
+                    fontSize: 9.5,
+                    color: "var(--fg-muted)",
+                    marginTop: 4,
+                    textAlign: "center",
+                  }}
+                >
+                  {nombre}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.6fr 1fr",
+          gap: 10,
+          marginTop: 10,
+        }}
+      >
+        <div style={tarjeta}>
+          <Row style={{ marginBottom: 10, justifyContent: "space-between" }}>
+            <SectionTitle>Cefalometría</SectionTitle>
+            <Tag color="#a78bfa">Trazado manual</Tag>
+          </Row>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+            {medidas.map(([nombre, valor]) => (
+              <div
+                key={nombre}
+                style={{
+                  padding: "6px 8px",
+                  borderRadius: 6,
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid var(--app-border)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 9,
+                    color: "var(--fg-muted)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
+                  }}
+                >
+                  {nombre}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{valor}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={tarjeta}>
+          <Row style={{ marginBottom: 10 }}>
+            <SectionTitle>Desde el portal</SectionTitle>
+          </Row>
+          <Row style={{ fontSize: 11, marginBottom: 6 }}>
+            <Dot c="#34d399" /> Elásticos de hoy registrados
+          </Row>
+          <Row style={{ fontSize: 11 }}>
+            <Dot c="#a78bfa" /> Foto de monitoreo por revisar
+          </Row>
         </div>
       </div>
     </MockShell>

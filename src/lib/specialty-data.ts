@@ -100,25 +100,37 @@ export const SPECIALTIES: Record<string, Specialty> = {
 
   "ortodoncia": {
     slug: "ortodoncia", name: "Ortodoncia", category: "Dental", icon: "braces", accent: "#a78bfa",
-    tagline: "Seguimiento fotográfico", eyebrow: "Para ortodoncistas",
-    heroTitle: "Documenta cada ajuste. Visualiza cada avance.",
-    heroSub:   "Timeline fotográfico del tratamiento, control de brackets y alineadores, recordatorios de citas mensuales. Tus pacientes ven su progreso, tú ves tu negocio.",
-    metricsStrip: [["18 mo", "Tratamiento promedio"], ["+34%", "Retención paciente"], ["100%", "Casos documentados"], ["< 2 h", "Carga admin/sem"]],
+    // Contenido reescrito en ws1-t11 (sep-2026): cada frase describe algo que el
+    // módulo de ortodoncia SÍ hace. Antes de añadir una promesa, comprueba que
+    // la función existe (tabla promesa → archivo en REPORTE-ws1-t11.md). Nada
+    // de IA que traza sola, cobro automático a tarjeta ni CFDI por mensualidad:
+    // no existen. La franja de métricas son datos del producto, no resultados
+    // de clínicas (esos no los tenemos medidos).
+    tagline: "Casos, controles y mensualidades", eyebrow: "Para ortodoncistas",
+    heroTitle: "Casos, controles y mensualidades en un solo lugar.",
+    heroSub:   "Abre el caso con su diagnóstico y su plan, lleva cada control desde la agenda con su hoja de control y cobra las mensualidades en Caja. Tu recepción sabe quién debe y cuánto.",
+    metricsStrip: [["7", "Tipos de cita de ortodoncia"], ["5", "Alertas que vigilan cada caso"], ["6 meses", "Proyección de mensualidades"], ["14 días", "Cumplimiento de elásticos a la vista"]],
     features: [
-      feature("Timeline fotográfico", "Fotos intraorales y extraorales organizadas por fecha. El paciente ve su transformación mes a mes.", "camera"),
-      feature("Control de brackets y alineadores", "Registra tipo, marca, lote. Próximos ajustes agendados automáticamente.", "braces"),
-      feature("Cefalometrías digitales", "Sube la radiografía lateral y traza directo. Análisis Steiner, Ricketts, McNamara.", "scan"),
-      feature("Planes a largo plazo", "Presupuestos con pagos mensuales programados. Cobranza automática.", "doc"),
-      feature("Recordatorios mensuales", "Tu paciente no olvida su ajuste. WhatsApp 48 h y 2 h antes.", "bell"),
-      feature("CFDI 4.0 por mensualidad", "Cada pago genera factura automática. Cero carga administrativa.", "invoice"),
+      feature("Expediente y alta del caso", "Abre el caso desde la ficha del paciente: diagnóstico (clase de Angle, overjet, overbite, apiñamiento), técnica, duración, doctor tratante y quién paga. También puedes dejar al paciente en observación.", "doc"),
+      feature("Mensualidades a plazos o por control", "Tu clínica elige cómo cobra: precio total con enganche y mensualidades, o pago por control. Acepta abonos de cualquier monto y registra promesas de pago.", "invoice"),
+      feature("Controles en la agenda", "Agenda con 7 tipos de cita de ortodoncia. Al abrir un control llenas su hoja: arco, elásticos, activaciones, indicaciones y cuándo toca el siguiente. La firmas y queda ligada a esa cita.", "braces"),
+      feature("Recepción y Caja", "Caja muestra las mensualidades vencidas, las de hoy y las de los próximos 7 días, cada una con su botón de cobrar. Los hermanos con el mismo responsable de pago aparecen juntos.", "box"),
+      feature("Tablero y alertas", "Pacientes activos, controles de hoy, saldos vencidos y lo que va a entrar por mensualidades en los próximos 6 meses. Las alertas te dicen quién debe, quién no tiene control agendado y quién faltó.", "bell"),
+      feature("Cefalometría con trazado manual", "Sube la radiografía lateral y marca tú los puntos. El sistema calcula SNA, SNB, ANB, FMA e IMPA al momento, los compara con la norma y superpone el trazado inicial con el más reciente.", "scan"),
+      feature("Fotos con líneas", "Juegos de fotos iniciales, de avance y finales. Sobre la foto marcas la línea E, el ángulo nasolabial y la línea media. Incluye análisis de Bolton y PDF comparativo.", "camera"),
+      feature("Alineadores y elásticos", "Registra el alineador actual, el total y cada cuándo se cambia: el sistema calcula cuál debería traer hoy el paciente y te avisa si va atrasado. De los elásticos ves el cumplimiento de los últimos 14 días.", "tooth"),
+      feature("Portal del paciente y WhatsApp", "Tu paciente ve su mensualidad, su saldo y su próximo control, registra sus elásticos y te manda fotos de seguimiento. El recordatorio de cita sale solo por WhatsApp; el de mensualidad lo envías con un clic.", "hand"),
     ],
     mockupKey: "ortho",
     testimonial: { q: "Los pacientes de ortodoncia me abandonaban en el mes 10 por falta de motivación. Con el timeline fotográfico ven el cambio y se quedan hasta el final. Subí retención 34%.", name: "Dr. Alejandro Kuri", role: "Ortodoncista · Smile Studio", city: "Guadalajara", metric: "+34% retención" },
     faqs: [
-      ["¿Maneja alineadores como Invisalign?", "Sí. Registras lote, número de charola y fecha de cambio. El paciente recibe recordatorio del cambio."],
-      ["¿Las fotos se almacenan de forma segura?", "Encriptadas en reposo y en tránsito. Cumplimos con la NOM-024 y LFPDPPP."],
-      ["¿Puedo hacer cefalometría desde la tablet?", "Sí, desde cualquier navegador moderno. Tablet, laptop, iPad."],
-      ["¿Funciona para consultorio pequeño?", "BASIC cubre un ortodoncista con hasta 500 pacientes activos."],
+      ["¿La cefalometría se traza sola?", "No. El trazado es manual: tú marcas los puntos sobre la radiografía lateral y el sistema hace las cuentas (SNA, SNB, ANB, FMA e IMPA) y las compara con la norma. No hay IA que trace por ti."],
+      ["¿Puedo cobrar por control en lugar de mensualidades fijas?", "Sí. Cada clínica elige cómo cobra sus casos: precio total con enganche y mensualidades, o un cobro por cada control."],
+      ["¿Las mensualidades se cobran solas a la tarjeta?", "No. El cobro lo registra tu equipo en Caja, con el método de pago que use el paciente. Lo que hace el sistema es avisarte quién tiene una mensualidad vencida, cuánto debe y desde cuándo."],
+      ["¿Cada mensualidad se factura (CFDI) en automático?", "No. Cada pago queda registrado con su recibo. El CFDI se timbra desde la factura, con un botón, cuando lo necesitas; no sale solo con cada mensualidad."],
+      ["¿Maneja alineadores como Invisalign?", "Sí, de cualquier sistema. Registras el nombre del sistema, el alineador actual, el total y el intervalo de cambio. El panel calcula cuál debería traer hoy el paciente y marca si va atrasado o adelantado."],
+      ["¿Las fotos y radiografías están protegidas?", "Se guardan en un almacenamiento privado, sin enlace público. Cada vez que alguien de tu equipo abre una imagen, el sistema genera un enlace temporal que caduca en minutos."],
+      ["¿Ortodoncia viene incluida en mi plan?", "Ortodoncia es un módulo que se activa por clínica. Escríbenos y lo encendemos en tu cuenta."],
     ],
   },
 
