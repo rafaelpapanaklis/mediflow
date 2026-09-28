@@ -14,8 +14,6 @@ import {
   type EmptyStateSize,
 } from "../empty-state";
 import { useT } from "@/i18n/i18n-provider";
-import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
-import { enlaceNuevaCita, rutaAgendaSemana } from "@/lib/agenda/rutas-agenda";
 
 interface PresetBaseProps {
   size?: EmptyStateSize;
@@ -55,13 +53,6 @@ interface EmptyAppointmentsTodayProps extends PresetBaseProps {
 
 export function EmptyAppointmentsToday({ size, className, onNew }: EmptyAppointmentsTodayProps) {
   const t = useT();
-  // Con el menú nuevo (el interruptor que el layout ya le pasa a «Nueva cita»)
-  // no se sale a la agenda clásica: «Nueva cita» abre la ventana nueva y «Ver
-  // la semana» va a /dashboard/agenda. Con el menú de siempre, nada cambia.
-  // Este vacío solo se pinta dentro del panel, donde vive el proveedor.
-  const { open: abrirCita, apariencia } = useNewAppointmentDialog();
-  const menuNuevo = apariencia === "nueva";
-  const enlaceNueva = enlaceNuevaCita(menuNuevo);
   return (
     <EmptyStateNew
       icon={Calendar} tone="neutral"
@@ -69,12 +60,12 @@ export function EmptyAppointmentsToday({ size, className, onNew }: EmptyAppointm
       description={t("clinical.emptyStates.apptsTodayDesc")}
       primaryCta={{
         label: t("clinical.emptyStates.apptsNewCta"), icon: CalendarPlus,
-        onClick: onNew ?? (enlaceNueva ? undefined : () => abrirCita({ openAgendaAfter: true })),
-        href: onNew || !enlaceNueva ? undefined : enlaceNueva,
+        onClick: onNew,
+        href: onNew ? undefined : "/dashboard/appointments?new=1",
       }}
       secondaryCta={{
         label: t("clinical.emptyStates.apptsWeekCta"), icon: CalendarDays,
-        href: rutaAgendaSemana(menuNuevo),
+        href: "/dashboard/appointments?view=week",
       }}
       size={size} className={className}
     />
