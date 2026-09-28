@@ -332,6 +332,13 @@ model Clinic {
   orthoPhaseTransitions   OrthoPhaseTransition[]
   patientFlowEntries      PatientFlow[]
 
+  // Ortodoncia — Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
+  orthoCephalometryAnalyses OrthodonticCephalometryAnalysis[]
+  orthoAligners             OrthodonticAligner[]
+  orthoAlignerEvents        OrthodonticAlignerEvent[]
+  orthoElasticsLogs         OrthodonticElasticsLog[]
+  orthoMonitoringPhotos     OrthodonticMonitoringPhoto[]
+
   // Orthodontics Fase 1.5 rediseño completo.
   orthoQuoteScenarios     OrthoQuoteScenario[]
   orthoSignAtHomePackages OrthoSignAtHomePackage[]
@@ -1246,6 +1253,11 @@ model User {
   orthoPhaseTransitionsSigned OrthoPhaseTransition[] @relation("OrthoPhaseTransitionSignedBy")
   patientFlowsTriggered       PatientFlow[]          @relation("PatientFlowTriggeredBy")
 
+  // Ortodoncia — Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
+  orthoCephAnalysesCreated  OrthodonticCephalometryAnalysis[] @relation("OrthoCephAnalysisCreatedBy")
+  orthoAlignerEventsCreated OrthodonticAlignerEvent[]         @relation("OrthoAlignerEventCreatedBy")
+  orthoMonitoringPhotosReviewed OrthodonticMonitoringPhoto[]  @relation("OrthoMonitoringPhotoReviewedBy")
+
   // Orthodontics Fase 1.5 rediseño completo.
   orthoQuotesCreated     OrthoQuoteScenario[]     @relation("OrthoQuoteCreatedBy")
   orthoSignAtHomeCreated OrthoSignAtHomePackage[] @relation("OrthoSignAtHomeCreatedBy")
@@ -1499,6 +1511,12 @@ model Patient {
   orthoAuxMechanics       OrthoAuxMechanics[]
   orthoPhaseTransitions   OrthoPhaseTransition[]
   patientFlowEntries      PatientFlow[]
+
+  // Ortodoncia — Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
+  orthoCephalometryAnalyses OrthodonticCephalometryAnalysis[]
+  orthoAligners             OrthodonticAligner[]
+  orthoElasticsLogs         OrthodonticElasticsLog[]
+  orthoMonitoringPhotos     OrthodonticMonitoringPhoto[]
 
   // Orthodontics Fase 1.5 rediseño completo.
   orthoSignAtHomePackages OrthoSignAtHomePackage[]
@@ -2556,6 +2574,14 @@ model PatientFile {
   orthoConsentsSignedFile            OrthodonticConsent[]       @relation("OrthoConsentSignedFile")
   orthoDigitalRecordsFile            OrthodonticDigitalRecord[] @relation("OrthoDigitalRecordFile")
 
+  // Orthodontics — Parte 7 «Imagen y análisis» (ws1-t8, ola 1, sep-2026):
+  // radiografía lateral de cráneo y PDF de trazado del centro radiológico
+  // usados por un análisis cefalométrico (H1/H3/H4). Parte 8 (H15): foto de
+  // monitoreo remoto que el paciente sube desde el portal.
+  orthoCephXrayFor       OrthodonticCephalometryAnalysis[] @relation("OrthoCephXrayFile")
+  orthoCephTracingPdfFor OrthodonticCephalometryAnalysis[] @relation("OrthoCephTracingPdfFile")
+  orthoMonitoringPhotoFor OrthodonticMonitoringPhoto[]     @relation("OrthoMonitoringPhotoFile")
+
   // Implants module — radiografías peri-implantarias, foto intraoperatoria
   // de la cirugía, foto del paciente para el carnet, PDF del carnet,
   // consentimientos firmados. Ver SPEC §8.5.
@@ -2641,6 +2667,10 @@ enum FileCategory {
   ORTHO_PHOTO_T2
   ORTHO_PHOTO_CONTROL
   CEPH_ANALYSIS_PDF
+  // Parte 7 «Imagen y análisis» (ws1-t8, ola 1, sep-2026) — H1: la
+  // radiografía lateral de cráneo en sí (distinta del PDF de trazado de
+  // arriba, que ya existía).
+  XRAY_CEPHALOMETRIC
   SCAN_STL
   OTHER
 }
@@ -6315,6 +6345,12 @@ model OrthodonticTreatmentPlan {
   signAtHomePackages OrthoSignAtHomePackage[]
   referralCode       OrthoReferralCode?
 
+  // Parte 7/8 «Imagen y análisis» (ws1-t8, ola 1, sep-2026).
+  cephalometryAnalyses OrthodonticCephalometryAnalysis[]
+  aligner              OrthodonticAligner?
+  elasticsLogs         OrthodonticElasticsLog[]
+  monitoringPhotos     OrthodonticMonitoringPhoto[]
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -7133,25 +7169,247 @@ model PatientFlow {
 // en MVP. Quedan documentados aquí como TODO para que el bot de v1.1 los
 // agregue sin redefinir el contrato.
 //
-// TODO v1.1: OrthodonticCephalometryAnalysis — captura numérica de valores
-//   Steiner/Ricketts/Jarabak (~30 campos: SNA, SNB, ANB, FMA, IMPA, planos,
-//   dimensiones faciales). Vinculado 1:1 con un PatientFile category=
-//   CEPH_ANALYSIS_PDF.
+// HECHO (ws1-t8, Parte 7, ola 1, sep-2026): OrthodonticCephalometryAnalysis
+//   — implementado más abajo (H1/H3/H4). Simplificado contra el TODO
+//   original: en vez de ~30 campos sueltos, guarda `points`/`measurements`
+//   en JSON (5 medidas hoy: SNA/SNB/ANB/FMA/IMPA; el catálogo de puntos
+//   puede crecer sin migración). Vinculado a un PatientFile category=
+//   XRAY_CEPHALOMETRIC (la placa) y opcionalmente a uno category=
+//   CEPH_ANALYSIS_PDF (el trazado del centro radiológico).
 //
 // TODO v1.1: OrthodonticBracketsMap — mapeo bracket por diente con
 //   prescripción (Roth, MBT, Andrews) + slot, torque, in/out, tip.
 //
-// TODO v1.1: OrthodonticAligner — tracking del set actual de alineadores con
-//   número, fecha entrega, fecha cambio, compliance reportado por paciente.
+// HECHO (ws1-t8, Parte 8, ola 1, sep-2026): OrthodonticAligner —
+//   implementado más abajo (H12), con `OrthodonticAlignerEvent` para el
+//   historial de entregas/refinamientos/cambios que el TODO original no
+//   desglosaba.
 //
 // TODO v1.1: OrthodonticIPR — registro de reducción interproximal por par de
-//   dientes con cantidad en mm, fecha, instrumento.
+//   dientes con cantidad en mm, fecha, instrumento. NO se duplica aquí: el
+//   dato por visita ya existe en `OrthoCardIprPoint` (dueño: parte «Control
+//   y agenda»); falta solo el mapa por caso (H13, fuera de esta ola por
+//   instrucción explícita — ver src/lib/orthodontics/imagen/integraciones-futuras.ts).
 //
 // TODO v1.1: OrthodonticTAD — mini-implantes de anclaje con lote, ubicación
-//   FDI, fecha colocación, fecha retiro, complicaciones.
+//   FDI, fecha colocación, fecha retiro, complicaciones. NO se duplica: ya
+//   existe como `OrthoTAD` más arriba en este archivo.
 //
 // TODO v1.1: OrthodonticRefinement — segundo curso de tratamiento por
 //   ajustes finales no logrados con el plan original (alineadores y brackets).
+//   Parcialmente cubierto por `OrthodonticAligner.refinementCount` +
+//   `OrthodonticAlignerEvent` tipo REFINEMENT (H12); un modelo propio con
+//   plan/costo separado queda para v1.1 si Rafael lo pide.
+
+// ─── Parte 7 «Imagen y análisis» (ws1-t8, ola 1, sep-2026) ───────────────
+// H1 cefalometría manual, H3 superposición antes/después, H4 normas
+// mexicanas. SQL a mano en sql/ortodoncia-cefalometria.sql (aditivo, no
+// aplicado). Dueña única de este bloque — ver REPORTE-ws1-t8.md.
+
+enum OrthoCephTracingKind {
+  INITIAL
+  PROGRESS
+  FINAL
+}
+
+enum OrthoCephAnalysisType {
+  STEINER
+  RICKETTS
+  MCNAMARA
+}
+
+enum OrthoCephNormSet {
+  STANDARD
+  MEXICAN
+}
+
+model OrthodonticCephalometryAnalysis {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  kind         OrthoCephTracingKind  @default(INITIAL)
+  analysisType OrthoCephAnalysisType @default(STEINER)
+  normSet      OrthoCephNormSet      @default(STANDARD)
+
+  /// Puntos marcados a mano: Partial<Record<CephLandmarkId, {x,y}>> en px de
+  /// la imagen (ver src/lib/orthodontics/cefalometria/landmarks.ts).
+  points Json @default("{}")
+  /// Medidas calculadas (SNA/SNB/ANB/FMA/IMPA) — se recalculan en el
+  /// servidor a partir de `points`, nunca se confía en un valor del cliente.
+  measurements Json @default("{}")
+  /// px por mm si se calibró con una referencia conocida en la placa.
+  calibrationMmPerPixel Float?
+
+  lateralXrayFileId String?
+  lateralXrayFile   PatientFile? @relation("OrthoCephXrayFile", fields: [lateralXrayFileId], references: [id], onDelete: SetNull)
+  tracingPdfFileId  String?
+  tracingPdfFile    PatientFile? @relation("OrthoCephTracingPdfFile", fields: [tracingPdfFileId], references: [id], onDelete: SetNull)
+
+  createdByUserId String?
+  createdByUser   User?   @relation("OrthoCephAnalysisCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([treatmentPlanId])
+  @@index([clinicId])
+  @@map("orthodontic_cephalometry_analyses")
+}
+
+// ─── Parte 8 «Alineadores y cumplimiento» (ws1-t8, ola 1, sep-2026) ──────
+// H12 seguimiento de alineadores, H14 cumplimiento de elásticos/horas de
+// uso, H15 monitoreo a distancia con fotos del paciente. SQL a mano en
+// sql/ortodoncia-alineadores.sql (aditivo, no aplicado). Dueña única de
+// este bloque — ver REPORTE-ws1-t8.md.
+//
+// Contacto con «Control y agenda»: la hoja del control es de esa parte;
+// esto NO la reemplaza, guarda el estado del CASO de alineadores aparte.
+
+enum OrthoAlignerStatus {
+  ACTIVE
+  PAUSED
+  FINISHED
+}
+
+enum OrthoAlignerEventType {
+  DELIVERY
+  REFINEMENT
+  TRAY_CHANGE
+  ATTACHMENT_PLACED
+  ATTACHMENT_LOST
+  PAUSE
+  RESUME
+}
+
+model OrthodonticAligner {
+  id              String @id @default(uuid())
+  treatmentPlanId String @unique
+  patientId       String
+  clinicId        String
+
+  systemName         String?
+  totalTrays         Int
+  currentTray        Int                @default(1)
+  changeIntervalDays Int                @default(14)
+  startedAt          DateTime
+  attachmentsPlaced  Int?
+  attachmentsLost    Int                @default(0)
+  refinementCount    Int                @default(0)
+  status             OrthoAlignerStatus @default(ACTIVE)
+  notes              String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  events        OrthodonticAlignerEvent[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([clinicId])
+  @@map("orthodontic_aligners")
+}
+
+model OrthodonticAlignerEvent {
+  id        String @id @default(uuid())
+  alignerId String
+  clinicId  String
+
+  eventType OrthoAlignerEventType
+  trayNumber Int?
+  quantity   Int?
+  notes      String?
+
+  aligner OrthodonticAligner @relation(fields: [alignerId], references: [id], onDelete: Cascade)
+  clinic  Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdByUserId String?
+  createdByUser   User?   @relation("OrthoAlignerEventCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([alignerId])
+  @@map("orthodontic_aligner_events")
+}
+
+enum OrthoElasticsSource {
+  PATIENT_PORTAL
+  CLINIC_MANUAL
+}
+
+model OrthodonticElasticsLog {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  logDate      DateTime
+  wornHours    Float?
+  usedElastics Boolean             @default(false)
+  source       OrthoElasticsSource @default(PATIENT_PORTAL)
+  notes        String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([treatmentPlanId, logDate])
+  @@index([treatmentPlanId])
+  @@map("orthodontic_elastics_logs")
+}
+
+enum OrthoMonitoringAngle {
+  FRONTAL
+  LATERAL
+  SMILE
+  INTRAORAL
+  OTHER
+}
+
+enum OrthoMonitoringReviewStatus {
+  PENDING
+  REVIEWED
+  FLAGGED
+}
+
+model OrthodonticMonitoringPhoto {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  patientFileId String
+  patientFile   PatientFile @relation("OrthoMonitoringPhotoFile", fields: [patientFileId], references: [id], onDelete: Cascade)
+
+  angle        OrthoMonitoringAngle        @default(OTHER)
+  patientNote  String?
+  doctorNote   String?
+  reviewStatus OrthoMonitoringReviewStatus @default(PENDING)
+
+  reviewedByUserId String?
+  reviewedByUser   User?   @relation("OrthoMonitoringPhotoReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewedAt       DateTime?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  submittedAt DateTime @default(now())
+
+  @@index([treatmentPlanId])
+  @@index([clinicId, reviewStatus])
+  @@map("orthodontic_monitoring_photos")
+}
 
 /// Catálogo de marcas/modelos de implantes que la clínica usa habitualmente.
 /// Sirve como selector al crear un Implant (en lugar de typear modelName libre).
