@@ -12,7 +12,7 @@ import { recalculatePaymentStatusSchema } from "@/lib/validation/orthodontics";
 import { computePaymentStatus } from "@/lib/orthodontics/payment-status";
 import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
 import type { OrthoWhatsAppTemplateKey } from "@/lib/orthodontics/whatsapp-templates";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoBillingActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -26,7 +26,10 @@ export async function recalculatePaymentStatus(
     pendingAmount: number;
   }>
 > {
-  const auth = await getOrthoActionContext();
+  // Revisión cruzada (Ola 1): recalcula saldos/estado de dinero — migrado de
+  // medicalRecord.edit a billing.charge (mismo criterio que las otras 3
+  // actions legacy de dinero de este archivo).
+  const auth = await getOrthoBillingActionContext("billing.charge");
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 

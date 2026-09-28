@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { createPaymentPlanSchema } from "@/lib/validation/orthodontics";
 import {
   auditOrtho,
-  getOrthoActionContext,
+  getOrthoBillingActionContext,
   loadPatientForOrtho,
 } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -15,7 +15,10 @@ import { fail, isFailure, ok, type ActionResult } from "./result";
 export async function createPaymentPlan(
   input: unknown,
 ): Promise<ActionResult<{ id: string }>> {
-  const auth = await getOrthoActionContext();
+  // Revisión cruzada (Ola 1): armar el plan de pagos es dinero, no clínico —
+  // migrado de medicalRecord.edit a billing.charge (mismo criterio que
+  // /api/payment-plans genérico, que ya pide billing.charge para crear).
+  const auth = await getOrthoBillingActionContext("billing.charge");
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 

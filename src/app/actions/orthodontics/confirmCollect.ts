@@ -6,7 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoBillingActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import type { OrthoPaymentMethod } from "@prisma/client";
@@ -36,7 +36,9 @@ const METHOD_TO_PRISMA: Record<z.infer<typeof methodEnum>, OrthoPaymentMethod> =
 export async function confirmCollect(
   input: unknown,
 ): Promise<ActionResult<{ installmentId: string; cfdiTimbradoStub: boolean }>> {
-  const auth = await getOrthoActionContext();
+  // Revisión cruzada (Ola 1): migrado de medicalRecord.edit a billing.charge
+  // (mismo hallazgo que recordInstallmentPayment).
+  const auth = await getOrthoBillingActionContext("billing.charge");
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 

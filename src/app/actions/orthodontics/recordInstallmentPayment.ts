@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { recordInstallmentPaymentSchema } from "@/lib/validation/orthodontics";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoBillingActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -13,7 +13,10 @@ const SIXTY_DAYS_MS = 60 * 86_400_000;
 export async function recordInstallmentPayment(
   input: unknown,
 ): Promise<ActionResult<{ id: string }>> {
-  const auth = await getOrthoActionContext();
+  // Revisión cruzada (Ola 1): cobrar una mensualidad exigía medicalRecord.edit
+  // (getOrthoActionContext) en vez de la key de dinero — recepción no podía
+  // registrar el pago aunque sea justo su trabajo. Migrado a billing.charge.
+  const auth = await getOrthoBillingActionContext("billing.charge");
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 
