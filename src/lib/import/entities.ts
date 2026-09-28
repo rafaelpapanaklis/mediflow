@@ -3218,20 +3218,25 @@ export const odontogramHandler: EntityHandler = {
       const pick = chosen[key];
       if (pick && pick !== VALUE_UNLINKED) {
         if (ODO_CONDITION_IDS.has(pick)) conditionId = pick;
-        else pr.warnings.push("El equivalente elegido ya no está en el catálogo del odontograma: la fila no se importa hasta elegir otro");
+        else pr.errors.push("El equivalente elegido ya no está en el catálogo del odontograma: la fila no se importa hasta elegir otro");
       } else if (!pick) {
         const found = ODO_CONDITION_BY_NAME.get(key);
         if (found) conditionId = found;
         else {
           pr.unresolved = [{ field: "condition", key, value: hallazgoTexto }];
-          pr.warnings.push(`Hallazgo "${hallazgoTexto}" no reconocido en el catálogo del odontograma: elige el equivalente para importar esta fila`);
+          // N7 (ws1-t10 ronda 4): antes esto era solo un warning y la fila
+          // quedaba "ok" — se veía en la vista previa como que sí se iba a
+          // importar, y el resultado final no la mencionaba, cuando commit()
+          // la excluye sin decisión. Mismo criterio que el monto ambiguo
+          // (AMOUNT_FORMAT_FIELD, arriba): bloqueada como error hasta que el
+          // usuario elija el equivalente — así cuenta en "inválidos", no en
+          // "válidos", y el resultado final la suma a sus errores.
+          pr.errors.push(`Hallazgo "${hallazgoTexto}" no reconocido en el catálogo del odontograma: elige el equivalente para importar esta fila`);
         }
       }
 
       if (!conditionId) {
-        // Sin equivalente todavía: no hay conditionId válido que guardar. No es
-        // un error (el usuario puede resolverlo en la vista previa), pero sin
-        // decisión la fila no se comete (ver commit()).
+        pr.status = "error";
         pr.data = { name: idx.nameById.get(res.id!) || res.fullName || undefined, tooth, condition: hallazgoTexto };
         out.push(pr);
         continue;

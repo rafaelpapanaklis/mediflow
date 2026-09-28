@@ -234,6 +234,28 @@ test("M7 (QA ws1-t10): «Tratamiento» Y «Procedimiento» en la misma hoja no c
   assert.match(q.title ?? "", /QA plan activo/);
 });
 
+test("N13 (ws1-t10 ronda 4): perfil Dentalink, hoja con SOLO «Tratamiento» (sin «Procedimiento»/«Prestación») no se bloquea", async () => {
+  reiniciar();
+  const texto = "Paciente,Celular,Fecha creación,Tratamiento,Valor\nMaría Hernández,5551234567,2024-05-01,Resina simple,850\n";
+  const prev = await correr(csv("dentalink-solo-tratamiento.csv", texto), { dryRun: true, origin: "dentalink" });
+  assert.equal(prev.mappingError, undefined, JSON.stringify(prev));
+  assert.equal(prev.suggestedMapping["Tratamiento"], "procedure", "sin «Procedimiento» aparte, «Tratamiento» cae en procedure — igual que Mi Excel/Otro (M7)");
+  assert.deepEqual([prev.total, prev.validos, prev.invalidos], [1, 1, 0]);
+
+  const hecho = await correr(csv("dentalink-solo-tratamiento.csv", texto), { dryRun: false, origin: "dentalink" });
+  assert.equal(hecho.created, 1);
+});
+
+test("N13: con «Tratamiento» Y «Prestación» juntos, el perfil Dentalink sigue mandando (título vs procedimiento, distintos)", async () => {
+  reiniciar();
+  const texto = "Paciente,Celular,Fecha creación,Tratamiento,Prestación,Valor\nMaría Hernández,5551234567,2024-05-01,Plan de rehabilitación,Resina simple,850\n";
+  const prev = await correr(csv("dentalink-ambos.csv", texto), { dryRun: true, origin: "dentalink" });
+  assert.equal(prev.mappingError, undefined, JSON.stringify(prev));
+  assert.equal(prev.suggestedMapping["Tratamiento"], "title");
+  assert.equal(prev.suggestedMapping["Prestación"], "procedure");
+  assert.deepEqual([prev.total, prev.validos, prev.invalidos], [1, 1, 0]);
+});
+
 test("próxima visita ya vencida en el archivo se clampa a futuro: nunca dispara el seguimiento el primer barrido", async () => {
   reiniciar();
   const vencida = isoPasado(400);

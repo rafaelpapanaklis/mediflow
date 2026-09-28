@@ -93,14 +93,22 @@ test("hallazgo no reconocido: sin emparejar (nunca en silencio); con equivalente
   reiniciar();
   const texto = [CABECERA, "María,Hernández,5551234567,21,Vestibular,Mancha rarísima XYZ"].join("\n");
   const prev = await correr(csv("o2.csv", texto), { dryRun: true });
-  assert.equal(prev.validos, 1, "no es un error: es 'ok' pendiente de decisión");
+  // N7 (ws1-t10 ronda 4): antes salía "válido" (mentía: nunca se iba a importar
+  // sin decisión) y el resultado final no la mencionaba. Mismo criterio que el
+  // monto ambiguo: bloqueada como error hasta que el usuario elija.
+  assert.deepEqual([prev.validos, prev.invalidos], [0, 1], "sin decidir, cuenta como inválido — no promete lo que no va a cumplir");
+  assert.equal(fila(prev, 2).status, "error");
+  assert.match(fila(prev, 2).errors.join(" · "), /no reconocido en el catálogo/);
+  // Pero el selector de equivalente SIGUE apareciendo (no queda huérfano por ser "error").
   assert.equal(prev.unresolved?.length, 1);
   assert.equal(prev.unresolved![0].field, "condition");
   assert.ok(prev.options?.condition?.some((o: any) => o.id === "caries"));
 
-  // Sin decisión: no se importa (a diferencia de un procedimiento de presupuesto, aquí no hay "sin ligar" que guardar).
+  // Sin decisión: no se importa (a diferencia de un procedimiento de presupuesto, aquí no hay "sin ligar" que guardar)
+  // Y el resultado SÍ lo cuenta como error (N7): antes desaparecía sin más.
   const sinDecidir = await correr(csv("o2.csv", texto), { dryRun: false });
   assert.equal(sinDecidir.created, 0);
+  assert.equal(sinDecidir.errors.length, 1);
   assert.equal(tabla("odontogramEntry").length, 0);
 
   // VALUE_UNLINKED tampoco importa nada (no es un conditionId real).
@@ -109,9 +117,11 @@ test("hallazgo no reconocido: sin emparejar (nunca en silencio); con equivalente
   const conUnlinked = await correr(csv("o2.csv", texto), { dryRun: false, valueMapping: { condition: { [key]: VALUE_UNLINKED } } });
   assert.equal(conUnlinked.created, 0);
 
-  // Con el equivalente real elegido: importa con ese conditionId.
-  const conEquivalente = await correr(csv("o2.csv", texto), { dryRun: false, valueMapping: { condition: { [key]: "pigmentation" } } });
-  assert.equal(conEquivalente.created, 1);
+  // Con el equivalente real elegido: importa con ese conditionId, y ya no cuenta como error.
+  const conEquivalente = await correr(csv("o2.csv", texto), { dryRun: true, valueMapping: { condition: { [key]: "pigmentation" } } });
+  assert.deepEqual([conEquivalente.validos, conEquivalente.invalidos], [1, 0]);
+  const importado = await correr(csv("o2.csv", texto), { dryRun: false, valueMapping: { condition: { [key]: "pigmentation" } } });
+  assert.equal(importado.created, 1);
   assert.equal(tabla("odontogramEntry")[0].conditionId, "pigmentation");
 });
 

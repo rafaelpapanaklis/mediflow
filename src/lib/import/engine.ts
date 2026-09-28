@@ -668,9 +668,10 @@ function aggregateUnresolved(preview: PreviewRow[]): UnresolvedValue[] {
     if (!r.unresolved) continue;
     for (const u of r.unresolved) {
       // Una fila con error no se importa, así que sus procedimientos sin equivalente
-      // no cuentan… salvo el formato de los montos: es justo lo que la deja con error
-      // hasta que el usuario lo confirme.
-      if (r.status === "error" && u.field !== AMOUNT_FORMAT_FIELD) continue;
+      // no cuentan… salvo el formato de los montos y el hallazgo del odontograma
+      // (N7, ws1-t10 ronda 4): en los dos, el error ES justo la falta de decisión,
+      // así que hay que seguir ofreciendo el selector hasta que el usuario elija.
+      if (r.status === "error" && u.field !== AMOUNT_FORMAT_FIELD && u.field !== "condition") continue;
       const k = `${u.field}\u0000${u.key}`;
       const hit = byKey.get(k);
       if (hit) hit.rows++;
@@ -741,11 +742,27 @@ export async function runImport(
     : {};
 
   // Sugerencia = autodetección genérica + lo que sabe el perfil del origen
-  // (manda el perfil donde opina: es específico de ese sistema).
-  const suggested: ColumnMapping = {
-    ...autodetect(columns, handler.headerVariants),
+  // (manda el perfil donde opina: es específico de ese sistema) — SALVO que eso
+  // deje sin cubrir un campo obligatorio que la autodetección genérica sí
+  // resolvía sola (N13, ws1-t10 ronda 4): el perfil de Dentalink manda
+  // «Tratamiento» siempre a "title" (tratamientos activos/presupuestos/notas de
+  // evolución), pero si el archivo no trae ADEMÁS una columna de procedimiento
+  // separada, eso deja "procedure" sin ninguna columna — la autodetección
+  // genérica sí sabe resolver esa ambigüedad (M7) cuando nadie más se la
+  // disputa. El perfil sigue mandando en todo lo demás; solo se cae a la
+  // autodetección pura cuando, tal cual, el mapeo del perfil no alcanzaría
+  // para importar y la genérica sola sí habría bastado.
+  const generic = autodetect(columns, handler.headerVariants);
+  const withProfile: ColumnMapping = {
+    ...generic,
     ...(profile ? profileSuggestions(columns, profileMappingFor(profile, handler.entity), handler.headerVariants) : {}),
   };
+  const suggested: ColumnMapping =
+    profile
+    && handler.validateMapping(new Set(Object.values(withProfile).filter(Boolean) as string[])) != null
+    && handler.validateMapping(new Set(Object.values(generic).filter(Boolean) as string[])) == null
+      ? generic
+      : withProfile;
   // Mapping efectivo: el del cliente (saneado) si vino; si no, la sugerencia.
   const mapping =
     opts.columnMapping && Object.keys(opts.columnMapping).length > 0
