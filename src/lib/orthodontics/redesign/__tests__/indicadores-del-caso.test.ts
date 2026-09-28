@@ -200,3 +200,39 @@ describe("la cabecera del caso usa las visitas reales (fila 8, ws1-t4 ronda 6)",
     assert.match(pestana, /count: orthoRedesignVM\.visitas\s*\?\s*orthoRedesignVM\.visitas\.total/);
   });
 });
+
+describe("un control de hoy ya atendido cuenta aunque estuviera agendado más tarde (ws1-t4 ronda 6)", () => {
+  // AHORA = 12:30 en Ciudad de México; la cita era a las 19:00 de hoy.
+  const alasSiete = new Date("2026-09-29T01:00:00.000Z");
+  const cita = (status: string) => ({
+    id: "c-hoy",
+    startsAt: alasSiete,
+    endsAt: new Date(alasSiete.getTime() + 30 * 60 * 1000),
+    status,
+  });
+
+  it("firmada la hoja (cita completada), cuenta como visita y como asistencia", () => {
+    const hojas = [{ appointmentId: "c-hoy", visitDate: AHORA }];
+    assert.equal(visitasDelCaso([cita("COMPLETED")], hojas, AHORA, ZONA).total, 1);
+    assert.deepEqual(asistenciaDelCaso([cita("COMPLETED")], hojas, AHORA, undefined, ZONA), {
+      pct: 100,
+      asistio: 1,
+      falto: 0,
+    });
+  });
+
+  it("con la hoja registrada pero la cita sin marcar, también cuenta", () => {
+    const hojas = [{ appointmentId: "c-hoy", visitDate: AHORA }];
+    assert.equal(visitasDelCaso([cita("CONFIRMED")], hojas, AHORA, ZONA).total, 1);
+  });
+
+  it("sin hoja y sin llegar, la cita de más tarde todavía no cuenta", () => {
+    assert.equal(visitasDelCaso([cita("CONFIRMED")], [], AHORA, ZONA).total, 0);
+    assert.equal(asistenciaDelCaso([cita("CONFIRMED")], [], AHORA, undefined, ZONA).pct, null);
+  });
+
+  it("una cita de MAÑANA con hoja no cuenta todavía", () => {
+    const manana = { ...cita("COMPLETED"), startsAt: new Date("2026-09-29T18:00:00.000Z") };
+    assert.equal(visitasDelCaso([manana], [{ appointmentId: "c-hoy", visitDate: AHORA }], AHORA, ZONA).total, 0);
+  });
+});

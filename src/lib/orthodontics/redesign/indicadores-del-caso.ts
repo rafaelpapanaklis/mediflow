@@ -58,6 +58,27 @@ function diaEnZona(instante: Date, zona: string): string {
   }).format(instante);
 }
 
+/**
+ * La cita ya se puede contar como control ocurrido. Una cita cuya hora aún no
+ * llega también cuenta si es de HOY y el paciente ya vino o ya tiene su hoja:
+ * al firmar la hoja de un control agendado a las 19:00, ws1-t8 la marca
+ * atendida a las 16:00, y antes quedaba fuera («Asistencia —, sin controles
+ * registrados» con la hoja a la vista).
+ */
+function citaYaOcurrio(
+  c: CitaDeControlDelCaso,
+  conHoja: ReadonlySet<string>,
+  ahora: Date,
+  zona: string,
+): boolean {
+  if (c.startsAt <= ahora) return true;
+  if (!VINO.has(c.status) && !conHoja.has(c.id)) return false;
+  return diaEnZona(c.startsAt, zona) <= diaEnZona(ahora, zona);
+}
+
+/** Zona por omisión si quien llama no la pasa (la de casi todas las clínicas). */
+const ZONA_POR_OMISION = "America/Mexico_City";
+
 function hace(ahora: Date, meses: number): Date {
   const d = new Date(ahora.getTime());
   d.setUTCMonth(d.getUTCMonth() - meses);
@@ -85,13 +106,14 @@ export function asistenciaDelCaso(
   hojas: readonly HojaDeControlDelCaso[],
   ahora: Date,
   meses: number = MESES_DE_ASISTENCIA,
+  zona: string = ZONA_POR_OMISION,
 ): AsistenciaDelCaso {
   const desde = hace(ahora, meses);
   const conHoja = new Set(hojas.flatMap((h) => (h.appointmentId ? [h.appointmentId] : [])));
   let asistio = 0;
   let falto = 0;
   for (const c of citas) {
-    if (c.startsAt > ahora || c.startsAt < desde) continue;
+    if (!citaYaOcurrio(c, conHoja, ahora, zona) || c.startsAt < desde) continue;
     if (c.status === "CANCELLED") continue;
     if (c.status === "NO_SHOW") falto += 1;
     else if (VINO.has(c.status) || conHoja.has(c.id)) asistio += 1;
@@ -128,7 +150,7 @@ export function visitasDelCaso(
   const visitas: Date[] = [];
   const diasContados = new Set<string>();
   for (const c of citas) {
-    if (c.startsAt > ahora) continue;
+    if (!citaYaOcurrio(c, conHoja, ahora, zona)) continue;
     if (c.status === "CANCELLED" || c.status === "NO_SHOW") continue;
     if (!VINO.has(c.status) && !conHoja.has(c.id)) continue;
     visitas.push(c.startsAt);

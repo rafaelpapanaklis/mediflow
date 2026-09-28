@@ -298,7 +298,7 @@ export async function loadOrthoRedesignData(
     appointmentId: c.appointmentId ?? null,
     visitDate: c.visitDate,
   }));
-  const attendance = asistenciaDelCaso(indicadores.citas, hojasDeControl, ahora);
+  const attendance = asistenciaDelCaso(indicadores.citas, hojasDeControl, ahora, undefined, indicadores.zona);
   const elastics = usoDeElasticos(indicadores.elasticos);
   const visitasReales = visitasDelCaso(indicadores.citas, hojasDeControl, ahora, indicadores.zona);
   // Los dos números de siempre se conservan para quien todavía los lee; ya no
