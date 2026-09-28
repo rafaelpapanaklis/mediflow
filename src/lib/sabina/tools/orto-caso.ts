@@ -381,7 +381,9 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
         trozos.push(`${m.cuotasPagadas} de ${m.cuotasTotales} pagos hechos`);
         trozos.push(`le falta por pagar ${pesos(m.porCobrar)}`);
         if (m.saldoAFavor > 0) trozos.push(`tiene ${pesos(m.saldoAFavor)} de saldo a favor`);
-        partes.push(`Mensualidades: ${trozos.join("; ")}.`);
+        // En vivo (28-sep-2026) el modelo añadió un «ya pagó $6,000» que nadie le
+        // dio: lo dedujo de «3 de 11». Los importes son los de aquí y ninguno más.
+        partes.push(`Mensualidades: ${trozos.join("; ")}. No calcules ni deduzcas ningún otro importe (ni lo pagado ni el total).`);
       }
     }
 
