@@ -214,7 +214,10 @@ export function historialDeControles(
   };
   for (const c of citas) {
     if (c.status === "CANCELLED") continue;
-    if (c.startsAt >= ahora) {
+    // ws1-t4 ronda 6 (fila 23): una cita de más tarde que YA se atendió
+    // (al firmar la hoja, ws1-t8 la cierra) no es «su próximo control»: es el
+    // de hoy, y el siguiente sigue sin agendar.
+    if (c.startsAt >= ahora && !citaAtendida(c.status)) {
       if (c.status !== "NO_SHOW") conControlFuturo.add(c.patientId);
       continue;
     }
@@ -284,7 +287,9 @@ export function fraseSinControl(c: Pick<CasoSinControl, "diasSinControl" | "falt
   if (c.diasSinControl === null) {
     return c.faltoAlUltimo ? "Faltó a su cita · sin controles registrados" : "Sin controles registrados";
   }
-  if (c.diasSinControl === 0) return `Su último control fue hoy${falto}`;
+  // Fila 23 (ws1-t4 ronda 6): quien vino hoy sale también en «Controles de
+  // hoy»; aquí se dice qué falta, no que «su último control fue hoy».
+  if (c.diasSinControl === 0) return `Vino hoy · falta agendar el siguiente${falto}`;
   if (c.diasSinControl === 1) return `Su último control fue ayer${falto}`;
   return `Su último control fue hace ${c.diasSinControl} días${falto}`;
 }

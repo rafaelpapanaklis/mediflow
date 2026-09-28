@@ -98,3 +98,8 @@ test("el SQL es plano, idempotente y sin bloques DO", () => {
   assert.doesNotMatch(sql, /\bDO\s+\$\$/);
   assert.match(sql, /DROP CONSTRAINT IF EXISTS/);
 });
+
+test("fila 23: Alertas no toma como «próximo control» una cita de más tarde ya atendida", () => {
+  const datos = leer("src/lib/orthodontics/alerts-data.ts");
+  assert.match(datos, /a\.startsAt >= ahora &&[\s\S]{0,120}!citaAtendida\(a\.status\)/);
+});

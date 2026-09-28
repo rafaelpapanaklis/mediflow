@@ -272,7 +272,7 @@ test("un paciente con dos casos sale una sola vez", () => {
 test("las frases de quien falta de control", () => {
   assert.equal(fraseSinControl({ diasSinControl: 52, faltoAlUltimo: false }), "Su último control fue hace 52 días");
   assert.equal(fraseSinControl({ diasSinControl: 1, faltoAlUltimo: false }), "Su último control fue ayer");
-  assert.equal(fraseSinControl({ diasSinControl: 0, faltoAlUltimo: false }), "Su último control fue hoy");
+  assert.equal(fraseSinControl({ diasSinControl: 0, faltoAlUltimo: false }), "Vino hoy · falta agendar el siguiente");
   assert.equal(fraseSinControl({ diasSinControl: 27, faltoAlUltimo: true }), "Su último control fue hace 27 días · faltó a su última cita");
   assert.equal(fraseSinControl({ diasSinControl: null, faltoAlUltimo: false }), "Sin controles registrados");
   assert.equal(fraseSinControl({ diasSinControl: null, faltoAlUltimo: true }), "Faltó a su cita · sin controles registrados");
@@ -282,4 +282,13 @@ test("H43: retención, pausa y planeado no aparecen como «falta de control»", 
   const mk = (id: string, status: OrthoCaseSummary["status"]) => ({ ...caso(), planId: id, patientId: id, patientName: id, status });
   const casos = [mk("a", "IN_PROGRESS"), mk("b", "RETENTION"), mk("c", "ON_HOLD"), mk("d", "PLANNED")];
   assert.deepEqual(listMissingNextControl(casos, new Set()).map((c) => c.patientId), ["a"]);
+});
+
+test("fila 23: la cita de más tarde ya atendida no cuenta como próximo control (ws1-t4 ronda 6)", () => {
+  const masTarde = new Date(AHORA.getTime() + 3 * 60 * 60 * 1000);
+  const atendida = historialDeControles([{ patientId: "p-1", startsAt: masTarde, status: "COMPLETED" }], AHORA);
+  assert.equal(atendida.conControlFuturo.has("p-1"), false);
+  assert.ok(atendida.ultimoAtendido.has("p-1"));
+  const pendiente = historialDeControles([{ patientId: "p-1", startsAt: masTarde, status: "CONFIRMED" }], AHORA);
+  assert.equal(pendiente.conControlFuturo.has("p-1"), true);
 });

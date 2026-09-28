@@ -29,6 +29,7 @@ import {
 import { agruparFotosPorRevisar, type FotosPorRevisarEntry } from "./fotos-paciente";
 import { historialDeControles } from "./controles-modulo";
 import { quitarPospuestas, vigentes } from "./alertas-pospuestas";
+import { citaAtendida } from "./controles-modulo";
 import { cargarPosposiciones } from "./alertas-pospuestas-db";
 import { cargarFotosPorRevisar } from "./fotos-paciente-db";
 
@@ -93,8 +94,19 @@ export async function loadOrthoAlerts(
     take: 2000,
   });
 
+  // ws1-t4 ronda 6 (fila 23): una cita de más tarde que ya se atendió (al
+  // firmar la hoja se cierra) no es «su próximo control»; ni una falta.
+  // Mismo criterio que Controles (`historialDeControles`).
   const futureControlPatientIds = new Set(
-    appointments.filter((a) => a.startsAt >= ahora && a.status !== "CANCELLED").map((a) => a.patientId),
+    appointments
+      .filter(
+        (a) =>
+          a.startsAt >= ahora &&
+          a.status !== "CANCELLED" &&
+          a.status !== "NO_SHOW" &&
+          !citaAtendida(a.status),
+      )
+      .map((a) => a.patientId),
   );
 
   // H44: una falta deja de contar en cuanto el paciente ya vino después
