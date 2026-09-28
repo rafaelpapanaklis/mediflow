@@ -4,8 +4,8 @@
 // menú y la página de contratar no se podían ver. Esto pone (o quita) una
 // cookie que hace que ESTE navegador vea la clínica como si no la tuviera:
 //
-//   /dashboard/orthodontics/contratar/vista-previa            → entra
-//   /dashboard/orthodontics/contratar/vista-previa?salir=1    → sale
+//   /dashboard/contratar/ortodoncia/vista-previa            → entra
+//   /dashboard/contratar/ortodoncia/vista-previa?salir=1    → sale
 //
 // No toca la base ni el acceso de nadie. Solo puede QUITAR el módulo a la
 // vista, nunca darlo. En producción responde 404 y la cookie, aunque alguien

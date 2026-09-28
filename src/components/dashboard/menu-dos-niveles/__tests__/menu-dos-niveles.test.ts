@@ -236,7 +236,7 @@ test("candado: sin el módulo, Ortodoncia SÍ sale, con candado, y lleva a la p�
     const it = ortodonciaDe(role, MODULOS_PRO, CON_CANDADO);
     assert.ok(it, `${role} la ve`);
     assert.equal(it!.locked, true, `${role}: con candado`);
-    assert.equal(it!.href, "/dashboard/orthodontics/contratar", `${role}: NO abre el módulo`);
+    assert.equal(it!.href, "/dashboard/contratar/ortodoncia", `${role}: NO abre el módulo`);
   }
   // La opción de NAV_ITEMS no se toca: el candado va en una copia.
   const original = NAV_ITEMS.find((it) => it.id === "orthodontics")!;
@@ -279,9 +279,20 @@ test("candado: va en el segundo nivel, en Especialidades, y marca Administració
   const esp = menu.grupos.find((g) => g.id === "especialidades");
   assert.deepEqual(esp?.items.map((it) => it.id), ["orthodontics"]);
   assert.equal(menu.nivel1.some((it) => it.id === "orthodontics"), false);
-  assert.equal(segundoNivelActivo("/dashboard/orthodontics/contratar", menu.grupos), true);
+  assert.equal(segundoNivelActivo("/dashboard/contratar/ortodoncia", menu.grupos), true);
   assert.equal(segundoNivelActivo("/dashboard/orthodontics/tablero", menu.grupos), false, "el candado no pinta como abierto un módulo que no se tiene");
-  assert.deepEqual(etiquetaDeRuta("/dashboard/orthodontics/contratar", {}), { tipo: "opcion", id: "orthodontics" }, "la miga dice «Ortodoncia»");
+  // La miga: la página no es una opción de NAV_ITEMS (la del candado es una
+  // copia), así que sale del mapa de la barra superior.
+  // (topbar.tsx es de cliente y no se puede importar aquí: se lee su texto.)
+  const barra = leer("src/components/dashboard/topbar.tsx");
+  assert.match(barra, /"\/dashboard\/contratar\/ortodoncia": "sidebar\.nav\.orthodontics",/);
+  assert.deepEqual(
+    etiquetaDeRuta("/dashboard/contratar/ortodoncia", { "/dashboard/contratar/ortodoncia": "sidebar.nav.orthodontics" }),
+    { tipo: "clave", clave: "sidebar.nav.orthodontics" },
+    "la miga dice «Ortodoncia»",
+  );
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json")) as { sidebar: { nav: Record<string, string> } };
+  assert.equal(es.sidebar.nav.orthodontics, "Ortodoncia");
 });
 
 test("candado: el menú lo pinta con el ícono de candado de la fuente y sigue siendo un enlace", () => {

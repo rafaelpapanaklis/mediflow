@@ -216,13 +216,13 @@ test("vuelta del checkout: desde la página de contratar, vuelve a esa página",
   assert.deepEqual(
     resolveModuleCheckoutReturnUrls({ baseUrl: BASE, moduleKey: "orthodontics", method: "card", origin: "contratar" }),
     {
-      successUrl: `${BASE}/dashboard/orthodontics/contratar?compra=ok&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${BASE}/dashboard/orthodontics/contratar?compra=cancelada`,
+      successUrl: `${BASE}/dashboard/contratar/ortodoncia?compra=ok&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${BASE}/dashboard/contratar/ortodoncia?compra=cancelada`,
     },
   );
   assert.equal(
     resolveModuleCheckoutReturnUrls({ baseUrl: BASE, moduleKey: "orthodontics", method: "oxxo", origin: "contratar" }).successUrl,
-    `${BASE}/dashboard/orthodontics/contratar?compra=pendiente&metodo=oxxo`,
+    `${BASE}/dashboard/contratar/ortodoncia?compra=pendiente&metodo=oxxo`,
   );
 });
 

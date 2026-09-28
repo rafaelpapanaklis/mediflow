@@ -1,6 +1,6 @@
 // Contratar Ortodoncia — la vista (ws1-t3). Solo pinta lo que recibe: los
 // precios y los permisos los resuelve la página
-// (`src/app/dashboard/orthodontics/contratar/page.tsx`).
+// (`src/app/dashboard/contratar/ortodoncia/page.tsx`).
 //
 // Decisión de Rafael (28-sep-2026): «que salga con candado y al darle click
 // que salga el precio mensual o anual con botón para cambiar. Y también TODO
@@ -25,7 +25,12 @@ import {
   CONTENIDO_ORTODONCIA,
   type CategoriaIncluida,
 } from "@/lib/orthodontics/contratar-contenido";
-import type { CicloCobro, EstadoCompra, ResumenDePrecios } from "@/lib/orthodontics/contratar";
+import {
+  RUTA_CONTRATAR_ORTODONCIA,
+  type CicloCobro,
+  type EstadoCompra,
+  type ResumenDePrecios,
+} from "@/lib/orthodontics/contratar";
 import { TarjetaPrecio } from "./TarjetaPrecio";
 import { EsperandoActivacion } from "./EsperandoActivacion";
 import s from "./contratar.module.css";
@@ -66,7 +71,7 @@ export function VistaContratar({
           <div className={s.avisoCuerpo}>
             <strong>Vista previa: esta clínica SÍ tiene Ortodoncia</strong>
             Estás viendo el panel como lo ve una clínica que no la ha contratado. Solo cambia en este navegador.{" "}
-            <a className={s.avisoEnlace} href="/dashboard/orthodontics/contratar/vista-previa?salir=1">
+            <a className={s.avisoEnlace} href={`${RUTA_CONTRATAR_ORTODONCIA}/vista-previa?salir=1`}>
               Salir de la vista previa
             </a>
           </div>

@@ -4,10 +4,14 @@
  * Run: npx tsx --test src/lib/orthodontics/__tests__/contratar.test.ts
  *
  * Lo que fija:
- *  1. La REDIRECCIÓN del guardia: sin módulo se va a la página de contratar
- *     (no a /dashboard ni a un error); esa página nunca se redirige a sí
- *     misma; sin permiso o fuera de dental, a /dashboard como siempre.
- *  2. El layout del módulo y la página usan esa decisión y no otra.
+ *  1. La REDIRECCIÓN de los dos guardias: sin módulo, el del módulo manda a
+ *     la página de contratar (no a /dashboard ni a un error); con módulo, el
+ *     de contratar manda al módulo; sin permiso o fuera de dental, los dos a
+ *     /dashboard.
+ *  2. La página de contratar vive FUERA de /dashboard/orthodontics, para que
+ *     el layout del módulo (donde está su guardia) no se monte nunca para una
+ *     clínica que no lo tiene. El 28-sep-2026 estuvo dentro unos minutos y
+ *     desde ella se podía saltar al Tablero sin pasar por el guardia.
  *  3. El CANDADO: qué clínicas lo ven.
  *  4. El PRECIO sale de la base: con $129 y $1,316 el ahorro es el 15 %, y
  *     ningún archivo de la página lleva esos números escritos.
@@ -19,15 +23,15 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   COOKIE_VISTA_PREVIA_SIN_MODULO,
   RUTA_CONTRATAR_ORTODONCIA,
   RUTA_MODULO_ORTODONCIA,
   cicloInicial,
+  decidirEntradaAContratar,
   decidirEntradaAlModulo,
-  esRutaContratar,
   leerEstadoCompra,
   moduloActivoALaVista,
   modulosConCandado,
@@ -37,92 +41,107 @@ import {
   vistaPreviaSinModulo,
 } from "../contratar";
 import { CONTENIDO_ORTODONCIA, PENDIENTE_DE_LISTAR } from "../contratar-contenido";
+import { resolveModuleCheckoutReturnUrls } from "@/lib/marketplace/module-purchase-core";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..");
 const leer = (rel: string) => readFileSync(join(RAIZ, rel), "utf8");
 const sinComentarios = (c: string) => c.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const LAYOUT = "src/app/dashboard/orthodontics/layout.tsx";
-const PAGINA = "src/app/dashboard/orthodontics/contratar/page.tsx";
+const PAGINA = "src/app/dashboard/contratar/ortodoncia/page.tsx";
+const INTERRUPTOR = "src/app/dashboard/contratar/ortodoncia/vista-previa/route.ts";
 const VISTA = "src/components/specialties/orthodontics/contratar/vista-contratar.tsx";
 const TARJETA = "src/components/specialties/orthodontics/contratar/TarjetaPrecio.tsx";
 const HOJA = "src/components/specialties/orthodontics/contratar/contratar.module.css";
 
-// ── 1. La redirección del guardia ────────────────────────────────────
+// ── 1. La redirección de los dos guardias ────────────────────────────
 
-const base = { esDental: true, tienePermiso: true, moduloActivo: false, pathname: "/dashboard/orthodontics/tablero" };
+const quien = { esDental: true, tienePermiso: true, moduloActivo: false };
 
-test("sin el módulo, cualquier pantalla del módulo manda a la página de contratar", () => {
-  for (const p of ["", "/tablero", "/pacientes", "/cobranza", "/controles", "/alertas", "/configuracion"]) {
+test("guardia del módulo: sin el módulo manda a la página de contratar", () => {
+  assert.deepEqual(decidirEntradaAlModulo(quien), { tipo: "redirigir", a: RUTA_CONTRATAR_ORTODONCIA });
+  assert.equal(RUTA_CONTRATAR_ORTODONCIA, "/dashboard/contratar/ortodoncia");
+});
+
+test("guardia del módulo: con el módulo, todo como hoy", () => {
+  assert.deepEqual(decidirEntradaAlModulo({ ...quien, moduloActivo: true }), { tipo: "modulo" });
+});
+
+test("guardia de contratar: sin módulo pinta la página; con módulo no hay nada que vender y entra al módulo", () => {
+  for (const compra of [null, "cancelada", "pendiente", "ok"] as const) {
+    assert.deepEqual(decidirEntradaAContratar({ ...quien, compra }), { tipo: "contratar" }, `sin módulo, compra=${compra}`);
+  }
+  for (const compra of [null, "cancelada", "pendiente"] as const) {
     assert.deepEqual(
-      decidirEntradaAlModulo({ ...base, pathname: `/dashboard/orthodontics${p}` }),
-      { tipo: "redirigir", a: RUTA_CONTRATAR_ORTODONCIA },
-      `/dashboard/orthodontics${p}`,
+      decidirEntradaAContratar({ ...quien, moduloActivo: true, compra }),
+      { tipo: "redirigir", a: RUTA_MODULO_ORTODONCIA },
+      `con módulo, compra=${compra}`,
     );
   }
-  assert.equal(RUTA_CONTRATAR_ORTODONCIA, "/dashboard/orthodontics/contratar");
+  // La vuelta de pagar: la página avisa y entra con carga completa.
+  assert.deepEqual(decidirEntradaAContratar({ ...quien, moduloActivo: true, compra: "ok" }), { tipo: "contratar" });
+  assert.equal(RUTA_MODULO_ORTODONCIA, "/dashboard/orthodontics");
 });
 
-test("la página de contratar se pinta y NUNCA se redirige a sí misma (sin vueltas)", () => {
-  for (const p of [RUTA_CONTRATAR_ORTODONCIA, `${RUTA_CONTRATAR_ORTODONCIA}/`, `${RUTA_CONTRATAR_ORTODONCIA}?compra=ok`]) {
-    assert.deepEqual(decidirEntradaAlModulo({ ...base, pathname: p }), { tipo: "contratar" }, p);
-    assert.deepEqual(decidirEntradaAlModulo({ ...base, moduloActivo: true, pathname: p }), { tipo: "contratar" }, `${p} con módulo`);
-  }
-  assert.equal(esRutaContratar("/dashboard/orthodontics/contratarx"), false);
-  assert.equal(esRutaContratar("/dashboard/orthodontics/tablero"), false);
-  assert.equal(esRutaContratar("/dashboard/orthodontics"), false);
-  assert.equal(esRutaContratar(null), false);
-});
-
-test("con el módulo, todo como hoy: se pinta el módulo", () => {
-  assert.deepEqual(decidirEntradaAlModulo({ ...base, moduloActivo: true }), { tipo: "modulo" });
-  assert.deepEqual(
-    decidirEntradaAlModulo({ ...base, moduloActivo: true, pathname: "/dashboard/orthodontics" }),
-    { tipo: "modulo" },
-  );
-});
-
-test("sin permiso o fuera de dental, a /dashboard — tenga o no el módulo, y también en contratar", () => {
+test("los dos guardias: sin permiso o fuera de dental, a /dashboard — tenga o no el módulo", () => {
   for (const moduloActivo of [true, false]) {
-    for (const pathname of ["/dashboard/orthodontics/tablero", RUTA_CONTRATAR_ORTODONCIA]) {
+    for (const otro of [{ esDental: true, tienePermiso: false }, { esDental: false, tienePermiso: true }, { esDental: false, tienePermiso: false }]) {
+      assert.deepEqual(decidirEntradaAlModulo({ ...otro, moduloActivo }), { tipo: "redirigir", a: "/dashboard" });
       assert.deepEqual(
-        decidirEntradaAlModulo({ esDental: true, tienePermiso: false, moduloActivo, pathname }),
+        decidirEntradaAContratar({ ...otro, moduloActivo, compra: "ok" }),
         { tipo: "redirigir", a: "/dashboard" },
         "a quien no puede ver Ortodoncia no se le enseña ni el precio",
-      );
-      assert.deepEqual(
-        decidirEntradaAlModulo({ esDental: false, tienePermiso: true, moduloActivo, pathname }),
-        { tipo: "redirigir", a: "/dashboard" },
       );
     }
   }
 });
 
-test("si no se sabe qué ruta se pidió y no hay módulo, a /dashboard (nunca a dar vueltas)", () => {
-  for (const pathname of [null, undefined, ""]) {
-    assert.deepEqual(decidirEntradaAlModulo({ ...base, pathname }), { tipo: "redirigir", a: "/dashboard" });
-    assert.deepEqual(decidirEntradaAlModulo({ ...base, moduloActivo: true, pathname }), { tipo: "modulo" });
+test("los dos guardias no se mandan el uno al otro en círculo", () => {
+  for (const moduloActivo of [true, false]) {
+    const alModulo = decidirEntradaAlModulo({ ...quien, moduloActivo });
+    const aContratar = decidirEntradaAContratar({ ...quien, moduloActivo, compra: null });
+    const rebotaAlModulo = aContratar.tipo === "redirigir" && aContratar.a === RUTA_MODULO_ORTODONCIA;
+    const rebotaAContratar = alModulo.tipo === "redirigir" && alModulo.a === RUTA_CONTRATAR_ORTODONCIA;
+    assert.ok(!(rebotaAlModulo && rebotaAContratar), `módulo ${moduloActivo ? "activo" : "inactivo"}: uno de los dos pinta`);
   }
 });
 
-// ── 2. El layout y la página usan esa decisión ───────────────────────
+// ── 2. Dónde vive la página, y que cada guardia esté donde corre ─────
 
-test("el layout del módulo decide con decidirEntradaAlModulo y conserva sus tres comprobaciones", () => {
+test("la página de contratar NO cuelga de /dashboard/orthodontics (su layout no se vuelve a ejecutar al navegar)", () => {
+  assert.ok(!RUTA_CONTRATAR_ORTODONCIA.startsWith(`${RUTA_MODULO_ORTODONCIA}/`));
+  assert.ok(!RUTA_CONTRATAR_ORTODONCIA.startsWith(RUTA_MODULO_ORTODONCIA));
+  assert.ok(existsSync(join(RAIZ, PAGINA)), "la página está donde dice la ruta");
+  assert.ok(existsSync(join(RAIZ, INTERRUPTOR)));
+  assert.ok(
+    !existsSync(join(RAIZ, "src/app/dashboard/orthodontics/contratar")),
+    "nada de contratar dentro de la ruta del módulo",
+  );
+  // La URL que vuelve de Stripe es esa misma página.
+  const vuelta = resolveModuleCheckoutReturnUrls({ baseUrl: "https://x", moduleKey: "orthodontics", method: "card", origin: "contratar" });
+  assert.ok(vuelta.successUrl.startsWith(`https://x${RUTA_CONTRATAR_ORTODONCIA}?`));
+  assert.ok(vuelta.cancelUrl.startsWith(`https://x${RUTA_CONTRATAR_ORTODONCIA}?`));
+});
+
+test("el layout del módulo: un solo redirect, el de la decisión, y no depende de la ruta pedida", () => {
   const layout = sinComentarios(leer(LAYOUT));
   assert.match(layout, /const active = await hasActiveOrthodonticsModule\(user\.clinicId\);/);
   assert.match(layout, /esDental: user\.clinic\.category === "DENTAL",/);
   assert.match(layout, /"specialties\.orthodontics",/);
-  assert.match(layout, /pathname: headers\(\)\.get\("x-pathname"\),/);
+  assert.match(layout, /const entrada = decidirEntradaAlModulo\(\{/);
   assert.match(layout, /if \(entrada\.tipo === "redirigir"\) redirect\(entrada\.a\);/);
-  assert.equal((layout.match(/redirect\(/g) ?? []).length, 1, "un solo redirect: el de la decisión");
-  assert.match(layout, /\{entrada\.tipo === "modulo" && <SubmenuOrtodoncia apartados=\{SUBMENU\} \/>\}/, "sin módulo no hay submenú");
+  assert.equal((layout.match(/redirect\(/g) ?? []).length, 1);
+  assert.ok(!/x-pathname|headers\(\)/.test(layout), "un layout que decide por ruta se queda con la decisión vieja al navegar");
   assert.ok(layout.indexOf("redirect(entrada.a)") < layout.indexOf("<RaizModulo>"), "se decide ANTES de pintar");
 });
 
-test("la página: con el módulo activo entra al módulo; los precios salen de la tabla modules", () => {
+test("la página: se guarda a sí misma, y los precios salen de la tabla modules", () => {
   const pagina = sinComentarios(leer(PAGINA));
-  assert.match(pagina, /if \(moduloActivo && compra !== "ok"\) redirect\(RUTA_MODULO_ORTODONCIA\);/);
-  assert.equal(RUTA_MODULO_ORTODONCIA, "/dashboard/orthodontics");
+  assert.match(pagina, /const entrada = decidirEntradaAContratar\(\{/);
+  assert.match(pagina, /esDental: user\.clinic\.category === "DENTAL",/);
+  assert.match(pagina, /"specialties\.orthodontics",/);
+  assert.match(pagina, /if \(entrada\.tipo === "redirigir"\) redirect\(entrada\.a\);/);
+  assert.ok(pagina.indexOf("redirect(entrada.a)") < pagina.indexOf("<VistaContratar"), "se decide ANTES de pintar");
   assert.match(pagina, /prisma\.module\.findUnique\(\{\s*where: \{ key: ORTHODONTICS_MODULE_KEY \}/);
   assert.match(pagina, /getModuleAnnualPriceMxn\(prisma, modulo\.id\)/);
   assert.match(pagina, /hasActiveOrthodonticsModule\(user\.clinicId\)/, "el clinicId sale de la sesión");
@@ -280,7 +299,7 @@ test("vista previa: solo puede QUITAR el módulo a la vista, nunca darlo", () =>
 });
 
 test("el interruptor de la vista previa responde 404 en producción y no toca la base", () => {
-  const ruta = sinComentarios(leer("src/app/dashboard/orthodontics/contratar/vista-previa/route.ts"));
+  const ruta = sinComentarios(leer(INTERRUPTOR));
   assert.match(ruta, /if \(process\.env\.NODE_ENV === "production"\) \{\s*return new NextResponse\("Not found", \{ status: 404 \}\);/);
   assert.ok(!/prisma|@\/lib\/auth/.test(ruta), "solo pone o quita una cookie");
 });

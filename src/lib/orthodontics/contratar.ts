@@ -14,59 +14,63 @@
  *
  * Quién usa esto: `src/app/dashboard/layout.tsx` (menú),
  * `src/app/dashboard/orthodontics/layout.tsx` (guardia),
- * `src/app/dashboard/orthodontics/contratar/page.tsx` (la página) y
+ * `src/app/dashboard/contratar/ortodoncia/page.tsx` (la página) y
  * `src/components/dashboard/sidebar-nav.ts` (a dónde lleva el candado).
  */
 
-/** La página donde se contrata el módulo. Vive dentro de la ruta del módulo. */
-export const RUTA_CONTRATAR_ORTODONCIA = "/dashboard/orthodontics/contratar";
+/**
+ * La página donde se contrata el módulo.
+ *
+ * ⚠ Vive FUERA de /dashboard/orthodontics a propósito, y no debe entrar ahí.
+ * El guardia del módulo está en el layout de esa ruta, y en Next un layout NO
+ * se vuelve a ejecutar al navegar entre páginas que cuelgan de él. Si esta
+ * página colgara de ese layout, una clínica sin módulo lo dejaría montado y
+ * desde aquí podría saltar al Tablero sin que el guardia corriera (pasó, y se
+ * comprobó en vivo el 28-sep-2026). Fuera, el layout del módulo no se monta
+ * nunca para quien no lo tiene.
+ */
+export const RUTA_CONTRATAR_ORTODONCIA = "/dashboard/contratar/ortodoncia";
 
 /** A dónde entra quien SÍ tiene el módulo. */
 export const RUTA_MODULO_ORTODONCIA = "/dashboard/orthodontics";
 
-/** ¿La ruta es la página de contratar (o algo que cuelga de ella)? */
-export function esRutaContratar(pathname: string | null | undefined): boolean {
-  if (!pathname) return false;
-  const limpia = pathname.split(/[?#]/)[0].replace(/\/+$/, "");
-  return limpia === RUTA_CONTRATAR_ORTODONCIA || limpia.startsWith(`${RUTA_CONTRATAR_ORTODONCIA}/`);
-}
+/* ── 1. Los dos guardias ─────────────────────────────────────────────── */
 
-/* ── 1. El guardia de /dashboard/orthodontics/** ─────────────────────── */
-
-export interface EntradaAlModulo {
+export interface QuienLlega {
   /** `clinic.category === "DENTAL"`. */
   esDental: boolean;
   /** Permiso UI `specialties.orthodontics`. */
   tienePermiso: boolean;
   /** `hasActiveOrthodonticsModule(clinicId)`: fila `ClinicModule` real y vigente. */
   moduloActivo: boolean;
-  /** La ruta pedida (cabecera `x-pathname`). Vacía si no se pudo saber. */
-  pathname: string | null | undefined;
 }
 
-export type DecisionEntrada =
-  /** Se pinta el módulo, con su submenú. */
-  | { tipo: "modulo" }
-  /** Se pinta la página de contratar, sin submenú (no hay módulo que recorrer). */
-  | { tipo: "contratar" }
-  | { tipo: "redirigir"; a: string };
+export type Decision<T extends string> = { tipo: T } | { tipo: "redirigir"; a: string };
 
 /**
- * Qué hace el layout del módulo con quien llega. En orden:
+ * El guardia de /dashboard/orthodontics/** (su layout). En orden:
  *  1. Clínica no dental, o persona sin el permiso → a /dashboard, como siempre.
  *     Va ANTES que el módulo: a quien no puede ver Ortodoncia tampoco se le
  *     enseña cuánto cuesta.
- *  2. La página de contratar se pinta tenga o no el módulo (ella decide qué
- *     enseñar); nunca se redirige a sí misma.
- *  3. Sin módulo → a contratar. Si no se sabe qué ruta se pidió, a /dashboard:
- *     redirigir a contratar sin saber dónde estamos podría dar vueltas.
+ *  2. Sin módulo → a la página de contratar (antes: a /dashboard, sin explicar).
+ *  3. Con módulo → el módulo, como hoy.
  */
-export function decidirEntradaAlModulo(e: EntradaAlModulo): DecisionEntrada {
+export function decidirEntradaAlModulo(e: QuienLlega): Decision<"modulo"> {
   if (!e.esDental || !e.tienePermiso) return { tipo: "redirigir", a: "/dashboard" };
-  if (esRutaContratar(e.pathname)) return { tipo: "contratar" };
-  if (e.moduloActivo) return { tipo: "modulo" };
-  if (!e.pathname) return { tipo: "redirigir", a: "/dashboard" };
-  return { tipo: "redirigir", a: RUTA_CONTRATAR_ORTODONCIA };
+  if (!e.moduloActivo) return { tipo: "redirigir", a: RUTA_CONTRATAR_ORTODONCIA };
+  return { tipo: "modulo" };
+}
+
+/**
+ * El guardia de la página de contratar (la propia página; una página SÍ se
+ * ejecuta en cada visita). Mismas dos primeras reglas. Con el módulo ya
+ * activo no hay nada que vender: al módulo. La única excepción es la vuelta
+ * de pagar (`?compra=ok`), donde la página avisa y entra con carga completa.
+ */
+export function decidirEntradaAContratar(e: QuienLlega & { compra: EstadoCompra }): Decision<"contratar"> {
+  if (!e.esDental || !e.tienePermiso) return { tipo: "redirigir", a: "/dashboard" };
+  if (e.moduloActivo && e.compra !== "ok") return { tipo: "redirigir", a: RUTA_MODULO_ORTODONCIA };
+  return { tipo: "contratar" };
 }
 
 /* ── 2. El candado del menú ──────────────────────────────────────────── */

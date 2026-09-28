@@ -44,6 +44,9 @@ export const ROUTE_LABELS: Record<string, string> = {
   "/dashboard/landing":       "shell.topbar.routePaginaWeb",
   "/dashboard/procedures":    "shell.topbar.routeProcedimientos",
   "/dashboard/settings":      "shell.topbar.routeConfiguracion",
+  // La página donde se contrata Ortodoncia (ws1-t3): no es una opción del
+  // menú (la opción con candado es una copia), así que la miga sale de aquí.
+  "/dashboard/contratar/ortodoncia": "sidebar.nav.orthodontics",
 };
 
 function resolveCurrentLabelKey(pathname: string | null): string {

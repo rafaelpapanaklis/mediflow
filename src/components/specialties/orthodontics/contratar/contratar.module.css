@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   Contratar Ortodoncia (/dashboard/orthodontics/contratar) — ws1-t3.
+   Contratar Ortodoncia (/dashboard/contratar/ortodoncia) — ws1-t3.
 
    La página que abre el candado del menú: el precio (mensual o anual, con su
    selector) y todo lo que incluye el módulo, por categorías.
 
-   Cuelga de la raíz del módulo (`modulo/modulo.module.css` → `.raiz`), así
+   La página la envuelve `RaizModulo` (`modulo/modulo.module.css` → `.raiz`), así
    que hereda los tokens `--pr-*` del rediseño, la tipografía del panel, las
    cifras de ancho fijo y los botones ya vestidos. Aquí NO se declara ningún
    token ni ningún color: solo lo que es propio de esta página.

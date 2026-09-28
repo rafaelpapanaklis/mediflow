@@ -231,7 +231,9 @@ export type ModuleCheckoutOrigin = "marketplace" | "contratar";
 
 /** Módulos con página propia de contratar. Los demás vuelven a Marketplace. */
 const RUTA_CONTRATAR: Readonly<Record<string, string>> = {
-  orthodontics: "/dashboard/orthodontics/contratar",
+  // La misma que RUTA_CONTRATAR_ORTODONCIA (src/lib/orthodontics/contratar.ts);
+  // un test comprueba que no se separen.
+  orthodontics: "/dashboard/contratar/ortodoncia",
 };
 
 export interface ModuleCheckoutReturnUrls {

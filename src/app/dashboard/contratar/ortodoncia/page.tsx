@@ -5,8 +5,12 @@
 // precio mensual o anual con botón para cambiar. Y también TODO lo que
 // contiene, tal vez en categorías».
 //
-//  - Quién entra: lo decide el layout de esta ruta (clínica dental + permiso
-//    `specialties.orthodontics`), igual que para el resto del módulo.
+//  - Vive FUERA de /dashboard/orthodontics a propósito (ver
+//    RUTA_CONTRATAR_ORTODONCIA en src/lib/orthodontics/contratar.ts): así el
+//    layout del módulo, que es donde está su guardia, no se monta nunca para
+//    una clínica que no lo tiene.
+//  - Quién entra: clínica dental + permiso `specialties.orthodontics`, igual
+//    que al módulo. Se comprueba AQUÍ, en la página, que sí corre en cada visita.
 //  - Precios: se LEEN de la tabla `modules` (`price_mxn_monthly` por Prisma y
 //    `price_mxn_annual` por SQL crudo, ver module-annual-price.ts). Esa tabla
 //    es el catálogo de la plataforma, el mismo para todas las clínicas: no
@@ -18,19 +22,21 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/auth/permissions";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { getModuleAnnualPriceMxn } from "@/lib/marketplace/module-annual-price";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import {
   COOKIE_VISTA_PREVIA_SIN_MODULO,
-  RUTA_MODULO_ORTODONCIA,
   cicloInicial,
+  decidirEntradaAContratar,
   leerEstadoCompra,
   moduloActivoALaVista,
   puedeContratarModulos,
   resumirPrecios,
   vistaPreviaSinModulo,
 } from "@/lib/orthodontics/contratar";
+import { RaizModulo } from "@/components/specialties/orthodontics/modulo/piezas";
 import { VistaContratar } from "@/components/specialties/orthodontics/contratar/vista-contratar";
 
 export default async function ContratarOrtodonciaPage({
@@ -55,10 +61,16 @@ export default async function ContratarOrtodonciaPage({
   const moduloActivo = moduloActivoALaVista(activoReal, vistaPrevia);
   const compra = leerEstadoCompra(searchParams.compra);
 
-  // Ya lo tiene: al módulo. La única excepción es la vuelta de pagar
-  // (`?compra=ok`): ahí la vista avisa y entra con una carga completa, para
-  // que el menú deje de pintar el candado.
-  if (moduloActivo && compra !== "ok") redirect(RUTA_MODULO_ORTODONCIA);
+  const entrada = decidirEntradaAContratar({
+    esDental: user.clinic.category === "DENTAL",
+    tienePermiso: hasPermission(
+      { role: user.role, permissionsOverride: user.permissionsOverride },
+      "specialties.orthodontics",
+    ),
+    moduloActivo,
+    compra,
+  });
+  if (entrada.tipo === "redirigir") redirect(entrada.a);
 
   const anualMxn = modulo?.isActive ? await getModuleAnnualPriceMxn(prisma, modulo.id) : null;
   const precios = resumirPrecios(
@@ -66,14 +78,17 @@ export default async function ContratarOrtodonciaPage({
   );
   const pedido = Array.isArray(searchParams.ciclo) ? searchParams.ciclo[0] : searchParams.ciclo;
 
+  // `RaizModulo`: los tokens y la tipografía del rediseño, los mismos del módulo.
   return (
-    <VistaContratar
-      precios={precios}
-      cicloInicial={cicloInicial(pedido, precios.ciclos)}
-      puedeContratar={puedeContratarModulos(user.role)}
-      compra={compra}
-      moduloActivo={moduloActivo}
-      vistaPrevia={vistaPrevia && activoReal}
-    />
+    <RaizModulo>
+      <VistaContratar
+        precios={precios}
+        cicloInicial={cicloInicial(pedido, precios.ciclos)}
+        puedeContratar={puedeContratarModulos(user.role)}
+        compra={compra}
+        moduloActivo={moduloActivo}
+        vistaPrevia={vistaPrevia && activoReal}
+      />
+    </RaizModulo>
   );
 }

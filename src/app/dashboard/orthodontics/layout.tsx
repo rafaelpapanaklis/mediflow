@@ -16,14 +16,15 @@
 //
 // 28-sep-2026 (ws1-t3, decisión de Rafael): quien NO tiene el módulo ya no
 // rebota a /dashboard sin explicación; va a la página de contratar
-// (/dashboard/orthodontics/contratar), que vive dentro de esta misma ruta.
-// Esa página se pinta SIN submenú: no hay módulo que recorrer. La decisión
-// entera está en `decidirEntradaAlModulo` (src/lib/orthodontics/contratar.ts),
-// pura y con tests; aquí solo se le dan los datos.
+// (/dashboard/contratar/ortodoncia). Esa página vive FUERA de esta ruta a
+// propósito: este guardia está en un layout, y un layout no se vuelve a
+// ejecutar al navegar entre las páginas que cuelgan de él. Así, para quien no
+// tiene el módulo este layout no llega a montarse nunca. La decisión está en
+// `decidirEntradaAlModulo` (src/lib/orthodontics/contratar.ts), pura y con tests.
 export const dynamic = "force-dynamic";
 
 import type { ReactNode } from "react";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
@@ -73,9 +74,6 @@ export default async function OrthodonticsModuleLayout({
       "specialties.orthodontics",
     ),
     moduloActivo,
-    // La pone el middleware en toda ruta de /dashboard (la misma cabecera que
-    // usa el layout del panel para sus barreras).
-    pathname: headers().get("x-pathname"),
   });
   if (entrada.tipo === "redirigir") redirect(entrada.a);
 
@@ -83,7 +81,7 @@ export default async function OrthodonticsModuleLayout({
   // rediseño; el submenú marca el apartado abierto y se queda pegado arriba.
   return (
     <RaizModulo>
-      {entrada.tipo === "modulo" && <SubmenuOrtodoncia apartados={SUBMENU} />}
+      <SubmenuOrtodoncia apartados={SUBMENU} />
       {children}
     </RaizModulo>
   );

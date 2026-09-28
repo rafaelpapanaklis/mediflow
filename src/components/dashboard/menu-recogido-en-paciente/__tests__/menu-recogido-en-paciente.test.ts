@@ -219,12 +219,10 @@ test("el módulo de Ortodoncia es una zona; la pantalla vieja de especialidades 
   assert.equal(zonaRecogida("/dashboard/patients"), null);
   // Un paciente cuyo id fuera literalmente el nombre de la zona no choca con ella.
   assert.notEqual(zonaRecogida("/dashboard/patients/modulo:ortodoncia"), ZONA_ORTODONCIA);
-  // La página de contratar vive en la ruta del módulo pero no es un sitio de
-  // trabajo: ahí el menú se queda como la persona lo tiene.
-  assert.equal(zonaRecogida("/dashboard/orthodontics/contratar"), null);
-  assert.equal(zonaRecogida("/dashboard/orthodontics/contratar?compra=ok"), null);
-  assert.equal(zonaRecogida("/dashboard/orthodontics/contratarx"), ZONA_ORTODONCIA);
-  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/orthodontics/contratar"), false, "el candado no cierra Administración");
+  // La página de contratar vive fuera de la ruta del módulo: ahí el menú se
+  // queda como la persona lo tiene.
+  assert.equal(zonaRecogida("/dashboard/contratar/ortodoncia"), null);
+  assert.equal(cierraSegundoNivelAlEntrar("/dashboard/agenda", "/dashboard/contratar/ortodoncia"), false, "el candado no cierra Administración");
   // pacienteDeFicha no se entera del módulo: sigue hablando solo de pacientes.
   assert.equal(pacienteDeFicha("/dashboard/orthodontics/tablero"), null);
 });

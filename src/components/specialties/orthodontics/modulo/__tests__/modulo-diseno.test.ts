@@ -35,7 +35,7 @@ const ARCHIVOS = [
   "src/components/specialties/orthodontics/contratar/vista-contratar.tsx",
   "src/components/specialties/orthodontics/contratar/TarjetaPrecio.tsx",
   "src/components/specialties/orthodontics/contratar/EsperandoActivacion.tsx",
-  "src/app/dashboard/orthodontics/contratar/page.tsx",
+  "src/app/dashboard/contratar/ortodoncia/page.tsx",
   "src/components/specialties/orthodontics/OrthoPacientesTable.tsx",
   "src/components/specialties/orthodontics/OrthoModulePlaceholder.tsx",
   "src/components/specialties/orthodontics/EnviarIndicacionesButton.tsx",
@@ -90,7 +90,7 @@ test("el layout conserva sus tres comprobaciones y monta la raíz y el submenú 
   assert.match(layout, /esDental: user\.clinic\.category === "DENTAL",/);
   assert.match(layout, /const active = await hasActiveOrthodonticsModule\(user\.clinicId\);/);
   assert.match(layout, /hasPermission\(\s*\{ role: user\.role, permissionsOverride: user\.permissionsOverride \},\s*"specialties\.orthodontics",\s*\)/);
-  assert.match(layout, /<RaizModulo>\s*\{entrada\.tipo === "modulo" && <SubmenuOrtodoncia apartados=\{SUBMENU\} \/>\}\s*\{children\}\s*<\/RaizModulo>/);
+  assert.match(layout, /<RaizModulo>\s*<SubmenuOrtodoncia apartados=\{SUBMENU\} \/>\s*\{children\}\s*<\/RaizModulo>/);
   assert.ok(layout.indexOf("redirect(entrada.a)") < layout.indexOf("<RaizModulo>"), "se decide ANTES de pintar nada");
 });
 
