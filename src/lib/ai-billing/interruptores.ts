@@ -25,6 +25,13 @@ export interface FuncionIa {
   queHace: string;
   /** Qué deja de pasar si la apagan: lo que evita que la vuelvan a encender mañana. */
   siLaApagas: string;
+  /**
+   * Categorías de clínica (`Clinic.category`) en las que la función NO aplica y
+   * por eso no se pinta en «Funciones de IA». Sin este campo aplica a todas.
+   * Es solo lo que se ENSEÑA: la función sigue en el catálogo, su id sigue
+   * siendo válido y el corte del servidor no cambia. Ver `funcionesIaParaCategoria`.
+   */
+  noAplicaEn?: readonly string[];
 }
 
 /**
@@ -98,6 +105,8 @@ export const FUNCIONES_IA = [
     gasta: "cupo",
     queHace: "Sugiere remedios a partir de los síntomas de la repertorización.",
     siLaApagas: "La repertorización sigue, sin sugerencias de IA.",
+    // Una clínica dental no repertoriza: no se le enseña este interruptor.
+    noAplicaEn: ["DENTAL"],
   },
   {
     id: "ai_insight",
@@ -136,6 +145,23 @@ const IDS: readonly string[] = FUNCIONES_IA.map((f) => f.id);
 
 export function esFuncionIa(id: unknown): id is FuncionIaId {
   return typeof id === "string" && IDS.includes(id);
+}
+
+/**
+ * Las funciones que se le ENSEÑAN a una clínica según su categoría (ws1-t4
+ * ronda 6): una clínica DENTAL no ve «Homeopatía». El orden es el del catálogo.
+ *
+ * La categoría la manda el servidor (sale de la sesión). Si no se conoce
+ * (`null`/`undefined`) se enseña todo, que es lo que había: esto solo quita
+ * filas de la pantalla, no apaga ni enciende nada.
+ */
+export function funcionesIaParaCategoria(
+  categoria: string | null | undefined,
+): (typeof FUNCIONES_IA)[number][] {
+  return FUNCIONES_IA.filter((f) => {
+    const fuera: readonly string[] = (f as FuncionIa).noAplicaEn ?? [];
+    return !categoria || !fuera.includes(categoria);
+  });
 }
 
 /** Forma guardada en Clinic.aiSettings. */

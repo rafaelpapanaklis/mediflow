@@ -29,6 +29,9 @@ export async function GET() {
     return NextResponse.json({
       apagadas: sanitizeAiSettings(clinic?.aiSettings).apagadas,
       isAdmin: ctx.isAdmin,
+      // Categoría de la clínica, de la SESIÓN: la pantalla la usa para no
+      // pintar funciones que no son de su giro (Homeopatía en una dental).
+      categoria: ctx.clinicCategory,
     });
   } catch {
     return NextResponse.json({ error: "No se pudieron leer las funciones de IA" }, { status: 500 });

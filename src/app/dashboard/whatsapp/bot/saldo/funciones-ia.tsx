@@ -8,6 +8,7 @@ import {
   FUNCIONES_IA,
   GASTO_IA_GRUPO,
   GASTO_IA_TEXTO,
+  funcionesIaParaCategoria,
   type FuncionIaId,
   type GastoIa,
 } from "@/lib/ai-billing/interruptores";
@@ -22,6 +23,8 @@ export const GRUPOS_GASTO: GastoIa[] = ["saldo", "cupo", "ninguno"];
 export function useFuncionesIa() {
   const [apagadas, setApagadas] = useState<FuncionIaId[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  // Categoría de la clínica tal como la manda el servidor (de la sesión).
+  const [categoria, setCategoria] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(false);
   const [guardando, setGuardando] = useState<FuncionIaId | null>(null);
@@ -36,6 +39,7 @@ export function useFuncionesIa() {
         if (!vivo) return;
         setApagadas(Array.isArray(d.apagadas) ? d.apagadas : []);
         setIsAdmin(d.isAdmin === true);
+        setCategoria(typeof d.categoria === "string" ? d.categoria : null);
       } catch {
         if (vivo) setError(true);
       } finally {
@@ -69,7 +73,11 @@ export function useFuncionesIa() {
     }
   }
 
-  return { apagadas, isAdmin, cargando, error, guardando, alternar };
+  // Lo que se pinta: el catálogo sin las funciones que no son del giro de la
+  // clínica. Las dos vistas leen esta lista, no el catálogo entero.
+  const funciones = funcionesIaParaCategoria(categoria);
+
+  return { apagadas, isAdmin, cargando, error, guardando, alternar, funciones };
 }
 
 /** Lo que el cliente le pasa a cualquiera de las dos vistas. */
@@ -82,7 +90,7 @@ export const FUNCIONES_IA_SOLO_ADMIN = "Solo un administrador puede encender o a
 
 /** Vista de siempre (sin el rediseño). El estado lo pone SaldoClient. */
 export function FuncionesIaCard({ vm }: { vm: FuncionesIaVM }) {
-  const { apagadas, isAdmin, cargando, error, guardando, alternar } = vm;
+  const { apagadas, isAdmin, cargando, error, guardando, alternar, funciones } = vm;
 
   return (
     <CardNew title={FUNCIONES_IA_TITULO} sub={FUNCIONES_IA_SUB}>
@@ -108,7 +116,7 @@ export function FuncionesIaCard({ vm }: { vm: FuncionesIaVM }) {
               >
                 {GASTO_IA_GRUPO[gasto]}
               </div>
-              {FUNCIONES_IA.filter((f) => f.gasta === gasto).map((f) => {
+              {funciones.filter((f) => f.gasta === gasto).map((f) => {
                 const on = !apagadas.includes(f.id);
                 return (
                   <div

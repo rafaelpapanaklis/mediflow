@@ -7,7 +7,7 @@ import {
   GRUPOS_GASTO,
   type FuncionesIaVM,
 } from "@/app/dashboard/whatsapp/bot/saldo/funciones-ia";
-import { FUNCIONES_IA, GASTO_IA_GRUPO, GASTO_IA_TEXTO } from "@/lib/ai-billing/interruptores";
+import { GASTO_IA_GRUPO, GASTO_IA_TEXTO } from "@/lib/ai-billing/interruptores";
 import { Cargando, FilaInterruptor, Tarjeta } from "./piezas";
 import s from "./whatsapp-rediseno.module.css";
 
@@ -18,7 +18,7 @@ import s from "./whatsapp-rediseno.module.css";
  * función con lo que gasta y lo que se pierde al apagarla.
  */
 export function FuncionesIaRediseno({ vm }: { vm: FuncionesIaVM }) {
-  const { apagadas, isAdmin, cargando, error, guardando, alternar } = vm;
+  const { apagadas, isAdmin, cargando, error, guardando, alternar, funciones } = vm;
 
   return (
     <Tarjeta titulo={FUNCIONES_IA_TITULO} sub={FUNCIONES_IA_SUB}>
@@ -32,7 +32,7 @@ export function FuncionesIaRediseno({ vm }: { vm: FuncionesIaVM }) {
           {GRUPOS_GASTO.map((gasto) => (
             <div key={gasto} className={s.apilado} style={{ gap: 8 }}>
               <div className={s.filaTitulo}>{GASTO_IA_GRUPO[gasto]}</div>
-              {FUNCIONES_IA.filter((f) => f.gasta === gasto).map((f) => {
+              {funciones.filter((f) => f.gasta === gasto).map((f) => {
                 const on = !apagadas.includes(f.id);
                 // El título es solo el nombre: es también el nombre accesible del
                 // interruptor, y no debe cambiar al apagarlo.
