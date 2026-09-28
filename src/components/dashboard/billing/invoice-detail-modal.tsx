@@ -21,7 +21,7 @@ import { formatDate } from "@/lib/utils";
 import { fmtMXNdec } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
-import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
+import { esPlanAPlazos, montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import { todayLocalISO } from "@/lib/billing/paid-at";
 // Ropa del diseño nuevo (solo con `rediseno`): tokens del menú de dos niveles
 // y las clases que visten este modal y su familia. Ver factura-rediseno/.
@@ -998,9 +998,15 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   {t("clinical.invoiceDetail.collectPayment", { amount: fmtMXNdec(invoice.balance) })}
                 </ButtonNew>
                 )}
-                <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
-                  {t("clinical.invoiceDetail.markPaid")}
-                </ButtonNew>
+                {/* «Marcar pagada» liquida TODO el saldo de un clic. En una factura a
+                    plazos eso borra el calendario de cuotas por un descuido (ws1-t4 #69):
+                    ahí se cobra con «Cobrar», que pide el monto (y si de verdad es
+                    todo, se teclea todo). */}
+                {!esPlanAPlazos(condicionesPago) && (
+                  <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
+                    {t("clinical.invoiceDetail.markPaid")}
+                  </ButtonNew>
+                )}
                 <ButtonNew variant="secondary" icon={<MessageCircle size={14} aria-hidden />} onClick={handleSendWhatsApp} disabled={busy}>
                   {t("clinical.invoiceDetail.sendWhatsApp")}
                 </ButtonNew>

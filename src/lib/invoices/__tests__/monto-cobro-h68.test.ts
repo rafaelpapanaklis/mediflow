@@ -52,3 +52,9 @@ test("Facturación del expediente (fila de factura del paciente): openDirectPaym
   // se abre el modal a ciegas con el saldo completo por no tener el dato.
   assert.match(src, /fetch\(`\/api\/invoices\/condiciones\?ids=\$\{encodeURIComponent\(inv\.id\)\}`\)/);
 });
+
+// ws1-t4 #69 — «Marcar pagada» liquidaba de un clic una factura a plazos entera.
+test("detalle de factura: «Marcar pagada» no se ofrece en una factura a plazos", () => {
+  const src = leer("components/dashboard/billing/invoice-detail-modal.tsx");
+  assert.match(src, /\{!esPlanAPlazos\(condicionesPago\) && \(\s*<ButtonNew[\s\S]{0,120}onClick=\{handleMarkPaid\}/);
+});
