@@ -598,16 +598,28 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
 
   // Aviso de saldo por WhatsApp. No muta la factura: no se llama onMutated ni
   // se cierra el modal — el éxito enlaza al hilo del Inbox.
-  async function handleSendWhatsApp() {
+  async function handleSendWhatsApp(forzar = false) {
     if (!invoice) return;
     setBusy(true);
     try {
       // Se cobra por Mercado Pago (trato, método o link vigente): el aviso lleva el link (ws1-t1).
       const pedirLink = mpDisponible && (hayLinkMp || condicionesPago?.metodo === "mercadopago" || invoice.paymentMethod === "mercadopago");
-      const res = await fetch(`/api/invoices/${invoice.id}/send-whatsapp`, pedirLink
-        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkPago: true }) }
+      const cuerpo = { ...(pedirLink ? { linkPago: true } : {}), ...(forzar ? { forzar: true } : {}) };
+      const res = await fetch(`/api/invoices/${invoice.id}/send-whatsapp`, Object.keys(cuerpo).length > 0
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) }
         : { method: "POST" });
       const data = await res.json().catch(() => ({}));
+      // ws1-t4 #82: ya salió un aviso de cobro hoy — se pregunta antes de mandar otro.
+      if (res.status === 409 && data.code === "AVISO_YA_ENVIADO") {
+        setBusy(false);
+        if (await confirmDialog({
+          title: t("clinical.invoiceDetail.sendWhatsApp"),
+          description: data.error,
+          confirmText: "Mandar de todos modos",
+          cancelText: t("common.cancel"),
+        })) await handleSendWhatsApp(true);
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? t("clinical.invoiceDetail.operationError"));
       // Iba con link de Mercado Pago y el link no viajó (ventana cerrada, MP caído…).
       if (typeof data.avisoLink === "string" && data.avisoLink) {
@@ -1024,7 +1036,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     {t("clinical.invoiceDetail.markPaid")}
                   </ButtonNew>
                 )}
-                <ButtonNew variant="secondary" icon={<MessageCircle size={14} aria-hidden />} onClick={handleSendWhatsApp} disabled={busy}>
+                <ButtonNew variant="secondary" icon={<MessageCircle size={14} aria-hidden />} onClick={() => handleSendWhatsApp()} disabled={busy}>
                   {t("clinical.invoiceDetail.sendWhatsApp")}
                 </ButtonNew>
                 {canEditPrice && (

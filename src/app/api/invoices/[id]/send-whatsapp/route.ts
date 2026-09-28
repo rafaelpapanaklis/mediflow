@@ -30,6 +30,8 @@ import { buildPaymentNotice } from "@/lib/invoices/payment-notice";
 import { linkParaEnviar } from "@/lib/factura-mp/envio.server";
 import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
+import { lastSentOfKind } from "@/lib/orthodontics/whatsapp-dedupe";
+import { horaDelAvisoPrevio } from "@/lib/invoices/aviso-del-dia";
 
 export const runtime = "nodejs"; // genera el PDF con @react-pdf
 export const dynamic = "force-dynamic";
@@ -55,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       patient: { select: { firstName: true, lastName: true, phone: true } },
       clinic: {
         select: {
-          id: true, name: true, phone: true,
+          id: true, name: true, phone: true, timezone: true,
           waConnected: true, waPhoneNumberId: true, waAccessToken: true, waTemplates: true,
         },
       },
@@ -107,6 +109,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   // Link de Mercado Pago (ws1-t1). Nunca lanza: sin link, el aviso de siempre.
   const pedido = await req.json().catch(() => null);
+
+  // ws1-t4 #82 — un aviso de cobro por teléfono al día. El recordatorio de mensualidad
+  // (Alertas) y este aviso salen con el mismo tipo `payment_notice`: mandar los dos el
+  // mismo día era mandar dos cobros con montos distintos ($6,000 vencido y $30,000 de
+  // saldo total). Se puede forzar a propósito con `forzar: true` (la pantalla lo pregunta).
+  if (pedido?.forzar !== true) {
+    const previo = await lastSentOfKind(ctx.clinicId, patientPhone, "payment_notice", new Date()).catch(() => null);
+    if (previo) {
+      return NextResponse.json(
+        {
+          code: "AVISO_YA_ENVIADO",
+          error: `Ya se le mandó un aviso de cobro hoy (${horaDelAvisoPrevio(previo, clinic.timezone)}). Para que no reciba mensajes con montos distintos, no se manda otro a menos que lo confirmes.`,
+        },
+        { status: 409 },
+      );
+    }
+  }
   const { link, aviso: avisoLink } = await linkParaEnviar({
     clinicId: ctx.clinicId,
     invoiceId: invoice.id,
