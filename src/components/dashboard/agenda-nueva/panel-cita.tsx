@@ -48,6 +48,7 @@ import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { ModalPedirAnticipo } from "@/components/dashboard/billing/modal-pedir-anticipo";
 import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
+import { RanuraCita } from "@/components/specialties/orthodontics/agenda/RanuraCita";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
@@ -557,6 +558,11 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               </div>
             </div>
           )}
+
+          {/* Ortodoncia — Ola 0 (ws1-t1): única ranura de este panel. Se
+              autocalifica sola (dto.reason === TIPO_CITA_CONTROL_ORTO) y hoy
+              no pinta nada — ver MAPA DE PARTES en REPORTE-ws1-t1.md. */}
+          <RanuraCita dto={dto} />
         </div>
 
         {/* ── Pie ── */}

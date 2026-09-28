@@ -17,6 +17,7 @@ import {
   type PhotoStage,
 } from "./sections/SectionPhotos";
 import { SectionFinance } from "./sections/SectionFinance";
+import { ResumenCobranza } from "../cobranza/ResumenCobranza";
 import {
   SectionRetention,
   type RetainerCheckupDTO,
@@ -39,20 +40,15 @@ import { OrthodonticsModuleSidebar } from "./sidebar/OrthodonticsModuleSidebar";
 import { DrawerTreatmentCard } from "./drawers/DrawerTreatmentCard";
 import type { DrawerCardSubmit } from "./drawers/DrawerTreatmentCard";
 import { ModalAdvancePhase } from "./drawers/ModalAdvancePhase";
-import { ModalOpenChoice } from "./drawers/ModalOpenChoice";
-import { DrawerSignAtHome } from "./drawers/DrawerSignAtHome";
 import { ModalCollect } from "./drawers/ModalCollect";
-import { DrawerCFDIList } from "./drawers/DrawerCFDIList";
 import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
 import { DrawerEditFinancialPlan } from "./drawers/DrawerEditFinancialPlan";
 import { DrawerEditDiagnosis } from "./drawers/DrawerEditDiagnosis";
 import { DrawerEditPrescription } from "./drawers/DrawerEditPrescription";
 import { DrawerNewReferral } from "./drawers/DrawerNewReferral";
 import { DrawerConfigRetention } from "./drawers/DrawerConfigRetention";
-import { DrawerConfigNps } from "./drawers/DrawerConfigNps";
 import { DrawerWhatsAppChat } from "./drawers/DrawerWhatsAppChat";
 import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
-import { ModalCompare, type CompareSet } from "./drawers/ModalCompare";
 import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
 import layout from "./ortho-redesign-layout.module.css";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
@@ -366,17 +362,16 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onStartNewCard={() => setDrawer({ kind: "tcard-new" })}
           />
 
+          {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S12, QUITAR
+              (solo el comparador): en la ficha nueva el comparador de fotos
+              muestra huecos (el loader no trae URL por slot todavía). Sin
+              onCompare no hay botón que lo abra. El PDF comparativo SÍ se
+              queda — ver onGeneratePdf de SectionPostTreatment más arriba. */}
           <SectionPhotos
             monthCurrent={t.monthCurrent}
             monthTotal={t.monthTotal}
             historicalSets={props.historicalPhotoSets ?? []}
             onUpload={props.onUploadPhoto}
-            onCompare={
-              props.onComparePhotos ??
-              ((props.historicalPhotoSets ?? []).length > 0
-                ? () => setDrawer({ kind: "compare" })
-                : undefined)
-            }
             onScheduleG15={props.onScheduleG15Action ?? props.onScheduleG15}
           />
 
@@ -389,11 +384,15 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
                 ? () => setDrawer({ kind: "edit-financial" })
                 : undefined
             }
-            onPresentQuote={() => setDrawer({ kind: "openchoice" })}
-            onSignAtHome={() => setDrawer({ kind: "signhome" })}
             onCollectNext={() => setDrawer({ kind: "collect" })}
-            onViewCfdi={() => setDrawer({ kind: "cfdi" })}
           />
+
+          {/* Ortodoncia — Ola 0 (ws1-t1): ranura del resumen de cobranza
+              (decisión 1 — el dinero va por la factura a plazos). Hoy no
+              pinta nada; la parte «Cobro» la llena en la Ola 1. */}
+          {t.treatmentPlanId ? (
+            <ResumenCobranza treatmentPlanId={t.treatmentPlanId} />
+          ) : null}
 
           <SectionRetention
             regimen={props.retentionRegimen ?? null}
@@ -407,17 +406,17 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             }
           />
 
+          {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S6, QUITAR: NPS
+              (se programa pero nadie lo envía) y códigos de referidos (solo
+              con datos de ejemplo) sin sus botones. El PDF comparativo
+              (onGeneratePdf) SÍ se queda — S12 lo saca explícitamente del
+              QUITAR ("el PDF comparativo se queda"), es distinto del
+              comparador de fotos roto que sí se oculta más abajo. */}
           <SectionPostTreatment
             treatmentStatus={tStatus}
             npsSchedules={props.npsSchedules ?? []}
             referralCode={props.referralCode ?? null}
             onGeneratePdf={props.onGeneratePdfBeforeAfter}
-            onConfigureNps={
-              props.onUpdateNpsConfig
-                ? () => setDrawer({ kind: "config-nps" })
-                : props.onConfigureNps
-            }
-            onCopyReferralCode={props.onCopyReferralCode}
           />
 
           <SectionDocs
@@ -435,10 +434,9 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
 
           <PhaseTransitionAuditTeaser count={vm.phaseTransitions.length} />
 
-          <footer className="text-[11px] text-slate-400 text-center py-4 dark:text-slate-500">
-            DaleControl · Ortodoncia · Patient Detail · 11 gaps integrados (G1 G3 G4 G5 G6 G9 G10 G11
-            G12 G15 G16 G18) · 6 differentiators preservados (M1-M6)
-          </footer>
+          {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S14, QUITAR: el
+              pie de desarrollo ("11 gaps integrados...") hacía parecer roto
+              el módulo a un ojo clínico. Ocultar, no borrar. */}
         </main>
 
         {/* Right rail */}
@@ -504,31 +502,12 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
-      {/* Modal Open Choice G5 — cards editables */}
-      {drawer?.kind === "openchoice" ? (
-        <ModalOpenChoice
-          scenarios={props.quoteScenarios ?? []}
-          patientFirstName={vm.patient.firstName}
-          onClose={closeDrawer}
-          onConfirm={async (id) => {
-            await props.onSelectQuoteScenario?.(id);
-            setDrawer({ kind: "signhome" });
-          }}
-          onUpdateScenario={props.onUpdateQuoteScenario}
-        />
-      ) : null}
-
-      {/* Drawer Sign@Home G6 */}
-      {drawer?.kind === "signhome" ? (
-        <DrawerSignAtHome
-          patientFirstName={vm.patient.firstName}
-          onClose={closeDrawer}
-          onSend={async () => {
-            await props.onSendSignAtHome?.();
-            closeDrawer();
-          }}
-        />
-      ) : null}
+      {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S4 y S5, QUITAR:
+          "Modal Open Choice" (presupuestos A/B/C, duplica los presupuestos
+          generales del paciente) y "Sign@Home" (maqueta: dice que envía el
+          link y no envía nada) ya no tienen botón que los abra en
+          SectionFinance. Ocultar, no borrar: ModalOpenChoice y
+          DrawerSignAtHome se quedan en su archivo. */}
 
       {/* Modal Collect (cobrar siguiente) */}
       {drawer?.kind === "collect" ? (
@@ -547,10 +526,10 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
-      {/* Drawer CFDI list (M1) */}
-      {drawer?.kind === "cfdi" ? (
-        <DrawerCFDIList cfdiRecords={props.cfdiRecords ?? []} onClose={closeDrawer} />
-      ) : null}
+      {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S14, QUITAR: la
+          lista de CFDI sale siempre vacía (nada la llena hoy). Sin botón
+          que la abra en SectionFinance; DrawerCFDIList se queda en su
+          archivo. */}
 
       {/* Drawer Lab Order G18 */}
       {drawer?.kind === "laborder" ? (
@@ -575,24 +554,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
-      {/* Modal Compare T0 vs actual */}
-      {drawer?.kind === "compare" ? (
-        <ModalCompare
-          setT0={summaryToCompareSet(
-            (props.historicalPhotoSets ?? []).find((s) => s.stage === "T0") ?? null,
-          )}
-          setRight={summaryToCompareSet(
-            (props.historicalPhotoSets ?? []).find((s) => s.stage === "T1") ??
-              (props.historicalPhotoSets ?? []).find((s) => s.stage === "T2") ??
-              null,
-          )}
-          availableRightStages={(props.historicalPhotoSets ?? [])
-            .filter((s) => s.stage !== "T0")
-            .map((s) => s.stage)}
-          onGeneratePdf={props.onGenerateComparePdf}
-          onClose={closeDrawer}
-        />
-      ) : null}
+      {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S12, QUITAR: sin
+          botón que abra el comparador de fotos (ver SectionPhotos más
+          arriba). ModalCompare se queda en su archivo; el helper que
+          armaba su input (summaryToCompareSet, glue local de este
+          archivo, no reusable) se quitó por no tener ya llamador. */}
 
       {/* Drawer Editor Plan Financiero (BUG 7 / nuevo feature) */}
       {drawer?.kind === "edit-financial" && props.financialPlan ? (
@@ -688,23 +654,9 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
-      {/* Drawer Configurar NPS (Sección H) */}
-      {drawer?.kind === "config-nps" ? (
-        <DrawerConfigNps
-          current={{
-            windowEarlyDays: 3,
-            windowMidDays: 180,
-            windowLateDays: 360,
-            customMessage: null,
-            triggerGoogleReview: true,
-          }}
-          onClose={closeDrawer}
-          onConfirm={async (payload) => {
-            await props.onUpdateNpsConfig?.(payload);
-            closeDrawer();
-          }}
-        />
-      ) : null}
+      {/* Ola 0 de ortodoncia (ws1-t1, sep-2026) — bloque S6, QUITAR: sin
+          botón que abra "Configurar NPS" en SectionPostTreatment.
+          DrawerConfigNps se queda en su archivo. */}
 
       {/* Drawer WhatsApp Chat read-only (sidebar derecha "Abrir chat") */}
       {drawer?.kind === "wa-chat" ? (
@@ -722,20 +674,6 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       ) : null}
     </div>
   );
-}
-
-/**
- * El loader actual entrega únicamente meta-datos del set (sin URLs por slot).
- * Este helper construye un CompareSet con `photos = {}` para mostrar
- * placeholders en columnas y la fecha del set. La carga de URLs reales se
- * hará vía server action en commit posterior cuando el loader incluya el
- * map slot→url.
- */
-function summaryToCompareSet(
-  s: import("./sections/SectionPhotos").PhotoSetSummary | null,
-): CompareSet | null {
-  if (!s) return null;
-  return { stage: s.stage, takenAt: s.date, photos: {} };
 }
 
 function isToday(iso: string | null | undefined): boolean {
