@@ -30,7 +30,7 @@
  */
 
 import { z } from "zod";
-import { fraseSinControl } from "@/lib/orthodontics/controles-modulo";
+import { DIAS_SIN_CONTROL_URGENTE, fraseSinControl } from "@/lib/orthodontics/controles-modulo";
 import { fraseDeAtraso, fraseDeProxima, fraseDeVencidos } from "@/lib/orthodontics/cobranza-modulo";
 import { definirHerramienta, pesos } from "./base";
 import { fechaDe, horaDe } from "./fechas";
@@ -236,7 +236,9 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
         : null,
       cobranza: leido.cobranza
         ? {
-            situacion: fila ? fila.situacion : "saldado",
+            // Sin fila = caso cerrado que la pantalla de Cobranza ya no lista:
+            // o saldó su plan, o nunca tuvo uno. No son lo mismo.
+            situacion: fila ? fila.situacion : leido.cobranza.tienePlan ? "saldado" : "sin-plan",
             vencido: fila?.vencido ?? 0,
             pagosVencidos: fila?.cuotasVencidas ?? 0,
             vencidoDesde: fila?.vencidoDesde ?? null,
@@ -245,8 +247,8 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
             proximoImporte: fila?.proximoImporte ?? null,
             diasParaLaProxima: fila?.diasParaLaProxima ?? null,
             porCobrar: fila?.porCobrar ?? 0,
-            cuotasPagadas: fila?.cuotasPagadas ?? 0,
-            cuotasTotales: fila?.cuotasTotales ?? 0,
+            cuotasPagadas: fila?.cuotasPagadas ?? leido.cobranza.cuotasPagadas,
+            cuotasTotales: fila?.cuotasTotales ?? leido.cobranza.cuotasTotales,
             saldoAFavor: leido.cobranza.saldoAFavor,
           }
         : null,
@@ -304,8 +306,10 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
             : a.diferencia < 0
               ? `va ${Math.abs(a.diferencia)} atrás de lo esperado (el ${a.esperado})`
               : `va ${a.diferencia} adelante de lo esperado (el ${a.esperado})`;
-        const pausa = a.estado === "PAUSED" ? ", en pausa" : a.estado === "FINISHED" ? ", terminados" : "";
-        partes.push(`Alineadores${a.sistema ? ` ${a.sistema}` : ""}: trae el ${a.actual} de ${a.total}${pausa}; ${ritmo}.`);
+        // En pausa o terminados, el «esperado» sigue corriendo con el calendario
+        // y no dice nada del paciente: no se compara.
+        const cola = a.estado === "PAUSED" ? ", en pausa" : a.estado === "FINISHED" ? ", terminados" : `; ${ritmo}`;
+        partes.push(`Alineadores${a.sistema ? ` ${a.sistema}` : ""}: trae el ${a.actual} de ${a.total}${cola}.`);
       }
     }
 
@@ -315,13 +319,15 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
       const proximo = k.proximo
         ? `próximo el ${fechaCorta(k.proximo)} a las ${k.proximo.slice(11)}`
         : "sin próximo control agendado";
-      partes.push(`Controles: ${ultimo}; ${proximo}.${k.urgente ? " Lleva más de 45 días sin control." : ""}`);
+      partes.push(
+        `Controles: ${ultimo}; ${proximo}.${k.urgente ? ` Lleva ${DIAS_SIN_CONTROL_URGENTE} días o más sin control.` : ""}`,
+      );
     }
 
     if (d.cobranza) {
       const m = d.cobranza;
       if (m.situacion === "sin-plan") {
-        partes.push("Mensualidades: todavía no tiene plan de pagos.");
+        partes.push("Mensualidades: no tiene plan de pagos.");
       } else {
         const trozos = [`${SITUACION[m.situacion] ?? m.situacion}`];
         if (m.pagosVencidos > 0) {

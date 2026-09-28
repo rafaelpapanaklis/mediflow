@@ -23,7 +23,12 @@
  */
 
 import { z } from "zod";
-import { estadoDeCita, fraseSinControl, rotuloDelDia } from "@/lib/orthodontics/controles-modulo";
+import {
+  DIAS_SIN_CONTROL_URGENTE,
+  estadoDeCita,
+  fraseSinControl,
+  rotuloDelDia,
+} from "@/lib/orthodontics/controles-modulo";
 import { definirHerramienta, fraseRecorte, lineasDeLista, plural, recortar, type Lista } from "./base";
 import { fechaDe, horaDe } from "./fechas";
 import {
@@ -81,6 +86,8 @@ export interface DatosOrtoControles {
   controles: Lista<ControlFila> | null;
   /** De HOY: los que siguen en pie, los atendidos, las faltas y los cancelados. */
   resumenHoy: { enPie: number; atendidos: number; faltaron: number; cancelados: number } | null;
+  /** De mañana a siete días, sin los cancelados: el total de la pantalla, no el de la lista recortada. */
+  proximos: number | null;
   sinControl: Lista<SinControlFila> | null;
   urgentes: number;
   casos: {
@@ -106,6 +113,15 @@ const ESTADO_DEL_CASO: Record<string, string> = {
   COMPLETED: "Completado",
   DROPPED_OUT: "Abandono",
 };
+/** Para la frase: «4 en curso, 2 pausados, 1 en retención». */
+const ESTADO_EN_FRASE: Record<string, [string, string]> = {
+  Planeado: ["planeado", "planeados"],
+  "En curso": ["en curso", "en curso"],
+  Pausado: ["pausado", "pausados"],
+  Retención: ["en retención", "en retención"],
+  Completado: ["completado", "completados"],
+  Abandono: ["en abandono", "en abandono"],
+};
 const ORDEN_DE_ESTADOS = ["IN_PROGRESS", "PLANNED", "ON_HOLD", "RETENTION", "COMPLETED", "DROPPED_OUT"];
 
 const HOJA: Record<string, string> = { SIGNED: "firmada", DRAFT: "borrador" };
@@ -129,6 +145,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
       hoy: "",
       controles: null,
       resumenHoy: null,
+      proximos: null,
       sinControl: null,
       urgentes: 0,
       casos: null,
@@ -202,6 +219,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
       hoy: data.hoy,
       controles: recortar([...deHoy, ...deLaSemana]),
       resumenHoy: data.semana.resumenHoy,
+      proximos: que === "semana" ? data.semana.totalProximos : null,
       omitidas,
     };
   },
@@ -227,7 +245,12 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
       if (c.total === 0) {
         return `No hay casos de ortodoncia registrados. Yo no los abro: se abren en [Pacientes en tratamiento](${d.enlace}).`;
       }
-      const detalle = c.porEstado.map((e) => `${e.casos} ${e.estado.toLowerCase()}`).join(", ");
+      const detalle = c.porEstado
+        .map((e) => {
+          const [uno, varios] = ESTADO_EN_FRASE[e.estado] ?? [e.estado.toLowerCase(), e.estado.toLowerCase()];
+          return `${e.casos} ${e.casos === 1 ? uno : varios}`;
+        })
+        .join(", ");
       return (
         `${plural(c.activos, "caso activo", "casos activos")} de ortodoncia, ${c.terminados} ` +
         `${c.terminados === 1 ? "terminado" : "terminados"} y ${c.abandonaron} en abandono (${detalle}). ` +
@@ -246,7 +269,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
       const uno = !lista && s.filas[0] ? ` Es ${s.filas[0].paciente}: ${s.filas[0].situacion.toLowerCase()}.` : "";
       return (
         `${plural(s.total, "caso activo", "casos activos")} sin próximo control agendado, de ${d.casosActivos ?? 0} activos` +
-        `${d.urgentes > 0 ? `; ${d.urgentes} con más de 45 días sin venir` : ""}${fraseRecorte(s, "casos")}.` +
+        `${d.urgentes > 0 ? `; ${d.urgentes} con ${DIAS_SIN_CONTROL_URGENTE} días o más sin venir` : ""}${fraseRecorte(s, "casos")}.` +
         `${lista ? " Del que lleva más tiempo al que menos:" : uno}${lista}\n` +
         `Yo no agendo: el control se agenda en ${pantalla}.`
       );
@@ -267,8 +290,8 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
           ? `Hoy (${fechaCorta(d.hoy)}) no hay controles de ortodoncia${cancelados ? ` (${cancelados})` : ""}`
           : `Hoy (${fechaCorta(d.hoy)}) hay ${plural(deHoy, "control", "controles")} de ortodoncia: ${desglose.join(", ")}` +
             `${cancelados ? `; aparte, ${cancelados}` : ""}`;
-      const proximos = d.controles.filas.filter((f) => f.dia !== d.hoy && f.estado !== "Cancelada").length;
-      const semana = d.que === "semana" ? `; en los siete días siguientes, ${plural(proximos, "control", "controles")}` : "";
+      const semana =
+        d.que === "semana" ? `; en los siete días siguientes, ${plural(d.proximos ?? 0, "control", "controles")}` : "";
       const lista = lineasDeLista(d.controles.filas, (f) =>
         `${d.que === "semana" ? `${f.rotulo}, ` : ""}${f.hora} ${f.paciente}${f.doctor ? ` con ${f.doctor}` : ""} — ${f.estado}` +
         `${f.hoja ? ` (hoja ${f.hoja})` : ""}`,

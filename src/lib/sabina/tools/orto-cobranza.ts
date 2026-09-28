@@ -90,7 +90,9 @@ export interface DatosOrtoCobranza {
     mes: string;
     /** T6: mensualidades que TODAVÍA no vencen y vencen en lo que queda del mes. */
     porVencerEnElMes: number;
-    /** T4: lo ya cobrado este mes en las facturas de los casos. */
+    /** T4: la «Producción del mes» del Tablero, por doctor tratante, tal cual. */
+    cobradoPorDoctor: Array<{ doctor: string; importe: number }>;
+    /** La suma de esas barras. El Tablero no pinta el total: es lo único que aquí se suma. */
     cobradoEnElMes: number;
     /** T3: lo vencido sin cobrar, del mes que sea. */
     vencido: { casos: number; importe: number };
@@ -99,6 +101,12 @@ export interface DatosOrtoCobranza {
   } | null;
   omitidas: OmitidaOrto[];
   enlace: string;
+}
+
+/** « (Mariana Cortés $20,000, Renata Solís $8,000)»: las barras de «Producción del mes». */
+function porDoctor(filas: Array<{ doctor: string; importe: number }>): string {
+  if (filas.length < 2) return "";
+  return ` (${filas.map((f) => `${f.doctor} ${pesos(f.importe)}`).join(", ")})`;
 }
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -144,6 +152,7 @@ export const ortoCobranza = definirHerramienta<ParamsOrtoCobranza, DatosOrtoCobr
         esteMes: {
           mes: actual?.monthKey ?? "",
           porVencerEnElMes: actual?.amountMxn ?? 0,
+          cobradoPorDoctor: t.productionByDoctor.map((p) => ({ doctor: p.doctorName, importe: p.amountMxn })),
           cobradoEnElMes: t.productionByDoctor.reduce((s, p) => s + p.amountMxn, 0),
           vencido: { casos: t.overdue.count, importe: t.overdue.amountMxn },
           mesSiguiente: siguiente ? { mes: siguiente.monthKey, importe: siguiente.amountMxn } : null,
@@ -198,7 +207,8 @@ export const ortoCobranza = definirHerramienta<ParamsOrtoCobranza, DatosOrtoCobr
         ? ` En ${mesLegible(m.mesSiguiente.mes)} vencen ${pesos(m.mesSiguiente.importe)}.`
         : "";
       return (
-        `Mensualidades de ortodoncia de ${mesLegible(m.mes)}: ${pesos(m.cobradoEnElMes)} ya cobrados en el mes y ` +
+        `Mensualidades de ortodoncia de ${mesLegible(m.mes)}: ${pesos(m.cobradoEnElMes)} ya cobrados en el mes` +
+        `${porDoctor(m.cobradoPorDoctor)} y ` +
         `${pesos(m.porVencerEnElMes)} de pagos que vencen en lo que queda del mes. Aparte hay ` +
         `${pesos(m.vencido.importe)} vencidos sin cobrar de ${plural(m.vencido.casos, "caso", "casos")}, que entran solo si se cobran.` +
         `${siguiente} Son las cifras del [Tablero de ortodoncia](${d.enlace}); lo cobrado es lo pagado a la factura del ` +

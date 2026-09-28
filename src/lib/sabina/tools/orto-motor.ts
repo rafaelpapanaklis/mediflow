@@ -200,13 +200,25 @@ export interface CasoLeido {
     /** Solo si el caso está activo y NO tiene control futuro (`casosSinControl`). */
     sinControl: CasoSinControl | null;
   } | null;
-  cobranza: { fila: FilaCobranza | null; saldoAFavor: number } | null;
+  cobranza: {
+    /** La fila de la pantalla de Cobranza. `null` = caso CERRADO que ya no debe: la pantalla no lo lista. */
+    fila: FilaCobranza | null;
+    /** `false` = el caso no tiene factura ni plan de pagos: no hay nada que dar por saldado. */
+    tienePlan: boolean;
+    /** Contadas del resumen del motor, para el caso cerrado que no tiene fila. */
+    cuotasPagadas: number;
+    cuotasTotales: number;
+    saldoAFavor: number;
+  } | null;
 }
 
 /**
  * El caso de UN paciente. `null` = ese paciente no existe para quien pregunta
  * (otra clínica, restringido, archivado): lo decide `loadOrthoData`, igual que
- * en la ficha. `ver` dice qué partes se leen; lo que no se puede ver NO se consulta.
+ * en la ficha. `ver` dice qué partes se leen: las hojas, los arcos, los
+ * alineadores, la agenda y la cobranza no se consultan sin su permiso. El
+ * cargador de la ficha sí se corre entero (es una sola función), y de lo suyo
+ * solo sale el plan, la fase y el nombre.
  */
 export async function leerCaso(
   ctx: SabinaCtx,
@@ -224,7 +236,8 @@ export async function leerCaso(
     return {
       paciente: legacy.patientName,
       caso: null,
-      tieneValoracion: legacy.diagnosis !== null,
+      // Que exista una valoración es expediente: solo con el permiso clínico.
+      tieneValoracion: ver.clinico && legacy.diagnosis !== null,
       clinico: null,
       controles: null,
       cobranza: null,
@@ -303,7 +316,9 @@ export async function leerCaso(
       arco: vm.treatment.wireCurrent,
       higiene: ultima
         ? {
-            fecha: ultima.visitDate.slice(0, 10),
+            // El día de la visita en la zona de la CLÍNICA: un control de las
+            // 18:30 del día 5 en Ciudad de México ya es día 6 en UTC.
+            fecha: hoyEnZona(new Date(ultima.visitDate), zona),
             placaPct: ultima.plaquePct,
             gingivitis: ultima.gingivitis,
             manchasBlancas: ultima.whiteSpots,
@@ -379,7 +394,15 @@ export async function leerCaso(
     // La fila de la pantalla de Cobranza para ESTE caso. Un caso cerrado y sin
     // deuda no tiene fila: `filasDeCobranza` lo deja fuera.
     const [fila] = filasDeCobranza([comoCaso(resumen)], hoyEnZona(ahora, zona));
-    cobranza = { fila: fila ?? null, saldoAFavor: resumen?.saldoAFavor ?? 0 };
+    const cuotasPagadas = resumen?.pagadas.length ?? 0;
+    const cuotasTotales = cuotasPagadas + (resumen?.vencidas.length ?? 0) + (resumen?.proximas.length ?? 0);
+    cobranza = {
+      fila: fila ?? null,
+      tienePlan: cuotasTotales > 0,
+      cuotasPagadas,
+      cuotasTotales,
+      saldoAFavor: resumen?.saldoAFavor ?? 0,
+    };
   }
 
   return {
@@ -392,7 +415,7 @@ export async function leerCaso(
       inicio: vm.treatment.startDate ? vm.treatment.startDate.slice(0, 10) : null,
       finEstimado: vm.treatment.estimatedEndDate ? vm.treatment.estimatedEndDate.slice(0, 10) : null,
     },
-    tieneValoracion: legacy.diagnosis !== null,
+    tieneValoracion: ver.clinico && legacy.diagnosis !== null,
     clinico,
     controles,
     cobranza,

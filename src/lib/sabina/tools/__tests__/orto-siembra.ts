@@ -16,7 +16,9 @@
  *  · Carla  — en retención, plan saldado. Control en tres días.
  *  · Dora   — en curso, modo PAGO POR CONTROL, con alineadores (trae el 3 y
  *             debería traer el 6). Debe un control de $800.
- *  · Elías  — caso COMPLETADO, sin deuda.
+ *  · Elías  — caso COMPLETADO, con su plan de tres pagos saldado.
+ *  · Iván   — caso en ABANDONO que nunca tuvo factura: no hay nada que dar por
+ *             saldado.
  *  · Paula  — la paciente RESTRINGIDA (solo la ve la administradora): en curso,
  *             debe tres mensualidades ($6,000). Un doctor no puede enterarse.
  *
@@ -208,7 +210,11 @@ export function datosOrto(): SiembraOrto {
     }),
     plan({
       id: "plan-elias", clinicId: CL_NORTE, patientId: "p-elias", treatingDoctorId: U_DOC2_N, status: "COMPLETED",
-      installedAt: subMonths(new Date(), 30), estimatedDurationMonths: 24,
+      installedAt: subMonths(new Date(), 30), estimatedDurationMonths: 24, invoiceId: "inv-orto-elias",
+    }),
+    plan({
+      id: "plan-ivan", clinicId: CL_NORTE, patientId: "p-inact-2", treatingDoctorId: U_DOC2_N, status: "DROPPED_OUT",
+      installedAt: subMonths(new Date(), 14), estimatedDurationMonths: 24, droppedOutAt: haceDias(200),
     }),
     plan({
       id: "plan-priv", clinicId: CL_NORTE, patientId: "p-priv", treatingDoctorId: U_DOC_N,
@@ -251,8 +257,10 @@ export function datosOrto(): SiembraOrto {
       id: "h-ana-2", treatmentPlanId: "plan-ana", patientId: "p-ana", cardNumber: 2, visitDate: haceDias(60),
       wireFromId: "w-ana-1", wireToId: "w-ana-2", hygienePlaquePct: 30, hygieneGingivitis: "LEVE",
     }),
+    // A las 18:30 de Ciudad de México: en UTC ya es el día siguiente.
     hoja({
-      id: "h-ana-3", treatmentPlanId: "plan-ana", patientId: "p-ana", cardNumber: 3, visitDate: haceDias(30),
+      id: "h-ana-3", treatmentPlanId: "plan-ana", patientId: "p-ana", cardNumber: 3,
+      visitDate: en(sumarDias(HOY_N, -30), 18, 30, TZ_NORTE),
       wireFromId: "w-ana-2", wireToId: "w-ana-2", hygienePlaquePct: 45, hygieneGingivitis: "MODERADA", hygieneWhiteSpots: true,
     }),
     // BORRADOR de hoy: un borrador no es un dato clínico confirmado.
@@ -311,6 +319,7 @@ export function datosOrto(): SiembraOrto {
     ...(d.invoices ?? []),
     { id: "inv-orto-ana", clinicId: CL_NORTE, patientId: "p-ana", status: "PARTIAL", total: 25000, paid: 9000, balance: 16000, discount: 0, dueDate: null, createdAt: haceDias(110), items: [] },
     { id: "inv-orto-carla", clinicId: CL_NORTE, patientId: "p-carla", status: "PAID", total: 12000, paid: 12000, balance: 0, discount: 0, dueDate: null, createdAt: haceDias(600), items: [] },
+    { id: "inv-orto-elias", clinicId: CL_NORTE, patientId: "p-elias", status: "PAID", total: 6000, paid: 6000, balance: 0, discount: 0, dueDate: null, createdAt: haceDias(900), items: [] },
     { id: "inv-orto-priv", clinicId: CL_NORTE, patientId: "p-priv", status: "PENDING", total: 10000, paid: 0, balance: 10000, discount: 0, dueDate: null, createdAt: haceDias(80), items: [] },
     // Los controles de Dora (pago por control): uno pagado y uno vencido.
     { id: "inv-ctl-dora-1", clinicId: CL_NORTE, patientId: "p-dora", status: "PAID", total: 800, paid: 800, balance: 0, discount: 0, dueDate: haceDias(40), createdAt: haceDias(40), invoiceNumber: "MF-0801", appointmentId: "c-dora-viejo-1", orthodonticTreatmentPlanId: "plan-dora", items: [] },
@@ -327,6 +336,7 @@ export function datosOrto(): SiembraOrto {
     { id: "pay-orto-ana-0", invoiceId: "inv-orto-ana", amount: 5000, method: "cash", paidAt: haceDias(105) },
     { id: "pay-orto-ana-1", invoiceId: "inv-orto-ana", amount: 2000, method: "transfer", paidAt: haceDias(70) },
     { id: "pay-orto-ana-2", invoiceId: "inv-orto-ana", amount: 2000, method: "transfer", paidAt: haceDias(0) },
+    { id: "pay-orto-elias", invoiceId: "inv-orto-elias", amount: 6000, method: "cash", paidAt: haceDias(800) },
     { id: "pay-orto-carla", invoiceId: "inv-orto-carla", amount: 12000, method: "cash", paidAt: haceDias(590) },
     { id: "pay-orto-sur", invoiceId: "inv-orto-sur", amount: 1, method: "cash", paidAt: haceDias(0) },
   ];
@@ -335,6 +345,7 @@ export function datosOrto(): SiembraOrto {
   const terminos: Terminos[] = [
     { invoiceId: "inv-orto-ana", modo: "plazos", metodo: null, enganche: 5000, numPagos: 10, frecuencia: "MONTHLY", primerPago: aFecha(haceDias(105)), difiereConSuBanco: false },
     { invoiceId: "inv-orto-carla", modo: "plazos", metodo: null, enganche: 2000, numPagos: 10, frecuencia: "MONTHLY", primerPago: aFecha(haceDias(600)), difiereConSuBanco: false },
+    { invoiceId: "inv-orto-elias", modo: "plazos", metodo: null, enganche: 0, numPagos: 3, frecuencia: "MONTHLY", primerPago: aFecha(haceDias(900)), difiereConSuBanco: false },
     { invoiceId: "inv-orto-priv", modo: "plazos", metodo: null, enganche: 0, numPagos: 5, frecuencia: "MONTHLY", primerPago: aFecha(haceDias(75)), difiereConSuBanco: false },
     { invoiceId: "inv-orto-sur", modo: "plazos", metodo: null, enganche: 0, numPagos: 1, frecuencia: "MONTHLY", primerPago: aFecha(haceDias(75)), difiereConSuBanco: false },
   ];

@@ -42,13 +42,14 @@ import { ejecutarSabina, type TurnoModelo } from "../../engine";
 import { esSqlDeLectura } from "../../engine-solo-lectura";
 import type { SabinaCtx, SabinaTool } from "../../tipos";
 import { correrHerramienta } from "../base";
+import { sumarDias } from "../fechas";
 import { ortoCaso } from "../orto-caso";
 import { ortoCobranza } from "../orto-cobranza";
 import { ENLACES_ORTO } from "../orto-comun";
 import { ortoControles } from "../orto-controles";
 import type { BaseDoble } from "./doble-base";
 import { CL_SIN_MODULO, CL_VENCIDA, baseOrto, sesion } from "./orto-siembra";
-import { CL_NORTE, CL_SUR, TZ_NORTE, TZ_SUR, U_ADMIN_S, U_DOC_N, U_RECEP_N } from "./siembra";
+import { CL_NORTE, CL_SUR, HOY_N, TZ_NORTE, TZ_SUR, U_ADMIN_S, U_DOC_N, U_RECEP_N } from "./siembra";
 
 /* ── utilería ───────────────────────────────────────────────────────── */
 
@@ -178,6 +179,9 @@ test("caso: la higiene es la del último control firmado, con el aviso del panel
 
   // El borrador de hoy trae placa 5 %: si saliera, Sabina diría que va bien.
   assert.equal(d.clinico.higiene.placaPct, 45);
+  // Ese control fue a las 18:30 de Ciudad de México: en UTC ya era el día
+  // siguiente. La fecha es la de la clínica.
+  assert.equal(d.clinico.higiene.fecha, sumarDias(HOY_N, -30));
   assert.equal(d.clinico.higiene.gingivitis, "MODERADA");
   assert.equal(d.clinico.higiene.manchasBlancas, true);
   assert.deepEqual(d.clinico.higieneEmpeora, [
@@ -202,6 +206,43 @@ test("caso: alineadores — cuál trae y cuál debería traer hoy", async () => 
   });
   assert.match(r.resumen, /trae el 3 de 20; va 3 atrás de lo esperado \(el 6\)/);
   assert.equal(r.datos.clinico.arco, null, "Dora no tiene arcos: no se inventa uno");
+});
+
+test("caso: alineadores en pausa o terminados — no se dice que «va atrás», el calendario siguió corriendo solo", () => {
+  const datos = (estado: string) =>
+    ({
+      modulo: "activo", sinPaciente: false, paciente: "Dora Sanchez", tieneValoracion: false, omitidas: [],
+      enlace: "/dashboard/patients/p-dora?tab=ortodoncia",
+      caso: { estado: "En curso", mes: 3, de: 12, inicio: null, finEstimado: null },
+      clinico: {
+        fase: null, arco: null, higiene: null, higieneEmpeora: [],
+        alineadores: { sistema: "Invisalign", actual: 3, total: 20, esperado: 9, diferencia: -6, estado },
+      },
+      controles: null, cobranza: null,
+    }) as any;
+  assert.match(ortoCaso.resumir(datos("PAUSED"), { patientId: "p-dora" }), /trae el 3 de 20, en pausa\./);
+  assert.match(ortoCaso.resumir(datos("FINISHED"), { patientId: "p-dora" }), /trae el 3 de 20, terminados\./);
+  assert.doesNotMatch(ortoCaso.resumir(datos("PAUSED"), { patientId: "p-dora" }), /atrás|esperado/);
+  assert.match(ortoCaso.resumir(datos("ACTIVE"), { patientId: "p-dora" }), /va 6 atrás de lo esperado \(el 9\)/);
+});
+
+test("🔴 caso cerrado: «saldado» solo si tuvo plan y lo pagó; sin factura no hay nada que dar por saldado", async () => {
+  const { db } = montar();
+  // Elías terminó y pagó sus tres pagos. La pantalla de Cobranza ya no lo lista.
+  const elias = await ok(ortoCaso, admin(db), { patientId: "p-elias" });
+  assert.equal(elias.datos.caso.estado, "Completado");
+  assert.deepEqual(
+    [elias.datos.cobranza.situacion, elias.datos.cobranza.cuotasPagadas, elias.datos.cobranza.cuotasTotales, elias.datos.cobranza.porCobrar],
+    ["saldado", 3, 3, 0],
+  );
+  assert.match(elias.resumen, /saldado; 3 de 3 pagos hechos/);
+
+  // Iván abandonó y nunca tuvo factura: decir «saldado» sería inventar un plan.
+  const ivan = await ok(ortoCaso, admin(db), { patientId: "p-inact-2" });
+  assert.equal(ivan.datos.caso.estado, "Abandono");
+  assert.equal(ivan.datos.cobranza.situacion, "sin-plan");
+  assert.match(ivan.resumen, /Mensualidades: no tiene plan de pagos\./);
+  assert.doesNotMatch(ivan.resumen, /saldado|0 de 0/);
 });
 
 test("caso: último y próximo control salen de la agenda; quien se pasó, con los días", async () => {
@@ -274,6 +315,9 @@ test("🔴 controles de hoy y de la semana: los mismos que pinta la pantalla de 
   ].map((c) => c.patientName);
   assert.deepEqual(semana.datos.controles.filas.map((f: any) => f.paciente), deLaPantalla);
   assert.ok(deLaPantalla.includes("Carla Gomez"), "el control de Carla en tres días entra en la semana");
+  // El total de la semana es el de la pantalla, no una cuenta sobre la lista (que se recorta a 50).
+  assert.equal(semana.datos.proximos, pantallaControles.semana.totalProximos);
+  assert.match(semana.resumen, /en los siete días siguientes, 1 control[;.(]/);
   assert.ok(!hoy.datos.controles.filas.some((f: any) => f.paciente === "Carla Gomez"));
   assert.ok(semana.resumen.includes(`(${ENLACES_ORTO.controles})`));
 });
@@ -306,14 +350,16 @@ test("casos activos y terminados: el T1 del Tablero, y el desglose por estado", 
   assert.equal(r.datos.casos.activos, tablero.activeCasesCount);
   assert.deepEqual(
     [r.datos.casos.activos, r.datos.casos.terminados, r.datos.casos.abandonaron, r.datos.casos.total],
-    [5, 1, 0, 6],
+    [5, 1, 1, 7],
   );
   assert.deepEqual(r.datos.casos.porEstado, [
     { estado: "En curso", casos: 4 },
     { estado: "Retención", casos: 1 },
     { estado: "Completado", casos: 1 },
+    { estado: "Abandono", casos: 1 },
   ]);
-  assert.match(r.resumen, /5 casos activos de ortodoncia, 1 terminado/);
+  assert.match(r.resumen, /5 casos activos de ortodoncia, 1 terminado y 1 en abandono/);
+  assert.match(r.resumen, /\(4 en curso, 1 en retención, 1 completado, 1 en abandono\)/);
   assert.ok(r.resumen.includes(`(${ENLACES_ORTO.pacientes})`));
 });
 
@@ -359,6 +405,11 @@ test("🔴 cuánto entra este mes: las cifras del Tablero, cada una con su nombr
 
   assert.equal(m.mes, tablero.monthlyProjection[0].monthKey);
   assert.equal(m.porVencerEnElMes, tablero.monthlyProjection[0].amountMxn);
+  // Lo cobrado: las barras de «Producción del mes», una por doctor, y su suma.
+  assert.deepEqual(
+    m.cobradoPorDoctor,
+    tablero.productionByDoctor.map((p) => ({ doctor: p.doctorName, importe: p.amountMxn })),
+  );
   assert.equal(m.cobradoEnElMes, tablero.productionByDoctor.reduce((s, p) => s + p.amountMxn, 0));
   assert.deepEqual(m.vencido, { casos: tablero.overdue.count, importe: tablero.overdue.amountMxn });
   assert.deepEqual(m.mesSiguiente, {
@@ -379,7 +430,7 @@ test("🔴 cuánto entra este mes: las cifras del Tablero, cada una con su nombr
 test("🔴 solo lectura: todas las preguntas del encargo, contra una base que revienta si alguien escribe", async () => {
   const { db, escrituras } = montar();
   for (const p of PREGUNTAS) await ok(p.tool, admin(db), p.params);
-  for (const patientId of ["p-dora", "p-beto", "p-carla", "p-elias", "p-priv", "p-inact-3"]) {
+  for (const patientId of ["p-dora", "p-beto", "p-carla", "p-elias", "p-priv", "p-inact-2", "p-inact-3"]) {
     await ok(ortoCaso, admin(db), { patientId });
   }
   assert.deepEqual(escrituras, [], `hubo escrituras: ${escrituras.join(", ")}`);
@@ -476,6 +527,12 @@ test("🔴 recepción: el caso SIN lo clínico, diciéndolo — y lo clínico ni
   for (const clinico of ["orthoWireStep.findMany", "orthoTreatmentCard.findMany", "orthodonticAligner.findFirst"]) {
     assert.ok(!leidos(db).includes(clinico), `recepción hizo leer ${clinico}`);
   }
+
+  // Que tenga una valoración registrada también es expediente.
+  const valorada = await ok(ortoCaso, recepcion(db), { patientId: "p-inact-3" });
+  assert.equal(valorada.datos.tieneValoracion, false);
+  assert.doesNotMatch(todo(valorada), /valoración/i);
+  assert.match(valorada.resumen, /no tiene un caso de ortodoncia abierto/);
 
   // Los alineadores de Dora también son clínicos.
   const dora = await ok(ortoCaso, recepcion(db), { patientId: "p-dora" });
