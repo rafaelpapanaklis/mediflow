@@ -133,29 +133,21 @@ export interface HeroCardProps {
   } | null;
 }
 
-function fmtShortDate(iso: string): string {
-  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" })
-    .format(new Date(iso))
-    .replace(/\./g, "");
-}
-
 /**
  * La fecha de una cita, en el día que es.
  *
- * `fmtShortDate` recibe un día suelto («2026-09-24») y `new Date()` lo lee
- * como medianoche EN GREENWICH; pintado en la hora de México sale el día
- * anterior. Está fotografiado: la cabecera dice «8 oct» y la línea de tiempo
- * de Historia clínica, «9 oct», de la misma cita y en la misma pantalla.
+ * La cabecera recibe un día suelto («2026-09-24»). Con `new Date()` a secas
+ * se leía como medianoche EN GREENWICH y, pintado en la hora de México, salía
+ * el día anterior: la cabecera decía «8 oct» y la línea de tiempo de Historia
+ * clínica, «9 oct», de la misma cita y en la misma pantalla.
  *
- * Con el rediseño encendido ese defecto se vería aún peor, porque la tarjeta
- * «Tratamiento activo» del Resumen nuevo SÍ pinta el día correcto y quedaría
- * contradiciendo a la cabecera dos centímetros más arriba. Así que con la
- * bandera se pinta bien; sin ella, exactamente lo de hoy — arreglarlo para
- * todo el mundo toca `formatDate` de `src/lib/utils.ts`, que usa medio panel,
- * y eso es otra tarea.
+ * Antes solo se pintaba bien con el rediseño encendido. Desde ws1-t4 ronda 6
+ * (`formatDate` de `src/lib/utils.ts` ya trata el día suelto como día de
+ * calendario) se pinta bien SIEMPRE, con `fechaCorta`, que parte el texto a
+ * mano. El formato no cambia: «9 oct».
  */
-function fechaCabecera(iso: string, rediseno: boolean): string {
-  return rediseno ? fechaCorta(iso) : fmtShortDate(iso);
+function fechaCabecera(iso: string, _rediseno: boolean): string {
+  return fechaCorta(iso);
 }
 
 function patientInitials(first: string, last: string): string {

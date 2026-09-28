@@ -5,7 +5,17 @@ import { Calendar, FileText, CreditCard, Image, FileCheck, User, Phone, MapPin, 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("es-MX", { style:"currency", currency:"MXN", maximumFractionDigits:0 }).format(n);
 }
+// Una fecha SIN hora («2026-09-28», así llegan las citas) es un día del
+// calendario: `new Date()` la lee como medianoche UTC y en México se pintaba
+// el día anterior. Se arma con sus partes y se pinta en UTC. Lo que trae hora
+// sigue igual.
+const FECHA_SIN_HORA = /^(\d{4})-(\d{2})-(\d{2})$/;
 function formatDate(s: string) {
+  const partes = typeof s === "string" ? FECHA_SIN_HORA.exec(s) : null;
+  if (partes) {
+    return new Date(Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3])))
+      .toLocaleDateString("es-MX", { day:"numeric", month:"long", year:"numeric", timeZone:"UTC" });
+  }
   return new Date(s).toLocaleDateString("es-MX", { day:"numeric", month:"long", year:"numeric" });
 }
 
