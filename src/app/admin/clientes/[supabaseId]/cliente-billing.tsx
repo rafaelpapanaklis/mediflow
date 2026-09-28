@@ -18,6 +18,7 @@ import { formatCurrency } from "@/lib/utils";
 import { daysUntil } from "@/lib/plan-status";
 import { fechaAdmin } from "@/lib/admin/zona-horaria";
 import { computeMrr, mrrBreakdownHint, type AdminMrr } from "@/lib/admin/mrr-core";
+import { AVISO_MRR_SIN_MODULOS, desgloseMrr } from "../cartera";
 import { PLAN_IDS } from "@/lib/billing/plans";
 import type { ClienteDetalle, ClienteClinica, ClienteInvoice } from "@/lib/admin/clientes";
 import css from "./ficha.module.css";
@@ -126,6 +127,8 @@ async function postJson(url: string, body: any): Promise<any> {
 export function ClienteBilling({
   cliente,
   mrr,
+  mrrModulos = 0,
+  modulosMedidos = true,
   planPrices,
   ahora,
   stripeConfigured,
@@ -139,6 +142,10 @@ export function ClienteBilling({
    * negociado.
    */
   mrr: AdminMrr;
+  /** Lo que sus clínicas vigentes pagan al mes por módulos (../cartera). Se suma a `mrr.total`. */
+  mrrModulos?: number;
+  /** `false` = no se pudo leer clinic_modules: el MRR va sólo con planes y se avisa. */
+  modulosMedidos?: boolean;
   /** Precios de lista de plan_configs. Ni un número escrito a mano aquí. */
   planPrices: Record<string, number>;
   ahora: Date;
@@ -325,9 +332,15 @@ export function ClienteBilling({
             de subida y "MRR $2,408 ↗ 2 PRO" se lee como que el MRR creció. */}
         <KpiCard
           label="MRR"
-          value={formatCurrency(mrr.total, "MXN")}
+          value={formatCurrency(Math.round((mrr.total + mrrModulos) * 100) / 100, "MXN")}
           icon={DollarSign}
-          hint={mrr.total > 0 ? mrrBreakdownHint(mrr) : undefined}
+          hint={
+            !modulosMedidos
+              ? AVISO_MRR_SIN_MODULOS
+              : mrrModulos > 0
+                ? desgloseMrr(mrr.total, mrrModulos)
+                : mrr.total > 0 ? mrrBreakdownHint(mrr) : undefined
+          }
         />
         <KpiCard
           label="Cobros pendientes"

@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import {
   suscripcionesConBajaProgramada,
+  whereBitacoraBajas,
   type FilaModulo,
 } from "./modulos-core";
 
@@ -32,10 +33,14 @@ export async function loadBajasProgramadas(stripeSubscriptionIds: string[]): Pro
   const ids = Array.from(new Set(stripeSubscriptionIds.filter(Boolean)));
   if (ids.length === 0) return new Set();
   try {
+    // Sin `take`: antes se leían las últimas 500 filas de TODA la bitácora de
+    // estas suscripciones y, con mucho movimiento, la marca de la baja se caía
+    // del corte (salía «Activo»). Ahora sólo se piden las filas de pedir o
+    // deshacer la baja, y de ésas la más reciente de cada suscripción.
     const bitacora = await prisma.auditLog.findMany({
-      where: { entityType: "subscription", entityId: { in: ids } },
+      where: whereBitacoraBajas(ids),
       orderBy: { createdAt: "desc" },
-      take: 500,
+      distinct: ["entityId"],
       select: { entityId: true, createdAt: true, changes: true },
     });
     return suscripcionesConBajaProgramada(bitacora);

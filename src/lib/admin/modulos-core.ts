@@ -309,6 +309,28 @@ export function planDeEncendido(
 export const ACCION_BAJA_PROGRAMADA = "cancel_at_period_end";
 export const ACCION_BAJA_DESHECHA = "resume";
 
+/** Dónde deja la acción cada ruta dentro de `audit_logs.changes`. */
+export const RUTA_ACCION_BITACORA = ["_source", "after", "action"] as const;
+
+/**
+ * El filtro de la bitácora para `loadBajasProgramadas`: SOLO las filas de
+ * pedir o deshacer la baja de estas suscripciones. Sin este filtro (y con un
+ * `take`) las demás filas de una suscripción con mucho movimiento empujaban
+ * fuera las marcas viejas de `cancel_at_period_end` y /admin enseñaba
+ * «Activo» en vez de «Baja programada». Va sin tope: con el filtro, cada
+ * suscripción deja pocas filas, y con `distinct` por `entityId` (ordenado del
+ * más reciente al más viejo) sale una por suscripción.
+ */
+export function whereBitacoraBajas(stripeSubscriptionIds: string[]) {
+  return {
+    entityType: "subscription",
+    entityId: { in: stripeSubscriptionIds },
+    OR: [ACCION_BAJA_PROGRAMADA, ACCION_BAJA_DESHECHA].map((accion) => ({
+      changes: { path: [...RUTA_ACCION_BITACORA], equals: accion },
+    })),
+  };
+}
+
 export interface FilaBitacoraSuscripcion {
   /** `entityId` de la fila: el id de la suscripción de Stripe. */
   entityId: string;

@@ -21,10 +21,14 @@ import {
   estadoDeCartera,
   repartirIngresos,
   ETIQUETA_ESTADO_CLIENTE,
+  mrrModulosPorClinica,
+  conMrrModulos,
+  desgloseMrr,
   type ClienteCrudo,
   type ClinicaDeCliente,
 } from "./cartera";
 import { DIAS_APAGADA } from "@/lib/admin/salud-clinica";
+import { computeMrrModulos, type FilaModulo } from "@/lib/admin/modulos-core";
 
 /** El "hoy" de todas las pruebas. */
 const AHORA = new Date("2026-09-20T12:00:00.000Z");
@@ -484,4 +488,111 @@ test("el MRR del cliente y de cada clínica usa el precio CONSERVADO, no el de l
 test("un precio negociado sigue mandando sobre el conservado", () => {
   const c = clinica({ plan: "CLINIC", monthlyPrice: 450, planOverrideFor: "CLINIC", priceMxnMonthlyOverride: 500 });
   assert.equal(valorarCliente(cliente([c]), PRECIOS, AHORA).mrr.total, 450);
+});
+
+
+// ── Módulos: lo que cada clínica paga aparte del plan ─────────────────────
+
+function modulo(over: Partial<FilaModulo> = {}): FilaModulo {
+  return {
+    clinicId: "c1",
+    moduleKey: "orthodontics",
+    moduleName: "Ortodoncia",
+    status: "active",
+    paymentMethod: "card",
+    billingCycle: "monthly",
+    pricePaidMxn: 129,
+    currentPeriodEnd: enDias(20),
+    tieneSuscripcionStripe: true,
+    ...over,
+  };
+}
+
+test("módulos: por clínica con EL cálculo compartido (anual/12, cortesía y vencido valen 0)", () => {
+  const filas = [
+    modulo({ clinicId: "c1", pricePaidMxn: 129 }),
+    modulo({ clinicId: "c1", moduleKey: "perio", moduleName: "Periodoncia", billingCycle: "annual", pricePaidMxn: 1200 }),
+    modulo({ clinicId: "c2", paymentMethod: "admin", pricePaidMxn: 500 }),     // cortesía
+    modulo({ clinicId: "c3", currentPeriodEnd: haceDias(1) }),                 // vencido
+    modulo({ clinicId: "c4", status: "paused" }),                               // cobro fallido
+  ];
+  const m = mrrModulosPorClinica(filas, AHORA);
+  assert.equal(m.get("c1"), 129 + 100);
+  assert.equal(m.has("c2"), false, "una cortesía no aporta");
+  assert.equal(m.has("c3"), false);
+  assert.equal(m.has("c4"), false);
+  // Y cuadra con el total global que usan la portada y /admin/payments.
+  let suma = 0;
+  m.forEach((v) => { suma += v; });
+  assert.equal(suma, computeMrrModulos(filas, AHORA).total);
+});
+
+test("módulos: el MRR del cliente suma planes + módulos de sus clínicas vigentes", () => {
+  const crudo = conMrrModulos(
+    [cliente([clinica({ id: "a" }), clinica({ id: "b", plan: "BASIC" })])],
+    new Map([["a", 129], ["b", 50.5]]),
+  )[0];
+  const fila = valorarCliente(crudo, PRECIOS, AHORA);
+  assert.equal(fila.mrr.total, PRECIOS.PRO + PRECIOS.BASIC, "mrr sigue siendo sólo planes");
+  assert.equal(fila.mrrModulos, 179.5);
+  assert.equal(fila.mrrTotal, PRECIOS.PRO + PRECIOS.BASIC + 179.5);
+  assert.equal(fila.vigentes.find((v) => v.clinica.id === "a")!.mrrModulos, 129);
+});
+
+test("módulos: una clínica archivada no suma sus módulos (mismo universo que los planes)", () => {
+  const fila = valorarCliente(
+    cliente([clinica({ id: "a", mrrModulos: 129 }), clinica({ id: "z", archivada: true, mrrModulos: 999 })]),
+    PRECIOS,
+    AHORA,
+  );
+  assert.equal(fila.mrrModulos, 129);
+  assert.equal(fila.mrrTotal, PRECIOS.PRO + 129);
+});
+
+test("módulos: suman aunque el plan no cobre (trial o sede incluida)", () => {
+  // El módulo se paga aparte: no depende del estado del plan, igual que en la portada.
+  const fila = valorarCliente(
+    cliente([
+      clinica({ id: "t", subscriptionStatus: "trialing", mrrModulos: 129 }),
+      clinica({ id: "s", sedeIncluida: true, mrrModulos: 60 }),
+    ]),
+    PRECIOS,
+    AHORA,
+  );
+  assert.equal(fila.mrr.total, 0);
+  assert.equal(fila.mrrModulos, 189);
+  assert.equal(fila.mrrTotal, 189);
+});
+
+test("módulos: sin el campo (o con basura) aporta 0 y nada cambia", () => {
+  const fila = valorarCliente(cliente([clinica({ mrrModulos: Number.NaN }), clinica({ id: "c9" })]), PRECIOS, AHORA);
+  assert.equal(fila.mrrModulos, 0);
+  assert.equal(fila.mrrTotal, fila.mrr.total);
+});
+
+test("módulos: el resumen de la cartera desglosa planes y módulos", () => {
+  const filas = valorarClientes(
+    [
+      cliente([clinica({ id: "a", mrrModulos: 129 })], { supabaseId: "s1" }),
+      cliente([clinica({ id: "b", plan: "CLINIC" })], { supabaseId: "s2" }),
+    ],
+    PRECIOS,
+    AHORA,
+  );
+  const r = resumirClientes(filas);
+  assert.equal(r.mrrPlanes, PRECIOS.PRO + PRECIOS.CLINIC);
+  assert.equal(r.mrrModulos, 129);
+  assert.equal(r.mrrTotal, r.mrrPlanes + r.mrrModulos);
+});
+
+test("módulos: conMrrModulos no muta la entrada y pone 0 a quien no paga", () => {
+  const original = cliente([clinica({ id: "a" }), clinica({ id: "b" })]);
+  const [copia] = conMrrModulos([original], new Map([["a", 129]]));
+  assert.equal(original.clinicas[0].mrrModulos, undefined);
+  assert.deepEqual(copia.clinicas.map((c) => c.mrrModulos), [129, 0]);
+});
+
+test("módulos: el desglose se lee «planes $X · módulos $Y»", () => {
+  assert.equal(desgloseMrr(1899, 129), "planes $1,899 · módulos $129");
+  assert.equal(desgloseMrr(0, 0), "planes $0 · módulos $0");
 });

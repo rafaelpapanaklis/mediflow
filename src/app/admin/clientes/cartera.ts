@@ -15,6 +15,8 @@
  *     riesgos, si es una cuenta de prueba;
  *   • el DINERO lo da `computeMrr` (@/lib/admin/mrr-core) — solo clínicas
  *     `active`, precios de `plan_configs` y el precio negociado manda;
+ *   • lo que paga por MÓDULOS lo da `computeMrrModulos` (@/lib/admin/modulos-core),
+ *     el mismo cálculo que la portada, /admin/payments y /admin/reports;
  *   • el CUPO de pacientes lo agrega `aggregatePatientQuotas`.
  *
  * Lo único que se decide en este archivo es cómo se SUMAN esas piezas cuando
@@ -43,6 +45,7 @@ import {
   aggregatePatientQuotas,
   type PatientQuota,
 } from "@/lib/patient-quota-shared";
+import { computeMrrModulos, type FilaModulo } from "@/lib/admin/modulos-core";
 import { cortesAdmin, diaAdmin, LOCALE_ADMIN, ZONA_ADMIN } from "@/lib/admin/zona-horaria";
 import type { UsoClinica } from "@/lib/admin/uso-core";
 
@@ -94,6 +97,12 @@ export interface ClinicaDeCliente {
   sedeIncluida?: boolean;
   /** Consumo y cupos (@/lib/admin/uso-clinica). Ausente = no se midió. */
   uso?: UsoClinica;
+  /**
+   * Lo que esta clínica paga al mes por MÓDULOS (`mrrModulosPorClinica`, sobre
+   * `clinic_modules`). Ausente = 0 (sin módulos pagados, o no se pudieron leer:
+   * eso lo dice `modulosMedidos` en la carga, no este campo).
+   */
+  mrrModulos?: number;
   /** Para «cómo paga» (@/lib/admin/uso-core.metodoDePago). Ausentes = no se cargaron. */
   paymentMethodType?: string | null;
   paymentMethodLast4?: string | null;
@@ -153,8 +162,10 @@ export interface RiesgoDeCliente {
 export interface ClinicaValorada {
   clinica: ClinicaDeCliente;
   salud: SaludClinica;
-  /** Lo que ESTA clínica aporta al MRR del cliente (0 si no está `active`). */
+  /** Lo que ESTA clínica aporta al MRR de PLANES del cliente (0 si no está `active`). */
   mrr: number;
+  /** Lo que ESTA clínica paga al mes por módulos. Se suma aparte de `mrr`. */
+  mrrModulos: number;
 }
 
 /**
@@ -186,8 +197,12 @@ export interface FilaCliente {
   /** Los totales de su cartera, contados con la misma regla que /admin/clinics. */
   resumen: ResumenCartera;
   estado: EstadoCliente;
-  /** Desglose del MRR del cliente por plan. `mrr.total` es lo que cobra al mes. */
+  /** Desglose del MRR de PLANES del cliente. `mrr.total` NO incluye módulos. */
   mrr: AdminMrr;
+  /** Lo que sus clínicas vigentes pagan al mes por módulos. */
+  mrrModulos: number;
+  /** Lo que cobra al mes de verdad: planes (`mrr.total`) + módulos. */
+  mrrTotal: number;
   /** Todo lo que hay que atender, de lo más grave a lo menos. */
   riesgos: RiesgoDeCliente[];
   /** La severidad del riesgo que encabeza la fila. null = nada que atender. */
@@ -344,6 +359,7 @@ export function valorarCliente(
       [clinica].filter((c) => c.subscriptionStatus === "active").map(aFilaMrr),
       planPrices,
     ).total,
+    mrrModulos: aporteModulos(clinica),
   }));
 
   const vigentes   = valoradas.filter((v) => !v.clinica.archivada);
@@ -356,6 +372,10 @@ export function valorarCliente(
     vigentes.filter((v) => v.clinica.subscriptionStatus === "active").map((v) => aFilaMrr(v.clinica)),
     planPrices,
   );
+
+  // Mismo universo que el de planes: sólo las vigentes (no archivadas). Un
+  // módulo no depende del estado del plan, igual que en la portada.
+  const mrrModulos = redondear(vigentes.reduce((s, v) => s + v.mrrModulos, 0));
 
   const riesgos: RiesgoDeCliente[] = [];
   for (const v of vigentes) {
@@ -409,6 +429,8 @@ export function valorarCliente(
     resumen,
     estado: estadoDeCartera(saludes),
     mrr,
+    mrrModulos,
+    mrrTotal: redondear(mrr.total + mrrModulos),
     riesgos,
     severidadMaxima: riesgos.length ? riesgos[0].riesgo.severidad : null,
     prioridad: prioridadDeCliente(saludes),
@@ -423,6 +445,53 @@ export function valorarCliente(
     proximaRenovacionAt,
   };
 }
+
+const redondear = (n: number) => Math.round(n * 100) / 100;
+
+function aporteModulos(c: ClinicaDeCliente): number {
+  const n = Number(c.mrrModulos ?? 0);
+  return Number.isFinite(n) && n > 0 ? redondear(n) : 0;
+}
+
+// ── Módulos ────────────────────────────────────────────────────────────────
+
+/**
+ * Lo que cada clínica paga al mes por módulos, con EL cálculo compartido
+ * (`computeMrrModulos`): cortesías, cobros fallidos y vencidos valen 0, y el
+ * anual se reparte entre 12. Sólo salen las clínicas que aportan algo.
+ */
+export function mrrModulosPorClinica(filas: FilaModulo[], ahora: Date): Map<string, number> {
+  const porClinica = new Map<string, FilaModulo[]>();
+  for (const f of filas) {
+    const lista = porClinica.get(f.clinicId);
+    if (lista) lista.push(f);
+    else porClinica.set(f.clinicId, [f]);
+  }
+  const out = new Map<string, number>();
+  porClinica.forEach((lista, clinicId) => {
+    const total = computeMrrModulos(lista, ahora).total;
+    if (total > 0) out.set(clinicId, total);
+  });
+  return out;
+}
+
+/** Le pone a cada clínica lo que paga por módulos. No muta: devuelve copias. */
+export function conMrrModulos(clientes: ClienteCrudo[], porClinica: ReadonlyMap<string, number>): ClienteCrudo[] {
+  return clientes.map((c) => ({
+    ...c,
+    clinicas: c.clinicas.map((cl) => ({ ...cl, mrrModulos: porClinica.get(cl.id) ?? 0 })),
+  }));
+}
+
+const pesos = (n: number) => `$${Math.round(n).toLocaleString("es-MX")}`;
+
+/** «planes $1,899 · módulos $500» — el desglose que va debajo de un MRR. */
+export function desgloseMrr(planes: number, modulos: number): string {
+  return `planes ${pesos(planes)} · módulos ${pesos(modulos)}`;
+}
+
+/** Aviso cuando la lectura de módulos falló: la cifra va sólo con planes. */
+export const AVISO_MRR_SIN_MODULOS = "MRR sin módulos: no se pudieron leer";
 
 const PESO: Record<Severidad, number> = { critico: 300, alto: 200, medio: 100 };
 
@@ -463,13 +532,18 @@ export interface ResumenClientes {
   /** Clientes con alguien trabajando en el panel ahora mismo. */
   enLinea: number;
   /**
-   * MRR sumado de los clientes de la lista. Los PRECIOS y la regla de qué
+   * MRR sumado de los clientes de la lista: planes + módulos (`mrrPlanes` +
+   * `mrrModulos`). Los PRECIOS y la regla de qué
    * clínica cobra son los mismos que en /admin/clinics (computeMrr sobre las
    * `active`), pero el UNIVERSO no: aquí sólo entran las clínicas que tienen
    * una cuenta dueña activa, y allí entra toda clínica no archivada. Una
    * clínica cuyo dueño quedó `isActive: false` suma allá y no aquí.
    */
   mrrTotal: number;
+  /** De `mrrTotal`, lo que viene de planes. */
+  mrrPlanes: number;
+  /** De `mrrTotal`, lo que viene de módulos (mismo universo: clínicas vigentes). */
+  mrrModulos: number;
   /**
    * Sedes activas que NO suman a `mrrTotal` porque van incluidas en el plan de
    * su clínica madre. Mismo universo que `mrrTotal` (todas las filas).
@@ -508,7 +582,9 @@ export function resumirClientes(filas: FilaCliente[]): ResumenClientes {
     // cliente» de la pantalla divide este total (todas las filas) entre
     // `reales` (sólo las que no son prueba). Con una cuenta de prueba que
     // aporte dinero, el promedio sale alto.
-    mrrTotal: filas.reduce((s, f) => s + f.mrr.total, 0),
+    mrrTotal: redondear(filas.reduce((s, f) => s + f.mrrTotal, 0)),
+    mrrPlanes: redondear(filas.reduce((s, f) => s + f.mrr.total, 0)),
+    mrrModulos: redondear(filas.reduce((s, f) => s + f.mrrModulos, 0)),
     sedesIncluidas: filas.reduce((s, f) => s + f.mrr.includedBranches, 0),
     clinicas: reales.reduce((s, f) => s + f.vigentes.length, 0),
   };

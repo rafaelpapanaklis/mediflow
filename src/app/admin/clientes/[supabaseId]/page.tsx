@@ -26,7 +26,7 @@ export default async function AdminClienteDetallePage({ params }: { params: { su
   const cliente = await getClienteDetalle(params.supabaseId);
   if (!cliente) notFound();
 
-  const { cliente: cartera, planPrices, ahoraISO, ingresos, soloComoUsuario } =
+  const { cliente: cartera, planPrices, ahoraISO, ingresos, soloComoUsuario, modulosMedidos } =
     await cargarCliente(params.supabaseId);
   if (!cartera) notFound();
 
@@ -38,6 +38,7 @@ export default async function AdminClienteDetallePage({ params }: { params: { su
       ahoraISO={ahoraISO}
       ingresos={ingresos}
       soloComoUsuario={soloComoUsuario}
+      modulosMedidos={modulosMedidos}
       stripeConfigured={isStripeConfigured()}
       stripeInstructions={STRIPE_SETUP_INSTRUCTIONS}
     />

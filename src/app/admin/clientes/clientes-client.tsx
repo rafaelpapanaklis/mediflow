@@ -35,6 +35,8 @@ import {
   resumirClientes,
   ordenarPorAtencionCliente,
   ETIQUETA_ESTADO_CLIENTE,
+  AVISO_MRR_SIN_MODULOS,
+  desgloseMrr,
   type ClienteCrudo,
   type ClinicaValorada,
   type EstadoCliente,
@@ -48,6 +50,8 @@ interface Props {
   planPrices: Record<string, number>;
   /** El "ahora" del servidor: así SSR e hidratación cuentan los mismos días. */
   ahoraISO: string;
+  /** `false` = no se pudo leer clinic_modules: el MRR va sólo con planes y se avisa. */
+  modulosMedidos?: boolean;
 }
 
 type ClaveFiltro =
@@ -130,7 +134,7 @@ function usoPeorSede(vigentes: ClinicaValorada[]) {
   return { disco, ia, varias: vigentes.length > 1 };
 }
 
-export function ClientesClient({ clientes, planPrices, ahoraISO }: Props) {
+export function ClientesClient({ clientes, planPrices, ahoraISO, modulosMedidos = true }: Props) {
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState<ClaveFiltro>("todos");
   const [orden, setOrden]   = useState<ClaveOrden>("compra");
@@ -205,7 +209,7 @@ export function ClientesClient({ clientes, planPrices, ahoraISO }: Props) {
     const valor = (f: FilaCliente): number | string => {
       switch (orden) {
         case "nombre":    return f.nombre.toLowerCase();
-        case "mrr":       return f.mrr.total;
+        case "mrr":       return f.mrrTotal;
         case "actividad": return f.tendencia.actual.total;
         case "pacientes": return f.cupo.used;
         case "alta":      return f.altaAt.getTime();
@@ -229,7 +233,7 @@ export function ClientesClient({ clientes, planPrices, ahoraISO }: Props) {
         return String(va).localeCompare(String(vb), "es") * signo;
       }
       // Empate en prioridad (lo normal: casi todos a 0): manda el dinero.
-      if (va === vb) return (a.mrr.total - b.mrr.total) * signo;
+      if (va === vb) return (a.mrrTotal - b.mrrTotal) * signo;
       return (va - vb) * signo;
     });
   }, [filas, search, filtro, orden, desc]);
@@ -274,6 +278,9 @@ export function ClientesClient({ clientes, planPrices, ahoraISO }: Props) {
           <div className={css.cifraPie}>
             {resumen.reales > 0 ? `${formatCurrency(Math.round(resumen.mrrTotal / resumen.reales), "MXN")} por cliente` : "sin clientes"}
             {resumen.sedesIncluidas > 0 && ` · ${includedBranchesHint(resumen.sedesIncluidas)}`}
+          </div>
+          <div className={css.cifraPie}>
+            {modulosMedidos ? desgloseMrr(resumen.mrrPlanes, resumen.mrrModulos) : AVISO_MRR_SIN_MODULOS}
           </div>
           {/* A QUIÉN cuenta. Mismos precios (plan_configs) y misma regla de
               cobro que /admin/clinics; lo que cambia es QUIÉN entra. */}
@@ -342,7 +349,7 @@ export function ClientesClient({ clientes, planPrices, ahoraISO }: Props) {
                         {primero.clinicaNombre}{f.riesgos.length > 1 ? ` +${f.riesgos.length - 1}` : ""}
                       </span>
                     </span>
-                    <span className="ad-pend__dato ad-num">{formatCurrency(f.mrr.total, "MXN")}/mes</span>
+                    <span className="ad-pend__dato ad-num">{formatCurrency(f.mrrTotal, "MXN")}/mes</span>
                   </Link>
                 </li>
               );
@@ -512,10 +519,12 @@ function FilaTabla({ fila, ahora }: { fila: FilaCliente; ahora: Date }) {
 
       <td data-col="MRR" className="ad-der">
         <div className={css.celda} style={{ alignItems: "flex-end" }}>
-          <span className={`ad-fuerte ${css.num}`} style={{ fontSize: 14, color: fila.mrr.total === 0 ? "var(--text-3)" : undefined }}>
-            {formatCurrency(fila.mrr.total, "MXN")}
+          <span className={`ad-fuerte ${css.num}`} style={{ fontSize: 14, color: fila.mrrTotal === 0 ? "var(--text-3)" : undefined }}>
+            {formatCurrency(fila.mrrTotal, "MXN")}
           </span>
-          <span className={`${css.meta} ${css.num}`}>{fila.mrr.total > 0 ? mrrBreakdownHint(fila.mrr) : "no cobra"}</span>
+          <span className={`${css.meta} ${css.num}`}>
+            {fila.mrrTotal === 0 ? "no cobra" : fila.mrrModulos > 0 ? desgloseMrr(fila.mrr.total, fila.mrrModulos) : mrrBreakdownHint(fila.mrr)}
+          </span>
         </div>
       </td>
 

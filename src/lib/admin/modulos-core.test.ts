@@ -6,6 +6,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   aporteMensualModulo,
   computeMrrModulos,
@@ -17,6 +19,10 @@ import {
   planDeEncendido,
   resumenMrrModulos,
   suscripcionesConBajaProgramada,
+  whereBitacoraBajas,
+  RUTA_ACCION_BITACORA,
+  ACCION_BAJA_PROGRAMADA,
+  ACCION_BAJA_DESHECHA,
   type FilaModulo,
 } from "./modulos-core";
 
@@ -211,4 +217,58 @@ test("bitácora: manda la última acción de cada suscripción", () => {
     { entityId: "sub_4", createdAt: "2026-09-05T10:00:00Z", changes: null },
   ]);
   assert.deepEqual(Array.from(set).sort(), ["sub_1", "sub_3"]);
+});
+
+test("bitácora: el filtro pide SOLO las filas de pedir/deshacer la baja, en la ruta que se lee", () => {
+  const w = whereBitacoraBajas(["sub_1", "sub_2"]);
+  assert.equal(w.entityType, "subscription");
+  assert.deepEqual(w.entityId, { in: ["sub_1", "sub_2"] });
+  assert.deepEqual(
+    w.OR.map((o) => o.changes.equals).sort(),
+    [ACCION_BAJA_DESHECHA, ACCION_BAJA_PROGRAMADA].sort(),
+  );
+  // La ruta del filtro es la misma que lee suscripcionesConBajaProgramada: una
+  // fila armada siguiendo la ruta tiene que contar como baja.
+  for (const o of w.OR) assert.deepEqual(o.changes.path, [...RUTA_ACCION_BITACORA]);
+  const changes: Record<string, unknown> = {};
+  let nodo = changes;
+  RUTA_ACCION_BITACORA.forEach((k, i) => {
+    if (i === RUTA_ACCION_BITACORA.length - 1) nodo[k] = ACCION_BAJA_PROGRAMADA;
+    else nodo = (nodo[k] = {}) as Record<string, unknown>;
+  });
+  assert.deepEqual(
+    Array.from(suscripcionesConBajaProgramada([{ entityId: "sub_1", createdAt: "2026-01-01T00:00:00Z", changes }])),
+    ["sub_1"],
+  );
+});
+
+test("bitácora: la baja vieja no se cae aunque la suscripción tenga cientos de filas más nuevas", () => {
+  // Lo que pasaba con `take: 500`: 600 renovaciones del webhook más nuevas que
+  // el pedido de baja empujaban la marca fuera del corte.
+  const filas = [
+    { entityId: "sub_1", createdAt: "2026-01-01T00:00:00Z", changes: { _source: { before: null, after: { action: "cancel_at_period_end" } } } },
+    ...Array.from({ length: 600 }, (_, i) => ({
+      entityId: "sub_1",
+      createdAt: new Date(Date.UTC(2026, 1, 1) + i * 60_000).toISOString(),
+      changes: { _source: { before: null, after: { event: "customer.subscription.updated" } } },
+    })),
+  ];
+  const cortadas = filas.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 500);
+  assert.equal(suscripcionesConBajaProgramada(cortadas).size, 0, "así fallaba con el tope");
+  // Con el filtro de acción sólo queda la fila que importa.
+  const soloBajas = filas.filter((f) => {
+    const a = (f.changes._source.after as { action?: string }).action;
+    return a === ACCION_BAJA_PROGRAMADA || a === ACCION_BAJA_DESHECHA;
+  });
+  assert.deepEqual(Array.from(suscripcionesConBajaProgramada(soloBajas)), ["sub_1"]);
+});
+
+test("bitácora: loadBajasProgramadas no vuelve a cortar con un `take`", () => {
+  const fuente = readFileSync(join(__dirname, "modulos.ts"), "utf8");
+  const i = fuente.indexOf("export async function loadBajasProgramadas");
+  const cuerpo = fuente.slice(i, fuente.indexOf("\n}\n", i));
+  assert.notEqual(i, -1);
+  assert.doesNotMatch(cuerpo, /\btake:/, "un tope vuelve a esconder bajas viejas");
+  assert.match(cuerpo, /whereBitacoraBajas\(/);
+  assert.match(cuerpo, /distinct: \["entityId"\]/);
 });

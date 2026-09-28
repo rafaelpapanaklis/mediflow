@@ -41,6 +41,8 @@ import type { ClienteDetalle } from "@/lib/admin/clientes";
 import {
   valorarCliente,
   ETIQUETA_ESTADO_CLIENTE,
+  AVISO_MRR_SIN_MODULOS,
+  desgloseMrr,
   type ClienteCrudo,
   type ClinicaValorada,
   type EstadoCliente,
@@ -84,6 +86,7 @@ export function ClienteDetalleClient({
   ahoraISO,
   ingresos,
   soloComoUsuario,
+  modulosMedidos = true,
   stripeConfigured,
   stripeInstructions,
 }: {
@@ -97,6 +100,8 @@ export function ClienteDetalleClient({
   ingresos: IngresosCliente;
   /** La cuenta no es dueña de ninguna clínica (ver ../datos). */
   soloComoUsuario: boolean;
+  /** `false` = no se pudo leer clinic_modules: el MRR va sólo con planes y se avisa. */
+  modulosMedidos?: boolean;
   stripeConfigured: boolean;
   stripeInstructions: string;
 }) {
@@ -113,7 +118,15 @@ export function ClienteDetalleClient({
   const waPhone = cliente.ownerPhone ? cliente.ownerPhone.replace(/[^\d]/g, "") : "";
   const criticos = fila.riesgos.filter((r) => r.riesgo.severidad === "critico").length;
   // LTV estimado: el MRR de HOY por 24 meses. Es una estimación, y se dice.
-  const ltv = fila.mrr.total * 24;
+  const ltv = fila.mrrTotal * 24;
+  // Debajo del MRR: de dónde sale (planes · módulos), o el aviso si los módulos no se leyeron.
+  const pieMrr = !modulosMedidos
+    ? AVISO_MRR_SIN_MODULOS
+    : fila.mrrTotal === 0
+      ? "no cobra nada al mes"
+      : fila.mrrModulos > 0
+        ? desgloseMrr(fila.mrr.total, fila.mrrModulos)
+        : mrrBreakdownHint(fila.mrr);
   const nivelCupo = patientQuotaLevel(fila.cupo);
   const unica = fila.vigentes.length === 1 ? fila.vigentes[0] : null;
   const pago = unica ? metodoDePago(unica.clinica) : null;
@@ -233,6 +246,8 @@ export function ClienteDetalleClient({
         <ClienteBilling
           cliente={cliente}
           mrr={fila.mrr}
+          mrrModulos={fila.mrrModulos}
+          modulosMedidos={modulosMedidos}
           planPrices={planPrices}
           ahora={ahora}
           stripeConfigured={stripeConfigured}
@@ -244,7 +259,7 @@ export function ClienteDetalleClient({
         <>
           {/* ── Resumen ────────────────────────────────────────────────── */}
           <div className="ad-resumen">
-            <DatoCaja label="MRR" n={formatCurrency(fila.mrr.total, "MXN")} pie={fila.mrr.total > 0 ? mrrBreakdownHint(fila.mrr) : "no cobra nada al mes"} />
+            <DatoCaja label="MRR" n={formatCurrency(fila.mrrTotal, "MXN")} pie={pieMrr} />
             <DatoCaja
               label="Última compra"
               n={fila.ultimaCompraAt ? fechaAdmin(fila.ultimaCompraAt) ?? "—" : "—"}
@@ -311,7 +326,9 @@ export function ClienteDetalleClient({
 // ── La tarjeta de una sede ─────────────────────────────────────────────────
 
 function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValorada; ahora: Date; variasSedes: boolean }) {
-  const { clinica, salud, mrr } = valorada;
+  const { clinica, salud, mrrModulos } = valorada;
+  // Lo que esta sede paga al mes: su plan + sus módulos.
+  const mrr = Math.round((valorada.mrr + mrrModulos) * 100) / 100;
   const riesgo = salud.riesgos[0];
   const nivelCupo = patientQuotaLevel(clinica.cupo);
   const deltaPct = salud.actividad.tendencia.deltaPct;
@@ -353,7 +370,7 @@ function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValora
       <div className="ad-sede__metricas">
         <div>
           <div className="ad-sede__metrica-label">Al mes</div>
-          <div className="ad-sede__metrica-n">{mrr > 0 ? formatCurrency(mrr, "MXN") : <span className="ad-suave">no cobra</span>}</div>
+          <div className="ad-sede__metrica-n" title={mrrModulos > 0 ? desgloseMrr(valorada.mrr, mrrModulos) : undefined}>{mrr > 0 ? formatCurrency(mrr, "MXN") : <span className="ad-suave">no cobra</span>}</div>
         </div>
         <div>
           <div className="ad-sede__metrica-label">Última compra</div>

@@ -12,6 +12,6 @@ export const metadata: Metadata = { title: "Clientes — Admin DaleControl" };
  * ./cartera; aquí sólo se enchufan.
  */
 export default async function AdminClientesPage() {
-  const { clientes, planPrices, ahoraISO } = await cargarClientes();
-  return <ClientesClient clientes={clientes} planPrices={planPrices} ahoraISO={ahoraISO} />;
+  const { clientes, planPrices, ahoraISO, modulosMedidos } = await cargarClientes();
+  return <ClientesClient clientes={clientes} planPrices={planPrices} ahoraISO={ahoraISO} modulosMedidos={modulosMedidos} />;
 }

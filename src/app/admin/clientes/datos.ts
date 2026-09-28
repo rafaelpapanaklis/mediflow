@@ -12,8 +12,9 @@ import "server-only";
  *
  * COSTE: 1 consulta de precios (plan_configs, con caché) + 1 de dueños + dos
  * tandas de 5 consultas AGREGADAS + 2 del cupo de pacientes + 7 del consumo
- * (medirUsoClinicas, en dos tandas). Ni una consulta por clínica: con 500
- * clínicas son las mismas 20. Las tandas van de ≤5 porque por encima de 7 en
+ * (medirUsoClinicas, en dos tandas) + 2 de módulos (loadModulosContratados,
+ * en fila). Ni una consulta por clínica: con 500
+ * clínicas son las mismas 22. Las tandas van de ≤5 porque por encima de 7 en
  * paralelo el pooler se satura.
  *
  * /admin es la vista del dueño de la plataforma: estas consultas son
@@ -35,7 +36,8 @@ import {
 } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
-import { repartirIngresos, INGRESOS_VACIOS } from "./cartera";
+import { loadModulosContratados } from "@/lib/admin/modulos";
+import { conMrrModulos, mrrModulosPorClinica, repartirIngresos, INGRESOS_VACIOS } from "./cartera";
 import type { ClienteCrudo, ClinicaDeCliente, IngresosCliente } from "./cartera";
 
 /** Lo que la pantalla necesita para pintarse entera. */
@@ -45,6 +47,30 @@ export interface DatosClientes {
   planPrices: Record<string, number>;
   /** El "ahora" del servidor: SSR e hidratación cuentan los mismos días. */
   ahoraISO: string;
+  /**
+   * `false` si no se pudo leer `clinic_modules`: el MRR va sólo con planes y
+   * la pantalla lo avisa en vez de callarlo.
+   */
+  modulosMedidos: boolean;
+}
+
+/**
+ * Le pone a cada clínica lo que paga por módulos. Va DESPUÉS de medirClinicas,
+ * en serie: `loadModulosContratados` hace sus dos consultas en fila y nunca
+ * lanza (si falla, `medido: false` y las clínicas quedan sin módulos).
+ * Cross-tenant a propósito, como todo /admin.
+ */
+async function sumarModulos(
+  clientes: ClienteCrudo[],
+  clinicIds: string[],
+  ahora: Date,
+): Promise<{ clientes: ClienteCrudo[]; modulosMedidos: boolean }> {
+  // Con una sola clínica (la ficha típica) se pide sólo la suya.
+  const modulos = await loadModulosContratados(clinicIds.length === 1 ? clinicIds[0] : undefined);
+  if (!modulos.medido) return { clientes, modulosMedidos: false };
+  const ids = new Set(clinicIds);
+  const porClinica = mrrModulosPorClinica(modulos.filas.filter((f) => ids.has(f.clinicId)), ahora);
+  return { clientes: conMrrModulos(clientes, porClinica), modulosMedidos: true };
 }
 
 const SELECT_DUENO = {
@@ -356,11 +382,16 @@ export async function cargarClientes(): Promise<DatosClientes> {
 
   const clinicas = filas.map((f) => f.clinic).filter((c): c is NonNullable<FilaDueno["clinic"]> => !!c);
   if (clinicas.length === 0) {
-    return { clientes: [], planPrices, ahoraISO: ahora.toISOString() };
+    return { clientes: [], planPrices, ahoraISO: ahora.toISOString(), modulosMedidos: true };
   }
 
   const medida = await medirClinicas(clinicas, ahora, sedesIncluidas);
-  return { clientes: agrupar(filas, medida), planPrices, ahoraISO: ahora.toISOString() };
+  const { clientes, modulosMedidos } = await sumarModulos(
+    agrupar(filas, medida),
+    clinicas.map((c) => c.id),
+    ahora,
+  );
+  return { clientes, planPrices, ahoraISO: ahora.toISOString(), modulosMedidos };
 }
 
 export interface DatosCliente {
@@ -375,6 +406,8 @@ export interface DatosCliente {
    * pasar por un cliente que no es.
    */
   soloComoUsuario: boolean;
+  /** Ver `DatosClientes.modulosMedidos`. */
+  modulosMedidos: boolean;
 }
 
 /**
@@ -425,19 +458,21 @@ export async function cargarCliente(supabaseId: string): Promise<DatosCliente> {
       ahoraISO: ahora.toISOString(),
       ingresos: INGRESOS_VACIOS,
       soloComoUsuario: false,
+      modulosMedidos: true,
     };
   }
 
   // En serie con medirClinicas, no en paralelo: esa ya abre sus dos tandas.
   const medida = await medirClinicas(clinicas, ahora, sedesIncluidas);
   const ingresos = await medirIngresos(clinicIds, ahora);
-  const clientes = agrupar(filas, medida);
+  const { clientes, modulosMedidos } = await sumarModulos(agrupar(filas, medida), clinicIds, ahora);
   return {
     cliente: clientes[0] ?? null,
     planPrices,
     ahoraISO: ahora.toISOString(),
     ingresos,
     soloComoUsuario,
+    modulosMedidos,
   };
 }
 
