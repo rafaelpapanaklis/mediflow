@@ -21,12 +21,14 @@ import {
   buildCloseSummary,
   cashOnHandPaymentWhere,
   computeOverdueAmount,
+  computeReceivables,
   deriveWindow,
   expectedCashOf,
   invoiceDiscountPortion,
   money,
   netRevenueSeries,
   overdueInstallmentsOf,
+  overdueOfInvoice,
   paymentDiscountPortion,
   type FacturaPorCobrarParaVencido,
 } from "../caja";
@@ -311,4 +313,102 @@ test("H21a · SIN facturas a plazos, computeOverdueAmount da EXACTAMENTE lo de s
   // solo la (a) tiene dueDate < hoy. La clínica sin plan a plazos no ve cambiar
   // su «Vencido» ni un peso.
   assert.equal(computeOverdueAmount(facturas, todayStart, HOY), 1_000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// FILA 87 de la revisión de lógica de uso (ws1-t5, ronda 6) — «Vencido» y
+// «Por cobrar» daban cifras distintas en Caja → Caja, Caja → Facturas y
+// Finanzas. Ahora las tres leen `computeReceivables`.
+// ─────────────────────────────────────────────────────────────────────────
+
+test("fila 87 · un cargo de control de ortodoncia sin dueDate vence al día siguiente de su fecha, como en Cobranza", () => {
+  const todayStart = new Date("2026-02-10T06:00:00Z");
+  const control = (vencimientoControl: string): FacturaPorCobrarParaVencido => ({
+    id: "c1", balance: 800, dueDate: null, total: 800, condiciones: null, cobros: [], vencimientoControl,
+  });
+  assert.equal(overdueOfInvoice(control("2026-02-09"), todayStart, HOY), 800, "ayer: ya venció");
+  assert.equal(overdueOfInvoice(control("2026-02-10"), todayStart, HOY), 0, "hoy: todavía no");
+  assert.equal(overdueOfInvoice(control("2026-02-11"), todayStart, HOY), 0, "mañana: no");
+});
+
+test("fila 87 · una factura normal sin dueDate sigue sin vencer jamás: el cargo de control no cambia a las demás", () => {
+  const todayStart = new Date("2026-02-10T06:00:00Z");
+  const normal: FacturaPorCobrarParaVencido = { id: "n", balance: 700, dueDate: null, total: 700, condiciones: null, cobros: [] };
+  assert.equal(overdueOfInvoice(normal, todayStart, HOY), 0);
+  assert.equal(overdueOfInvoice({ ...normal, vencimientoControl: null }, todayStart, HOY), 0);
+});
+
+/** Una base de mentira con lo justo que lee `computeReceivables`. */
+function baseDeSaldos(opts: {
+  facturas: Array<{ id: string; clinicId: string; status: string; balance: number; total: number; dueDate: Date | null; payments?: Array<{ amount: number; method: string }> }>;
+  condiciones?: Array<Record<string, unknown>>;
+  timezone?: string;
+}) {
+  const consultas: Array<{ where: any }> = [];
+  const db = {
+    invoice: {
+      findMany: async ({ where, select }: any) => {
+        consultas.push({ where });
+        return opts.facturas
+          .filter((f) => f.clinicId === where.clinicId)
+          .filter((f) => (where.status?.notIn ? !where.status.notIn.includes(f.status) : true))
+          .filter((f) => (where.balance?.gt !== undefined ? f.balance > where.balance.gt : true))
+          .filter((f) => (where.id?.in ? where.id.in.includes(f.id) : true))
+          .map((f) => (select?.payments ? { id: f.id, payments: f.payments ?? [] } : { id: f.id, balance: f.balance, total: f.total, dueDate: f.dueDate }));
+      },
+      aggregate: async () => ({ _sum: {} }),
+    },
+    clinic: { findUnique: async () => ({ timezone: opts.timezone ?? "America/Mexico_City" }) },
+    // leerCondicionesDeFacturas: primero sondea la tabla, luego lee las filas.
+    $queryRaw: async (cadenas: TemplateStringsArray) => {
+      const texto = cadenas.join("?");
+      if (/to_regclass|information_schema/.test(texto)) return [{ existe: true, reg: "invoice_payment_terms" }];
+      return opts.condiciones ?? [];
+    },
+  };
+  return { db: db as any, consultas };
+}
+
+test("fila 87 · computeReceivables: por cobrar = TODO lo que falta; vencido = lo que ya pasó de fecha, por cuota en las de plazos", async () => {
+  const { db, consultas } = baseDeSaldos({
+    facturas: [
+      // De un pago, vencida: cuenta entera en los dos.
+      { id: "n1", clinicId: "cl-1", status: "PENDING", balance: 5_000, total: 5_000, dueDate: new Date("2026-01-01T06:00:00Z") },
+      // De un pago, aún no vence: solo por cobrar.
+      { id: "n2", clinicId: "cl-1", status: "PARTIAL", balance: 1_200, total: 2_000, dueDate: new Date("2026-03-01T06:00:00Z") },
+      // Cargo de control de ortodoncia, sin dueDate, de ayer: vencido.
+      { id: "c1", clinicId: "cl-1", status: "PENDING", balance: 800, total: 800, dueDate: null },
+      // Borrador y cancelada: no existen para los saldos.
+      { id: "b1", clinicId: "cl-1", status: "DRAFT", balance: 9_000, total: 9_000, dueDate: new Date("2026-01-01T06:00:00Z") },
+      { id: "x1", clinicId: "cl-1", status: "CANCELLED", balance: 9_000, total: 9_000, dueDate: new Date("2026-01-01T06:00:00Z") },
+      // De otra clínica: jamás.
+      { id: "o1", clinicId: "cl-2", status: "PENDING", balance: 77_000, total: 77_000, dueDate: new Date("2026-01-01T06:00:00Z") },
+    ],
+  });
+  const saldos = await computeReceivables("cl-1", new Date("2026-02-10T18:00:00Z"), db, async () => new Map([["c1", "2026-02-09"]]));
+  assert.equal(saldos.porCobrar, 5_000 + 1_200 + 800);
+  assert.equal(saldos.vencido, 5_000 + 800);
+  assert.deepEqual(saldos.vencidoPorFactura, { n1: 5_000, c1: 800 });
+  assert.ok(consultas.every((c) => c.where.clinicId === "cl-1"), "toda lectura de facturas lleva el clinicId de quien pregunta");
+});
+
+test("fila 87 · computeReceivables: «hoy» es el día de la clínica, no el de UTC", async () => {
+  // 10-feb 02:00 UTC = 9-feb 20:00 en México: una factura que vence el 9 NO está vencida todavía.
+  const { db } = baseDeSaldos({
+    facturas: [{ id: "n1", clinicId: "cl-1", status: "PENDING", balance: 300, total: 300, dueDate: new Date("2026-02-09T06:00:00Z") }],
+  });
+  const noche = await computeReceivables("cl-1", new Date("2026-02-10T02:00:00Z"), db, async () => new Map());
+  assert.equal(noche.vencido, 0);
+  const manana = await computeReceivables("cl-1", new Date("2026-02-10T07:00:00Z"), db, async () => new Map());
+  assert.equal(manana.vencido, 300);
+});
+
+test("fila 87 · computeReceivables: sin clínica no consulta nada, y si falla la lectura de controles no tumba el saldo", async () => {
+  const { db, consultas } = baseDeSaldos({
+    facturas: [{ id: "n1", clinicId: "cl-1", status: "PENDING", balance: 300, total: 300, dueDate: new Date("2026-01-09T06:00:00Z") }],
+  });
+  assert.deepEqual(await computeReceivables("", new Date(), db), { porCobrar: 0, vencido: 0, vencidoPorFactura: {} });
+  assert.equal(consultas.length, 0);
+  const saldos = await computeReceivables("cl-1", new Date("2026-02-10T18:00:00Z"), db, async () => { throw new Error("sin columna"); });
+  assert.equal(saldos.vencido, 300);
 });

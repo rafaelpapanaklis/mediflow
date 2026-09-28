@@ -22,7 +22,8 @@ import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { calendarioDeCuotas, esPlanAPlazos, estadoDelPlan, pagosDesdeFilas } from "@/lib/invoices/plan-de-pagos";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
-import { getTzParts } from "@/lib/agenda/time-utils";
+import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { cargarVencimientosDeCargosDeControl } from "@/lib/orthodontics/cobranza-controles-db";
 import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
 
 /**
@@ -199,6 +200,12 @@ export interface CajaState {
   // vencidas (estadoDelPlan.importeVencido), nunca el balance completo. Ver
   // computeOverdueAmount.
   overdueToday:     number;
+  // Los saldos de TODA la clínica, de `computeReceivables` (fila 87): la
+  // pestaña Facturas pinta estos mismos números, no otra cuenta. Opcionales en
+  // el tipo para no romper a quien arma un CajaState a mano; `getCajaState`
+  // los manda siempre.
+  receivableTotal?:  number;                 // POR COBRAR: todo lo que falta por cobrar
+  overdueByInvoice?: Record<string, number>; // lo vencido de cada factura con algo vencido
 }
 
 function fullName(u?: { firstName?: string | null; lastName?: string | null } | null): string {
@@ -594,6 +601,30 @@ export interface FacturaPorCobrarParaVencido {
   condiciones: CondicionesPago | null | undefined;
   /** Solo se usan si `condiciones` es a plazos. */
   cobros:      Array<{ amount: unknown; method?: string | null }>;
+  /**
+   * Solo para un CARGO DE CONTROL de ortodoncia (modo «pago por control»): el
+   * día "YYYY-MM-DD" en que vence (`vencimientoDeCargoDeControl`). Esas
+   * facturas nacen sin `dueDate` al firmar la hoja, y Cobranza de ortodoncia
+   * las da por vencidas al día siguiente; sin esto, Caja nunca las contaba.
+   */
+  vencimientoControl?: string | null;
+}
+
+/**
+ * Cuánto de UNA factura por cobrar está vencido hoy. Tres poblaciones
+ * disjuntas, en este orden:
+ *   1. a plazos → solo sus cuotas vencidas (`overdueInstallmentsOf`);
+ *   2. cargo de control de ortodoncia → su saldo completo si ya pasó su día;
+ *   3. de un solo pago → su saldo completo si `dueDate` < hoy (sin `dueDate`
+ *      no vence jamás).
+ */
+export function overdueOfInvoice(f: FacturaPorCobrarParaVencido, todayStart: Date, hoy: string): number {
+  if (esPlanAPlazos(f.condiciones)) {
+    return overdueInstallmentsOf({ total: f.total, condiciones: f.condiciones, cobros: f.cobros }, hoy);
+  }
+  if (f.vencimientoControl) return f.vencimientoControl < hoy ? f.balance ?? 0 : 0;
+  if (f.dueDate && f.dueDate.getTime() < todayStart.getTime()) return f.balance ?? 0;
+  return 0;
 }
 
 /**
@@ -614,13 +645,7 @@ export function computeOverdueAmount(
   hoy: string,
 ): number {
   let total = 0;
-  for (const f of facturas) {
-    if (esPlanAPlazos(f.condiciones)) {
-      total += overdueInstallmentsOf({ total: f.total, condiciones: f.condiciones, cobros: f.cobros }, hoy);
-    } else if (f.dueDate && f.dueDate.getTime() < todayStart.getTime()) {
-      total += f.balance ?? 0;
-    }
-  }
+  for (const f of facturas) total += overdueOfInvoice(f, todayStart, hoy);
   return money(total);
 }
 
@@ -632,26 +657,51 @@ function hoyEnZonaClinica(now: Date, timezone: string): string {
   return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 }
 
+/** Los dos saldos de la clínica, con UNA sola definición para todo el panel. */
+export interface SaldosDeLaClinica {
+  /** POR COBRAR: todo lo que falta por cobrar de las facturas emitidas (ni borrador ni cancelada). */
+  porCobrar: number;
+  /** VENCIDO: la parte de lo por cobrar cuya fecha ya pasó (por cuota en las facturas a plazos). */
+  vencido:   number;
+  /** Lo vencido de cada factura que tiene algo vencido: `invoiceId` → pesos. */
+  vencidoPorFactura: Record<string, number>;
+}
+
 /**
- * Shell con I/O de `computeOverdueAmount`: trae las facturas por cobrar
- * (id/balance/dueDate/total, sin `payments` — la inmensa mayoría es de un
+ * «POR COBRAR» y «VENCIDO» de la clínica (fila 87 de la revisión de lógica de
+ * uso). Es LA función: la usan la pestaña Caja, la pestaña Facturas y
+ * Finanzas, que antes daban tres cifras distintas el mismo día (Facturas y
+ * Finanzas contaban vencido por `dueDate` y el saldo entero; Caja, por cuota).
+ *
+ * Trae las facturas por cobrar (sin `payments`: la inmensa mayoría es de un
  * solo pago y no los necesita), sus condiciones de pago EN LOTE
  * (`leerCondicionesDeFacturas` — sin `sql/factura-condiciones-pago.sql`
- * aplicado, no revienta: no encuentra ninguna a plazos y el resultado sale
- * idéntico al de siempre) y, SOLO para las que sí son a plazos, sus pagos.
+ * aplicado no revienta: no encuentra ninguna a plazos), los cargos de control
+ * de ortodoncia (tolerante) y, SOLO para las que sí son a plazos, sus pagos.
+ * «Hoy» es el día de la CLÍNICA (`Clinic.timezone`). Como mucho dos consultas
+ * a la vez.
  */
-async function computeOverdueToday(clinicId: string, todayStart: Date, now: Date, db: CajaDb): Promise<number> {
+export async function computeReceivables(
+  clinicId: string,
+  now: Date = new Date(),
+  db: CajaDb = prisma,
+  /** Solo para pruebas: de dónde salen los cargos de control de ortodoncia. */
+  leerCargosDeControl: (clinicId: string) => Promise<Map<string, string>> = cargarVencimientosDeCargosDeControl,
+): Promise<SaldosDeLaClinica> {
+  // `clinicId: undefined` no filtra nada en Prisma: sin clínica no se consulta.
+  if (!clinicId) return { porCobrar: 0, vencido: 0, vencidoPorFactura: {} };
   const receivable = await db.invoice.findMany({
     where:  receivableInvoiceWhere(clinicId),
     select: { id: true, balance: true, dueDate: true, total: true },
     take:   5000,
   });
-  if (receivable.length === 0) return 0;
+  if (receivable.length === 0) return { porCobrar: 0, vencido: 0, vencidoPorFactura: {} };
 
   const [{ porFactura }, clinic] = await Promise.all([
     leerCondicionesDeFacturas(db as unknown as typeof prisma, { clinicId, invoiceIds: receivable.map((f) => f.id) }),
     db.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }),
   ]);
+  const vencimientosControl = await leerCargosDeControl(clinicId).catch(() => new Map<string, string>());
 
   const idsAPlazos = receivable.filter((f) => esPlanAPlazos(porFactura.get(f.id))).map((f) => f.id);
   const cobrosPorFactura = idsAPlazos.length === 0
@@ -661,20 +711,34 @@ async function computeOverdueToday(clinicId: string, todayStart: Date, now: Date
         select: { id: true, payments: { select: { amount: true, method: true } } },
       })).map((i) => [i.id, i.payments]));
 
-  const hoy = hoyEnZonaClinica(now, clinic?.timezone ?? DEFAULT_INVOICE_TZ);
-  return computeOverdueAmount(
-    receivable.map((f) => ({ ...f, condiciones: porFactura.get(f.id), cobros: cobrosPorFactura.get(f.id) ?? [] })),
-    todayStart,
-    hoy,
-  );
+  const timezone = clinic?.timezone || DEFAULT_INVOICE_TZ;
+  const hoy = hoyEnZonaClinica(now, timezone);
+  const todayStart = tzLocalToUtc(hoy, 0, 0, timezone);
+
+  let porCobrarC = 0;
+  let vencidoC = 0;
+  const vencidoPorFactura: Record<string, number> = {};
+  for (const f of receivable) {
+    porCobrarC += Math.round((f.balance ?? 0) * 100);
+    const v = overdueOfInvoice(
+      { ...f, condiciones: porFactura.get(f.id), cobros: cobrosPorFactura.get(f.id) ?? [], vencimientoControl: vencimientosControl.get(f.id) ?? null },
+      todayStart,
+      hoy,
+    );
+    if (v > 0) {
+      vencidoC += Math.round(v * 100);
+      vencidoPorFactura[f.id] = money(v);
+    }
+  }
+  return { porCobrar: porCobrarC / 100, vencido: vencidoC / 100, vencidoPorFactura };
 }
 
 /**
  * Resumen de facturación del día natural (México), independiente del turno:
  *  - billedToday:  Σ total de facturas EMITIDAS hoy (excluye DRAFT/CANCELLED).
  *  - pendingToday: Σ saldo por cobrar de esas mismas facturas de hoy.
- *  - overdueToday: computeOverdueAmount (H21a) — de un pago por `dueDate`,
- *    a plazos por cuota vencida.
+ *  - overdueToday: el «vencido» de `computeReceivables` — el mismo de la
+ *    pestaña Facturas y de Finanzas.
  */
 async function computeDayBilling(clinicId: string, todayStart: Date, now: Date, db: CajaDb = prisma) {
   const issuedToday: Prisma.InvoiceWhereInput = {
@@ -683,16 +747,18 @@ async function computeDayBilling(clinicId: string, todayStart: Date, now: Date, 
     createdAt: { gte: todayStart, lte: now },
   };
 
-  const [billedAgg, pendingAgg, overdueToday] = await Promise.all([
+  const [billedAgg, pendingAgg, saldos] = await Promise.all([
     db.invoice.aggregate({ _sum: { total: true },   where: issuedToday }),
     db.invoice.aggregate({ _sum: { balance: true }, where: issuedToday }),
-    computeOverdueToday(clinicId, todayStart, now, db),
+    computeReceivables(clinicId, now, db),
   ]);
 
   return {
     billedToday:  billedAgg._sum.total    ?? 0,
     pendingToday: pendingAgg._sum.balance ?? 0,
-    overdueToday,
+    overdueToday: saldos.vencido,
+    receivableTotal:  saldos.porCobrar,
+    overdueByInvoice: saldos.vencidoPorFactura,
   };
 }
 
@@ -719,6 +785,8 @@ export async function getCajaState(clinicId: string): Promise<CajaState> {
     billedToday:      money(dayBilling.billedToday),
     pendingToday:     money(dayBilling.pendingToday),
     overdueToday:     money(dayBilling.overdueToday),
+    receivableTotal:  money(dayBilling.receivableTotal),
+    overdueByInvoice: dayBilling.overdueByInvoice,
   };
 
   return { ...(await shiftOf(clinicId, reg, now, {})), ...day };

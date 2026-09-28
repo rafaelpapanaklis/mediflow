@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canSeePatient, patientVisibilityAnd } from "@/lib/patient-visibility";
 import { getClinicCreditTotal } from "@/lib/patient-credit";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
-import { getCajaState, getCajaHistory, money, overdueInvoiceWhere, receivableInvoiceWhere } from "@/lib/caja";
+import { getCajaState, getCajaHistory, money } from "@/lib/caja";
 import { periodRangeUtc } from "@/lib/agenda/time-utils";
 import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
 import type { Prisma } from "@prisma/client";
@@ -82,9 +82,8 @@ export default async function CajaPage() {
   // KPIs sobre TODA la clínica con aggregate (FIN-04). Antes salían del arreglo
   // de arriba, que trae solo las 100 facturas más recientes: pasadas 100, los
   // números se congelaban sobre esas 100; y "Total cobrado" filtraba PAID, así
-  // que los abonos de una PARTIAL no contaban. "Vencido" se deriva de dueDate
-  // (overdueInvoiceWhere), nunca del status OVERDUE que nadie escribe. "Hoy" y
-  // "este mes" van en la zona de la clínica: Vercel corre en UTC.
+  // que los abonos de una PARTIAL no contaban. "Hoy" y "este mes" van en la
+  // zona de la clínica: Vercel corre en UTC.
   const tz = user.clinic?.timezone || DEFAULT_INVOICE_TZ;
   const todayStart = periodRangeUtc("day", tz).from;
   const monthStart = periodRangeUtc("month", tz).from;
@@ -96,17 +95,19 @@ export default async function CajaPage() {
   // preguntó en esta misma carga y la respuesta vive 60 s en memoria por
   // clínica. Va en este Promise.all (6) y no en el de arriba (ya con 6): menos
   // de 7 consultas por tanda.
-  const [paidAgg, pendingAgg, overdueAgg, totalInvoices, monthInvoices, rediseno] = await Promise.all([
+  const [paidAgg, totalInvoices, monthInvoices, rediseno] = await Promise.all([
     prisma.invoice.aggregate({ _sum: { paid: true },    where: issued }),
-    prisma.invoice.aggregate({ _sum: { balance: true }, where: receivableInvoiceWhere(user.clinicId) }),
-    prisma.invoice.aggregate({ _sum: { balance: true }, where: overdueInvoiceWhere(user.clinicId, todayStart) }),
     prisma.invoice.count({ where: { clinicId: user.clinicId } }),
     prisma.invoice.count({ where: { clinicId: user.clinicId, createdAt: { gte: monthStart } } }),
     menuDosNivelesEncendido(user.clinicId),
   ]);
   const totalPaid    = money(paidAgg._sum.paid ?? 0);
-  const totalPending = money(pendingAgg._sum.balance ?? 0);
-  const totalOverdue = money(overdueAgg._sum.balance ?? 0);
+  // «Por cobrar» y «Vencido» NO se vuelven a calcular aquí (fila 87 de la
+  // revisión de lógica de uso): son los de `computeReceivables`, que ya vienen
+  // en `caja`. Antes esta pestaña contaba vencido por `dueDate` y la de al
+  // lado por cuota, y las dos decían «Vencido» con cifras distintas.
+  const totalPending = money(caja.receivableTotal ?? 0);
+  const totalOverdue = money(caja.overdueToday);
 
   return (
     <CajaClient

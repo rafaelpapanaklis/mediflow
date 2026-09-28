@@ -66,6 +66,16 @@ function aFechaISO(d: Date): string {
 }
 
 /**
+ * Cuándo vence un cargo de control: su `dueDate` o, si no tiene (nace sin
+ * ella al firmar la hoja), el día en que se creó. UNA sola regla, exportada
+ * para que Caja y Finanzas digan «vencido» con el mismo criterio que Cobranza
+ * de ortodoncia (fila 87 de la revisión de lógica de uso).
+ */
+export function vencimientoDeCargoDeControl(dueDate: Date | null, createdAt: Date): string {
+  return aFechaISO(dueDate ?? createdAt);
+}
+
+/**
  * Los cargos de control (facturas de citas «Control de ortodoncia», ya
  * ligadas a su caso) de varios casos a la vez — UNA sola consulta, sin
  * importar cuántos casos traigas. Solo tiene sentido para casos en modo
@@ -98,7 +108,7 @@ export async function cargarCargosDeControlPorCasos(
         total: Number(f.total) || 0,
         pagado: Number(f.paid) || 0,
         status: f.status,
-        vencimiento: aFechaISO(f.dueDate ?? f.createdAt),
+        vencimiento: vencimientoDeCargoDeControl(f.dueDate, f.createdAt),
       };
       const lista = salida.get(f.planId);
       if (lista) lista.push(cargo);
@@ -118,4 +128,35 @@ export async function cargarCargosDeControlDelCaso(
 ): Promise<CargoDeControl[]> {
   const mapa = await cargarCargosDeControlPorCasos(clinicId, [treatmentPlanId]);
   return mapa.get(treatmentPlanId) ?? [];
+}
+
+/**
+ * Los cargos de control POR COBRAR de toda la clínica (de cualquier caso), con
+ * su vencimiento: `invoiceId` → "YYYY-MM-DD". Lo usa el «Vencido» de Caja y
+ * Finanzas (`computeReceivables`, src/lib/caja.ts) para que un control sin
+ * pagar cuente como vencido desde el mismo día que en Cobranza de ortodoncia.
+ * Sin la columna, o si la consulta falla, mapa vacío: Caja se queda con su
+ * criterio de siempre (`dueDate`).
+ */
+export async function cargarVencimientosDeCargosDeControl(clinicId: string): Promise<Map<string, string>> {
+  const salida = new Map<string, string>();
+  if (!clinicId) return salida;
+  if (!(await columnaExiste())) return salida;
+  try {
+    const filas = await prisma.$queryRaw<{ invoiceId: string; dueDate: Date | null; createdAt: Date }[]>`
+      SELECT i."id" AS "invoiceId", i."dueDate", i."createdAt"
+        FROM "invoices" i
+        JOIN "appointments" a ON a."id" = i."appointmentId"
+       WHERE i."clinicId" = ${clinicId}
+         AND i."orthodonticTreatmentPlanId" IS NOT NULL
+         AND i."appointmentId" IS NOT NULL
+         AND a."type" = ${TIPO_CITA_CONTROL_ORTO}
+         AND i."balance" > 0
+         AND i."status" NOT IN ('DRAFT', 'CANCELLED')`;
+    for (const f of filas) salida.set(f.invoiceId, vencimientoDeCargoDeControl(f.dueDate, f.createdAt));
+    return salida;
+  } catch (e) {
+    console.warn("[ortodoncia:cargos-control] no se pudieron leer los vencimientos:", e);
+    return new Map();
+  }
 }

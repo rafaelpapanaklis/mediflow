@@ -4,10 +4,9 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import {
   CASH_METHOD,
+  computeReceivables,
   money,
   netRevenueSeries,
-  overdueInvoiceWhere,
-  receivableInvoiceWhere,
   refundPaymentWhere,
   revenuePaymentWhere,
 } from "@/lib/caja";
@@ -101,7 +100,6 @@ export async function GET(req: NextRequest) {
   const expenseTo = expenseWindowEnd(new URL(req.url).searchParams.get("period"), new Date(), to);
 
   try {
-    const todayStart = startOfTodayMx(new Date());
 
     // Cobros del periodo SIN reembolsos ni facturas canceladas
     // (revenuePaymentWhere, el mismo criterio que el home y la agenda). Ojo:
@@ -110,7 +108,7 @@ export async function GET(req: NextRequest) {
     const revenueWhere = revenuePaymentWhere(clinicId, { gte: from, lte: to });
 
     // Lote 1 — agregados (máx 6 promesas por Promise.all, regla del repo).
-    const [efectivoAgg, ventas, citas, porCobrarAgg, vencidoAgg] = await Promise.all([
+    const [efectivoAgg, ventas, citas, saldos] = await Promise.all([
       // efectivo: mismo criterio que caja.ts (method === "cash").
       //
       // ⚠️ Es efectivo RECIBIDO (así se etiqueta en la UI) y va en BRUTO: el
@@ -133,20 +131,11 @@ export async function GET(req: NextRequest) {
       prisma.appointment.count({
         where: { clinicId, startsAt: { gte: from, lte: to }, status: { not: "CANCELLED" } },
       }),
-      // porCobrar: saldo pendiente GLOBAL de facturas abiertas (no limitado
-      // al periodo). Mismo filtro que caja.ts: excluye DRAFT/CANCELLED.
-      prisma.invoice.aggregate({
-        _sum:  { balance: true },
-        where: receivableInvoiceWhere(clinicId),
-      }),
-      // vencido: subset con Invoice.dueDate < hoy MX y balance > 0 (mismo
-      // criterio que overdueToday en caja.ts y el KPI de Facturas). Se usa
-      // dueDate y NO el status OVERDUE porque nadie escribe OVERDUE — la fecha
-      // de vencimiento es la fuente de verdad.
-      prisma.invoice.aggregate({
-        _sum:  { balance: true },
-        where: overdueInvoiceWhere(clinicId, todayStart),
-      }),
+      // porCobrar / vencido: los saldos GLOBALES de la clínica (no limitados
+      // al periodo), de `computeReceivables` — la MISMA función que pinta Caja.
+      // Antes aquí «vencido» era el saldo entero de toda factura con `dueDate`
+      // pasada, y una factura a plazos con una mensualidad atrasada no contaba.
+      computeReceivables(clinicId),
     ]);
 
     // Lote 2 — filas del periodo para serie/porDoctor (se agrupan en JS; un
@@ -253,8 +242,8 @@ export async function GET(req: NextRequest) {
       serie,
       porDoctor,
       saldos: {
-        porCobrar: money(porCobrarAgg._sum.balance ?? 0),
-        vencido:   money(vencidoAgg._sum.balance ?? 0),
+        porCobrar: money(saldos.porCobrar),
+        vencido:   money(saldos.vencido),
       },
     });
   } catch (err: any) {
