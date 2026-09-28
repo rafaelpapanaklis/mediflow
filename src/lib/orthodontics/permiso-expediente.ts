@@ -1,0 +1,24 @@
+// Ortodoncia — ¿este usuario puede VER lo clínico de un caso? (ws1-t5, ronda 6)
+//
+// Es la misma llave que exige `getOrthoActionContext({ write: false })` en las
+// server actions del módulo (`medicalRecord.view`). Vive aparte para las
+// rutas que no pasan por ese ayudante —porque contestan con su propio código
+// HTTP— y para que la regla tenga test sin base de datos.
+//
+// Respeta los permisos personalizados de Equipo → Permisos: si la clínica le
+// quitó el expediente a un doctor, aquí sale `false` aunque su rol lo traiga.
+
+import { hasPermission } from "@/lib/auth/permissions";
+
+export interface UsuarioConPermisos {
+  role: string;
+  permissionsOverride?: string[] | null;
+}
+
+export function puedeVerExpediente(usuario: UsuarioConPermisos | null | undefined): boolean {
+  if (!usuario) return false;
+  return hasPermission(
+    { role: usuario.role, permissionsOverride: usuario.permissionsOverride ?? null },
+    "medicalRecord.view",
+  );
+}

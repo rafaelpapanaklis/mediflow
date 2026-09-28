@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { puedeVerExpediente } from "@/lib/orthodontics/permiso-expediente";
 import { ProgressReportPdf } from "@/lib/orthodontics/pdf-templates/progress-report";
 import { PHOTO_VIEW_ORDER, VIEW_TO_COLUMN } from "@/lib/orthodontics/photo-set-helpers";
 import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
@@ -29,6 +30,13 @@ export async function GET(
   const active = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!active) {
     return NextResponse.json({ error: "Módulo no activo" }, { status: 403 });
+  }
+  // ws1-t5 (ronda 6, X5): este PDF lleva fotos clínicas y es parte del
+  // expediente. Pide la MISMA llave que los otros tres PDF del caso, que
+  // pasan por getOrthoActionContext({ write: false }). Sin esto, recepción o
+  // un usuario de solo lectura lo bajaba con solo conocer la dirección.
+  if (!puedeVerExpediente(ctx)) {
+    return NextResponse.json({ error: "No tienes permiso para ver el expediente de este paciente." }, { status: 403 });
   }
 
   const plan = await prisma.orthodonticTreatmentPlan.findFirst({
