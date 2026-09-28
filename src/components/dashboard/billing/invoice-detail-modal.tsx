@@ -22,6 +22,8 @@ import { fmtMXNdec } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 import { esPlanAPlazos, montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
+import { receptorInicial } from "@/lib/orthodontics/receptor-responsable";
+import { useResponsableDeFactura } from "@/components/dashboard/plan-de-pagos/use-responsable-cfdi";
 import { todayLocalISO } from "@/lib/billing/paid-at";
 // Ropa del diseño nuevo (solo con `rediseno`): tokens del menú de dos niveles
 // y las clases que visten este modal y su familia. Ver factura-rediseno/.
@@ -238,6 +240,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // caminos — con y sin el interruptor, `PaymentModal` de abajo también abre
   // con el saldo completo si no sabe que la factura es a plazos.
   const condicionesPago = useCondicionesDeFactura(invoice?.id, open);
+  // ws1-t10 (punto 9): en la factura de un caso de ortodoncia con responsable de
+  // pago, el CFDI se precarga con los datos del TUTOR, no con los del niño.
+  const responsableDePago = useResponsableDeFactura(invoice?.id, open);
+  const [fiscalOrigen, setFiscalOrigen] = useState<"responsable" | "paciente">("paciente");
   // ws1-t10 (H68): la mensualidad o lo vencido, no el saldo completo del
   // tratamiento. 0 sin condiciones a plazos: cada consumidor cae al saldo.
   const montoSugerido = invoice ? montoSugeridoDeCobro(condicionesPago, invoice.total, invoice.paid, todayLocalISO()) : 0;
@@ -381,11 +387,16 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // editable factura por factura desde el selector.
   function openCfdiForm() {
     const p = invoice?.patient;
+    const inicial = receptorInicial(
+      { rfc: p?.rfcPaciente ?? "", nombre: p?.razonSocialPac ?? "", regimen: p?.regimenFiscalPac ?? "", cp: p?.cpPaciente ?? "" },
+      responsableDePago,
+    );
+    setFiscalOrigen(inicial.origen);
     setFiscal({
-      rfc:     p?.rfcPaciente ?? "",
-      nombre:  p?.razonSocialPac ?? "",
-      regimen: p?.regimenFiscalPac || "612",
-      cp:      p?.cpPaciente ?? "",
+      rfc:     inicial.datos.rfc,
+      nombre:  inicial.datos.nombre,
+      regimen: inicial.datos.regimen,
+      cp:      inicial.datos.cp,
       uso:     "D01",
       email:   "",
       formaPago: derivePaymentForm(invoice?.payments, invoice?.paymentMethod),
@@ -433,7 +444,15 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     setBusy(true);
     try {
       // (a) Persistir fiscales en el paciente (best-effort, no bloquea el timbrado).
-      if (invoice.patientId) {
+      // Con responsable de pago los fiscales son SUYOS: guardarlos en el niño
+      // le pondría el RFC del tutor a su ficha.
+      if (fiscalOrigen === "responsable") {
+        fetch(`/api/invoices/${invoice.id}/receptor-responsable`, {
+          method:  "PUT",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ rfc, nombre, regimen: fiscal.regimen, cp }),
+        }).catch(() => {});
+      } else if (invoice.patientId) {
         fetch(`/api/patients/${invoice.patientId}`, {
           method:  "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -922,12 +941,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                             amount={p.amount}
                             method={p.method}
                             clinicTaxMode={clinicTaxMode}
-                            defaultReceptor={{
-                              rfc:     invoice.patient?.rfcPaciente,
-                              nombre:  invoice.patient?.razonSocialPac,
-                              regimen: invoice.patient?.regimenFiscalPac,
-                              cp:      invoice.patient?.cpPaciente,
-                            }}
+                            defaultReceptor={receptorInicial(
+                              { rfc: invoice.patient?.rfcPaciente ?? "", nombre: invoice.patient?.razonSocialPac ?? "", regimen: invoice.patient?.regimenFiscalPac ?? "", cp: invoice.patient?.cpPaciente ?? "" },
+                              responsableDePago,
+                            ).datos}
                             cfdi={cfdiPorPago[p.id]}
                             onStamped={() => { recargarCfdiPorPago(); onMutated(); }}
                           />
@@ -1244,6 +1261,12 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   <span>{t("clinical.invoiceDetail.cfdiUnpaidConfirm")}</span>
                 </label>
               </div>
+            )}
+            {fiscalOrigen === "responsable" && responsableDePago && (
+              <p className={cx("text-[11px]", c.texto)} data-cfdi-responsable>
+                Datos del responsable de pago: <strong>{responsableDePago.nombreCompleto}</strong>
+                {responsableDePago.parentesco ? ` (${responsableDePago.parentesco})` : ""}. El comprobante sale a su nombre, no al del paciente; lo que captures aquí se guarda en el responsable.
+              </p>
             )}
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalRfc")}</Label>

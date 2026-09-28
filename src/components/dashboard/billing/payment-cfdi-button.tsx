@@ -8,7 +8,7 @@
 // meterse en el `SubAction` de `invoice-detail-modal.tsx`: ese archivo ya es
 // grande y esto es aditivo — una fila de pago que no lo usa no cambia nada.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Receipt, Download, FileText } from "lucide-react";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
@@ -43,6 +43,14 @@ export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
     formaPago: METODO_A_FORMA_SAT[props.method ?? ""] ?? "03",
     impuestos: (props.clinicTaxMode === "exempt" ? "exento" : "iva16") as "exento" | "iva16",
   }));
+  // ws1-t10 (punto 9): el responsable de pago llega DESPUÉS de montar el botón
+  // (lo pide el detalle de la factura); mientras el formulario está cerrado, los
+  // datos por defecto lo siguen. Abierto, no se le pisa lo que el usuario teclee.
+  const { rfc: rfcPorDefecto, nombre: nombrePorDefecto, regimen: regimenPorDefecto, cp: cpPorDefecto } = props.defaultReceptor ?? {};
+  useEffect(() => {
+    if (open) return;
+    setFiscal((f) => ({ ...f, rfc: rfcPorDefecto ?? "", nombre: nombrePorDefecto ?? "", regimen: regimenPorDefecto || "612", cp: cpPorDefecto ?? "" }));
+  }, [open, rfcPorDefecto, nombrePorDefecto, regimenPorDefecto, cpPorDefecto]);
 
   if (props.cfdi) {
     const vigente = props.cfdi.status === "valid";

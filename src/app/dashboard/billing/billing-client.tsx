@@ -21,6 +21,8 @@ import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
+import { receptorInicial } from "@/lib/orthodontics/receptor-responsable";
+import { pedirResponsableDeFactura } from "@/components/dashboard/plan-de-pagos/use-responsable-cfdi";
 import { todayLocalISO } from "@/lib/billing/paid-at";
 // La ficha de factura del diseño nuevo (solo con `rediseno`): lo bueno de
 // Presupuestos. Ver components/dashboard/factura-ficha-rediseno/.
@@ -185,6 +187,18 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
     setCfdiMismatch(null);
     setCfdiBlockCode(null);
     setCfdiFor(inv);
+    // ws1-t10 (punto 9): si la factura es de un caso de ortodoncia con responsable
+    // de pago, el CFDI arranca con los datos del TUTOR (no los del niño). Llega
+    // async; solo pisa el formulario si sigue abierto para ESTA factura y el
+    // usuario aún no lo tocó (sigue con lo que se precargó del paciente).
+    const precargado = { rfc: inv.patient?.rfcPaciente ?? "", nombre: inv.patient?.razonSocialPac ?? "", cp: inv.patient?.cpPaciente ?? "" };
+    pedirResponsableDeFactura(inv.id).then((responsable) => {
+      if (!responsable) return;
+      const { datos } = receptorInicial(null, responsable);
+      setCfdiForm((f) => (f.rfc === precargado.rfc && f.nombre === precargado.nombre && f.cp === precargado.cp
+        ? { ...f, rfc: datos.rfc, nombre: datos.nombre, regimenFiscal: datos.regimen, cp: datos.cp }
+        : f));
+    });
   }
 
   const filtered = useMemo(() => {
