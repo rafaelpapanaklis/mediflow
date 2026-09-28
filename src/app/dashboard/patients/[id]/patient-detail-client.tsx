@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock, CreditCard, FileImage } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock, CreditCard, FileImage } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
@@ -97,6 +97,7 @@ import type { PerioTabData } from "@/lib/periodontics/load-data";
 import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import type { ImplantFull } from "@/lib/types/implants";
 import type { OrthoTabData } from "@/lib/orthodontics/load-data";
+import { resumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
 import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
 import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
 import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
@@ -480,6 +481,13 @@ export function PatientDetailClient({
   const showEndodontics  = endoSummaries !== null && endoSummaries !== undefined;
   const showImplants     = implants !== null && implants !== undefined;
   const showOrthodontics = orthoData !== null && orthoData !== undefined;
+  // El caso de ortodoncia, resumido para la portada y la pestaña Plan
+  // (ws1-t4 ronda 6). Sale de `orthoData`, que ya está cargado: ni una
+  // consulta más. Sin módulo o sin permiso, `null` y no se pinta nada.
+  const casoOrtodoncia = useMemo(
+    () => (showOrthodontics ? resumenOrtoParaFicha(orthoData) : null),
+    [showOrthodontics, orthoData],
+  );
   // Items de la tab bar móvil — MISMA fuente de verdad que el QuickNav de
   // escritorio (patient-nav-items.ts): mismos items, orden, labels y gating.
   // Solo en móvil los chips disabled (especialidades "Próximamente", Pediatría
@@ -1426,17 +1434,10 @@ export function PatientDetailClient({
         </Link>
         <span style={{ color: "var(--text-4)" }}>/</span>
         <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{fullName}</span>
-        {/* NOM-024 — exportar expediente HL7 CDA R2. La API gate por
-            permission medicalRecord.read; si el rol no califica devuelve
-            403 (mejor mostrar y dejar al server gatear que duplicar lógica). */}
-        <button
-          type="button"
-          onClick={() => { window.location.href = `/api/patients/${patient.id}/export-cda`; }}
-          className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-border bg-card hover:bg-muted text-foreground shadow-[var(--shadow-1)] transition duration-150 focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98]"
-          title={t("patients.export.cdaTitle")}
-        >
-          <Download size={11} strokeWidth={1.75} aria-hidden /> {t("patients.export.cdaLabel")}
-        </button>
+        {/* La exportación HL7 CDA R2 (NOM-024) ya no vive aquí: era el botón
+            más visible de toda ficha y nadie sabía qué era. Está en «Más
+            acciones del paciente» (⋯ de la cabecera, hero-card.tsx) como
+            «Exportar expediente (formato HL7)», con la misma acción. */}
       </div>
 
       {/* Hero card permanente — audit Opción C ajuste 1.
@@ -1716,6 +1717,7 @@ export function PatientDetailClient({
               citas={appointments}
               facturas={invoices}
               tratamientos={treatments}
+              casoOrtodoncia={casoOrtodoncia}
               canViewBilling={canViewBilling}
               canEditPatient={canEditPatient}
               onCobrar={openChargeShortcut}
@@ -2284,6 +2286,8 @@ export function PatientDetailClient({
                     onVer={(plan) => setViewPlan(plan)}
                     onEditar={(plan) => setEditPlan(plan)}
                     onEliminar={(plan) => handleDeleteTreatment(plan)}
+                    casoOrtodoncia={casoOrtodoncia}
+                    onAbrirCaso={() => setTab("ortodoncia")}
                   />
                 )}
                 {!rediseno && (

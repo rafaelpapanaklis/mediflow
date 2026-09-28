@@ -7,10 +7,10 @@
  * Se prueba leyendo el código, como el resto de candados de la ficha: lo que
  * se vigila es que el cableado no se pierda en un archivo que tocan muchos.
  *
- * Tres pruebas van marcadas `todo`: describen el cableado que FALTA en
- * `patient-detail-client.tsx` (pasar `casoOrtodoncia` a la portada y a Plan, y
- * quitar el botón de las migas). Ese archivo lo tenía otra pantalla a medias
- * al cerrar la ronda. Al cablear, quitar el `todo`.
+ * El cableado en `patient-detail-client.tsx` (pasar `casoOrtodoncia` a la
+ * portada y a Plan, y quitar el botón de las migas) llegó al retomar la
+ * ronda, cuando el archivo quedó libre; hasta entonces estas pruebas iban
+ * marcadas `todo`.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -38,7 +38,7 @@ const bloque = (inicio: string) => {
 
 // ── F2: el caso de ortodoncia ────────────────────────────────────────────
 
-test("el resumen del caso sale de lo ya cargado y solo con módulo y permisos", { todo: "pendiente: cablear en patient-detail-client.tsx cuando quede libre (ws1-t4 ronda 6)" }, () => {
+test("el resumen del caso sale de lo ya cargado y solo con módulo y permisos", () => {
   assert.match(
     ficha,
     /const casoOrtodoncia = useMemo\(\s*\(\) => \(showOrthodontics \? resumenOrtoParaFicha\(orthoData\) : null\)/,
@@ -48,7 +48,7 @@ test("el resumen del caso sale de lo ya cargado y solo con módulo y permisos", 
   assert.doesNotMatch(puro, /prisma|fetch\(|from "react"|^import /m);
 });
 
-test("la portada y la pestaña Plan reciben el caso", { todo: "pendiente: cablear en patient-detail-client.tsx cuando quede libre (ws1-t4 ronda 6)" }, () => {
+test("la portada y la pestaña Plan reciben el caso", () => {
   assert.ok(bloque("<ResumenRediseno").includes("casoOrtodoncia={casoOrtodoncia}"));
   const plan = bloque("<PlanTratamientoRediseno");
   assert.ok(plan.includes("casoOrtodoncia={casoOrtodoncia}"));
@@ -66,7 +66,7 @@ test("«Abrir caso» lleva a la pestaña ortodoncia y el caso cerrado no cuenta"
 
 // ── F5: la exportación HL7 ───────────────────────────────────────────────
 
-test("la exportación HL7 ya no está en las migas de la ficha", { todo: "pendiente: cablear en patient-detail-client.tsx cuando quede libre (ws1-t4 ronda 6)" }, () => {
+test("la exportación HL7 ya no está en las migas de la ficha", () => {
   assert.doesNotMatch(ficha, /export-cda/);
   assert.doesNotMatch(ficha, /patients\.export\.cdaLabel/);
 });
