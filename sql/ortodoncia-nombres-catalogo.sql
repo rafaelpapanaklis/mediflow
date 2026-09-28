@@ -19,7 +19,8 @@
 --     se borran ni se desactivan; el código deja de sembrarlos y de ofrecerlos
 --     en el menú del bot.
 --
--- ORDEN: se puede pegar antes o después de integrar. Sin él, esas clínicas
+-- ORDEN: si la clínica tiene el catálogo sembrado dos veces, pega ANTES
+-- sql/ortodoncia-catalogo-duplicados.sql. Se puede pegar antes o después de integrar. Sin él, esas clínicas
 -- conservan los nombres viejos y todo funciona igual.
 --
 -- Plano e idempotente: la segunda vez no encuentra nada que cambiar.
@@ -29,6 +30,14 @@ UPDATE "procedure_catalog" p
    SET "name" = 'Toma de registros de ortodoncia', "updatedAt" = now()
  WHERE p."category" = 'orthodontics'
    AND p."name" = 'Estudio de registros de ortodoncia'
+   -- Solo UNO por clínica (el activo más antiguo): si hay duplicados, los
+   -- demás se quedan con el nombre viejo y así no nacen dos con el nuevo.
+   AND p."id" = (
+     SELECT r."id" FROM "procedure_catalog" r
+      WHERE r."clinicId" = p."clinicId" AND r."category" = 'orthodontics' AND r."name" = 'Estudio de registros de ortodoncia'
+      ORDER BY r."isActive" DESC, r."createdAt", r."id"
+      LIMIT 1
+   )
    AND NOT EXISTS (
      SELECT 1 FROM "procedure_catalog" q
       WHERE q."clinicId" = p."clinicId" AND q."name" = 'Toma de registros de ortodoncia'
@@ -38,6 +47,14 @@ UPDATE "procedure_catalog" p
    SET "name" = 'Urgencia de ortodoncia', "updatedAt" = now()
  WHERE p."category" = 'orthodontics'
    AND p."name" = 'Urgencia de ortodoncia fuera de control'
+   -- Solo UNO por clínica (el activo más antiguo): si hay duplicados, los
+   -- demás se quedan con el nombre viejo y así no nacen dos con el nuevo.
+   AND p."id" = (
+     SELECT r."id" FROM "procedure_catalog" r
+      WHERE r."clinicId" = p."clinicId" AND r."category" = 'orthodontics' AND r."name" = 'Urgencia de ortodoncia fuera de control'
+      ORDER BY r."isActive" DESC, r."createdAt", r."id"
+      LIMIT 1
+   )
    AND NOT EXISTS (
      SELECT 1 FROM "procedure_catalog" q
       WHERE q."clinicId" = p."clinicId" AND q."name" = 'Urgencia de ortodoncia'
