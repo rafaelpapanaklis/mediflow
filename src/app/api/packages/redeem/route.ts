@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { negarApiPorCategoria } from "@/lib/dashboard/guardia-categoria.server";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
+  const fuera = negarApiPorCategoria("/dashboard/packages", ctx.clinicCategory);
+  if (fuera) return fuera;
 
   const body = await req.json();
   const { packageId, patientId } = body;
@@ -49,6 +53,9 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
+  const fuera = negarApiPorCategoria("/dashboard/packages", ctx.clinicCategory);
+  if (fuera) return fuera;
 
   const body = await req.json();
   const { redeemId } = body;

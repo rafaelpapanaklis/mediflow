@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
-import { getCurrentUser } from "@/lib/auth";
+import { exigirCategoriaParaPagina } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { ResourceBookingsClient } from "./resource-bookings-client";
@@ -9,7 +9,9 @@ import { ResourceBookingsClient } from "./resource-bookings-client";
 export const metadata: Metadata = { title: "Reservas legacy — DaleControl" };
 
 export default async function ResourceBookingsPage() {
-  const user = await getCurrentUser();
+  // Guardia de categoría EN LA PÁGINA (no en un layout): esta pantalla solo abre
+  // para las clínicas cuyo giro la tiene. La categoría sale de la sesión.
+  const user = await exigirCategoriaParaPagina("/dashboard/resource-bookings");
   const clinicId = user.clinicId;
 
   const today = new Date();

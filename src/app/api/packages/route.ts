@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { negarApiPorCategoria } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
+  const fuera = negarApiPorCategoria("/dashboard/packages", ctx.clinicCategory);
+  if (fuera) return fuera;
 
   const packages = await prisma.servicePackage.findMany({
     where: { clinicId: ctx.clinicId },
@@ -19,6 +23,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
+  const fuera = negarApiPorCategoria("/dashboard/packages", ctx.clinicCategory);
+  if (fuera) return fuera;
   if (!ctx.isAdmin) return NextResponse.json({ error: "Admin access required" }, { status: 403 });
 
   const body = await req.json();

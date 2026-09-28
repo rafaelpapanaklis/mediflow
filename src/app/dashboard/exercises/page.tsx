@@ -1,14 +1,16 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
-import { getCurrentUser } from "@/lib/auth";
+import { exigirCategoriaParaPagina } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
 import { ExercisesClient } from "./exercises-client";
 
 export const metadata: Metadata = { title: "Ejercicios — DaleControl" };
 
 export default async function ExercisesPage() {
-  const user = await getCurrentUser();
+  // Guardia de categoría EN LA PÁGINA (no en un layout): esta pantalla solo abre
+  // para las clínicas cuyo giro la tiene. La categoría sale de la sesión.
+  const user = await exigirCategoriaParaPagina("/dashboard/exercises");
   const clinicId = user.clinicId;
 
   // ws1-t4 (defensivo, sin cambio de comportamiento): select explícito para

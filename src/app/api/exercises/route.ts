@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { negarApiPorCategoria } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
 
 // Exercise library stored as InventoryItem with category="exercise_library"
@@ -18,6 +19,9 @@ const EXERCISE_SELECT = {
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
+  const fuera = negarApiPorCategoria("/dashboard/exercises", ctx.clinicCategory);
+  if (fuera) return fuera;
 
   const exercises = await prisma.inventoryItem.findMany({
     where: { clinicId: ctx.clinicId, category: "exercise_library" },
@@ -42,6 +46,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
+  const fuera = negarApiPorCategoria("/dashboard/exercises", ctx.clinicCategory);
+  if (fuera) return fuera;
 
   const body = await req.json();
   const { name, description, muscleGroup, defaultSets, defaultReps } = body;

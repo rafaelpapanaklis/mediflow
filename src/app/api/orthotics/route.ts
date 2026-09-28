@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { negarApiPorCategoria } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -10,6 +11,9 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
+  const fuera = negarApiPorCategoria("/dashboard/orthotics", ctx.clinicCategory);
+  if (fuera) return fuera;
 
   // Visibilidad por paciente. Filtro de RELACIÓN porque esto lista los
   // registros de TODA la clínica, restringidos incluidos.
@@ -34,6 +38,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
+  const fuera = negarApiPorCategoria("/dashboard/orthotics", ctx.clinicCategory);
+  if (fuera) return fuera;
 
   // Permiso granular: dar de alta la ortesis ARRANCA el tratamiento (nace en
   // etapa "evaluation"). Es la misma superficie que mover esa ortesis de etapa,

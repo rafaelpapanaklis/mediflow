@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { negarApiPorCategoria } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -7,6 +8,9 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
+  const fuera = negarApiPorCategoria("/dashboard/orthotics", ctx.clinicCategory);
+  if (fuera) return fuera;
 
   // Permiso granular: mover la ortesis de etapa (evaluación → molde →
   // laboratorio → entregado…) es avanzar el tratamiento del paciente, lo mismo
