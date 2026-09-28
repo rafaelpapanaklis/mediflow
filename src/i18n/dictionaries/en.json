@@ -9597,6 +9597,27 @@
     "lista": {
       "atajosAria": "Keyboard shortcuts for the list"
     },
+    "casoOrto": {
+      "titulo": "Orthodontic case",
+      "abrir": "Open case",
+      "mesDe": "Month {mes} of {total}",
+      "mes": "Month {mes}",
+      "enCurso": "In progress",
+      "porColocar": "Not placed yet",
+      "pausado": "On hold",
+      "enRetencion": "In retention",
+      "terminado": "Finished",
+      "abandonado": "Dropped out",
+      "fase": {
+        "ALIGNMENT": "Alignment",
+        "LEVELING": "Leveling",
+        "SPACE_CLOSURE": "Space closure",
+        "DETAILS": "Detailing",
+        "FINISHING": "Finishing",
+        "RETENTION": "Retention"
+      },
+      "sinPlanesGenerales": "No general dental treatment plans"
+    },
     "resumen": {
       "informacion": "Patient information",
       "telefono": "Phone",

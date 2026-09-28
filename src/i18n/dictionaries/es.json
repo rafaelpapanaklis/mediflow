@@ -9597,6 +9597,27 @@
     "lista": {
       "atajosAria": "Atajos de teclado de la lista"
     },
+    "casoOrto": {
+      "titulo": "Caso de ortodoncia",
+      "abrir": "Abrir caso",
+      "mesDe": "Mes {mes} de {total}",
+      "mes": "Mes {mes}",
+      "enCurso": "En curso",
+      "porColocar": "Por colocar",
+      "pausado": "Pausado",
+      "enRetencion": "En retención",
+      "terminado": "Terminado",
+      "abandonado": "Abandonado",
+      "fase": {
+        "ALIGNMENT": "Alineación",
+        "LEVELING": "Nivelación",
+        "SPACE_CLOSURE": "Cierre de espacios",
+        "DETAILS": "Detalles",
+        "FINISHING": "Finalización",
+        "RETENTION": "Retención"
+      },
+      "sinPlanesGenerales": "Sin planes de tratamiento dental general"
+    },
     "resumen": {
       "informacion": "Información del paciente",
       "telefono": "Teléfono",
