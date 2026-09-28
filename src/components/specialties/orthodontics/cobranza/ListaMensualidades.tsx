@@ -8,7 +8,7 @@
 //
 // R5 (cobrar a hermanos de una vez): cuando ≥2 mensualidades comparten el
 // mismo `responsibleGuardianId` (A11, "Alta del caso"), se agrupan bajo un
-// solo total y un botón "Cobrar a los dos". No es un cobro atómico nuevo (eso
+// solo total y un botón «Cobrar a los dos» (o «a los tres»…, ver rotulo-cobro.ts). No es un cobro atómico nuevo (eso
 // tocaría `src/app/api/invoices/**`, fuera del alcance de esta parte): abre
 // el `PaymentModal` de la primera factura y, al guardar, encadena el de la
 // segunda — dos confirmaciones rápidas en vez de dos búsquedas separadas.
@@ -26,6 +26,8 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import av from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.css";
 import { fmtMoney, fmtDate } from "../redesign/atoms/format";
+// ws1-t5 (arreglo): el botón y la lista de hermanos dicen a cuántos, con test.
+import { listaDeNombres, rotuloCobrar } from "@/lib/orthodontics/rotulo-cobro";
 import {
   listarMensualidadesPorCobrar,
   type MensualidadPorCobrar,
@@ -152,7 +154,7 @@ export function ListaMensualidades() {
                 <span className={av.quienNombre}>{g.guardianName ?? g.items[0].patientName}</span>
                 <BadgeNew tone={pill.tono} dot>{pill.label}</BadgeNew>
                 {g.items.length > 1 && (
-                  <span className={av.quienHermanos}>{g.items.map((it) => it.patientName).join(" y ")}</span>
+                  <span className={av.quienHermanos}>{listaDeNombres(g.items.map((it) => it.patientName))}</span>
                 )}
               </div>
               <span className={av.vence}>
@@ -160,7 +162,9 @@ export function ListaMensualidades() {
               </span>
               <span className={av.montoFila}>{fmtMoney(subtotal)}</span>
               <ButtonNew variant="primary" size="sm" onClick={() => iniciarCobro(g.items)}>
-                {g.items.length > 1 ? "Cobrar a los dos" : "Cobrar"}
+                {/* ws1-t5 (arreglo): decía «Cobrar a los dos» escrito fijo, también
+                    con tres hermanos. El cobro encadenado ya era de todos. */}
+                {rotuloCobrar(g.items.length)}
               </ButtonNew>
             </li>
           );
