@@ -1,6 +1,7 @@
 // Ortodoncia — carta de alta del caso (H66). Mismas guardias que los otros PDF del caso.
 
 import { NextResponse } from "next/server";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { differenceInMonths } from "date-fns";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { prisma } from "@/lib/prisma";
@@ -80,7 +81,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       patientName={`${plan.patient.firstName} ${plan.patient.lastName}`.trim()}
       doctorName={doctor ? `${doctor.firstName} ${doctor.lastName}`.trim() : "—"}
       doctorCedula={doctor?.cedulaProfesional ?? null}
-      techniqueLabel={techniqueLabel(plan.technique)}
+      techniqueLabel={techniqueLabel(plan.technique, await cargarNombreDeTecnica(ctx.clinicId, plan.id))}
       startDate={inicio ? inicio.toISOString() : null}
       endDate={fin ? fin.toISOString() : null}
       durationMonths={inicio && fin ? Math.max(0, differenceInMonths(fin, inicio)) : null}

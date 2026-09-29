@@ -21,6 +21,8 @@
 //   (c) el costo nace VACÍO: antes traía 45000 escrito en el código.
 
 import { useEffect, useId, useRef, useState } from "react";
+import { DateField } from "@/components/ui/date-field";
+import { hoyMasAniosISO } from "@/lib/orthodontics/fechas-de-formulario";
 import { Loader2, Plus, Sparkles, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { getCaseIntakeOptions, buscarTutoresDeLaClinica, type TutorDeLaClinica } from "@/app/actions/orthodontics";
@@ -34,6 +36,7 @@ import {
   type OrthoBillingMode,
 } from "@/lib/orthodontics/billing-mode";
 import {
+  ETIQUETAS_MODO_RESPONSABLE,
   MOTIVO_TELEFONO_TUTOR,
   errorReferenteNuevo,
   errorTelefonoTutor,
@@ -48,7 +51,9 @@ import {
 } from "@/lib/orthodontics/alta-caso-formulario";
 import { useCajon } from "../atoms/useCajon";
 import { usePresupuestoDelAlta } from "./usePresupuestoDelAlta";
-import { costoAProponer, precioDeTecnica, type PreciosPorTecnica } from "@/lib/orthodontics/precios-por-tecnica";
+import { EJEMPLO_DE_RETENCION } from "@/lib/orthodontics/retencion-ejemplo";
+import { costoAProponer } from "@/lib/orthodontics/precios-por-tecnica";
+import { nombrePropioAGuardar, tecnicasDeSiempre, type TecnicaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
 import orto from "../orto.module.css";
 
 const ANGLE_OPTIONS = [
@@ -70,16 +75,6 @@ const MODO_DE_COBRO_OPTIONS = (["PRECIO_TOTAL", "PAGO_POR_CONTROL"] as const).ma
   v,
   l: ORTHO_BILLING_MODE_LABELS[v],
 }));
-
-const TECHNIQUE_OPTIONS = [
-  { v: "METAL_BRACKETS", l: "Brackets metálicos" },
-  { v: "CERAMIC_BRACKETS", l: "Brackets estéticos (cerámicos)" },
-  { v: "SELF_LIGATING_METAL", l: "Autoligado metálico" },
-  { v: "SELF_LIGATING_CERAMIC", l: "Autoligado estético" },
-  { v: "LINGUAL_BRACKETS", l: "Brackets linguales" },
-  { v: "CLEAR_ALIGNERS", l: "Alineadores transparentes" },
-  { v: "HYBRID", l: "Mixto" },
-] as const;
 
 const ANCHORAGE_OPTIONS = [
   { v: "MAXIMUM", l: "Máximo" },
@@ -107,10 +102,6 @@ const GUARDIAN_RELATION_OPTIONS = [
   { v: "otro", l: "Otro" },
 ] as const;
 
-const DEFAULT_RETENTION =
-  "Retenedor fijo lingual 3-3 inferior + retenedor removible Hawley superior. " +
-  "24 horas por 6 meses, luego nocturno permanente.";
-
 export interface DrawerNewCaseDiagnosisPayload {
   angleClassRight: string;
   angleClassLeft: string;
@@ -133,7 +124,10 @@ export interface DrawerNewCaseDiagnosisPayload {
 }
 
 export interface DrawerNewCasePlanPayload {
+  /** Tipo base (enum OrthoTechnique): de él dependen consentimientos, alineadores y expediente. */
   technique: string;
+  /** Nombre propio de la técnica de la clínica, solo si difiere del de su tipo base (ws1-t10). */
+  techniqueLabel: string | null;
   estimatedDurationMonths: number;
   installedAt: string | null;
   /**
@@ -204,7 +198,12 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       setColumnsExist(res.data.columnsExist);
       setBillingMode(res.data.billingMode);
       setModoDeLaClinica(res.data.billingMode);
-      setPreciosPorTecnica(res.data.preciosPorTecnica ?? {});
+      // Solo las ACTIVAS de la clínica; si quitó todas, el selector queda vacío y el alta lo pide.
+      setTecnicas(res.data.tecnicas);
+      setTecnicaId((actual) => (res.data.tecnicas.some((x) => x.id === actual) ? actual : (res.data.tecnicas[0]?.id ?? "")));
+      // «Responsable del pago»: el paciente, o —si es menor y ya tiene tutor— ese tutor.
+      setGuardianMode(res.data.responsablePropuesto.modo);
+      setResponsibleGuardianId(res.data.responsablePropuesto.tutorId);
       // H60: lo que el doctor ya midió en «Nueva consulta» se propone aquí (editable).
       const o = res.data.oclusionDeConsulta;
       if (o) {
@@ -260,7 +259,11 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   const [nextObservationDate, setNextObservationDate] = useState("");
 
   // ── Plan de tratamiento ──────────────────────────────────────────────
-  const [technique, setTechnique] = useState("METAL_BRACKETS");
+  // ws1-t10: la lista de técnicas es de la clínica (activas, por su nombre). `tecnicaId` es el id estable de
+  // la elegida; el tipo base y el nombre propio salen de ella al guardar.
+  const [tecnicas, setTecnicas] = useState<TecnicaClinica[]>(() => tecnicasDeSiempre());
+  const [tecnicaId, setTecnicaId] = useState("METAL_BRACKETS");
+  const tecnica = tecnicas.find((x) => x.id === tecnicaId) ?? tecnicas[0] ?? null;
   const [duration, setDuration] = useState(18);
   const [installedAt, setInstalledAt] = useState("");
   // (c) Vacío a propósito: el precio lo escribe la clínica, no el código.
@@ -275,25 +278,24 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   // elegida (tabla de Configuración → Precio por técnica). Solo toca el campo si está
   // vacío o si aún trae lo que esta tabla propuso; nunca pisa lo que se tecleó ni el
   // importe de un presupuesto aceptado.
-  const [preciosPorTecnica, setPreciosPorTecnica] = useState<PreciosPorTecnica>({});
   const [costoSugerido, setCostoSugerido] = useState<string | null>(null);
   const costoSugeridoRef = useRef<string | null>(null);
   const totalCostRef = useRef(totalCost);
   totalCostRef.current = totalCost;
   useEffect(() => {
-    const precio = precioDeTecnica(preciosPorTecnica, technique);
+    const precio = tecnica?.precio ?? null;
     const nuevo = costoAProponer({ actual: totalCostRef.current, ultimoSugerido: costoSugeridoRef.current, precio, hayPresupuesto: presupuesto != null });
     if (nuevo === null) return;
     costoSugeridoRef.current = nuevo === "" ? null : nuevo;
     setCostoSugerido(costoSugeridoRef.current);
     setTotalCost(nuevo);
-  }, [technique, preciosPorTecnica, presupuesto]);
+  }, [tecnica, presupuesto]);
   const [anchorage, setAnchorage] = useState("MODERATE");
   const [extractions, setExtractions] = useState(false);
   const [iprRequired, setIprRequired] = useState(false);
   const [tadsRequired, setTadsRequired] = useState(false);
   const [objectives, setObjectives] = useState("AESTHETIC_AND_FUNCTIONAL");
-  const [retention, setRetention] = useState(DEFAULT_RETENTION);
+  const [retention, setRetention] = useState("");
   const [guardianMode, setGuardianMode] = useState<ModoResponsable>("none");
   const [responsibleGuardianId, setResponsibleGuardianId] = useState("");
   const [newGuardianName, setNewGuardianName] = useState("");
@@ -346,6 +348,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     tutorElegidoId: responsibleGuardianId,
     tutorNombre: newGuardianName,
     tutorTelefono: newGuardianPhone,
+    sinTecnica: tecnica === null,
   });
   const fraseFaltantes = fraseDeFaltantes(faltantes, inObservation);
   const canSubmit = faltantes.length === 0;
@@ -425,7 +428,8 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       const plan: DrawerNewCasePlanPayload | null = inObservation
         ? null
         : {
-            technique,
+            technique: tecnica?.base ?? "METAL_BRACKETS", // sin técnica el alta no se puede confirmar (faltantes)
+            techniqueLabel: nombrePropioAGuardar(tecnica),
             estimatedDurationMonths: duration,
             installedAt: installedAt ? new Date(installedAt).toISOString() : null,
             totalCostMxn: costo as number,
@@ -676,7 +680,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 </label>
                 {inObservation ? (
                   <Field label="Próxima revisión">
-                    <input type="date" value={nextObservationDate} onChange={(e) => setNextObservationDate(e.target.value)} className={inputCls} />
+                    <DateField value={nextObservationDate} onChange={(e) => setNextObservationDate(e.target.value)} max={hoyMasAniosISO(5)} className={inputCls} aria-label="Próxima revisión" />
                   </Field>
                 ) : null}
               </div>
@@ -688,13 +692,19 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
               <SectionTitle>Datos del caso</SectionTitle>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Aparatología">
-                  <Select value={technique} onChange={setTechnique} options={TECHNIQUE_OPTIONS} />
+                  {tecnicas.length > 0 ? (
+                    <Select value={tecnica?.id ?? ""} onChange={setTecnicaId} options={tecnicas.map((x) => ({ v: x.id, l: x.nombre }))} />
+                  ) : (
+                    <p className="text-[11px] text-[color:var(--pr-alerta)]">
+                      La clínica no tiene técnicas activas. Agrégalas en Configuración → Técnicas y precios.
+                    </p>
+                  )}
                 </Field>
                 <Field label="Duración estimada (meses)">
                   <NumberInput value={duration} onChange={setDuration} step={1} min={3} max={60} />
                 </Field>
                 <Field label="Fecha de colocación (opcional)">
-                  <input type="date" value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} className={inputCls} />
+                  <DateField value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} max={hoyMasAniosISO(5)} className={inputCls} aria-label="Fecha de colocación" />
                 </Field>
                 <Field label="Cómo se cobra este caso" hint={pistaDelModoDelCaso(billingMode, modoDeLaClinica)}>
                   <Select
@@ -734,7 +744,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 <Checkbox label="Requiere TADs" checked={tadsRequired} onChange={setTadsRequired} />
               </div>
               <Field label="Plan de retención (mín. 20 caracteres)">
-                <textarea value={retention} onChange={(e) => setRetention(e.target.value)} className={`${inputCls} min-h-[70px]`} />
+                <textarea value={retention} onChange={(e) => setRetention(e.target.value)} placeholder={`Ejemplo: ${EJEMPLO_DE_RETENCION}`} className={`${inputCls} min-h-[70px]`} />
                 <div className={`text-[11px] mt-1 ${retentionValid ? "text-[color:var(--pr-exito)]" : "text-[color:var(--pr-alerta)]"}`}>
                   {retention.trim().length} / 20 mínimo
                 </div>
@@ -785,10 +795,10 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                     responsable todavía.
                   </p>
                 ) : null}
-                <div className="flex gap-2">
-                  <GuardianModeButton active={guardianMode === "none"} onClick={() => setGuardianMode("none")}>Sin definir</GuardianModeButton>
-                  <GuardianModeButton active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId}>Ya registrado</GuardianModeButton>
-                  <GuardianModeButton active={guardianMode === "new"} onClick={() => setGuardianMode("new")} disabled={!columnsExist.responsibleGuardianId}>Nuevo</GuardianModeButton>
+                <div className="flex flex-wrap gap-2">
+                  <GuardianModeButton active={guardianMode === "none"} onClick={() => setGuardianMode("none")}>{ETIQUETAS_MODO_RESPONSABLE.none}</GuardianModeButton>
+                  <GuardianModeButton active={guardianMode === "existing"} onClick={() => setGuardianMode("existing")} disabled={!columnsExist.responsibleGuardianId}>{ETIQUETAS_MODO_RESPONSABLE.existing}</GuardianModeButton>
+                  <GuardianModeButton active={guardianMode === "new"} onClick={() => setGuardianMode("new")} disabled={!columnsExist.responsibleGuardianId}>{ETIQUETAS_MODO_RESPONSABLE.new}</GuardianModeButton>
                 </div>
                 {guardianMode === "existing" ? (
                   <div className="space-y-2">

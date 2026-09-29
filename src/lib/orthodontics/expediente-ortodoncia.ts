@@ -1,3 +1,4 @@
+import { nombreDeTecnica } from "./tecnicas-de-la-clinica";
 // Ortodoncia en el EXPEDIENTE PDF del paciente (ws1-t10, punto 12 / decisión 3 y 4).
 // El caso (diagnóstico, plan, doctor, estado) y sus HOJAS DE CONTROL firmadas
 // salen dentro de la sección «Planes de tratamiento» del expediente, tenga o no
@@ -109,9 +110,9 @@ export interface HojaCruda {
 }
 
 /** Un caso del expediente a partir de lo que trae Prisma. Las hojas salen de la más vieja a la más nueva. */
-export function armarCasoDeOrtodoncia(plan: PlanCrudo, hojas: readonly HojaCruda[]): ExpedienteOrtodoncia {
+export function armarCasoDeOrtodoncia(plan: PlanCrudo, hojas: readonly HojaCruda[], nombrePropio?: string | null): ExpedienteOrtodoncia {
   return {
-    tecnica: TECNICA[plan.technique] ?? plan.technique,
+    tecnica: nombreDeTecnica(plan.technique, nombrePropio, TECNICA[plan.technique] ?? plan.technique),
     estado: ESTADO_DEL_CASO[plan.status] ?? plan.status,
     doctor: plan.treatingDoctor ? `Dr/a. ${plan.treatingDoctor.firstName} ${plan.treatingDoctor.lastName}`.trim() : null,
     inicio: iso(plan.startDate),

@@ -30,7 +30,33 @@ export const MAX_COSTO_TOTAL = 10_000_000;
 export const MOTIVO_TELEFONO_TUTOR =
   "Obligatorio. Es el contacto de quien paga: recepción lo usa para localizarlo por las mensualidades.";
 
+/**
+ * «Responsable del pago» del alta. "none" = EL PACIENTE (paga el mismo paciente y se factura con sus
+ * datos fiscales): en la base es `responsibleGuardianId = null`, igual que un caso sin responsable
+ * de siempre — cobro, Cobranza, factura y portal ya tratan ese null como «el paciente», así que los
+ * casos ya abiertos no cambian. Ya no existe «Sin definir».
+ */
 export type ModoResponsable = "none" | "existing" | "new";
+
+export const ETIQUETAS_MODO_RESPONSABLE: Record<ModoResponsable, string> = {
+  none: "El paciente",
+  existing: "Otra persona ya registrada",
+  new: "Otra persona nueva",
+};
+
+/** Con quién arranca el alta: el paciente, salvo que sea menor y ya tenga un tutor registrado. */
+export function responsablePropuestoParaElAlta(args: {
+  esMenor: boolean;
+  tutores: ReadonlyArray<{ id: string; principal?: boolean; esResponsableLegal?: boolean }>;
+}): { modo: ModoResponsable; tutorId: string } {
+  if (!args.esMenor || args.tutores.length === 0) return { modo: "none", tutorId: "" };
+  const elegido =
+    args.tutores.find((g) => g.principal && g.esResponsableLegal) ??
+    args.tutores.find((g) => g.esResponsableLegal) ??
+    args.tutores.find((g) => g.principal) ??
+    args.tutores[0]!;
+  return { modo: "existing", tutorId: elegido.id };
+}
 
 /** Solo las cifras: «+52 55 1234-5678» → «525512345678». */
 export function soloDigitos(texto: string): string {
@@ -113,6 +139,8 @@ export interface EstadoAlta {
   tutorElegidoId: string;
   tutorNombre: string;
   tutorTelefono: string;
+  /** ws1-t10: la clínica no tiene ninguna técnica activa que ofrecer. */
+  sinTecnica?: boolean;
 }
 
 /**
@@ -136,6 +164,7 @@ export function faltantesDelAlta(e: EstadoAlta): string[] {
   }
   if (e.enObservacion) return faltan;
 
+  if (e.sinTecnica) faltan.push("una técnica (la clínica no tiene ninguna activa: agrégala en Configuración → Técnicas y precios)");
   if (leerCostoTotal(e.costoTotal) === null) {
     faltan.push(e.costoTotal.trim() === "" ? "el costo del tratamiento" : "un costo del tratamiento válido (mayor que cero)");
   }
@@ -144,7 +173,7 @@ export function faltantesDelAlta(e: EstadoAlta): string[] {
     faltan.push(`el plan de retención (lleva ${retencion} de ${MIN_RETENCION} caracteres)`);
   }
   if (e.modoResponsable === "existing" && e.tutorElegidoId === "") {
-    faltan.push("elegir al responsable del pago (o marcar «Sin definir»)");
+    faltan.push("elegir al responsable del pago (o marcar «El paciente»)");
   }
   if (e.modoResponsable === "new") {
     if (e.tutorNombre.trim().length < MIN_NOMBRE_TUTOR) faltan.push("el nombre del responsable del pago");

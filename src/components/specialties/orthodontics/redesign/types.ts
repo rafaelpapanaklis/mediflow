@@ -163,6 +163,8 @@ export interface OrthoTreatmentDTO {
   monthTotal: number;
   appliance: {
     type: string | null;
+    /** Tipo base (enum OrthoTechnique) del caso; `type` es su nombre para mostrar (puede ser el propio de la clínica). Opcional: fixtures viejos no lo traen. */
+    technique?: string | null;
     prescriptionSlot: OrthoApplianceSlot | null;
     bonding: OrthoBondingType | null;
     notes: string | null;

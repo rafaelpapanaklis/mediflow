@@ -10,6 +10,7 @@ import { auditOrtho, getOrthoPlanActionContext } from "./_helpers";
 import { validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { guardarNombreDeTecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { controlesConOtroDoctor } from "@/lib/orthodontics/controles-con-otro-doctor-db";
 import { avisoDePrecioDesfasado } from "@/lib/orthodontics/cobro/precio-desfasado";
 
@@ -60,7 +61,8 @@ export async function updateTreatmentPlan(
     }
   }
 
-  const { treatmentPlanId, diagnosisId, patientId, newResponsibleGuardian, ...rest } = parsed.data;
+  // `techniqueLabel` no es columna de Prisma (va por SQL crudo, ws1-t10): se saca de `rest`.
+  const { treatmentPlanId, diagnosisId, patientId, newResponsibleGuardian, techniqueLabel, ...rest } = parsed.data;
   const data: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(rest)) {
     if (value !== undefined) data[key] = value;
@@ -126,6 +128,14 @@ export async function updateTreatmentPlan(
         );
         return prisma.orthodonticTreatmentPlan.update({ where: { id: treatmentPlanId }, data: reduced });
       });
+
+    // ws1-t10: el nombre propio de la técnica. Si se manda, se guarda; si cambia el tipo base sin
+    // mandar nombre, el anterior ya no corresponde y se limpia (se muestra el del tipo base).
+    if (techniqueLabel !== undefined) {
+      await guardarNombreDeTecnicaDelCaso(ctx.clinicId, updated.id, techniqueLabel);
+    } else if (parsed.data.technique !== undefined && parsed.data.technique !== before.technique) {
+      await guardarNombreDeTecnicaDelCaso(ctx.clinicId, updated.id, null);
+    }
 
     // H46: el estado arrastra a la fase (y al régimen de retención). Es
     // secundario: si falla, el cambio de estado ya quedó guardado.

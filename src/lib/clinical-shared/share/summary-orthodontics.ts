@@ -1,6 +1,7 @@
 // clinical-shared/share — summary corto Orto para vista pública del paciente.
 
 import { prisma } from "@/lib/prisma";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 
 export interface OrthoShareStats {
   monthInTreatment: number | null;
@@ -93,7 +94,7 @@ export async function buildShortOrthoSummary(args: {
       initialPhotoSetId: initial?.id ?? null,
       lastPhotoSetId: last?.id ?? null,
       paymentStatus: plan.paymentPlan?.status ?? null,
-      technique: plan.technique,
+      technique: (await cargarNombreDeTecnica(args.clinicId, plan.id)) ?? plan.technique,
     },
   };
 }

@@ -945,9 +945,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             prescriptionSlot: t.appliance.prescriptionSlot,
             bondingType: t.appliance.bonding,
             technique:
-              t.appliance.type === "Brackets metálicos auto-ligado"
-                ? "SELF_LIGATING_METAL"
-                : "METAL_BRACKETS",
+              t.appliance.technique ??
+              (t.appliance.type === "Brackets metálicos auto-ligado" ? "SELF_LIGATING_METAL" : "METAL_BRACKETS"),
             prescriptionNotes: t.appliance.notes,
           }}
           onClose={closeDrawer}

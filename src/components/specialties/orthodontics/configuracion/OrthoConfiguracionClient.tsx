@@ -32,15 +32,15 @@ import type { OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
 import { MAX_PLANTILLA, PLANTILLAS_ORTO, motivoDeRechazoDePlantillas } from "@/lib/orthodontics/plantillas-mensaje";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { mensajeDeQuitar, separarActivosYQuitados, textoConfirmarQuitar } from "@/lib/procedures/quitar-procedimiento";
-import { PreciosPorTecnica } from "./PreciosPorTecnica";
-import type { PreciosPorTecnica as TablaDePrecios } from "@/lib/orthodontics/precios-por-tecnica";
+import { TecnicasYPrecios } from "./TecnicasYPrecios";
+import type { TecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 
 export interface OrthoConfiguracionClientProps {
   settings: OrthoClinicSettings;
   doctors: OrthoConfigDoctorOption[];
   procedimientos: OrthoProcedureRow[];
   /** Precio del tratamiento por técnica (ws1-t10, decisión 2): lo que el alta del caso propone. */
-  preciosPorTecnica?: TablaDePrecios;
+  tecnicasDeLaClinica?: TecnicasDeLaClinica;
   /**
    * La tarjeta "Suscripción" (ws1-t2, 28-sep-2026) — `null` si no hay nada
    * que cancelar desde aquí: sin permiso (no dueño/administrador), módulo
@@ -62,7 +62,7 @@ const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
 // plantillas-mensaje.ts (ws1-t5, ronda 6): la pantalla, el guardado y los dos
 // envíos leen de ahí, para que lo que aquí se promete sea lo que se manda.
 
-export function OrthoConfiguracionClient({ settings, doctors, procedimientos: procedimientosIniciales, preciosPorTecnica, suscripcion }: OrthoConfiguracionClientProps) {
+export function OrthoConfiguracionClient({ settings, doctors, procedimientos: procedimientosIniciales, tecnicasDeLaClinica, suscripcion }: OrthoConfiguracionClientProps) {
   // Si el doctor guardado ya no atiende (baja o cambio de rol) no está en la
   // lista: el selector arranca en «Sin doctor por defecto» y lo dice, en vez
   // de conservar a escondidas un valor que el guardado rechazaría.
@@ -333,7 +333,7 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
             </div>
           </Tarjeta>
 
-          <PreciosPorTecnica iniciales={preciosPorTecnica ?? {}} />
+          <TecnicasYPrecios iniciales={tecnicasDeLaClinica} />
 
           <Tarjeta
             icono={CalendarClock}

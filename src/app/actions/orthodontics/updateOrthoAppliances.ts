@@ -4,6 +4,7 @@
 // prescriptionNotes del plan ortodóntico activo. Wrapper sobre
 // updateTreatmentPlan acotado a campos de aparatología.
 
+import { guardarNombreDeTecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -76,6 +77,11 @@ export async function updateOrthoAppliances(
       where: { id: treatmentPlanId },
       data: updateData,
     });
+
+    // ws1-t10: si cambia el tipo base, el nombre propio anterior ya no corresponde.
+    if (data.technique !== undefined && data.technique !== before.technique) {
+      await guardarNombreDeTecnicaDelCaso(ctx.clinicId, treatmentPlanId, null);
+    }
 
     await auditOrtho({
       ctx,

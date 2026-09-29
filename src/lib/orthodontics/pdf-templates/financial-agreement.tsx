@@ -50,7 +50,7 @@ export function FinancialAgreementPdf({ data }: { data: FinancialAgreementPdfDat
         <View style={styles.metric}>
           <Text style={styles.metricLabel}>Técnica:</Text>
           <Text style={styles.metricValue}>
-            {techniqueLabel(data.technique as never)}
+            {techniqueLabel(data.technique as never, data.techniqueName)}
           </Text>
         </View>
         <View style={styles.metric}>

@@ -10,6 +10,7 @@
 // queda solo con lo que sigue siendo EXCLUSIVO de Cobro.
 
 import { prisma } from "@/lib/prisma";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import type { OrthoTechnique } from "@prisma/client";
 import type { AuthContext } from "@/lib/auth-context";
 import { canSeePatient } from "@/lib/patient-visibility";
@@ -21,6 +22,8 @@ export interface CasoParaCobro {
   invoiceId: string | null;
   /** ronda 3 (ws1-t2, H9): para precargar «Abrir plan de pago» — concepto, precio y doctor tratante. */
   technique: OrthoTechnique;
+  /** ws1-t10: nombre propio de la técnica del caso (null = el del tipo base). */
+  techniqueName?: string | null;
   totalCostMxn: number;
   treatingDoctorId: string | null;
 }
@@ -60,6 +63,7 @@ export async function loadCasoParaCobro(args: {
       patientId: plan.patientId,
       invoiceId: plan.invoiceId,
       technique: plan.technique,
+      techniqueName: await cargarNombreDeTecnica(args.ctx.clinicId, plan.id),
       totalCostMxn: Number(plan.totalCostMxn) || 0,
       treatingDoctorId: plan.treatingDoctorId,
     },

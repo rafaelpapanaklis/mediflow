@@ -36,6 +36,7 @@
 //     CONTINÚA esa hoja en vez de crear una segunda del mismo día.
 
 import { prisma } from "@/lib/prisma";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { duracionSugeridaProximoControl } from "@/lib/orthodontics/duracion-proximo-control";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
@@ -201,6 +202,7 @@ export async function buildTreatmentCardContext(
     patientName: plan.patient ? `${plan.patient.firstName} ${plan.patient.lastName}` : "",
     monthAt,
     technique: plan.technique ?? null,
+    techniqueName: plan.clinicId && plan.id ? await cargarNombreDeTecnica(plan.clinicId, plan.id) : null,
     phaseKey: phase,
     paymentStatus: plan.paymentPlan?.status ?? null,
     bracketsPendientesFdi: lastPendingBrackets.map((b) => b.toothFdi),

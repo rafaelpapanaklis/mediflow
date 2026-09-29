@@ -15,6 +15,8 @@ export interface TreatmentConsentModalProps {
   isMinor: boolean;
   guardianName?: string | null;
   technique: OrthoTechnique;
+  /** ws1-t10: nombre propio de la técnica de la clínica; sin él, el del tipo base. */
+  techniqueName?: string | null;
   estimatedDurationMonths: number;
   retentionPlanText: string;
   doctorName: string;
@@ -34,7 +36,7 @@ export function TreatmentConsentModal(props: TreatmentConsentModalProps) {
     .replace(/\{fileNumber\}/g, "—")
     .replace(/\{doctorFullName\}/g, props.doctorName)
     .replace(/\{doctorLicense\}/g, props.doctorLicense)
-    .replace(/\{technique\}/g, techniqueLabel(props.technique))
+    .replace(/\{technique\}/g, techniqueLabel(props.technique, props.techniqueName))
     .replace(/\{techniqueNotes\}/g, "—")
     .replace(/\{diagnosisAccessibleSummary\}/g, props.diagnosisAccessibleSummary ?? "—")
     .replace(
@@ -78,7 +80,7 @@ export function TreatmentConsentModal(props: TreatmentConsentModalProps) {
   return (
     <ConsentModalShell
       title="Consentimiento de tratamiento ortodóntico"
-      subtitle={`Técnica: ${techniqueLabel(props.technique)}`}
+      subtitle={`Técnica: ${techniqueLabel(props.technique, props.techniqueName)}`}
       text={text}
       signerLabel={props.isMinor ? "Firma del tutor" : "Firma del paciente"}
       onClose={props.onClose}

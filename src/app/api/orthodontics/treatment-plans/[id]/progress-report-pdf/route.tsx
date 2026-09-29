@@ -1,6 +1,7 @@
 // Orthodontics — endpoint PDF "Reporte de progreso T0 vs T2". SPEC §9.3.
 
 import { NextResponse } from "next/server";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { differenceInMonths } from "date-fns";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { prisma } from "@/lib/prisma";
@@ -125,7 +126,7 @@ export async function GET(
         doctorName: doctor ? `${doctor.firstName} ${doctor.lastName}` : "—",
         clinicName: clinic?.name ?? "Clínica",
         durationMonthsActual: durationMonths,
-        techniqueLabel: techniqueLabel(plan.technique),
+        techniqueLabel: techniqueLabel(plan.technique, await cargarNombreDeTecnica(ctx.clinicId, plan.id)),
         retentionPlanText: plan.retentionPlanText,
         beforeLabel: `${t0.setType} · ${fmt(t0.capturedAt)}`,
         afterLabel: `${after.setType} · ${fmt(after.capturedAt)}`,

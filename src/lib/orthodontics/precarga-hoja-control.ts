@@ -80,6 +80,8 @@ export interface DatosNotaPrecargada {
   patientName: string;
   monthAt: number;
   technique: OrthoTechnique | null;
+  /** ws1-t10: nombre propio de la técnica del caso. */
+  techniqueName?: string | null;
   phaseKey: OrthoPhaseKey | null;
   paymentStatus: OrthoPaymentStatus | null;
   /** FDI de los brackets que siguen caídos (se mencionan en el Objetivo). */
@@ -91,7 +93,7 @@ export function notaPrecargada(d: DatosNotaPrecargada): NotaSoap {
   const n = buildOrthoSoapPrefill({
     patientName: d.patientName.trim() || "Paciente",
     monthInTreatment: d.monthAt,
-    technique: d.technique ? techniqueLabel(d.technique) : "ortodoncia",
+    technique: d.technique ? techniqueLabel(d.technique, d.techniqueName) : "ortodoncia",
     phaseKey: d.phaseKey,
     paymentStatus: d.paymentStatus,
     bracketsLooseFdis: d.bracketsPendientesFdi,

@@ -2,6 +2,7 @@
 // Pediatrics tiene su builder en summary.ts; aquí solo Ortodoncia.
 
 import { prisma } from "@/lib/prisma";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 
 const ANGLE_CLASS_LABELS: Record<string, string> = {
   CLASS_I: "Clase I",
@@ -71,10 +72,10 @@ export async function buildOrthoSummary(args: {
       : 0;
     const remaining = Math.max(0, totalMonths - monthsElapsed);
 
+    // ws1-t10: la técnica propia de la clínica, si el caso la trae.
+    const tecnica = (await cargarNombreDeTecnica(args.clinicId, plan.id)) ?? plan.technique.replaceAll("_", " ").toLowerCase();
     lines.push(
-      `Plan activo: técnica ${plan.technique
-        .replaceAll("_", " ")
-        .toLowerCase()}. Fase actual: ${
+      `Plan activo: técnica ${tecnica}. Fase actual: ${
         inProgress ? inProgress.phaseKey : "no iniciada"
       }. Mes ${monthsElapsed}/${totalMonths}, restan aprox. ${remaining} meses.`,
     );

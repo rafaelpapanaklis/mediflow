@@ -136,6 +136,8 @@ export const createTreatmentPlanSchema = z.object({
   diagnosisId: z.string().min(1),
   patientId: z.string().min(1),
   technique: z.enum(ORTHO_TECHNIQUE),
+  /** ws1-t10: nombre propio de la técnica de la clínica («Brackets de zafiro»); `technique` es su tipo base. */
+  techniqueLabel: z.string().max(80).optional().nullable(),
   techniqueNotes: z.string().max(1000).optional().nullable(),
   estimatedDurationMonths: z.number().int().min(3).max(60),
   startDate: z.string().datetime().optional().nullable(),

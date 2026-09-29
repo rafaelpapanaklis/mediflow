@@ -61,7 +61,7 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
         <View style={styles.box}>
           <View style={styles.metric}>
             <Text style={styles.metricLabel}>Técnica:</Text>
-            <Text style={styles.metricValue}>{techniqueLabel(data.plan.technique as never)}</Text>
+            <Text style={styles.metricValue}>{techniqueLabel(data.plan.technique as never, data.plan.techniqueName)}</Text>
           </View>
           {data.plan.techniqueNotes ? (
             <View style={styles.metric}>

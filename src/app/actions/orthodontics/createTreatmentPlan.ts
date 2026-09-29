@@ -9,6 +9,7 @@ import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { guardarModoDeCobroDelCaso } from "@/lib/orthodontics/billing-mode-db";
+import { guardarNombreDeTecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import {
   auditOrtho,
   getOrthoPlanActionContext,
@@ -175,6 +176,12 @@ export async function createTreatmentPlan(
     // sin la columna, el caso queda en null = PRECIO_TOTAL (default correcto
     // de todas formas) y solo avisa por consola.
     await guardarModoDeCobroDelCaso(ctx.clinicId, created.id, billingModeDelCaso);
+
+    // ws1-t10 — nombre propio de la técnica de la clínica, también en su propio paso y sin lanzar:
+    // sin la columna (sql/ortodoncia-tecnicas-propias.sql) el caso muestra el nombre de su tipo base.
+    if (parsed.data.techniqueLabel) {
+      await guardarNombreDeTecnicaDelCaso(ctx.clinicId, created.id, parsed.data.techniqueLabel);
+    }
 
     await auditOrtho({
       ctx,

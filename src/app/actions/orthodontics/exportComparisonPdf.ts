@@ -5,6 +5,8 @@
 // que treatment-plan-pdf y financial-agreement-pdf).
 
 import { z } from "zod";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { nombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
 import { prisma } from "@/lib/prisma";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
@@ -112,7 +114,7 @@ export async function exportComparisonPdf(
     doctorName: doctor ? `${doctor.firstName} ${doctor.lastName}` : "—",
     doctorCedula: doctor?.cedulaProfesional ?? null,
     clinicName: clinic.name,
-    techniqueLabel: plan.technique.replaceAll("_", " ").toLowerCase(),
+    techniqueLabel: nombreDeTecnica(plan.technique, await cargarNombreDeTecnica(ctx.clinicId, plan.id), plan.technique.replaceAll("_", " ").toLowerCase()),
     durationMonthsActual: monthsElapsed,
     estimatedDurationMonths: plan.estimatedDurationMonths,
     diagnosisSummary: plan.diagnosis.clinicalSummary,

@@ -7,6 +7,7 @@
 // dispara solo descarga/abre el PDF (ver DrawerCaseSettings).
 
 import { prisma } from "@/lib/prisma";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { z } from "zod";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
@@ -30,6 +31,8 @@ export interface ReferralProgressLetterPdfData {
   };
   plan: {
     technique: string;
+    /** ws1-t10: nombre propio de la técnica de la clínica. */
+    techniqueName?: string | null;
     estimatedDurationMonths: number;
     installedAt: string | null;
     retentionPlanText: string;
@@ -108,6 +111,7 @@ export async function exportReferralProgressLetterPdf(
     },
     plan: {
       technique: plan.technique,
+      techniqueName: await cargarNombreDeTecnica(ctx.clinicId, plan.id),
       estimatedDurationMonths: plan.estimatedDurationMonths,
       installedAt: plan.installedAt ? plan.installedAt.toISOString() : null,
       retentionPlanText: plan.retentionPlanText,

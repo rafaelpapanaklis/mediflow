@@ -14,6 +14,8 @@ import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-red
 
 export interface CasoParaBorrador {
   technique: OrthoTechnique;
+  /** ws1-t10: nombre propio de la técnica de la clínica; sin él, el del tipo base. */
+  techniqueName?: string | null;
   /** Costo de referencia del caso (`OrthodonticTreatmentPlan.totalCostMxn`), en pesos. */
   totalCostMxn: number;
   treatingDoctorId: string | null;
@@ -31,7 +33,7 @@ export function borradorInicialDelCaso(
   /** Precio de «Colocación de aparatología» en el catálogo de la clínica (solo lo usa PAGO_POR_CONTROL). */
   precioColocacion?: number | null,
 ): BorradorDeFactura {
-  const tecnica = techniqueLabel(caso.technique);
+  const tecnica = techniqueLabel(caso.technique, caso.techniqueName);
   const nombre = esPorControl
     ? `Colocación/enganche — ortodoncia (${tecnica})`
     : `Tratamiento de ortodoncia (${tecnica})`;

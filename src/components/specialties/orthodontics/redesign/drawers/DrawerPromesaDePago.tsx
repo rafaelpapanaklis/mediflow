@@ -4,6 +4,8 @@
 // revisa desde la lista de vencidas al día siguiente.
 
 import { useState } from "react";
+import { DateField } from "@/components/ui/date-field";
+import { hoyMasAniosISO } from "@/lib/orthodontics/fechas-de-formulario";
 import { Save, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { registrarPromesaDePago } from "@/app/actions/orthodontics/cobro/registrarPromesaDePago";
@@ -73,12 +75,13 @@ export function DrawerPromesaDePago(props: DrawerPromesaDePagoProps) {
           </label>
           <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)]">
             Fecha prometida
-            <input
-              type="date"
+            <DateField
               value={promisedDate}
               min={mañana()}
+              max={hoyMasAniosISO(2)}
               onChange={(e) => setPromisedDate(e.target.value)}
               className={`${orto.entrada} mt-1 w-full`}
+              aria-label="Fecha prometida"
             />
           </label>
           <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)]">

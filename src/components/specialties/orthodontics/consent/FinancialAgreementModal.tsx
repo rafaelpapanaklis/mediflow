@@ -15,6 +15,8 @@ export interface FinancialAgreementModalProps {
   guardianName?: string | null;
   isMinor: boolean;
   technique: OrthoTechnique;
+  /** ws1-t10: nombre propio de la técnica de la clínica; sin él, el del tipo base. */
+  techniqueName?: string | null;
   estimatedDurationMonths: number;
   totalCostMxn: number;
   initialDownPayment: number;
@@ -41,7 +43,7 @@ export function FinancialAgreementModal(props: FinancialAgreementModalProps) {
     .replace(/\{guardianFullName\}/g, props.guardianName ?? "—")
     .replace(/\{guardianRelationship\}/g, props.isMinor ? "tutor" : "—")
     .replace(/\{totalCostMxn\}/g, props.totalCostMxn.toLocaleString("es-MX"))
-    .replace(/\{technique\}/g, techniqueLabel(props.technique))
+    .replace(/\{technique\}/g, techniqueLabel(props.technique, props.techniqueName))
     .replace(/\{estimatedDurationMonths\}/g, String(props.estimatedDurationMonths))
     .replace(/\{initialDownPayment\}/g, props.initialDownPayment.toLocaleString("es-MX"))
     .replace(/\{installmentCount\}/g, String(props.installmentCount))

@@ -37,6 +37,7 @@ import type {
 } from "@/components/specialties/orthodontics/redesign/types";
 import { PHASE_LABELS } from "@/components/specialties/orthodontics/redesign/types";
 import { resolveCurrentWire } from "./current-wire";
+import { nombreDeTecnica } from "../tecnicas-de-la-clinica";
 
 // Tipos auxiliares para include shapes que load-data devolverá.
 
@@ -161,6 +162,8 @@ export interface AdapterInput {
    */
   realInvoiceTotal?: number | null;
   realInvoicePaid?: number | null;
+  /** ws1-t10: nombre propio de la técnica del caso (`techniqueLabel`); sin él sale el del tipo base. */
+  techniqueLabel?: string | null;
 }
 
 export function adaptToOrthoRedesignViewModel(
@@ -183,6 +186,7 @@ export function adaptToOrthoRedesignViewModel(
     elastics: input.elastics,
     realInvoiceTotal: input.realInvoiceTotal ?? null,
     realInvoicePaid: input.realInvoicePaid ?? null,
+    techniqueLabel: input.techniqueLabel ?? null,
   });
 
   const diagnosis = l.diagnosis ? adaptDiagnosis(l.diagnosis) : null;
@@ -232,6 +236,7 @@ function adaptTreatment(args: {
   elastics?: OrthoTreatmentDTO["elastics"];
   realInvoiceTotal: number | null;
   realInvoicePaid: number | null;
+  techniqueLabel?: string | null;
 }): OrthoTreatmentDTO {
   const l = args.legacy;
   const plan = l.plan;
@@ -262,7 +267,8 @@ function adaptTreatment(args: {
     monthCurrent: l.monthInTreatment,
     monthTotal: plan?.estimatedDurationMonths ?? 0,
     appliance: {
-      type: plan ? humanTechnique(plan.technique) : null,
+      technique: plan?.technique ?? null,
+      type: plan ? nombreDeTecnica(plan.technique, args.techniqueLabel, humanTechnique(plan.technique)) : null,
       prescriptionSlot: plan?.prescriptionSlot ?? null,
       bonding: plan?.bondingType ?? null,
       notes: plan?.prescriptionNotes ?? plan?.techniqueNotes ?? null,
@@ -473,7 +479,7 @@ const TECHNIQUE_LABELS: Record<string, string> = {
   HYBRID: "Tratamiento híbrido",
 };
 
-function humanTechnique(t: OrthodonticTreatmentPlan["technique"]): string {
+export function humanTechnique(t: OrthodonticTreatmentPlan["technique"]): string {
   return TECHNIQUE_LABELS[t] ?? t;
 }
 

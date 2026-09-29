@@ -3,6 +3,7 @@
 // Carga datos para que el route handler renderToBuffer arme el PDF.
 
 import { prisma } from "@/lib/prisma";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { exportTreatmentPlanPdfSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
@@ -23,6 +24,8 @@ export type TreatmentPlanPdfData = {
   };
   plan: {
     technique: string;
+    /** ws1-t10: nombre propio de la técnica de la clínica. */
+    techniqueName?: string | null;
     techniqueNotes: string | null;
     estimatedDurationMonths: number;
     totalCostMxn: string;
@@ -93,6 +96,7 @@ export async function exportTreatmentPlanPdf(
     meta: { exportedAt: new Date().toISOString() },
   });
 
+  const techniqueName = await cargarNombreDeTecnica(ctx.clinicId, plan.id);
   return ok({
     treatmentPlanId: plan.id,
     patient: plan.patient,
@@ -107,6 +111,7 @@ export async function exportTreatmentPlanPdf(
     },
     plan: {
       technique: plan.technique,
+      techniqueName,
       techniqueNotes: plan.techniqueNotes,
       estimatedDurationMonths: plan.estimatedDurationMonths,
       totalCostMxn: plan.totalCostMxn.toString(),

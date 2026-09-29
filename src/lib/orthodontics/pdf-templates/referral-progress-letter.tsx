@@ -75,7 +75,7 @@ export function ReferralProgressLetterPdf({ data }: { data: ReferralProgressLett
           </View>
           <View style={styles.metric}>
             <Text style={styles.metricLabel}>Técnica utilizada:</Text>
-            <Text style={styles.metricValue}>{techniqueLabel(data.plan.technique as never)}</Text>
+            <Text style={styles.metricValue}>{techniqueLabel(data.plan.technique as never, data.plan.techniqueName)}</Text>
           </View>
           {isInicio ? (
             <View style={styles.metric}>

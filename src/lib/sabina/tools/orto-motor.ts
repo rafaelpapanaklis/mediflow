@@ -54,6 +54,7 @@ import { cargarCobranzaDelCaso } from "@/lib/orthodontics/cobranza-db";
 import type { CobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
 import { loadOrthoData } from "@/lib/orthodontics/load-data";
 import { adaptToOrthoRedesignViewModel, type AdapterInput } from "@/lib/orthodontics/redesign/adapter";
+import { cargarNombreDeTecnica, type LectorRaw } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { buildHygieneTrend, detectHygieneWorsening } from "@/lib/orthodontics/redesign/hygiene-trend";
 import { compareTrayToExpected, computeExpectedTray } from "@/lib/orthodontics/alineadores/expected-tray";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
@@ -276,6 +277,7 @@ export async function leerCaso(
     elasticsCompliancePct: 0,
     realInvoiceTotal: legacy.invoiceTotal,
     realInvoicePaid: legacy.invoicePaid,
+    techniqueLabel: plan ? await cargarNombreDeTecnica(clinicId, plan.id, db as unknown as LectorRaw) : null,
   });
 
   let clinico: CasoLeido["clinico"] = null;

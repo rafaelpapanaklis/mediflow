@@ -6,6 +6,8 @@
 // Todo vía updateTreatmentPlan (server action existente, con bitácora).
 
 import { useEffect, useState } from "react";
+import { DateField } from "@/components/ui/date-field";
+import { hoyMasAniosISO } from "@/lib/orthodontics/fechas-de-formulario";
 import { FileText, Loader2, Save, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { getCaseIntakeOptions, buscarTutoresDeLaClinica, type TutorDeLaClinica } from "@/app/actions/orthodontics";
@@ -208,7 +210,7 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
           </Field>
 
           <Field label="Fecha de colocación">
-            <input type="date" value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} className={inputCls} />
+            <DateField value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} max={hoyMasAniosISO(5)} className={inputCls} aria-label="Fecha de colocación" />
             <p className="text-[11px] text-[color:var(--pr-texto-3)] mt-1">
               Si el caso seguía &ldquo;planeado&rdquo; y pones fecha aquí, pasa a &ldquo;en tratamiento&rdquo;.
             </p>

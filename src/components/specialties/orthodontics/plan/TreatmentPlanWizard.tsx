@@ -1,12 +1,14 @@
 "use client";
 // Orthodontics — wizard de plan de tratamiento 3 pasos. SPEC §6.6.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { WizardShell } from "../shared/WizardShell";
-import { createTreatmentPlan } from "@/app/actions/orthodontics";
+import { createTreatmentPlan, getCaseIntakeOptions } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { DateField } from "@/components/ui/date-field";
+import { nombrePropioAGuardar, tecnicasDeSiempre, type TecnicaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
+import { EJEMPLO_DE_RETENCION } from "@/lib/orthodontics/retencion-ejemplo";
 import type {
   AnchorageType,
   OrthoTechnique,
@@ -19,16 +21,6 @@ export interface TreatmentPlanWizardProps {
   onClose: () => void;
   onCreated?: (id: string) => void;
 }
-
-const TECHNIQUE_OPTIONS: OrthoTechnique[] = [
-  "METAL_BRACKETS",
-  "CERAMIC_BRACKETS",
-  "SELF_LIGATING_METAL",
-  "SELF_LIGATING_CERAMIC",
-  "LINGUAL_BRACKETS",
-  "CLEAR_ALIGNERS",
-  "HYBRID",
-];
 
 const ANCHORAGE_OPTIONS: AnchorageType[] = [
   "MAXIMUM",
@@ -43,15 +35,15 @@ const OBJECTIVE_OPTIONS: TreatmentObjective[] = [
   "AESTHETIC_AND_FUNCTIONAL",
 ];
 
-const DEFAULT_RETENTION =
-  "Retenedor fijo lingual 3-3 inferior + retenedor removible Hawley superior. " +
-  "24 horas por 6 meses, luego nocturno permanente.";
-
 export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
   const [step, setStep] = useState(1);
   const [pending, setPending] = useState(false);
 
-  const [technique, setTechnique] = useState<OrthoTechnique>("METAL_BRACKETS");
+  // ws1-t10: técnicas de la clínica (activas, por su nombre); el tipo base viaja en `technique`.
+  const [tecnicas, setTecnicas] = useState<TecnicaClinica[]>(() => tecnicasDeSiempre());
+  const [tecnicaId, setTecnicaId] = useState("METAL_BRACKETS");
+  const tecnica = tecnicas.find((x) => x.id === tecnicaId) ?? tecnicas[0] ?? null;
+  const technique: OrthoTechnique = tecnica?.base ?? "METAL_BRACKETS";
   const [techniqueNotes, setTechniqueNotes] = useState("");
   const [duration, setDuration] = useState(18);
   const [installedAt, setInstalledAt] = useState("");
@@ -66,9 +58,21 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
   const [objectives, setObjectives] = useState<TreatmentObjective>("AESTHETIC_AND_FUNCTIONAL");
   const [patientGoals, setPatientGoals] = useState("");
 
-  const [retention, setRetention] = useState(DEFAULT_RETENTION);
+  const [retention, setRetention] = useState("");
 
-  const canProceed = step === 3 ? retention.length >= 20 : true;
+  useEffect(() => {
+    let cancelado = false;
+    getCaseIntakeOptions({ patientId: props.patientId }).then((res) => {
+      if (cancelado || isFailure(res)) return;
+      setTecnicas(res.data.tecnicas);
+      setTecnicaId((actual) => (res.data.tecnicas.some((x) => x.id === actual) ? actual : (res.data.tecnicas[0]?.id ?? "")));
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [props.patientId]);
+
+  const canProceed = step === 3 ? retention.length >= 20 : step === 1 ? tecnica !== null : true;
 
   const submit = async () => {
     setPending(true);
@@ -81,6 +85,7 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
         diagnosisId: props.diagnosisId,
         patientId: props.patientId,
         technique,
+        techniqueLabel: nombrePropioAGuardar(tecnica),
         techniqueNotes: techniqueNotes || null,
         estimatedDurationMonths: duration,
         installedAt: installedAt ? new Date(installedAt).toISOString() : null,
@@ -122,7 +127,27 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
       {step === 1 ? (
         <Section title="Técnica + duración + costo">
           <Row label="Técnica">
-            <Select value={technique} onChange={(v) => setTechnique(v as OrthoTechnique)} options={TECHNIQUE_OPTIONS} />
+            {tecnicas.length > 0 ? (
+              <select
+                value={tecnica?.id ?? ""}
+                onChange={(e) => {
+                  setTecnicaId(e.target.value);
+                  const precio = tecnicas.find((x) => x.id === e.target.value)?.precio;
+                  if (precio) setTotalCost(precio);
+                }}
+                style={inputStyle}
+              >
+                {tecnicas.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.nombre}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span style={{ fontSize: 12, color: "#F59E0B" }}>
+                La clínica no tiene técnicas activas. Agrégalas en Configuración → Técnicas y precios.
+              </span>
+            )}
           </Row>
           <Row label="Notas de técnica">
             <textarea value={techniqueNotes} onChange={(e) => setTechniqueNotes(e.target.value)} rows={2} style={textareaStyle} />
@@ -174,6 +199,7 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
           <textarea
             value={retention}
             onChange={(e) => setRetention(e.target.value)}
+            placeholder={`Ejemplo: ${EJEMPLO_DE_RETENCION}`}
             rows={6}
             style={textareaStyle}
           />

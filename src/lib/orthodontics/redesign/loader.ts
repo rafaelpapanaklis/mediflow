@@ -24,6 +24,7 @@ import {
 } from "./indicadores-del-caso";
 import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { signMaybeUrls } from "@/lib/storage";
+import { cargarNombreDeTecnica } from "../tecnicas-de-la-clinica-db";
 import {
   adaptToOrthoRedesignViewModel,
   type AdapterInput,
@@ -438,6 +439,8 @@ export async function loadOrthoRedesignData(
     // siempre es seguro.
     realInvoiceTotal: legacy.invoiceTotal,
     realInvoicePaid: legacy.invoicePaid,
+    // ws1-t10: nombre propio de la técnica del caso (sin la columna: el del tipo base).
+    techniqueLabel: planId ? await cargarNombreDeTecnica(input.clinicId, planId) : null,
   };
 
   const viewModel = adaptToOrthoRedesignViewModel(adapterInput);

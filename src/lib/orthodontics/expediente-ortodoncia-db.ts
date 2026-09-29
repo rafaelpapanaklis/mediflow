@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { cargarNombresDeTecnica } from "./tecnicas-de-la-clinica-db";
 import { armarCasoDeOrtodoncia, type ExpedienteOrtodoncia } from "./expediente-ortodoncia";
 
 /**
@@ -52,7 +53,8 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
         select: { treatmentPlanId: true, cardNumber: true, visitDate: true, phaseKey: true, monthAt: true, soapP: true, signedAt: true },
       })).map((h) => ({ ...h, indications: null as string | null }));
     });
-    return planes.map((p) => armarCasoDeOrtodoncia(p, hojas.filter((h) => h.treatmentPlanId === p.id)));
+    const nombres = await cargarNombresDeTecnica(clinicId, planes.map((p) => p.id));
+    return planes.map((p) => armarCasoDeOrtodoncia(p, hojas.filter((h) => h.treatmentPlanId === p.id), nombres.get(p.id)));
   } catch (e) {
     console.warn("[expediente-pdf] no se pudo leer la ortodoncia del paciente:", e);
     return [];

@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { differenceInMonths } from "date-fns";
+import { nombreDeTecnica } from "./tecnicas-de-la-clinica";
 import {
   ETIQUETA_ESTADO_CASO,
   resumenOrtoParaFicha,
@@ -46,6 +47,8 @@ export interface CasoParaLaLista {
 export interface LoClinicoDelCaso {
   /** Clave de la técnica (`OrthoTechnique`), o `null` si no se pudo leer. */
   technique: string | null;
+  /** ws1-t10: nombre propio de la técnica del caso; sin él sale el del tipo base. */
+  techniqueLabel?: string | null;
   phases: ReadonlyArray<{ status: string; phaseKey: string }>;
 }
 
@@ -133,7 +136,7 @@ export function filaDeCaso(
     estado,
     etiquetaEstado: ETIQUETA_ESTADO_CASO[estado],
     etapa: resumen?.enCurso ? resumen.linea : "",
-    aparatologia: clinico?.technique ? (ETIQUETA_TECNICA[clinico.technique] ?? clinico.technique) : "—",
+    aparatologia: clinico?.technique ? nombreDeTecnica(clinico.technique, clinico.techniqueLabel, ETIQUETA_TECNICA[clinico.technique] ?? clinico.technique) : "—",
     ultimoControl: controles?.ultimo ? controles.ultimo.toISOString() : null,
     proximoControl: controles?.proximo ? controles.proximo.toISOString() : null,
     cobranza,

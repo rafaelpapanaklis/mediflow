@@ -2,6 +2,7 @@
 // Orthodontics — action 15/15: exportFinancialAgreementPdf. SPEC §9.2.
 
 import { prisma } from "@/lib/prisma";
+import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { exportFinancialAgreementPdfSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
@@ -13,6 +14,8 @@ export type FinancialAgreementPdfData = {
   patient: { firstName: string; lastName: string };
   clinic: { name: string };
   technique: string;
+  /** ws1-t10: nombre propio de la técnica de la clínica. */
+  techniqueName?: string | null;
   estimatedDurationMonths: number;
   totalAmount: string;
   initialDownPayment: string;
@@ -70,11 +73,13 @@ export async function exportFinancialAgreementPdf(
     meta: { exportedAt: new Date().toISOString() },
   });
 
+  const techniqueName = await cargarNombreDeTecnica(ctx.clinicId, plan.treatmentPlanId);
   return ok({
     paymentPlanId: plan.id,
     patient: plan.patient,
     clinic,
     technique: plan.treatmentPlan.technique,
+    techniqueName,
     estimatedDurationMonths: plan.treatmentPlan.estimatedDurationMonths,
     totalAmount: plan.totalAmount.toString(),
     initialDownPayment: plan.initialDownPayment.toString(),

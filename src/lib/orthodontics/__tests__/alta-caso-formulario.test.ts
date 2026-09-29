@@ -123,7 +123,7 @@ test("todo lo que falta, en el orden del formulario", () => {
 
   // «Ya registrado» sin elegir a nadie: antes se guardaba el caso SIN responsable, en silencio.
   assert.deepEqual(faltantesDelAlta({ ...COMPLETA, modoResponsable: "existing", tutorElegidoId: "" }), [
-    "elegir al responsable del pago (o marcar «Sin definir»)",
+    "elegir al responsable del pago (o marcar «El paciente»)",
   ]);
   assert.deepEqual(faltantesDelAlta({ ...COMPLETA, modoResponsable: "existing", tutorElegidoId: "g1" }), []);
 

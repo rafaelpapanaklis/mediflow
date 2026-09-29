@@ -10,6 +10,8 @@
 // agendar 5 revisiones (lo dispara advancePhase server action).
 
 import { useState } from "react";
+import { DateTimeField } from "@/components/ui/date-time-field";
+import { hoyMasAniosISO } from "@/lib/orthodontics/fechas-de-formulario";
 import { MessageCircle, Plus, Settings2, Shield } from "lucide-react";
 import { agendarRevisionRetencion } from "@/app/actions/orthodontics/agendarRevisionRetencion";
 import { isFailure } from "@/app/actions/orthodontics/result";
@@ -296,9 +298,9 @@ function CheckupCard({ checkup }: { checkup: RetainerCheckupDTO }) {
       {puedeAgendar && estado !== "agendado" ? (
         abierto ? (
           <div className="flex flex-col gap-[4px] w-full mt-[4px]">
-            <input
-              type="datetime-local"
+            <DateTimeField
               value={cuando}
+              max={hoyMasAniosISO(5)}
               onChange={(e) => setCuando(e.target.value)}
               className={orto.entrada}
               aria-label={`Fecha y hora de la revisión de ${checkup.monthsFromDebond} meses`}

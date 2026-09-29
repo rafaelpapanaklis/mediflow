@@ -6,6 +6,8 @@
 // elásticos, vista de clínica) + H15 (bandeja de fotos de monitoreo).
 
 import { useEffect, useId, useState, useTransition } from "react";
+import { DateField } from "@/components/ui/date-field";
+import { hoyMasAniosISO } from "@/lib/orthodontics/fechas-de-formulario";
 import { AlertTriangle, CheckCircle2, Circle, Layers } from "lucide-react";
 import { Card } from "../redesign/atoms/Card";
 import { Btn } from "../redesign/atoms/Btn";
@@ -148,11 +150,11 @@ function AlignerTrackingBlock({
             <NumberField label="Cambio cada (días)" value={form.changeIntervalDays} onChange={(v) => setForm({ ...form, changeIntervalDays: v })} />
             <div className={orto.campo}>
               <label htmlFor={idInicio} className={orto.campoEtiqueta}>Fecha de inicio</label>
-              <input
+              <DateField
                 id={idInicio}
-                type="date"
                 value={form.startedAt}
                 onChange={(e) => setForm({ ...form, startedAt: e.target.value })}
+                max={hoyMasAniosISO(2)}
                 className={`${orto.entrada} w-full`}
               />
             </div>

@@ -262,7 +262,10 @@ export function techniqueAccessibleName(t: OrthoTechnique): string {
 }
 
 /** Etiqueta humana de cada técnica para el cuerpo del consentimiento. */
-export function techniqueLabel(t: OrthoTechnique): string {
+export function techniqueLabel(t: OrthoTechnique, nombrePropio?: string | null): string {
+  // ws1-t10: la técnica propia de la clínica («Brackets de zafiro») sale tal cual la escribió.
+  const propio = typeof nombrePropio === "string" ? nombrePropio.replace(/\s+/g, " ").trim() : "";
+  if (propio) return propio;
   const map: Record<OrthoTechnique, string> = {
     METAL_BRACKETS: "brackets metálicos",
     CERAMIC_BRACKETS: "brackets cerámicos (estéticos)",

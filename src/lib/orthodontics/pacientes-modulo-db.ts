@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import { loadOrthoCases } from "./tablero-data";
+import { cargarNombresDeTecnica } from "./tecnicas-de-la-clinica-db";
 import {
   controlesPorPaciente,
   filaDeCaso,
@@ -45,7 +46,7 @@ export async function cargarFilasDeCasos(
   const planIds = cases.map((c) => c.planId);
   const pacientes = Array.from(new Set(cases.map((c) => c.patientId)));
 
-  const [planes, citas, hojas] = await Promise.all([
+  const [planes, citas, hojas, nombresDeTecnica] = await Promise.all([
     prisma.orthodonticTreatmentPlan.findMany({
       where: { clinicId, id: { in: planIds } },
       select: { id: true, technique: true, phases: { select: { status: true, phaseKey: true } } },
@@ -75,10 +76,12 @@ export async function cargarFilasDeCasos(
         if (!esRelacionAusente(e)) throw e;
         return [];
       }),
+    // ws1-t10: nombre propio de la técnica de cada caso (sin la columna: mapa vacío).
+    cargarNombresDeTecnica(clinicId, planIds),
   ]);
 
   const clinico = new Map<string, LoClinicoDelCaso>(
-    planes.map((p) => [p.id, { technique: p.technique, phases: p.phases }]),
+    planes.map((p) => [p.id, { technique: p.technique, techniqueLabel: nombresDeTecnica.get(p.id) ?? null, phases: p.phases }]),
   );
   const controles = controlesPorPaciente(
     citas,

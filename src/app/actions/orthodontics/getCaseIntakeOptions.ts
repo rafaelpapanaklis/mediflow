@@ -17,10 +17,12 @@ import { ORTHO_BILLING_MODE_DEFAULT, type OrthoBillingMode } from "@/lib/orthodo
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { cargarDoctoresTratantes } from "@/lib/orthodontics/doctores-tratantes-db";
 import { doctorPropuestoParaElAlta, etiquetaDeDoctor } from "@/lib/orthodontics/doctores-tratantes";
+import { responsablePropuestoParaElAlta, type ModoResponsable } from "@/lib/orthodontics/alta-caso-formulario";
+import { isMinor } from "@/lib/consent/signers";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { oclusionDeLaConsulta, type OclusionDeConsulta } from "@/lib/orthodontics/oclusion-de-consulta";
-import { leerPreciosPorTecnica } from "@/lib/orthodontics/precios-por-tecnica-db";
-import type { PreciosPorTecnica } from "@/lib/orthodontics/precios-por-tecnica";
+import { leerTecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { tecnicasActivas, type TecnicaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 export interface CaseIntakeOptions {
@@ -28,6 +30,11 @@ export interface CaseIntakeOptions {
   guardians: Array<{ id: string; fullName: string; parentesco: string; phone: string }>;
   referringDoctors: Array<{ id: string; fullName: string; clinicName: string | null }>;
   generalConsentSigned: boolean | null;
+  /**
+   * «Responsable del pago» con el que arranca el alta: «El paciente», salvo que sea menor de edad y ya
+   * tenga un tutor registrado (entonces ese tutor, que el doctor puede cambiar).
+   */
+  responsablePropuesto: { modo: ModoResponsable; tutorId: string };
   /** A13 — quién refirió al caso, si ya está guardado en el diagnóstico. */
   referredByDoctor: { id: string; fullName: string; clinicName: string | null } | null;
   /**
@@ -54,8 +61,8 @@ export interface CaseIntakeOptions {
    * control» no se factura un total, así que ahí es un estimado.
    */
   billingMode: OrthoBillingMode;
-  /** ws1-t10 (decisión 2): precio del tratamiento por técnica (Configuración); el alta propone el de la técnica elegida. */
-  preciosPorTecnica: PreciosPorTecnica;
+  /** ws1-t10: las técnicas ACTIVAS de la clínica (Configuración → Técnicas y precios); el alta propone el precio de la elegida. */
+  tecnicas: TecnicaClinica[];
   /**
    * Con qué doctor arranca el alta de un caso NUEVO (ws1-t5, ronda 6): el
    * «Doctor tratante por defecto» de Configuración si sigue atendiendo, o el
@@ -171,7 +178,7 @@ export async function getCaseIntakeOptions(
     cargarDoctoresTratantes(ctx.clinicId),
     prisma.guardian.findMany({
       where: { clinicId: ctx.clinicId, patientId, deletedAt: null },
-      select: { id: true, fullName: true, parentesco: true, phone: true },
+      select: { id: true, fullName: true, parentesco: true, phone: true, principal: true, esResponsableLegal: true },
       orderBy: { principal: "desc" },
     }),
     prisma.doctorContact.findMany({
@@ -234,12 +241,12 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: no se pudo leer la oclusión de la consulta:", e);
   }
 
-  const preciosPorTecnica = await leerPreciosPorTecnica(ctx.clinicId);
+  const tecnicas = tecnicasActivas((await leerTecnicasDeLaClinica(ctx.clinicId)).tecnicas);
 
   return ok({
     oclusionDeConsulta,
     billingMode,
-    preciosPorTecnica,
+    tecnicas,
     suggestedTreatingDoctorId: doctorPropuestoParaElAlta({ porDefecto: doctorPorDefecto, opciones: doctorsRaw }),
     doctors: doctorsRaw.map((d) => ({ id: d.id, fullName: etiquetaDeDoctor(d) })),
     guardians: guardiansRaw.map((g) => ({
@@ -254,6 +261,10 @@ export async function getCaseIntakeOptions(
       clinicName: r.clinicName,
     })),
     generalConsentSigned,
+    // Sin la columna de responsable (alta-caso.sql) no se puede guardar un tutor: siempre «El paciente».
+    responsablePropuesto: columnsExist.responsibleGuardianId
+      ? responsablePropuestoParaElAlta({ esMenor: isMinor(patient.data.dob), tutores: guardiansRaw })
+      : { modo: "none", tutorId: "" },
     referredByDoctor,
     columnsExist,
     currentPlan,

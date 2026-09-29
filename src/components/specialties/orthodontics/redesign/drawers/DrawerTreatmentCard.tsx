@@ -9,6 +9,9 @@
 // action) se conecta en commit posterior.
 
 import { useEffect, useMemo, useReducer, useState } from "react";
+import { DateField } from "@/components/ui/date-field";
+import { DateTimeField } from "@/components/ui/date-time-field";
+import { hoyISO, hoyMasAniosISO } from "@/lib/orthodontics/fechas-de-formulario";
 import {
   Camera,
   Check,
@@ -736,9 +739,9 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 })}
               </div>
               <div className={orto.rejilla2}>
-                <input
-                  type="datetime-local"
+                <DateTimeField
                   value={toDatetimeLocalValue(state.nextDate)}
+                  max={hoyMasAniosISO(3)}
                   onChange={(e) =>
                     dispatch({
                       kind: "set-next-date",
@@ -1171,10 +1174,9 @@ function BrokenBlock(props: {
                     />
                   </div>
                   {/* H50: «se me cayó hace diez días» — la fecha ya no es siempre hoy. */}
-                  <input
-                    type="date"
+                  <DateField
                     value={b.brokenDate.slice(0, 10)}
-                    max={new Date().toISOString().slice(0, 10)}
+                    max={hoyISO()}
                     onChange={(e) =>
                       e.target.value
                         ? props.onUpdate(b.id, { brokenDate: new Date(`${e.target.value}T12:00:00`).toISOString() })
