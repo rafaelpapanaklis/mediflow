@@ -26,3 +26,6 @@ export function pistaSinCaso(migrados: number, desdeConsulta: boolean): string {
 export function etiquetaAbrirCaso(migrados: number): string {
   return migrados > 0 ? "Abrir caso nuevo" : "Abrir caso de ortodoncia";
 }
+
+/** La línea bajo el título del botón «Abrir caso de ortodoncia»: qué pasa al pulsarlo (ws1-t10). */
+export const LINEA_DEL_BOTON_ABRIR_CASO = "Diagnóstico, datos del caso y plan de pago, en una sola ventana.";

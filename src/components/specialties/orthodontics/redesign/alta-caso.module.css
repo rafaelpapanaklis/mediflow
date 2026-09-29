@@ -1,0 +1,455 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Ortodoncia — «Abrir caso» como ventana centrada (ws1-t10, 29-sep-2026).
+
+   Antes era un cajón pegado a la derecha; ahora es una ventana con
+   secciones claras (Paciente y responsable · Diagnóstico · Datos del caso
+   · Plan de pago · Doctor). Los colores NO viven aquí: salen de los tokens
+   `--pr-*` y los alias `--orto-*` que monta `RAIZ_ORTO` (mismos que el resto
+   del módulo, claro y oscuro). Aquí no hay ni un hex.
+
+   Vive en su propio archivo para no tocar `orto.module.css` (lo comparten
+   otras tareas); las piezas que ya existían allí (velo, entrada, botones,
+   campo) se siguen usando de `orto`.
+
+   1440 px: ventana de 920 px, dos columnas por sección.
+   390 px: pantalla completa, una columna y el pie con botones a todo el ancho.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.marco {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: none;
+}
+
+.ventana {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 920px;
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  background: var(--pr-fondo-2, var(--pr-tarjeta));
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--pr-texto) 22%, transparent);
+  color: var(--pr-texto);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: auto;
+  overflow: hidden;
+  animation: altaAparece 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ventana:focus,
+.ventana:focus-visible {
+  outline: none;
+}
+
+@keyframes altaAparece {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ventana { animation: none; }
+}
+
+.cabeza {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 22px 14px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+  background: var(--pr-tarjeta);
+}
+
+.cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px 22px;
+}
+
+.pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 12px 22px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--pr-borde-suave);
+  background: var(--pr-tarjeta);
+}
+
+.pieNota {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--pr-texto-3);
+}
+
+.pieNotaFalta {
+  color: var(--pr-alerta);
+}
+
+.pieBotones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Una sección: icono + título + contenido ─────────────────────── */
+
+.seccion {
+  padding: 16px 18px 18px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  background: var(--pr-tarjeta);
+  min-width: 0;
+}
+
+.seccionCabeza {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.seccionIcono {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+}
+
+.seccionTextos {
+  min-width: 0;
+}
+
+.seccionTitulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
+  color: var(--pr-texto);
+}
+
+.seccionSub {
+  margin: 1px 0 0;
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+}
+
+.seccionCuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cuadricula {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cuadricula3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.subbloque {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--pr-borde-suave);
+}
+
+.subtitulo {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+/* El paciente del caso, arriba de todo: quien abre el caso ve DE QUIÉN es. */
+.paciente {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+}
+
+.pacienteRotulo {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pr-texto-3);
+}
+
+/* Una casilla con su explicación, como tarjeta pulsable. */
+.casilla {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  cursor: pointer;
+  color: var(--pr-texto-2);
+}
+
+.casilla input {
+  margin-top: 2px;
+  flex: none;
+}
+
+.casillaActiva {
+  border-color: var(--orto-violeta-borde);
+  background: var(--pr-activo-suave);
+}
+
+.casillaTitulo {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pr-texto);
+}
+
+.casillaPista {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+}
+
+/* «Enganche $X y N pagos de $Y, el primero el dd/mm/aaaa». */
+.vistaPrevia {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 13px;
+  border: 1px solid var(--orto-violeta-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-activo-suave);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pr-texto);
+}
+
+.vistaPrevia svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--orto-violeta);
+}
+
+.vistaPreviaVacia {
+  border-style: dashed;
+  border-color: var(--pr-borde);
+  background: var(--pr-tarjeta-2);
+  font-weight: 500;
+  color: var(--pr-texto-3);
+}
+
+/* Un valor que se muestra pero no se escribe aquí (el costo total). */
+.valor {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pr-texto);
+}
+
+@media (pointer: coarse) {
+  .valor { height: 42px; font-size: 16px; }
+}
+
+.pendiente {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 13px;
+  border: 1px dashed var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  font-size: 12.5px;
+  color: var(--pr-texto-2);
+}
+
+.pendiente svg {
+  flex: none;
+  color: var(--pr-texto-3);
+}
+
+.error {
+  padding: 9px 12px;
+  border: 1px solid var(--orto-peligro-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-peligro-suave);
+  color: var(--pr-peligro);
+  font-size: 12px;
+}
+
+/* ── El botón «Abrir caso de ortodoncia» (ficha sin caso y demás) ─── */
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 100%;
+  padding: 14px 20px 14px 16px;
+  border: 1px solid var(--pr-activo);
+  border-radius: var(--pr-radio);
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--pr-sombra);
+  transition: filter 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+
+.cta:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+@media (hover: hover) {
+  .cta:hover {
+    filter: brightness(1.06);
+  }
+}
+
+.cta:active {
+  transform: translateY(1px);
+}
+
+.cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ctaIcono {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--pr-activo-texto) 16%, transparent);
+}
+
+.ctaTextos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ctaTitulo {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.1px;
+}
+
+.ctaLinea {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  opacity: 0.85;
+}
+
+.ctaFlecha {
+  flex: none;
+  margin-left: 4px;
+  opacity: 0.85;
+}
+
+/* ── Teléfono: pantalla completa, una columna ────────────────────── */
+
+@media (max-width: 640px) {
+  .marco {
+    padding: 0;
+  }
+
+  .ventana {
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .cabeza {
+    padding: 12px 14px;
+  }
+
+  .cuerpo {
+    gap: 12px;
+    padding: 12px 12px 16px;
+  }
+
+  .seccion {
+    padding: 14px 14px 16px;
+  }
+
+  .cuadricula,
+  .cuadricula3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pie {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 14px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  .pieNota {
+    flex: none;
+  }
+
+  .pieBotones {
+    flex-wrap: nowrap;
+  }
+
+  .pieBotones > * {
+    flex: 1 1 0;
+  }
+
+  .cta {
+    width: 100%;
+  }
+}

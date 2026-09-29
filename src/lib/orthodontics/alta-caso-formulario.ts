@@ -109,7 +109,7 @@ export function textosDelCosto(modo: OrthoBillingMode): { rotulo: string; pista:
   return {
     rotulo: "Costo total (MXN)",
     pista:
-      "Escribe el precio acordado con el paciente. Es la referencia del caso; lo que de verdad se cobra es la factura del tratamiento («Cobro del tratamiento» → «Abrir plan de pago»): confírmalo ahí antes de firmar el acuerdo.",
+      "Escribe el precio acordado con el paciente. Es el precio del caso: con él se arma la factura del tratamiento en «Plan de pago» (o después, en Cobro → «Abrir plan de pago»).",
   };
 }
 

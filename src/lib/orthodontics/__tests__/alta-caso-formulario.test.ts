@@ -71,7 +71,9 @@ test("H18a: el campo dice que es obligatorio y POR QUÉ", () => {
   // Y junto al botón, lo que falta.
   assert.match(CAJON, /\{fraseFaltantes\}/);
   assert.match(CAJON, /aria-describedby=\{fraseFaltantes \? idFaltantes : undefined\}/);
-  assert.match(CAJON, /const canSubmit = faltantes\.length === 0;/, "el botón y la explicación salen de la MISMA lista");
+  assert.match(CAJON, /const todosLosFaltantes = \[\.\.\.faltantes, \.\.\.faltantesPlan\];/);
+  assert.match(CAJON, /const fraseFaltantes = fraseDeFaltantes\(todosLosFaltantes, inObservation\);/);
+  assert.match(CAJON, /const canSubmit = todosLosFaltantes\.length === 0 && !loadingOptions;/, "el botón y la explicación salen de la MISMA lista");
 });
 
 test("el teléfono se mide en cifras, no en caracteres", () => {
@@ -175,7 +177,8 @@ test("el costo se lee como lo escribe una persona", () => {
 test("el rótulo del costo depende de cómo cobra la clínica", () => {
   const total = textosDelCosto("PRECIO_TOTAL");
   assert.equal(total.rotulo, "Costo total (MXN)");
-  assert.match(total.pista, /Abrir plan de pago/);
+  assert.match(total.pista, /Plan de pago/);
+  assert.doesNotMatch(total.pista, /confírmalo ahí/, "ya no se manda a Cobro por lo que se arma en el mismo alta");
   const control = textosDelCosto("PAGO_POR_CONTROL");
   assert.match(control.rotulo, /estimado/i);
   assert.match(control.pista, /cobra por control/);
@@ -259,7 +262,7 @@ test("el alta propone el modo de la clínica y deja elegir otro solo para este c
 test("el alta habla de «responsable» para el dinero y de «datos del caso», no de «tutor» ni «plan»", () => {
   assert.doesNotMatch(CAJON, />Tutor registrado</);
   assert.doesNotMatch(CAJON, /"Plan de tratamiento · "/);
-  assert.match(CAJON, /<SectionTitle>Datos del caso<\/SectionTitle>/);
+  assert.match(CAJON, /titulo="Datos del caso"/);
   assert.match(CAJON, /placeholder="Nombre o teléfono del responsable"/);
   const ajustes = leer("src/components/specialties/orthodontics/redesign/drawers/DrawerCaseSettings.tsx");
   assert.doesNotMatch(ajustes, />Tutor registrado</);

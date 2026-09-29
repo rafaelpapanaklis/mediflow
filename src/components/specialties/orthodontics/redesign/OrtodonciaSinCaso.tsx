@@ -9,13 +9,9 @@
 // la ficha se refresca y la pestaña pasa a ser la completa. La regla de cuándo
 // toca esta vista vive en `src/lib/orthodontics/pestana-ficha.ts`.
 import { useEffect, useState } from "react";
-import { FolderPlus, Smile } from "lucide-react";
-import { Btn } from "./atoms/Btn";
-import {
-  DrawerNewCase,
-  type DrawerNewCaseDiagnosisPayload,
-  type DrawerNewCasePlanPayload,
-} from "./drawers/DrawerNewCase";
+import { Smile } from "lucide-react";
+import { BotonAbrirCaso } from "./BotonAbrirCaso";
+import { DrawerNewCase, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
 import { RAIZ_ORTO } from "./raiz";
 import { CasosMigrados, useCasosMigrados } from "./CasosMigrados";
 import { etiquetaAbrirCaso, pistaSinCaso, tituloSinCaso } from "./casos-migrados-texto";
@@ -25,10 +21,7 @@ import orto from "./orto.module.css";
 export interface OrtodonciaSinCasoProps {
   patientId: string;
   patientFullName: string;
-  onCreateCase: (payload: {
-    diagnosis: DrawerNewCaseDiagnosisPayload | null;
-    plan: DrawerNewCasePlanPayload | null;
-  }) => Promise<void> | void;
+  onCreateCase: (payload: DrawerNewCaseSubmit) => Promise<void> | void;
   /**
    * Se llegó desde «Nueva consulta», eligiendo el tipo «Ortodoncia»: no hay
    * caso en el que registrar un control, así que se explica y se OFRECE
@@ -73,15 +66,11 @@ export function OrtodonciaSinCaso({
             {tituloSinCaso(patientFullName, nMigrados)}
           </h2>
           <p className={orto.vacioPista}>{pistaSinCaso(nMigrados, desdeConsulta)}</p>
-          <Btn
-            variant="primary"
-            size="lg"
-            className="mt-1"
-            icon={<FolderPlus size={16} strokeWidth={1.75} aria-hidden />}
+          <BotonAbrirCaso
+            className="mt-2"
+            etiqueta={etiquetaAbrirCaso(nMigrados)}
             onClick={() => setAltaAbierta(true)}
-          >
-            {etiquetaAbrirCaso(nMigrados)}
-          </Btn>
+          />
         </div>
       </section>
       <CasosMigrados patientId={patientId} casosDados={migrados} />

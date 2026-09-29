@@ -15,9 +15,10 @@
 //  - El expediente de ortodoncia es el «caso», con su estado en palabras.
 //  - El botón que abre la aparatología se llama así, no «Editar plan».
 
-import { Activity, ChevronRight, ClipboardCheck, Layers, Pencil, Plus, Settings } from "lucide-react";
+import { Activity, ChevronRight, ClipboardCheck, Layers, Pencil, Settings } from "lucide-react";
 import { Btn, Card, StatChip, fmtDayLong, fmtPct } from "../atoms";
 import { Pill } from "../atoms/Pill";
+import { BotonAbrirCaso } from "../BotonAbrirCaso";
 import { ProgressBar } from "../atoms/ProgressBar";
 import {
   APPLIANCE_SLOT_LABELS,
@@ -236,17 +237,7 @@ function HeroEmptyState({ onStart }: { onStart?: () => void }) {
             Abre el caso con su diagnóstico y su plan. A partir de ahí se registran los
             controles, las fotos y el cobro.
           </p>
-          {onStart ? (
-            <Btn
-              variant="primary"
-              size="md"
-              className="mt-1"
-              icon={<Plus size={15} strokeWidth={1.75} aria-hidden />}
-              onClick={onStart}
-            >
-              Abrir caso de ortodoncia
-            </Btn>
-          ) : null}
+          {onStart ? <BotonAbrirCaso className="mt-2" etiqueta="Abrir caso de ortodoncia" onClick={onStart} /> : null}
         </div>
       </div>
     </Card>

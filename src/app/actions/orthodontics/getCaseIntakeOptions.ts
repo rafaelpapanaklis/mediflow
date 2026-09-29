@@ -13,6 +13,8 @@
 //     el sistema propio de consentimientos de ortodoncia, que se oculta).
 
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/auth/permissions";
+import { precioDeColocacionDelCatalogo } from "@/lib/orthodontics/catalog-procedures";
 import { ORTHO_BILLING_MODE_DEFAULT, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { cargarDoctoresTratantes } from "@/lib/orthodontics/doctores-tratantes-db";
@@ -78,6 +80,14 @@ export interface CaseIntakeOptions {
    * en vez de pedirla dos veces. `null` = ninguna consulta la trae.
    */
   oclusionDeConsulta: OclusionDeConsulta | null;
+  /**
+   * ws1-t10: quien abre el caso puede crear facturas (`billing.create`). Si no, el popup no
+   * pide el plan de pago: el caso se abre y recepción lo arma. Es solo para pintar; la acción
+   * que crea la factura vuelve a exigir el permiso en el servidor.
+   */
+  puedeCobrar: boolean;
+  /** ws1-t10: precio de «Colocación de aparatología» en el catálogo de la clínica (propuesta en «Pago por control»); null si no hay. */
+  precioColocacion: number | null;
 }
 
 export async function getCaseIntakeOptions(
@@ -245,7 +255,16 @@ export async function getCaseIntakeOptions(
 
   const tecnicas = tecnicasActivas((await leerTecnicasDeLaClinica(ctx.clinicId)).tecnicas);
 
+  // ws1-t10: best-effort — sin catálogo el precio de la colocación se teclea, y el alta no se cae.
+  const precioColocacion = await precioDeColocacionDelCatalogo(ctx.clinicId).catch((e) => {
+    console.error("[ortho] getCaseIntakeOptions: no se pudo leer el precio de la colocación:", e);
+    return null;
+  });
+  const puedeCobrar = hasPermission({ role: ctx.role as never, permissionsOverride: ctx.permissionsOverride }, "billing.create");
+
   return ok({
+    puedeCobrar,
+    precioColocacion,
     oclusionDeConsulta,
     billingMode,
     tecnicas,

@@ -64,11 +64,7 @@ import { DrawerConfigRetention } from "./drawers/DrawerConfigRetention";
 import { DrawerWhatsAppChat } from "./drawers/DrawerWhatsAppChat";
 import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
 import { DrawerAddTad, type DrawerAddTadSubmit } from "./drawers/DrawerAddTad";
-import {
-  DrawerNewCase,
-  type DrawerNewCaseDiagnosisPayload,
-  type DrawerNewCasePlanPayload,
-} from "./drawers/DrawerNewCase";
+import { DrawerNewCase, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
 import { DrawerCaseSettings, type DrawerCaseSettingsPayload } from "./drawers/DrawerCaseSettings";
 import { ModalCompare } from "./drawers/ModalCompare";
 import {
@@ -256,10 +252,7 @@ export interface OrthodonticsRedesignClientProps {
   /** Ola 1 (ws1-t6) — «Alta del caso»: abre el asistente DENTRO de la ficha
    *  (diagnóstico + plan, o solo plan si ya hay diagnóstico). Si está
    *  presente, sustituye a `onStartDiagnosisWizard` en Hero/Diagnóstico. */
-  onCreateCase?: (payload: {
-    diagnosis: DrawerNewCaseDiagnosisPayload | null;
-    plan: DrawerNewCasePlanPayload | null;
-  }) => Promise<void> | void;
+  onCreateCase?: (payload: DrawerNewCaseSubmit) => Promise<void> | void;
   /** Se llegó desde «Nueva consulta» con el tipo «Ortodoncia»: abrir la hoja de control al entrar. */
   abrirControlAlEntrar?: boolean;
   onControlAbierto?: () => void;

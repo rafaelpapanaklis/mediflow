@@ -61,7 +61,8 @@ import { agregarFotoExtra } from "@/app/actions/orthodontics/fotosDelJuego";
 import { esVistaEnExtras } from "@/lib/orthodontics/fotos-del-juego";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
 import { CasosMigrados } from "./CasosMigrados";
-import { DrawerNewCase, type DrawerNewCaseDiagnosisPayload, type DrawerNewCasePlanPayload } from "./drawers/DrawerNewCase";
+import { DrawerNewCase, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
+import { crearPlanDelCaso } from "@/app/actions/orthodontics/cobro/crearPlanDelCaso";
 import { Btn } from "./atoms/Btn";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
@@ -279,10 +280,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
   // Abrir el caso: lo usan las dos caras de la pestaña — la completa (el
   // asistente que abre `OrthodonticsRedesignClient`) y la limpia del paciente
   // que nunca tuvo caso (`OrtodonciaSinCaso`).
-  const crearCaso = async (payload: {
-    diagnosis: DrawerNewCaseDiagnosisPayload | null;
-    plan: DrawerNewCasePlanPayload | null;
-  }) => {
+  const crearCaso = async (payload: DrawerNewCaseSubmit) => {
     let diagnosisId = orthoRedesignVM?.diagnosis?.id ?? null;
     if (payload.diagnosis) {
       const res = await createDiagnosis({ patientId: patient.id, ...payload.diagnosis });
@@ -315,7 +313,21 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
       if (!res.data.altaCasoFieldsSaved && (payload.plan.treatingDoctorId || payload.plan.responsibleGuardianId || payload.plan.newResponsibleGuardian)) {
         toast(t("patients.ortho.altaCasoSqlPending"));
       }
-      toast.success(t("patients.ortho.caseOpened"));
+      // ws1-t10: el plan de pago se arma al abrir el caso. El caso YA está abierto: si la factura
+      // no sale, se dice claro y Cobro sigue ofreciendo «Abrir plan de pago» para reintentar.
+      if (payload.planDePago) {
+        const cobro = await crearPlanDelCaso({ treatmentPlanId: res.data.id, ...payload.planDePago });
+        if (isFailure(cobro)) {
+          toast.error(`El caso se abrió, pero el plan de pago no se pudo crear: ${cobro.error} Reinténtalo en Cobro, con «Abrir plan de pago».`, { duration: 12000 });
+        } else if (cobro.data.aviso) {
+          toast.success(t("patients.ortho.caseOpened"));
+          toast(cobro.data.aviso, { duration: 12000 });
+        } else {
+          toast.success(cobro.data.invoiceNumber ? `Caso abierto y plan de pago creado (${cobro.data.invoiceNumber}).` : "Caso abierto y plan de pago creado.");
+        }
+      } else {
+        toast.success(t("patients.ortho.caseOpened"));
+      }
     } else {
       toast.success(t("patients.ortho.caseOpenedObservation"));
     }
