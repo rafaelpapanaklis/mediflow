@@ -106,6 +106,8 @@ const dentalink: OriginProfile = {
     // «Citas pacientes» (Agenda). «Hora fin» va a `endTime` (NO a `time`: pisaría la hora de inicio): la
     // duración sale de «Duración», si no de la hora de fin, y si no son 30 min.
     appointments: {
+      "Fecha de nac.": "dob",
+      "Cédula identidad / DNI Paciente": "nationalId",
       "Id paciente": "patientExternalId",
       "ID Paciente": "patientExternalId",
       // BEVADENT «05_Citas» (CSV): «# Paciente» es el ID; hora en «Hora Inicio Cita»
@@ -150,6 +152,8 @@ const dentalink: OriginProfile = {
     },
     // «Pacientes morosos» (Pacientes): una fila por paciente con su deuda.
     balances: {
+      "Fecha de nac.": "dob",
+      "Cédula identidad / DNI Paciente": "nationalId",
       "Id paciente": "patientExternalId",
       "ID Paciente": "patientExternalId",
       // BEVADENT «04_Saldos» (reporte «Mora»): «Paciente» es un NÚMERO (el ID, el mismo
@@ -249,6 +253,8 @@ const dentalink: OriginProfile = {
     // abonado. Sin export real delante — igual que el resto del archivo:
     // `verified` sigue en false, y si no casan el paso de mapeo se corrige a mano.
     treatmentPlans: {
+      "Fecha de nac.": "dob",
+      "Cédula identidad / DNI Paciente": "nationalId",
       "Id paciente": "patientExternalId",
       "ID Paciente": "patientExternalId",
       "Paciente": "name",
@@ -395,6 +401,8 @@ const dentalink: OriginProfile = {
     // confirmada/no show/anulada/atendida. Sin export real delante:
     // `verified` sigue en false.
     appointmentHistory: {
+      "Fecha de nac.": "dob",
+      "Cédula identidad / DNI Paciente": "nationalId",
       "Id paciente": "patientExternalId",
       "ID Paciente": "patientExternalId",
       // BEVADENT «05_Citas» (mismo archivo que las citas vivas): ID, hora y doctor partido en dos columnas.

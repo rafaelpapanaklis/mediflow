@@ -30,6 +30,7 @@ import { AMOUNT_FORMAT_FIELD, AMOUNT_FORMAT_KEY, VALUE_UNLINKED, type PreviewRow
 import { cargarExternos, guardarExternos, limpiarId } from "./externos";
 // Casos de ortodoncia desde los tratamientos de Dentalink (ws1-t12): archivo propio, aquí solo el enganche.
 import { commitCasosDeOrtodoncia, marcarCasosDeOrtodoncia } from "./dentalink/ortodoncia-caso-db";
+import { agregarFicha, coincidencias, datosDeFila, diaDeNacimiento, resolverConIdDesconocido, textoDeDatos, type FichaPaciente } from "./dentalink/paciente-seguro";
 // Historial de pagos migrado (ws1-t6): construido en su propio archivo mientras
 // este módulo cambiaba en paralelo (ws1-t12); solo se registra aquí.
 import { paymentHistoryHandler } from "./pagos-historial/handler";
@@ -119,6 +120,9 @@ interface PatientIndex {
   byExternal: Map<string, string>;
   /** Nombre completo tal como está en la ficha (para decir a QUIÉN va una fila). */
   nameById: Map<string, string>;
+  /** CURP/cédula → pacientes, y los datos fuertes de cada ficha: el desempate cuando el ID no alcanza (paciente-seguro.ts). */
+  byDoc: Map<string, string[]>;
+  fichas: Map<string, FichaPaciente>;
 }
 
 function pushKey(m: Map<string, string[]>, k: string, id: string) {
@@ -145,13 +149,14 @@ async function loadPatientIndex(
 ): Promise<PatientIndex> {
   const patients = await prisma.patient.findMany({
     where: { clinicId, deletedAt: null },
-    select: { id: true, firstName: true, lastName: true, email: true, phone: true, visibleUserIds: true },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true, dob: true, curp: true, visibleUserIds: true },
   });
-  const idx: PatientIndex = { byPhone: new Map(), byEmail: new Map(), byName: new Map(), byExternal: new Map(), nameById: new Map() };
+  const idx: PatientIndex = { byPhone: new Map(), byEmail: new Map(), byName: new Map(), byExternal: new Map(), nameById: new Map(), byDoc: new Map(), fichas: new Map() };
   const quien = { userId: viewer?.userId ?? "", role: viewer?.role ?? "", clinicId };
   for (const p of patients) {
     if (!canSeePatient(quien, p.visibleUserIds)) continue;
     idx.nameById.set(p.id, `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim());
+    agregarFicha(idx, p);
     if (p.phone) pushKey(idx.byPhone, phoneKey(p.phone), p.id);
     if (p.email) pushKey(idx.byEmail, p.email.toLowerCase(), p.id);
     pushKey(idx.byName, normName(`${p.firstName} ${p.lastName}`), p.id);
@@ -176,14 +181,11 @@ function resolvePatient(mapped: Record<string, any>, idx: PatientIndex): { id?: 
     const id = idx.byExternal.get(externo);
     if (id) return { id };
   }
-  const r = resolverSinId(mapped, idx, externo);
-  // La fila trae un ID del sistema de origen que NO existe entre los pacientes importados y aun así
-  // se emparejó (por nombre, teléfono o correo): la vista previa lo dice en esa fila, porque puede
-  // ser otra persona con el mismo nombre.
-  if (externo && r.id) {
-    r.warning = `El ID ${externo} no existe entre los pacientes importados de este sistema: se emparejó por ${r.via ?? "nombre"} con «${idx.nameById.get(r.id) ?? ""}». Revisa que sea la misma persona`;
-  }
-  return r;
+  // La fila trae un ID del sistema de origen que NO está entre los pacientes importados: no se adivina por un solo
+  // dato (un teléfono de familia, un homónimo). Se desempata con TODOS los datos de la fila y solo se asigna con 2 datos
+  // fuertes de UN candidato; si no, «a revisar» (ver dentalink/paciente-seguro.ts).
+  if (externo) return resolverConIdDesconocido(mapped, idx, externo, "el sistema de origen");
+  return resolverSinId(mapped, idx, externo);
 }
 
 function resolverSinId(
@@ -430,6 +432,10 @@ const diaLocal = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDat
 interface Persona {
   nombre: string;
   dob: Date | null;
+  /** Paciente ya guardado en la base (los de la base traen su id). */
+  id?: string;
+  /** Fila del archivo que crea a esta persona (las del archivo). */
+  fila?: PreviewRow;
 }
 
 /**
@@ -534,7 +540,7 @@ export const patientsHandler: EntityHandler = {
     // duplicado a un hijo que comparte celular con su mamá.
     const enArchivoTel = new Map<string, Persona[]>();
     const enArchivoMail = new Map<string, Persona[]>();
-    const enArchivoNombreDob = new Set<string>();
+    const enArchivoNombreDob = new Map<string, PreviewRow>();
     const enArchivoExterno = new Set<string>();
 
     for (const { row, mapped, sobrantes, origen } of rows) {
@@ -719,7 +725,7 @@ export const patientsHandler: EntityHandler = {
     const [existing, externos] = await Promise.all([
       prisma.patient.findMany({
         where: { clinicId },
-        select: { id: true, firstName: true, lastName: true, email: true, phone: true, dob: true },
+        select: { id: true, firstName: true, lastName: true, email: true, phone: true, dob: true, curp: true },
       }),
       ctx.originId ? cargarExternos(clinicId, ctx.originId, "patient") : Promise.resolve({ mapa: new Map<string, string>(), disponible: true }),
     ]);
@@ -727,7 +733,9 @@ export const patientsHandler: EntityHandler = {
     const dbPorMail = new Map<string, Array<Persona & { id: string }>>();
     const dbPorNombreDob = new Map<string, string>();
     const dbIds = new Set<string>();
+    const fichasBase = { byDoc: new Map<string, string[]>(), fichas: new Map<string, FichaPaciente>() };
     for (const e of existing) {
+      agregarFicha(fichasBase, e);
       const persona = { id: e.id, nombre: `${e.firstName ?? ""} ${e.lastName ?? ""}`.trim(), dob: e.dob ?? null };
       dbIds.add(e.id);
       const tel = e.phone ? phoneKey(e.phone) : "";
@@ -740,7 +748,7 @@ export const patientsHandler: EntityHandler = {
     for (const pr of out) {
       if (pr.status !== "ok") continue;
       const data = pr.data;
-      const persona: Persona = { nombre: `${data.firstName} ${data.lastName}`, dob: data.dob ?? null };
+      const persona: Persona = { nombre: `${data.firstName} ${data.lastName}`, dob: data.dob ?? null, fila: pr };
       const tel = data.phone ? phoneKey(data.phone) : "";
       const mail: string = data.email ?? "";
 
@@ -761,6 +769,8 @@ export const patientsHandler: EntityHandler = {
       // 2. Mismo nombre y misma fecha de nacimiento (el reintento de quien no tiene teléfono ni correo).
       const nombreDob = data.dob ? `${normName(persona.nombre)}|${diaLocal(data.dob)}` : "";
       if (nombreDob && (dbPorNombreDob.has(nombreDob) || enArchivoNombreDob.has(nombreDob))) {
+        const idBase = dbPorNombreDob.get(nombreDob);
+        data.duplicadoDe = idBase ? { id: idBase } : { fila: enArchivoNombreDob.get(nombreDob) };
         pr.status = "duplicate";
         pr.warnings.push(dbPorNombreDob.has(nombreDob) ? "Ya existe un paciente con el mismo nombre y fecha de nacimiento" : "Mismo nombre y fecha de nacimiento repetidos en el archivo");
         continue;
@@ -771,8 +781,10 @@ export const patientsHandler: EntityHandler = {
       const hallazgo: { duplicado: string | null } = { duplicado: null };
       const revisa = (etiqueta: string, enBase: Persona[] | undefined, enArch: Persona[] | undefined) => {
         if (hallazgo.duplicado) return;
-        if (enBase?.some((p) => mismaPersona(persona, p))) { hallazgo.duplicado = "Ya existe en la base de datos"; return; }
-        if (enArch?.some((p) => mismaPersona(persona, p))) { hallazgo.duplicado = `${etiqueta} repetido en el archivo`; return; }
+        const enB = enBase?.find((p) => mismaPersona(persona, p));
+        if (enB) { hallazgo.duplicado = "Ya existe en la base de datos"; data.duplicadoDe = { id: enB.id }; return; }
+        const enA = enArch?.find((p) => mismaPersona(persona, p));
+        if (enA) { hallazgo.duplicado = `${etiqueta} repetido en el archivo`; data.duplicadoDe = { fila: enA.fila }; return; }
         if ((enBase?.length ?? 0) + (enArch?.length ?? 0) > 0) compartidos.push(etiqueta.toLowerCase());
       };
       if (tel) revisa("Teléfono", dbPorTel.get(tel), enArchivoTel.get(tel));
@@ -785,15 +797,61 @@ export const patientsHandler: EntityHandler = {
       // Nueva de verdad: se registra para las filas que siguen.
       if (tel) (enArchivoTel.get(tel) ?? enArchivoTel.set(tel, []).get(tel)!).push(persona);
       if (mail) (enArchivoMail.get(mail) ?? enArchivoMail.set(mail, []).get(mail)!).push(persona);
-      if (nombreDob) enArchivoNombreDob.add(nombreDob);
+      if (nombreDob) enArchivoNombreDob.set(nombreDob, pr);
       if (data.externalId) enArchivoExterno.add(data.externalId);
+    }
+    // ID de Dentalink de los duplicados que son LA MISMA persona que uno que se queda: se recuerda apuntando a ese
+    // paciente, para que sus tratamientos, saldos y citas (que traen ESE ID) no dependan de adivinar por nombre. Solo si
+    // coinciden en al menos 2 datos fuertes (nombre completo, teléfono, correo, fecha de nacimiento, CURP) y ninguno se
+    // contradice; un teléfono de familia con otro nombre NO se registra (esa fila, si aparece, queda «a revisar»).
+    for (const pr of out) {
+      const dup = pr.data.duplicadoDe as { id?: string; fila?: PreviewRow; por?: string[] } | undefined;
+      if (pr.status !== "duplicate" || !dup || !pr.data.externalId) continue;
+      const mia = datosDeFila({ name: `${pr.data.firstName ?? ""} ${pr.data.lastName ?? ""}`, phone: pr.data.phone, email: pr.data.email, dob: pr.data.dob, nationalId: pr.data.curp });
+      const otra = dup.id
+        ? fichasBase.fichas.get(dup.id)
+        : dup.fila && dup.fila.status !== "error" && dup.fila.data.firstName
+          ? {
+              id: "",
+              nombre: `${dup.fila.data.firstName} ${dup.fila.data.lastName ?? ""}`.trim(),
+              tel: dup.fila.data.phone ? phoneKey(dup.fila.data.phone) : "",
+              email: dup.fila.data.email ? String(dup.fila.data.email).toLowerCase() : "",
+              dob: dup.fila.data.dob ? diaDeNacimiento(dup.fila.data.dob) : "",
+              doc: dup.fila.data.curp ? String(dup.fila.data.curp).toUpperCase() : "",
+            }
+          : undefined;
+      const por = otra ? coincidencias(mia, otra) : null;
+      if (por && por.length >= 2) {
+        dup.por = por;
+        pr.warnings.push(`Su ID ${pr.data.externalId} se recordará como el de este mismo paciente (coinciden ${textoDeDatos(por)}): así sus tratamientos, saldos y citas con ese ID le llegan a él`);
+      } else {
+        delete pr.data.duplicadoDe;
+      }
     }
     return out;
   },
 
   async commit(rows, clinicId, skipDuplicates, ctx) {
+    // El ID de Dentalink de un duplicado omitido (la misma persona que un paciente que se queda) también se recuerda,
+    // aunque no se cree nada: reimportar el archivo de pacientes ya importado los registra sin duplicar a nadie.
+    const recordarDuplicados = async () => {
+      if (!ctx.originId) return;
+      const pares: Array<{ externalId: string; localId: string }> = [];
+      for (const r of rows) {
+        const dup = r.data.duplicadoDe as { id?: string; fila?: PreviewRow; por?: string[] } | undefined;
+        if (r.status !== "duplicate" || !dup?.por || !r.data.externalId) continue;
+        const local = dup.id ?? (dup.fila && dup.fila.status !== "error" ? (dup.fila.data.newId as string | undefined) : undefined);
+        if (local) pares.push({ externalId: r.data.externalId as string, localId: local });
+      }
+      if (pares.length === 0) return;
+      const vivos = await idsCreados("patient", clinicId, Array.from(new Set(pares.map((p) => p.localId))));
+      const buenos = pares.filter((p) => vivos.has(p.localId));
+      if (buenos.length > 0 && !(await guardarExternos(clinicId, ctx.originId, "patient", buenos))) {
+        console.warn("[import/patients] import_external_ids no existe: no se guardaron los ID de los duplicados");
+      }
+    };
     const toInsert = pickInsertable(rows, skipDuplicates);
-    if (toInsert.length === 0) return { created: 0, skipped: 0 };
+    if (toInsert.length === 0) { await recordarDuplicados(); return { created: 0, skipped: 0 }; }
 
     // Tope de pacientes del plan. El createMany de abajo lo saltaba por
     // completo: un Básico (500) podía subir un Excel de 5 000 y quedarse con
@@ -897,6 +955,7 @@ export const patientsHandler: EntityHandler = {
         console.warn("[import/patients] no se pudo guardar el apoderado de los menores:", e);
       }
     }
+    await recordarDuplicados();
     const erroredNow = toInsert.filter((r) => r.status === "error").length;
     return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
   },
@@ -1002,6 +1061,9 @@ export const balancesHandler: EntityHandler = {
     email:       ["email", "correo", "correoelectronico"],
     // ID del paciente en el sistema de origen (el mismo que trajo el archivo de pacientes).
     patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    // Datos fuertes de la ficha (ws1-t12): con ellos se desempata a QUÉ paciente va una fila cuyo ID no está importado.
+    dob: ["fechadenac", "fechadenacimiento", "fechanacimiento", "nacimiento", "fnacimiento"],
+    nationalId: ["cedulaidentidaddnipaciente", "cedulaidentidaddni", "cedulaidentidad", "curp", "dni"],
     // ID del movimiento (deuda, cuota…) en el sistema de origen, si lo trae.
     externalId:  ["idsaldo", "iddeuda", "idmovimiento", "iddocumento", "idcuota", "idcargo", "idexterno"],
     amount:      ["saldo", "monto", "adeudo", "balance", "saldopendiente", "deuda", "importe", "saldoactual", "porcobrar", "montoadeudado", "deudatotal", "totaldeuda"],
@@ -1459,6 +1521,9 @@ export const appointmentsHandler: EntityHandler = {
     email:    ["email", "correo", "correoelectronico"],
     // ID del paciente en el sistema de origen (el mismo que trajo el archivo de pacientes).
     patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    // Datos fuertes de la ficha (ws1-t12): con ellos se desempata a QUÉ paciente va una fila cuyo ID no está importado.
+    dob: ["fechadenac", "fechadenacimiento", "fechanacimiento", "nacimiento", "fnacimiento"],
+    nationalId: ["cedulaidentidaddnipaciente", "cedulaidentidaddni", "cedulaidentidad", "curp", "dni"],
     doctor:   ["doctor", "doctora", "medico", "odontologo", "odontologa", "dentista", "profesional", "atiende", "nombredentista", "nombreprofesional"],
     date:     ["fecha", "fechacita", "fechadelacita", "dia", "date", "fechainicio"],
     time:     ["hora", "horacita", "time", "horario", "horadelacita", "horainicio", "horadeinicio", "inicio"],
@@ -2981,6 +3046,9 @@ export const treatmentPlansHandler: EntityHandler = {
   sheetNames: ["tratamientosactivos", "tratamientoactivo", "planesactivos", "tratamientosvigentes", "tratamientosencurso"],
   headerVariants: {
     ...IDENTITY_VARIANTS,
+    // Datos fuertes de la ficha (ws1-t12): con ellos se desempata a QUÉ paciente va una fila cuyo ID no está importado.
+    dob: ["fechadenac", "fechadenacimiento", "fechanacimiento", "nacimiento", "fnacimiento"],
+    nationalId: ["cedulaidentidaddnipaciente", "cedulaidentidaddni", "cedulaidentidad", "curp", "dni"],
     folio: [
       "folio", "numeropresupuesto", "numerodepresupuesto", "nopresupuesto", "nodepresupuesto", "npresupuesto",
       "idpresupuesto", "folioplan", "numerodeplan", "nplan", "idplan", "nodeplan",

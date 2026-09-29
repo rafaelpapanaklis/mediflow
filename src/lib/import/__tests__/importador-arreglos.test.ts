@@ -909,27 +909,32 @@ test("N8: «Confirmada» entra como CONFIRMED y los demás estados equivalentes 
   assert.ok(tabla("appointment").every((a) => a.status !== "SCHEDULED" || a.confirmedAt === undefined));
 });
 
-test("N8: si el ID externo de la fila no existe y se empareja por nombre, la vista previa lo AVISA en esa fila", async () => {
+test("N8: si el ID externo de la fila no existe, solo se empareja con 2 datos fuertes de UN paciente y la vista previa dice por qué", async () => {
   reiniciar();
-  await correr("patients", csv("pacientes.csv", "ID,Nombre,Apellidos\n1001,Carla,Mena\n"), { dryRun: false, origin: "dentalink" });
+  await correr("patients", csv("pacientes.csv", "ID,Nombre,Apellidos,Celular\n1001,Carla,Mena,5559990001\n"), { dryRun: false, origin: "dentalink" });
   const citas = await correr("appointments", csv("citas.csv", [
-    "Id paciente,Paciente,Profesional,Fecha,Hora",
-    "1001,Carla Mena,Ana López,15/01/2030,10:00", // ID que existe: sin aviso
-    "SINT-001,Carla Mena,Ana López,16/01/2030,10:00", // ID que no existe: por nombre, con aviso
-    "SINT-002,Nadie Conocido,Ana López,17/01/2030,10:00", // ni ID ni nombre: error
+    "Id paciente,Paciente,Celular,Profesional,Fecha,Hora",
+    "1001,Carla Mena,,Ana López,15/01/2030,10:00", // ID que existe: sin aviso
+    "SINT-001,Carla Mena,5559990001,Ana López,16/01/2030,10:00", // ID que no existe: nombre + teléfono → seguro, con aviso
+    "SINT-002,Carla Mena,,Ana López,17/01/2030,10:00", // ID que no existe y solo el nombre: a revisar (puede ser una homónima)
+    "SINT-003,Nadie Conocido,,Ana López,18/01/2030,10:00", // ni ID ni nada: error
   ].join("\n")), { origin: "dentalink" });
   assert.equal(fila(citas, 2).status, "ok");
   assert.deepEqual(fila(citas, 2).warnings, []);
   assert.equal(fila(citas, 3).status, "ok");
-  assert.match(fila(citas, 3).warnings.join(" "), /SINT-001.*no existe.*por nombre con «Carla Mena»/);
+  assert.match(fila(citas, 3).warnings.join(" "), /SINT-001.*no existe.*se emparejó por nombre \+ teléfono con «Carla Mena»/);
   assert.equal(fila(citas, 3).data.patientId, fila(citas, 2).data.patientId);
   assert.equal(fila(citas, 4).status, "error");
-  // Mismo aviso en saldos.
+  assert.match(fila(citas, 4).errors.join(" "), /A revisar.*SINT-002.*solo coincide el nombre/);
+  assert.equal(fila(citas, 5).status, "error");
+  assert.match(fila(citas, 5).errors.join(" "), /Paciente con ID SINT-003 no encontrado/);
+  // Mismo criterio en saldos: solo el nombre no alcanza.
   // «Nombre paciente», no «Paciente»: en el export real de Dentalink/BEVADENT (04_Saldos) «Paciente» es el
   // NÚMERO de ID, así que el perfil ya no la toma por nombre (ver perfil-dentalink-bevadent.test.ts).
-  const saldos = await correr("balances", csv("s.csv", "Id paciente,Nombre paciente,Saldo\nSINT-001,Carla Mena,50\n"), { origin: "dentalink" });
-  assert.match(fila(saldos, 2).warnings.join(" "), /SINT-001/);
-  // Por teléfono: dice «teléfono».
-  const tel = await correr("appointments", csv("c.csv", "Id paciente,Celular,Profesional,Fecha,Hora\nSINT-009,5551234567,Ana López,15/01/2030,10:00\n"), { origin: "dentalink" });
-  assert.match(fila(tel, 2).warnings.join(" "), /por teléfono con «María Hernández»/);
+  const saldos = await correr("balances", csv("s.csv", "Id paciente,Nombre paciente,Celular,Saldo\nSINT-001,Carla Mena,5559990001,50\nSINT-005,Carla Mena,,50\n"), { origin: "dentalink" });
+  assert.match(fila(saldos, 2).warnings.join(" "), /SINT-001.*por nombre \+ teléfono/);
+  assert.match(fila(saldos, 3).errors.join(" "), /A revisar.*SINT-005/);
+  // Solo el teléfono (sin nombre en la fila) tampoco: puede ser el celular de la familia.
+  const tel = await correr("appointments", csv("c.csv", "Id paciente,Celular,Profesional,Fecha,Hora\nSINT-009,5559990001,Ana López,15/01/2030,10:00\n"), { origin: "dentalink" });
+  assert.match(fila(tel, 2).errors.join(" "), /A revisar.*solo coincide el teléfono/);
 });

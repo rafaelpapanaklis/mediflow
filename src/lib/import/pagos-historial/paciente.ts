@@ -14,6 +14,7 @@ import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
 import { normName } from "../engine";
 import { phoneKey } from "../valores";
 import { cargarExternos, limpiarId } from "../externos";
+import { agregarFicha, resolverConIdDesconocido, type FichaPaciente } from "../dentalink/paciente-seguro";
 
 export interface PatientIndex {
   byPhone: Map<string, string[]>;
@@ -22,6 +23,9 @@ export interface PatientIndex {
   /** ID del sistema de origen → paciente (import_external_ids). Vacío si el SQL aún no se aplicó. */
   byExternal: Map<string, string>;
   nameById: Map<string, string>;
+  /** CURP/cédula → pacientes y datos fuertes de cada ficha (desempate cuando el ID no alcanza: dentalink/paciente-seguro.ts). */
+  byDoc: Map<string, string[]>;
+  fichas: Map<string, FichaPaciente>;
 }
 
 function pushKey(m: Map<string, string[]>, k: string, id: string) {
@@ -37,13 +41,14 @@ export async function loadPatientIndex(
 ): Promise<PatientIndex> {
   const patients = await prisma.patient.findMany({
     where: { clinicId, deletedAt: null },
-    select: { id: true, firstName: true, lastName: true, email: true, phone: true, visibleUserIds: true },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true, dob: true, curp: true, visibleUserIds: true },
   });
-  const idx: PatientIndex = { byPhone: new Map(), byEmail: new Map(), byName: new Map(), byExternal: new Map(), nameById: new Map() };
+  const idx: PatientIndex = { byPhone: new Map(), byEmail: new Map(), byName: new Map(), byExternal: new Map(), nameById: new Map(), byDoc: new Map(), fichas: new Map() };
   const quien: VisibilityViewer = { userId: viewer?.userId ?? "", role: viewer?.role ?? "", clinicId };
   for (const p of patients) {
     if (!canSeePatient(quien, p.visibleUserIds)) continue;
     idx.nameById.set(p.id, `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim());
+    agregarFicha(idx, p);
     if (p.phone) pushKey(idx.byPhone, phoneKey(p.phone), p.id);
     if (p.email) pushKey(idx.byEmail, p.email.toLowerCase(), p.id);
     pushKey(idx.byName, normName(`${p.firstName} ${p.lastName}`), p.id);
@@ -111,11 +116,10 @@ function resolvePatient(mapped: Record<string, any>, idx: PatientIndex): { id?: 
     const id = idx.byExternal.get(externo);
     if (id) return { id };
   }
-  const r = resolverSinId(mapped, idx, externo);
-  if (externo && r.id) {
-    r.warning = `El ID ${externo} no existe entre los pacientes importados de este sistema: se emparejó por ${r.via ?? "nombre"} con «${idx.nameById.get(r.id) ?? ""}». Revisa que sea la misma persona`;
-  }
-  return r;
+  // ID del sistema de origen que no está entre los importados: se desempata con todos los datos de la fila y solo se
+  // asigna con 2 datos fuertes de UN candidato; si no, «a revisar» (dentalink/paciente-seguro.ts).
+  if (externo) return resolverConIdDesconocido(mapped, idx, externo, "el sistema de origen");
+  return resolverSinId(mapped, idx, externo);
 }
 
 /**

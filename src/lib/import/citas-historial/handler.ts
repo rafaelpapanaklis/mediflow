@@ -80,6 +80,9 @@ export const appointmentHistoryHandler: EntityHandler = {
     phone: ["telefono", "celular", "whatsapp", "phone", "movil"],
     email: ["email", "correo", "correoelectronico"],
     patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    // Datos fuertes de la ficha (ws1-t12): con ellos se desempata a QUÉ paciente va una fila cuyo ID no está importado.
+    dob: ["fechadenac", "fechadenacimiento", "fechanacimiento", "nacimiento", "fnacimiento"],
+    nationalId: ["cedulaidentidaddnipaciente", "cedulaidentidaddni", "cedulaidentidad", "curp", "dni"],
     doctor: ["doctor", "doctora", "medico", "odontologo", "odontologa", "dentista", "profesional", "atiende"],
     date: ["fecha", "fechacita", "fechadelacita", "dia", "date"],
     time: ["hora", "horacita", "time", "horario"],
