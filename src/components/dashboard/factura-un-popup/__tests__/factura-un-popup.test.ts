@@ -167,12 +167,16 @@ test("la sección NO repite Factura, Paciente, Total, Pagado ni Saldo", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 test("con el interruptor, el cobro sale desplegado dentro del detalle y el pie registra el pago", () => {
   const d = leer(DETALLE);
-  assert.match(d, /const cobrable = rediseno && !!invoice && \["DRAFT", "PENDING", "PARTIAL", "OVERDUE"\]\.includes\(invoice\.status\);/,
-    "cobrable = interruptor + los mismos estados que hoy enseñan «Cobrar»");
+  // Regla vigente: el interruptor + los mismos estados que enseñan «Cobrar», y además (anticipos) que la persona
+  // tenga permiso de cobrar y que la factura no sea la de una cita cancelada con el dinero pendiente de decidir.
+  assert.match(d, /const cobrable = rediseno && puedeCobrar && !citaCanceladaConDinero && !!invoice && \["DRAFT", "PENDING", "PARTIAL", "OVERDUE"\]\.includes\(invoice\.status\);/,
+    "cobrable = interruptor + permiso + sin cita cancelada con dinero + los mismos estados que hoy enseñan «Cobrar»");
   assert.match(d, /\{cobrable && \(\s*<SeccionCobro/, "la sección solo se monta con `cobrable`");
   assert.match(d, /alCobrar: handlePaymentSuccess,/, "al cobrar corre lo mismo que corría la segunda ventana");
   assert.match(d, /alOcupar: setBusy,/, "mientras cobra, el resto de botones del detalle se bloquea");
-  assert.equal((d.match(/\{rediseno \? botonRegistrarPago : \(/g) ?? []).length, 2, "borrador y pendiente: el botón del pie cambia solo con el interruptor");
+  // Sin el interruptor, el botón de siempre (ahora también con el permiso de cobrar y sin cita cancelada con dinero).
+  assert.equal((d.match(/\{rediseno \? botonRegistrarPago : puedeCobrar && !citaCanceladaConDinero && \(/g) ?? []).length, 2, "borrador y pendiente: el botón del pie cambia solo con el interruptor");
+  assert.match(d, /const botonRegistrarPago = !puedeCobrar \|\| citaCanceladaConDinero \|\| cobroPorMercadoPago \? null : \(/, "y sin permiso, o con la cita cancelada con dinero, o con cobro por Mercado Pago, no hay botón");
   assert.match(d, /onClick=\{cobro\.submit\}/);
   assert.match(d, /onOpenAutoFocus=\{cobrable \? enfocarMontoAlAbrir : undefined\}/, "el foco cae en el monto, como en la ventana de cobro");
   // El descuento en línea usa el estado y la llamada DEL DETALLE.

@@ -134,12 +134,14 @@ test("los apartados nuevos reciben los mismos callbacks que los de siempre", () 
     assert.ok(citas.includes(cb), `las citas nuevas perdieron ${cb}`);
   }
   const fact = bloque("<FacturacionRediseno");
-  for (const cb of ["facturas={invoices}", "facturApiEnabled={facturApiEnabled}", "setShowNewInvoice(true)", "setInvoiceDetailOpen(inv)", "openDirectPayment(inv)", 'setInvoiceDetailAction("cfdi")']) {
+  for (const cb of ["facturas={invoices}", "facturApiEnabled={facturApiEnabled}", "setShowNewInvoice(true)", "setInvoiceDetailOpen(inv)", "void openDirectPayment(inv, condiciones)", 'setInvoiceDetailAction("cfdi")']) {
+    // Firma vigente (649cb4b9, ws1-t10): el cobro de la facturación nueva también recibe las condiciones del plan a
+    // plazos, para abrir con el monto del mes y no con el saldo completo.
     assert.ok(fact.includes(cb), `la facturación nueva perdió ${cb}`);
   }
   // Y la vieja sigue con exactamente los mismos.
   const viejaFact = bloque("<BillingTab");
-  for (const cb of ["invoices={invoices}", "setShowNewInvoice(true)", "setInvoiceDetailOpen(inv)", "openDirectPayment(inv)", 'setInvoiceDetailAction("cfdi")', "redesignOn={rediseno}"]) {
+  for (const cb of ["invoices={invoices}", "setShowNewInvoice(true)", "setInvoiceDetailOpen(inv)", "void openDirectPayment(inv)", 'setInvoiceDetailAction("cfdi")', "redesignOn={rediseno}"]) {
     assert.ok(viejaFact.includes(cb), `la facturación vieja cambió: ${cb}`);
   }
 });

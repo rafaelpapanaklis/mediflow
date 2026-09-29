@@ -15,7 +15,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const denied = denyIfMissingPermission(ctx, "procedures.view");
   if (denied) return denied;
 
-  const procedure = await prisma.procedureCatalog.findFirst({ where: { id: params.id, clinicId: ctx.clinicId } });
+  // Solo se comprueba que exista: sin `select` traía la fila entera, con el gasto (`cost`) de la clínica.
+  const procedure = await prisma.procedureCatalog.findFirst({ where: { id: params.id, clinicId: ctx.clinicId }, select: { id: true } });
   if (!procedure) return NextResponse.json({ error: "Procedimiento no encontrado" }, { status: 404 });
 
   const lines = await getRecipe(ctx.clinicId, params.id);

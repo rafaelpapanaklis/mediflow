@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
     }
     if (procedureId) {
-      const procedure = await prisma.procedureCatalog.findFirst({ where: { id: procedureId, clinicId: ctx.clinicId } });
+      const procedure = await prisma.procedureCatalog.findFirst({ where: { id: procedureId, clinicId: ctx.clinicId }, select: { id: true } });
       if (!procedure) return NextResponse.json({ error: "Procedimiento no encontrado" }, { status: 404 });
     }
     let dbItems: { id: string; name: string }[] = [];

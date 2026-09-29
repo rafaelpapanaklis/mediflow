@@ -50,7 +50,7 @@ export async function upsertRecipeLine(clinicId: string, procedureId: string, it
   if (!(quantity > 0)) throw new Error("La cantidad debe ser mayor a 0");
 
   const [procedure, item] = await Promise.all([
-    (db as PrismaClient).procedureCatalog.findFirst({ where: { id: procedureId, clinicId } }),
+    (db as PrismaClient).procedureCatalog.findFirst({ where: { id: procedureId, clinicId }, select: { id: true } }), // solo existencia: sin select traía el gasto (`cost`)
     (db as PrismaClient).inventoryItem.findFirst({ where: { id: itemId, clinicId } }),
   ]);
   if (!procedure) throw new Error("Procedimiento no encontrado");

@@ -25,7 +25,7 @@ import { test, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { margenDe } from "../../../dashboard/procedures/margen";
+import { gastoDe, margenDe } from "../../../dashboard/procedures/margen";
 import { leerGasto } from "../entrada";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..", "..");
@@ -129,11 +129,28 @@ test("gasto 0 sí es un dato: el margen es el precio; con gasto, precio − gast
   assert.equal(margenDe(500, 800), -300); // se pierde dinero: se enseña, no se esconde
 });
 
+test("gastoDe: el gasto manual manda (incluido 0); sin manual se usa la receta; una receta en 0 o sin receta no es un dato", () => {
+  assert.deepEqual(gastoDe(400, 900), { monto: 400, origen: "manual" });
+  assert.deepEqual(gastoDe(0, 900), { monto: 0, origen: "manual" }, "0 es «no gasta nada», no «no lo sé»");
+  assert.deepEqual(gastoDe(null, 350.5), { monto: 350.5, origen: "receta" });
+  assert.deepEqual(gastoDe(undefined, 350.5), { monto: 350.5, origen: "receta" });
+  assert.equal(gastoDe(null, 0), null, "insumos sin costo capturado: sigue sin gasto");
+  assert.equal(gastoDe(null, undefined), null);
+  assert.equal(gastoDe(null, Number.NaN), null);
+  // y de ahí, sin gasto no hay margen; con el de la receta, sí
+  assert.equal(margenDe(1500, gastoDe(null, null)?.monto ?? null), null);
+  assert.equal(margenDe(1500, gastoDe(null, 350)?.monto ?? null), 1150);
+});
+
 test("la pantalla pinta el margen con margenDe y un guion cuando no lo hay; ya no enseña ni envía code", () => {
   const src = leer("src/app/dashboard/procedures/procedures-client.tsx");
-  assert.match(src, /const margen = margenDe\(p\.basePrice, p\.cost\)/);
+  // Regla vigente (ws1-t6): el gasto es el manual o, si no hay, el de la receta de materiales (`gastoDe`), y el
+  // margen se calcula con ESE gasto; sin gasto, un guion.
+  assert.match(src, /const gasto = gastoDe\(p\.cost, costoReceta\[p\.id\]\);/);
+  assert.match(src, /const margen = margenDe\(p\.basePrice, gasto \? gasto\.monto : null\);/);
   assert.match(src, /margen != null \? formatCurrency\(margen\) : "—"/);
-  assert.match(src, /p\.cost != null \? formatCurrency\(p\.cost\) : "—"/);
+  assert.match(src, /gasto \? formatCurrency\(gasto\.monto\) : "—"/);
+  assert.match(src, /gasto\?\.origen === "receta"/, "el gasto que viene de la receta se dice");
   assert.doesNotMatch(src, /colSatCode/);
   assert.doesNotMatch(src, /\bcode\b/);
 });
