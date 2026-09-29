@@ -201,9 +201,12 @@ export function Campo({
   ayuda,
   obligatorio = false,
   derecha,
+  htmlFor,
   children,
 }: {
   etiqueta?: ReactNode;
+  /** El `id` de la entrada: enlaza la etiqueta (clic y lectores de pantalla). */
+  htmlFor?: string;
   /** Texto de ayuda debajo de la entrada. */
   ayuda?: ReactNode;
   obligatorio?: boolean;
@@ -214,7 +217,7 @@ export function Campo({
   return (
     <div className={s.campo}>
       {etiqueta && (
-        <label className={s.campoEtiqueta}>
+        <label className={s.campoEtiqueta} htmlFor={htmlFor}>
           <span>
             {etiqueta}
             {obligatorio && <span className={s.campoObligatorio}> *</span>}

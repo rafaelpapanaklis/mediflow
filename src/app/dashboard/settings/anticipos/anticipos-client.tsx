@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Banknote, CreditCard, Link2, MessageCircle, QrCode, Receipt, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
@@ -115,6 +115,24 @@ export function AnticiposClient({
   const [panelPorcentaje, setPanelPorcentaje] = useState(inicial.configPanel.porcentaje > 0 ? String(inicial.configPanel.porcentaje) : "");
   const [panelHoras, setPanelHoras] = useState(String(inicial.configPanel.horas));
   const [guardandoPanel, setGuardandoPanel] = useState(false);
+  // H8 (revisión final, ws1-t4): un «Guardado» que se queda a la vista junto
+  // al botón (el toast solo se veía si uno miraba a tiempo) y etiquetas
+  // enlazadas a su campo.
+  const [guardadoEn, setGuardadoEn] = useState<"bot" | "panel" | null>(null);
+  useEffect(() => {
+    if (!guardadoEn) return;
+    const t = setTimeout(() => setGuardadoEn(null), 5000);
+    return () => clearTimeout(t);
+  }, [guardadoEn]);
+  const idBase = useId();
+  const ids = {
+    botMonto: `${idBase}-bot-monto`,
+    botPorcentaje: `${idBase}-bot-porcentaje`,
+    botMinutos: `${idBase}-bot-minutos`,
+    panelMonto: `${idBase}-panel-monto`,
+    panelPorcentaje: `${idBase}-panel-porcentaje`,
+    panelHoras: `${idBase}-panel-horas`,
+  };
 
   // ── ws1-t3 fase 2 — datos bancarios de la sede, para «Pedir anticipo →
   // Transferencia» y su PDF/texto. Canal INDEPENDIENTE de Mercado Pago: no
@@ -160,6 +178,7 @@ export function AnticiposClient({
       setDatos(json as PantallaAnticipos);
       setActivo((json as PantallaAnticipos).config.activo);
       toast.success(activo ? "Listo: el bot pedirá anticipo al agendar." : "Guardado. El bot agenda sin anticipo.");
+      setGuardadoEn("bot");
     } finally {
       setGuardando(false);
     }
@@ -187,7 +206,8 @@ export function AnticiposClient({
         return;
       }
       setDatos(json as PantallaAnticipos);
-      toast.success("Guardado.");
+      toast.success("Anticipo del panel guardado.");
+      setGuardadoEn("panel");
     } finally {
       setGuardandoPanel(false);
     }
@@ -406,7 +426,12 @@ export function AnticiposClient({
           }
           pie={
             puedeCobrar ? (
-              <BotonGuardar guardando={guardando} texto="Guardar" textoGuardando="Guardando…" onClick={guardar} />
+              <>
+                <BotonGuardar guardando={guardando} texto="Guardar" textoGuardando="Guardando…" onClick={guardar} />
+                <span role="status" className={cr.campoAyuda} style={{ marginLeft: 10 }}>
+                  {guardadoEn === "bot" ? "✓ Guardado" : ""}
+                </span>
+              </>
             ) : undefined
           }
         >
@@ -426,6 +451,7 @@ export function AnticiposClient({
               </Selector>
             </Campo>
             <Campo
+              htmlFor={ids.botMonto}
               etiqueta={modo === "fixed" ? "Monto del anticipo (MXN)" : "Monto de respaldo (MXN)"}
               ayuda={
                 modo === "fixed"
@@ -438,6 +464,7 @@ export function AnticiposClient({
                 inputMode="decimal"
                 min={0}
                 step="1"
+                id={ids.botMonto}
                 value={monto}
                 onChange={(e) => setMonto(e.target.value)}
                 disabled={!puedeCobrar}
@@ -447,12 +474,13 @@ export function AnticiposClient({
           </Campos2>
           <Campos2>
             {modo === "percent" && (
-              <Campo etiqueta="Porcentaje (%)" ayuda="Del precio del servicio en tu catálogo.">
+              <Campo htmlFor={ids.botPorcentaje} etiqueta="Porcentaje (%)" ayuda="Del precio del servicio en tu catálogo.">
                 <Entrada
                   type="number"
                   inputMode="numeric"
                   min={1}
                   max={100}
+                  id={ids.botPorcentaje}
                   value={porcentaje}
                   onChange={(e) => setPorcentaje(e.target.value)}
                   disabled={!puedeCobrar}
@@ -461,6 +489,7 @@ export function AnticiposClient({
               </Campo>
             )}
             <Campo
+              htmlFor={ids.botMinutos}
               etiqueta="Plazo para pagar (minutos)"
               ayuda={`Entre ${MINUTOS_MIN} y ${MINUTOS_MAX}. Pasado el plazo, el horario vuelve a estar libre para otros.`}
             >
@@ -469,6 +498,7 @@ export function AnticiposClient({
                 inputMode="numeric"
                 min={MINUTOS_MIN}
                 max={MINUTOS_MAX}
+                id={ids.botMinutos}
                 value={minutos}
                 onChange={(e) => setMinutos(e.target.value)}
                 disabled={!puedeCobrar}
@@ -506,7 +536,12 @@ export function AnticiposClient({
           }
           pie={
             puedeConfigurarPanel ? (
-              <BotonGuardar guardando={guardandoPanel} texto="Guardar" textoGuardando="Guardando…" onClick={guardarPanel} />
+              <>
+                <BotonGuardar guardando={guardandoPanel} texto="Guardar" textoGuardando="Guardando…" onClick={guardarPanel} />
+                <span role="status" className={cr.campoAyuda} style={{ marginLeft: 10 }}>
+                  {guardadoEn === "panel" ? "✓ Guardado" : ""}
+                </span>
+              </>
             ) : undefined
           }
         >
@@ -514,41 +549,51 @@ export function AnticiposClient({
             <Campo etiqueta="Cómo se calcula">
               <Selector value={panelModo} onChange={(e) => setPanelModo(e.target.value as ModoAnticipoPanel)} disabled={!puedeConfigurarPanel}>
                 <option value="fixed">Monto fijo</option>
-                <option value="percent">Porcentaje del total de la factura</option>
+                <option value="percent">Porcentaje de lo que falta por pagar</option>
               </Selector>
             </Campo>
             <Campo
+              htmlFor={ids.panelMonto}
               etiqueta={panelModo === "fixed" ? "Monto sugerido (MXN)" : "Monto de respaldo (MXN)"}
-              ayuda={panelModo === "fixed" ? `Mínimo ${formatoPesos(ANTICIPO_MINIMO_MXN)}.` : "Se sugiere si la factura no tiene total (aún no hay concepto)."}
+              ayuda={
+                // H3 (revisión final, ws1-t4): el «300» gris era solo un
+                // ejemplo y parecía configurado. Ahora se dice qué pasa vacío.
+                panelModo === "fixed"
+                  ? `Mínimo ${formatoPesos(ANTICIPO_MINIMO_MXN)}. Vacío: «Pedir anticipo» abre sin monto y recepción lo escribe.`
+                  : "Se sugiere si la factura no tiene total (aún no hay concepto). Vacío: sin sugerido."
+              }
             >
               <Entrada
                 type="number"
                 inputMode="decimal"
                 min={0}
                 step="1"
+                id={ids.panelMonto}
                 value={panelMonto}
                 onChange={(e) => setPanelMonto(e.target.value)}
                 disabled={!puedeConfigurarPanel}
-                placeholder="300"
+                placeholder="Sin definir"
               />
             </Campo>
           </Campos2>
           <Campos2>
             {panelModo === "percent" && (
-              <Campo etiqueta="Porcentaje (%)" ayuda="Del TOTAL de la factura.">
+              <Campo htmlFor={ids.panelPorcentaje} etiqueta="Porcentaje (%)" ayuda="De lo que falta por pagar de la factura (su saldo).">
                 <Entrada
                   type="number"
                   inputMode="numeric"
                   min={1}
                   max={100}
+                  id={ids.panelPorcentaje}
                   value={panelPorcentaje}
                   onChange={(e) => setPanelPorcentaje(e.target.value)}
                   disabled={!puedeConfigurarPanel}
-                  placeholder="20"
+                  placeholder="Sin definir"
                 />
               </Campo>
             )}
             <Campo
+              htmlFor={ids.panelHoras}
               etiqueta="Plazo para pagar (horas)"
               ayuda={`Entre ${PANEL_HORAS_MIN} y ${PANEL_HORAS_MAX}. Pasado el plazo, la cita se libera y se avisa a recepción (no al paciente).`}
             >
@@ -557,6 +602,7 @@ export function AnticiposClient({
                 inputMode="numeric"
                 min={PANEL_HORAS_MIN}
                 max={PANEL_HORAS_MAX}
+                id={ids.panelHoras}
                 value={panelHoras}
                 onChange={(e) => setPanelHoras(e.target.value)}
                 disabled={!puedeConfigurarPanel}
