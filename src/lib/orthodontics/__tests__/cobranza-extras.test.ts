@@ -125,7 +125,9 @@ test("pasar controles al doctor nuevo: ventana acotada, bloqueos de agenda y cho
 
 test("el tope de un aviso mira también el teléfono del responsable; la ficha rediseñada puede confirmar", () => {
   const r = leer("app/api/invoices/[id]/send-whatsapp/route.ts");
-  assert.match(r, /telefonoDelResponsableDeLaFactura\(ctx\.clinicId, invoice\.id\)/);
+  // ws1-t10: el responsable se lee una vez (contactoDelResponsableDeLaFactura) y su teléfono entra al tope junto con el del paciente.
+  assert.match(r, /contactoDelResponsableDeLaFactura\(ctx\.clinicId, invoice\.id\)/);
+  assert.match(r, /responsable\?\.telefono \? \[responsable\.telefono\]/);
   assert.match(r, /en las últimas 24 h/);
   assert.match(leer("components/dashboard/factura-ficha-rediseno/extras.ts"), /forzar/);
   assert.match(leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx"), /r\.codigo === "AVISO_YA_ENVIADO"/);

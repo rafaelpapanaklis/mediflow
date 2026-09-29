@@ -28,6 +28,8 @@ import { logMutation } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import { CHARGEABLE_INVOICE_STATUSES } from "@/components/dashboard/billing/invoice-status";
 import { buildCorreoFactura } from "@/lib/invoices/correo-factura";
+import { contactoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
+import { destinatariosDeEnvio, esDestinoDeEnvio, type Destinatario } from "@/lib/invoices/destinatarios";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { linkParaEnviar } from "@/lib/factura-mp/envio.server";
 
@@ -78,14 +80,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
 
-  const correo = invoice.patient?.email?.trim() ?? "";
-  if (!correo) {
-    return NextResponse.json(
-      { error: "El paciente no tiene correo registrado. Agrégalo en su expediente para poder enviarle la factura." },
-      { status: 409 },
-    );
-  }
-  if (!CORREO_VALIDO.test(correo)) {
+  // ws1-t10: si el caso tiene RESPONSABLE DE PAGO con correo, la factura va a él (y al paciente si se
+  // pide o si el responsable no tiene); sin responsable, al paciente, como siempre. El aviso de «no
+  // tiene correo» solo sale si ninguno de los dos tiene uno válido.
+  const pedido = await req.json().catch(() => null);
+  const destino = esDestinoDeEnvio(pedido?.destino) ? pedido.destino : "auto";
+  const responsable = await contactoDelResponsableDeLaFactura(ctx.clinicId, invoice.id);
+  const nombrePaciente = `${invoice.patient?.firstName ?? ""} ${invoice.patient?.lastName ?? ""}`.trim() || "Paciente";
+  const correoPaciente = invoice.patient?.email?.trim() ?? "";
+  const { destinatarios, sinContacto, motivo } = destinatariosDeEnvio({
+    paciente: { nombre: nombrePaciente, correo: correoPaciente },
+    responsable: responsable ? { nombre: responsable.nombre, parentesco: responsable.parentesco, correo: responsable.correo } : null,
+    canal: "correo",
+    destino,
+  });
+  if (sinContacto) {
+    if (responsable) return NextResponse.json({ error: motivo }, { status: 409 });
+    if (!correoPaciente) {
+      return NextResponse.json(
+        { error: "El paciente no tiene correo registrado. Agrégalo en su expediente para poder enviarle la factura." },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: "El correo registrado del paciente no parece válido. Corrígelo en su expediente." },
       { status: 409 },
@@ -99,7 +115,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   });
 
   // Link de Mercado Pago (ws1-t1). Nunca lanza: sin link, el correo de siempre.
-  const pedido = await req.json().catch(() => null);
   const { link, aviso: avisoLink } = await linkParaEnviar({
     clinicId: ctx.clinicId,
     invoiceId: invoice.id,
@@ -108,26 +123,34 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     puedeCobrar: denyIfMissingPermission(ctx, "billing.charge") === null,
   });
 
-  const { subject, html, text } = buildCorreoFactura({
-    patient: invoice.patient,
-    clinicName: invoice.clinic?.name ?? "",
-    clinicPhone: invoice.clinic?.phone ?? null,
-    invoiceNumber: invoice.invoiceNumber,
-    total: invoice.total,
-    paid: invoice.paid,
-    balance: invoice.balance,
-    items: invoice.items,
-    condiciones: porFactura.get(invoice.id) ?? null,
-    linkPago: link,
-  });
-
-  const { delivered } = await sendEmail({ to: correo, subject, html, text });
-  if (!delivered) {
+  const enviados: Destinatario[] = [];
+  const fallos: Destinatario[] = [];
+  for (const d of destinatarios) {
+    const { subject, html, text } = buildCorreoFactura({
+      // Al responsable se le saluda a él.
+      patient: d.rol === "responsable" ? { firstName: d.nombre, lastName: "" } : invoice.patient,
+      clinicName: invoice.clinic?.name ?? "",
+      clinicPhone: invoice.clinic?.phone ?? null,
+      invoiceNumber: invoice.invoiceNumber,
+      total: invoice.total,
+      paid: invoice.paid,
+      balance: invoice.balance,
+      items: invoice.items,
+      condiciones: porFactura.get(invoice.id) ?? null,
+      linkPago: link,
+    });
+    const { delivered } = await sendEmail({ to: d.valor, subject, html, text });
+    (delivered ? enviados : fallos).push(d);
+  }
+  if (enviados.length === 0) {
     return NextResponse.json(
-      { error: "El correo no salió: el servicio de correo no está configurado o rechazó el envío. La factura no se le mandó al paciente." },
+      { error: `El correo no salió: el servicio de correo no está configurado o rechazó el envío. La factura no se le mandó ${destinatarios[0].rol === "responsable" ? "al responsable de pago" : "al paciente"}.` },
       { status: 502 },
     );
   }
+  const parcial = fallos.length > 0
+    ? `Salió a ${enviados.map((d) => d.nombre).join(" y ")}, pero no a ${fallos.map((d) => d.nombre).join(" ni a ")}.`
+    : null;
 
   await logMutation({
     req,
@@ -137,12 +160,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     entityId: invoice.id,
     action: "update",
     before: { sentVia: null },
-    after: { sentVia: "email", ...(link ? { paymentLink: "mercadopago" } : {}) },
+    after: { sentVia: "email", to: enviados.map((d) => d.rol), ...(link ? { paymentLink: "mercadopago" } : {}) },
   });
 
   return NextResponse.json({
     ok: true,
     patientId: invoice.patientId ?? null,
+    enviadoA: enviados.map((d) => ({ rol: d.rol, nombre: d.nombre })),
+    avisoParcial: parcial,
     linkPago: link ? { ...link, enMensaje: true } : null,
     avisoLink,
   });

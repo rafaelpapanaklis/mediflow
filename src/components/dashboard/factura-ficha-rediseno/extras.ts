@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import type { ContactoPaciente, ViaEnvio } from "./datos";
+import type { DestinoDeEnvio } from "@/lib/invoices/destinatarios";
 
 export interface ExtrasDeFacturas {
   condiciones: Record<string, CondicionesPago>;
@@ -103,10 +104,15 @@ export async function enviarFactura(
   invoiceId: string,
   via: ViaEnvio,
   /** `forzar` (WhatsApp): manda aunque ya haya salido un aviso de cobro a ese teléfono hoy (ws1-t4 #82). */
-  opciones: { linkPago?: boolean; forzar?: boolean } = {},
-): Promise<Resultado & { avisoLink: string | null; codigo?: string | null }> {
+  opciones: { linkPago?: boolean; forzar?: boolean; destino?: DestinoDeEnvio } = {},
+): Promise<Resultado & { avisoLink: string | null; codigo?: string | null; enviadoA?: string[]; avisoParcial?: string | null }> {
   try {
-    const cuerpo = { ...(opciones.linkPago ? { linkPago: true } : {}), ...(opciones.forzar ? { forzar: true } : {}) };
+    // `destino` (ws1-t10): a quién va cuando el caso tiene responsable de pago. Sin él, la ruta decide ("auto").
+    const cuerpo = {
+      ...(opciones.linkPago ? { linkPago: true } : {}),
+      ...(opciones.forzar ? { forzar: true } : {}),
+      ...(opciones.destino && opciones.destino !== "auto" ? { destino: opciones.destino } : {}),
+    };
     const res = await fetch(`/api/invoices/${invoiceId}/${RUTA[via]}`, {
       method: "POST",
       ...(Object.keys(cuerpo).length > 0
@@ -115,7 +121,13 @@ export async function enviarFactura(
     });
     const out = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: typeof out?.error === "string" ? out.error : null, avisoLink: null, codigo: typeof out?.code === "string" ? out.code : null };
-    return { ok: true, error: null, avisoLink: typeof out?.avisoLink === "string" && out.avisoLink ? out.avisoLink : null };
+    return {
+      ok: true,
+      error: null,
+      avisoLink: typeof out?.avisoLink === "string" && out.avisoLink ? out.avisoLink : null,
+      enviadoA: Array.isArray(out?.enviadoA) ? out.enviadoA.map((d: { nombre?: unknown }) => String(d?.nombre ?? "")).filter(Boolean) : [],
+      avisoParcial: typeof out?.avisoParcial === "string" && out.avisoParcial ? out.avisoParcial : null,
+    };
   } catch {
     return { ok: false, error: null, avisoLink: null };
   }

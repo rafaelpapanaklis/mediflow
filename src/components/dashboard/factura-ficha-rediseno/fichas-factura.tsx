@@ -41,6 +41,7 @@ import {
   type ContactoPaciente, type FacturaDeFicha, type ViaEnvio,
 } from "./datos";
 import { enviarFactura, useExtrasDeFacturas } from "./extras";
+import { estadoDeEnvioEnFicha, nombreConParentesco, type DestinoDeEnvio } from "@/lib/invoices/destinatarios";
 import { BloquePlan } from "@/components/dashboard/plan-de-pagos/bloque-plan";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { facturaEditableEnEditor } from "@/components/billing/editar-factura";
@@ -176,6 +177,7 @@ function Ficha({
   const [enviando, setEnviando] = useState<ViaEnvio | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [enviado, setEnviado] = useState<ViaEnvio | null>(null);
+  const [enviadoA, setEnviadoA] = useState<string[]>([]);
 
   // La píldora dice «Vencido» cuando la factura LO ESTÁ (dueDate + saldo),
   // aunque su status siga en PENDING/PARTIAL — igual que la tabla de Caja.
@@ -200,8 +202,14 @@ function Ficha({
   // y el motivo se ESCRIBE debajo (un `title` no existe en un iPad).
   const ofreceCorreo = sePuedeEnviarPorCorreo(inv.status);
   const ofreceWhatsApp = puedeEnviar && sePuedeEnviarPorWhatsApp(inv.status);
-  const sinCorreo = ofreceCorreo && contacto?.correo === false;
-  const sinTelefono = ofreceWhatsApp && contacto?.telefono === false;
+  // ws1-t10: con RESPONSABLE DE PAGO (tutor u otra persona del caso) el envío es a él —y al paciente si
+  // tiene—; el aviso de «no tiene» solo sale si ninguno de los dos tiene. Sin responsable, como siempre.
+  const envioWa = estadoDeEnvioEnFicha(contacto, "telefono");
+  const envioCorreo = estadoDeEnvioEnFicha(contacto, "correo");
+  const sinCorreo = ofreceCorreo && !envioCorreo.puede;
+  const sinTelefono = ofreceWhatsApp && !envioWa.puede;
+  const responsable = contacto?.responsable ?? null;
+  const [destino, setDestino] = useState<DestinoDeEnvio>("auto");
   const esperando = cargandoContacto && contacto === undefined;
 
   async function enviar(via: ViaEnvio, forzar = false) {
@@ -209,20 +217,22 @@ function Ficha({
     setMensaje(null);
     setEnviado(null);
     // El trato dice Mercado Pago: el mensaje lleva el link del saldo (ws1-t1).
-    const r = await enviarFactura(inv.id, via, { linkPago: condiciones?.metodo === "mercadopago", forzar });
+    const r = await enviarFactura(inv.id, via, { linkPago: condiciones?.metodo === "mercadopago", forzar, destino });
     // ws1-t4 #82: ya salió un aviso de cobro a ese teléfono hoy — se pregunta antes de mandar otro.
     if (!r.ok && r.codigo === "AVISO_YA_ENVIADO") {
       setEnviando(null);
       if (window.confirm(`${r.error ?? ""}\n\n¿Mandarlo de todos modos?`)) await enviar(via, true);
       return;
     }
-    if (r.ok) setEnviado(via);
+    if (r.ok) { setEnviado(via); setEnviadoA(r.enviadoA ?? []); }
     // Con motivo del servidor, se enseña tal cual. SIN motivo (se cortó la red o
     // la función) no se sabe si salió: no se afirma que no, para que nadie
     // reenvíe a ciegas y el paciente reciba dos mensajes.
     else setMensaje(r.error ?? t("facturaFicha.envioSinConfirmar"));
     // Salió, pero sin el link de Mercado Pago que debía llevar (ws1-t1): se dice.
     if (r.ok && r.avisoLink) setMensaje(`${t("facturaMp.enviadoSinLink")} ${r.avisoLink}`);
+    // Salió a uno y a otro no (ws1-t10): se dice.
+    if (r.ok && r.avisoParcial) setMensaje(r.avisoParcial);
     setEnviando(null);
   }
 
@@ -301,6 +311,23 @@ function Ficha({
           </button>
         )}
 
+        {responsable && (ofreceWhatsApp || ofreceCorreo) && (
+          <label className={s.motivo} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            Enviar a
+            <select
+              className={s.accion}
+              value={destino}
+              disabled={enviando !== null}
+              onChange={(e) => setDestino(e.target.value as DestinoDeEnvio)}
+              aria-label="A quién se envía la factura"
+            >
+              <option value="auto">{`Responsable de pago: ${nombreConParentesco({ nombre: responsable.nombre, parentesco: responsable.parentesco })}`}</option>
+              <option value="paciente">Paciente</option>
+              <option value="ambos">Los dos</option>
+            </select>
+          </label>
+        )}
+
         {ofreceWhatsApp && (
           <button
             type="button"
@@ -329,9 +356,12 @@ function Ficha({
           <Files size={13} aria-hidden /> {t("quotes.card.duplicate")}
         </button>
 
-        {sinTelefono && <p className={s.motivo}>{t("facturaFicha.sinTelefono")}</p>}
-        {sinCorreo && <p className={s.motivo}>{t("facturaFicha.sinCorreo")}</p>}
+        {sinTelefono && <p className={s.motivo}>{envioWa.motivo ?? t("facturaFicha.sinTelefono")}</p>}
+        {sinCorreo && <p className={s.motivo}>{envioCorreo.motivo ?? t("facturaFicha.sinCorreo")}</p>}
         {mensaje && <p className={s.fichaMensaje} role="alert">{mensaje}</p>}
+        {enviado && responsable && enviadoA.length > 0 && (
+          <p className={s.fichaAviso} role="status">{`Enviado a ${enviadoA.join(" y ")}.`}</p>
+        )}
         {enviado === "whatsapp" && (
           <p className={s.fichaAviso} role="status">
             {t("quotes.card.waSentToast")}

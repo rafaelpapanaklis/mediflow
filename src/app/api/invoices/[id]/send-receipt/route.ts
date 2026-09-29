@@ -23,6 +23,8 @@ import { textoRecibo } from "@/lib/anticipos/mensaje-panel";
 import { formatoPesos } from "@/lib/anticipos/core";
 import { sendWhatsAppLogged, type WhatsAppOutboundAttachment } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
+import { contactoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
+import { destinatariosDeEnvio, esDestinoDeEnvio, type Destinatario } from "@/lib/invoices/destinatarios";
 
 export const runtime = "nodejs"; // genera el PDF con @react-pdf
 export const dynamic = "force-dynamic";
@@ -54,17 +56,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "Esta factura todavía no tiene ningún pago registrado." }, { status: 409 });
   }
 
-  const phone = invoice.patient?.phone?.trim();
-  if (!phone) {
-    return NextResponse.json({ error: "El paciente no tiene teléfono registrado." }, { status: 409 });
+  // ws1-t10: el recibo va al RESPONSABLE DE PAGO del caso si tiene teléfono (y al paciente si se pide o
+  // si el responsable no tiene); sin responsable, al paciente, como siempre.
+  const pedido = await req.json().catch(() => null);
+  const destino = esDestinoDeEnvio(pedido?.destino) ? pedido.destino : "auto";
+  const responsable = await contactoDelResponsableDeLaFactura(ctx.clinicId, invoice.id);
+  const paciente = invoice.patient ? `${invoice.patient.firstName} ${invoice.patient.lastName ?? ""}`.trim() : "Paciente";
+  const { destinatarios, sinContacto, motivo } = destinatariosDeEnvio({
+    paciente: { nombre: paciente, telefono: invoice.patient?.phone },
+    responsable: responsable ? { nombre: responsable.nombre, parentesco: responsable.parentesco, telefono: responsable.telefono } : null,
+    canal: "telefono",
+    destino,
+  });
+  if (sinContacto) {
+    return NextResponse.json({ error: responsable ? motivo : "El paciente no tiene teléfono registrado." }, { status: 409 });
   }
   const clinic = invoice.clinic;
   if (!clinic?.waConnected || !clinic.waPhoneNumberId || !clinic.waAccessToken) {
     return NextResponse.json({ error: "WhatsApp no está conectado en esta clínica." }, { status: 409 });
   }
 
-  const paciente = invoice.patient ? `${invoice.patient.firstName} ${invoice.patient.lastName ?? ""}`.trim() : "Paciente";
-  const texto = textoRecibo({ paciente, clinica: clinic.name, monto: invoice.paid, folio: invoice.invoiceNumber });
 
   let attachment: WhatsAppOutboundAttachment | null = null;
   try {
@@ -74,26 +85,41 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     console.error("[invoices/send-receipt] no se pudo generar el comprobante PDF:", e);
   }
 
-  try {
-    await sendWhatsAppLogged({
-      clinic: {
-        id: clinic.id,
-        waPhoneNumberId: clinic.waPhoneNumberId,
-        waAccessToken: clinic.waAccessToken,
-        waConnected: clinic.waConnected,
-        waTemplates: clinic.waTemplates,
-      },
-      to: phone,
-      body: texto,
-      kind: "payment_receipt",
-      templateParams: [paciente, clinic.name, formatoPesos(invoice.paid), invoice.invoiceNumber],
-      attachment,
-    });
-  } catch (e) {
-    if (e instanceof WhatsAppBlockedError) return NextResponse.json({ error: e.message }, { status: 409 });
-    console.error(`[invoices/send-receipt] fallo al enviar (${invoice.id}):`, e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo enviar el mensaje." }, { status: 502 });
+  const enviados: Destinatario[] = [];
+  const fallos: { a: Destinatario; status: number; error: string }[] = [];
+  for (const d of destinatarios) {
+    // Al responsable se le saluda a él; el recibo lleva el folio de la factura.
+    const texto = textoRecibo({ paciente: d.nombre, clinica: clinic.name, monto: invoice.paid, folio: invoice.invoiceNumber });
+    try {
+      await sendWhatsAppLogged({
+        clinic: {
+          id: clinic.id,
+          waPhoneNumberId: clinic.waPhoneNumberId,
+          waAccessToken: clinic.waAccessToken,
+          waConnected: clinic.waConnected,
+          waTemplates: clinic.waTemplates,
+        },
+        to: d.valor,
+        body: texto,
+        kind: "payment_receipt",
+        templateParams: [d.nombre, clinic.name, formatoPesos(invoice.paid), invoice.invoiceNumber],
+        attachment,
+      });
+      enviados.push(d);
+    } catch (e) {
+      if (e instanceof WhatsAppBlockedError) {
+        fallos.push({ a: d, status: 409, error: e.message });
+      } else {
+        console.error(`[invoices/send-receipt] fallo al enviar (${invoice.id}):`, e);
+        fallos.push({ a: d, status: 502, error: e instanceof Error ? e.message : "No se pudo enviar el mensaje." });
+      }
+    }
   }
+  if (enviados.length === 0) return NextResponse.json({ error: fallos[0].error }, { status: fallos[0].status });
+  const parcial = fallos.length > 0
+    ? `Salió a ${enviados.map((d) => d.nombre).join(" y ")}, pero no a ${fallos.map((f) => `${f.a.nombre} (${f.error})`).join(" ni a ")}.`
+    : null;
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, enviadoA: enviados.map((d) => ({ rol: d.rol, nombre: d.nombre })), avisoParcial: parcial });
+
 }

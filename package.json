@@ -280,6 +280,7 @@
     "test:cfdi-cuadre": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/cuadre-renglones.test.ts",
     "test:cfdi-candado": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/timbrado-y-sat.test.ts",
     "test:orto-cajon-tablero": "tsx --test src/components/specialties/orthodontics/redesign/__tests__/cajon-tablero-y-elasticos.test.ts",
+    "test:factura-destinatarios": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/invoices/__tests__/destinatarios.test.ts",
     "test:cobro-panel-rapido": "tsx --test src/lib/__tests__/limitar-concurrencia.test.ts",
     "test:cfdi-timbre-incierto": "tsx --test --experimental-test-module-mocks src/lib/invoices/__tests__/cfdi-timbre-incierto.test.ts",
     "test:iva-sat": "tsx --test src/lib/__tests__/invoice-iva-sat.test.ts",

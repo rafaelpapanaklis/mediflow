@@ -11,7 +11,9 @@
 // de leer nada: un id ajeno o de un paciente restringido no devuelve ni la frase
 // ni el «tiene teléfono».
 //
-// Del contacto se devuelve SOLO si existe (booleanos), no el dato.
+// Del contacto se devuelve SOLO si existe (booleanos), no el dato. ws1-t10: si el caso de la
+// factura tiene RESPONSABLE DE PAGO (tutor u otra persona), viene también `responsable` con su
+// nombre y sus dos booleanos: la ficha le ofrece enviarle a él.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -20,6 +22,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
+import { contactosDeResponsablesDeFacturas } from "@/lib/orthodontics/responsable-telefono-db";
 
 export const dynamic = "force-dynamic";
 
@@ -69,9 +72,18 @@ export async function GET(req: NextRequest) {
     select: { id: true, patient: { select: { email: true, phone: true } } },
   });
 
-  const contacto: Record<string, { correo: boolean; telefono: boolean }> = {};
+  const responsables = await contactosDeResponsablesDeFacturas(ctx.clinicId, propias.map((i) => i.id));
+  const contacto: Record<string, {
+    correo: boolean; telefono: boolean;
+    responsable?: { nombre: string; parentesco: string; correo: boolean; telefono: boolean };
+  }> = {};
   propias.forEach((inv) => {
-    contacto[inv.id] = { correo: tiene(inv.patient?.email), telefono: tiene(inv.patient?.phone) };
+    const r = responsables.get(inv.id);
+    contacto[inv.id] = {
+      correo: tiene(inv.patient?.email),
+      telefono: tiene(inv.patient?.phone),
+      ...(r ? { responsable: { nombre: r.nombre, parentesco: r.parentesco, correo: tiene(r.correo), telefono: tiene(r.telefono) } } : {}),
+    };
   });
 
   const leido = await leerCondicionesDeFacturas(prisma, {

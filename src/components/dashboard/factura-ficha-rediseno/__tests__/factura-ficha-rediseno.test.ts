@@ -196,8 +196,11 @@ test("la pieza de WhatsApp se REAPROVECHA: misma ruta que el detalle de factura"
 
 test("enviar nunca falla en silencio", () => {
   const correo = leer("app/api/invoices/[id]/send-email/route.ts");
-  assert.match(correo, /if \(!correo\)[\s\S]*?status: 409/, "sin correo tiene que ser un 409 con motivo");
-  assert.match(correo, /if \(!delivered\)[\s\S]*?status: 502/, "un correo que no salió no puede contestar ok");
+  // ws1-t10: «sin correo» = ni el responsable de pago ni el paciente tienen uno válido.
+  assert.match(correo, /if \(sinContacto\)[\s\S]*?status: 409/, "sin correo tiene que ser un 409 con motivo");
+  // ws1-t10: se manda a cada destinatario; si NINGUNO salió, 502 (nunca `ok` por un correo que no salió).
+  assert.match(correo, /\(delivered \? enviados : fallos\)\.push\(d\)/);
+  assert.match(correo, /if \(enviados\.length === 0\)[\s\S]*?status: 502/, "un correo que no salió no puede contestar ok");
   const ficha = leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx");
   assert.match(ficha, /disabled=\{enviando !== null \|\| sinTelefono \|\| esperando\}/, "WhatsApp sin teléfono no se deshabilita");
   assert.match(ficha, /disabled=\{enviando !== null \|\| sinCorreo \|\| esperando\}/, "correo sin correo no se deshabilita");

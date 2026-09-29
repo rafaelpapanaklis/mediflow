@@ -51,6 +51,12 @@ export interface PaymentNoticeInput {
   pagoDelMes?: number | null;
   /** Link de Mercado Pago de la factura (ws1-t1). Sin él, el texto de siempre. */
   linkPago?: { url: string; monto: number } | null;
+  /**
+   * ws1-t10: el aviso va al RESPONSABLE DE PAGO, no al paciente: `patient` es a quien se saluda
+   * (el responsable) y aquí va el nombre del paciente, de quien es la nota. Solo cambia el TEXTO
+   * LIBRE; la plantilla de Meta conserva sus cuatro huecos.
+   */
+  aNombreDe?: string | null;
 }
 
 export interface PaymentNotice {
@@ -70,11 +76,11 @@ export function buildPaymentNotice(input: PaymentNoticeInput): PaymentNotice {
   const conceptos = summarizeItems(input.items);
   const pagoDelMes = input.pagoDelMes != null && input.pagoDelMes > 0 && input.pagoDelMes < input.balance - 0.005 ? input.pagoDelMes : null;
   const cifras = pagoDelMes != null
-    ? `Tu pago de este mes es de ${fmtMXN(pagoDelMes)} (saldo total ${amount})`
-    : `Tienes un saldo pendiente de ${amount}`;
+    ? `${input.aNombreDe ? "El pago de este mes es" : "Tu pago de este mes es"} de ${fmtMXN(pagoDelMes)} (saldo total ${amount})`
+    : `${input.aNombreDe ? "Hay" : "Tienes"} un saldo pendiente de ${amount}`;
   const body =
     `Hola ${patientName}, te saludamos de ${input.clinicName}. ` +
-    `${cifras} de tu nota ${input.invoiceNumber}` +
+    `${cifras} de ${input.aNombreDe ? `la nota ${input.invoiceNumber} de ${input.aNombreDe}` : `tu nota ${input.invoiceNumber}`}` +
     `${conceptos ? ` (${conceptos})` : ""}. ` +
     (input.linkPago
       // El link en su propia línea: pegado a un punto, WhatsApp lo corta mal.

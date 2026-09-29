@@ -33,7 +33,8 @@ import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { reservarAvisoDeCobro, ultimoAvisoDeCobroEnTelefonos } from "@/lib/whatsapp/aviso-cobro-tope";
 import { horaDelAvisoPrevio } from "@/lib/invoices/aviso-del-dia";
 import { pagoDelMesDeFactura } from "@/lib/invoices/pago-del-mes";
-import { telefonoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
+import { contactoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
+import { destinatariosDeEnvio, esDestinoDeEnvio, type Destinatario } from "@/lib/invoices/destinatarios";
 
 export const runtime = "nodejs"; // genera el PDF con @react-pdf
 export const dynamic = "force-dynamic";
@@ -83,10 +84,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
 
-  const patientPhone = invoice.patient?.phone?.trim();
-  if (!patientPhone) {
+  // ws1-t10: si el caso tiene RESPONSABLE DE PAGO con teléfono, el aviso va a él (y al paciente si se
+  // pide o si el responsable no tiene); sin responsable, al paciente, como siempre. El aviso de «no
+  // tiene teléfono» solo sale si ninguno de los dos tiene.
+  const pedido = await req.json().catch(() => null);
+  const destino = esDestinoDeEnvio(pedido?.destino) ? pedido.destino : "auto";
+  const responsable = await contactoDelResponsableDeLaFactura(ctx.clinicId, invoice.id);
+  const nombrePaciente = `${invoice.patient?.firstName ?? ""} ${invoice.patient?.lastName ?? ""}`.trim() || "Paciente";
+  const patientPhone = invoice.patient?.phone?.trim() || null;
+  const { destinatarios, sinContacto, motivo } = destinatariosDeEnvio({
+    paciente: { nombre: nombrePaciente, telefono: patientPhone },
+    responsable: responsable ? { nombre: responsable.nombre, parentesco: responsable.parentesco, telefono: responsable.telefono } : null,
+    canal: "telefono",
+    destino,
+  });
+  if (sinContacto) {
     return NextResponse.json(
-      { error: "El paciente no tiene teléfono registrado. Agrégalo en su expediente para poder avisarle por WhatsApp." },
+      { error: responsable ? motivo : "El paciente no tiene teléfono registrado. Agrégalo en su expediente para poder avisarle por WhatsApp." },
       { status: 409 },
     );
   }
@@ -110,7 +124,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   // Link de Mercado Pago (ws1-t1). Nunca lanza: sin link, el aviso de siempre.
-  const pedido = await req.json().catch(() => null);
 
   // ws1-t4 #82 — un aviso de cobro por teléfono al día. El recordatorio de mensualidad
   // (Alertas) y este aviso salen con el mismo tipo `payment_notice`: mandar los dos el
@@ -119,8 +132,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // El recordatorio de Alertas y los cobros automáticos salen al teléfono del RESPONSABLE de
   // pago; este aviso, al del paciente: se mira en los dos para que no le lleguen dos cobros
   // al mismo hogar.
-  const telResponsable = await telefonoDelResponsableDeLaFactura(ctx.clinicId, invoice.id);
-  const telefonos = Array.from(new Set([patientPhone, ...(telResponsable ? [telResponsable] : [])]));
+  const telefonos = Array.from(new Set([...(patientPhone ? [patientPhone] : []), ...(responsable?.telefono ? [responsable.telefono] : [])]));
   const forzar = pedido?.forzar === true;
 
   /** ¿Ya salió un aviso de cobro en las últimas 24 h (manual, de Alertas o AUTOMÁTICO)? */
@@ -165,23 +177,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // ¿Viajará el link? Solo en texto libre (ventana de 24 h abierta). Es el mismo
   // criterio con el que sendWhatsAppLogged elige entre texto y plantilla.
   const enMensaje = link
-    ? isWithin24hWindow(await lastInboundAtForPhone(clinic.id, patientPhone).catch(() => null), new Date())
+    ? isWithin24hWindow(await lastInboundAtForPhone(clinic.id, destinatarios[0].valor).catch(() => null), new Date())
     : false;
 
   // El texto sale de lib/invoices/payment-notice: Sabina enseña ESE MISMO texto en
   // su tarjeta antes de que alguien confirme el envío.
-  const { body, templateParams } = buildPaymentNotice({
-    patient: invoice.patient,
-    clinicName: clinic.name,
-    clinicPhone,
-    invoiceNumber: invoice.invoiceNumber,
-    balance: invoice.balance,
-    // Factura a plazos: el texto dice «Tu pago de este mes es $X (saldo total $Y)».
-    pagoDelMes: await pagoDelMesDeFactura(prisma, {
-      clinicId: ctx.clinicId, invoiceId: invoice.id, total: invoice.total, paid: invoice.paid, zonaHoraria: clinic.timezone,
-    }),
-    items: invoice.items,
-    linkPago: link,
+  // Factura a plazos: el texto dice «Tu pago de este mes es $X (saldo total $Y)».
+  const pagoDelMes = await pagoDelMesDeFactura(prisma, {
+    clinicId: ctx.clinicId, invoiceId: invoice.id, total: invoice.total, paid: invoice.paid, zonaHoraria: clinic.timezone,
   });
 
   // Comprobante PDF — solo sale con la ventana abierta (en modo plantilla el
@@ -196,35 +199,59 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     console.error("[invoices/send-whatsapp] no se pudo generar el comprobante PDF:", e);
   }
 
-  try {
-    await sendWhatsAppLogged({
-      clinic: {
-        id: clinic.id,
-        waPhoneNumberId: clinic.waPhoneNumberId,
-        waAccessToken: clinic.waAccessToken,
-        waConnected: clinic.waConnected,
-        waTemplates: clinic.waTemplates,
-      },
-      to: patientPhone,
-      body,
-      kind: "payment_notice",
-      templateParams,
-      attachment,
+  const enviados: Destinatario[] = [];
+  const fallos: { a: Destinatario; status: number; error: string }[] = [];
+  for (const d of destinatarios) {
+    const { body, templateParams } = buildPaymentNotice({
+      // Al responsable se le saluda a él y se dice de quién es la nota.
+      patient: d.rol === "responsable" ? { firstName: d.nombre, lastName: "" } : invoice.patient,
+      aNombreDe: d.rol === "responsable" ? nombrePaciente : null,
+      clinicName: clinic.name,
+      clinicPhone,
+      invoiceNumber: invoice.invoiceNumber,
+      balance: invoice.balance,
+      pagoDelMes,
+      items: invoice.items,
+      linkPago: link,
     });
-  } catch (e) {
-    // Bloqueo decidido ANTES de llamar a Meta (fuera de ventana sin plantilla
-    // utilizable): el motivo ya viene en español para el panel.
-    if (e instanceof WhatsAppBlockedError) {
-      return NextResponse.json({ error: e.message }, { status: 409 });
+    try {
+      await sendWhatsAppLogged({
+        clinic: {
+          id: clinic.id,
+          waPhoneNumberId: clinic.waPhoneNumberId,
+          waAccessToken: clinic.waAccessToken,
+          waConnected: clinic.waConnected,
+          waTemplates: clinic.waTemplates,
+        },
+        to: d.valor,
+        body,
+        kind: "payment_notice",
+        templateParams,
+        attachment,
+      });
+      enviados.push(d);
+    } catch (e) {
+      // Bloqueo decidido ANTES de llamar a Meta (fuera de ventana sin plantilla
+      // utilizable): el motivo ya viene en español para el panel.
+      if (e instanceof WhatsAppBlockedError) {
+        fallos.push({ a: d, status: 409, error: e.message });
+      } else {
+        console.error(`[invoices/send-whatsapp] fallo al enviar (${invoice.id}):`, e);
+        fallos.push({ a: d, status: 502, error: e instanceof Error ? e.message : "No se pudo enviar el mensaje." });
+      }
     }
-    const msg = e instanceof Error ? e.message : "No se pudo enviar el mensaje.";
-    console.error(`[invoices/send-whatsapp] fallo al enviar (${invoice.id}):`, e);
-    return NextResponse.json({ error: msg }, { status: 502 });
   }
+  // Nada salió: el motivo del primero, como antes. Salió a uno y a otro no: sale ok y se dice.
+  if (enviados.length === 0) return NextResponse.json({ error: fallos[0].error }, { status: fallos[0].status });
+  const parcial = fallos.length > 0
+    ? `Salió a ${enviados.map((d) => d.nombre).join(" y ")}, pero no a ${fallos.map((f) => `${f.a.nombre} (${f.error})`).join(" ni a ")}.`
+    : null;
 
   return NextResponse.json({
     ok: true,
     patientId: invoice.patientId ?? null,
+    enviadoA: enviados.map((d) => ({ rol: d.rol, nombre: d.nombre })),
+    avisoParcial: parcial,
     linkPago: link ? { ...link, enMensaje } : null,
     avisoLink: link && !enMensaje
       ? "El aviso salió con la plantilla de WhatsApp (el paciente no ha escrito en 24 h), que no admite el link. Cópialo y compártelo por otro medio."

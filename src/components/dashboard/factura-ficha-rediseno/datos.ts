@@ -32,7 +32,12 @@ export interface FacturaDeFicha {
   condicionesPago?: CondicionesPago | null;
 }
 
-export interface ContactoPaciente { correo: boolean; telefono: boolean }
+export interface ContactoPaciente {
+  correo: boolean;
+  telefono: boolean;
+  /** ws1-t10: el responsable de pago del caso de la factura (tutor u otra persona), si lo hay. */
+  responsable?: { nombre: string; parentesco: string; correo: boolean; telefono: boolean };
+}
 
 export type ViaEnvio = "correo" | "whatsapp";
 
