@@ -117,8 +117,8 @@ test("el catálogo del motor trae las herramientas de las cuatro ramas", () => {
   // 28 + las tres de la lista de pacientes (ws1-t5): cumpleanos,
   // pacientes_con_etiqueta y proximas_citas; + estado_mercado_pago y
   // ayuda_del_panel (ws1-t4, «Sabina sabe del panel»); + las tres de ortodoncia
-  // (ws1-t11): orto_caso, orto_controles y orto_cobranza, que solo leen.
-  assert.equal(nombres.length, 36);
+  // (ws1-t11): orto_caso, orto_controles y orto_cobranza, que solo leen; + orto_diagnostico (ws1-t8).
+  assert.equal(nombres.length, 37);
 });
 
 test("🔴 cada herramienta del motor: el usuario tiene la key, el Super Admin se la quita a Sabina → sin_permiso «sabina», sin tocar la base", async () => {

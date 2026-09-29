@@ -6,6 +6,13 @@ import { prisma } from "@/lib/prisma";
 import { updateDiagnosisSchema } from "@/lib/validation/orthodontics";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { validarArchivosInicialesDelDiagnostico, validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
+import {
+  cambiosDelDetalle,
+  textoDeMovimientoDelDiagnostico,
+  validarDiagnosticoDetalle,
+  type DiagnosticoDetalle,
+} from "@/lib/orthodontics/diagnostico-detalle";
+import { columnaDeDiagnosticoDetalleExiste, escribirDetalle, leerDetalleParaGuardar } from "@/lib/orthodontics/diagnostico-detalle-db";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -19,15 +26,33 @@ const ALTA_CASO_DIAGNOSIS_FIELDS = [
   "nextObservationDate",
 ] as const;
 
+const PATRONES = ["MESOFACIAL", "DOLICOFACIAL", "BRAQUIFACIAL"] as const;
+
 export async function updateDiagnosis(
   input: unknown,
-): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean }>> {
+): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; avisoDetalle: string | null }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 
   const parsed = updateDiagnosisSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
+
+  // ws1-t8 — lo que el esquema de siempre no trae (zod lo descartaba en silencio): el patrón esquelético
+  // (el «tipo» del VERT) y el diagnóstico completo, que va por SQL crudo a "diagnosticoDetalle".
+  const crudo = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  let skeletalPattern: string | null | undefined;
+  if ("skeletalPattern" in crudo) {
+    const sp = crudo.skeletalPattern;
+    if (sp !== null && sp !== "" && !(PATRONES as readonly unknown[]).includes(sp)) return fail("Patrón esquelético no válido");
+    skeletalPattern = (sp as string | null) || null;
+  }
+  let detalleNuevo: DiagnosticoDetalle | undefined;
+  if (crudo.diagnosticoDetalle !== undefined) {
+    const v = validarDiagnosticoDetalle(crudo.diagnosticoDetalle);
+    if (v.ok === false) return fail(v.error);
+    detalleNuevo = v.detalle;
+  }
 
   const before = await prisma.orthodonticDiagnosis.findFirst({
     where: { id: parsed.data.diagnosisId, clinicId: ctx.clinicId, deletedAt: null },
@@ -63,6 +88,7 @@ export async function updateDiagnosis(
   if (typeof data.nextObservationDate === "string") {
     data.nextObservationDate = new Date(data.nextObservationDate);
   }
+  if (skeletalPattern !== undefined) data.skeletalPattern = skeletalPattern;
 
   try {
     let altaCasoFieldsSaved = true;
@@ -81,20 +107,58 @@ export async function updateDiagnosis(
         return prisma.orthodonticDiagnosis.update({ where: { id: diagnosisId }, data: reduced });
       });
 
+    // El diagnóstico completo, bajo candado de fila. Sin la columna (SQL sin pegar) lo de siempre ya quedó y
+    // se avisa; si falla, lo de siempre también quedó: se avisa sin deshacerlo.
+    let avisoDetalle: string | null = null;
+    let detalleAntes: DiagnosticoDetalle | null = null;
+    let detalleGuardado: DiagnosticoDetalle | null = null;
+    if (detalleNuevo) {
+      if (!(await columnaDeDiagnosticoDetalleExiste())) {
+        avisoDetalle = "Falta pegar sql/ortodoncia-diagnostico-completo.sql: lo nuevo del diagnóstico (facial, oclusal, cefalometría…) no se guardó; lo demás sí.";
+      } else {
+        try {
+          await prisma.$transaction(async (tx) => {
+            detalleAntes = await leerDetalleParaGuardar(tx, ctx.clinicId, diagnosisId);
+            await escribirDetalle(tx, ctx.clinicId, diagnosisId, detalleNuevo!);
+          });
+          detalleGuardado = detalleNuevo;
+        } catch (e) {
+          console.error("[ortho] updateDiagnosis: no se pudo guardar diagnosticoDetalle:", e);
+          avisoDetalle = "No se pudo guardar lo nuevo del diagnóstico (facial, oclusal, cefalometría…); lo demás sí. Inténtalo de nuevo.";
+        }
+      }
+    }
+
+    // Movimientos del paciente: qué apartados cambiaron, sin valores clínicos en la frase.
+    const cambioDetalle = detalleGuardado ? cambiosDelDetalle(detalleAntes, detalleGuardado) : { secciones: [], campos: [] };
+    const columnasCambiadas = Object.keys(data).filter(
+      (k) => JSON.stringify((before as Record<string, unknown>)[k] ?? null) !== JSON.stringify((updated as Record<string, unknown>)[k] ?? null),
+    );
+    const planoDetalle = (d: DiagnosticoDetalle | null, campos: string[]) =>
+      Object.fromEntries(
+        campos.map((c) => {
+          const [, sec, campo] = c.split(".");
+          return [c, (d as Record<string, Record<string, unknown>> | null)?.[sec!]?.[campo!] ?? null];
+        }),
+      );
     await auditOrtho({
       ctx,
       action: ORTHO_AUDIT_ACTIONS.DIAGNOSIS_UPDATED,
       entityType: "OrthodonticDiagnosis",
       entityId: updated.id,
       patientId: before.patientId,
-      before: before as unknown as Record<string, unknown>,
-      after: updated as unknown as Record<string, unknown>,
+      before: { ...(before as unknown as Record<string, unknown>), ...planoDetalle(detalleAntes, cambioDetalle.campos) },
+      after: {
+        ...(updated as unknown as Record<string, unknown>),
+        ...planoDetalle(detalleGuardado, cambioDetalle.campos),
+        _mov: { texto: textoDeMovimientoDelDiagnostico(columnasCambiadas, cambioDetalle.secciones) },
+      },
     });
 
     revalidatePath(`/dashboard/patients/${updated.patientId}/orthodontics`);
     revalidatePath(`/dashboard/specialties/orthodontics/${updated.patientId}`);
     void patientId; // patientId del input solo es informativo
-    return ok({ id: updated.id, altaCasoFieldsSaved });
+    return ok({ id: updated.id, altaCasoFieldsSaved, avisoDetalle });
   } catch (e) {
     console.error("[ortho] updateDiagnosis failed:", e);
     return fail("No se pudo actualizar el diagnóstico");

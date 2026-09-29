@@ -26,6 +26,7 @@ import { configDeCobroPorDefecto } from "@/lib/orthodontics/cobro/reglas";
 import { CONDICIONES_CONVENIO_EJEMPLO, SIN_CONDICIONES_CONVENIO, condicionesParaImprimir } from "@/lib/orthodontics/cobro/condiciones-convenio";
 import { FinancialAgreementPdf } from "../../pdf-templates/financial-agreement";
 import { TreatmentPlanPdf } from "../../pdf-templates/treatment-plan";
+import { diagnosticoDetalleVacio, seccionesDelDiagnostico } from "../../diagnostico-detalle";
 import { DischargeLetterPdf } from "../../pdf-templates/discharge-letter";
 import { ReferralProgressLetterPdf } from "../../pdf-templates/referral-progress-letter";
 import { ProgressReportPdf } from "../../pdf-templates/progress-report";
@@ -391,6 +392,47 @@ describe("membrete común en los PDF de ortodoncia", () => {
     );
     comprobar(tiene, "Plan de tratamiento");
     assert.ok(todo.includes("$35,000 MXN"));
+  });
+
+  it("plan de tratamiento con el diagnóstico completo (ws1-t8)", async () => {
+    const d = diagnosticoDetalleVacio();
+    d.facial.cierreLabial = "incompetente";
+    d.oclusal.lineaMediaInferior = "izquierda";
+    d.oclusal.lineaMediaInferiorMm = 2;
+    d.cefalometria.anb = 6;
+    const secciones = seccionesDelDiagnostico(
+      {
+        angleClassRight: "CLASS_II_DIV_1", angleClassLeft: "CLASS_II_DIV_1", overbiteMm: 4, overbitePercentage: 40, overjetMm: 7,
+        midlineDeviationMm: -2, crowdingUpperMm: 3, crowdingLowerMm: null, crossbite: false, crossbiteDetails: null, openBite: false,
+        openBiteDetails: null, etiologySkeletal: true, etiologyDental: false, etiologyFunctional: false, etiologyNotes: null,
+        habits: [], habitsDescription: null, dentalPhase: "PERMANENT", skeletalPattern: "DOLICOFACIAL", tmjPainPresent: false,
+        tmjClickingPresent: false, tmjNotes: null, clinicalSummary: "Clase II división 1.",
+      },
+      d,
+    );
+    const { tiene } = await textoDelPdf(
+      <TreatmentPlanPdf
+        data={{
+          treatmentPlanId: "c1",
+          membrete: membrete(),
+          patient: { firstName: "Diego", lastName: "Hernández", dob: null },
+          clinic: { name: "Clínica Sonrisa Norte" },
+          doctor: { firstName: "Ana", lastName: "Ruiz", cedulaProfesional: "7654321" },
+          diagnosis: { angleClassRight: "CLASS_II_DIV_1", angleClassLeft: "CLASS_II_DIV_1", overbiteMm: "4", overjetMm: "7", clinicalSummary: "Clase II división 1." },
+          plan: {
+            technique: "METAL_BRACKETS", techniqueName: null, techniqueNotes: null, estimatedDurationMonths: 18,
+            totalCostMxn: "35000", anchorageType: "MODERATE", extractionsRequired: false, extractionsTeethFdi: [],
+            treatmentObjectives: "FULL_CORRECTION", retentionPlanText: "Retenedor fijo inferior.",
+          },
+          diagnosticoCompleto: secciones,
+          phases: [],
+          generatedAt: "2026-09-29T08:33:00.000Z",
+        }}
+      />,
+    );
+    for (const e of ["Características faciales", "Incompetente", "Desviada a la izquierda 2 mm", "Análisis cefalométrico", "Dolicofacial", "Etiología"]) {
+      assert.ok(tiene(e), `falta «${e}»`);
+    }
   });
 
   it("carta de alta", async () => {

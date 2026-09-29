@@ -24,6 +24,7 @@ import { proximasCitas } from "./tools/proximas-citas";
 import { estadoMercadoPago } from "./tools/estado-mercado-pago";
 import { ayudaDelPanel } from "./tools/ayuda-del-panel";
 import { ortoCaso } from "./tools/orto-caso";
+import { ortoDiagnostico } from "./tools/orto-diagnostico";
 import { ortoControles } from "./tools/orto-controles";
 import { ortoCobranza } from "./tools/orto-cobranza";
 
@@ -98,6 +99,7 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   estadoMercadoPago,
   ayudaDelPanel,
   ortoCaso,
+  ortoDiagnostico,
   ortoControles,
   ortoCobranza,
 ];

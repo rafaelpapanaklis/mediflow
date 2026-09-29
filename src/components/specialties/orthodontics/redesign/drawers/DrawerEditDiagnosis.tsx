@@ -1,187 +1,171 @@
 "use client";
-// DrawerEditDiagnosis — editor del diagnóstico ortodóntico activo. Form
-// con todos los campos clínicos del modelo OrthodonticDiagnosis.
-// Usa updateDiagnosis server action existente.
+// «Editar diagnóstico» (ws1-t8): ventana centrada —el mismo marco que «Abrir caso»— que monta el PASO
+// «Diagnóstico» (`PasoDiagnostico`), el MISMO formulario que usa el paso 1 de «Abrir caso» (ws1-t12). No hay
+// otra versión del formulario: cuando la ventana de 2 pasos de ws1-t12 abra «Editar» en su paso Diagnóstico,
+// esta cáscara se puede retirar sin perder nada.
+//
+// Guarda por `updateDiagnosis` (el servidor valida todo otra vez y deja el movimiento del paciente). Si algo
+// falla, la ventana NO se cierra y el error queda a la vista (antes se cerraba y se perdía lo escrito).
 
-import { useState } from "react";
-import { Save, Shield, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import { Loader2, Save, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
-import type { DiagnosisDTO, OrthoSkeletalPattern as SkeletalPattern } from "../types";
 import { useCajon } from "../atoms/useCajon";
+import type { DiagnosisDTO } from "../types";
+import { updateDiagnosis } from "@/app/actions/orthodontics/updateDiagnosis";
+import { isFailure } from "@/app/actions/orthodontics/result";
+import {
+  formularioAPeticion,
+  formularioDesdeDiagnostico,
+  type FormularioDelDiagnostico,
+  type SeccionDelPaso,
+} from "@/lib/orthodontics/diagnostico-formulario";
+import { PasoDiagnostico } from "../diagnostico/PasoDiagnostico";
+import { olvidarDiagnosticoCompleto, tomarSeccionPedida, useDiagnosticoCompleto } from "../diagnostico/useDiagnosticoCompleto";
 import orto from "../orto.module.css";
-
-// Hallazgo ws1-t4 §10: faltaba "Asimétrica" — el alta del caso
-// (DrawerNewCase) sí la ofrece, así que ya existe como valor válido en la
-// base (createDiagnosis la guarda sin problema); solo faltaba aquí.
-const ANGLE_OPTIONS = ["CLASS_I", "CLASS_II_DIV_1", "CLASS_II_DIV_2", "CLASS_III", "ASYMMETRIC"] as const;
-// Solo el rótulo que se lee: el valor que se guarda es la clave de siempre.
-const ANGLE_LABEL: Record<(typeof ANGLE_OPTIONS)[number], string> = {
-  CLASS_I: "Clase I",
-  CLASS_II_DIV_1: "Clase II div. 1",
-  CLASS_II_DIV_2: "Clase II div. 2",
-  CLASS_III: "Clase III",
-  ASYMMETRIC: "Asimétrica",
-};
-const SKELETAL_OPTIONS: ReadonlyArray<SkeletalPattern> = [
-  "MESOFACIAL",
-  "DOLICOFACIAL",
-  "BRAQUIFACIAL",
-];
+import alta from "../alta-caso.module.css";
+import dx from "../diagnostico.module.css";
 
 export interface DrawerEditDiagnosisProps {
   diagnosis: DiagnosisDTO;
+  patientFullName?: string;
+  /** Sección con la que abre (el «Completar» de un apartado vacío del resumen). */
+  seccionInicial?: SeccionDelPaso;
   onClose: () => void;
-  onConfirm: (payload: {
-    diagnosisId: string;
-    angleClassRight: string;
-    angleClassLeft: string;
-    overbiteMm: number;
-    overjetMm: number;
-    crowdingUpperMm: number | null;
-    crowdingLowerMm: number | null;
-    crossbite: boolean;
-    crossbiteDetails: string | null;
-    openBite: boolean;
-    skeletalPattern: SkeletalPattern | null;
-    tmjPainPresent: boolean;
-    tmjClickingPresent: boolean;
-    tmjNotes: string | null;
-    clinicalSummary: string;
-  }) => Promise<void> | void;
+  /** Quedó guardado: quien monta cierra (la ficha ya se refrescó). */
+  onGuardado: () => void;
 }
 
 export function DrawerEditDiagnosis(props: DrawerEditDiagnosisProps) {
-  const cajonRef = useCajon<HTMLElement>(props.onClose);
-  const d = props.diagnosis;
-  const [angleR, setAngleR] = useState(d.angleClassRight);
-  const [angleL, setAngleL] = useState(d.angleClassLeft);
-  const [overbite, setOverbite] = useState(d.overbiteMm);
-  const [overjet, setOverjet] = useState(d.overjetMm);
-  const [crowdU, setCrowdU] = useState(d.crowdingUpperMm ?? 0);
-  const [crowdL, setCrowdL] = useState(d.crowdingLowerMm ?? 0);
-  const [crossbite, setCrossbite] = useState(d.crossbite);
-  const [crossbiteDetails, setCrossbiteDetails] = useState(d.crossbiteDetails ?? "");
-  const [openBite, setOpenBite] = useState(d.openBite);
-  const [skeletal, setSkeletal] = useState<SkeletalPattern | "">(
-    d.skeletalPattern ?? "",
+  const router = useRouter();
+  const { datos, error: errorDeCarga } = useDiagnosticoCompleto(props.diagnosis.id);
+  const [form, setForm] = useState<FormularioDelDiagnostico | null>(null);
+  const [inicial, setInicial] = useState<string>("");
+  const [seccion, setSeccion] = useState<SeccionDelPaso>(
+    () => props.seccionInicial ?? (tomarSeccionPedida() as SeccionDelPaso | null) ?? "clasificacion",
   );
-  const [tmjPain, setTmjPain] = useState(d.tmjPainPresent);
-  const [tmjClick, setTmjClick] = useState(d.tmjClickingPresent);
-  const [tmjNotes, setTmjNotes] = useState(d.tmjNotes ?? "");
-  const [summary, setSummary] = useState(d.clinicalSummary);
-  const [submitting, setSubmitting] = useState(false);
+  const [seccionConError, setSeccionConError] = useState<SeccionDelPaso | null>(null);
+  const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = async () => {
-    setSubmitting(true);
+  // El formulario se arma UNA vez, con lo que llegó del servidor.
+  useEffect(() => {
+    if (!datos || form) return;
+    const f = formularioDesdeDiagnostico(datos.base, datos.detalle);
+    setForm(f);
+    setInicial(JSON.stringify(f));
+  }, [datos, form]);
+
+  const sinCambios = form !== null && JSON.stringify(form) === inicial;
+  const cerrar = () => {
+    if (form && !sinCambios && !window.confirm("Hay cambios sin guardar en el diagnóstico. ¿Cerrar sin guardar?")) return;
+    props.onClose();
+  };
+  const cajonRef = useCajon<HTMLDivElement>(cerrar);
+
+  const guardar = async () => {
+    if (!form) return;
     setError(null);
+    setSeccionConError(null);
+    const r = formularioAPeticion(form, "editar");
+    if (r.ok === false) {
+      setError(r.error);
+      setSeccionConError(r.seccion as SeccionDelPaso);
+      setSeccion(r.seccion as SeccionDelPaso);
+      return;
+    }
+    setGuardando(true);
     try {
-      await props.onConfirm({
-        diagnosisId: d.id,
-        angleClassRight: angleR,
-        angleClassLeft: angleL,
-        overbiteMm: overbite,
-        overjetMm: overjet,
-        crowdingUpperMm: crowdU || null,
-        crowdingLowerMm: crowdL || null,
-        crossbite,
-        crossbiteDetails: crossbiteDetails || null,
-        openBite,
-        skeletalPattern: skeletal === "" ? null : skeletal,
-        tmjPainPresent: tmjPain,
-        tmjClickingPresent: tmjClick,
-        tmjNotes: tmjNotes || null,
-        clinicalSummary: summary,
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al guardar");
+      const res = await updateDiagnosis({ diagnosisId: props.diagnosis.id, ...r.peticion });
+      if (isFailure(res)) {
+        setError(res.error);
+        return;
+      }
+      olvidarDiagnosticoCompleto(props.diagnosis.id);
+      toast.success("Diagnóstico guardado");
+      if (res.data.avisoDetalle) toast(res.data.avisoDetalle, { duration: 12000 });
+      router.refresh();
+      props.onGuardado();
+    } catch {
+      setError("No se pudo guardar el diagnóstico. Revisa tu conexión e inténtalo de nuevo.");
     } finally {
-      setSubmitting(false);
+      setGuardando(false);
     }
   };
 
   return (
     <>
-      <div className={orto.velo} onClick={props.onClose} aria-hidden />
-      <aside
-        ref={cajonRef}
-        tabIndex={-1} className={`${orto.cajon} ${orto.cajonAncho}`} role="dialog" aria-modal="true" aria-labelledby="dx-title">
-        <header className={orto.cajonCabeza}>
-          <div>
-            <div className={orto.cajonCeja}>Diagnóstico</div>
-            <h3 id="dx-title" className={orto.cajonTitulo}>Editar diagnóstico</h3>
-          </div>
-          <button type="button" onClick={props.onClose} aria-label="Cerrar" className={orto.botonIcono}><X className="w-5 h-5" aria-hidden /></button>
-        </header>
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Angle derecha">
-              <select value={angleR} onChange={(e) => setAngleR(e.target.value)} className={inputCls}>
-                {ANGLE_OPTIONS.map((o) => <option key={o} value={o}>{ANGLE_LABEL[o]}</option>)}
-              </select>
-            </Field>
-            <Field label="Angle izquierda">
-              <select value={angleL} onChange={(e) => setAngleL(e.target.value)} className={inputCls}>
-                {ANGLE_OPTIONS.map((o) => <option key={o} value={o}>{ANGLE_LABEL[o]}</option>)}
-              </select>
-            </Field>
-            <Field label="Overbite (mm)"><input type="number" step="0.5" value={overbite} onChange={(e) => setOverbite(Number(e.target.value))} className={inputCls} /></Field>
-            <Field label="Overjet (mm)"><input type="number" step="0.5" value={overjet} onChange={(e) => setOverjet(Number(e.target.value))} className={inputCls} /></Field>
-            <Field label="Apiñam. sup. (mm)"><input type="number" step="0.5" value={crowdU} onChange={(e) => setCrowdU(Number(e.target.value))} className={inputCls} /></Field>
-            <Field label="Apiñam. inf. (mm)"><input type="number" step="0.5" value={crowdL} onChange={(e) => setCrowdL(Number(e.target.value))} className={inputCls} /></Field>
-            <Field label="Patrón esquelético">
-              <select value={skeletal} onChange={(e) => setSkeletal(e.target.value as SkeletalPattern | "")} className={inputCls}>
-                <option value="">— sin asignar —</option>
-                {SKELETAL_OPTIONS.map((s) => <option key={s} value={s}>{s.toLowerCase()}</option>)}
-              </select>
-            </Field>
-            <Field label="Mordida cruzada">
-              <label className="flex items-center gap-2 text-[13px] text-[color:var(--pr-texto-2)]"><input type="checkbox" checked={crossbite} onChange={(e) => setCrossbite(e.target.checked)} /> Presente</label>
-            </Field>
-          </div>
-          {crossbite ? (
-            <Field label="Detalles mordida cruzada">
-              <input type="text" value={crossbiteDetails} onChange={(e) => setCrossbiteDetails(e.target.value)} className={inputCls} placeholder="lateral derecha 15-45" />
-            </Field>
-          ) : null}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Mordida abierta">
-              <label className="flex items-center gap-2 text-[13px] text-[color:var(--pr-texto-2)]"><input type="checkbox" checked={openBite} onChange={(e) => setOpenBite(e.target.checked)} /> Presente</label>
-            </Field>
-            <Field label="ATM">
-              <div className="flex flex-col gap-1 text-[13px] text-[color:var(--pr-texto-2)]">
-                <label className="flex items-center gap-2"><input type="checkbox" checked={tmjPain} onChange={(e) => setTmjPain(e.target.checked)} /> Dolor</label>
-                <label className="flex items-center gap-2"><input type="checkbox" checked={tmjClick} onChange={(e) => setTmjClick(e.target.checked)} /> Chasquido</label>
+      <div className={orto.velo} onClick={cerrar} aria-hidden />
+      <div className={alta.marco}>
+        <div ref={cajonRef} tabIndex={-1} className={`${alta.ventana} ${dx.dxVentanaAncha}`} role="dialog" aria-modal="true" aria-labelledby="dx-title">
+          <header className={alta.cabeza}>
+            <div className="min-w-0">
+              <div className={orto.cajonCeja}>Diagnóstico</div>
+              <h3 id="dx-title" className={orto.cajonTitulo}>
+                Editar diagnóstico{props.patientFullName ? ` · ${props.patientFullName}` : ""}
+              </h3>
+              <p className={orto.cajonSub}>Cómo está el paciente. Lo que se le va a hacer va en el Plan de tratamiento.</p>
+            </div>
+            <button type="button" onClick={cerrar} aria-label="Cerrar" className={orto.botonIcono}>
+              <X className="w-5 h-5" aria-hidden />
+            </button>
+          </header>
+
+          <div className={alta.cuerpo}>
+            {!form ? (
+              errorDeCarga ? (
+                <div className={alta.error} role="alert">{errorDeCarga}</div>
+              ) : (
+                <div className="flex items-center gap-2 text-xs text-[color:var(--pr-texto-3)]">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> Cargando el diagnóstico…
+                </div>
+              )
+            ) : (
+              <PasoDiagnostico
+                valor={form}
+                onCambio={(f) => {
+                  setForm(f);
+                  if (error) setError(null);
+                }}
+                seccion={seccion}
+                onSeccion={setSeccion}
+                seccionConError={seccionConError}
+                columna={datos?.columna}
+                archivos={datos?.archivos}
+                trazado={datos?.registros.trazado ?? null}
+                anbDelTrazado={datos?.registros.anbDelTrazado ?? null}
+                fotosIniciales={datos?.registros.fotosIniciales}
+                modo="editar"
+              />
+            )}
+            {error ? (
+              <div className={alta.error} role="alert">
+                {error}
               </div>
-            </Field>
+            ) : null}
           </div>
-          <Field label="Notas ATM">
-            <textarea value={tmjNotes} onChange={(e) => setTmjNotes(e.target.value)} className={`${inputCls} min-h-[60px]`} />
-          </Field>
-          <Field label="Resumen clínico">
-            <textarea value={summary} onChange={(e) => setSummary(e.target.value)} className={`${inputCls} min-h-[120px]`} required />
-          </Field>
-          {error ? <div className="bg-[color:var(--pr-peligro-suave)] border border-[color:var(--orto-peligro-borde)] text-[color:var(--pr-peligro)] text-xs rounded-[8px] p-2">{error}</div> : null}
+
+          <footer className={alta.pie}>
+            <span className={alta.pieNota}>Cada cambio queda registrado en Movimientos del paciente.</span>
+            <div className={alta.pieBotones}>
+              <Btn variant="ghost" size="md" onClick={cerrar}>
+                Cancelar
+              </Btn>
+              <Btn
+                variant="primary"
+                size="md"
+                icon={guardando ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> : <Save className="w-3.5 h-3.5" aria-hidden />}
+                onClick={guardar}
+                disabled={!form || guardando || sinCambios}
+              >
+                {guardando ? "Guardando…" : "Guardar diagnóstico"}
+              </Btn>
+            </div>
+          </footer>
         </div>
-        <footer className={`${orto.cajonPie} ${orto.cajonPieReparto}`}>
-          <span className="text-[11px] text-[color:var(--pr-texto-3)] inline-flex items-center gap-1"><Shield className="w-3 h-3" aria-hidden />Cada cambio queda registrado</span>
-          <div className="flex gap-2">
-            <Btn variant="ghost" size="md" onClick={props.onClose}>Cancelar</Btn>
-            <Btn variant="primary" size="md" icon={<Save className="w-3.5 h-3.5" aria-hidden />} onClick={submit} disabled={submitting || !summary}>{submitting ? "Guardando..." : "Guardar"}</Btn>
-          </div>
-        </footer>
-      </aside>
+      </div>
     </>
-  );
-}
-
-const inputCls = orto.entrada;
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)] mb-1">{label}</label>
-      {children}
-    </div>
   );
 }

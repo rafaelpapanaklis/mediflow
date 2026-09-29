@@ -1,0 +1,748 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Ortodoncia — «Diagnóstico» completo (ws1-t8, 29-sep-2026).
+
+   Dos piezas: el RESUMEN visual de la pestaña (franja de valores clave +
+   tarjetas por apartado) y el PASO «Diagnóstico» (índice lateral + campos),
+   que monta «Editar diagnóstico» y el paso 1 de «Abrir caso» (ws1-t12).
+   Los colores NO viven aquí: salen de los tokens `--pr-*` y los alias
+   `--orto-*` que monta `RAIZ_ORTO` (claro y oscuro). Aquí no hay ni un hex.
+
+   Prefijo «dx…»: nada con prefijo de anuncio (ad-, banner-).
+   1440 px: franja de 5, tarjetas en 2 columnas, paso con índice lateral.
+   390 px: franja de 2, una columna, índice como tira deslizable arriba.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Resumen: franja de valores clave ─────────────────────────────── */
+
+.dxCuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 18px 18px;
+}
+
+.dxFranja {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio);
+  background: var(--pr-tarjeta-2);
+  overflow: hidden;
+}
+
+.dxIndicador {
+  position: relative;
+  min-width: 0;
+  padding: 12px 14px 13px;
+  border-left: 1px solid var(--pr-borde-suave);
+}
+
+.dxIndicador:first-child {
+  border-left: 0;
+}
+
+.dxIndicadorEtiqueta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.dxIndicadorValor {
+  margin-top: 5px;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  line-height: 1.15;
+  color: var(--pr-texto);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.dxIndicadorVacio {
+  color: var(--pr-texto-3);
+  font-weight: 500;
+}
+
+.dxIndicadorDetalle {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--pr-texto-2);
+  overflow-wrap: anywhere;
+}
+
+/* Punto de estado: verde normal, ámbar alterado. */
+.dxPunto {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pr-borde);
+}
+
+.dxPuntoNormal {
+  background: var(--pr-exito);
+}
+
+.dxPuntoAlterado {
+  background: var(--pr-alerta);
+}
+
+/* ── Resumen: tarjetas por apartado ───────────────────────────────── */
+
+.dxTarjetas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dxBloque {
+  min-width: 0;
+  padding: 13px 14px 12px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+}
+
+.dxBloqueCabeza {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dxBloqueIcono {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+}
+
+.dxBloqueTitulo {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--pr-texto);
+}
+
+.dxBloqueCuenta {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pr-texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.dxRenglones {
+  display: flex;
+  flex-direction: column;
+}
+
+.dxRenglon {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px dashed var(--pr-borde-suave);
+  font-size: 12.5px;
+}
+
+.dxRenglon:first-child {
+  border-top: 0;
+}
+
+.dxRenglonEtiqueta {
+  flex: 0 1 46%;
+  min-width: 0;
+  color: var(--pr-texto-3);
+}
+
+.dxRenglonValor {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  font-weight: 550;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.dxValorAlterado {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--pr-alerta-suave);
+  color: var(--pr-alerta);
+  font-weight: 600;
+}
+
+.dxValorNormal::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--pr-exito);
+  vertical-align: 1px;
+}
+
+.dxRenglonLargo {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.dxRenglonLargo .dxRenglonValor {
+  text-align: left;
+  font-weight: 450;
+  color: var(--pr-texto-2);
+}
+
+/* Apartado sin datos: discreto, con un acceso para completarlo. */
+.dxBloqueVacio {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1px dashed var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  color: var(--pr-texto-3);
+  font-size: 12.5px;
+}
+
+.dxBloqueVacio strong {
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+.dxCompletar {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 7px;
+  background: var(--pr-tarjeta);
+  color: var(--orto-violeta);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dxCompletar:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+@media (hover: hover) {
+  .dxCompletar:hover {
+    border-color: var(--orto-violeta-borde);
+    background: var(--pr-activo-suave);
+  }
+}
+
+.dxVacios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+/* Resumen diagnóstico: al final, como cita. */
+.dxResumen {
+  padding: 12px 14px 13px 16px;
+  border-left: 3px solid var(--orto-violeta);
+  border-radius: 0 var(--pr-radio-s) var(--pr-radio-s) 0;
+  background: var(--pr-tarjeta-2);
+}
+
+.dxResumenEtiqueta {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.dxResumenTexto {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--pr-texto);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.dxEnlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--orto-violeta);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .dxEnlace:hover {
+    text-decoration: underline;
+  }
+}
+
+.dxEsqueleto {
+  height: 118px;
+  border-radius: var(--pr-radio-s);
+  background: linear-gradient(90deg, var(--pr-tarjeta-2) 0%, var(--pr-hover) 50%, var(--pr-tarjeta-2) 100%);
+  background-size: 200% 100%;
+  animation: dxBrillo 1.2s ease-in-out infinite;
+}
+
+@keyframes dxBrillo {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dxEsqueleto { animation: none; }
+}
+
+/* ── Paso «Diagnóstico»: índice + campos ─────────────────────────── */
+
+.dxPaso {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 18px;
+  min-height: 0;
+}
+
+.dxIndice {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dxIndiceBoton {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dxIndiceBoton svg {
+  flex: none;
+  color: var(--pr-texto-3);
+}
+
+.dxIndiceNombre {
+  flex: 1;
+  min-width: 0;
+}
+
+.dxIndiceCuenta {
+  flex: none;
+  min-width: 30px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--pr-tarjeta-2);
+  color: var(--pr-texto-3);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dxIndiceCuentaLlena {
+  background: var(--pr-exito-suave);
+  color: var(--pr-exito);
+}
+
+.dxIndiceActivo {
+  background: var(--pr-activo-suave);
+  color: var(--pr-texto);
+  font-weight: 650;
+}
+
+.dxIndiceActivo svg {
+  color: var(--orto-violeta);
+}
+
+.dxIndiceError {
+  box-shadow: inset 0 0 0 1px var(--orto-peligro-borde);
+}
+
+.dxIndiceBoton:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+@media (hover: hover) {
+  .dxIndiceBoton:hover {
+    background: var(--pr-hover);
+  }
+  .dxIndiceActivo:hover {
+    background: var(--pr-activo-suave);
+  }
+}
+
+.dxContenido {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.dxContenidoCabeza {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+}
+
+.dxContenidoTitulo {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  color: var(--pr-texto);
+}
+
+.dxContenidoSub {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+.dxGrupo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dxGrupoTitulo {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.dxCampos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+
+.dxCampos3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dxCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dxCampoAncho {
+  grid-column: 1 / -1;
+}
+
+.dxCampoEtiqueta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+.dxCampoPista {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pr-texto-3);
+}
+
+/* Opciones cortas: botones segmentados que envuelven. */
+.dxOpciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.dxOpcion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 8px;
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.dxOpcionNormal::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pr-exito);
+  opacity: 0.8;
+}
+
+.dxOpcionElegida {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo-suave);
+  color: var(--orto-violeta);
+  font-weight: 650;
+}
+
+.dxOpcion:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+@media (hover: hover) {
+  .dxOpcion:hover {
+    border-color: var(--orto-violeta-borde);
+    color: var(--pr-texto);
+  }
+  .dxOpcionElegida:hover {
+    border-color: var(--pr-activo);
+    color: var(--orto-violeta);
+  }
+}
+
+@media (pointer: coarse) {
+  .dxOpcion {
+    min-height: 36px;
+    padding: 0 13px;
+  }
+}
+
+/* Número con su unidad dentro de la caja. */
+.dxNumero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 180px;
+}
+
+.dxNumero input {
+  width: 100%;
+  padding-right: 38px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.dxUnidad {
+  position: absolute;
+  right: 11px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pr-texto-3);
+  pointer-events: none;
+}
+
+.dxFila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+/* Lo que se propone solo (categoría desde los mm). */
+.dxDerivado {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--pr-tarjeta-2);
+  color: var(--pr-texto-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.dxDerivadoAlterado {
+  background: var(--pr-alerta-suave);
+  color: var(--pr-alerta);
+}
+
+.dxDerivadoNormal {
+  background: var(--pr-exito-suave);
+  color: var(--pr-exito);
+}
+
+.dxInterruptores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dxAviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--orto-alerta-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-alerta-suave);
+  color: var(--pr-alerta);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.dxAviso svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.dxReferencia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--orto-violeta-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-activo-suave);
+  font-size: 12.5px;
+  color: var(--pr-texto);
+}
+
+.dxContador {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pr-texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.dxContadorFalta {
+  color: var(--pr-alerta);
+}
+
+.dxNavegacion {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pr-borde-suave);
+}
+
+.dxVentanaAncha {
+  max-width: 1040px !important;
+}
+
+/* ── Teléfono / ventana angosta ──────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .dxFranja {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .dxIndicador:nth-child(4) {
+    border-left: 0;
+  }
+  .dxIndicador:nth-child(n + 4) {
+    border-top: 1px solid var(--pr-borde-suave);
+  }
+}
+
+@media (max-width: 760px) {
+  .dxCuerpo {
+    padding: 4px 14px 16px;
+  }
+  .dxFranja {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dxIndicador {
+    border-left: 0;
+    border-top: 1px solid var(--pr-borde-suave);
+  }
+  .dxIndicador:nth-child(-n + 2) {
+    border-top: 0;
+  }
+  .dxIndicador:nth-child(even) {
+    border-left: 1px solid var(--pr-borde-suave);
+  }
+  .dxIndicador:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .dxTarjetas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dxPaso {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .dxIndice {
+    position: static;
+    flex-direction: row;
+    gap: 4px;
+    margin: 0 -12px;
+    padding: 0 12px 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .dxIndice::-webkit-scrollbar {
+    display: none;
+  }
+  .dxIndice > li {
+    flex: none;
+  }
+  .dxIndiceBoton {
+    min-height: 34px;
+    padding: 5px 10px;
+    border: 1px solid var(--pr-borde-suave);
+    white-space: nowrap;
+  }
+  .dxIndiceActivo {
+    border-color: var(--pr-activo);
+  }
+  .dxCampos,
+  .dxCampos3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dxNumero {
+    max-width: none;
+  }
+}

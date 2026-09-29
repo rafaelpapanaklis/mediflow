@@ -256,7 +256,7 @@ function preguntar(pregunta: string, extra: Record<string, unknown> = {}) {
  * pruebas; el suelo de abajo solo impide que el catálogo encoja sin que alguien
  * venga a decirlo aquí.
  */
-const SUELO_DEL_CATALOGO = 36;
+const SUELO_DEL_CATALOGO = 37;
 
 test("el modelo recibe el catálogo ENTERO de Sabina —ni una de más, ni una de menos—, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
