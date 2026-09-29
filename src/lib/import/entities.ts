@@ -6,6 +6,9 @@
 // resoluciones de paciente/doctor SOLO buscan dentro de esa clínica.
 
 import { prisma } from "@/lib/prisma";
+import { asegurarCatalogoDentalink, claveDePrestacion, planearCatalogo, type PrestacionPlaneada } from "./dentalink/catalogo";
+import { renglonEsOrtodoncia } from "./dentalink/es-ortodoncia";
+import { conciliarPagado, notaDeRenglon, precioDeRenglon } from "./dentalink/renglon";
 import { getPatientQuota } from "@/lib/patient-quota";
 import { lastPatientFolio } from "@/lib/patients/next-patient-number";
 import { formatPatientNumber } from "@/lib/patients/next-patient-number-core";
@@ -25,6 +28,8 @@ import {
 } from "@/app/api/patient-documents/_lib/service";
 import { AMOUNT_FORMAT_FIELD, AMOUNT_FORMAT_KEY, VALUE_UNLINKED, type PreviewRow, type UnresolvedRef } from "./types";
 import { cargarExternos, guardarExternos, limpiarId } from "./externos";
+// Casos de ortodoncia desde los tratamientos de Dentalink (ws1-t12): archivo propio, aquí solo el enganche.
+import { commitCasosDeOrtodoncia, marcarCasosDeOrtodoncia } from "./dentalink/ortodoncia-caso-db";
 // Historial de pagos migrado (ws1-t6): construido en su propio archivo mientras
 // este módulo cambiaba en paralelo (ws1-t12); solo se registra aquí.
 import { paymentHistoryHandler } from "./pagos-historial/handler";
@@ -38,6 +43,11 @@ import { orthoCasesHandler } from "./ortho-casos/handler";
 import { labExpenseHandler } from "./laboratorio-historial/handler";
 import { installmentPlansHandler } from "./cuotas-plan/handler";
 import { procedureCatalogHandler } from "./aranceles/handler";
+// Citas de Dentalink (ws1-t10): estado, tipo de cita de un caso de ortodoncia, sillón, notas legibles, enlace por
+// «# Tratamiento» con lo ya importado de 06, y los choques de consultorio. Aquí solo los enganches.
+import { elegirRecurso, esSobreagendamiento, grupoDeEstado, notasDeCita, tipoParaCaso, type EnlaceDeCita } from "./dentalink/citas";
+import { cargarOcupadas, cargarRecursos, leerDuracionDeCita, soltarConsultoriosQueChocan } from "./dentalink/citas-agenda";
+import { cargarEnlaces, enlaceDe, enlacesVacios, type Enlaces } from "./dentalink/enlace-tratamientos";
 import {
   crearLectorMontos,
   horaAdjunta,
@@ -67,6 +77,7 @@ import {
   parseDate,
   parseGender,
   parsePhone,
+  textoDeCelda,
 } from "./engine";
 import {
   MIGRATED_STATUS,
@@ -997,6 +1008,8 @@ export const balancesHandler: EntityHandler = {
     type:        ["tipo", "tiposaldo", "tipodesaldo", "movimiento", "tipomovimiento", "adeudoofavor", "naturaleza"],
     description: ["concepto", "descripcion", "motivo", "referencia", "detalle", "observaciones"],
     date:        ["fecha", "fechasaldo", "fechadelsaldo", "fechamovimiento", "fechacargo", "fechavencimiento"],
+    // Dentalink (ws1-t10): el tratamiento del que es la mora. Si ya se importó de 06, la mora no se cobra dos veces.
+    treatmentRef: ["#tratamiento", "idtratamiento", "numerotratamiento", "notratamiento", "ntratamiento", "foliotratamiento"],
   },
 
   validateMapping(campos) {
@@ -1040,6 +1053,14 @@ export const balancesHandler: EntityHandler = {
       if (e?.code !== "P2021" && e?.code !== "P2022") throw e;
     }
 
+    // Dentalink (ws1-t10): ¿de qué tratamiento ya importado es cada mora? (por «# Tratamiento» y paciente)
+    const pacientePrevio = new Map<number, ReturnType<typeof resolvePatientRow>>();
+    const hayRefs = rows.some((r) => cellText(r.mapped.treatmentRef));
+    if (hayRefs) for (const { row, mapped } of rows) pacientePrevio.set(row, resolvePatientRow(mapped, idx, true));
+    const enlaces: Enlaces = hayRefs
+      ? await cargarEnlaces(clinicId, ctx.originId, Array.from(new Set(Array.from(pacientePrevio.values()).map((x) => x.id).filter((x): x is string => !!x))))
+      : enlacesVacios();
+
     const vecesEnArchivo = new Map<string, number>();
     const out: PreviewRow[] = [];
 
@@ -1060,7 +1081,7 @@ export const balancesHandler: EntityHandler = {
       // Identidad: combina nombre + apellido; el ID del sistema de origen manda si viene.
       // STRICT: es dinero. Si el teléfono es de la mamá y la fila dice «Juanito», no se
       // le carga a la mamá: es un error que se corrige, no una deuda en el paciente equivocado.
-      const res = resolvePatientRow(mapped, idx, true);
+      const res = pacientePrevio.get(row) ?? resolvePatientRow(mapped, idx, true);
       if (res.error) pr.errors.push(res.error);
       if (res.warning) pr.warnings.push(res.warning);
 
@@ -1072,7 +1093,10 @@ export const balancesHandler: EntityHandler = {
       const concepto = mapped.description ? oneLine(mapped.description, 300) : "";
       const fecha = mapped.date ? parseDate(mapped.date) : null;
       if (mapped.date && !fecha) pr.warnings.push(`Fecha "${cellText(mapped.date)}" inválida — se ignora`);
-      const externalId = ctx.originId ? limpiarId(mapped.externalId) : "";
+      // Dentalink: cada mora es de UN tratamiento; su «# Tratamiento» es su ID (dos moras de tratamientos distintos del
+      // mismo paciente son dos movimientos, no «el saldo inicial» repetido).
+      const refTrat = ctx.originId ? limpiarId(mapped.treatmentRef) : "";
+      const externalId = ctx.originId ? limpiarId(mapped.externalId) || (refTrat ? `trat-${refTrat}` : "") : "";
       const simple = esSaldoSimple({ concepto, fecha, externalId });
       const llave = llaveDeSaldo({ patientId: res.id!, kind, concepto, fecha, externalId, simple, origen: ctx.originId });
       // Dos filas iguales EN EL ARCHIVO son dos movimientos: cada una con su «#n», para que
@@ -1091,12 +1115,25 @@ export const balancesHandler: EntityHandler = {
         key: llaveFinal,
       };
 
+      // ── ¿La mora es de un tratamiento que YA se importó de 06? Entonces su saldo ya está en sus cargos pendientes:
+      // crear otra factura la contaría DOS veces. Se anota en el tratamiento y no se crea deuda nueva. ──
+      const { enlace: deTratamiento, deOtroPaciente } = kind === "debt" ? enlaceDe(enlaces, mapped.treatmentRef, res.id) : { enlace: null, deOtroPaciente: false };
+      if (deOtroPaciente) pr.warnings.push(`El tratamiento #${refTrat} pertenece a otro paciente en lo ya importado: la mora entra como saldo aparte`);
+      if (deTratamiento) {
+        pr.data.ligadoA = deTratamiento.tipo === "caso"
+          ? { tipo: "caso", ref: deTratamiento.ref, id: deTratamiento.planId }
+          : { tipo: "tratamiento", ref: deTratamiento.ref, id: deTratamiento.quoteId };
+        pr.warnings.push(`Ya incluido en el tratamiento #${deTratamiento.ref}${deTratamiento.tipo === "caso" ? " (caso de ortodoncia)" : ""}: no se crea otra deuda, la mora se anota en él`);
+      }
+
       // ── ¿Ya se importó? Nunca se vuelve a crear, ni con «omitir duplicados» apagado. ──
       // La red (lo que ya quedó en facturas y créditos) se aplica SIEMPRE, además de la llave: la llave
       // puede no estar (el SQL se aplicó después del primer import, o el archivo cambió de columnas).
       let yaEsta: string | null = null;
       if (externos.mapa.has(llaveFinal)) yaEsta = "Este saldo ya se importó antes";
-      else if (kind === "debt") {
+      else if (deTratamiento) {
+        // Anotarla en el tratamiento no crea saldo: las redes de «saldo inicial» no aplican.
+      } else if (kind === "debt") {
         if (simple && aperturaPorPaciente.has(res.id!)) yaEsta = "El paciente ya tiene saldo inicial migrado";
         else if (aperturaPorMonto.has(`${res.id}|${round2(amount).toFixed(2)}`)) yaEsta = "El paciente ya tiene un saldo inicial migrado por ese monto";
       } else if (creditoPorMonto.has(creditKey(res.id!, amount))) {
@@ -1118,10 +1155,13 @@ export const balancesHandler: EntityHandler = {
     if (toInsert.length === 0) return { created: 0, skipped: 0 };
     for (const r of toInsert) r.data.newId = newId();
 
-    // Divide por tipo: adeudos → factura de apertura; a favor → PatientCredit.
-    const debtRows = toInsert.filter((r) => r.data.kind !== "credit");
+    // Divide por tipo: adeudos → factura de apertura; a favor → PatientCredit; y —ws1-t10— la mora de un tratamiento
+    // ya importado NO crea deuda: se anota en el tratamiento.
+    const ligadas = toInsert.filter((r) => r.data.ligadoA);
+    const debtRows = toInsert.filter((r) => r.data.kind !== "credit" && !r.data.ligadoA);
     const creditRows = toInsert.filter((r) => r.data.kind === "credit");
     let created = 0;
+    const anotadas = await anotarMorasEnTratamientos(ligadas, clinicId, ctx);
 
     if (debtRows.length > 0) {
       created += await insertNumbered({
@@ -1179,9 +1219,15 @@ export const balancesHandler: EntityHandler = {
       ...Array.from(await idsCreados("invoice", clinicId, debtRows.map((r) => r.data.newId as string))),
       ...(creditRows.length > 0 ? Array.from(await idsCreados("patientCredit", clinicId, creditRows.map((r) => r.data.newId as string))) : []),
     ]);
-    const pares = toInsert
-      .filter((r) => r.status !== "error" && hechos.has(r.data.newId))
-      .map((r) => ({ externalId: r.data.key as string, localId: r.data.newId as string }));
+    const pares = [
+      ...toInsert
+        .filter((r) => r.status !== "error" && !r.data.ligadoA && hechos.has(r.data.newId))
+        .map((r) => ({ externalId: r.data.key as string, localId: r.data.newId as string })),
+      // La mora anotada en un tratamiento también se recuerda (su localId es el del tratamiento): un reintento no la repite.
+      ...ligadas
+        .filter((r) => anotadas.has(r))
+        .map((r) => ({ externalId: r.data.key as string, localId: (r.data.ligadoA as { id: string }).id })),
+    ];
     if (pares.length > 0 && !(await guardarExternos(clinicId, FUENTE_SALDOS, "balance", pares))) {
       console.warn("[import/balances] import_external_ids no existe: la idempotencia usa solo la red de siempre (falta aplicar sql/import-ids-externos.sql)");
     }
@@ -1190,6 +1236,38 @@ export const balancesHandler: EntityHandler = {
     return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
   },
 };
+
+/**
+ * La mora de un tratamiento que ya se importó de 06 (ws1-t10): una línea «Mora en Dentalink: $600.00…» al final de las
+ * notas del tratamiento (las del presupuesto si es un tratamiento normal; las de prescripción si es un caso de ortodoncia).
+ * No toca ninguna factura ni saldo. Idempotente: si la nota ya la trae, no se repite. Devuelve las filas que quedaron anotadas.
+ */
+async function anotarMorasEnTratamientos(filas: PreviewRow[], clinicId: string, ctx: ImportContext): Promise<Set<PreviewRow>> {
+  const hechas = new Set<PreviewRow>();
+  for (const r of filas) {
+    const lig = r.data.ligadoA as { tipo: "caso" | "tratamiento"; ref: string; id: string };
+    const linea = `Mora en Dentalink: $${round2(r.data.amount as number).toFixed(2)} (saldo ya incluido en este tratamiento #${lig.ref}; anotada el ${formatConsentDate(ctx.now, "UTC")})`;
+    const agregar = (previa: string | null | undefined) => (previa && previa.includes("Mora en Dentalink") ? null : [previa, linea].filter(Boolean).join("\n"));
+    try {
+      if (lig.tipo === "caso") {
+        const plan = await prisma.orthodonticTreatmentPlan.findFirst({ where: { id: lig.id, clinicId }, select: { prescriptionNotes: true } });
+        if (!plan) { r.status = "error"; r.errors.push("El caso de ortodoncia ya no existe"); continue; }
+        const nueva = agregar(plan.prescriptionNotes);
+        if (nueva !== null) await prisma.orthodonticTreatmentPlan.updateMany({ where: { id: lig.id, clinicId }, data: { prescriptionNotes: nueva } });
+      } else {
+        const q = await prisma.quote.findFirst({ where: { id: lig.id, clinicId }, select: { notes: true } });
+        if (!q) { r.status = "error"; r.errors.push("El tratamiento ya no existe"); continue; }
+        const nueva = agregar(q.notes);
+        if (nueva !== null) await prisma.quote.updateMany({ where: { id: lig.id, clinicId }, data: { notes: nueva } });
+      }
+      hechas.add(r);
+    } catch (e: any) {
+      r.status = "error";
+      r.errors.push(e?.code === "P2022" || e?.code === "P2021" ? "No se pudo anotar la mora en el tratamiento (falta una columna en la base)" : "No se pudo anotar la mora en el tratamiento");
+    }
+  }
+  return hechas;
+}
 
 /**
  * Llave estable de un saldo: la misma fila da la misma llave en cualquier reintento.
@@ -1218,8 +1296,6 @@ const FUENTE_SALDOS = "saldos";
 // clínica). Valida fecha/hora, calcula endsAt, status SCHEDULED. Dedup por
 // (paciente + horario) en archivo y contra DB.
 // ===========================================================================
-
-const DEFAULT_DURATION_MIN = 30;
 
 /** Un valor de celda para mostrarlo en un mensaje (las fechas de .xlsx llegan como Date). */
 function verTexto(v: unknown): string {
@@ -1281,38 +1357,6 @@ export function leerInicioDeCita(
 }
 
 /**
- * Cuánto dura la cita: 1) la columna «Duración» si viene; 2) si no, hora de fin − hora de inicio (la misma
- * fecha, en la zona de la clínica); 3) 30 min. Una hora de fin ilegible o que no es posterior al inicio NO
- * se adivina: se usa 30 min y se avisa en esa fila.
- */
-function leerDuracion(
-  mapped: Record<string, any>,
-  startsAt: Date | undefined,
-  timezone: string | null | undefined,
-): { min: number; warning?: string } {
-  if (mapped.duration !== undefined && mapped.duration !== null && String(mapped.duration).trim() !== "") {
-    return { min: parseDuration(mapped.duration) };
-  }
-  if (mapped.endTime === undefined || mapped.endTime === null || cellText(mapped.endTime) === "") return { min: DEFAULT_DURATION_MIN };
-  const fin = parseHora(mapped.endTime);
-  const fecha = parseDate(mapped.date);
-  const aviso = (motivo: string) => ({ min: DEFAULT_DURATION_MIN, warning: `Hora de fin "${verTexto(mapped.endTime)}" ${motivo}: la cita dura ${DEFAULT_DURATION_MIN} min` });
-  if (!fin || !fecha || !startsAt) return aviso("ilegible");
-  const finUtc = horaLocalAUtc(fecha.getFullYear(), fecha.getMonth() + 1, fecha.getDate(), fin.h, fin.m, timezone);
-  if (!finUtc) return aviso("no existe en la zona horaria de la clínica");
-  const min = Math.round((finUtc.getTime() - startsAt.getTime()) / 60_000);
-  if (min <= 0) return aviso("no es posterior al inicio");
-  if (min > 600) return aviso("deja la cita en más de 10 horas");
-  return { min };
-}
-
-function parseDuration(v: any): number {
-  if (v === undefined || v === null || String(v).trim() === "") return DEFAULT_DURATION_MIN;
-  const n = parseInt(String(v).replace(/[^0-9]/g, ""), 10);
-  return Number.isFinite(n) && n > 0 && n <= 600 ? n : DEFAULT_DURATION_MIN;
-}
-
-/**
  * Estado de la cita en el sistema de origen → qué hacer con ella:
  *  · anulada / cancelada / no asistió → NO se agenda (skip);
  *  · ya atendida con fecha futura (dato incoherente) → NO se agenda (skip);
@@ -1326,6 +1370,10 @@ export function estadoDeCita(v: unknown):
   const texto = cellText(v);
   const n = norm(texto);
   if (!n) return { accion: "agendar", status: "SCHEDULED" };
+  // «Cambio de fecha» (Dentalink): la cita se movió a otra fecha, que es OTRA fila del archivo; esta ya no existe.
+  if (grupoDeEstado(texto) === "reagendada") {
+    return { accion: "omitir", texto, motivo: "reagendada (la cita se movió a otra fecha): no se agenda esta" };
+  }
   if (/anul|cancel|elimin|noasist|inasist|ausent|falt|rechaz|suspend|noshow/.test(n)) {
     return { accion: "omitir", texto, motivo: "no se agenda" };
   }
@@ -1335,7 +1383,9 @@ export function estadoDeCita(v: unknown):
   // «Sin confirmar», «No confirmada», «Por confirmar», «Pendiente de confirmación» NO son confirmadas.
   if (/(sin|no|por|pendiente)(de)?confirm/.test(n)) return { accion: "agendar", status: "SCHEDULED" };
   if (/confirm/.test(n)) return { accion: "agendar", status: "CONFIRMED" };
-  if (/agendad|programad|reservad|citad|pendient|vigente|activ|nueva|scheduled|booked/.test(n)) {
+  // «Notif. automática vía WhatsApp», «Recordado por IA», «Paciente Deshabilitado», «En sala de espera»… (Dentalink):
+  // el último aviso que se mandó, no un estado raro — la cita sigue pendiente de confirmar.
+  if (/agendad|programad|reservad|citad|pendient|vigente|activ|nueva|scheduled|booked|notif|recordad|deshabilit|espera|atendiendo/.test(n)) {
     return { accion: "agendar", status: "SCHEDULED" };
   }
   return { accion: "agendar", status: "SCHEDULED", aviso: `Estado «${texto}» no reconocido: se agenda como pendiente de confirmar` };
@@ -1419,6 +1469,12 @@ export const appointmentsHandler: EntityHandler = {
     // Estado en el sistema de origen: una cita anulada/cancelada NO se agenda.
     status:   ["estado", "estadocita", "estadodelacita", "status"],
     notes:    ["notas", "observaciones", "comentarios", "nota", "comentario"],
+    // Dentalink (ws1-t10): tratamiento al que pertenece, sillón, quién y cuándo la agendó, y un segundo texto libre.
+    treatmentRef: ["#tratamiento", "idtratamiento", "numerotratamiento", "notratamiento", "ntratamiento", "foliotratamiento"],
+    chair:        ["sillon", "sillonrecurso", "recurso", "consultorio", "sala", "box"],
+    bookedBy:     ["agendadopor", "agendadapor", "creadopor", "creadapor", "registradopor"],
+    createdOn:    ["fechadecreaciondecita", "fechacreacioncita", "fechadecreacion", "fechacreacion", "creadoel"],
+    observations: ["observacionescita", "observacionesdelacita"],
   },
 
   validateMapping(campos) {
@@ -1452,6 +1508,16 @@ export const appointmentsHandler: EntityHandler = {
     // Respaldo cuando dos citas chocan en el horario de la misma persona: los usuarios DOCTOR activos.
     const respaldos = users.filter((u) => u.role === "DOCTOR").map((u) => ({ id: u.id, name: nombreDe.get(u.id)! }));
 
+    // Dentalink (ws1-t10): a qué tratamiento ya importado de 06 pertenece cada cita («# Tratamiento») y el consultorio
+    // que corresponde a su «Sillón (Recurso)». Se leen en bloque, solo si el archivo trae esas columnas.
+    const pacientePrevio = new Map<number, ReturnType<typeof resolvePatientRow>>();
+    for (const { row, mapped } of rows) pacientePrevio.set(row, resolvePatientRow(mapped, idx, true));
+    const hayRefs = rows.some((r) => cellText(r.mapped.treatmentRef));
+    const enlaces: Enlaces = hayRefs
+      ? await cargarEnlaces(clinicId, ctx.originId, Array.from(new Set(Array.from(pacientePrevio.values()).map((x) => x.id).filter((x): x is string => !!x))))
+      : enlacesVacios();
+    const recursos = rows.some((r) => cellText(r.mapped.chair)) ? await cargarRecursos(clinicId) : [];
+
     const seen = new Set<string>();
     const out: PreviewRow[] = [];
 
@@ -1467,7 +1533,7 @@ export const appointmentsHandler: EntityHandler = {
       pr.data.startsLocal = startsAt ? textoLocal(startsAt, tz) : undefined;
       pr.data.timezone = consentTimeZone(tz);
       pr.data.doctorName = cellText(mapped.doctor) || undefined;
-      const duracion = leerDuracion(mapped, startsAt, tz);
+      const duracion = leerDuracionDeCita(mapped, startsAt, tz);
       pr.data.durationMin = duracion.min;
 
       // Una cita PASADA no se agenda: entraría como SCHEDULED (y dispararía un
@@ -1491,16 +1557,29 @@ export const appointmentsHandler: EntityHandler = {
 
       // STRICT, como en saldos: si el celular es de la mamá y la fila dice «Luis», la cita no va a la
       // ficha de ella (el recordatorio saldría «Hola Ana»): es un error que se corrige en el archivo.
-      const pRes = resolvePatientRow(mapped, idx, true);
+      const pRes = pacientePrevio.get(row)!;
       if (pRes.error) pr.errors.push(pRes.error);
       if (pRes.warning) pr.warnings.push(pRes.warning);
       // I6: el paciente se muestra en la vista previa aunque la fila falle por otra cosa (p. ej. el doctor).
       if (pRes.id) pr.data.patientName = pRes.fullName || idx.nameById.get(pRes.id) || undefined;
 
+      // ¿Pertenece a un caso de ortodoncia (o a un tratamiento) ya importado? Su «control» es del doctor tratante del caso.
+      const { enlace, deOtroPaciente } = enlaceDe(enlaces, mapped.treatmentRef, pRes.id);
+      const caso = enlace && enlace.tipo === "caso" ? enlace : null;
+      const tipoInfo = caso ? tipoParaCaso(cellText(mapped.type)) : null;
+      const casoDoctor = caso?.doctorId && nombreDe.has(caso.doctorId) ? caso.doctorId : null;
+      if (deOtroPaciente) pr.warnings.push(`El tratamiento #${limpiarId(mapped.treatmentRef)} pertenece a otro paciente en lo ya importado: la cita no se liga a él`);
+
       let dRes: { id?: string; error?: string };
       let doctorPorEleccion = false;
-      if (!mapped.doctor || !String(mapped.doctor).trim()) {
-        dRes = { error: "Falta el doctor" };
+      if (tipoInfo?.esControl && casoDoctor) {
+        // Decisión de Rafael: el control de un caso va con el doctor tratante del caso. Si choca en su horario, entra con
+        // el doctor de respaldo libre (sin mover el horario), igual que cuando la persona elige a quién van las citas.
+        dRes = { id: casoDoctor };
+        doctorPorEleccion = true;
+      } else if (!mapped.doctor || !String(mapped.doctor).trim()) {
+        dRes = casoDoctor ? { id: casoDoctor } : { error: "Falta el doctor" };
+        if (casoDoctor) doctorPorEleccion = true;
       } else {
         const claveDoctor = normName(mapped.doctor);
         const elegido = eleccionDoctor[claveDoctor];
@@ -1509,7 +1588,10 @@ export const appointmentsHandler: EntityHandler = {
           doctorPorEleccion = true;
         } else {
           dRes = resolveByName(mapped.doctor, byDoctor, "Doctor");
-          if (dRes.error) {
+          if (dRes.error && casoDoctor) {
+            dRes = { id: casoDoctor };
+            doctorPorEleccion = true;
+          } else if (dRes.error) {
             // La persona decide a quién va (paso «Revisar»); sin decidir, la cita no se importa.
             pr.unresolved = [{ field: "doctor", key: claveDoctor, value: String(mapped.doctor).trim() }];
             dRes = { error: `${dRes.error}: elige a qué usuario se asigna` };
@@ -1522,7 +1604,27 @@ export const appointmentsHandler: EntityHandler = {
 
       if (duracion.warning) pr.warnings.push(duracion.warning);
       const endsAt = new Date(startsAt!.getTime() + duracion.min * 60_000);
-      const type = mapped.type && String(mapped.type).trim() ? String(mapped.type).trim().slice(0, 200) : "Consulta";
+      const motivo = mapped.type && String(mapped.type).trim() ? String(mapped.type).trim().slice(0, 200) : "";
+      // Con caso: «Control de ortodoncia» (o el tipo de ortodoncia que le toca); sin caso, el motivo de siempre.
+      const type = tipoInfo?.tipo ? tipoInfo.tipo.slice(0, 200) : motivo || "Consulta";
+      const rec = elegirRecurso(mapped.chair, recursos);
+      const chairTexto = cellText(mapped.chair);
+      const refTexto = limpiarId(mapped.treatmentRef);
+      const enlaceNota: EnlaceDeCita | null = refTexto ? { tipo: caso ? "caso" : enlace ? "tratamiento" : "suelta", ref: refTexto } : null;
+      const notes = mapped.observations || mapped.bookedBy || mapped.createdOn || mapped.treatmentRef || mapped.chair || tipoInfo?.cambio
+        // Dentalink: cada dato del archivo con su etiqueta (comentario, observaciones, quién y cuándo la agendó, sillón, tratamiento).
+        ? notasDeCita({
+            comentario: mapped.notes,
+            observaciones: mapped.observations,
+            motivoOriginal: tipoInfo?.cambio ? motivo : null,
+            estadoOrigen: mapped.status,
+            agendadoPor: mapped.bookedBy,
+            creadaEl: textoDeCelda(mapped.createdOn),
+            sobreagendada: esSobreagendamiento(chairTexto),
+            sillonSinEquivalente: rec.id || esSobreagendamiento(chairTexto) ? null : chairTexto || null,
+            enlace: enlaceNota,
+          })
+        : mapped.notes ? String(mapped.notes).trim() : null;
 
       Object.assign(pr.data, {
         patientId: pRes.id,
@@ -1530,7 +1632,10 @@ export const appointmentsHandler: EntityHandler = {
         startsAt,
         endsAt,
         type,
-        notes: mapped.notes ? String(mapped.notes).trim() : null,
+        notes,
+        resourceId: rec.id,
+        chairTexto: chairTexto || undefined,
+        tratamiento: enlaceNota ? `${enlaceNota.tipo}:${enlaceNota.ref}` : undefined,
         status: estado.status,
         patientName: pRes.fullName || idx.nameById.get(pRes.id!) || undefined,
         doctorName: doctorPorEleccion ? nombreDe.get(dRes.id!)! : String(mapped.doctor).trim(),
@@ -1572,6 +1677,25 @@ export const appointmentsHandler: EntityHandler = {
     }
 
     await marcarSolapes(out, clinicId, idx, tz, respaldos);
+
+    // Consultorio (ws1-t10): la agenda tiene una constraint por consultorio igual a la del doctor. La cita entra en su
+    // consultorio solo si está libre a esa hora; si no, entra sin él (nunca se mueve el horario) y la nota lo dice.
+    const conConsultorio = out.filter((r) => r.status === "ok" && r.data.resourceId);
+    if (conConsultorio.length > 0) {
+      let desde = conConsultorio[0].data.startsAt as Date;
+      let hasta = conConsultorio[0].data.endsAt as Date;
+      for (const r of conConsultorio) {
+        if ((r.data.startsAt as Date) < desde) desde = r.data.startsAt;
+        if ((r.data.endsAt as Date) > hasta) hasta = r.data.endsAt;
+      }
+      const ocupadas = await cargarOcupadas(clinicId, [], Array.from(new Set(conConsultorio.map((r) => r.data.resourceId as string))), desde, hasta);
+      soltarConsultoriosQueChocan(conConsultorio, ocupadas, tz);
+      for (const r of conConsultorio) {
+        if (r.data.consultorioSoltado && r.data.chairTexto) {
+          r.data.notes = [r.data.notes, `Sillón en Dentalink: ${r.data.chairTexto} (no se asignó consultorio: estaba ocupado)`].filter(Boolean).join("\n");
+        }
+      }
+    }
     return out;
   },
 
@@ -1602,6 +1726,7 @@ export const appointmentsHandler: EntityHandler = {
         startsAt: r.data.startsAt,
         endsAt: r.data.endsAt,
         status: (r.data.status ?? "SCHEDULED") as any,
+        ...(r.data.resourceId ? { resourceId: r.data.resourceId as string } : {}),
         // «Confirmada» en el origen entra CONFIRMED, con la marca de cuándo se registró aquí.
         ...(r.data.status === "CONFIRMED" ? { confirmedAt: ctx.now } : {}),
         notes: r.data.notes ?? null,
@@ -2916,7 +3041,7 @@ export const treatmentPlansHandler: EntityHandler = {
     }
 
     const lector = crearLectorMontos(
-      rows.flatMap((r) => [r.mapped.price, r.mapped.discount, r.mapped.total, r.mapped.abonado]),
+      rows.flatMap((r) => [r.mapped.price, r.mapped.discount, r.mapped.total, r.mapped.abonado, r.mapped.abonadoLinea, r.mapped.precioOriginal]),
       ctx.valueMapping[AMOUNT_FORMAT_FIELD]?.[AMOUNT_FORMAT_KEY],
     );
 
@@ -2937,6 +3062,12 @@ export const treatmentPlansHandler: EntityHandler = {
       hecho: boolean;
       fechaRealizado: Date | null;
       abonado: number | null;
+      /** «Pagado Prestación»: lo pagado de ESTA línea (lo usan los casos de ortodoncia, ws1-t12). */
+      abonadoLinea: number | null;
+      // Dentalink 06 (ws1-t8): identifican el renglón y el tratamiento.
+      categoria: string;
+      codigoPrestacion: string;
+      convenio: string;
       fechaAbono: Date | null;
       proximaVisita: Date | null;
       estadoTrat: "activo" | "finalizado" | null;
@@ -2987,11 +3118,21 @@ export const treatmentPlansHandler: EntityHandler = {
       if (cellText(mapped.total) && (total === null || total < 0)) pr.errors.push(`Importe inválido "${cellText(mapped.total)}"`);
       if (!cellText(mapped.price) && !cellText(mapped.total)) pr.errors.push("Falta el precio de la línea");
 
+      // Precio de lista (Dentalink «Precio Original»): el precio final sigue siendo «Precio Paciente» y la diferencia
+      // queda como descuento visible en el renglón. Un descuento explícito en el archivo manda sobre la diferencia.
+      const precioOriginal = cellText(mapped.precioOriginal) ? leer(mapped.precioOriginal) : null;
+      if (cellText(mapped.precioOriginal) && (precioOriginal === null || precioOriginal < 0)) pr.errors.push(`Precio de lista inválido "${cellText(mapped.precioOriginal)}"`);
       let unitPrice = 0;
       let itemNotes: string | null = null;
-      const d = round2(discount ?? 0);
+      let d = round2(discount ?? 0);
       if (price !== null && price >= 0) {
         unitPrice = round2(price);
+        if (precioOriginal !== null && precioOriginal >= 0 && !cellText(mapped.discount)) {
+          const pl = precioDeRenglon({ original: precioOriginal, paciente: price, cantidad: quantity });
+          unitPrice = pl.unitPrice;
+          d = pl.discount;
+          if (pl.aviso) pr.warnings.push(pl.aviso);
+        }
         const computed = round2(Math.max(0, unitPrice * quantity - d));
         if (unitPrice * quantity < d) pr.errors.push("El descuento es mayor que el importe de la línea");
         else if (total !== null && Math.abs(computed - round2(total)) > 0.01) {
@@ -3039,6 +3180,8 @@ export const treatmentPlansHandler: EntityHandler = {
 
       const abonado = cellText(mapped.abonado) ? leer(mapped.abonado) : null;
       if (cellText(mapped.abonado) && (abonado === null || abonado < 0)) pr.errors.push(`Abonado inválido "${cellText(mapped.abonado)}"`);
+      let abonadoLinea = cellText(mapped.abonadoLinea) ? leer(mapped.abonadoLinea) : null;
+      if (abonadoLinea !== null && abonadoLinea < 0) { pr.warnings.push(`Pagado de la prestación «${cellText(mapped.abonadoLinea)}» inválido — se ignora`); abonadoLinea = null; }
       let fechaAbono: Date | null = null;
       if (cellText(mapped.fechaAbono)) {
         fechaAbono = parseCalendarDay(mapped.fechaAbono);
@@ -3050,10 +3193,15 @@ export const treatmentPlansHandler: EntityHandler = {
         if (!proximaVisita) pr.warnings.push(`Próxima visita "${cellText(mapped.proximaVisita)}" inválida — se ignora`);
       }
 
+      const categoria = oneLine(mapped.categoria, 60);
+      const codigoPrestacion = oneLine(mapped.codigoPrestacion, 40);
+      itemNotes = notaDeRenglon({ previa: itemNotes, categoria, codigo: codigoPrestacion, pagado: abonadoLinea });
+
       lineas.push({
         pr, mapped, patientId, fecha, folio, sinPaciente, procedure,
-        quantity, unitPrice, discount: round2(discount ?? 0), itemNotes,
-        doctorId, doctorNombre, hecho: hechoLinea, fechaRealizado, abonado, fechaAbono, proximaVisita, estadoTrat,
+        quantity, unitPrice, discount: d, itemNotes,
+        doctorId, doctorNombre, hecho: hechoLinea, fechaRealizado, abonado, abonadoLinea, fechaAbono, proximaVisita, estadoTrat,
+        categoria, codigoPrestacion, convenio: oneLine(mapped.convenio, 120),
       });
     }
 
@@ -3085,6 +3233,16 @@ export const treatmentPlansHandler: EntityHandler = {
       }
     }
 
+    // Lo pagado por prestación contra el total abonado del tratamiento («Total Pagos Tratamiento»): MANDA el total;
+    // si no cuadran, se avisa en la primera línea (normalmente son pagos sin prestación asignada).
+    for (const g of Array.from(grupos.values())) {
+      if (!g.some((l) => l.abonadoLinea !== null)) continue;
+      const total = g.find((l) => l.abonado !== null)?.abonado;
+      if (total === undefined || total === null) continue;
+      const aviso = conciliarPagado(g.reduce((a, l) => a + (l.abonadoLinea ?? 0), 0), total);
+      if (aviso) g[0].pr.warnings.push(aviso);
+    }
+
     // Un tratamiento entra COMPLETO o no entra: con una línea rota su total y
     // sus sesiones serían mentira.
     for (const g of Array.from(grupos.values())) {
@@ -3099,6 +3257,21 @@ export const treatmentPlansHandler: EntityHandler = {
     const out: PreviewRow[] = [];
     const grupoDe = new Map<Linea, string>();
     for (const [k, g] of Array.from(grupos.entries())) for (const l of g) grupoDe.set(l, k);
+
+    // CATÁLOGO (Dentalink, ws1-t8): con las columnas de categoría/código en el archivo, cada prestación distinta que la
+    // clínica aún no tiene se agregará al catálogo (precio de lista más frecuente) en commit(). Lo de los tratamientos de
+    // ortodoncia lo asegura su propio camino (ws1-t12), no este.
+    const gruposOrto = new Set<string>();
+    for (const [k, g] of Array.from(grupos.entries())) {
+      if (g.some((l) => renglonEsOrtodoncia({ categoria: l.categoria, procedure: l.procedure, especialidad: cellText(l.mapped.especialidad) }))) gruposOrto.add(k);
+    }
+    const planCatalogo = new Map<string, PrestacionPlaneada>();
+    for (const p of planearCatalogo(
+      lineas
+        .filter((l) => l.pr.errors.length === 0 && (l.categoria || l.codigoPrestacion) && !gruposOrto.has(grupoDe.get(l) ?? ""))
+        .map((l) => ({ nombre: l.procedure, codigo: l.codigoPrestacion, categoria: l.categoria, precioOriginal: cellText(l.mapped.precioOriginal) ? lector.leer(l.mapped.precioOriginal).valor : null })),
+    )) planCatalogo.set(p.clave, p);
+
     for (const l of lineas) {
       const pr = l.pr;
       const name = (l.patientId && idx.nameById.get(l.patientId)) || undefined;
@@ -3111,14 +3284,20 @@ export const treatmentPlansHandler: EntityHandler = {
 
       const key = norm(l.procedure);
       let procedureId: string | null = null;
+      let catalogo: PrestacionPlaneada | null = null;
       const pick = chosen[key];
       if (pick && pick !== VALUE_UNLINKED) {
         if (catalogIds.has(pick)) procedureId = pick;
         else pr.warnings.push("El equivalente elegido ya no está en tu catálogo: la línea entra sin ligar");
       } else if (!pick) {
         const hit = resolveByName(l.procedure, byProcedure, "Procedimiento", norm);
+        const nuevo = planCatalogo.get(claveDePrestacion(l.procedure));
         if (hit.id) procedureId = hit.id;
-        else {
+        else if (nuevo && /no encontrado/.test(hit.error ?? "")) {
+          // Dentalink: la prestación no está en el catálogo → se agrega al confirmar (no hay nada que elegir).
+          catalogo = nuevo;
+          pr.warnings.push(`«${l.procedure}» se agregará al catálogo de la clínica`);
+        } else {
           const unresolved: UnresolvedRef = { field: "procedure", key, value: l.procedure };
           pr.unresolved = [unresolved];
           pr.warnings.push(`${hit.error}: entra con su nombre e importe, sin ligar (puedes elegir el equivalente)`);
@@ -3138,6 +3317,9 @@ export const treatmentPlansHandler: EntityHandler = {
         doctorName: l.doctorNombre,
         procedure: l.procedure,
         procedureId,
+        catalogo,
+        codigoPrestacion: l.codigoPrestacion,
+        convenio: l.convenio,
         toothFdi: sanitizeFdi(l.mapped.tooth),
         quantity: l.quantity,
         unitPrice: l.unitPrice,
@@ -3147,12 +3329,20 @@ export const treatmentPlansHandler: EntityHandler = {
         hecho: l.hecho,
         fechaRealizado: l.fechaRealizado,
         abonado: l.abonado,
+        abonadoLinea: l.abonadoLinea,
+        categoria: oneLine(l.mapped.categoria, 80),
+        especialidad: oneLine(l.mapped.especialidad, 80),
         fechaAbono: l.fechaAbono,
         proximaVisita: l.proximaVisita,
         estadoTratamiento: l.estadoTrat,
       };
       out.push(pr);
     }
+
+    // ws1-t12 · ÚNICO punto de enganche de los casos de ortodoncia (1/2): los tratamientos de ortodoncia
+    // (esOrtodonciaDentalink) se marcan `data.ortoCaso` y entran como CASO del módulo en commit() (2/2). El resto
+    // sigue por el camino de siempre.
+    await marcarCasosDeOrtodoncia(out, clinicId, ctx);
 
     // Idempotencia: SOLO contra tratamientos activos que ESTA importación creó
     // antes (marcador propio en notes) — un presupuesto ACCEPTED cualquiera del
@@ -3204,12 +3394,31 @@ export const treatmentPlansHandler: EntityHandler = {
   async commit(rows, clinicId, _skipDuplicates, ctx) {
     // Es dinero y un plan vivo: NUNCA reimporta un duplicado, ni con «omitir
     // duplicados» apagado (mismo criterio que quotesHandler/lo clínico).
-    const toInsert = pickInsertable(rows, true);
-    if (toInsert.length === 0) return { created: 0, skipped: 0 };
+    const todo = pickInsertable(rows, true);
+    // ws1-t12 · ÚNICO punto de enganche (2/2): los tratamientos de ortodoncia entran como CASOS del módulo.
+    const filasOrto = todo.filter((r) => r.data.ortoCaso === true);
+    const toInsert = todo.filter((r) => r.data.ortoCaso !== true);
+    const casosOrto = filasOrto.length > 0 ? await commitCasosDeOrtodoncia(filasOrto, clinicId, ctx) : { created: 0, skipped: 0 };
+    if (toInsert.length === 0) return casosOrto;
 
     const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } });
     const tz = consentTimeZone(clinic?.timezone);
     const origen = nombreOrigen(ctx.originName);
+
+    // Catálogo (Dentalink, ws1-t8): las prestaciones que la clínica aún no tenía se crean AHORA (idempotente) y sus
+    // renglones se ligan. Solo entra aquí lo marcado en la vista previa; lo que ya existía llegó ligado.
+    const porCrear = new Map<string, PrestacionPlaneada>();
+    for (const r of toInsert) {
+      const c = r.data.catalogo as PrestacionPlaneada | null | undefined;
+      if (c && !r.data.procedureId) porCrear.set(c.clave, c);
+    }
+    if (porCrear.size > 0) {
+      const cat = await asegurarCatalogoDentalink(clinicId, Array.from(porCrear.values()));
+      for (const r of toInsert) {
+        const c = r.data.catalogo as PrestacionPlaneada | null | undefined;
+        if (c && !r.data.procedureId) r.data.procedureId = cat.ids.get(c.clave) ?? null;
+      }
+    }
 
     const groups = new Map<string, PreviewRow[]>();
     for (const r of toInsert) {
@@ -3268,7 +3477,9 @@ export const treatmentPlansHandler: EntityHandler = {
         nextExpectedDate = declarada && declarada.getTime() > ctx.now.getTime() ? declarada : futuro;
       }
 
-      const abonadoTotal = round2(Math.max(0, (pickFirst("abonado") as number | undefined) ?? 0));
+      // Manda «Total Pagos Tratamiento». Solo si el archivo no lo trae se usa la suma de lo pagado por prestación.
+      const sumaPorLinea = lines.reduce((a, l) => a + ((l.data.abonadoLinea as number | null | undefined) ?? 0), 0);
+      const abonadoTotal = round2(Math.max(0, (pickFirst("abonado") as number | undefined) ?? sumaPorLinea));
       const paid = round2(Math.min(abonadoTotal, totals.total));
       const balance = round2(Math.max(0, totals.total - paid));
       const invoiceStatus = balance <= 0 && totals.total > 0 ? "PAID" : paid > 0 ? "PARTIAL" : "PENDING";
@@ -3303,6 +3514,8 @@ export const treatmentPlansHandler: EntityHandler = {
             timezone: tz,
             folio: pickFirst("folioOriginal") || "",
             doctor: pickFirst("doctorName") || "",
+            especialidad: pickFirst("especialidad") || "",
+            convenio: pickFirst("convenio") || "",
           }),
           doctorId: pickFirst("doctorId") || ctx.userId,
           totalSessions,
@@ -3423,7 +3636,7 @@ export const treatmentPlansHandler: EntityHandler = {
       for (const l of h.data.lines as PreviewRow[]) { l.status = "error"; l.errors.push(...h.errors); }
     }
     const errored = headers.filter((h) => h.status === "error").length;
-    return { created, skipped: Math.max(0, headers.length - created - errored) };
+    return { created: created + casosOrto.created, skipped: Math.max(0, headers.length - created - errored) + casosOrto.skipped };
   },
 };
 

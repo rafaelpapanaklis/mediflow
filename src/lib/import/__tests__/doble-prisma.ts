@@ -235,8 +235,19 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
       get(_t, prop: string) {
         if (prop === "then") return undefined; // `await prisma` no es una operación
         if (prop === "$transaction") {
-          return async (ops: Array<{ correr: () => Promise<unknown> }>) => {
+          return async (ops: Array<{ correr: () => Promise<unknown> }> | ((tx: any) => Promise<unknown>)) => {
             contar("$transaction");
+            // Forma interactiva `$transaction(async (tx) => …)`: mismo doble como `tx`, con el mismo deshacer.
+            if (typeof ops === "function") {
+              const antes = structuredClone(tablas);
+              try {
+                return await ops(prisma);
+              } catch (e) {
+                for (const k of Object.keys(tablas)) delete tablas[k];
+                Object.assign(tablas, antes);
+                throw e;
+              }
+            }
             const foto = structuredClone(tablas);
             try {
               const out = [];
@@ -327,6 +338,8 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
                 }
                 return n;
               }
+              // Candado de Postgres (pg_advisory_xact_lock): sin efecto en memoria.
+              if (/pg_advisory_xact_lock/.test(sql)) return 0;
               throw new Error(`$executeRaw sin doble: ${sql.slice(0, 80)}`);
             });
         }

@@ -278,6 +278,9 @@ export function activeTreatmentNotes(args: {
   timezone: string;
   folio: string;
   doctor: string;
+  /** Especialidad del profesional en el sistema anterior y convenio del tratamiento (Dentalink 06). Opcionales. */
+  especialidad?: string;
+  convenio?: string;
 }): string {
   const lineas = [
     `${SENTINEL_ACTIVO}${args.origen} el ${formatConsentDate(args.importadoEl, args.timezone)}. ` +
@@ -285,6 +288,8 @@ export function activeTreatmentNotes(args: {
   ];
   if (args.folio) lineas.push(`${FOLIO_ORIGINAL_ACTIVO}${args.folio}`);
   if (args.doctor) lineas.push(`Doctor original: ${args.doctor}`);
+  if (args.especialidad) lineas.push(`Especialidad del profesional: ${args.especialidad}`);
+  if (args.convenio) lineas.push(`Convenio del tratamiento: ${args.convenio}`);
   return lineas.join("\n");
 }
 
