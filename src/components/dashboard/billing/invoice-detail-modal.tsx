@@ -294,6 +294,11 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   useEffect(() => {
     if (!open || !invoice?.id) { setAnticipoPagado(0); setAnticipoPendiente(null); setPuedeDepositar(false); setPuedeRegistrarAnticipo(false); setPuedeEnviarRecibo(false); return; }
     let vivo = true;
+    // H16 (revisión final, ws1-t4): al cambiar de factura (o recargar), fuera lo
+    // de la ANTERIOR mientras responde el servidor. Antes quedaban su permiso
+    // de registrar y su pendiente: «Registrar anticipo recibido» se podía
+    // pulsar sin el pendiente de ESTA factura cargado.
+    setAnticipoPendiente(null); setPuedeDepositar(false); setPuedeRegistrarAnticipo(false); setPuedeEnviarRecibo(false);
     fetch(`/api/invoices/${invoice.id}/anticipo`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {

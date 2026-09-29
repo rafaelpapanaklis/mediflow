@@ -35,7 +35,8 @@ test("soltar la cita solo toca una CANCELADA de esta clínica y esta cita, y dej
 test("cableado: todos los caminos que crean la factura de una cita dejan pasar a la cancelada", () => {
   const crear = leer("src/lib/invoices/crear-desde-cita.server.ts");
   assert.match(crear, /if \(existing && facturaOcupaLaCita\(existing\)\) return falloFactura\("invoice_already_exists"/);
-  assert.match(crear, /if \(existing\) await soltarFacturaCanceladaDeCita\(/);
+  // (0d37943f admite facturas sin cita: la condición también mira `appointmentId`.)
+  assert.match(crear, /if \(existing( && appointmentId)?\) await soltarFacturaCanceladaDeCita\(/);
 
   assert.match(leer("src/app/api/invoices/route.ts"), /await soltarFacturaCanceladaDeCita\(\{ clinicId, appointmentId: data\.appointmentId, userId: ctx\.userId \}\)/);
   assert.match(leer("src/app/api/invoices/from-appointment/route.ts"), /if \(existing && facturaOcupaLaCita\(existing\)\) \{/);

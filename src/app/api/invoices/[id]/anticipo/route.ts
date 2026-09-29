@@ -49,6 +49,9 @@ async function comprobarFactura(
   return { patientId: inv.patientId };
 }
 
+/** Los mismos estados que `pedirAnticipoDeFactura` acepta (panel.server.ts). */
+const ESTADOS_QUE_ADMITEN_ANTICIPO = ["PENDING", "PARTIAL", "OVERDUE"];
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -65,13 +68,18 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const [canales, sugerido, estado, elegibilidad, clinica] = await Promise.all([
     canalesAnticipoPanel(ctx.clinicId),
-    sugeridoParaFactura(ctx.clinicId, inv.total),
+    sugeridoParaFactura(ctx.clinicId, inv.total, undefined, inv.paid),
     estadoAnticipoDeFactura(ctx.clinicId, params.id),
     elegibilidadCitaDeInvoice(ctx.clinicId, inv.appointmentId),
-    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }),
+    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true } }),
   ]);
 
+  // H1 (revisión final, ws1-t4): sobre una factura CANCELADA (o sin saldo) no
+  // se ofrece pedir ni registrar anticipo — el POST lo rechaza igual.
+  const admiteAnticipo = ESTADOS_QUE_ADMITEN_ANTICIPO.includes(inv.status) && inv.total - inv.paid > 0;
+
   return NextResponse.json({
+    estado: inv.status,
     disponible: canales.mercadopago || canales.transferencia,
     canales,
     sugerido: sugerido.monto,
@@ -83,6 +91,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     // usa para el «vence el…» del anticipo pendiente (mismo criterio que el
     // chip de la agenda y el PDF).
     zonaHoraria: clinica?.timezone || "America/Mexico_City",
+    // H26 (revisión final, ws1-t4): el modal avisa ANTES si no hay WhatsApp
+    // (mismo criterio que el POST), en vez de ofrecer «Pedir y enviar».
+    whatsapp: {
+      conectado: !!(clinica?.waConnected && clinica.waPhoneNumberId && clinica.waAccessToken),
+      puedeEnviar: denyIfMissingPermission(ctx, "whatsapp.send") === null,
+    },
     anticipoPagado: estado.anticipoPagado,
     pendiente: estado.pendiente,
     // Ajuste 2: solo citas futuras (SCHEDULED/CONFIRMED, inicio después de
@@ -94,8 +108,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     // cliente (invoice-detail-modal.tsx) esconde "Pedir anticipo"/"Registrar
     // anticipo recibido" con esto; el servidor los vuelve a exigir igual en
     // el POST correspondiente.
-    puedeDepositar: denyIfMissingPermission(ctx, "billing.deposit") === null,
-    puedeRegistrar: denyIfMissingAnyPermission(ctx, ["billing.deposit.register", "billing.charge"]) === null,
+    puedeDepositar: admiteAnticipo && denyIfMissingPermission(ctx, "billing.deposit") === null,
+    puedeRegistrar: admiteAnticipo && denyIfMissingAnyPermission(ctx, ["billing.deposit.register", "billing.charge"]) === null,
     puedeEnviarRecibo: denyIfMissingPermission(ctx, "whatsapp.send") === null,
   });
 }
