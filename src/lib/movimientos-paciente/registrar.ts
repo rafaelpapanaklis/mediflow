@@ -1,6 +1,6 @@
-import type { NextRequest } from "next/server";
 import { extractAuditMeta, logAudit, type AuditAction, type AuditEntityType } from "@/lib/audit";
-import type { CategoriaMovimiento } from "./catalogo";
+import type { ActorExterno, CategoriaMovimiento } from "./catalogo";
+import { insertarFilaExterna } from "./fila";
 
 /**
  * EL helper de los movimientos del paciente: una llamada por cada escritura de
@@ -44,7 +44,7 @@ export interface MovimientoDelPaciente {
   campos?: readonly string[];
   cambios?: Record<string, { before: unknown; after: unknown }>;
   /** El request, para IP y user-agent. Opcional (server actions no lo tienen). */
-  req?: NextRequest | null;
+  req?: Pick<Request, "headers"> | null;
   actorType?: "staff" | "admin";
   actorAdminId?: string;
 }
@@ -95,5 +95,65 @@ export async function registrarMovimientoDelPaciente(m: MovimientoDelPaciente): 
     });
   } catch (e) {
     console.error("registrarMovimientoDelPaciente error:", e);
+  }
+}
+
+/**
+ * Un movimiento de quien NO es del equipo: el propio paciente en su portal
+ * (`patient`), la reserva web pública (`public`) o el bot de WhatsApp (`bot`).
+ * Mismo formato y misma lista que los del equipo; solo cambia el autor.
+ *
+ *   await registrarMovimientoExterno({
+ *     actor: "patient", clinicId: cita.clinicId, patientId: cita.patientId,
+ *     entityType: "appointment", entityId: cita.id, action: "update",
+ *     texto: "Pidió cambiar su cita del 3 oct 2026 10:00", req,
+ *   });
+ *
+ * - clinicId y patientId salen de la fila que la ruta ya cargó (o de la sesión
+ *   del portal / el token), NUNCA del cuerpo de la petición.
+ * - Necesita sql/audit-logs-actor-externo.sql. Sin él NO escribe y NO falla
+ *   (se anota un aviso y se deja de intentar unos minutos).
+ * - NUNCA tira. Sin clínica, paciente o entidad no escribe nada.
+ */
+export interface MovimientoExterno {
+  actor: ActorExterno;
+  clinicId: string;
+  patientId: string;
+  entityType: AuditEntityType | (string & {});
+  entityId: string;
+  action: AuditAction;
+  texto?: string;
+  categoria?: CategoriaMovimiento;
+  campos?: readonly string[];
+  cambios?: Record<string, { before: unknown; after: unknown }>;
+  /** Precisa el origen en pantalla («El paciente (firma en línea)»); por defecto la etiqueta del actor. */
+  origen?: string;
+  req?: Pick<Request, "headers"> | null;
+}
+
+export async function registrarMovimientoExterno(m: MovimientoExterno): Promise<void> {
+  try {
+    if (!m.clinicId || !m.patientId || !m.entityId) return;
+    const base = armarCambiosDelMovimiento(m) ?? {};
+    const mov = (base._mov ?? { before: null, after: {} }) as { before: unknown; after: Record<string, unknown> };
+    const changes = {
+      ...base,
+      _mov: { before: null, after: { ...mov.after, ...(m.origen?.trim() ? { actor: m.origen.trim() } : {}) } },
+    };
+    const meta = m.req ? extractAuditMeta(m.req) : {};
+    await insertarFilaExterna({
+      clinicId: m.clinicId,
+      userId: null,
+      entityType: m.entityType,
+      entityId: m.entityId,
+      action: m.action,
+      changes,
+      ipAddress: meta.ipAddress ?? null,
+      userAgent: meta.userAgent ?? null,
+      actorType: m.actor,
+      patientId: m.patientId,
+    });
+  } catch (e) {
+    console.error("registrarMovimientoExterno error:", e);
   }
 }

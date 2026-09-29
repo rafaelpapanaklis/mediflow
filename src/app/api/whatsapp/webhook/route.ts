@@ -29,6 +29,7 @@ import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
+import { anotarRespuestaARecordatorio } from "@/lib/whatsapp/bot/movimientos-bot";
 
 // Tope diario de respuestas del bot por clínica (proxy de gasto: cada
 // respuesta OUT del bot ≈ 1 llamada a Claude + 1 envío de WhatsApp).
@@ -494,6 +495,7 @@ export async function POST(req: NextRequest) {
           });
         });
         await recordReminderReply(reminder.id, text, { close: true });
+        if (reminder.appointment) await anotarRespuestaARecordatorio({ clinicId: clinic.id, cita: reminder.appointment, accion: "cancel" });
         // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».
         await marcarPendienteSiHayDinero({ clinicId: clinic.id, appointmentId: reminder.appointmentId!, quien: "el paciente (WhatsApp)" });
 
@@ -509,6 +511,7 @@ export async function POST(req: NextRequest) {
           data:  { status: "CONFIRMED", confirmedAt: new Date() },
         });
         await recordReminderReply(reminder.id, text, { close: true });
+        if (reminder.appointment) await anotarRespuestaARecordatorio({ clinicId: clinic.id, cita: reminder.appointment, accion: "confirm" });
 
         if (clinic.waAccessToken && clinic.waPhoneNumberId) {
           const appt = reminder.appointment;

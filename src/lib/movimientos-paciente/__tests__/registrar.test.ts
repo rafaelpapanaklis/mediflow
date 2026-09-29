@@ -20,8 +20,8 @@ import assert from "node:assert/strict";
 type Creada = { data: Record<string, any>; select?: unknown };
 let creadas: Creada[] = [];
 let crudas: Array<{ sql: string; values: unknown[] }> = [];
-let modoCrudo: "ok" | "sin-columna" | "falla" = "ok";
-let modoCreate: "ok" | "falla" = "ok";
+let modoCrudo: "ok" | "sin-columna" | "falla" | "usuario-no-nulo" = "ok";
+let modoCreate: "ok" | "falla" | "usuario-no-nulo" = "ok";
 
 mock.module("@/lib/prisma", {
   namedExports: {
@@ -29,6 +29,9 @@ mock.module("@/lib/prisma", {
       auditLog: {
         create: (args: Creada) => {
           if (modoCreate === "falla") return Promise.reject(new Error("pooler saturado"));
+          if (modoCreate === "usuario-no-nulo" && (args.data.userId ?? null) === null) {
+            return Promise.reject(Object.assign(new Error("Null constraint violation on the fields: (`userId`)"), { code: "P2011" }));
+          }
           creadas.push(args);
           return Promise.resolve({ id: "log_1" });
         },
@@ -43,6 +46,14 @@ mock.module("@/lib/prisma", {
           );
         }
         if (modoCrudo === "falla") return Promise.reject(new Error("connection terminated"));
+        if (modoCrudo === "usuario-no-nulo" && values[2] === null) {
+          return Promise.reject(
+            Object.assign(new Error('null value in column "userId" of relation "audit_logs" violates not-null constraint'), {
+              code: "P2010",
+              meta: { code: "23502", message: 'null value in column "userId" of relation "audit_logs" violates not-null constraint' },
+            }),
+          );
+        }
         crudas.push({ sql: strings.join("?"), values });
         return Promise.resolve(1);
       },
@@ -62,6 +73,7 @@ const BASE = {
 
 async function cargar() {
   const fila = await import("../fila");
+  fila._reiniciarEstadoDeUsuarioNulo();
   const registrar = await import("../registrar");
   const audit = await import("@/lib/audit");
   return { fila, registrar, audit };
@@ -281,5 +293,125 @@ describe("helpers de módulo", () => {
     assert.ok(crudas[1].values.includes("pat_y"));
     assert.equal(crudas.length, 2, "sin paciente no usa la columna");
     assert.equal(creadas.length, 1);
+  });
+});
+
+describe("registrarMovimientoExterno (paciente, reserva web, bot)", () => {
+  const EXT = {
+    actor: "patient" as const,
+    clinicId: "cli_1",
+    patientId: "pat_1",
+    entityType: "appointment" as const,
+    entityId: "apt_1",
+    action: "update" as const,
+    texto: "Pidió cancelar su cita",
+  };
+  beforeEach(async () => {
+    creadas = [];
+    crudas = [];
+    modoCrudo = "ok";
+    modoCreate = "ok";
+    const { fila } = await cargar();
+    fila._reiniciarEstadoDeColumna();
+    fila._reiniciarEstadoDeUsuarioNulo();
+  });
+
+  it("escribe la fila con userId NULL, el actor y el paciente", async () => {
+    const { registrar } = await cargar();
+    await registrar.registrarMovimientoExterno(EXT);
+    assert.equal(crudas.length, 1);
+    const v = crudas[0].values;
+    assert.equal(v[2], null, "userId NULL");
+    assert.ok(v.includes("patient"), "actorType");
+    assert.ok(v.includes("pat_1") && v.includes("cli_1"));
+    const cambios = JSON.parse(v.find((x) => typeof x === "string" && x.startsWith("{")) as string);
+    assert.equal(cambios._mov.after.texto, "Pidió cancelar su cita");
+  });
+
+  it("puede precisar el origen que se ve en pantalla", async () => {
+    const { registrar } = await cargar();
+    await registrar.registrarMovimientoExterno({ ...EXT, origen: "El paciente (firma en línea)" });
+    const cambios = JSON.parse(crudas[0].values.find((x) => typeof x === "string" && x.startsWith("{")) as string);
+    assert.equal(cambios._mov.after.actor, "El paciente (firma en línea)");
+  });
+
+  it("SIN el SQL (userId sigue NOT NULL): no escribe, no falla, y deja de intentar un rato", async () => {
+    modoCrudo = "usuario-no-nulo";
+    modoCreate = "usuario-no-nulo";
+    const { registrar, fila } = await cargar();
+    const avisos = mock.method(console, "warn", () => {});
+    try {
+      await assert.doesNotReject(registrar.registrarMovimientoExterno(EXT));
+      assert.equal(crudas.length + creadas.length, 0, "no quedó ninguna fila");
+      assert.equal(fila.usuarioNuloProbablementeNoPermitido(), true);
+      assert.equal(avisos.mock.callCount(), 1, "un solo aviso");
+      // la siguiente ni siquiera toca la base
+      modoCrudo = "ok";
+      await registrar.registrarMovimientoExterno({ ...EXT, entityId: "apt_2" });
+      assert.equal(crudas.length + creadas.length, 0);
+      assert.equal(avisos.mock.callCount(), 1);
+    } finally {
+      avisos.mock.restore();
+    }
+  });
+
+  it("pasado el plazo vuelve a intentar (por si Rafael ya corrió el SQL)", async () => {
+    const { fila } = await cargar();
+    modoCrudo = "usuario-no-nulo";
+    modoCreate = "usuario-no-nulo";
+    const { registrar } = await cargar();
+    const avisos = mock.method(console, "warn", () => {});
+    try {
+      await registrar.registrarMovimientoExterno(EXT);
+    } finally {
+      avisos.mock.restore();
+    }
+    assert.equal(fila.usuarioNuloProbablementeNoPermitido(Date.now() + fila.REINTENTO_USUARIO_NULO_MS - 1), true);
+    assert.equal(fila.usuarioNuloProbablementeNoPermitido(Date.now() + fila.REINTENTO_USUARIO_NULO_MS + 1), false);
+  });
+
+  it("solo con la columna patientId sin el SQL de userId cae a Prisma y tampoco falla", async () => {
+    modoCrudo = "sin-columna";
+    modoCreate = "usuario-no-nulo";
+    const { registrar } = await cargar();
+    const avisos = mock.method(console, "warn", () => {});
+    try {
+      await assert.doesNotReject(registrar.registrarMovimientoExterno(EXT));
+    } finally {
+      avisos.mock.restore();
+    }
+    assert.equal(creadas.length, 0);
+  });
+
+  it("con los dos SQL pero sin patientId: Prisma con userId null y el paciente en _mov", async () => {
+    modoCrudo = "sin-columna";
+    const { registrar } = await cargar();
+    await registrar.registrarMovimientoExterno({ ...EXT, actor: "bot" });
+    assert.equal(creadas.length, 1);
+    assert.equal(creadas[0].data.userId, null);
+    assert.equal(creadas[0].data.actorType, "bot");
+    assert.equal(creadas[0].data.changes._mov.after.patientId, "pat_1");
+  });
+
+  it("un error de la base que no es del userId no se traga en silencio, pero tampoco tira", async () => {
+    modoCrudo = "falla";
+    modoCreate = "falla";
+    const { registrar, fila } = await cargar();
+    const errores = mock.method(console, "error", () => {});
+    try {
+      await assert.doesNotReject(registrar.registrarMovimientoExterno(EXT));
+      assert.ok(errores.mock.callCount() >= 1);
+    } finally {
+      errores.mock.restore();
+    }
+    assert.equal(fila.usuarioNuloProbablementeNoPermitido(), false);
+  });
+
+  it("sin clínica, paciente o entidad no escribe nada (regla (c))", async () => {
+    const { registrar } = await cargar();
+    for (const roto of [{ clinicId: "" }, { patientId: "" }, { entityId: "" }, { clinicId: undefined as unknown as string }]) {
+      await registrar.registrarMovimientoExterno({ ...EXT, ...roto });
+    }
+    assert.equal(crudas.length + creadas.length, 0);
   });
 });

@@ -11,6 +11,7 @@ import {
 import { findOrCreateWhatsAppPatient } from "./booking-helpers";
 import { anticipoParaAnunciar, crearCitaDesdeBot } from "@/lib/anticipos/servicio.server";
 import { getOrthoBookingContext } from "@/lib/orthodontics/whatsapp-bot-booking";
+import { anotarCitaCreadaPorBot, anotarCitaMovidaPorBot, citaAntesDeMover } from "./movimientos-bot";
 import { runBookingTurn, type BookingDeps } from "./booking-core";
 import type { BotConfigDTO, BotTurnInput, BotTurnResult } from "./types";
 
@@ -33,9 +34,19 @@ const realDeps: BookingDeps = {
   // WS1-T5 — el alta pasa por el servicio de anticipos: si la clínica no pide
   // anticipo es exactamente createBotAppointment; si lo pide, aparta el hueco y
   // devuelve el link de Mercado Pago.
-  createBotAppointment: (params) => crearCitaDesdeBot(params),
+  createBotAppointment: async (params) => {
+    const r = await crearCitaDesdeBot(params);
+    // ws1-t12 — la cita que agenda el bot queda en los movimientos del paciente.
+    if (r.ok) await anotarCitaCreadaPorBot({ clinicId: params.clinicId, appointmentId: r.appointmentId });
+    return r;
+  },
   anticipoParaAnunciar: (clinicId, serviceId) => anticipoParaAnunciar(clinicId, serviceId),
-  rescheduleBotAppointment,
+  rescheduleBotAppointment: async (params) => {
+    const antes = await citaAntesDeMover(params.clinicId, params.appointmentId);
+    const r = await rescheduleBotAppointment(params);
+    if (r.ok) await anotarCitaMovidaPorBot({ clinicId: params.clinicId, appointmentId: r.appointmentId ?? params.appointmentId, antes });
+    return r;
+  },
   getUpcomingAppointmentsForPatient,
   findOrCreateWhatsAppPatient,
   findServiceById: (clinicId, id) =>

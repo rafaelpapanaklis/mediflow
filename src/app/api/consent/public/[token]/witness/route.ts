@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { signaturePath, uploadSignature, validateSignatureDataUrl } from "@/lib/consent/signature";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 
 const MAX_NAME = 120;
 
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   const form = await prisma.consentForm.findUnique({
     where: { token: params.token },
     select: {
-      id: true, clinicId: true, deletedAt: true, expiresAt: true,
+      id: true, clinicId: true, patientId: true, deletedAt: true, expiresAt: true,
       signedAt: true, revokedAt: true,
       witness1SignedAt: true, witness2SignedAt: true,
     },
@@ -97,6 +98,18 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   if (res.count === 0) {
     return NextResponse.json({ error: "Ese testigo ya firmó." }, { status: 409 });
   }
+
+  await registrarMovimientoExterno({
+    actor: "patient",
+    origen: "Testigo (firma en línea)",
+    clinicId: form.clinicId,
+    patientId: form.patientId,
+    entityType: "consent",
+    entityId: form.id,
+    action: "update",
+    texto: `Firmó el testigo ${slot} de un consentimiento desde el enlace`,
+    req,
+  });
 
   return NextResponse.json({ success: true, witness: slot, signedAt: now.toISOString() });
 }

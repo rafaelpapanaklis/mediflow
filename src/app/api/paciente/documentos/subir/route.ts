@@ -22,6 +22,7 @@ import {
   limiteSubidasPorUsuario,
 } from "@/lib/uploads/validar-archivo";
 import type { PacienteSubidoKind } from "@/lib/patient-portal/types";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -115,6 +116,18 @@ export async function POST(req: Request) {
         kind: true,
         createdAt: true,
       },
+    });
+
+    await registrarMovimientoExterno({
+      actor: "patient",
+      clinicId: link.clinicId,
+      patientId: link.patientId,
+      entityType: "patient-file",
+      entityId: record.id,
+      action: "create",
+      categoria: "archivos",
+      texto: "Subió un documento desde su portal",
+      req,
     });
 
     return NextResponse.json(

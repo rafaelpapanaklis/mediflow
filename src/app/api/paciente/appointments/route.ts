@@ -36,6 +36,8 @@ import type {
 } from "@/lib/patient-portal/types";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { hayQueNombrarAlPaciente, pacienteDeLaCita } from "@/lib/patient-portal/ortodoncia-portal";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
 
 export const dynamic = "force-dynamic";
 
@@ -437,6 +439,18 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
+
+    // ws1-t12 — el propio paciente agendó desde su portal (sin usuario del equipo).
+    await registrarMovimientoExterno({
+      actor: "patient",
+      clinicId, // ya validado contra los links de la sesión, no es el del body sin comprobar
+      patientId,
+      entityType: "appointment",
+      entityId: appt.id,
+      action: "create",
+      texto: textoCita.agendada(appt.startsAt, timezone),
+      req,
+    });
 
     // ── Side-effects best-effort (no rompen la respuesta) ────────────────────
     const patient = await prisma.patient

@@ -21,6 +21,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +77,19 @@ export async function POST(
   await prisma.appointment.update({
     where: { id: appt.id },
     data: { status: "CONFIRMED", confirmedAt: now },
+  });
+
+  await registrarMovimientoExterno({
+    actor: "patient",
+    clinicId: appt.clinicId,
+    patientId: appt.patientId,
+    entityType: "appointment",
+    entityId: appt.id,
+    action: "update",
+    texto: textoCita.estado(appt.startsAt, appt.status, "CONFIRMED", await zonaDeClinica(appt.clinicId)),
+    campos: ["status"],
+    cambios: { status: { before: appt.status, after: "CONFIRMED" } },
+    req,
   });
 
   return NextResponse.json({ ok: true, status: "CONFIRMED", changed: true });

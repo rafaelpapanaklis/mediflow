@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import {
   aplicarPermisos,
   clasificarFila,
+  esActorExterno,
+  etiquetaDeActorExterno,
   CATEGORIAS_MOVIMIENTO,
   LLAVES_CLINICAS_EN_PACIENTE,
   REGLAS_CATEGORIA_POR_ACCION,
@@ -155,6 +157,7 @@ function dondeCompleto(f: FiltroMovimientos, conColumna: boolean, ahora: Date): 
 
 function nombreDelActor(f: FilaCruda): string {
   if (f.actorType === "admin") return "Soporte DaleControl";
+  if (esActorExterno(f.actorType)) return etiquetaDeActorExterno(f.actorType, f.changes);
   const n = `${f.firstName ?? ""} ${f.lastName ?? ""}`.trim();
   return n || "Alguien del equipo";
 }

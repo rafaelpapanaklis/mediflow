@@ -7,6 +7,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   const appt = await prisma.appointment.findUnique({
     where: { confirmToken: token },
-    select: { id: true, clinicId: true, startsAt: true, status: true, holdExpiresAt: true },
+    select: { id: true, clinicId: true, patientId: true, startsAt: true, status: true, holdExpiresAt: true },
   });
   // 404 genérico: no se distingue entre token inexistente o mal formado.
   if (!appt) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -43,6 +46,17 @@ export async function POST(req: NextRequest) {
       await prisma.appointment.update({
         where: { id: appt.id },
         data: { status: "CONFIRMED", confirmedAt: now },
+      });
+      await registrarMovimientoExterno({
+        actor: "public",
+        clinicId: appt.clinicId,
+        patientId: appt.patientId,
+        entityType: "appointment",
+        entityId: appt.id,
+        action: "update",
+        texto: `${textoCita.estado(appt.startsAt, appt.status, "CONFIRMED", await zonaDeClinica(appt.clinicId))} (desde el enlace de confirmación)`,
+        campos: ["status"],
+        req,
       });
       return NextResponse.json({ status: "CONFIRMED", changed: true });
     }
@@ -69,6 +83,17 @@ export async function POST(req: NextRequest) {
     });
     // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».
     await marcarPendienteSiHayDinero({ clinicId: appt.clinicId, appointmentId: appt.id, quien: "el paciente (enlace de confirmación)" });
+    await registrarMovimientoExterno({
+      actor: "public",
+      clinicId: appt.clinicId,
+      patientId: appt.patientId,
+      entityType: "appointment",
+      entityId: appt.id,
+      action: "update",
+      texto: `${textoCita.cancelada(appt.startsAt, await zonaDeClinica(appt.clinicId))} (desde el enlace de confirmación)`,
+      campos: ["status"],
+      req,
+    });
     return NextResponse.json({ status: "CANCELLED", changed: true });
   }
   if (appt.status === "CANCELLED") {

@@ -52,7 +52,8 @@ export function esColumnaPatientIdAusente(e: unknown): boolean {
 
 export interface FilaBitacora {
   clinicId: string;
-  userId: string;
+  /** `null` solo para un actor externo (paciente, reserva web, bot); ver insertarFilaExterna. */
+  userId: string | null;
   entityType: string;
   entityId: string;
   action: string;
@@ -80,7 +81,7 @@ async function crearPorPrisma(fila: FilaBitacora): Promise<void> {
   await prisma.auditLog.create({
     data: {
       clinicId: fila.clinicId,
-      userId: fila.userId,
+      userId: fila.userId ?? null,
       entityType: fila.entityType,
       entityId: fila.entityId,
       action: fila.action,
@@ -128,5 +129,47 @@ export async function insertarFilaBitacora(fila: FilaBitacora): Promise<void> {
     // Falta el SQL: se recuerda un rato y la fila se guarda por el camino de siempre.
     marcarColumnaAusente();
     await crearPorPrisma(fila);
+  }
+}
+
+// ───────────────────── Actores que no son del equipo ─────────────────────
+
+/** Cuánto se recuerda «userId sigue siendo NOT NULL» antes de volver a intentar. */
+export const REINTENTO_USUARIO_NULO_MS = 2 * 60 * 1000;
+let sinUsuarioNuloHasta = 0;
+
+/** Solo para pruebas. */
+export function _reiniciarEstadoDeUsuarioNulo() {
+  sinUsuarioNuloHasta = 0;
+}
+
+export function usuarioNuloProbablementeNoPermitido(ahora: number = Date.now()): boolean {
+  return ahora < sinUsuarioNuloHasta;
+}
+
+/** ¿El error es «"userId" no acepta NULL» (falta sql/audit-logs-actor-externo.sql)? */
+export function esUsuarioNoNulo(e: unknown): boolean {
+  const err = e as { message?: unknown; code?: unknown; meta?: { code?: unknown; message?: unknown } } | null;
+  const texto = [err?.message, err?.meta?.message].filter((x): x is string => typeof x === "string").join(" ");
+  const codigo = String(err?.meta?.code ?? err?.code ?? "");
+  return /userId/i.test(texto) && (/null value|not-null|Null constraint|violates not-null/i.test(texto) || codigo === "23502" || codigo === "P2011");
+}
+
+/**
+ * Escribe la fila de alguien que NO es del equipo (`userId` null, `actorType`
+ * 'patient' | 'public' | 'bot'). Necesita que Rafael haya corrido
+ * sql/audit-logs-actor-externo.sql; sin él NO escribe, NO falla y no vuelve a
+ * intentarlo durante REINTENTO_USUARIO_NULO_MS. Devuelve si la fila quedó escrita.
+ */
+export async function insertarFilaExterna(fila: FilaBitacora): Promise<boolean> {
+  if (usuarioNuloProbablementeNoPermitido()) return false;
+  try {
+    await insertarFilaBitacora({ ...fila, userId: null });
+    return true;
+  } catch (e) {
+    if (!esUsuarioNoNulo(e)) throw e;
+    sinUsuarioNuloHasta = Date.now() + REINTENTO_USUARIO_NULO_MS;
+    console.warn("[movimientos] audit_logs.userId aún no acepta NULL: los movimientos del paciente/bot/reserva web no se registran hasta aplicar sql/audit-logs-actor-externo.sql");
+    return false;
   }
 }

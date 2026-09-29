@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { anotarPacienteCreadoPorBot } from "./movimientos-bot";
 import { nextPatientNumber, withPatientNumberRetry } from "@/lib/patients/next-patient-number";
 import { normalizeLast10 } from "./booking-parse";
 
@@ -35,7 +36,7 @@ export async function findOrCreateWhatsAppPatient(
   try {
     // El retry envuelve al $transaction (no al revés): una tx abortada por P2002
     // ya no admite queries, así que cada intento abre transacción nueva.
-    return await withPatientNumberRetry(() => prisma.$transaction(async (tx) => {
+    const creado = await withPatientNumberRetry(() => prisma.$transaction(async (tx) => {
       // Serializa creates concurrentes por clínica (igual que /api/public/book).
       await tx.$executeRaw`SELECT 1 FROM clinics WHERE id = ${clinicId} FOR UPDATE`;
       const patientNumber = await nextPatientNumber(clinicId, tx);
@@ -54,6 +55,9 @@ export async function findOrCreateWhatsAppPatient(
         select: { id: true },
       });
     }));
+    // ws1-t12 — el alta del paciente por el bot queda en sus movimientos.
+    await anotarPacienteCreadoPorBot({ clinicId, patientId: creado.id });
+    return creado;
   } catch (err) {
     console.error("[bot/booking] patient create failed", err);
     return null;

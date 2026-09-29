@@ -15,6 +15,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { hashPassword, verifyPassword } from "@/lib/patient-portal/crypto";
 import type { PacienteClinica, PacientePerfil, UpdateProfileBody } from "@/lib/patient-portal/types";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 
 export const dynamic = "force-dynamic";
 
@@ -165,6 +166,31 @@ export async function PATCH(req: NextRequest) {
     // El email NO se toca: es la identidad de vinculación de la cuenta.
     if (Object.keys(data).length > 0) {
       await prisma.patientAccount.update({ where: { id: ctx.account.id }, data });
+
+      // ws1-t12 — el propio paciente cambió sus datos del portal: queda en los
+      // movimientos de CADA ficha a la que su cuenta está ligada (sin valores).
+      const cambios: string[] = [];
+      if (data.name !== undefined) cambios.push("su nombre");
+      if (data.phone !== undefined) cambios.push("su teléfono");
+      if (data.passwordHash !== undefined) cambios.push("su contraseña del portal");
+      const campos = [
+        ...(data.name !== undefined ? ["name"] : []),
+        ...(data.phone !== undefined ? ["phone"] : []),
+      ];
+      const texto = `Cambió ${cambios.length > 1 ? `${cambios.slice(0, -1).join(", ")} y ${cambios[cambios.length - 1]}` : cambios[0]} desde su portal`;
+      for (const l of ctx.links) {
+        await registrarMovimientoExterno({
+          actor: "patient",
+          clinicId: l.clinicId,
+          patientId: l.patientId,
+          entityType: "patient",
+          entityId: l.patientId,
+          action: "update",
+          texto,
+          campos,
+          req,
+        });
+      }
     }
 
     return NextResponse.json({ ok: true });

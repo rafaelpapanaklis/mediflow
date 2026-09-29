@@ -12,6 +12,8 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende, MENSAJE_PUBLICO_FUERA_DE_HORARIO } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
 
 export async function POST(req: NextRequest) {
   try {
@@ -249,6 +251,18 @@ export async function POST(req: NextRequest) {
     }, { status: 409 });
   }
   const { appt, doctor } = booked;
+
+  // ws1-t12 — la reserva web queda en los movimientos del paciente (sin usuario del equipo).
+  await registrarMovimientoExterno({
+    actor: "public",
+    clinicId: clinic.id,
+    patientId: resolved.patientId,
+    entityType: "appointment",
+    entityId: appt.id,
+    action: "create",
+    texto: `${textoCita.agendada(appt.startsAt, clinic.timezone)} (reserva web)`,
+    req,
+  });
 
   // ── Send WhatsApp confirmation ─────────────────────────────────────────────
   if (clinic.waConnected && clinic.waPhoneNumberId && clinic.waAccessToken) {

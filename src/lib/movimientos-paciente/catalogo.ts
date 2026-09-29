@@ -621,3 +621,28 @@ export function deducirPatientId(args: {
   if (!esEntidadDePaciente(args.entityType)) return null;
   return patientIdEnCambios(args.changes);
 }
+
+// ───────────────────────────── Actores externos ─────────────────────────────
+
+/** Quién no es del equipo pero deja movimientos: `audit_logs.actorType`. */
+export type ActorExterno = "patient" | "public" | "bot";
+
+export const ETIQUETA_ACTOR_EXTERNO: Record<ActorExterno, string> = {
+  patient: "El paciente (portal)",
+  public: "Reserva web",
+  bot: "Bot de WhatsApp",
+};
+
+export function esActorExterno(actorType: string | null | undefined): actorType is ActorExterno {
+  return actorType === "patient" || actorType === "public" || actorType === "bot";
+}
+
+/**
+ * Cómo se llama quien hizo el movimiento cuando no es del equipo. Una fila puede
+ * precisar el origen en `changes._mov.after.actor` («El paciente (firma en
+ * línea)»); si no, la etiqueta de su tipo.
+ */
+export function etiquetaDeActorExterno(actorType: ActorExterno, changes: unknown): string {
+  const propia = comoObjeto(comoObjeto(comoObjeto(changes)?._mov)?.after)?.actor;
+  return typeof propia === "string" && propia.trim() ? propia.trim().slice(0, 60) : ETIQUETA_ACTOR_EXTERNO[actorType];
+}

@@ -59,6 +59,8 @@ import { doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
+import { fechaHoraParaTexto, textoCita } from "@/lib/movimientos-paciente/textos";
 
 export const dynamic = "force-dynamic";
 
@@ -247,6 +249,19 @@ export async function POST(
       console.error("[paciente/change-request] create error:", err);
       return NextResponse.json({ error: "internal_error" }, { status: 500 });
     }
+    await registrarMovimientoExterno({
+      actor: "patient",
+      clinicId: appt.clinicId,
+      patientId: appt.patientId,
+      entityType: "appointment",
+      entityId: appt.id,
+      action: "update",
+      texto:
+        type === "RESCHEDULE"
+          ? `Pidió cambiar su cita del ${fechaHoraParaTexto(appt.startsAt, appt.clinic.timezone)} al ${fechaHoraParaTexto(proposedStartsAt, appt.clinic.timezone)}`
+          : `Pidió cancelar su cita del ${fechaHoraParaTexto(appt.startsAt, appt.clinic.timezone)}`,
+      req,
+    });
     return NextResponse.json({ ok: true, autoApproved: false, status: "PENDING" });
   }
 
@@ -334,6 +349,20 @@ export async function POST(
     console.error("[paciente/change-request] auto-approve error:", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
+
+  await registrarMovimientoExterno({
+    actor: "patient",
+    clinicId: appt.clinicId,
+    patientId: appt.patientId,
+    entityType: "appointment",
+    entityId: appt.id,
+    action: "update",
+    texto:
+      type === "RESCHEDULE"
+        ? `${textoCita.movida(appt.startsAt, proposedStartsAt!, appt.clinic.timezone)} (aprobado solo)`
+        : `${textoCita.cancelada(appt.startsAt, appt.clinic.timezone)} (a petición suya)`,
+    req,
+  });
 
   // Best-effort FUERA de la tx: nunca rompen la respuesta.
   // Los recordatorios ya se reprogramaron DENTRO de la transacción.

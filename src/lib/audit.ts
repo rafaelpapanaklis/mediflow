@@ -181,7 +181,7 @@ export async function logAudit(opts: AuditOptions) {
  * x-forwarded-for (Vercel), x-real-ip (Cloudflare/nginx) o cf-connecting-ip.
  * Devuelve undefined si no encuentra header — es opcional.
  */
-export function extractAuditMeta(req: NextRequest): { ipAddress?: string; userAgent?: string } {
+export function extractAuditMeta(req: Pick<Request, "headers">): { ipAddress?: string; userAgent?: string } {
   const xff = req.headers.get("x-forwarded-for");
   const ipAddress =
     (xff ? xff.split(",")[0]!.trim() : null) ??

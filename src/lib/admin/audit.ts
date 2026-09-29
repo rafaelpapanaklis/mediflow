@@ -13,6 +13,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { esActorExterno, etiquetaDeActorExterno } from "@/lib/movimientos-paciente/catalogo";
 import {
   buildAuditWhere,
   clampPage,
@@ -73,8 +74,14 @@ export async function queryAuditLogs(filters: AuditQueryFilters): Promise<AuditQ
       id: r.id,
       clinicId: r.clinicId,
       clinicName: r.clinic?.name ?? null,
-      userId: r.userId,
-      userName: fullName || r.user?.email || r.userId,
+      // ws1-t12 — quien no es del equipo (paciente, reserva web, bot) no tiene usuario:
+      // userId llega null y se nombra por su tipo de actor.
+      userId: r.userId ?? "",
+      userName:
+        fullName ||
+        r.user?.email ||
+        (esActorExterno(r.actorType) ? etiquetaDeActorExterno(r.actorType, r.changes) : r.userId) ||
+        "—",
       userEmail: r.user?.email ?? null,
       userRole: r.user?.role ?? null,
       entityType: r.entityType,

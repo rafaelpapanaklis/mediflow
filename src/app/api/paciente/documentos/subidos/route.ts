@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { removeFileFromStorage } from "@/lib/storage";
 import type { PacienteSubido } from "@/lib/patient-portal/types";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export async function DELETE(req: Request) {
 
     const up = await prisma.patientUpload.findUnique({
       where: { id },
-      select: { id: true, accountId: true, storageKey: true },
+      select: { id: true, accountId: true, storageKey: true, clinicId: true, patientId: true },
     });
     // Solo el dueño (la cuenta del paciente) puede borrar. 404 genérico.
     if (!up || up.accountId !== ctx.account.id) return notFound();
@@ -83,6 +84,18 @@ export async function DELETE(req: Request) {
       console.error("[paciente/documentos/subidos] storage remove:", e);
     }
     await prisma.patientUpload.delete({ where: { id: up.id } });
+
+    await registrarMovimientoExterno({
+      actor: "patient",
+      clinicId: up.clinicId,
+      patientId: up.patientId,
+      entityType: "patient-file",
+      entityId: up.id,
+      action: "delete",
+      categoria: "archivos",
+      texto: "Quitó un documento que había subido desde su portal",
+      req,
+    });
 
     return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (err) {

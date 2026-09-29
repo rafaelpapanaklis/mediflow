@@ -20,6 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { signMaybeUrl } from "@/lib/storage";
 import { signaturePath, uploadSignature, validateSignatureDataUrl } from "@/lib/consent/signature";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 
 /** Lo que ve el paciente. Nunca salen ids internos ni el resto del expediente. */
 const PUBLIC_SELECT = {
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
   const form = await prisma.consentForm.findUnique({
     where: { token: params.token },
-    select: { id: true, clinicId: true, expiresAt: true, signedAt: true, revokedAt: true, deletedAt: true },
+    select: { id: true, clinicId: true, patientId: true, expiresAt: true, signedAt: true, revokedAt: true, deletedAt: true },
   });
 
   if (!form || form.deletedAt) {
@@ -161,9 +162,20 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     return NextResponse.json({ error: "Ya fue firmado" }, { status: 409 });
   }
 
-  // NO se escribe en audit_logs: el firmante es el paciente, no un usuario de
-  // la clínica, y AuditLog.userId es FK estricta a users. La evidencia de la
-  // firma vive en la propia fila (signedAt/signedIp/signedUserAgent) y el alta
-  // del documento sí quedó auditada en POST /api/consent.
+  // ws1-t12 — antes NO se escribía aquí: el firmante es el paciente, no un usuario de
+  // la clínica, y AuditLog.userId era FK estricta. Ahora queda como movimiento del
+  // paciente con actor externo (sql/audit-logs-actor-externo.sql; sin él no escribe
+  // y no falla). La evidencia legal sigue en la propia fila (signedAt/signedIp/UA).
+  await registrarMovimientoExterno({
+    actor: "patient",
+    origen: "El paciente (firma en línea)",
+    clinicId: form.clinicId,
+    patientId: form.patientId,
+    entityType: "consent",
+    entityId: form.id,
+    action: "update",
+    texto: "Firmó un consentimiento desde el enlace",
+    req,
+  });
   return NextResponse.json({ success: true, signedAt: now.toISOString() });
 }

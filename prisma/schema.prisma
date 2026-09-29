@@ -3099,7 +3099,11 @@ model SubscriptionInvoice {
 model AuditLog {
   id         String   @id @default(cuid())
   clinicId   String
-  userId     String
+  // ws1-t12 — NULL solo para quien no es del equipo (actorType "patient" | "public" |
+  // "bot": el propio paciente en su portal, la reserva web, el bot de WhatsApp).
+  // La columna sigue siendo NOT NULL en BD hasta que Rafael corra
+  // sql/audit-logs-actor-externo.sql; sin él esas filas simplemente no se escriben.
+  userId     String?
   entityType String // "patient" | "appointment" | "invoice" | "record"
   entityId   String
   action     String // "create" | "update" | "delete" | "view"
@@ -3125,7 +3129,7 @@ model AuditLog {
   // real en BD es ON DELETE RESTRICT (ver sql/nom-audit-immutable.sql, aplicado
   // a mano). Se declara Restrict aquí para que el ORM no reintroduzca CASCADE.
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Restrict)
-  user   User   @relation(fields: [userId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
 
   @@index([clinicId, entityType, entityId])
   @@index([clinicId, createdAt])
