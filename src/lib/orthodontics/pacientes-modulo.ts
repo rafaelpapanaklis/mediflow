@@ -22,6 +22,12 @@
 import { differenceInMonths } from "date-fns";
 import { nombreDeTecnica } from "./tecnicas-de-la-clinica";
 import {
+  evaluarEliminacion,
+  explicacionDeHistorial,
+  type HistorialDelCaso,
+  type VeredictoDeEliminacion,
+} from "./eliminar-caso";
+import {
   ETIQUETA_ESTADO_CASO,
   resumenOrtoParaFicha,
   type EstadoCasoOrto,
@@ -81,6 +87,22 @@ export interface FilaDeCaso {
   vencidoMxn: number;
   colocadoEsteMes: boolean;
   retiradoEsteMes: boolean;
+  /** ws1-t8: cuándo se colocó (ISO), o `null` si el caso aún no se coloca. */
+  inicio: string | null;
+  /** ws1-t8: lo que falta por pagar de la factura del tratamiento; `null` = sin factura. */
+  saldoMxn: number | null;
+  /**
+   * ws1-t8: si el caso se puede eliminar (abierto por error, sin historial).
+   * `explicacion` es lo que se le dice cuando NO se puede; vacío si no se sabe.
+   */
+  eliminar: VeredictoDeEliminacion & { explicacion: string };
+}
+
+/** Lo que la lista sabe de cada caso además de lo clínico: el saldo y qué tiene (para «Eliminar»). */
+export interface LoDelDineroYElHistorial {
+  saldoMxn: number | null;
+  /** Sin él no se sabe si el caso tiene historial, y «Eliminar» no se ofrece. */
+  historial?: HistorialDelCaso;
 }
 
 /** Las mismas palabras que la pestaña Ortodoncia de la ficha (`redesign/adapter.ts`). */
@@ -113,6 +135,7 @@ export function filaDeCaso(
   clinico: LoClinicoDelCaso | undefined,
   controles: ControlesDelPaciente | undefined,
   ahora: Date,
+  extra?: LoDelDineroYElHistorial,
 ): FilaDeCaso | null {
   const estado = ESTADO_POR_STATUS[String(caso.status)];
   // Un estado que no se conoce no se pinta: mejor una fila menos que una mal dicha.
@@ -144,7 +167,23 @@ export function filaDeCaso(
     colocadoEsteMes: caso.installedAt !== null && mismoMes(caso.installedAt, ahora),
     retiradoEsteMes:
       (caso.status === "RETENTION" || caso.status === "COMPLETED") && mismoMes(caso.statusUpdatedAt, ahora),
+    inicio: caso.installedAt ? caso.installedAt.toISOString() : null,
+    saldoMxn: extra?.saldoMxn ?? null,
+    eliminar: veredictoDeLaFila(extra?.historial),
   };
+}
+
+function veredictoDeLaFila(h: HistorialDelCaso | undefined): FilaDeCaso["eliminar"] {
+  // Sin saber qué tiene el caso, no se ofrece borrarlo ni se dice que tiene historial.
+  if (!h) return { puede: false, motivos: [], facturasACancelar: 0, explicacion: "" };
+  const v = evaluarEliminacion(h);
+  return { ...v, explicacion: explicacionDeHistorial(v) };
+}
+
+/** Lo que falta por pagar de una factura: total menos lo cobrado, sin bajar de cero. */
+export function saldoDeFactura(total: unknown, pagos: ReadonlyArray<{ amount: unknown }>): number {
+  const pagado = pagos.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  return Math.max(0, Math.round(((Number(total) || 0) - pagado) * 100) / 100);
 }
 
 /**

@@ -1,4 +1,4 @@
-// «Pacientes en tratamiento» del módulo: filas clínicas y filtros
+// «Casos» del módulo: filas clínicas y filtros
 // (ws1-t4 ronda 6, filas 18, 19 y 20 de la revisión de lógica de uso).
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";

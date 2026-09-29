@@ -108,7 +108,7 @@ test("el submenú conserva los seis apartados, con su nombre, marca el abierto y
   );
   assert.deepEqual(apartados, [
     ["tablero", "Tablero", "Tablero"],
-    ["pacientes", "Pacientes en tratamiento", "Pacientes"],
+    ["pacientes", "Casos", "Casos"],
     ["cobranza", "Cobranza de mensualidades", "Cobranza"],
     ["controles", "Controles / agenda", "Controles"],
     ["alertas", "Alertas", "Alertas"],

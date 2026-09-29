@@ -104,6 +104,8 @@ import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
 import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
 import { buildEmptySuggestion } from "@/lib/patient-detail/empty-suggestion";
 import { OrthodonticsPatientTab } from "@/components/specialties/orthodontics/redesign/OrthodonticsPatientTab";
+import { SelectorDeCasos } from "@/components/specialties/orthodontics/modulo/selector-de-casos";
+import type { CasoDelPaciente } from "@/lib/orthodontics/casos-del-paciente";
 import { SoloLectura } from "@/components/specialties/orthodontics/redesign/SoloLectura";
 import { OrtodonciaAdministrativa } from "@/components/specialties/orthodontics/redesign/OrtodonciaAdministrativa";
 
@@ -311,6 +313,8 @@ interface Props {
    * treatmentStatus derivado. Cuando viene null se usa todo en empty state.
    */
   orthoRedesignBundle?: OrthoRedesignBundle | null;
+  /** ws1-t8: los casos vivos del paciente; con más de uno se enseña «Casos de este paciente». */
+  orthoCasos?: CasoDelPaciente[];
   /**
    * H24 (QA ws1-t9): doctor tratante y representante legal del caso de
    * ortodoncia (si hay uno abierto) — precargan «Nuevo consentimiento» en
@@ -454,6 +458,7 @@ export function PatientDetailClient({
   orthoSoloAdministrativo = false,
   orthoRedesignVM,
   orthoRedesignBundle,
+  orthoCasos = [],
   orthoTreatingDoctorId = null,
   orthoResponsibleGuardian = null,
   activityCounts,
@@ -2009,7 +2014,10 @@ export function PatientDetailClient({
           )}
           {tab === "ortodoncia" && !orthoSoloAdministrativo && (
             <SoloLectura activo={orthoSoloLectura}>
+            <SelectorDeCasos patientId={patient.id} casos={orthoCasos} actualId={orthoData?.plan?.id ?? null} />
             <OrthodonticsPatientTab
+              // Al cambiar de caso la pestaña arranca limpia (cajones y avisos del caso anterior).
+              key={orthoData?.plan?.id ?? "sin-caso"}
               patient={patient}
               fullName={fullName}
               nextAppt={nextAppt}

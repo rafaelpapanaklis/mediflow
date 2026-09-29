@@ -41,6 +41,11 @@ async function columnaExiste(): Promise<boolean> {
   }
 }
 
+/** ¿Existe `invoices.orthodonticTreatmentPlanId` en esta base? (ws1-t8: eliminar un caso mira sus facturas.) */
+export async function existeColumnaDeFacturasDelCaso(): Promise<boolean> {
+  return columnaExiste();
+}
+
 /** Solo para pruebas: olvida lo que se sabía de la columna. */
 export function _olvidarColumnaExtras(): void {
   columna = null;

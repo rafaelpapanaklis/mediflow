@@ -1,6 +1,7 @@
 // Orthodontics — helper compartido. SPEC §6.
 
 import { differenceInMonths, differenceInYears } from "date-fns";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { patientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import type {
@@ -17,6 +18,12 @@ import type {
 export interface LoadOrthoDataInput {
   clinicId: string;
   patientId: string;
+  /**
+   * ws1-t8 — el caso que se pidió (`?caso=`) cuando el paciente tiene más de uno.
+   * Sin él, o si no es un caso vivo de este paciente, sale el caso activo más
+   * reciente (y si todos cerraron, el más reciente).
+   */
+  planId?: string | null;
 }
 
 export interface OrthoTabData {
@@ -107,12 +114,23 @@ export async function loadOrthoData(
     // PediatricProfile no existe en schema — Pediatría no instalada, ignorar.
   }
 
+  const planPedido = fetchPlanTolerante(patient.id, input.clinicId, input.planId ?? null);
   const [diagnosis, plan, photoSets, controls, digitalRecords] = await Promise.all([
-    prisma.orthodonticDiagnosis.findFirst({
-      where: { patientId: patient.id, clinicId: input.clinicId, deletedAt: null },
-      orderBy: { diagnosedAt: "desc" },
+    planPedido.then(async (p) => {
+      // Un caso pedido a propósito enseña SU diagnóstico (uno por caso); sin
+      // pedirlo, el más reciente del paciente, como siempre (es el que usa «Abrir caso»).
+      if (input.planId && p?.id === input.planId) {
+        const suyo = await prisma.orthodonticDiagnosis.findFirst({
+          where: { id: p.diagnosisId, patientId: patient.id, clinicId: input.clinicId, deletedAt: null },
+        });
+        if (suyo) return suyo;
+      }
+      return prisma.orthodonticDiagnosis.findFirst({
+        where: { patientId: patient.id, clinicId: input.clinicId, deletedAt: null },
+        orderBy: { diagnosedAt: "desc" },
+      });
     }),
-    fetchPlanTolerante(patient.id, input.clinicId),
+    planPedido,
     prisma.orthoPhotoSet.findMany({
       where: { patientId: patient.id, clinicId: input.clinicId },
       include: {
@@ -267,8 +285,21 @@ function esRelacionAusente(e: unknown): boolean {
 async function fetchPlanTolerante(
   patientId: string,
   clinicId: string,
+  planId: string | null = null,
 ): Promise<OrthodonticTreatmentPlanRow | null> {
-  const where = { patientId, clinicId, deletedAt: null } as const;
+  const base = { patientId, clinicId, deletedAt: null } as const;
+  // ws1-t8: el caso pedido; si no hay, el activo más reciente; si todos cerraron, el más reciente.
+  if (planId) {
+    const pedido = await leerPlanTolerante({ ...base, id: planId });
+    if (pedido) return pedido;
+  }
+  const activo = await leerPlanTolerante({ ...base, status: { notIn: ["COMPLETED", "DROPPED_OUT"] } });
+  return activo ?? leerPlanTolerante(base);
+}
+
+async function leerPlanTolerante(
+  where: Prisma.OrthodonticTreatmentPlanWhereInput,
+): Promise<OrthodonticTreatmentPlanRow | null> {
   try {
     return await prisma.orthodonticTreatmentPlan.findFirst({
       where,

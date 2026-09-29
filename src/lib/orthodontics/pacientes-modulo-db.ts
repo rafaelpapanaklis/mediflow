@@ -15,9 +15,12 @@ import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import { loadOrthoCases } from "./tablero-data";
 import { cargarNombresDeTecnica } from "./tecnicas-de-la-clinica-db";
+import { existeColumnaDeFacturasDelCaso } from "./cobro/extras-db";
+import { leerHistorialDeCasos } from "./eliminar-caso-db";
 import {
   controlesPorPaciente,
   filaDeCaso,
+  saldoDeFactura,
   type FilaDeCaso,
   type LoClinicoDelCaso,
 } from "./pacientes-modulo";
@@ -36,11 +39,13 @@ export async function cargarFilasDeCasos(
   zonaHoraria: string,
   viewer: VisibilityViewer,
   ahora: Date = new Date(),
+  /** ws1-t8: leer también qué tiene cada caso (para ofrecer «Eliminar»). Solo lo pide quien puede editar el expediente. */
+  opciones: { conHistorial?: boolean } = {},
 ): Promise<FilaDeCaso[]> {
   // `clinicId: undefined` en Prisma NO filtra: sin clínica no se consulta nada.
   if (!clinicId) return [];
 
-  const { cases } = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
+  const { cases, invoiceIdByPlanId, invoicesById } = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
   if (cases.length === 0) return [];
 
   const planIds = cases.map((c) => c.planId);
@@ -49,7 +54,7 @@ export async function cargarFilasDeCasos(
   const [planes, citas, hojas, nombresDeTecnica] = await Promise.all([
     prisma.orthodonticTreatmentPlan.findMany({
       where: { clinicId, id: { in: planIds } },
-      select: { id: true, technique: true, phases: { select: { status: true, phaseKey: true } } },
+      select: { id: true, technique: true, createdAt: true, phases: { select: { status: true, phaseKey: true } } },
     }),
     prisma.appointment.findMany({
       where: {
@@ -80,6 +85,29 @@ export async function cargarFilasDeCasos(
     cargarNombresDeTecnica(clinicId, planIds),
   ]);
 
+  // ws1-t8: qué tiene cada caso, en tandas propias (menos de 7 consultas cada una).
+  const historiales = opciones.conHistorial
+    ? await leerHistorialDeCasos(
+        prisma,
+        clinicId,
+        cases.flatMap((c) => {
+          const creado = planes.find((p) => p.id === c.planId)?.createdAt;
+          return creado
+            ? [{ id: c.planId, patientId: c.patientId, createdAt: creado, invoiceId: invoiceIdByPlanId.get(c.planId) ?? null }]
+            : [];
+        }),
+        { tolerante: true, columnaDeFacturas: await existeColumnaDeFacturasDelCaso() },
+      ).catch((e: unknown) => {
+        // Sin saber qué tiene cada caso, «Eliminar» no se ofrece; la lista sale igual.
+        console.warn("[ortodoncia:casos] no se pudo leer el historial de los casos:", e);
+        return null;
+      })
+    : null;
+  const saldoDe = (planId: string): number | null => {
+    const factura = invoicesById.get(invoiceIdByPlanId.get(planId) ?? "");
+    return factura && factura.status !== "CANCELLED" ? saldoDeFactura(factura.total, factura.payments) : null;
+  };
+
   const clinico = new Map<string, LoClinicoDelCaso>(
     planes.map((p) => [p.id, { technique: p.technique, techniqueLabel: nombresDeTecnica.get(p.id) ?? null, phases: p.phases }]),
   );
@@ -90,7 +118,12 @@ export async function cargarFilasDeCasos(
   );
 
   return cases
-    .map((c) => filaDeCaso(c, clinico.get(c.planId), controles.get(c.patientId), ahora))
+    .map((c) =>
+      filaDeCaso(c, clinico.get(c.planId), controles.get(c.patientId), ahora, {
+        saldoMxn: saldoDe(c.planId),
+        historial: historiales?.get(c.planId),
+      }),
+    )
     .filter((f): f is FilaDeCaso => f !== null)
     .sort((a, b) => a.patientName.localeCompare(b.patientName, "es"));
 }

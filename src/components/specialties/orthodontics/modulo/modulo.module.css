@@ -1987,3 +1987,155 @@
     display: block;
   }
 }
+
+/* ── Casos: acciones por fila, eliminar y selector de casos (ws1-t8) ──── */
+
+.boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.botonPeligro {
+  border-color: var(--pr-peligro);
+  background: transparent;
+  color: var(--pr-peligro);
+}
+
+@media (hover: hover) {
+  .botonPeligro:hover:not(:disabled) {
+    background: var(--pr-peligro-suave);
+    border-color: var(--pr-peligro);
+    color: var(--pr-peligro);
+  }
+}
+
+.botonPeligro:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+@keyframes ortoGiro {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.girando {
+  animation: ortoGiro 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando {
+    animation: none;
+  }
+}
+
+.dialogoCuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 18px 16px;
+  overflow-y: auto;
+}
+
+.dialogoCuerpo .dialogoSub {
+  margin: 0;
+}
+
+.avisoEliminar {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--pr-alerta);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-alerta-suave);
+  color: var(--pr-texto);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* La columna de acciones de cada caso: ver, editar, eliminar — o por qué no se elimina. */
+.accionesCaso {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.notaHistorial {
+  flex: 1 1 100%;
+  text-align: right;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--pr-texto-3);
+}
+
+@container orto (max-width: 640px) {
+  .tabla td.accionesCaso {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .notaHistorial {
+    text-align: left;
+  }
+}
+
+/* «Casos de este paciente» en la ficha: una fila corta de casos para cambiar entre ellos. */
+.selectorCasos {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-size: 12.5px;
+}
+
+.selectorCasosTitulo {
+  margin-right: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.casoOpcion {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 999px;
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.casoOpcion:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+@media (hover: hover) {
+  .casoOpcion:hover {
+    background: var(--pr-hover);
+  }
+}
+
+.casoOpcionActivo,
+.casoOpcionActivo:hover {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}

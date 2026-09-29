@@ -63,6 +63,8 @@ import type {
 export interface LoadOrthoRedesignInput {
   clinicId: string;
   patientId: string;
+  /** ws1-t8: el caso pedido con `?caso=` (ver `LoadOrthoDataInput.planId`). */
+  planId?: string | null;
 }
 
 export type OrthoTreatmentStatus =

@@ -77,12 +77,15 @@ test("caso 2 — con el módulo y un caso en CUALQUIER estado, la pestaña compl
     ["COMPLETED", "DROPPED_OUT", "IN_PROGRESS", "ON_HOLD", "PLANNED", "RETENTION"],
     "abierto, en pausa, en retención, terminado y abandonado: todos",
   );
-  // El cargador trae el ÚLTIMO plan del paciente sin mirar su estado: uno
-  // terminado o abandonado llega igual, y por eso cuenta.
+  // El cargador prefiere el caso ACTIVO más reciente (ws1-t8: con más de un caso,
+  // el viejo terminado no tapa al nuevo), pero si todos cerraron trae el último
+  // plan del paciente sin mirar su estado: uno terminado o abandonado llega
+  // igual, y por eso cuenta.
   const cargador = leer("src/lib/orthodontics/load-data.ts");
-  assert.match(cargador, /const where = \{ patientId, clinicId, deletedAt: null \} as const;/);
+  assert.match(cargador, /const base = \{ patientId, clinicId, deletedAt: null \} as const;/);
   const busqueda = cargador.slice(cargador.indexOf("async function fetchPlanTolerante"));
-  assert.doesNotMatch(busqueda.slice(0, 900), /status:/, "no filtra por estado");
+  assert.match(busqueda.slice(0, 900), /return activo \?\? leerPlanTolerante\(base\);/, "sin activo, el último sin mirar su estado");
+  assert.equal(busqueda.slice(0, 900).match(/status:/g)?.length, 1, "solo el intento del caso activo mira el estado");
 });
 
 // ── Caso 3: nunca tuvo caso ──────────────────────────────────────────────

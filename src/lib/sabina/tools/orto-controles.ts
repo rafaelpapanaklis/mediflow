@@ -233,7 +233,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
   avisoObligatorio(d) {
     if (d.modulo !== "activo") return avisoSinModulo(d.modulo);
     if (d.que === "casos") {
-      return avisoEnlace("abrir un caso o entrar al de un paciente", "Pacientes en tratamiento", d.enlace);
+      return avisoEnlace("abrir un caso o entrar al de un paciente", "Casos de ortodoncia", d.enlace);
     }
     return avisoEnlace("registrar la hoja de un control", "Controles de ortodoncia", d.enlace);
   },
@@ -245,7 +245,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
     if (d.casos) {
       const c = d.casos;
       if (c.total === 0) {
-        return `No hay casos de ortodoncia registrados. Yo no los abro: se abren en [Pacientes en tratamiento](${d.enlace}).`;
+        return `No hay casos de ortodoncia registrados. Yo no los abro: se abren en [Casos de ortodoncia](${d.enlace}).`;
       }
       const detalle = c.porEstado
         .map((e) => {
@@ -257,7 +257,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
         `${plural(c.activos, "caso activo", "casos activos")} de ortodoncia, ${c.terminados} ` +
         `${c.terminados === 1 ? "terminado" : "terminados"} y ${c.abandonaron} en abandono (${detalle}). ` +
         `«Activo» cuenta por colocar, en curso, pausado y retención, como el Tablero. ` +
-        `La lista está en [Pacientes en tratamiento](${d.enlace}).`
+        `La lista está en [Casos de ortodoncia](${d.enlace}).`
       );
     }
 

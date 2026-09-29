@@ -1,6 +1,10 @@
-// Ortodoncia — Pacientes en tratamiento (ws1-t2, Ola 1). La lista de casos
-// activos, con su fase y su cobranza real (factura del tratamiento, decisión
+// Ortodoncia — «Casos» (antes «Pacientes en tratamiento», ws1-t2, Ola 1). La
+// lista de casos con su etapa y su saldo real (factura del tratamiento, decisión
 // 1 de la arquitectura). La guarda de módulo corre en el layout y, otra vez, aquí.
+//
+// ws1-t8: es LA sección de casos del módulo (la ruta se queda en /pacientes:
+// hay enlaces, atajos del Tablero y pruebas que la usan). Cada fila se ve,
+// se edita y, si se abrió por error y no tiene nada, se elimina.
 //
 // Diseño (ws1-t3): solo cambia cómo se pinta; las filas salen igual que antes.
 //
@@ -34,17 +38,19 @@ export default async function OrthodonticsPacientesPage({
   await exigirModuloOrtodoncia();
   const user = await getCurrentUser();
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
-  const rows = await cargarFilasDeCasos(user.clinicId, user.clinic.timezone, viewer);
+  const permisos = { role: user.role, permissionsOverride: user.permissionsOverride };
+  const puedeAbrirCaso = hasPermission(permisos, "medicalRecord.edit");
+  // Editar y eliminar piden lo mismo que abrir un caso (escribir el expediente);
+  // cancelar la factura sin pagos de un caso eliminado pide, además, reembolsos.
+  const puedeCancelarFacturas = hasPermission(permisos, "billing.refund");
+  const rows = await cargarFilasDeCasos(user.clinicId, user.clinic.timezone, viewer, new Date(), {
+    conHistorial: puedeAbrirCaso,
+  });
   const activos = contarPorEstado(rows).activos;
-
-  const puedeAbrirCaso = hasPermission(
-    { role: user.role, permissionsOverride: user.permissionsOverride },
-    "medicalRecord.edit",
-  );
 
   return (
     <Pantalla
-      titulo="Pacientes en tratamiento"
+      titulo="Casos"
       sub={`${activos} caso${activos === 1 ? "" : "s"} activo${activos === 1 ? "" : "s"}${
         rows.length > activos ? ` · ${rows.length} en total` : ""
       }.`}
@@ -53,6 +59,7 @@ export default async function OrthodonticsPacientesPage({
       <OrthoPacientesTable
         rows={rows}
         puedeAbrirCaso={puedeAbrirCaso}
+        puedeCancelarFacturas={puedeCancelarFacturas}
         zonaHoraria={user.clinic.timezone}
         estadoInicial={leerFiltroEstado(searchParams?.estado)}
         verInicial={leerFiltroVer(searchParams?.ver)}

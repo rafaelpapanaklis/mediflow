@@ -73,7 +73,7 @@ export const DESTINOS_ORTODONCIA: readonly DestinoOrtodoncia[] = [
   },
   {
     id: "orto:pacientes",
-    label: "Ortodoncia: Pacientes en tratamiento",
+    label: "Ortodoncia: Casos",
     sub: "Todos los casos de ortodoncia de la clínica",
     href: "/dashboard/orthodontics/pacientes",
     keywords: ["ortodoncia", "brackets", "alineadores", "casos", "caso", "tratamiento", "abrir caso"],

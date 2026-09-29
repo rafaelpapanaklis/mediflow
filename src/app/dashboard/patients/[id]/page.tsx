@@ -27,6 +27,8 @@ import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { accesoDeOrtodonciaEnLaFicha, vistaOrtoPorPermisos } from "@/lib/orthodontics/pestana-ficha";
 import { COOKIE_VISTA_PREVIA_SIN_MODULO, moduloActivoALaVista, vistaPreviaSinModulo } from "@/lib/orthodontics/contratar";
 import { pacienteTuvoCasoDeOrtodoncia } from "@/lib/orthodontics/tuvo-caso";
+import { leerCasoPedido, type CasoDelPaciente } from "@/lib/orthodontics/casos-del-paciente";
+import { cargarCasosDelPaciente } from "@/lib/orthodontics/casos-del-paciente-db";
 import {
   loadOrthoRedesignData,
   type OrthoRedesignBundle,
@@ -48,7 +50,13 @@ import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { resolveReminderOutcome } from "@/lib/reminders/promise";
 import { parseNotifPrefs } from "@/lib/patient-notifications/types";
 
-export default async function PatientDetailPage({ params }: { params: { id: string } }) {
+export default async function PatientDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams?: { caso?: string | string[] };
+}) {
   const user = await getCurrentUser();
   const { t } = await getServerT();
   const tz = user.clinic.timezone;
@@ -431,6 +439,8 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   let orthoData: OrthoTabData | null = null;
   let orthoRedesignVM: OrthoRedesignViewModel | null = null;
   let orthoRedesignBundle: OrthoRedesignBundle | null = null;
+  // ws1-t8: los casos vivos del paciente, para «Casos de este paciente» (solo se enseña con más de uno).
+  let orthoCasos: CasoDelPaciente[] = [];
   // Decisión 3 del gerente: sin el módulo (venció, o nunca lo pagó) el paciente
   // que YA tiene o tuvo un caso conserva la LECTURA de su expediente (NOM-004:
   // no se oculta); crear o cobrar sigue bloqueado por el servidor. Solo se
@@ -462,11 +472,14 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     const redesign = await loadOrthoRedesignData({
       clinicId: user.clinicId,
       patientId: patient.id,
+      // ws1-t8: con más de un caso, `?caso=` elige cuál se ve (sin él, el activo).
+      planId: leerCasoPedido(searchParams?.caso),
     }, { userId: user.id, role: user.role, clinicId: user.clinicId });
     if (redesign) {
       orthoData = redesign.legacy;
       orthoRedesignVM = redesign.viewModel;
       orthoRedesignBundle = redesign.bundle;
+      orthoCasos = await cargarCasosDelPaciente(user.clinicId, patient.id);
     }
   }
 
@@ -652,6 +665,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           orthoSoloAdministrativo={orthoSoloAdministrativo}
           orthoRedesignVM={orthoRedesignVM}
           orthoRedesignBundle={orthoRedesignBundle}
+          orthoCasos={orthoCasos}
           orthoTreatingDoctorId={orthoTreatingDoctorId}
           orthoResponsibleGuardian={orthoResponsibleGuardian}
           activityCounts={activityCounts}

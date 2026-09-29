@@ -71,7 +71,7 @@ export function primerosPasosOrtodoncia(e: EstadoPrimerosPasos): PrimerosPasos {
       titulo: "Abre tu primer caso",
       detalle: "Busca al paciente y ábrele su caso de ortodoncia: diagnóstico, aparatología y duración estimada.",
       href: RUTA_PACIENTES_ORTODONCIA,
-      accion: "Ir a Pacientes",
+      accion: "Ir a Casos",
       hecho: e.casos > 0,
     },
   ];
@@ -82,7 +82,7 @@ export function primerosPasosOrtodoncia(e: EstadoPrimerosPasos): PrimerosPasos {
       titulo: "Abre el plan de pago del caso",
       detalle: "Desde la ficha del paciente, en Ortodoncia → Cobro: enganche, número de mensualidades y día de pago. Con eso el módulo ya sabe qué se debe y cuándo.",
       href: RUTA_PACIENTES_ORTODONCIA,
-      accion: "Ir a Pacientes",
+      accion: "Ir a Casos",
       hecho: e.casosConPlanDePago > 0,
     });
   }

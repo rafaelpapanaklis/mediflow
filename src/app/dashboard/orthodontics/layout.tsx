@@ -1,5 +1,5 @@
 // Ortodoncia — Ola 0 (ws1-t1): layout del módulo con su propio SUBMENÚ
-// (Tablero · Pacientes en tratamiento · Cobranza de mensualidades ·
+// (Tablero · Casos · Cobranza de mensualidades ·
 // Controles/agenda · Alertas · Configuración — decisión de Rafael) y la
 // guarda de módulo para las seis páginas de abajo.
 //
@@ -42,7 +42,7 @@ import { SubmenuOrtodoncia } from "@/components/specialties/orthodontics/modulo/
 // siempre el completo.
 const SUBMENU = [
   { href: "/dashboard/orthodontics/tablero", label: "Tablero", corto: "Tablero" },
-  { href: "/dashboard/orthodontics/pacientes", label: "Pacientes en tratamiento", corto: "Pacientes" },
+  { href: "/dashboard/orthodontics/pacientes", label: "Casos", corto: "Casos" },
   { href: "/dashboard/orthodontics/cobranza", label: "Cobranza de mensualidades", corto: "Cobranza" },
   { href: "/dashboard/orthodontics/controles", label: "Controles / agenda", corto: "Controles" },
   { href: "/dashboard/orthodontics/alertas", label: "Alertas", corto: "Alertas" },
