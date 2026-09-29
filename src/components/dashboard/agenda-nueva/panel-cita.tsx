@@ -64,6 +64,7 @@ import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useMinuto } from "./usar-minuto";
 import { ROPA_EDITAR_CITA } from "./ropa";
 import s from "./agenda-nueva.module.css";
+import { plazoApartadoEnPalabras } from "@/lib/agenda-nueva/plazo-apartado";
 
 /* ═══ Flujo de la cita ══════════════════════════════════════════════════
    El diseño enseña cinco pasos: Confirmada → Llegó → En consulta → Atendida
@@ -566,8 +567,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                   <Wallet size={18} strokeWidth={2} />
                 </span>
                 <span>
-                  Apartada · paga antes de las{" "}
-                  <span className={s.notaDato}>{formatTimeInTz(dto.holdExpiresAt, state.timezone)}</span>
+                  {/* H4 (revisión final, ws1-t4): con su día, no solo la hora. */}
+                  Apartada · paga antes de{" "}
+                  <span className={s.notaDato}>{plazoApartadoEnPalabras(dto.holdExpiresAt, ahora, state.timezone)}</span>
                 </span>
               </div>
             </div>

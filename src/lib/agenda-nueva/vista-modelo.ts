@@ -15,6 +15,7 @@
  */
 
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
+import { plazoApartadoEnPalabras } from "./plazo-apartado";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import type {
   AgendaAppointmentDTO,
@@ -228,7 +229,8 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
       ? dto.holdExpiresAt
       : null;
   const notaAnticipo = apartadaHasta
-    ? `Apartada · paga antes de ${formatTimeInTz(apartadaHasta, timezone)}`
+    ? // H4 (revisión final, ws1-t4): con su día — «mañana a las 19:00», no «19:00».
+      `Apartada · paga antes de ${plazoApartadoEnPalabras(apartadaHasta, ctx.ahora, timezone)}`
     : estado === "CONFIRMED" && dto.depositoPagado === true
       ? "Anticipo pagado"
       : null;

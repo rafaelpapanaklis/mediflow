@@ -290,12 +290,12 @@ test("una cita PENDING que espera validación la sigue marcando", () => {
 
 /* ── Ajuste 2 (ws1-t3) — notaAnticipo: «Apartada»/«Anticipo pagado» ───── */
 
-test("SCHEDULED con holdExpiresAt vivo: «Apartada · paga antes de HH:MM»", () => {
+test("SCHEDULED con holdExpiresAt vivo hoy: «Apartada · paga antes de las HH:MM»", () => {
   const v = aCitaVista(
     cita({ status: "SCHEDULED", holdExpiresAt: "2026-09-02T18:30:00.000Z" }), // 12:30 en México
     CTX,
   );
-  assert.equal(v.notaAnticipo, "Apartada · paga antes de 12:30");
+  assert.equal(v.notaAnticipo, "Apartada · paga antes de las 12:30");
 });
 
 test("SCHEDULED con holdExpiresAt YA VENCIDO: sin nota (el apartado ya no cuenta)", () => {
@@ -342,6 +342,14 @@ test("ortoMensualidadVencida ausente (undefined): avisoMensualidadVencida false 
   assert.equal(v.avisoMensualidadVencida, false);
 });
 
+test("H4: apartada hasta MAÑANA dice el día, no solo la hora (ws1-t4)", () => {
+  const v = aCitaVista(
+    cita({ status: "SCHEDULED", holdExpiresAt: "2026-09-04T01:00:00.000Z" }), // 3-sep 19:00 en México
+    CTX,
+  );
+  assert.equal(v.notaAnticipo, "Apartada · paga antes de mañana a las 19:00");
+});
+
 test("ortoMensualidadVencida false explícito: avisoMensualidadVencida false", () => {
   const v = aCitaVista(cita({ ortoMensualidadVencida: false }), CTX);
   assert.equal(v.avisoMensualidadVencida, false);
@@ -352,6 +360,6 @@ test("una cita con anticipo apartado Y mensualidad de ortodoncia vencida: las do
     cita({ status: "SCHEDULED", holdExpiresAt: "2026-09-02T18:30:00.000Z", ortoMensualidadVencida: true }),
     CTX,
   );
-  assert.equal(v.notaAnticipo, "Apartada · paga antes de 12:30");
+  assert.equal(v.notaAnticipo, "Apartada · paga antes de las 12:30");
   assert.equal(v.avisoMensualidadVencida, true);
 });
