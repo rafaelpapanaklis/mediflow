@@ -53,10 +53,13 @@ import {
   reducer,
   type PrecargaHoja,
 } from "./treatment-card-state";
+import { ProcedimientosDeVisita, type SeleccionDeProcedimiento } from "./ProcedimientosDeVisita";
 import orto from "../orto.module.css";
 
 export type DrawerCardSubmit = {
   cardId: string | null;
+  /** «Procedimientos de esta visita»: solo qué y cuántos (el precio sale del catálogo). undefined = no se tocan. */
+  procedimientos?: SeleccionDeProcedimiento[];
   soap: SOAP;
   hygiene: {
     plaquePct: number | null;
@@ -204,6 +207,9 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   // `justSigned` no depende de `props.card` (el padre puede no remontar el
   // componente con el card fresco): se arma con lo que el propio `onSign`
   // devolvió.
+  // «Procedimientos de esta visita»: lo elegido en esta hoja (undefined = aún no se cargó lo guardado).
+  const [procSel, setProcSel] = useState<SeleccionDeProcedimiento[] | undefined>(undefined);
+  const [procRecarga, setProcRecarga] = useState(0);
   const [justSigned, setJustSigned] = useState<{
     cardId: string;
     nextDate: string | null;
@@ -296,6 +302,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     activationsNote: state.activationsNote.trim() ? state.activationsNote : null,
     indications: state.indications.trim() ? state.indications : null,
     appointmentId: props.appointmentId ?? null,
+    ...(procSel !== undefined ? { procedimientos: procSel } : {}),
   });
 
   // Fila 12 (c): solo el Plan es obligatorio (S/O/A opcionales); un Plan
@@ -331,6 +338,16 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             </button>
           </header>
           <div className={orto.cajonCuerpo}>
+            {props.treatmentPlanId ? (
+              <ProcedimientosDeVisita
+                treatmentPlanId={props.treatmentPlanId}
+                cardId={justSigned.cardId}
+                soloLectura
+                seleccion={undefined}
+                onSeleccion={() => {}}
+                recarga={procRecarga}
+              />
+            ) : null}
             <section className={orto.bloque}>
               <div className={orto.bloqueCabeza}>
                 <h4 className={orto.bloqueTitulo}>Próximo control</h4>
@@ -499,6 +516,18 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             onMarkRebonded={(id) => dispatch({ kind: "mark-rebonded", id })}
             onRemove={(id) => dispatch({ kind: "remove-bracket", id })}
           />
+
+          {/* PROCEDIMIENTOS DE ESTA VISITA (incluidos / con costo aparte) */}
+          {props.treatmentPlanId ? (
+            <ProcedimientosDeVisita
+              treatmentPlanId={props.treatmentPlanId}
+              cardId={state.learnedCardId ?? props.card?.id ?? null}
+              soloLectura={isReadOnly}
+              seleccion={procSel}
+              onSeleccion={setProcSel}
+              recarga={procRecarga}
+            />
+          ) : null}
 
           {/* ACTIVACIONES (C2) */}
           <section className={orto.bloque}>
@@ -815,6 +844,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                     // falsy y el error ya se mostró por su cuenta
                     // (toast/aviso propio de cada caller).
                     setJustSigned({ cardId: id, nextDate: submit.nextDate, nextDurationMin: submit.nextDurationMin });
+                    setProcRecarga((n) => n + 1);
                   }
                 } finally {
                   setEnVuelo(false);

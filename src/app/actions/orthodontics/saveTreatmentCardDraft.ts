@@ -15,6 +15,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import type { Pedido } from "@/lib/orthodontics/procedimientos-de-visita";
+import { buscarNotaDeHoja, escribirNotaDeHoja, validarPedidos } from "@/lib/orthodontics/procedimientos-de-hoja-db";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -102,6 +104,10 @@ const inputSchema = z.object({
   activationsNote: z.string().nullable().optional(),
   /** C3: indicaciones para el paciente de ESTA visita. */
   indications: z.string().nullable().optional(),
+  /** «Procedimientos de esta visita»: solo QUÉ y CUÁNTOS (precio y tipo salen del catálogo). */
+  procedimientos: z
+    .array(z.object({ procedureId: z.string().min(1), quantity: z.number().int().min(1).max(20) }))
+    .optional(),
 });
 
 export type SaveTreatmentCardDraftInput = z.input<typeof inputSchema>;
@@ -140,6 +146,12 @@ export async function saveTreatmentCardDraft(
 
   const visitDate = new Date(data.visitDate);
   const nextDate = data.nextDate ? new Date(data.nextDate) : null;
+
+  // Los procedimientos se validan contra el catálogo ANTES de guardar nada.
+  if (data.procedimientos !== undefined) {
+    const errorProcedimientos = await validarPedidos({ clinicId: ctx.clinicId, cardId: data.cardId ?? null, pedidos: data.procedimientos as Pedido[] });
+    if (errorProcedimientos) return fail(errorProcedimientos);
+  }
 
   try {
     const cardId = await prisma.$transaction(async (tx) => {
@@ -297,6 +309,32 @@ export async function saveTreatmentCardDraft(
         } else {
           throw e;
         }
+      }
+    }
+
+    // Los procedimientos viajan con la hoja: en borrador quedan en la nota-borrador del
+    // expediente. Solo se crea esa nota si hay algo que guardar (o ya existía).
+    if (data.procedimientos !== undefined) {
+      try {
+        const nota = await buscarNotaDeHoja(plan.clinicId, cardId);
+        if (data.procedimientos.length > 0 || nota) {
+          await escribirNotaDeHoja({
+            clinicId: plan.clinicId,
+            patientId: plan.patientId,
+            planId: plan.id,
+            userId: ctx.userId,
+            cardId,
+            cardNumber: data.cardNumber,
+            visitDate: new Date(data.visitDate),
+            appointmentId: data.appointmentId ?? null,
+            soap: { s: data.soap.s ?? "", o: data.soap.o ?? "", a: data.soap.a ?? "", p: data.soap.p ?? "" },
+            pedidos: data.procedimientos as Pedido[] | undefined,
+            firmar: false,
+          });
+        }
+      } catch (e) {
+        console.warn("[ortho] saveTreatmentCardDraft: no se guardaron los procedimientos en la nota-borrador:", e);
+        return fail("El borrador se guardó, pero no se pudieron guardar sus procedimientos. Inténtalo de nuevo.");
       }
     }
 

@@ -119,6 +119,7 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
       nextDurationMin: payload.nextDurationMin,
       activationsNote: payload.activationsNote,
       indications: payload.indications,
+      procedimientos: payload.procedimientos,
     };
     const res = firmar ? await signTreatmentCard(base) : await saveTreatmentCardDraft(base);
     if (isFailure(res)) {
@@ -135,6 +136,10 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
     if (avisoControlSinFacturar) {
       toast.error(avisoControlSinFacturar, { duration: 8000 });
     }
+    const avisoProcedimientos = firmar
+      ? (res.data as { avisoProcedimientos?: string }).avisoProcedimientos
+      : undefined;
+    if (avisoProcedimientos) toast.error(avisoProcedimientos, { duration: 9000 });
     const avisoReposiciones = firmar ? (res.data as { avisoReposiciones?: string }).avisoReposiciones : undefined;
     if (avisoReposiciones) toast(avisoReposiciones, { duration: 9000 });
     // M11 (Ronda 6): al FIRMAR, el cajón se queda abierto — es él quien

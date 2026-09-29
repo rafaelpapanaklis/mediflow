@@ -31,6 +31,7 @@ import { fmtDateShort, fmtDay, fmtMoney } from "../atoms/format";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { DrawerCambiarPlanDePago } from "../drawers/DrawerCambiarPlanDePago";
+import { ExtrasPorCobrar } from "../../cobranza/ExtrasPorCobrar";
 import { DrawerCobrarExtra } from "../drawers/DrawerCobrarExtra";
 import { DrawerConfigCobro } from "../drawers/DrawerConfigCobro";
 import { DrawerElegirDescuento } from "../drawers/DrawerElegirDescuento";
@@ -269,6 +270,9 @@ export function SectionFinance(props: SectionFinanceProps) {
           </div>
         }
       >
+        <div style={{ padding: "0 18px" }}>
+          <ExtrasPorCobrar treatmentPlanId={props.treatmentPlanId} />
+        </div>
         {!panel.invoiceId ? (
           <div className={orto.tarjetaCuerpo}>
             <div className={orto.vacio}>

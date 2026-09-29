@@ -35,6 +35,7 @@ import {
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { ExtrasPorCobrar } from "@/components/specialties/orthodontics/cobranza/ExtrasPorCobrar";
 import { EnviarRecordatorioButton } from "@/components/specialties/orthodontics/EnviarRecordatorioButton";
 import { ListaMensualidades } from "@/components/specialties/orthodontics/cobranza/ListaMensualidades";
 import {
@@ -166,6 +167,9 @@ export function VistaCobranza({
           : "Nadie debe pagos vencidos."
       }
     >
+      {/* Procedimientos con costo aparte de hojas firmadas que siguen sin factura. */}
+      <ExtrasPorCobrar conPaciente />
+
       <div className={s.cuadros} role="group" aria-label="Filtrar los casos por su situación">
         {cuadros.map((c) => {
           const activo = filtro === c.id;

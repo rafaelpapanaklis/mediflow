@@ -15,6 +15,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
+import type { Pedido } from "@/lib/orthodontics/procedimientos-de-visita";
+import { escribirNotaDeHoja, validarPedidos } from "@/lib/orthodontics/procedimientos-de-hoja-db";
 import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -114,13 +116,21 @@ const inputSchema = z.object({
   activationsNote: z.string().nullable().optional(),
   /** C3: indicaciones para el paciente de ESTA visita. */
   indications: z.string().nullable().optional(),
+  /**
+   * «Procedimientos de esta visita»: solo QUÉ y CUÁNTOS. Nombre, precio y si es incluido
+   * o con costo aparte salen del catálogo en el servidor (procedimientos-de-visita.ts).
+   * undefined = no se tocan los que la hoja ya tenía guardados.
+   */
+  procedimientos: z
+    .array(z.object({ procedureId: z.string().min(1), quantity: z.number().int().min(1).max(20) }))
+    .optional(),
 });
 
 export type SignTreatmentCardInput = z.input<typeof inputSchema>;
 
 export async function signTreatmentCard(
   input: unknown,
-): Promise<ActionResult<{ cardId: string; avisoControlSinFacturar?: string; avisoReposiciones?: string }>> {
+): Promise<ActionResult<{ cardId: string; avisoControlSinFacturar?: string; avisoReposiciones?: string; avisoProcedimientos?: string }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -168,6 +178,13 @@ export async function signTreatmentCard(
     });
     if (!appt) return fail("La cita no pertenece a este paciente");
     citaDeControl = appt;
+  }
+
+  // Los procedimientos de la visita se validan ANTES de firmar: una hoja no puede quedar
+  // firmada con un procedimiento que el catálogo ya no ofrece (la firma es inalterable).
+  if (data.procedimientos !== undefined) {
+    const errorProcedimientos = await validarPedidos({ clinicId: ctx.clinicId, cardId: data.cardId ?? null, pedidos: data.procedimientos as Pedido[] });
+    if (errorProcedimientos) return fail(errorProcedimientos);
   }
 
   const visitDate = new Date(data.visitDate);
@@ -455,43 +472,30 @@ export async function signTreatmentCard(
     // control firmado el mismo día. Idempotente por
     // `specialtyData.treatmentCardId`: si alguna vez se permite re-firmar,
     // no duplica la nota.
+    // «Procedimientos de esta visita»: la nota se crea (o, si ya existía como borrador,
+    // se firma) con los procedimientos ESCRITOS en su texto (NOM-004) y guardados
+    // estructurados en su `specialtyData`. Una nota ya firmada no se reescribe.
+    let avisoProcedimientos: string | undefined;
     try {
-      const yaExiste = await prisma.medicalRecord.findFirst({
-        where: {
-          clinicId: plan.clinicId,
-          patientId: plan.patientId,
-          specialtyData: { path: ["treatmentCardId"], equals: cardId },
-        },
-        select: { id: true },
+      const nota = await escribirNotaDeHoja({
+        clinicId: plan.clinicId,
+        patientId: plan.patientId,
+        planId: plan.id,
+        userId: ctx.userId,
+        cardId,
+        cardNumber: data.cardNumber,
+        visitDate,
+        appointmentId: data.appointmentId ?? null,
+        soap,
+        pedidos: data.procedimientos as Pedido[] | undefined,
+        firmar: true,
       });
-      if (!yaExiste) {
-        await prisma.medicalRecord.create({
-          data: {
-            clinicId: plan.clinicId,
-            patientId: plan.patientId,
-            doctorId: ctx.userId,
-            visitDate,
-            subjective: soap.s,
-            objective: soap.o,
-            assessment: soap.a,
-            plan: soap.p,
-            specialtyData: {
-              type: "orthodontics",
-              // Visto en vivo: sin esto el historial de consultas pintaba la
-              // nota de un control FIRMADO como «Borrador» y ofrecía
-              // «Eliminar borrador». Misma forma que una nota firmada de
-              // /api/clinical-notes (NOM-024: inalterable).
-              status: "SIGNED",
-              signedAt: new Date().toISOString(),
-              treatmentCardId: cardId,
-              treatmentPlanId: plan.id,
-              appointmentId: data.appointmentId ?? null,
-              cardNumber: data.cardNumber,
-            },
-          },
-        });
+      if (!nota.ok) {
+        avisoProcedimientos = "La hoja se firmó, pero no se pudieron escribir sus procedimientos en la nota del expediente. Revísalos y anótalos a mano.";
+        console.warn("[ortho] signTreatmentCard: procedimientos no escritos en la nota:", nota.error);
       }
     } catch (e) {
+      avisoProcedimientos = "La hoja se firmó, pero no se pudo crear la nota del expediente. Revísala en «Historial de consultas».";
       console.warn("[ortho] signTreatmentCard: no se pudo crear la nota de evolución en el expediente general (no revierte la firma):", e);
     }
 
@@ -510,7 +514,7 @@ export async function signTreatmentCard(
 
     revalidatePath(`/dashboard/specialties/orthodontics/${plan.patientId}`);
     revalidatePath(`/dashboard/patients/${plan.patientId}`);
-    return ok({ cardId, ...(avisoReposiciones ? { avisoReposiciones } : {}), ...(avisoControlSinFacturar ? { avisoControlSinFacturar } : {}) });
+    return ok({ cardId, ...(avisoProcedimientos ? { avisoProcedimientos } : {}), ...(avisoReposiciones ? { avisoReposiciones } : {}), ...(avisoControlSinFacturar ? { avisoControlSinFacturar } : {}) });
   } catch (e) {
     console.error("[ortho] signTreatmentCard failed:", e);
     return fail("No se pudo firmar la cita");

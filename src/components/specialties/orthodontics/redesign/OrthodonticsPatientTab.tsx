@@ -779,6 +779,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               nextDurationMin: payload.nextDurationMin,
               activationsNote: payload.activationsNote,
               indications: payload.indications,
+              procedimientos: payload.procedimientos,
               // M6 (ws1-t8, Ronda 6 — hallazgo 6): antes esta llamada nunca
               // mandaba appointmentId — "Registrar control" desde la ficha
               // nunca quedaba ligado a la cita del día, aunque hubiera una.
@@ -797,6 +798,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               toast.error(res.data.avisoControlSinFacturar, { duration: 8000 });
             }
             if (res.data.avisoReposiciones) toast(res.data.avisoReposiciones, { duration: 9000 });
+            if (res.data.avisoProcedimientos) toast.error(res.data.avisoProcedimientos, { duration: 9000 });
             // ws1-t9 #11: se firma un CONTROL (una hoja), no una cita.
             toast.success("Control firmado");
             router.refresh();
@@ -842,6 +844,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               nextDurationMin: payload.nextDurationMin,
               activationsNote: payload.activationsNote,
               indications: payload.indications,
+              procedimientos: payload.procedimientos,
               appointmentId: payload.appointmentId,
             });
             if (isFailure(res)) {
