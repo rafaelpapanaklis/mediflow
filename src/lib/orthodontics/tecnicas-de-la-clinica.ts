@@ -151,3 +151,31 @@ export function nombrePropioAGuardar(t: Pick<TecnicaClinica, "nombre" | "base"> 
   if (!nombre || nombre === etiquetaEstandar(t.base)) return null;
   return nombre;
 }
+
+export interface OpcionDeTecnica {
+  id: string;
+  nombre: string;
+  base: TecnicaOrto;
+}
+
+/** Id de la opción que representa «la técnica que el caso ya tiene», cuando la clínica ya no la ofrece. */
+export const ID_TECNICA_ACTUAL = "__actual";
+
+/**
+ * Opciones de «Cambiar aparatología» de un caso YA abierto: las técnicas ACTIVAS de la clínica y, si la del
+ * caso no está entre ellas (la quitaron, o es de antes de esta lista), la actual arriba de todo para no
+ * perderla. `label` es el nombre propio guardado en el caso (null = el de su tipo base); `nombreVisible`,
+ * cómo lo muestra hoy la ficha.
+ */
+export function opcionesDeEdicion(
+  activas: readonly TecnicaClinica[],
+  actual: { base: string; label: string | null; nombreVisible: string },
+): { opciones: OpcionDeTecnica[]; seleccionadaId: string } {
+  const base = (BASES.has(actual.base) ? actual.base : "METAL_BRACKETS") as TecnicaOrto;
+  const label = limpiarNombre(actual.label);
+  const igual = activas.find((t) => t.base === base && (label ? t.nombre === label : nombrePropioAGuardar(t) === null));
+  const opciones = activas.map((t) => ({ id: t.id, nombre: t.nombre, base: t.base }));
+  if (igual) return { opciones, seleccionadaId: igual.id };
+  const nombre = label || limpiarNombre(actual.nombreVisible) || etiquetaEstandar(base);
+  return { opciones: [{ id: ID_TECNICA_ACTUAL, nombre: `${nombre} (actual)`, base }, ...opciones], seleccionadaId: ID_TECNICA_ACTUAL };
+}

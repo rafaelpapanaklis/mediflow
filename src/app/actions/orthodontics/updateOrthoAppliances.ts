@@ -38,6 +38,8 @@ const inputSchema = z.object({
   prescriptionSlot: slotEnum.optional(),
   bondingType: bondingEnum.optional(),
   technique: techniqueEnum.optional(),
+  /** ws1-t10: nombre propio de la técnica de la clínica; null = el de su tipo base. */
+  techniqueLabel: z.string().max(80).nullable().optional(),
   prescriptionNotes: z.string().max(1000).nullable().optional(),
 });
 
@@ -66,7 +68,8 @@ export async function updateOrthoAppliances(
   });
   if (!before) return fail("Plan no encontrado");
 
-  const { treatmentPlanId, ...rest } = data;
+  // `techniqueLabel` no es columna de Prisma (SQL crudo): se saca de lo que va al update.
+  const { treatmentPlanId, techniqueLabel, ...rest } = data;
   const updateData: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) updateData[k] = v;
@@ -78,8 +81,10 @@ export async function updateOrthoAppliances(
       data: updateData,
     });
 
-    // ws1-t10: si cambia el tipo base, el nombre propio anterior ya no corresponde.
-    if (data.technique !== undefined && data.technique !== before.technique) {
+    // ws1-t10: el nombre propio que manda la pantalla; si no manda y cambia el tipo base, el anterior ya no corresponde.
+    if (techniqueLabel !== undefined) {
+      await guardarNombreDeTecnicaDelCaso(ctx.clinicId, treatmentPlanId, techniqueLabel);
+    } else if (data.technique !== undefined && data.technique !== before.technique) {
       await guardarNombreDeTecnicaDelCaso(ctx.clinicId, treatmentPlanId, null);
     }
 

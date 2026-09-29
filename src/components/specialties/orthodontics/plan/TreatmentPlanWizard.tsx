@@ -1,12 +1,14 @@
 "use client";
 // Orthodontics — wizard de plan de tratamiento 3 pasos. SPEC §6.6.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { WizardShell } from "../shared/WizardShell";
 import { createTreatmentPlan, getCaseIntakeOptions } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { DateField } from "@/components/ui/date-field";
+import { costoAProponer } from "@/lib/orthodontics/precios-por-tecnica";
+import { leerCostoTotal } from "@/lib/orthodontics/alta-caso-formulario";
 import { nombrePropioAGuardar, tecnicasDeSiempre, type TecnicaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
 import { EJEMPLO_DE_RETENCION } from "@/lib/orthodontics/retencion-ejemplo";
 import type {
@@ -47,7 +49,12 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
   const [techniqueNotes, setTechniqueNotes] = useState("");
   const [duration, setDuration] = useState(18);
   const [installedAt, setInstalledAt] = useState("");
-  const [totalCost, setTotalCost] = useState(45000);
+  // (d) Vacío a propósito: el precio lo pone la clínica (Configuración → Técnicas y precios), no el código.
+  // Se PROPONE con el de la técnica elegida —misma regla que el alta nueva— sin pisar lo que se tecleó.
+  const [totalCost, setTotalCost] = useState("");
+  const costoSugeridoRef = useRef<string | null>(null);
+  const totalCostRef = useRef(totalCost);
+  totalCostRef.current = totalCost;
 
   const [anchorage, setAnchorage] = useState<AnchorageType>("MODERATE");
   const [anchorageNotes, setAnchorageNotes] = useState("");
@@ -72,7 +79,15 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
     };
   }, [props.patientId]);
 
-  const canProceed = step === 3 ? retention.length >= 20 : step === 1 ? tecnica !== null : true;
+  useEffect(() => {
+    const nuevo = costoAProponer({ actual: totalCostRef.current, ultimoSugerido: costoSugeridoRef.current, precio: tecnica?.precio ?? null, hayPresupuesto: false });
+    if (nuevo === null) return;
+    costoSugeridoRef.current = nuevo === "" ? null : nuevo;
+    setTotalCost(nuevo);
+  }, [tecnica]);
+
+  const costo = leerCostoTotal(totalCost);
+  const canProceed = step === 3 ? retention.length >= 20 : step === 1 ? tecnica !== null && costo !== null : true;
 
   const submit = async () => {
     setPending(true);
@@ -89,7 +104,7 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
         techniqueNotes: techniqueNotes || null,
         estimatedDurationMonths: duration,
         installedAt: installedAt ? new Date(installedAt).toISOString() : null,
-        totalCostMxn: totalCost,
+        totalCostMxn: costo as number,
         anchorageType: anchorage,
         anchorageNotes: anchorageNotes || null,
         extractionsRequired: extractions,
@@ -130,11 +145,7 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
             {tecnicas.length > 0 ? (
               <select
                 value={tecnica?.id ?? ""}
-                onChange={(e) => {
-                  setTecnicaId(e.target.value);
-                  const precio = tecnicas.find((x) => x.id === e.target.value)?.precio;
-                  if (precio) setTotalCost(precio);
-                }}
+                onChange={(e) => setTecnicaId(e.target.value)}
                 style={inputStyle}
               >
                 {tecnicas.map((x) => (
@@ -159,7 +170,7 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
             <DateField value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} style={inputStyle} />
           </Row>
           <Row label="Costo total MXN">
-            <NumberInput value={totalCost} onChange={setTotalCost} min={1} max={1000000} step={100} />
+            <input value={totalCost} onChange={(e) => setTotalCost(e.target.value)} inputMode="decimal" placeholder="Sin precio: escríbelo" aria-invalid={costo === null} style={inputStyle} />
           </Row>
         </Section>
       ) : null}

@@ -268,6 +268,7 @@ function adaptTreatment(args: {
     monthTotal: plan?.estimatedDurationMonths ?? 0,
     appliance: {
       technique: plan?.technique ?? null,
+      techniqueLabel: plan ? (args.techniqueLabel ?? null) : null,
       type: plan ? nombreDeTecnica(plan.technique, args.techniqueLabel, humanTechnique(plan.technique)) : null,
       prescriptionSlot: plan?.prescriptionSlot ?? null,
       bonding: plan?.bondingType ?? null,

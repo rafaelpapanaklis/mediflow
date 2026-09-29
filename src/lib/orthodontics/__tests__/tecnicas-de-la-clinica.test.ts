@@ -10,8 +10,10 @@ import {
   faltanDeSiempre,
   idNuevoDeTecnica,
   nombreDeTecnica,
+  ID_TECNICA_ACTUAL,
   nombrePropioAGuardar,
   normalizarTecnicas,
+  opcionesDeEdicion,
   resolverTecnicas,
   restaurarDeSiempre,
   tecnicasActivas,
@@ -157,7 +159,8 @@ test("técnica quitada: no se ofrece, pero el caso viejo la muestra por su nombr
   lee("lib/orthodontics/pacientes-modulo-db.ts", /cargarNombresDeTecnica\(clinicId, planIds\)/);
   lee("lib/orthodontics/expediente-ortodoncia-db.ts", /nombres\.get\(p\.id\)/);
   lee("lib/orthodontics/pdf-templates/treatment-plan.tsx", /techniqueLabel\(data\.plan\.technique as never, data\.plan\.techniqueName\)/);
-  lee("lib/orthodontics/pdf-templates/financial-agreement.tsx", /data\.techniqueName/);
+  // el convenio de pago (ws1-t4 lo rehízo) arma su renglón «Técnica» con el mismo lector del nombre propio
+  lee("app/actions/orthodontics/exportFinancialAgreementPdf.ts", /cargarNombreDeTecnica\(/);
   lee("lib/orthodontics/pdf-templates/referral-progress-letter.tsx", /data\.plan\.techniqueName/);
   lee("app/api/orthodontics/treatment-plans/[id]/progress-report-pdf/route.tsx", /cargarNombreDeTecnica\(ctx\.clinicId, plan\.id\)/);
   lee("app/api/orthodontics/treatment-plans/[id]/discharge-letter-pdf/route.tsx", /cargarNombreDeTecnica\(ctx\.clinicId, plan\.id\)/);
@@ -314,4 +317,54 @@ test("límites del calendario: hoy en zona local y hoy + N años, en ISO", () =>
   const d = new Date(2026, 8, 29, 23, 30); // 29-sep-2026 23:30 hora local
   assert.equal(hoyISO(d), "2026-09-29");
   assert.equal(hoyMasAniosISO(5, d), "2031-09-29");
+});
+
+// ── «Cambiar aparatología» y el asistente viejo (respuestas del gerente) ─────
+
+test("Cambiar aparatología: ofrece las ACTIVAS de la clínica y la actual del caso aunque esté quitada", () => {
+  const zafiro: TecnicaClinica = { id: "t-1", nombre: "Brackets de zafiro", base: "CERAMIC_BRACKETS", precio: null, activa: true };
+  const activas = tecnicasActivas([...tecnicasDeSiempre().map((t) => (t.id === "LINGUAL_BRACKETS" ? { ...t, activa: false } : t)), zafiro]);
+  // caso con técnica propia vigente: viene seleccionada, sin duplicarla
+  let r = opcionesDeEdicion(activas, { base: "CERAMIC_BRACKETS", label: "Brackets de zafiro", nombreVisible: "Brackets de zafiro" });
+  assert.equal(r.seleccionadaId, "t-1");
+  assert.equal(r.opciones.length, 7); // 6 de siempre activas + la propia
+  assert.ok(!r.opciones.some((o) => o.base === "LINGUAL_BRACKETS"));
+  // caso de antes (sin nombre propio) con una de siempre activa: se selecciona la de siempre
+  r = opcionesDeEdicion(activas, { base: "METAL_BRACKETS", label: null, nombreVisible: "Brackets metálicos" });
+  assert.equal(r.seleccionadaId, "METAL_BRACKETS");
+  // la actual quitada (lingual) no se pierde: sale arriba, seleccionada, con su tipo base
+  r = opcionesDeEdicion(activas, { base: "LINGUAL_BRACKETS", label: null, nombreVisible: "Brackets linguales" });
+  assert.equal(r.seleccionadaId, ID_TECNICA_ACTUAL);
+  assert.deepEqual(r.opciones[0], { id: ID_TECNICA_ACTUAL, nombre: "Brackets linguales (actual)", base: "LINGUAL_BRACKETS" });
+  // una propia que luego quitaron
+  r = opcionesDeEdicion(activas.filter((t) => t.id !== "t-1"), { base: "CERAMIC_BRACKETS", label: "Brackets de zafiro", nombreVisible: "Brackets de zafiro" });
+  assert.equal(r.seleccionadaId, ID_TECNICA_ACTUAL);
+  assert.equal(r.opciones[0].nombre, "Brackets de zafiro (actual)");
+  assert.equal(r.opciones[0].base, "CERAMIC_BRACKETS");
+});
+
+test("Cambiar aparatología guarda tipo base + nombre igual que el alta", () => {
+  const cajon = sinComentarios(leer("components/specialties/orthodontics/redesign/drawers/DrawerEditPrescription.tsx"));
+  assert.doesNotMatch(cajon, /TECHNIQUES\b/);
+  assert.match(cajon, /listarTecnicasActivasDeLaClinica\(\)/);
+  assert.match(cajon, /technique: elegida\?\.base \?\? c\.technique/);
+  assert.match(cajon, /nombrePropioAGuardar\(activas\.find/);
+  assert.match(cajon, /elegida\?\.id === ID_TECNICA_ACTUAL \? \(c\.techniqueLabel \?\? null\)/);
+  const accion = sinComentarios(leer("app/actions/orthodontics/updateOrthoAppliances.ts"));
+  assert.match(accion, /techniqueLabel: z\.string\(\)\.max\(80\)\.nullable\(\)\.optional\(\)/);
+  assert.match(accion, /const \{ treatmentPlanId, techniqueLabel, \.\.\.rest \} = data/); // no va a Prisma
+  assert.match(accion, /guardarNombreDeTecnicaDelCaso\(ctx\.clinicId, treatmentPlanId, techniqueLabel\)/);
+  const lista = sinComentarios(leer("app/actions/orthodontics/listarTecnicasDeLaClinica.ts"));
+  assert.match(lista, /getOrthoActionContext\(\{ write: false \}\)/);
+  assert.match(lista, /leerTecnicasDeLaClinica\(ctx\.clinicId\)/);
+  assert.match(leer("lib/orthodontics/redesign/adapter.ts"), /techniqueLabel: plan \? \(args\.techniqueLabel \?\? null\) : null/);
+});
+
+test("asistente viejo: sin costo escrito en el código; propone el precio de la técnica (vacío si no hay) y no deja seguir sin costo", () => {
+  const w = sinComentarios(leer("components/specialties/orthodontics/plan/TreatmentPlanWizard.tsx"));
+  assert.doesNotMatch(w, /45000|45_000/);
+  assert.match(w, /\[totalCost, setTotalCost\] = useState\(""\)/);
+  assert.match(w, /costoAProponer\(\{[^}]*precio: tecnica\?\.precio \?\? null/);
+  assert.match(w, /tecnica !== null && costo !== null/);
+  assert.match(w, /totalCostMxn: costo as number/);
 });

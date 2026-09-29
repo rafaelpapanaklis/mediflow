@@ -187,6 +187,7 @@ export interface OrthodonticsRedesignClientProps {
     prescriptionSlot: string;
     bondingType: "DIRECTO" | "INDIRECTO";
     technique: string;
+    techniqueLabel: string | null;
     prescriptionNotes: string | null;
   }) => Promise<void> | void;
   /** Crear carta de referencia — Sección I. */
@@ -947,6 +948,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             technique:
               t.appliance.technique ??
               (t.appliance.type === "Brackets metálicos auto-ligado" ? "SELF_LIGATING_METAL" : "METAL_BRACKETS"),
+            techniqueLabel: t.appliance.techniqueLabel ?? null,
+            techniqueName: t.appliance.type,
             prescriptionNotes: t.appliance.notes,
           }}
           onClose={closeDrawer}

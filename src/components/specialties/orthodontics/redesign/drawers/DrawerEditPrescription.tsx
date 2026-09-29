@@ -3,11 +3,14 @@
 // ortodóntico. Cambia slot, bonding, technique, notas. Persiste vía
 // updateOrthoAppliances.
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Save, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
+import { listarTecnicasActivasDeLaClinica } from "@/app/actions/orthodontics/listarTecnicasDeLaClinica";
+import { isFailure } from "@/app/actions/orthodontics/result";
+import { ID_TECNICA_ACTUAL, nombrePropioAGuardar, opcionesDeEdicion, type TecnicaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
 
 const SLOTS = [
   { v: "MBT_018", l: "MBT 0.018" },
@@ -20,22 +23,16 @@ const SLOTS = [
   { v: "INVISALIGN", l: "Invisalign" },
 ] as const;
 
-const TECHNIQUES = [
-  { v: "METAL_BRACKETS", l: "Brackets metálicos" },
-  { v: "CERAMIC_BRACKETS", l: "Brackets cerámicos" },
-  { v: "SELF_LIGATING_METAL", l: "Self-ligating metal" },
-  { v: "SELF_LIGATING_CERAMIC", l: "Self-ligating cerámico" },
-  { v: "LINGUAL_BRACKETS", l: "Lingual" },
-  { v: "CLEAR_ALIGNERS", l: "Alineadores transparentes" },
-  { v: "HYBRID", l: "Híbrido" },
-] as const;
-
 export interface DrawerEditPrescriptionProps {
   current: {
     treatmentPlanId: string;
     prescriptionSlot: string | null;
     bondingType: "DIRECTO" | "INDIRECTO" | null;
     technique: string;
+    /** ws1-t10: nombre propio guardado en el caso (null = el de su tipo base). */
+    techniqueLabel?: string | null;
+    /** Cómo se muestra hoy la técnica del caso. */
+    techniqueName?: string | null;
     prescriptionNotes: string | null;
   };
   onClose: () => void;
@@ -43,7 +40,10 @@ export interface DrawerEditPrescriptionProps {
     treatmentPlanId: string;
     prescriptionSlot: string;
     bondingType: "DIRECTO" | "INDIRECTO";
+    /** Tipo base (enum OrthoTechnique). */
     technique: string;
+    /** Nombre propio de la técnica de la clínica; null = el de su tipo base. */
+    techniqueLabel: string | null;
     prescriptionNotes: string | null;
   }) => Promise<void> | void;
 }
@@ -53,7 +53,23 @@ export function DrawerEditPrescription(props: DrawerEditPrescriptionProps) {
   const c = props.current;
   const [slot, setSlot] = useState(c.prescriptionSlot ?? "MBT_022");
   const [bonding, setBonding] = useState<"DIRECTO" | "INDIRECTO">(c.bondingType ?? "DIRECTO");
-  const [tech, setTech] = useState(c.technique);
+  // ws1-t10: las técnicas ACTIVAS de la clínica por su nombre, y la actual del caso aunque ya no se ofrezca.
+  const [activas, setActivas] = useState<TecnicaClinica[]>([]);
+  useEffect(() => {
+    let cancelado = false;
+    listarTecnicasActivasDeLaClinica().then((r) => {
+      if (!cancelado && !isFailure(r)) setActivas(r.data.tecnicas);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+  const { opciones, seleccionadaId } = useMemo(
+    () => opcionesDeEdicion(activas, { base: c.technique, label: c.techniqueLabel ?? null, nombreVisible: c.techniqueName ?? "" }),
+    [activas, c.technique, c.techniqueLabel, c.techniqueName],
+  );
+  const [eleccion, setEleccion] = useState<string | null>(null);
+  const elegida = opciones.find((o) => o.id === (eleccion ?? seleccionadaId)) ?? opciones[0];
   const [notes, setNotes] = useState(c.prescriptionNotes ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +82,10 @@ export function DrawerEditPrescription(props: DrawerEditPrescriptionProps) {
         treatmentPlanId: c.treatmentPlanId,
         prescriptionSlot: slot,
         bondingType: bonding,
-        technique: tech,
+        technique: elegida?.base ?? c.technique,
+        // la actual conserva su nombre; una de la lista guarda el suyo (null si es el de siempre del tipo)
+        techniqueLabel:
+          elegida?.id === ID_TECNICA_ACTUAL ? (c.techniqueLabel ?? null) : nombrePropioAGuardar(activas.find((x) => x.id === elegida?.id)),
         prescriptionNotes: notes || null,
       });
     } catch (e) {
@@ -105,8 +124,8 @@ export function DrawerEditPrescription(props: DrawerEditPrescriptionProps) {
             </div>
           </Field>
           <Field label="Técnica">
-            <select value={tech} onChange={(e) => setTech(e.target.value)} className={inputCls}>
-              {TECHNIQUES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+            <select value={elegida?.id ?? ""} onChange={(e) => setEleccion(e.target.value)} className={inputCls}>
+              {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
             </select>
           </Field>
           <Field label="Notas (opcional)">
