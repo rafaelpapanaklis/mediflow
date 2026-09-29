@@ -658,3 +658,50 @@ describe("las notas privadas de otro profesional", () => {
     assert.doesNotMatch(todo, /marcadas como privadas/);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// 10 · Ortodoncia (ws1-t10, punto 12): el caso y sus hojas firmadas salen
+// ─────────────────────────────────────────────────────────────────────
+
+describe("el caso de ortodoncia y sus hojas de control", () => {
+  const caso = {
+    tecnica: "Brackets metálicos",
+    estado: "En tratamiento",
+    doctor: "Dr/a. Mariana Cortés",
+    inicio: "2026-07-20T12:00:00.000Z",
+    colocacion: "2026-07-20T12:00:00.000Z",
+    duracionMeses: 18,
+    diagnosticadoEl: "2026-07-10T12:00:00.000Z",
+    claseAngleDerecha: "Clase II div. 1",
+    claseAngleIzquierda: "Clase I",
+    overbiteMm: 4,
+    overjetMm: 5.5,
+    resumenClinico: "Apiñamiento moderado con mordida profunda.",
+    motivoDeAbandono: null,
+    hojas: [
+      { numero: 1, fecha: "2026-08-20T15:00:00.000Z", fase: "Alineación", mes: 1, plan: "Arco NiTi .014 superior", indicaciones: "Cera en brackets", firmadaEl: "2026-08-20T16:00:00.000Z" },
+    ],
+  };
+
+  it("imprime el caso, su diagnóstico y la tabla de hojas firmadas", async () => {
+    const { todo } = await texto(props({ ortodoncia: [caso] }));
+    assert.match(todo, /Ortodoncia . Brackets met.licos/);
+    assert.match(todo, /Clase II div\. 1/);
+    assert.match(todo, /Api.amiento moderado/);
+    assert.match(todo, /hojas de control firmadas/i);
+    assert.match(todo, /Arco NiTi \.014 superior/);
+    assert.match(todo, /Indicaciones: Cera en brackets/);
+    assert.doesNotMatch(todo, /Sin planes de tratamiento registrados/);
+  });
+
+  it("un caso sin hojas firmadas lo dice", async () => {
+    const { todo } = await texto(props({ ortodoncia: [{ ...caso, hojas: [] }] }));
+    assert.match(todo, /sin hojas de control firmadas/i);
+  });
+
+  it("sin ortodoncia la sección de planes sale como siempre", async () => {
+    const { todo } = await texto(props());
+    assert.match(todo, /Sin planes de tratamiento registrados/);
+    assert.doesNotMatch(todo, /hojas de control firmadas/i);
+  });
+});

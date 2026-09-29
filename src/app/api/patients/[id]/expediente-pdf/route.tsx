@@ -8,6 +8,7 @@ import { ownPrivateRecordsOnly } from "@/lib/branches";
 import { logRead, extractAuditMeta } from "@/lib/audit";
 import { signMaybeUrls, BUCKETS } from "@/lib/storage";
 import { consentTimeZone } from "@/lib/consent/dates";
+import { leerOrtodonciaDelExpediente } from "@/lib/orthodontics/expediente-ortodoncia-db";
 import { buildSignatureBlocks } from "@/lib/consent/signers";
 import {
   CLINIC_LETTERHEAD_SELECT,
@@ -523,6 +524,12 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const nombrePaciente = `${paciente.firstName} ${paciente.lastName}`.trim();
 
+  // Casos de ortodoncia y sus hojas de control FIRMADAS (ws1-t10, punto 12). Se leen
+  // tenga o no la clínica el módulo activo: el expediente no se oculta (NOM-004). Si la
+  // tabla aún no existe o la consulta falla, la sección sale como siempre (sin romper
+  // el PDF entero). Dos consultas, acotadas por clínica y paciente de la sesión.
+  const ortodoncia = await leerOrtodonciaDelExpediente(user.clinicId, paciente.id);
+
   const consentimientosDoc: ExpedienteConsentimiento[] = consentimientos.map((c, i) => ({
     procedimiento: c.procedure,
     creadoEl: c.createdAt.toISOString(),
@@ -629,6 +636,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     odontograma,
     odontogramaActualizado: ultimaFecha(hallazgos.map((h) => h.updatedAt)),
     planes: planesDoc,
+    ortodoncia,
     recetas: recetasDoc,
     consentimientos: consentimientosDoc,
     firmasOmitidas,

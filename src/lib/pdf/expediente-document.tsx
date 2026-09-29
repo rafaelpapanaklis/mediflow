@@ -1,3 +1,4 @@
+import type { ExpedienteOrtodoncia } from "@/lib/orthodontics/expediente-ortodoncia";
 import type { ReactNode } from "react";
 import {
   Document,
@@ -437,6 +438,12 @@ export interface ExpedienteDocumentProps extends ClinicLetterheadClinic {
   /** ISO — última vez que alguien tocó el odontograma. */
   odontogramaActualizado: string | null;
   planes: ExpedientePlan[];
+  /**
+   * ws1-t10 (punto 12): los casos de ortodoncia con sus hojas de control firmadas,
+   * dentro de «Planes de tratamiento». Opcional: sin casos (o quien arma el
+   * documento no los lee) la sección sale como siempre.
+   */
+  ortodoncia?: ExpedienteOrtodoncia[];
   recetas: ExpedienteReceta[];
   consentimientos: ExpedienteConsentimiento[];
   /**
@@ -975,11 +982,12 @@ function ContenidoDelExpediente(
 
       {/* ── 5 · PLANES DE TRATAMIENTO ───────────────────────────────── */}
       <Seccion n="5" titulo="Planes de tratamiento" nota="Con sus fases y el registro de cada sesión." />
-      {props.planes.length === 0 ? (
+      {props.planes.length === 0 && (props.ortodoncia ?? []).length === 0 ? (
         <Vacio>Sin planes de tratamiento registrados.</Vacio>
       ) : (
         props.planes.map((pl, i) => <PlanBloque key={i} plan={pl} tz={tz} />)
       )}
+      {(props.ortodoncia ?? []).map((c, i) => <OrtodonciaBloque key={`orto-${i}`} caso={c} tz={tz} />)}
 
       {/* ── 6 · RECETAS ─────────────────────────────────────────────── */}
       <Seccion n="6" titulo="Recetas" />
@@ -1478,6 +1486,52 @@ function PlanBloque({ plan, tz }: { plan: ExpedientePlan; tz: string }) {
             String(s.numero),
             s.completadaEl ? fecha(s.completadaEl, tz) : "Pendiente",
             noCapturado(s.notas) === NO_CAPTURADO ? "—" : (s.notas as string),
+          ])}
+        />
+      )}
+    </View>
+  );
+}
+
+// ── 5 · Caso de ortodoncia (con sus hojas de control firmadas) ─────────
+
+function OrtodonciaBloque({ caso, tz }: { caso: ExpedienteOrtodoncia; tz: string }) {
+  return (
+    <View style={styles.notaBloque} minPresenceAhead={90}>
+      <Text style={styles.notaFecha}>Ortodoncia · {caso.tecnica}</Text>
+      <Text style={styles.notaDoctor}>
+        {caso.estado} · {noCapturado(caso.doctor)}
+      </Text>
+      <View style={[styles.rejilla, { marginTop: 5 }]}>
+        <Dato etiqueta="Diagnóstico del" valor={caso.diagnosticadoEl ? fecha(caso.diagnosticadoEl, tz) : null} ancho="tercio" />
+        <Dato etiqueta="Colocación" valor={caso.colocacion ? fecha(caso.colocacion, tz) : null} ancho="tercio" />
+        <Dato etiqueta="Duración estimada" valor={caso.duracionMeses != null ? `${caso.duracionMeses} meses` : null} ancho="tercio" />
+        <Dato etiqueta="Angle derecha" valor={caso.claseAngleDerecha} ancho="tercio" />
+        <Dato etiqueta="Angle izquierda" valor={caso.claseAngleIzquierda} ancho="tercio" />
+        <Dato
+          etiqueta="Overbite / Overjet"
+          valor={caso.overbiteMm != null || caso.overjetMm != null ? `${caso.overbiteMm ?? "—"} mm / ${caso.overjetMm ?? "—"} mm` : null}
+          ancho="tercio"
+        />
+        <Dato etiqueta="Resumen clínico" valor={caso.resumenClinico} ancho="entero" />
+        {caso.motivoDeAbandono ? <Dato etiqueta="Motivo del abandono" valor={caso.motivoDeAbandono} ancho="entero" /> : null}
+      </View>
+      <Text style={styles.subTitulo}>Hojas de control firmadas</Text>
+      {caso.hojas.length === 0 ? (
+        <Text style={styles.vacio}>Sin hojas de control firmadas.</Text>
+      ) : (
+        <Tabla
+          columnas={[
+            { titulo: "N.º", ancho: "8%" },
+            { titulo: "Fecha", ancho: "16%" },
+            { titulo: "Fase / mes", ancho: "20%" },
+            { titulo: "Plan (P) e indicaciones", ancho: "56%" },
+          ]}
+          filas={caso.hojas.map((h) => [
+            String(h.numero),
+            fecha(h.fecha, tz),
+            h.mes != null ? `${h.fase} · mes ${h.mes}` : h.fase,
+            [h.plan, h.indicaciones ? `Indicaciones: ${h.indicaciones}` : null].filter(Boolean).join(" — ") || "—",
           ])}
         />
       )}
