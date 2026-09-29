@@ -91,7 +91,11 @@ test("Caja conserva SUS reglas de la tabla: un borrador no se cobra desde la lis
   assert.ok(caja.includes('const canPay  = !["PAID", "CANCELLED"].includes(inv.status) && !isDraft;'), "cambió canPay: actualiza este candado");
   // …es la que reciben las fichas (la ficha sola usaría isChargeableInvoice, que incluye DRAFT).
   assert.match(caja, /puedeCobrar=\{\(inv\) => !\["PAID", "CANCELLED"\]\.includes\(inv\.status\) && inv\.status !== "DRAFT"\}/, "Caja ofrece cobrar un borrador");
-  assert.match(caja, /puedeTimbrar=\{\(\) => true\}/, "Caja dejó de ofrecer Timbrar como la tabla");
+  // H9 (revisión final, ws1-t4): Timbrar, como la tabla, pero nunca en una CANCELADA.
+  assert.match(caja, /puedeTimbrar=\{\(inv\) => !isVoidedInvoice\(inv\)\}/, "Caja ofrece Timbrar en una cancelada");
+  assert.match(caja, /onStamp=\{isVoidedInvoice\(inv\) \? undefined : \(\) => openCfdiModal\(inv\)\}/, "la tabla ofrece Timbrar en una cancelada");
+  const ficha = leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx");
+  assert.match(ficha, /\{anulada \? \(\s*<><Eye size=\{13\} aria-hidden \/> \{t\("quotes\.card\.viewInvoice"\)\}<\/>/, "una anulada dice «Editar»");
 });
 
 test("mientras guarda el trato o envía, el popup no se cierra (solo diseño nuevo)", () => {

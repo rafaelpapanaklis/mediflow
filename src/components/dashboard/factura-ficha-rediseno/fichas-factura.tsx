@@ -25,7 +25,7 @@
 
 import { useState } from "react";
 import {
-  CheckCircle2, Download, Files, Mail, MessageCircle, Pencil, Stamp, Wallet,
+  CheckCircle2, Download, Eye, Files, Mail, MessageCircle, Pencil, Stamp, Wallet,
 } from "lucide-react";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import {
@@ -257,8 +257,13 @@ function Ficha({
           <Download size={13} aria-hidden /> {t("quotes.card.pdf")}
         </a>
 
+        {/* H9 (revisión final, ws1-t4): una anulada no se edita — se ve. */}
         <button type="button" className={s.accion} onClick={onAbrir}>
-          <Pencil size={13} aria-hidden /> {t("quotes.card.edit")}
+          {anulada ? (
+            <><Eye size={13} aria-hidden /> {t("quotes.card.viewInvoice")}</>
+          ) : (
+            <><Pencil size={13} aria-hidden /> {t("quotes.card.edit")}</>
+          )}
         </button>
 
         {cobrable && (

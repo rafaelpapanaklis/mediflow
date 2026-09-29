@@ -15,7 +15,7 @@ import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-badge";
-import { invoiceStatusBadge } from "@/components/dashboard/billing/invoice-status";
+import { invoiceStatusBadge, isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
@@ -404,8 +404,10 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           estaVencida={isOverdue}
           montoVencido={overdueAmount}
           // Las dos reglas de la tabla de abajo, tal cual: `canPay` y «Timbrar».
+          // H9 (revisión final, ws1-t4): una CANCELADA no se timbra — ni aquí ni
+          // en la tabla; el servidor (POST /api/cfdi) ya la rechazaba.
           puedeCobrar={(inv) => !["PAID", "CANCELLED"].includes(inv.status) && inv.status !== "DRAFT"}
-          puedeTimbrar={() => true}
+          puedeTimbrar={(inv) => !isVoidedInvoice(inv)}
           textoCobrar={t("billing.billingClient.registerPayment")}
           textoVacio={invoices.length === 0 ? t("billing.billingClient.emptyNoInvoices") : t("billing.billingClient.emptyNoResults")}
           onAbrir={(inv) => setDetailInvoice(inv)}
@@ -504,7 +506,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                         <InvoiceCfdiBadge
                           cfdiUuid={inv.cfdiUuid}
                           facturApiEnabled={clinic.facturApiEnabled}
-                          onStamp={() => openCfdiModal(inv)}
+                          onStamp={isVoidedInvoice(inv) ? undefined : () => openCfdiModal(inv)}
                         />
                       </td>
                       <td
