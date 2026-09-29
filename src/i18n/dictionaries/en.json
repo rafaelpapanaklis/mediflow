@@ -1195,10 +1195,37 @@
       },
       "result": {
         "title": "Done! Your clinic is in DaleControl",
-        "lead": {
-          "one": "We imported your data successfully. {count} record with an error wasn't imported; you can fix it and upload it again.",
-          "other": "We imported your data successfully. {count} records with errors weren't imported; you can fix them and upload them again."
+        "titleErrors": "Import finished with errors",
+        "titleNothing": "Nothing was imported",
+        "leadOk": "We imported your data successfully.",
+        "leadPartial": {
+          "one": "{created} records were imported. {count} record with an error wasn't imported: see below which one and why.",
+          "other": "{created} records were imported. {count} records with errors weren't imported: see below which ones and why."
         },
+        "leadNothing": {
+          "one": "No records were imported: {count} record with an error. See below which one and why; fix it and upload the file again.",
+          "other": "No records were imported: {count} records with errors. See below which ones and why; fix them and upload the file again."
+        },
+        "errorsHeading": "What failed and why",
+        "errorsRows": {
+          "one": "Row {rows}",
+          "other": "Rows {rows}"
+        },
+        "errorsMore": {
+          "one": "and {count} more",
+          "other": "and {count} more"
+        },
+        "errorsMoreReasons": {
+          "one": "{count} more reason in the downloadable report.",
+          "other": "{count} more reasons in the downloadable report."
+        },
+        "errorsWholeFile": "Whole file",
+        "errorsTruncated": "Showing {shown} of {total} rows with errors; the report has the same rows.",
+        "errorsNoDetail": {
+          "one": "{count} record with an error; the server gave no detail.",
+          "other": "{count} records with errors; the server gave no detail."
+        },
+        "reportEmpty": "There are no rows with errors to download.",
         "pillPatients": "patients",
         "pillBalances": "in balances",
         "pillPaymentHistory": "migrated payments",
@@ -1208,7 +1235,6 @@
           "other": "{count} rows with errors weren't imported."
         },
         "downloadReport": "Download report",
-        "reportSoon": "The error report will be available once the backend is connected.",
         "goPatients": "View patients",
         "importAnother": "Import something else",
         "pillMedicalHistory": "histories completed",

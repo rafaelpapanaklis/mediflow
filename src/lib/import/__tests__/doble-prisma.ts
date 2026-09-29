@@ -1,7 +1,7 @@
 // Doble de Prisma EN MEMORIA para conducir el motor de importación de verdad
 // (runImport + handlers) sin base. No es un stub que devuelve lo que se le pide:
 // guarda filas, aplica los `where` de verdad y hace cumplir tres cosas que la
-// base real hace cumplir, porque son justo las que una importación puede romper:
+// base real hace cumplir, porque son justo las que una importación puede romper (más una cuarta, abajo):
 //
 //  · Un `where` con una clave `undefined` REVIENTA. Prisma la ignoraría y
 //    devolvería las filas de todas las clínicas (regla (c) del repo): aquí es un
@@ -10,10 +10,13 @@
 //    quotes → P2003. Lo que prueba que la renumeración y la transacción sirven.
 //  · `$transaction([...])` es atómica: si una operación falla, se deshacen las
 //    anteriores (las operaciones son perezosas, como las de Prisma).
+//  · Las CHECK de `orthodontic_treatment_plans` (duración 3..60, costo > 0, abandono con motivo): un caso con
+//    costo 0 revienta con el 23514 de Postgres (ws1-t10). `banderas.checkDelPlan` las cambia o las apaga.
 //
 // Cuenta las llamadas por modelo/método: con eso se demuestra que una
 // importación NO hace una consulta por fila.
 
+import { violacionesDelPlan } from "@/lib/orthodontics/check-del-caso";
 import { folioToInt } from "@/lib/patients/next-patient-number-core";
 
 type Row = Record<string, any>;
@@ -32,7 +35,15 @@ export interface Base {
    * Interruptores de la base falsa. `sinTablaExternos`: import_external_ids NO existe
    * (el SQL de Rafael aún no se aplicó) → el SQL crudo revienta como en Postgres (42P01).
    */
-  banderas: { sinTablaExternos: boolean };
+  banderas: {
+    sinTablaExternos: boolean;
+    /**
+     * Las restricciones CHECK de `orthodontic_treatment_plans` (`check-del-caso.ts`) se aplican por defecto, como en la
+     * base real (ws1-t10: el doble en memoria no las aplicaba y un caso «Pago por control» con costo 0 pasaba las
+     * pruebas y fallaba en producción). `"corregida"` = ya se pegó sql/ortodoncia-costo-del-caso.sql; `"ninguna"` la apaga.
+     */
+    checkDelPlan: "vigente" | "corregida" | "ninguna";
+  };
 }
 
 class PrismaError extends Error {
@@ -140,7 +151,7 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
   for (const [k, v] of Object.entries(semilla)) tablas[k] = v.map((r) => ({ ...r }));
   const llamadas: Record<string, number> = {};
   const ganchos: Record<string, () => void> = {};
-  const banderas = { sinTablaExternos: false };
+  const banderas: Base["banderas"] = { sinTablaExternos: false, checkDelPlan: "vigente" };
   const contar = (k: string) => {
     llamadas[k] = (llamadas[k] ?? 0) + 1;
     ganchos[k]?.();
@@ -157,6 +168,17 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
     if (modelo === "quoteItem") {
       if (!tabla("quote").some((q) => q.id === fila.quoteId)) {
         throw new PrismaError("P2003", "Foreign key constraint failed on quoteId");
+      }
+    }
+    if (modelo === "orthodonticTreatmentPlan" && banderas.checkDelPlan !== "ninguna") {
+      const fallas = violacionesDelPlan(fila, banderas.checkDelPlan);
+      if (fallas.length > 0) {
+        // Lo que Postgres contesta (23514) y Prisma envuelve: la restricción NOMBRADA, sin el detalle de la fila.
+        throw new PrismaError(
+          "P2004",
+          `A constraint failed on the database: new row for relation "orthodontic_treatment_plans" violates check constraint "${fallas[0].split(":")[0]}"`,
+          { code: "23514" },
+        );
       }
     }
     if (fila.id && tabla(modelo).some((r) => r.id === fila.id)) {

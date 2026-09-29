@@ -19,6 +19,7 @@ import { lastInvoiceFolio } from "@/lib/invoices/next-invoice-number";
 import { formatInvoiceNumber } from "@/lib/invoices/next-invoice-number-core";
 import { invoiceFieldsFromQuote } from "@/lib/quotes/invoice-from-quote-core";
 import { PHASE_ORDER } from "@/lib/orthodontics/phase-machine";
+import { CHECK_DURACION_Y_COSTO, esViolacionDelCheckDelPlan, mensajeDelCheckDelPlan } from "@/lib/orthodontics/check-del-caso";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { guardarModoDeCobroDelCaso } from "@/lib/orthodontics/billing-mode-db";
 import { guardarNombreDeTecnicaDelCaso, leerTecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
@@ -392,10 +393,35 @@ async function ligarFacturas(clinicId: string, planId: string, facturaIds: strin
   }
 }
 
-function mensajeDeError(e: any): string {
-  if (e?.code === "P2003") return "No se pudo guardar el caso: el paciente o el doctor ya no existe";
-  if (e?.code === "P2002") return "No se pudo guardar el caso: número de factura repetido, reintenta";
-  return "No se pudo guardar el caso de ortodoncia (error de base de datos)";
+/** El código de error de la base (Prisma «P2003» o Postgres «23514»), si el error lo trae; nunca el detalle de la fila. */
+export function codigoDeLaBase(e: any): string | null {
+  const valido = (c: unknown): c is string => typeof c === "string" && /^(P\d{4}|\d{2}[0-9A-Z]{3})$/.test(c);
+  // El de Postgres (más útil: 23514, 42P01) antes que el envoltorio de Prisma (P2010, P2004…).
+  const postgres = [e?.meta?.code, e?.cause?.code].find(valido);
+  if (postgres) return postgres;
+  // Prisma no siempre trae el código en un campo: en el texto va como «Code: `42P01`» (P2010) o, en un error
+  // desconocido de la consulta, como «PostgresError { code: "23514", …» (medido contra la base real, 29-sep-2026).
+  const enTexto = typeof e?.message === "string" ? /Code: `([0-9A-Z]{5})`|PostgresError \{ code: "([0-9A-Z]{5})"/.exec(e.message) : null;
+  if (enTexto) return enTexto[1] ?? enTexto[2];
+  return valido(e?.code) ? e.code : null;
+}
+
+/**
+ * El motivo que ve quien importa, por caso: nombra el tratamiento y, si la base rechazó el caso por una restricción,
+ * cuál y con qué valor (nunca el volcado de la fila: trae ids y datos del paciente).
+ */
+export function mensajeDeError(e: any, plan?: PlanDelCaso): string {
+  const de = plan ? `Tratamiento #${plan.folio}: ` : "";
+  if (e?.code === "P2003") return `${de}No se pudo guardar el caso: el paciente o el doctor ya no existe`;
+  if (e?.code === "P2002") return `${de}No se pudo guardar el caso: número de factura repetido, reintenta`;
+  if (esViolacionDelCheckDelPlan(e)) {
+    const detalle = plan
+      ? mensajeDelCheckDelPlan({ estimatedDurationMonths: plan.estimatedDurationMonths, totalCostMxn: plan.totalCostMxn })
+      : "La base de datos rechazó el caso por una restricción de la tabla de casos de ortodoncia.";
+    return `${de}${detalle} (restricción ${CHECK_DURACION_Y_COSTO}; hay un SQL pendiente: sql/ortodoncia-costo-del-caso.sql)`;
+  }
+  const codigo = codigoDeLaBase(e);
+  return `${de}No se pudo guardar el caso de ortodoncia (error de base de datos${codigo ? ` ${codigo}` : ""})`;
 }
 
 /**
@@ -467,7 +493,7 @@ export async function commitCasosDeOrtodoncia(
       }
     }
     if (!registros) {
-      for (const r of g) { r.status = "error"; r.errors.push(mensajeDeError(ultimoError)); }
+      for (const r of g) { r.status = "error"; r.errors.push(mensajeDeError(ultimoError, plan)); }
       continue;
     }
 

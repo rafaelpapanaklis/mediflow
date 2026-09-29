@@ -114,15 +114,27 @@ export interface PreviewResult {
   options?: Record<string, ValueOption[]>;
 }
 
+/** Una fila que no se importó: de qué archivo, qué fila y por qué (motivos ya en español). */
+export interface ErrorDeFila {
+  entity: Entity;
+  /** Nombre del archivo (con la pestaña si el libro trae varias); vacío si no se conoce. */
+  fileName: string;
+  row: number;
+  errors: string[];
+}
+
 export interface CommitResult {
   created: number;
+  /** Cuántas filas fallaron en TOTAL (`errorRows` puede venir recortada). */
   errors: number;
   duplicates: number;
   /** Filas dejadas fuera a propósito (citas pasadas, ya importadas). */
   omitted?: number;
   /** Resumen para las "pills" de la pantalla de resultado: creados por entidad importada. */
   summary: Partial<Record<Entity, number>>;
-  /** URL del reporte de errores descargable (TODO(T4): generar real). */
+  /** Qué falló y por qué, por archivo y por fila: alimenta el resumen final y el reporte descargable (CSV). */
+  errorRows?: ErrorDeFila[];
+  /** Sin uso: el reporte se genera en el navegador a partir de `errorRows`. */
   errorReportUrl?: string;
 }
 

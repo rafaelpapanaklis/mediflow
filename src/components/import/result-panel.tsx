@@ -1,9 +1,10 @@
 "use client";
 
-// Pantalla "Resultado" — resumen de éxito + descarga de reporte de errores + CTAs.
-import { Check, AlertCircle, Download, Users, Upload } from "lucide-react";
+// Pantalla "Resultado" — resumen honesto (todo bien / una parte / nada) + qué falló y por qué + reporte descargable + CTAs.
+import { Check, AlertCircle, Users, Upload } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { DATA_TYPES, type CommitResult, type Entity } from "./import-client";
+import { ErroresDeImportacion } from "./errores-de-importacion";
 
 /** Etiqueta de la pill de cada entidad (shell.importClinic.result.*). */
 const PILL_KEY: Record<Entity, string> = {
@@ -31,17 +32,27 @@ interface Props {
   result: CommitResult;
   onGoPatients: () => void;
   onImportAnother: () => void;
-  /** Descarga del reporte de errores. TODO(T4): URL real desde el commit. */
+  /** Descarga del reporte de errores (CSV armado en el navegador con `result.errorRows`). */
   onDownloadReport: () => void;
 }
 
 export function ResultPanel({ t, result, onGoPatients, onImportAnother, onDownloadReport }: Props) {
-  const { created, errors, summary, omitted = 0 } = result;
+  const { created, errors, summary, omitted = 0, errorRows = [] } = result;
+  // Con errores el título y la frase no pueden decir «correctamente»: si NADA entró, se dice; si entró una parte, también.
+  const nada = errors > 0 && created === 0;
+  const parcial = errors > 0 && created > 0;
+  const titulo = nada ? "titleNothing" : parcial ? "titleErrors" : "title";
   return (
     <div className="imp-result">
-      <div className="imp-seal" aria-hidden><Check size={38} /></div>
-      <h2 className="imp-result__title">{t("shell.importClinic.result.title")}</h2>
-      <p className="imp-result__lead">{t("shell.importClinic.result.lead", { count: errors })}</p>
+      <div className="imp-seal" aria-hidden>{nada ? <AlertCircle size={38} /> : <Check size={38} />}</div>
+      <h2 className="imp-result__title">{t(`shell.importClinic.result.${titulo}`)}</h2>
+      <p className="imp-result__lead">
+        {nada
+          ? t("shell.importClinic.result.leadNothing", { count: errors })
+          : parcial
+            ? t("shell.importClinic.result.leadPartial", { count: errors, created })
+            : t("shell.importClinic.result.leadOk")}
+      </p>
 
       <div className="imp-summary-row">
         {/* Una pill por entidad importada, en el orden del paso 3. */}
@@ -53,16 +64,7 @@ export function ResultPanel({ t, result, onGoPatients, onImportAnother, onDownlo
         ))}
       </div>
 
-      {errors > 0 && (
-        <div className="imp-report-line">
-          <AlertCircle size={18} aria-hidden />
-          <span>{t("shell.importClinic.result.reportLine", { count: errors })}</span>
-          <span style={{ flex: 1 }} />
-          <button type="button" className="imp-report-line__link" onClick={onDownloadReport}>
-            <Download size={16} aria-hidden /> {t("shell.importClinic.result.downloadReport")}
-          </button>
-        </div>
-      )}
+      {errors > 0 && <ErroresDeImportacion t={t} filas={errorRows} total={errors} onDownload={onDownloadReport} />}
 
       {omitted > 0 && (
         <p className="imp-hint" style={{ textAlign: "center" }}>{t("shell.importClinic.result.omittedLine", { count: omitted })}</p>

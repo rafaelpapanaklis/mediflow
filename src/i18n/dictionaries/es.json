@@ -1195,10 +1195,37 @@
       },
       "result": {
         "title": "¡Listo! Tu clínica está en DaleControl",
-        "lead": {
-          "one": "Importamos tus datos correctamente. {count} registro con error no se importó; puedes corregirlo y volver a subirlo.",
-          "other": "Importamos tus datos correctamente. {count} registros con error no se importaron; puedes corregirlos y volver a subirlos."
+        "titleErrors": "Importación terminada con errores",
+        "titleNothing": "No se importó nada",
+        "leadOk": "Importamos tus datos correctamente.",
+        "leadPartial": {
+          "one": "Se importaron {created} registros. {count} registro con error no se importó: abajo dice cuál y por qué.",
+          "other": "Se importaron {created} registros. {count} registros con error no se importaron: abajo dice cuáles y por qué."
         },
+        "leadNothing": {
+          "one": "No se importó ningún registro: {count} registro con error. Abajo dice cuál y por qué; corrígelo y vuelve a subir el archivo.",
+          "other": "No se importó ningún registro: {count} registros con error. Abajo dice cuáles y por qué; corrígelos y vuelve a subir el archivo."
+        },
+        "errorsHeading": "Qué falló y por qué",
+        "errorsRows": {
+          "one": "Fila {rows}",
+          "other": "Filas {rows}"
+        },
+        "errorsMore": {
+          "one": "y {count} más",
+          "other": "y {count} más"
+        },
+        "errorsMoreReasons": {
+          "one": "Hay {count} motivo más en el reporte descargable.",
+          "other": "Hay {count} motivos más en el reporte descargable."
+        },
+        "errorsWholeFile": "Todo el archivo",
+        "errorsTruncated": "Se muestran {shown} de {total} filas con error; el reporte trae las mismas.",
+        "errorsNoDetail": {
+          "one": "{count} registro con error; el servidor no dio el detalle.",
+          "other": "{count} registros con error; el servidor no dio el detalle."
+        },
+        "reportEmpty": "No hay filas con error para descargar.",
         "pillPatients": "pacientes",
         "pillBalances": "en saldos",
         "pillPaymentHistory": "pagos migrados",
@@ -1208,7 +1235,6 @@
           "other": "{count} filas con error no se importaron."
         },
         "downloadReport": "Descargar reporte",
-        "reportSoon": "El reporte de errores estará disponible al conectar el backend.",
         "goPatients": "Ver pacientes",
         "importAnother": "Importar otra cosa",
         "pillMedicalHistory": "expedientes completados",

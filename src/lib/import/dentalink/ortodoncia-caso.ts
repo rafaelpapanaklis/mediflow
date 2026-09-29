@@ -18,6 +18,7 @@
 
 import type { OrthoTechnique } from "@prisma/client";
 import { dayKey } from "../migrado";
+import { acotarDuracion, costoParaGuardarPorControl, estimarCostoPorControl, type OrigenDelCosto } from "@/lib/orthodontics/check-del-caso";
 import { renglonEsOrtodoncia, sinAcentos } from "./es-ortodoncia";
 
 export type TipoRenglon = "control" | "colocacion" | "tratamiento" | "extra";
@@ -105,8 +106,14 @@ export interface PlanDelCaso {
   /** Última visita hecha (o la generación): cierra las fases de un caso Terminado. */
   ultimaActividad: Date;
   billingMode: ModoDeCobro;
-  /** «Costo total» del caso: el cargo principal en «Precio total»; 0 (referencia) en «Pago por control». */
+  /**
+   * «Costo total» del caso: el cargo principal en «Precio total». En «Pago por control» no hay total: es el ESTIMADO
+   * (colocación + lo que suman los controles del presupuesto) y nunca 0, porque la base exige > 0
+   * (`orthodontic_treatment_plans_duration_chk`, ver `check-del-caso.ts`).
+   */
   totalCostMxn: number;
+  /** De dónde salió `totalCostMxn`: precio del archivo, estimado o $1 provisional (sin ningún precio en el archivo). */
+  origenDelCosto: OrigenDelCosto;
   /** La colocación / el tratamiento completo (`plan.invoiceId`). */
   principal: CargoDelCaso | null;
   controles: ControlDelCaso[];
@@ -346,7 +353,9 @@ export function armarCaso(e: EntradaDelCaso): PlanDelCaso {
   const tec = deducirTecnica(renglones, e.tecnicasPropias);
   const nControles = controlesTodos.length;
   const duracionPorControles = nControles >= 3;
-  const estimatedDurationMonths = duracionPorControles ? Math.min(60, nControles) : 18;
+  // La base admite 3..60 meses (`orthodontic_treatment_plans_duration_chk`): lo real, si se sale, va en la nota.
+  const duracion = acotarDuracion(duracionPorControles ? nControles : 18);
+  const estimatedDurationMonths = duracion.meses;
 
   const tarifa = /nueva italia/.test(sinAcentos(controlesTodos.map((r) => r.procedure).join(" ")));
   const notasTecnica = [
@@ -354,6 +363,7 @@ export function armarCaso(e: EntradaDelCaso): PlanDelCaso {
     duracionPorControles
       ? `Duración estimada = ${estimatedDurationMonths} meses, uno por cada control del presupuesto (${nControles}).`
       : "Duración estimada por defecto (18 meses): Dentalink no la trae.",
+    duracion.real !== null ? `El presupuesto trae ${nControles} controles: la duración se acotó a ${estimatedDurationMonths} meses (el máximo que admite el caso).` : "",
     tarifa ? "Sus controles usan la tarifa «Nueva Italia» de Dentalink (precio distinto al control normal): es una tarifa, no una técnica." : "",
   ].filter(Boolean).join(" ").slice(0, 1000);
 
@@ -369,10 +379,31 @@ export function armarCaso(e: EntradaDelCaso): PlanDelCaso {
     pendiente: round2((principal?.saldo ?? 0) + (extras?.saldo ?? 0) + controles.reduce((s, c) => s + (c.cargo?.saldo ?? 0), 0)),
   };
 
+  // --- Costo del caso ---------------------------------------------------------------------------
+  // «Precio total»: el cargo principal ES el total. «Pago por control»: no hay total, pero la base no admite 0 en
+  // `totalCostMxn` — se guarda el mejor estimado (la colocación + lo que suman los controles del presupuesto; sin
+  // eso, todos los cargos conocidos) y el caso lo enseña como «estimado». Sin ningún precio, $1 provisional.
+  const importeControles = round2(controlesTodos.reduce((s, r) => s + Math.max(0, r.lineTotal), 0));
+  const cargosConocidos = round2((principal?.total ?? 0) + importeControles + (extras?.total ?? 0));
+  const conocido = billingMode === "PRECIO_TOTAL" ? principal?.total ?? 0 : 0;
+  const { costo: totalCostMxn, origen: origenDelCosto } = costoParaGuardarPorControl({
+    escrito: conocido,
+    estimado: estimarCostoPorControl({ colocacion: principal?.total, importeDeControles: importeControles, cargosConocidos }),
+  });
+  if (origenDelCosto === "estimado") {
+    avisos.push(
+      `«Pago por control» no trae un total: el costo del caso se guardó como ESTIMADO ($${totalCostMxn.toFixed(2)} = colocación + los ${nControles} control(es) del presupuesto). Es solo una referencia; lo que se cobra es cada control.`,
+    );
+  } else if (origenDelCosto === "provisional") {
+    avisos.push("El archivo no trae ningún precio para este caso: se guardó con $1 provisional (la base exige un costo mayor que cero). Se corrige en el caso.");
+  }
+
   const prescriptionNotes = [
     `Migrado de Dentalink · # Tratamiento ${e.folio} · generado el ${dayKey(e.generado)}${e.doctorName ? ` · profesional: ${e.doctorName}` : ""}.`,
     `Cobro: ${billingMode === "PAGO_POR_CONTROL" ? "por control (cada control con su precio)" : "precio total (un solo cargo, sin calendario de mensualidades)"}.`,
-  ].join("\n");
+    origenDelCosto === "estimado" ? `Costo del caso ESTIMADO ($${totalCostMxn.toFixed(2)}): colocación + controles del presupuesto. No es un total pactado.` : "",
+    origenDelCosto === "provisional" ? "Costo del caso sin definir (se guardó $1 provisional): escríbelo en el caso." : "",
+  ].filter(Boolean).join("\n");
 
   return {
     folio: e.folio,
@@ -386,7 +417,8 @@ export function armarCaso(e: EntradaDelCaso): PlanDelCaso {
     startDate,
     ultimaActividad,
     billingMode,
-    totalCostMxn: billingMode === "PRECIO_TOTAL" ? (principal?.total ?? 0) : 0,
+    totalCostMxn,
+    origenDelCosto,
     principal,
     controles,
     extras,

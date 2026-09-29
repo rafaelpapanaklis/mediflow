@@ -34,6 +34,7 @@ import {
   type DetectBatchResult,
   ORIGINS,
 } from "@/components/import/import-client";
+import { nombreDelArchivo } from "@/components/import/reporte-errores";
 import type {
   PreviewResult as BackendPreviewResult,
   CommitResult as BackendCommitResult,
@@ -601,7 +602,7 @@ export class RealImportClient implements ImportClient {
       },
       onProgress,
     )) as BackendCommitResult;
-    return adaptCommit(entity, backend);
+    return adaptCommit(entity, backend, nombreDelArchivo(file, opts.sheet));
   }
 
   // -- Plantilla (una hoja por tipo de dato; el motor lee cada entidad de la suya) --
@@ -774,17 +775,19 @@ export function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewRe
  * monetaria); el resumen por entidad lo arma el wizard al acumular varias
  * entidades. Aquí se llena el slot de la entidad importada.
  */
-function adaptCommit(entity: Entity, b: BackendCommitResult): CommitResult {
+function adaptCommit(entity: Entity, b: BackendCommitResult, fileName?: string): CommitResult {
   const summary: CommitResult["summary"] = { [entity]: b.created };
+  const filas = Array.isArray(b.errors) ? b.errors : [];
 
   return {
     created: b.created,
-    errors: Array.isArray(b.errors) ? b.errors.length : 0,
+    // El total real (la lista viaja recortada); las respuestas de antes del recorte no lo traen.
+    errors: typeof b.errorsTotal === "number" ? b.errorsTotal : filas.length,
     duplicates: b.duplicates,
     ...(b.omitted ? { omitted: b.omitted } : {}),
     summary,
-    // El backend no genera (todavía) un reporte de errores descargable; los
-    // errores se muestran en la tabla de revisión. Ver ORQUESTA (followup).
+    // Qué falló y por qué, por archivo y por fila: el resumen final lo enseña y «Descargar reporte» lo baja como CSV.
+    errorRows: filas.map((f) => ({ entity, fileName: fileName ?? "", row: f.row, errors: f.errors })),
     errorReportUrl: undefined,
   };
 }

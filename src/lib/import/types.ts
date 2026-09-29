@@ -207,5 +207,11 @@ export interface CommitResult {
   duplicates: number;
   /** Filas dejadas fuera a propósito, ver RowStatus "skipped". Ausente = 0. */
   omitted?: number;
+  /** Las filas con error (con su motivo), hasta `MAX_FILAS_CON_ERROR_EN_RESPUESTA`. */
   errors: { row: number; errors: string[] }[];
+  /** Cuántas filas fallaron en total (`errors` se recorta): el resumen final y el reporte lo dicen. */
+  errorsTotal?: number;
 }
+
+/** Tope de filas con error que viajan en la respuesta del commit (el resto se cuenta en `errorsTotal`). */
+export const MAX_FILAS_CON_ERROR_EN_RESPUESTA = 500;

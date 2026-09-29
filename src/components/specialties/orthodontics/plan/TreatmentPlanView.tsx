@@ -4,6 +4,7 @@
 import type { OrthodonticTreatmentPlanRow, OrthodonticPhaseRow } from "@/lib/types/orthodontics";
 import type { OrthoPhaseKey, OrthoTechnique } from "@prisma/client";
 import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
+import { costoVisible } from "@/lib/orthodontics/check-del-caso";
 import { PhaseTimeline } from "./PhaseTimeline";
 
 export interface TreatmentPlanViewProps {
@@ -38,7 +39,8 @@ export function TreatmentPlanView(props: TreatmentPlanViewProps) {
           label="Mes actual"
           value={`${props.monthInTreatment} / ${p.estimatedDurationMonths}`}
         />
-        <Kpi label="Costo total" value={`$${Number(p.totalCostMxn).toLocaleString("es-MX")}`} />
+        {/* ws1-t10: el $1 provisional (la base exige > 0) no es un precio. */}
+        <Kpi label="Costo total" value={costoVisible(p.totalCostMxn) === null ? "Por definir" : `$${Number(p.totalCostMxn).toLocaleString("es-MX")}`} />
         <Kpi label="Anclaje" value={p.anchorageType.toLowerCase()} />
         <Kpi label="Estado" value={p.status.replace("_", " ").toLowerCase()} />
       </section>

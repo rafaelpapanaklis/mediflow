@@ -139,7 +139,10 @@ test("por control: los controles HECHOS son hojas con su precio y su pago; los n
   assert.equal(p.principal!.status, "PAID");
   assert.equal(p.extras!.total, 2800, "TADs = cargo aparte del caso");
   assert.equal(p.extras!.status, "PAID");
-  assert.equal(p.totalCostMxn, 0, "en «Pago por control» el costo total es solo referencia");
+  assert.equal(p.totalCostMxn, 5400, "en «Pago por control» no hay total: es el ESTIMADO (colocación 3000 + 4 controles × 600), nunca 0");
+  assert.equal(p.origenDelCosto, "estimado");
+  assert.match(p.avisos.join(" "), /ESTIMADO/);
+  assert.match(p.prescriptionNotes, /ESTIMADO/);
   assert.equal(p.estimatedDurationMonths, 4, "un mes por control del presupuesto");
   assert.deepEqual(
     [p.cifras.controlesDelPresupuesto, p.cifras.controlesHechos, p.cifras.controlesSinHacer, p.cifras.importeControlesSinHacer, p.cifras.controlesHechosPagados, p.cifras.controlesHechosPendientes],
@@ -421,4 +424,92 @@ test("sin la tabla de ID externos no se importa ningún caso (un reintento los d
   const filas = (prev.preview as any[]).slice(0, 5);
   assert.ok(filas.every((f) => f.status === "error"));
   assert.match(filas[0].errors.join(" "), /import-ids-externos\.sql/);
+});
+
+// ───────────────────────── ws1-t10: la restricción de la base ─────────────────────────
+// `orthodontic_treatment_plans_duration_chk`: duración 3..60 Y costo > 0. El doble la APLICA (por defecto), así que un
+// caso «Pago por control» con costo 0 ya no pasa en las pruebas para fallar en producción.
+
+test("el doble aplica la restricción de la base: costo 0 → 23514 y el motivo lo nombra (no el genérico)", async () => {
+  reiniciar();
+  const { armarCaso } = await caso();
+  const { construirRegistros, mensajeDeError, codigoDeLaBase } = await casoDb();
+  const p = armarCaso(entrada([
+    { row: 2, procedure: "Colocación de brackets Metálicos", categoria: O, lineTotal: 3000, hecho: true, fecha: "2026-01-10", pag: 3000 },
+    { row: 3, procedure: "Ajuste control mensual de ortodoncia", categoria: O, lineTotal: 600 },
+  ]));
+  const r = construirRegistros(p, { clinicId: CLINICA, userId: DUENO, origen: "Dentalink", ahora: dia("2026-09-29"), primerNumero: 1, patientId: "p1", doctorId: DUENO });
+  assert.ok((r.plan as any).totalCostMxn > 0, "con el arreglo el plan sale con costo > 0");
+
+  // El caso de ANTES del arreglo (costo 0 «de referencia»): la base lo rechaza.
+  const antes = { ...(r.plan as any), id: "plan_viejo", totalCostMxn: 0 };
+  let error: any = null;
+  try {
+    await base.prisma.orthodonticTreatmentPlan.createMany({ data: [antes] });
+  } catch (e) {
+    error = e;
+  }
+  assert.ok(error, "costo 0 debe reventar como en Postgres");
+  assert.equal(codigoDeLaBase(error), "23514");
+  const msg = mensajeDeError(error, { ...p, totalCostMxn: 0 });
+  assert.match(msg, /Tratamiento #77/);
+  assert.match(msg, /costo total \(0\) debe ser mayor que cero/);
+  assert.match(msg, /orthodontic_treatment_plans_duration_chk/);
+  assert.doesNotMatch(msg, /error de base de datos\)$/, "ya no es el mensaje genérico");
+  assert.equal(tabla("orthodonticTreatmentPlan").length, 0, "no quedó nada a medias");
+
+  // La forma REAL del error (medida contra la base, 29-sep-2026): sin `code` ni `meta`, todo en el texto, con el volcado
+  // de la fila (ids y datos del paciente) que NUNCA debe llegar al mensaje.
+  const real: any = new Error(
+    'Invalid `tx.orthodonticTreatmentPlan.createMany()` invocation\nConnectorError { kind: QueryError(PostgresError { code: "23514", message: "new row for relation \\"orthodontic_treatment_plans\\" violates check constraint \\"orthodontic_treatment_plans_duration_chk\\"", detail: Some("Failing row contains (cyv3, p1, clinica_qa_prueba, 0.00)") }) }',
+  );
+  assert.equal(codigoDeLaBase(real), "23514");
+  assert.match(mensajeDeError(real, { ...p, totalCostMxn: 0 }), /costo total \(0\) debe ser mayor que cero/);
+  assert.doesNotMatch(mensajeDeError(real, { ...p, totalCostMxn: 0 }), /Failing row|clinica_qa_prueba/);
+
+  // Otro error de la base sí cae al genérico, pero con su código.
+  assert.match(mensajeDeError({ code: "P2010", message: "Raw query failed. Code: `42P01`." }, p), /error de base de datos 42P01\)$/);
+});
+
+test("con sql/ortodoncia-costo-del-caso.sql pegado el costo 0 y la duración corta se aceptan; sin él, no", async () => {
+  const { violacionesDelPlan } = await import("@/lib/orthodontics/check-del-caso");
+  const fila = { estimatedDurationMonths: 2, totalCostMxn: 0 };
+  assert.equal(violacionesDelPlan(fila, "vigente").length, 2);
+  assert.deepEqual(violacionesDelPlan(fila, "corregida"), []);
+  reiniciar();
+  base.banderas.checkDelPlan = "corregida";
+  await base.prisma.orthodonticTreatmentPlan.createMany({ data: [{ id: "pl_1", clinicId: CLINICA, ...fila }] });
+  assert.equal(tabla("orthodonticTreatmentPlan").length, 1);
+});
+
+test("«Pago por control» importado entra COMPLETO contra la restricción real, con su estimado marcado", async () => {
+  reiniciar();
+  const res = await correr(ARCHIVO(), { dryRun: false });
+  assert.equal(res.errors.length, 0, JSON.stringify(res.errors));
+  const p77 = tabla("orthodonticTreatmentPlan").find((p) => p.technique === "METAL_BRACKETS")!;
+  assert.equal(p77.totalCostMxn, 3000 + 3 * 600, "colocación + los 3 controles del archivo");
+  assert.match(String(p77.prescriptionNotes), /ESTIMADO/);
+  assert.ok(p77.estimatedDurationMonths >= 3 && p77.estimatedDurationMonths <= 60);
+});
+
+test("sin ningún precio en el archivo: $1 provisional (la base exige > 0), avisado y nunca 0", async () => {
+  const { armarCaso } = await caso();
+  const { COSTO_PROVISIONAL, costoVisible, violacionesDelPlan } = await import("@/lib/orthodontics/check-del-caso");
+  const p = armarCaso(entrada([{ row: 2, procedure: "Alineadores invisibles tratamiento completo", categoria: O, lineTotal: 0 }]));
+  assert.equal(p.billingMode, "PRECIO_TOTAL");
+  assert.equal(p.totalCostMxn, COSTO_PROVISIONAL);
+  assert.equal(p.origenDelCosto, "provisional");
+  assert.match(p.avisos.join(" "), /\$1 provisional/);
+  assert.equal(costoVisible(p.totalCostMxn), null, "el provisional no se enseña como precio");
+  assert.deepEqual(violacionesDelPlan({ estimatedDurationMonths: p.estimatedDurationMonths, totalCostMxn: p.totalCostMxn }), []);
+});
+
+test("un presupuesto con más de 60 controles: duración acotada a 60 y el valor real queda en la nota", async () => {
+  const { armarCaso } = await caso();
+  const lineas: R[] = [{ row: 2, procedure: "Colocación de brackets Metálicos", categoria: O, lineTotal: 3000, hecho: true, fecha: "2026-01-10", pag: 3000 }];
+  for (let i = 0; i < 75; i++) lineas.push({ row: 3 + i, procedure: "Ajuste control mensual de ortodoncia", categoria: O, lineTotal: 500 });
+  const p = armarCaso(entrada(lineas));
+  assert.equal(p.estimatedDurationMonths, 60);
+  assert.match(p.techniqueNotes, /75 controles: la duración se acotó a 60 meses/);
+  assert.equal(p.totalCostMxn, 3000 + 75 * 500);
 });

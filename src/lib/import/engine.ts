@@ -17,6 +17,7 @@ import { getOriginProfile, profileMappingFor } from "./profiles";
 import { analizarMonto, montoSinConfirmar, separarFechaHora, type HoraDeReloj } from "./valores";
 import {
   AMOUNT_FORMAT_FIELD,
+  MAX_FILAS_CON_ERROR_EN_RESPUESTA,
   type ColumnMapping,
   type CommitResult,
   type Entity,
@@ -971,12 +972,14 @@ export async function runImport(
     console.error("[import] no se pudo dejar el rastro por paciente:", e);
   }
 
+  const filasConError = preview.filter((r) => r.status === "error");
   return {
     entity: handler.entity,
     created,
     skipped,
     duplicates: counts.duplicados,
     ...(counts.omitidos > 0 ? { omitted: counts.omitidos } : {}),
-    errors: preview.filter((r) => r.status === "error").slice(0, 50).map((r) => ({ row: r.row, errors: r.errors })),
+    errors: filasConError.slice(0, MAX_FILAS_CON_ERROR_EN_RESPUESTA).map((r) => ({ row: r.row, errors: r.errors })),
+    errorsTotal: filasConError.length,
   };
 }

@@ -43,6 +43,8 @@ import { StepReview } from "./step-review";
 import { ImportingPanel } from "./importing-panel";
 import { UploadProgress, type UploadProgressState } from "./upload-progress";
 import { ResultPanel } from "./result-panel";
+import { etiquetaDeEntidad } from "./errores-de-importacion";
+import { descargarReporte, nombreDelArchivo } from "./reporte-errores";
 import { AssistedPanel } from "./assisted-panel";
 import { FilesWizard } from "./files-wizard";
 import { MultiImportWizard } from "./multi-import-wizard";
@@ -459,6 +461,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       errors: 0,
       duplicates: 0,
       summary: {},
+      errorRows: [],
       errorReportUrl: undefined,
     };
     let committedAny = false;
@@ -499,6 +502,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
         agg.errors += r.errors;
         agg.duplicates += r.duplicates;
         if (r.errorReportUrl) agg.errorReportUrl = r.errorReportUrl;
+        if (r.errorRows?.length) agg.errorRows!.push(...r.errorRows);
         agg.summary[ent] = r.created;
       } catch (e) {
         // Falla la PRIMERA entidad sin nada importado → abortar y volver a revisar.
@@ -510,6 +514,9 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
           setStep(6);
           return;
         }
+        // Una entidad secundaria que no se pudo importar NO se calla: entra al resumen y al reporte como «todo el archivo».
+        agg.errors += 1;
+        agg.errorRows!.push({ entity: ent, fileName: nombreDelArchivo(f, ent === principalEntity ? sheet : null), row: 0, errors: [e instanceof Error ? e.message : t("shell.importClinic.errImport")] });
       }
     }
 
@@ -738,8 +745,10 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                   onGoPatients={() => { onImported?.(); onClose(); }}
                   onImportAnother={startWizard}
                   onDownloadReport={() => {
-                    if (result.errorReportUrl) window.open(result.errorReportUrl, "_blank", "noopener");
-                    else toast(t("shell.importClinic.result.reportSoon")); // TODO(T4): reporte real
+                    // El reporte se arma aquí con las filas que devolvió el motor (archivo, fila y motivo).
+                    if (!descargarReporte(result.errorRows ?? [], (e) => etiquetaDeEntidad(t, e))) {
+                      toast(t("shell.importClinic.result.reportEmpty"));
+                    }
                   }}
                 />
               ) : step === 1 ? (

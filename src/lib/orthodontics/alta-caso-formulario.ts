@@ -113,7 +113,7 @@ export function textosDelCosto(modo: OrthoBillingMode): { rotulo: string; pista:
     return {
       rotulo: "Costo estimado del tratamiento (MXN) · opcional",
       pista:
-        "Este caso se cobra por control: no se factura un total. Si le diste un estimado al paciente, escríbelo; queda solo como referencia del caso. Puedes dejarlo vacío.",
+        "Este caso se cobra por control: no se factura un total. Si le diste un estimado al paciente, escríbelo; queda solo como referencia del caso. Si lo dejas vacío, se guarda un estimado (colocación + controles previstos, con los precios de tu catálogo) y se marca como estimado.",
     };
   }
   return {

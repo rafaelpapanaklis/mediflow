@@ -21,6 +21,7 @@
 // ============================================================================
 import { mapeoEsDeEsteArchivo, puedeConfirmarSolo, refrescaAlDecidir, valueMappingDeDecisiones } from "./lote-guardia";
 import { useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
 import { UploadCloud, X as XIcon, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import {
@@ -36,6 +37,7 @@ import {
   type DetectBatchResult,
   type DetectGuess,
   type Confidence,
+  type ErrorDeFila,
   DATA_TYPES,
   ORIGINS,
   VALUE_UNLINKED,
@@ -48,6 +50,8 @@ import { RealImportClient, esErrorTransitorio } from "@/lib/import/client";
 import { StepMapping } from "./step-mapping";
 import { StepReview } from "./step-review";
 import { UploadProgress, type UploadProgressState } from "./upload-progress";
+import { ErroresDeImportacion, etiquetaDeEntidad } from "./errores-de-importacion";
+import { descargarReporte, filasConError, nombreDelArchivo } from "./reporte-errores";
 
 /** El cliente real ya implementa esto (`RealImportClient.detectBatch`); un mock de test también puede. */
 export type ImportClientWithDetect = ImportClient & {
@@ -691,6 +695,32 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
               </table>
             </div>
           </div>
+          {(() => {
+            // Qué falló y por qué, por archivo y por fila (el total de la tabla no dice el motivo). Un archivo que ni se
+            // pudo procesar entra como «todo el archivo».
+            const filasDeError: ErrorDeFila[] = [
+              ...filasConError(outcomes.map((o) => o.result)),
+              ...outcomes.flatMap((o) => {
+                if (o.status !== "error") return [];
+                const it = queue.find((x) => x.key === o.key);
+                return [{ entity: o.entity, fileName: it ? nombreDelArchivo(it.file, it.sheetName) : "", row: 0, errors: [o.errorMsg ?? t("shell.importClinic.multi.errImportFile")] }];
+              }),
+            ];
+            const total = outcomes.reduce((n, o) => n + (o.status === "error" ? 1 : (o.result?.errors ?? 0)), 0);
+            if (total === 0) return null;
+            return (
+              <div style={{ marginTop: 12 }}>
+                <ErroresDeImportacion
+                  t={t}
+                  filas={filasDeError}
+                  total={total}
+                  onDownload={() => {
+                    if (!descargarReporte(filasDeError, (e) => etiquetaDeEntidad(t, e))) toast(t("shell.importClinic.result.reportEmpty"));
+                  }}
+                />
+              </div>
+            );
+          })()}
           {outcomes.some((o) => o.entity === "doctors" && o.status === "error") && queue.some((it) => it.entity === "appointments" || it.entity === "blockedHours" || it.entity === "appointmentHistory") && (
             <div className="imp-callout imp-callout--warn" style={{ marginTop: 12 }}>
               <div className="imp-callout__txt"><p>{t("shell.importClinic.multi.doctorsFailedDeps")}</p></div>
