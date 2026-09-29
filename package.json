@@ -228,7 +228,7 @@
     "test:orto-precio-desfasado": "tsx --test src/lib/orthodontics/cobro/__tests__/precio-desfasado.test.ts",
     "test:nueva-consulta-catalogo": "tsx --test src/lib/orthodontics/__tests__/nueva-consulta-catalogo.test.ts",
     "test:orto-expediente": "tsx --test src/lib/orthodontics/__tests__/expediente-ortodoncia.test.ts",
-    "test:orto-diagnostico": "tsx --test src/lib/orthodontics/__tests__/diagnostico-detalle.test.ts",
+    "test:orto-diagnostico": "tsx --test src/lib/orthodontics/__tests__/diagnostico-detalle.test.ts src/lib/orthodontics/__tests__/versiones-caso.test.ts",
     "test:pago-del-mes": "tsx --test src/lib/invoices/__tests__/pago-del-mes.test.ts",
     "test:orto-anticipo-control": "tsx --test src/lib/orthodontics/__tests__/anticipo-control.test.ts",
     "test:quitar-procedimiento": "tsx --test src/lib/procedures/__tests__/quitar-procedimiento.test.ts",

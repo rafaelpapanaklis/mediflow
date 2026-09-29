@@ -26,6 +26,7 @@ import {
 } from "@/lib/orthodontics/diagnostico-detalle";
 import type { DiagnosticoCompleto } from "@/app/actions/orthodontics/leerDiagnosticoCompleto";
 import { pedirSeccionDelDiagnostico, useDiagnosticoCompleto } from "../diagnostico/useDiagnosticoCompleto";
+import { VersionesDelCaso } from "../diagnostico/VersionesDelCaso";
 import dx from "../diagnostico.module.css";
 import { ImagenYAnalisisCard } from "../../imagen/ImagenYAnalisisCard";
 import orto from "../orto.module.css";
@@ -108,7 +109,7 @@ export function SectionDiagnosis(props: SectionDiagnosisProps) {
         ) : null
       }
     >
-      <ResumenDelDiagnostico d={d} onEdit={props.onEdit} />
+      <ResumenDelDiagnostico d={d} onEdit={props.onEdit} treatmentPlanId={props.treatmentPlanId} />
       {/* Imagen y análisis + registros: rejilla 1×2 con una línea fina entre bloques. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-[color:var(--pr-borde-suave)] border-t border-[color:var(--pr-borde-suave)] rounded-b-[14px] overflow-hidden">
         {props.treatmentPlanId && props.patientId ? (
@@ -177,7 +178,7 @@ const APARTADOS: Array<{ clave: string; titulo: string }> = [
   { clave: "etiologia", titulo: "Etiología" },
 ];
 
-function ResumenDelDiagnostico({ d, onEdit }: { d: DiagnosisDTO; onEdit?: () => void }) {
+function ResumenDelDiagnostico({ d, onEdit, treatmentPlanId }: { d: DiagnosisDTO; onEdit?: () => void; treatmentPlanId?: string }) {
   const { datos, cargando } = useDiagnosticoCompleto(d.id);
   const base = datos ? datos.base : baseDesdeDto(d);
   const detalle = datos?.detalle ?? null;
@@ -200,6 +201,8 @@ function ResumenDelDiagnostico({ d, onEdit }: { d: DiagnosisDTO; onEdit?: () => 
   return (
     <div className={dx.dxCuerpo}>
       {meta.length ? <div className={`${orto.tonoApagado} text-xs`}>{meta.join(" · ")}</div> : null}
+      {/* Reevaluaciones del caso: versión actual, historial y «Nueva reevaluación» (sin el SQL, no se pinta). */}
+      {treatmentPlanId ? <VersionesDelCaso treatmentPlanId={treatmentPlanId} puedeReevaluar={Boolean(onEdit)} onReevaluacionCreada={onEdit} /> : null}
       <div className={dx.dxFranja} role="list" aria-label="Valores clave del diagnóstico">
         {indicadores.map((i) => (
           <div key={i.clave} className={dx.dxIndicador} role="listitem">

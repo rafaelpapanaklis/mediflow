@@ -82,6 +82,12 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
         <MembreteOrto datos={m} documento={DOCUMENTO} />
 
         <Text style={styles.h1}>Plan de tratamiento ortodóntico</Text>
+        {/* ws1-t8: la versión que se imprime (reevaluaciones). Sin historial, no se dice nada. */}
+        {data.versiones && data.versiones.anteriores.length > 0 ? (
+          <Text style={styles.paragraph}>
+            Versión: {data.versiones.actual.etiqueta}, vigente desde el {data.versiones.actual.desde}.
+          </Text>
+        ) : null}
 
         <Text style={styles.h2}>Tu diagnóstico</Text>
         <View style={styles.box} wrap={false}>
@@ -179,6 +185,18 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
         <Text style={styles.bullet}>
           • Avisa de inmediato si se rompe un bracket, sale un elástico, o tienes dolor anormal.
         </Text>
+
+        {/* ws1-t8: historial de reevaluaciones (las versiones anteriores se conservan completas en la ficha). */}
+        {data.versiones && data.versiones.anteriores.length > 0 ? (
+          <View wrap={false}>
+            <Text style={styles.h2}>Historial de versiones</Text>
+            {data.versiones.anteriores.map((v) => (
+              <Text key={v.etiqueta} style={styles.bullet}>
+                • {v.etiqueta}: del {v.desde} al {v.hasta}{v.motivo ? ` · motivo de la reevaluación siguiente: ${v.motivo}` : ""}
+              </Text>
+            ))}
+          </View>
+        ) : null}
 
         <Text style={styles.nota}>
           Este documento es informativo. El consentimiento firmado contiene los términos legales completos.

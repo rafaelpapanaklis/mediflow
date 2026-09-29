@@ -9,6 +9,8 @@ import { cargarPlanDetalle } from "@/lib/orthodontics/plan-detalle-db";
 import { lineasDelPlan, type LineaDelPlan } from "@/lib/orthodontics/plan-detalle";
 import { cargarDiagnosticosLegibles } from "@/lib/orthodontics/diagnostico-detalle-db";
 import type { SeccionLegible } from "@/lib/orthodontics/diagnostico-detalle";
+import { listarVersionesDelCaso } from "@/lib/orthodontics/versiones-caso-db";
+import { fechaDma, lineaDeTiempo } from "@/lib/orthodontics/versiones-caso";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { exportTreatmentPlanPdfSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
@@ -61,6 +63,14 @@ export type TreatmentPlanPdfData = {
    * redactado con `seccionesDelDiagnostico` (la misma redacción que la ficha). Vacío/ausente = solo lo de arriba.
    */
   diagnosticoCompleto?: SeccionLegible[];
+  /**
+   * ws1-t8 — REEVALUACIONES: la versión que se imprime (la actual) y las anteriores (fechas dd/mm/aaaa y el motivo
+   * de la reevaluación que las cerró). Ausente o sin anteriores = el caso nunca se reevaluó.
+   */
+  versiones?: {
+    actual: { etiqueta: string; desde: string };
+    anteriores: Array<{ etiqueta: string; desde: string; hasta: string; motivo: string | null }>;
+  };
   phases: Array<{ phaseKey: string; orderIndex: number; status: string }>;
   generatedAt: string;
 };
@@ -87,6 +97,7 @@ export async function exportTreatmentPlanPdf(
           overjetMm: true,
           clinicalSummary: true,
           diagnosedById: true,
+          diagnosedAt: true,
         },
       },
       phases: {
@@ -175,7 +186,25 @@ export async function exportTreatmentPlanPdf(
     planCompleto,
     // ws1-t8: sin la columna del diagnóstico completo (SQL sin pegar), sale lo de siempre.
     diagnosticoCompleto: (await cargarDiagnosticosLegibles(ctx.clinicId, [plan.diagnosisId])).get(plan.diagnosisId) ?? [],
+    versiones: await versionesParaElPdf(ctx.clinicId, plan.id, plan.diagnosis.diagnosedAt),
     phases: plan.phases,
     generatedAt: new Date().toISOString(),
   });
+}
+
+/** ws1-t8 — la línea de tiempo de reevaluaciones para el PDF. Sin la tabla (SQL sin pegar), nada. */
+async function versionesParaElPdf(clinicId: string, planId: string, diagnosedAt: Date): Promise<TreatmentPlanPdfData["versiones"]> {
+  const cerradas = await listarVersionesDelCaso(clinicId, planId).catch(() => null);
+  if (!cerradas || cerradas.length === 0) return undefined;
+  const linea = lineaDeTiempo(cerradas, diagnosedAt.toISOString());
+  const actual = linea[linea.length - 1]!;
+  return {
+    actual: { etiqueta: actual.etiqueta, desde: fechaDma(actual.desde) },
+    anteriores: linea.slice(0, -1).map((p, i) => ({
+      etiqueta: p.etiqueta,
+      desde: fechaDma(p.desde),
+      hasta: fechaDma(p.hasta),
+      motivo: cerradas[i]?.motivo ?? null,
+    })),
+  };
 }

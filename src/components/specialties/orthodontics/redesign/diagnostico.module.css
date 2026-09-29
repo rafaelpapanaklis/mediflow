@@ -672,6 +672,80 @@
   max-width: 1040px !important;
 }
 
+/* ── Reevaluaciones: versión actual, historial y qué cambió ─────── */
+
+.dxVersiones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  font-size: 12.5px;
+}
+
+.dxVersionActual {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--pr-texto);
+}
+
+.dxVersionPunto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--orto-violeta);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+.dxVersionesAcciones {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dxHitoFecha {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pr-texto-3);
+}
+
+.dxCambio {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.dxCambio svg {
+  flex: none;
+  color: var(--pr-texto-3);
+}
+
+.dxCambioAntes {
+  color: var(--pr-texto-3);
+  text-decoration: line-through;
+  overflow-wrap: anywhere;
+}
+
+.dxCambioDespues {
+  font-weight: 600;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+}
+
+.dxVentanaChica {
+  max-width: 560px !important;
+  height: auto !important;
+}
+
 /* ── Teléfono / ventana angosta ──────────────────────────────────── */
 
 @media (max-width: 1100px) {
