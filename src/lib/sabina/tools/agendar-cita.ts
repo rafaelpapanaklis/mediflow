@@ -130,10 +130,12 @@ export const agendarCita = definirHerramienta<ParamsAgendarCita, DatosAccionAgen
     }
 
     // El doctor: el que diga el usuario. Si no dijo y la cita es de ortodoncia,
-    // el tratante del caso (o el tratante por defecto de la clínica).
+    // el tratante del caso. Sin caso (o un caso viejo sin doctor) no hay «doctor por defecto» de
+    // Configuración (ws1-t10): manda `resolverDoctor`, que toma a quien pregunta si es doctor, o al
+    // único doctor de la sede, y si no, pregunta.
     const pedido = { doctorId: p.doctorId, doctor: p.doctor };
     const nombroDoctor = Boolean(p.doctorId || (p.doctor ?? "").trim());
-    const tratante = tipoOrto ? orto?.caso?.treatingDoctorId ?? orto?.doctorPorDefecto ?? null : null;
+    const tratante = tipoOrto ? orto?.caso?.treatingDoctorId ?? null : null;
     let doctor = await resolverDoctor(ctx, db, !nombroDoctor && tratante ? { doctorId: tratante } : pedido);
     // El tratante ya no está activo (o ya no es doctor): se resuelve como siempre.
     if (doctor.tipo === "no" && !nombroDoctor && tratante) doctor = await resolverDoctor(ctx, db, pedido);

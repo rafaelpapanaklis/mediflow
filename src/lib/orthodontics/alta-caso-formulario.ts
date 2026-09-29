@@ -141,6 +141,11 @@ export interface EstadoAlta {
   tutorTelefono: string;
   /** ws1-t10: la clínica no tiene ninguna técnica activa que ofrecer. */
   sinTecnica?: boolean;
+  /**
+   * ws1-t10: hay que elegir al doctor tratante (nadie quedó propuesto y la
+   * base guarda ese dato). Lo calcula el cajón con `motivoFaltaDoctor`.
+   */
+  sinDoctor?: boolean;
 }
 
 /**
@@ -172,6 +177,7 @@ export function faltantesDelAlta(e: EstadoAlta): string[] {
   if (retencion < MIN_RETENCION) {
     faltan.push(`el plan de retención (lleva ${retencion} de ${MIN_RETENCION} caracteres)`);
   }
+  if (e.sinDoctor) faltan.push("el doctor tratante (elige quién lleva el caso)");
   if (e.modoResponsable === "existing" && e.tutorElegidoId === "") {
     faltan.push("elegir al responsable del pago (o marcar «El paciente»)");
   }

@@ -16,6 +16,8 @@ import {
   loadPatientForOrtho,
 } from "./_helpers";
 import { validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
+import { existeColumnaDoctorTratante } from "@/lib/orthodontics/doctores-tratantes-db";
+import { motivoFaltaDoctor } from "@/lib/orthodontics/doctores-tratantes";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -44,6 +46,17 @@ export async function createTreatmentPlan(
   if (!dx) return fail("Diagnóstico no encontrado");
   if (dx.treatmentPlan)
     return fail("Ya existe un plan para este diagnóstico", dx.treatmentPlan.id);
+
+  // ws1-t10: un caso nuevo no se abre sin doctor tratante (ya no hay «doctor
+  // por defecto» que lo supla). La columna se comprueba solo si falta el
+  // doctor, para no gastar una consulta en el camino normal.
+  if (!parsed.data.treatingDoctorId) {
+    const sinDoctor = motivoFaltaDoctor({
+      treatingDoctorId: parsed.data.treatingDoctorId,
+      columnaExiste: await existeColumnaDoctorTratante(),
+    });
+    if (sinDoctor) return fail(sinDoctor);
+  }
 
   // X1: el doctor tratante y el responsable de pago tienen que ser de ESTA
   // clínica (el id llega del cliente).

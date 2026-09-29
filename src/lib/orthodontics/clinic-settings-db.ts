@@ -77,7 +77,8 @@ export const DEFAULT_ORTHO_APPOINTMENT_TYPES: readonly OrthoAppointmentTypeOptio
 
 export interface OrthoClinicSettings {
   clinicId: string;
-  defaultTreatingDoctorId: string | null;
+  // ws1-t10: ya no hay «doctor tratante por defecto». La columna `defaultTreatingDoctorId` sigue en
+  // la tabla con lo que la clínica guardó, pero nadie la lee ni la escribe.
   appointmentTypes: OrthoAppointmentTypeOption[];
   messageTemplates: Record<string, string>;
   /** Ola 2 (ws1-t1) — default para CASOS NUEVOS; un caso ya abierto conserva
@@ -101,7 +102,6 @@ export function normalizarProximoControlBotEnabled(raw: unknown): boolean {
 function defaults(clinicId: string): OrthoClinicSettings {
   return {
     clinicId,
-    defaultTreatingDoctorId: null,
     appointmentTypes: [...DEFAULT_ORTHO_APPOINTMENT_TYPES],
     messageTemplates: {},
     billingMode: ORTHO_BILLING_MODE_DEFAULT,
@@ -125,7 +125,6 @@ export async function loadOrthoClinicSettings(clinicId: string): Promise<OrthoCl
     if (!row) return defaults(clinicId);
     return {
       clinicId,
-      defaultTreatingDoctorId: row.defaultTreatingDoctorId,
       // `normalizarCatalogo`: la fila fija sale siempre con su clave y su
       // texto exacto, y sin el duplicado que podía dejar el fallo de reconocerla
       // por el texto. Solo cambia lo que se ENTREGA; la fila guardada se
@@ -149,7 +148,6 @@ export async function loadOrthoClinicSettings(clinicId: string): Promise<OrthoCl
 export interface GuardarOrthoClinicSettingsArgs {
   clinicId: string;
   updatedBy: string;
-  defaultTreatingDoctorId: string | null;
   appointmentTypes: OrthoAppointmentTypeOption[];
   messageTemplates: Record<string, string>;
   billingMode: OrthoBillingMode;
@@ -173,7 +171,6 @@ export async function guardarOrthoClinicSettings(
     where: { clinicId: args.clinicId },
     create: {
       clinicId: args.clinicId,
-      defaultTreatingDoctorId: args.defaultTreatingDoctorId,
       appointmentTypes: args.appointmentTypes as unknown as object,
       messageTemplates: args.messageTemplates as unknown as object,
       billingMode: args.billingMode,
@@ -181,7 +178,6 @@ export async function guardarOrthoClinicSettings(
       updatedBy: args.updatedBy,
     },
     update: {
-      defaultTreatingDoctorId: args.defaultTreatingDoctorId,
       appointmentTypes: args.appointmentTypes as unknown as object,
       messageTemplates: args.messageTemplates as unknown as object,
       billingMode: args.billingMode,

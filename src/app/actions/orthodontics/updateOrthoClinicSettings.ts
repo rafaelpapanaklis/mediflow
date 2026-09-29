@@ -1,13 +1,11 @@
 "use server";
-// Orthodontics — Configuración del submenú (Ola 1, ws1-t3). Guarda doctor
-// tratante por defecto, catálogo de tipos de cita (C7) y plantillas de
-// mensaje. Zod valida forma; el permiso lo exige getOrthoConfigActionContext
+// Orthodontics — Configuración del submenú (Ola 1, ws1-t3). Guarda el
+// catálogo de tipos de cita (C7), las plantillas de mensaje y el modo de cobro. Zod valida forma; el permiso lo exige getOrthoConfigActionContext
 // (settings.edit — es ajuste de la clínica, no dinero ni expediente).
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getOrthoConfigActionContext, auditOrtho } from "./_helpers";
-import { esDoctorTratanteDeLaClinica } from "@/lib/orthodontics/doctores-tratantes-db";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import {
   guardarOrthoClinicSettings,
@@ -27,8 +25,9 @@ const appointmentTypeSchema = z.object({
   durationMin: z.number().int().positive().max(600).nullable().optional(),
 });
 
+// ws1-t10: ya no hay «doctor tratante por defecto». Si un cliente viejo aún manda
+// `defaultTreatingDoctorId`, zod lo descarta (no es .strict()) y la columna no se toca.
 const inputSchema = z.object({
-  defaultTreatingDoctorId: z.string().nullable(),
   appointmentTypes: z.array(appointmentTypeSchema).min(1).max(20),
   messageTemplates: z.record(z.string().max(2000)),
   // Ola 2 (ws1-t1) — opcional a propósito: mientras la pantalla de
@@ -55,15 +54,6 @@ export async function updateOrthoClinicSettings(
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
   const data = parsed.data;
-
-  // El doctor por defecto tiene que ser alguien que ATIENDE en ESTA clínica —
-  // el clinicId nunca sale del cliente, sale de la sesión (ctx.clinicId). La
-  // regla es la misma de la lista que se ofrece (doctores-tratantes.ts): un
-  // doctor, o el dueño/administrador que atiende.
-  if (data.defaultTreatingDoctorId) {
-    const valido = await esDoctorTratanteDeLaClinica(ctx.clinicId, data.defaultTreatingDoctorId);
-    if (!valido) return fail("El doctor tratante por defecto ya no atiende en esta clínica. Elige otro de la lista.");
-  }
 
   const before = await loadOrthoClinicSettings(ctx.clinicId);
 
@@ -103,7 +93,6 @@ export async function updateOrthoClinicSettings(
     await guardarOrthoClinicSettings({
       clinicId: ctx.clinicId,
       updatedBy: ctx.userId,
-      defaultTreatingDoctorId: data.defaultTreatingDoctorId,
       appointmentTypes,
       messageTemplates,
       billingMode,
@@ -118,7 +107,7 @@ export async function updateOrthoClinicSettings(
     throw e;
   }
 
-  // P4: bitácora de cambios — quién tocó el doctor por defecto, el catálogo
+  // P4: bitácora de cambios — quién tocó el catálogo
   // de tipos de cita o las plantillas.
   await auditOrtho({
     ctx,
@@ -126,14 +115,12 @@ export async function updateOrthoClinicSettings(
     entityType: "OrthodonticsClinicSettings",
     entityId: ctx.clinicId,
     before: {
-      defaultTreatingDoctorId: before.defaultTreatingDoctorId,
       appointmentTypes: before.appointmentTypes,
       messageTemplates: before.messageTemplates,
       billingMode: before.billingMode,
       proximoControlBotEnabled: before.proximoControlBotEnabled,
     },
     after: {
-      defaultTreatingDoctorId: data.defaultTreatingDoctorId,
       appointmentTypes: data.appointmentTypes,
       messageTemplates,
       billingMode,

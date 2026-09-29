@@ -1,6 +1,6 @@
 "use client";
 // Ortodoncia — Configuración del submenú (Ola 1, ws1-t3 · «Acceso y
-// permisos»). Doctor tratante por defecto, catálogo de tipos de cita (C7,
+// permisos»). Catálogo de tipos de cita (C7,
 // ÚNICO — ver clinic-settings-db.ts — que new-appointment-dialog.tsx pide a
 // /api/orthodontics/context y ofrece como chips de motivo al agendar) y
 // plantillas de mensaje. La entrada "Control de ortodoncia" es de solo
@@ -14,7 +14,7 @@
 
 import { useId, useState } from "react";
 import toast from "react-hot-toast";
-import { AlertTriangle, Ban, CalendarClock, ClipboardList, Lock, MessageCircle, MessageSquareText, Plus, Stethoscope, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, Ban, CalendarClock, ClipboardList, Lock, MessageCircle, MessageSquareText, Plus, Trash2, Wallet } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { Pantalla, Tarjeta } from "@/components/specialties/orthodontics/modulo/piezas";
 import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
@@ -24,7 +24,6 @@ import type {
   OrthoAppointmentTypeOption,
   OrthoClinicSettings,
 } from "@/lib/orthodontics/clinic-settings-db";
-import type { OrthoConfigDoctorOption } from "@/app/actions/orthodontics/getOrthoClinicSettings";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { esTipoFijo, motivoDeRechazo, nuevaClave } from "@/lib/orthodontics/tipos-de-cita";
 import { ORTHO_BILLING_MODE_LABELS, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
@@ -38,7 +37,6 @@ import type { TecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clin
 
 export interface OrthoConfiguracionClientProps {
   settings: OrthoClinicSettings;
-  doctors: OrthoConfigDoctorOption[];
   procedimientos: OrthoProcedureRow[];
   /** Precio del tratamiento por técnica (ws1-t10, decisión 2): lo que el alta del caso propone. */
   tecnicasDeLaClinica?: TecnicasDeLaClinica;
@@ -63,15 +61,7 @@ const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
 // plantillas-mensaje.ts (ws1-t5, ronda 6): la pantalla, el guardado y los dos
 // envíos leen de ahí, para que lo que aquí se promete sea lo que se manda.
 
-export function OrthoConfiguracionClient({ settings, doctors, procedimientos: procedimientosIniciales, tecnicasDeLaClinica, suscripcion }: OrthoConfiguracionClientProps) {
-  // Si el doctor guardado ya no atiende (baja o cambio de rol) no está en la
-  // lista: el selector arranca en «Sin doctor por defecto» y lo dice, en vez
-  // de conservar a escondidas un valor que el guardado rechazaría.
-  const doctorGuardadoYaNoAtiende =
-    Boolean(settings.defaultTreatingDoctorId) && !doctors.some((d) => d.id === settings.defaultTreatingDoctorId);
-  const [defaultTreatingDoctorId, setDefaultTreatingDoctorId] = useState<string>(
-    doctorGuardadoYaNoAtiende ? "" : settings.defaultTreatingDoctorId ?? "",
-  );
+export function OrthoConfiguracionClient({ settings, procedimientos: procedimientosIniciales, tecnicasDeLaClinica, suscripcion }: OrthoConfiguracionClientProps) {
   const [appointmentTypes, setAppointmentTypes] = useState<OrthoAppointmentTypeOption[]>(
     settings.appointmentTypes,
   );
@@ -158,7 +148,6 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
     setSaving(true);
     try {
       const res = await updateOrthoClinicSettings({
-        defaultTreatingDoctorId: defaultTreatingDoctorId || null,
         appointmentTypes,
         messageTemplates: templates,
         billingMode,
@@ -210,7 +199,6 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
     }
   }
 
-  const idDoctor = useId();
   const idPlantilla = useId();
 
   return (
@@ -225,49 +213,6 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
     >
       <div className={s.formulario}>
         <div className={s.formularioColumna}>
-          <Tarjeta
-            icono={Stethoscope}
-            titulo="Doctor tratante por defecto"
-            sub="Es el doctor con el que arranca el alta de un caso nuevo. Cada caso puede elegir a otro."
-          >
-            <div className={s.tarjetaCuerpo}>
-              <div className={s.campo}>
-                <label className={s.campoEtiqueta} htmlFor={idDoctor}>
-                  Doctor
-                </label>
-                <select
-                  id={idDoctor}
-                  className="input-new"
-                  value={defaultTreatingDoctorId}
-                  onChange={(e) => setDefaultTreatingDoctorId(e.target.value)}
-                >
-                  <option value="">Sin doctor por defecto</option>
-                  {doctors.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-                {doctorGuardadoYaNoAtiende && defaultTreatingDoctorId === "" ? (
-                  <div className={s.campoAyuda} role="status">
-                    El doctor que estaba por defecto ya no atiende en esta clínica. Elige a otro y guarda.
-                  </div>
-                ) : null}
-                {doctors.length === 0 ? (
-                  <div className={s.campoAyuda}>
-                    Nadie de esta clínica aparece como doctor. En Equipo, dale rol de doctor a quien atiende; si
-                    atiende el dueño o un administrador, basta con que esté en la Agenda.
-                  </div>
-                ) : (
-                  <div className={s.campoAyuda}>
-                    Salen los doctores y también el dueño o administrador que atiende. Primero va quien tiene la
-                    especialidad «Ortodoncia» en Equipo.
-                  </div>
-                )}
-              </div>
-            </div>
-          </Tarjeta>
-
           <Tarjeta
             icono={Wallet}
             titulo="Modo de cobro"

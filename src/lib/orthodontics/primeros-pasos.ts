@@ -16,15 +16,13 @@ import type { OrthoBillingMode } from "./billing-mode";
 export const RUTA_CONFIGURACION_ORTODONCIA = "/dashboard/orthodontics/configuracion";
 export const RUTA_PACIENTES_ORTODONCIA = "/dashboard/orthodontics/pacientes";
 
-export type ClavePrimerPaso = "modo-de-cobro" | "doctor-tratante" | "primer-caso" | "plan-de-pago";
+export type ClavePrimerPaso = "modo-de-cobro" | "primer-caso" | "plan-de-pago";
 
 export interface EstadoPrimerosPasos {
   /** La clínica ya guardó su Configuración de Ortodoncia al menos una vez. */
   configuracionGuardada: boolean;
   /** Modo de cobro de la clínica (el de fábrica si no ha guardado nada). */
   modoDeCobro: OrthoBillingMode;
-  /** Hay un doctor tratante por defecto elegido. */
-  doctorTratanteElegido: boolean;
   /** Casos de ortodoncia de la clínica, en cualquier estado. */
   casos: number;
   /** De esos, los que ya tienen su plan de pago abierto (factura ligada). */
@@ -69,14 +67,6 @@ export function primerosPasosOrtodoncia(e: EstadoPrimerosPasos): PrimerosPasos {
       hecho: e.configuracionGuardada,
     },
     {
-      clave: "doctor-tratante",
-      titulo: "Elige al doctor tratante por defecto",
-      detalle: "Es quien se propone al abrir un caso. Si en tu clínica atiende más de un ortodoncista, lo cambias caso por caso.",
-      href: RUTA_CONFIGURACION_ORTODONCIA,
-      accion: "Ir a Configuración",
-      hecho: e.doctorTratanteElegido,
-    },
-    {
       clave: "primer-caso",
       titulo: "Abre tu primer caso",
       detalle: "Busca al paciente y ábrele su caso de ortodoncia: diagnóstico, aparatología y duración estimada.",
@@ -112,7 +102,6 @@ export function titulosPrimerosPasos(modoDeCobro: OrthoBillingMode = "PRECIO_TOT
   return primerosPasosOrtodoncia({
     configuracionGuardada: false,
     modoDeCobro,
-    doctorTratanteElegido: false,
     casos: 0,
     casosConPlanDePago: 0,
   }).pasos.map((p) => p.titulo);

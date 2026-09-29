@@ -1,6 +1,6 @@
 // Ola 1 (ws1-t3 · «Acceso y permisos»): Configuración quedó asignada a esta
 // parte (decisión de Rafael, pregunta abierta #1 de REPORTE-ws1-t1.md).
-// Doctor tratante por defecto, catálogo de tipos de cita (C7) y plantillas
+// Catálogo de tipos de cita (C7) y plantillas
 // de mensaje — ver src/lib/orthodontics/clinic-settings-db.ts.
 export const dynamic = "force-dynamic";
 
@@ -66,7 +66,6 @@ export default async function OrthodonticsConfiguracionPage() {
   return (
     <OrthoConfiguracionClient
       settings={res.data.settings}
-      doctors={res.data.doctors}
       procedimientos={isFailure(procRes) ? [] : procRes.data.procedimientos}
       tecnicasDeLaClinica={tecnicasDeLaClinica}
       suscripcion={

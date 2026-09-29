@@ -36,6 +36,12 @@ import {
   type OrthoBillingMode,
 } from "@/lib/orthodontics/billing-mode";
 import {
+  MENSAJE_FALTA_DOCTOR,
+  motivoFaltaDoctor,
+  textoDeLaPropuesta,
+  type MotivoDeLaPropuesta,
+} from "@/lib/orthodontics/doctores-tratantes";
+import {
   ETIQUETAS_MODO_RESPONSABLE,
   MOTIVO_TELEFONO_TUTOR,
   errorReferenteNuevo,
@@ -183,8 +189,9 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   /** Cómo cobra la clínica: la propuesta para el modo de este caso (fila 32). */
   const [modoDeLaClinica, setModoDeLaClinica] = useState<OrthoBillingMode>(ORTHO_BILLING_MODE_DEFAULT);
   const [treatingDoctorId, setTreatingDoctorId] = useState("");
-  /** El doctor que propuso Configuración, para decir de dónde salió. */
+  /** El doctor con el que arrancó el alta (quien abre, o el único de la sede) y de dónde salió. */
   const [doctorPropuesto, setDoctorPropuesto] = useState("");
+  const [motivoPropuesta, setMotivoPropuesta] = useState<MotivoDeLaPropuesta | null>(null);
   /** H60: la oclusión de abajo viene de la última consulta (se dice en pantalla). */
   const [oclusionPrecargada, setOclusionPrecargada] = useState(false);
 
@@ -217,11 +224,13 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
         if (o.openBite) setOpenBite(true);
         setOclusionPrecargada(true);
       }
-      // ws1-t5 (ronda 6): el alta arranca con el «Doctor tratante por defecto»
-      // de Configuración (o el único ortodoncista de la clínica). Solo si
-      // nadie eligió ya a otro mientras cargaba, y si la columna existe.
+      // ws1-t10: el alta arranca con quien abre el caso (si es doctor con
+      // acceso a Ortodoncia) o con el único doctor de la sede; si no hay
+      // ninguno de los dos, queda vacío y hay que elegir. Solo si nadie
+      // eligió ya a otro mientras cargaba, y si la columna existe.
       if (res.data.columnsExist.treatingDoctorId && res.data.suggestedTreatingDoctorId) {
         setDoctorPropuesto(res.data.suggestedTreatingDoctorId);
+        setMotivoPropuesta(res.data.suggestedTreatingDoctorReason);
         setTreatingDoctorId((actual) => actual || res.data.suggestedTreatingDoctorId);
       }
     }).finally(() => {
@@ -349,6 +358,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     tutorNombre: newGuardianName,
     tutorTelefono: newGuardianPhone,
     sinTecnica: tecnica === null,
+    sinDoctor: motivoFaltaDoctor({ treatingDoctorId, columnaExiste: columnsExist.treatingDoctorId }) !== null,
   });
   const fraseFaltantes = fraseDeFaltantes(faltantes, inObservation);
   const canSubmit = faltantes.length === 0;
@@ -754,23 +764,24 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 <div className={orto.ceja}>
                   Doctor tratante
                 </div>
-                <Field label="Quién lleva el caso">
+                <Field label="Quién lleva el caso (obligatorio)">
                   <select
                     value={treatingDoctorId}
                     onChange={(e) => setTreatingDoctorId(e.target.value)}
                     className={inputCls}
                     disabled={!columnsExist.treatingDoctorId}
                   >
-                    <option value="">— sin asignar —</option>
+                    <option value="">{columnsExist.treatingDoctorId ? "— elige al doctor —" : "— sin asignar —"}</option>
                     {doctors.map((d) => (
                       <option key={d.id} value={d.id}>{d.fullName}</option>
                     ))}
                   </select>
                 </Field>
-                {doctorPropuesto && treatingDoctorId === doctorPropuesto ? (
-                  <p className="text-[11px] text-[color:var(--pr-texto-3)]">
-                    Propuesto por la Configuración de Ortodoncia. Puedes elegir a otro.
-                  </p>
+                {doctorPropuesto && treatingDoctorId === doctorPropuesto && textoDeLaPropuesta(motivoPropuesta) ? (
+                  <p className="text-[11px] text-[color:var(--pr-texto-3)]">{textoDeLaPropuesta(motivoPropuesta)}</p>
+                ) : null}
+                {!loadingOptions && columnsExist.treatingDoctorId && doctors.length > 0 && treatingDoctorId === "" ? (
+                  <p className="text-[11px] text-[color:var(--pr-alerta)]">{MENSAJE_FALTA_DOCTOR}</p>
                 ) : null}
                 {!loadingOptions && columnsExist.treatingDoctorId && doctors.length === 0 ? (
                   <p className="text-[11px] text-[color:var(--pr-alerta)]">

@@ -142,7 +142,6 @@ test("🔴 «agéndale su control a Ana»: tipo de cita del catálogo, su doctor
 test("🔴 la duración y el nombre son los que la clínica puso en Configuración → Ortodoncia", async () => {
   const configuracion: Fila = {
     clinicId: CL_NORTE,
-    defaultTreatingDoctorId: U_DOC2_N,
     appointmentTypes: [
       { id: "valoracion", label: "Primera visita de ortodoncia", durationMin: 50 },
       { id: "control", label: TIPO_CITA_CONTROL_ORTO, durationMin: 40 },
@@ -303,16 +302,18 @@ test("🔴 paciente sin caso que pide ortodoncia: se le agenda la Valoración de
   }
 });
 
-test("sin caso y sin doctor: va con el tratante por defecto de Configuración; si no hay, se pregunta", async () => {
-  const conDefecto = montar({ configuracion: { clinicId: CL_NORTE, defaultTreatingDoctorId: U_DOC2_N, appointmentTypes: null } });
-  const d = await agendar(recepcion(conDefecto.db), { paciente: "Ines Vieja", fecha: DIA, hora: "11:00", motivo: "valoración de ortodoncia" });
-  assert.equal(d.estado, "propuesta", JSON.stringify(d));
-  assert.equal(d.propuesta.peticion.cuerpo.doctorId, U_DOC2_N);
-
-  const sinDefecto = montar();
-  const q = await agendar(recepcion(sinDefecto.db), { paciente: "Ines Vieja", fecha: DIA, hora: "11:00", motivo: "valoración de ortodoncia" });
-  assert.equal(q.estado, "pregunta");
+test("ws1-t10: ya no hay «doctor por defecto»; sin caso y sin doctor, manda quien pregunta o el único doctor, y si no, se pregunta", async () => {
+  // Aunque la fila vieja de Configuración aún traiga un doctor guardado, ya no se lee.
+  const conFilaVieja = montar({ configuracion: { clinicId: CL_NORTE, defaultTreatingDoctorId: U_DOC2_N, appointmentTypes: null } });
+  const q = await agendar(recepcion(conFilaVieja.db), { paciente: "Ines Vieja", fecha: DIA, hora: "11:00", motivo: "valoración de ortodoncia" });
+  assert.equal(q.estado, "pregunta", "recepción y dos doctores: se pregunta, no se usa el guardado");
   assert.deepEqual(q.preguntas.map((x: any) => x.falta), ["doctor"]);
+
+  // Lo abre un doctor: es él (resolverDoctor, la regla de siempre de la Agenda).
+  const { db } = montar();
+  const yo = await agendar(sesion(db, { userId: U_DOC2_N, role: "DOCTOR" }), { paciente: "Ines Vieja", fecha: DIA, hora: "11:00", motivo: "valoración de ortodoncia" });
+  assert.equal(yo.estado, "propuesta", JSON.stringify(yo));
+  assert.equal(yo.propuesta.peticion.cuerpo.doctorId, U_DOC2_N);
 });
 
 test("🔴 lo que no es de ortodoncia se agenda como siempre — tenga caso o no", async () => {
@@ -352,7 +353,7 @@ test("una sede sin el módulo (o que no es dental) agenda como siempre, diga lo 
 
 test("🔴 no cruza de clínica: el caso y el catálogo del sur no aparecen al agendar en el norte", async () => {
   const { db, datos } = montar({
-    configuracion: { clinicId: CL_SUR, defaultTreatingDoctorId: "u-admin-s", appointmentTypes: [
+    configuracion: { clinicId: CL_SUR, appointmentTypes: [
       { id: "control", label: TIPO_CITA_CONTROL_ORTO, durationMin: 99 },
       { id: "valoracion", label: "VALORACION DEL SUR", durationMin: 99 },
     ] },

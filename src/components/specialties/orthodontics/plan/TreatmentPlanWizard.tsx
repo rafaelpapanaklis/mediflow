@@ -11,6 +11,12 @@ import { costoAProponer } from "@/lib/orthodontics/precios-por-tecnica";
 import { leerCostoTotal } from "@/lib/orthodontics/alta-caso-formulario";
 import { nombrePropioAGuardar, tecnicasDeSiempre, type TecnicaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
 import { EJEMPLO_DE_RETENCION } from "@/lib/orthodontics/retencion-ejemplo";
+import {
+  MENSAJE_FALTA_DOCTOR,
+  motivoFaltaDoctor,
+  textoDeLaPropuesta,
+  type MotivoDeLaPropuesta,
+} from "@/lib/orthodontics/doctores-tratantes";
 import type {
   AnchorageType,
   OrthoTechnique,
@@ -67,12 +73,26 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
 
   const [retention, setRetention] = useState("");
 
+  // ws1-t10: el doctor tratante arranca con quien abre el caso (si es doctor con acceso a
+  // Ortodoncia) o con el único de la sede; si no hay, se elige aquí y no se avanza sin él.
+  const [doctors, setDoctors] = useState<Array<{ id: string; fullName: string }>>([]);
+  const [treatingDoctorId, setTreatingDoctorId] = useState("");
+  const [motivoPropuesta, setMotivoPropuesta] = useState<MotivoDeLaPropuesta | null>(null);
+  const [columnaDoctor, setColumnaDoctor] = useState(true);
+  const sinDoctor = motivoFaltaDoctor({ treatingDoctorId, columnaExiste: columnaDoctor }) !== null;
+
   useEffect(() => {
     let cancelado = false;
     getCaseIntakeOptions({ patientId: props.patientId }).then((res) => {
       if (cancelado || isFailure(res)) return;
       setTecnicas(res.data.tecnicas);
       setTecnicaId((actual) => (res.data.tecnicas.some((x) => x.id === actual) ? actual : (res.data.tecnicas[0]?.id ?? "")));
+      setDoctors(res.data.doctors);
+      setColumnaDoctor(res.data.columnsExist.treatingDoctorId);
+      if (res.data.columnsExist.treatingDoctorId && res.data.suggestedTreatingDoctorId) {
+        setMotivoPropuesta(res.data.suggestedTreatingDoctorReason);
+        setTreatingDoctorId((actual) => actual || res.data.suggestedTreatingDoctorId);
+      }
     });
     return () => {
       cancelado = true;
@@ -87,7 +107,7 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
   }, [tecnica]);
 
   const costo = leerCostoTotal(totalCost);
-  const canProceed = step === 3 ? retention.length >= 20 : step === 1 ? tecnica !== null && costo !== null : true;
+  const canProceed = step === 3 ? retention.length >= 20 && !sinDoctor : step === 1 ? tecnica !== null && costo !== null : true;
 
   const submit = async () => {
     setPending(true);
@@ -114,6 +134,7 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
         treatmentObjectives: objectives,
         patientGoals: patientGoals || null,
         retentionPlanText: retention,
+        treatingDoctorId: treatingDoctorId || null,
       });
       if (isFailure(result)) {
         toast.error(result.error);
@@ -217,6 +238,26 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
           <div style={{ fontSize: 11, color: retention.length >= 20 ? "#22C55E" : "#F59E0B" }}>
             {retention.length} / 20 mínimo
           </div>
+          <Row label="Doctor tratante (obligatorio)">
+            <select
+              value={treatingDoctorId}
+              onChange={(e) => setTreatingDoctorId(e.target.value)}
+              disabled={!columnaDoctor}
+              aria-invalid={sinDoctor}
+              style={inputStyle}
+            >
+              <option value="">{columnaDoctor ? "— elige al doctor —" : "— sin asignar —"}</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.fullName}
+                </option>
+              ))}
+            </select>
+          </Row>
+          {treatingDoctorId !== "" && textoDeLaPropuesta(motivoPropuesta) ? (
+            <div style={{ fontSize: 11, color: "var(--text-3)" }}>{textoDeLaPropuesta(motivoPropuesta)}</div>
+          ) : null}
+          {sinDoctor ? <div style={{ fontSize: 11, color: "#F59E0B" }}>{MENSAJE_FALTA_DOCTOR}</div> : null}
           <p style={{ margin: 0, fontSize: 11, color: "var(--text-3)" }}>
             Tras guardar, se abrirá el modal del consentimiento de tratamiento (SPEC §10.4)
             para firma del paciente o tutor.

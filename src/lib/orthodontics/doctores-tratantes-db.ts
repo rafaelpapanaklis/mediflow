@@ -45,3 +45,22 @@ export async function esDoctorTratanteDeLaClinica(clinicId: string, userId: stri
   });
   return usuario ? atiendePacientes(usuario) : false;
 }
+
+/**
+ * ¿Existe `orthodontic_treatment_plans.treatingDoctorId` en esta base? Sin ella
+ * (sql/ortodoncia-nucleo.sql sin pegar) el alta no puede exigir doctor: no hay
+ * dónde guardarlo. Es lo mismo que `columnsExist.treatingDoctorId` del alta;
+ * si no se puede comprobar, se trata como ausente (el alta no se bloquea).
+ */
+export async function existeColumnaDoctorTratante(): Promise<boolean> {
+  try {
+    const cols = await prisma.$queryRaw<Array<{ column_name: string }>>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'orthodontic_treatment_plans' AND column_name = 'treatingDoctorId'
+    `;
+    return cols.length > 0;
+  } catch (e) {
+    console.error("[ortho] no se pudo comprobar la columna treatingDoctorId:", e);
+    return false;
+  }
+}

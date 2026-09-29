@@ -16,7 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { ORTHO_BILLING_MODE_DEFAULT, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { cargarDoctoresTratantes } from "@/lib/orthodontics/doctores-tratantes-db";
-import { doctorPropuestoParaElAlta, etiquetaDeDoctor } from "@/lib/orthodontics/doctores-tratantes";
+import { etiquetaDeDoctor, propuestaDeDoctorParaElAlta, type MotivoDeLaPropuesta } from "@/lib/orthodontics/doctores-tratantes";
 import { responsablePropuestoParaElAlta, type ModoResponsable } from "@/lib/orthodontics/alta-caso-formulario";
 import { isMinor } from "@/lib/consent/signers";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
@@ -64,12 +64,14 @@ export interface CaseIntakeOptions {
   /** ws1-t10: las técnicas ACTIVAS de la clínica (Configuración → Técnicas y precios); el alta propone el precio de la elegida. */
   tecnicas: TecnicaClinica[];
   /**
-   * Con qué doctor arranca el alta de un caso NUEVO (ws1-t5, ronda 6): el
-   * «Doctor tratante por defecto» de Configuración si sigue atendiendo, o el
-   * único ortodoncista/doctor de la clínica. "" = que lo elija quien abre el
-   * caso. Es una propuesta: el selector sigue editable.
+   * Con qué doctor arranca el alta de un caso NUEVO (ws1-t10): quien abre el
+   * caso si es un doctor con acceso a Ortodoncia; si no, el único doctor con
+   * acceso de la sede. "" = que lo elija quien abre el caso (el alta no lo
+   * deja abrir sin elegirlo). Es una propuesta: el selector sigue editable.
    */
   suggestedTreatingDoctorId: string;
+  /** De dónde sale la propuesta, para decirlo bajo el selector. */
+  suggestedTreatingDoctorReason: MotivoDeLaPropuesta | null;
   /**
    * H60: la oclusión que el doctor ya capturó en su última consulta (clase
    * molar, sobremordida, overjet, mordida) para proponerla en el diagnóstico
@@ -211,15 +213,12 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: ConsentForm no disponible:", e);
   }
 
-  // El modo de cobro de la clínica y el doctor tratante por defecto.
-  // best-effort: si no se puede leer, el modo de siempre (precio total) y sin
-  // doctor por defecto — el alta no se cae por esto.
+  // El modo de cobro de la clínica. best-effort: si no se puede leer, el modo
+  // de siempre (precio total) — el alta no se cae por esto.
   let billingMode: OrthoBillingMode = ORTHO_BILLING_MODE_DEFAULT;
-  let doctorPorDefecto: string | null = null;
   try {
     const settings = await loadOrthoClinicSettings(ctx.clinicId);
     billingMode = settings.billingMode;
-    doctorPorDefecto = settings.defaultTreatingDoctorId;
   } catch (e) {
     console.error("[ortho] getCaseIntakeOptions: no se pudo leer la Configuración de la clínica:", e);
   }
@@ -241,13 +240,17 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: no se pudo leer la oclusión de la consulta:", e);
   }
 
+  // El usuario sale de la sesión (ctx.userId), nunca del cliente.
+  const propuesta = propuestaDeDoctorParaElAlta({ quienAbreId: ctx.userId, opciones: doctorsRaw });
+
   const tecnicas = tecnicasActivas((await leerTecnicasDeLaClinica(ctx.clinicId)).tecnicas);
 
   return ok({
     oclusionDeConsulta,
     billingMode,
     tecnicas,
-    suggestedTreatingDoctorId: doctorPropuestoParaElAlta({ porDefecto: doctorPorDefecto, opciones: doctorsRaw }),
+    suggestedTreatingDoctorId: propuesta.id,
+    suggestedTreatingDoctorReason: propuesta.motivo,
     doctors: doctorsRaw.map((d) => ({ id: d.id, fullName: etiquetaDeDoctor(d) })),
     guardians: guardiansRaw.map((g) => ({
       id: g.id,

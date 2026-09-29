@@ -68,11 +68,9 @@ export interface OrtoParaAgendar {
   catalogo: TipoDeCita[];
   /** El caso ACTIVO del paciente en esta sede, si lo tiene. */
   caso: CasoParaAgendar | null;
-  /** «Doctor tratante por defecto» de Configuración. */
-  doctorPorDefecto: string | null;
 }
 
-const SIN_ORTO: OrtoParaAgendar = { modulo: false, catalogo: [], caso: null, doctorPorDefecto: null };
+const SIN_ORTO: OrtoParaAgendar = { modulo: false, catalogo: [], caso: null };
 
 function esRelacionAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
@@ -118,15 +116,13 @@ export async function leerOrtoParaAgendar(
   if (!contratado) return SIN_ORTO;
 
   let catalogo: TipoDeCita[] = [...DEFAULT_ORTHO_APPOINTMENT_TYPES];
-  let doctorPorDefecto: string | null = null;
   if (typeof (db as any).orthodonticsClinicSettings?.findUnique === "function") {
     try {
       const fila = await (db as any).orthodonticsClinicSettings.findUnique({
         where: { clinicId },
-        select: { defaultTreatingDoctorId: true, appointmentTypes: true },
+        select: { appointmentTypes: true },
       });
       if (fila) {
-        doctorPorDefecto = fila.defaultTreatingDoctorId ?? null;
         if (esCatalogo(fila.appointmentTypes)) catalogo = normalizarCatalogo(fila.appointmentTypes);
       }
     } catch (e) {
@@ -154,7 +150,7 @@ export async function leerOrtoParaAgendar(
     if (plan) caso = { planId: plan.id, status: plan.status, treatingDoctorId: null };
   }
 
-  return { modulo: true, catalogo, caso, doctorPorDefecto };
+  return { modulo: true, catalogo, caso };
 }
 
 /** Los minutos de un tipo de cita: lo configurado, o la regla del bot y la reserva web. */

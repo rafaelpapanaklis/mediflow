@@ -89,25 +89,52 @@ export function opcionesDeDoctorTratante(usuarios: readonly UsuarioCandidato[]):
     });
 }
 
+/** De dónde sale el doctor con el que arranca el alta (para decírselo a quien abre el caso). */
+export type MotivoDeLaPropuesta = "quien-abre" | "unico";
+
 /**
- * Con qué doctor arranca el alta de un caso nuevo. Es una PROPUESTA: el
- * selector sigue editable.
- *   1. El «Doctor tratante por defecto» de Configuración, si sigue en la lista
- *      (si lo dieron de baja o le cambiaron el rol, ya no se propone).
- *   2. Si en Equipo hay exactamente UN ortodoncista, ese.
- *   3. Si la clínica tiene un solo doctor, ese.
- *   4. Nada: que lo elija quien abre el caso.
+ * Con qué doctor arranca el alta de un caso nuevo (ws1-t10; ya no existe el
+ * «Doctor tratante por defecto» de Configuración). Es una PROPUESTA: el
+ * selector sigue editable. `opciones` ya son solo los doctores con acceso al
+ * módulo de Ortodoncia de ESTA sede (`opcionesDeDoctorTratante`). En orden:
+ *   a) quien abre el caso, si es uno de ellos → él mismo;
+ *   b) si no, y en la sede hay UN SOLO doctor con acceso → ese;
+ *   c) si no (p. ej. lo abre recepción y hay varios) → nadie: el alta no deja
+ *      abrir el caso hasta que se elija (`motivoFaltaDoctor`).
  */
-export function doctorPropuestoParaElAlta(args: {
-  porDefecto: string | null | undefined;
+export function propuestaDeDoctorParaElAlta(args: {
+  quienAbreId: string | null | undefined;
   opciones: readonly DoctorTratanteOpcion[];
-}): string {
-  const { porDefecto, opciones } = args;
-  if (porDefecto && opciones.some((o) => o.id === porDefecto)) return porDefecto;
-  const ortodoncistas = opciones.filter((o) => o.esOrtodoncista);
-  if (ortodoncistas.length === 1) return ortodoncistas[0].id;
-  if (opciones.length === 1) return opciones[0].id;
-  return "";
+}): { id: string; motivo: MotivoDeLaPropuesta | null } {
+  const { quienAbreId, opciones } = args;
+  if (quienAbreId && opciones.some((o) => o.id === quienAbreId)) return { id: quienAbreId, motivo: "quien-abre" };
+  if (opciones.length === 1) return { id: opciones[0].id, motivo: "unico" };
+  return { id: "", motivo: null };
+}
+
+/** La pista bajo el selector cuando el doctor viene propuesto. */
+export function textoDeLaPropuesta(motivo: MotivoDeLaPropuesta | null): string | null {
+  if (motivo === "quien-abre") return "Eres tú, que abres el caso. Puedes elegir a otro doctor.";
+  if (motivo === "unico") return "Es el único doctor con acceso a Ortodoncia en esta clínica. Puedes elegir a otro.";
+  return null;
+}
+
+/** Lo que se le dice a quien intenta abrir un caso sin doctor tratante. */
+export const MENSAJE_FALTA_DOCTOR =
+  "Elige al doctor tratante: es quien lleva el caso y a quien se le agendan sus controles.";
+
+/**
+ * ¿Se puede abrir el caso con lo que llegó? `null` = sí. El doctor es
+ * obligatorio, salvo que la base aún no tenga la columna
+ * (`orthodontic_treatment_plans.treatingDoctorId`): sin ella no hay dónde
+ * guardarlo y el caso se abre como siempre.
+ */
+export function motivoFaltaDoctor(args: {
+  treatingDoctorId: string | null | undefined;
+  columnaExiste: boolean;
+}): string | null {
+  if (!args.columnaExiste) return null;
+  return typeof args.treatingDoctorId === "string" && args.treatingDoctorId.trim() !== "" ? null : MENSAJE_FALTA_DOCTOR;
 }
 
 /** Texto de la opción en el selector: «Ana Ruiz · Ortodoncia». */

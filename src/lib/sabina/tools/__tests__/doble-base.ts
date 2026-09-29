@@ -93,7 +93,7 @@ export interface Datos {
   orthoCardBrokenBrackets?: Fila[];
   orthodonticAligners?: Fila[];
   patientCredits?: Fila[];
-  /** La fila de Configuración → Ortodoncia de cada sede: catálogo de tipos de cita y doctor tratante por defecto. */
+  /** La fila de Configuración → Ortodoncia de cada sede: catálogo de tipos de cita. */
   orthodonticsClinicSettings?: Fila[];
 }
 

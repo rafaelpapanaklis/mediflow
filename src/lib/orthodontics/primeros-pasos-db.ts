@@ -25,7 +25,6 @@ export async function loadPrimerosPasosOrtodoncia(clinicId: string): Promise<Pri
       // `updatedAt` solo existe si hay fila: la clínica guardó su Configuración.
       configuracionGuardada: settings.updatedAt !== null,
       modoDeCobro: settings.billingMode,
-      doctorTratanteElegido: !!settings.defaultTreatingDoctorId,
       casos,
       casosConPlanDePago,
     });
