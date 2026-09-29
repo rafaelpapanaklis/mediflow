@@ -25,7 +25,7 @@ const TAB = sinComentarios(leer(`${REDISENO}/OrthodonticsPatientTab.tsx`));
 
 test("es una VENTANA centrada, no un cajón pegado a la derecha", () => {
   assert.match(CAJON, /<div className=\{alta\.marco\}>/);
-  assert.match(CAJON, /className=\{alta\.ventana\}/);
+  assert.match(CAJON, /className=\{`\$\{alta\.ventana\}/);
   assert.match(CAJON, /role="dialog"\s+aria-modal="true"\s+aria-labelledby="new-case-title"/);
   assert.doesNotMatch(CAJON, /<aside/);
   assert.doesNotMatch(CAJON, /orto\.cajon\b|orto\.cajonAncho|cajonPieReparto/, "ya no usa las clases del cajón lateral");
@@ -70,7 +70,7 @@ test("una ventana de DOS pasos con las secciones en orden: Datos del caso · Dia
   assert.deepEqual([...posiciones].sort((a, b) => a - b), posiciones, "en ese orden");
   assert.equal((CAJON.match(/<Seccion\b/g) ?? []).length, 5);
   // Los dos pasos y su navegación.
-  assert.match(CAJON, /const \[paso, setPaso\] = useState<PasoDeLaVentana>\(needsDiagnosis \? \(props\.pasoInicial \?\? "diagnostico"\) : "plan"\);/);
+  assert.match(CAJON, /const \[paso, setPaso\] = useState<PasoDeLaVentana>\(\s*needsDiagnosis \? \(props\.pasoInicial \?\? "diagnostico"\) : editarDx \? \(props\.pasoInicial \?\? "plan"\) : "plan",\s*\);/);
   assert.match(CAJON, /Siguiente: plan de tratamiento/);
   // Un solo formulario para crear y para editar: el modo `editar` parte del caso y guarda con `onEditar`.
   assert.match(CAJON, /props\.modo === "editar"/);
@@ -109,7 +109,30 @@ test("sin permiso de cobro la sección se oculta y dice «Recepción armará el 
 });
 
 test("un paciente en observación sigue sin plan de pago (no hay caso con plan): se guarda solo el diagnóstico", () => {
-  assert.match(CAJON, /if \(inObservation\) \{[\s\S]*?await props\.onConfirm\(\{ diagnosis: diagnosticoParaEnviar\(\), plan: null, planDePago: null \}\);/);
+  assert.match(CAJON, /if \(inObservation\) \{[\s\S]*?await props\.onConfirm\(\{ diagnosis: dxListo\.payload, plan: null, planDePago: null \}\);/);
+});
+
+test("el paso 1 monta el PasoDiagnostico de ws1-t8 (el mismo de «Editar diagnóstico»): un solo formulario, en modo abrir o editar", () => {
+  assert.match(CAJON, /import \{ PasoDiagnostico \} from "\.\.\/diagnostico\/PasoDiagnostico";/);
+  assert.match(CAJON, /<PasoDiagnostico\s+valor=\{dx\}/);
+  assert.match(CAJON, /modo=\{editarDx \? "editar" : "abrir"\}/);
+  // Ya no queda una copia de los campos del diagnóstico dentro de la ventana.
+  assert.doesNotMatch(CAJON, /label="Angle derecha"|label="Overjet \(mm\)"|label="Resumen clínico/);
+  // Se valida ANTES de pasar al plan y el error lleva a la sección donde está.
+  assert.match(CAJON, /const dxListo = diagnosticoParaEnviar\(\);\s*if \(dxListo\.ok === false\) \{[\s\S]*?setSeccionDx\(dxListo\.seccion\);/);
+  // Editar: los dos pasos se abren, el de Diagnóstico guarda con updateDiagnosis y la ventana la abre «Editar» del resumen.
+  assert.match(CAJON, /await updateDiagnosis\(\{ diagnosisId: props\.existingDiagnosisId, \.\.\.r\.peticion \}\)/);
+  assert.match(CAJON, /useDiagnosticoCompleto\(editarDx \? props\.existingDiagnosisId : null\)/);
+  const cliente = sinComentarios(leer(`${REDISENO}/OrthodonticsRedesignClient.tsx`));
+  assert.match(cliente, /pasoInicial=\{drawer\?\.kind === "edit-diagnosis" \? "diagnostico" : "plan"\}/);
+});
+
+test("al abrir el caso, el diagnóstico completo se guarda enseguida con el mismo servidor de «Editar diagnóstico»; si falla, el caso sigue abierto y se dice", () => {
+  const crear = TAB.indexOf("await createDiagnosis(");
+  const detalle = TAB.indexOf("await updateDiagnosis({ diagnosisId, ...payload.diagnosis.detalle })");
+  const plan = TAB.indexOf("await createTreatmentPlan(");
+  assert.ok(crear > 0 && detalle > crear && plan > detalle, "diagnóstico → su detalle → plan");
+  assert.match(TAB, /El diagnóstico se creó, pero el detalle no se guardó/);
 });
 
 test("al confirmar: primero se abre el caso y DESPUÉS se crea su factura; si falla, el caso queda abierto y se dice cómo reintentar", () => {

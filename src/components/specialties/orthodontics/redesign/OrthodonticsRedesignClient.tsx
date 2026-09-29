@@ -1017,7 +1017,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           se quedan en su archivo. */}
 
       {/* Drawer Editor Diagnóstico (Sección B "Editar") */}
-      {drawer?.kind === "edit-diagnosis" && vm.diagnosis ? (
+      {drawer?.kind === "edit-diagnosis" && vm.diagnosis && !(props.planDeTratamiento && props.onEditarPlan) ? (
         // ws1-t8: la ventana monta el paso «Diagnóstico» y guarda ella misma (un error no la cierra).
         <DrawerEditDiagnosis
           diagnosis={vm.diagnosis}
@@ -1049,10 +1049,12 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
-      {/* ws1-t12 — «Editar plan»: la MISMA ventana del caso que «Abrir caso», en el paso «Plan de tratamiento». */}
-      {drawer?.kind === "edit-plan" && props.planDeTratamiento && props.onEditarPlan ? (
+      {/* ws1-t12 — «Editar»: la MISMA ventana de 2 pasos que «Abrir caso», en el paso que se pidió
+          (Diagnóstico o Plan de tratamiento). Sin datos del plan, «Editar diagnóstico» usa su ventana de siempre. */}
+      {(drawer?.kind === "edit-plan" || (drawer?.kind === "edit-diagnosis" && vm.diagnosis)) && props.planDeTratamiento && props.onEditarPlan ? (
         <DrawerNewCase
           modo="editar"
+          pasoInicial={drawer?.kind === "edit-diagnosis" ? "diagnostico" : "plan"}
           vista={props.planDeTratamiento}
           patientId={vm.patient.id}
           patientFullName={vm.patient.fullName}

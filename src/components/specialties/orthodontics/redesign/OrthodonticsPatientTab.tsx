@@ -291,6 +291,16 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
         return false;
       }
       diagnosisId = res.data.id;
+      // ws1-t8: el diagnóstico COMPLETO (facial, oclusal, funcional, cefalometría…) se guarda enseguida con el mismo
+      // servidor que «Editar diagnóstico». Si no se pudo, el caso sigue: se dice y se completa desde el resumen.
+      if (payload.diagnosis.detalle) {
+        const detalle = await updateDiagnosis({ diagnosisId, ...payload.diagnosis.detalle });
+        if (isFailure(detalle)) {
+          toast(`El diagnóstico se creó, pero el detalle no se guardó: ${detalle.error} Complétalo con «Editar diagnóstico».`, { duration: 12000 });
+        } else if (detalle.data.avisoDetalle) {
+          toast(detalle.data.avisoDetalle, { duration: 12000 });
+        }
+      }
       if (
         !res.data.altaCasoFieldsSaved &&
         (payload.diagnosis.referredByDoctorId || payload.diagnosis.inObservation)

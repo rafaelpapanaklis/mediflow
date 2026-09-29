@@ -27,6 +27,8 @@
 // Las opciones de doctores/tutores/referentes se piden en caliente a getCaseIntakeOptions (solo lectura).
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import { DateField } from "@/components/ui/date-field";
 import { hoyISO, hoyMasAniosISO } from "@/lib/orthodontics/fechas-de-formulario";
 import { ArrowLeft, ArrowRight, Check, ClipboardList, Info, ListChecks, Loader2, Plus, Receipt, Stethoscope, UserCog, UserRound, Wallet, X } from "lucide-react";
@@ -34,6 +36,7 @@ import { Btn } from "../atoms/Btn";
 import { getCaseIntakeOptions, buscarTutoresDeLaClinica, type TutorDeLaClinica } from "@/app/actions/orthodontics";
 import { cargarOpcionesDelPlan } from "@/app/actions/orthodontics/cargarOpcionesDelPlan";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { updateDiagnosis } from "@/app/actions/orthodontics/updateDiagnosis";
 import { createDoctorContact } from "@/app/actions/clinical-shared/referrals";
 import { isFailure as referenteFallo } from "@/lib/clinical-shared/result";
 import {
@@ -106,24 +109,20 @@ import {
   tecnicasDeSiempre,
   type TecnicaClinica,
 } from "@/lib/orthodontics/tecnicas-de-la-clinica";
+import {
+  formularioAPeticion as peticionDelDiagnostico,
+  formularioDesdeDiagnostico,
+  formularioVacio as diagnosticoVacio,
+  type FormularioDelDiagnostico,
+  type PeticionDelDiagnostico,
+  type SeccionDelPaso,
+} from "@/lib/orthodontics/diagnostico-formulario";
+import { PasoDiagnostico } from "../diagnostico/PasoDiagnostico";
+import { olvidarDiagnosticoCompleto, tomarSeccionPedida, useDiagnosticoCompleto } from "../diagnostico/useDiagnosticoCompleto";
 import orto from "../orto.module.css";
 import alta from "../alta-caso.module.css";
 import planCss from "../plan-tratamiento.module.css";
-
-const ANGLE_OPTIONS = [
-  { v: "CLASS_I", l: "Clase I" },
-  { v: "CLASS_II_DIV_1", l: "Clase II div. 1" },
-  { v: "CLASS_II_DIV_2", l: "Clase II div. 2" },
-  { v: "CLASS_III", l: "Clase III" },
-  { v: "ASYMMETRIC", l: "Asimétrica" },
-] as const;
-
-const DENTAL_PHASE_OPTIONS = [
-  { v: "DECIDUOUS", l: "Dentición temporal" },
-  { v: "MIXED_EARLY", l: "Mixta temprana" },
-  { v: "MIXED_LATE", l: "Mixta tardía" },
-  { v: "PERMANENT", l: "Permanente" },
-] as const;
+import dxCss from "../diagnostico.module.css";
 
 const MODO_DE_COBRO_OPTIONS = (["PRECIO_TOTAL", "PAGO_POR_CONTROL"] as const).map((v) => ({
   v,
@@ -168,6 +167,12 @@ export interface DrawerNewCaseDiagnosisPayload {
   referredByDoctorId: string | null;
   inObservation: boolean;
   nextObservationDate: string | null;
+  /**
+   * ws1-t8 — el diagnóstico COMPLETO tal como lo arma su paso (facial, oclusal, funcional, cefalometría…). La
+   * creación del diagnóstico solo conoce las columnas de siempre: quien confirma guarda esto con `updateDiagnosis`
+   * justo después (sin la columna nueva, el servidor lo dice y el caso queda abierto con lo de siempre).
+   */
+  detalle: PeticionDelDiagnostico;
 }
 
 export interface DrawerNewCasePlanPayload {
@@ -270,7 +275,13 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   /** «Precio total» con factura: el costo del plan ES el total de la factura y cambiarlo sigue las reglas de «editar factura con pagos». */
   const conFactura = tieneFactura && caso!.billingMode === "PRECIO_TOTAL";
 
-  const [paso, setPaso] = useState<PasoDeLaVentana>(needsDiagnosis ? (props.pasoInicial ?? "diagnostico") : "plan");
+  /** Editar un caso que ya tiene diagnóstico: los DOS pasos se pueden abrir (el de Diagnóstico guarda con `updateDiagnosis`). */
+  const editarDx = editar && Boolean(props.existingDiagnosisId);
+  const router = useRouter();
+
+  const [paso, setPaso] = useState<PasoDeLaVentana>(
+    needsDiagnosis ? (props.pasoInicial ?? "diagnostico") : editarDx ? (props.pasoInicial ?? "plan") : "plan",
+  );
 
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [doctors, setDoctors] = useState<Array<{ id: string; fullName: string }>>([]);
@@ -314,22 +325,22 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   const [inObservation, setInObservation] = useState(false);
   const [nextObservationDate, setNextObservationDate] = useState("");
 
-  // ── Diagnóstico (paso 1: el componente de paso de ws1-t8 entra aquí) ────
-  const [angleR, setAngleR] = useState("CLASS_I");
-  const [angleL, setAngleL] = useState("CLASS_I");
-  const [overbiteMm, setOverbiteMm] = useState(2);
-  const [overbitePct, setOverbitePct] = useState(20);
-  const [overjetMm, setOverjetMm] = useState(2);
-  const [crowdU, setCrowdU] = useState(0);
-  const [crowdL, setCrowdL] = useState(0);
-  const [crossbite, setCrossbite] = useState(false);
-  const [crossbiteDetails, setCrossbiteDetails] = useState("");
-  const [openBite, setOpenBite] = useState(false);
-  const [openBiteDetails, setOpenBiteDetails] = useState("");
-  const [dentalPhase, setDentalPhase] = useState("PERMANENT");
-  const [tmjPain, setTmjPain] = useState(false);
-  const [tmjClick, setTmjClick] = useState(false);
-  const [summary, setSummary] = useState("");
+  // ── Diagnóstico (paso 1): el MISMO paso que usa «Editar diagnóstico» (ws1-t8), sin ventana propia ────
+  const [dx, setDx] = useState<FormularioDelDiagnostico>(() => diagnosticoVacio());
+  const [seccionDx, setSeccionDx] = useState<SeccionDelPaso>(
+    () => (editarDx ? ((tomarSeccionPedida() as SeccionDelPaso | null) ?? "clasificacion") : "clasificacion"),
+  );
+  const [seccionDxConError, setSeccionDxConError] = useState<SeccionDelPaso | null>(null);
+  // Al EDITAR, el diagnóstico completo llega del servidor (el mismo lector que la ficha) y arma el formulario UNA vez.
+  const { datos: dxDatos, error: dxErrorDeCarga } = useDiagnosticoCompleto(editarDx ? props.existingDiagnosisId : null);
+  const [dxInicial, setDxInicial] = useState<string | null>(null);
+  const [guardandoDx, setGuardandoDx] = useState(false);
+  useEffect(() => {
+    if (!dxDatos || dxInicial !== null) return;
+    const f = formularioDesdeDiagnostico(dxDatos.base, dxDatos.detalle);
+    setDx(f);
+    setDxInicial(JSON.stringify(f));
+  }, [dxDatos, dxInicial]);
 
   // ── Plan de tratamiento (paso 2) ─────────────────────────────────────
   // ws1-t10: la lista de técnicas es de la clínica (activas, por su nombre). `tecnicaId` es el id estable de
@@ -446,14 +457,12 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
         // H60: lo que el doctor ya midió en «Nueva consulta» se propone aquí (editable).
         const o = res.data.oclusionDeConsulta;
         if (o) {
-          if (o.angleClass) {
-            setAngleR(o.angleClass);
-            setAngleL(o.angleClass);
-          }
-          if (o.overbiteMm !== null) setOverbiteMm(o.overbiteMm);
-          if (o.overjetMm !== null) setOverjetMm(o.overjetMm);
-          if (o.crossbite) setCrossbite(true);
-          if (o.openBite) setOpenBite(true);
+          setDx((f) => ({
+            ...f,
+            ...(o.angleClass ? { angleClassRight: o.angleClass, angleClassLeft: o.angleClass } : {}),
+            ...(o.overbiteMm !== null ? { overbiteMm: String(o.overbiteMm) } : {}),
+            ...(o.overjetMm !== null ? { overjetMm: String(o.overjetMm) } : {}),
+          }));
           setOclusionPrecargada(true);
         }
       }
@@ -553,10 +562,12 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     primerPago,
     conFactura: tieneFactura,
   };
-  const faltantesDx = faltantesDelDiagnostico({ necesitaDiagnostico: needsDiagnosis, enObservacion: inObservation, resumen: summary, proximaRevision: nextObservationDate });
+  const faltantesDx = faltantesDelDiagnostico({ necesitaDiagnostico: needsDiagnosis, enObservacion: inObservation, resumen: dx.clinicalSummary, proximaRevision: nextObservationDate });
   const faltantesDelPlan = faltantesDelPlanCompleto(estadoDelPlan);
   const todosLosFaltantes = [...faltantesDelPlan.obligatorios, ...faltantesDelPlan.correcciones];
-  const fraseFaltantes = paso === "diagnostico"
+  const fraseFaltantes = paso === "diagnostico" && editarDx
+    ? null
+    : paso === "diagnostico"
     ? (faltantesDx.length > 0 ? `${inObservation ? "Para guardarlo en observación" : "Para continuar"} falta: ${faltantesDx.join("; ")}.` : null)
     : fraseDeLoQueFalta(faltantesDelPlan, editar ? "editar" : "crear");
   // Hasta que llegan las opciones no se sabe si quien abre puede cobrar: el botón espera.
@@ -606,39 +617,93 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     }
   };
 
-  const diagnosticoParaEnviar = (): DrawerNewCaseDiagnosisPayload | null =>
-    needsDiagnosis
-      ? {
-          angleClassRight: angleR,
-          angleClassLeft: angleL,
-          overbiteMm,
-          overbitePercentage: overbitePct,
-          overjetMm,
-          crowdingUpperMm: crowdU || null,
-          crowdingLowerMm: crowdL || null,
-          crossbite,
-          crossbiteDetails: crossbite ? crossbiteDetails || null : null,
-          openBite,
-          openBiteDetails: openBite ? openBiteDetails || null : null,
-          dentalPhase,
-          tmjPainPresent: tmjPain,
-          tmjClickingPresent: tmjClick,
-          clinicalSummary: summary.trim(),
-          referredByDoctorId: referredByDoctorId || null,
-          inObservation,
-          nextObservationDate: inObservation && nextObservationDate ? new Date(nextObservationDate).toISOString() : null,
-        }
-      : null;
+  /** El diagnóstico como lo pide el servidor, o el error con la sección del paso donde está. */
+  const diagnosticoParaEnviar = ():
+    | { ok: true; payload: DrawerNewCaseDiagnosisPayload | null }
+    | { ok: false; error: string; seccion: SeccionDelPaso } => {
+    if (!needsDiagnosis) return { ok: true, payload: null };
+    const r = peticionDelDiagnostico(dx, "abrir");
+    if (r.ok === false) return { ok: false, error: r.error, seccion: r.seccion as SeccionDelPaso };
+    const d = r.peticion;
+    return {
+      ok: true,
+      payload: {
+        angleClassRight: d.angleClassRight,
+        angleClassLeft: d.angleClassLeft,
+        // Vacío = 0 al crear (las columnas son NOT NULL); el diagnóstico completo guarda lo demás.
+        overbiteMm: d.overbiteMm ?? 0,
+        overbitePercentage: d.overbitePercentage ?? 0,
+        overjetMm: d.overjetMm ?? 0,
+        crowdingUpperMm: d.crowdingUpperMm,
+        crowdingLowerMm: d.crowdingLowerMm,
+        crossbite: d.crossbite ?? false,
+        crossbiteDetails: d.crossbiteDetails,
+        openBite: d.openBite ?? false,
+        openBiteDetails: d.openBiteDetails,
+        dentalPhase: d.dentalPhase,
+        tmjPainPresent: d.tmjPainPresent,
+        tmjClickingPresent: d.tmjClickingPresent,
+        clinicalSummary: d.clinicalSummary ?? "",
+        referredByDoctorId: referredByDoctorId || null,
+        inObservation,
+        nextObservationDate: inObservation && nextObservationDate ? new Date(nextObservationDate).toISOString() : null,
+        detalle: d,
+      },
+    };
+  };
+
+  const guardarDx = async () => {
+    if (!props.existingDiagnosisId) return;
+    setError(null);
+    setSeccionDxConError(null);
+    const r = peticionDelDiagnostico(dx, "editar");
+    if (r.ok === false) {
+      setError(r.error);
+      setSeccionDxConError(r.seccion as SeccionDelPaso);
+      setSeccionDx(r.seccion as SeccionDelPaso);
+      return;
+    }
+    setGuardandoDx(true);
+    try {
+      const res = await updateDiagnosis({ diagnosisId: props.existingDiagnosisId, ...r.peticion });
+      if (isFailure(res)) {
+        setError(res.error);
+        return;
+      }
+      olvidarDiagnosticoCompleto(props.existingDiagnosisId);
+      toast.success("Diagnóstico guardado");
+      if (res.data.avisoDetalle) toast(res.data.avisoDetalle, { duration: 12000 });
+      router.refresh();
+      props.onClose();
+    } catch {
+      setError("No se pudo guardar el diagnóstico. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setGuardandoDx(false);
+    }
+  };
 
   const submit = async () => {
+    if (paso === "diagnostico" && editarDx) {
+      await guardarDx();
+      return;
+    }
     if (paso === "diagnostico") {
       if (faltantesDx.length > 0) return;
+      // Lo escrito en el diagnóstico se valida ANTES de pasar al plan: el error se ve donde está.
+      const dxListo = diagnosticoParaEnviar();
+      if (dxListo.ok === false) {
+        setError(dxListo.error);
+        setSeccionDxConError(dxListo.seccion);
+        setSeccionDx(dxListo.seccion);
+        return;
+      }
+      setSeccionDxConError(null);
+      setError(null);
       // Un paciente en observación no lleva plan todavía: se guarda solo el diagnóstico.
       if (inObservation) {
         setSubmitting(true);
-        setError(null);
         try {
-          await props.onConfirm({ diagnosis: diagnosticoParaEnviar(), plan: null, planDePago: null });
+          await props.onConfirm({ diagnosis: dxListo.payload, plan: null, planDePago: null });
         } catch (e) {
           setError(e instanceof Error ? e.message : "Error al guardar");
         } finally {
@@ -689,7 +754,15 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
         if (ok === false) return;
         return;
       }
-      const diagnosis = diagnosticoParaEnviar();
+      const dxListo = diagnosticoParaEnviar();
+      if (dxListo.ok === false) {
+        setPaso("diagnostico");
+        setError(dxListo.error);
+        setSeccionDxConError(dxListo.seccion);
+        setSeccionDx(dxListo.seccion);
+        return;
+      }
+      const diagnosis = dxListo.payload;
       const plan: DrawerNewCasePlanPayload = {
         technique: tecnica?.base ?? "METAL_BRACKETS", // sin técnica el alta no se puede confirmar (faltantes)
         techniqueLabel: nombrePropioAGuardar(tecnica),
@@ -759,7 +832,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
 
   const titulo = props.etiquetas?.titulo ?? (editar ? "Plan de tratamiento" : needsDiagnosis ? "Diagnóstico y plan de tratamiento" : "Plan de tratamiento");
   const pasos: Array<{ id: PasoDeLaVentana; texto: string; hecho: boolean }> = [
-    { id: "diagnostico", texto: "Diagnóstico", hecho: !needsDiagnosis || paso === "plan" },
+    { id: "diagnostico", texto: "Diagnóstico", hecho: editarDx ? false : !needsDiagnosis || paso === "plan" },
     { id: "plan", texto: "Plan de tratamiento", hecho: false },
   ];
 
@@ -770,7 +843,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
         <div
           ref={cajonRef}
           tabIndex={-1}
-          className={alta.ventana}
+          className={`${alta.ventana} ${paso === "diagnostico" ? dxCss.dxVentanaAncha : ""}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="new-case-title"
@@ -783,12 +856,21 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
               <h3 id="new-case-title" className={orto.cajonTitulo}>
                 {titulo} · {props.patientFullName}
               </h3>
-              {needsDiagnosis && !inObservation ? (
+              {(needsDiagnosis && !inObservation) || editarDx ? (
                 <ol className={planCss.pasos} aria-label="Pasos">
                   {pasos.map((p, i) => (
                     <li key={p.id} className={`${planCss.paso} ${paso === p.id ? planCss.pasoOn : ""} ${p.hecho && paso !== p.id ? planCss.pasoHecho : ""}`} aria-current={paso === p.id ? "step" : undefined}>
-                      <span className={planCss.pasoNumero} aria-hidden>{p.hecho && paso !== p.id ? <Check size={12} strokeWidth={2.6} /> : i + 1}</span>
-                      {p.texto}
+                      {editarDx ? (
+                        <button type="button" className={planCss.pasoBoton} onClick={() => setPaso(p.id)}>
+                          <span className={planCss.pasoNumero} aria-hidden>{i + 1}</span>
+                          {p.texto}
+                        </button>
+                      ) : (
+                        <>
+                          <span className={planCss.pasoNumero} aria-hidden>{p.hecho && paso !== p.id ? <Check size={12} strokeWidth={2.6} /> : i + 1}</span>
+                          {p.texto}
+                        </>
+                      )}
                     </li>
                   ))}
                 </ol>
@@ -809,12 +891,14 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
 
           {paso === "diagnostico" ? (
             <div className={alta.cuerpo}>
-              {loadingOptions ? (
+              {loadingOptions && !editarDx ? (
                 <div className="flex items-center gap-2 text-xs text-[color:var(--pr-texto-3)]">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> Cargando doctores y responsables…
                 </div>
               ) : null}
 
+              {!editarDx ? (
+                <>
               {/* Datos del CASO (cabecera): quién lo refirió y «en observación». No son del diagnóstico. */}
               <Seccion
                 icono={<UserRound size={16} strokeWidth={1.75} />}
@@ -947,75 +1031,46 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 </div>
               </Seccion>
 
-              {/* PASO DE DIAGNÓSTICO — punto de entrada del componente de paso de ws1-t8 (sin ventana propia). */}
+                </>
+              ) : null}
+
+              {/* PASO DE DIAGNÓSTICO — el componente de ws1-t8, el mismo de «Editar diagnóstico». */}
               <Seccion
                 icono={<Stethoscope size={16} strokeWidth={1.75} />}
                 titulo="Diagnóstico ortodóntico"
-                sub="Oclusión, ATM y resumen clínico del paciente."
+                sub="Cómo está el paciente: lo que se le va a hacer va en el Plan de tratamiento."
               >
                 {oclusionPrecargada ? (
                   <p className="text-xs text-[color:var(--pr-texto-3)]">
-                    Clase, sobremordida, overjet y mordida vienen de tu última consulta; revísalos y cámbialos si hace falta.
+                    Clase, overbite y overjet vienen de tu última consulta; revísalos y cámbialos si hace falta.
                   </p>
                 ) : null}
-                <div className={alta.cuadricula}>
-                  <Field label="Angle derecha">
-                    <Select value={angleR} onChange={setAngleR} options={ANGLE_OPTIONS} />
-                  </Field>
-                  <Field label="Angle izquierda">
-                    <Select value={angleL} onChange={setAngleL} options={ANGLE_OPTIONS} />
-                  </Field>
-                  <Field label="Overbite (mm)">
-                    <NumberInput value={overbiteMm} onChange={setOverbiteMm} step={0.5} min={-10} max={15} />
-                  </Field>
-                  <Field label="Overbite (%)">
-                    <NumberInput value={overbitePct} onChange={setOverbitePct} step={1} min={0} max={100} />
-                  </Field>
-                  <Field label="Overjet (mm)">
-                    <NumberInput value={overjetMm} onChange={setOverjetMm} step={0.5} min={-5} max={20} />
-                  </Field>
-                  <Field label="Fase dental">
-                    <Select value={dentalPhase} onChange={setDentalPhase} options={DENTAL_PHASE_OPTIONS} />
-                  </Field>
-                  <Field label="Apiñamiento sup. (mm)">
-                    <NumberInput value={crowdU} onChange={setCrowdU} step={0.5} min={0} max={20} />
-                  </Field>
-                  <Field label="Apiñamiento inf. (mm)">
-                    <NumberInput value={crowdL} onChange={setCrowdL} step={0.5} min={0} max={20} />
-                  </Field>
-                </div>
-                <div className={alta.cuadricula}>
-                  <Field label="Mordida cruzada">
-                    <Checkbox label="Presente" checked={crossbite} onChange={setCrossbite} />
-                  </Field>
-                  <Field label="Mordida abierta">
-                    <Checkbox label="Presente" checked={openBite} onChange={setOpenBite} />
-                  </Field>
-                </div>
-                {crossbite ? (
-                  <Field label="Detalles mordida cruzada">
-                    <input value={crossbiteDetails} onChange={(e) => setCrossbiteDetails(e.target.value)} className={inputCls} placeholder="lateral derecha 15-45" />
-                  </Field>
-                ) : null}
-                {openBite ? (
-                  <Field label="Detalles mordida abierta">
-                    <input value={openBiteDetails} onChange={(e) => setOpenBiteDetails(e.target.value)} className={inputCls} />
-                  </Field>
-                ) : null}
-                <div className={alta.cuadricula}>
-                  <Field label="Dolor ATM">
-                    <Checkbox label="Presente" checked={tmjPain} onChange={setTmjPain} />
-                  </Field>
-                  <Field label="Chasquido ATM">
-                    <Checkbox label="Presente" checked={tmjClick} onChange={setTmjClick} />
-                  </Field>
-                </div>
-                <Field label="Resumen clínico (mín. 40 caracteres)">
-                  <textarea value={summary} onChange={(e) => setSummary(e.target.value)} className={`${inputCls} min-h-[90px]`} placeholder="Clase, problema principal, etiología, plan general…" />
-                  <div className={`text-[11px] mt-1 ${summary.trim().length >= 40 ? "text-[color:var(--pr-exito)]" : "text-[color:var(--pr-alerta)]"}`}>
-                    {summary.trim().length} / 40 mínimo
-                  </div>
-                </Field>
+                {editarDx && dxInicial === null ? (
+                  dxErrorDeCarga ? (
+                    <div className={alta.error} role="alert">{dxErrorDeCarga}</div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-[color:var(--pr-texto-3)]">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> Cargando el diagnóstico…
+                    </div>
+                  )
+                ) : (
+                  <PasoDiagnostico
+                    valor={dx}
+                    onCambio={(f) => {
+                      setDx(f);
+                      if (error) setError(null);
+                    }}
+                    seccion={seccionDx}
+                    onSeccion={setSeccionDx}
+                    seccionConError={seccionDxConError}
+                    columna={editarDx ? dxDatos?.columna : undefined}
+                    archivos={editarDx ? dxDatos?.archivos : undefined}
+                    trazado={editarDx ? (dxDatos?.registros.trazado ?? null) : undefined}
+                    anbDelTrazado={editarDx ? (dxDatos?.registros.anbDelTrazado ?? null) : undefined}
+                    fotosIniciales={editarDx ? dxDatos?.registros.fotosIniciales : undefined}
+                    modo={editarDx ? "editar" : "abrir"}
+                  />
+                )}
               </Seccion>
 
               {error ? (
@@ -1419,21 +1474,21 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
             )}
             <div className={alta.pieBotones}>
               <Btn variant="ghost" size="md" onClick={props.onClose}>Cancelar</Btn>
-              {paso === "plan" && needsDiagnosis ? (
+              {paso === "plan" && (needsDiagnosis || editarDx) ? (
                 <Btn variant="secondary" size="md" icon={<ArrowLeft className="w-3.5 h-3.5" aria-hidden />} onClick={() => setPaso("diagnostico")}>Atrás</Btn>
               ) : null}
               <Btn
                 variant="primary"
                 size="md"
                 onClick={submit}
-                disabled={paso === "diagnostico" ? faltantesDx.length > 0 || submitting : !canSubmit || submitting}
+                disabled={paso === "diagnostico" ? faltantesDx.length > 0 || submitting || guardandoDx || (editarDx && dxInicial === null) : !canSubmit || submitting}
                 aria-describedby={fraseFaltantes ? idFaltantes : undefined}
-                icon={paso === "diagnostico" && !inObservation ? <ArrowRight className="w-3.5 h-3.5" aria-hidden /> : undefined}
+                icon={paso === "diagnostico" && !inObservation && !editarDx ? <ArrowRight className="w-3.5 h-3.5" aria-hidden /> : undefined}
               >
-                {submitting
+                {submitting || guardandoDx
                   ? "Guardando…"
                   : paso === "diagnostico"
-                    ? inObservation ? "Guardar en observación" : "Siguiente: plan de tratamiento"
+                    ? editarDx ? "Guardar diagnóstico" : inObservation ? "Guardar en observación" : "Siguiente: plan de tratamiento"
                     : (props.etiquetas?.guardar ?? (editar ? "Guardar plan" : "Abrir caso"))}
               </Btn>
             </div>
@@ -1521,41 +1576,6 @@ function Select({
         <option key={o.v} value={o.v}>{o.l}</option>
       ))}
     </select>
-  );
-}
-
-function NumberInput({
-  value,
-  onChange,
-  min,
-  max,
-  step,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  min: number;
-  max: number;
-  step: number;
-}) {
-  return (
-    <input
-      type="number"
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      min={min}
-      max={max}
-      step={step}
-      className={inputCls}
-    />
-  );
-}
-
-function Checkbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="flex items-center gap-2 text-[13px] text-[color:var(--pr-texto-2)]">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      {label}
-    </label>
   );
 }
 

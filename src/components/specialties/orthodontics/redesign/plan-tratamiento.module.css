@@ -574,6 +574,18 @@
   font-weight: 500;
 }
 
+.pasoBoton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
 .pasoNumero {
   display: grid;
   place-items: center;
