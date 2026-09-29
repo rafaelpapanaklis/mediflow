@@ -54,6 +54,7 @@ import ant from "@/components/dashboard/cobros-inventario-rediseno/anticipo.modu
 import { ModalRegistrarAnticipo } from "./modal-registrar-anticipo";
 import { AnularAnticipo } from "./anular-anticipo";
 import { AvisoDineroCitaCancelada } from "./aviso-dinero-cita-cancelada";
+import { ultimaMarca } from "@/lib/anticipos/cita-cancelada-core";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
@@ -240,7 +241,12 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // /api/invoices/[id]/permisos-cobro). Arrancan en false: el lado seguro mientras responde.
   const [puedeCobrar, setPuedeCobrar] = useState(false);
   const [puedeTimbrar, setPuedeTimbrar] = useState(false);
-  const cobrable = rediseno && puedeCobrar && !!invoice && ["DRAFT", "PENDING", "PARTIAL", "OVERDUE"].includes(invoice.status);
+  // H15 (opción A, ws1-t4): la cita de esta factura se canceló con dinero
+  // pagado y falta decidir (o está por reembolsar): no se ofrece cobrar más de
+  // un servicio que ya no va a ocurrir. El aviso de abajo dice qué hacer.
+  const marcaCita = ultimaMarca(invoice?.notes);
+  const citaCanceladaConDinero = invoice?.status !== "CANCELLED" && (marcaCita === "pendiente" || marcaCita === "reembolso");
+  const cobrable = rediseno && puedeCobrar && !citaCanceladaConDinero && !!invoice && ["DRAFT", "PENDING", "PARTIAL", "OVERDUE"].includes(invoice.status);
   // ws1-t10 (H68): antes solo se leían las condiciones con el diseño nuevo
   // (para BloquePlan). El monto inicial del cobro las necesita EN LOS DOS
   // caminos — con y sin el interruptor, `PaymentModal` de abajo también abre
@@ -389,7 +395,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // Con Mercado Pago elegido no hay «Registrar pago»: el link está en la sección
   // y el pago lo registra el webhook al acreditarse (ws1-t1).
   const cobroPorMercadoPago = cobrable && mpDisponible && cobro.method === "mercadopago";
-  const botonRegistrarPago = !puedeCobrar || cobroPorMercadoPago ? null : (
+  const botonRegistrarPago = !puedeCobrar || citaCanceladaConDinero || cobroPorMercadoPago ? null : (
     <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={cobro.submit} disabled={busy || cobro.saving || cobro.isInvalid || descuentoPendiente}>
       {cobro.saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: cobro.amountNum ? " · " + fmtMXNdec(cobro.amountNum) : "" })}
     </ButtonNew>
@@ -1043,7 +1049,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               <>
                 {/* Diseño nuevo: el formulario ya está arriba, así que este
                     botón registra el pago (confirmando antes el borrador). */}
-                {rediseno ? botonRegistrarPago : puedeCobrar && (
+                {rediseno ? botonRegistrarPago : puedeCobrar && !citaCanceladaConDinero && (
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={handleConfirmAndPay} disabled={busy}>
                   {t("clinical.invoiceDetail.chargeNow", { amount: fmtMXNdec(invoice.total) })}
                 </ButtonNew>
@@ -1066,7 +1072,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
             {/* PENDIENTE / PARCIAL */}
             {isPending && (
               <>
-                {rediseno ? botonRegistrarPago : puedeCobrar && (
+                {rediseno ? botonRegistrarPago : puedeCobrar && !citaCanceladaConDinero && (
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={() => setPaymentOpen(true)} disabled={busy}>
                   {t("clinical.invoiceDetail.collectPayment", { amount: fmtMXNdec(invoice.balance) })}
                 </ButtonNew>
@@ -1075,7 +1081,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     plazos eso borra el calendario de cuotas por un descuido (ws1-t4 #69):
                     ahí se cobra con «Cobrar», que pide el monto (y si de verdad es
                     todo, se teclea todo). */}
-                {puedeCobrar && !esPlanAPlazos(condicionesPago) && (
+                {puedeCobrar && !citaCanceladaConDinero && !esPlanAPlazos(condicionesPago) && (
                   <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
                     {t("clinical.invoiceDetail.markPaid")}
                   </ButtonNew>

@@ -97,3 +97,30 @@ test("la agenda pregunta antes de cancelar y la factura deja decidir después", 
   assert.match(dialogo, /pendiente de decidir/);
   assert.match(leer("src/components/dashboard/billing/invoice-detail-modal.tsx"), /<AvisoDineroCitaCancelada\s/);
 });
+
+test("con la marca de cita cancelada, la factura no ofrece cobrar más", () => {
+  const modal = leer("src/components/dashboard/billing/invoice-detail-modal.tsx");
+  assert.match(modal, /const citaCanceladaConDinero = invoice\?\.status !== "CANCELLED" && \(marcaCita === "pendiente" \|\| marcaCita === "reembolso"\);/);
+  assert.match(modal, /const cobrable = rediseno && puedeCobrar && !citaCanceladaConDinero &&/);
+  assert.match(modal, /const botonRegistrarPago = !puedeCobrar \|\| citaCanceladaConDinero \|\|/);
+  assert.equal((modal.match(/puedeCobrar && !citaCanceladaConDinero/g) ?? []).length, 4, "cobrable, los dos «Registrar pago» y «Marcar pagada»");
+});
+
+test("«Ya lo devolví» registra el reembolso con la ruta de siempre y cancela la factura", () => {
+  const aviso = leer("src/components/dashboard/billing/aviso-dinero-cita-cancelada.tsx");
+  assert.match(aviso, /fetch\(`\/api\/invoices\/\$\{invoiceId\}\/refund`/);
+  assert.match(aviso, /fetch\(`\/api\/invoices\/\$\{invoiceId\}\/cancel`/);
+  assert.match(aviso, /Sí, registrar reembolso/, "pide confirmación");
+});
+
+test("el SQL de facturas históricas solo añade la marca que el panel sabe leer", () => {
+  const sql = leer("sql/anticipos-cita-cancelada-pendientes.sql")
+    .split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+  assert.match(sql, /SET "notes" = COALESCE\(i\."notes" \|\| E'\\n', ''\)/);
+  assert.doesNotMatch(sql, /\bDELETE\b|\bDROP\b|\bDO\s+\$\$/i);
+  assert.doesNotMatch(sql, /SET "(paid|status|balance|total|appointmentId)"/, "solo toca las notas");
+  assert.match(sql, /NOT LIKE '%\[CITA CANCELADA CON DINERO PAGADO ·%'/, "idempotente");
+  // Lo que escribe el SQL, leído por el panel.
+  const escrita = "[CITA CANCELADA CON DINERO PAGADO · PENDIENTE DE DECIDIR · $800.00 · revisión de facturas (SQL) · 2026-09-29 05:00 UTC]";
+  assert.equal(ultimaMarca(`nota vieja\n${escrita}`), "pendiente");
+});

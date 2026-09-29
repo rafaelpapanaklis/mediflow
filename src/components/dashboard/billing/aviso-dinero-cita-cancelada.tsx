@@ -28,7 +28,8 @@ export function AvisoDineroCitaCancelada({
   puedeCobrar: boolean;
   onListo?: () => void;
 }) {
-  const [enviando, setEnviando] = useState<"a_favor" | "reembolso" | null>(null);
+  const [enviando, setEnviando] = useState<"a_favor" | "reembolso" | "devuelto" | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
   const marca = ultimaMarca(notas);
   if (!marca || marca === "a_favor" || estado === "CANCELLED" || !(pagado > 0)) return null;
 
@@ -53,6 +54,41 @@ export function AvisoDineroCitaCancelada({
     }
   }
 
+  // «Ya lo devolví»: registra el reembolso con la ruta de siempre (que exige
+  // su permiso) y cancela la factura, que ya no tiene dinero y cuya cita no
+  // va a ocurrir. DaleControl no mueve dinero: esto solo lo anota.
+  async function registrarDevuelto() {
+    if (enviando) return;
+    setEnviando("devuelto");
+    try {
+      const r1 = await fetch(`/api/invoices/${invoiceId}/refund`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: pagado, reason: "Devuelto al paciente: se canceló su cita" }),
+      });
+      const o1 = await r1.json().catch(() => ({}));
+      if (!r1.ok) {
+        toast.error(o1?.error ?? "No se pudo registrar el reembolso.", { duration: 9000 });
+        return;
+      }
+      const r2 = await fetch(`/api/invoices/${invoiceId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Cita cancelada; el dinero se devolvió al paciente" }),
+      });
+      if (!r2.ok) {
+        const o2 = await r2.json().catch(() => ({}));
+        toast(`Reembolso registrado. La factura no se pudo cancelar: ${o2?.error ?? "cancélala a mano"}.`, { duration: 9000 });
+      } else {
+        toast.success("Reembolso registrado y factura cancelada.");
+      }
+      onListo?.();
+    } finally {
+      setEnviando(null);
+      setConfirmando(false);
+    }
+  }
+
   return (
     <div role="status" className="mt-3 rounded-lg border border-[color:var(--warning-strong,#b45309)] px-3 py-2 text-xs space-y-2">
       <p className="font-semibold">
@@ -60,7 +96,25 @@ export function AvisoDineroCitaCancelada({
         {marca === "reembolso" ? "Está marcado POR REEMBOLSAR." : "Falta decidir qué pasa con ese dinero."}
       </p>
       {marca === "reembolso" ? (
-        <p>DaleControl no mueve dinero: devuélvelo por Mercado Pago o en efectivo y después regístralo aquí con «Reembolsar».</p>
+        <>
+          <p>DaleControl no mueve dinero: devuélvelo por Mercado Pago o en efectivo y después regístralo aquí.</p>
+          {puedeCobrar &&
+            (confirmando ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span>¿Ya se lo devolviste al paciente?</span>
+                <ButtonNew variant="danger" size="sm" disabled={enviando !== null} onClick={registrarDevuelto}>
+                  {enviando === "devuelto" ? "Registrando…" : "Sí, registrar reembolso"}
+                </ButtonNew>
+                <ButtonNew variant="ghost" size="sm" disabled={enviando !== null} onClick={() => setConfirmando(false)}>
+                  No
+                </ButtonNew>
+              </div>
+            ) : (
+              <ButtonNew variant="secondary" size="sm" onClick={() => setConfirmando(true)}>
+                Ya lo devolví: registrar reembolso
+              </ButtonNew>
+            ))}
+        </>
       ) : puedeCobrar ? (
         <div className="flex flex-wrap gap-2">
           <ButtonNew variant="secondary" size="sm" disabled={enviando !== null} onClick={() => decidir("a_favor")}>
