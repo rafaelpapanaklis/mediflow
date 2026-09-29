@@ -61,7 +61,7 @@ const primero = <T>(g: PreviewRow[], campo: string): T | undefined =>
 /** Lo que `esOrtodonciaDentalink` lee de un renglón ya mapeado. */
 const renglonCrudo = (r: PreviewRow) => ({ procedure: r.data.procedure, categoria: r.data.categoria, especialidad: r.data.especialidad });
 
-function entradaDe(g: PreviewRow[], tecnicas: EntradaDelCaso["tecnicasPropias"]): EntradaDelCaso {
+export function entradaDelCaso(g: PreviewRow[], tecnicas: EntradaDelCaso["tecnicasPropias"]): EntradaDelCaso {
   const first = g[0].data;
   const abonado = g.find((r) => typeof r.data.abonado === "number")?.data.abonado as number | undefined;
   return {
@@ -127,7 +127,7 @@ export async function marcarCasosDeOrtodoncia(filas: PreviewRow[], clinicId: str
       for (const r of g) { r.status = "duplicate"; r.warnings.push("Este caso de ortodoncia ya se importó antes"); }
       continue;
     }
-    const plan = armarCaso(entradaDe(g, tecnicas));
+    const plan = armarCaso(entradaDelCaso(g, tecnicas));
     g[0].warnings.push(resumenDelCaso(plan), ...plan.avisos);
   }
 }
@@ -422,7 +422,7 @@ export async function commitCasosDeOrtodoncia(
   let ultimoNumero = 0;
 
   for (const g of grupos) {
-    const entrada = entradaDe(g, tecnicas);
+    const entrada = entradaDelCaso(g, tecnicas);
     if (casos.mapa.has(entrada.folio)) { skipped++; for (const r of g) r.status = "duplicate"; continue; }
     const plan = armarCaso(entrada);
 
