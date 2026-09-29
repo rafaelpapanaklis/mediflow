@@ -89,7 +89,16 @@ test("dos candidatos igual de buenos → empate, a revisar; una fecha o cédula 
   assert.deepEqual(e(dato("Ana López", { tel: "5550001111", dob: "1975-8-9" }), [a2, b2]), { tipo: "seguro", id: "b", por: ["nombre", "teléfono", "fecha de nacimiento"] });
   // Misma cédula distinta = otra persona aunque compartan nombre y teléfono.
   const c = ficha("c", "Ana López", { tel: "5550001111", doc: "AAAA000101MDFRRN01" });
-  assert.deepEqual(e(dato("Ana López", { tel: "5550001111", doc: "BBBB000101MDFRRN02" }), [c]), { tipo: "ninguno" });
+  const cedula = e(dato("Ana López", { tel: "5550001111", doc: "BBBB000101MDFRRN02" }), [c]);
+  assert.equal(cedula.tipo, "revisar", "coincide nombre y teléfono pero la CURP es otra: lo mira una persona, no se asigna solo");
+  assert.match((cedula as any).motivo, /coincide en nombre \+ teléfono con un paciente, pero su cédula\/CURP es distinta/);
+  // Sin la fecha de nacimiento de la ficha no hay contradicción posible.
+  assert.equal(e(dato("Ana López", { tel: "5550001111", dob: "1999-1-1" }), [a]).tipo, "seguro");
+  // Nombre + correo iguales pero la fecha de nacimiento difiere (un dato mal capturado o un homónimo): a revisar, diciendo cuál no cuadra.
+  const hijo = ficha("h", "Benjamín Ruiz Soto", { email: "familia@x.mx", dob: "2006-9-4" });
+  const distinta = e(dato("Benjamín Ruiz Soto", { email: "familia@x.mx", dob: "2006-7-4" }), [hijo]);
+  assert.equal(distinta.tipo, "revisar");
+  assert.match((distinta as any).motivo, /coincide en nombre \+ correo con un paciente, pero su fecha de nacimiento es distinta/);
 });
 
 // ───────────────────────── Por el motor: filas con un ID que no está importado ─────────────────────────
@@ -138,6 +147,18 @@ test("a QUIÉN va una fila con ID que no existe: por ID, por 2 datos (con el mot
   assert.equal(fila(cit, 9).status, "error");
   assert.match(fila(cit, 9).errors.join(" "), /Paciente con ID 906 no encontrado/);
   void idDe;
+});
+
+test("mismo nombre y correo pero otra fecha de nacimiento: no se asigna solo, dice qué no cuadra", async () => {
+  base = crearBase(semilla());
+  await correr("patients", csv([PACIENTES, "64,Benjamín,Ruiz Soto,5551110040,familia@x.mx,2006-09-04", "233,Angela,Ruiz,5551110041,familia@x.mx,1975-08-29"].join("\n") + "\n"), false);
+  const cit = await correr("appointments", csv([CITAS, cita("1", "Benjamín", "Ruiz Soto", "5559990000", "familia@x.mx", "2006-07-04")].join("\n") + "\n"));
+  assert.equal(fila(cit, 2).status, "error");
+  assert.match(fila(cit, 2).errors.join(" "), /A revisar: el ID 1 .*coincide en nombre \+ correo con un paciente, pero su fecha de nacimiento es distinta/);
+  // Con la misma fecha sí es él: nombre + correo + fecha.
+  const igual = await correr("appointments", csv([CITAS, cita("1", "Benjamín", "Ruiz Soto", "5559990000", "familia@x.mx", "2006-09-04")].join("\n") + "\n"));
+  assert.equal(fila(igual, 2).status, "ok");
+  assert.match(fila(igual, 2).warnings.join(" "), /por nombre \+ correo \+ fecha de nacimiento/);
 });
 
 test("los mismos criterios en saldos y en el historial de citas", async () => {

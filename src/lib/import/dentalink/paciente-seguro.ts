@@ -43,7 +43,7 @@ export interface DatosDeFila {
 
 export type Emparejo =
   | { tipo: "seguro"; id: string; por: Dato[] }
-  | { tipo: "revisar"; motivo: string; candidatos: Array<{ id: string; por: Dato[] }> }
+  | { tipo: "revisar"; motivo: string; candidatos: Array<{ id: string; por: Dato[]; contradice?: Dato }> }
   | { tipo: "ninguno" };
 
 function tokens(s: string): string[] {
@@ -70,17 +70,26 @@ export function mismoNombreCompleto(a: string, b: string): boolean {
   return comunes === x.size || comunes === y.size;
 }
 
-/** Datos fuertes en los que la fila coincide con esta ficha, o null si hay una contradicción (fecha o cédula distintas). */
-export function coincidencias(fila: DatosDeFila, f: FichaPaciente): Dato[] | null {
-  if (fila.dob && f.dob && fila.dob !== f.dob) return null;
-  if (fila.doc && f.doc && fila.doc !== f.doc) return null;
+/**
+ * Datos fuertes en los que la fila coincide con esta ficha y, si los hay, el que la CONTRADICE (fecha de nacimiento o
+ * CURP distintas: es otra persona, o un dato mal capturado que una persona debe mirar).
+ */
+export function evaluar(fila: DatosDeFila, f: FichaPaciente): { por: Dato[]; contradice: Dato | null } {
+  const contradice: Dato | null =
+    fila.dob && f.dob && fila.dob !== f.dob ? "fecha de nacimiento" : fila.doc && f.doc && fila.doc !== f.doc ? "cédula/CURP" : null;
   const por: Dato[] = [];
   if (fila.nombre && f.nombre && mismoNombreCompleto(fila.nombre, f.nombre)) por.push("nombre");
   if (fila.tel && f.tel && fila.tel === f.tel) por.push("teléfono");
   if (fila.email && f.email && fila.email === f.email) por.push("correo");
   if (fila.dob && f.dob && fila.dob === f.dob) por.push("fecha de nacimiento");
   if (fila.doc && f.doc && fila.doc === f.doc) por.push("cédula/CURP");
-  return por;
+  return { por, contradice };
+}
+
+/** Datos fuertes en los que la fila coincide con esta ficha, o null si hay una contradicción. */
+export function coincidencias(fila: DatosDeFila, f: FichaPaciente): Dato[] | null {
+  const e = evaluar(fila, f);
+  return e.contradice ? null : e.por;
 }
 
 /** «nombre + teléfono». */
@@ -90,18 +99,28 @@ export const textoDeDatos = (por: readonly Dato[]) => por.join(" + ");
 export function emparejarPorDatos(fila: DatosDeFila, candidatos: readonly FichaPaciente[]): Emparejo {
   const vistos = new Set<string>();
   const evaluados: Array<{ id: string; por: Dato[] }> = [];
+  const contradichos: Array<{ id: string; por: Dato[]; contradice: Dato }> = [];
   for (const f of candidatos) {
     if (vistos.has(f.id)) continue;
     vistos.add(f.id);
-    const por = coincidencias(fila, f);
-    if (por === null) continue; // contradicción: es otra persona
-    evaluados.push({ id: f.id, por });
+    const e = evaluar(fila, f);
+    if (e.contradice) { if (e.por.length >= 2) contradichos.push({ id: f.id, por: e.por, contradice: e.contradice }); continue; }
+    evaluados.push({ id: f.id, por: e.por });
   }
-  if (evaluados.length === 0) return { tipo: "ninguno" };
   const claros = evaluados.filter((c) => c.por.length >= 2);
   if (claros.length === 1) return { tipo: "seguro", id: claros[0].id, por: claros[0].por };
   if (claros.length > 1) {
     return { tipo: "revisar", motivo: "dos o más pacientes coinciden igual de bien (empate)", candidatos: claros };
+  }
+  // Coincide en 2 o más datos pero la fecha de nacimiento (o la CURP) es distinta: puede ser el mismo paciente con un dato
+  // mal capturado, o un homónimo. No se decide solo: se dice cuál dato no cuadra.
+  if (contradichos.length > 0) {
+    const c = contradichos[0];
+    return {
+      tipo: "revisar",
+      motivo: `coincide en ${textoDeDatos(c.por)} con un paciente, pero su ${c.contradice} es distinta`,
+      candidatos: contradichos,
+    };
   }
   const conAlgo = evaluados.filter((c) => c.por.length >= 1);
   if (conAlgo.length === 0) return { tipo: "ninguno" };
