@@ -13,6 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { etiquetaAbrirCaso, pistaSinCaso, tituloSinCaso } from "@/components/specialties/orthodontics/redesign/casos-migrados-texto";
 import { buildPatientNavItems } from "@/components/dashboard/patient-detail/patient-nav-items";
 import { FIJOS, construirMenuFicha } from "@/components/dashboard/pacientes-rediseno/menu-estructura";
 import { ESTADOS_QUE_CUENTAN_COMO_CASO, vistaDePestanaOrto } from "../pestana-ficha";
@@ -104,7 +105,11 @@ test("caso 3 — con el módulo y sin caso nunca, solo «Abrir caso de ortodonci
   assert.ok(pestana.indexOf('if (vista === "solo-abrir-caso")') < pestana.indexOf("<OrthodonticsRedesignClient"));
 
   const limpia = sinComentarios(leer("src/components/specialties/orthodontics/redesign/OrtodonciaSinCaso.tsx"));
-  assert.match(limpia, /Abrir caso de ortodoncia/);
+  // El texto sale de funciones puras: sin casos migrados el paciente ve lo de siempre; con ellos, «Sin caso activo…».
+  assert.equal(etiquetaAbrirCaso(0), "Abrir caso de ortodoncia");
+  assert.equal(tituloSinCaso("Ana Prueba", 0), "Ana Prueba no tiene caso de ortodoncia");
+  assert.match(limpia, /etiquetaAbrirCaso\(nMigrados\)/);
+  assert.match(limpia, /tituloSinCaso\(patientFullName, nMigrados\)/);
   assert.match(limpia, /<DrawerNewCase/, "el asistente de alta de siempre, no otro");
   // Una vista limpia: ninguna sección del expediente de ortodoncia.
   assert.doesNotMatch(limpia, /Section[A-Z]\w+|RightRail|ResumenCobranza|AlineadoresPanel|HygieneTrendCard|OrthodonticsModuleSidebar/);

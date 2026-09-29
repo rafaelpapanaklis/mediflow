@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { etiquetaAbrirCaso, pistaSinCaso, tituloSinCaso } from "@/components/specialties/orthodontics/redesign/casos-migrados-texto";
 import {
   HUECO,
   aplicarPlantillaAlControl,
@@ -49,8 +50,12 @@ test("caso activo: se abre su hoja de control", () => {
 test("nunca tuvo caso: se ofrece «Abrir caso de ortodoncia»", () => {
   assert.equal(destinoDeConsultaOrto({ vista: "solo-abrir-caso", tienePlan: false, estado: null }), "abrir-caso");
   const limpia = leer("src/components/specialties/orthodontics/redesign/OrtodonciaSinCaso.tsx");
-  assert.match(limpia, /Abrir caso de ortodoncia/);
-  assert.match(limpia, /La consulta de ortodoncia se registra en la hoja de control de su caso\./);
+  // Los textos viven en funciones puras (casos-migrados-texto.ts) y el componente las usa: quien NUNCA tuvo caso
+  // (0 casos migrados) sigue viendo «Abrir caso de ortodoncia» y el aviso de siempre.
+  assert.equal(etiquetaAbrirCaso(0), "Abrir caso de ortodoncia");
+  assert.match(pistaSinCaso(0, true), /La consulta de ortodoncia se registra en la hoja de control de su caso\./);
+  assert.match(limpia, /etiquetaAbrirCaso\(nMigrados\)/);
+  assert.match(limpia, /pistaSinCaso\(nMigrados, desdeConsulta\)/);
   // Se OFRECE: llegar desde Nueva consulta no abre el asistente por su cuenta.
   const efecto = limpia.slice(limpia.indexOf("if (!vieneDeNuevaConsulta) return;"), limpia.indexOf("}, [vieneDeNuevaConsulta]);"));
   assert.doesNotMatch(efecto, /setAltaAbierta/);
