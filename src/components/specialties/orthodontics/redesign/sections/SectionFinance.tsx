@@ -39,12 +39,13 @@ import { DrawerConfigCobro } from "../drawers/DrawerConfigCobro";
 import { DrawerElegirDescuento } from "../drawers/DrawerElegirDescuento";
 import { DrawerLigarFactura } from "../drawers/DrawerLigarFactura";
 import { DrawerPromesaDePago } from "../drawers/DrawerPromesaDePago";
-import { cargarPanelDeCobro, type PanelDeCobro, type FacturaResumen, type ControlPorCobrar } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
+import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import { resolverPromesaDePago } from "@/app/actions/orthodontics/cobro/resolverPromesaDePago";
 import { abrirPlanDePago } from "@/app/actions/orthodontics/cobro/abrirPlanDePago";
 import { comprobarPlanDePagoLibre } from "@/app/actions/orthodontics/cobro/comprobarPlanDePagoLibre";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import type { CuotaConEstado } from "@/lib/invoices/plan-de-pagos";
+import { cobroPrincipalDelCaso, montoDelCobroPrincipal } from "@/lib/orthodontics/cobro/cobro-principal";
 import orto from "../orto.module.css";
 
 export interface SectionFinanceProps {
@@ -157,26 +158,17 @@ export function SectionFinance(props: SectionFinanceProps) {
   // colocación, casi siempre YA pagada. Ahora abre el primer control que se debe
   // (y cada control tiene su propio «Cobrar» abajo); la colocación solo si aún debe.
   const controlesPorCobrar = esPorControl ? panel.controlesPorCobrar ?? [] : [];
-  const facturaACobrar: FacturaResumen | ControlPorCobrar | null =
-    esPorControl && controlesPorCobrar.length > 0
-      ? controlesPorCobrar[0]
-      : panel.invoice && (!esPorControl || panel.invoice.balance > 0.004) ? panel.invoice : null;
-  const idFacturaACobrar: string | null = facturaACobrar
-    ? ("id" in facturaACobrar ? facturaACobrar.id : facturaACobrar.invoiceId)
-    : null;
+  // ws1-t4: la factura y el monto del «Cobrar» principal salen de la MISMA
+  // regla que usa el «Cobrar» de la cabecera de la pestaña (cobro-principal.ts).
+  const cobroPrincipal = cobroPrincipalDelCaso(panel);
+  const idFacturaACobrar: string | null = cobroPrincipal?.invoiceId ?? null;
   const controlACobrar = drawer?.kind === "cobrar-control" ? controlesPorCobrar.find((c) => c.invoiceId === drawer.invoiceId) ?? null : null;
   const hayDeudaDeControles = Boolean(panel.cobranza && (panel.cobranza.vencidas.length > 0 || panel.cobranza.proximas.length > 0));
 
   // ronda 3 (ws1-t2, H6): lo que se sugiere cobrar con «Cobrar» — TODO lo
-  // vencido (si hay), si no la cuota de hoy. Mismo criterio que ya usaba
-  // «Registrar promesa de pago» (montoSugerido, abajo): un solo número, no
-  // dos que puedan discrepar entre el rótulo del botón y lo que precarga el
-  // modal.
-  const montoCobrarSugerido = esPorControl && controlesPorCobrar.length > 0
-    ? controlesPorCobrar[0].balance
-    : panel.cobranza
-      ? panel.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) || panel.cobranza.cuotaDeHoy?.falta || 0
-      : 0;
+  // vencido (si hay), si no la cuota de hoy; en «pago por control», el saldo
+  // del primer control. Un solo número para el rótulo del botón y el modal.
+  const montoCobrarSugerido = montoDelCobroPrincipal(panel);
 
   // #77: la lista de controles que se deben, uno por uno, cada uno con su «Cobrar».
   const bloqueControlesPorCobrar = controlesPorCobrar.length > 0 ? (

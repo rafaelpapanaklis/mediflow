@@ -29,7 +29,10 @@ test("un centavo de ruido no cuenta como deuda", () => {
 
 test("la ficha cobra el primer control y no la colocación ya pagada, y lista cada uno con su Cobrar", () => {
   const f = leer("components/specialties/orthodontics/redesign/sections/SectionFinance.tsx");
-  assert.match(f, /esPorControl && controlesPorCobrar\.length > 0\s*\?\s*controlesPorCobrar\[0\]/);
+  // ws1-t4: la regla vive ahora en cobro-principal.ts (la comparte la cabecera).
+  assert.match(f, /cobroPrincipalDelCaso\(panel\)/);
+  const regla = leer("lib/orthodontics/cobro/cobro-principal.ts");
+  assert.match(regla, /esPorControl && controles\.length > 0\s*\?\s*controles\[0\]\.invoiceId/);
   assert.match(f, /data-controles-por-cobrar/);
   assert.match(f, /kind: "cobrar-control", invoiceId: c\.invoiceId/);
   const a = leer("app/actions/orthodontics/cobro/cargarPanelDeCobro.ts");

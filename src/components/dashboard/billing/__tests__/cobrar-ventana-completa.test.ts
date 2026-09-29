@@ -254,3 +254,50 @@ test("«Editar» (tarjeta de Caja y del expediente, y la ventana completa) abre 
   const d = leer(DETALLE);
   assert.match(d, /\{onEditar && puedeEditar && facturaEditableEnEditor\(invoice\) && \(/);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Revisión panel.108 (fallo 3): «Cobrar» que solo navegaba
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { cobroPrincipalDelCaso, montoDelCobroPrincipal } from "../../../../lib/orthodontics/cobro/cobro-principal";
+
+test("cobro principal del caso: factura y monto (la regla de «Cobrar · $X»)", () => {
+  const plazos = {
+    billingMode: "PRECIO_TOTAL",
+    invoice: { id: "inv-caso", balance: 18000 },
+    cobranza: { vencidas: [{ falta: 2000 }], cuotaDeHoy: { falta: 2000 } },
+  };
+  assert.deepEqual(cobroPrincipalDelCaso(plazos), { invoiceId: "inv-caso", montoSugerido: 2000 });
+  assert.equal(montoDelCobroPrincipal({ ...plazos, cobranza: { vencidas: [{ falta: 2000 }, { falta: 1500 }] } }), 3500, "TODO lo vencido");
+  assert.equal(montoDelCobroPrincipal({ ...plazos, cobranza: { vencidas: [], cuotaDeHoy: { falta: 1000 } } }), 1000, "si no, la cuota de hoy");
+  assert.equal(montoDelCobroPrincipal({ ...plazos, cobranza: null }), 0, "sin plan: el saldo (0 = que lo decida la ventana)");
+  assert.equal(cobroPrincipalDelCaso({ ...plazos, invoice: null }), null, "sin factura no hay a qué cobrar");
+  // Pago por control: el primer control que se debe; la colocación solo si aún debe.
+  const porControl = { billingMode: "PAGO_POR_CONTROL", invoice: { id: "coloc", balance: 0 }, cobranza: null };
+  assert.deepEqual(cobroPrincipalDelCaso({ ...porControl, controlesPorCobrar: [{ invoiceId: "ctl-1", balance: 900 }, { invoiceId: "ctl-2", balance: 900 }] }), { invoiceId: "ctl-1", montoSugerido: 900 });
+  assert.equal(cobroPrincipalDelCaso({ ...porControl, controlesPorCobrar: [] }), null, "colocación pagada: nada");
+  assert.deepEqual(cobroPrincipalDelCaso({ ...porControl, invoice: { id: "coloc", balance: 5000 }, controlesPorCobrar: [] }), { invoiceId: "coloc", montoSugerido: 0 });
+});
+
+test("la Sección F y la cabecera de Ortodoncia usan la MISMA regla", () => {
+  const f = leer("src/components/specialties/orthodontics/redesign/sections/SectionFinance.tsx");
+  assert.match(f, /const cobroPrincipal = cobroPrincipalDelCaso\(panel\);/);
+  assert.match(f, /const montoCobrarSugerido = montoDelCobroPrincipal\(panel\);/);
+  const c = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
+  assert.match(c, /const cobroDeCabecera = panelListo\?\.puedeCobrar \? cobroPrincipalDelCaso\(panelListo\) : null;/);
+  assert.match(c, /onCollect=\{onCollectCabecera\}/);
+  assert.match(c, /panelListo && !panelListo\.puedeCobrar\s*\? undefined/, "sin permiso de cobro no hay «Cobrar» en la cabecera");
+  assert.match(c, /<CobrarEnFactura\s+invoiceId=\{cobrandoDesdeCabecera\.invoiceId\}\s+montoSugerido=\{cobrandoDesdeCabecera\.montoSugerido\}/);
+});
+
+test("`?charge=1` (barra del paciente, fin de consulta, paleta) abre el cobro en vez de solo caer en la ficha", () => {
+  for (const [archivo, patron] of [
+    ["src/components/dashboard/patient-context-bar.tsx", /\?charge=1/],
+    ["src/components/dashboard/patient-context-end-modal.tsx", /\?charge=1/],
+    ["src/lib/command-palette/actions.ts", /\?charge=1/],
+  ] as const) assert.match(leer(archivo), patron, archivo);
+  const pac = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(pac, /const cobroPedidoPorUrl = searchParams\.get\("charge"\) === "1";/);
+  assert.match(pac, /if \(permisosCobro\?\.cobrar === false\) \{ openBillingTab\(\); return; \}\s*openChargeShortcut\(\);/);
+  assert.match(pac, /window\.history\.replaceState\(null, ""/, "el parámetro se quita para que un refresh no vuelva a abrirlo");
+});

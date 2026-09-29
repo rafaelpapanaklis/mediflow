@@ -681,6 +681,30 @@ export function PatientDetailClient({
     else openBillingTab();
   };
 
+  // ws1-t4 (revisión panel.108): la barra del paciente («Cobrar»), el «Cobrar
+  // ahora» al terminar la consulta y la paleta de comandos llegan aquí con
+  // `?charge=1`, y NADIE lo leía: se caía en la ficha sin cobrar. Ahora hace
+  // lo mismo que «Cobrar ahora» de la cabecera: la ventana completa de la
+  // factura por cobrar con el pago abierto (o Facturación si no hay ninguna).
+  // Sin permiso de cobro, solo Facturación. Una vez por carga, y el parámetro
+  // se quita sin navegar para que un refresh no vuelva a abrirlo.
+  const cobroPedidoPorUrl = searchParams.get("charge") === "1";
+  const cobroDeUrlAtendidoRef = useRef(false);
+  useEffect(() => {
+    if (!cobroPedidoPorUrl || cobroDeUrlAtendidoRef.current) return;
+    cobroDeUrlAtendidoRef.current = true;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("charge");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      // Sin URL editable: el ref ya evita repetirlo en esta carga.
+    }
+    if (permisosCobro?.cobrar === false) { openBillingTab(); return; }
+    openChargeShortcut();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cobroPedidoPorUrl]);
+
   async function handleDeleteRecord(record: { id: string; specialtyData?: any }) {
     const status = record.specialtyData?.status ?? "DRAFT";
     if (status === "SIGNED") {
@@ -2008,6 +2032,9 @@ export function PatientDetailClient({
                   onCreated: () => router.refresh(),
                 })
               }
+              // ws1-t4: la pestaña abre la ventana completa de la factura del
+              // caso por su cuenta (OrthodonticsRedesignClient); esto queda
+              // como respaldo cuando no hay nada que cobrar o aún no carga.
               onCollect={openBillingTab}
               abrirControlAlEntrar={abrirControlOrto}
               onControlAbierto={() => setAbrirControlOrto(false)}

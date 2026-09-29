@@ -10,6 +10,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
+// ws1-t4: «Cobrar» de la cabecera → ventana completa de la factura del caso.
+import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
+import { cobroPrincipalDelCaso, type CobroPrincipal } from "@/lib/orthodontics/cobro/cobro-principal";
 import {
   getTreatmentCardContextForPatient,
 } from "@/app/actions/orthodontics/getTreatmentCardContextForPatient";
@@ -463,6 +466,26 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       ? Math.round(panelDeCobro.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) * 100) / 100
       : null;
 
+  // ws1-t4 (revisión panel.108, fallo 3): «Cobrar» de la cabecera abría solo la
+  // pestaña Facturación. Ahora abre la ventana completa de la factura del caso
+  // con «Registrar pago» abierto — la MISMA factura y el MISMO monto que
+  // «Cobrar · $X» de la Sección F (cobro-principal.ts). Sin permiso de cobro,
+  // no hay botón. Mientras el panel carga (o si falló), o si el caso no tiene
+  // nada que cobrar (sin factura, o pagada), el botón hace lo de siempre: ir a
+  // Facturación, donde se crea o se ve la factura.
+  const panelListo = panelDeCobro && panelDeCobro !== "cargando" && panelDeCobro !== "error" ? panelDeCobro : null;
+  const cobroDeCabecera = panelListo?.puedeCobrar ? cobroPrincipalDelCaso(panelListo) : null;
+  const [cobrandoDesdeCabecera, setCobrandoDesdeCabecera] = useState<
+    (CobroPrincipal & { rediseno: boolean; clinicTaxMode: string | null }) | null
+  >(null);
+  const onCollectCabecera = !props.patientHeader?.onCollect
+    ? undefined
+    : panelListo && !panelListo.puedeCobrar
+      ? undefined
+      : cobroDeCabecera && panelListo
+        ? () => setCobrandoDesdeCabecera({ ...cobroDeCabecera, rediseno: panelListo.redisenoFacturas, clinicTaxMode: panelListo.clinicTaxMode })
+        : props.patientHeader.onCollect;
+
   const cardForDrawer =
     drawer?.kind === "tcard"
       ? vm.treatmentCards.find((c) => c.id === drawer.cardId) ?? null
@@ -508,7 +531,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           totalVisits={props.patientHeader.totalVisits}
           onStartVisit={props.patientHeader.onStartVisit}
           onScheduleNext={props.patientHeader.onScheduleNext}
-          onCollect={props.patientHeader.onCollect}
+          onCollect={onCollectCabecera}
           onMore={props.patientHeader.onMore}
           // Registrar el control es lo que se hace veinte veces al día: va
           // arriba, a la vista, y manda sobre los demás botones. Mismo
@@ -751,6 +774,17 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           </div>
         </div>
       </div>
+
+      {cobrandoDesdeCabecera ? (
+        <CobrarEnFactura
+          invoiceId={cobrandoDesdeCabecera.invoiceId}
+          montoSugerido={cobrandoDesdeCabecera.montoSugerido}
+          rediseno={cobrandoDesdeCabecera.rediseno}
+          clinicTaxMode={cobrandoDesdeCabecera.clinicTaxMode}
+          onClose={() => setCobrandoDesdeCabecera(null)}
+          onRefrescar={recargarPanelDeCobro}
+        />
+      ) : null}
 
       {compararCon ? (
         <ModalCompare
