@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { textoArchivo } from "@/lib/movimientos-paciente/textos";
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /*  PATCH — actualiza las notas clínicas del doctor sobre el archivo   */
@@ -74,6 +75,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     entityType: "patient-file",
     entityId:   existing.id,
     action:     "FILE_NOTES_UPDATED",
+    patientId:  existing.patientId,
+    texto:      "Actualizó las notas de un estudio del paciente",
     changes: {
       doctorNotes: {
         before: existing.doctorNotes ?? "",
@@ -144,6 +147,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     entityType: "patient-file",
     entityId:   params.id,
     action:     "soft_delete",
+    patientId:  file.patientId,
+    texto:      textoArchivo.quitado(file.category),
     changes: {
       _deleted: {
         before: { name: file.name, category: file.category, url: file.url },

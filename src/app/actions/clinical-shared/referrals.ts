@@ -247,6 +247,7 @@ export async function createReferralLetter(
     action: "clinical-shared.referral.created",
     entityType: "referral-letter",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { module: parsed.data.module, contactId: parsed.data.contactId },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);

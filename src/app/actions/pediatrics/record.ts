@@ -66,6 +66,7 @@ export async function createPediatricRecord(input: CreatePediatricRecordInput): 
     action: PEDIATRIC_AUDIT_ACTIONS.RECORD_CREATED,
     entityType: "pediatric-record",
     entityId: created.id,
+    patientId: parsed.data.patientId,
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
   return ok(created);
@@ -110,6 +111,7 @@ export async function updatePediatricRecord(
     action: PEDIATRIC_AUDIT_ACTIONS.RECORD_UPDATED,
     entityType: "pediatric-record",
     entityId: updated.id,
+    patientId: parsed.data.patientId,
   });
   revalidatePath(`/dashboard/patients/${record.patientId}`);
   return ok(updated);

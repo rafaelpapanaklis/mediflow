@@ -90,6 +90,7 @@ export async function updateRetentionRegimenConfig(
       action: ORTHO_AUDIT_ACTIONS.RETENTION_REGIMEN_CONFIGURED,
       entityType: "OrthoRetentionRegimen",
       entityId: regimen.id,
+      patientId: plan.patientId,
       after: {
         upperRetainer: data.upperRetainer,
         lowerRetainer: data.lowerRetainer,

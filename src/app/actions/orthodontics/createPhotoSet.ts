@@ -58,6 +58,7 @@ export async function createPhotoSet(
       action: ORTHO_AUDIT_ACTIONS.PHOTO_SET_CREATED,
       entityType: "OrthoPhotoSet",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: { setType: created.setType, treatmentPlanId: parsed.data.treatmentPlanId },
     });
 

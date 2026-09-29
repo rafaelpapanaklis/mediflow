@@ -177,6 +177,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     : { ...(await leerCondiciones(prisma, quote.id)), fallo: false };
 
   await logAudit({
+    patientId: quote.patientId,
+    texto: `Actualizó el presupuesto ${quote.folio}`,
     clinicId: ctx.clinicId,
     userId: ctx.userId,
     entityType: "quote",
@@ -187,6 +189,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (invoice && linked) {
     await logAudit({
+      patientId: invoice.patientId,
+      texto: `Actualizó la factura ${invoice.invoiceNumber} desde el presupuesto ${quote.folio}`,
       clinicId: ctx.clinicId,
       userId: ctx.userId,
       entityType: "invoice",
@@ -244,6 +248,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   await prisma.quote.delete({ where: { id: existing.id } });
 
   await logAudit({
+    patientId: existing.patientId,
+    texto: `Eliminó el presupuesto ${existing.folio}`,
     clinicId: ctx.clinicId,
     userId: ctx.userId,
     entityType: "quote",

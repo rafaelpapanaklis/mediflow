@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
+import { textoArchivo } from "@/lib/movimientos-paciente/textos";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +66,8 @@ export async function DELETE(
     entityType: "patient-file",
     entityId: params.fileId,
     action: "soft_delete",
+    patientId: params.id,
+    texto: textoArchivo.quitado(file.category),
     changes: {
       _deleted: {
         before: { name: file.name, category: file.category, url: file.url },
@@ -130,6 +134,22 @@ export async function PATCH(
     where: { id: params.fileId, clinicId: ctx.clinicId },
     data: data as any,
   });
+
+  // ws1-t12 — solo las NOTAS del doctor dejan movimiento. Las marcas del visor
+  // se guardan solas a cada trazo: una fila por trazo ahogaría la lista.
+  if (data.doctorNotes !== undefined) {
+    await registrarMovimientoDelPaciente({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      patientId: params.id,
+      entityType: "patient-file",
+      entityId: params.fileId,
+      action: "update",
+      texto: "Actualizó las notas de un modelo 3D",
+      campos: ["doctorNotes"],
+      req,
+    });
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -53,6 +53,7 @@ export async function createDiagnosis(
       action: ENDO_AUDIT_ACTIONS.DIAGNOSIS_CREATED,
       entityType: "endo-diagnosis",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         toothFdi: parsed.data.toothFdi,
         pulpalDiagnosis: parsed.data.pulpalDiagnosis,
@@ -115,6 +116,7 @@ export async function updateDiagnosis(
       action: ENDO_AUDIT_ACTIONS.DIAGNOSIS_UPDATED,
       entityType: "endo-diagnosis",
       entityId: existing.id,
+      patientId: parsed.data.patientId,
       before: {
         pulpalDiagnosis: existing.pulpalDiagnosis,
         periapicalDiagnosis: existing.periapicalDiagnosis,

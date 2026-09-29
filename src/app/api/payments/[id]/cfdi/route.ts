@@ -281,6 +281,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const q = cfdiOverage(usage.stamped, plan.cfdiMonthly, plan.cfdiOverageCents);
 
     await logMutation({
+      texto: "Timbró el CFDI de un pago",
       req, clinicId: ctx!.clinicId, userId: ctx!.userId,
       // No hay "payment" en AuditEntityType (audit.ts): se audita contra la
       // FACTURA, igual que el timbrado completo, con el paymentId adentro.

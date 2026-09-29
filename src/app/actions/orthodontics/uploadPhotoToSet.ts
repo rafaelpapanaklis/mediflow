@@ -46,6 +46,7 @@ export async function uploadPhotoToSet(
       action: ORTHO_AUDIT_ACTIONS.PHOTO_UPLOADED,
       entityType: "OrthoPhotoSet",
       entityId: set.id,
+      patientId: set.patientId,
       meta: { view: parsed.data.view, fileId: parsed.data.fileId },
     });
 

@@ -59,6 +59,7 @@ export async function captureBehavior(input: CaptureBehaviorInput): Promise<Acti
     action: PEDIATRIC_AUDIT_ACTIONS.FRANKL_CAPTURED,
     entityType: "ped-behavior",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { scale: parsed.data.scale, value: parsed.data.value },
   });
 
@@ -116,6 +117,7 @@ export async function deleteBehavior(args: { id: string }): Promise<ActionResult
     action: "pediatrics.behavior.deleted",
     entityType: "ped-behavior",
     entityId: row.id,
+    patientId: row.patientId,
   });
   revalidatePath(`/dashboard/patients/${row.patientId}`);
   return ok({ id: row.id });

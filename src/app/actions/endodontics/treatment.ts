@@ -93,6 +93,7 @@ export async function startTreatment(
       action: ENDO_AUDIT_ACTIONS.TREATMENT_STARTED,
       entityType: "endo-treatment",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         toothFdi: parsed.data.toothFdi,
         treatmentType: parsed.data.treatmentType,
@@ -190,6 +191,7 @@ export async function updateTreatmentStep<S extends 1 | 2 | 3 | 4>(
       action: ENDO_AUDIT_ACTIONS.TREATMENT_STEP_UPDATED,
       entityType: "endo-treatment",
       entityId: updated.id,
+      patientId: tx.patientId,
       after: { step, advancedTo },
     });
     revalidatePath(`/dashboard/patients/${tx.patientId}`);
@@ -258,6 +260,7 @@ export async function upsertRootCanal(
       action: ENDO_AUDIT_ACTIONS.ROOT_CANAL_UPSERT,
       entityType: "endo-rootcanal",
       entityId: upserted.id,
+      patientId: tx.patientId,
       after: {
         canonicalName: parsed.data.canonicalName,
         workingLengthMm: parsed.data.workingLengthMm,
@@ -314,6 +317,7 @@ export async function recordIntracanalMedication(
       action: ENDO_AUDIT_ACTIONS.INTRACANAL_MED_RECORDED,
       entityType: "endo-medication",
       entityId: created.id,
+      patientId: tx.patientId,
       after: { substance: parsed.data.substance, placedAt: parsed.data.placedAt },
     });
     revalidatePath(`/dashboard/patients/${tx.patientId}`);
@@ -444,6 +448,7 @@ export async function completeTreatment(
       action: ENDO_AUDIT_ACTIONS.TREATMENT_COMPLETED,
       entityType: "endo-treatment",
       entityId: tx.id,
+      patientId: tx.patientId,
       after: { completedAt: now.toISOString(), followUpsCreated: result.followUpsCreated },
     });
     revalidatePath(`/dashboard/patients/${tx.patientId}`);

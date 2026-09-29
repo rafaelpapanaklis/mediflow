@@ -85,6 +85,7 @@ export async function createHealingPhase(
       action,
       entityType: "implant.healing",
       entityId: phase.id,
+      patientId: implantRes.data.patientId,
       after: {
         implantId: parsed.data.implantId,
         isqLatest: parsed.data.isqLatest ?? null,

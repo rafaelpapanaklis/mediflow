@@ -67,6 +67,7 @@ export async function captureCambra(input: CaptureCambraInput): Promise<ActionRe
     action: PEDIATRIC_AUDIT_ACTIONS.CAMBRA_CAPTURED,
     entityType: "ped-cambra",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { category: result.category, recallMonths: result.recallMonths },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);

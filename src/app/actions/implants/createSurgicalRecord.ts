@@ -97,6 +97,7 @@ export async function createSurgicalRecord(
       action: IMPLANT_AUDIT_ACTIONS.SURGICAL_RECORD_CREATED,
       entityType: "implant.surgical",
       entityId: result.surgicalId,
+      patientId: implantRes.data.patientId,
       after: {
         implantId: parsed.data.implantId,
         boneDensity: parsed.data.boneDensity,
@@ -110,6 +111,7 @@ export async function createSurgicalRecord(
       action: IMPLANT_AUDIT_ACTIONS.HEALING_PHASE_CREATED,
       entityType: "implant.healing",
       entityId: result.healingId,
+      patientId: implantRes.data.patientId,
       after: {
         implantId: parsed.data.implantId,
         expectedDurationWeeks: osseointegrationWeeksFor(parsed.data.boneDensity),
@@ -120,6 +122,7 @@ export async function createSurgicalRecord(
       action: IMPLANT_AUDIT_ACTIONS.IMPLANT_STATUS_CHANGED,
       entityType: "implant",
       entityId: parsed.data.implantId,
+      patientId: implantRes.data.patientId,
       before: { currentStatus: "PLACED" },
       after: { currentStatus: "OSSEOINTEGRATING" },
     });

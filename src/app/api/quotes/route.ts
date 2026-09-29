@@ -151,6 +151,8 @@ export async function POST(req: NextRequest) {
   });
 
   await logAudit({
+    patientId: quote.patientId,
+    texto: `Creó el presupuesto ${quote.folio}`,
     clinicId: ctx.clinicId,
     userId: ctx.userId,
     entityType: "quote",

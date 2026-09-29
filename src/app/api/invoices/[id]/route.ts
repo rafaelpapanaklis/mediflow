@@ -16,6 +16,7 @@ import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
+import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -173,6 +174,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   await logMutation({
+    patientId: invoice.patientId,
+    texto: `Registró un pago de ${montoParaTexto(amount)} en la factura ${invoice.invoiceNumber}`,
     req,
     clinicId,
     userId: ctx.userId,
@@ -288,6 +291,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const updated = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
 
   await logMutation({
+    patientId: invoice.patientId,
+    texto: `Editó la factura ${invoice.invoiceNumber}`,
     req,
     clinicId,
     userId: ctx.userId,
@@ -332,6 +337,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: "La factura cambió mientras la anulabas (entró un pago). Vuelve a abrirla." }, { status: 409 });
     }
     await logMutation({
+      patientId: invoice.patientId,
+      texto: `Anuló la factura ${invoice.invoiceNumber}`,
       req, clinicId, userId: ctx.userId,
       entityType: "invoice", entityId: params.id, action: "delete",
       before: { status: invoice.status, invoiceNumber: invoice.invoiceNumber, total: invoice.total },
@@ -357,6 +364,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: "El borrador cambió mientras lo eliminabas (se confirmó o se cobró). Vuelve a abrirlo." }, { status: 409 });
   }
   await logMutation({
+    patientId: invoice.patientId,
+    texto: `Eliminó el borrador de la factura ${invoice.invoiceNumber}`,
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "delete",
     before: { status: invoice.status, invoiceNumber: invoice.invoiceNumber },

@@ -122,6 +122,7 @@ export async function updateImplantTraceability(
       action: IMPLANT_AUDIT_ACTIONS.COFEPRIS_TRACEABILITY_UPDATE,
       entityType: "implant",
       entityId: before.id,
+      patientId: before.patientId,
       meta: {
         cofeprisTraceability: true,
         field: parsed.data.field,

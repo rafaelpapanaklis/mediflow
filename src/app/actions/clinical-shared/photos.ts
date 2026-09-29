@@ -214,6 +214,7 @@ export async function uploadClinicalPhotoAction(
       action: "clinical-shared.photo.uploaded",
       entityType: "clinical-photo",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       changes: { module: parsed.data.module, photoType: parsed.data.photoType },
     });
     revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
@@ -261,6 +262,7 @@ export async function deleteClinicalPhotoAction(
     action: "clinical-shared.photo.deleted",
     entityType: "clinical-photo",
     entityId: photo.id,
+    patientId: photo.patientId,
   });
   revalidatePath(`/dashboard/patients/${photo.patientId}`);
   return ok({ id: photo.id });
@@ -353,6 +355,7 @@ export async function updatePhotoAnnotationsAction(
     action: "clinical-shared.photo.annotated",
     entityType: "clinical-photo",
     entityId: photo.id,
+    patientId: photo.patientId,
     changes: { count: parsed.data.annotations.length },
   });
   revalidatePath(`/dashboard/patients/${photo.patientId}`);

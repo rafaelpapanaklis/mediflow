@@ -45,6 +45,7 @@ import { CLASES_REDISENO } from "@/components/dashboard/pacientes-rediseno/raiz"
 import { FichaMenu } from "@/components/dashboard/pacientes-rediseno/ficha-menu";
 import { Resumen as ResumenRediseno } from "@/components/dashboard/pacientes-rediseno/resumen";
 import { Historia as HistoriaRediseno } from "@/components/dashboard/pacientes-rediseno/historia";
+import { MovimientosCompleto, MovimientosRecientes } from "@/components/dashboard/pacientes-rediseno/movimientos";
 import { Cuestionario as CuestionarioRediseno } from "@/components/dashboard/pacientes-rediseno/cuestionario";
 import { NuevaConsulta as NuevaConsultaRediseno } from "@/components/dashboard/pacientes-rediseno/nueva-consulta";
 import {
@@ -1719,19 +1720,10 @@ export function PatientDetailClient({
                   {showQuestionnaireWarning && (
                     <div style={{ marginBottom: 12 }}>{questionnaireBanner}</div>
                   )}
-                  <HistoriaTimeline
-                    patientId={patient.id}
-                    compact
-                    limit={8}
-                    onOpenSoap={(recordId) => {
-                      const record = records.find((r) => r.id === recordId);
-                      if (record) setNoteDetailOpen(record as ClinicalNote);
-                    }}
-                    onOpenXray={(fileId) => router.push(`/dashboard/xrays/${patient.id}?fileId=${fileId}`)}
-                    onOpenAppointment={() => setTab("agenda")}
-                    onOpenTreatment={() => setTab("tratamiento")}
-                    onOpenReferral={() => setTab("referencias")}
-                  />
+                  {/* ws1-t12 — «Movimientos recientes» ya no es la línea de tiempo
+                      clínica (esa sigue en «Historia clínica»): son los cambios
+                      hechos al paciente, con fecha y quién. */}
+                  <MovimientosRecientes patientId={patient.id} onVerCompleto={() => setTab("movimientos")} />
                   <div style={{ marginTop: 14 }}>
                     <RecentPhotosStrip
                       patientId={patient.id}
@@ -3042,6 +3034,10 @@ export function PatientDetailClient({
           {tab === "modelos-3d" && (
             <Models3DTab patientId={patient.id} pacientesRediseno={rediseno} />
           )}
+
+          {/* ws1-t12 — «Movimientos Completo». Sin permiso propio: el servidor
+              enmascara lo clínico y lo económico según quién mira. */}
+          {tab === "movimientos" && <MovimientosCompleto patientId={patient.id} />}
 
           {/* Pestaña gateada por "consents.view": sin el permiso el ítem no
               existe en el menú (ver buildPatientNavItems) y el server manda []

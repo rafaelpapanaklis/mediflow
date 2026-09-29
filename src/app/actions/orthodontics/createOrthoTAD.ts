@@ -70,6 +70,7 @@ export async function createOrthoTAD(
       action: ORTHO_AUDIT_ACTIONS.TAD_CREATED,
       entityType: "OrthoTAD",
       entityId: created.id,
+      patientId: plan.patientId,
       after: {
         brand: data.brand,
         size: data.size,

@@ -531,6 +531,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       entityType: "patient",
       entityId: params.id,
       action: "delete",
+      texto: cancelledFutureAppointments > 0
+        ? `Archivó al paciente y canceló ${cancelledFutureAppointments} ${cancelledFutureAppointments === 1 ? "cita futura" : "citas futuras"}`
+        : "Archivó al paciente",
       before: before as any,
       after: { archived: true, cancelledFutureAppointments } as any,
     });
@@ -559,6 +562,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     entityType: "patient",
     entityId: params.id,
     action: "delete",
+    texto: "Eliminó al paciente definitivamente",
     before: { ...before, hardDelete: true } as any,
   });
 

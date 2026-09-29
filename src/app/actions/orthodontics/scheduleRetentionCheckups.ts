@@ -85,6 +85,7 @@ export async function scheduleRetentionCheckups(
       action: ORTHO_AUDIT_ACTIONS.RETAINER_CHECKUPS_SCHEDULED,
       entityType: "OrthoRetentionRegimen",
       entityId: regimen.id,
+      patientId: plan.patientId,
       after: { months: CHECKUP_MONTHS, debondedAt },
     });
 

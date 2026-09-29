@@ -74,6 +74,7 @@ export async function recordElasticsCompliance(
     action: "ortho.elastics.compliance.recorded",
     entityType: "OrthodonticTreatmentPlan",
     entityId: plan.id,
+    patientId: parsed.data.patientId,
     after: {
       evaluatedAt: parsed.data.evaluatedAt,
       compliancePct: parsed.data.compliancePct,

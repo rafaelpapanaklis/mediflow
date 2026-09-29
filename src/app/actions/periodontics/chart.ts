@@ -73,6 +73,7 @@ export async function createPeriodontalRecord(
       action: PERIO_AUDIT_ACTIONS.RECORD_CREATED,
       entityType: "PeriodontalRecord",
       entityId: record.id,
+      patientId: parsed.data.patientId,
       after: { id: record.id, recordType: record.recordType, ...metrics },
     });
 
@@ -120,6 +121,7 @@ export async function updatePeriodontalRecord(
       action: PERIO_AUDIT_ACTIONS.RECORD_UPDATED,
       entityType: "PeriodontalRecord",
       entityId: next.id,
+      patientId: before.patientId,
       before: { notes: before.notes, durationMinutes: before.durationMinutes },
       after: { notes: next.notes, durationMinutes: next.durationMinutes },
     });
@@ -324,6 +326,7 @@ export async function deletePeriodontalRecord(
       action: PERIO_AUDIT_ACTIONS.RECORD_DELETED,
       entityType: "PeriodontalRecord",
       entityId: before.id,
+      patientId: before.patientId,
       before: { id: before.id },
     });
 

@@ -75,6 +75,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // REPORTE-ws1-t8.md). No se toca la respuesta ni el status code.
   const cobrada = updated.find((p) => p.id === installmentId);
   await logMutation({
+      patientId: plan.patientId,
+      texto: "Registró el pago de una letra del plan de pagos",
     req,
     clinicId: ctx.clinicId,
     userId: ctx.userId,
@@ -123,6 +125,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   // P4 — bitácora: cancelar un plan detiene el cobro de todo lo que falte;
   // "void" (no borra la fila, invalida el plan — hallazgo REPORTE-ws1-t8.md).
   await logMutation({
+    patientId: plan.patientId,
+    texto: "Canceló un plan de pagos",
     req,
     clinicId: ctx.clinicId,
     userId: ctx.userId,

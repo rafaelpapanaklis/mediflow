@@ -77,6 +77,7 @@ export async function scheduleNpsTimeline(
       action: ORTHO_AUDIT_ACTIONS.NPS_SCHEDULED,
       entityType: "OrthodonticTreatmentPlan",
       entityId: plan.id,
+      patientId: plan.patientId,
       after: {
         scheduledAt3d: addDays(completedAt, 3),
         scheduledAt6m: addDays(completedAt, 30 * 6),

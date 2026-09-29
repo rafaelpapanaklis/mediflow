@@ -117,6 +117,7 @@ export async function signSurgeryConsent(
       action: PERIO_AUDIT_ACTIONS.CONSENT_SURGERY_SIGNED,
       entityType: "PeriodontalSurgery",
       entityId: surgery.id,
+      patientId: surgery.patientId,
       after: {
         fileId: result.fileId,
         surgeryType: surgery.surgeryType,

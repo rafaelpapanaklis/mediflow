@@ -64,6 +64,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const saldo = await aplicarSaldoAFavor({ clinicId, invoiceId: params.id, userId: ctx.userId, origen: "confirmada" });
 
   await logMutation({
+      patientId: invoice.patientId,
+      texto: `Confirmó la factura ${invoice.invoiceNumber}`,
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "update",
     before: { status: "DRAFT" },

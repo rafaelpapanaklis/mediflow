@@ -50,6 +50,7 @@ export async function exportPerioPatientReportPdf(
     action: PERIO_AUDIT_ACTIONS.REPORT_PATIENT_PDF,
     entityType: "Patient",
     entityId: patient.id,
+    patientId: patientId,
     after: { exportedAt: new Date().toISOString() },
   });
 
@@ -87,6 +88,7 @@ export async function exportPerioReferrerReportPdf(
     action: PERIO_AUDIT_ACTIONS.REPORT_REFERRER_PDF,
     entityType: "Patient",
     entityId: patient.id,
+    patientId: patientId,
     after: { exportedAt: new Date().toISOString() },
   });
 

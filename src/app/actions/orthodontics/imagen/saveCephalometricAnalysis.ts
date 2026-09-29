@@ -101,6 +101,7 @@ export async function saveCephalometricAnalysis(
       action: input.analysisId ? "ceph_analysis_updated" : "ceph_analysis_created",
       entityType: "OrthodonticCephalometryAnalysis",
       entityId: saved.id,
+      patientId: patientId,
       after: { treatmentPlanId: input.treatmentPlanId, kind: input.kind, measurements },
     });
 

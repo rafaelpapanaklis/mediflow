@@ -66,6 +66,7 @@ export async function placeSealant(input: z.infer<typeof placeSealantSchema>): P
     action: PEDIATRIC_AUDIT_ACTIONS.SEALANT_PLACED,
     entityType: "ped-sealant",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { toothFdi: parsed.data.toothFdi, material: parsed.data.material },
   });
 
@@ -115,6 +116,7 @@ export async function updateSealantRetention(input: z.infer<typeof updateRetenti
     action: PEDIATRIC_AUDIT_ACTIONS.SEALANT_UPDATED,
     entityType: "ped-sealant",
     entityId: sealant.id,
+    patientId: sealant.patientId,
     changes: { retentionStatus: parsed.data.retentionStatus },
   });
   revalidatePath(`/dashboard/patients/${sealant.patientId}`);
@@ -146,6 +148,7 @@ export async function reapplySealant(args: { id: string }): Promise<ActionResult
     action: PEDIATRIC_AUDIT_ACTIONS.SEALANT_REAPPLIED,
     entityType: "ped-sealant",
     entityId: sealant.id,
+    patientId: sealant.patientId,
   });
   revalidatePath(`/dashboard/patients/${sealant.patientId}`);
   return ok({ id: sealant.id });

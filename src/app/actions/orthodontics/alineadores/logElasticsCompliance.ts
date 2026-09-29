@@ -59,6 +59,7 @@ export async function logElasticsCompliance(input: LogElasticsComplianceInput): 
       action: "elastics_log_manual",
       entityType: "OrthodonticElasticsLog",
       entityId: saved.id,
+      patientId: patientId,
       after: { treatmentPlanId: input.treatmentPlanId, logDate: input.logDate, ...input },
     });
 

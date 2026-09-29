@@ -113,6 +113,7 @@ export async function exportReferralProgressLetterPdf(
     action: `ortho.report.referralProgressLetter.${parsed.data.stage}.pdf`,
     entityType: "OrthodonticTreatmentPlan",
     entityId: plan.id,
+    patientId: plan.patientId,
     meta: { exportedAt: new Date().toISOString(), stage: parsed.data.stage },
   });
 

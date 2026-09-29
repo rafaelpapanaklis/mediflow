@@ -1,0 +1,165 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Movimientos del paciente (ws1-t12) — «Movimientos recientes» del Resumen
+   y «Movimientos Completo» de Archivos.
+
+   Los tokens `--pr-*` los pone `<RaizRediseno>` (rediseno.module.css) y se
+   heredan; aquí no hay hex. Botones, tarjeta y estado vacío son los del
+   rediseño (`rediseno.module.css`); este archivo solo trae lo propio de la
+   lista de movimientos, los filtros y la paginación.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.lista { display: flex; flex-direction: column; gap: 8px; }
+
+.fila {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  font-size: 13px;
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.punto {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--pr-texto-3);
+}
+
+.puntoCitas { background: var(--pr-activo); }
+.puntoPerfil { background: var(--pr-texto-2); }
+.puntoExpediente { background: var(--pr-exito); }
+.puntoArchivos { background: var(--pr-alerta); }
+.puntoDinero { background: var(--pr-peligro); }
+
+.cuerpo { flex: 1; min-width: 0; }
+
+.texto {
+  display: block;
+  font-weight: 600;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+}
+
+/* Lo que se enmascara por permiso: se ve que pasó algo, sin el qué. */
+.textoOculto { font-weight: 500; color: var(--pr-texto-2); }
+
+.sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.tipo { flex-shrink: 0; }
+
+@media (max-width: 560px) {
+  .tipo { display: none; }
+}
+
+.pie {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pr-texto-3);
+}
+
+/* globals.css pinta en oscuro todo input/select con !important: para ganarle
+   hace falta !important propio. */
+.control {
+  height: 38px;
+  min-width: 150px;
+  padding: 0 10px;
+  border: 1px solid var(--pr-borde) !important;
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta) !important;
+  color: var(--pr-texto) !important;
+  font-family: inherit;
+  font-size: 13px;
+  color-scheme: light;
+}
+
+:global(.dark) .control { color-scheme: dark; }
+.control:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+@media (max-width: 560px) {
+  .campo { flex: 1 1 calc(50% - 10px); }
+  .control { min-width: 0; width: 100%; }
+  .campoTipo { flex-basis: 100%; }
+}
+
+.descargas { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+@media (max-width: 560px) {
+  .descargas { margin-left: 0; flex: 1 1 100%; }
+  .descargas > * { flex: 1; }
+}
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--pr-texto-3);
+}
+
+.paginacionBotones { display: flex; align-items: center; gap: 8px; }
+.numeros { font-variant-numeric: tabular-nums; }
+
+.aviso {
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-alerta-suave);
+  color: var(--pr-alerta);
+  font-size: 12.5px;
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-peligro-suave);
+  color: var(--pr-peligro);
+  font-size: 12.5px;
+}
+
+.cargando {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 4px;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+.girar { animation: girar 0.9s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .girar { animation: none; } }
+
+.descargas a { text-decoration: none; }

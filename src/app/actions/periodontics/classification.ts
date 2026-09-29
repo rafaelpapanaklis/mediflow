@@ -105,6 +105,7 @@ export async function classifyPatient(
       action: PERIO_AUDIT_ACTIONS.CLASSIFICATION_COMPUTED,
       entityType: "PeriodontalClassification",
       entityId: created.id,
+      patientId: record.patientId,
       after: {
         stage: created.stage,
         grade: created.grade,

@@ -93,6 +93,7 @@ export async function createControlAppointment(
       action: ORTHO_AUDIT_ACTIONS.CONTROL_CREATED,
       entityType: "OrthodonticControlAppointment",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         month: created.monthInTreatment,
         attendance: created.attendance,

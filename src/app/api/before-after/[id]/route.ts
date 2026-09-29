@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -34,6 +35,17 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (hidden) return hidden;
 
   await prisma.beforeAfterPhoto.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
+
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: photo.patientId,
+    entityType: "photo",
+    entityId: params.id,
+    action: "delete",
+    texto: "Quitó una foto de antes y después",
+    req,
+  });
 
   return NextResponse.json({ success: true });
 }

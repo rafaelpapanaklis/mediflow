@@ -15,6 +15,9 @@ import type { StatusChangeInput } from "@/lib/agenda/types";
 import { avisarCitaPorWhatsApp } from "@/lib/whatsapp/avisos-cita";
 import { decidirDineroDeCitaCancelada, dineroDeLaCita } from "@/lib/anticipos/cita-cancelada.server";
 import { decisionEfectiva } from "@/lib/anticipos/cita-cancelada-core";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -149,6 +152,28 @@ export async function PATCH(
     }
     return row;
   });
+
+  // ws1-t12 — cada cambio de estado de la cita (confirmó, llegó, canceló, no
+  // asistió…) queda en los movimientos del paciente. Antes esta ruta no
+  // dejaba ninguna fila en la bitácora.
+  {
+    const zona = await zonaDeClinica(session.clinic.id);
+    await registrarMovimientoDelPaciente({
+      clinicId: session.clinic.id,
+      userId: session.user.id,
+      patientId: existing.patientId,
+      entityType: "appointment",
+      entityId: params.id,
+      action: "update",
+      texto:
+        body.status === "CANCELLED"
+          ? textoCita.cancelada(existing.startsAt, zona)
+          : textoCita.estado(existing.startsAt, existing.status, body.status, zona),
+      campos: ["status"],
+      cambios: { status: { before: existing.status, after: body.status } },
+      req,
+    });
+  }
 
   // Instrumentación de tiempos para analytics. Cada transición de status
   // upsert el campo correspondiente del AppointmentTimeline. Si la cita

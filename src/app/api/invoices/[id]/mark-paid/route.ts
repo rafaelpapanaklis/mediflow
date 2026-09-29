@@ -13,6 +13,7 @@ import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
+import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -140,6 +141,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   await logMutation({
+      patientId: invoice.patientId,
+      texto: `Marcó como pagada la factura ${invoice.invoiceNumber} (${montoParaTexto(amount)})`,
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "update",
     before: { paid: invoice.paid, balance: invoice.balance, status: invoice.status },

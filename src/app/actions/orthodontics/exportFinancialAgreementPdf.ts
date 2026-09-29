@@ -207,6 +207,7 @@ export async function exportFinancialAgreementPdf(
     action: ORTHO_AUDIT_ACTIONS.REPORT_FINANCIAL_AGREEMENT_PDF,
     entityType: "OrthodonticTreatmentPlan",
     entityId: plan.id,
+    patientId: plan.patientId,
     meta: { exportedAt: membrete.emitidoEl, folio: data.folio, pedidoCon: idPedido === plan.id ? "caso" : "planViejo" },
   });
 

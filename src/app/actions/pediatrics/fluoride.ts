@@ -54,6 +54,7 @@ export async function applyFluoride(input: ApplyFluorideInput): Promise<ActionRe
     action: PEDIATRIC_AUDIT_ACTIONS.FLUORIDE_APPLIED,
     entityType: "ped-fluoride",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: {
       product: parsed.data.product,
       teethCount: parsed.data.appliedTeeth.length,

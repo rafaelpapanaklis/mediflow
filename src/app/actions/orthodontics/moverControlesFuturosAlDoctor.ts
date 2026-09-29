@@ -98,6 +98,7 @@ export async function moverControlesFuturosAlDoctor(args: {
     action: ORTHO_AUDIT_ACTIONS.TREATMENT_PLAN_UPDATED,
     entityType: "OrthodonticTreatmentPlan",
     entityId: plan.id,
+    patientId: plan.patientId,
     meta: { accion: "mover-controles-al-doctor-tratante", doctorId: plan.treatingDoctorId, movidos, conChoque: conflicto.length + conflictoTardio.length },
   });
   revalidatePath(`/dashboard/patients/${plan.patientId}`);

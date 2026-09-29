@@ -64,6 +64,7 @@ export async function addHabit(input: AddHabitInput): Promise<ActionResult<{ id:
     action: PEDIATRIC_AUDIT_ACTIONS.HABIT_RECORDED,
     entityType: "ped-habit",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { habitType: parsed.data.habitType, frequency: parsed.data.frequency ?? "na" },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
@@ -105,6 +106,7 @@ export async function updateHabit(
     action: PEDIATRIC_AUDIT_ACTIONS.HABIT_UPDATED,
     entityType: "ped-habit",
     entityId: habit.id,
+    patientId: parsed.data.patientId,
   });
   revalidatePath(`/dashboard/patients/${habit.patientId}`);
   return ok({ id: habit.id });
@@ -135,6 +137,7 @@ export async function resolveHabit(args: {
     action: PEDIATRIC_AUDIT_ACTIONS.HABIT_RESOLVED,
     entityType: "ped-habit",
     entityId: habit.id,
+    patientId: habit.patientId,
   });
 
   if (args.treatmentSessionId) {
@@ -176,6 +179,7 @@ export async function deleteHabit(args: { id: string }): Promise<ActionResult<{ 
     action: PEDIATRIC_AUDIT_ACTIONS.HABIT_DELETED,
     entityType: "ped-habit",
     entityId: habit.id,
+    patientId: habit.patientId,
   });
   revalidatePath(`/dashboard/patients/${habit.patientId}`);
   return ok({ id: habit.id });

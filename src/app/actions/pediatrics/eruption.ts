@@ -75,6 +75,7 @@ export async function recordEruption(input: RecordEruptionInput): Promise<Action
     action: PEDIATRIC_AUDIT_ACTIONS.ERUPTION_RECORDED,
     entityType: "ped-eruption",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { toothFdi: parsed.data.toothFdi, deviation },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
@@ -101,6 +102,7 @@ export async function deleteEruption(args: { id: string }): Promise<ActionResult
     action: PEDIATRIC_AUDIT_ACTIONS.ERUPTION_DELETED,
     entityType: "ped-eruption",
     entityId: row.id,
+    patientId: row.patientId,
   });
   revalidatePath(`/dashboard/patients/${row.patientId}`);
   return ok({ id: row.id });

@@ -64,6 +64,7 @@ export async function updateImplantStatus(
       action: IMPLANT_AUDIT_ACTIONS.IMPLANT_STATUS_CHANGED,
       entityType: "implant",
       entityId: updated.id,
+      patientId: updated.patientId,
       before: { currentStatus: before.currentStatus },
       after: { currentStatus: updated.currentStatus },
       meta: parsed.data.reason ? { reason: parsed.data.reason } : undefined,

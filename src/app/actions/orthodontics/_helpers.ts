@@ -3,6 +3,7 @@
 // que romperían el bundle del cliente. SPEC §1.18.
 
 import { prisma } from "@/lib/prisma";
+import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
 import type { AuthContext } from "@/lib/auth-context";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
@@ -241,6 +242,8 @@ export async function auditOrtho(args: {
   action: string;
   entityType: string;
   entityId: string;
+  /** ws1-t12 — paciente al que pertenece el cambio (movimientos del paciente). */
+  patientId?: string | null;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
   meta?: Record<string, unknown>;
@@ -267,15 +270,14 @@ export async function auditOrtho(args: {
     }
     if (args.meta) changes = { ...(changes ?? {}), _meta: args.meta };
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: args.ctx.clinicId,
-        userId: args.ctx.userId,
-        entityType: args.entityType,
-        entityId: args.entityId,
-        action: args.action,
-        changes: (changes as object | null) ?? null,
-      },
+    await anotarFilaDeModulo({
+      clinicId: args.ctx.clinicId,
+      userId: args.ctx.userId,
+      entityType: args.entityType,
+      entityId: args.entityId,
+      action: args.action,
+      changes: changes as Record<string, unknown> | null,
+      patientId: args.patientId,
     });
   } catch (e) {
     console.error("[ortho audit] failed:", e);

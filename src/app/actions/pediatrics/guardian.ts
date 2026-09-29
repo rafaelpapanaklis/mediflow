@@ -84,6 +84,7 @@ export async function addGuardian(input: AddGuardianInput): Promise<ActionResult
     action: PEDIATRIC_AUDIT_ACTIONS.GUARDIAN_ADDED,
     entityType: "ped-guardian",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { fullName: parsed.data.fullName, parentesco: parsed.data.parentesco },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
@@ -139,6 +140,7 @@ export async function updateGuardian(
     action: PEDIATRIC_AUDIT_ACTIONS.GUARDIAN_UPDATED,
     entityType: "ped-guardian",
     entityId: guardian.id,
+    patientId: parsed.data.patientId,
   });
   revalidatePath(`/dashboard/patients/${guardian.patientId}`);
   return ok({ id: guardian.id });
@@ -175,6 +177,7 @@ export async function setPrimaryGuardian(args: { guardianId: string }): Promise<
     action: PEDIATRIC_AUDIT_ACTIONS.GUARDIAN_UPDATED,
     entityType: "ped-guardian",
     entityId: guardian.id,
+    patientId: guardian.patientId,
     changes: { principal: { before: false, after: true } },
   });
   revalidatePath(`/dashboard/patients/${guardian.patientId}`);
@@ -201,6 +204,7 @@ export async function deleteGuardian(args: { guardianId: string }): Promise<Acti
     action: PEDIATRIC_AUDIT_ACTIONS.GUARDIAN_DELETED,
     entityType: "ped-guardian",
     entityId: guardian.id,
+    patientId: guardian.patientId,
   });
   revalidatePath(`/dashboard/patients/${guardian.patientId}`);
   return ok({ id: guardian.id });

@@ -102,6 +102,7 @@ export async function updateNpsConfig(
     action: ORTHO_AUDIT_ACTIONS.NPS_SCHEDULED,
     entityType: "OrthodonticTreatmentPlan",
     entityId: plan.id,
+    patientId: plan.patientId,
     after: {
       windowEarlyDays: data.windowEarlyDays,
       windowMidDays: data.windowMidDays,

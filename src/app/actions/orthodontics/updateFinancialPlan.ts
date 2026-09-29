@@ -172,6 +172,7 @@ export async function updateFinancialPlan(
       action: "ortho.financialPlan.updated",
       entityType: "OrthoPaymentPlan",
       entityId: paymentPlan.id,
+      patientId: plan.patientId,
       before: {
         totalAmount: Number(paymentPlan.totalAmount),
         installmentCount: paymentPlan.installmentCount,

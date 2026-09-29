@@ -83,6 +83,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     await logMutation({
+      patientId: invoice.patientId,
+      texto: `Canceló la factura ${invoice.invoiceNumber}`,
       req, clinicId, userId: ctx.userId,
       entityType: "invoice", entityId: params.id, action: "update",
       before: { status: invoice.status, notes: invoice.notes },
@@ -147,6 +149,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
 
   await logMutation({
+      patientId: invoice.patientId,
+      texto: `Canceló la factura ${invoice.invoiceNumber}`,
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "update",
     before: { status: result.fresca.status, notes: result.fresca.notes, paid: result.fresca.paid },

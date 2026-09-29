@@ -44,6 +44,6 @@ export async function registrarPromesaDePago(args: {
     return fail(resultado.sinTabla ? "Falta aplicar sql/ortodoncia-cobro.sql: la promesa no se guardó" : "No se pudo registrar la promesa");
   }
 
-  await auditarCobro({ ctx, action: "registrar-promesa-de-pago", entityId: args.treatmentPlanId, meta: { amount, promisedDate: args.promisedDate } });
+  await auditarCobro({ ctx, action: "registrar-promesa-de-pago", entityId: args.treatmentPlanId, patientId: casoResult.data.patientId, meta: { amount, promisedDate: args.promisedDate } });
   return ok(resultado.promesa);
 }

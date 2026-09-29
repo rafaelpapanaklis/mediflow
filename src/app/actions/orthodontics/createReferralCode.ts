@@ -72,6 +72,7 @@ export async function createReferralCode(
       action: ORTHO_AUDIT_ACTIONS.REFERRAL_CODE_CREATED,
       entityType: "OrthoReferralCode",
       entityId: created.id,
+      patientId: plan.patientId,
       after: { code: created.code },
     });
 

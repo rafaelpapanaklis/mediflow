@@ -79,6 +79,7 @@ export async function createPerioShareLink(
         action: "perio.shareLink.created",
         entityType: "PatientShareLink",
         entityId: created.id,
+        patientId: parsed.data.patientId,
         after: {
           expiresAt: created.expiresAt.toISOString(),
         },
@@ -137,6 +138,7 @@ export async function revokePerioShareLink(
       action: "perio.shareLink.revoked",
       entityType: "PatientShareLink",
       entityId: link.id,
+      patientId: link.patientId,
     });
     revalidatePath(`/dashboard/specialties/periodontics/${link.patientId}`);
     return ok({ id: link.id });

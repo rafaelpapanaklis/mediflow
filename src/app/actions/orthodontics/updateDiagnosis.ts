@@ -86,6 +86,7 @@ export async function updateDiagnosis(
       action: ORTHO_AUDIT_ACTIONS.DIAGNOSIS_UPDATED,
       entityType: "OrthodonticDiagnosis",
       entityId: updated.id,
+      patientId: before.patientId,
       before: before as unknown as Record<string, unknown>,
       after: updated as unknown as Record<string, unknown>,
     });

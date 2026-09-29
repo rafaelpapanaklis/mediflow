@@ -21,6 +21,7 @@ import {
   FileSignature,
   NotebookPen,
   Receipt,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 
@@ -179,6 +180,9 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     { id: "fotos",        labelKey: "patients.tabs.fotos",        icon: Camera,       section: "imagen-docs", isNew: true },
     { id: "subidos",      labelKey: "patients.tabs.subidos",      shortLabelKey: "patients.tabsShort.subidos",     icon: Upload,       section: "imagen-docs" },
     { id: "modelos-3d",   labelKey: "patients.tabs.modelos3d",    icon: Box,          section: "imagen-docs" },
+    // ws1-t12 — «Movimientos Completo»: todo cambio hecho al paciente, con fecha y
+    // quién. Sin permiso propio: el servidor enmascara lo clínico y lo económico.
+    { id: "movimientos",  labelKey: "patients.tabs.movimientos",  icon: Activity,     section: "imagen-docs" },
     { id: "tratamiento",  labelKey: "patients.tabs.tratamiento",  shortLabelKey: "patients.tabsShort.tratamiento", icon: Pill,         section: "imagen-docs" },
     { id: "recetas",      labelKey: "patients.tabs.recetas",      icon: FileText,     section: "imagen-docs" },
     { id: "referencias",  labelKey: "patients.tabs.referencias",  icon: ArrowUpRight, section: "imagen-docs" },

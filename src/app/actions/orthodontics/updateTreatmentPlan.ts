@@ -159,6 +159,7 @@ export async function updateTreatmentPlan(
       action,
       entityType: "OrthodonticTreatmentPlan",
       entityId: updated.id,
+      patientId: before.patientId,
       // `treatingDoctorId` va a la bitácora para que una reasignación deje
       // dicho quién llevaba el caso y desde cuándo: de ahí sale a qué doctor se
       // le atribuye cada cobro (produccion.ts). `undefined` si la columna de

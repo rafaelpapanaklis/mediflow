@@ -21,6 +21,7 @@ import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { anticiposAnulables, anularAnticipoRecibido } from "@/lib/anticipos/anular.server";
+import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   await logMutation({
+      texto: `Anuló un anticipo de ${montoParaTexto(r.anulado.monto)}`,
     req,
     clinicId: ctx.clinicId,
     userId: ctx.userId,

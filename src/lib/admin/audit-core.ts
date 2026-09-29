@@ -250,6 +250,10 @@ const ORTHO_ACTION_META: Record<string, { label: string; tone: AuditTone }> = {
   "ortho.tad.created": { label: "Microimplante registrado", tone: "success" },
   "ortho.photoSet.created": { label: "Juego de fotos creado", tone: "success" },
   "ortho.photoSet.photoUploaded": { label: "Foto de ortodoncia subida", tone: "success" },
+  // Las tres siguientes se registraban (fotosDelJuego.ts) sin nombre: se leían en crudo.
+  "ortho.photoSet.photoRemoved": { label: "Foto de ortodoncia quitada", tone: "danger" },
+  "ortho.photoSet.extraAdded": { label: "Foto extra de ortodoncia subida", tone: "success" },
+  "ortho.photoSet.extraRemoved": { label: "Foto extra de ortodoncia quitada", tone: "danger" },
   "ortho.elastics.compliance.recorded": { label: "Uso de elásticos registrado", tone: "info" },
   "ortho.digitalRecord.linked": { label: "Registro digital ligado al caso", tone: "info" },
   "ortho.consent.signed": { label: "Consentimiento de ortodoncia firmado", tone: "success" },
@@ -518,6 +522,8 @@ export const READ_KIND_LABELS: Record<string, { key: string; fallback: string }>
   // crudo "expediente_pdf" — y justamente ésta es la que nadie puede tener que
   // descifrar: es la lectura más grande del panel.
   expediente_pdf: { key: "auditoria.readExpedientePdf", fallback: "Descargó el expediente completo (PDF)" },
+  // ws1-t12: la lista «Movimientos Completo» del paciente, en CSV o PDF.
+  movimientos_export: { key: "auditoria.readMovimientosExport", fallback: "Descargó los movimientos del paciente" },
 };
 
 /**

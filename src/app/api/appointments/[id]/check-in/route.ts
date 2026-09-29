@@ -4,9 +4,12 @@ import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } },
 ) {
   const session = await loadClinicSession();
@@ -25,7 +28,7 @@ export async function POST(
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, patientId: true },
+    select: { id: true, status: true, patientId: true, startsAt: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -67,6 +70,20 @@ export async function POST(
       status: "CHECKED_IN",
       checkedInAt: now,
     },
+  });
+
+  // ws1-t12 — la llegada del paciente queda en sus movimientos.
+  await registrarMovimientoDelPaciente({
+    clinicId: session.clinic.id,
+    userId: session.user.id,
+    patientId: existing.patientId,
+    entityType: "appointment",
+    entityId: params.id,
+    action: "update",
+    texto: textoCita.estado(existing.startsAt, existing.status, "CHECKED_IN", await zonaDeClinica(session.clinic.id)),
+    campos: ["status"],
+    cambios: { status: { before: existing.status, after: "CHECKED_IN" } },
+    req,
   });
 
   revalidateAfter("appointments");

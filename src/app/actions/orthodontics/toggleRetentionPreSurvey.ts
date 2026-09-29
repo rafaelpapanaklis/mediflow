@@ -48,6 +48,7 @@ export async function toggleRetentionPreSurvey(
       action: ORTHO_AUDIT_ACTIONS.RETENTION_PRE_SURVEY_TOGGLED,
       entityType: "OrthoRetentionRegimen",
       entityId: regimen.id,
+      patientId: plan.patientId,
       after: { enabled: parsed.data.enabled },
     });
 

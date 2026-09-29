@@ -53,6 +53,7 @@ export async function createGingivalRecession(
       action: PERIO_AUDIT_ACTIONS.RECESSION_CREATED,
       entityType: "GingivalRecession",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: { toothFdi: created.toothFdi, cairo: created.cairoClassification },
     });
 

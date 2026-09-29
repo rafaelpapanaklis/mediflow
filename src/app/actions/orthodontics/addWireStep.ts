@@ -100,6 +100,7 @@ export async function addWireStep(
       action: ORTHO_AUDIT_ACTIONS.WIRE_STEP_ADDED,
       entityType: "OrthoWireStep",
       entityId: created.id,
+      patientId: plan.patientId,
       after: {
         phase: data.phase,
         material: data.material,

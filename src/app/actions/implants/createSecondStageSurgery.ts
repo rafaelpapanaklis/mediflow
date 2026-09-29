@@ -80,6 +80,7 @@ export async function createSecondStageSurgery(
       action: IMPLANT_AUDIT_ACTIONS.SECOND_STAGE_CREATED,
       entityType: "implant.secondStage",
       entityId: result.id,
+      patientId: before.patientId,
       after: {
         implantId: parsed.data.implantId,
         technique: parsed.data.technique,
@@ -91,6 +92,7 @@ export async function createSecondStageSurgery(
       action: IMPLANT_AUDIT_ACTIONS.IMPLANT_STATUS_CHANGED,
       entityType: "implant",
       entityId: parsed.data.implantId,
+      patientId: before.patientId,
       before: { currentStatus: before.currentStatus },
       after: { currentStatus: "UNCOVERED" },
     });

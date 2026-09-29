@@ -53,6 +53,7 @@ export async function recordVitalityTest(
       action: ENDO_AUDIT_ACTIONS.VITALITY_RECORDED,
       entityType: "endo-vitality",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         toothFdi: parsed.data.toothFdi,
         testType: parsed.data.testType,

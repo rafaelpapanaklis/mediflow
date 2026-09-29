@@ -52,18 +52,20 @@ export async function selectQuoteScenario(
       }),
     ]);
 
+    const plan = await prisma.orthodonticTreatmentPlan.findUnique({
+      where: { id: parsed.data.treatmentPlanId },
+      select: { patientId: true },
+    });
+
     await auditOrtho({
       ctx,
       action: ORTHO_AUDIT_ACTIONS.QUOTE_SCENARIO_SELECTED,
       entityType: "OrthoQuoteScenario",
       entityId: scenario.id,
+      patientId: plan?.patientId,
       after: { status: "ACCEPTED" },
     });
 
-    const plan = await prisma.orthodonticTreatmentPlan.findUnique({
-      where: { id: parsed.data.treatmentPlanId },
-      select: { patientId: true },
-    });
     if (plan) {
       revalidatePath(`/dashboard/specialties/orthodontics/${plan.patientId}`);
     }

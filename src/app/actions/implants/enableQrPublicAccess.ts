@@ -89,6 +89,7 @@ export async function enableQrPublicAccess(
       action: IMPLANT_AUDIT_ACTIONS.QR_PUBLIC_ENABLED,
       entityType: "implant.passport",
       entityId: updated.id,
+      patientId: before.patientId,
       after: {
         implantId: parsed.data.implantId,
         qrConsentId: parsed.data.qrConsentId,

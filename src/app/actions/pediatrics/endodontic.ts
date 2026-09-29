@@ -62,6 +62,7 @@ export async function recordEndoTreatment(input: RecordEndoTreatmentInput): Prom
     action: PEDIATRIC_AUDIT_ACTIONS.ENDO_RECORDED,
     entityType: "ped-endodontic",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { toothFdi: parsed.data.toothFdi, treatmentType: parsed.data.treatmentType },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);

@@ -60,6 +60,7 @@ export async function removeImplant(
       action: IMPLANT_AUDIT_ACTIONS.IMPLANT_REMOVED,
       entityType: "implant",
       entityId: updated.id,
+      patientId: updated.patientId,
       before: { currentStatus: before.currentStatus },
       after: { currentStatus: "REMOVED" },
       meta: {

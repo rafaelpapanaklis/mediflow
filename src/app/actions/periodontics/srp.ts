@@ -67,6 +67,7 @@ export async function createSRPSession(
       action: PERIO_AUDIT_ACTIONS.SRP_SESSION_CREATED,
       entityType: "SRPSession",
       entityId: created.id,
+      patientId: plan.patientId,
       after: {
         technique: created.technique,
         instrumentation: parsed.data.instrumentation,

@@ -43,6 +43,7 @@ export async function reviewMonitoringPhoto(input: ReviewMonitoringPhotoInput): 
       action: "monitoring_photo_reviewed",
       entityType: "OrthodonticMonitoringPhoto",
       entityId: input.photoId,
+      patientId: patientId,
       after: { reviewStatus: input.reviewStatus },
     });
 

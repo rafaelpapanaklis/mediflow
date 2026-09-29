@@ -61,6 +61,7 @@ export async function upsertAlignerCase(input: UpsertAlignerCaseInput): Promise<
       action: "aligner_case_upserted",
       entityType: "OrthodonticAligner",
       entityId: saved.id,
+      patientId: patientId,
       after: { treatmentPlanId: input.treatmentPlanId, ...data },
     });
 

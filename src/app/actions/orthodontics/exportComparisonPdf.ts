@@ -148,6 +148,7 @@ export async function exportComparisonPdf(
     action: "ortho.comparison-pdf.exported",
     entityType: "OrthodonticTreatmentPlan",
     entityId: plan.id,
+    patientId: plan.patientId,
     after: {
       midSetsCount: data.midSets.length,
       hasInitial: data.initialSet !== null,

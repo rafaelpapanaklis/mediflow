@@ -128,6 +128,7 @@ export async function confirmCollect(
     action: ORTHO_AUDIT_ACTIONS.COLLECT_RECORDED,
     entityType: "OrthoInstallment",
     entityId: installment.id,
+    patientId: plan.patientId,
     after: {
       method: paymentMethod,
       amount: amountAsNumber,

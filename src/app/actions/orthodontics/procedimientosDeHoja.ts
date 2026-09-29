@@ -190,6 +190,7 @@ export async function cobrarProcedimientoDeHoja(input: {
       ctx,
       action: "cobrar-procedimiento-de-hoja",
       entityId: card.treatmentPlanId,
+      patientId: card.patientId,
       meta: { cardId: card.id, procedureId: input.procedureId, invoiceId: resultado.invoiceId, yaExistia: resultado.yaExistia },
     });
     revalidatePath(`/dashboard/patients/${card.patientId}`);

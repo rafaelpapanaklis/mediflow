@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import type { NextRequest } from "next/server";
 import type { PediatricAuditAction } from "@/lib/pediatrics/audit";
+import { insertarFilaBitacora } from "@/lib/movimientos-paciente/fila";
+import { deducirPatientId, type CategoriaMovimiento } from "@/lib/movimientos-paciente/catalogo";
 
 export type AuditAction =
   | "create" | "update" | "delete" | "view"
@@ -90,7 +92,26 @@ export type AuditEntityType =
   // Catálogo de procedimientos (ws1-t6, importador Dentalink "Aranceles y
   // precios"): crear o actualizar el precio de un procedimiento del
   // tarifario de la clínica.
-  | "procedure";
+  | "procedure"
+  // Movimientos del paciente (ws1-t12): entidades que antes no dejaban rastro
+  // y que ahora cuelgan de un paciente. Ver src/lib/movimientos-paciente.
+  | "odontogram"
+  | "photo"
+  | "model-3d"
+  | "questionnaire"
+  | "patient-guardian"
+  | "orthodontic-case"
+  | "orthodontic-plan"
+  | "orthodontic-diagnosis"
+  | "orthodontic-control"
+  | "orthodontic-consent"
+  | "orthodontic-photo"
+  | "orthodontic-lab"
+  | "orthodontic-payment"
+  | "package-redemption"
+  | "payment"
+  | "cfdi"
+  | "referral";
 
 export { PEDIATRIC_AUDIT_ACTIONS, type PediatricAuditAction } from "@/lib/pediatrics/audit";
 
@@ -107,23 +128,47 @@ interface AuditOptions {
   // de plataforma. Default (undefined) → "staff" (User de clínica) en BD.
   actorType?:    "staff" | "admin";
   actorAdminId?: string;
+  // ws1-t12 — a qué paciente pertenece el movimiento. Si no se pasa, se deduce
+  // (la entidad ES el paciente, o el cambio lleva `patientId`). Va a la columna
+  // `audit_logs.patientId` cuando existe (sql/audit-logs-patient-id.sql); sin
+  // ella, dentro de `changes._mov`. Ver src/lib/movimientos-paciente/fila.ts.
+  patientId?:    string | null;
+  // ws1-t12 — la frase que verá «Movimientos» (sin datos clínicos) y, solo si la
+  // categoría no sale de `entityType`, cuál es. Viajan en `changes._mov`.
+  texto?:        string;
+  categoria?:    CategoriaMovimiento;
 }
 
 export async function logAudit(opts: AuditOptions) {
   try {
-    await prisma.auditLog.create({
-      data: {
-        clinicId:   opts.clinicId,
-        userId:     opts.userId,
-        entityType: opts.entityType,
-        entityId:   opts.entityId,
-        action:     opts.action,
-        changes:    opts.changes ?? null,
-        ipAddress:  opts.ipAddress ?? null,
-        userAgent:  opts.userAgent ?? null,
-        actorType:    opts.actorType,             // undefined → default 'staff' en BD
-        actorAdminId: opts.actorAdminId ?? null,
-      },
+    const changes: Record<string, any> | undefined =
+      opts.texto?.trim() || opts.categoria
+        ? {
+            ...(opts.changes ?? {}),
+            _mov: {
+              before: null,
+              after: {
+                ...(opts.texto?.trim() ? { texto: opts.texto.trim() } : {}),
+                ...(opts.categoria ? { categoria: opts.categoria } : {}),
+              },
+            },
+          }
+        : opts.changes;
+    const patientId =
+      opts.patientId ??
+      deducirPatientId({ entityType: opts.entityType, entityId: opts.entityId, changes });
+    await insertarFilaBitacora({
+      clinicId:   opts.clinicId,
+      userId:     opts.userId,
+      entityType: opts.entityType,
+      entityId:   opts.entityId,
+      action:     opts.action,
+      changes:    changes ?? null,
+      ipAddress:  opts.ipAddress ?? null,
+      userAgent:  opts.userAgent ?? null,
+      actorType:    opts.actorType,             // undefined → default 'staff' en BD
+      actorAdminId: opts.actorAdminId ?? null,
+      patientId,
     });
   } catch (e) {
     // Never let audit logging crash the main operation
@@ -167,6 +212,12 @@ export async function logMutation(opts: {
   after?: Record<string, any> | null;
   actorType?:    "staff" | "admin";
   actorAdminId?: string;
+  /** ws1-t12 — paciente al que pertenece; si falta se deduce de before/after. */
+  patientId?: string | null;
+  /** ws1-t12 — la frase que verá «Movimientos» (sin datos clínicos). */
+  texto?: string;
+  /** ws1-t12 — solo si la categoría no sale de `entityType` (ver registrar.ts). */
+  categoria?: CategoriaMovimiento;
 }): Promise<void> {
   try {
     const { ipAddress, userAgent } = extractAuditMeta(opts.req);
@@ -196,6 +247,17 @@ export async function logMutation(opts: {
       changes,
       ipAddress,
       userAgent,
+      texto:      opts.texto,
+      categoria:  opts.categoria,
+      patientId:  opts.patientId ?? deducirPatientId({
+        entityType: opts.entityType,
+        entityId:   opts.entityId,
+        changes: {
+          _created: { after: opts.after ?? null },
+          _deleted: { before: opts.before ?? null },
+          patientId: { before: opts.before?.patientId, after: opts.after?.patientId },
+        },
+      }),
       // Reenviar la atribución del actor (antes se perdía aquí): sin esto, una
       // mutación ejecutada por un AdminUser quedaba registrada como "staff".
       actorType:    opts.actorType,
@@ -221,7 +283,11 @@ export async function logMutation(opts: {
  * etiqueta, la bitácora no podría contestar cuál de las dos pasó — y ésta es la
  * lectura más grande que existe en el panel.
  */
-export type ReadKind = "ficha" | "nota_pdf" | "export_cda" | "export_arco" | "expediente_pdf";
+export type ReadKind =
+  | "ficha" | "nota_pdf" | "export_cda" | "export_arco" | "expediente_pdf"
+  // ws1-t12: «Movimientos Completo» descargado (CSV o PDF). Es una copia que sale
+  // del sistema: lleva nombres de quien hizo qué y cuándo.
+  | "movimientos_export";
 
 /**
  * Ventana de dedupe. Aplica SOLO a "ficha": la página se re-renderiza con cada
@@ -310,7 +376,7 @@ export async function logRead(opts: {
         console.error("logRead error:", e);
       });
     const limit =
-      opts.kind === "export_cda" || opts.kind === "export_arco" || opts.kind === "expediente_pdf"
+      opts.kind === "export_cda" || opts.kind === "export_arco" || opts.kind === "expediente_pdf" || opts.kind === "movimientos_export"
         ? READ_LOG_EXPORT_TIMEOUT_MS
         : READ_LOG_TIMEOUT_MS;
     let timer: ReturnType<typeof setTimeout> | undefined;

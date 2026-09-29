@@ -19,6 +19,8 @@ import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-valid
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { canTransition } from "@/lib/agenda/transitions";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 
 export const dynamic = "force-dynamic";
 
@@ -193,6 +195,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     entityType: "appointment",
     entityId: params.id,
     action: "update",
+    patientId: existing.patientId,
+    texto: textoCita.completada(existing.startsAt, await zonaDeClinica(session.clinic.id)),
     before: { status: existing.status },
     after: { status: "COMPLETED", completedAt: completedAt.toISOString() },
   });
@@ -204,6 +208,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       entityType: "record",
       entityId: note.id,
       action: "update",
+      patientId: existing.patientId,
+      texto: "Firmó la nota de la consulta",
       before: { status: prevSpec.status ?? null, signedAt: prevSpec.signedAt ?? null },
       after: { status: "SIGNED", signedAt: signedAtIso },
     });

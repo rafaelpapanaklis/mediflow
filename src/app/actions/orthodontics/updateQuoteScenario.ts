@@ -65,19 +65,21 @@ export async function updateQuoteScenario(
       data: updateData,
     });
 
+    const plan = await prisma.orthodonticTreatmentPlan.findUnique({
+      where: { id: before.treatmentPlanId },
+      select: { patientId: true },
+    });
+
     await auditOrtho({
       ctx,
       action: ORTHO_AUDIT_ACTIONS.QUOTE_SCENARIO_SELECTED,
       entityType: "OrthoQuoteScenario",
       entityId: scenarioId,
+      patientId: plan?.patientId,
       before: before as unknown as Record<string, unknown>,
       after: updateData,
     });
 
-    const plan = await prisma.orthodonticTreatmentPlan.findUnique({
-      where: { id: before.treatmentPlanId },
-      select: { patientId: true },
-    });
     try {
       if (plan) {
         revalidatePath(`/dashboard/specialties/orthodontics/${plan.patientId}`);

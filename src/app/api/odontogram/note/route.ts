@@ -7,6 +7,7 @@ import {
   isMissingTableError,
   puedeEscribirOdontograma,
 } from "@/lib/odontogram/api-auth";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,26 @@ function unexpectedError(err: unknown) {
   console.error("[/api/odontogram/note] unexpected error", err);
   return jsonError("internal_error", 500, {
     reason: err instanceof Error ? err.message : "unknown",
+  });
+}
+
+/** ws1-t12 — la nota por diente queda en los movimientos del paciente (sin el texto de la nota ni el diente). */
+async function anotarNota(
+  req: NextRequest,
+  dbUser: { id: string; clinicId: string },
+  patientId: string,
+  texto: string,
+  action: "update" | "delete",
+): Promise<void> {
+  await registrarMovimientoDelPaciente({
+    clinicId: dbUser.clinicId,
+    userId: dbUser.id,
+    patientId,
+    entityType: "odontogram",
+    entityId: patientId,
+    action,
+    texto,
+    req,
   });
 }
 
@@ -76,6 +97,7 @@ export async function PUT(req: NextRequest) {
     const note = parsed.data.note.trim();
     if (!note) {
       await clearNote(patientId, toothNumber);
+      await anotarNota(req, dbUser, patientId, "Quitó la nota de un diente del odontograma", "delete");
       return NextResponse.json({ ok: true, note: null });
     }
 
@@ -99,6 +121,7 @@ export async function PUT(req: NextRequest) {
         },
       });
     }
+    await anotarNota(req, dbUser, patientId, "Escribió una nota en un diente del odontograma", "update");
     return NextResponse.json({ ok: true, note });
   } catch (err) {
     return unexpectedError(err);
@@ -125,6 +148,7 @@ export async function DELETE(req: NextRequest) {
       return jsonError("patient_not_found", 404);
     }
     await clearNote(parsed.data.patientId, parsed.data.toothNumber);
+    await anotarNota(req, dbUser, parsed.data.patientId, "Quitó la nota de un diente del odontograma", "delete");
     return NextResponse.json({ ok: true });
   } catch (err) {
     return unexpectedError(err);

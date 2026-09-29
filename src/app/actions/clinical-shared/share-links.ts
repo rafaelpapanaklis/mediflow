@@ -58,6 +58,7 @@ export async function createPatientShareLink(
     action: "clinical-shared.share-link.created",
     entityType: "patient-share-link",
     entityId: token,
+    patientId: parsed.data.patientId,
     changes: { module: parsed.data.module, expiresInDays: days },
   });
 
@@ -98,6 +99,7 @@ export async function revokePatientShareLink(
     action: "clinical-shared.share-link.revoked",
     entityType: "patient-share-link",
     entityId: parsed.data.token,
+    patientId: link.patientId,
   });
   revalidatePath(`/dashboard/patients/${link.patientId}`);
   return ok({ token: parsed.data.token });

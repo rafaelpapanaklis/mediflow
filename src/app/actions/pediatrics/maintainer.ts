@@ -63,6 +63,7 @@ export async function placeMaintainer(input: z.infer<typeof placeSchema>): Promi
     action: PEDIATRIC_AUDIT_ACTIONS.MAINTAINER_PLACED,
     entityType: "ped-maintainer",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { type: parsed.data.type, replacedToothFdi: parsed.data.replacedToothFdi },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
@@ -95,6 +96,7 @@ export async function updateMaintainerStatus(input: z.infer<typeof updateStatusS
     action: PEDIATRIC_AUDIT_ACTIONS.MAINTAINER_UPDATED,
     entityType: "ped-maintainer",
     entityId: m.id,
+    patientId: m.patientId,
     changes: { currentStatus: parsed.data.currentStatus },
   });
   revalidatePath(`/dashboard/patients/${m.patientId}`);
@@ -129,6 +131,7 @@ export async function retireMaintainer(input: z.infer<typeof retireSchema>): Pro
     action: PEDIATRIC_AUDIT_ACTIONS.MAINTAINER_RETIRED,
     entityType: "ped-maintainer",
     entityId: m.id,
+    patientId: m.patientId,
   });
   revalidatePath(`/dashboard/patients/${m.patientId}`);
   return ok({ id: m.id });

@@ -67,6 +67,8 @@ import type {
   CreateAppointmentInput,
 } from "@/lib/agenda/types";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -495,6 +497,8 @@ export async function POST(req: NextRequest) {
       entityType: "appointment",
       entityId: created.id,
       action: "create",
+      patientId: created.patientId,
+      texto: textoCita.agendada(created.startsAt, await zonaDeClinica(session.clinic.id)),
       after: {
         patientId: created.patientId,
         doctorId: created.doctorId,

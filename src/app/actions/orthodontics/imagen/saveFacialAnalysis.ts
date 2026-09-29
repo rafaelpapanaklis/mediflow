@@ -81,6 +81,7 @@ export async function saveFacialAnalysis(
       action: "facial_analysis_saved",
       entityType: "OrthodonticFacialAnalysis",
       entityId: saved.id,
+      patientId: patientId,
       after: { treatmentPlanId: input.treatmentPlanId, view: input.view, measurements },
     });
 

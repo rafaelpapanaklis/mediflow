@@ -86,6 +86,7 @@ export async function createFollowUp(
       action: auditAction,
       entityType: "implant.followup",
       entityId: created.id,
+      patientId: before.patientId,
       after: {
         implantId: parsed.data.implantId,
         milestone: parsed.data.milestone,

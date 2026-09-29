@@ -1936,6 +1936,7 @@
       "fotos": "Clinical photos",
       "subidos": "Patient uploads",
       "modelos3d": "3D models",
+      "movimientos": "Full activity log",
       "tratamiento": "Treatment plan",
       "referencias": "Referrals",
       "agenda": "Appointments",
@@ -9775,6 +9776,37 @@
       "bitacora": "Access log",
       "bitacoraPista": "Who opened, edited or exported the record (NOM-024)"
     },
+    "movimientos": {
+      "titulo": "Full activity log",
+      "subtitulo": "Everything that has been changed on this patient since they were created, with the date and who did it.",
+      "cargando": "Loading activity…",
+      "errorCargar": "Couldn't load the activity",
+      "vacio": "No activity recorded yet",
+      "vacioPista": "Every change made to this patient will show up here.",
+      "vacioFiltro": "No activity matches that filter",
+      "verCompleto": "See all",
+      "tipo": "Type",
+      "todos": "All",
+      "desde": "From",
+      "hasta": "To",
+      "limpiar": "Clear filters",
+      "csv": "Download CSV",
+      "pdf": "Download PDF",
+      "paginacion": "Activity pagination",
+      "total": "{total} entries",
+      "pagina": "Page {pagina} of {paginas}",
+      "anterior": "Previous page",
+      "siguiente": "Next page",
+      "degradado": "For now this shows the last 90 days plus appointments, notes, prescriptions and invoices. The full history turns on once the database is updated.",
+      "categorias": {
+        "citas": "Appointments",
+        "perfil": "Profile",
+        "expediente": "Record",
+        "archivos": "Files",
+        "dinero": "Billing",
+        "otros": "Other"
+      }
+    },
     "cuestionario": {
       "cargando": "Loading questionnaire…",
       "errorCargar": "Couldn't load the questionnaire",
@@ -10116,6 +10148,7 @@
     "readExportCda": "Exported the record (CDA)",
     "readExportArco": "Exported the data (ARCO access)",
     "readExpedientePdf": "Downloaded the full medical record (PDF)",
+    "readMovimientosExport": "Downloaded the patient's activity log",
     "readNoteId": "Note",
     "readNoContent": "A read changes nothing. The log keeps who and when, not the content."
   },

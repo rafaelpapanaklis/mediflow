@@ -175,6 +175,7 @@ export async function advanceTreatmentPhase(
       action: ORTHO_AUDIT_ACTIONS.PHASE_ADVANCED,
       entityType: "OrthodonticTreatmentPlan",
       entityId: plan.id,
+      patientId: plan.patientId,
       before: { phase: currentPhase.phaseKey },
       after: { phase: parsed.data.toPhase },
     });

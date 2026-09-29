@@ -23,6 +23,6 @@ export async function resolverPromesaDePago(args: {
   const r = await resolverEnDb({ id: args.promiseId, clinicId: ctx.clinicId, resultado: args.resultado });
   if (!r.ok) return fail(r.sinTabla ? "Falta aplicar sql/ortodoncia-cobro.sql" : "No se pudo resolver la promesa (¿ya estaba resuelta?)");
 
-  await auditarCobro({ ctx, action: "resolver-promesa-de-pago", entityId: args.treatmentPlanId, meta: { promiseId: args.promiseId, resultado: args.resultado } });
+  await auditarCobro({ ctx, action: "resolver-promesa-de-pago", entityId: args.treatmentPlanId, patientId: casoResult.data.patientId, meta: { promiseId: args.promiseId, resultado: args.resultado } });
   return ok({ resuelto: true });
 }

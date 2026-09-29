@@ -108,6 +108,7 @@ export async function createImplant(
       action: IMPLANT_AUDIT_ACTIONS.IMPLANT_CREATED,
       entityType: "implant",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         toothFdi: parsed.data.toothFdi,
         brand: parsed.data.brand,

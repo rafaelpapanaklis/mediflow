@@ -389,6 +389,7 @@ export async function POST(req: NextRequest) {
     // Rastro en el audit log (antes el timbrado no se registraba). Incluye si
     // se confirmó explícitamente timbrar PUE con saldo pendiente.
     await logMutation({
+      texto: "Timbró el CFDI de una factura",
       req,
       clinicId:   ctx!.clinicId,
       userId:     ctx!.userId,

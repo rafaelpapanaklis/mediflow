@@ -55,6 +55,7 @@ export async function registrarExtraCobrado(args: {
     ctx,
     action: "registrar-extra-cobrado",
     entityId: args.treatmentPlanId,
+    patientId: caso.patientId,
     meta: { invoiceId: args.invoiceId, vinculado: vinculo.ok, esReposicionIncluida: args.esReposicionIncluida, fueIncluida },
   });
 

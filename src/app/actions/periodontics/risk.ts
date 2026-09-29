@@ -74,6 +74,7 @@ export async function createRiskAssessment(
       action: PERIO_AUDIT_ACTIONS.RISK_ASSESSED,
       entityType: "PeriodontalRiskAssessment",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         riskCategory,
         recommendedRecallMonths,

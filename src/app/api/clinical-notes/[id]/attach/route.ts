@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +102,17 @@ export async function POST(req: NextRequest, { params }: Params) {
       specialtyData: { ...currentSpec, attachments } as Prisma.InputJsonValue,
     },
     select: { id: true, specialtyData: true },
+  });
+
+  await registrarMovimientoDelPaciente({
+    clinicId: dbUser.clinicId,
+    userId: dbUser.id,
+    patientId: note.patientId,
+    entityType: "record",
+    entityId: note.id,
+    action: "update",
+    texto: "Adjuntó un archivo a una nota de consulta",
+    req,
   });
 
   return NextResponse.json({ note: updated });

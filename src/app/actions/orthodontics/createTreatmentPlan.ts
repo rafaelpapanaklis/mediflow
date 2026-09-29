@@ -201,6 +201,7 @@ export async function createTreatmentPlan(
       action: ORTHO_AUDIT_ACTIONS.TREATMENT_PLAN_CREATED,
       entityType: "OrthodonticTreatmentPlan",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         technique: created.technique,
         durationMonths: created.estimatedDurationMonths,

@@ -19,6 +19,7 @@ import { DEFAULT_INVOICE_TZ, parseInvoiceDueDate } from "@/lib/invoices/due-date
 import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
 import { computeReceivables, whereFacturasVencidas } from "@/lib/caja";
 import { soltarFacturaCanceladaDeCita } from "@/lib/invoices/cita-factura-cancelada.server";
+import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -245,6 +246,7 @@ export async function POST(req: NextRequest) {
     const saldo = await aplicarSaldoAFavor({ clinicId, invoiceId: invoice.id, userId: ctx.userId, origen: "creada" });
 
     await logMutation({
+      texto: `Creó la factura ${invoice.invoiceNumber} por ${montoParaTexto(invoice.total)}`,
       req,
       clinicId,
       userId: ctx.userId,

@@ -98,6 +98,7 @@ export async function sendSignAtHomeLink(
       action: ORTHO_AUDIT_ACTIONS.SIGN_AT_HOME_SENT,
       entityType: "OrthoSignAtHomePackage",
       entityId: created.id,
+      patientId: plan.patientId,
       after: { tokenPrefix: created.token.slice(0, 16), expiresAt: created.expiresAt },
     });
 

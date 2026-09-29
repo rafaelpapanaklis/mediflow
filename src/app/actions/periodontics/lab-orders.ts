@@ -98,6 +98,7 @@ export async function createPerioLabOrder(
       action: "perio.labOrder.created",
       entityType: "LabOrder",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         kind,
         orderType: PERIO_LAB_ORDER_TYPE_TO_SCHEMA[kind],

@@ -53,6 +53,8 @@ import type {
 } from "@/lib/agenda/types";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el include para que appointmentToDTO pueda enmascarar
@@ -422,6 +424,8 @@ export async function PATCH(
       entityType: "appointment",
       entityId: params.id,
       action: "update",
+      patientId: existing.patientId,
+      texto: await textoDeCitaEditada(session.clinic.id, existing.startsAt, updated.startsAt),
       before: { startsAt: existing.startsAt, endsAt: existing.endsAt, doctorId: existing.doctorId, resourceId: existing.resourceId, type: existing.type, status: existing.status },
       after: {
         startsAt: updated.startsAt,
@@ -614,6 +618,8 @@ export async function DELETE(
     entityType: "appointment",
     entityId: params.id,
     action: "delete",
+    // La cancelación es un borrado lógico: la cita sigue existiendo, cancelada.
+    texto: textoCita.cancelada(existing.startsAt, await zonaDeClinica(session.clinic.id)),
     before: { status: existing.status, patientId: existing.patientId, doctorId: existing.doctorId, startsAt: existing.startsAt },
   });
   // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».
@@ -715,4 +721,12 @@ async function findConflictingAppointment(
     resourceId: a.resourceId,
     status: a.status as AppointmentStatus,
   };
+}
+
+/** «Movió una cita del … al …» si cambió la hora; «Modificó la cita del …» si cambió otra cosa. */
+async function textoDeCitaEditada(clinicId: string, antes: Date, despues: Date): Promise<string> {
+  const zona = await zonaDeClinica(clinicId);
+  return antes.getTime() !== despues.getTime()
+    ? textoCita.movida(antes, despues, zona)
+    : textoCita.editada(despues, zona);
 }

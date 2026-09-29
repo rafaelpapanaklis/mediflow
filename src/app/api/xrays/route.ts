@@ -15,6 +15,8 @@ import {
   limiteSubidasPorUsuario,
 } from "@/lib/uploads/validar-archivo";
 import { extractAuditMeta } from "@/lib/audit";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+import { textoArchivo } from "@/lib/movimientos-paciente/textos";
 
 export const runtime = "nodejs";
 
@@ -185,6 +187,19 @@ export async function POST(req: NextRequest) {
       notes,
       takenAt:    takenAt ? new Date(takenAt) : null,
     },
+  });
+
+
+  // ws1-t12 — la subida queda en los movimientos del paciente (sin el nombre del archivo).
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: patientId,
+    entityType: "patient-file",
+    entityId: record.id,
+    action: "create",
+    texto: textoArchivo.subido(category),
+    req,
   });
 
   // Devolvemos al cliente la URL ya firmada para que pueda mostrar el

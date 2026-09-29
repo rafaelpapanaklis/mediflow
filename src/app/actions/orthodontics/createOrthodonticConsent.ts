@@ -60,6 +60,7 @@ export async function createOrthodonticConsent(
       action: ORTHO_AUDIT_ACTIONS.CONSENT_SIGNED,
       entityType: "OrthodonticConsent",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         consentType: created.consentType,
         signerName: parsed.data.signerName,

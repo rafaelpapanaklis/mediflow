@@ -20,6 +20,8 @@ import {
   registrarSubidaRechazada,
   limiteSubidasPorUsuario,
 } from "@/lib/uploads/validar-archivo";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+import { textoArchivo } from "@/lib/movimientos-paciente/textos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -325,6 +327,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       category: "SCAN_STL" as any,
     },
     select: { id: true, name: true, url: true, size: true, mimeType: true, createdAt: true },
+  });
+
+  // ws1-t12 — la subida queda en los movimientos del paciente (sin el nombre del archivo).
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: params.id,
+    entityType: "patient-file",
+    entityId: record.id,
+    action: "create",
+    texto: textoArchivo.subido("SCAN_STL"),
+    req,
   });
 
   // Best-effort: genera y sube un GLB web-optimizado HERMANO (mismo folder por

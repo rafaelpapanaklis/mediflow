@@ -280,6 +280,7 @@ async function completeAndLink(
     action: AUDIT_ACTIONS[entity],
     entityType: entity,
     entityId: session.id,
+    patientId: parsed.data.patientId,
     after: {
       treatmentSessionId: parsed.data.treatmentSessionId ?? null,
       treatmentLinkId,

@@ -91,6 +91,7 @@ export async function createPerioPhoto(
       action: "perio.photo.created",
       entityType: "ClinicalPhoto",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         kind: parsed.data.kind,
         photoType,

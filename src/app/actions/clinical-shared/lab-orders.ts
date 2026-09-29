@@ -172,6 +172,7 @@ export async function createLabOrder(
     action: "clinical-shared.lab-order.created",
     entityType: "lab-order",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { module: parsed.data.module, orderType: parsed.data.orderType },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);

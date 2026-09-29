@@ -99,6 +99,7 @@ export async function createPeriImplantAssessment(
       action: PERIO_AUDIT_ACTIONS.PERI_IMPLANT_ASSESSED,
       entityType: "PeriImplantAssessment",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         implantFdi: created.implantFdi,
         status: created.status,

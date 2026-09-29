@@ -56,6 +56,7 @@ export async function createClinicalReminder(
     action: "clinical-shared.reminder.created",
     entityType: "clinical-reminder",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { module: parsed.data.module, reminderType: parsed.data.reminderType },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);

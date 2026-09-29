@@ -24,6 +24,9 @@ import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 
 export const dynamic = "force-dynamic";
 
@@ -322,6 +325,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       entityType: "appointment",
       entityId: creado.cita.id,
       action: "create",
+      patientId: creado.paciente.id,
+      texto: `${textoCita.agendada(startsAt, await zonaDeClinica(clinicId))} (desde una solicitud de la página web)`,
       after: {
         origen: "booking_request",
         bookingRequestId: solicitud.id,
@@ -333,6 +338,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         startsAt,
       },
     });
+
+    if (!creado.reusado) {
+      await registrarMovimientoDelPaciente({
+        clinicId,
+        userId: session.user.id,
+        patientId: creado.paciente.id,
+        entityType: "patient",
+        entityId: creado.paciente.id,
+        action: "create",
+        texto: "Creó el perfil del paciente (desde una solicitud de la página web)",
+        req,
+      });
+    }
 
     revalidateAfter("appointments");
 

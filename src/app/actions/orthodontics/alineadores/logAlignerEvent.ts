@@ -75,6 +75,7 @@ export async function logAlignerEvent(input: LogAlignerEventInput): Promise<Acti
       action: "aligner_event_logged",
       entityType: "OrthodonticAlignerEvent",
       entityId: event.id,
+      patientId: patientId,
       after: { alignerId: aligner.id, ...input },
     });
 

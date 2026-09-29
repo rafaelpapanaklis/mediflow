@@ -27,7 +27,7 @@ export async function auditarCambioDePlan(args: {
   await auditarCobro({
     ctx,
     action: "cambiar-plan-de-pago",
-    entityId: args.treatmentPlanId,
+    entityId: args.treatmentPlanId, patientId: casoResult.data.patientId,
     meta: { motivo: args.motivo.trim().slice(0, 500), antes: args.antes, despues: args.despues },
   });
 

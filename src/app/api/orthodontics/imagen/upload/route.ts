@@ -19,6 +19,8 @@ import {
   limiteSubidasPorUsuario,
   type PerfilSubida,
 } from "@/lib/uploads/validar-archivo";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+import { textoArchivo } from "@/lib/movimientos-paciente/textos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -177,6 +179,18 @@ export async function POST(req: NextRequest) {
       category,
     },
     select: { id: true, url: true },
+  });
+
+  // ws1-t12 — la subida queda en los movimientos del paciente (sin el nombre del archivo).
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: patientId,
+    entityType: "patient-file",
+    entityId: patientFile.id,
+    action: "create",
+    texto: textoArchivo.subido(category),
+    req,
   });
 
   // El bucket es privado: `path` no sirve como <img src>. Se firma AQUÍ,

@@ -163,6 +163,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (count === 0) return cfdiVigenteResponse(null, "cambiar el precio de");
 
   await logMutation({
+      patientId: invoice.patientId,
+      texto: `Cambió el precio de la factura ${invoice.invoiceNumber}`,
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "update",
     before: { subtotal: invoice.subtotal, discount: invoice.discount, total: invoice.total, balance: invoice.balance },

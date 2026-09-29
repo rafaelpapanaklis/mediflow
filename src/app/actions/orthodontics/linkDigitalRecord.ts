@@ -65,6 +65,7 @@ export async function linkDigitalRecord(
       action: ORTHO_AUDIT_ACTIONS.DIGITAL_RECORD_LINKED,
       entityType: "OrthodonticDigitalRecord",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: { recordType: created.recordType, fileId: parsed.data.fileId },
     });
 

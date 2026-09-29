@@ -76,6 +76,7 @@ export async function createComplication(
       action: IMPLANT_AUDIT_ACTIONS.COMPLICATION_CREATED,
       entityType: "implant.complication",
       entityId: result.id,
+      patientId: before.patientId,
       after: {
         implantId: parsed.data.implantId,
         type: parsed.data.type,
@@ -91,6 +92,7 @@ export async function createComplication(
         action: IMPLANT_AUDIT_ACTIONS.IMPLANT_STATUS_CHANGED,
         entityType: "implant",
         entityId: parsed.data.implantId,
+        patientId: before.patientId,
         before: { currentStatus: before.currentStatus },
         after: { currentStatus: "COMPLICATION" },
       });

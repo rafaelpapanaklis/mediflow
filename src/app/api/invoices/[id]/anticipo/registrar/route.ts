@@ -24,6 +24,7 @@ import { registrarAnticipoRecibido } from "@/lib/anticipos/panel.server";
 import { esMetodoRegistroAnticipo } from "@/lib/anticipos/core";
 import { revalidatePath } from "next/cache";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   await logMutation({
+      texto: `Registró un anticipo de ${montoParaTexto(r.registrado.amount)}`,
     req,
     clinicId: ctx.clinicId,
     userId: ctx.userId,

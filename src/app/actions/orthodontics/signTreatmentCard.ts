@@ -504,6 +504,7 @@ export async function signTreatmentCard(
       action: ORTHO_AUDIT_ACTIONS.CARD_SIGNED,
       entityType: "OrthoTreatmentCard",
       entityId: cardId,
+      patientId: plan.patientId,
       after: {
         status: "SIGNED",
         cardNumber: data.cardNumber,

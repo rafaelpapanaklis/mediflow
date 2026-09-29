@@ -343,6 +343,7 @@ export async function saveTreatmentCardDraft(
       action: ORTHO_AUDIT_ACTIONS.CARD_DRAFT_SAVED,
       entityType: "OrthoTreatmentCard",
       entityId: cardId,
+      patientId: plan.patientId,
       after: {
         status: "DRAFT",
         cardNumber: data.cardNumber,

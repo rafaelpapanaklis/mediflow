@@ -52,6 +52,7 @@ export async function recordNpsResponse(
       action: ORTHO_AUDIT_ACTIONS.NPS_RESPONSE_RECORDED,
       entityType: "OrthoNpsSchedule",
       entityId: schedule.id,
+      patientId: schedule.patientId,
       after: {
         npsScore: parsed.data.npsScore,
         googleReviewTriggered: triggerGoogleReview,
@@ -69,6 +70,7 @@ export async function recordNpsResponse(
         action: ORTHO_AUDIT_ACTIONS.GOOGLE_REVIEW_TRIGGERED,
         entityType: "OrthoNpsSchedule",
         entityId: schedule.id,
+        patientId: schedule.patientId,
         after: { score: parsed.data.npsScore, channel: "whatsapp-stub" },
       });
     }

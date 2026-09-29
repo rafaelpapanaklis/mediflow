@@ -31,6 +31,8 @@ import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
+import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 
 export const dynamic = "force-dynamic";
 
@@ -184,6 +186,8 @@ export async function POST(
       entityType: "appointment",
       entityId: appointment.id,
       action: "update",
+      patientId: appointment.patientId,
+      texto: `${textoCita.cancelada(appointment.startsAt, await zonaDeClinica(session.clinic.id))} (a petición del paciente)`,
       before: {
         startsAt: appointment.startsAt,
         endsAt: appointment.endsAt,
@@ -381,6 +385,8 @@ export async function POST(
     entityType: "appointment",
     entityId: appointment.id,
     action: "update",
+    patientId: appointment.patientId,
+    texto: `${textoCita.movida(appointment.startsAt, proposedStartsAt, await zonaDeClinica(session.clinic.id))} (a petición del paciente)`,
     before: {
       startsAt: appointment.startsAt,
       endsAt: appointment.endsAt,

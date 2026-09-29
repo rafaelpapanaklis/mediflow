@@ -100,6 +100,7 @@ export async function createReevaluation(
       action: PERIO_AUDIT_ACTIONS.REEVALUATION_CREATED,
       entityType: "PeriodontalReevaluation",
       entityId: created.id,
+      patientId: plan.patientId,
       after: {
         bopImprovementPct,
         pdAverageImprovementMm,

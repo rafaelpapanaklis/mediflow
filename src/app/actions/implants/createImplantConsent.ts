@@ -64,6 +64,7 @@ export async function createImplantConsent(
       action: IMPLANT_AUDIT_ACTIONS.CONSENT_CREATED,
       entityType: "implant.consent",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         implantId: parsed.data.implantId,
         consentType: parsed.data.consentType,

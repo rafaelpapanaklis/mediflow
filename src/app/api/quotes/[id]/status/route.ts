@@ -7,6 +7,7 @@ import { leerCondiciones } from "@/lib/quotes/condiciones-pago-db";
 import { presentQuote } from "@/lib/quotes/present";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { estadoDePresupuesto } from "@/lib/movimientos-paciente/textos";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +109,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   });
 
   await logAudit({
+    patientId: quote.patientId,
+    texto: `Cambió el presupuesto de «${estadoDePresupuesto(quote.status)}» a «${estadoDePresupuesto(updated.status)}»`,
     clinicId: ctx.clinicId,
     userId: ctx.userId,
     entityType: "quote",

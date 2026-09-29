@@ -89,6 +89,7 @@ export async function quitarFotoDeVista(input: {
       action: ORTHO_AUDIT_ACTIONS.PHOTO_REMOVED,
       entityType: "OrthoPhotoSet",
       entityId: set.id,
+      patientId: set.patientId,
       meta: { slotId, motivo: motivoVista },
     });
     revalidarFicha(set.patientId);
@@ -125,6 +126,7 @@ export async function quitarFotoDeVista(input: {
     action: ORTHO_AUDIT_ACTIONS.PHOTO_REMOVED,
     entityType: "OrthoPhotoSet",
     entityId: set.id,
+    patientId: set.patientId,
     meta: { slotId: input.slotId, fileId, motivo },
   });
   revalidarFicha(set.patientId);
@@ -197,6 +199,7 @@ export async function agregarFotoExtra(input: {
     action: ORTHO_AUDIT_ACTIONS.PHOTO_EXTRA_ADDED,
     entityType: "OrthoPhotoSet",
     entityId: set.id,
+    patientId: set.patientId,
     meta: { extraId: id, fileId: input.fileId, etiqueta, slotId: slot },
   });
   revalidarFicha(set.patientId);
@@ -236,6 +239,7 @@ export async function quitarFotoExtra(input: {
     action: ORTHO_AUDIT_ACTIONS.PHOTO_EXTRA_REMOVED,
     entityType: "OrthoPhotoSet",
     entityId: set.id,
+    patientId: set.patientId,
     meta: { extraId: input.extraId, motivo },
   });
   revalidarFicha(set.patientId);

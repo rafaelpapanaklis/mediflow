@@ -32,6 +32,6 @@ export async function elegirDescuentoDelCaso(args: {
     return fail(resultado.sinTabla ? "Falta aplicar sql/ortodoncia-cobro.sql: el descuento no se guardó" : "No se pudo guardar el descuento del caso");
   }
 
-  await auditarCobro({ ctx, action: "elegir-descuento-del-caso", entityId: args.treatmentPlanId, meta: { ruleId: args.ruleId, pct: args.pct } });
+  await auditarCobro({ ctx, action: "elegir-descuento-del-caso", entityId: args.treatmentPlanId, patientId: casoResult.data.patientId, meta: { ruleId: args.ruleId, pct: args.pct } });
   return ok({ guardado: true });
 }

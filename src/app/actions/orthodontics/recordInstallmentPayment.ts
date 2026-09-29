@@ -84,6 +84,7 @@ export async function recordInstallmentPayment(
       action: ORTHO_AUDIT_ACTIONS.INSTALLMENT_PAID,
       entityType: "OrthoInstallment",
       entityId: updated.id,
+      patientId: installment.paymentPlan.patientId,
       after: {
         installmentNumber: updated.installmentNumber,
         amountPaid: updated.amountPaid?.toString() ?? null,

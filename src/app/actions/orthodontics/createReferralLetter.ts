@@ -63,6 +63,7 @@ export async function createReferralLetter(
       action: "ortho.referralLetter.created",
       entityType: "Referral",
       entityId: created.id,
+      patientId: data.patientId,
       after: {
         toClinicName: data.toClinicName,
         toSpecialty: data.toSpecialty,

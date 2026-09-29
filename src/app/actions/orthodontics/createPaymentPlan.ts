@@ -106,6 +106,7 @@ export async function createPaymentPlan(
       action: ORTHO_AUDIT_ACTIONS.PAYMENT_PLAN_CREATED,
       entityType: "OrthoPaymentPlan",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         totalAmount: created.totalAmount.toString(),
         installments: parsed.data.installmentCount,

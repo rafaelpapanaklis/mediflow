@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { BUCKETS, extractStoragePath, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -115,6 +116,17 @@ export async function POST(req: NextRequest) {
       sessionId: sessionId ?? null,
       notes: notes ?? null,
     },
+  });
+
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId,
+    entityType: "photo",
+    entityId: photo.id,
+    action: "create",
+    texto: "Subió una foto de antes y después",
+    req,
   });
 
   // Devolvemos URL ya firmada al cliente para render inmediato.

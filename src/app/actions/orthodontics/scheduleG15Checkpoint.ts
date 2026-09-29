@@ -94,6 +94,7 @@ export async function scheduleG15Checkpoint(
       action: ORTHO_AUDIT_ACTIONS.G15_CHECKPOINT_SCHEDULED,
       entityType: "OrthoPhotoSet",
       entityId: created.id,
+      patientId: plan.patientId,
       after: {
         setType: "CONTROL",
         scheduledFor: scheduledFor.toISOString(),

@@ -103,6 +103,7 @@ export async function exportTreatmentPlanPdf(
     action: ORTHO_AUDIT_ACTIONS.REPORT_TREATMENT_PLAN_PDF,
     entityType: "OrthodonticTreatmentPlan",
     entityId: plan.id,
+    patientId: plan.patientId,
     meta: { exportedAt: new Date().toISOString() },
   });
 

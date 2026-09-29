@@ -93,6 +93,7 @@ export async function updateOrthoAppliances(
       action: ORTHO_AUDIT_ACTIONS.TREATMENT_PLAN_UPDATED,
       entityType: "OrthodonticTreatmentPlan",
       entityId: treatmentPlanId,
+      patientId: before.patientId,
       before: {
         prescriptionSlot: before.prescriptionSlot,
         bondingType: before.bondingType,

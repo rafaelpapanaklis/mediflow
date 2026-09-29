@@ -1,6 +1,7 @@
 // Pediatrics — helpers internos para server actions (auth + audit). Spec: §4.A.9, §4.B.4
 
 import { prisma } from "@/lib/prisma";
+import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
 import type { AuthContext } from "@/lib/auth-context";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { canAccessModule } from "@/lib/marketplace/access-control";
@@ -127,18 +128,19 @@ export async function auditPediatric(args: {
   action: string;
   entityType: string;
   entityId: string;
+  /** ws1-t12 — paciente al que pertenece el cambio (movimientos del paciente). */
+  patientId?: string | null;
   changes?: Record<string, unknown>;
 }): Promise<void> {
   try {
-    await prisma.auditLog.create({
-      data: {
-        clinicId: args.ctx.clinicId,
-        userId: args.ctx.userId,
-        entityType: args.entityType,
-        entityId: args.entityId,
-        action: args.action,
-        changes: (args.changes as object | undefined) ?? null,
-      },
+    await anotarFilaDeModulo({
+      clinicId: args.ctx.clinicId,
+      userId: args.ctx.userId,
+      entityType: args.entityType,
+      entityId: args.entityId,
+      action: args.action,
+      changes: (args.changes as Record<string, unknown> | undefined) ?? null,
+      patientId: args.patientId,
     });
   } catch (e) {
     console.error("[pediatrics audit] failed:", e);

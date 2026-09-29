@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
   // P4 — bitácora: esta ruta no dejaba ningún rastro de quién armó el plan
   // de pagos ni con qué condiciones (hallazgo REPORTE-ws1-t8.md).
   await logMutation({
+      texto: `Creó un plan de pagos de ${letras.installments} pagos`,
     req,
     clinicId: ctx.clinicId,
     userId: ctx.userId,

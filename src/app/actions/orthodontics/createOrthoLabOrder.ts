@@ -76,6 +76,7 @@ export async function createOrthoLabOrder(
       action: ORTHO_AUDIT_ACTIONS.LAB_ORDER_CREATED,
       entityType: "LabOrder",
       entityId: created.id,
+      patientId: parsed.data.patientId,
       after: {
         catalog: parsed.data.catalog,
         lab: parsed.data.lab,

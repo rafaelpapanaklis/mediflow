@@ -70,7 +70,7 @@ test("los dos grupos son Clínico y Archivos, con su contenido; «Más» ya no s
   assert.deepEqual(porId.clinico, [
     "historia", "cuestionario", "historial-consultas", "nota-evolucion", "recetas", "consentimientos", "implantes",
   ]);
-  assert.deepEqual(porId.archivos, ["radiografias", "fotos", "subidos", "modelos-3d"]);
+  assert.deepEqual(porId.archivos, ["radiografias", "fotos", "subidos", "modelos-3d", "movimientos"]);
   // «Presupuestos» salió del menú en ws1-t1 (se unió con Facturación) y
   // «Referencias» en ws1-t3 (Rafael: no es necesario): ver
   // `presupuestos-en-facturacion/menu.ts`. No están en ningún sitio del menú.

@@ -50,7 +50,9 @@ export const GRUPO_CLINICO = [
   "implantes",
 ] as const;
 
-export const GRUPO_ARCHIVOS = ["radiografias", "fotos", "subidos", "modelos-3d"] as const;
+// «Movimientos Completo» (ws1-t12): todo cambio hecho al paciente. Rafael lo pidió
+// dentro de Archivos.
+export const GRUPO_ARCHIVOS = ["radiografias", "fotos", "subidos", "modelos-3d", "movimientos"] as const;
 
 // «Presupuestos» estuvo aquí hasta ws1-t1 (se unió con Facturación) y
 // «Referencias» hasta ws1-t3 (Rafael: no es necesario). Ninguno se borró: ver

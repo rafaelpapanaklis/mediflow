@@ -121,6 +121,7 @@ export async function scheduleImplantReminders(
       action: IMPLANT_AUDIT_ACTIONS.REMINDER_RULE_SCHEDULED,
       entityType: "ClinicalReminder",
       entityId: created.id,
+      patientId: implant.patientId,
       meta: {
         implantId: parsed.data.implantId,
         ruleKey: rule.ruleKey,

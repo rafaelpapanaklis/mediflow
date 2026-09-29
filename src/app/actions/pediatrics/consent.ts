@@ -79,6 +79,7 @@ export async function generateConsent(input: z.infer<typeof generateSchema>): Pr
     action: PEDIATRIC_AUDIT_ACTIONS.CONSENT_GENERATED,
     entityType: "ped-consent",
     entityId: created.id,
+    patientId: parsed.data.patientId,
     changes: { procedureType: parsed.data.procedureType },
   });
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);

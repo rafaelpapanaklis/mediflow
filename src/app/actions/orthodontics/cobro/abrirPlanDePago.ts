@@ -131,6 +131,7 @@ export async function abrirPlanDePago(args: {
     ctx,
     action: "abrir-plan-de-pago",
     entityId: args.treatmentPlanId,
+    patientId: caso.patientId,
     meta: { invoiceId: args.invoiceId },
   });
 
@@ -198,6 +199,7 @@ async function quedarseConLaVigente(args: {
     ctx,
     action: "abrir-plan-de-pago-duplicado",
     entityId: caso.id,
+    patientId: caso.patientId,
     meta: {
       invoiceIdVigente: vigenteId,
       invoiceIdDuplicada: duplicadaId,

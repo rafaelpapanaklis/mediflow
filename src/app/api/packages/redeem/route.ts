@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { negarApiPorCategoria } from "@/lib/dashboard/guardia-categoria.server";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -45,6 +46,17 @@ export async function POST(req: NextRequest) {
       expiresAt,
       totalSessions: pkg.totalSessions,
     },
+  });
+
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId,
+    entityType: "package-redemption",
+    entityId: redemption.id,
+    action: "create",
+    texto: "Activó un paquete de servicios",
+    req,
   });
 
   return NextResponse.json(redemption, { status: 201 });
@@ -93,6 +105,17 @@ export async function PATCH(req: NextRequest) {
       sessionsUsed: newSessionsUsed,
       status: newStatus,
     },
+  });
+
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: redemption.patientId,
+    entityType: "package-redemption",
+    entityId: redeemId,
+    action: "update",
+    texto: newStatus === "COMPLETED" ? "Usó la última sesión de un paquete de servicios" : "Usó una sesión de un paquete de servicios",
+    req,
   });
 
   return NextResponse.json(updated);

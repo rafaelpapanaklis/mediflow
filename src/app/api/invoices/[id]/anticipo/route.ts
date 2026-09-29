@@ -30,6 +30,7 @@ import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { buildSolicitudAnticipoPdf } from "@/lib/anticipos/solicitud-pdf";
+import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +145,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (!r.reutilizado) {
     await logMutation({
+      texto: `Pidió un anticipo de ${montoParaTexto(deposit.amount)}`,
       req,
       clinicId: ctx.clinicId,
       userId: ctx.userId,
