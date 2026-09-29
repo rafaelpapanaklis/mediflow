@@ -23,6 +23,7 @@ import { CLASES_FACTURA_REDISENO, CLASES_CALENDARIO_REDISENO, clasesFactura as c
 // pago se registra solo. Sin cuenta conectada, el botón ni sale.
 import { BotonMercadoPago, LinkMercadoPago, clasesMetodoClasico, useCobroMercadoPago } from "./link-mercado-pago";
 import { montoInicialDeCobro } from "./monto-inicial-cobro";
+import { RUTA_CAJA, debeAvisarCajaCerrada, useCajaAbierta } from "./aviso-caja-cerrada";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
 /**
@@ -85,6 +86,9 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
   const [notes, setNotes]         = useState("");
   const [saving, setSaving]       = useState(false);
   const mpDisponible = useCobroMercadoPago(open);
+  const { abierta: cajaAbierta, comprobar: comprobarCaja } = useCajaAbierta(open);
+  // «La caja está cerrada»: se pregunta UNA vez antes de confirmar un cobro en efectivo.
+  const [avisoCaja, setAvisoCaja] = useState(false);
   const esMercadoPago = method === "mercadopago";
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de siempre sin él.
   // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
@@ -99,6 +103,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
     setPaidAt(todayLocalISO());
     setReference("");
     setNotes("");
+    setAvisoCaja(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, invoice]);
 
@@ -108,8 +113,16 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
   const isOverpay = amountNum > invoice.balance + 0.001;
   const isInvalid = !amountNum || amountNum <= 0 || isOverpay;
 
-  async function submit() {
+  async function submit(sinAviso = false) {
     if (isInvalid || saving || !invoice) return;
+    if (!sinAviso && method === "cash") {
+      // Si la lectura de la caja aún no llegó, se espera (con tope) antes de decidir.
+      setSaving(true);
+      const abierta = cajaAbierta ?? (await comprobarCaja());
+      setSaving(false);
+      if (debeAvisarCajaCerrada(method, abierta)) { setAvisoCaja(true); return; }
+    }
+    setAvisoCaja(false);
     setSaving(true);
     try {
       const res = await fetch(`/api/invoices/${invoice.id}`, {
@@ -266,11 +279,23 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
           )}
         </div>
 
+        {avisoCaja && method === "cash" && (
+          <div role="alert" style={{ margin: "0 0 12px", padding: "10px 12px", borderRadius: 8, background: "var(--warning-soft)", color: "var(--text-1)", fontSize: 13 }}>
+            La caja está cerrada: este efectivo no entrará en ningún corte. ¿Abrir caja?
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <a href={RUTA_CAJA} className="btn-new btn-new--primary btn-new--sm">Abrir caja</a>
+              <button type="button" className="btn-new btn-new--ghost btn-new--sm" onClick={() => submit(true)} disabled={saving}>
+                Cobrar de todos modos
+              </button>
+            </div>
+          </div>
+        )}
+
         <DialogFooter className={rediseno ? c.pie : undefined}>
           <ButtonNew variant="ghost" onClick={onClose} disabled={saving}>{t("common.cancel")}</ButtonNew>
           {/* Con Mercado Pago no se registra nada aquí: el webhook lo registra al acreditarse. */}
           {!esMercadoPago && (
-          <ButtonNew variant="primary" onClick={submit} disabled={isInvalid || saving}>
+          <ButtonNew variant="primary" onClick={() => submit()} disabled={isInvalid || saving}>
             {saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: amountNum ? " · " + fmtMXNdec(amountNum) : "" })}
           </ButtonNew>
           )}
