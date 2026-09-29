@@ -3,6 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
 
 const ANGLE_CLASS_LABELS: Record<string, string> = {
   CLASS_I: "Clase I",
@@ -73,7 +74,8 @@ export async function buildOrthoSummary(args: {
     const remaining = Math.max(0, totalMonths - monthsElapsed);
 
     // ws1-t10: la técnica propia de la clínica, si el caso la trae.
-    const tecnica = (await cargarNombreDeTecnica(args.clinicId, plan.id)) ?? plan.technique.replaceAll("_", " ").toLowerCase();
+    // ws1-t4 (5e): en español, no el enum en crudo («metal brackets»).
+    const tecnica = techniqueLabel(plan.technique, await cargarNombreDeTecnica(args.clinicId, plan.id));
     lines.push(
       `Plan activo: técnica ${tecnica}. Fase actual: ${
         inProgress ? inProgress.phaseKey : "no iniciada"

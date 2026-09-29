@@ -14,6 +14,7 @@ import { DischargeLetterPdf } from "@/lib/orthodontics/pdf-templates/discharge-l
 import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
 import { cargarMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto-db";
 import { nombreDeArchivoPdf } from "@/lib/orthodontics/pdf/nombre-de-archivo";
+import { MENSAJE_CARTA_DE_ALTA_EN_CURSO, casoConFaseActivaTerminada } from "@/lib/orthodontics/pdf/reglas-de-emision";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,11 +52,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (denied) return denied;
 
   // Solo tiene sentido con la aparatología ya retirada (retención o terminado).
-  if (plan.status !== "RETENTION" && plan.status !== "COMPLETED") {
-    return NextResponse.json(
-      { error: "La carta de alta se emite cuando el caso está en retención o terminado." },
-      { status: 400 },
-    );
+  if (!casoConFaseActivaTerminada(plan.status)) {
+    return NextResponse.json({ error: MENSAJE_CARTA_DE_ALTA_EN_CURSO }, { status: 400 });
   }
 
   const [membrete, regimen] = await Promise.all([

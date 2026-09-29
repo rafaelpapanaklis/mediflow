@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clinic-letterhead";
 import { consentTimeZone } from "@/lib/consent/dates";
 import type { DatosDelMembreteOrto } from "./membrete-orto";
+import { especialidadDelDoctor } from "./formato";
 
 export async function cargarMembreteOrto(args: {
   clinicId: string;
@@ -42,6 +43,7 @@ export async function cargarMembreteOrto(args: {
             cedulaProfesional: true,
             cedulaEspecialidad: true,
             especialidad: true,
+            specialty: true,
           },
         })
       : Promise.resolve(null),
@@ -66,7 +68,7 @@ export async function cargarMembreteOrto(args: {
           nombre: `${doctor.firstName} ${doctor.lastName}`.trim(),
           cedula: doctor.cedulaProfesional ?? null,
           cedulaEspecialidad: doctor.cedulaEspecialidad ?? null,
-          especialidad: doctor.especialidad ?? null,
+          especialidad: especialidadDelDoctor(doctor.especialidad, doctor.specialty),
         }
       : null,
   };

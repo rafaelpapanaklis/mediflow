@@ -2,7 +2,8 @@
 // Orthodontics — vista del plan + timeline. SPEC §6.6.
 
 import type { OrthodonticTreatmentPlanRow, OrthodonticPhaseRow } from "@/lib/types/orthodontics";
-import type { OrthoPhaseKey } from "@prisma/client";
+import type { OrthoPhaseKey, OrthoTechnique } from "@prisma/client";
+import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
 import { PhaseTimeline } from "./PhaseTimeline";
 
 export interface TreatmentPlanViewProps {
@@ -102,6 +103,7 @@ function Kpi(props: { label: string; value: string }) {
   );
 }
 
+// ws1-t4 (5e): el mismo nombre en español que el plan y el convenio, no el enum en crudo.
 function prettyTechnique(t: string): string {
-  return t.replaceAll("_", " ").toLowerCase();
+  return techniqueLabel(t as OrthoTechnique);
 }

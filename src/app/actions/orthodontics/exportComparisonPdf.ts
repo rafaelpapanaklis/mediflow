@@ -6,7 +6,7 @@
 
 import { z } from "zod";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
-import { nombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
+import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
 import { prisma } from "@/lib/prisma";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
@@ -118,7 +118,9 @@ export async function exportComparisonPdf(
     doctorName: doctor ? `${doctor.firstName} ${doctor.lastName}` : "—",
     doctorCedula: doctor?.cedulaProfesional ?? null,
     clinicName: clinic.name,
-    techniqueLabel: nombreDeTecnica(plan.technique, await cargarNombreDeTecnica(ctx.clinicId, plan.id), plan.technique.replaceAll("_", " ").toLowerCase()),
+    // ws1-t4 (5e): el mismo nombre que el plan y el convenio («brackets metálicos», o el
+    // nombre propio de la técnica del caso). Antes caía a «metal brackets» (el enum en crudo).
+    techniqueLabel: techniqueLabel(plan.technique, await cargarNombreDeTecnica(ctx.clinicId, plan.id)),
     durationMonthsActual: monthsElapsed,
     estimatedDurationMonths: plan.estimatedDurationMonths,
     diagnosisSummary: plan.diagnosis.clinicalSummary,

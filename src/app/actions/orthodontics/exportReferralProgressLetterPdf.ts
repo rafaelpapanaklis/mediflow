@@ -14,6 +14,7 @@ import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import { cargarMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto-db";
 import type { DatosDelMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto";
+import { motivoParaNoEmitirCartaDeAvance } from "@/lib/orthodontics/pdf/reglas-de-emision";
 
 const inputSchema = z.object({
   treatmentPlanId: z.string().min(1),
@@ -84,6 +85,11 @@ export async function exportReferralProgressLetterPdf(
   if (!(await canViewPatient(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }))) {
     return fail("Paciente no encontrado");
   }
+
+  // ws1-t4 (5d): la de «término» dice «ha concluido su tratamiento»; con el caso
+  // en curso eso es falso. Se niega aquí, no solo en la pantalla.
+  const noSePuede = motivoParaNoEmitirCartaDeAvance(parsed.data.stage, plan.status);
+  if (noSePuede) return fail(noSePuede);
 
   if (!plan.diagnosis.referredByDoctor) {
     return fail("Este caso no tiene registrado quién refirió al paciente (A13)");

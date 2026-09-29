@@ -78,3 +78,18 @@ export function fechaDeNacimiento(nacimiento: Date | string | null | undefined):
   if (Number.isNaN(d.getTime())) return SIN_FECHA;
   return fechaDMA(d.toISOString().slice(0, 10));
 }
+
+/**
+ * La especialidad que se imprime del doctor (ws1-t4, 5j): la oficial de NOM-024
+ * (`User.especialidad`) si está capturada y, si no, la que eligieron en Equipo
+ * (`User.specialty`: «Ortodoncia», «Endodoncia»…). «Otra» no dice nada: raya.
+ */
+export function especialidadDelDoctor(
+  oficial: string | null | undefined,
+  delSelector: string | null | undefined,
+): string | null {
+  const o = (oficial ?? "").trim();
+  if (o) return o;
+  const s = (delSelector ?? "").trim();
+  return s && s !== "Otra" ? s : null;
+}

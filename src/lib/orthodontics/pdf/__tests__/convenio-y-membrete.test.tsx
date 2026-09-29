@@ -31,7 +31,11 @@ import { ReferralProgressLetterPdf } from "../../pdf-templates/referral-progress
 import { ProgressReportPdf } from "../../pdf-templates/progress-report";
 import { ComparisonPdf } from "../../pdf-templates/comparison-pdf";
 import { armarConvenio, diaDePago, folioDelConvenio, type EntradaConvenio } from "../convenio";
-import { fechaDMA, edadEnAnios } from "../formato";
+import { fechaDMA, edadEnAnios, especialidadDelDoctor } from "../formato";
+import { motivoParaNoEmitirCartaDeAvance, casoConFaseActivaTerminada } from "../reglas-de-emision";
+import { techniqueLabel } from "../../consent-texts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { DatosDelMembreteOrto } from "../membrete-orto";
 import { nombreDeArchivoPdf } from "../nombre-de-archivo";
 
@@ -470,5 +474,62 @@ describe("membrete común en los PDF de ortodoncia", () => {
       />,
     );
     comprobar(tiene, "Antes y después");
+  });
+});
+
+// ── Revisión en panel.108 (ws1-t9): 5e, 5d, 5j ─────────────────────────
+
+describe("5e — la técnica en español en todos los PDF", () => {
+  it("el nombre del tipo base es el del plan y el convenio, no el enum", () => {
+    assert.equal(techniqueLabel("METAL_BRACKETS"), "brackets metálicos");
+    assert.equal(techniqueLabel("METAL_BRACKETS", "QA Brackets de zafiro"), "QA Brackets de zafiro");
+  });
+  it("ni el comparativo ni el resumen de referencia pintan el enum en crudo", () => {
+    const src = join(__dirname, "..", "..", "..", "..");
+    for (const rel of ["app/actions/orthodontics/exportComparisonPdf.ts", "lib/clinical-shared/referral/summary-orthodontics.ts", "components/specialties/orthodontics/plan/TreatmentPlanView.tsx"]) {
+      const f = readFileSync(join(src, rel), "utf8");
+      assert.doesNotMatch(f, /technique\.replaceAll\("_", " "\)/, rel);
+      assert.match(f, /techniqueLabel\(/, rel);
+    }
+  });
+  it("el PDF de antes y después dice «brackets metálicos»", async () => {
+    const { tiene } = await textoDelPdf(
+      <ComparisonPdf
+        data={{
+          membrete: membrete(), patientName: "Diego Hernández", patientDobIso: null, doctorName: "Ana Ruiz", doctorCedula: null,
+          clinicName: "Clínica Sonrisa Norte", techniqueLabel: techniqueLabel("METAL_BRACKETS"), durationMonthsActual: 3,
+          estimatedDurationMonths: 18, diagnosisSummary: "", retentionPlanText: "", initialSet: null, midSets: [], finalSet: null,
+          generatedAtIso: "2026-09-29T08:33:00.000Z", hasPhotoUseConsent: true,
+        }}
+      />,
+    );
+    assert.ok(tiene("brackets metálicos · duración estimada 18 meses"));
+    assert.ok(!tiene("metal brackets"));
+  });
+});
+
+describe("5d — la carta «de término» solo con el caso en retención o terminado", () => {
+  it("en curso se niega con un mensaje claro; inicio siempre se puede", () => {
+    for (const status of ["PLANNED", "IN_PROGRESS", "ON_HOLD", null]) {
+      assert.match(motivoParaNoEmitirCartaDeAvance("termino", status) ?? "", /retención o terminado/);
+      assert.equal(motivoParaNoEmitirCartaDeAvance("inicio", status), null);
+    }
+    assert.equal(motivoParaNoEmitirCartaDeAvance("termino", "RETENTION"), null);
+    assert.equal(motivoParaNoEmitirCartaDeAvance("termino", "COMPLETED"), null);
+    assert.equal(casoConFaseActivaTerminada("IN_PROGRESS"), false);
+  });
+  it("la action lo comprueba en el servidor, antes de armar la carta", () => {
+    const f = readFileSync(join(__dirname, "..", "..", "..", "..", "app/actions/orthodontics/exportReferralProgressLetterPdf.ts"), "utf8");
+    assert.match(f, /motivoParaNoEmitirCartaDeAvance\(parsed\.data\.stage, plan\.status\)/);
+  });
+});
+
+describe("5j — especialidad del doctor en el membrete", () => {
+  it("la oficial NOM-024 si existe; si no, la del selector de Equipo", () => {
+    assert.equal(especialidadDelDoctor("Ortodoncia y Ortopedia Maxilar", "Ortodoncia"), "Ortodoncia y Ortopedia Maxilar");
+    assert.equal(especialidadDelDoctor(null, "Ortodoncia"), "Ortodoncia");
+    assert.equal(especialidadDelDoctor("  ", "Ortodoncia"), "Ortodoncia");
+    assert.equal(especialidadDelDoctor(null, "Otra"), null);
+    assert.equal(especialidadDelDoctor(null, null), null);
   });
 });
