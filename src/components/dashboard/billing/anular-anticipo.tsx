@@ -108,7 +108,7 @@ export function AnularAnticipo({
             <DialogTitle className="text-foreground font-bold">Anular anticipo registrado por error</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3 text-sm">
+          <div className="space-y-3 text-sm px-6">
             <p className="text-muted-foreground">
               El pago deja de contar (también en la Caja) y la factura vuelve a como estaba. No se borra nada: queda
               anotado quién lo anuló, cuándo y por qué.
