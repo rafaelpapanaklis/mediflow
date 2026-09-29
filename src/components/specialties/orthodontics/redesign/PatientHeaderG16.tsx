@@ -62,6 +62,10 @@ export interface PatientHeaderProps {
   onStartControl?: () => void;
   /** Hay un control agendado para hoy: cambia el rótulo del botón. */
   controlIsToday?: boolean;
+  /** «Registrar control» está abriendo la hoja (tarda): el botón lo muestra y no admite otro clic. */
+  controlCargando?: boolean;
+  /** El control de hoy YA está firmado: el botón pasa a «Ver el control de hoy» (no se ofrece registrarlo otra vez). */
+  controlFirmadoHoy?: boolean;
 }
 
 export function PatientHeaderG16(props: PatientHeaderProps) {
@@ -129,8 +133,16 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
               size="lg"
               icon={<ClipboardCheck size={16} strokeWidth={1.75} aria-hidden />}
               onClick={props.onStartControl}
+              disabled={props.controlCargando}
+              aria-busy={props.controlCargando || undefined}
             >
-              {props.controlIsToday ? "Registrar control de hoy" : "Registrar control"}
+              {props.controlCargando
+                ? "Abriendo la hoja…"
+                : props.controlFirmadoHoy
+                  ? "Ver el control de hoy (firmado)"
+                  : props.controlIsToday
+                    ? "Registrar control de hoy"
+                    : "Registrar control"}
             </Btn>
           ) : null}
           {props.onStartVisit ? (

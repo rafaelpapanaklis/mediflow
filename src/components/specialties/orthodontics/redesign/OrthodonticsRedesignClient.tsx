@@ -6,7 +6,9 @@
 // contextual a la izquierda).
 
 import { Shield, Sparkles, Star } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
+import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import {
   getTreatmentCardContextForPatient,
@@ -14,7 +16,6 @@ import {
 import type { TreatmentCardAgendaContext } from "@/app/actions/orthodontics/getTreatmentCardContextForAppointment";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
-import { debeAbrirLaHoja } from "@/lib/orthodontics/consulta-ortodoncia";
 import { SectionHero } from "./sections/SectionHero";
 import { SeccionPlegada } from "./SeccionPlegada";
 import { seccionesPlegadasPorFase } from "@/lib/orthodontics/redesign/secciones-por-fase";
@@ -361,8 +362,26 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   const vm = props.vm;
   const t = vm.treatment;
 
+  // ws1-t9 #9: «Registrar control» tarda (trae la cita de hoy y el contexto): mientras tanto se
+  // ve que está cargando y un segundo clic no lanza otra apertura.
+  const [abriendoControl, setAbriendoControl] = useState(false);
+  const abriendoControlRef = useRef(false);
+  // ws1-t9 #17: la hoja de hoy YA firmada. No se ofrece «Registrar control de hoy» otra vez:
+  // se dice y se puede ver.
+  const hojaDeHoyFirmada = hojaFirmadaDeHoy(vm.treatmentCards);
+  const pacienteParaAgendar = { id: vm.patient.id, nombre: vm.patient.fullName, doctorId: null };
+
   const abrirRegistrarControl = useCallback(async () => {
     if (!t.treatmentPlanId) return;
+    if (abriendoControlRef.current) return;
+    if (hojaDeHoyFirmada) {
+      toast("El control de hoy ya está firmado. Aquí lo puedes ver.", { id: "control-hoy-firmado", duration: 6000 });
+      setDrawer({ kind: "tcard", cardId: hojaDeHoyFirmada.id });
+      return;
+    }
+    abriendoControlRef.current = true;
+    setAbriendoControl(true);
+    try {
     // Mismo criterio que BotonHojaControl.tsx en Agenda: se trae el
     // contexto ANTES de abrir el cajón, para que nazca ya con la cita de
     // hoy ligada (si la hay) y, si ya hay hoja de hoy, continuándola en vez
@@ -374,7 +393,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     const res = await getTreatmentCardContextForPatient(t.treatmentPlanId).catch(() => null);
     setNuevoControlCtx(!res || isFailure(res) ? null : res.data);
     setDrawer({ kind: "tcard-new" });
-  }, [t.treatmentPlanId]);
+    } finally {
+      abriendoControlRef.current = false;
+      setAbriendoControl(false);
+    }
+  }, [t.treatmentPlanId, hojaDeHoyFirmada]);
 
   // H17 (QA ws1-t9, ws1-t3): quien llega desde «Abrir caso» del módulo
   // (Pacientes en tratamiento → elegir paciente) trae `?abrirCaso=1`: el
@@ -386,7 +409,10 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   // misma de «Registrar control». Sin caso activo no se abre nada: la pestaña
   // ya enseña lo que hay. El aviso se apaga en la ficha en cuanto se atiende.
   const { abrirControlAlEntrar, onControlAbierto } = props;
-  const casoActivo = debeAbrirLaHoja({ tienePlan: Boolean(t.treatmentPlanId), estado: t.status });
+  // ws1-t9 #17: «Nueva consulta → Ortodoncia» y el botón «Registrar control» de la ficha hacen LO
+  // MISMO, con el mismo criterio (antes cada uno tenía el suyo: con un caso «Por colocar» uno abría
+  // la hoja y el otro no). El del botón manda: hay caso y no es «no iniciado».
+  const casoActivo = Boolean(t.treatmentPlanId) && t.status !== "no-iniciado";
   useEffect(() => {
     if (!abrirControlAlEntrar) return;
     if (casoActivo) void abrirRegistrarControl();
@@ -490,6 +516,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             t.status !== "no-iniciado" ? abrirRegistrarControl : undefined
           }
           controlIsToday={isToday(vm.nextAppointment?.date)}
+          controlCargando={abriendoControl}
+          controlFirmadoHoy={Boolean(hojaDeHoyFirmada)}
         />
       ) : null}
       <div className={layout.grid}>
@@ -737,6 +765,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       {/* Drawer Treatment Card existente */}
       {drawer?.kind === "tcard" && cardForDrawer ? (
         <DrawerTreatmentCard
+          paciente={pacienteParaAgendar}
           key={cardForDrawer.id}
           card={cardForDrawer}
           availableWires={vm.wireSequence}
@@ -754,6 +783,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           antes de esta ronda. */}
       {drawer?.kind === "tcard-new" && nuevoControlCtx?.existingCard ? (
         <DrawerTreatmentCard
+          paciente={pacienteParaAgendar}
           key={nuevoControlCtx.existingCard.id}
           card={nuevoControlCtx.existingCard}
           appointmentId={nuevoControlCtx.appointmentId}
@@ -766,6 +796,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : drawer?.kind === "tcard-new" && nuevoControlCtx ? (
         <DrawerTreatmentCard
+          paciente={pacienteParaAgendar}
           key="new-card-con-cita"
           card={null}
           appointmentId={nuevoControlCtx.appointmentId}
@@ -793,6 +824,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : drawer?.kind === "tcard-new" && !nuevoControlCtx && newCardDefaults ? (
         <DrawerTreatmentCard
+          paciente={pacienteParaAgendar}
           key="new-card"
           card={null}
           defaultsForNew={{

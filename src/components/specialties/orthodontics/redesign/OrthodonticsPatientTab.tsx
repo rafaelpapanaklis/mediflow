@@ -797,7 +797,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               toast.error(res.data.avisoControlSinFacturar, { duration: 8000 });
             }
             if (res.data.avisoReposiciones) toast(res.data.avisoReposiciones, { duration: 9000 });
-            toast.success(t("patients.ortho.appointmentSigned"));
+            // ws1-t9 #11: se firma un CONTROL (una hoja), no una cita.
+            toast.success("Control firmado");
             router.refresh();
             // §1 completo (ws1-t8): el cajón recuerda este id — así, si ya
             // se había guardado un borrador antes en la MISMA sesión y

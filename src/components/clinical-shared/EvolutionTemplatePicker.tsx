@@ -24,11 +24,15 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // «Reintentar» (ws1-t9 #10): si la primera carga falla (502, base caída), cerrar y reabrir
+  // no la repetía. Subir este contador vuelve a pedir las plantillas.
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     async function fetchAll() {
       setLoading(true);
+      setError(null);
       try {
         const res = await listEvolutionTemplates({
           module: props.module,
@@ -49,7 +53,7 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
     return () => {
       cancelled = true;
     };
-  }, [props.module, props.ensureDefaults]);
+  }, [props.module, props.ensureDefaults, intento]);
 
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
@@ -99,8 +103,15 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
               Cargando…
             </div>
           ) : error ? (
-            <div style={{ padding: 10, fontSize: 12, color: "var(--danger)" }}>
-              {error}
+            <div style={{ padding: 10, fontSize: 12, color: "var(--danger)" }} role="alert">
+              {error}{" "}
+              <button
+                type="button"
+                onClick={() => setIntento((n) => n + 1)}
+                style={{ textDecoration: "underline", color: "inherit", background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit" }}
+              >
+                Reintentar
+              </button>
             </div>
           ) : templates.length === 0 ? (
             <div style={{ padding: 10, fontSize: 12, color: "var(--text-2)" }}>

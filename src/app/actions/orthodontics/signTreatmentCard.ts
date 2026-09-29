@@ -27,6 +27,7 @@ import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { consumirReposicionIncluida } from "@/lib/orthodontics/cobro/caso-db";
 import { notaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita";
+import { mensajeDeHuecos } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { existeFacturaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita-db";
 import { avisoDeReposiciones } from "@/lib/orthodontics/cobro/reposiciones";
 
@@ -141,6 +142,11 @@ export async function signTreatmentCard(
   if (!canSignSoap(soap)) {
     return fail("Falta el Plan (P): es lo único obligatorio para firmar el control");
   }
+  // NOM-004 (ws1-t9 #2): una nota firmada es inalterable y no puede llevar los huecos «____» de
+  // la plantilla. El cajón ya lo bloquea; el servidor lo vuelve a exigir (una petición hecha a
+  // mano no se lo salta).
+  const avisoDeHuecos = mensajeDeHuecos(soap);
+  if (avisoDeHuecos) return fail(avisoDeHuecos);
 
   const plan = await prisma.orthodonticTreatmentPlan.findFirst({
     where: { id: data.treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },

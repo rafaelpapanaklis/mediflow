@@ -38,7 +38,9 @@ import {
 } from "../types";
 import { useCajon } from "../atoms/useCajon";
 import { EvolutionTemplatePicker } from "@/components/clinical-shared/EvolutionTemplatePicker";
-import { aplicarPlantillaAlControl, huecosPorLlenar } from "@/lib/orthodontics/consulta-ortodoncia";
+import { aplicarPlantillaAlControl } from "@/lib/orthodontics/consulta-ortodoncia";
+import { mensajeDeHuecos, proximaFechaDeControl } from "@/lib/orthodontics/hoja-de-control-reglas";
+import { AgendarControlBoton } from "@/components/specialties/orthodontics/modulo/agendar-control";
 import { AgendarProximoControlButton } from "@/components/specialties/orthodontics/AgendarProximoControlButton";
 import { AvisarProximoControlButton } from "@/components/specialties/orthodontics/AvisarProximoControlButton";
 import { addWireStep } from "@/app/actions/orthodontics/addWireStep";
@@ -137,6 +139,11 @@ export interface DrawerTreatmentCardProps {
    * no tengan que llevar su propia copia. `null` = control sin cita ligada.
    */
   appointmentId?: string | null;
+  /**
+   * El paciente de la hoja, para ofrecer «Agendar el próximo control» tras firmar cuando no se
+   * capturó fecha (ws1-t9 #11). Sin él (la Agenda no lo pasa) ese botón no se ofrece.
+   */
+  paciente?: { id: string; nombre: string; doctorId?: string | null } | null;
   onClose: () => void;
   /**
    * Devuelve el `cardId` con el que quedó la tarjeta (creada o
@@ -254,7 +261,8 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
       if (nota[campo] !== state.soap[campo]) dispatch({ kind: "set-soap", field: campo, value: nota[campo] });
     });
   };
-  const huecos = huecosPorLlenar(state.soap);
+  // NOM-004 (ws1-t9 #2): una nota con huecos «____» de la plantilla no se firma; el mensaje dice cuántos y dónde.
+  const avisoDeHuecos = mensajeDeHuecos(state.soap);
 
   const buildSubmit = (): DrawerCardSubmit => ({
     cardId: state.learnedCardId,
@@ -292,7 +300,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
 
   // Fila 12 (c): solo el Plan es obligatorio (S/O/A opcionales); un Plan
   // precargado sin tocar no cuenta. Misma regla en el servidor (canSignSoap).
-  const canSign = puedeFirmarNota(state.soap, state.notaPrecargada);
+  const canSign = puedeFirmarNota(state.soap, state.notaPrecargada) && !avisoDeHuecos;
 
   // M11 (Ronda 6): control recién firmado en ESTA sesión del cajón —
   // pantalla de cierre con Agendar/Avisar en el momento, en vez de cerrar en
@@ -341,7 +349,12 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                   </div>
                 </>
               ) : (
-                <div className={orto.vacioLinea}>Sin próximo control capturado en esta hoja.</div>
+                <>
+                  <div className={orto.vacioLinea} style={{ marginBottom: 10 }}>Sin próximo control capturado en esta hoja.</div>
+                  {props.paciente ? (
+                    <AgendarControlBoton patientId={props.paciente.id} patientName={props.paciente.nombre} doctorId={props.paciente.doctorId} />
+                  ) : null}
+                </>
               )}
             </section>
           </div>
@@ -534,11 +547,9 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 Nota precargada con los datos del caso: edítala o elige una plantilla.
               </p>
             ) : null}
-            {!isReadOnly && huecos > 0 ? (
-              <p className={`${orto.bloqueNota} ${orto.tonoAlerta} mb-[10px]`} role="status">
-                {huecos === 1
-                  ? "Queda 1 hueco (____) por llenar."
-                  : `Quedan ${huecos} huecos (____) por llenar.`}
+            {!isReadOnly && avisoDeHuecos ? (
+              <p className={`${orto.bloqueNota} ${orto.tonoAlerta} mb-[10px]`} role="alert" data-huecos>
+                {avisoDeHuecos}
               </p>
             ) : null}
             <div className="flex flex-col gap-[10px]">
@@ -679,6 +690,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                   const fecha = addWeeks(
                     props.card?.visitDate ?? props.defaultsForNew?.visitDate ?? null,
                     weeks,
+                    Boolean(props.appointmentId),
                   );
                   const elegido = state.nextDate != null && state.nextDate === fecha;
                   return (
@@ -809,7 +821,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 }
               }}
               disabled={!canSign || enVuelo}
-              title={!canSign ? "Escribe el Plan (P) de este control para firmarlo" : undefined}
+              title={avisoDeHuecos ?? (!canSign ? "Escribe el Plan (P) de este control para firmarlo" : undefined)}
             >
               {enVuelo ? "Firmando…" : "Firmar control"}
             </Btn>
@@ -1360,11 +1372,10 @@ function wireText(wire: { gauge: string; material: string } | null): string {
 }
 
 /** C5: "próximo control en N semanas" — parte de la fecha de ESTA visita, no de hoy. */
-function addWeeks(fromIso: string | null, weeks: number): string {
-  const base = fromIso ? new Date(fromIso) : new Date();
-  const d = new Date(base.getTime());
-  d.setDate(d.getDate() + weeks * 7);
-  return d.toISOString();
+function addWeeks(fromIso: string | null, weeks: number, horaDeCita = false): string {
+  // ws1-t9 #11: la hora sale de la CITA, o cae dentro del horario (no «la hora actual», que a las
+  // 10:26 p. m. hacía fallar «Agendar este control» por caer fuera del horario de la clínica).
+  return proximaFechaDeControl({ desde: fromIso, semanas: weeks, horaDeCita });
 }
 
 /**

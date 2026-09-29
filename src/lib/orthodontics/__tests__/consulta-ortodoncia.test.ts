@@ -66,7 +66,8 @@ test("con historial pero sin caso en marcha: se enseña su pestaña, sin abrir h
 
 test("la hoja que se abre es la de «Registrar control», y el aviso se apaga", () => {
   const ficha = sinComentarios(leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx"));
-  assert.match(ficha, /const casoActivo = debeAbrirLaHoja\(\{ tienePlan: Boolean\(t\.treatmentPlanId\), estado: t\.status \}\);/);
+  // ws1-t10 (hallazgo #17 de ws1-t9): mismo criterio que el botón «Registrar control» de la ficha.
+  assert.match(ficha, /const casoActivo = Boolean\(t\.treatmentPlanId\) && t\.status !== "no-iniciado";/);
   // Ronda 6 (ws1-t8, hallazgo 6): «Nueva consulta → Ortodoncia» ya no abre el
   // cajón en blanco directo — pasa por `abrirRegistrarControl`, que resuelve
   // la cita de control de HOY (mismo cargador que la Agenda) antes de abrir.
@@ -147,11 +148,13 @@ test("se cuentan los huecos que quedan por llenar", () => {
   assert.equal(huecosPorLlenar(VACIA), 0);
   assert.equal(huecosPorLlenar({ s: "a ____ b", o: "____ y ____", a: "nada", p: "" }), 3);
   const hoja = leer("src/components/specialties/orthodontics/redesign/drawers/DrawerTreatmentCard.tsx");
-  assert.match(hoja, /const huecos = huecosPorLlenar\(state\.soap\);/);
+  // ws1-t10 (#2 de ws1-t9): ahora el cajón dice cuántos y DÓNDE (hoja-de-control-reglas.ts) y bloquea la firma.
+  assert.match(hoja, /const avisoDeHuecos = mensajeDeHuecos\(state\.soap\);/);
   // Desde la ficha la hoja sabe cuánto dura el caso: «Mes 4 de 18», sin hueco.
   assert.match(hoja, /duracionMeses: props\.defaultsForNew\?\.monthTotal \?\? null,/);
   const ficha = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
   assert.match(ficha, /monthTotal: t\.monthTotal > 0 \? t\.monthTotal : null,/);
   // Fila 12: los huecos pueden venir de la plantilla o de la nota precargada.
-  assert.match(hoja, /Queda 1 hueco \(____\) por llenar\./);
+  // El texto ("Queda 1 hueco (____): 1 en Plan…") lo arma mensajeDeHuecos y lo prueba hoja-de-control-reglas.test.ts.
+  assert.match(hoja, /\{avisoDeHuecos\}/);
 });
