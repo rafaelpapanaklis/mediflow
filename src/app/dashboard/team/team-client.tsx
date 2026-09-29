@@ -17,6 +17,7 @@ import { ModalHorarioDoctor } from "@/components/dashboard/horario-doctor/modal-
 import type { Dia } from "@/components/dashboard/horario-doctor/tipos";
 import { RaizRediseno } from "@/components/dashboard/equipo-rediseno/raiz";
 import { useT, useLocale } from "@/i18n/i18n-provider";
+import { leerRespuestaEquipo } from "@/lib/team/leer-respuesta";
 import { CampoAccesoOrtodoncia, type RespuestaAcceso } from "./campo-acceso-ortodoncia";
 import { ESPECIALIDAD_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { prepararImagen } from "@/lib/image-client";
@@ -439,7 +440,7 @@ function MemberPhoto({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatarUrl: upData.url }),
       });
-      const data = await res.json();
+      const data = await leerRespuestaEquipo(res);
       if (!res.ok) throw new Error(data.error ?? t("settings.team.savePhotoError"));
 
       onChange(upData.url);
@@ -459,7 +460,7 @@ function MemberPhoto({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatarUrl: null }),
       });
-      const data = await res.json();
+      const data = await leerRespuestaEquipo(res);
       if (!res.ok) throw new Error(data.error ?? t("settings.team.removePhotoError"));
       onChange(null);
       toast.success(t("settings.team.photoRemoved"));
@@ -643,7 +644,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify(form),
       });
-      const data = await res.json();
+      const data = await leerRespuestaEquipo(res);
       if (!res.ok) throw new Error(data.error);
       setTeam(prev => [...prev, { ...data, _count:{ appointments:0, records:0 } }]);
       setTempPass(data.tempPassword ?? null);
@@ -675,7 +676,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             : undefined,
         }),
       });
-      const data = await res.json();
+      const data = await leerRespuestaEquipo(res);
       if (!res.ok) throw new Error(data.error);
       // El email se pinta con el que devolvió el server, no con el del form:
       // el endpoint lo normaliza (trim + minúsculas) antes de guardarlo.
@@ -739,7 +740,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
 
     try {
       const res = await fetch(`/api/team/${m.id}/reset-password`, { method: "POST" });
-      const data = await res.json();
+      const data = await leerRespuestaEquipo(res);
       if (!res.ok) throw new Error(data.error ?? t("settings.team.resetPasswordError"));
       // Cerramos el modal de edit y mostramos el banner amarillo de tempPassword
       // (mismo componente que se usa cuando se crea un doctor nuevo).
@@ -764,7 +765,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     }))) return;
     try {
       const res = await fetch(`/api/team/${m.id}`, { method:"DELETE" });
-      const data = await res.json();
+      const data = await leerRespuestaEquipo(res);
       if (!res.ok) throw new Error(data.error);
       if (data.deactivated) {
         setTeam(prev => prev.map(mem => mem.id === m.id ? { ...mem, isActive:false } : mem));

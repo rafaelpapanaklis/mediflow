@@ -361,8 +361,12 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      {/* Animations — keyframes inline para no requerir CSS module. */}
-      <style jsx global>{`
+      {/* Animations — keyframes inline para no requerir CSS module.
+       *  ⛔ <style> a secas, NUNCA la variante «jsx» de styled-jsx: con ella, Babel le añade
+       *  su propia clase a cada <div>/<button> de este archivo y pisa el
+       *  `className` que llega por spread desde `vestir()` — con el rediseño
+       *  encendido el diálogo salía sin cabecera, ícono ni pie (ws1-t3). */}
+      <style>{`
         @keyframes mfConfirmFade {
           from { opacity: 0; }
           to { opacity: 1; }
