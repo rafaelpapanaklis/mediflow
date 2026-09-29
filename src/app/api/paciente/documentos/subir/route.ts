@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { uploadFileToStorage } from "@/lib/storage";
+import { storageQuotaError } from "@/lib/storage-quota";
 import {
   PERFILES,
   validarArchivo,
@@ -88,6 +89,15 @@ export async function POST(req: Request) {
       [link.clinicId, link.patientId, "patient-uploads"],
       validado.extensionReal,
     );
+
+    // El espacio es de la clínica: si ya no cabe, el paciente recibe un aviso
+    // suyo (no el mensaje de «mejora tu plan», que es para la clínica).
+    if (await storageQuotaError(link.clinicId, file.size)) {
+      return NextResponse.json(
+        { error: "Tu clínica no puede recibir más archivos por ahora. Avísale a la clínica." },
+        { status: 402 },
+      );
+    }
 
     try {
       await uploadFileToStorage(storageKey, bytes, validado.mimeReal);

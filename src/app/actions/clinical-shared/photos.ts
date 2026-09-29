@@ -170,6 +170,7 @@ export async function uploadClinicalPhotoAction(
     // Thumbnail best-effort: si su subida falla, la foto queda sin thumb
     // (la UI usa blobUrl) en vez de tumbar la action completa.
     let thumbPath: string | null = null;
+    let thumbBytes = 0;
     if (thumbBody) {
       try {
         const thumbUpload = await uploadClinicalPhoto({
@@ -181,6 +182,7 @@ export async function uploadClinicalPhotoAction(
           body: thumbBody,
         });
         thumbPath = thumbUpload.storagePath;
+        thumbBytes = thumbBody.length;
       } catch (e) {
         console.warn(
           "[clinical-photos] subida de thumbnail falló:",
@@ -200,7 +202,8 @@ export async function uploadClinicalPhotoAction(
         capturedBy: ctx.userId,
         blobUrl: storagePath,
         thumbnailUrl: thumbPath,
-        sizeBytes: mainBody.length,
+        // Foto + miniatura: lo que de verdad ocupa en el bucket.
+        sizeBytes: mainBody.length + thumbBytes,
         notes: parsed.data.notes ?? null,
         annotations: parsed.data.annotations
           ? (parsed.data.annotations as unknown as object)
@@ -254,8 +257,13 @@ export async function deleteClinicalPhotoAction(
     where: { id: photo.id },
     data: { deletedAt: new Date() },
   });
-  await removeClinicalPhotoBinary(photo.blobUrl);
-  if (photo.thumbnailUrl) await removeClinicalPhotoBinary(photo.thumbnailUrl);
+  // El tamaño solo se libera si el binario de verdad salió del bucket: si el
+  // borrado falla, la foto sigue ocupando y la cuenta lo refleja.
+  const principalBorrada = await removeClinicalPhotoBinary(photo.blobUrl);
+  const miniaturaBorrada = photo.thumbnailUrl ? await removeClinicalPhotoBinary(photo.thumbnailUrl) : true;
+  if (principalBorrada && miniaturaBorrada) {
+    await prisma.clinicalPhoto.update({ where: { id: photo.id }, data: { sizeBytes: 0 } });
+  }
 
   await auditClinicalShared({
     ctx,

@@ -10,13 +10,12 @@
 // se guarda SOLO el path interno — la URL se firma bajo demanda (TTL corto)
 // en listarCompras().
 //
-// A propósito NO cuenta contra la cuota de almacenamiento del plan
-// (storageQuotaError): storage-quota.ts ya documenta "archivos de
-// laboratorios y proveedores" como una subestimación conocida y aceptada
-// ("nunca sobreestima"); un comprobante de compra es del mismo calibre —
-// ocasional y pequeño — así que no se tocó ese archivo compartido.
+// Cuenta contra la cuota de almacenamiento del plan (ws1-t6): se pregunta a
+// storageQuotaError ANTES de subir y el tamaño queda anotado en
+// clinic_storage_objects (kind RECEIPT).
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { registrarObjetoAlmacen, olvidarObjetoAlmacen } from "@/lib/storage-usage";
 import { BUCKETS, uploadFileToStorage, removeFileFromStorage, signMaybeUrl } from "@/lib/storage";
 import {
   PERFILES,
@@ -53,6 +52,10 @@ export class ComprobanteInvalidoError extends Error {
 export class CompraNoEncontradaError extends Error {
   code = "COMPRA_NO_ENCONTRADA" as const;
   constructor() { super("La compra no existe en esta clínica."); }
+}
+
+export class ComprobanteSinEspacioError extends Error {
+  constructor(message: string) { super(message); }
 }
 
 export interface ComprobanteSubido {
@@ -116,7 +119,17 @@ export async function subirComprobanteDeCompra(
     validado.extensionReal,
   );
 
+  // Import diferido: storage-quota trae plans.ts (server-only) y las pruebas de
+  // validación de este módulo corren fuera de Next.
+  const { storageQuotaError } = await import("@/lib/storage-quota");
+  const sinEspacio = await storageQuotaError(params.clinicId, bytes.byteLength);
+  if (sinEspacio) {
+    const detalle = (await sinEspacio.json().catch(() => null)) as { error?: string } | null;
+    throw new ComprobanteSinEspacioError(detalle?.error ?? "No hay espacio en tu plan para este comprobante.");
+  }
+
   await uploadFileToStorage(path, bytes, validado.mimeReal, BUCKETS.PATIENT_FILES);
+  await registrarObjetoAlmacen({ clinicId: params.clinicId, kind: "RECEIPT", bucket: BUCKETS.PATIENT_FILES, path, sizeBytes: bytes.byteLength });
 
   try {
     await db.inventoryPurchase.update({
@@ -126,7 +139,7 @@ export async function subirComprobanteDeCompra(
   } catch (e) {
     // El archivo ya subió al bucket pero no se pudo enlazar en la base —
     // limpiar el objeto huérfano antes de propagar el error.
-    await removeFileFromStorage(path, BUCKETS.PATIENT_FILES).catch(() => {});
+    await removeFileFromStorage(path, BUCKETS.PATIENT_FILES).then(() => olvidarObjetoAlmacen(BUCKETS.PATIENT_FILES, path)).catch(() => {});
     if (faltaTabla(e)) throw new ComprasTablaFaltanteError();
     throw e;
   }
@@ -134,7 +147,9 @@ export async function subirComprobanteDeCompra(
   // Reemplazo: si ya había un comprobante, se borra el anterior (best-effort,
   // nunca bloquea la respuesta por un fallo de borrado).
   if (compra.receiptFilePath) {
-    removeFileFromStorage(compra.receiptFilePath, BUCKETS.PATIENT_FILES).catch((e) =>
+    removeFileFromStorage(compra.receiptFilePath, BUCKETS.PATIENT_FILES)
+      .then(() => olvidarObjetoAlmacen(BUCKETS.PATIENT_FILES, compra!.receiptFilePath!))
+      .catch((e) =>
       console.error("[comprobante] no se pudo borrar el archivo anterior:", (e as Error)?.message ?? e),
     );
   }

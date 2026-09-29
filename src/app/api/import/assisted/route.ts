@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { storageQuotaError } from "@/lib/storage-quota";
+import { registrarObjetoAlmacen } from "@/lib/storage-usage";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { getAuthContext, requireRole, type AuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -125,6 +127,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Lo que la clínica manda para migrar también ocupa en su plan.
+  const cuotaErr = await storageQuotaError(ctx.clinicId, file.size);
+  if (cuotaErr) return cuotaErr;
+
   try {
     const supabase = getAdminSupabase();
     const { error: uploadError } = await supabase.storage
@@ -134,6 +140,7 @@ export async function POST(req: NextRequest) {
       console.error("[import/assisted] storage upload error:", uploadError);
       return NextResponse.json({ error: "No se pudo subir el archivo" }, { status: 500 });
     }
+    await registrarObjetoAlmacen({ clinicId: ctx.clinicId, kind: "SUPPORT", bucket: BUCKETS.PATIENT_FILES, path, sizeBytes: file.size });
   } catch (e) {
     console.error("[import/assisted] upload exception:", e);
     return NextResponse.json({ error: "No se pudo procesar el archivo" }, { status: 500 });

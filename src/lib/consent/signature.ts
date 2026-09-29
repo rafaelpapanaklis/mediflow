@@ -116,6 +116,13 @@ export async function uploadSignature(path: string, buffer: Buffer): Promise<str
       console.error("[consent/signature] upload falló:", error.message);
       return null;
     }
+    // La firma ocupa en el plan de la clínica (signatures/<clinicId>/…). Se anota,
+    // pero NUNCA se bloquea por cuota: perder el consentimiento del paciente es peor.
+    const clinicId = path.split("/")[1];
+    if (clinicId) {
+      const { registrarObjetoAlmacen } = await import("@/lib/storage-usage");
+      await registrarObjetoAlmacen({ clinicId, kind: "SIGNATURE", bucket: BUCKETS.PATIENT_FILES, path, sizeBytes: buffer.length });
+    }
     return path;
   } catch (e) {
     console.error("[consent/signature] excepción al subir:", e);

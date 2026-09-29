@@ -15,6 +15,7 @@ import {
 import { validateModel3D } from "@/lib/validate-upload";
 import { CBCT_LITE_SUFFIX } from "@/components/patient-3d/cbct-lite-shared";
 import { storageQuotaError } from "@/lib/storage-quota";
+import { registrarObjetoAlmacen } from "@/lib/storage-usage";
 import {
   tieneExtensionPeligrosa,
   registrarSubidaRechazada,
@@ -350,12 +351,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const { convertMeshToWebGlb } = await import("@/lib/mesh-to-glb");
       const glb = await convertMeshToWebGlb(bytes, ext as "stl" | "ply" | "obj");
       const webPath = `${path}${WEB_GLB_SUFFIX}`;
-      const { error: webErr } = await supabase.storage
-        .from(BUCKETS.PATIENT_FILES)
-        .upload(webPath, glb, { contentType: GLB_CONTENT_TYPE, upsert: true });
+      // El GLB también ocupa: si no cabe en el plan se omite (el visor usa el original).
+      const glbSinCupo = await storageQuotaError(ctx.clinicId, glb.length);
+      const { error: webErr } = glbSinCupo
+        ? { error: new Error("sin espacio en el plan") }
+        : await supabase.storage
+            .from(BUCKETS.PATIENT_FILES)
+            .upload(webPath, glb, { contentType: GLB_CONTENT_TYPE, upsert: true });
       if (webErr) {
-        console.error("[models-3d] web GLB upload error:", webErr);
+        console.error("[models-3d] web GLB no subido:", webErr);
       } else {
+        await registrarObjetoAlmacen({ clinicId: ctx.clinicId, kind: "MODEL_WEB", bucket: BUCKETS.PATIENT_FILES, path: webPath, sizeBytes: glb.length });
         webUrl = await signMaybeUrl(webPath).catch(() => "");
       }
     } catch (e) {

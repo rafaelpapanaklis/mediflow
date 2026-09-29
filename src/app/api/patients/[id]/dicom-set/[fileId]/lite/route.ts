@@ -14,7 +14,9 @@ import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { persistentRateLimit, acquireLock, releaseLock } from "@/lib/failban";
 import { prisma } from "@/lib/prisma";
-import { BUCKETS, extractStoragePath, SIGNED_URL_TTL_SECONDS } from "@/lib/storage";
+import { storageQuotaError } from "@/lib/storage-quota";
+import { registrarObjetoAlmacen } from "@/lib/storage-usage";
+import { BUCKETS, extractStoragePath, getStorageObjectSize, SIGNED_URL_TTL_SECONDS } from "@/lib/storage";
 import { CBCT_LITE_SUFFIX, CBCT_LITE_HI_SUFFIX, CBCT_LITE_CONTENT_TYPE } from "@/components/patient-3d/cbct-lite-shared";
 import { MAX_CBCT_LITE_BYTES, formatBytes } from "@/lib/uploads/patient-study-upload";
 
@@ -128,6 +130,12 @@ export async function POST(
       .from(BUCKETS.PATIENT_FILES)
       .createSignedUrl(litePath, SIGNED_URL_TTL_SECONDS);
     if (!error && data?.signedUrl) {
+      // Un lite generado ANTES de que se contara: se anota ahora (una vez; el
+      // upsert lo deja igual las siguientes) para que ya ocupe en el plan.
+      const tam = await getStorageObjectSize(litePath).catch(() => null);
+      if (tam != null) {
+        await registrarObjetoAlmacen({ clinicId: ctx.clinicId, kind: "CBCT_LITE", bucket: BUCKETS.PATIENT_FILES, path: litePath, sizeBytes: tam });
+      }
       return NextResponse.json({ liteUrl: data.signedUrl, cached: true });
     }
     // Si la firma falla pese a existir, seguimos a regenerar (defensivo).
@@ -205,7 +213,18 @@ export async function POST(
       );
     }
 
-    // 6) Sube el binario lite hermano (upsert: regenera si se forzó).
+    // 6) El lite también ocupa en el bucket: se cuenta contra el plan ANTES de
+    //    subirlo. Regenerar (upsert) reemplaza el anterior, no suma otro.
+    const yaRegistrado = await prisma.clinicStorageObject
+      .findUnique({
+        where: { bucket_path: { bucket: BUCKETS.PATIENT_FILES, path: litePath } },
+        select: { sizeBytes: true },
+      })
+      .catch(() => null);
+    const cuotaErr = await storageQuotaError(ctx.clinicId, Math.max(0, bytes.length - (yaRegistrado?.sizeBytes ?? 0)));
+    if (cuotaErr) return cuotaErr;
+
+    // Sube el binario lite hermano (upsert: regenera si se forzó).
     const up = await supabase.storage
       .from(BUCKETS.PATIENT_FILES)
       .upload(litePath, bytes, { contentType: CBCT_LITE_CONTENT_TYPE, upsert: true });
@@ -213,6 +232,14 @@ export async function POST(
       console.error("[cbct-lite] upload error:", up.error);
       return NextResponse.json({ error: "No se pudo guardar la versión ligera" }, { status: 500 });
     }
+
+    await registrarObjetoAlmacen({
+      clinicId: ctx.clinicId,
+      kind: "CBCT_LITE",
+      bucket: BUCKETS.PATIENT_FILES,
+      path: litePath,
+      sizeBytes: bytes.length,
+    });
 
     const signed = await supabase.storage
       .from(BUCKETS.PATIENT_FILES)

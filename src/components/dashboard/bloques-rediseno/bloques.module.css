@@ -1054,3 +1054,91 @@
     transition: none;
   }
 }
+
+/* ── Almacenamiento (tarjeta dentro de Suscripción) ───────────────── */
+
+.barraRelleno[data-nivel="aviso"] { background: var(--warning, #d97706); }
+.barraRelleno[data-nivel="critico"],
+.barraRelleno[data-nivel="lleno"] { background: var(--danger, #dc2626); }
+
+.almacCuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.almacCifra {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.almacUsado {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--m2-texto);
+}
+
+.almacPct {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m2-texto-3);
+}
+
+.almacBarra {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--m2-hover);
+  overflow: hidden;
+}
+
+.almacLista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.almacFila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--m2-texto-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.almacFila strong {
+  font-weight: 600;
+  color: var(--m2-texto);
+}
+
+.almacAviso {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--warning-border-strong, rgba(217, 119, 6, 0.35));
+  border-radius: 10px;
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  color: var(--warning-strong, #a85a05);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.almacAviso[data-nivel="critico"],
+.almacAviso[data-nivel="lleno"] {
+  border-color: var(--danger-border-strong, rgba(220, 38, 38, 0.35));
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--danger-strong, #991b1b);
+}
+
+.almacNota {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+}

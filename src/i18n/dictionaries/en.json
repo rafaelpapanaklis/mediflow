@@ -618,6 +618,32 @@
       "cta": "View usage",
       "dismiss": "Dismiss notice"
     },
+    "storageCard": {
+      "title": "Storage",
+      "subtitle": "Everything your clinic uploads: photos, X-rays and CBCT, 3D models, documents, signatures and more.",
+      "usedOf": "{used} of {limit}",
+      "usedUnlimited": "{used} used · unlimited plan",
+      "loading": "Calculating your storage…",
+      "cat_fotos": "Photos",
+      "cat_radiografias": "X-rays and CBCT",
+      "cat_modelos3d": "3D models",
+      "cat_documentos": "Documents",
+      "cat_otros": "Other",
+      "warn": "You have used {percent}% of your storage. Free up space or upgrade your plan before it fills up.",
+      "critical": "You are almost out of space ({percent}% used). Soon you will not be able to upload new files.",
+      "full": "Your storage is full: you cannot upload new files until you free up space or upgrade your plan.",
+      "note": "Files you remove from a record keep taking up space for as long as they exist in storage."
+    },
+    "storageBanner": {
+      "warnTitle": "You have used {percent}% of your storage",
+      "warnBody": "When it fills up you will not be able to upload new photos, X-rays or studies.",
+      "criticalTitle": "Almost out of space: {percent}% of your storage",
+      "criticalBody": "Free up space or upgrade your plan to keep uploading studies.",
+      "fullTitle": "Your storage is full",
+      "fullBody": "You cannot upload new files until you free up space or upgrade your plan.",
+      "cta": "View storage",
+      "dismiss": "Dismiss notice"
+    },
     "expiredPlanModal": {
       "title": "Activate your plan",
       "desc": "Your access to the dashboard is blocked. Activate your plan to start using DaleControl.",

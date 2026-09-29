@@ -5,6 +5,8 @@ import { createClient as createAdmin } from "@supabase/supabase-js";
 import sharp from "sharp";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { BUCKETS } from "@/lib/storage";
+import { storageQuotaError } from "@/lib/storage-quota";
+import { registrarObjetoAlmacen } from "@/lib/storage-usage";
 import { allPhotoSlotIds } from "@/app/[slug]/_shared/template-manifest";
 import { LOGO_ALLOWED_MIME_TYPES } from "@/lib/clinic-logo";
 import {
@@ -199,6 +201,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // La landing también ocupa en el plan de la clínica: cuota ANTES de subir.
+  const cuotaErr = await storageQuotaError(ctx.clinicId, file.size);
+  if (cuotaErr) return cuotaErr;
+
   const { error } = await supabase.storage
     .from(BUCKETS.CLINIC_PUBLIC)
     .upload(path, bytes, { contentType: file.type, upsert: false });
@@ -207,6 +213,7 @@ export async function POST(req: NextRequest) {
     console.error("Upload error:", error);
     return NextResponse.json({ error: "Error al subir imagen" }, { status: 500 });
   }
+  await registrarObjetoAlmacen({ clinicId: ctx.clinicId, kind: "LANDING", bucket: BUCKETS.CLINIC_PUBLIC, path, sizeBytes: file.size });
 
   // Public URL — la landing es pública e indexable, no usa signed URLs.
   const { data: publicData } = supabase.storage.from(BUCKETS.CLINIC_PUBLIC).getPublicUrl(path);

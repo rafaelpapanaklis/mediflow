@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { storageQuotaError } from "@/lib/storage-quota";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import {
@@ -201,6 +202,11 @@ export async function POST(
   // (escaneos, DICOM, radiografías) → nunca URL pública.
   const safeExt = ext === "jpeg" ? "jpg" : ext;
   const path = `${order.labId}/${orderId}/${randomUUID()}.${safeExt}`;
+
+  // Los archivos de laboratorio de la orden ocupan en el plan de la clínica
+  // (dental_lab_order_files.sizeBytes ya se suma en medirAlmacenamiento).
+  const cuotaErr = await storageQuotaError(ctx.clinicId, file.size);
+  if (cuotaErr) return cuotaErr;
 
   const supabase = getAdminSupabase();
   const { error: uploadError } = await supabase.storage

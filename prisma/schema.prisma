@@ -19369,3 +19369,25 @@ model OrthodonticsClinicSettings {
 
   @@map("orthodontics_clinic_settings")
 }
+
+/// Uso de almacenamiento por archivo para lo que NO tiene columna de tamaño en
+/// su propia tabla (derivados como el CBCT ligero y el GLB web, miniaturas,
+/// firmas, comprobantes, landing, soporte). Una fila por objeto de Storage,
+/// única por (bucket, path): regenerar el mismo objeto actualiza, no duplica.
+/// Solo crece: el objeto sigue ocupando mientras exista en el bucket. Sin FK en
+/// Prisma a propósito (el SQL sí la crea con ON DELETE CASCADE).
+model ClinicStorageObject {
+  id        String   @id @default(cuid())
+  clinicId  String
+  /// CBCT_LITE | MODEL_WEB | PHOTO_THUMB | SIGNATURE | RECEIPT | LANDING | SUPPORT
+  kind      String
+  bucket    String
+  path      String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bucket, path])
+  @@index([clinicId, kind])
+  @@map("clinic_storage_objects")
+}

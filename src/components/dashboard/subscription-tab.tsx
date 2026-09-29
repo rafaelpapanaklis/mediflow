@@ -14,6 +14,7 @@ import { PaymentMethodModal } from "./payment-method-modal";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 import { resolverMetodoPago, textosMetodoPago, avisoMetodoPago } from "@/lib/billing/metodo-de-pago-vista";
 import { CfdiUsageCard } from "./cfdi-usage-card";
+import { StorageUsageCard } from "./storage-usage-card";
 import { useT } from "@/i18n/i18n-provider";
 import { textosDeFila, type BillingInvoiceRow } from "@/lib/billing/historial-facturas";
 import { ROPA_DESGLOSE, SuscripcionRediseno, type RopaDesglose } from "./bloques-rediseno/suscripcion";
@@ -540,6 +541,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
           formatFecha,
           formatMoney,
           cfdi: <CfdiUsageCard rediseno />,
+          almacenamiento: <StorageUsageCard rediseno />,
           modalPago: (
             <PaymentMethodModal
               open={paymentModalOpen}
@@ -826,6 +828,9 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
 
       {/* ── Facturación CFDI (cupo del mes + excedente + adeudo) ──── */}
       <CfdiUsageCard />
+
+      {/* ── Almacenamiento (GB usados + desglose + avisos) ───────── */}
+      <StorageUsageCard />
 
       {/* ── Facturación ──────────────────────────────────────────── */}
       <section className="bg-card border border-border rounded-2xl p-6" style={{ display: "flex", flexDirection: "column", gap: 14 }}>

@@ -152,6 +152,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       .from(BUCKETS.PATIENT_FILES)
       .upload(path, signatureBuffer, { contentType: "image/png", upsert: true });
     storedPath = path;
+    // Ocupa en el plan de la clínica; se anota sin bloquear (la firma del paciente no se pierde por cuota).
+    const { registrarObjetoAlmacen } = await import("@/lib/storage-usage");
+    await registrarObjetoAlmacen({ clinicId: quote.clinicId, kind: "SIGNATURE", bucket: BUCKETS.PATIENT_FILES, path, sizeBytes: signatureBuffer.length });
   } catch (e) {
     console.error("Quote signature upload error:", e);
     return NextResponse.json({ error: "No se pudo guardar la firma. Intenta de nuevo." }, { status: 500 });

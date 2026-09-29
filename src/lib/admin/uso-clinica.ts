@@ -3,13 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import type { PlanLimits } from "@/lib/plan-shared";
+import { medirAlmacenamiento } from "@/lib/storage-usage";
+import { desgloseVacio, totalDesglose } from "@/lib/storage-usage-core";
 import { cfdiPeriodFor } from "@/lib/cfdi-quota";
 import { tokensVigentes, USO_VACIO, type UsoClinica } from "./uso-core";
 
 /**
  * Lo MEDIDO de cada clínica para /admin (almacenamiento, CFDI del mes, usuarios,
- * sedes, saldo IA), en consultas AGREGADAS: son las mismas 7 con 9 clínicas o
- * con 500, en dos tandas (el pooler se satura por encima de 7 por Promise.all).
+ * sedes, saldo IA), en consultas AGREGADAS: son las mismas con 9 clínicas o
+ * con 500, en tandas (el pooler se satura por encima de 7 por Promise.all).
  *
  * Cada consulta lleva su `.catch`: un timeout no puede tumbar la página, y
  * lo que no se pudo medir sale como `null` («sin dato»), nunca como 0. Qué
@@ -72,13 +74,13 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
   const periodoDe = new Map(clinicas.map((c) => [c.id, cfdiPeriodFor(ahora, c.timezone)]));
   const periodos = Array.from(new Set(periodoDe.values()));
 
-  // ── Tanda 1 (4): almacenamiento, con el MISMO criterio que storage-quota ──
-  const [archivos, fotos, subidas, cfdi] = await Promise.all([
-    seguro(prisma.patientFile.groupBy({ by: ["clinicId"], where: en, _sum: { size: true } }), "archivos de pacientes", avisos),
-    seguro(prisma.clinicalPhoto.groupBy({ by: ["clinicId"], where: { ...en, deletedAt: null }, _sum: { sizeBytes: true } }), "fotos clínicas", avisos),
-    seguro(prisma.patientUpload.groupBy({ by: ["clinicId"], where: en, _sum: { sizeBytes: true } }), "documentos del portal", avisos),
+  // ── Tanda 1 (2): almacenamiento (LA MISMA función que la cuota de subida y la
+  //    tarjeta de Suscripción: @/lib/storage-usage) y CFDI del mes ─────────────
+  const [almacen, cfdi] = await Promise.all([
+    seguro(medirAlmacenamiento(ids), "almacenamiento", avisos),
     seguro(prisma.cfdiUsage.findMany({ where: { ...en, period: { in: periodos } }, select: { clinicId: true, period: true, stamped: true } }), "CFDI del mes", avisos),
   ]);
+  for (const a of almacen?.avisos ?? []) avisos.push(a);
 
   // ── Tanda 2 (3): usuarios activos, dueños (sedes) y saldo IA ─────────────
   const [usuarios, duenos, monederos] = await Promise.all([
@@ -90,13 +92,6 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
     seguro(prisma.aiWallet.findMany({ where: en, select: { clinicId: true, balanceCents: true, status: true } }), "saldo IA", avisos),
   ]);
 
-  const storageMedido = archivos !== null && fotos !== null;
-  const mArchivos = new Map<string, number>();
-  for (const f of archivos ?? []) mArchivos.set(f.clinicId, Number(f._sum.size ?? 0));
-  const mFotos = new Map<string, number>();
-  for (const f of fotos ?? []) mFotos.set(f.clinicId, Number(f._sum.sizeBytes ?? 0));
-  const mSubidas = new Map<string, number>();
-  for (const f of subidas ?? []) mSubidas.set(f.clinicId, Number(f._sum.sizeBytes ?? 0));
   const mUsuarios = new Map<string, number>();
   for (const f of usuarios ?? []) mUsuarios.set(f.clinicId, f._count._all);
   const mCfdi = new Map<string, number>();
@@ -117,9 +112,7 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
     const w = mMonedero.get(c.id);
     porClinica.set(c.id, {
       ...USO_VACIO,
-      storageUsado: storageMedido
-        ? (mArchivos.get(c.id) ?? 0) + (mFotos.get(c.id) ?? 0) + (mSubidas.get(c.id) ?? 0)
-        : null,
+      storageUsado: almacen ? totalDesglose(almacen.porClinica.get(c.id) ?? desgloseVacio()) : null,
       storageTope: lim?.storageBytes ?? null,
       tokensUsados: tokensVigentes(c.aiTokensUsed ?? 0, c.aiLastResetAt, ahora),
       tokensTope: c.aiTokensLimit ?? 0,

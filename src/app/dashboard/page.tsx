@@ -18,6 +18,7 @@ import { HoyAdmin } from "@/components/dashboard/hoy-rediseno/hoy-admin";
 import { HomeClientSwitch } from "./home-client-switch";
 import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist";
 import { AiQuotaBanner } from "@/components/dashboard/ai-quota-banner";
+import { StorageQuotaBanner } from "@/components/dashboard/storage-quota-banner";
 import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
 
 export const dynamic = "force-dynamic";
@@ -121,6 +122,9 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
             cupo mensual. Se auto-gatea (admin + límite > 0) y se descarta por
             sesión; en planes sin IA (límite 0) no aparece nunca. */}
         <AiQuotaBanner rediseno={rediseno} />
+        {/* Aviso de almacenamiento — solo desde el 80 % del tope del plan; se
+            descarta por sesión y por nivel. */}
+        <StorageQuotaBanner rediseno={rediseno} />
         {/* Checklist de primeros pasos — solo admins; se auto-oculta al 100%
             o si el usuario lo descartó (localStorage por clinicId). */}
         <OnboardingChecklist completed={onboardingCompleted} clinicId={clinic.id} rediseno={rediseno} />

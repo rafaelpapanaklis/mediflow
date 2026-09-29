@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { storageQuotaError } from "@/lib/storage-quota";
+import { registrarObjetoAlmacen } from "@/lib/storage-usage";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import sharp from "sharp";
 import { getAuthContext } from "@/lib/auth-context";
@@ -146,6 +148,9 @@ export async function POST(req: NextRequest) {
       .toString(36)
       .slice(2)}.${ext}`;
 
+    const cuotaErr = await storageQuotaError(ctx.clinicId, file.size);
+    if (cuotaErr) return cuotaErr;
+
     const supabase = getAdminSupabase();
     const { error: uploadError } = await supabase.storage
       .from(BUCKETS.PATIENT_FILES)
@@ -155,6 +160,8 @@ export async function POST(req: NextRequest) {
       console.error("[support/attachments] Storage upload error:", uploadError);
       return NextResponse.json({ error: "Error al subir archivo" }, { status: 500 });
     }
+
+    await registrarObjetoAlmacen({ clinicId: ctx.clinicId, kind: "SUPPORT", bucket: BUCKETS.PATIENT_FILES, path, sizeBytes: file.size });
 
     // Solo metadatos (path interno del bucket). El cliente los manda después
     // a POST /api/support/tickets(/[id]/messages) y el service los re-valida.

@@ -5,11 +5,11 @@
  * `./uso-clinica` (server). Se prueba con `npm run test:admin-uso`.
  *
  * ── De dónde sale cada dato (y qué NO se inventa) ───────────────────────────
- *  · Almacenamiento usado = patient_files.size + clinical_photos.sizeBytes
- *    (vivas) + patient_uploads.sizeBytes. Es EXACTAMENTE la suma con la que
- *    `storageQuotaError` (@/lib/storage-quota) decide si una subida cabe en el
- *    plan; el tope es `plan_configs.storageBytes`. Subestima el uso real:
- *    varias rutas suben a Storage sin registrar tamaño (ver ese archivo).
+ *  · Almacenamiento usado = `medirAlmacenamiento` (@/lib/storage-usage): la
+ *    MISMA suma con la que `storageQuotaError` decide si una subida cabe en el
+ *    plan y la que ve la clínica en Suscripción (archivos de pacientes, fotos,
+ *    CBCT, modelos 3D, firmas, comprobantes, landing, laboratorio, soporte);
+ *    el tope es `plan_configs.storageBytes`.
  *  · Tokens IA = Clinic.aiTokensUsed / aiTokensLimit, con el contador puesto a
  *    0 si `aiLastResetAt` es de un mes anterior (`tokensVigentes`), igual que
  *    /api/ai/usage: el reseteo real sólo ocurre en la primera llamada del mes.

@@ -81,10 +81,15 @@ export async function uploadClinicalPhoto(args: UploadPhotoArgs): Promise<Upload
   return { storagePath: path, bucket: BUCKETS.PATIENT_FILES };
 }
 
-/** Borra el binario del bucket (el row sigue con deletedAt). */
-export async function removeClinicalPhotoBinary(path: string): Promise<void> {
+/**
+ * Borra el binario del bucket (el row sigue con deletedAt). Devuelve si de
+ * verdad se borró: solo entonces la foto deja de ocupar en la cuota.
+ */
+export async function removeClinicalPhotoBinary(path: string): Promise<boolean> {
   const { error } = await admin().storage.from(BUCKETS.PATIENT_FILES).remove([path]);
   if (error) {
     console.warn("[clinical-photos] remove falló:", error.message);
+    return false;
   }
+  return true;
 }

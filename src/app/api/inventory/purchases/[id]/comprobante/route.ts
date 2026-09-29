@@ -5,6 +5,7 @@ import {
   subirComprobanteDeCompra,
   ComprasTablaFaltanteError,
   ComprobanteInvalidoError,
+  ComprobanteSinEspacioError,
   CompraNoEncontradaError,
 } from "@/lib/inventory/comprobante.server";
 import { limiteSubidasPorUsuario } from "@/lib/uploads/validar-archivo";
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json(resultado, { status: 201 });
   } catch (e) {
     if (e instanceof ComprasTablaFaltanteError) return NextResponse.json({ error: e.message }, { status: 503 });
+    if (e instanceof ComprobanteSinEspacioError) return NextResponse.json({ error: e.message, code: "PLAN_LIMIT_STORAGE" }, { status: 402 });
     if (e instanceof ComprobanteInvalidoError)  return NextResponse.json({ error: e.message }, { status: 400 });
     if (e instanceof CompraNoEncontradaError)   return NextResponse.json({ error: e.message }, { status: 404 });
     console.error("[inventory/purchases/comprobante] POST error:", (e as Error)?.message ?? e);

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { storageQuotaError } from "@/lib/storage-quota";
+import { registrarObjetoAlmacen } from "@/lib/storage-usage";
 import { randomUUID } from "crypto";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { fileTypeFromBuffer } from "file-type";
@@ -146,6 +148,8 @@ export async function POST(req: NextRequest) {
 
   // Bucket privado, prefijo dedicado, nombre aleatorio (no filtra info).
   const path = `ai-billing/spei-proofs/${ctx.clinicId}/${randomUUID()}.${detected.ext}`;
+  const cuotaErr = await storageQuotaError(ctx.clinicId, buffer.length);
+  if (cuotaErr) return cuotaErr;
   const { error: upErr } = await adminSupabase()
     .storage.from(BUCKETS.PATIENT_FILES)
     .upload(path, buffer, { contentType: detected.mime, upsert: false });
@@ -153,6 +157,7 @@ export async function POST(req: NextRequest) {
     console.error("[ai-wallet/spei/topup] upload error:", upErr.message);
     return NextResponse.json({ error: "No se pudo guardar el comprobante" }, { status: 500 });
   }
+  await registrarObjetoAlmacen({ clinicId: ctx.clinicId, kind: "RECEIPT", bucket: BUCKETS.PATIENT_FILES, path, sizeBytes: buffer.length });
 
   // Guardamos el PATH (no una URL): se firma on-demand al leerlo (admin GET).
   const topup = await prisma.aiTopup.create({

@@ -11,6 +11,7 @@ import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import type { OrthoPhotoSetType } from "@prisma/client";
 import { storageQuotaError } from "@/lib/storage-quota";
+import { registrarObjetoAlmacen } from "@/lib/storage-usage";
 import {
   validarArchivo,
   registrarSubidaRechazada,
@@ -210,6 +211,10 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  // La miniatura no tiene columna de tamaño propia: se anota aparte (el original
+  // ya cuenta por patient_files.size).
+  await registrarObjetoAlmacen({ clinicId: ctx.clinicId, kind: "PHOTO_THUMB", bucket: BUCKET, path: thumbPath, sizeBytes: thumbnail.length });
 
   // Crea PatientFile referenciando el path original.
   const patientFile = await prisma.patientFile.create({

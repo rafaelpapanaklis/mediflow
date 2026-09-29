@@ -618,6 +618,32 @@
       "cta": "Ver consumo",
       "dismiss": "Descartar aviso"
     },
+    "storageCard": {
+      "title": "Almacenamiento",
+      "subtitle": "Todo lo que tu clínica sube: fotos, radiografías y CBCT, modelos 3D, documentos, firmas y más.",
+      "usedOf": "{used} de {limit}",
+      "usedUnlimited": "{used} usados · plan sin límite",
+      "loading": "Calculando tu almacenamiento…",
+      "cat_fotos": "Fotos",
+      "cat_radiografias": "Radiografías y CBCT",
+      "cat_modelos3d": "Modelos 3D",
+      "cat_documentos": "Documentos",
+      "cat_otros": "Otros",
+      "warn": "Llevas {percent}% de tu almacenamiento. Libera espacio o mejora tu plan antes de que se llene.",
+      "critical": "Te queda muy poco espacio ({percent}% usado). Pronto no podrás subir archivos nuevos.",
+      "full": "Tu almacenamiento está lleno: no podrás subir archivos nuevos hasta liberar espacio o mejorar tu plan.",
+      "note": "Lo que quitas de la ficha sigue ocupando espacio mientras el archivo exista en el almacenamiento."
+    },
+    "storageBanner": {
+      "warnTitle": "Llevas {percent}% de tu almacenamiento",
+      "warnBody": "Cuando se llene no podrás subir fotos, radiografías ni estudios nuevos.",
+      "criticalTitle": "Casi sin espacio: {percent}% de tu almacenamiento",
+      "criticalBody": "Libera espacio o mejora tu plan para seguir subiendo estudios.",
+      "fullTitle": "Tu almacenamiento está lleno",
+      "fullBody": "No podrás subir archivos nuevos hasta liberar espacio o mejorar tu plan.",
+      "cta": "Ver almacenamiento",
+      "dismiss": "Descartar aviso"
+    },
     "expiredPlanModal": {
       "title": "Activa tu plan",
       "desc": "Tu acceso al panel está bloqueado. Activa tu plan para empezar a usar DaleControl.",

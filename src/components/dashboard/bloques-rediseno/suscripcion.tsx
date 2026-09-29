@@ -96,6 +96,8 @@ export interface ModeloSuscripcion {
 
   /** La tarjeta «Facturación CFDI», ya vestida por quien la monta. */
   cfdi: ReactNode;
+  /** La tarjeta «Almacenamiento», ya vestida por quien la monta. */
+  almacenamiento: ReactNode;
   /** El modal de método de pago, montado por quien tiene su estado. */
   modalPago: ReactNode;
 }
@@ -302,6 +304,9 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
 
       {/* ── Facturación CFDI (cupo del mes + excedente + adeudo) ──── */}
       {m.cfdi}
+
+      {/* ── Almacenamiento (GB usados + desglose + avisos) ───────── */}
+      {m.almacenamiento}
 
       {/* ── Facturación ──────────────────────────────────────────── */}
       <Seccion
