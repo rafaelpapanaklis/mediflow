@@ -96,6 +96,8 @@ export async function GET(req: NextRequest) {
     orthodontics: true,
     moduleActive: true,
     hasActivePlan: Boolean(plan),
+    // ws1-t8: «Nueva cita» propone al doctor tratante del caso para el control de ortodoncia.
+    treatingDoctorId: plan?.treatingDoctorId ?? null,
     technique: plan?.technique ?? null,
     currentPhase: plan?.phases[0]?.phaseKey ?? null,
     monthInTreatment: plan?.installedAt

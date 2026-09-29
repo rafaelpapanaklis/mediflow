@@ -39,6 +39,7 @@ import {
   type DuracionSugerida,
   type TipoDeCitaConDuracion,
 } from "@/lib/orthodontics/duracion-cita-sugerida";
+import { avisarOtroDoctor, doctorAProponer } from "@/lib/orthodontics/doctor-tratante-cita";
 import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import type {
   OpenNewAppointmentParams,
@@ -144,6 +145,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   // usuario ya cambió a mano en esta apertura.
   const [orthoTiposConDuracion, setOrthoTiposConDuracion] = useState<TipoDeCitaConDuracion[]>([]);
   const [orthoCasoActivo, setOrthoCasoActivo] = useState(false);
+  // ws1-t8: el doctor tratante del caso (para proponerlo en un control de ortodoncia).
+  const [orthoTratanteId, setOrthoTratanteId] = useState<string | null>(null);
+  // Si la persona ya eligió doctor a mano, no se le vuelve a cambiar.
+  const doctorTocadoAMano = useRef(false);
   const [orthoDuracionSugerida, setOrthoDuracionSugerida] = useState<DuracionSugerida | null>(null);
   const duracionTocadaAMano = useRef(false);
   // Los presets propios de ortodoncia NO pasan por `t()`: son el texto
@@ -280,6 +285,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     setPediatricContext(null);
     setBloqueoPendiente(null);
     duracionTocadaAMano.current = false;
+    doctorTocadoAMano.current = false;
     setOrthoDuracionSugerida(null);
 
     const initialSlot = params?.initialSlot;
@@ -366,19 +372,43 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   useEffect(() => {
     if (!patient || !hayModuloOrto) {
       setOrthoCasoActivo(false);
+      setOrthoTratanteId(null);
       return;
     }
     let cancelled = false;
     fetch(`/api/orthodontics/context?patientId=${encodeURIComponent(patient.id)}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
-        if (!cancelled) setOrthoCasoActivo(Boolean(body?.hasActivePlan));
+        if (cancelled) return;
+        setOrthoCasoActivo(Boolean(body?.hasActivePlan));
+        setOrthoTratanteId(typeof body?.treatingDoctorId === "string" && body.treatingDoctorId ? body.treatingDoctorId : null);
       })
       .catch(() => {
-        if (!cancelled) setOrthoCasoActivo(false);
+        if (!cancelled) {
+          setOrthoCasoActivo(false);
+          setOrthoTratanteId(null);
+        }
       });
     return () => { cancelled = true; };
   }, [patient, hayModuloOrto]);
+
+  // ws1-t8: control de ortodoncia de un paciente con caso → propone al doctor tratante
+  // (se puede cambiar; si ya eligió a mano o el hueco ya viene elegido de la agenda, solo avisa).
+  const entradaTratante = {
+    motivo: reason,
+    casoActivo: orthoCasoActivo,
+    tratanteId: orthoTratanteId,
+    doctoresIds: (boot?.doctors ?? []).map((d) => d.id),
+    doctorActual: doctorId,
+  };
+  useEffect(() => {
+    if (doctorTocadoAMano.current || slotIso) return;
+    const propuesto = doctorAProponer(entradaTratante);
+    if (propuesto) setDoctorId(propuesto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reason, orthoCasoActivo, orthoTratanteId, boot, slotIso]);
+  const avisoOtroDoctor = avisarOtroDoctor(entradaTratante);
+  const nombreTratante = boot?.doctors.find((d) => d.id === orthoTratanteId)?.shortName ?? null;
 
   // Al elegir (o escribir) un motivo de ortodoncia para un paciente con caso,
   // propone la duración de ese tipo de cita — salvo que el usuario ya la haya
@@ -616,7 +646,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                     <select
                       className={nueva ? `${nc.control} ${errors.doctorId ? nc.controlError : ""}` : "input-new"}
                       value={doctorId}
-                      onChange={(e) => { setDoctorId(e.target.value); if (errors.doctorId) setErrors((er) => ({ ...er, doctorId: undefined })); }}
+                      onChange={(e) => { doctorTocadoAMano.current = true; setDoctorId(e.target.value); if (errors.doctorId) setErrors((er) => ({ ...er, doctorId: undefined })); }}
                       style={nueva ? undefined : { borderColor: errors.doctorId ? "var(--danger)" : undefined }}
                     >
                       {boot.doctors.length === 0 && <option value="">{t("appointments.newApptDialog.optionNoActiveProfessionals")}</option>}
@@ -645,6 +675,17 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                     </Field>
                   )}
                 </div>
+
+                {avisoOtroDoctor && nombreTratante ? (
+                  <div
+                    {...(nueva ? { className: nc.pediatria } : { style: pediatricBannerStyle })}
+                    role="note"
+                  >
+                    <span {...(nueva ? { className: nc.pediatriaTexto } : { style: pediatricHintStyle })}>
+                      {`El doctor tratante de este caso es ${nombreTratante}. Estás agendando el control con otro doctor.`}
+                    </span>
+                  </div>
+                ) : null}
 
                 {pediatricContext ? (
                   <div {...(nueva ? { className: nc.pediatria } : { style: pediatricBannerStyle })} role="note" aria-label={t("appointments.newApptDialog.pediatricAriaLabel")}>
