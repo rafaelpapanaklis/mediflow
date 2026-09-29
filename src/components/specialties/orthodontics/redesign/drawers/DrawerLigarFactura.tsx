@@ -43,7 +43,7 @@ export function DrawerLigarFactura(props: DrawerLigarFacturaProps) {
     setLigando(f.id);
     setError(null);
     try {
-      const r = await abrirPlanDePago({ treatmentPlanId: props.treatmentPlanId, invoiceId: f.id });
+      const r = await abrirPlanDePago({ treatmentPlanId: props.treatmentPlanId, invoiceId: f.id, origen: "ligar" });
       if (isFailure(r)) { setError(r.error); return; }
       if (r.data.aviso) window.alert(r.data.aviso);
       props.onLigada();

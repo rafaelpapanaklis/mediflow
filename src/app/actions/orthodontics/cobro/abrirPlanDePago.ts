@@ -30,12 +30,21 @@ import {
 } from "@/lib/orthodontics/cobro/plan-de-pago-duplicado";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro, auditarCobro, type CasoParaCobro } from "./_ctx";
+import { idsDeFacturasLigadasAUnCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
 export async function abrirPlanDePago(args: {
   treatmentPlanId: string;
   invoiceId: string;
+  /**
+   * `"ligar"` = el usuario ELIGIÓ una factura que ya existía (cajón «Ya tengo la
+   * factura»). Ahí nunca se cancela nada por «duplicada» (esa limpieza es solo para
+   * la factura que la misma pestaña acaba de crear) y solo se acepta una factura
+   * sin cita y que no sea un extra/control de un caso.
+   */
+  origen?: "crear" | "ligar";
 }): Promise<ActionResult<{ invoiceId: string; aviso?: string }>> {
+  const soloLigar = args.origen === "ligar";
   const ctxResult = await getOrthoBillingActionContext("billing.create");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
@@ -61,6 +70,7 @@ export async function abrirPlanDePago(args: {
     }
     // X4: otra pestaña ya ligó OTRA factura vigente — esta recibe esa.
     if (anterior && anterior.status !== "CANCELLED") {
+      if (soloLigar) return fail("Este caso ya tiene su plan de pago abierto (quizá desde otra pestaña). No se ligó ni se canceló ninguna factura: recarga la pantalla.");
       return quedarseConLaVigente({ ctx, caso, vigenteId: caso.invoiceId, duplicadaId: args.invoiceId });
     }
     if (anterior?.status !== "CANCELLED") return fail("Este caso ya tiene un plan de pago abierto");
@@ -69,7 +79,7 @@ export async function abrirPlanDePago(args: {
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: args.invoiceId, clinicId: ctx.clinicId },
-    select: { id: true, patientId: true, status: true, orthodonticTreatmentPlan: { select: { id: true } } },
+    select: { id: true, patientId: true, status: true, appointmentId: true, orthodonticTreatmentPlan: { select: { id: true } } },
   });
   if (!invoice) return fail("La factura no existe o es de otra clínica");
   if (invoice.patientId !== caso.patientId) return fail("La factura no es de este paciente");
@@ -79,6 +89,12 @@ export async function abrirPlanDePago(args: {
   if (invoice.status === "CANCELLED") return fail("Esa factura está cancelada: no puede ser el plan de pago");
   if (invoice.orthodonticTreatmentPlan && invoice.orthodonticTreatmentPlan.id !== args.treatmentPlanId) {
     return fail("Esa factura ya es el plan de pago de otro caso");
+  }
+  if (soloLigar) {
+    if (invoice.appointmentId) return fail("Esa factura es de una cita: no puede ser el plan de pago del tratamiento");
+    if ((await idsDeFacturasLigadasAUnCaso(ctx.clinicId, [invoice.id])).size > 0) {
+      return fail("Esa factura ya es un extra o el cobro de un control de un caso: no puede ser el plan de pago");
+    }
   }
 
   // Solo si SIGUE sin plan vigente (defensivo contra doble clic / dos
@@ -104,6 +120,7 @@ export async function abrirPlanDePago(args: {
         select: { status: true },
       });
       if (vigente && vigente.status !== "CANCELLED") {
+        if (soloLigar) return fail("Este caso ya tiene su plan de pago abierto (quizá desde otra pestaña). No se ligó ni se canceló ninguna factura: recarga la pantalla.");
         return quedarseConLaVigente({ ctx, caso, vigenteId: ahora.invoiceId, duplicadaId: args.invoiceId });
       }
     }

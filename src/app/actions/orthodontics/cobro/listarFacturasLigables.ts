@@ -6,6 +6,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { conceptoDeFactura, esFacturaLigable, ESTADOS_LIGABLES } from "@/lib/orthodontics/cobro/facturas-ligables";
+import { idsDeFacturasLigadasAUnCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro } from "./_ctx";
 import { fail, isFailure, ok, type ActionResult } from "../result";
@@ -44,9 +45,13 @@ export async function listarFacturasLigables(args: {
     select: { id: true, invoiceNumber: true, items: true, total: true, paid: true, status: true, appointmentId: true, createdAt: true },
   });
 
+  // Un extra o un cargo de control también está «ligado a un caso» (por la columna de
+  // extras, que `orthodonticTreatmentPlan` no ve): no es el plan de pago.
+  const ligadasComoExtra = await idsDeFacturasLigadasAUnCaso(ctx.clinicId, filas.map((f) => f.id));
+
   return ok({
     facturas: filas
-      .filter((f) => esFacturaLigable({ status: f.status, appointmentId: f.appointmentId, ligadaACaso: null }))
+      .filter((f) => esFacturaLigable({ status: f.status, appointmentId: f.appointmentId, ligadaACaso: ligadasComoExtra.has(f.id) ? "extra" : null }))
       .map((f) => ({
         id: f.id,
         invoiceNumber: f.invoiceNumber,
