@@ -20,7 +20,9 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { makePng, WEBP } from "@/lib/pdf/__tests__/_imagenes-de-prueba";
-import { separacionCuerpoPie, textoVisiblePorPagina } from "@/lib/pdf/__tests__/_texto-del-pdf";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { separacionCuerpoPie, textoVisiblePorPagina, textosPintados } from "@/lib/pdf/__tests__/_texto-del-pdf";
 
 const CLINICA = "clinic_1";
 
@@ -30,6 +32,10 @@ let selectPedido: Record<string, unknown> | null = null;
 let clinicRow: Record<string, unknown> = {};
 /** Lo que una prueba quiera cambiar de la factura (conceptos, UUID…). */
 let facturaExtra: Record<string, unknown> = {};
+/** ws1-t10: las condiciones de cobro (`invoice_payment_terms`) de la factura; `null` = de un solo pago. */
+let condicionesFila: Record<string, unknown> | null = null;
+/** ws1-t10: si el doble de la base sabe contestar SQL crudo (sin él, el comprobante sale como siempre). */
+let sqlCrudo = true;
 
 function invoiceRow() {
   return {
@@ -63,6 +69,13 @@ function invoiceRow() {
 mock.module("@/lib/prisma", {
   namedExports: {
     prisma: {
+      // La sonda `to_regclass` y la lectura de `invoice_payment_terms`.
+      $queryRaw: async (strings: TemplateStringsArray) => {
+        if (!sqlCrudo) throw new Error("sin SQL crudo");
+        const sql = strings.join("?");
+        if (sql.includes("to_regclass")) return [{ existe: true }];
+        return condicionesFila ? [condicionesFila] : [];
+      },
       invoice: {
         findFirst: async ({ where, select }: any) => {
           selectPedido = select;
@@ -228,5 +241,101 @@ describe("comprobante de pago — la cabecera de la clínica", () => {
     clinica();
     const { buildInvoicePrintPdf } = await import("../print-pdf");
     assert.equal(await buildInvoicePrintPdf("inv_1", "otra_clinica"), null);
+  });
+});
+
+// ── ws1-t10 · el PDF de una factura A PLAZOS explica cómo se paga ─────────
+
+/** Todo lo que el PDF pinta, en un solo texto (renglones unidos por espacio). */
+function textoDe(buf: Buffer): string {
+  return textosPintados(buf).flat().map((t) => t.s).join(" ");
+}
+
+/** Como la de Rafael Clínica: total $38,000, enganche $8,000 + 15 pagos de $2,000, pagado $20,000 (enganche + 6 cuotas). */
+function facturaAPlazos() {
+  facturaExtra = {
+    invoiceNumber: "PRUEBA-ORTO-0003",
+    status: "PARTIAL",
+    subtotal: 38000, discount: 0, total: 38000, paid: 20000, balance: 18000, taxRate: 0,
+    items: [{ description: "Tratamiento de ortodoncia", quantity: 1, unitPrice: 38000, total: 38000 }],
+    payments: [
+      { amount: 8000, method: "transfer", reference: null, paidAt: new Date("2026-02-01T18:00:00.000Z") },
+      { amount: 4000, method: "cash", reference: null, paidAt: new Date("2026-03-05T18:00:00.000Z") },
+      { amount: 8000, method: "debit", reference: "AUT-1", paidAt: new Date("2026-04-05T18:00:00.000Z") },
+    ],
+  };
+  condicionesFila = {
+    invoiceId: "inv_1", modo: "plazos", metodo: null, enganche: 8000, numPagos: 15,
+    frecuencia: "MONTHLY", primerPago: new Date("2026-02-01T00:00:00.000Z"), difiereConSuBanco: false,
+  };
+}
+
+describe("comprobante de pago — factura a plazos (ws1-t10)", () => {
+  after(() => { facturaExtra = {}; condicionesFila = null; sqlCrudo = true; });
+
+  it("dice la forma de pago con la misma frase de la tarjeta y pinta el calendario completo", async () => {
+    facturaAPlazos();
+    const out = await generar();
+    const t = textoDe(out!.buffer);
+    if (process.env.VER_PDF) console.log(t);
+    assert.match(t, /Forma de pago:/i);
+    assert.match(t, /Enganche de \$8,000\.00 y 15 pagos mensuales de \$2,000\.00, el primero el 1 de marzo de 2026/);
+    assert.match(t, /Plan de pagos/i);
+    assert.match(t, /Enganche/);
+    assert.match(t, /Pago 1 de 15/);
+    assert.match(t, /Pago 15 de 15/);
+    // Fechas dd/mm/aaaa con año: el enganche el 01/02/2026, la cuota 15 el 01/05/2027.
+    assert.match(t, /01\/02\/2026/);
+    assert.match(t, /01\/05\/2027/);
+    // Concepto y total de siempre.
+    assert.match(t, /Tratamiento de ortodoncia/);
+    assert.match(t, /\$38,000\.00/);
+  });
+
+  it("cada cuota dice si está pagada (con su fecha), por vencer o vencida; y hay Pagado / Saldo", async () => {
+    facturaAPlazos();
+    const t = textoDe((await generar())!.buffer);
+    assert.match(t, /Pagado el 01\/02\/2026/, "el enganche se saldó con el primer movimiento");
+    assert.match(t, /Pagado el 05\/04\/2026/, "las cuotas siguientes, cuando el acumulado las alcanzó");
+    assert.match(t, /Vencido/, "la cuota 7 venció el 01/09/2026");
+    assert.match(t, /Por vencer/);
+    assert.match(t, /Pagos recibidos/i);
+    assert.match(t, /05\/03\/2026/);
+    assert.match(t, /Transferencia/);
+    assert.match(t, /Pagado/);
+    assert.match(t, /Saldo/);
+    assert.match(t, /\$20,000\.00/);
+    assert.match(t, /\$18,000\.00/);
+  });
+
+  it("una factura de un solo pago (con o sin condiciones) sale IGUAL que siempre", async () => {
+    facturaExtra = {};
+    condicionesFila = null;
+    const base = textoDe((await generar())!.buffer);
+    assert.doesNotMatch(base, /Forma de pago|Plan de pagos|Pagos recibidos/i);
+    assert.match(base, /Pagos realizados/i);
+    assert.match(base, /Saldo pendiente/i);
+
+    condicionesFila = { invoiceId: "inv_1", modo: "unico", metodo: "cash", enganche: 0, numPagos: 0, frecuencia: "MONTHLY", primerPago: null, difiereConSuBanco: false };
+    const unico = textoDe((await generar())!.buffer);
+    assert.doesNotMatch(unico, /Forma de pago|Plan de pagos/i);
+    assert.match(unico, /Pagos realizados/i);
+  });
+
+  it("sin SQL crudo (tabla o base caída) el comprobante sale igual y no se cae", async () => {
+    facturaAPlazos();
+    sqlCrudo = false;
+    try {
+      const out = await generar();
+      assert.ok(out);
+      assert.doesNotMatch(textoDe(out!.buffer), /Plan de pagos/i);
+    } finally {
+      sqlCrudo = true;
+    }
+  });
+
+  it("la lectura de las condiciones va acotada por la clínica de la sesión", async () => {
+    const fuente = readFileSync(join(__dirname, "..", "print-pdf.tsx"), "utf8");
+    assert.match(fuente, /leerCondicionesDeFacturas\(prisma, \{ clinicId, invoiceIds: \[id\] \}\)/);
   });
 });

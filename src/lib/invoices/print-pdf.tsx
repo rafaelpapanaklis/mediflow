@@ -8,6 +8,14 @@
 // clínica que pase el caller (mismo patrón que lib/quotes/quote-pdf).
 
 import { prisma } from "@/lib/prisma";
+import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
+import {
+  ZONA_POR_DEFECTO,
+  diaEnZona,
+  fechaDeMovimiento,
+  planParaComprobante,
+  type PlanDelComprobante,
+} from "@/lib/invoices/plan-en-comprobante";
 import { itemQuantity, itemUnitPrice, itemLineTotal, invoicePrintTotals, round2 } from "@/lib/invoice-totals";
 import {
   ClinicLetterhead,
@@ -119,6 +127,22 @@ const styles = StyleSheet.create({
   paySub: { fontSize: 8.5, color: "#64748b", marginTop: 1 },
   payAmount: { fontSize: 9.5, color: "#047857", fontFamily: "Helvetica-Bold" },
 
+  // ws1-t10 — factura a plazos: la forma de pago y el calendario de cuotas.
+  formaPago: { fontSize: 10, color: "#0f172a", lineHeight: 1.4, marginTop: 16 },
+  formaPagoLabel: { fontFamily: "Helvetica-Bold" },
+  planHeader: {
+    flexDirection: "row", backgroundColor: "#eff6ff", paddingVertical: 5, paddingHorizontal: 6,
+    borderBottomWidth: 1, borderBottomColor: "#bfdbfe",
+  },
+  planRow: {
+    flexDirection: "row", paddingVertical: 3.5, paddingHorizontal: 6,
+    borderBottomWidth: 0.5, borderBottomColor: "#e2e8f0",
+  },
+  planColEtiqueta: { width: "26%" },
+  planColFecha: { width: "20%" },
+  planColMonto: { width: "22%", textAlign: "right" },
+  planColEstado: { width: "32%", textAlign: "right" },
+
   footer: {
     position: "absolute", bottom: 30, left: 40, right: 40, fontSize: 8, color: "#94a3b8",
     textAlign: "center", borderTopWidth: 0.5, borderTopColor: "#e2e8f0", paddingTop: 8,
@@ -132,9 +156,16 @@ interface ComprobanteProps {
   patient: { name: string; rfc: string | null; razonSocial: string | null; regimen: string | null; cp: string | null };
   items: { description: string; quantity: number; unitPrice: number; total: number }[];
   payments: { amount: number; method: string; reference: string | null; paidAt: Date }[];
+  /** ws1-t10: solo una factura A PLAZOS lo trae; sin él el comprobante sale como siempre. */
+  plan?: PlanDelComprobante | null;
+  /** Zona de la clínica, para las fechas de los movimientos del plan. */
+  zona?: string;
 }
 
+const ESTADO_COLOR: Record<string, string> = { pagada: "#047857", porVencer: "#64748b", vencida: "#b91c1c" };
+
 function ComprobanteDocument(p: ComprobanteProps) {
+  const plan = p.plan ?? null;
   const sello = estadoSello(p.invoice.status, p.invoice.paid, p.invoice.balance);
   // Renglones de dinero que hacen cuadrar el documento: con "IVA agregado" las
   // líneas suman la base y el TOTAL trae el impuesto encima.
@@ -180,7 +211,9 @@ function ComprobanteDocument(p: ComprobanteProps) {
         </View>
 
         {/* Conceptos */}
-        <View style={styles.tableHeader} fixed>
+        {/* Con plan de pagos el encabezado NO se repite: en la hoja 2 quedaría
+            «Descripción / Cant. / P. Unitario» sobre las cuotas. */}
+        <View style={styles.tableHeader} fixed={!p.plan}>
           <Text style={[styles.th, styles.colDesc]}>Descripción</Text>
           <Text style={[styles.th, styles.colQty]}>Cant.</Text>
           <Text style={[styles.th, styles.colUnit]}>P. Unitario</Text>
@@ -227,21 +260,63 @@ function ComprobanteDocument(p: ComprobanteProps) {
           </View>
         </View>
 
+        {/* Forma de pago y calendario — SOLO en una factura a plazos (ws1-t10).
+            La frase es la de la tarjeta de la factura; el estado de cada cuota
+            sale de lo realmente cobrado, no de una tabla aparte. */}
+        {plan ? (
+          <View>
+            <Text style={styles.formaPago}>
+              <Text style={styles.formaPagoLabel}>Forma de pago: </Text>
+              {plan.frase}
+            </Text>
+
+            <Text style={styles.sectionTitle} minPresenceAhead={70}>Plan de pagos</Text>
+            <View style={styles.planHeader} wrap={false}>
+              <Text style={[styles.th, styles.planColEtiqueta]}>Pago</Text>
+              <Text style={[styles.th, styles.planColFecha]}>Fecha</Text>
+              <Text style={[styles.th, styles.planColMonto]}>Monto</Text>
+              <Text style={[styles.th, styles.planColEstado]}>Estado</Text>
+            </View>
+            {plan.filas.map((f, i) => (
+              <View key={i} style={styles.planRow} wrap={false}>
+                <Text style={[styles.td, styles.planColEtiqueta]}>{f.etiqueta}</Text>
+                <Text style={[styles.td, styles.planColFecha]}>{f.fecha}</Text>
+                <Text style={[styles.td, styles.planColMonto]}>{fmtMXN(f.monto)}</Text>
+                <Text style={[styles.td, styles.planColEstado, { color: ESTADO_COLOR[f.estado] }]}>{f.texto}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Pagos */}
-        <Text style={styles.sectionTitle}>Pagos realizados</Text>
+        <Text style={styles.sectionTitle}>{plan ? "Pagos recibidos" : "Pagos realizados"}</Text>
         {p.payments.length === 0 ? (
           <Text style={[styles.td, styles.tdMuted]}>Sin pagos registrados.</Text>
-        ) : p.payments.map((pay, i) => (
-          <View key={i} style={styles.payRow} wrap={false}>
-            <View>
-              <Text style={styles.payLeft}>{METHOD_LABELS[pay.method] ?? pay.method}</Text>
-              <Text style={styles.paySub}>{fmtFecha(pay.paidAt)}{pay.reference ? `  ·  Ref: ${pay.reference}` : ""}</Text>
+        ) : p.payments.map((pay, i) => {
+          const reembolso = plan && pay.method === "refund";
+          return (
+            <View key={i} style={styles.payRow} wrap={false}>
+              <View>
+                <Text style={styles.payLeft}>{METHOD_LABELS[pay.method] ?? pay.method}</Text>
+                <Text style={styles.paySub}>
+                  {plan ? fechaDeMovimiento(pay.paidAt, p.zona) : fmtFecha(pay.paidAt)}
+                  {pay.reference ? `  ·  Ref: ${pay.reference}` : ""}
+                </Text>
+              </View>
+              <Text style={[styles.payAmount, reembolso ? { color: "#b45309" } : {}]}>
+                {reembolso ? "−" : ""}{fmtMXN(pay.amount)}
+              </Text>
             </View>
-            <Text style={styles.payAmount}>{fmtMXN(pay.amount)}</Text>
+          );
+        })}
+        {plan ? (
+          <View style={[styles.totalLine, { marginTop: 8 }]}>
+            <Text style={styles.totalLabel}>Pagado</Text>
+            <Text style={[styles.totalValue, { fontFamily: "Helvetica-Bold", color: "#047857" }]}>{fmtMXN(p.invoice.paid)}</Text>
           </View>
-        ))}
-        <View style={[styles.totalLine, { marginTop: 8 }]}>
-          <Text style={styles.totalLabel}>Saldo pendiente</Text>
+        ) : null}
+        <View style={[styles.totalLine, { marginTop: plan ? 0 : 8 }]}>
+          <Text style={styles.totalLabel}>{plan ? "Saldo" : "Saldo pendiente"}</Text>
           <Text style={[styles.totalValue, { fontFamily: "Helvetica-Bold", color: p.invoice.balance > 0 ? "#b91c1c" : "#047857" }]}>
             {fmtMXN(p.invoice.balance)}
           </Text>
@@ -288,7 +363,7 @@ export async function buildInvoicePrintPdf(
       items: true,
       // logoUrl entra por CLINIC_LETTERHEAD_SELECT; rfcEmisor se suma aparte
       // porque el membrete solo pinta el fiscal donde corresponde y aquí sí.
-      clinic:  { select: { ...CLINIC_LETTERHEAD_SELECT, rfcEmisor: true } },
+      clinic:  { select: { ...CLINIC_LETTERHEAD_SELECT, rfcEmisor: true, timezone: true } },
       patient: { select: { firstName: true, lastName: true, rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } },
       payments: { orderBy: { paidAt: "asc" }, select: { amount: true, method: true, reference: true, paidAt: true } },
     },
@@ -354,6 +429,24 @@ export async function buildInvoicePrintPdf(
       amount: pay.amount, method: pay.method, reference: pay.reference, paidAt: pay.paidAt,
     })),
   };
+
+  // ws1-t10 — una factura A PLAZOS (invoice_payment_terms) explica cómo se paga.
+  // Nunca tumba el comprobante: sin la tabla, sin condiciones o con un fallo de
+  // lectura sale como siempre.
+  const zona = invoice.clinic?.timezone || ZONA_POR_DEFECTO;
+  try {
+    const { porFactura } = await leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds: [id] });
+    props.plan = planParaComprobante({
+      total: invoice.total,
+      condiciones: porFactura.get(id),
+      movimientos: props.payments.map((pay) => ({ amount: pay.amount, method: pay.method, paidAt: pay.paidAt })),
+      hoy: diaEnZona(new Date(), zona),
+      zona,
+    });
+    props.zona = zona;
+  } catch (e) {
+    console.warn("[comprobante] no se pudo leer el plan de pagos:", e);
+  }
 
   const buffer = await renderToBuffer(<ComprobanteDocument {...props} />);
   return { buffer, fileName: `comprobante-${invoice.invoiceNumber}.pdf` };

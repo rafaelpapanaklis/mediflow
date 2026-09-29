@@ -281,3 +281,79 @@ test("montaje: tras el interruptor, sin borradores, y el destino no tapa el cobr
     }
   }
 });
+
+// ── ws1-t10 · el plan en el PDF de la factura ────────────────────────────
+import { fechaDDMMAAAA, fechaDeMovimiento, planParaComprobante } from "../plan-en-comprobante";
+
+/** La de Rafael Clínica: total $38,000, enganche $8,000 + 15 pagos de $2,000, desde el 1 de febrero. */
+const CONDICIONES_ORTO = plazos({ enganche: 8000, numPagos: 15, primerPago: "2026-02-01" });
+const mov = (amount: number, iso: string, method = "cash") => ({ amount, method, paidAt: new Date(iso) });
+
+test("PDF de una factura a plazos: enganche + 15 cuotas, con fecha dd/mm/aaaa, monto y estado", () => {
+  const plan = planParaComprobante({
+    total: 38000,
+    condiciones: CONDICIONES_ORTO,
+    movimientos: [mov(8000, "2026-02-01T18:00:00Z"), mov(12000, "2026-04-05T18:00:00Z")],
+    hoy: "2026-09-29",
+  })!;
+  assert.equal(plan.frase, "Enganche de $8,000.00 y 15 pagos mensuales de $2,000.00, el primero el 1 de marzo de 2026");
+  assert.equal(plan.filas.length, 16);
+  assert.deepEqual(
+    [plan.filas[0].etiqueta, plan.filas[0].fecha, plan.filas[0].monto],
+    ["Enganche", "01/02/2026", 8000],
+  );
+  assert.deepEqual([plan.filas[15].etiqueta, plan.filas[15].fecha], ["Pago 15 de 15", "01/05/2027"]);
+  assert.equal(plan.filas.reduce((a, f) => a + Math.round(f.monto * 100), 0), 3_800_000, "las cuotas suman el total");
+  assert.equal(plan.pagado, 20000);
+  assert.equal(plan.pendiente, 18000);
+  // Enganche + 6 cuotas pagadas; la 7 (01/09) venció; de la 8 en adelante, por vencer.
+  assert.equal(plan.filas.filter((f) => f.estado === "pagada").length, 7);
+  assert.equal(plan.filas[7].estado, "vencida");
+  assert.equal(plan.filas[7].texto, "Vencido");
+  assert.equal(plan.filas[8].texto, "Por vencer");
+  assert.equal(plan.filas[0].texto, "Pagado el 01/02/2026");
+  assert.equal(plan.filas[6].texto, "Pagado el 05/04/2026", "la cuota 6 se saldó con el movimiento que hizo alcanzar el acumulado");
+});
+
+test("PDF: una cuota a medias dice cuánto lleva abonado", () => {
+  const plan = planParaComprobante({
+    total: 38000, condiciones: CONDICIONES_ORTO, movimientos: [mov(9000, "2026-02-01T18:00:00Z")], hoy: "2026-02-15",
+  })!;
+  assert.equal(plan.filas[0].texto, "Pagado el 01/02/2026");
+  assert.equal(plan.filas[1].texto, "Por vencer · abonado $1,000.00");
+});
+
+test("PDF: un reembolso baja lo cobrado y la cuota vuelve a deberse (no se cuenta como cobro)", () => {
+  const plan = planParaComprobante({
+    total: 38000,
+    condiciones: CONDICIONES_ORTO,
+    movimientos: [mov(10000, "2026-02-01T18:00:00Z"), mov(2000, "2026-02-10T18:00:00Z", "refund")],
+    hoy: "2026-02-15",
+  })!;
+  assert.equal(plan.pagado, 8000);
+  assert.equal(plan.filas[0].estado, "pagada");
+  assert.equal(plan.filas[1].estado, "porVencer");
+});
+
+test("PDF: el día de un pago se lee en la zona de la clínica, no en la del servidor", () => {
+  // 03:00 UTC del 2 de febrero = 21:00 del 1 de febrero en Ciudad de México.
+  assert.equal(fechaDeMovimiento(new Date("2026-02-02T03:00:00Z"), "America/Mexico_City"), "01/02/2026");
+  assert.equal(fechaDeMovimiento(new Date("2026-02-02T03:00:00Z"), "UTC"), "02/02/2026");
+  assert.equal(fechaDeMovimiento(new Date("2026-02-02T03:00:00Z"), "zona/inventada"), "01/02/2026", "zona inválida → la de México");
+});
+
+test("PDF: sin primera fecha las cuotas dicen «Sin fecha» y nada vence", () => {
+  const plan = planParaComprobante({
+    total: 38000, condiciones: plazos({ enganche: 8000, numPagos: 15, primerPago: null }), movimientos: [], hoy: "2026-09-29",
+  })!;
+  assert.ok(plan.filas.every((f) => f.fecha === "Sin fecha" && f.estado === "porVencer"));
+  assert.equal(fechaDDMMAAAA(null), "Sin fecha");
+});
+
+test("PDF: un solo pago, sin condiciones o un enganche que cubre todo → sin plan; el PDF no cambia", () => {
+  const args = { total: 38000, movimientos: [], hoy: "2026-09-29" };
+  assert.equal(planParaComprobante({ ...args, condiciones: null }), null);
+  assert.equal(planParaComprobante({ ...args, condiciones: undefined }), null);
+  assert.equal(planParaComprobante({ ...args, condiciones: { ...condicionesPorDefecto(), modo: "unico", metodo: "cash" } }), null);
+  assert.equal(planParaComprobante({ ...args, total: 0, condiciones: CONDICIONES_ORTO }), null);
+});
