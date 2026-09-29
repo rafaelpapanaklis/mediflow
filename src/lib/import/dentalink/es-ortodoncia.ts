@@ -4,7 +4,9 @@
 // Contrato: un tratamiento es de ortodoncia si CUALQUIERA de sus renglones cumple una de tres:
 //   1. «Nombre Categoría» es Ortodoncia (sin acentos ni mayúsculas).
 //   2. La prestación contiene ortodoncia / bracket(s) / alineador(es) / Damon / contención / TAD(s).
-//   3. La especialidad del profesional es Ortodoncia.
+//   3. La especialidad del profesional es Ortodoncia, pero SOLO en un renglón que no trae categoría: el ortodoncista de
+//      una clínica también hace operatoria y cirugía, y en BEVADENT la especialidad sola clasificaba 148 de 157
+//      tratamientos como ortodoncia (con categoría/prestación son 48; los otros 109 son tratamientos normales).
 //
 // Acepta el renglón crudo del export (encabezados de Dentalink, con o sin acentos) o el ya mapeado por el motor
 // (`procedure`, `categoria`, `especialidad`): las claves se comparan sin acentos, sin mayúsculas y sin símbolos.
@@ -56,6 +58,7 @@ export function prestacionEsOrtodoncia(nombre: unknown): boolean {
 export function renglonEsOrtodoncia(r: RenglonDentalink): boolean {
   if (sinAcentos(categoriaDeRenglon(r)) === "ortodoncia") return true;
   if (prestacionEsOrtodoncia(prestacionDeRenglon(r))) return true;
+  if (sinAcentos(categoriaDeRenglon(r))) return false;
   return sinAcentos(especialidadDeRenglon(r)).includes("ortodonc");
 }
 

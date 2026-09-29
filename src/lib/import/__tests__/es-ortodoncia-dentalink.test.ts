@@ -20,9 +20,11 @@ test("la prestación con palabras de ortodoncia basta", () => {
   }
 });
 
-test("la especialidad del profesional Ortodoncia basta", () => {
-  assert.equal(esOrtodonciaDentalink([r("Operatoria", "Resina", "Ortodoncia")]), true);
-  assert.equal(esOrtodonciaDentalink([r("Operatoria", "Resina", "Ortodoncista")]), true);
+test("la especialidad del profesional Ortodoncia basta solo si el renglón no trae categoría", () => {
+  assert.equal(esOrtodonciaDentalink([r("", "Resina", "Ortodoncia")]), true);
+  assert.equal(esOrtodonciaDentalink([r("", "Resina", "Ortodoncista")]), true);
+  // Con categoría propia manda la categoría: un ortodoncista también hace operatoria (BEVADENT: 100 tratamientos).
+  assert.equal(esOrtodonciaDentalink([r("Operatoria", "Resina", "Ortodoncia")]), false);
 });
 
 test("con un solo renglón de ortodoncia todo el tratamiento lo es", () => {
