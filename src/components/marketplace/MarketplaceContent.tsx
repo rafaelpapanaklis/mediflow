@@ -14,16 +14,13 @@
  *   - Focus rings consistentes con --brand color.
  */
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Search, SearchX } from "lucide-react";
 import toast from "react-hot-toast";
 import type { Module, ClinicModule } from "@prisma/client";
 import { addToCart, removeFromCart } from "@/app/actions/cart";
-import type { BillingCycle } from "@/lib/marketplace/pricing";
 import type { TrialStatus } from "@/lib/marketplace/access-control";
 import { ModuleCard, type ModuleStatus } from "./ModuleCard";
-import { DiscountTiersBar } from "./DiscountTiersBar";
-import { FloatingCart } from "./FloatingCart";
+import { soloModulosConCompra, TABS_VISIBLES } from "@/lib/marketplace/catalogo-visible";
 import { useT } from "@/i18n/i18n-provider";
 
 interface MarketplaceContentProps {
@@ -33,12 +30,14 @@ interface MarketplaceContentProps {
   initialCart: string[];
 }
 
-const TABS = ["Todos", "Dental", "Pediatría", "Cardiología", "Dermatología", "Ginecología", "Nutrición", "Estética"] as const;
+// Solo las pestañas de lo que se vende hoy (ver catalogo-visible.ts); las de otras
+// especialidades quedan fuera de la vista, sin borrar sus textos de traducción.
+const TABS = TABS_VISIBLES;
 type Tab = (typeof TABS)[number];
 
 // Map de categoría (valor de DB, no traducir el valor) -> llave de traducción para
 // la etiqueta visible del tab. La llave se resuelve con t() en render, nunca aquí.
-const TAB_LABEL_KEYS: Record<Tab, string> = {
+const TAB_LABEL_KEYS: Record<string, string> = {
   "Todos":        "common.all",
   "Dental":       "pages.marketplace.tabDental",
   "Pediatría":    "pages.marketplace.tabPediatria",
@@ -62,17 +61,18 @@ function computeStatus(
 }
 
 export function MarketplaceContent({
-  modules,
+  modules: todosLosModulos,
   clinicModules,
   trialStatus,
   initialCart,
 }: MarketplaceContentProps) {
   const t = useT();
-  const router = useRouter();
+  // Solo lo que tiene una compra que funciona; el carrito multi-módulo no tiene
+  // checkout (su página da 404), así que no se ofrece ningún camino a él.
+  const modules = useMemo(() => soloModulosConCompra(todosLosModulos), [todosLosModulos]);
   const [cart, setCart] = useState<string[]>(initialCart);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
-  const [billingCycle] = useState<BillingCycle>("monthly"); // toggle anual/mensual vive en cart (Sprint 3)
 
   const [activeTab, setActiveTab] = useState<Tab>("Todos");
   const [search, setSearch]       = useState("");
@@ -91,12 +91,6 @@ export function MarketplaceContent({
       );
     });
   }, [modules, activeTab, search]);
-
-  const cartPrices = useMemo(() => {
-    return cart
-      .map((id) => modules.find((m) => m.id === id)?.priceMxnMonthly ?? 0)
-      .filter((p) => p > 0);
-  }, [cart, modules]);
 
   const markPending = (id: string, on: boolean) => {
     setPendingIds((prev) => {
@@ -199,8 +193,6 @@ export function MarketplaceContent({
         </p>
       </header>
 
-      <DiscountTiersBar cartCount={cart.length} />
-
       <div className="mb-5 flex items-center justify-between gap-4 flex-wrap">
         <div
           role="tablist"
@@ -263,7 +255,7 @@ export function MarketplaceContent({
               pending={pendingIds.has(m.id) || isPending}
               onAddToCart={() => handleAdd(m.id)}
               onRemoveFromCart={() => handleRemove(m.id)}
-              onBuyNow={status === "locked" ? () => handleBuyNow(m.id, m.key) : undefined}
+              onBuyNow={status === "purchased" ? undefined : () => handleBuyNow(m.id, m.key)}
             />
           );
         })}
@@ -277,11 +269,6 @@ export function MarketplaceContent({
         )}
       </div>
 
-      <FloatingCart
-        prices={cartPrices}
-        billingCycle={billingCycle}
-        onClick={() => router.push("/dashboard/marketplace/cart")}
-      />
     </div>
   );
 }

@@ -137,6 +137,7 @@ export function ModuleCard({
             ${m.priceMxnMonthly}
           </span>
           <span className="text-xs text-[var(--text-3)]">{t("pages.moduleCard.perMonth")}</span>
+          <span className="text-xs text-[var(--text-3)]">+ IVA</span>
         </div>
 
         {isPurchased ? (
@@ -162,13 +163,13 @@ export function ModuleCard({
         ) : (
           <button
             type="button"
-            onClick={isLocked && onBuyNow ? onBuyNow : onAddToCart}
+            onClick={onBuyNow ?? onAddToCart}
             disabled={pending}
-            aria-label={isLocked ? t("pages.moduleCard.buyToUnlockAria", { name: m.name }) : t("pages.moduleCard.addAria", { name: m.name })}
+            aria-label={isLocked || onBuyNow ? t("pages.moduleCard.buyToUnlockAria", { name: m.name }) : t("pages.moduleCard.addAria", { name: m.name })}
             className="w-full text-[13px] font-semibold px-3 py-2.5 rounded-[var(--radius)] bg-brand-600 text-white hover:bg-brand-700 transition-[background-color,transform] duration-150 ease-[cubic-bezier(.2,.8,.4,1)] active:scale-[.98] flex items-center justify-center gap-1.5 disabled:opacity-45 disabled:cursor-wait focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]"
           >
             <Plus className="w-4 h-4" strokeWidth={1.75} aria-hidden />
-            {isLocked ? t("pages.moduleCard.buyToUnlock") : t("pages.moduleCard.addToCart")}
+            {isLocked || onBuyNow ? t("pages.moduleCard.buyToUnlock") : t("pages.moduleCard.addToCart")}
           </button>
         )}
       </div>
