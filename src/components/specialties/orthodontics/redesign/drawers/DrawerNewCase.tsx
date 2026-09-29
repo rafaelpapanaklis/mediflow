@@ -58,6 +58,7 @@ import {
   faltantesDelAlta,
   fraseDeFaltantes,
   leerCostoTotal,
+  costoDelAlta,
   pistaDelModoDelCaso,
   referenteParaGuardar,
   referenteYaRegistrado,
@@ -394,6 +395,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     proximaRevision: nextObservationDate,
     retencion: retention,
     costoTotal: totalCost,
+    costoOpcional: billingMode === "PAGO_POR_CONTROL",
     modoResponsable: guardianMode,
     tutorElegidoId: responsibleGuardianId,
     tutorNombre: newGuardianName,
@@ -454,7 +456,8 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   const submit = async () => {
     if (!canSubmit) return;
     // Sin plan (observación) no hay costo; con plan, `faltantes` ya lo exigió.
-    if (!inObservation && costo === null) return;
+    const costoAGuardar = costoDelAlta(totalCost, billingMode === "PAGO_POR_CONTROL");
+    if (!inObservation && costoAGuardar === null) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -491,7 +494,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
             techniqueLabel: nombrePropioAGuardar(tecnica),
             estimatedDurationMonths: duration,
             installedAt: installedAt ? new Date(installedAt).toISOString() : null,
-            totalCostMxn: costo as number,
+            totalCostMxn: costoAGuardar as number,
             anchorageType: anchorage,
             extractionsRequired: extractions,
             iprRequired,

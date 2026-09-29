@@ -142,7 +142,9 @@ export const createTreatmentPlanSchema = z.object({
   estimatedDurationMonths: z.number().int().min(3).max(60),
   startDate: z.string().datetime().optional().nullable(),
   installedAt: z.string().datetime().optional().nullable(),
-  totalCostMxn: z.number().positive().max(10_000_000),
+  // ws1-t10 (E): 0 solo lo admite «Pago por control» (costo de referencia opcional); la acción
+  // `createTreatmentPlan` lo exige > 0 en cualquier otro modo.
+  totalCostMxn: z.number().min(0).max(10_000_000),
   anchorageType: z.enum(ANCHORAGE_TYPE),
   anchorageNotes: z.string().max(500).optional().nullable(),
   extractionsRequired: z.boolean().default(false),
@@ -175,6 +177,7 @@ export const createTreatmentPlanSchema = z.object({
 
 export const updateTreatmentPlanSchema = createTreatmentPlanSchema.omit({ billingMode: true }).partial().extend({
   treatmentPlanId: z.string().min(1),
+  totalCostMxn: z.number().positive().max(10_000_000).optional(),
   status: z.enum(ORTHO_TREATMENT_STATUS).optional(),
   onHoldReason: z.string().max(500).optional().nullable(),
   droppedOutReason: z

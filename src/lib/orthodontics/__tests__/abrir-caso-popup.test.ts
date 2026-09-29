@@ -116,7 +116,7 @@ test("al confirmar: primero se abre el caso y DESPUÉS se crea su factura; si fa
   assert.match(leer(`${REDISENO}/sections/SectionFinance.tsx`), /Abrir plan de pago/);
   // Los tres sitios que abren el popup pasan por la misma función y el mismo tipo.
   for (const f of ["OrtodonciaSinCaso.tsx", "OrthodonticsRedesignClient.tsx"]) assert.match(leer(`${REDISENO}/${f}`), /DrawerNewCaseSubmit/);
-  assert.match(TAB, /const crearCaso = async \(payload: DrawerNewCaseSubmit\) =>/);
+  assert.match(TAB, /const crearCaso = async \(payload: DrawerNewCaseSubmit\)(: Promise<boolean>)? =>/);
 });
 
 test("la acción: exige billing.create ANTES de tocar nada, saca la clínica de la sesión y no recibe paciente ni clínica", () => {

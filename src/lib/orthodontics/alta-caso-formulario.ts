@@ -97,13 +97,23 @@ export function leerCostoTotal(texto: string): number | null {
   return n;
 }
 
+/**
+ * ws1-t10 (E): en «Pago por control» el costo es solo una referencia y se puede dejar vacío.
+ * Lo que se guarda: lo escrito, o 0 si es opcional y no se escribió nada (la base no admite
+ * null y el caso no lleva total). `null` = lo escrito no es un importe válido.
+ */
+export function costoDelAlta(texto: string, opcional: boolean): number | null {
+  if (opcional && texto.trim() === "") return 0;
+  return leerCostoTotal(texto);
+}
+
 /** Rótulo y explicación del campo del costo, según cómo cobra la clínica. */
 export function textosDelCosto(modo: OrthoBillingMode): { rotulo: string; pista: string } {
   if (modo === "PAGO_POR_CONTROL") {
     return {
-      rotulo: "Costo estimado del tratamiento (MXN)",
+      rotulo: "Costo estimado del tratamiento (MXN) · opcional",
       pista:
-        "Este caso se cobra por control: no se factura un total. Escribe el estimado que le diste al paciente; queda solo como referencia del caso.",
+        "Este caso se cobra por control: no se factura un total. Si le diste un estimado al paciente, escríbelo; queda solo como referencia del caso. Puedes dejarlo vacío.",
     };
   }
   return {
@@ -135,6 +145,8 @@ export interface EstadoAlta {
   retencion: string;
   /** Lo escrito en el campo, tal cual. */
   costoTotal: string;
+  /** ws1-t10 (E): «Pago por control» — el costo se puede dejar vacío (si se escribe, tiene que valer). */
+  costoOpcional?: boolean;
   modoResponsable: ModoResponsable;
   tutorElegidoId: string;
   tutorNombre: string;
@@ -170,7 +182,7 @@ export function faltantesDelAlta(e: EstadoAlta): string[] {
   if (e.enObservacion) return faltan;
 
   if (e.sinTecnica) faltan.push("una técnica (la clínica no tiene ninguna activa: agrégala en Configuración → Técnicas y precios)");
-  if (leerCostoTotal(e.costoTotal) === null) {
+  if (costoDelAlta(e.costoTotal, e.costoOpcional === true) === null) {
     faltan.push(e.costoTotal.trim() === "" ? "el costo del tratamiento" : "un costo del tratamiento válido (mayor que cero)");
   }
   const retencion = e.retencion.trim().length;

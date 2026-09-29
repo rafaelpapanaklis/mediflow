@@ -32,9 +32,11 @@ const sinComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace
 // Lógica pura
 // ═══════════════════════════════════════════════════════════════════════════
 
-test("monto: manda el de quien abre (aunque sea 0 = «el saldo»); sin él, el de la factura", () => {
+test("monto: manda el de quien abre si vale algo; sin él (o con 0), el cálculo de la factura", () => {
   assert.equal(montoDelCobroAlAbrir(2000, 38000), 2000, "la cuota vencida del caso");
-  assert.equal(montoDelCobroAlAbrir(0, 2000), 0, "quien abre ya calculó: sin plan → saldo");
+  // ws1-t10: la fila aún sin condiciones manda 0; eso NO manda sobre lo que la ventana lee sola.
+  assert.equal(montoDelCobroAlAbrir(0, 3000), 3000, "0 de quien abre = no supo: manda el enganche que calcula la ventana");
+  assert.equal(montoDelCobroAlAbrir(0, 0), 0, "sin plan, ninguno sabe: sigue el saldo (montoInicialDeCobro)");
   assert.equal(montoDelCobroAlAbrir(undefined, 2000), 2000);
   assert.equal(montoDelCobroAlAbrir(null, 1500), 1500);
   assert.equal(montoDelCobroAlAbrir(Number.NaN, 1500), 1500, "un NaN no pisa el cálculo propio");
@@ -45,6 +47,9 @@ test("monto: el campo nace igual que en la ventana suelta (clampeado al saldo)",
   assert.equal(montoInicialDeCobro(montoDelCobroAlAbrir(2000, 0), 18000), 2000);
   // «Cobrar a los dos»: la mensualidad del hermano, nunca por encima del saldo.
   assert.equal(montoInicialDeCobro(montoDelCobroAlAbrir(2500, 0), 1200), 1200);
+  // ws1-t10 (B): la factura del caso recién abierto (total $18,000, enganche $3,000 que vence hoy) con la
+  // fila sin condiciones (0): nace en el enganche que calcula la ventana, no en el total.
+  assert.equal(montoInicialDeCobro(montoDelCobroAlAbrir(0, 3000), 18000), 3000);
   // Sin plan a plazos: el saldo completo, como siempre.
   assert.equal(montoInicialDeCobro(montoDelCobroAlAbrir(0, 0), 950.5), 950.5);
 });

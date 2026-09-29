@@ -280,13 +280,13 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
   // Abrir el caso: lo usan las dos caras de la pestaña — la completa (el
   // asistente que abre `OrthodonticsRedesignClient`) y la limpia del paciente
   // que nunca tuvo caso (`OrtodonciaSinCaso`).
-  const crearCaso = async (payload: DrawerNewCaseSubmit) => {
+  const crearCaso = async (payload: DrawerNewCaseSubmit): Promise<boolean> => {
     let diagnosisId = orthoRedesignVM?.diagnosis?.id ?? null;
     if (payload.diagnosis) {
       const res = await createDiagnosis({ patientId: patient.id, ...payload.diagnosis });
       if (isFailure(res)) {
         toast.error(res.error);
-        return;
+        return false;
       }
       diagnosisId = res.data.id;
       if (
@@ -298,7 +298,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     }
     if (!diagnosisId) {
       toast.error(t("patients.ortho.noPlan"));
-      return;
+      return false;
     }
     if (payload.plan) {
       const res = await createTreatmentPlan({
@@ -308,7 +308,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
       });
       if (isFailure(res)) {
         toast.error(res.error);
-        return;
+        return false;
       }
       if (!res.data.altaCasoFieldsSaved && (payload.plan.treatingDoctorId || payload.plan.responsibleGuardianId || payload.plan.newResponsibleGuardian)) {
         toast(t("patients.ortho.altaCasoSqlPending"));
@@ -332,6 +332,9 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
       toast.success(t("patients.ortho.caseOpenedObservation"));
     }
     router.refresh();
+    // ws1-t10 (D): true = el caso quedó abierto; la vista «sin caso» lo dice al instante en vez
+    // de seguir con «no tiene caso» hasta que llega la ficha refrescada.
+    return true;
   };
 
   // Qué cara toca (decisión de Rafael, 28-sep-2026; la regla y sus tests, en

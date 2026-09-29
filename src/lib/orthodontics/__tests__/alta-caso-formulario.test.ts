@@ -25,6 +25,7 @@ import {
   faltantesDelAlta,
   fraseDeFaltantes,
   leerCostoTotal,
+  costoDelAlta,
   referenteParaGuardar,
   referenteYaRegistrado,
   telefonoTutorValido,
@@ -150,7 +151,7 @@ test("H18c: el costo nace VACÍO — ningún precio escrito en el código", () =
   assert.doesNotMatch(CAJON_CODIGO, /45[_,.]?000/, "el 45000 de antes ya no está");
   // Ni ese ni ningún otro importe por defecto en el estado del cajón.
   assert.doesNotMatch(CAJON_CODIGO, /useState\(\s*\d{4,}\s*\)/);
-  assert.match(CAJON, /totalCostMxn: costo as number,/, "se manda lo que se escribió");
+  assert.match(CAJON, /totalCostMxn: costoAGuardar as number,/, "se manda lo que se escribió");
 });
 
 test("H18c: sin costo no se abre el caso, y lo dice", () => {
@@ -269,4 +270,47 @@ test("el alta habla de «responsable» para el dinero y de «datos del caso», n
   const cobro = leer("src/components/specialties/orthodontics/redesign/sections/SectionFinance.tsx");
   assert.doesNotMatch(cobro, /Saldo pendiente/);
   assert.match(cobro, /Por cobrar/);
+});
+
+// ── ws1-t10 (E): en «Pago por control» el costo es opcional ────────────────
+
+test("costo opcional (Pago por control): vacío vale 0; escrito, tiene que valer; en Precio total sigue obligatorio", () => {
+  assert.equal(costoDelAlta("", true), 0);
+  assert.equal(costoDelAlta("   ", true), 0);
+  assert.equal(costoDelAlta("15,000", true), 15000);
+  assert.equal(costoDelAlta("abc", true), null, "si se escribe algo, no se acepta basura");
+  assert.equal(costoDelAlta("0", true), null, "escrito, tampoco un cero");
+  assert.equal(costoDelAlta("", false), null, "Precio total: el costo sigue haciendo falta");
+  assert.equal(costoDelAlta("36000", false), 36000);
+
+  const sinCosto = { ...COMPLETA, costoTotal: "" };
+  assert.ok(faltantesDelAlta(sinCosto).some((f) => /costo/.test(f)), "Precio total: falta el costo");
+  assert.deepEqual(faltantesDelAlta({ ...sinCosto, costoOpcional: true }), [], "Pago por control: se abre sin costo");
+  assert.ok(faltantesDelAlta({ ...sinCosto, costoTotal: "abc", costoOpcional: true }).some((f) => /válido/.test(f)));
+});
+
+test("costo opcional: el cajón lo usa al guardar y el servidor solo lo admite en Pago por control", () => {
+  const cajon = readFileSync(join(process.cwd(), "src/components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx"), "utf8");
+  assert.match(cajon, /costoOpcional: billingMode === "PAGO_POR_CONTROL"/);
+  assert.match(cajon, /totalCostMxn: costoAGuardar as number/);
+  const accion = readFileSync(join(process.cwd(), "src/app/actions/orthodontics/createTreatmentPlan.ts"), "utf8");
+  assert.match(accion, /!\(parsed\.data\.totalCostMxn > 0\) && billingModeDelCaso !== "PAGO_POR_CONTROL"/);
+  const validacion = readFileSync(join(process.cwd(), "src/lib/validation/orthodontics.ts"), "utf8");
+  assert.match(validacion, /updateTreatmentPlanSchema[\s\S]*?totalCostMxn: z\.number\(\)\.positive\(\)/, "la edición sigue exigiendo un costo mayor que cero");
+});
+
+// ── ws1-t10 (D) y (A): la vista «sin caso» avisa al instante; la clave del botón existe ──
+
+test("la vista «sin caso» dice «Caso abierto» en cuanto el caso se abre, sin esperar la ficha", () => {
+  const sinCaso = readFileSync(join(process.cwd(), "src/components/specialties/orthodontics/redesign/OrtodonciaSinCaso.tsx"), "utf8");
+  assert.match(sinCaso, /const abierto = await onCreateCase\(payload\);\s*if \(abierto === true\) setCasoAbierto\(true\);/);
+  const tab = readFileSync(join(process.cwd(), "src/components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx"), "utf8");
+  assert.match(tab, /const crearCaso = async \(payload: DrawerNewCaseSubmit\): Promise<boolean>/);
+});
+
+test("billing.invoiceEditor.editButton existe en es y en en (salía la clave cruda en la ventana de la factura)", () => {
+  for (const l of ["es", "en"]) {
+    const d = JSON.parse(readFileSync(join(process.cwd(), `src/i18n/dictionaries/${l}.json`), "utf8"));
+    assert.equal(typeof d.billing?.invoiceEditor?.editButton, "string", l);
+  }
 });

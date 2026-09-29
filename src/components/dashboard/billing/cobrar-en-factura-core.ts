@@ -6,13 +6,19 @@
 /**
  * Con qué monto nace «Monto a cobrar». Si quien abre ya sabe qué se cobra
  * (la cuota vencida del caso, la mensualidad de un hermano, el control…)
- * manda SU número, aunque sea 0 (= «ya lo calculé: el saldo»): es el mismo
- * que antes le pasaba a la ventana suelta. Sin él (`undefined`/`null`), el
- * cálculo propio de la factura. El clampeo al saldo lo hace después
- * `montoInicialDeCobro`, igual que siempre.
+ * manda SU número. Sin él — `undefined`/`null`, o 0 — manda el cálculo propio
+ * de la ventana (que lee las condiciones de la factura ella misma).
+ *
+ * ws1-t10: un 0 de quien abre NO cuenta como «ya lo calculé: el saldo». La
+ * fila de la ficha calcula con las condiciones que YA tenía cargadas y, si
+ * todavía no llegaban (o no llegaron), manda 0: tomarlo al pie de la letra
+ * abría la factura del caso recién abierto (enganche de $3,000 + 12 pagos)
+ * cobrando el total de $18,000. Para una factura sin plan el cálculo propio
+ * también da 0 y `montoInicialDeCobro` cae al saldo, igual que siempre. El
+ * clampeo al saldo lo hace después `montoInicialDeCobro`.
  */
 export function montoDelCobroAlAbrir(deQuienAbre: number | null | undefined, propio: number): number {
-  if (deQuienAbre != null && Number.isFinite(deQuienAbre)) return deQuienAbre;
+  if (deQuienAbre != null && Number.isFinite(deQuienAbre) && deQuienAbre > 0) return deQuienAbre;
   return propio;
 }
 

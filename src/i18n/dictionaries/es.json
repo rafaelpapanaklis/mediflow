@@ -3335,6 +3335,7 @@
       "title": "Nueva factura",
       "titleWithPatient": "Nueva factura · {patient}",
       "editTitle": "Editar factura {number}",
+      "editButton": "Editar factura",
       "saveChanges": "Guardar cambios",
       "saving": "Guardando…",
       "updatedToast": "Factura {number} actualizada",

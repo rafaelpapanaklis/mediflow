@@ -662,7 +662,9 @@ export function PatientDetailClient({
   const openDirectPayment = async (inv: any, condiciones?: CondicionesPago | null) => {
     if (!canViewBilling || !inv) return;
     let condicionesFinal = condiciones;
-    if (condicionesFinal === undefined) {
+    // ws1-t10: `null` de la fila = todavía no cargaban (o no llegaron): también se leen aquí. Sin
+    // esto, la factura del caso recién abierto nacía cobrando el total en vez del enganche.
+    if (!condicionesFinal) {
       condicionesFinal = await fetch(`/api/invoices/condiciones?ids=${encodeURIComponent(inv.id)}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => d?.condiciones?.[inv.id] ?? null)

@@ -3335,6 +3335,7 @@
       "title": "New invoice",
       "titleWithPatient": "New invoice · {patient}",
       "editTitle": "Edit invoice {number}",
+      "editButton": "Edit invoice",
       "saveChanges": "Save changes",
       "saving": "Saving…",
       "updatedToast": "Invoice {number} updated",

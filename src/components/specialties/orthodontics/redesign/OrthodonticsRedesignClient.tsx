@@ -252,7 +252,7 @@ export interface OrthodonticsRedesignClientProps {
   /** Ola 1 (ws1-t6) — «Alta del caso»: abre el asistente DENTRO de la ficha
    *  (diagnóstico + plan, o solo plan si ya hay diagnóstico). Si está
    *  presente, sustituye a `onStartDiagnosisWizard` en Hero/Diagnóstico. */
-  onCreateCase?: (payload: DrawerNewCaseSubmit) => Promise<void> | void;
+  onCreateCase?: (payload: DrawerNewCaseSubmit) => Promise<boolean | void> | boolean | void;
   /** Se llegó desde «Nueva consulta» con el tipo «Ortodoncia»: abrir la hoja de control al entrar. */
   abrirControlAlEntrar?: boolean;
   onControlAbierto?: () => void;

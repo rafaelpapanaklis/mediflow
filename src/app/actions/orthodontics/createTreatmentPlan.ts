@@ -169,6 +169,10 @@ export async function createTreatmentPlan(
   // ESTE caso, manda ese; el de la clínica queda como propuesta.
   const clinicSettings = await loadOrthoClinicSettings(ctx.clinicId);
   const billingModeDelCaso = parsed.data.billingMode ?? clinicSettings.billingMode;
+  // ws1-t10 (E): el costo del caso puede ser 0 solo en «Pago por control» (es una referencia).
+  if (!(parsed.data.totalCostMxn > 0) && billingModeDelCaso !== "PAGO_POR_CONTROL") {
+    return fail("El costo del tratamiento tiene que ser mayor que cero");
+  }
 
   try {
     let altaCasoFieldsSaved = wantsAltaCasoFields;
