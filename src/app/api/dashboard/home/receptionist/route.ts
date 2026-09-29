@@ -1,3 +1,4 @@
+import { hasPermission } from "@/lib/auth/permissions";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
@@ -27,6 +28,7 @@ export async function GET() {
         clinicCategory: session.clinic.category,
         // Enmascara pacientes restringidos que este usuario no puede ver.
         viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
+        ortoAcceso: hasPermission({ role: session.user.role, permissionsOverride: session.user.permissionsOverride ?? [] }, "specialties.orthodontics"),
       }),
       fetchPendingValidation(
         dateISO,

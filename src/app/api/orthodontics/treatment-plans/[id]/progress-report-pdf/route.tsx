@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { puedeVerExpediente } from "@/lib/orthodontics/permiso-expediente";
 import { ProgressReportPdf } from "@/lib/orthodontics/pdf-templates/progress-report";
 import { PHOTO_VIEW_ORDER, VIEW_TO_COLUMN } from "@/lib/orthodontics/photo-set-helpers";
@@ -30,6 +31,9 @@ export async function GET(
   const active = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!active) {
     return NextResponse.json({ error: "Módulo no activo" }, { status: 403 });
+  }
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
+    return NextResponse.json({ error: MENSAJE_SIN_ACCESO_ORTODONCIA }, { status: 403 });
   }
   // ws1-t5 (ronda 6, X5): este PDF lleva fotos clínicas y es parte del
   // expediente. Pide la MISMA llave que los otros tres PDF del caso, que

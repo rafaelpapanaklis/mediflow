@@ -21,6 +21,7 @@
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { cargarCobranzaDelCaso } from "@/lib/orthodontics/cobranza-db";
@@ -61,6 +62,7 @@ export async function sendMensualidadReminder(
 
   const activo = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!activo) return fail("Módulo Ortodoncia no activo para esta clínica");
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
 
   const visibilidad = await assertPatientVisible(input.patientId, {
     userId: ctx.userId,

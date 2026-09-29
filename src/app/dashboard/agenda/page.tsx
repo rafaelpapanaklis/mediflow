@@ -107,6 +107,7 @@ export default async function AgendaPage({ searchParams }: PageProps) {
         // sin viewer los pacientes restringidos saldrían con nombre completo
         // hasta el primer refetch del cliente.
         viewer: { userId: user.id, role: user.role, clinicId: clinic.id },
+        ortoAcceso: hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride }, "specialties.orthodontics"),
       }),
       fetchActiveDoctors(clinic.id, clinic.category),
       fetchResources(clinic.id),

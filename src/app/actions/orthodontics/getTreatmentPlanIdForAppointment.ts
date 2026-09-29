@@ -32,6 +32,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/auth/permissions";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { loadPatientForOrtho } from "./_helpers";
 import { resolveTreatmentPlanAccess } from "./_control-agenda-predicates";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -47,6 +48,7 @@ export async function getTreatmentPlanIdForAppointment(
   if (!(await hasActiveOrthodonticsModule(ctx.clinicId))) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
   }
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
 
   const perms = { role: ctx.role as any, permissionsOverride: ctx.permissionsOverride };
   const access = resolveTreatmentPlanAccess({

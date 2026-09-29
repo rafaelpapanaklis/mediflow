@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import type { OrthoPhotoSetType } from "@prisma/client";
 import { storageQuotaError } from "@/lib/storage-quota";
 import {
@@ -66,6 +67,9 @@ export async function POST(req: NextRequest) {
   const active = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!active) {
     return NextResponse.json({ error: "Módulo no activo" }, { status: 403 });
+  }
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
+    return NextResponse.json({ error: MENSAJE_SIN_ACCESO_ORTODONCIA }, { status: 403 });
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

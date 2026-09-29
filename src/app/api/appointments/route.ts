@@ -1,3 +1,4 @@
+import { hasPermission } from "@/lib/auth/permissions";
 import { modoDeLaCita } from "@/lib/agenda/teleconsulta-por-categoria";
 import { NextResponse, type NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
@@ -141,6 +142,7 @@ export async function GET(req: NextRequest) {
         resourceId,
         statuses,
         viewer,
+        ortoAcceso: hasPermission({ role: session.user.role, permissionsOverride: session.user.permissionsOverride ?? [] }, "specialties.orthodontics"),
       }),
       fetchActiveDoctors(session.clinic.id, session.clinic.category),
       fetchResources(session.clinic.id),

@@ -15,6 +15,7 @@
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { lastSentOfKind } from "@/lib/orthodontics/whatsapp-dedupe";
@@ -44,6 +45,7 @@ export async function sendControlInstructions(
 
   const activo = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!activo) return fail("Módulo Ortodoncia no activo para esta clínica");
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
 
   const appointment = await prisma.appointment.findFirst({
     where: { id: input.appointmentId, clinicId: ctx.clinicId },

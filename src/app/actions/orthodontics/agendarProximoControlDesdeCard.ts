@@ -22,6 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createBotAppointment, type CreateErrorCode } from "@/lib/agenda/bot-booking-service";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
@@ -59,6 +60,7 @@ export async function agendarProximoControlDesdeCard(
 
   const activo = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!activo) return fail("Módulo Ortodoncia no activo para esta clínica");
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
 
   const card = await prisma.orthoTreatmentCard.findFirst({
     where: { id: input.cardId, clinicId: ctx.clinicId },

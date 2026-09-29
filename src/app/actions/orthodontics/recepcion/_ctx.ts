@@ -17,6 +17,7 @@ import type { AuthContext } from "@/lib/auth-context";
 import { getAuthContext } from "@/lib/auth-context";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { fail, type ActionResult } from "../result";
 
 /** Auth + categoría DENTAL + módulo orthodontics REALMENTE activo + permiso de facturación. */
@@ -28,6 +29,9 @@ export async function getRecepcionActionContext(
   if (ctx.clinicCategory !== "DENTAL") return fail("La clínica no soporta el módulo de Ortodoncia");
   const activo = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!activo) return fail("Módulo Ortodoncia no activo para esta clínica");
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
+    return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
+  }
   if (!hasPermission({ role: ctx.role, permissionsOverride: ctx.permissionsOverride }, permiso)) {
     return fail(`Sin permisos: ${permiso}`);
   }

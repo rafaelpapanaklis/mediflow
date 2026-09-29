@@ -108,6 +108,7 @@ export async function GET(req: Request) {
       statuses: statuses.length > 0 ? statuses : undefined,
       // Enmascara pacientes restringidos que este usuario no puede ver.
       viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
+      ortoAcceso: hasPermission({ role: session.user.role, permissionsOverride: session.user.permissionsOverride ?? [] }, "specialties.orthodontics"),
     }),
     fetchActiveDoctors(session.clinic.id, session.clinic.category),
     fetchResources(session.clinic.id),

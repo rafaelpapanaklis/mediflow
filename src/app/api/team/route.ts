@@ -9,6 +9,8 @@ import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { camposPublicosDeMiembro } from "@/lib/team/member-fields";
 import { traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { esAccesoOrtodoncia, especialidadSegunAcceso, overrideConAcceso, type AccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 
 const DOCTOR_COLORS = [
   "#3b82f6","#7c3aed","#059669","#e11d48","#d97706",
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { email, firstName, lastName, role, specialty, color, phone, services,
-          cedulaProfesional, especialidad, cedulaEspecialidad, canAccessCaja } = body;
+          cedulaProfesional, especialidad, cedulaEspecialidad, canAccessCaja, accesoOrtodoncia } = body;
 
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
     return NextResponse.json({ error: "Nombre, apellido y email son requeridos" }, { status: 400 });
@@ -106,6 +108,20 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+  // ws1-t3 — «¿solo dental o también ortodoncista?». Solo cuenta para un DOCTOR
+  // de una sede dental que tiene el módulo contratado; en cualquier otro caso
+  // se ignora (la pantalla ni siquiera pregunta) y la persona queda con lo de
+  // siempre: el default de su rol. El servidor NUNCA acepta la lista de
+  // permisos del cliente: parte del default del rol y solo quita o deja la
+  // llave del módulo.
+  const rolNuevo: string = role ?? "DOCTOR";
+  let acceso: AccesoOrtodoncia | null = null;
+  if (esAccesoOrtodoncia(accesoOrtodoncia) && rolNuevo === "DOCTOR" && ctx!.clinicCategory === "DENTAL") {
+    acceso = (await hasActiveOrthodonticsModule(ctx!.clinicId)) ? accesoOrtodoncia : null;
+  }
+  const permissionsOverrideNuevo = acceso ? overrideConAcceso({ role: "DOCTOR", permissionsOverride: [] }, acceso) : null;
+  const especialidadNueva = acceso ? especialidadSegunAcceso(specialty, acceso) : specialty || null;
 
   const usedColors    = existing.map(u => u.color);
   const assignedColor = color || DOCTOR_COLORS.find(c => !usedColors.includes(c)) || DOCTOR_COLORS[0];
@@ -146,7 +162,10 @@ export async function POST(req: NextRequest) {
       firstName:  firstName.trim(),
       lastName:   lastName.trim(),
       role:       role ?? "DOCTOR",
-      specialty:  specialty || null,
+      specialty:  especialidadNueva,
+      // Vacío = default del rol (que ya trae el módulo). Con «solo dental» va el
+      // default del rol SIN la llave, explícito.
+      ...(permissionsOverrideNuevo && permissionsOverrideNuevo.length > 0 && { permissionsOverride: permissionsOverrideNuevo }),
       color:      assignedColor,
       phone:      phone || null,
       services:   services ?? [],
@@ -173,7 +192,7 @@ export async function POST(req: NextRequest) {
     entityType: "user",
     entityId: newUser.id,
     action: "create",
-    after: { firstName: newUser.firstName, lastName: newUser.lastName, email: newUser.email, role: newUser.role, especialidad: newUser.especialidad },
+    after: { firstName: newUser.firstName, lastName: newUser.lastName, email: newUser.email, role: newUser.role, especialidad: newUser.especialidad, ...(acceso && { accesoOrtodoncia: acceso }) },
   });
 
   revalidateAfter("team");

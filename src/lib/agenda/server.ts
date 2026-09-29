@@ -136,6 +136,13 @@ export interface AgendaQueryFilter {
    * enmascarado (comportamiento previo) — para callers que ya son admin-only.
    */
   viewer?: VisibilityViewer | null;
+  /**
+   * ws1-t3 — ¿quien mira tiene el módulo de Ortodoncia (`specialties.orthodontics`)?
+   * `false` = no se calcula la insignia «mensualidad vencida» de ortodoncia: es
+   * dato del módulo y quien no lo tiene no lo ve. Omitirlo = se calcula (el
+   * comportamiento de antes), para los callers que no saben del permiso.
+   */
+  ortoAcceso?: boolean;
 }
 
 /**
@@ -286,7 +293,9 @@ export async function fetchAppointmentsForDay(
   const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
   const [pagados, vencidos] = await Promise.all([
     citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id)),
-    pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
+    filter.ortoAcceso === false
+      ? Promise.resolve(new Set<string>())
+      : pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
   ]);
   return conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos);
 }
@@ -321,7 +330,9 @@ export async function fetchAppointmentsForRange(
   const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
   const [pagados, vencidos] = await Promise.all([
     citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id)),
-    pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
+    filter.ortoAcceso === false
+      ? Promise.resolve(new Set<string>())
+      : pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
   ]);
   return conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos);
 }

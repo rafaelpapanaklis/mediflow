@@ -6,6 +6,7 @@ import { differenceInMonths } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { suggestOrthoAppointmentDuration } from "@/lib/orthodontics/appointment-durations";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
@@ -28,7 +29,9 @@ export async function GET(req: NextRequest) {
   // con el atajo de trial, cualquier clínica dental en prueba los vería sin
   // haber contratado el módulo.
   const active = await hasActiveOrthodonticsModule(ctx.clinicId);
-  if (!active) {
+  if (!active || !tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
+    // Sin el módulo o sin la llave de la persona: para «Nueva cita» es lo mismo,
+    // no hay chips de ortodoncia.
     return NextResponse.json({ orthodontics: false });
   }
 

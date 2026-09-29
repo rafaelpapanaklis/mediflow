@@ -16,7 +16,9 @@ import { SabinaPermissionsModal } from "@/components/dashboard/team/sabina-permi
 import { ModalHorarioDoctor } from "@/components/dashboard/horario-doctor/modal-horario-doctor";
 import type { Dia } from "@/components/dashboard/horario-doctor/tipos";
 import { RaizRediseno } from "@/components/dashboard/equipo-rediseno/raiz";
-import { useT } from "@/i18n/i18n-provider";
+import { useT, useLocale } from "@/i18n/i18n-provider";
+import { CampoAccesoOrtodoncia, type RespuestaAcceso } from "./campo-acceso-ortodoncia";
+import { ESPECIALIDAD_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { prepararImagen } from "@/lib/image-client";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
@@ -68,6 +70,8 @@ interface FormState {
   cedulaProfesional: string;
   especialidad: string;
   cedulaEspecialidad: string;
+  // ws1-t3: «¿solo dental o también ortodoncista?». "" = no aplica / sin contestar.
+  accesoOrtodoncia: RespuestaAcceso;
 }
 interface TeamMember {
   id: string; firstName: string; lastName: string; email: string;
@@ -87,7 +91,7 @@ interface TeamMember {
 // as a new component type on every render and unmounts/remounts the inputs,
 // causing focus loss on every keystroke. Defined outside, it is stable.
 function MemberForm({
-  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, rediseno,
+  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, rediseno, ortoModulo, puedeCambiarAcceso,
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
@@ -104,6 +108,10 @@ function MemberForm({
   // "byte por byte igual" manda incluso sobre la regla de tipografía, que
   // solo aplica dentro del rediseño (WS1-T5).
   rediseno: boolean;
+  // ws1-t3: la sede tiene el módulo de Ortodoncia contratado → se pregunta.
+  ortoModulo: boolean;
+  // Alta: quien da de alta. Edición: solo el dueño (los permisos son suyos).
+  puedeCambiarAcceso: boolean;
 }) {
   const t = useT();
   const [svcInput, setSvcInput] = useState("");
@@ -210,6 +218,23 @@ function MemberForm({
           />
         </div>
       </div>
+
+      {/* ws1-t3 — solo un DOCTOR de una sede con el módulo de Ortodoncia. */}
+      {ortoModulo && form.role === "DOCTOR" && (
+        <CampoAccesoOrtodoncia
+          valor={form.accesoOrtodoncia}
+          puedeCambiar={puedeCambiarAcceso}
+          esEdicion={isEdit}
+          acento={acento} acentoSuave={acentoSuave} bordeSuave={bordeSuave}
+          onChange={(v) => setForm(prev => ({
+            ...prev,
+            accesoOrtodoncia: v,
+            // Misma regla que aplica el servidor: ortodoncista → especialidad
+            // «Ortodoncia»; solo dental no puede quedarse con «Ortodoncia».
+            specialty: v === "ortodoncista" ? ESPECIALIDAD_ORTODONCIA : (prev.specialty === ESPECIALIDAD_ORTODONCIA ? "" : prev.specialty),
+          }))}
+        />
+      )}
 
       {/* Services */}
       <div className="space-y-1.5">
@@ -526,6 +551,15 @@ function MemberPhoto({
   );
 }
 
+// ws1-t3 — la respuesta con la que arranca la edición de un miembro: la que dice
+// su permiso HOY. Un doctor que ya trae el módulo (por default o porque se lo
+// dieron) arranca en «también ortodoncista»; a quien se lo quitaron, en «solo
+// dental». Vacío si no aplica (la sede no tiene el módulo o no es un doctor).
+function accesoInicial(m: TeamMember, ortoModulo: boolean): RespuestaAcceso {
+  if (!ortoModulo || m.role !== "DOCTOR") return "";
+  return tieneAccesoOrtodoncia({ role: m.role, permissionsOverride: m.permissionsOverride }) ? "ortodoncista" : "solo_dental";
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 interface Props {
   team: TeamMember[]; currentUserId: string; currentUserRole: string; clinicName: string;
@@ -536,10 +570,13 @@ interface Props {
   /** El horario de la clínica (0=Lunes…6=Domingo), o `null` si no tiene
    *  filas. Lo lee la ventana «Horario» de cada doctor. */
   horarioClinica?: Dia[] | null;
+  /** ws1-t3: la sede es dental y tiene el módulo de Ortodoncia contratado de verdad. */
+  ortoModulo?: boolean;
 }
 
-export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, ortoModulo = false }: Props) {
   const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const askConfirm = useConfirm();
   const [team,       setTeam]       = useState<TeamMember[]>(initialTeam);
@@ -576,6 +613,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     firstName:"", lastName:"", email:"", role:"DOCTOR",
     specialty:"", color: nextColor, phone:"", services:[],
     cedulaProfesional: "", especialidad: "", cedulaEspecialidad: "",
+    accesoOrtodoncia: "",
   });
 
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -593,6 +631,10 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     // Read current form state directly — no stale closure issue
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
       toast.error(t("settings.team.requiredFields"));
+      return;
+    }
+    if (ortoModulo && form.role === "DOCTOR" && !form.accesoOrtodoncia) {
+      toast.error(locale.startsWith("en") ? "Choose: dental only, or also an orthodontist." : "Elige si es solo dental o también ortodoncista.");
       return;
     }
     setLoading(true);
@@ -624,14 +666,24 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     try {
       const res = await fetch(`/api/team/${editMember.id}`, {
         method:"PATCH", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(form),
+        // El acceso a Ortodoncia solo viaja si la persona lo CAMBIÓ: guardar otro
+        // dato (el teléfono, la cédula) no reescribe los permisos de nadie.
+        body: JSON.stringify({
+          ...form,
+          accesoOrtodoncia: form.accesoOrtodoncia && form.accesoOrtodoncia !== accesoInicial(editMember, ortoModulo)
+            ? form.accesoOrtodoncia
+            : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       // El email se pinta con el que devolvió el server, no con el del form:
       // el endpoint lo normaliza (trim + minúsculas) antes de guardarlo.
       const savedEmail: string = data.email ?? form.email;
-      setTeam(prev => prev.map(m => m.id === editMember.id ? { ...m, ...form, email: savedEmail } : m));
+      const { accesoOrtodoncia: _acceso, ...datosDelForm } = form;
+      setTeam(prev => prev.map(m => m.id === editMember.id
+        ? { ...m, ...datosDelForm, email: savedEmail, permissionsOverride: data.permissionsOverride ?? m.permissionsOverride }
+        : m));
       setEditMember(null);
       toast.success(t("settings.team.dataUpdated"));
       // El cambio de correo es un cambio de LOGIN: el server manda emailChanged
@@ -733,6 +785,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       cedulaProfesional:  m.cedulaProfesional  ?? "",
       especialidad:       m.especialidad       ?? "",
       cedulaEspecialidad: m.cedulaEspecialidad ?? "",
+      accesoOrtodoncia: accesoInicial(m, ortoModulo),
     });
     setEditMember(m);
   }
@@ -1044,6 +1097,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               form={form} setForm={setForm}
               onSubmit={createDoctor} onCancel={() => setShowNew(false)}
               loading={loading} isEdit={false} rediseno={rediseno}
+              ortoModulo={ortoModulo} puedeCambiarAcceso
             />
           </div>
         </div>
@@ -1064,6 +1118,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               form={form} setForm={setForm}
               onSubmit={updateDoctor} onCancel={() => setEditMember(null)}
               loading={loading} isEdit={true} rediseno={rediseno}
+              ortoModulo={ortoModulo} puedeCambiarAcceso={isSuperAdmin}
               // Reset password solo aparece cuando el actor es SUPER_ADMIN
               // y el target NO es SUPER_ADMIN. El backend valida lo mismo.
               onResetPassword={

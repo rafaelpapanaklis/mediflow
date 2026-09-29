@@ -7,6 +7,7 @@ import { TeamClient } from "./team-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { horarioClinica } from "@/components/dashboard/horario-doctor/tipos";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 
 export const metadata: Metadata = { title: "Equipo — DaleControl" };
 
@@ -29,7 +30,9 @@ export default async function TeamPage() {
   // «Horario» de cada doctor dice «sigue el horario de la clínica (Lun-Vie
   // 9:00-19:00…)» y avisa de las horas que se salen de él. Tercera consulta
   // del mismo Promise.all, con el clinicId de la sesión.
-  const [team, rediseno, horarios] = await Promise.all([
+  // ws1-t3: la pregunta «¿solo dental o también ortodoncista?» solo se hace si la
+  // sede es dental y tiene el módulo contratado de verdad (sin el atajo de trial).
+  const [team, rediseno, horarios, ortoModulo] = await Promise.all([
     prisma.user.findMany({
       where: { clinicId: user.clinicId },
       select: {
@@ -54,6 +57,7 @@ export default async function TeamPage() {
       select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
       orderBy: { dayOfWeek: "asc" },
     }),
+    user.clinic.category === "DENTAL" ? hasActiveOrthodonticsModule(user.clinicId).catch(() => false) : Promise.resolve(false),
   ]);
 
   return (
@@ -65,6 +69,7 @@ export default async function TeamPage() {
       clinicName={user.clinic.name}
       rediseno={rediseno}
       horarioClinica={horarioClinica(horarios)}
+      ortoModulo={ortoModulo}
     />
   );
 }

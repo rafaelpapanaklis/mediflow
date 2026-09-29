@@ -8,6 +8,7 @@ import { canSeePatient } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { fail, type ActionResult } from "./result";
 
 /**
@@ -32,6 +33,9 @@ export async function getOrthoActionContext(
   const active = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
+  }
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
+    return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
   }
 
   const requiredKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
@@ -76,6 +80,9 @@ export async function getOrthoBillingActionContext(
   if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
   }
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
+    return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
+  }
 
   if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, permiso)) {
     return fail(`Sin permisos: ${permiso}`);
@@ -105,6 +112,9 @@ export async function getOrthoConfigActionContext(
   const active = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
+  }
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
+    return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
   }
 
   const requiredKey = opts?.write === false ? "settings.view" : "settings.edit";
@@ -154,6 +164,9 @@ export async function getOrthoPlanActionContext(
   const active = await hasActiveOrthodonticsModule(ctx.clinicId);
   if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
+  }
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
+    return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
   }
 
   const rawKeys =

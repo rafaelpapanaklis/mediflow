@@ -159,7 +159,11 @@ export const ALL_PERMISSIONS = {
   "specialties.pediatrics":   "Ver Odontopediatría",
   "specialties.endodontics":  "Ver Endodoncia",
   "specialties.periodontics": "Ver Periodoncia",
-  "specialties.orthodontics": "Ver Ortodoncia",
+  // Es EL interruptor del módulo de Ortodoncia por persona (ws1-t3): menú,
+  // pestaña del paciente, hoja de control, Sabina y agenda de controles. Se
+  // suma a que la sede lo tenga contratado. Qué hace cada quien dentro lo
+  // siguen decidiendo «Editar expediente» (clínico) y «Cobrar» (mensualidades).
+  "specialties.orthodontics": "Acceso al módulo de Ortodoncia (casos, controles y cobro de mensualidades)",
   "specialties.implants":     "Ver Implantología",
 } as const;
 

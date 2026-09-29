@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createBotAppointment, type CreateErrorCode } from "@/lib/agenda/bot-booking-service";
 import { fail, ok, type ActionResult } from "./result";
@@ -33,6 +34,7 @@ export async function agendarRevisionRetencion(input: {
   if (!ctx) return fail("No autenticado");
   if (denyIfMissingPermission(ctx, "agenda.create")) return fail("Sin permiso para crear citas");
   if (!(await hasActiveOrthodonticsModule(ctx.clinicId))) return fail("Módulo Ortodoncia no activo para esta clínica");
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) return fail(MENSAJE_SIN_ACCESO_ORTODONCIA);
 
   const inicio = new Date(input.startsAt);
   if (Number.isNaN(inicio.getTime())) return fail("La fecha/hora no es válida.");

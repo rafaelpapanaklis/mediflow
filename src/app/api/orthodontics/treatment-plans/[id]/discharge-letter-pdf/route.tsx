@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { puedeVerExpediente } from "@/lib/orthodontics/permiso-expediente";
 import { DischargeLetterPdf } from "@/lib/orthodontics/pdf-templates/discharge-letter";
 import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
@@ -22,6 +23,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (ctx.clinicCategory !== "DENTAL") return NextResponse.json({ error: "Categoría no válida" }, { status: 403 });
   if (!(await hasActiveOrthodonticsModule(ctx.clinicId))) {
     return NextResponse.json({ error: "Módulo no activo" }, { status: 403 });
+  }
+  if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
+    return NextResponse.json({ error: MENSAJE_SIN_ACCESO_ORTODONCIA }, { status: 403 });
   }
   if (!puedeVerExpediente(ctx)) {
     return NextResponse.json({ error: "No tienes permiso para ver el expediente de este paciente." }, { status: 403 });
