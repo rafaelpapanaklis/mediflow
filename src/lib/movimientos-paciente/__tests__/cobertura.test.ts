@@ -15,6 +15,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { ORTHO_AUDIT_ACTIONS } from "../../../app/actions/orthodontics/audit-actions";
+import { clasificarFila, esAccionQueNoEsMovimiento, redactarMovimiento } from "../catalogo";
 
 const RAIZ = path.resolve(__dirname, "../../../..");
 const leer = (rel: string) => fs.readFileSync(path.join(RAIZ, rel), "utf8");
@@ -166,5 +168,134 @@ describe("el modelo de Prisma NO declara patientId en AuditLog (sin el SQL rompe
     assert.match(sql, /ADD COLUMN IF NOT EXISTS "patientId"/);
     assert.match(sql, /CREATE INDEX CONCURRENTLY IF NOT EXISTS/);
     assert.ok(!/\b(DROP|DELETE|UPDATE|TRUNCATE)\b\s+(TABLE|FROM|"?audit_logs)/i.test(sql.replace(/^--.*$/gm, "")));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ortodoncia (ws1-t8, auditoría «¿cada cambio aparece en Movimientos?»): se recorren TODAS las acciones del
+// módulo y las rutas /api/orthodontics. Lo que escribe en la base tiene que dejar su movimiento; si una acción
+// nueva se olvida del registro, aquí se pone en rojo con su nombre.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("ortodoncia: toda escritura deja movimiento del paciente", () => {
+  const ESCRIBE = /prisma\.\w+\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(|\$executeRaw|\$transaction|\btx\.\w+\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(/;
+  const REGISTRA = /\b(auditOrtho|auditarCobro|registrarMovimientoDelPaciente|registrarMovimientoExterno|logAudit|logMutation)\(/;
+  // Acciones que no escriben ellas mismas pero DELEGAN la escritura (agendar, WhatsApp, posponer): el registro es suyo.
+  const DELEGA = /createBotAppointment\(|sendWhatsAppLogged\(|guardarPosposicion\(|terminarPosposicion\(/;
+  // Solo estas escriben sin paciente (ajustes de la clínica): van a la bitácora general, no a Movimientos.
+  const SIN_PACIENTE = [
+    "catalogo/sembrarProcedimientosSugeridos.ts",
+    "cobro/condicionesDelConvenio.ts",
+    "cobro/guardarConfigDeCobro.ts",
+    "guardarPreciosPorTecnica.ts",
+    "guardarTecnicasDeLaClinica.ts",
+    "recalculatePaymentStatus.ts",
+    "updateOrthoClinicSettings.ts",
+  ];
+  const base = "src/app/actions/orthodontics/";
+  const fuentes = [
+    ...archivos("src/app/actions/orthodontics").filter((f) => !/\/(_helpers|_ctx|index|result)\.ts$/.test(f)),
+    ...archivos("src/app/api/orthodontics").filter((f) => /route\.tsx?$/.test(f)),
+  ];
+
+  it("hay acciones que recorrer", () => {
+    assert.ok(fuentes.length > 60);
+  });
+
+  it("cada archivo que escribe (o delega la escritura) llama al registro", () => {
+    const sin = fuentes.filter((f) => {
+      const s = leer(f);
+      return (ESCRIBE.test(s) || DELEGA.test(s)) && !REGISTRA.test(s) && !/eliminarCasoEnBase\(/.test(s);
+    });
+    assert.deepEqual(sin, []);
+  });
+
+  it("eliminarCaso registra por el helper (lo hace su función de base con patientId)", () => {
+    assert.match(leer(base + "modulo/eliminarCaso.ts"), /registrarMovimientoDelPaciente\(/);
+    const lib = leer("src/lib/orthodontics/eliminar-caso-core.ts");
+    assert.match(lib, /registrar\(\{/);
+    assert.match(lib, /patientId/);
+  });
+
+  it("cada llamada al registro trae el paciente como campo propio, no escondido en before/after", () => {
+    const sin: string[] = [];
+    for (const f of fuentes) {
+      const rel = f.startsWith(base) ? f.slice(base.length) : f;
+      if (SIN_PACIENTE.indexOf(rel) !== -1) continue;
+      const s = leer(f);
+      for (const fn of ["auditOrtho", "auditarCobro", "registrarMovimientoDelPaciente", "registrarMovimientoExterno"]) {
+        for (const c of llamadas(s, fn)) {
+          // Se quita lo anidado: en un update `auditOrtho` descarta lo que no cambió y el paciente se perdería.
+          let d = 0;
+          let arriba = "";
+          for (const ch of c.bloque) {
+            if (ch === "{" || ch === "(" || ch === "[") d++;
+            if (d <= 1) arriba += ch;
+            if (ch === "}" || ch === ")" || ch === "]") d--;
+          }
+          if (!/\bpatientId\b/.test(arriba)) sin.push(`${f}:${c.linea} (${fn})`);
+        }
+      }
+    }
+    // `_created.after` sí lo recupera el registro (creaciones sin before): la única que lo usa.
+    assert.deepEqual(sin.filter((x) => !/createDiagnosis\.ts/.test(x) && !/eliminarCaso\.ts/.test(x)), []);
+  });
+
+  it("cada acción de ortodoncia con paciente tiene frase humana y categoría (nada de «Registró un cambio»)", () => {
+    const acciones = new Map<string, string>(); // acción → archivo
+    const porConstante = ORTHO_AUDIT_ACTIONS as Record<string, string>;
+    for (const f of fuentes) {
+      const rel = f.startsWith(base) ? f.slice(base.length) : f;
+      if (SIN_PACIENTE.indexOf(rel) !== -1) continue;
+      const s = leer(f);
+      for (const fn of ["auditOrtho", "auditarCobro"]) {
+        for (const c of llamadas(s, fn)) {
+          const lit = /action:\s*["']([^"'`$]+)["']/.exec(c.bloque);
+          const cte = /action:\s*ORTHO_AUDIT_ACTIONS\.(\w+)/.exec(c.bloque);
+          const a = lit ? lit[1] : cte ? porConstante[cte[1]] : null;
+          if (a) acciones.set(a, f);
+        }
+      }
+    }
+    // `input.analysisId ? "ceph_analysis_updated" : "ceph_analysis_created"`
+    for (const a of ["ceph_analysis_created", "ceph_analysis_updated"]) acciones.set(a, "imagen/saveCephalometricAnalysis.ts");
+    assert.ok(acciones.size > 30, "no se leyeron las acciones");
+    const vagas: string[] = [];
+    const sinCategoria: string[] = [];
+    for (const [a, f] of Array.from(acciones.entries())) {
+      if (esAccionQueNoEsMovimiento(a)) continue;
+      const fila = { entityType: "OrthodonticX", action: a, changes: null };
+      if (/^Registr[óo] un cambio( en ortodoncia)?$/.test(redactarMovimiento(fila))) vagas.push(`${a} (${f})`);
+      if (clasificarFila(fila) === "otros") sinCategoria.push(`${a} (${f})`);
+    }
+    assert.deepEqual(vagas, []);
+    assert.deepEqual(sinCategoria, []);
+  });
+
+  it("las constantes ORTHO_AUDIT_ACTIONS que no son PDF ni ajustes de la clínica tienen frase propia", () => {
+    const CLINICA = ["ortho.clinicSettings.updated"];
+    const vagas = Object.values(ORTHO_AUDIT_ACTIONS).filter(
+      (a) =>
+        !esAccionQueNoEsMovimiento(a) &&
+        CLINICA.indexOf(a) === -1 &&
+        /^Registr[óo] un (cambio|dato)/.test(redactarMovimiento({ entityType: "OrthodonticX", action: a, changes: null })),
+    );
+    assert.deepEqual(vagas, []);
+  });
+
+  it("los movimientos nuevos de la auditoría siguen cableados", () => {
+    const CON = [
+      "agendarProximoControlDesdeCard.ts",
+      "agendarRevisionRetencion.ts",
+      "modulo/posponerAlerta.ts",
+      "modulo/deshacerPosposicion.ts",
+      "whatsapp/avisarProximoControlAlPaciente.ts",
+      "whatsapp/sendControlInstructions.ts",
+      "whatsapp/sendMensualidadReminder.ts",
+      "alineadores/logElasticsComplianceFromPortal.ts",
+      "alineadores/submitMonitoringPhoto.ts",
+    ];
+    for (const rel of CON) assert.match(leer(base + rel), /registrarMovimiento(DelPaciente|Externo)\(\{/, rel);
+    assert.match(leer("src/app/actions/orthodontics/imagen/boltonAnalysis.ts"), /auditOrtho\(\{/);
+    assert.match(leer("src/app/api/orthodontics/photos/upload/route.ts"), /registrarMovimientoDelPaciente\(\{/);
   });
 });

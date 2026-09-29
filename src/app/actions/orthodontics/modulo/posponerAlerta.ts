@@ -10,6 +10,7 @@
 import { revalidatePath } from "next/cache";
 import { hastaDePosposicion, esTipoPosponible } from "@/lib/orthodontics/alertas-pospuestas";
 import { faltaLaTabla, guardarPosposicion } from "@/lib/orthodontics/alertas-pospuestas-db";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 import { getOrthoActionContext, loadPatientForOrtho } from "../_helpers";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
@@ -44,6 +45,15 @@ export async function posponerAlerta(input: {
     return fail("No se pudo posponer la alerta. Inténtalo de nuevo.");
   }
 
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: paciente.data.id,
+    entityType: "orthodontic-case",
+    entityId: paciente.data.id,
+    action: "update",
+    texto: "Pospuso 7 días una alerta de ortodoncia",
+  });
   revalidatePath("/dashboard/orthodontics/alertas");
   return ok({ hasta: hasta.toISOString() });
 }

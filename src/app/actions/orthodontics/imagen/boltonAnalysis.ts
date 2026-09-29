@@ -4,6 +4,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { isFailure, fail, ok, type ActionResult } from "../result";
+import { auditOrtho } from "../_helpers";
 import { getOrthoImagingContext, isMissingRelation } from "./_context";
 
 export interface BoltonGuardado {
@@ -72,6 +73,14 @@ export async function saveBoltonAnalysis(input: {
         ...data,
       },
       update: data,
+    });
+    await auditOrtho({
+      ctx,
+      action: "ortho.bolton.saved",
+      entityType: "OrthodonticBoltonAnalysis",
+      entityId: input.treatmentPlanId,
+      patientId,
+      meta: { treatmentPlanId: input.treatmentPlanId },
     });
     return ok({ saved: true });
   } catch (e) {

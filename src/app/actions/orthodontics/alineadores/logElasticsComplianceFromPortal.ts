@@ -11,6 +11,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { diaDeLaClinica, fechaDeRegistro } from "@/lib/patient-portal/ortodoncia-portal";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 import { getOrthoPatientPortalContext, isMissingRelation } from "./_patient-context";
 
@@ -54,6 +55,15 @@ export async function logElasticsComplianceFromPortal(
         // recepción lo había capturado antes por teléfono).
       },
       select: { id: true },
+    });
+    await registrarMovimientoExterno({
+      actor: "patient",
+      clinicId,
+      patientId,
+      entityType: "orthodontic-control",
+      entityId: saved.id,
+      action: "update",
+      texto: input.usedElastics ? "Registró que usó sus elásticos hoy (portal)" : "Registró que hoy no usó sus elásticos (portal)",
     });
     return ok({ id: saved.id });
   } catch (e) {

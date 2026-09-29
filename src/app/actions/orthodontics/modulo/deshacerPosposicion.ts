@@ -6,6 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { esTipoPosponible } from "@/lib/orthodontics/alertas-pospuestas";
 import { faltaLaTabla, terminarPosposicion } from "@/lib/orthodontics/alertas-pospuestas-db";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 import { getOrthoActionContext, loadPatientForOrtho } from "../_helpers";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
@@ -32,6 +33,15 @@ export async function deshacerPosposicion(input: {
     return fail("No se pudo deshacer. Inténtalo de nuevo.");
   }
 
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: paciente.data.id,
+    entityType: "orthodontic-case",
+    entityId: paciente.data.id,
+    action: "update",
+    texto: "Reactivó una alerta de ortodoncia que estaba pospuesta",
+  });
   revalidatePath("/dashboard/orthodontics/alertas");
   return ok({ deshecha: true });
 }

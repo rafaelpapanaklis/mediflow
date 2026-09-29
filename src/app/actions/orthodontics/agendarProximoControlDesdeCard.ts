@@ -26,6 +26,8 @@ import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orth
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createBotAppointment, type CreateErrorCode } from "@/lib/agenda/bot-booking-service";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+import { fechaHoraParaTexto } from "@/lib/movimientos-paciente/textos";
 import { fail, ok, type ActionResult } from "./result";
 
 export interface AgendarProximoControlInput {
@@ -104,5 +106,14 @@ export async function agendarProximoControlDesdeCard(
   });
 
   if (!res.ok) return fail(MENSAJE_POR_ERROR[res.error]);
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: card.patientId,
+    entityType: "appointment",
+    entityId: res.appointmentId,
+    action: "create",
+    texto: `Agendó el próximo control de ortodoncia para el ${fechaHoraParaTexto(card.nextDate, clinic.timezone)}`,
+  });
   return ok({ appointmentId: res.appointmentId });
 }

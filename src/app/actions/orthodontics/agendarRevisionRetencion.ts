@@ -10,6 +10,8 @@ import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createBotAppointment, type CreateErrorCode } from "@/lib/agenda/bot-booking-service";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+import { fechaHoraParaTexto } from "@/lib/movimientos-paciente/textos";
 import { fail, ok, type ActionResult } from "./result";
 
 const TIPO_CITA_RETENCION = "Control de retención";
@@ -70,5 +72,14 @@ export async function agendarRevisionRetencion(input: {
     reason: TIPO_CITA_RETENCION,
   });
   if (!res.ok) return fail(MENSAJE_POR_ERROR[res.error]);
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: plan.patientId,
+    entityType: "appointment",
+    entityId: res.appointmentId,
+    action: "create",
+    texto: `Agendó una revisión de retención de ortodoncia para el ${fechaHoraParaTexto(inicio, clinic.timezone)}`,
+  });
   return ok({ appointmentId: res.appointmentId });
 }

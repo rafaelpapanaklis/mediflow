@@ -19,6 +19,7 @@ import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 import { fail, ok, type ActionResult } from "@/app/actions/orthodontics/result";
 
 export interface AvisarProximoControlInput {
@@ -124,6 +125,15 @@ export async function avisarProximoControlAlPaciente(
       to: telefonoDestino,
       body: texto,
       kind: "manual_api",
+    });
+    await registrarMovimientoDelPaciente({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      patientId: card.patientId,
+      entityType: "orthodontic-control",
+      entityId: card.patientId,
+      action: "send",
+      texto: "Avisó al paciente por WhatsApp de su próximo control de ortodoncia",
     });
     return ok({ texto, enviado: true });
   } catch (e) {

@@ -17,6 +17,8 @@ import {
   limiteSubidasPorUsuario,
 } from "@/lib/uploads/validar-archivo";
 
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -223,6 +225,18 @@ export async function POST(req: NextRequest) {
       notes: `Set ${set.setType} · vista ${safeView}`,
     },
     select: { id: true, url: true },
+  });
+
+  // La foto del juego queda en los movimientos del paciente (sin el nombre del archivo).
+  await registrarMovimientoDelPaciente({
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    patientId: set.patientId,
+    entityType: "patient-file",
+    entityId: patientFile.id,
+    action: "create",
+    texto: "Subió una foto de ortodoncia a un juego de fotos",
+    req,
   });
 
   return NextResponse.json({

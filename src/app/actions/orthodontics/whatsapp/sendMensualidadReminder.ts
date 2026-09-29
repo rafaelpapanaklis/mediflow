@@ -39,6 +39,7 @@ import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
+import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 import { fail, ok, type ActionResult } from "@/app/actions/orthodontics/result";
 
 export interface SendMensualidadReminderInput {
@@ -185,6 +186,15 @@ export async function sendMensualidadReminder(
       to: telefonoDestino,
       body: texto,
       kind: "payment_notice",
+    });
+    await registrarMovimientoDelPaciente({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      patientId: input.patientId,
+      entityType: "orthodontic-payment",
+      entityId: input.patientId,
+      action: "send",
+      texto: "Envió por WhatsApp un recordatorio de mensualidad de ortodoncia",
     });
     return ok({ texto, enviado: true });
   } catch (e) {

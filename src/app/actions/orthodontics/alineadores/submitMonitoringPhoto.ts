@@ -5,6 +5,7 @@
 // que la clínica lo revise. Auth de paciente — ver _patient-context.ts.
 
 import { prisma } from "@/lib/prisma";
+import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 import { getOrthoPatientPortalContext, isMissingRelation } from "./_patient-context";
 
@@ -59,6 +60,15 @@ export async function submitMonitoringPhoto(
         reviewStatus: "PENDING",
       },
       select: { id: true },
+    });
+    await registrarMovimientoExterno({
+      actor: "patient",
+      clinicId,
+      patientId,
+      entityType: "OrthodonticMonitoringPhoto",
+      entityId: created.id,
+      action: "create",
+      texto: "Envió una foto de monitoreo de su tratamiento (portal)",
     });
     return ok({ id: created.id });
   } catch (e) {

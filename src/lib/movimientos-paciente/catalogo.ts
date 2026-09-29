@@ -128,10 +128,18 @@ export function categoriaDeEntidad(entityType: string): CategoriaMovimiento {
  */
 export const REGLAS_CATEGORIA_POR_ACCION: ReadonlyArray<{ prefijos: readonly string[]; categoria: CategoriaMovimiento }> = [
   {
-    prefijos: ["ortho.paymentPlan", "ortho.installment", "ortho.paymentStatus", "ortho.collect", "ortho.cfdi", "ortho.quoteScenario"],
+    prefijos: [
+      "ortho.paymentPlan", "ortho.installment", "ortho.paymentStatus", "ortho.collect", "ortho.cfdi", "ortho.quoteScenario",
+      // ws1-t8 (auditoría de ortodoncia): acciones de cobro y de plan financiero con nombre propio.
+      "ortho.financialPlan", "abrir-plan-de-pago", "crear-plan-al-abrir-caso", "registrar-extra-cobrado",
+      "cobrar-procedimiento-de-hoja", "registrar-promesa-de-pago", "resolver-promesa-de-pago", "cambiar-plan-de-pago",
+      "elegir-descuento-del-caso",
+    ],
     categoria: "dinero",
   },
-  { prefijos: ["ortho.photoSet", "clinical-shared.photo"], categoria: "archivos" },
+  { prefijos: ["ortho.photoSet", "clinical-shared.photo", "monitoring_photo"], categoria: "archivos" },
+  // Acciones de ortodoncia con nombre propio (sin el prefijo «ortho.»): alineadores, elásticos, análisis, controles.
+  { prefijos: ["aligner_", "elastics_", "ceph_analysis", "facial_analysis", "mover-controles"], categoria: "expediente" },
   { prefijos: ["ortho.", "pediatrics.", "perio.", "endo.", "implant.", "clinical-shared."], categoria: "expediente" },
 ];
 
@@ -144,7 +152,8 @@ function categoriaPorPrefijoDeAccion(action: string): CategoriaMovimiento | null
 
 /** Acciones que no son un cambio sino un documento generado o una lectura. */
 export function esAccionQueNoEsMovimiento(action: string): boolean {
-  return action === "view" || /\.pdf$/.test(action);
+  // Un documento generado o descargado (PDF, exportación) no cambia nada del paciente.
+  return action === "view" || /\.pdf$/.test(action) || /\.exported$/.test(action);
 }
 
 export const LLAVES_CLINICAS_EN_PACIENTE = ["_odontogram", "healthQuestionnaireId", "referralCreated"];
@@ -486,6 +495,24 @@ const TEXTO_POR_ACCION: Record<string, string> = {
   "clinical-shared.reminder.created": "Creó un recordatorio clínico",
   "clinical-shared.reminder.cancelled": "Canceló un recordatorio clínico",
   "clinical-shared.treatment-link.created": "Vinculó un tratamiento",
+  // ws1-t8 (auditoría de ortodoncia): acciones con nombre propio que caían en «Registró un cambio en ortodoncia».
+  "ortho.bolton.saved": "Guardó el análisis de Bolton",
+  "ortho.referralLetter.created": "Creó una carta de referencia de ortodoncia",
+  "ortho.financialPlan.updated": "Actualizó el plan financiero de ortodoncia",
+  "ortho.elastics.compliance.recorded": "Registró el uso de elásticos",
+  "aligner_case_upserted": "Guardó el caso de alineadores",
+  "aligner_event_logged": "Registró un evento del tratamiento con alineadores",
+  "elastics_log_manual": "Registró el uso de elásticos del paciente",
+  "monitoring_photo_reviewed": "Revisó una foto de monitoreo",
+  "facial_analysis_saved": "Guardó el análisis facial",
+  "ceph_analysis_created": "Registró un análisis cefalométrico",
+  "ceph_analysis_updated": "Actualizó un análisis cefalométrico",
+  "mover-controles-al-doctor-tratante": "Movió los controles futuros al doctor tratante",
+  "abrir-plan-de-pago": "Abrió el plan de pago de ortodoncia",
+  "abrir-plan-de-pago-duplicado": "Intentó abrir un plan de pago de ortodoncia que ya existía",
+  "crear-plan-al-abrir-caso": "Armó el plan de pago al abrir el caso de ortodoncia",
+  "registrar-extra-cobrado": "Cobró un extra de ortodoncia",
+  "cobrar-procedimiento-de-hoja": "Cobró un procedimiento de la visita de ortodoncia",
   "registrar-promesa-de-pago": "Registró una promesa de pago de ortodoncia",
   "resolver-promesa-de-pago": "Resolvió una promesa de pago de ortodoncia",
   "cambiar-plan-de-pago": "Cambió las condiciones de pago de ortodoncia",
