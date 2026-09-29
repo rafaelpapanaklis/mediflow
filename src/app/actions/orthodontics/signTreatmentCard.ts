@@ -174,7 +174,16 @@ export async function signTreatmentCard(
           })
         : null;
       // #81: una hoja que YA estaba firmada no vuelve a mover el cupo de reposiciones.
-      yaEstabaFirmada = existing?.status === "SIGNED";
+      // La firma se «reclama» con un UPDATE condicional (status <> SIGNED): dos firmas a
+      // la vez se serializan por el candado de fila y solo UNA ve count = 1; leer el
+      // estado y luego escribir dejaba pasar a las dos y gastaba el cupo dos veces.
+      if (existing) {
+        const reclamo = await tx.orthoTreatmentCard.updateMany({
+          where: { id: existing.id, treatmentPlanId: plan.id, status: { not: "SIGNED" } },
+          data: { status: "SIGNED", signedAt: now, signedById: ctx.userId },
+        });
+        yaEstabaFirmada = reclamo.count === 0;
+      }
 
       let resolvedId: string;
       if (existing) {
@@ -371,12 +380,17 @@ export async function signTreatmentCard(
     if (!yaEstabaFirmada && repuestos > 0) {
       try {
         let incluidas = 0;
+        let sinContar = false;
         for (let i = 0; i < repuestos; i++) {
           const r = await consumirReposicionIncluida(plan.id, plan.clinicId);
+          // Un error o una tabla ausente NO es «ya no hay cupo»: no se manda a cobrar.
+          if (!r.ok) { sinContar = true; break; }
           if (r.fueIncluida) incluidas++;
           else break;
         }
-        avisoReposiciones = avisoDeReposiciones({ repuestos, incluidas });
+        avisoReposiciones = sinContar
+          ? "No se pudo contar la reposición de bracket contra las incluidas del caso: revisa «Reposiciones incluidas» en Cobro del tratamiento."
+          : avisoDeReposiciones({ repuestos, incluidas });
       } catch (e) {
         console.warn("[ortho] signTreatmentCard: no se pudo contar la reposición contra las incluidas (no revierte la firma):", e);
       }
