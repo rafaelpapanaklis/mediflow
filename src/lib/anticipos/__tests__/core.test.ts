@@ -199,7 +199,7 @@ describe("configuración del anticipo del panel: solo fixed/percent, sin 'total'
   });
 });
 
-describe("sugeridoAnticipoPanel: el % siempre es sobre el TOTAL de la factura", () => {
+describe("sugeridoAnticipoPanel: sin nada pagado, el % es sobre el total de la factura", () => {
   it("fixed ignora el total", () => {
     assert.equal(sugeridoAnticipoPanel({ modo: "fixed", monto: 250, porcentaje: 0, horas: 24 }, 5000), 250);
   });
@@ -356,5 +356,25 @@ describe("conPuntoFinal (N8, QA ronda 4) — nunca deja 'p.m..'", () => {
   it("NO lo duplica si el texto ya termina en punto (Intl deja 'p.m.'/'a.m.' con el suyo)", () => {
     assert.equal(conPuntoFinal("28-sep, 04:00 p.m."), "28-sep, 04:00 p.m.");
     assert.equal(conPuntoFinal("28-sep, 09:00 a.m."), "28-sep, 09:00 a.m.");
+  });
+});
+
+describe("H13 (revisión final, ws1-t4): el sugerido de una factura PARCIAL es sobre el SALDO y no lo supera", () => {
+  it("25 % sobre lo que falta, no sobre el total", () => {
+    // $800 con $200 pagados: 25 % de $600 = $150 (antes sugería $200).
+    assert.equal(sugeridoAnticipoPanel({ modo: "percent", monto: 0, porcentaje: 25, horas: 24 }, 800, 200), 150);
+  });
+  it("un fijo mayor que el saldo se recorta al saldo", () => {
+    assert.equal(sugeridoAnticipoPanel({ modo: "fixed", monto: 300, porcentaje: 0, horas: 24 }, 800, 650), 150);
+  });
+  it("con un saldo por debajo del mínimo, sin sugerido", () => {
+    assert.equal(sugeridoAnticipoPanel({ modo: "fixed", monto: 300, porcentaje: 0, horas: 24 }, 800, 795), null);
+  });
+  it("sin nada pagado, igual que antes", () => {
+    assert.equal(sugeridoAnticipoPanel({ modo: "percent", monto: 0, porcentaje: 20, horas: 24 }, 2000), 400);
+    assert.equal(sugeridoAnticipoPanel({ modo: "percent", monto: 0, porcentaje: 20, horas: 24 }, 2000, 0), 400);
+  });
+  it("sin factura (total 0): solo el fijo, como antes", () => {
+    assert.equal(sugeridoAnticipoPanel({ modo: "fixed", monto: 300, porcentaje: 0, horas: 24 }, 0), 300);
   });
 });

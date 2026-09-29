@@ -83,12 +83,22 @@ interface EstadoGET {
   motivoCitaNoElegible?: string | null;
   /** ws1-t1 (M4): zona de la clínica, para pintar `pendiente.expiresAt`. */
   zonaHoraria?: string;
+  /** H26: ¿se puede mandar por WhatsApp desde aquí? Sin el dato, se ofrece como antes. */
+  whatsapp?: { conectado: boolean; puedeEnviar: boolean };
 }
 
 interface ResultadoPOST {
   deposit: { invoiceId: string; checkoutUrl: string | null; metodo: MetodoAnticipo };
   texto: string;
   whatsapp: { enviado: boolean; motivo?: string };
+}
+
+/** Por qué no se ofrece enviar por WhatsApp, o null si se puede. Puro. */
+export function motivoSinWhatsAppDe(w: { conectado: boolean; puedeEnviar: boolean } | undefined): string | null {
+  if (!w) return null;
+  if (!w.conectado) return "Esta clínica no tiene WhatsApp conectado: pide el anticipo y comparte el texto o el PDF por otro medio.";
+  if (!w.puedeEnviar) return "No tienes permiso para enviar WhatsApp: pide el anticipo y comparte el texto o el PDF por otro medio.";
+  return null;
 }
 
 export interface ModalPedirAnticipoProps {
@@ -129,6 +139,10 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo, redisen
   const [enviando, setEnviando] = useState<"solo" | "wa" | null>(null);
   const [resultado, setResultado] = useState<ResultadoPOST | null>(null);
   const [recargarTick, setRecargarTick] = useState(0);
+  // H26 (revisión final, ws1-t4): sin WhatsApp conectado (o sin permiso de
+  // enviarlo) no se ofrece «Pedir y enviar por WhatsApp»: se dice antes, y el
+  // anticipo se pide igual para compartir el texto o el PDF por otro medio.
+  const motivoSinWhatsApp = motivoSinWhatsAppDe(estado?.whatsapp);
 
   useEffect(() => {
     if (!open) return;
@@ -399,6 +413,12 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo, redisen
                   <Input id="anticipo-plazo" value={horas} onChange={(e) => setHoras(e.target.value)} inputMode="numeric" />
                 </div>
               </div>
+              {motivoSinWhatsApp && (
+                <p className={`${a.nota} ${a.notaInfo}`} role="note">
+                  <MessageCircle size={16} strokeWidth={1.75} aria-hidden />
+                  <span>{motivoSinWhatsApp}</span>
+                </p>
+              )}
             </>
           )}
         </div>
@@ -407,9 +427,11 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo, redisen
           {enFormulario ? (
             <>
               <ButtonNew variant="ghost" onClick={onClose} disabled={enviando !== null}>Cancelar</ButtonNew>
-              <ButtonNew variant="secondary" icon={enviando === "wa" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <MessageCircle size={14} aria-hidden />} onClick={() => pedir(true)} disabled={enviando !== null}>
-                {enviando === "wa" ? "Enviando…" : "Pedir y enviar por WhatsApp"}
-              </ButtonNew>
+              {!motivoSinWhatsApp && (
+                <ButtonNew variant="secondary" icon={enviando === "wa" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <MessageCircle size={14} aria-hidden />} onClick={() => pedir(true)} disabled={enviando !== null}>
+                  {enviando === "wa" ? "Enviando…" : "Pedir y enviar por WhatsApp"}
+                </ButtonNew>
+              )}
               <ButtonNew variant="primary" icon={enviando === "solo" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Link2 size={14} aria-hidden />} onClick={() => pedir(false)} disabled={enviando !== null}>
                 {enviando === "solo" ? "Pidiendo…" : "Pedir anticipo"}
               </ButtonNew>

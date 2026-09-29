@@ -15,6 +15,8 @@ import { prisma } from "@/lib/prisma";
 import { sumInvoiceItems, computeInvoiceTotal, itemLineTotal, clinicInvoiceTaxDefaults, round2 } from "@/lib/invoice-totals";
 import { InvoiceNumberExhaustedError, nextInvoiceNumber, withInvoiceNumberRetry } from "@/lib/invoices/next-invoice-number";
 import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
+import { facturaOcupaLaCita } from "./cita-factura-cancelada";
+import { soltarFacturaCanceladaDeCita } from "./cita-factura-cancelada.server";
 
 export interface LineItemFactura {
   code?: string;
@@ -90,7 +92,10 @@ export async function crearFacturaDesdeCita(
     where: { appointmentId },
     select: { id: true, invoiceNumber: true, total: true, balance: true, status: true },
   });
-  if (existing) return falloFactura("invoice_already_exists", { existente: existing });
+  // H1 (revisión final, ws1-t4): una factura CANCELADA no ocupa la cita. Se le
+  // quita el vínculo (con nota y bitácora) para que quepa la nueva.
+  if (existing && facturaOcupaLaCita(existing)) return falloFactura("invoice_already_exists", { existente: existing });
+  if (existing) await soltarFacturaCanceladaDeCita({ clinicId, appointmentId, userId: args.userId ?? null });
 
   const items = args.lineItems.map((li) => {
     const quantity = li.quantity;

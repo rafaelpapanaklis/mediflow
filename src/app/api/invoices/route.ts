@@ -18,6 +18,7 @@ import {
 import { DEFAULT_INVOICE_TZ, parseInvoiceDueDate } from "@/lib/invoices/due-date";
 import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
 import { computeReceivables, whereFacturasVencidas } from "@/lib/caja";
+import { soltarFacturaCanceladaDeCita } from "@/lib/invoices/cita-factura-cancelada.server";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -216,6 +217,10 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      // H1 (revisión final, ws1-t4): si la factura que tenía la cita está
+      // CANCELADA, suelta la cita (con nota y bitácora) para que quepa esta.
+      // Una factura viva sigue dando «Esa cita ya tiene una factura» (P2002).
+      await soltarFacturaCanceladaDeCita({ clinicId, appointmentId: data.appointmentId, userId: ctx.userId });
     }
 
     // Folio por MÁXIMO emitido con reintento ante carrera (P0-2): el folio se

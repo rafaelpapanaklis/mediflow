@@ -7,6 +7,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
+import { facturaOcupaLaCita } from "@/lib/invoices/cita-factura-cancelada";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +89,9 @@ export async function POST(req: NextRequest) {
     where: { appointmentId: appt.id },
     select: { id: true, invoiceNumber: true, total: true, balance: true, status: true },
   });
-  if (existing) {
+  // H1 (revisión final, ws1-t4): una factura CANCELADA no ocupa la cita —
+  // `crearFacturaDesdeCita` le quita el vínculo y crea la nueva.
+  if (existing && facturaOcupaLaCita(existing)) {
     return NextResponse.json(
       { error: "invoice_already_exists", invoice: existing },
       { status: 409 },

@@ -40,6 +40,7 @@ import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { leerDatosBancarios, type CuentaBancariaSede } from "./datos-bancarios.server";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { computeInvoiceTotal, clinicInvoiceTaxDefaults } from "@/lib/invoice-totals";
+import { facturaOcupaLaCita } from "@/lib/invoices/cita-factura-cancelada";
 
 type Db = typeof prisma;
 
@@ -146,9 +147,11 @@ export async function sugeridoParaFactura(
   clinicId: string,
   totalFactura: number,
   over?: Partial<DepsAnticipoPanel>,
+  /** Lo ya pagado de la factura: el sugerido se calcula sobre el saldo (H13). */
+  pagado: number = 0,
 ): Promise<{ monto: number | null; horas: number }> {
   const politica = await leerPoliticaPanelVigente(clinicId, over);
-  return { monto: sugeridoAnticipoPanel(politica, totalFactura), horas: politica.horas };
+  return { monto: sugeridoAnticipoPanel(politica, totalFactura, pagado), horas: politica.horas };
 }
 
 export interface EstadoAnticipoFactura {
@@ -664,8 +667,10 @@ async function pedirAnticipoDeCitaImpl(
   const canal = await resolverCanal(d, args.clinicId, metodo);
   if (canal.fallo) return canal.fallo;
 
-  const existente = await d.db.invoice.findUnique({ where: { appointmentId: appt.id }, select: { id: true } });
-  let invoiceId = existente?.id ?? null;
+  const existente = await d.db.invoice.findUnique({ where: { appointmentId: appt.id }, select: { id: true, status: true } });
+  // H1 (revisión final, ws1-t4): una factura CANCELADA no es la de la cita; se
+  // pide sobre una nueva (crearFacturaDesdeCita suelta la cancelada).
+  let invoiceId = facturaOcupaLaCita(existente) ? existente!.id : null;
 
   if (!invoiceId) {
     let description = args.concepto?.description?.trim() ?? "";

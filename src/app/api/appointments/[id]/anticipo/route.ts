@@ -30,6 +30,7 @@ import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { buildSolicitudAnticipoPdf } from "@/lib/anticipos/solicitud-pdf";
+import { facturaOcupaLaCita } from "@/lib/invoices/cita-factura-cancelada";
 
 export const dynamic = "force-dynamic";
 
@@ -67,12 +68,18 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     prisma.invoice.findUnique({
       where: { appointmentId: params.id },
       select: { id: true, total: true, paid: true, status: true },
-    }),
-    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }),
+    }).then((f) => (facturaOcupaLaCita(f) ? f : null)), // H1: una cancelada no es la de la cita
+    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true } }),
   ]);
   const disponible = canales.mercadopago || canales.transferencia;
   // ws1-t1 (M4): la zona de la CLÍNICA, no la del navegador.
   const zonaHoraria = clinica?.timezone || "America/Mexico_City";
+  // H26 (revisión final, ws1-t4): el modal avisa ANTES si no hay WhatsApp
+  // (mismo criterio que el POST), en vez de ofrecer «Pedir y enviar».
+  const whatsapp = {
+    conectado: !!(clinica?.waConnected && clinica.waPhoneNumberId && clinica.waAccessToken),
+    puedeEnviar: denyIfMissingPermission(ctx, "whatsapp.send") === null,
+  };
 
   if (!invoice) {
     const sugerido = await sugeridoParaFactura(ctx.clinicId, 0);
@@ -86,11 +93,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       citaElegible,
       motivoCitaNoElegible,
       zonaHoraria,
+      whatsapp,
     });
   }
 
   const [sugerido, estado] = await Promise.all([
-    sugeridoParaFactura(ctx.clinicId, invoice.total),
+    sugeridoParaFactura(ctx.clinicId, invoice.total, undefined, invoice.paid),
     estadoAnticipoDeFactura(ctx.clinicId, invoice.id),
   ]);
 
@@ -106,6 +114,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     citaElegible,
     motivoCitaNoElegible,
     zonaHoraria,
+    whatsapp,
   });
 }
 

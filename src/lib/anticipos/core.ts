@@ -176,14 +176,32 @@ export function validarConfiguracionPanel(c: {
 }
 
 /**
- * El monto SUGERIDO para prefijar el modal («Pedir anticipo»), a partir del
- * total de la factura. Reutiliza `calcularMontoAnticipo` tratando el total de
- * la factura como el "precio del servicio": el modo "percent" ya calcula sobre
- * ese número, y "fixed" lo ignora. Puede dar null (por debajo del mínimo);
- * la pantalla entonces no sugiere nada y recepción escribe el monto a mano.
+ * El monto SUGERIDO para prefijar el modal («Pedir anticipo»), a partir de lo
+ * que FALTA por pagar de la factura (total − pagado). Reutiliza
+ * `calcularMontoAnticipo` tratando ese saldo como el "precio del servicio": el
+ * modo "percent" calcula sobre él y "fixed" lo ignora.
+ *
+ * H13 (revisión final, ws1-t4): antes el % se calculaba sobre el TOTAL, y en
+ * una factura PARCIAL sugería de más (25 % de $800 = $200 con solo $600 por
+ * cobrar… y un fijo de $300 sobre $150 de saldo sugería $300, que el servidor
+ * rechaza). Ahora nunca pasa del saldo. Sin factura (`totalFactura` 0), solo el
+ * monto fijo, como antes. Puede dar null (por debajo del mínimo); la pantalla
+ * entonces no sugiere nada y recepción escribe el monto a mano.
  */
-export function sugeridoAnticipoPanel(politica: PoliticaAnticipoPanel, totalFactura: number): number | null {
-  return calcularMontoAnticipo({ modo: politica.modo, monto: politica.monto, porcentaje: politica.porcentaje }, totalFactura);
+export function sugeridoAnticipoPanel(
+  politica: PoliticaAnticipoPanel,
+  totalFactura: number,
+  pagado: number = 0,
+): number | null {
+  const hayFactura = Number.isFinite(totalFactura) && totalFactura > 0;
+  const saldo = hayFactura ? redondear2(Math.max(0, totalFactura - (Number.isFinite(pagado) ? Math.max(0, pagado) : 0))) : 0;
+  const monto = calcularMontoAnticipo(
+    { modo: politica.modo, monto: politica.monto, porcentaje: politica.porcentaje },
+    hayFactura ? saldo : totalFactura,
+  );
+  if (monto === null || !hayFactura) return monto;
+  const tope = Math.min(monto, saldo);
+  return tope >= ANTICIPO_MINIMO_MXN ? redondear2(tope) : null;
 }
 
 /**
