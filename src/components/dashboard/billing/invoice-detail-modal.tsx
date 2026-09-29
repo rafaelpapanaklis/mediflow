@@ -241,6 +241,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // /api/invoices/[id]/permisos-cobro). Arrancan en false: el lado seguro mientras responde.
   const [puedeCobrar, setPuedeCobrar] = useState(false);
   const [puedeTimbrar, setPuedeTimbrar] = useState(false);
+  // H14 (2.ª parte): «Editar precio»/descuento/«Eliminar borrador» (billing.edit) y
+  // «Cancelar factura»/«Reembolsar» (billing.refund), como los exigen sus rutas.
+  const [puedeEditar, setPuedeEditar] = useState(false);
+  const [puedeReembolsar, setPuedeReembolsar] = useState(false);
   // H15 (opción A, ws1-t4): la cita de esta factura se canceló con dinero
   // pagado y falta decidir (o está por reembolsar): no se ofrece cobrar más de
   // un servicio que ya no va a ocurrir. El aviso de abajo dice qué hacer.
@@ -327,12 +331,12 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // H14 — permisos de cobro de ESTA sesión, de su propio endpoint (no del de
   // anticipos). Falla cerrado: sin respuesta buena, los botones no salen.
   useEffect(() => {
-    setPuedeCobrar(false); setPuedeTimbrar(false);
+    setPuedeCobrar(false); setPuedeTimbrar(false); setPuedeEditar(false); setPuedeReembolsar(false);
     if (!open || !invoice?.id) return;
     let vivo = true;
     fetch(`/api/invoices/${invoice.id}/permisos-cobro`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (vivo) { setPuedeCobrar(d?.puedeCobrar === true); setPuedeTimbrar(d?.puedeTimbrar === true); } })
+      .then((d) => { if (vivo) { setPuedeCobrar(d?.puedeCobrar === true); setPuedeTimbrar(d?.puedeTimbrar === true); setPuedeEditar(d?.puedeEditar === true); setPuedeReembolsar(d?.puedeReembolsar === true); } })
       .catch(() => {});
     return () => { vivo = false; };
   }, [open, invoice?.id]);
@@ -374,7 +378,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // de cobrar requiere "Confirmar" para pasar a PENDING. El usuario puede
   // editar precio/descuento o eliminar el borrador completo desde aquí.
   const isDraft    = status === "DRAFT";
-  const canEditPrice = (isPending || isDraft) && invoice.paid === 0;
+  const canEditPrice = (isPending || isDraft) && invoice.paid === 0 && puedeEditar;
   // Lo pagado es SOLO el saldo a favor aplicado al emitirla: se puede cancelar
   // y ese dinero vuelve a favor del paciente (el servidor lo vuelve a decidir).
   const soloAnticipo = !invoice.cfdiUuid && pagadoEsSoloAnticipo(invoice.paid, invoice.payments);
@@ -1054,18 +1058,22 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   {t("clinical.invoiceDetail.chargeNow", { amount: fmtMXNdec(invoice.total) })}
                 </ButtonNew>
                 )}
+                {puedeEditar && (
                 <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => openSub("edit-price")} disabled={busy}>
                   {t("clinical.invoiceDetail.editPrice")}
                 </ButtonNew>
+                )}
                 {/* Diseño nuevo: el descuento es una fila de la sección de cobro. */}
-                {!rediseno && (
+                {!rediseno && puedeEditar && (
                 <ButtonNew variant="secondary" icon={<Tag size={14} aria-hidden />} onClick={() => openSub("discount")} disabled={busy}>
                   {t("clinical.invoiceDetail.applyDiscount")}
                 </ButtonNew>
                 )}
+                {puedeEditar && (
                 <ButtonNew variant="danger" icon={<Trash2 size={14} aria-hidden />} onClick={handleDeleteDraft} disabled={busy}>
                   {t("clinical.invoiceDetail.deleteDraft")}
                 </ButtonNew>
+                )}
               </>
             )}
 
@@ -1103,7 +1111,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     )}
                   </>
                 )}
-                {(invoice.paid === 0 || soloAnticipo) && (
+                {puedeReembolsar && (invoice.paid === 0 || soloAnticipo) && (
                   <ButtonNew variant="danger" icon={<XCircle size={14} aria-hidden />} onClick={() => openSub("cancel")} disabled={busy}>
                     {t("clinical.invoiceDetail.cancelInvoice")}
                   </ButtonNew>
@@ -1114,11 +1122,13 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
             {/* PAGADA */}
             {isPaid && (
               <>
+                {puedeReembolsar && (
                 <ButtonNew variant="danger" icon={<Undo2 size={14} aria-hidden />} onClick={() => openSub("refund")} disabled={busy}>
                   {t("clinical.invoiceDetail.refund")}
                 </ButtonNew>
+                )}
                 {/* Pagada SOLO con el saldo a favor: cancelarla lo devuelve a favor. */}
-                {soloAnticipo && (
+                {puedeReembolsar && soloAnticipo && (
                   <ButtonNew variant="danger" icon={<XCircle size={14} aria-hidden />} onClick={() => openSub("cancel")} disabled={busy}>
                     {t("clinical.invoiceDetail.cancelInvoice")}
                   </ButtonNew>

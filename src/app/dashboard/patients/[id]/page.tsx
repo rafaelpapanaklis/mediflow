@@ -295,6 +295,16 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     "billing.view",
   );
 
+  // H14: qué botones de COBRO ve la sesión en la ficha (cabecera, rail y facturas).
+  // Se resuelve aquí y no en el cliente: son permisos por persona. Cada acción los
+  // vuelve a exigir en su ruta (billing.charge, rol administrador para timbrar,
+  // whatsapp.send para enviar).
+  const permisosCobro = {
+    cobrar: hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "billing.charge"),
+    timbrar: user.role === "ADMIN" || user.role === "SUPER_ADMIN",
+    enviar: hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "whatsapp.send"),
+  };
+
   // Consentimientos: los tres permisos del módulo + el del canal de envío. Se
   // resuelven aquí (no en el cliente) porque el SUPER_ADMIN los enciende y
   // apaga persona a persona desde el modal de equipo; cada endpoint los
@@ -609,6 +619,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           // /api/patients/[id]/expediente-pdf lo revalida con 403.
           canExportRecord={hasPermission(permsUser, "medicalRecord.export")}
           canViewBilling={canViewBilling}
+          permisosCobro={permisosCobro}
           consents={consentRows.map((c) => toConsentDTO(c))}
           canViewConsents={canViewConsents}
           canCreateConsents={canCreateConsents}

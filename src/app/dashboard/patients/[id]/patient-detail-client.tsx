@@ -368,6 +368,12 @@ interface Props {
    */
   canViewBilling?: boolean;
   /**
+   * H14: qué acciones de COBRO puede ver la sesión (page.tsx las resuelve con
+   * hasPermission). Sin la prop se ofrecen todas (otros montajes de la ficha).
+   * Las rutas las revalidan con 403.
+   */
+  permisosCobro?: { cobrar: boolean; timbrar: boolean; enviar: boolean };
+  /**
    * Consentimientos informados del paciente (snapshot del server). El tab los
    * pinta al instante y luego se refresca solo contra GET /api/consent.
    * Vacío sin el permiso "consents.view": las cartas ni salen del server.
@@ -460,6 +466,7 @@ export function PatientDetailClient({
   canExportRecord = false,
   canEditPatient = false,
   canViewBilling = false,
+  permisosCobro,
   consents = [],
   canViewConsents = false,
   canCreateConsents = false,
@@ -1503,6 +1510,7 @@ export function PatientDetailClient({
           }}
           onReschedule={openNewAppointmentForPatient}
           onCharge={openChargeShortcut}
+          puedeCobrar={permisosCobro?.cobrar !== false}
           canEdit={canEditPatient}
           canDelete={canDeletePatient}
           onDelete={() => setShowDelete(true)}
@@ -3147,6 +3155,7 @@ export function PatientDetailClient({
               onAbrir={(inv) => setInvoiceDetailOpen(inv)}
               onCobrar={(inv, condiciones) => { void openDirectPayment(inv, condiciones); }}
               onTimbrar={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
+              permisosCobro={permisosCobro}
               // «Duplicar» de la ficha: Nueva factura abre con los mismos
               // conceptos y el mismo trato (solo diseño nuevo).
               onDuplicar={(inv, condiciones) => {
@@ -3166,6 +3175,7 @@ export function PatientDetailClient({
               onOpenInvoice={(inv) => setInvoiceDetailOpen(inv)}
               onChargeInvoice={(inv) => { void openDirectPayment(inv); }}
               onStampInvoice={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
+              permisosCobro={permisosCobro}
               redesignOn={rediseno}
             />
           )}
@@ -3190,6 +3200,7 @@ export function PatientDetailClient({
             patientName={fullName}
             patientPhone={patient.phone ?? null}
             onCharge={openChargeShortcut}
+            puedeCobrar={permisosCobro?.cobrar !== false}
             onOpenBilling={openBillingTab}
             canViewBilling={canViewBilling}
             stampedInvoices={stampedInvoices}

@@ -27,5 +27,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     puedeCobrar: denyIfMissingPermission(ctx, "billing.charge") === null,
     // POST /api/cfdi exige rol administrador (requireAdmin), no una llave.
     puedeTimbrar: requireAdmin(ctx) === null,
+    // «Editar precio» y «Aplicar descuento» → POST edit-price (billing.edit).
+    puedeEditar: denyIfMissingPermission(ctx, "billing.edit") === null,
+    // «Cancelar factura» y «Reembolsar» → /cancel y /refund (billing.refund).
+    puedeReembolsar: denyIfMissingPermission(ctx, "billing.refund") === null,
   }, { headers: { "Cache-Control": "no-store" } });
 }

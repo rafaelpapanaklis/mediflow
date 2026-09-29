@@ -53,6 +53,8 @@ interface BillingTabProps {
   onChargeInvoice: (inv: PatientBillingInvoice) => void;
   /** Badge CFDI "Timbrar" — abre el detalle con el formulario SAT desplegado. */
   onStampInvoice: (inv: PatientBillingInvoice) => void;
+  /** H14: qué acciones de cobro ve la sesión. Sin la prop, todas. */
+  permisosCobro?: { cobrar: boolean; timbrar: boolean; enviar: boolean };
   /**
    * N6 (MAPA-pacientes §9): esta pestaña siempre se monta junto al rail
    * (SideCards) — mismo `RAIL_TABS` en patient-detail-client.tsx — y el rail
@@ -78,6 +80,7 @@ export function BillingTab({
   onOpenInvoice,
   onChargeInvoice,
   onStampInvoice,
+  permisosCobro,
   redesignOn = false,
 }: BillingTabProps) {
   const t = useT();
@@ -170,11 +173,11 @@ export function BillingTab({
                         <InvoiceCfdiBadge
                           cfdiUuid={inv.cfdiUuid}
                           facturApiEnabled={facturApiEnabled}
-                          onStamp={voided ? undefined : () => onStampInvoice(inv)}
+                          onStamp={voided || permisosCobro?.timbrar === false ? undefined : () => onStampInvoice(inv)}
                         />
                       </td>
                       <td style={{ textAlign: "right", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
-                        {isChargeableInvoice(inv) && (
+                        {isChargeableInvoice(inv) && permisosCobro?.cobrar !== false && (
                           <ButtonNew variant="ghost" size="sm" onClick={() => onChargeInvoice(inv)}>
                             {t("patients.billing.rowCharge")}
                           </ButtonNew>

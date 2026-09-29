@@ -83,6 +83,8 @@ export interface HeroCardProps {
   onStartConsult: () => void;
   onReschedule: () => void;
   onCharge: () => void;
+  /** H14: sin billing.charge no se pinta «Cobrar» (la ruta lo revalida). */
+  puedeCobrar?: boolean;
   /** Abre el modal de eliminar. Solo se llama si `canDelete` es true. */
   onDelete?: () => void;
   /**
@@ -171,6 +173,7 @@ export function HeroCard({
   onStartConsult,
   onReschedule,
   onCharge,
+  puedeCobrar = true,
   onDelete,
   canDelete = false,
   canExportRecord = false,
@@ -293,6 +296,7 @@ export function HeroCard({
       >
         <CalendarClock size={13} strokeWidth={1.75} aria-hidden /> {hasNextAppt ? t("patients.heroCard.rescheduleNext") : t("patients.heroCard.scheduleNext")}
       </button>
+      {puedeCobrar && (
       <button
         type="button"
         className={`${styles.btn} ${hasBalance ? styles.btnSuccess : ""}`}
@@ -301,6 +305,7 @@ export function HeroCard({
       >
         <CreditCard size={13} strokeWidth={1.75} aria-hidden /> {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : t("patients.heroCard.charge")}
       </button>
+      )}
 
       <Popover.Root open={moreOpen} onOpenChange={setMoreOpen}>
         <Popover.Trigger asChild>

@@ -96,7 +96,7 @@ test("H14: el detalle de la factura esconde cobrar, marcar pagada, WhatsApp y CF
   assert.match(m, /const \[puedeCobrar, setPuedeCobrar\] = useState\(false\)/, "arranca en el lado seguro");
   assert.match(m, /const cobrable = rediseno && puedeCobrar/, "la sección de métodos de pago");
   assert.match(m, /const botonRegistrarPago = !puedeCobrar \|\|/);
-  assert.match(m, /puedeCobrar && !esPlanAPlazos\(condicionesPago\)/, "Marcar pagada");
+  assert.match(m, /puedeCobrar && [^\n]*!esPlanAPlazos\(condicionesPago\)/, "Marcar pagada");
   assert.match(m, /puedeEnviarRecibo && \(\s*<ButtonNew[\s\S]{0,200}handleSendWhatsApp/, "Enviar por WhatsApp");
   assert.match(m, /\) : puedeTimbrar && \(/, "Facturar (CFDI)");
   const ruta = leer("src/app/api/invoices/[id]/permisos-cobro/route.ts");
@@ -104,6 +104,43 @@ test("H14: el detalle de la factura esconde cobrar, marcar pagada, WhatsApp y CF
   assert.match(ruta, /puedeTimbrar: requireAdmin\(ctx\) === null/);
   assert.match(ruta, /clinicId: ctx\.clinicId/, "multi-tenant");
   assert.match(m, /permisos-cobro/);
+});
+
+test("H14 (2.ª parte): editar precio/descuento/eliminar borrador, cancelar y reembolsar salen con el permiso que exige su ruta", () => {
+  const m = leer("src/components/dashboard/billing/invoice-detail-modal.tsx");
+  assert.match(m, /const canEditPrice = \(isPending \|\| isDraft\) && invoice\.paid === 0 && puedeEditar;/);
+  assert.match(m, /puedeEditar && \(\s*<ButtonNew[\s\S]{0,120}openSub\("edit-price"\)/);
+  assert.match(m, /puedeEditar && \(\s*<ButtonNew[\s\S]{0,120}handleDeleteDraft/);
+  assert.match(m, /puedeReembolsar && \(invoice\.paid === 0 \|\| soloAnticipo\)/, "Cancelar factura");
+  assert.match(m, /puedeReembolsar && \(\s*<ButtonNew[\s\S]{0,120}openSub\("refund"\)/, "Reembolsar");
+  // Las llaves salen de las mismas que exigen las rutas (no inventadas).
+  assert.match(leer("src/app/api/invoices/[id]/edit-price/route.ts"), /denyIfMissingPermission\(ctx, "billing\.edit"\)/);
+  assert.match(leer("src/app/api/invoices/[id]/cancel/route.ts"), /denyIfMissingPermission\(ctx, "billing\.refund"\)/);
+  assert.match(leer("src/app/api/invoices/[id]/refund/route.ts"), /denyIfMissingPermission\(ctx, "billing\.refund"\)/);
+  const ruta = leer("src/app/api/invoices/[id]/permisos-cobro/route.ts");
+  assert.match(ruta, /puedeEditar: denyIfMissingPermission\(ctx, "billing\.edit"\) === null/);
+  assert.match(ruta, /puedeReembolsar: denyIfMissingPermission\(ctx, "billing\.refund"\) === null/);
+});
+
+test("H14 (ficha del paciente): «Cobrar», «Timbrar» y «Enviar por WhatsApp» salen según permiso, en la ficha nueva y la vieja", () => {
+  const page = leer("src/app/dashboard/patients/[id]/page.tsx");
+  assert.match(page, /cobrar: hasPermission\([^)]*\}, "billing\.charge"\)/);
+  assert.match(page, /enviar: hasPermission\([^)]*\}, "whatsapp\.send"\)/);
+  assert.match(page, /timbrar: user\.role === "ADMIN" \|\| user\.role === "SUPER_ADMIN"/);
+  assert.match(page, /permisosCobro=\{permisosCobro\}/);
+  const cli = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.equal((cli.match(/puedeCobrar=\{permisosCobro\?\.cobrar !== false\}/g) ?? []).length, 2, "cabecera y rail");
+  assert.equal((cli.match(/permisosCobro=\{permisosCobro\}/g) ?? []).length, 2, "facturación nueva y vieja");
+  assert.match(leer("src/components/dashboard/patient-detail/hero-card.tsx"), /\{puedeCobrar && \(\s*<button/);
+  assert.match(leer("src/components/dashboard/patient-detail/side-cards.tsx"), /finance\.balance > 0 && puedeCobrar/);
+  const bt = leer("src/components/dashboard/patient-detail/billing-tab.tsx");
+  assert.match(bt, /permisosCobro\?\.timbrar === false \? undefined/);
+  assert.match(bt, /permisosCobro\?\.cobrar !== false/);
+  const fac = leer("src/components/dashboard/expediente-rediseno/facturacion.tsx");
+  assert.match(fac, /puedeCobrar=\{permisosCobro\?\.cobrar === false/);
+  assert.match(fac, /puedeTimbrar=\{permisosCobro\?\.timbrar === false/);
+  assert.match(fac, /puedeEnviar=\{permisosCobro\?\.enviar !== false\}/);
+  assert.match(leer("src/components/dashboard/factura-ficha-rediseno/fichas-factura.tsx"), /const ofreceWhatsApp = puedeEnviar && sePuedeEnviarPorWhatsApp/);
 });
 
 test("sanidad: no quedó ningún archivo con dos imports de url-publica", () => {

@@ -89,13 +89,15 @@ export interface FichasFacturaProps<F extends FacturaDeFicha> {
   /** ¿Se ofrece «Timbrar»? Por defecto, no en una anulada (regla del expediente).
    *  Caja lo ofrecía siempre que hubiera SAT y sigue igual: pasa `() => true`. */
   puedeTimbrar?: (inv: F) => boolean;
+  /** H14: `false` = sin whatsapp.send, no se ofrece «Enviar por WhatsApp». */
+  puedeEnviar?: boolean;
   /** Abre Nueva factura con los mismos conceptos y el mismo trato. */
   onDuplicar: (inv: F, condiciones: CondicionesPago | null) => void;
 }
 
 export function FichasFactura<F extends FacturaDeFicha>({
   facturas, facturApiEnabled, conPaciente = false, dentroDeTarjeta = false, estaVencida, montoVencido, textoCobrar, textoVacio,
-  onAbrir, onCobrar, onTimbrar, puedeCobrar, puedeTimbrar, onDuplicar,
+  onAbrir, onCobrar, onTimbrar, puedeCobrar, puedeTimbrar, puedeEnviar = true, onDuplicar,
 }: FichasFacturaProps<F>) {
   const t = useT();
   const extras = useExtrasDeFacturas(facturas.map((f) => f.id));
@@ -118,6 +120,7 @@ export function FichasFactura<F extends FacturaDeFicha>({
               montoVencido={montoVencido ? montoVencido(inv) : 0}
               cobrable={puedeCobrar ? puedeCobrar(inv) : isChargeableInvoice(inv)}
               timbrable={puedeTimbrar ? puedeTimbrar(inv) : !isVoidedInvoice(inv)}
+              puedeEnviar={puedeEnviar}
               textoCobrar={textoCobrar}
               condiciones={extras.condiciones[inv.id] ?? inv.condicionesPago ?? null}
               contacto={extras.contacto[inv.id]}
@@ -136,7 +139,7 @@ export function FichasFactura<F extends FacturaDeFicha>({
 
 function Ficha({
   inv, t, facturApiEnabled, conPaciente, vencida, montoVencido, cobrable, timbrable, textoCobrar, condiciones, contacto,
-  cargandoContacto, onAbrir, onCobrar, onTimbrar, onDuplicar,
+  cargandoContacto, puedeEnviar, onAbrir, onCobrar, onTimbrar, onDuplicar,
 }: {
   inv: FacturaDeFicha;
   t: TFunction;
@@ -150,6 +153,7 @@ function Ficha({
   condiciones: CondicionesPago | null;
   contacto: ContactoPaciente | undefined;
   cargandoContacto: boolean;
+  puedeEnviar: boolean;
   onAbrir: () => void;
   onCobrar: () => void;
   onTimbrar: () => void;
@@ -181,7 +185,7 @@ function Ficha({
   // Mandar sale al PACIENTE: sin correo o sin teléfono el botón se deshabilita
   // y el motivo se ESCRIBE debajo (un `title` no existe en un iPad).
   const ofreceCorreo = sePuedeEnviarPorCorreo(inv.status);
-  const ofreceWhatsApp = sePuedeEnviarPorWhatsApp(inv.status);
+  const ofreceWhatsApp = puedeEnviar && sePuedeEnviarPorWhatsApp(inv.status);
   const sinCorreo = ofreceCorreo && contacto?.correo === false;
   const sinTelefono = ofreceWhatsApp && contacto?.telefono === false;
   const esperando = cargandoContacto && contacto === undefined;

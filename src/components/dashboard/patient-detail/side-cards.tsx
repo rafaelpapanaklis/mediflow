@@ -24,6 +24,8 @@ interface SideCardsProps {
   patientName: string;
   patientPhone: string | null;
   onCharge: () => void;
+  /** H14: sin billing.charge no se pinta «Cobrar ahora». */
+  puedeCobrar?: boolean;
   onOpenBilling: () => void; // NUEVO — abre el tab Facturación
   /**
    * ¿La sesión tiene "billing.view"? Sin el permiso el card "Estado de cuenta"
@@ -91,6 +93,7 @@ export function SideCards({
   patientName,
   patientPhone,
   onCharge,
+  puedeCobrar = true,
   onOpenBilling,
   canViewBilling = false,
   stampedInvoices = [],
@@ -243,7 +246,7 @@ export function SideCards({
             </div>
           )}
 
-          {finance.balance > 0 && (
+          {finance.balance > 0 && puedeCobrar && (
             <button
               type="button"
               className={`${styles.sideBtn} ${styles.primary} ${styles.fullWidth}`}
