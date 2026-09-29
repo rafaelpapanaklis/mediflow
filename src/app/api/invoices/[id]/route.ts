@@ -17,6 +17,8 @@ import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
+import { decidirEdicion, motivoParaNoEditar } from "@/lib/invoices/editar-factura-core";
+import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -213,9 +215,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (denied) return denied;
   }
 
-  // Can edit items/amounts on DRAFT invoices
-  if (body.items && invoice.status !== "DRAFT") {
-    return NextResponse.json({ error: "Solo se pueden editar facturas en borrador" }, { status: 400 });
+  // ws1-t4 (decisión de Rafael, 29-sep-2026): los conceptos se editan también
+  // con pagos. Nunca timbrada ni cancelada (a); el total nunca por debajo de lo
+  // pagado (b); con plan a plazos, el cambio de total se avisa (c). La regla
+  // vive en editar-factura-core.ts y se repite en el WHERE del UPDATE de abajo.
+  if (body.items) {
+    const no = motivoParaNoEditar(invoice);
+    if (no) return NextResponse.json({ error: no }, { status: 400 });
   }
 
   // El ESTADO no se fija desde aquí. Este endpoint pide "billing.edit" —que
@@ -267,42 +273,81 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // Los CONCEPTOS, no el subtotal (hallazgo 19): el IVA agregado se redondea
     // por concepto, igual que el timbrado.
     const { total } = computeInvoiceTotal(items, discount, invoice.taxRate ?? 16, invoice.taxIncluded !== false);
+    // (b)/(c): total ≥ lo pagado (saldo a favor incluido) y, con plan a
+    // plazos, el aviso de que las mensualidades se recalculan. Las condiciones
+    // se leen tolerando que falte la tabla (sin ella no hay plan).
+    const { porFactura } = await leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds: [invoice.id] });
+    const decision = decidirEdicion({
+      factura: invoice,
+      totalNuevo: total,
+      condiciones: porFactura.get(invoice.id) ?? null,
+      planAvisado: body.planAvisado === true,
+    });
+    if ("error" in decision) {
+      return NextResponse.json({ error: decision.error, code: decision.codigo }, { status: decision.httpStatus });
+    }
     updateData.items = items;
     updateData.subtotal = subtotal;
     updateData.discount = discount;
     updateData.total = total;
     // Piso en 0 como en TODOS los demás escritores de balance (POST de pago,
-    // edit-price, mark-paid, portal). Sin él, bajar el total de una factura ya
-    // cobrada deja un saldo NEGATIVO que se resta de los "por cobrar" de la
-    // clínica: $500 pagados y un PATCH a $100 dejaba balance −400.
-    updateData.balance = round2(Math.max(0, total - invoice.paid));
+    // edit-price, mark-paid, portal) — `decidirEdicion` ya lo aplica.
+    updateData.balance = decision.balance;
+    if (decision.status !== invoice.status) updateData.status = decision.status;
+    // Queda saldada con el total nuevo: pagada hoy. Se reabre: ya no lo está.
+    if (decision.liquida) updateData.paidAt = new Date();
+    if (decision.reabre) updateData.paidAt = null;
   }
 
-  // Conceptos: solo mientras SIGA siendo borrador sin dinero. Si entre la
-  // lectura y aquí se confirmó (y recibió el saldo a favor), el total ya no se
-  // cambia por debajo de lo aplicado.
+  // Conceptos: la regla OTRA VEZ en el mismo UPDATE, contra lo que se leyó: sin
+  // CFDI, no cancelada, el mismo status y lo pagado igual (si entró un cobro,
+  // un reembolso o el saldo a favor entre la lectura y aquí, no se guarda sobre
+  // cifras viejas) y nunca por encima del total nuevo.
   const { count } = await prisma.invoice.updateMany({
-    where: { id: params.id, clinicId, ...(body.items ? { status: "DRAFT" as const, paid: { lte: 0 } } : {}) },
+    where: {
+      id: params.id,
+      clinicId,
+      ...(body.items
+        ? {
+            cfdiUuid: null,
+            status: invoice.status,
+            NOT: { status: "CANCELLED" as const },
+            paid: { equals: invoice.paid, lte: updateData.total },
+          }
+        : {}),
+    },
     data: updateData,
   });
   if (count === 0) {
-    return NextResponse.json({ error: "La factura cambió mientras la editabas (se confirmó o se cobró). Vuelve a abrirla." }, { status: 409 });
+    return NextResponse.json({ error: "La factura cambió mientras la editabas (se cobró, se timbró o se canceló). Vuelve a abrirla." }, { status: 409 });
   }
   const updated = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
 
   await logMutation({
     patientId: invoice.patientId,
-    texto: `Editó la factura ${invoice.invoiceNumber}`,
+    texto: body.items && Math.abs((updateData.total ?? invoice.total) - invoice.total) >= 0.005
+      ? `Editó la factura ${invoice.invoiceNumber} (total ${montoParaTexto(invoice.total)} → ${montoParaTexto(updateData.total)})`
+      : `Editó la factura ${invoice.invoiceNumber}`,
     req,
     clinicId,
     userId: ctx.userId,
     entityType: "invoice",
     entityId: params.id,
     action: "update",
-    before: { status: invoice.status, total: invoice.total, notes: invoice.notes },
+    // ws1-t4 (d): el antes/después completo (conceptos incluidos) para el rastro.
+    before: {
+      status: invoice.status, total: invoice.total, notes: invoice.notes,
+      ...(body.items ? { items: invoice.items, subtotal: invoice.subtotal, discount: invoice.discount, balance: invoice.balance, paid: invoice.paid } : {}),
+    },
     after: updateData,
   });
 
+  // El saldo cambió: los links de Mercado Pago y los anticipos pedidos desde
+  // el panel piden un monto viejo y se cierran (igual que «Editar precio»).
+  if (body.items) {
+    await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
+    await cerrarAnticiposDePanel({ clinicId, invoiceId: params.id });
+  }
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json(updated);

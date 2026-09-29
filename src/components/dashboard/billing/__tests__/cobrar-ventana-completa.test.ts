@@ -184,18 +184,14 @@ test("sin permiso de cobro (billing.charge) los botones de cobro de ortodoncia n
 // «Editar» abre el editor
 // ═══════════════════════════════════════════════════════════════════════════
 
-test("qué se edita: la regla del PATCH (borrador, sin pagos, sin CFDI)", () => {
+test("qué se edita (decisión de Rafael): todo lo que no esté timbrado ni cancelado, con o sin pagos", () => {
   assert.equal(facturaEditableEnEditor({ status: "DRAFT", paid: 0 }), true);
-  assert.equal(facturaEditableEnEditor({ status: "DRAFT", paid: 0.01 }), false, "con saldo a favor aplicado");
-  assert.equal(facturaEditableEnEditor({ status: "DRAFT", paid: 0, cfdiUuid: "X" }), false);
-  for (const status of ["PENDING", "PARTIAL", "PAID", "CANCELLED", "OVERDUE"]) {
-    assert.equal(facturaEditableEnEditor({ status, paid: 0 }), false, status);
+  for (const status of ["PENDING", "PARTIAL", "PAID", "OVERDUE"]) {
+    assert.equal(facturaEditableEnEditor({ status, paid: 500 }), true, `${status} con pagos`);
   }
+  assert.equal(facturaEditableEnEditor({ status: "PARTIAL", paid: 500, cfdiUuid: "X" }), false, "timbrada");
+  assert.equal(facturaEditableEnEditor({ status: "CANCELLED", paid: 0 }), false, "cancelada");
   assert.equal(facturaEditableEnEditor(null), false);
-  // …y es la del servidor, letra por letra.
-  const ruta = leer("src/app/api/invoices/[id]/route.ts");
-  assert.match(ruta, /if \(body\.items && invoice\.status !== "DRAFT"\)/);
-  assert.match(ruta, /\.\.\.\(body\.items \? \{ status: "DRAFT" as const, paid: \{ lte: 0 \} \} : \{\}\)/);
 });
 
 test("el editor carga los conceptos guardados y conserva sus campos extra", () => {
@@ -252,7 +248,8 @@ test("«Editar» (tarjeta de Caja y del expediente, y la ventana completa) abre 
   assert.match(pac, /<InvoiceEditorModal[\s\S]*?editar=\{editandoFactura\}/);
   assert.match(leer("src/app/dashboard/patients/[id]/page.tsx"), /editar: hasPermission\([^\n]*"billing\.edit"\)/);
   const d = leer(DETALLE);
-  assert.match(d, /\{onEditar && puedeEditar && facturaEditableEnEditor\(invoice\) && \(/);
+  // En borrador (junto a «Editar precio») y en pendiente/parcial/pagada.
+  assert.equal((d.match(/onEditar && puedeEditar && facturaEditableEnEditor\(\{ \.\.\.invoice, cfdiUuid: effectiveUuid \}\) && \(/g) ?? []).length, 2);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -300,4 +297,85 @@ test("`?charge=1` (barra del paciente, fin de consulta, paleta) abre el cobro en
   assert.match(pac, /const cobroPedidoPorUrl = searchParams\.get\("charge"\) === "1";/);
   assert.match(pac, /if \(permisosCobro\?\.cobrar === false\) \{ openBillingTab\(\); return; \}\s*openChargeShortcut\(\);/);
   assert.match(pac, /window\.history\.replaceState\(null, ""/, "el parámetro se quita para que un refresh no vuelva a abrirlo");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Editar con pagos (decisión de Rafael, 29-sep-2026)
+// ═══════════════════════════════════════════════════════════════════════════
+
+import {
+  avisoDePlan, decidirEdicion, estadoTrasEditar, motivoParaNoEditar, CODIGO_PLAN_SE_RECALCULA,
+} from "../../../../lib/invoices/editar-factura-core";
+import { condicionesPorDefecto, type CondicionesPago } from "../../../../lib/quotes/condiciones-pago";
+
+const plazos: CondicionesPago = { ...condicionesPorDefecto(), modo: "plazos", enganche: 8000, numPagos: 15, primerPago: "2026-02-27" };
+
+test("(a) nunca timbrada ni cancelada", () => {
+  assert.match(motivoParaNoEditar({ status: "PARTIAL", paid: 1, total: 2, cfdiUuid: "UUID" }) ?? "", /timbrada/);
+  assert.match(motivoParaNoEditar({ status: "CANCELLED", paid: 0, total: 2 }) ?? "", /cancelada/);
+  assert.equal(motivoParaNoEditar({ status: "PAID", paid: 2, total: 2 }), null);
+  const d = decidirEdicion({ factura: { status: "PARTIAL", paid: 100, total: 500, cfdiUuid: "U" }, totalNuevo: 600, condiciones: null, planAvisado: true });
+  assert.equal(d.ok, false);
+});
+
+test("(b) el total nunca por debajo de lo pagado (saldo a favor incluido), con mensaje claro", () => {
+  const f = { status: "PARTIAL", paid: 20000, total: 38000 };
+  const d = decidirEdicion({ factura: f, totalNuevo: 19999.99, condiciones: null, planAvisado: false });
+  assert.equal(d.ok, false);
+  if ("error" in d) {
+    assert.equal(d.httpStatus, 400);
+    assert.equal(d.codigo, "TOTAL_BAJO_LO_PAGADO");
+    assert.match(d.error, /no puede quedar por debajo de lo ya pagado \(\$20,000\.00, incluido el saldo a favor aplicado\)/);
+  }
+  // Justo lo pagado: queda PAGADA (y se marca liquidada para fijar paidAt).
+  const igual = decidirEdicion({ factura: f, totalNuevo: 20000, condiciones: null, planAvisado: false });
+  assert.deepEqual(igual, { ok: true, status: "PAID", balance: 0, reabre: false, liquida: true });
+  // Una PAGADA a la que se le sube el total se reabre como parcial.
+  assert.deepEqual(
+    decidirEdicion({ factura: { status: "PAID", paid: 1000, total: 1000 }, totalNuevo: 1200, condiciones: null, planAvisado: false }),
+    { ok: true, status: "PARTIAL", balance: 200, reabre: true, liquida: false },
+  );
+  // Un borrador sigue borrador.
+  assert.equal(estadoTrasEditar("DRAFT", 0, 900).status, "DRAFT");
+  assert.equal(estadoTrasEditar("PENDING", 0, 900).status, "PENDING");
+});
+
+test("(c) con plan a plazos, cambiar el total avisa (409) y dice cuánto queda cada mensualidad", () => {
+  const f = { status: "PARTIAL", paid: 20000, total: 38000 };
+  const sinAviso = decidirEdicion({ factura: f, totalNuevo: 41000, condiciones: plazos, planAvisado: false });
+  assert.equal(sinAviso.ok, false);
+  if ("error" in sinAviso) {
+    assert.equal(sinAviso.httpStatus, 409);
+    assert.equal(sinAviso.codigo, CODIGO_PLAN_SE_RECALCULA);
+    assert.match(sinAviso.error, /a plazos \(enganche de \$8,000\.00 \+ 15 pagos\)/);
+    assert.match(sinAviso.error, /de \$2,000\.00 a \$2,200\.00; el enganche no cambia/);
+  }
+  const avisado = decidirEdicion({ factura: f, totalNuevo: 41000, condiciones: plazos, planAvisado: true });
+  assert.equal(avisado.ok, true);
+  // Mismo total (solo notas o un concepto que suma igual): nada que avisar.
+  assert.equal(avisoDePlan(plazos, 38000, 38000), null);
+  assert.equal(avisoDePlan({ ...plazos, modo: "unico" }, 38000, 41000), null, "sin plazos no hay plan");
+  // Un total que ya no da para el plan acordado: se dice, no se esconde.
+  const roto = avisoDePlan(plazos, 38000, 8000);
+  assert.equal(roto?.descuadre, "engancheCubreTodo");
+  assert.match(roto?.texto ?? "", /ajusta la forma de pago/);
+});
+
+test("el PATCH corre la regla y la repite en el MISMO UPDATE; (d) deja rastro antes/después", () => {
+  const ruta = leer("src/app/api/invoices/[id]/route.ts");
+  assert.match(ruta, /const no = motivoParaNoEditar\(invoice\);/);
+  assert.match(ruta, /const decision = decidirEdicion\(\{[\s\S]*?planAvisado: body\.planAvisado === true,/);
+  assert.match(ruta, /cfdiUuid: null,\s*status: invoice\.status,\s*NOT: \{ status: "CANCELLED" as const \},\s*paid: \{ equals: invoice\.paid, lte: updateData\.total \},/);
+  assert.doesNotMatch(ruta, /Solo se pueden editar facturas en borrador/);
+  assert.match(ruta, /patientId: invoice\.patientId,\s*texto: body\.items/, "movimiento del paciente con texto");
+  assert.match(ruta, /items: invoice\.items, subtotal: invoice\.subtotal, discount: invoice\.discount, balance: invoice\.balance, paid: invoice\.paid/, "el antes completo");
+  assert.match(ruta, /if \(body\.items\) \{\s*await cerrarLinksDeFactura/, "los links de pago del saldo viejo se cierran");
+});
+
+test("el editor dice lo mismo antes de mandar: piso de lo pagado y aviso del plan", () => {
+  const m = leer("src/components/billing/invoice-editor-modal.tsx");
+  assert.match(m, /const avisoPlan = editar \? avisoDePlan\(condicionesEdicion, Number\(editar\.total \?\? 0\), grandTotal\) : null;/);
+  assert.match(m, /disabled=\{saving \|\| bajoLoPagado\}/);
+  assert.match(m, /\.\.\.\(avisoPlan \|\| avisoPlanServidor \? \{ planAvisado: true \} : \{\}\)/);
+  assert.match(m, /res\.status === 409 && out\?\.code === CODIGO_PLAN_SE_RECALCULA/);
 });

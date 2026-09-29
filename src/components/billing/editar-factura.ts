@@ -1,12 +1,12 @@
 // ws1-t4 — «Editar» de una factura abre el EDITOR (conceptos, precios,
 // descuentos, notas), no la ventana de detalle. Puro, sin React.
 //
-// La regla de cuándo se puede es la del servidor, no una nueva:
-// PATCH /api/invoices/:id solo acepta conceptos en un BORRADOR sin dinero
-// (`status: "DRAFT"`, `paid ≤ 0`) — lo vuelve a comprobar en el mismo UPDATE —
-// y un CFDI vigente nunca se toca. Todo lo demás (pendiente, pagada, timbrada,
-// cancelada) se VE («Ver factura»): allí quedan «Editar precio»/descuento del
-// detalle donde el servidor los permite (sin pagos), como siempre.
+// Cuándo se puede (decisión de Rafael, 29-sep-2026): cualquier factura que NO
+// esté timbrada ni cancelada, CON o sin pagos. Los límites del total (nunca
+// por debajo de lo pagado; con plan a plazos, avisar que se recalcula) los
+// decide `src/lib/invoices/editar-factura-core.ts`, el MISMO código que corre
+// PATCH /api/invoices/:id, que además repite la regla en su UPDATE. Timbradas
+// y canceladas se VEN («Ver factura»).
 
 export interface FacturaParaEditar {
   status: string;
@@ -14,11 +14,10 @@ export interface FacturaParaEditar {
   cfdiUuid?: string | null;
 }
 
-/** ¿«Editar» abre el editor? Borrador, sin pagos (ni saldo a favor aplicado) y sin CFDI. */
+/** ¿«Editar» abre el editor? Ni cancelada ni timbrada (con o sin pagos). */
 export function facturaEditableEnEditor(inv: FacturaParaEditar | null | undefined): boolean {
   if (!inv) return false;
-  if (inv.status !== "DRAFT") return false;
-  if (Number(inv.paid ?? 0) > 0) return false;
+  if (inv.status === "CANCELLED") return false;
   if (inv.cfdiUuid) return false;
   return true;
 }

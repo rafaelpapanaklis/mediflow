@@ -1118,7 +1118,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 </ButtonNew>
                 )}
                 {/* ws1-t4: «Editar factura» abre el editor con los conceptos. */}
-                {onEditar && puedeEditar && facturaEditableEnEditor(invoice) && (
+                {onEditar && puedeEditar && facturaEditableEnEditor({ ...invoice, cfdiUuid: effectiveUuid }) && (
                 <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => onEditar(invoice)} disabled={busy}>
                   {t("billing.invoiceEditor.editButton")}
                 </ButtonNew>
@@ -1143,6 +1143,14 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
             )}
 
             {/* PENDIENTE / PARCIAL */}
+            {/* ws1-t4 (decisión de Rafael): con pagos también se edita — no timbrada ni
+                cancelada; el total no baja de lo pagado (lo decide el servidor). */}
+            {!isDraft && onEditar && puedeEditar && facturaEditableEnEditor({ ...invoice, cfdiUuid: effectiveUuid }) && (
+              <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => onEditar(invoice)} disabled={busy}>
+                {t("billing.invoiceEditor.editButton")}
+              </ButtonNew>
+            )}
+
             {isPending && (
               <>
                 {rediseno ? botonRegistrarPago : puedeCobrar && !citaCanceladaConDinero && (

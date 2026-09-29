@@ -34,6 +34,7 @@ import { enviarFactura, guardarCondiciones, useContactoDePaciente } from "@/comp
 import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 // ws1-t4: «Editar» de una factura existente (borrador sin pagos) abre este editor.
 import { conceptosParaEditar, cuerpoDeEdicion } from "./editar-factura";
+import { avisoDePlan, CODIGO_PLAN_SE_RECALCULA } from "@/lib/invoices/editar-factura-core";
 
 /**
  * Descuento de línea tal y como VIAJA en el payload: clampeado al importe de la
@@ -74,13 +75,16 @@ interface EditorItem {
 }
 
 /**
- * ws1-t4 — la factura que se EDITA (en vez de crear una). Solo un borrador sin
- * pagos ni CFDI (`facturaEditableEnEditor`): es lo único que acepta
- * PATCH /api/invoices/:id para conceptos, y lo vuelve a comprobar al guardar.
+ * ws1-t4 — la factura que se EDITA (en vez de crear una): cualquiera sin CFDI
+ * ni cancelar, con o sin pagos (`facturaEditableEnEditor`). Los límites del
+ * total los decide `editar-factura-core.ts`, igual aquí que en el servidor.
  */
 export interface FacturaEnEdicion {
   id: string;
   invoiceNumber: string;
+  /** Total y pagado actuales (ws1-t4): el total nuevo no baja de lo pagado. */
+  total?: number | null;
+  paid?: number | null;
   items: unknown;
   discount?: number | null;
   notes?: string | null;
@@ -206,6 +210,22 @@ function InvoiceEditorBody({
   const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">(descuentoInicial > 0 ? "amount" : "none");
   const [discountValue, setDiscountValue] = useState<number>(descuentoInicial);
   const [notes, setNotes] = useState(editar ? (editar.notes ?? "") : (inicial?.notes ?? ""));
+  // Editar con pagos (ws1-t4): lo ya pagado (saldo a favor incluido) es el piso
+  // del total, y el plan a plazos —si lo hay— se recalcula con el total nuevo.
+  const pagadoEdicion = editar ? Math.max(0, Number(editar.paid ?? 0) || 0) : 0;
+  const [condicionesEdicion, setCondicionesEdicion] = useState<CondicionesPago | null>(null);
+  const [avisoPlanServidor, setAvisoPlanServidor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!editar) return;
+    let vivo = true;
+    fetch(`/api/invoices/condiciones?ids=${encodeURIComponent(editar.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (vivo) setCondicionesEdicion(d?.condiciones?.[editar.id] ?? null); })
+      // Si no llegan, el servidor lo avisa igual (409) y el aviso sale entonces.
+      .catch(() => {});
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // "Vence el" (Invoice.dueDate) — opcional. Viaja como "YYYY-MM-DD" y el
   // servidor lo ancla al día natural de la clínica. Es lo ÚNICO que hace que
   // una factura cuente como vencida (KPI, filtro "Vencidas", Caja, Finanzas).
@@ -361,6 +381,10 @@ function InvoiceEditorBody({
     return { tax: bd.tax, grandTotal: round2(base + bd.tax) };
   }, [totals.items, totals.discountAmount, taxMode, taxIncluded]);
 
+  // Editar (ws1-t4): la MISMA regla que el servidor (editar-factura-core.ts).
+  const bajoLoPagado = editando && grandTotal + 0.005 < pagadoEdicion;
+  const avisoPlan = editar ? avisoDePlan(condicionesEdicion, Number(editar.total ?? 0), grandTotal) : null;
+
   function addProcedure(p: CatalogProcedure) {
     setItems((prev) => [...prev, {
       key: newKey(), procedureId: p.id, name: p.name, quantity: 1, unitPrice: p.basePrice, discount: 0,
@@ -399,6 +423,12 @@ function InvoiceEditorBody({
         discountAmount: discountMode === "amount" ? discountValue : null,
       },
     );
+    const totalNuevo = grandTotal;
+    if (totalNuevo + 0.005 < pagadoEdicion) {
+      toast.error(t("billing.invoiceEditor.editBelowPaid", { paid: money(pagadoEdicion) }), { duration: 8000 });
+      setSaving(false);
+      return;
+    }
     const cuerpo = cuerpoDeEdicion({
       lineas: normalized.items.map((it, i) => ({
         name: it.name, quantity: it.quantity, unitPrice: it.unitPrice,
@@ -411,9 +441,18 @@ function InvoiceEditorBody({
       const res = await fetch(`/api/invoices/${encodeURIComponent(editar.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cuerpo),
+        // (c) el aviso del plan ya se enseñó (o lo mandó el servidor la vez anterior).
+        body: JSON.stringify({ ...cuerpo, ...(avisoPlan || avisoPlanServidor ? { planAvisado: true } : {}) }),
       });
       const out = await res.json().catch(() => ({}));
+      if (res.status === 409 && out?.code === CODIGO_PLAN_SE_RECALCULA) {
+        // El servidor vio un plan que aquí no se había cargado: se enseña su
+        // aviso y el siguiente «Guardar» ya va avisado. Nada se guardó.
+        setAvisoPlanServidor(typeof out.error === "string" ? out.error : t("billing.invoiceEditor.errorUpdate"));
+        toast(t("billing.invoiceEditor.editPlanReview"), { duration: 8000 });
+        setSaving(false);
+        return;
+      }
       if (!res.ok) throw new Error(out.error || t("billing.invoiceEditor.errorUpdate"));
       toast.success(t("billing.invoiceEditor.updatedToast", { number: editar.invoiceNumber ?? "" }));
       onGuardada?.(out);
@@ -826,12 +865,28 @@ function InvoiceEditorBody({
           </div>
           {/* La frase del trato, en el pie: la misma que saldrá en la ficha. */}
           {rediseno && !editando && <FraseDelTrato cond={cond} total={grandTotal} />}
+          {/* Editar con pagos (ws1-t4): el piso del total y el aviso del plan. */}
+          {editando && pagadoEdicion > 0 && (
+            <p className={cx("text-[11px] text-muted-foreground max-w-xs text-right", c.ayuda)}>
+              {t("billing.invoiceEditor.editPaid", { paid: money(pagadoEdicion) })}
+            </p>
+          )}
+          {bajoLoPagado && (
+            <p role="alert" className={cx("text-[11px] font-semibold text-rose-600 max-w-xs text-right", c.ayuda)} style={{ color: "var(--danger, #dc2626)" }}>
+              {t("billing.invoiceEditor.editBelowPaid", { paid: money(pagadoEdicion) })}
+            </p>
+          )}
+          {editando && (avisoPlan || avisoPlanServidor) && (
+            <p role="status" className={cx("text-[11px] font-medium text-amber-700 max-w-sm text-right", c.ayuda)} style={{ color: "var(--warning, #b45309)" }}>
+              {avisoPlan?.texto ?? avisoPlanServidor}
+            </p>
+          )}
         </div>
         <div className={cx("flex items-center justify-end gap-2", c.pieBotones)}>
           <button type="button" onClick={onClose} disabled={despuesDeCrear} className={cx("text-xs font-semibold px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/50", c.boton)}>
             {t("billing.invoiceEditor.cancel")}
           </button>
-          <button type="button" onClick={save} disabled={saving}
+          <button type="button" onClick={save} disabled={saving || bajoLoPagado}
             className={cx("text-xs font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 inline-flex items-center gap-1.5", `${c.boton} ${c.botonPrincipal}`)}>
             {saving ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Check size={14} aria-hidden />}
             {editando
