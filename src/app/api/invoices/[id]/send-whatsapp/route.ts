@@ -32,6 +32,7 @@ import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { lastSentOfKind } from "@/lib/orthodontics/whatsapp-dedupe";
 import { horaDelAvisoPrevio } from "@/lib/invoices/aviso-del-dia";
+import { pagoDelMesDeFactura } from "@/lib/invoices/pago-del-mes";
 import { telefonoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
 
 export const runtime = "nodejs"; // genera el PDF con @react-pdf
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const invoice = await prisma.invoice.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId }, // scope multi-tenant
     select: {
-      id: true, invoiceNumber: true, status: true, balance: true, items: true, patientId: true,
+      id: true, invoiceNumber: true, status: true, balance: true, total: true, paid: true, items: true, patientId: true,
       patient: { select: { firstName: true, lastName: true, phone: true } },
       clinic: {
         select: {
@@ -155,6 +156,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     clinicPhone,
     invoiceNumber: invoice.invoiceNumber,
     balance: invoice.balance,
+    // Factura a plazos: el texto dice «Tu pago de este mes es $X (saldo total $Y)».
+    pagoDelMes: await pagoDelMesDeFactura(prisma, {
+      clinicId: ctx.clinicId, invoiceId: invoice.id, total: invoice.total, paid: invoice.paid, zonaHoraria: clinic.timezone,
+    }),
     items: invoice.items,
     linkPago: link,
   });

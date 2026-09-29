@@ -27,6 +27,7 @@ import { z } from "zod";
 import { CHARGEABLE_INVOICE_STATUSES } from "@/components/dashboard/billing/invoice-status";
 import { digitsLast10, isWithin24hWindow } from "@/lib/inbox/send-core";
 import { buildPaymentNotice } from "@/lib/invoices/payment-notice";
+import { pagoDelMesDeFactura } from "@/lib/invoices/pago-del-mes";
 import { decideSendMode } from "@/lib/whatsapp/send-mode";
 import { SYSTEM_EXTERNAL_ID_PREFIX } from "@/lib/whatsapp/system-message";
 import { parseWaTemplates, renderTemplateBody, specForKind } from "@/lib/whatsapp/template-config";
@@ -216,7 +217,7 @@ export async function mensajeDe(ctx: SabinaCtx, f: FacturaLeida): Promise<Mensaj
   const db = dbDineroDe(ctx);
   // El token de WhatsApp NO se lee: solo se pregunta si existe.
   const [clinica, conToken] = await Promise.all([
-    db.clinic.findFirst({ where: { id: ctx.clinicId }, select: { name: true, phone: true, waConnected: true, waPhoneNumberId: true, waTemplates: true } }),
+    db.clinic.findFirst({ where: { id: ctx.clinicId }, select: { name: true, phone: true, timezone: true, waConnected: true, waPhoneNumberId: true, waTemplates: true } }),
     db.clinic.findFirst({ where: { id: ctx.clinicId, waAccessToken: { not: null } }, select: { id: true } }),
   ]);
   if (!clinica?.waConnected || !clinica.waPhoneNumberId || !conToken) {
@@ -233,6 +234,10 @@ export async function mensajeDe(ctx: SabinaCtx, f: FacturaLeida): Promise<Mensaj
     clinicPhone: telefonoClinica,
     invoiceNumber: f.folio,
     balance: f.balance,
+    // Mismo cálculo que la ruta: la tarjeta enseña el texto EXACTO que se manda.
+    pagoDelMes: await pagoDelMesDeFactura(db, {
+      clinicId: ctx.clinicId, invoiceId: f.id, total: f.total, paid: f.paid, zonaHoraria: (clinica as { timezone?: string | null }).timezone,
+    }),
     items: f.items,
   });
   const { lastInboundAtForPhone } = await import("@/lib/whatsapp/inbox-log");

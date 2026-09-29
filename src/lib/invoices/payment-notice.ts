@@ -43,6 +43,12 @@ export interface PaymentNoticeInput {
   /** La columna `balance` de la factura: es lo que el aviso siempre ha dicho. */
   balance: number;
   items: unknown;
+  /**
+   * Factura A PLAZOS: lo que toca pagar ESTE mes (lo vencido, o la cuota por la que va).
+   * Solo cambia el TEXTO LIBRE («Tu pago de este mes es $X (saldo total $Y)»); la
+   * plantilla aprobada por Meta no se toca y sigue diciendo el saldo total.
+   */
+  pagoDelMes?: number | null;
   /** Link de Mercado Pago de la factura (ws1-t1). Sin él, el texto de siempre. */
   linkPago?: { url: string; monto: number } | null;
 }
@@ -62,9 +68,13 @@ export function buildPaymentNotice(input: PaymentNoticeInput): PaymentNotice {
     `${input.patient?.firstName ?? ""} ${input.patient?.lastName ?? ""}`.trim() || "Paciente";
   const amount = fmtMXN(input.balance);
   const conceptos = summarizeItems(input.items);
+  const pagoDelMes = input.pagoDelMes != null && input.pagoDelMes > 0 && input.pagoDelMes < input.balance - 0.005 ? input.pagoDelMes : null;
+  const cifras = pagoDelMes != null
+    ? `Tu pago de este mes es de ${fmtMXN(pagoDelMes)} (saldo total ${amount})`
+    : `Tienes un saldo pendiente de ${amount}`;
   const body =
     `Hola ${patientName}, te saludamos de ${input.clinicName}. ` +
-    `Tienes un saldo pendiente de ${amount} de tu nota ${input.invoiceNumber}` +
+    `${cifras} de tu nota ${input.invoiceNumber}` +
     `${conceptos ? ` (${conceptos})` : ""}. ` +
     (input.linkPago
       // El link en su propia línea: pegado a un punto, WhatsApp lo corta mal.
