@@ -14,7 +14,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -145,6 +145,10 @@ export async function signTreatmentCard(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!plan) return fail("Plan no encontrado");
+  // Visibilidad por paciente (la regla de todo el módulo): un doctor con pacientes
+  // restringidos no firma la hoja de un paciente que no ve, aunque conozca el id del caso.
+  const visible = await loadPatientForOrtho({ ctx, patientId: plan.patientId });
+  if (isFailure(visible)) return visible;
 
   // Tenant + integridad: si viene un appointmentId, la cita tiene que ser de
   // este mismo paciente y clínica (C6).
