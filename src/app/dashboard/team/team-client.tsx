@@ -639,7 +639,11 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       // cubre un deploy en el que el server aún no devuelva el flag.
       const emailChanged: boolean =
         data.emailChanged ?? (savedEmail.trim().toLowerCase() !== editMember.email.trim().toLowerCase());
-      if (emailChanged) {
+      // Sin cuenta de acceso el correo solo quedó en la ficha: el banner de
+      // «ahora inicia sesión con…» sería falso. En su lugar va el aviso del server.
+      if (data.sinCuentaDeAcceso && data.aviso) {
+        toast(data.aviso, { duration: 15000, icon: "ℹ️" });
+      } else if (emailChanged) {
         setEmailNotice({ name: `${form.firstName} ${form.lastName}`.trim(), email: savedEmail });
       }
       router.refresh();
@@ -692,6 +696,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       setTempPassMode(data.tempPassword ? "reset" : null);
       setTempPassFor(`${m.firstName} ${m.lastName}`);
       toast.success(t("settings.team.passwordResetForToast", { name: `${m.firstName} ${m.lastName}` }));
+      if (data.aviso) toast(data.aviso, { duration: 15000, icon: "ℹ️" });
     } catch (err: any) {
       toast.error(err.message ?? t("settings.team.resetPasswordError"));
     }

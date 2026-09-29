@@ -8,6 +8,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { MIEMBRO_SELECT, camposPublicosDeMiembro } from "@/lib/team/member-fields";
+import { clasificarErrorAuth, esUuid, ERROR_SIN_CUENTA } from "@/lib/team/auth-errors";
 
 function getAdminClient() {
   return createAdminClient(
@@ -165,6 +166,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // clínica, las demás seguirían mostrando el correo viejo.
   let siblingIds: string[] = [];
   let supabaseAdmin: ReturnType<typeof getAdminClient> | null = null;
+  // El correo cambió EN Supabase (y hay que deshacerlo si Prisma truena). Se
+  // separa de `emailChanged` porque un miembro sin cuenta de acceso cambia de
+  // correo en la fila y Auth no se toca.
+  let authActualizado = false;
+  // La fila apunta a una cuenta de Auth que ya no existe (invitado que nunca
+  // entró, o cuenta borrada por un reinicio de la clínica). Ver abajo.
+  let sinCuentaDeAcceso = false;
 
   if (emailChanged) {
     if (!EMAIL_RE.test(emailRaw!)) {
@@ -208,26 +216,51 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     supabaseAdmin = getAdminClient();
-    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-      member.supabaseId,
-      // email_confirm: sin esto el correo queda pendiente de confirmar y el
-      // doctor no puede entrar hasta hacer clic en un mail que nunca pidió.
-      { email: emailRaw!, email_confirm: true },
-    );
+    const authError: any = !esUuid(member.supabaseId)
+      ? ERROR_SIN_CUENTA // demo / muestra de QA: nunca tuvo cuenta, y supabase-js lanzaría con un id así
+      : (await supabaseAdmin.auth.admin.updateUserById(
+          member.supabaseId,
+          // email_confirm: sin esto el correo queda pendiente de confirmar y el
+          // doctor no puede entrar hasta hacer clic en un mail que nunca pidió.
+          { email: emailRaw!, email_confirm: true },
+        )).error;
     if (authError) {
-      const msg = (authError.message ?? "") + " " + ((authError as any).code ?? "");
-      if (/already been registered|already exists|email_exists/i.test(msg)) {
+      const causa = clasificarErrorAuth(authError);
+      if (causa === "cuenta-no-existe") {
+        // BEVADENT, 28-sep-2026: la fila de la doctora apuntaba a una cuenta de
+        // Auth ya borrada (el reinicio de la clínica la quitó y dejó la fila
+        // inactiva). Todo intento de cambiarle el correo — y con él la cédula,
+        // que viaja en el mismo PATCH — moría con un mensaje genérico. Un
+        // miembro sin cuenta de acceso no tiene login que cambiar: el correo se
+        // guarda en la fila y Auth no se toca. Para darle acceso de verdad está
+        // "Restablecer contraseña", que crea la cuenta con este correo.
+        sinCuentaDeAcceso = true;
+      } else if (causa === "correo-ya-registrado") {
         // Mismo caso que cubre el alta (POST /api/team): el correo ya es de otra
         // cuenta de la plataforma, sea de esta clínica o de cualquier otra.
         return NextResponse.json({
           error: "Este email ya tiene cuenta en DaleControl. Usa otro correo distinto para este miembro.",
         }, { status: 400 });
+      } else if (causa === "correo-invalido") {
+        return NextResponse.json({
+          error: "El sistema de acceso no aceptó ese correo (formato o dominio). Revisa que esté bien escrito. No se guardó ningún cambio.",
+        }, { status: 400 });
+      } else if (causa === "limite") {
+        return NextResponse.json({
+          error: "Hay demasiados intentos seguidos. Espera unos minutos y vuelve a guardar. No se guardó ningún cambio.",
+        }, { status: 429 });
+      } else {
+        console.error("[api/team/[id] PATCH] supabase updateUserById falló:", authError);
+        const motivo = (authError as any).code || (authError as any).status || "desconocido";
+        return NextResponse.json(
+          {
+            error: `No se pudo actualizar el correo de acceso (motivo: ${motivo}). No se guardó ningún cambio, tampoco la cédula ni los demás datos: para guardarlos sin tocar el correo, deja el correo como estaba.`,
+          },
+          { status: 502 },
+        );
       }
-      console.error("[api/team/[id] PATCH] supabase updateUserById falló:", authError);
-      return NextResponse.json(
-        { error: "No se pudo actualizar el correo de acceso. No se guardó ningún cambio." },
-        { status: 400 },
-      );
+    } else {
+      authActualizado = true;
     }
   }
 
@@ -265,7 +298,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   } catch (e) {
     // Supabase ya cambió y Prisma no. Se revierte Auth para que el doctor siga
     // entrando con el correo que el panel muestra.
-    if (emailChanged && supabaseAdmin) {
+    if (authActualizado && supabaseAdmin) {
       const { error: revertError } = await supabaseAdmin.auth.admin.updateUserById(
         member.supabaseId,
         { email: member.email, email_confirm: true },
@@ -308,7 +341,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // (la bitácora de arriba saca el diff de ella), pero lo que se responde pasa
   // por la lista blanca: el spread `{...updated}` mandaba el secret TOTP de esa
   // persona al navegador de quien pulsó "Guardar cambios".
-  return NextResponse.json({ ...camposPublicosDeMiembro(updated), emailChanged });
+  // sinCuentaDeAcceso: el correo se guardó en la ficha pero este miembro no tiene
+  // cuenta con la que iniciar sesión — la UI avisa cómo dársela.
+  return NextResponse.json({
+    ...camposPublicosDeMiembro(updated),
+    emailChanged,
+    sinCuentaDeAcceso,
+    ...(sinCuentaDeAcceso && {
+      aviso: `Se guardaron los cambios. Ojo: ${updated.firstName} no tiene una cuenta para iniciar sesión, así que el correo quedó solo en su ficha. Para darle acceso, el dueño (SUPER_ADMIN) abre su ficha y pulsa «Restablecer contraseña»: eso le crea la cuenta con este correo.`,
+    }),
+  });
 }
 
 // DELETE /api/team/[id] — permanently remove doctor
@@ -352,19 +394,52 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ deactivated: true, message: "Doctor desactivado (tiene registros históricos)" });
   }
 
-  // No records — safe to delete. Loggeamos ANTES del delete porque después
-  // el FK desde audit_logs no encontraría el user (aunque el userId del
-  // audit es el ADMIN actor, el entityId es el user borrado y eso no tiene
-  // FK; el log queda persistido sin problema).
+  // Sin citas ni expedientes: se intenta borrar de verdad. Orden: PRIMERO la fila,
+  // DESPUÉS la cuenta de Auth. Antes era al revés y, si la fila no se dejaba
+  // borrar, la persona quedaba sin cuenta de acceso pero seguía en el equipo
+  // (BEVADENT, 28-sep-2026: cinco intentos seguidos de «Eliminar» a la doctora).
+  //
+  // La razón típica de que la fila se niegue: `audit_logs` tiene FK a users(id) y
+  // un trigger que impide tocarlo (trg_audit_logs_immutable). Quien hizo o a quien
+  // le hicieron un cambio alguna vez ya tiene filas ahí, aunque no tenga una sola
+  // cita. En ese caso se desactiva, igual que cuando hay historial clínico, y la
+  // respuesta lo dice en vez de tronar con un 500 vacío.
+  let borrado = false;
+  try {
+    const r = await prisma.user.deleteMany({ where: { id: params.id, clinicId: ctx!.clinicId } });
+    borrado = r.count > 0;
+  } catch (e) {
+    console.warn("[api/team/[id] DELETE] la fila no se puede borrar (historial de auditoría u otra referencia); se desactiva:", (e as any)?.code ?? e);
+  }
+
+  if (!borrado) {
+    await prisma.user.updateMany({ where: { id: params.id, clinicId: ctx!.clinicId }, data: { isActive: false } });
+    await logMutation({
+      req, clinicId: ctx!.clinicId, userId: ctx!.userId,
+      entityType: "user", entityId: params.id, action: "delete",
+      before: { firstName: member.firstName, lastName: member.lastName, email: member.email, role: member.role, deactivated: true },
+    });
+    revalidateAfter("team");
+    return NextResponse.json({ deactivated: true, message: "Doctor desactivado (tiene registros históricos)" });
+  }
+
   await logMutation({
     req, clinicId: ctx!.clinicId, userId: ctx!.userId,
     entityType: "user", entityId: params.id, action: "delete",
     before: { firstName: member.firstName, lastName: member.lastName, email: member.email, role: member.role, hardDelete: true },
   });
 
-  const supabaseAdmin = getAdminClient();
-  await supabaseAdmin.auth.admin.deleteUser(member.supabaseId);
-  await prisma.user.deleteMany({ where: { id: params.id, clinicId: ctx!.clinicId } });
+  // La cuenta de Auth es de la PERSONA, no de la fila: si tiene filas en otras
+  // clínicas (sucursales del dueño, mismo supabaseId) borrarla las dejaría sin
+  // poder entrar. Solo se borra cuando ya no queda ninguna fila que la use. Si la
+  // cuenta ya no existe (sin acceso) no hay nada que borrar y no es un error.
+  const restantes = await prisma.user.count({ where: { supabaseId: member.supabaseId } });
+  if (restantes === 0 && esUuid(member.supabaseId)) {
+    const { error: authError } = await getAdminClient().auth.admin.deleteUser(member.supabaseId);
+    if (authError && clasificarErrorAuth(authError) !== "cuenta-no-existe") {
+      console.error("[api/team/[id] DELETE] la fila se borró pero la cuenta de Auth no:", { supabaseId: member.supabaseId, authError });
+    }
+  }
 
   revalidateAfter("team");
   return NextResponse.json({ deleted: true });
