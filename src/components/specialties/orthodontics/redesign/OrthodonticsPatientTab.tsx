@@ -61,7 +61,9 @@ import { agregarFotoExtra } from "@/app/actions/orthodontics/fotosDelJuego";
 import { esVistaEnExtras } from "@/lib/orthodontics/fotos-del-juego";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
 import { CasosMigrados } from "./CasosMigrados";
-import { DrawerNewCase, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
+import { DrawerNewCase, type DrawerEditarPlanSubmit, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
+import { guardarPlanDeTratamiento } from "@/app/actions/orthodontics/guardarPlanDeTratamiento";
+import { cambiarCostoDelCaso } from "@/app/actions/orthodontics/cobro/cambiarCostoDelCaso";
 import { crearPlanDelCaso } from "@/app/actions/orthodontics/cobro/crearPlanDelCaso";
 import { Btn } from "./atoms/Btn";
 import orto from "./orto.module.css";
@@ -313,6 +315,10 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
       if (!res.data.altaCasoFieldsSaved && (payload.plan.treatingDoctorId || payload.plan.responsibleGuardianId || payload.plan.newResponsibleGuardian)) {
         toast(t("patients.ortho.altaCasoSqlPending"));
       }
+      // ws1-t12: el plan de tratamiento completo no se pudo guardar (falta el SQL): el caso ya está abierto.
+      if (res.data.avisoPlanDetalle) toast(res.data.avisoPlanDetalle, { duration: 12000 });
+      // ws1-t10: «Pago por control» sin costo escrito: el que quedó guardado es un estimado, y se dice.
+      if (res.data.avisoCosto) toast(res.data.avisoCosto, { duration: 12000 });
       // ws1-t10: el plan de pago se arma al abrir el caso. El caso YA está abierto: si la factura
       // no sale, se dice claro y Cobro sigue ofreciendo «Abrir plan de pago» para reintentar.
       if (payload.planDePago) {
@@ -335,6 +341,83 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     // ws1-t10 (D): true = el caso quedó abierto; la vista «sin caso» lo dice al instante en vez
     // de seguir con «no tiene caso» hasta que llega la ficha refrescada.
     return true;
+  };
+
+  // ws1-t12 — «Editar» de la ventana única del caso: guarda en pasos (técnica → doctor y columnas → plan completo →
+  // costo y factura), cada uno con sus reglas y su permiso, y dice cuál falló. Devuelve `false` si algo no se guardó
+  // (la ventana se queda abierta con lo escrito; volver a guardar repite los pasos sin dañar nada).
+  const editarPlan = async (p: DrawerEditarPlanSubmit): Promise<boolean> => {
+    const id = p.treatmentPlanId;
+    if (p.tecnica) {
+      const r = await updateOrthoAppliances({ treatmentPlanId: id, technique: p.tecnica.technique, techniqueLabel: p.tecnica.techniqueLabel });
+      if (isFailure(r)) {
+        toast.error(r.error);
+        return false;
+      }
+    }
+    const cols = await updateTreatmentPlan({
+      treatmentPlanId: id,
+      treatmentObjectives: p.columnas.treatmentObjectives as never,
+      retentionPlanText: p.columnas.retentionPlanText,
+      treatingDoctorId: p.columnas.treatingDoctorId,
+      responsibleGuardianId: p.columnas.responsibleGuardianId,
+      newResponsibleGuardian: p.columnas.newResponsibleGuardian as never,
+      iprRequired: p.columnas.iprRequired,
+      ...(p.columnas.installedAt !== undefined ? { installedAt: p.columnas.installedAt } : {}),
+    });
+    if (isFailure(cols)) {
+      toast.error(cols.error);
+      return false;
+    }
+    if (!cols.data.altaCasoFieldsSaved && (p.columnas.treatingDoctorId || p.columnas.responsibleGuardianId || p.columnas.newResponsibleGuardian)) {
+      toast(t("patients.ortho.altaCasoSqlPending"));
+    }
+    // F «Cambio de doctor»: los controles YA agendados se quedaban con el doctor anterior. Se ofrece pasarlos.
+    if (cols.data.controlesConOtroDoctor > 0) {
+      const n = cols.data.controlesConOtroDoctor;
+      const pasar = window.confirm(
+        `${n === 1 ? "Hay 1 control futuro agendado" : `Hay ${n} controles futuros agendados`} con el doctor anterior. ¿Pasarlo${n === 1 ? "" : "s"} al doctor nuevo? Solo se pasan los que no chocan con su agenda.`,
+      );
+      if (pasar) {
+        const m = await moverControlesFuturosAlDoctor({ treatmentPlanId: id });
+        if (isFailure(m)) toast.error(m.error);
+        else toast.success(`${m.data.movidos} control${m.data.movidos === 1 ? "" : "es"} pasado${m.data.movidos === 1 ? "" : "s"} al doctor nuevo` + (m.data.conChoque > 0 ? `; ${m.data.conChoque} chocan con su agenda y se quedaron como estaban.` : "."));
+      }
+    }
+    const plan = await guardarPlanDeTratamiento({ treatmentPlanId: id, plan: p.plan, extraccionesIndicadas: p.extraccionesIndicadas, duracionMeses: p.duracionMeses });
+    if (isFailure(plan)) {
+      toast.error(plan.error);
+      return false;
+    }
+    let todoBien = true;
+    if (p.costo.cambio) {
+      // Con factura, el costo sigue las reglas de «editar factura con pagos»: no bajar de lo pagado y avisar el recálculo.
+      let costo = await cambiarCostoDelCaso({ treatmentPlanId: id, nuevoTotal: p.costo.total });
+      if (!isFailure(costo) && costo.data.estado === "avisar") {
+        if (window.confirm(`${costo.data.texto}\n\n¿Guardar el costo nuevo de todos modos?`)) {
+          costo = await cambiarCostoDelCaso({ treatmentPlanId: id, nuevoTotal: p.costo.total, planAvisado: true });
+        } else {
+          toast("El plan se guardó; el costo quedó como estaba.");
+          todoBien = false;
+        }
+      }
+      if (isFailure(costo)) {
+        toast.error(`El plan se guardó, pero el costo no: ${costo.error}`);
+        todoBien = false;
+      }
+    }
+    if (todoBien && p.planDePago) {
+      const cobro = await crearPlanDelCaso({ treatmentPlanId: id, ...p.planDePago });
+      if (isFailure(cobro)) {
+        toast.error(`El plan se guardó, pero el plan de pago no se pudo crear: ${cobro.error} Reinténtalo en Cobro, con «Abrir plan de pago».`, { duration: 12000 });
+        todoBien = false;
+      } else if (cobro.data.aviso) {
+        toast(cobro.data.aviso, { duration: 12000 });
+      }
+    }
+    if (todoBien) toast.success("Plan de tratamiento guardado.");
+    router.refresh();
+    return todoBien;
   };
 
   // Qué cara toca (decisión de Rafael, 28-sep-2026; la regla y sus tests, en
@@ -618,6 +701,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             toast.success(t("patients.ortho.diagnosisUpdated"));
             router.refresh();
           }}
+          planDeTratamiento={orthoRedesignBundle?.planDeTratamiento ?? null}
+          onEditarPlan={soloLectura ? undefined : editarPlan}
           onUpdateAppliances={async (payload) => {
             const res = await updateOrthoAppliances(payload);
             if (isFailure(res)) {
@@ -797,6 +882,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               activationsNote: payload.activationsNote,
               indications: payload.indications,
               procedimientos: payload.procedimientos,
+              // ws1-t12: las extracciones del plan que se hicieron hoy se marcan al firmar.
+              extraccionesRealizadas: payload.extraccionesRealizadas,
               // M6 (ws1-t8, Ronda 6 — hallazgo 6): antes esta llamada nunca
               // mandaba appointmentId — "Registrar control" desde la ficha
               // nunca quedaba ligado a la cita del día, aunque hubiera una.
@@ -816,6 +903,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             }
             if (res.data.avisoReposiciones) toast(res.data.avisoReposiciones, { duration: 9000 });
             if (res.data.avisoProcedimientos) toast.error(res.data.avisoProcedimientos, { duration: 9000 });
+            if (res.data.avisoExtracciones) toast.error(res.data.avisoExtracciones, { duration: 9000 });
             // ws1-t9 #11: se firma un CONTROL (una hoja), no una cita.
             toast.success("Control firmado");
             router.refresh();

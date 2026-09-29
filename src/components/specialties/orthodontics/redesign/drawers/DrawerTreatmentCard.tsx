@@ -63,6 +63,8 @@ export type DrawerCardSubmit = {
   cardId: string | null;
   /** «Procedimientos de esta visita»: solo qué y cuántos (el precio sale del catálogo). undefined = no se tocan. */
   procedimientos?: SeleccionDeProcedimiento[];
+  /** ws1-t12: extracciones del plan de tratamiento (FDI) que se hicieron en esta visita; se anotan en el plan al firmar. */
+  extraccionesRealizadas?: number[];
   soap: SOAP;
   hygiene: {
     plaquePct: number | null;
@@ -212,6 +214,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   // devolvió.
   // «Procedimientos de esta visita»: lo elegido en esta hoja (undefined = aún no se cargó lo guardado).
   const [procSel, setProcSel] = useState<SeleccionDeProcedimiento[] | undefined>(undefined);
+  const [extraccionesHoy, setExtraccionesHoy] = useState<number[]>([]);
   const [procRecarga, setProcRecarga] = useState(0);
   const [justSigned, setJustSigned] = useState<{
     cardId: string;
@@ -306,6 +309,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     indications: state.indications.trim() ? state.indications : null,
     appointmentId: props.appointmentId ?? null,
     ...(procSel !== undefined ? { procedimientos: procSel } : {}),
+    ...(extraccionesHoy.length > 0 ? { extraccionesRealizadas: extraccionesHoy } : {}),
   });
 
   // Fila 12 (c): solo el Plan es obligatorio (S/O/A opcionales); un Plan
@@ -529,6 +533,8 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               seleccion={procSel}
               onSeleccion={setProcSel}
               recarga={procRecarga}
+              extracciones={extraccionesHoy}
+              onExtracciones={setExtraccionesHoy}
             />
           ) : null}
 

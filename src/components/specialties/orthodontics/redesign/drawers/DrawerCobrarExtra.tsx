@@ -108,11 +108,32 @@ export function DrawerCobrarExtra(props: DrawerCobrarExtraProps) {
                 aria-label="Concepto del extra"
               >
                 <option value="">Otro concepto (lo escribo en la factura)</option>
-                {catalogo.map((c) => (
-                  <option key={c.name} value={c.name}>
-                    {c.name} · ${c.price.toLocaleString("es-MX")}
-                  </option>
-                ))}
+                {/* ws1-t12: lo que el plan de tratamiento del caso pide (microtornillo, barra palatina…) va primero. */}
+                {catalogo.some((c) => c.sugerido) ? (
+                  <optgroup label="Del plan de tratamiento de este caso">
+                    {catalogo.filter((c) => c.sugerido).map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name} · ${c.price.toLocaleString("es-MX")}
+                        {c.motivo ? ` (${c.motivo})` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {catalogo.some((c) => c.sugerido) ? (
+                  <optgroup label="Otros conceptos">
+                    {catalogo.filter((c) => !c.sugerido).map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name} · ${c.price.toLocaleString("es-MX")}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : (
+                  catalogo.map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {c.name} · ${c.price.toLocaleString("es-MX")}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
           ) : null}

@@ -1,0 +1,859 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Ortodoncia — «Plan de tratamiento» completo (ws1-t12, 29-sep-2026).
+
+   La sección de la ficha (resumen legible) y los campos del popup «Editar
+   plan» / de la sección opcional del alta. Los colores NO viven aquí: salen
+   de los tokens `--pr-*` y los alias `--orto-*` que monta `RAIZ_ORTO` (los
+   mismos que el resto del módulo, claro y oscuro). Aquí no hay ni un hex.
+
+   Vive en su propio archivo para no tocar `orto.module.css` (lo comparten
+   otras tareas). Prefijo «plan…»: nada con prefijo de anuncio (ad-, banner-).
+
+   1440 px: rejillas de 2 a 4 columnas. 390 px: una columna.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Resumen en la ficha ─────────────────────────────────────────── */
+
+.resumen {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 16px 18px 18px;
+}
+
+.dato {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+}
+
+.datoAncho {
+  grid-column: 1 / -1;
+}
+
+.datoEtiqueta {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.datoValor {
+  margin-top: 2px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.datoNota {
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--pr-texto-3);
+}
+
+.avance {
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+}
+
+.avanceFila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+  font-size: 13px;
+}
+
+.avanceTitulo {
+  font-weight: 650;
+  color: var(--pr-texto);
+}
+
+.avanceSub {
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+}
+
+.aviso {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--orto-alerta-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-alerta-suave);
+  color: var(--pr-alerta);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.aviso svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.vacioPlan {
+  padding: 18px;
+  font-size: 13px;
+  color: var(--pr-texto-2);
+}
+
+/* ── Campos del formulario ───────────────────────────────────────── */
+
+.rejilla2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rejilla3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rejilla4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.grupo {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.grupoTitulo {
+  display: block;
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--pr-texto-2);
+}
+
+.casillas {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.casillaFila {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: var(--pr-texto-2);
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.casillaFila input {
+  flex: none;
+  margin-top: 2px;
+  accent-color: var(--pr-activo);
+}
+
+.casillaFilaOn {
+  background: var(--pr-activo-suave);
+  color: var(--pr-texto);
+}
+
+@media (hover: hover) {
+  .casillaFila:hover {
+    background: var(--pr-hover);
+  }
+  .casillaFilaOn:hover {
+    background: var(--pr-activo-suave);
+  }
+}
+
+.casillaFila:focus-within {
+  outline: 2px solid var(--pr-activo);
+  outline-offset: -2px;
+}
+
+.quitada {
+  font-size: 11px;
+  color: var(--pr-texto-3);
+}
+
+.vacioLista {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+.piezas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.pieza {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 9px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 999px;
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto-2);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.piezaHecha {
+  border-color: var(--pr-exito);
+  background: var(--pr-exito-suave);
+  color: var(--pr-exito);
+}
+
+.pieza:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.sufijo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sufijo > span {
+  flex: none;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+.plegable {
+  padding: 0;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  background: var(--pr-tarjeta);
+  min-width: 0;
+}
+
+.plegableCabeza {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--pr-radio);
+}
+
+.plegableCabeza:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.plegableCuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 18px 18px;
+}
+
+.plegableFlecha {
+  flex: none;
+  margin-left: auto;
+  color: var(--pr-texto-3);
+  transition: transform 0.15s;
+}
+
+.plegableFlechaAbierta {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plegableFlecha {
+    transition: none;
+  }
+}
+
+/* ── Configuración: las listas de la clínica ─────────────────────── */
+
+.listaEditable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.opcionFila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opcionFila input {
+  flex: 1 1 auto;
+}
+
+.opcionQuitada {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px dashed var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  color: var(--pr-texto-3);
+  font-size: 12.5px;
+}
+
+.listas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.listaBloque {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+}
+
+.listaTitulo {
+  margin: 0 0 2px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--pr-texto);
+}
+
+.listaAyuda {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+}
+
+/* ── Alertas: la fila de «Reevaluación radiográfica» ─────────────── */
+
+.detalleDeAlerta {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+/* ── Chips y segmentados (opciones cortas) ───────────────────────── */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 5px 12px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 999px;
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto-2);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.chip svg {
+  flex: none;
+}
+
+@media (hover: hover) {
+  .chip:hover {
+    border-color: var(--pr-texto-3);
+    background: var(--pr-hover);
+  }
+}
+
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.chipOn {
+  border-color: var(--orto-violeta-borde);
+  background: var(--pr-activo-suave);
+  color: var(--pr-texto);
+  font-weight: 600;
+}
+
+.chipQuitada {
+  border-style: dashed;
+}
+
+.segmentado {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 12px;
+  background: var(--pr-tarjeta-2);
+}
+
+.segmento {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--pr-texto-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .segmento:hover:not(.segmentoOn) {
+    background: var(--pr-hover);
+  }
+}
+
+.segmento:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.segmentoOn {
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  font-weight: 650;
+}
+
+.grupoCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* ── Popup «Editar plan»: navegación por secciones ───────────────── */
+
+.popupCuerpo {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 10px;
+  overflow-y: auto;
+  border-right: 1px solid var(--pr-borde-suave);
+  background: var(--pr-tarjeta);
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--pr-texto-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .navItem:hover {
+    background: var(--pr-hover);
+  }
+}
+
+.navItem:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.navItemOn {
+  background: var(--pr-activo-suave);
+  color: var(--pr-texto);
+  font-weight: 650;
+}
+
+.navPunto {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--pr-borde);
+  background: transparent;
+}
+
+.navPuntoLleno {
+  border-color: var(--pr-exito);
+  background: var(--pr-exito);
+}
+
+.popupScroll {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px 22px;
+  scroll-padding-top: 12px;
+}
+
+/* ── Pasos de la ventana del caso: 1 Diagnóstico → 2 Plan ─────────── */
+
+.pasos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.paso {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 12px 3px 4px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 999px;
+  color: var(--pr-texto-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pasoNumero {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--pr-tarjeta-2);
+  color: var(--pr-texto-3);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pasoOn {
+  border-color: var(--orto-violeta-borde);
+  background: var(--pr-activo-suave);
+  color: var(--pr-texto);
+  font-weight: 650;
+}
+
+.pasoOn .pasoNumero {
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+.pasoHecho {
+  color: var(--pr-texto-2);
+}
+
+.pasoHecho .pasoNumero {
+  background: var(--pr-exito-suave);
+  color: var(--pr-exito);
+}
+
+/* ── Resumen visual en la ficha ──────────────────────────────────── */
+
+.kpis {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kpi {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+}
+
+.kpiVacio {
+  background: transparent;
+  border-style: dashed;
+}
+
+.kpiValor {
+  margin-top: 3px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.3px;
+  color: var(--pr-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiValor small {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--pr-texto-3);
+}
+
+.kpiVacioValor {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+.kpiSub {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+}
+
+.kpiPildoras {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.pildora {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-texto);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pildoraEtq {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.pildoraExito {
+  background: var(--pr-exito-suave);
+  color: var(--pr-exito);
+}
+
+.pildoraNeutra {
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  color: var(--pr-texto-2);
+  font-weight: 500;
+}
+
+.tarjetaPlan {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+}
+
+.tarjetaPlanAncha {
+  grid-column: 1 / -1;
+}
+
+.tarjetaPlanTitulo {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.subgrupo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.subgrupo + .subgrupo {
+  margin-top: 10px;
+}
+
+.subgrupoEtq {
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+}
+
+.tablaMini {
+  display: grid;
+  grid-template-columns: auto repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  align-items: baseline;
+  font-size: 13px;
+}
+
+.tablaMiniCab {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.tablaMiniFila {
+  color: var(--pr-texto-2);
+}
+
+.tablaMiniValor {
+  font-weight: 600;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+}
+
+.tablaMiniVacio {
+  color: var(--pr-texto-3);
+  font-weight: 400;
+}
+
+.cita {
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--orto-violeta-borde);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--pr-texto);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.sinDefinir {
+  grid-column: 1 / -1;
+  padding: 2px 4px;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+@media (max-width: 900px) {
+  .rejilla4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .listas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .resumen,
+  .rejilla2,
+  .rejilla3,
+  .rejilla4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .resumen {
+    padding: 14px;
+  }
+  .plegableCabeza {
+    padding: 12px 14px;
+  }
+  .plegableCuerpo {
+    padding: 0 14px 16px;
+  }
+  .casillaFila {
+    min-height: 40px;
+  }
+  .chip,
+  .segmento {
+    min-height: 40px;
+  }
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kpiValor {
+    font-size: 19px;
+  }
+  /* La navegación pasa a una tira de chips arriba del formulario. */
+  .popupCuerpo {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .nav {
+    flex-direction: row;
+    gap: 6px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--pr-borde-suave);
+    scrollbar-width: none;
+  }
+  .navItem {
+    flex: none;
+    width: auto;
+    min-height: 36px;
+    padding: 4px 12px;
+    border: 1px solid var(--pr-borde);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .navItemOn {
+    border-color: var(--orto-violeta-borde);
+  }
+  .popupScroll {
+    padding: 12px 12px 16px;
+  }
+}

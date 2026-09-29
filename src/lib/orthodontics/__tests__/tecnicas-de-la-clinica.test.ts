@@ -121,7 +121,7 @@ test("caso con técnica propia: guarda tipo base (enum) + nombre; con el nombre 
   const cajon = sinComentarios(leer("components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx"));
   assert.match(cajon, /technique: tecnica\?\.base/);
   assert.match(cajon, /techniqueLabel: nombrePropioAGuardar\(tecnica\)/);
-  assert.match(cajon, /tecnicas\.map\(\(x\) => \(\{ v: x\.id, l: x\.nombre \}\)\)/);
+  assert.match(cajon, /listaDeTecnicas\.map\(\(x\) => \(\{ v: x\.id, l: x\.nombre \}\)\)/);
   assert.match(cajon, /costoAProponer\(/);
   assert.match(cajon, /tecnica\?\.precio/);
   const wizard = sinComentarios(leer("components/specialties/orthodontics/plan/TreatmentPlanWizard.tsx"));
@@ -237,15 +237,17 @@ test("plan de retención: el alta nace VACÍO (los dos formularios); el ejemplo 
   const cajon = sinComentarios(leer("components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx"));
   const wizard = sinComentarios(leer("components/specialties/orthodontics/plan/TreatmentPlanWizard.tsx"));
   for (const [nombre, codigo] of [["DrawerNewCase", cajon], ["TreatmentPlanWizard", wizard]] as const) {
-    assert.match(codigo, /\[retention, setRetention\] = useState\(""\)/, nombre);
+    // La ventana única también arranca al editar con la retención del caso; sin caso nace vacía.
+    assert.match(codigo, nombre === "DrawerNewCase" ? /\[retention, setRetention\] = useState\(caso\?\.retencion \?\? ""\)/ : /\[retention, setRetention\] = useState\(""\)/, nombre);
     assert.doesNotMatch(codigo, /DEFAULT_RETENTION/, nombre);
     assert.doesNotMatch(codigo, /Retenedor fijo lingual/, nombre);
     assert.match(codigo, /placeholder=\{`Ejemplo: \$\{EJEMPLO_DE_RETENCION\}`\}/, nombre);
   }
   assert.ok(EJEMPLO_DE_RETENCION.length > MIN_RETENCION);
   assert.equal(MIN_RETENCION, 20);
-  assert.match(leer("lib/validation/orthodontics.ts"), /retentionPlanText: z\.string\(\)\.min\(20\)/);
-  // vacío no deja abrir el caso, y dice por qué
+  // ws1-t12 (decisión de Rafael): la retención ya no es obligatoria para abrir el caso (vacío = "").
+  assert.match(leer("lib/validation/orthodontics.ts"), /retentionPlanText: z\.string\(\)\.max\(2000\)\.default\(""\)/);
+  // La regla vieja (`faltantesDelAlta`) sigue disponible para quien la use; la ventana del caso usa `faltantesDelPlanCompleto`.
   const estado: EstadoAlta = { necesitaDiagnostico: false, enObservacion: false, resumen: "", proximaRevision: "", retencion: "", costoTotal: "30000", modoResponsable: "none", tutorElegidoId: "", tutorNombre: "", tutorTelefono: "" };
   assert.deepEqual(faltantesDelAlta(estado), [`el plan de retención (lleva 0 de ${MIN_RETENCION} caracteres)`]);
   assert.deepEqual(faltantesDelAlta({ ...estado, retencion: EJEMPLO_DE_RETENCION }), []);
@@ -257,7 +259,7 @@ test("«Responsable del pago»: El paciente (por defecto) / Otra persona ya regi
   assert.deepEqual(ETIQUETAS_MODO_RESPONSABLE, { none: "El paciente", existing: "Otra persona ya registrada", new: "Otra persona nueva" });
   const cajon = sinComentarios(leer("components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx"));
   assert.doesNotMatch(cajon, /Sin definir/);
-  assert.match(cajon, /useState<ModoResponsable>\("none"\)/);
+  assert.match(cajon, /useState<ModoResponsable>\(caso\?\.responsableId \? "existing" : "none"\)/);
   for (const k of ["none", "existing", "new"]) assert.match(cajon, new RegExp(`ETIQUETAS_MODO_RESPONSABLE\\.${k}`));
   // «El paciente» viaja como si no hubiera responsable (null): lo mismo que hoy tratan cobro, Cobranza, factura y portal
   assert.match(cajon, /responsibleGuardianId: guardianMode === "existing" \? responsibleGuardianId \|\| null : null/);

@@ -130,6 +130,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
       activationsNote: payload.activationsNote,
       indications: payload.indications,
       procedimientos: payload.procedimientos,
+      // ws1-t12: las extracciones del plan que se hicieron hoy se marcan al firmar (el borrador no las toca).
+      ...(firmar && payload.extraccionesRealizadas ? { extraccionesRealizadas: payload.extraccionesRealizadas } : {}),
     };
     const res = firmar ? await signTreatmentCard(base) : await saveTreatmentCardDraft(base);
     if (isFailure(res)) {
@@ -146,6 +148,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
     if (avisoControlSinFacturar) {
       toast.error(avisoControlSinFacturar, { duration: 8000 });
     }
+    const avisoExtracciones = firmar ? (res.data as { avisoExtracciones?: string }).avisoExtracciones : undefined;
+    if (avisoExtracciones) toast.error(avisoExtracciones, { duration: 9000 });
     const avisoProcedimientos = firmar
       ? (res.data as { avisoProcedimientos?: string }).avisoProcedimientos
       : undefined;

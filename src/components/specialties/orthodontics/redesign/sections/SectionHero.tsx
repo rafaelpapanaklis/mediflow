@@ -27,10 +27,13 @@ import {
   type OrthoTreatmentDTO,
 } from "../types";
 import { bracketsDelCaso, cooperacionDelPaciente, type ControlParaResumen } from "@/lib/orthodontics/resumen-del-caso";
+import { textoControlQueSigue, textoControlesHechos, type ProgresoDeControles } from "@/lib/orthodontics/plan-detalle";
 import orto from "../orto.module.css";
 
 export interface SectionHeroProps {
   treatment: OrthoTreatmentDTO;
+  /** ws1-t12: «Controles: 5 de 18». Sin él (el plan no dice cuántos controles prevé) no se pinta. */
+  controles?: ProgresoDeControles | null;
   /** H66: controles del caso, para los brackets caídos acumulados. */
   cards?: readonly ControlParaResumen[];
   hasUpcomingControlToday?: boolean;
@@ -197,6 +200,27 @@ export function SectionHero(props: SectionHeroProps) {
             <span className="text-right">Fin estimado · {fmtDayLong(t.estimatedEndDate)}</span>
           </div>
         </div>
+
+        {props.controles ? (
+          <div className="mt-[16px]">
+            <div className="flex items-baseline justify-between gap-3 mb-[7px]">
+              <span className={orto.ceja}>Controles del plan</span>
+              <span className="text-[13px] font-semibold">{textoControlesHechos(props.controles)}</span>
+            </div>
+            <ProgressBar
+              value={props.controles.pct ?? 0}
+              color={props.controles.excedido ? "amber" : "violet"}
+              ariaLabel={textoControlesHechos(props.controles)}
+            />
+            <div className={`${orto.tonoApagado} mt-[6px] text-[11.5px]`}>
+              {props.controles.completo
+                ? props.controles.excedido
+                  ? `Ya pasó de los ${props.controles.previstos} controles previstos`
+                  : "Se completaron los controles previstos"
+                : `El siguiente es el ${textoControlQueSigue(props.controles).toLowerCase()}`}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-[14px] flex gap-[6px] flex-wrap items-center">
           {PHASE_ORDER.map((ph, i) => (

@@ -46,6 +46,7 @@ import { comprobarPlanDePagoLibre } from "@/app/actions/orthodontics/cobro/compr
 import { isFailure } from "@/app/actions/orthodontics/result";
 import type { CuotaConEstado } from "@/lib/invoices/plan-de-pagos";
 import { cobroPrincipalDelCaso, montoDelCobroPrincipal } from "@/lib/orthodontics/cobro/cobro-principal";
+import { progresoDeControles, textoControlQueSigue, textoControlesHechos, textoDelEstimado } from "@/lib/orthodontics/plan-detalle";
 import orto from "../orto.module.css";
 
 export interface SectionFinanceProps {
@@ -216,6 +217,11 @@ export function SectionFinance(props: SectionFinanceProps) {
         <div style={{ padding: "0 18px" }}>
           <ExtrasPorCobrar treatmentPlanId={props.treatmentPlanId} />
         </div>
+        {panel.controlesDelPlan ? (
+          <div style={{ padding: "0 18px" }}>
+            <ControlesDelPlan datos={panel.controlesDelPlan} porControl={esPorControl} />
+          </div>
+        ) : null}
         {!panel.invoiceId ? (
           <div className={orto.tarjetaCuerpo}>
             <div className={orto.vacio}>
@@ -559,5 +565,32 @@ export function SectionFinance(props: SectionFinanceProps) {
         <DrawerConfigCobro config={panel.config} onClose={() => setDrawer(null)} onGuardado={cerrarYRecargar} />
       ) : null}
     </>
+  );
+}
+
+/**
+ * ws1-t12 — «Control X de N» y, en «Pago por control», controles previstos × precio del control = total
+ * ESTIMADO. Solo informa: nada se cobra solo; cada control se cobra al atenderlo, con su factura.
+ */
+function ControlesDelPlan({ datos, porControl }: { datos: NonNullable<PanelDeCobro["controlesDelPlan"]>; porControl: boolean }) {
+  const p = progresoDeControles(datos.hechos, datos.previstos);
+  return (
+    <div className={orto.caja} style={{ margin: "12px 0" }} data-controles-del-plan>
+      <div className={orto.datoEtiqueta}>Controles del plan</div>
+      <div className="mt-[2px] text-[13.5px] font-semibold">
+        {textoControlQueSigue(p)}
+        <span className="font-normal text-[color:var(--pr-texto-3)]"> · van {textoControlesHechos(p)}</span>
+      </div>
+      {porControl ? (
+        datos.estimado ? (
+          <div className="mt-[4px] text-[12.5px] text-[color:var(--pr-texto-2)]">Estimado: {textoDelEstimado(datos.estimado)}</div>
+        ) : (
+          <div className="mt-[4px] text-[12px] text-[color:var(--pr-texto-3)]">
+            Para estimar el total falta el precio de «Control de ortodoncia» en el catálogo (Configuración → Procedimientos de ortodoncia).
+          </div>
+        )
+      ) : null}
+      <ProgressBar value={p.pct ?? 0} color={p.excedido ? "amber" : "violet"} className="mt-[8px]" ariaLabel={textoControlesHechos(p)} />
+    </div>
   );
 }

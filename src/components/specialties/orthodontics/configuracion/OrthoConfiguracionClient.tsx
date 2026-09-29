@@ -32,6 +32,8 @@ import { MAX_PLANTILLA, PLANTILLAS_ORTO, motivoDeRechazoDePlantillas } from "@/l
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { mensajeDeQuitar, separarActivosYQuitados, textoConfirmarQuitar } from "@/lib/procedures/quitar-procedimiento";
 import { TecnicasYPrecios } from "./TecnicasYPrecios";
+import { OpcionesDelPlanDeTratamiento } from "./OpcionesDelPlanDeTratamiento";
+import type { OpcionesDeLaClinica } from "@/lib/orthodontics/plan-detalle-db";
 import { CondicionesDelConvenio } from "./CondicionesDelConvenio";
 import type { TecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 
@@ -40,6 +42,8 @@ export interface OrthoConfiguracionClientProps {
   procedimientos: OrthoProcedureRow[];
   /** Precio del tratamiento por técnica (ws1-t10, decisión 2): lo que el alta del caso propone. */
   tecnicasDeLaClinica?: TecnicasDeLaClinica;
+  /** ws1-t12: las listas del plan de tratamiento (brackets, alineadores, placas, aditamentos…) de la clínica. */
+  opcionesDelPlan?: OpcionesDeLaClinica;
   /**
    * La tarjeta "Suscripción" (ws1-t2, 28-sep-2026) — `null` si no hay nada
    * que cancelar desde aquí: sin permiso (no dueño/administrador), módulo
@@ -61,7 +65,7 @@ const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
 // plantillas-mensaje.ts (ws1-t5, ronda 6): la pantalla, el guardado y los dos
 // envíos leen de ahí, para que lo que aquí se promete sea lo que se manda.
 
-export function OrthoConfiguracionClient({ settings, procedimientos: procedimientosIniciales, tecnicasDeLaClinica, suscripcion }: OrthoConfiguracionClientProps) {
+export function OrthoConfiguracionClient({ settings, procedimientos: procedimientosIniciales, tecnicasDeLaClinica, opcionesDelPlan, suscripcion }: OrthoConfiguracionClientProps) {
   const [appointmentTypes, setAppointmentTypes] = useState<OrthoAppointmentTypeOption[]>(
     settings.appointmentTypes,
   );
@@ -280,6 +284,8 @@ export function OrthoConfiguracionClient({ settings, procedimientos: procedimien
           </Tarjeta>
 
           <TecnicasYPrecios iniciales={tecnicasDeLaClinica} />
+
+          <OpcionesDelPlanDeTratamiento iniciales={opcionesDelPlan} />
 
           <Tarjeta
             icono={CalendarClock}

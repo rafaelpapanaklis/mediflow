@@ -146,6 +146,8 @@ const ENLACES_DE_INDICADOR = [
   "/dashboard/orthodontics/cobranza?filtro=vencido",
   "/dashboard/orthodontics/pacientes?ver=colocados-este-mes",
   "/dashboard/orthodontics/pacientes?ver=retirados-este-mes",
+  // ws1-t12: «Casos con diagnóstico o plan incompleto» lleva a su lista, con ancla, en Alertas.
+  "/dashboard/orthodontics/alertas#casos-incompletos",
 ];
 
 test("los indicadores del Tablero llevan a su lista, siempre con filtro o ancla", () => {

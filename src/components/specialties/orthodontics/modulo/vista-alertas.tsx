@@ -28,6 +28,8 @@ import {
   CheckCircle2,
   Clock,
   Hourglass,
+  ClipboardCheck,
+  ScanLine,
   UserX,
   type LucideIcon,
 } from "lucide-react";
@@ -36,10 +38,11 @@ import type {
   MissingNextControlEntry,
   OverduePatientEntry,
 } from "@/lib/orthodontics/specialty-kpis";
-import type { NoShowEntry, OrthoAlertsData } from "@/lib/orthodontics/alerts-data";
+import type { NoShowEntry, OrthoAlertsData, ReevaluacionRadiograficaEntry } from "@/lib/orthodontics/alerts-data";
 import { notaCorta, resumenDeFotos, type FotosPorRevisarEntry } from "@/lib/orthodontics/fotos-paciente";
 import { EnviarRecordatorioButton } from "@/components/specialties/orthodontics/EnviarRecordatorioButton";
 import { AgendarControlBoton } from "./agendar-control";
+import { FilaDeCasoIncompleto } from "./casos-incompletos";
 import { PosponerAlertaBoton } from "./posponer-alerta";
 import { ListaDePospuestas } from "./lista-de-pospuestas";
 import { DIAS_DE_POSPOSICION } from "@/lib/orthodontics/alertas-pospuestas";
@@ -64,19 +67,26 @@ export function VistaAlertas({
   zonaHoraria,
   puedeAgendar = false,
   puedePosponer = false,
+  puedeEditarCasos = false,
 }: {
   alerts: OrthoAlertsData;
   /** Permiso `agenda.create`, decidido en el servidor: sin él no sale «Agendar control». */
   puedeAgendar?: boolean;
   /** Permiso `medicalRecord.view` (el que pide `posponerAlerta`): sin él no sale «Posponer 7 días». */
   puedePosponer?: boolean;
+  /** Permiso `medicalRecord.edit`: sin él no salen los accesos directos «Completar diagnóstico / plan». */
+  puedeEditarCasos?: boolean;
   /** `clinic.timezone`: el día de una falta se pinta en la zona de la clínica, no en la del servidor. */
   zonaHoraria: string | null;
 }) {
   const fmtDate = (d: Date | string | null) => fechaEnZona(d, zonaHoraria);
   const fotos: FotosPorRevisarEntry[] = alerts.patientPhotos ?? [];
+  const reevaluaciones: ReevaluacionRadiograficaEntry[] = alerts.reevaluacionRadiografica ?? [];
+  const incompletos = alerts.incompletos ?? [];
   const totalAlerts =
     fotos.length +
+    incompletos.length +
+    reevaluaciones.length +
     alerts.overduePayments.length +
     alerts.missingNextControl.length +
     alerts.noShows.length +
@@ -90,6 +100,8 @@ export function VistaAlertas({
     { id: "no-se-presento", etiqueta: "No asistió", cuenta: alerts.noShows.length, icono: UserX, tono: "alerta" },
     { id: "proximo-a-terminar", etiqueta: "Próximo a terminar", cuenta: alerts.finishingSoon.length, icono: Hourglass, tono: "violeta" },
     { id: "pasado-de-fecha", etiqueta: "Pasado de su fecha", cuenta: alerts.pastDue.length, icono: CalendarX, tono: "peligro" },
+    { id: "casos-incompletos", etiqueta: "Diagnóstico o plan incompleto", cuenta: incompletos.length, icono: ClipboardCheck, tono: "alerta" },
+    { id: "reevaluacion-radiografica", etiqueta: "Reevaluación radiográfica", cuenta: reevaluaciones.length, icono: ScanLine, tono: "alerta" },
     { id: "fotos-del-paciente", etiqueta: "Fotos por revisar", cuenta: fotos.length, icono: Camera, tono: "violeta" },
   ];
 
@@ -227,6 +239,40 @@ export function VistaAlertas({
             detallePeligro
           >
             {puedePosponer && <PosponerAlertaBoton patientId={e.patientId} patientName={e.patientName} tipo="pasado-de-fecha" />}
+          </PatientRow>
+        ))}
+      </AlertSection>
+
+      <AlertSection
+        id="casos-incompletos"
+        icon={ClipboardCheck}
+        tono="alerta"
+        title="Casos con diagnóstico o plan incompleto"
+        sub="Sobre todo los migrados de Dentalink, que entran casi vacíos. Cada uno lleva al paso que falta."
+        empty="Todos los casos activos tienen su diagnóstico y su plan completos."
+      >
+        {incompletos.map((c) => (
+          <FilaDeCasoIncompleto key={c.planId} caso={c} puedeEditar={puedeEditarCasos} />
+        ))}
+      </AlertSection>
+
+      <AlertSection
+        id="reevaluacion-radiografica"
+        icon={ScanLine}
+        tono="alerta"
+        title="Reevaluación radiográfica"
+        sub="Toca la fecha de reevaluación del plan de tratamiento, o pasó la periodicidad desde la última radiografía de ese tipo (o desde el inicio del caso)."
+        empty="Ningún caso necesita reevaluación radiográfica."
+      >
+        {reevaluaciones.map((r: ReevaluacionRadiograficaEntry) => (
+          <PatientRow
+            // Una fila por CASO, no por paciente.
+            key={r.treatmentPlanId}
+            patientId={r.patientId}
+            patientName={r.patientName}
+            detalle={r.textos.join(" · ")}
+          >
+            {puedePosponer && <PosponerAlertaBoton patientId={r.patientId} patientName={r.patientName} tipo="reevaluacion-radiografica" />}
           </PatientRow>
         ))}
       </AlertSection>

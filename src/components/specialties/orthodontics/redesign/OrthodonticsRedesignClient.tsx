@@ -19,11 +19,13 @@ import {
 import type { TreatmentCardAgendaContext } from "@/app/actions/orthodontics/getTreatmentCardContextForAppointment";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
+import { useCompletarAlLlegar } from "./useCompletarAlLlegar";
 import { SectionHero } from "./sections/SectionHero";
 import { SeccionPlegada } from "./SeccionPlegada";
 import { seccionesPlegadasPorFase } from "@/lib/orthodontics/redesign/secciones-por-fase";
 import { SectionDiagnosis } from "./sections/SectionDiagnosis";
 import { SectionPlan } from "./sections/SectionPlan";
+import { SectionPlanDeTratamiento } from "./sections/SectionPlanDeTratamiento";
 import { SectionTreatmentCards } from "./sections/SectionTreatmentCards";
 import {
   SectionPhotos,
@@ -59,12 +61,13 @@ import { ModalAdvancePhase } from "./drawers/ModalAdvancePhase";
 import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
 import { DrawerEditDiagnosis } from "./drawers/DrawerEditDiagnosis";
 import { DrawerEditPrescription } from "./drawers/DrawerEditPrescription";
+import { progresoDeControles, type PlanDeTratamientoVista } from "@/lib/orthodontics/plan-detalle";
 import { DrawerNewReferral } from "./drawers/DrawerNewReferral";
 import { DrawerConfigRetention } from "./drawers/DrawerConfigRetention";
 import { DrawerWhatsAppChat } from "./drawers/DrawerWhatsAppChat";
 import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
 import { DrawerAddTad, type DrawerAddTadSubmit } from "./drawers/DrawerAddTad";
-import { DrawerNewCase, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
+import { DrawerNewCase, type DrawerEditarPlanSubmit, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
 import { DrawerCaseSettings, type DrawerCaseSettingsPayload } from "./drawers/DrawerCaseSettings";
 import { ModalCompare } from "./drawers/ModalCompare";
 import {
@@ -102,6 +105,7 @@ type DrawerState =
   | { kind: "compare" }
   | { kind: "edit-diagnosis" }
   | { kind: "edit-prescription" }
+  | { kind: "edit-plan" }
   | { kind: "new-referral" }
   | { kind: "config-retention" }
   | { kind: "config-nps" }
@@ -112,6 +116,14 @@ type DrawerState =
 
 export interface OrthodonticsRedesignClientProps {
   vm: OrthoRedesignViewModel;
+  /**
+   * ws1-t12 — el «Plan de tratamiento» completo del caso (como Dentalink). Sin él la sección no se pinta
+   * (paciente sin caso). «Editar plan» —y «Editar aparatología»— abren la ventana del caso en su paso «Plan de
+   * tratamiento» y solo salen con `onEditarPlan`.
+   */
+  planDeTratamiento?: PlanDeTratamientoVista | null;
+  /** Guarda lo que la ventana del caso entrega al editar (técnica, doctor, plan, cobro). `false` = algo falló: la ventana sigue abierta. */
+  onEditarPlan?: (payload: DrawerEditarPlanSubmit) => Promise<boolean | void> | boolean | void;
   digitalRecords?: DigitalRecordEntry[];
   /** Foto-sets históricos por etapa (T0/T1/T2/CONTROL). */
   historicalPhotoSets?: PhotoSetSummary[];
@@ -425,6 +437,16 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     abrir: () => setDrawer({ kind: "new-case" }),
   });
 
+  // ws1-t12: «Completar diagnóstico / plan» de Tablero y Alertas llega con `?completar=`: la ventana correcta se
+  // abre sola en su paso (el diagnóstico se edita con su propio editor; el plan, con la ventana del caso).
+  useCompletarAlLlegar({
+    puedeEditar: Boolean(props.onEditarPlan || props.onUpdateDiagnosis),
+    abrir: (paso) => {
+      if (paso === "plan" && props.onEditarPlan && props.planDeTratamiento) setDrawer({ kind: "edit-plan" });
+      else if (paso === "diagnostico" && vm.diagnosis && props.onUpdateDiagnosis) setDrawer({ kind: "edit-diagnosis" });
+    },
+  });
+
   // Hallazgo ws1-t4 §5/§11: la cabecera, «Estado de cuenta» (RightRail),
   // «Cobro del tratamiento» (SectionFinance) y el resumen de mensualidades
   // (ResumenCobranza) tienen que decir EXACTAMENTE el mismo número — la
@@ -570,15 +592,23 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         <div className={orto.columna}>
           <SectionHero
             treatment={t}
+            controles={
+              props.planDeTratamiento?.detalle.controlesPrevistos
+                ? progresoDeControles(props.planDeTratamiento.controlesHechos, props.planDeTratamiento.detalle.controlesPrevistos)
+                : null
+            }
             cards={vm.treatmentCards}
             hasUpcomingControlToday={isToday(vm.nextAppointment?.date)}
             onStartTreatment={
               props.onCreateCase ? () => setDrawer({ kind: "new-case" }) : props.onStartDiagnosisWizard
             }
             onEditPlan={
-              props.onUpdateAppliances
-                ? () => setDrawer({ kind: "edit-prescription" })
-                : props.onEditPrescription
+              // ws1-t12: «Editar aparatología» abre la ventana única del caso (paso «Plan de tratamiento»).
+              props.onEditarPlan && props.planDeTratamiento
+                ? () => setDrawer({ kind: "edit-plan" })
+                : props.onUpdateAppliances
+                  ? () => setDrawer({ kind: "edit-prescription" })
+                  : props.onEditPrescription
             }
             onOpenCaseSettings={
               props.onUpdateCaseSettings ? () => setDrawer({ kind: "case-settings" }) : undefined
@@ -630,6 +660,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             patientId={t.patientId}
           />
 
+          {props.planDeTratamiento ? (
+            <SectionPlanDeTratamiento
+              vista={props.planDeTratamiento}
+              onEditar={props.onEditarPlan ? () => setDrawer({ kind: "edit-plan" }) : undefined}
+            />
+          ) : null}
+
           <SectionPlan
             treatment={t}
             wireSequence={vm.wireSequence}
@@ -637,9 +674,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             tads={vm.tads}
             auxMechanics={vm.auxMechanics}
             onEditPrescription={
-              props.onUpdateAppliances
-                ? () => setDrawer({ kind: "edit-prescription" })
-                : props.onEditPrescription
+              props.onEditarPlan && props.planDeTratamiento
+                ? () => setDrawer({ kind: "edit-plan" })
+                : props.onUpdateAppliances
+                  ? () => setDrawer({ kind: "edit-prescription" })
+                  : props.onEditPrescription
             }
             // H51: sin plan activo estos formularios solo fallan al guardar.
             onAddWireStep={
@@ -1006,6 +1045,24 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           onConfirm={async (payload) => {
             await props.onUpdateAppliances?.(payload);
             closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* ws1-t12 — «Editar plan»: la MISMA ventana del caso que «Abrir caso», en el paso «Plan de tratamiento». */}
+      {drawer?.kind === "edit-plan" && props.planDeTratamiento && props.onEditarPlan ? (
+        <DrawerNewCase
+          modo="editar"
+          vista={props.planDeTratamiento}
+          patientId={vm.patient.id}
+          patientFullName={vm.patient.fullName}
+          existingDiagnosisId={vm.diagnosis?.id ?? null}
+          onClose={closeDrawer}
+          onConfirm={() => {}}
+          onEditar={async (payload) => {
+            const ok = await props.onEditarPlan?.(payload);
+            if (ok !== false) closeDrawer();
+            return ok;
           }}
         />
       ) : null}

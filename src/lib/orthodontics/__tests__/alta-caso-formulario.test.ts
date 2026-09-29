@@ -72,8 +72,8 @@ test("H18a: el campo dice que es obligatorio y POR QUÉ", () => {
   // Y junto al botón, lo que falta.
   assert.match(CAJON, /\{fraseFaltantes\}/);
   assert.match(CAJON, /aria-describedby=\{fraseFaltantes \? idFaltantes : undefined\}/);
-  assert.match(CAJON, /const todosLosFaltantes = \[\.\.\.faltantes, \.\.\.faltantesPlan\];/);
-  assert.match(CAJON, /const fraseFaltantes = fraseDeFaltantes\(todosLosFaltantes, inObservation\);/);
+  assert.match(CAJON, /const todosLosFaltantes = \[\.\.\.faltantesDelPlan\.obligatorios, \.\.\.faltantesDelPlan\.correcciones\];/);
+  assert.match(CAJON, /const fraseFaltantes = paso === "diagnostico"/);
   assert.match(CAJON, /const canSubmit = todosLosFaltantes\.length === 0 && !loadingOptions;/, "el botón y la explicación salen de la MISMA lista");
 });
 
@@ -96,7 +96,8 @@ test("los mínimos son los del servidor (createTreatmentPlanSchema / createDiagn
   const esquema = leer("src/lib/validation/orthodontics.ts");
   assert.match(esquema, new RegExp(`fullName: z\\.string\\(\\)\\.min\\(${MIN_NOMBRE_TUTOR}\\)\\.max\\(200\\)`));
   assert.match(esquema, new RegExp(`phone: z\\.string\\(\\)\\.min\\(${MIN_TELEFONO_TUTOR}\\)\\.max\\(${MAX_TELEFONO_TUTOR}\\)`));
-  assert.match(esquema, new RegExp(`retentionPlanText: z\\.string\\(\\)\\.min\\(${MIN_RETENCION}\\)`));
+  // ws1-t12 (decisión de Rafael): la retención ya no es obligatoria para abrir el caso; vacío = "".
+  assert.match(esquema, /retentionPlanText: z\.string\(\)\.max\(2000\)\.default\(""\)/);
   assert.match(esquema, /totalCostMxn: z\.number\(\)\.positive\(\)\.max\(10_000_000\)/);
   assert.equal(MAX_COSTO_TOTAL, 10_000_000);
   assert.equal(MIN_RESUMEN, 40);
@@ -147,11 +148,11 @@ test("paciente en observación: sin plan, solo diagnóstico y próxima revisión
 // ── (c) El costo total ───────────────────────────────────────────────────
 
 test("H18c: el costo nace VACÍO — ningún precio escrito en el código", () => {
-  assert.match(CAJON, /const \[totalCost, setTotalCost\] = useState\(""\);/);
+  assert.match(CAJON, /const \[totalCost, setTotalCost\] = useState\(\(\) => \(caso \? String\([^\n]*\) : ""\)\);/, "sin caso, nace vacío");
   assert.doesNotMatch(CAJON_CODIGO, /45[_,.]?000/, "el 45000 de antes ya no está");
   // Ni ese ni ningún otro importe por defecto en el estado del cajón.
   assert.doesNotMatch(CAJON_CODIGO, /useState\(\s*\d{4,}\s*\)/);
-  assert.match(CAJON, /totalCostMxn: costoAGuardar as number,/, "se manda lo que se escribió");
+  assert.match(CAJON, /totalCostMxn: costoAGuardar,/, "se manda lo que se escribió (0 = «lo armo después»)");
 });
 
 test("H18c: sin costo no se abre el caso, y lo dice", () => {
@@ -247,7 +248,7 @@ test("el alta propone el modo de la clínica y deja elegir otro solo para este c
   // El cajón manda el modo elegido, arrancando en el de la clínica.
   assert.match(CAJON, /setModoDeLaClinica\(res\.data\.billingMode\);/);
   assert.match(CAJON, /pistaDelModoDelCaso\(billingMode, modoDeLaClinica\)/);
-  assert.match(CAJON, /\n\s+billingMode,\n\s+\};\n/);
+  assert.match(CAJON, /\n\s+billingMode,\n/);
 
   // El servidor usa el del alta y, sin él, el de la clínica de la sesión.
   const accion = leer("src/app/actions/orthodontics/createTreatmentPlan.ts");
@@ -255,7 +256,7 @@ test("el alta propone el modo de la clínica y deja elegir otro solo para este c
 
   // Y un caso abierto no cambia de modo: la edición no lo acepta.
   const validacion = leer("src/lib/validation/orthodontics.ts");
-  assert.match(validacion, /updateTreatmentPlanSchema = createTreatmentPlanSchema\.omit\(\{ billingMode: true \}\)/);
+  assert.match(validacion, /updateTreatmentPlanSchema = createTreatmentPlanSchema\.omit\(\{ billingMode: true(, planDetalle: true)? \}\)/);
 });
 
 // ── Sección H (ws1-t4 ronda 6): un solo nombre para cada cosa ──
@@ -289,12 +290,12 @@ test("costo opcional (Pago por control): vacío vale 0; escrito, tiene que valer
   assert.ok(faltantesDelAlta({ ...sinCosto, costoTotal: "abc", costoOpcional: true }).some((f) => /válido/.test(f)));
 });
 
-test("costo opcional: el cajón lo usa al guardar y el servidor solo lo admite en Pago por control", () => {
+test("costo opcional en CUALQUIER modo (ws1-t12): la ventana guarda 0 si no hay costo y el servidor ya no lo exige al abrir", () => {
   const cajon = readFileSync(join(process.cwd(), "src/components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx"), "utf8");
-  assert.match(cajon, /costoOpcional: billingMode === "PAGO_POR_CONTROL"/);
-  assert.match(cajon, /totalCostMxn: costoAGuardar as number/);
+  assert.match(cajon, /const costoAGuardar = costoParaGuardar\(totalCost\);/);
+  assert.match(cajon, /totalCostMxn: costoAGuardar,/);
   const accion = readFileSync(join(process.cwd(), "src/app/actions/orthodontics/createTreatmentPlan.ts"), "utf8");
-  assert.match(accion, /!\(parsed\.data\.totalCostMxn > 0\) && billingModeDelCaso !== "PAGO_POR_CONTROL"/);
+  assert.doesNotMatch(accion, /El costo del tratamiento tiene que ser mayor que cero/, "abrir el caso solo exige técnica y doctor");
   const validacion = readFileSync(join(process.cwd(), "src/lib/validation/orthodontics.ts"), "utf8");
   assert.match(validacion, /updateTreatmentPlanSchema[\s\S]*?totalCostMxn: z\.number\(\)\.positive\(\)/, "la edición sigue exigiendo un costo mayor que cero");
 });

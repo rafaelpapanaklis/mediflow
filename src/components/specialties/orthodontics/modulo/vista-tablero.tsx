@@ -38,6 +38,8 @@ import { DIAS_VENTANA_VALORACIONES } from "@/lib/orthodontics/valoraciones-table
 import { EnviarIndicacionesButton } from "@/components/specialties/orthodontics/EnviarIndicacionesButton";
 import { BotonHojaControl } from "@/components/specialties/orthodontics/agenda/BotonHojaControl";
 import { horaEnZona } from "./fechas";
+import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
+import { FilaDeCasoIncompleto } from "./casos-incompletos";
 import { Pantalla, Tarjeta, Vacio } from "./piezas";
 import s from "./modulo.module.css";
 
@@ -80,7 +82,10 @@ export function VistaTablero({
   data,
   controlesHoy,
   zonaHoraria,
+  puedeEditarCasos = false,
 }: {
+  /** ws1-t12: permiso `medicalRecord.edit`; sin él no salen los accesos «Completar diagnóstico / plan». */
+  puedeEditarCasos?: boolean;
   data: OrthoTableroData;
   controlesHoy: TodayControlEntry[];
   /** `clinic.timezone`: la hora de cada control se pinta en la zona de la clínica, no en la del servidor. */
@@ -143,6 +148,19 @@ export function VistaTablero({
             icon={Smile}
           />
         </Indicador>
+        {data.incompletos ? (
+          <Indicador
+            href="/dashboard/orthodontics/alertas#casos-incompletos"
+            destino={`Casos con diagnóstico o plan incompleto: ${data.incompletos.length}. Ver cuáles`}
+          >
+            <KpiCard
+              label="Diagnóstico o plan incompleto"
+              value={String(data.incompletos.length)}
+              icon={ClipboardList}
+              accent={data.incompletos.length > 0 ? "danger" : undefined}
+            />
+          </Indicador>
+        ) : null}
       </section>
 
       <div className={s.rejillaPrincipal}>
@@ -176,6 +194,10 @@ export function VistaTablero({
                     <Link href={`/dashboard/patients/${c.patientId}?tab=ortodoncia`} className={s.nombre}>
                       {c.patientName}
                     </Link>
+                    {/* ws1-t12: «Control 6 de 18», del plan de tratamiento del caso. */}
+                    {c.progreso ? (
+                      <div className={s.detalle}>{textoControlQueSigue(progresoDeControles(c.progreso.numero - 1, c.progreso.previstos))}</div>
+                    ) : null}
                   </div>
                   <div className={s.filaDerecha}>
                     {/* M3 (Ronda 6, «El día de la ortodoncista»): la fila del
@@ -196,6 +218,28 @@ export function VistaTablero({
             </ul>
           )}
         </Tarjeta>
+
+        {data.incompletos && data.incompletos.length > 0 ? (
+          <Tarjeta
+            icono={ClipboardList}
+            titulo="Casos con diagnóstico o plan incompleto"
+            sub="Sobre todo los migrados de Dentalink. Cada uno lleva al paso que falta."
+            accion={
+              data.incompletos.length > 5 ? (
+                <Link href="/dashboard/orthodontics/alertas#casos-incompletos" className={s.enlace}>
+                  Ver los {data.incompletos.length}
+                  <ChevronRight size={14} aria-hidden />
+                </Link>
+              ) : undefined
+            }
+          >
+            <ul className={s.tarjetaLista}>
+              {data.incompletos.slice(0, 5).map((c) => (
+                <FilaDeCasoIncompleto key={c.planId} caso={c} puedeEditar={puedeEditarCasos} />
+              ))}
+            </ul>
+          </Tarjeta>
+        ) : null}
 
         <Tarjeta
           icono={ClipboardList}

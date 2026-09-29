@@ -16,6 +16,7 @@ import {
   DollarSign,
   FileText,
   Layers,
+  ListChecks,
   RefreshCw,
   Shield,
   Smile,
@@ -39,8 +40,10 @@ const SECTIONS: ReadonlyArray<SectionEntry> = [
   { id: "hero", label: "Resumen", Icon: Activity },
   { id: "tcards", label: "Controles", Icon: ClipboardList },
   { id: "diagnosis", label: "Diagnóstico", Icon: Smile },
-  // «Aparatología y arcos», no «Plan de tratamiento»: ese nombre ya es el de
-  // la pestaña general de la ficha (ws1-t4 ronda 6, sección H de la revisión).
+  // ws1-t12 (decisión de Rafael): el plan completo del caso, como Dentalink, se llama «Plan de
+  // tratamiento» también aquí. La sección de abajo sigue siendo «Aparatología y arcos» (prescripción,
+  // secuencia de arcos, IPR y mecánicas auxiliares).
+  { id: "plan-de-tratamiento", label: "Plan de tratamiento", Icon: ListChecks },
   { id: "plan", label: "Aparatología y arcos", Icon: Layers },
   { id: "photos", label: "Fotos", Icon: Camera },
   { id: "finance", label: "Cobro", Icon: DollarSign },

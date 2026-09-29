@@ -62,12 +62,19 @@ test("mismos tokens del panel, claro y oscuro: ni un color escrito a mano", () =
   assert.match(CAJON, /<Btn\s+variant="primary"\s+size="md"/);
 });
 
-test("secciones claras y en el orden pedido: Paciente/responsable · Diagnóstico · Datos del caso · Plan de pago · Doctor", () => {
-  const orden = ['titulo="Paciente y responsable del pago"', 'titulo="Diagnóstico ortodóntico"', 'titulo="Datos del caso"', 'titulo="Plan de pago"', 'titulo="Doctor tratante"'];
+test("una ventana de DOS pasos con las secciones en orden: Datos del caso · Diagnóstico → Técnica y doctor · Plan (CamposDelPlan) · Retención · Cobro", () => {
+  // ws1-t12 (decisión de Rafael): «Abrir caso» = Diagnóstico → Plan de tratamiento (con el cobro dentro).
+  const orden = ['titulo="Datos del caso"', 'titulo="Diagnóstico ortodóntico"', 'titulo="Técnica y doctor"', "<CamposDelPlan", 'titulo="Plan de retención"', 'titulo="Cobro"'];
   const posiciones = orden.map((t) => CAJON.indexOf(t));
   posiciones.forEach((p, i) => assert.ok(p > 0, `falta ${orden[i]}`));
   assert.deepEqual([...posiciones].sort((a, b) => a - b), posiciones, "en ese orden");
   assert.equal((CAJON.match(/<Seccion\b/g) ?? []).length, 5);
+  // Los dos pasos y su navegación.
+  assert.match(CAJON, /const \[paso, setPaso\] = useState<PasoDeLaVentana>\(needsDiagnosis \? \(props\.pasoInicial \?\? "diagnostico"\) : "plan"\);/);
+  assert.match(CAJON, /Siguiente: plan de tratamiento/);
+  // Un solo formulario para crear y para editar: el modo `editar` parte del caso y guarda con `onEditar`.
+  assert.match(CAJON, /props\.modo === "editar"/);
+  assert.match(CAJON, /props\.onEditar\?\.\(/);
 });
 
 test("el plan de pago se arma AQUÍ: enganche, número de pagos (propuesto = duración), primer pago y vista previa", () => {
@@ -84,11 +91,11 @@ test("el plan de pago se arma AQUÍ: enganche, número de pagos (propuesto = dur
   assert.match(CAJON, /res\.data\.precioColocacion/);
 });
 
-test("«Crear el plan de pago después»: casilla apagada por defecto; con ella no se manda nada", () => {
+test("«Lo armo después»: casilla apagada por defecto; con ella (o sin costo) no se manda ninguna factura", () => {
   assert.match(CAJON, /const \[despues, setDespues\] = useState\(false\);/);
-  assert.match(CAJON, /Crear el plan de pago después/);
-  assert.match(CAJON, /const pideElPlan = !inObservation && puedeCobrar && !despues;/, "con «después» no se exige ningún dato del plan");
-  assert.match(CAJON, /planDePagoParaEnviar\(\{\s*enObservacion: inObservation,\s*puedeCobrar,\s*despues,/);
+  assert.match(CAJON, /Lo armo después/);
+  assert.match(CAJON, /const seCreaLaFactura = hayQueCrearLaFactura\(estadoDelPlan\);/);
+  assert.match(CAJON, /const planDePago = planDePagoAlAbrir\(\{ \.\.\.estadoDelPlan, enObservacion: inObservation \}\);/);
   assert.match(CAJON, /await props\.onConfirm\(\{ diagnosis, plan, planDePago \}\);/);
 });
 
@@ -101,8 +108,8 @@ test("sin permiso de cobro la sección se oculta y dice «Recepción armará el 
   assert.match(opciones, /precioDeColocacionDelCatalogo\(ctx\.clinicId\)/, "el catálogo de la clínica de la SESIÓN");
 });
 
-test("un paciente en observación sigue sin plan de pago (no hay caso con plan)", () => {
-  assert.match(CAJON, /\{!inObservation \? \(\s*<Seccion\s+icono=\{<Wallet/);
+test("un paciente en observación sigue sin plan de pago (no hay caso con plan): se guarda solo el diagnóstico", () => {
+  assert.match(CAJON, /if \(inObservation\) \{[\s\S]*?await props\.onConfirm\(\{ diagnosis: diagnosticoParaEnviar\(\), plan: null, planDePago: null \}\);/);
 });
 
 test("al confirmar: primero se abre el caso y DESPUÉS se crea su factura; si falla, el caso queda abierto y se dice cómo reintentar", () => {

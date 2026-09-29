@@ -41,16 +41,23 @@ export interface ProcedimientosDeVisitaProps {
   onSeleccion: (s: SeleccionDeProcedimiento[]) => void;
   /** Cambia para forzar una recarga (p. ej. justo después de firmar). */
   recarga?: number;
+  /**
+   * ws1-t12 — extracciones del plan de tratamiento que se hicieron en ESTA visita (FDI). Se anotan en el plan
+   * al firmar la hoja. Sin `onExtracciones` no se ofrece marcarlas.
+   */
+  extracciones?: number[];
+  onExtracciones?: (piezas: number[]) => void;
 }
 
 export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
   const [catalogo, setCatalogo] = useState<ProcedimientoElegible[]>([]);
   const [lineas, setLineas] = useState<LineaParaVista[]>([]);
   const [puedeCobrar, setPuedeCobrar] = useState(false);
+  const [pendientes, setPendientes] = useState<number[]>([]);
   const [cargado, setCargado] = useState(false);
   const [error, setError] = useState(false);
   const [cobrando, setCobrando] = useState<string | null>(null);
-  const { treatmentPlanId, cardId, soloLectura, seleccion, onSeleccion, recarga } = props;
+  const { treatmentPlanId, cardId, soloLectura, seleccion, onSeleccion, recarga, extracciones = [], onExtracciones } = props;
 
   const cargar = useCallback(async () => {
     try {
@@ -63,6 +70,7 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
       setCatalogo(res.data.catalogo);
       setLineas(res.data.lineas);
       setPuedeCobrar(res.data.puedeCobrar);
+      setPendientes(res.data.extraccionesPendientes ?? []);
       setCargado(true);
       // La primera vez, lo elegido parte de lo que la hoja ya tenía guardado.
       if (!soloLectura && seleccion === undefined) {
@@ -255,7 +263,18 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
                 aria-label="Agregar un procedimiento a esta visita"
               >
                 <option value="">Agregar un procedimiento…</option>
-                {disponibles.map((c) => (
+                {/* ws1-t12: lo que el plan de tratamiento del caso pide (microtornillo, barra palatina…) va primero. */}
+                {disponibles.some((c) => c.sugerido) ? (
+                  <optgroup label="Del plan de tratamiento de este caso">
+                    {disponibles.filter((c) => c.sugerido).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} · {c.incluido ? "incluido" : `con costo aparte ${dinero.format(c.price)}`}
+                        {c.motivo ? ` (${c.motivo})` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {(disponibles.some((c) => c.sugerido) ? disponibles.filter((c) => !c.sugerido) : disponibles).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} · {c.incluido ? "incluido" : `con costo aparte ${dinero.format(c.price)}`}
                   </option>
@@ -266,6 +285,29 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
           <p className="text-[12px] mt-[8px] opacity-70">
             Los incluidos en el tratamiento solo se registran. Los de costo aparte se cobran al firmar la hoja, con el botón «Cobrar».
           </p>
+          {onExtracciones && pendientes.length > 0 ? (
+            <div className="mt-[12px]" data-extracciones-del-plan>
+              <div className={orto.campoEtiqueta}>Extracciones del plan pendientes</div>
+              <p className="text-[12px] opacity-70 mt-[2px]">Marca las que se hicieron en esta visita: se anotan como realizadas en el plan de tratamiento al firmar la hoja.</p>
+              <div className="flex flex-wrap gap-[6px] mt-[6px]" role="group" aria-label="Extracciones del plan pendientes">
+                {pendientes.map((p) => {
+                  const marcada = extracciones.includes(p);
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      aria-pressed={marcada}
+                      className={`${orto.boton} ${orto.botonChico} ${marcada ? orto.botonPrincipal : ""}`}
+                      onClick={() => onExtracciones(marcada ? extracciones.filter((x) => x !== p) : [...extracciones, p].sort((a, b) => a - b))}
+                    >
+                      {p}
+                      {marcada ? " · hecha hoy" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </section>

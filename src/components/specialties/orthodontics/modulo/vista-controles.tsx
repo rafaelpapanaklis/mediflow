@@ -37,6 +37,7 @@ import { AgendarControlBoton } from "./agendar-control";
 import { BotonHojaControl } from "@/components/specialties/orthodontics/agenda/BotonHojaControl";
 import { horaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, Vacio, type Tono } from "./piezas";
+import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
 import s from "./modulo.module.css";
 
 const CLASE_TONO: Record<Tono, string> = {
@@ -275,6 +276,10 @@ function FilaDeControl({
           {cita.patientName}
         </Link>
         {cita.doctorName && <div className={s.detalle}>{cita.doctorName}</div>}
+        {/* ws1-t12: «Control 6 de 18», del plan de tratamiento del caso. */}
+        {cita.progreso && !cancelada && (
+          <div className={s.detalle}>{textoControlQueSigue(progresoDeControles(cita.progreso.numero - 1, cita.progreso.previstos))}</div>
+        )}
       </div>
       <div className={s.filaDerecha}>
         <span className={`${s.etiqueta} ${CLASE_ESTADO[estado.tono]}`}>{estado.texto}</span>

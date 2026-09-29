@@ -47,7 +47,12 @@ export default async function OrthodonticsTableroPage() {
   return (
     <>
       {primerosPasos && <PrimerosPasosOrtodoncia pasos={primerosPasos} />}
-      <VistaTablero data={data} controlesHoy={controlesHoy} zonaHoraria={user.clinic.timezone} />
+      <VistaTablero
+        data={data}
+        controlesHoy={controlesHoy}
+        zonaHoraria={user.clinic.timezone}
+        puedeEditarCasos={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride }, "medicalRecord.edit")}
+      />
     </>
   );
 }

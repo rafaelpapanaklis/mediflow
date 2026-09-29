@@ -36,12 +36,19 @@ export default async function OrthodonticsAlertasPage() {
     "medicalRecord.view",
   );
 
+  // ws1-t12: los accesos directos «Completar diagnóstico / plan» abren la ventana del caso: piden editar el expediente.
+  const puedeEditarCasos = hasPermission(
+    { role: user.role, permissionsOverride: user.permissionsOverride },
+    "medicalRecord.edit",
+  );
+
   return (
     <VistaAlertas
       alerts={alerts}
       zonaHoraria={user.clinic.timezone}
       puedeAgendar={puedeAgendar}
       puedePosponer={puedePosponer}
+      puedeEditarCasos={puedeEditarCasos}
     />
   );
 }
