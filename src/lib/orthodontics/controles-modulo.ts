@@ -206,7 +206,14 @@ export function historialDeControles(
   ahora: Date,
   /** La fecha de la última hoja de control de cada paciente, si la hay. */
   hojas: { patientId: string; visitDate: Date }[] = [],
+  /**
+   * Zona de la clínica. Con ella, una cita de control de HOY que sigue en pie (agendada,
+   * confirmada, en sala…) cuenta como próximo control aunque su hora ya pasó: es la misma
+   * cita que Controles lista «por atender». Sin ella, solo cuenta lo que aún no llega.
+   */
+  zona?: string,
 ): HistorialDeControles {
+  const hoyClinica = zona ? diaEnZona(ahora, zona) : null;
   const conControlFuturo = new Set<string>();
   const ultimoAtendido = new Map<string, Date>();
   const ultimaFalta = new Map<string, Date>();
@@ -221,6 +228,11 @@ export function historialDeControles(
     // de hoy, y el siguiente sigue sin agendar.
     if (c.startsAt >= ahora && !citaAtendida(c.status)) {
       if (c.status !== "NO_SHOW") conControlFuturo.add(c.patientId);
+      continue;
+    }
+    // Control de hoy cuya hora ya pasó pero nadie lo marcó atendido ni falta: sigue «por atender».
+    if (hoyClinica && !citaAtendida(c.status) && c.status !== "NO_SHOW" && diaEnZona(c.startsAt, zona!) === hoyClinica) {
+      conControlFuturo.add(c.patientId);
       continue;
     }
     if (c.status === "NO_SHOW") masReciente(ultimaFalta, c.patientId, c.startsAt);

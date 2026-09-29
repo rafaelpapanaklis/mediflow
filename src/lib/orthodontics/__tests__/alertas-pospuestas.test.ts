@@ -100,8 +100,10 @@ test("el SQL es plano, idempotente y sin bloques DO", () => {
 });
 
 test("fila 23: Alertas no toma como «próximo control» una cita de más tarde ya atendida", () => {
+  // ws1-t8: la regla vive en UN sitio (`historialDeControles`), que Alertas y Controles comparten.
   const datos = leer("src/lib/orthodontics/alerts-data.ts");
-  assert.match(datos, /a\.startsAt >= ahora &&[\s\S]{0,120}!citaAtendida\(a\.status\)/);
+  assert.match(datos, /listMissingNextControl\(cases, historial\.conControlFuturo\)/);
+  assert.match(leer("src/lib/orthodontics/controles-modulo.ts"), /c\.startsAt >= ahora && !citaAtendida\(c\.status\)/);
 });
 
 import { listaDePospuestas } from "../alertas-pospuestas";

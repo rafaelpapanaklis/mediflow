@@ -132,7 +132,7 @@ export async function loadOrthoControles(
   const pacientes = Array.from(new Set(cases.map((c) => c.patientId)));
   const hojasPorPaciente = await cargarUltimasHojasPorPaciente(clinicId, pacientes, ahora);
 
-  const historial = historialDeControles(citas, ahora, hojasPorPaciente);
+  const historial = historialDeControles(citas, ahora, hojasPorPaciente, zonaHoraria);
 
   return {
     hoy,

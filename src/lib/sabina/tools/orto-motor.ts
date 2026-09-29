@@ -379,7 +379,7 @@ export async function leerCaso(
       .filter((g: any) => g?._max?.visitDate)
       .map((g: any) => ({ patientId: g.patientId as string, visitDate: g._max.visitDate as Date }));
 
-    const historial = historialDeControles(citas, ahora, hojasHechas);
+    const historial = historialDeControles(citas, ahora, hojasHechas, zona);
     // La próxima: el criterio de la ficha (`resolveNextRealAppointment`).
     const proxima = citas.find((c: any) => c.startsAt >= ahora && c.status !== "CANCELLED");
     const [sinControl] = casosSinControl([comoCaso(null)], historial, hoyEnZona(ahora, zona), zona);

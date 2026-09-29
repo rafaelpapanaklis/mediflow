@@ -30,7 +30,6 @@ import { agruparFotosPorRevisar, type FotosPorRevisarEntry } from "./fotos-pacie
 import { diaEnZona, historialDeControles, vinoHoy } from "./controles-modulo";
 import { cargarUltimasHojasPorPaciente } from "./hojas-por-paciente-db";
 import { listaDePospuestas, quitarPospuestas, vigentes, type PospuestaVisible } from "./alertas-pospuestas";
-import { citaAtendida } from "./controles-modulo";
 import { cargarPosposiciones } from "./alertas-pospuestas-db";
 import { cargarFotosPorRevisar } from "./fotos-paciente-db";
 
@@ -97,27 +96,12 @@ export async function loadOrthoAlerts(
     take: 2000,
   });
 
-  // ws1-t4 ronda 6 (fila 23): una cita de más tarde que ya se atendió (al
-  // firmar la hoja se cierra) no es «su próximo control»; ni una falta.
-  // Mismo criterio que Controles (`historialDeControles`).
-  const futureControlPatientIds = new Set(
-    appointments
-      .filter(
-        (a) =>
-          a.startsAt >= ahora &&
-          a.status !== "CANCELLED" &&
-          a.status !== "NO_SHOW" &&
-          !citaAtendida(a.status),
-      )
-      .map((a) => a.patientId),
-  );
-
   // H44: una falta deja de contar en cuanto el paciente ya vino después
   // (Controles ya lo daba por al día; Alertas lo seguía marcando 30 días).
   // Una hoja de control registrada también es un control hecho (aunque no tenga cita):
   // la misma lectura que Controles, para que «Vino hoy» diga lo mismo en las dos.
   const hojas = await cargarUltimasHojasPorPaciente(clinicId, Array.from(new Set(cases.map((c) => c.patientId))), ahora);
-  const historial = historialDeControles(appointments, ahora, hojas);
+  const historial = historialDeControles(appointments, ahora, hojas, zonaHoraria);
   const noShows: NoShowEntry[] = appointments
     .filter((a) => a.status === "NO_SHOW" && a.startsAt < ahora)
     .filter((a) => {
@@ -142,7 +126,7 @@ export async function loadOrthoAlerts(
   // «Vino hoy · falta agendar el siguiente»): la recepción lo agenda al despedirlo.
   const hoy = diaEnZona(ahora, zonaHoraria);
   const vinoHoyElPaciente = (patientId: string) => vinoHoy(historial, patientId, hoy, zonaHoraria);
-  const sinControlCrudo = listMissingNextControl(cases, futureControlPatientIds).filter((c) => !vinoHoyElPaciente(c.patientId));
+  const sinControlCrudo = listMissingNextControl(cases, historial.conControlFuturo).filter((c) => !vinoHoyElPaciente(c.patientId));
 
   const sinControl = quitarPospuestas(sinControlCrudo, "sin-proximo-control", activas);
   const faltas = quitarPospuestas(noShows, "no-asistio", activas);

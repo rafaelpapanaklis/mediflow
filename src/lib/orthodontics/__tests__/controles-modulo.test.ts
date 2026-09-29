@@ -315,3 +315,27 @@ test("vinoHoy: una hoja firmada hoy SIN cita cuenta, igual que en Controles", ()
   const cita = historialDeControles([{ patientId: "p", startsAt: new Date("2026-09-29T16:00:00Z"), status: "COMPLETED" }], ahora);
   assert.equal(vinoHoy(cita, "p", "2026-09-29", zona), true);
 });
+
+test("ws1-t8 #5: un control de HOY aún «Agendado» cuenta como próximo control aunque su hora ya pasó", () => {
+  // AHORA = 09:00 en la clínica; la cita fue a las 08:00 (14:00Z) y nadie la marcó.
+  const yaPaso = new Date("2026-09-28T14:00:00Z");
+  const cita = (status: string) => [{ patientId: "p-1", startsAt: yaPaso, status }];
+  assert.equal(historialDeControles(cita("SCHEDULED"), AHORA, [], ZONA).conControlFuturo.has("p-1"), true);
+  assert.equal(historialDeControles(cita("CHECKED_IN"), AHORA, [], ZONA).conControlFuturo.has("p-1"), true);
+  // Atendida, falta o cancelada: no es un próximo control.
+  for (const st of ["COMPLETED", "CHECKED_OUT", "NO_SHOW", "CANCELLED"]) {
+    assert.equal(historialDeControles(cita(st), AHORA, [], ZONA).conControlFuturo.has("p-1"), false, st);
+  }
+  // Una de AYER sin marcar sigue sin contar (no se sabe si vino).
+  const ayer = [{ patientId: "p-1", startsAt: new Date("2026-09-27T16:00:00Z"), status: "SCHEDULED" }];
+  assert.equal(historialDeControles(ayer, AHORA, [], ZONA).conControlFuturo.has("p-1"), false);
+  // Sin zona se conserva la regla de antes.
+  assert.equal(historialDeControles(cita("SCHEDULED"), AHORA).conControlFuturo.has("p-1"), false);
+});
+
+test("ws1-t8 #5: Alertas y Controles leen la misma regla (historialDeControles con zona)", () => {
+  const alertas = leer("src/lib/orthodontics/alerts-data.ts");
+  assert.match(alertas, /historialDeControles\(appointments, ahora, hojas, zonaHoraria\)/);
+  assert.match(alertas, /listMissingNextControl\(cases, historial\.conControlFuturo\)/);
+  assert.match(leer("src/lib/orthodontics/controles-data.ts"), /historialDeControles\(citas, ahora, hojasPorPaciente, zonaHoraria\)/);
+});
