@@ -37,7 +37,8 @@ import { ESTADOS_LIGABLES, conceptoDeFactura, facturaSinLigarReciente } from "@/
 import { idsDeFacturasLigadasAUnCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro } from "./_ctx";
-import { listarProcedimientosDeOrtodoncia, precioDeColocacionDelCatalogo } from "@/lib/orthodontics/catalog-procedures";
+import { elegirPrecioColocacion, listarProcedimientosDeOrtodoncia, type OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
+import { limitarConcurrencia } from "@/lib/limitar-concurrencia";
 import { controlesPorCobrarDe, type ControlPorCobrar } from "@/lib/orthodontics/cobro/controles-por-cobrar";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
@@ -98,38 +99,111 @@ export interface PanelDeCobro {
   facturaSinLigar: { id: string; invoiceNumber: string; concepto: string; total: number; fecha: string } | null;
 }
 
+/** H5: la factura de ortodoncia recién creada que no quedó ligada a ningún caso (`null` si no hay o no se pudo buscar). */
+async function buscarFacturaSinLigar(clinicId: string, patientId: string): Promise<PanelDeCobro["facturaSinLigar"]> {
+  try {
+    const recientes = await prisma.invoice.findMany({
+      where: {
+        clinicId,
+        patientId,
+        status: { in: [...ESTADOS_LIGABLES] },
+        appointmentId: null,
+        orthodonticTreatmentPlan: null,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { id: true, invoiceNumber: true, items: true, total: true, status: true, appointmentId: true, createdAt: true },
+    });
+    const ligadas = await idsDeFacturasLigadasAUnCaso(clinicId, recientes.map((r) => r.id));
+    const hallada = facturaSinLigarReciente(
+      recientes.map((r) => ({ ...r, ligadaACaso: ligadas.has(r.id) ? "extra" : null })),
+      new Date(),
+    );
+    if (!hallada) return null;
+    return {
+      id: hallada.id,
+      invoiceNumber: hallada.invoiceNumber,
+      concepto: conceptoDeFactura(hallada.items),
+      total: hallada.total,
+      fecha: hallada.createdAt.toISOString(),
+    };
+  } catch (e) {
+    console.warn("[ortodoncia:cobro] no se pudo buscar una factura sin ligar:", e);
+    return null;
+  }
+}
+
 export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<ActionResult<PanelDeCobro>> {
   const ctxResult = await getOrthoBillingActionContext("billing.view");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
 
-  const casoResult = await loadCasoParaCobro({ ctx, treatmentPlanId });
+  // ws1-t10 — medido en panel.108 (cada ida a la base ≈ 160–320 ms): ninguna consulta
+  // es lenta por sí sola; lo que sumaba >10 s eran ~20 idas y vueltas EN FILA (el caso,
+  // luego las siete de la primera tanda, luego el precio de la colocación, luego el
+  // catálogo —que se leía dos veces—, luego la factura, luego otra tanda…). Ahora todo lo
+  // que no depende de otra cosa arranca junto, con un tope de 6 en vuelo (el pooler), y lo
+  // que depende del caso arranca en cuanto el caso llega. Los `select` y los filtros por
+  // clínica son los mismos. Las lecturas se piden antes de saber si el caso es de esta
+  // clínica y visible para quien pregunta, pero todas filtran por `clinicId` de la sesión y
+  // NADA se devuelve si el caso no pasa: es la misma respuesta, en menos tiempo.
+  const correr = limitarConcurrencia(6);
+  // Una lectura que nadie llegó a esperar (salida temprana) no debe tumbar el proceso.
+  const pedir = <T,>(tarea: () => Promise<T>): Promise<T> => {
+    const p = correr(tarea);
+    p.catch(() => {});
+    return p;
+  };
+
+  const pCaso = pedir(() => loadCasoParaCobro({ ctx, treatmentPlanId }));
+  const pModo = pedir(() => cargarModoDeCobro(ctx.clinicId, treatmentPlanId));
+  const pClinica = pedir(() => prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { cfdiTaxMode: true, timezone: true } }));
+  const pRediseno = pedir(() => menuDosNivelesEncendido(ctx.clinicId));
+  const pConfig = pedir(() => leerConfigDeCobro(ctx.clinicId));
+  // El catálogo de ortodoncia se lee UNA vez: de él salen los extras (H7) y el precio de la colocación.
+  // Si no se puede leer, el extra parte sin lista y la colocación sin precio de referencia.
+  const pCatalogo = pedir((): Promise<OrthoProcedureRow[]> => listarProcedimientosDeOrtodoncia(ctx.clinicId).catch(() => []));
+  const pBillingDelCaso = pedir(() => leerBillingDelCaso(treatmentPlanId, ctx.clinicId));
+  const pExtras = pedir(() => listarExtrasDelCaso(treatmentPlanId, ctx.clinicId));
+  const pPromesas = pedir(() => listarPromesasDelCaso(treatmentPlanId, ctx.clinicId));
+
+  const casoResult = await pCaso;
   if (isFailure(casoResult)) return casoResult;
   const caso = casoResult.data;
 
-  const [redisenoFacturas, clinica, billingDelCaso, config, extras, promesas, billingModeCrudo] = await Promise.all([
-    menuDosNivelesEncendido(ctx.clinicId),
-    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { cfdiTaxMode: true, timezone: true } }),
-    leerBillingDelCaso(treatmentPlanId, ctx.clinicId),
-    leerConfigDeCobro(ctx.clinicId),
-    listarExtrasDelCaso(treatmentPlanId, ctx.clinicId),
-    listarPromesasDelCaso(treatmentPlanId, ctx.clinicId),
-    cargarModoDeCobro(ctx.clinicId, treatmentPlanId),
-  ]);
-  const billingMode = normalizarOrthoBillingMode(billingModeCrudo);
-  // Solo en PAGO_POR_CONTROL el borrador es la colocación, y solo ahí hace falta el catálogo.
-  const precioColocacion = billingMode === "PAGO_POR_CONTROL"
-    ? await precioDeColocacionDelCatalogo(ctx.clinicId)
+  // Lo que depende del caso arranca ya, sin esperar a las demás lecturas.
+  const pInvoice = caso.invoiceId
+    ? pedir(() =>
+        prisma.invoice.findFirst({
+          where: { id: caso.invoiceId!, clinicId: ctx.clinicId },
+          select: { id: true, invoiceNumber: true, total: true, paid: true, balance: true, status: true, payments: { select: { amount: true, method: true } } },
+        }),
+      )
     : null;
+  const pCondiciones = caso.invoiceId
+    ? pedir(() => leerCondicionesDeFacturas(prisma, { clinicId: ctx.clinicId, invoiceIds: [caso.invoiceId!] }))
+    : null;
+  const pSaldoAFavor = pedir(() => getPatientCreditBalance(ctx.clinicId, caso.patientId));
+  const pCargosControl: Promise<Awaited<ReturnType<typeof cargarCargosDeControlDelCaso>>> = pModo.then((crudo) =>
+    normalizarOrthoBillingMode(crudo) === "PAGO_POR_CONTROL"
+      ? pedir(() => cargarCargosDeControlDelCaso(ctx.clinicId, treatmentPlanId))
+      : [],
+  );
+  pCargosControl.catch(() => {});
+  // H5: sin factura en el caso ya se sabe que no hay plan vigente: se busca la huérfana sin esperar.
+  const pSinLigar = caso.invoiceId ? null : pedir(() => buscarFacturaSinLigar(ctx.clinicId, caso.patientId));
 
-  // H7: solo lo activo y «con costo aparte»; si el catálogo no se puede leer, el extra parte sin lista.
-  const catalogoDeExtras: ConceptoDeExtra[] = await listarProcedimientosDeOrtodoncia(ctx.clinicId)
-    .then((filas) =>
-      filas
-        .filter((f) => f.isActive && f.orthoIncludedInTreatment === false)
-        .map((f) => ({ name: f.name, price: Number(f.basePrice) || 0 })),
-    )
-    .catch(() => []);
+  // Ya están todas en camino (con su tope de 6 en vuelo): esto solo las espera.
+  const [redisenoFacturas, clinica, billingDelCaso, config] = await Promise.all([pRediseno, pClinica, pBillingDelCaso, pConfig]);
+  const [extras, promesas, billingModeCrudo, filasCatalogo] = await Promise.all([pExtras, pPromesas, pModo, pCatalogo]);
+  const billingMode = normalizarOrthoBillingMode(billingModeCrudo);
+  // Solo en PAGO_POR_CONTROL el borrador es la colocación, y solo ahí hace falta el precio.
+  const precioColocacion = billingMode === "PAGO_POR_CONTROL" ? elegirPrecioColocacion(filasCatalogo) : null;
+
+  // H7: solo lo activo y «con costo aparte».
+  const catalogoDeExtras: ConceptoDeExtra[] = filasCatalogo
+    .filter((f) => f.isActive && f.orthoIncludedInTreatment === false)
+    .map((f) => ({ name: f.name, price: Number(f.basePrice) || 0 }));
 
   const base = {
     catalogoDeExtras,
@@ -149,19 +223,13 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
 
   const zonaHoraria = clinica?.timezone || "America/Mexico_City";
 
-  let invoice: { id: string; invoiceNumber: string | null; total: number; paid: number; balance: number; status: string; payments: Array<{ amount: unknown; method: string | null }> } | null = null;
-  if (caso.invoiceId) {
-    invoice = await prisma.invoice.findFirst({
-      where: { id: caso.invoiceId, clinicId: ctx.clinicId },
-      select: { id: true, invoiceNumber: true, total: true, paid: true, balance: true, status: true, payments: { select: { amount: true, method: true } } },
-    });
-    if (!invoice) return fail("La factura del tratamiento ya no existe");
-  }
+  const invoice = pInvoice ? await pInvoice : null;
+  if (caso.invoiceId && !invoice) return fail("La factura del tratamiento ya no existe");
 
   const [condicionesResult, saldoAFavorPrevio, cargosControl] = await Promise.all([
-    invoice ? leerCondicionesDeFacturas(prisma, { clinicId: ctx.clinicId, invoiceIds: [invoice.id] }) : Promise.resolve({ porFactura: new Map<string, CondicionesPago>() }),
-    getPatientCreditBalance(ctx.clinicId, caso.patientId),
-    billingMode === "PAGO_POR_CONTROL" ? cargarCargosDeControlDelCaso(ctx.clinicId, treatmentPlanId) : Promise.resolve([]),
+    pCondiciones ?? Promise.resolve({ porFactura: new Map<string, CondicionesPago>() }),
+    pSaldoAFavor,
+    pCargosControl,
   ]);
 
   const condiciones = invoice ? condicionesResult.porFactura.get(invoice.id) ?? null : null;
@@ -186,40 +254,13 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
 
   const controlesPorCobrar = controlesPorCobrarDe(cargosControl);
 
-  // H5: sin plan vigente, ¿hay una factura de ortodoncia recién creada sin ligar?
-  let facturaSinLigar: PanelDeCobro["facturaSinLigar"] = null;
-  if (!facturaVigente) {
-    try {
-      const recientes = await prisma.invoice.findMany({
-        where: {
-          clinicId: ctx.clinicId,
-          patientId: caso.patientId,
-          status: { in: [...ESTADOS_LIGABLES] },
-          appointmentId: null,
-          orthodonticTreatmentPlan: null,
-        },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: { id: true, invoiceNumber: true, items: true, total: true, status: true, appointmentId: true, createdAt: true },
-      });
-      const extras = await idsDeFacturasLigadasAUnCaso(ctx.clinicId, recientes.map((r) => r.id));
-      const hallada = facturaSinLigarReciente(
-        recientes.map((r) => ({ ...r, ligadaACaso: extras.has(r.id) ? "extra" : null })),
-        new Date(),
-      );
-      if (hallada) {
-        facturaSinLigar = {
-          id: hallada.id,
-          invoiceNumber: hallada.invoiceNumber,
-          concepto: conceptoDeFactura(hallada.items),
-          total: hallada.total,
-          fecha: hallada.createdAt.toISOString(),
-        };
-      }
-    } catch (e) {
-      console.warn("[ortodoncia:cobro] no se pudo buscar una factura sin ligar:", e);
-    }
-  }
+  // H5: sin plan vigente, ¿hay una factura de ortodoncia recién creada sin ligar? (Con factura en el
+  // caso, solo si esa factura está cancelada; sin factura ya se pidió arriba, en paralelo.)
+  const facturaSinLigar: PanelDeCobro["facturaSinLigar"] = facturaVigente
+    ? null
+    : pSinLigar
+      ? await pSinLigar
+      : await buscarFacturaSinLigar(ctx.clinicId, caso.patientId);
 
   return ok({
     ...base,

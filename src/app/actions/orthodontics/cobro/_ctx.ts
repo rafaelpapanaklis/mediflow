@@ -10,6 +10,7 @@
 // queda solo con lo que sigue siendo EXCLUSIVO de Cobro.
 
 import { prisma } from "@/lib/prisma";
+import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import type { OrthoTechnique } from "@prisma/client";
 import type { AuthContext } from "@/lib/auth-context";
@@ -40,14 +41,20 @@ export async function loadCasoParaCobro(args: {
   treatmentPlanId: string;
 }): Promise<ActionResult<CasoParaCobro>> {
   let plan;
+  let techniqueName: string | null = null;
   try {
-    plan = await prisma.orthodonticTreatmentPlan.findFirst({
-      where: { id: args.treatmentPlanId, clinicId: args.ctx.clinicId, deletedAt: null },
-      select: {
-        id: true, patientId: true, invoiceId: true, technique: true, totalCostMxn: true, treatingDoctorId: true,
-        patient: { select: { visibleUserIds: true } },
-      },
-    });
+    // ws1-t10: el nombre propio de la técnica se pide junto con el caso (van por
+    // `treatmentPlanId` y `clinicId` de la sesión), no después: eran dos idas en fila.
+    [plan, techniqueName] = await Promise.all([
+      prisma.orthodonticTreatmentPlan.findFirst({
+        where: { id: args.treatmentPlanId, clinicId: args.ctx.clinicId, deletedAt: null },
+        select: {
+          id: true, patientId: true, invoiceId: true, technique: true, totalCostMxn: true, treatingDoctorId: true,
+          patient: { select: { visibleUserIds: true } },
+        },
+      }),
+      cargarNombreDeTecnica(args.ctx.clinicId, args.treatmentPlanId),
+    ]);
   } catch (e) {
     if (esRelacionAusente(e)) return fail("El núcleo de ortodoncia (Ola 0) todavía no está aplicado en esta base");
     throw e;
@@ -63,7 +70,7 @@ export async function loadCasoParaCobro(args: {
       patientId: plan.patientId,
       invoiceId: plan.invoiceId,
       technique: plan.technique,
-      techniqueName: await cargarNombreDeTecnica(args.ctx.clinicId, plan.id),
+      techniqueName,
       totalCostMxn: Number(plan.totalCostMxn) || 0,
       treatingDoctorId: plan.treatingDoctorId,
     },
@@ -81,17 +88,18 @@ export async function auditarCobro(args: {
   action: string;
   entityId: string;
   meta: Record<string, unknown>;
+  /** ws1-t12 — paciente del caso; si falta se busca en `meta.patientId`. */
+  patientId?: string | null;
 }): Promise<void> {
   try {
-    await prisma.auditLog.create({
-      data: {
-        clinicId: args.ctx.clinicId,
-        userId: args.ctx.userId,
-        entityType: "orthodontic_cobro",
-        entityId: args.entityId,
-        action: args.action,
-        changes: { _meta: args.meta } as object,
-      },
+    await anotarFilaDeModulo({
+      clinicId: args.ctx.clinicId,
+      userId: args.ctx.userId,
+      entityType: "orthodontic_cobro",
+      entityId: args.entityId,
+      action: args.action,
+      changes: { _meta: args.meta },
+      patientId: args.patientId,
     });
   } catch (e) {
     console.error("[ortho cobro audit] failed:", e);

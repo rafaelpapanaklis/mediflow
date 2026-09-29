@@ -278,6 +278,8 @@
     "test:cfdi-timbrado-alerta": "tsx --test src/lib/__tests__/cfdi-timbrado-alerta.test.ts",
     "test:cfdi-cuadre": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/cuadre-renglones.test.ts",
     "test:cfdi-candado": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/timbrado-y-sat.test.ts",
+    "test:orto-cajon-tablero": "tsx --test src/components/specialties/orthodontics/redesign/__tests__/cajon-tablero-y-elasticos.test.ts",
+    "test:cobro-panel-rapido": "tsx --test src/lib/__tests__/limitar-concurrencia.test.ts",
     "test:cfdi-timbre-incierto": "tsx --test --experimental-test-module-mocks src/lib/invoices/__tests__/cfdi-timbre-incierto.test.ts",
     "test:iva-sat": "tsx --test src/lib/__tests__/invoice-iva-sat.test.ts",
     "//test:cbct-geometry": "Necesita el tsconfig de pruebas: el test importa GeometryWarning.tsx (JSX) y el tsconfig de la app deja jsx en 'preserve' para que lo resuelva Next.",

@@ -11,8 +11,16 @@
 // y abre el MISMO `DrawerTreatmentCard` que usa la ficha del paciente —
 // guardar/firmar van directo a saveTreatmentCardDraft/signTreatmentCard con
 // `appointmentId` puesto, para que la hoja quede ligada a esta cita.
+//
+// El cajón va en un PORTAL a <body> (ws1-t10): el botón vive en filas del
+// Tablero y de Controles cuyo contenedor crea su propia capa (`.filaDerecha`,
+// z-index 1), y un cajón `fixed` metido ahí no podía subir de esa capa: la barra
+// de pestañas (z-index 4) se dibujaba encima. Fuera de `.raiz` trae lo suyo: los
+// tokens del rediseño (`--pr-*`), los alias del cajón (`--orto-*`, sobre todo el
+// velo) y los vestidos de las piezas del módulo.
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { FileText, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Btn } from "../redesign/atoms/Btn";
@@ -25,6 +33,8 @@ import { saveTreatmentCardDraft } from "@/app/actions/orthodontics/saveTreatment
 import { signTreatmentCard } from "@/app/actions/orthodontics/signTreatmentCard";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import orto from "../redesign/orto.module.css";
+import modulo from "../modulo/modulo.module.css";
+import { CLASES_REDISENO } from "@/components/dashboard/pacientes-rediseno/raiz";
 import {
   PHASE_LABELS,
   type TreatmentCardDTO,
@@ -172,7 +182,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
           {error}
         </div>
       ) : null}
-      {open && ctx ? (
+      {open && ctx && typeof document !== "undefined" ? createPortal(
+        <div className={`${CLASES_REDISENO} ${orto.raiz} ${modulo.portal}`}>
         <DrawerTreatmentCard
           card={ctx.card}
           availableWires={ctx.availableWires}
@@ -199,6 +210,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
           onSave={(payload) => guardar(payload, false)}
           onSign={(payload) => guardar(payload, true)}
         />
+        </div>,
+        document.body,
       ) : null}
     </>
   );

@@ -939,8 +939,8 @@ function ElasticsBlock(props: {
         <div className="flex flex-col gap-[6px]">
           {props.elastics.map((e) =>
             props.readOnly ? (
-              <div key={e.id} className={`${orto.caja} flex items-center gap-2 text-[13px]`}>
-                <span className="font-semibold">
+              <div key={e.id} className={`${orto.caja} flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]`}>
+                <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">
                   {ELASTIC_CLASS_LABELS[e.elasticClass]} {e.config}
                 </span>
                 <span className={`${orto.tonoApagado} ml-auto text-xs`}>
@@ -948,20 +948,22 @@ function ElasticsBlock(props: {
                 </span>
               </div>
             ) : (
-              <div key={e.id} className={`${orto.caja} flex items-center gap-2 text-[13px]`}>
+              // Con «Del control anterior» la fila no cabe en el cajón (390 y 520 px): salta de línea
+              // en vez de salirse por la derecha, y el campo de texto puede encogerse (`min-w-0`).
+              <div key={e.id} className={`${orto.caja} flex flex-wrap items-center gap-x-2 gap-y-2 text-[13px]`}>
                 <span className="font-semibold shrink-0">{ELASTIC_CLASS_LABELS[e.elasticClass]}</span>
                 {props.heredados.includes(e.id) ? <DelAnterior className="shrink-0" /> : null}
                 <input
                   type="text"
                   value={e.config}
                   onChange={(ev) => props.onUpdate(e.id, { config: ev.target.value })}
-                  className={`${orto.entrada} flex-1`}
+                  className={`${orto.entrada} min-w-[120px] flex-1 basis-[120px]`}
                   aria-label="Descripción del elástico (medida y onzas)"
                 />
                 <select
                   value={e.zone}
                   onChange={(ev) => props.onUpdate(e.id, { zone: ev.target.value as OrthoElasticZone })}
-                  className={`${orto.entrada} w-[140px] shrink-0`}
+                  className={`${orto.entrada} w-[140px] min-w-0 max-w-full shrink-0`}
                   aria-label="Zona del elástico"
                 >
                   {(["ANTERIOR", "POSTERIOR", "INTERMAXILAR"] as const).map((z) => (
