@@ -26,6 +26,7 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { sharedRecordScope, ownPrivateRecordsOnly } from "../clinical/record-scope";
+import { mensajeSinPermiso } from "../auth/permissions";
 
 const CLINICA = "cli_1";
 const DR_A = "user_dr_a";
@@ -176,7 +177,9 @@ test("H5 · recepción SIN medicalRecord.view ya no recibe el expediente", async
   // `subjective` de cada nota y los CIE-10 con código y descripción.
   const { status, body } = await pedirTimeline(recepcion);
   assert.equal(status, 403);
-  assert.match(String(body.error), /medicalRecord\.view/);
+  // El 403 nombra el permiso: la llave en `permiso` (para quien la parsea) y el texto legible en `error`.
+  assert.equal(body.permiso, "medicalRecord.view");
+  assert.equal(String(body.error), mensajeSinPermiso(["medicalRecord.view"]));
 });
 
 test("H5 · el doctor, que sí tiene el permiso, sigue viendo su timeline", async () => {

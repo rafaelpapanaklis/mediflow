@@ -56,7 +56,9 @@ test("Facturación del expediente (fila de factura del paciente): openDirectPaym
 // ws1-t4 #69 — «Marcar pagada» liquidaba de un clic una factura a plazos entera.
 test("detalle de factura: «Marcar pagada» no se ofrece en una factura a plazos", () => {
   const src = leer("components/dashboard/billing/invoice-detail-modal.tsx");
-  assert.match(src, /\{!esPlanAPlazos\(condicionesPago\) && \(\s*<ButtonNew[\s\S]{0,120}onClick=\{handleMarkPaid\}/);
+  // Sigue sin ofrecerse en un plan a plazos (`!esPlanAPlazos`); además (anticipos) solo con permiso de cobrar y sin la
+  // cita cancelada con dinero pendiente. Las tres condiciones tienen que estar, y en ese orden.
+  assert.match(src, /\{puedeCobrar && !citaCanceladaConDinero && !esPlanAPlazos\(condicionesPago\) && \(\s*<ButtonNew[\s\S]{0,120}onClick=\{handleMarkPaid\}/);
 });
 
 // ws1-t4 #78/#79 — la ficha de finanzas no promete lo que no hace.

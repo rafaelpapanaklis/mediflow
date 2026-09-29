@@ -233,6 +233,13 @@ export interface SabinaDb {
     findMany(args: any): Promise<any[]>;
   };
   /**
+   * Cuenta bancaria de la sede para la transferencia (`estado_mercado_pago` la lee vía
+   * `leerPantallaAnticipos`, solo para saber si hay una USABLE: la CLABE no sale de aquí).
+   */
+  clinicBankAccount: {
+    findUnique(args: any): Promise<any>;
+  };
+  /**
    * Ortodoncia (ws1-t11) — solo lectura, y solo para `orto_caso`. Son las tres
    * lecturas de la ficha del caso que el panel hace dentro de funciones que
    * Sabina no puede llamar (ver ./tools/orto-motor). Todo lo demás de ortodoncia

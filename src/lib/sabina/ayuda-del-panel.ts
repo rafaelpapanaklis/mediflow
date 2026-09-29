@@ -57,7 +57,7 @@ export const TEMAS_AYUDA = [
     fuente: "codigo",
     texto: {
       es: `Mercado Pago sirve para que el bot de WhatsApp pida un anticipo al agendar. Lo configura un administrador (ADMIN o Super Admin): la tarjeta solo la ven ellos, y la pantalla pide el permiso «Editar configuración».
-1. Configuración → pestaña Integraciones → tarjeta «Anticipos por WhatsApp (Mercado Pago)» → «Configurar anticipos».
+1. Configuración → pestaña Integraciones → tarjeta «Configurar cuenta - Recibir pagos por MercadoPago» → «Configurar anticipos».
 2. En «Cuenta de Mercado Pago», pulsa «Conectar con Mercado Pago» y entra con la cuenta de la clínica. No hay que copiar llaves. Al volver sale «Conectada».
 3. En «Anticipo al agendar por WhatsApp», enciende «Pedir anticipo al agendar».
 4. En «Cómo se calcula» elige: Monto fijo, Porcentaje del precio del servicio o Precio completo del servicio. Con porcentaje o precio completo, el «Monto de respaldo» se usa si el servicio no tiene precio. Mínimo $10.
@@ -66,7 +66,7 @@ export const TEMAS_AYUDA = [
 El paciente recibe el link en WhatsApp. Si paga a tiempo, la cita se confirma; el anticipo queda como saldo a favor para su tratamiento, no como cobro extra. Si paga cuando el horario ya se liberó, el pago queda como saldo a favor y la cita no se confirma. «Desconectar» apaga el anticipo.
 Si la pantalla dice «DaleControl todavía no activa los cobros con Mercado Pago», no depende de la clínica y no hay que hacer nada: en cuanto se active, ahí se podrá conectar la cuenta.`,
       en: `Mercado Pago lets the WhatsApp bot ask for a deposit when it books. An administrator (ADMIN or Super Admin) sets it up: only they see the card, and the screen requires the "Editar configuración" permission. This screen is only in Spanish, so the names below are in Spanish.
-1. Settings → Integrations tab → card "Anticipos por WhatsApp (Mercado Pago)" → "Configurar anticipos".
+1. Settings → Integrations tab → card "Set up account - Receive payments with MercadoPago" → "Configurar anticipos".
 2. Under "Cuenta de Mercado Pago", press "Conectar con Mercado Pago" and sign in with the clinic's account. No keys to copy. When you come back it shows "Conectada".
 3. Under "Anticipo al agendar por WhatsApp", switch on "Pedir anticipo al agendar".
 4. Under "Cómo se calcula", choose a fixed amount (Monto fijo), a percentage of the service price, or the full service price. With a percentage or the full price, the fallback amount ("Monto de respaldo") applies when the service has no price. Minimum $10.

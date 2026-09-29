@@ -92,6 +92,15 @@ function tabla(filas: Fila[], defaults: () => Fila, idPrefix: string) {
       hits.forEach((f) => aplica(f, data));
       return { count: hits.length };
     },
+    // Como Prisma: la suma de cada campo pedido, o `null` si no hay ninguna fila que case (lo lee `cuadrarReversion`).
+    aggregate: async ({ where, _sum }: Fila) => {
+      const hits = filas.filter((f) => casa(f, where));
+      return {
+        _sum: Object.fromEntries(
+          Object.keys(_sum ?? {}).map((k) => [k, hits.length === 0 ? null : hits.reduce((acc, f) => acc + (Number(f[k]) || 0), 0)]),
+        ),
+      };
+    },
     upsert: async ({ where, create, update, select }: Fila) => {
       const fila = filas.find((f) => casa(f, where));
       if (fila) return proyecta(aplica(fila, update), select);
@@ -159,6 +168,10 @@ const stripeDoble = {
   llamadas: [] as Fila[],
   crear: (async (_p: Fila) => { throw new Error("prueba sin guion para paymentIntents.create"); }) as (p: Fila) => Promise<Fila>,
   leer: (async (id: string) => ({ id, metadata: {}, setup_future_usage: null, payment_method: null })) as (id: string) => Promise<Fila>,
+  // Lo que Stripe dice HOY de los cargos y disputas de un PaymentIntent (lo lee `revertirRecargaStripe`): por omisión,
+  // ni reembolsos ni contracargos — la recarga queda como se abonó.
+  cargos: [] as Fila[],
+  disputas: [] as Fila[],
 };
 const stripeCliente = {
   webhooks: { constructEvent: (raw: string) => JSON.parse(raw) },
@@ -169,6 +182,8 @@ const stripeCliente = {
     },
     retrieve: async (id: string) => stripeDoble.leer(id),
   },
+  charges: { list: async (_params: Fila) => ({ data: stripeDoble.cargos }) },
+  disputes: { list: async (_params: Fila) => ({ data: stripeDoble.disputas }) },
 };
 const whatsapps: Array<{ to: string; body: string }> = [];
 

@@ -114,6 +114,11 @@ export const BLOCKER_TYPE_BY_MODEL: Record<string, PatientDeleteBlockerType> = {
   // NOM-004 la cuenta como parte del expediente.
   Referral: "clinical",
   ReferralLetter: "clinical",
+  // Documentos del paciente que CONGELAN su contenido al firmarse (constancias,
+  // consentimientos, recetas…): `body` es el HTML final y `encabezado` la foto
+  // de los datos de ese momento. Son expediente firmado: la NOM-004 obliga a
+  // conservarlos 5 años, igual que ConsentForm y Prescription.
+  PatientDocument: "clinical",
 
   // ── Endodoncia (las 3 con onDelete: Restrict) ──────────────────────────
   EndodonticDiagnosis: "endodontics",
@@ -135,6 +140,16 @@ export const BLOCKER_TYPE_BY_MODEL: Record<string, PatientDeleteBlockerType> = {
   OrthoTreatmentCard: "specialty",
   OrthoTAD: "specialty",
   OrthoSignAtHomePackage: "specialty",
+  // Imagen y análisis del caso (ws1-t8): cefalometría, análisis facial y de
+  // Bolton son el diagnóstico del expediente de ortodoncia; los alineadores, el
+  // registro de elásticos y las fotos de monitoreo son su seguimiento clínico.
+  // Mismo criterio que OrthoPhotoSet / OrthodonticDigitalRecord: se conservan.
+  OrthodonticCephalometryAnalysis: "specialty",
+  OrthodonticFacialAnalysis: "specialty",
+  OrthodonticBoltonAnalysis: "specialty",
+  OrthodonticAligner: "specialty",
+  OrthodonticElasticsLog: "specialty",
+  OrthodonticMonitoringPhoto: "specialty",
 
   // ── Pediatría ──────────────────────────────────────────────────────────
   PediatricRecord: "specialty",

@@ -67,6 +67,7 @@ export interface Datos {
   odontogramEntries?: Fila[];
   /** ws1-t4 («Sabina sabe del panel»): la cuenta de Mercado Pago y los anticipos. */
   clinicMercadoPagos?: Fila[];
+  clinicBankAccounts?: Fila[];
   appointmentDeposits?: Fila[];
   appointmentDepositPayments?: Fila[];
   /**
@@ -222,6 +223,7 @@ const MODELO_DE: Record<string, string> = {
   appointmentChangeRequest: "appointmentChangeRequests",
   odontogramEntry: "odontogramEntries",
   clinicMercadoPago: "clinicMercadoPagos",
+  clinicBankAccount: "clinicBankAccounts",
   appointmentDeposit: "appointmentDeposits",
   appointmentDepositPayment: "appointmentDepositPayments",
   ...MODELOS_ORTO,
@@ -265,6 +267,7 @@ export function crearBase(datos: Datos): BaseDoble {
     appointmentChangeRequests: datos.appointmentChangeRequests ?? [],
     odontogramEntries: datos.odontogramEntries ?? [],
     clinicMercadoPagos: datos.clinicMercadoPagos ?? [],
+    clinicBankAccounts: datos.clinicBankAccounts ?? [],
     appointmentDeposits: datos.appointmentDeposits ?? [],
     appointmentDepositPayments: datos.appointmentDepositPayments ?? [],
   };
@@ -376,6 +379,7 @@ export function crearBase(datos: Datos): BaseDoble {
     appointmentChangeRequest: delegado("appointmentChangeRequest") as any,
     odontogramEntry: delegado("odontogramEntry") as any,
     clinicMercadoPago: delegado("clinicMercadoPago") as any,
+    clinicBankAccount: delegado("clinicBankAccount") as any,
     appointmentDeposit: delegado("appointmentDeposit") as any,
     // ws1-t11 — ortodoncia: los modelos que leen los cargadores del módulo.
     ...Object.fromEntries(Object.keys(MODELOS_ORTO).map((entidad) => [entidad, delegado(entidad)])),

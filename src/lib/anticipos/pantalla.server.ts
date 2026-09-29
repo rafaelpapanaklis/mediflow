@@ -7,7 +7,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { enmascarar, plataformaAnticipos, type EstadoCuentaMp, type PlataformaAnticipos } from "./cuenta.server";
 import { MINUTOS_DEFAULT, PANEL_HORAS_DEFAULT, type ModoAnticipo, type ModoAnticipoPanel, type ModoComision } from "./core";
-import { leerDatosBancarios, leerDatosBancariosParaEditar, type CuentaBancariaSede } from "./datos-bancarios.server";
+import { leerDatosBancarios, leerDatosBancariosParaEditar, type CuentaBancariaSede, type DbBancario } from "./datos-bancarios.server";
 import { parseWaTemplates } from "@/lib/whatsapp/template-config";
 
 export interface AnticipoReciente {
@@ -118,9 +118,9 @@ function vacia(
  * falta). NUNCA lanza: una clínica sin fila de Clinic (no debería pasar) se
  * calla con las dos apagadas.
  */
-async function leerPlantillasOpcionales(clinicId: string): Promise<PantallaAnticipos["plantillas"]> {
+async function leerPlantillasOpcionales(clinicId: string, db: DbPantallaAnticipos): Promise<PantallaAnticipos["plantillas"]> {
   if (!clinicId) return PLANTILLAS_VACIAS;
-  const fila = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { waTemplates: true } }).catch(() => null);
+  const fila = await db.clinic.findUnique({ where: { id: clinicId }, select: { waTemplates: true } }).catch(() => null);
   const mapa = parseWaTemplates(fila?.waTemplates ?? null);
   const deposito = mapa.deposit_request;
   const recibo = mapa.payment_receipt;
@@ -183,10 +183,19 @@ const SELECT_RECIENTE = {
  * propio cliente —el de solo lectura, o el doble de sus pruebas— en vez de
  * reescribir la consulta. Por defecto es el `prisma` del repo.
  */
-export interface DbPantallaAnticipos {
+export interface DbPantallaAnticipos extends DbBancario {
   clinicMercadoPago: {
-    findUnique(args: { where: { clinicId: string }; select: typeof SELECT_CUENTA }): Promise<
-      Prisma.ClinicMercadoPagoGetPayload<{ select: typeof SELECT_CUENTA }> | null
+    // Dos lecturas de la misma tabla, cada una con su `select`: la cuenta (SELECT_CUENTA) y, en SU PROPIA consulta
+    // por si falta su SQL, la config del anticipo pedido desde el panel (SELECT_CUENTA_PANEL, `leerConfigPanel`).
+    findUnique<S extends typeof SELECT_CUENTA | typeof SELECT_CUENTA_PANEL>(args: {
+      where: { clinicId: string };
+      select: S;
+    }): Promise<Prisma.ClinicMercadoPagoGetPayload<{ select: S }> | null>;
+  };
+  // Las plantillas de WhatsApp de la clínica (`leerPlantillasOpcionales`).
+  clinic: {
+    findUnique(args: { where: { id: string }; select: { waTemplates: true } }): Promise<
+      Prisma.ClinicGetPayload<{ select: { waTemplates: true } }> | null
     >;
   };
   appointmentDeposit: {
@@ -205,17 +214,17 @@ export interface DbPantallaAnticipos {
  * (`disponible: false` + los defaults) sin tumbar el resto de la pantalla,
  * que sigue leyendo las columnas de siempre.
  *
- * Siempre con el `prisma` real del repo (no el `db` inyectable de arriba):
- * su interfaz `DbPantallaAnticipos` es el contrato con el doble de Sabina
- * para lo que YA pintaba esta pantalla; esta pieza es nueva (ws1-t3 fase 1)
- * y no forma parte de ese contrato todavía.
+ * Con el `db` inyectado, como todas las lecturas de esta pantalla: la lee igual el
+ * panel (el `prisma` real) que Sabina (`ctx.db`, solo lectura); una lectura con
+ * el `prisma` global se saltaría el contrato del segundo.
  */
 async function leerConfigPanel(
   clinicId: string,
   puedeCobrar: boolean,
+  db: DbPantallaAnticipos,
 ): Promise<PantallaAnticipos["configPanel"]> {
   try {
-    const fila = await prisma.clinicMercadoPago.findUnique({ where: { clinicId }, select: SELECT_CUENTA_PANEL });
+    const fila = await db.clinicMercadoPago.findUnique({ where: { clinicId }, select: SELECT_CUENTA_PANEL });
     return {
       disponible: puedeCobrar,
       modo: (fila?.panelDepositMode as ModoAnticipoPanel) ?? "fixed",
@@ -244,12 +253,12 @@ export async function leerPantallaAnticipos(
   // que falte no debe apagar la otra ni el resto de la pantalla (mismo
   // criterio que leerConfigPanel).
   const [datosBancarios, plantillas, transferenciaDisponible] = await Promise.all([
-    leerDatosBancariosParaEditar(clinicId),
-    leerPlantillasOpcionales(clinicId),
+    leerDatosBancariosParaEditar(clinicId, db),
+    leerPlantillasOpcionales(clinicId, db),
     // "Usable" de verdad (CLABE con dígito verificador válido), no solo
     // "algo guardado": el mismo criterio que decide si el canal transferencia
     // se ofrece en «Pedir anticipo» (canalesAnticipoPanel).
-    leerDatosBancarios(clinicId).then((v) => !!v),
+    leerDatosBancarios(clinicId, db).then((v) => !!v),
   ]);
 
   try {
@@ -288,7 +297,7 @@ export async function leerPantallaAnticipos(
         porcentaje: fila?.depositPercent ?? 0,
         minutos: fila?.holdMinutes ?? MINUTOS_DEFAULT,
       },
-      configPanel: await leerConfigPanel(clinicId, (conectada && plataforma.lista) || transferenciaDisponible),
+      configPanel: await leerConfigPanel(clinicId, (conectada && plataforma.lista) || transferenciaDisponible, db),
       portal: { activo: conectada && plataforma.lista && fila?.portalPaymentsEnabled !== false },
       comision: {
         modo: (fila?.marketplaceFeeMode as ModoComision) ?? "fixed",

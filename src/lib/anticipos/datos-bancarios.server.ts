@@ -11,6 +11,7 @@
 // Sin "server-only" a propósito (mismo criterio que el resto de
 // src/lib/anticipos/*.server.ts): así los tests lo cargan con tsx/node:test.
 
+import type { ClinicBankAccount } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { clabeValida, normalizarClabe, type CuentaBancaria } from "@/lib/billing/spei-directo-core";
 
@@ -74,11 +75,21 @@ export function cuentaSedeUsable(c: Partial<CuentaBancariaSede> | null | undefin
   return !!c && !!c.banco?.trim() && !!c.beneficiario?.trim() && clabeValida(c.clabe ?? "");
 }
 
+/**
+ * Lo único que las LECTURAS de aquí necesitan de la base. Inyectable (por omisión, el `prisma` real): así
+ * `leerPantallaAnticipos` puede leerlo con el `db` que le den —el de Sabina, solo lectura— y no con el global.
+ */
+export interface DbBancario {
+  clinicBankAccount: {
+    findUnique(args: { where: { clinicId: string } }): Promise<ClinicBankAccount | null>;
+  };
+}
+
 /** La cuenta de esta sede, o null si falta / está incompleta / CLABE inválida. */
-export async function leerDatosBancarios(clinicId: string): Promise<CuentaBancariaSede | null> {
+export async function leerDatosBancarios(clinicId: string, db: DbBancario = prisma): Promise<CuentaBancariaSede | null> {
   if (!clinicId) return null;
   try {
-    const fila = await prisma.clinicBankAccount.findUnique({ where: { clinicId } });
+    const fila = await db.clinicBankAccount.findUnique({ where: { clinicId } });
     return cuentaSedeUsable(fila) ? { banco: fila.banco, beneficiario: fila.beneficiario, clabe: fila.clabe, referencia: fila.referencia ?? null } : null;
   } catch (e) {
     if (faltaTabla(e)) return null;
@@ -89,10 +100,11 @@ export async function leerDatosBancarios(clinicId: string): Promise<CuentaBancar
 /** Igual que leerDatosBancarios pero devuelve lo guardado aunque esté incompleto (para el editor). */
 export async function leerDatosBancariosParaEditar(
   clinicId: string,
+  db: DbBancario = prisma,
 ): Promise<(Partial<CuentaBancariaSede> & { updatedAt: string | null }) | null> {
   if (!clinicId) return null;
   try {
-    const fila = await prisma.clinicBankAccount.findUnique({ where: { clinicId } });
+    const fila = await db.clinicBankAccount.findUnique({ where: { clinicId } });
     if (!fila) return null;
     return {
       banco: fila.banco,

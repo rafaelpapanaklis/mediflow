@@ -138,13 +138,19 @@ test("si DaleControl aún no activa Mercado Pago, lo dice y no da el anticipo po
   }
 });
 
-test("🔴 solo lee: el doble no tiene métodos de escritura y solo se consultaron las dos tablas de la pantalla", async () => {
+test("🔴 solo lee: el doble no tiene métodos de escritura y solo se consultaron las cuatro tablas de la pantalla, TODAS por el db de Sabina", async () => {
   const db = baseConMercadoPago();
   await correrMp(adminNorte(db));
   const modelos = [...new Set(db.contador.llamadas.map((l) => `${l.modelo}.${l.op}`))].sort();
-  assert.deepEqual(modelos, ["appointmentDeposit.findMany", "clinicMercadoPago.findUnique"]);
-  assert.equal(typeof (db.clinicMercadoPago as any).update, "undefined");
-  assert.equal(typeof (db.clinicMercadoPago as any).upsert, "undefined");
+  // La pantalla de Anticipos lee cuatro cosas —los anticipos recientes, la cuenta de Mercado Pago (y su config del
+  // panel), la cuenta bancaria de la sede y las plantillas de WhatsApp de la clínica— y las cuatro pasan por el `db`
+  // inyectado (que aquí cuenta cada llamada), nunca por el `prisma` global. Todas son lecturas.
+  assert.deepEqual(modelos, ["appointmentDeposit.findMany", "clinic.findUnique", "clinicBankAccount.findUnique", "clinicMercadoPago.findUnique"]);
+  for (const m of ["clinicMercadoPago", "clinicBankAccount", "appointmentDeposit"] as const) {
+    for (const op of ["update", "upsert", "create", "delete", "deleteMany", "updateMany", "createMany"]) {
+      assert.equal(typeof (db as any)[m][op], "undefined", `${m}.${op} no debe existir en el db de Sabina`);
+    }
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -157,7 +163,7 @@ test("pregunta de ayuda: «¿cómo configuro Mercado Pago?» → los pasos de ES
   assert.equal(r.ok, true, JSON.stringify(r));
   if (!r.ok) return;
   assert.equal(r.datos.idioma, "es");
-  assert.match(r.resumen, /Configuración → pestaña Integraciones → tarjeta «Anticipos por WhatsApp \(Mercado Pago\)»/);
+  assert.match(r.resumen, /Configuración → pestaña Integraciones → tarjeta «Configurar cuenta - Recibir pagos por MercadoPago»/);
   assert.match(r.resumen, /«Conectar con Mercado Pago»/);
   assert.match(r.resumen, /No añadas pasos que no estén en este texto/);
   // Solo viaja un tema: nada de bloqueos ni de importar en esta respuesta.

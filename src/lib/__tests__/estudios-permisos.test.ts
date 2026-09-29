@@ -27,7 +27,7 @@
  */
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { hasPermission, ROLE_DEFAULT_PERMISSIONS } from "../auth/permissions";
+import { hasPermission, mensajeSinPermiso, ROLE_DEFAULT_PERMISSIONS } from "../auth/permissions";
 
 const CENTINELA = 499;
 const PACIENTE = "pat_1";
@@ -85,7 +85,9 @@ for (const ruta of RUTAS) {
     // Hoy esto devuelve 200 con signed URLs (GET) o empieza a subir (POST).
     const { status, body } = await llamar(ruta, "READONLY");
     assert.equal(status, 403, `${ruta.nombre} dejó pasar a READONLY`);
-    assert.match(String(body.error), new RegExp(ruta.permiso.replace(".", "\\.")));
+    // El 403 nombra el permiso: la llave en `permiso` y el texto legible en `error`.
+    assert.equal(body.permiso, ruta.permiso);
+    assert.equal(String(body.error), mensajeSinPermiso([ruta.permiso]));
   });
 
   test(`H7 · ${ruta.nombre} sigue abierta para recepción y doctor`, async () => {

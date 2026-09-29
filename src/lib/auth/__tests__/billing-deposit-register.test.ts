@@ -118,6 +118,8 @@ describe("cableado real en los route handlers (EQ-07: nada de interruptor muerto
   });
 
   it("GET .../anticipo calcula puedeRegistrar con la key nueva (OR con billing.charge)", () => {
-    assert.match(anticipo, /puedeRegistrar:\s*denyIfMissingAnyPermission\([^)]*billing\.deposit\.register/);
+    // Regla vigente: el permiso sigue siendo la key nueva (OR con billing.charge) y el resultado debe ser «permitido»
+    // (=== null); además solo se ofrece si la factura admite anticipo (no CANCELADA ni sin saldo, H1).
+    assert.match(anticipo, /puedeRegistrar:\s*admiteAnticipo\s*&&\s*denyIfMissingAnyPermission\(ctx,\s*\[[^\]]*billing\.deposit\.register[^\]]*billing\.charge[^\]]*\]\)\s*===\s*null/);
   });
 });
