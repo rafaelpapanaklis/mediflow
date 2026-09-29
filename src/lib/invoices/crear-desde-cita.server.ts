@@ -29,7 +29,12 @@ export interface LineItemFactura {
 
 export interface CrearFacturaDesdeCitaArgs {
   clinicId: string;
-  appointmentId: string;
+  /**
+   * `null` = factura sin cita (ws1-t10: el control de ortodoncia registrado desde la ficha
+   * en «Pago por control»). Sin cita no hay «ya existe la de esta cita»: quien llama es
+   * quien evita duplicarla (ver `control-sin-cita.ts`).
+   */
+  appointmentId: string | null;
   patientId: string;
   lineItems: LineItemFactura[];
   discount?: number;
@@ -88,14 +93,16 @@ export async function crearFacturaDesdeCita(
 ): Promise<ResultadoCrearFacturaDesdeCita> {
   const { clinicId, appointmentId, patientId } = args;
 
-  const existing = await prisma.invoice.findUnique({
-    where: { appointmentId },
-    select: { id: true, invoiceNumber: true, total: true, balance: true, status: true },
-  });
+  const existing = appointmentId
+    ? await prisma.invoice.findUnique({
+        where: { appointmentId },
+        select: { id: true, invoiceNumber: true, total: true, balance: true, status: true },
+      })
+    : null;
   // H1 (revisión final, ws1-t4): una factura CANCELADA no ocupa la cita. Se le
   // quita el vínculo (con nota y bitácora) para que quepa la nueva.
   if (existing && facturaOcupaLaCita(existing)) return falloFactura("invoice_already_exists", { existente: existing });
-  if (existing) await soltarFacturaCanceladaDeCita({ clinicId, appointmentId, userId: args.userId ?? null });
+  if (existing && appointmentId) await soltarFacturaCanceladaDeCita({ clinicId, appointmentId, userId: args.userId ?? null });
 
   const items = args.lineItems.map((li) => {
     const quantity = li.quantity;
@@ -159,7 +166,7 @@ export async function crearFacturaDesdeCita(
   } catch (err) {
     if (err instanceof InvoiceNumberExhaustedError) return falloFactura("invoice_number_conflict");
     const code = (err as { code?: string }).code;
-    if (code === "P2002") {
+    if (code === "P2002" && appointmentId) {
       const ya = await prisma.invoice.findUnique({
         where: { appointmentId },
         select: { id: true, invoiceNumber: true, total: true, balance: true, status: true },

@@ -120,12 +120,12 @@ export async function cargarCargosDeControlPorCasos(
              i."invoiceNumber", i."total", i."paid", i."status", i."dueDate", i."createdAt",
              c."timezone" AS "zona"
         FROM "invoices" i
-        JOIN "appointments" a ON a."id" = i."appointmentId"
+        LEFT JOIN "appointments" a ON a."id" = i."appointmentId"
         JOIN "clinics" c ON c."id" = i."clinicId"
        WHERE i."clinicId" = ${clinicId}
          AND i."orthodonticTreatmentPlanId" IN (${Prisma.join(treatmentPlanIds)})
-         AND i."appointmentId" IS NOT NULL
-         AND a."type" = ${TIPO_CITA_CONTROL_ORTO}
+         AND ((i."appointmentId" IS NOT NULL AND a."type" = ${TIPO_CITA_CONTROL_ORTO})
+              OR i."notes" LIKE '[control-hoja:%')
          AND i."status" NOT IN ('DRAFT', 'CANCELLED')`;
 
     for (const f of filas) {
@@ -173,12 +173,12 @@ export async function cargarVencimientosDeCargosDeControl(clinicId: string): Pro
     const filas = await prisma.$queryRaw<{ invoiceId: string; dueDate: Date | null; createdAt: Date; zona: string | null }[]>`
       SELECT i."id" AS "invoiceId", i."dueDate", i."createdAt", c."timezone" AS "zona"
         FROM "invoices" i
-        JOIN "appointments" a ON a."id" = i."appointmentId"
+        LEFT JOIN "appointments" a ON a."id" = i."appointmentId"
         JOIN "clinics" c ON c."id" = i."clinicId"
        WHERE i."clinicId" = ${clinicId}
          AND i."orthodonticTreatmentPlanId" IS NOT NULL
-         AND i."appointmentId" IS NOT NULL
-         AND a."type" = ${TIPO_CITA_CONTROL_ORTO}
+         AND ((i."appointmentId" IS NOT NULL AND a."type" = ${TIPO_CITA_CONTROL_ORTO})
+              OR i."notes" LIKE '[control-hoja:%')
          AND i."balance" > 0
          AND i."status" NOT IN ('DRAFT', 'CANCELLED')`;
     for (const f of filas) salida.set(f.invoiceId, vencimientoDeCargoDeControl(f.dueDate, f.createdAt, f.zona));

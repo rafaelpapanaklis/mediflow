@@ -121,7 +121,8 @@ export async function extrasPendientesPorCasos(clinicId: string, treatmentPlanId
        WHERE "clinicId" = ${clinicId}
          AND "orthodonticTreatmentPlanId" IN (${Prisma.join(treatmentPlanIds)})
          AND "status" IN (${Prisma.join(ESTADOS_QUE_DEBEN)})
-         AND "appointmentId" IS NULL`;
+         AND "appointmentId" IS NULL
+         AND ("notes" IS NULL OR "notes" NOT LIKE '[control-hoja:%')`;
     for (const f of filas) {
       const falta = Math.max(0, Math.round(((Number(f.total) || 0) - (Number(f.paid) || 0)) * 100)) / 100;
       if (falta <= 0) continue;

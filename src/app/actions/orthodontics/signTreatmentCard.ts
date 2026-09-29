@@ -26,6 +26,8 @@ import { buscarPrecioControlOrto } from "@/lib/orthodontics/catalog-procedures";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { consumirReposicionIncluida } from "@/lib/orthodontics/cobro/caso-db";
+import { notaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita";
+import { existeFacturaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita-db";
 import { avisoDeReposiciones } from "@/lib/orthodontics/cobro/reposiciones";
 
 /** Códigos Prisma de "columna inexistente" — mismo patrón que cobranza-db.ts. */
@@ -343,11 +345,21 @@ export async function signTreatmentCard(
     // «Nada en silencio» (pregunta de Rafael, ws1-t1): si el control no se
     // pudo facturar, `avisoControlSinFacturar` viaja de vuelta al cliente
     // para que muestre un toast — un `console.warn` nadie lo ve en Recepción.
+    //
+    // ws1-t10 (hallazgo #1 de la revisión final): «Registrar control» desde la ficha SIN
+    // cita de hoy firmaba y NO facturaba ni avisaba (cobro perdido en silencio). Ahora el
+    // control sin cita se factura igual — una factura sin cita, reconocible por la marca
+    // de la hoja en sus notas (`control-sin-cita.ts`) y ligada al caso — y no se duplica si
+    // ya existe la de esa hoja ni cuando la hoja ya estaba firmada.
     let avisoControlSinFacturar: string | undefined;
-    if (citaDeControl && esCitaControlOrto(citaDeControl.type)) {
+    const esControlConCita = !!citaDeControl && esCitaControlOrto(citaDeControl.type);
+    const esControlSinCita = !citaDeControl && !yaEstabaFirmada;
+    if (esControlConCita || esControlSinCita) {
       try {
         const modo = normalizarOrthoBillingMode(await cargarModoDeCobro(plan.clinicId, plan.id));
-        if (modo === "PAGO_POR_CONTROL") {
+        if (modo === "PAGO_POR_CONTROL" && esControlSinCita && (await existeFacturaDeControlSinCita(plan.clinicId, cardId))) {
+          // Esta hoja ya tiene su factura: no se duplica.
+        } else if (modo === "PAGO_POR_CONTROL") {
           const precio = await buscarPrecioControlOrto(plan.clinicId);
           if (!precio) {
             avisoControlSinFacturar = `Este control no se facturó: falta precio de "${TIPO_CITA_CONTROL_ORTO}" en el catálogo (Configuración → Procedimientos de ortodoncia).`;
@@ -355,9 +367,10 @@ export async function signTreatmentCard(
           } else {
             const factura = await crearFacturaDesdeCita({
               clinicId: plan.clinicId,
-              appointmentId: citaDeControl.id,
+              appointmentId: citaDeControl ? citaDeControl.id : null,
               patientId: plan.patientId,
               lineItems: [{ description: precio.name, unitPrice: precio.basePrice, quantity: 1 }],
+              ...(citaDeControl ? {} : { notes: notaDeControlSinCita(cardId) }),
               userId: ctx.userId,
             });
             if (factura.ok && factura.invoice) {
