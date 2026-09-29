@@ -32,7 +32,8 @@ export interface DischargeLetterProps {
 
 const styles = StyleSheet.create({
   title: { fontSize: 15, fontFamily: "Helvetica-Bold", marginTop: 2, marginBottom: 10 },
-  p: { marginBottom: 8, lineHeight: 1.5 },
+  // fontSize junto al lineHeight: sin él @react-pdf calcula el renglón sobre 18 pt (27 pt de interlínea).
+  p: { fontSize: 10.5, marginBottom: 8, lineHeight: 1.5 },
   h: { fontSize: 11, color: ACENTO_ORTO, fontFamily: "Helvetica-Bold", marginTop: 10, marginBottom: 4 },
   li: { marginBottom: 2 },
   signature: { marginTop: 48, borderTopWidth: 0.8, borderTopColor: TINTA_ORTO, paddingTop: 6, width: 240 },

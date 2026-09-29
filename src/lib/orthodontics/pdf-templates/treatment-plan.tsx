@@ -22,7 +22,8 @@ const styles = StyleSheet.create({
     fontSize: 8.5, fontFamily: "Helvetica-Bold", color: ACENTO_ORTO, textTransform: "uppercase",
     letterSpacing: 0.8, marginTop: 14, marginBottom: 5, lineHeight: 1.2,
   },
-  paragraph: { marginBottom: 6, lineHeight: 1.5 },
+  // fontSize junto al lineHeight: sin él @react-pdf calcula el renglón sobre 18 pt (27 pt de interlínea).
+  paragraph: { fontSize: 10, marginBottom: 6, lineHeight: 1.5 },
   box: { padding: 10, backgroundColor: "#f7f6fb", borderRadius: 4, marginBottom: 8 },
   metric: { flexDirection: "row", marginBottom: 3 },
   metricLabel: { color: GRIS_ORTO, width: 170 },

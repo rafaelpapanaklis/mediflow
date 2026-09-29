@@ -146,7 +146,7 @@ export function ProgressReportPdf({ data }: { data: ProgressReportPdfData }) {
         <Text style={{ fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
           Plan de retención
         </Text>
-        <Text style={{ lineHeight: 1.5 }}>{data.retentionPlanText}</Text>
+        <Text style={{ fontSize: 10, lineHeight: 1.5 }}>{data.retentionPlanText}</Text>
         <View style={styles.divider} />
         <Text style={styles.meta}>
           La retención es de por vida. El abandono o uso incorrecto de los

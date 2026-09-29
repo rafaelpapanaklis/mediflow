@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
   cellValue: { width: "14%", textAlign: "right", fontFamily: "Helvetica-Bold" },
   cellNorm: { width: "16%", textAlign: "right", color: "#6b6b78" },
   cellDev: { width: "12%", textAlign: "right", color: "#6b6b78" },
-  cellInterp: { width: "34%" },
+  cellInterp: { width: "34%", paddingLeft: 10 },
   tagNormal: { color: "#15803d" },
   tagAumentado: { color: "#b45309" },
   tagDisminuido: { color: "#b45309" },

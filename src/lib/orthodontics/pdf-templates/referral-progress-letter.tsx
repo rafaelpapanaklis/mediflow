@@ -14,7 +14,8 @@ const DOCUMENTO = "Carta de avance";
 
 const styles = StyleSheet.create({
   salutation: { marginTop: 4, marginBottom: 10, fontSize: 11 },
-  paragraph: { marginBottom: 10, lineHeight: 1.6 },
+  // fontSize junto al lineHeight: sin él @react-pdf calcula el renglón sobre 18 pt.
+  paragraph: { fontSize: 10.5, marginBottom: 10, lineHeight: 1.6 },
   box: { padding: 12, backgroundColor: "#F1F5F9", borderRadius: 4, marginVertical: 12 },
   metric: { flexDirection: "row", marginBottom: 3 },
   metricLabel: { color: "#475569", width: 160 },
