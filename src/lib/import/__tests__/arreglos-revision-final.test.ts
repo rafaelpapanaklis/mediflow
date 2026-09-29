@@ -7,7 +7,7 @@ import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { crearBase, type Base } from "./doble-prisma";
 import { tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
-import { mapeoEsDeEsteArchivo, puedeConfirmarSolo } from "../../../components/import/lote-guardia";
+import { mapeoEsDeEsteArchivo, puedeConfirmarSolo, refrescaAlDecidir, valueMappingDeDecisiones } from "../../../components/import/lote-guardia";
 
 const CLINICA = "cli_A";
 const IMPORTA = "u_admin";
@@ -159,4 +159,23 @@ test("I1: un archivo al que le falta algo se detiene y lo pide (nunca se confirm
   assert.equal(puedeConfirmarSolo({ ...ok, preview: vp({ stats: { valid: 0, errors: 3, duplicates: 0 } }) }), false);
   // procedimientos sin equivalente NO detienen: entran con su nombre e importe
   assert.equal(puedeConfirmarSolo({ ...ok, preview: vp({ unresolved: [{ field: "procedure", key: "x", value: "X", rows: 1 }] }) }), true);
+});
+
+// ── I7 en los DOS asistentes: qué se manda al servidor al elegir un equivalente ──────────────────────────────
+test("I7: solo doctor y hallazgo recalculan la vista previa al elegir equivalente (los procedimientos entran «solo con el importe»)", () => {
+  assert.equal(refrescaAlDecidir("doctor"), true);
+  assert.equal(refrescaAlDecidir("condition"), true);
+  assert.equal(refrescaAlDecidir("procedure"), false);
+  assert.equal(refrescaAlDecidir("amountFormat"), false);
+  assert.equal(refrescaAlDecidir(null), false);
+  assert.equal(refrescaAlDecidir(undefined), false);
+});
+test("I7: el valueMapping lleva las decisiones bajo el campo que las pidió y el formato de montos; sin nada, undefined", () => {
+  assert.deepEqual(valueMappingDeDecisiones("doctor", { zoedesconocida: "u_luis" }), { doctor: { zoedesconocida: "u_luis" } });
+  assert.deepEqual(valueMappingDeDecisiones("doctor", { a: "u1" }, "miles"), { doctor: { a: "u1" }, amountFormat: { formato: "miles" } });
+  assert.deepEqual(valueMappingDeDecisiones(null, {}, "miles"), { amountFormat: { formato: "miles" } });
+  // tras recalcular ya no hay `unresolved`: el campo se recuerda aparte y la decisión SIGUE viajando al importar
+  assert.deepEqual(valueMappingDeDecisiones("doctor", { a: "u1" }, ""), { doctor: { a: "u1" } });
+  assert.equal(valueMappingDeDecisiones("doctor", {}, ""), undefined);
+  assert.equal(valueMappingDeDecisiones(undefined, { a: "u1" }, ""), undefined, "sin campo no se inventa uno");
 });

@@ -31,18 +31,28 @@ interface CasoMigrado {
   origin: string;
 }
 
-/** `conLienzo`: la pestaña completa la monta sola; la vista sin caso ya vive dentro de su lienzo. */
-export function CasosMigrados({ patientId, conLienzo = false }: { patientId: string; conLienzo?: boolean }) {
+/** Los casos migrados del paciente (`null` mientras carga). Con `activo=false` no pide nada. */
+export function useCasosMigrados(patientId: string, activo = true): CasoMigrado[] | null {
   const [casos, setCasos] = useState<CasoMigrado[] | null>(null);
-
   useEffect(() => {
+    if (!activo) return;
     let vivo = true;
     fetch(`/api/patients/${patientId}/migrated-ortho-cases`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (vivo) setCasos(data?.cases ?? []); })
       .catch(() => { if (vivo) setCasos([]); });
     return () => { vivo = false; };
-  }, [patientId]);
+  }, [patientId, activo]);
+  return casos;
+}
+
+/**
+ * `conLienzo`: la pestaña completa la monta sola; la vista sin caso ya vive dentro de su lienzo.
+ * `casosDados`: quien ya los pidió (la vista sin caso, para su título) los pasa y aquí no se vuelve a pedir.
+ */
+export function CasosMigrados({ patientId, conLienzo = false, casosDados }: { patientId: string; conLienzo?: boolean; casosDados?: CasoMigrado[] | null }) {
+  const propios = useCasosMigrados(patientId, casosDados === undefined);
+  const casos = casosDados === undefined ? propios : casosDados;
 
   if (!casos || casos.length === 0) return null;
 

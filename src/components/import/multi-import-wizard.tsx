@@ -19,7 +19,7 @@
 // archivo. Nada se importa hasta que el usuario confirma. Un archivo que falla
 // no detiene a los demás: el resultado final es un resumen por archivo.
 // ============================================================================
-import { mapeoEsDeEsteArchivo, puedeConfirmarSolo } from "./lote-guardia";
+import { mapeoEsDeEsteArchivo, puedeConfirmarSolo, refrescaAlDecidir, valueMappingDeDecisiones } from "./lote-guardia";
 import { useEffect, useRef, useState } from "react";
 import { UploadCloud, X as XIcon, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
@@ -321,14 +321,14 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
     const next = { ...decisions, [key]: id };
     setDecisions(next);
     const campo = unresolvedField ?? decisionFieldRef.current;
-    if (campo !== "doctor" && campo !== "condition") return;
+    if (!refrescaAlDecidir(campo)) return;
     decisionFieldRef.current = campo;
     const reqId = ++previewReqRef.current;
     const stale = () => previewReqRef.current !== reqId;
     setRefrescando(true);
     api.preview(item.entity as Entity, item.file, mapping, undefined, {
       origin: originId,
-      valueMapping: { [campo]: next, ...(formatoMontos ? { amountFormat: { formato: formatoMontos } } : {}) },
+      valueMapping: valueMappingDeDecisiones(campo, next, formatoMontos),
       sheet: item.sheetName,
     })
       .then((res) => { if (!stale()) setPreview(res); })
@@ -379,12 +379,7 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
           skipDuplicates: skipDup,
           origin: originId,
           sheet: current.sheetName,
-          valueMapping: {
-            ...(Object.keys(decisions).length > 0 && (unresolvedField ?? decisionFieldRef.current)
-              ? { [(unresolvedField ?? decisionFieldRef.current) as string]: decisions }
-              : {}),
-            ...(formatoMontos ? { amountFormat: { formato: formatoMontos } } : {}),
-          },
+          valueMapping: valueMappingDeDecisiones(unresolvedField ?? decisionFieldRef.current, decisions, formatoMontos) ?? {},
         },
         makeUploadHandler(),
       );

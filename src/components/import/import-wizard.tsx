@@ -8,6 +8,7 @@
 // (RealImportClient, WS2-T4) que habla con /api/import/* (plantilla, preview/
 // commit por entidad, migración asistida). Se puede inyectar un mock en tests.
 // ============================================================================
+import { refrescaAlDecidir, valueMappingDeDecisiones } from "./lote-guardia";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, ArrowLeft, ArrowRight, Check, AlertCircle, RefreshCw } from "lucide-react";
@@ -103,6 +104,9 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   // Paso 6: equivalente elegido para cada procedimiento que no casó con el
   // tarifario (clave normalizada → id del catálogo, o VALUE_UNLINKED).
   const [decisions, setDecisions] = useState<Record<string, string>>({});
+  // Campo cuyas decisiones se eligieron (doctor/hallazgo): tras recalcular la vista previa ya no queda `unresolved`,
+  // pero al importar hay que seguir mandando la decisión bajo ese campo.
+  const decisionFieldRef = useRef<string | null>(null);
   // Paso 6: cómo leer los montos ambiguos («45.000»: ¿45 000 o 45?). Vacío = sin decidir; mientras
   // el archivo los traiga sin decidir, «Importar» está bloqueado y el backend NO los importa.
   const [formatoMontos, setFormatoMontos] = useState("");
@@ -164,7 +168,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
    */
   function seedDecisions(res: PreviewResult) {
     const field = (res.unresolved ?? []).find((u) => u.field !== "amountFormat")?.field;
-    if (field !== "procedure") { setDecisions({}); return; }
+    if (field !== "procedure") { setDecisions({}); decisionFieldRef.current = null; return; }
     setDecisions((prev) => {
       const next: Record<string, string> = {};
       for (const u of res.unresolved ?? []) {
@@ -298,6 +302,29 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       })
       .catch((e) => { if (!stale()) toast.error(e instanceof Error ? e.message : t("shell.importClinic.errPreview")); })
       .finally(() => { if (!stale()) { setPreviewLoading(false); setUploadProg(null); } });
+  }
+
+  // Paso 6: el usuario eligió a qué usuario/hallazgo corresponde un valor sin equivalente (doctor, condición del
+  // odontograma). Se recalcula la vista previa con esa decisión (misma regla que la carga por lote, I7): las cifras
+  // y las filas son las que de verdad se van a importar.
+  function decidir(key: string, id: string) {
+    const next = { ...decisions, [key]: id };
+    setDecisions(next);
+    const campo = unresolvedField ?? decisionFieldRef.current;
+    if (!refrescaAlDecidir(campo) || !file) return;
+    decisionFieldRef.current = campo;
+    const f = file;
+    const reqId = ++previewReqRef.current;
+    const stale = () => previewReqRef.current !== reqId;
+    setRefrescando(true);
+    api.preview(principalEntity, f, mapping, undefined, {
+      origin: originId,
+      valueMapping: valueMappingDeDecisiones(campo, next, formatoMontos),
+      sheet,
+    })
+      .then((res) => { if (!stale()) setPreview(res); })
+      .catch((e) => { if (!stale()) toast.error(e instanceof Error ? e.message : t("shell.importClinic.errPreview")); })
+      .finally(() => { if (!stale()) setRefrescando(false); });
   }
 
   // Paso 6: el usuario eligió cómo leer los montos ambiguos. Se recalcula la vista previa con esa
@@ -459,13 +486,9 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
             // principal; una secundaria importa lo que no case «solo el importe».
             ...(principal
               ? {
-                  valueMapping: {
-                    // El campo destino de `decisions` es el que el motor reportó como
-                    // `unresolved` en la última vista previa ("procedure" en presupuestos/
-                    // tratamientos activos, "condition" en el odontograma) — nunca fijo.
-                    ...(Object.keys(decisions).length > 0 && unresolvedField ? { [unresolvedField]: decisions } : {}),
-                    ...(formatoMontos ? { amountFormat: { formato: formatoMontos } } : {}),
-                  },
+                  // El campo destino de `decisions` es el que el motor reportó como `unresolved` en la última
+                  // vista previa ("procedure", "condition", "doctor") — nunca fijo.
+                  valueMapping: valueMappingDeDecisiones(unresolvedField ?? decisionFieldRef.current, decisions, formatoMontos) ?? {},
                 }
               : {}),
           },
@@ -774,7 +797,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                   skipDup={skipDup}
                   onToggleSkip={() => setSkipDup((v) => !v)}
                   decisions={decisions}
-                  onDecide={(key, id) => setDecisions((d) => ({ ...d, [key]: id }))}
+                  onDecide={decidir}
                 />
               ) : null}
             </div>

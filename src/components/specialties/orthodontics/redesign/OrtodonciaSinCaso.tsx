@@ -17,7 +17,8 @@ import {
   type DrawerNewCasePlanPayload,
 } from "./drawers/DrawerNewCase";
 import { RAIZ_ORTO } from "./raiz";
-import { CasosMigrados } from "./CasosMigrados";
+import { CasosMigrados, useCasosMigrados } from "./CasosMigrados";
+import { etiquetaAbrirCaso, pistaSinCaso, tituloSinCaso } from "./casos-migrados-texto";
 import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
 import orto from "./orto.module.css";
 
@@ -46,6 +47,9 @@ export function OrtodonciaSinCaso({
   onAvisoAtendido,
 }: OrtodonciaSinCasoProps) {
   const [altaAbierta, setAltaAbierta] = useState(false);
+  // Casos anteriores migrados del sistema de origen: cambian el título («Sin caso activo · tiene N…») y el botón.
+  const migrados = useCasosMigrados(patientId);
+  const nMigrados = migrados?.length ?? 0;
   useAbrirAltaAlLlegar({ tieneCaso: false, puedeCrear: true, abrir: () => setAltaAbierta(true) });
 
   // El aviso se recuerda aquí y se apaga en la ficha, para que al volver a la
@@ -66,13 +70,9 @@ export function OrtodonciaSinCaso({
             <Smile size={18} strokeWidth={1.75} />
           </span>
           <h2 id="orto-sin-caso-titulo" className={orto.vacioTitulo}>
-            {patientFullName} no tiene caso de ortodoncia
+            {tituloSinCaso(patientFullName, nMigrados)}
           </h2>
-          <p className={orto.vacioPista}>
-            {desdeConsulta
-              ? "La consulta de ortodoncia se registra en la hoja de control de su caso. Ábrele uno y después registra el control."
-              : "Al abrirlo se registran el diagnóstico y el plan de tratamiento. Después aparecen aquí sus controles, sus fotos, el cobro y la retención."}
-          </p>
+          <p className={orto.vacioPista}>{pistaSinCaso(nMigrados, desdeConsulta)}</p>
           <Btn
             variant="primary"
             size="lg"
@@ -80,11 +80,11 @@ export function OrtodonciaSinCaso({
             icon={<FolderPlus size={16} strokeWidth={1.75} aria-hidden />}
             onClick={() => setAltaAbierta(true)}
           >
-            Abrir caso de ortodoncia
+            {etiquetaAbrirCaso(nMigrados)}
           </Btn>
         </div>
       </section>
-      <CasosMigrados patientId={patientId} />
+      <CasosMigrados patientId={patientId} casosDados={migrados} />
 
       {altaAbierta ? (
         <DrawerNewCase
