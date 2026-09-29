@@ -16,6 +16,7 @@ import { PatientNavBar } from "@/components/dashboard/patient-detail/patient-nav
 import { buildPatientNavItems } from "@/components/dashboard/patient-detail/patient-nav-items";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import type { ReminderOutcome } from "@/lib/reminders/promise";
+import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import {
@@ -2026,7 +2027,17 @@ export function PatientDetailClient({
               soloLectura={orthoSoloLectura}
               orthoRedesignVM={orthoRedesignVM}
               orthoRedesignBundle={orthoRedesignBundle}
-              onScheduleNext={() => setTab("agenda")}
+              // H12: «Agendar próxima» abre directamente el alta de cita, con el
+              // paciente, «Control de ortodoncia» y el doctor tratante del caso.
+              onScheduleNext={() =>
+                openNewAppointment({
+                  initialPatient: { id: patient.id, name: `${patient.firstName} ${patient.lastName}`.trim() },
+                  initialReason: TIPO_CITA_CONTROL_ORTO,
+                  ...(orthoData?.plan?.treatingDoctorId ? { initialDoctorId: orthoData.plan.treatingDoctorId } : {}),
+                  openAgendaAfter: false,
+                  onCreated: () => router.refresh(),
+                })
+              }
               onCollect={openBillingTab}
               abrirControlAlEntrar={abrirControlOrto}
               onControlAbierto={() => setAbrirControlOrto(false)}

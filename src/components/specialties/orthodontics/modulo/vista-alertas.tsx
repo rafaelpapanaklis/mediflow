@@ -41,6 +41,7 @@ import { notaCorta, resumenDeFotos, type FotosPorRevisarEntry } from "@/lib/orth
 import { EnviarRecordatorioButton } from "@/components/specialties/orthodontics/EnviarRecordatorioButton";
 import { AgendarControlBoton } from "./agendar-control";
 import { PosponerAlertaBoton } from "./posponer-alerta";
+import { ListaDePospuestas } from "./lista-de-pospuestas";
 import { DIAS_DE_POSPOSICION } from "@/lib/orthodontics/alertas-pospuestas";
 import { fechaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, type Tono } from "./piezas";
@@ -104,6 +105,8 @@ export function VistaAlertas({
           : "")
       }
     >
+      <ListaDePospuestas pospuestas={alerts.pospuestasLista ?? []} />
+
       <nav className={s.resumen} aria-label="Alertas por tipo">
         {resumen.map((r) => (
           <a

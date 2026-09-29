@@ -1,5 +1,6 @@
 "use client";
 
+import { alergiasReales } from "@/lib/alergias-reales";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import * as Popover from "@radix-ui/react-popover";
@@ -190,13 +191,15 @@ export function HeroCard({
 
   const hasBalance = pendingBalance > 0;
   const hasNextAppt = nextAppointment !== null;
+  // H18: «N/A», «Ninguna», «Niega» y vacíos no son alergias (no van en rojo).
+  const alergias = alergiasReales(patient.allergies);
 
   // Los chips, SIN repetidos: ver `construirAlertas`. Solo con el rediseño —
   // apagado, la cabecera pinta exactamente las mismas listas de siempre.
   const alertasTodas = rediseno
     ? construirAlertas({
         riskFlags,
-        allergies: patient.allergies,
+        allergies: alergias,
         chronicConditions: patient.chronicConditions,
         currentMedications: patient.currentMedications,
       })
@@ -615,12 +618,12 @@ export function HeroCard({
             <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {RISK_FLAG_LABELS[f] ?? f}
           </span>
         ))}
-        {!rediseno && patient.allergies.map((a) => (
+        {!rediseno && alergias.map((a) => (
           <span key={`a-${a}`} className={`${styles.alertChip} ${styles.danger}`}>
             <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {a}
           </span>
         ))}
-        {!rediseno && riskFlags.length === 0 && patient.allergies.length === 0 && (
+        {!rediseno && riskFlags.length === 0 && alergias.length === 0 && (
           <span className={`${styles.alertChip} ${styles.success}`}>
             <Check size={11} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.noAllergies")}
           </span>

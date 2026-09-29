@@ -15,6 +15,8 @@ import type { Size } from "@/lib/orthodontics/fotos/image-coords";
 import { getFacialAnalysis, type FacialAnalysisView } from "@/app/actions/orthodontics/imagen/getFacialAnalysis";
 import { saveFacialAnalysis } from "@/app/actions/orthodontics/imagen/saveFacialAnalysis";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import type { ArchivoDelPaciente } from "@/app/actions/orthodontics/imagen/archivosDelPaciente";
+import { ElegirArchivoDelPaciente } from "./ElegirArchivoDelPaciente";
 import { Btn } from "../redesign/atoms/Btn";
 import orto from "../redesign/orto.module.css";
 
@@ -75,6 +77,8 @@ function FacialAnalysisTab({ treatmentPlanId, patientId }: { treatmentPlanId: st
   const [guardando, setGuardando] = useState(false);
   const [guardadoOk, setGuardadoOk] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // H13: usar una foto que ya está en el expediente en vez de subirla otra vez.
+  const [eligiendo, setEligiendo] = useState(false);
 
   // Reabre el análisis ya guardado de esta vista, si lo hay (H19: "que el
   // análisis se pueda volver a abrir").
@@ -140,6 +144,21 @@ function FacialAnalysisTab({ treatmentPlanId, patientId }: { treatmentPlanId: st
     setDirty(true);
   }
 
+  function usarExistente(a: ArchivoDelPaciente) {
+    if (!a.thumbUrl) {
+      setError("No se pudo generar la vista previa de esa foto. Elige otra o súbela de nuevo.");
+      return;
+    }
+    setError(null);
+    setGuardadoOk(false);
+    setImageUrl(a.thumbUrl);
+    setPhotoFileId(a.id);
+    setPoints({});
+    setImageSize(null);
+    setDirty(true);
+    setEligiendo(false);
+  }
+
   async function handleGuardar() {
     if (!imageSize) return;
     setError(null);
@@ -195,7 +214,19 @@ function FacialAnalysisTab({ treatmentPlanId, patientId }: { treatmentPlanId: st
             }}
           />
         </label>
+        <button type="button" className={orto.boton} disabled={guardando} onClick={() => setEligiendo((v) => !v)}>
+          Usar una foto ya subida
+        </button>
       </div>
+      {eligiendo ? (
+        <ElegirArchivoDelPaciente
+          patientId={patientId}
+          tipo="imagen"
+          titulo="Fotos del expediente (perfil o frente)"
+          onElegir={usarExistente}
+          onCerrar={() => setEligiendo(false)}
+        />
+      ) : null}
 
       {error ? (
         <div className={`${orto.aviso} ${orto.avisoPeligro} mb-3`} role="alert">

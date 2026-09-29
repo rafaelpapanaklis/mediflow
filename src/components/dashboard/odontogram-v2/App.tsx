@@ -258,7 +258,7 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
       </header>
 
       {/* ===== Chart ===== */}
-      <main className="odo-main">
+      <section className="odo-main" aria-label="Odontograma">
         <div className="odo-chart-card">
           <div className="odo-chart-head">
             <div className="odo-hint">
@@ -311,7 +311,7 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
 
         {/* ===== Palette ===== */}
         <Palette lang={lang} brush={brush} eraser={eraser} onPick={pickBrush} onEraser={pickEraser} />
-      </main>
+      </section>
 
       {/* ===== Detail panel ===== */}
       {selected != null && (

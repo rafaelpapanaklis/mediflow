@@ -27,8 +27,8 @@ import {
   type OverduePatientEntry,
 } from "./specialty-kpis";
 import { agruparFotosPorRevisar, type FotosPorRevisarEntry } from "./fotos-paciente";
-import { historialDeControles } from "./controles-modulo";
-import { quitarPospuestas, vigentes } from "./alertas-pospuestas";
+import { diaEnZona, historialDeControles } from "./controles-modulo";
+import { listaDePospuestas, quitarPospuestas, vigentes, type PospuestaVisible } from "./alertas-pospuestas";
 import { citaAtendida } from "./controles-modulo";
 import { cargarPosposiciones } from "./alertas-pospuestas-db";
 import { cargarFotosPorRevisar } from "./fotos-paciente-db";
@@ -61,6 +61,8 @@ export interface OrthoAlertsData {
    * pospuso 7 días. Ya vienen quitadas de las listas de arriba.
    */
   pospuestas?: number;
+  /** H14: las pospuestas vigentes, para verlas y deshacerlas. */
+  pospuestasLista?: PospuestaVisible[];
 }
 
 const NO_SHOW_WINDOW_DAYS = 30;
@@ -127,9 +129,21 @@ export async function loadOrthoAlerts(
   // ws1-t5 (96): nunca lanza; sin tabla o con la base caída, no hay avisos.
   const fotos = await cargarFotosPorRevisar(clinicId, viewer);
   // ws1-t4 ronda 6 (fila 22): nunca lanza; sin tabla, nada pospuesto.
-  const activas = vigentes(await cargarPosposiciones(clinicId, ahora), ahora);
+  const posposiciones = await cargarPosposiciones(clinicId, ahora);
+  const activas = vigentes(posposiciones, ahora);
+  const nombres = new Map<string, string>(cases.map((c) => [c.patientId, c.patientName]));
+  for (const a of appointments) nombres.set(a.patientId, `${a.patient.firstName} ${a.patient.lastName}`.trim());
 
-  const sinControl = quitarPospuestas(listMissingNextControl(cases, futureControlPatientIds), "sin-proximo-control", activas);
+  // H14: quien vino HOY no alerta «sin próximo control» el mismo día (Controles ya dice
+  // «Vino hoy · falta agendar el siguiente»): la recepción lo agenda al despedirlo.
+  const hoy = diaEnZona(ahora, zonaHoraria);
+  const vinoHoy = (patientId: string) => {
+    const ultimo = historial.ultimoAtendido.get(patientId);
+    return Boolean(ultimo) && diaEnZona(ultimo!, zonaHoraria) === hoy;
+  };
+  const sinControlCrudo = listMissingNextControl(cases, futureControlPatientIds).filter((c) => !vinoHoy(c.patientId));
+
+  const sinControl = quitarPospuestas(sinControlCrudo, "sin-proximo-control", activas);
   const faltas = quitarPospuestas(noShows, "no-asistio", activas);
   const porTerminar = quitarPospuestas(listFinishingSoon(cases, ahora), "proximo-a-terminar", activas);
   const pasados = quitarPospuestas(listPastDue(cases, ahora), "pasado-de-fecha", activas);
@@ -142,5 +156,6 @@ export async function loadOrthoAlerts(
     finishingSoon: porTerminar.quedan,
     pastDue: pasados.quedan,
     pospuestas: sinControl.pospuestas + faltas.pospuestas + porTerminar.pospuestas + pasados.pospuestas,
+    pospuestasLista: listaDePospuestas(posposiciones, ahora, nombres),
   };
 }

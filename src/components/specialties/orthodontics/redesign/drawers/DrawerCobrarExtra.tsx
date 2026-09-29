@@ -15,6 +15,8 @@ import { useState } from "react";
 import { AlertTriangle, ArrowRight, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
+import { borradorDeExtra, type ConceptoDeExtra } from "@/lib/orthodontics/cobro/borrador-factura";
+import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 import { registrarExtraCobrado } from "@/app/actions/orthodontics/cobro/registrarExtraCobrado";
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
@@ -24,6 +26,11 @@ export interface DrawerCobrarExtraProps {
   patientId: string;
   patientName: string;
   reposicionesRestantes: number;
+  /** H7: el editor de factura arranca con concepto, precio y doctor (como «Abrir plan de pago»). */
+  borradorBase?: BorradorDeFactura | null;
+  catalogo?: ConceptoDeExtra[];
+  rediseno?: boolean;
+  clinicTaxMode?: string | null;
   onClose: () => void;
   /** Al terminar (con o sin factura creada): refrescar el panel. */
   onListo: () => void;
@@ -33,6 +40,9 @@ export function DrawerCobrarExtra(props: DrawerCobrarExtraProps) {
   const cajonRef = useCajon<HTMLElement>(props.onClose);
   const [esIncluida, setEsIncluida] = useState(false);
   const [abrirEditor, setAbrirEditor] = useState(false);
+  const catalogo = props.catalogo ?? [];
+  // "" = ningún concepto elegido (extra genérico).
+  const [conceptoElegido, setConceptoElegido] = useState("");
 
   if (abrirEditor) {
     return (
@@ -40,6 +50,13 @@ export function DrawerCobrarExtra(props: DrawerCobrarExtraProps) {
         open
         patientId={props.patientId}
         patientName={props.patientName}
+        rediseno={props.rediseno}
+        clinicTaxMode={props.clinicTaxMode}
+        inicial={
+          props.borradorBase
+            ? borradorDeExtra(props.borradorBase, catalogo.find((c) => c.name === conceptoElegido) ?? null, esIncluida)
+            : null
+        }
         onClose={props.onClose}
         onCreated={async (invoice: { id: string }) => {
           await registrarExtraCobrado({
@@ -80,6 +97,25 @@ export function DrawerCobrarExtra(props: DrawerCobrarExtraProps) {
           <div className="rounded-[10px] border border-[color:var(--pr-borde)] bg-[color:var(--pr-tarjeta-2)] p-3 text-xs text-[color:var(--pr-texto-2)]">
             Reposiciones incluidas en el plan que quedan: <strong className="tabular-nums">{props.reposicionesRestantes}</strong>
           </div>
+
+          {catalogo.length > 0 ? (
+            <label className="block text-[13px] text-[color:var(--pr-texto-2)]">
+              <span className={orto.campoEtiqueta}>Concepto</span>
+              <select
+                value={conceptoElegido}
+                onChange={(e) => setConceptoElegido(e.target.value)}
+                className={`${orto.entrada} w-full mt-1`}
+                aria-label="Concepto del extra"
+              >
+                <option value="">Otro concepto (lo escribo en la factura)</option>
+                {catalogo.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name} · ${c.price.toLocaleString("es-MX")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label className="flex items-start gap-2 text-[13px] text-[color:var(--pr-texto-2)]">
             <input

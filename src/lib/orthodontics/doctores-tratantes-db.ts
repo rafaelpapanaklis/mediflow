@@ -19,6 +19,7 @@ const SELECT = {
   especialidad: true,
   agendaActive: true,
   isActive: true,
+  permissionsOverride: true,
 } as const;
 
 /** Los doctores que se pueden elegir como tratantes en esta clínica. */

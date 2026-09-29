@@ -75,3 +75,18 @@ test("elegirPrecioColocacion: activa gana, apagada o sin precio es null", async 
   assert.equal(elegirPrecioColocacion([{ name: "Colocación de aparatología", basePrice: 0, isActive: true }]), null);
   assert.equal(elegirPrecioColocacion([]), null);
 });
+
+import { borradorDeExtra } from "../borrador-factura";
+
+test("H7: el extra parte del borrador del caso con concepto, precio y doctor", () => {
+  const base = borradorInicialDelCaso({ technique: "METAL_BRACKETS", totalCostMxn: 30000, treatingDoctorId: "doc-1" }, false);
+  const b = borradorDeExtra(base, { name: "Reposición de bracket", price: 250 }, false);
+  assert.equal(b.doctorId, "doc-1");
+  assert.deepEqual(b.items, [{ name: "Reposición de bracket", quantity: 1, unitPrice: 250, discount: 0 }]);
+  assert.equal(b.condiciones, null);
+});
+test("H7: una reposición incluida arranca en $0 y sin concepto elegido cae a un extra genérico", () => {
+  const base = borradorInicialDelCaso({ technique: "METAL_BRACKETS", totalCostMxn: 30000, treatingDoctorId: null }, false);
+  assert.equal(borradorDeExtra(base, { name: "Reposición de bracket", price: 250 }, true).items[0].unitPrice, 0);
+  assert.equal(borradorDeExtra(base, null, false).items[0].name, "Extra de ortodoncia");
+});

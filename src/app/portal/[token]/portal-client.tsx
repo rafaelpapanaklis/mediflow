@@ -111,7 +111,7 @@ export function PatientPortalClient({ patient }: { patient: any }) {
               <div className="text-brand-300 text-xs">Expediente #{patient.patientNumber}</div>
               <div className="flex gap-4 mt-4 pt-4 border-t border-brand-500/40 text-sm">
                 <div>
-                  <div className="font-bold">{patient.appointments.filter((a:any)=>a.status==="COMPLETED").length}</div>
+                  <div className="font-bold">{patient.appointments.filter((a:any)=>a.status==="COMPLETED").length + (patient.visitasExtra ?? 0)}</div>
                   <div className="text-brand-300 text-xs">Visitas</div>
                 </div>
                 <div>

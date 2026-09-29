@@ -156,6 +156,7 @@ export function SectionFinance(props: SectionFinanceProps) {
   const panel = compartido ? props.panel! : panelPropio;
 
   const [drawer, setDrawer] = useState<DrawerKind>(null);
+  const [ligandoHuerfana, setLigandoHuerfana] = useState(false);
 
   const recargarPropio = useCallback(() => {
     setPanelPropio("cargando");
@@ -288,6 +289,28 @@ export function SectionFinance(props: SectionFinanceProps) {
                 <p className={`${orto.vacioPista} ${orto.tonoPeligro}`}>
                   Ya hay controles con factura sin pagar (saldo {fmtMoney(panel.cobranza!.saldoTotal)}) — cóbralos desde Caja.
                 </p>
+              ) : null}
+              {panel.facturaSinLigar ? (
+                <div className={`${orto.aviso} ${orto.avisoAlerta}`} role="status" style={{ alignItems: "flex-start", justifyContent: "flex-start" }}>
+                  <span className={orto.avisoTexto}>
+                    Encontramos la factura <strong>{panel.facturaSinLigar.invoiceNumber}</strong> ({panel.facturaSinLigar.concepto} · {fmtMoney(panel.facturaSinLigar.total)}),
+                    creada {fmtDateShort(panel.facturaSinLigar.fecha)}, que no quedó ligada a este caso. ¿Es el plan de pago?
+                  </span>
+                  <Btn
+                    variant="primary"
+                    size="sm"
+                    disabled={ligandoHuerfana}
+                    onClick={async () => {
+                      setLigandoHuerfana(true);
+                      const r = await abrirPlanDePago({ treatmentPlanId: props.treatmentPlanId, invoiceId: panel.facturaSinLigar!.id, origen: "ligar" });
+                      setLigandoHuerfana(false);
+                      if (isFailure(r)) window.alert(r.error);
+                      recargar();
+                    }}
+                  >
+                    {ligandoHuerfana ? "Ligando…" : "Ligarla al caso"}
+                  </Btn>
+                </div>
               ) : null}
               <Btn variant="primary" className="mt-1" icon={<Plus size={15} strokeWidth={1.75} aria-hidden />} onClick={() => setDrawer({ kind: "abrir-plan" })}>
                 {esPorControl ? "Abrir factura de colocación/enganche" : "Abrir plan de pago"}
@@ -536,6 +559,10 @@ export function SectionFinance(props: SectionFinanceProps) {
           patientId={props.patientId}
           patientName={props.patientName ?? ""}
           reposicionesRestantes={Math.max(0, panel.billingDelCaso.includedReplacementsTotal - panel.billingDelCaso.includedReplacementsUsed)}
+          borradorBase={panel.borradorInicial}
+          catalogo={panel.catalogoDeExtras}
+          rediseno={panel.redisenoFacturas}
+          clinicTaxMode={panel.clinicTaxMode}
           onClose={() => setDrawer(null)}
           onListo={cerrarYRecargar}
         />

@@ -45,6 +45,16 @@ export async function saveFacialAnalysis(
   if (isFailure(auth)) return auth;
   const { ctx, patientId } = auth.data;
 
+  // El archivo que se liga tiene que ser de ESTE paciente y de esta clínica: el
+  // id llega del cliente (ahora también se puede elegir uno ya subido).
+  if (input.photoFileId) {
+    const archivo = await prisma.patientFile.findFirst({
+      where: { id: input.photoFileId, clinicId: ctx.clinicId, patientId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!archivo) return fail("La foto no es de este paciente");
+  }
+
   const measurements = computeFacialMeasurements(input.points, input.calibrationPxPerMm ?? undefined);
 
   try {

@@ -31,6 +31,26 @@ export interface CategoriaIncluida {
   puntos: string[];
 }
 
+/** Las alertas de la pantalla Alertas: si se añade una, el texto de aquí la cuenta solo. */
+export const ALERTAS_DEL_MODULO = [
+  "mensualidad vencida",
+  "sin control",
+  "faltas",
+  "por terminar",
+  "pasado de fecha",
+  "fotos por revisar",
+] as const;
+
+const NUMEROS: Record<number, string> = { 1: "Una", 2: "Dos", 3: "Tres", 4: "Cuatro", 5: "Cinco", 6: "Seis", 7: "Siete", 8: "Ocho" };
+
+/** «Seis alertas: a, b, c… y z» — el número sale de la lista, no está escrito a mano. */
+export function textoDeAlertas(alertas: readonly string[] = ALERTAS_DEL_MODULO): string {
+  const n = alertas.length;
+  const cuantas = NUMEROS[n] ?? String(n);
+  const lista = alertas.length > 1 ? `${alertas.slice(0, -1).join(", ")} y ${alertas[alertas.length - 1]}` : alertas.join("");
+  return `${cuantas} alerta${n === 1 ? "" : "s"}: ${lista}`;
+}
+
 export const CONTENIDO_ORTODONCIA: readonly CategoriaIncluida[] = [
   {
     id: "casos",
@@ -85,7 +105,7 @@ export const CONTENIDO_ORTODONCIA: readonly CategoriaIncluida[] = [
       "Pacientes activos, controles de hoy y saldos vencidos",
       "Lo que va a entrar por mensualidades en los próximos 6 meses",
       "Producción del mes por doctor",
-      "Cinco alertas: mensualidad vencida, sin control agendado, falta a un control, por terminar y pasado de fecha",
+      textoDeAlertas(),
     ],
   },
   {
@@ -107,8 +127,8 @@ export const CONTENIDO_ORTODONCIA: readonly CategoriaIncluida[] = [
     titulo: "Paciente: portal y WhatsApp",
     resumen: "Tu paciente también ve su tratamiento.",
     puntos: [
-      "Portal del paciente: su mensualidad, su saldo y su próximo control",
-      "Registra sus elásticos y te manda fotos de seguimiento",
+      "En su cuenta del portal, «Ortodoncia»: avance, mensualidad, saldo y próximo control",
+      "Ahí mismo registra sus elásticos y te manda fotos de seguimiento",
       "Recordatorio de mensualidad por WhatsApp desde Alertas",
       "Indicaciones del control por WhatsApp desde el Tablero",
     ],

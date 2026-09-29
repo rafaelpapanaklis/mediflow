@@ -14,6 +14,8 @@
 // `doctores-tratantes-db.ts`.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { hasPermission } from "@/lib/auth/permissions";
+
 /** Los mismos roles que la Agenda y la reserva aceptan como «quien atiende». */
 export const ROLES_QUE_ATIENDEN = ["DOCTOR", "ADMIN", "SUPER_ADMIN"] as const;
 
@@ -29,6 +31,8 @@ export interface UsuarioCandidato {
   /** Equipo/Agenda → si aparece en el calendario. */
   agendaActive?: boolean | null;
   isActive?: boolean | null;
+  /** Permisos propios del usuario (Equipo): reemplazan a los de su rol. */
+  permissionsOverride?: string[] | null;
 }
 
 export interface DoctorTratanteOpcion {
@@ -53,8 +57,18 @@ export function esOrtodoncista(u: Pick<UsuarioCandidato, "specialty" | "especial
  * su especialidad: así no se cuela la administradora que solo lleva la caja y
  * a la que ya se sacó del calendario.
  */
+/**
+ * ¿Puede abrir el módulo de Ortodoncia? Un doctor tratante que no entra al
+ * módulo no puede abrir sus propios casos (la URL lo manda a Inicio): no se
+ * ofrece. Es el permiso `specialties.orthodontics`, con el override de Equipo.
+ */
+export function tieneAccesoAOrtodoncia(u: Pick<UsuarioCandidato, "role" | "permissionsOverride">): boolean {
+  return hasPermission({ role: u.role, permissionsOverride: u.permissionsOverride ?? [] }, "specialties.orthodontics");
+}
+
 export function atiendePacientes(u: UsuarioCandidato): boolean {
   if (u.isActive === false) return false;
+  if (!tieneAccesoAOrtodoncia(u)) return false;
   if (u.role === "DOCTOR") return true;
   if (u.role !== "ADMIN" && u.role !== "SUPER_ADMIN") return false;
   return u.agendaActive !== false || esOrtodoncista(u);

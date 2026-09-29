@@ -46,7 +46,7 @@ export default async function PatientPortalPage({ params }: Props) {
         orderBy: { visitDate: "desc" },
         take: 10,
         select: {
-          id: true, visitDate: true,
+          id: true, visitDate: true, specialtyData: true,
           doctor: { select: { firstName: true, lastName: true } },
         },
       },
@@ -123,6 +123,12 @@ export default async function PatientPortalPage({ params }: Props) {
       endsAt:       a.endsAt.toISOString(),
       doctor:       a.doctor,
     })),
+    // H19: un control de ortodoncia FIRMADO sin cita ligada también es una visita
+    // (los que sí tienen cita ya cuentan como cita «Completada»).
+    visitasExtra: patient.records.filter((r) => {
+      const d = r.specialtyData as { type?: string; status?: string; appointmentId?: string | null } | null;
+      return d?.type === "orthodontics" && d.status === "SIGNED" && !d.appointmentId;
+    }).length,
     records: patient.records.map(r => ({
       id:        r.id,
       visitDate: r.visitDate instanceof Date ? r.visitDate.toISOString() : String(r.visitDate),

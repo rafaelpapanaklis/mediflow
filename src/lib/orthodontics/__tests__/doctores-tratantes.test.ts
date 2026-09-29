@@ -105,3 +105,15 @@ test("con un solo doctor en la clínica, propone a ese", () => {
 test("sin nadie que atienda, el alta queda sin asignar", () => {
   assert.equal(doctorPropuestoParaElAlta({ porDefecto: "x", opciones: [] }), "");
 });
+
+test("H4: quien no tiene acceso al módulo de Ortodoncia no se ofrece como doctor tratante", () => {
+  const conAcceso = { id: "a", firstName: "Con", lastName: "Acceso", role: "DOCTOR", permissionsOverride: [] };
+  const sinAcceso = { id: "b", firstName: "Solo", lastName: "Dental", role: "DOCTOR", permissionsOverride: ["patients.view"] };
+  const ids = opcionesDeDoctorTratante([conAcceso, sinAcceso]).map((o) => o.id);
+  assert.deepEqual(ids, ["a"]);
+  assert.equal(atiendePacientes(sinAcceso), false);
+});
+test("H4: un override que sí trae el permiso deja pasar", () => {
+  const u = { id: "c", firstName: "Con", lastName: "Override", role: "DOCTOR", permissionsOverride: ["specialties.orthodontics"] };
+  assert.equal(atiendePacientes(u), true);
+});

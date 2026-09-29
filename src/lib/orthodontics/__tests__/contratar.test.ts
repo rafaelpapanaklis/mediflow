@@ -434,3 +434,11 @@ test("la vista dice claro para qué sede es esto, y solo pinta 'tus otras sedes'
   // Sin dato de paciente en la vista: solo nombre y si ya la tiene.
   assert.ok(!/patientId|paciente/i.test(vista.slice(vista.indexOf("Tus otras sedes"))));
 });
+
+import { ALERTAS_DEL_MODULO, textoDeAlertas } from "../contratar-contenido";
+
+test("H15: el texto de contratar cuenta las alertas de verdad (seis)", () => {
+  assert.equal(ALERTAS_DEL_MODULO.length, 6);
+  assert.match(textoDeAlertas(), /^Seis alertas: mensualidad vencida,.* y fotos por revisar$/);
+  assert.equal(textoDeAlertas(["a", "b"]), "Dos alertas: a y b");
+});

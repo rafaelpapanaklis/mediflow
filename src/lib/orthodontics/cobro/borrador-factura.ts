@@ -53,3 +53,33 @@ export function borradorInicialDelCaso(
     condiciones: null,
   };
 }
+
+/** Un concepto del catálogo de ortodoncia que se cobra aparte (reposición, retenedor…). */
+export interface ConceptoDeExtra {
+  name: string;
+  price: number;
+}
+
+/**
+ * H7 (revisión final): «Cobrar extra» abría el editor en blanco (Subtotal $0,
+ * sin doctor) mientras «Abrir plan de pago» ya arrancaba con concepto, precio
+ * y doctor. Mismo criterio: parte del borrador del caso (doctor tratante,
+ * impuestos) con UN renglón — el concepto elegido del catálogo con su precio, o
+ * un renglón de extra genérico sin precio si no se eligió ninguno. Una
+ * reposición incluida en el plan arranca en $0. Editable siempre.
+ */
+export function borradorDeExtra(
+  base: BorradorDeFactura,
+  concepto: ConceptoDeExtra | null,
+  esReposicionIncluida: boolean,
+): BorradorDeFactura {
+  const nombre = concepto?.name?.trim() || "Extra de ortodoncia";
+  const precio = esReposicionIncluida ? 0 : Math.max(0, Number(concepto?.price) || 0);
+  return {
+    ...base,
+    items: [{ name: esReposicionIncluida ? `${nombre} (reposición incluida)` : nombre, quantity: 1, unitPrice: precio, discount: 0 }],
+    descuento: 0,
+    notes: "",
+    condiciones: null,
+  };
+}

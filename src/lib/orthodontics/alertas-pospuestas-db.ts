@@ -54,3 +54,19 @@ export async function guardarPosposicion(args: {
     ON CONFLICT ("clinicId", "patientId", "tipo")
     DO UPDATE SET "hasta" = EXCLUDED."hasta", "userId" = EXCLUDED."userId", "createdAt" = now()`;
 }
+
+/**
+ * «Deshacer»: la posposición deja de estar vigente ahora mismo (no se borra
+ * nada: se vence). Lanza si la tabla no existe o la base falla.
+ */
+export async function terminarPosposicion(args: {
+  clinicId: string;
+  patientId: string;
+  tipo: TipoPosponible;
+}): Promise<void> {
+  if (!args.clinicId) throw new Error("clinicId requerido");
+  await prisma.$executeRaw`
+    UPDATE "ortho_alert_snoozes"
+    SET "hasta" = now()
+    WHERE "clinicId" = ${args.clinicId} AND "patientId" = ${args.patientId} AND "tipo" = ${args.tipo}`;
+}

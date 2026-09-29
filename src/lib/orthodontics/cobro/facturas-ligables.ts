@@ -31,3 +31,32 @@ export function conceptoDeFactura(items: unknown): string {
   if (nombres.length === 0) return "Sin conceptos";
   return nombres.length > 1 ? `${nombres[0]} (+${nombres.length - 1})` : nombres[0];
 }
+
+export interface FacturaRecienteParaLigar extends FacturaParaLigar {
+  id: string;
+  invoiceNumber: string;
+  items: unknown;
+  total: number;
+  createdAt: Date;
+}
+
+/**
+ * H5 (revisión final): «Abrir plan de pago» son dos pasos (crear la factura y
+ * ligarla al caso). Si la conexión se corta entre los dos, la factura queda
+ * huérfana y el caso «sin plan de pago». Al volver, el panel busca una factura
+ * de ortodoncia RECIÉN creada (por defecto, de las últimas 24 h) que siga sin
+ * ligar y la ofrece: la más nueva que cumpla. PURO.
+ */
+export function facturaSinLigarReciente(
+  facturas: readonly FacturaRecienteParaLigar[],
+  ahora: Date,
+  ventanaHoras = 24,
+): FacturaRecienteParaLigar | null {
+  const desde = ahora.getTime() - ventanaHoras * 3600_000;
+  const candidatas = facturas
+    .filter((f) => esFacturaLigable(f))
+    .filter((f) => f.createdAt.getTime() >= desde)
+    .filter((f) => /ortodoncia/i.test(conceptoDeFactura(f.items)))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return candidatas[0] ?? null;
+}

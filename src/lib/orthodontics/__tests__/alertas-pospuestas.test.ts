@@ -103,3 +103,19 @@ test("fila 23: Alertas no toma como «próximo control» una cita de más tarde 
   const datos = leer("src/lib/orthodontics/alerts-data.ts");
   assert.match(datos, /a\.startsAt >= ahora &&[\s\S]{0,120}!citaAtendida\(a\.status\)/);
 });
+
+import { listaDePospuestas } from "../alertas-pospuestas";
+
+test("H14: lista las pospuestas vigentes con nombre y etiqueta, y deja fuera las vencidas", () => {
+  const ahora = new Date("2026-09-28T12:00:00Z");
+  const r = listaDePospuestas(
+    [
+      { patientId: "p1", tipo: "sin-proximo-control", hasta: new Date("2026-10-05T12:00:00Z") },
+      { patientId: "p2", tipo: "no-asistio", hasta: new Date("2026-09-20T12:00:00Z") },
+      { patientId: "p3", tipo: "pasado-de-fecha", hasta: new Date("2026-10-01T12:00:00Z") },
+    ],
+    ahora,
+    new Map([["p1", "Ana Pérez"]]),
+  );
+  assert.deepEqual(r.map((x) => [x.patientName, x.etiqueta]), [["Ana Pérez", "Sin próximo control"], ["Paciente", "Pasado de su fecha"]]);
+});

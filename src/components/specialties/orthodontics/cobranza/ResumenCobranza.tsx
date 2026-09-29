@@ -18,6 +18,7 @@ import { AlertTriangle, Banknote } from "lucide-react";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { fmtDay } from "../redesign/atoms/format";
+import { resumenDeVencidas, tituloDeVencido } from "@/lib/orthodontics/cobro/linea-de-vencido";
 import orto from "../redesign/orto.module.css";
 
 export interface ResumenCobranzaProps {
@@ -58,7 +59,9 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
   if (!panel.invoiceId || !panel.cobranza || !panel.invoice) return null;
 
   const cuota = panel.cobranza.cuotaDeHoy;
-  const vencida = cuota?.estado === "vencida";
+  // H8: con cuotas vencidas, el título y el botón hablan de LO MISMO (la suma).
+  const vencidas = resumenDeVencidas(panel.cobranza.vencidas);
+  const vencida = vencidas.cuantas > 0 || cuota?.estado === "vencida";
   // ws1-t10 (H68): antes este botón abría PaymentModal SIN `montoSugerido`, y
   // el campo nacía en el saldo COMPLETO del tratamiento aunque el aviso de
   // arriba dijera "Próxima mensualidad $1,000". Mismo cálculo que ya usa
@@ -86,12 +89,18 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
         ) : null}
         <div className="min-w-0">
           <div className={`text-[13px] font-semibold ${vencida ? orto.tonoPeligro : orto.tonoTexto}`}>
-            {cuota
-              ? `${vencida ? "Mensualidad vencida" : "Próxima mensualidad"}: ${fmt.format(cuota.falta)}`
-              : "Sin mensualidades pendientes"}
+            {vencidas.cuantas > 0
+              ? tituloDeVencido(vencidas, (n) => fmt.format(n))
+              : cuota
+                ? `Próxima mensualidad: ${fmt.format(cuota.falta)}`
+                : "Sin mensualidades pendientes"}
           </div>
           <div className="text-xs text-[color:var(--pr-texto-3)]">
-            {cuota?.vencimiento ? `${vencida ? "Venció" : "Vence"} el ${fmtDay(cuota.vencimiento)} · ` : ""}
+            {vencidas.cuantas > 0 && vencidas.masAntigua
+              ? `${vencidas.cuantas > 1 ? "La más antigua venció" : "Venció"} el ${fmtDay(vencidas.masAntigua)} · `
+              : cuota?.vencimiento
+                ? `${vencida ? "Venció" : "Vence"} el ${fmtDay(cuota.vencimiento)} · `
+                : ""}
             Saldo total {fmt.format(panel.invoice.balance)}
             {panel.cobranza.saldoAFavor > 0 ? (
               <span className={orto.tonoExito}> · saldo a favor {fmt.format(panel.cobranza.saldoAFavor)}</span>

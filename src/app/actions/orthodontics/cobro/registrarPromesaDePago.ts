@@ -4,6 +4,9 @@
 // parte — la promesa queda visible en la Sección F para que recepción la
 // revise al día siguiente desde la lista de vencidas.
 
+import { prisma } from "@/lib/prisma";
+import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
+import { errorDeFechaDePromesa } from "@/lib/orthodontics/cobro/fecha-de-promesa";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro, auditarCobro } from "./_ctx";
 import { crearPromesaDePago, type PromesaDePago } from "@/lib/orthodontics/cobro/promesas-db";
@@ -24,7 +27,10 @@ export async function registrarPromesaDePago(args: {
 
   const amount = Number(args.amount);
   if (!isFinite(amount) || amount <= 0) return fail("El monto de la promesa debe ser mayor a 0");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.promisedDate)) return fail("Fecha de promesa inválida");
+  // H6: el día de calendario de HOY se mide en la zona de la clínica.
+  const clinica = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
+  const errorFecha = errorDeFechaDePromesa(args.promisedDate, hoyEnZona(new Date(), clinica?.timezone ?? "America/Mexico_City"));
+  if (errorFecha) return fail(errorFecha);
 
   const resultado = await crearPromesaDePago({
     treatmentPlanId: args.treatmentPlanId,

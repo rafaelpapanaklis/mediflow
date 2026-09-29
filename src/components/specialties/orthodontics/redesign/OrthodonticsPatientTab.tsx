@@ -54,6 +54,7 @@ import { moverControlesFuturosAlDoctor } from "@/app/actions/orthodontics/moverC
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
 import { RUTA_CONTRATAR_ORTODONCIA } from "@/lib/orthodontics/contratar";
+import { alergiasReales } from "@/lib/alergias-reales";
 import { textoAsentimientoMenor } from "@/lib/orthodontics/asentimiento-menor";
 import { elegirSetParaFoto } from "@/lib/orthodontics/redesign/set-de-foto-por-visita";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
@@ -482,9 +483,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                   : t("patients.ortho.guardianLabel", { name: orthoData.guardianName })
                 : null,
               criticalAllergies:
-                Array.isArray(patient.allergies) && patient.allergies.length > 0
-                  ? patient.allergies.join(", ")
-                  : null,
+                alergiasReales(patient.allergies).join(", ") || null,
             },
             // outstandingAmount ya no se calcula aquí (hallazgo ws1-t4 §5):
             // OrthodonticsRedesignClient lee la factura real del caso vía

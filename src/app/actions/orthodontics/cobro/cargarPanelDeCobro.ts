@@ -25,16 +25,18 @@ import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { leerConfigDeCobro, type ConfigDeCobro } from "@/lib/orthodontics/cobro/config-db";
 import { leerBillingDelCaso, type BillingDelCaso } from "@/lib/orthodontics/cobro/caso-db";
-import { borradorInicialDelCaso } from "@/lib/orthodontics/cobro/borrador-factura";
+import { borradorInicialDelCaso, type ConceptoDeExtra } from "@/lib/orthodontics/cobro/borrador-factura";
 import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 import { listarExtrasDelCaso, type ExtraDelCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { listarPromesasDelCaso, type PromesaDePago } from "@/lib/orthodontics/cobro/promesas-db";
 import { calcularRecargo, diasEntre } from "@/lib/orthodontics/cobro/reglas";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
+import { ESTADOS_LIGABLES, conceptoDeFactura, facturaSinLigarReciente } from "@/lib/orthodontics/cobro/facturas-ligables";
+import { idsDeFacturasLigadasAUnCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro } from "./_ctx";
-import { precioDeColocacionDelCatalogo } from "@/lib/orthodontics/catalog-procedures";
+import { listarProcedimientosDeOrtodoncia, precioDeColocacionDelCatalogo } from "@/lib/orthodontics/catalog-procedures";
 import { controlesPorCobrarDe, type ControlPorCobrar } from "@/lib/orthodontics/cobro/controles-por-cobrar";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
@@ -81,6 +83,13 @@ export interface PanelDeCobro {
    * Editable siempre: solo evita partir de cero.
    */
   borradorInicial: BorradorDeFactura;
+  /** H7: conceptos de ortodoncia que se cobran aparte (catálogo de la clínica), para «Cobrar extra». */
+  catalogoDeExtras: ConceptoDeExtra[];
+  /**
+   * H5: una factura de ortodoncia recién creada que no quedó ligada al caso
+   * (se cortó entre crearla y ligarla). Solo si el caso no tiene plan vigente.
+   */
+  facturaSinLigar: { id: string; invoiceNumber: string; concepto: string; total: number; fecha: string } | null;
 }
 
 export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<ActionResult<PanelDeCobro>> {
@@ -107,7 +116,17 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     ? await precioDeColocacionDelCatalogo(ctx.clinicId)
     : null;
 
+  // H7: solo lo activo y «con costo aparte»; si el catálogo no se puede leer, el extra parte sin lista.
+  const catalogoDeExtras: ConceptoDeExtra[] = await listarProcedimientosDeOrtodoncia(ctx.clinicId)
+    .then((filas) =>
+      filas
+        .filter((f) => f.isActive && f.orthoIncludedInTreatment === false)
+        .map((f) => ({ name: f.name, price: Number(f.basePrice) || 0 })),
+    )
+    .catch(() => []);
+
   const base = {
+    catalogoDeExtras,
     patientId: caso.patientId,
     billingDelCaso,
     config,
@@ -160,6 +179,41 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
 
   const controlesPorCobrar = controlesPorCobrarDe(cargosControl);
 
+  // H5: sin plan vigente, ¿hay una factura de ortodoncia recién creada sin ligar?
+  let facturaSinLigar: PanelDeCobro["facturaSinLigar"] = null;
+  if (!facturaVigente) {
+    try {
+      const recientes = await prisma.invoice.findMany({
+        where: {
+          clinicId: ctx.clinicId,
+          patientId: caso.patientId,
+          status: { in: [...ESTADOS_LIGABLES] },
+          appointmentId: null,
+          orthodonticTreatmentPlan: null,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { id: true, invoiceNumber: true, items: true, total: true, status: true, appointmentId: true, createdAt: true },
+      });
+      const extras = await idsDeFacturasLigadasAUnCaso(ctx.clinicId, recientes.map((r) => r.id));
+      const hallada = facturaSinLigarReciente(
+        recientes.map((r) => ({ ...r, ligadaACaso: extras.has(r.id) ? "extra" : null })),
+        new Date(),
+      );
+      if (hallada) {
+        facturaSinLigar = {
+          id: hallada.id,
+          invoiceNumber: hallada.invoiceNumber,
+          concepto: conceptoDeFactura(hallada.items),
+          total: hallada.total,
+          fecha: hallada.createdAt.toISOString(),
+        };
+      }
+    } catch (e) {
+      console.warn("[ortodoncia:cobro] no se pudo buscar una factura sin ligar:", e);
+    }
+  }
+
   return ok({
     ...base,
     controlesPorCobrar,
@@ -168,5 +222,6 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     condiciones,
     cobranza,
     recargoSugerido,
+    facturaSinLigar,
   });
 }
