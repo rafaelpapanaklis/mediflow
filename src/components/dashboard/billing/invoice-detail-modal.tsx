@@ -33,6 +33,8 @@ import { ConfirmacionFactura } from "@/components/dashboard/factura-rediseno/con
 // del detalle en vez de abrir otro diálogo. Ver factura-un-popup/.
 import { CLASES_UN_POPUP, CLASE_CUERPO_CON_COBRO } from "@/components/dashboard/factura-un-popup/raiz";
 import { useCobro } from "@/components/dashboard/factura-un-popup/use-cobro";
+import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
+import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
 // El plan de pagos de una factura a plazos (ws1-t2): por qué cuota va, y a cuál
 // va lo que se está cobrando. Derivado; sin condiciones a plazos no pinta nada.
 import { BloquePlan } from "@/components/dashboard/plan-de-pagos/bloque-plan";
@@ -271,6 +273,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     alCobrar: handlePaymentSuccess,
     montoSugerido,
   });
+  // H25: «Marcar pagada» también cobra en efectivo (todo el saldo): mismo aviso de caja cerrada.
+  const frenoMarkPaid = useFrenoCajaCerrada(open && !!invoice && invoice.status !== "PAID" && invoice.status !== "CANCELLED", true);
   // CFDI por pago (ws1-t1): solo tiene sentido pintarlo donde YA se pinta el
   // plan de pagos (rediseno) — sin eso no hay "cuota 3 de 18" que explicar.
   const { cfdiPorPago, recargarCfdiPorPago } = usePagosConCfdi(invoice?.id, open && rediseno);
@@ -617,7 +621,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     return callApi("/mark-paid", "POST", {}, t("clinical.invoiceDetail.markPaidSuccess"));
   }
 
-  async function handleMarkPaid() {
+  async function handleMarkPaid(sinAviso?: unknown) {
+    // Caja cerrada: se avisa ANTES de preguntar «¿Marcar pagada?» (no bloquea).
+    if (sinAviso !== true && (await frenoMarkPaid.frenar())) return;
+    frenoMarkPaid.ocultar();
     // Diseño nuevo: pregunta ConfirmacionFactura (abajo) y su botón corre
     // ejecutarMarkPaid, lo mismo que aquí tras el confirm de siempre.
     if (rediseno) { setConfirmacion("mark-paid"); return; }
@@ -1089,8 +1096,13 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     plazos eso borra el calendario de cuotas por un descuido (ws1-t4 #69):
                     ahí se cobra con «Cobrar», que pide el monto (y si de verdad es
                     todo, se teclea todo). */}
+                {frenoMarkPaid.visible && (
+                  <div style={{ flexBasis: "100%", width: "100%" }}>
+                    <AvisoCajaCerrada onCobrarDeTodosModos={() => void handleMarkPaid(true)} ocupado={busy} />
+                  </div>
+                )}
                 {puedeCobrar && !citaCanceladaConDinero && !esPlanAPlazos(condicionesPago) && (
-                  <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
+                  <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={() => void handleMarkPaid()} disabled={busy}>
                     {t("clinical.invoiceDetail.markPaid")}
                   </ButtonNew>
                 )}

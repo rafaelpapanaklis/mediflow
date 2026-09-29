@@ -63,3 +63,39 @@ export function useCajaAbierta(open: boolean): { abierta: boolean | null; compro
 
   return { abierta, comprobar };
 }
+
+/**
+ * El freno de «caja cerrada» para CUALQUIER camino de cobro en efectivo (una
+ * sola pieza, ws1-t6 H25): la ventana «Registrar pago», el cobro dentro del
+ * detalle de la factura, «Marcar pagada» y el anticipo recibido usan ésta y el
+ * componente `AvisoCajaCerrada`; nadie copia el texto ni la regla.
+ *
+ * `frenar()` se llama justo antes de enviar el cobro: `true` = hay que parar y
+ * mostrar el aviso (el cobro NO se envía todavía); `false` = seguir. El aviso
+ * no bloquea: «Cobrar de todos modos» vuelve a llamar al cobro saltándose el freno.
+ */
+export function useFrenoCajaCerrada(open: boolean, esEfectivo: boolean): {
+  visible: boolean;
+  frenar: () => Promise<boolean>;
+  ocultar: () => void;
+} {
+  const { abierta, comprobar } = useCajaAbierta(open);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => { if (!open) setVisible(false); }, [open]);
+  // Cambiar de método (o de efectivo a otro) retira el aviso.
+  useEffect(() => { if (!esEfectivo) setVisible(false); }, [esEfectivo]);
+
+  const frenar = useCallback(async (): Promise<boolean> => {
+    if (!esEfectivo) return false;
+    // Si la lectura de la caja aún no llegó, se espera (con tope) antes de decidir.
+    const ab = abierta ?? (await comprobar());
+    const parar = debeAvisarCajaCerrada("cash", ab);
+    setVisible(parar);
+    return parar;
+  }, [esEfectivo, abierta, comprobar]);
+
+  const ocultar = useCallback(() => setVisible(false), []);
+
+  return { visible: visible && esEfectivo, frenar, ocultar };
+}

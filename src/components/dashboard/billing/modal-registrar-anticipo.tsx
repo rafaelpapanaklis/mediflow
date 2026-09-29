@@ -26,6 +26,9 @@ import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashbo
 import a from "@/components/dashboard/cobros-inventario-rediseno/anticipo.module.css";
 import { useRedisenoActivo } from "@/components/dashboard/cobros-inventario-rediseno/rediseno-activo";
 import { montoInicialAnticipoRecibido } from "@/lib/anticipos/registrar-prellenado";
+// H25: el mismo aviso de «caja cerrada» que «Registrar pago» (una sola pieza).
+import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
+import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -79,6 +82,8 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
   const [method, setMethod] = useState<MetodoRegistro>("cash");
   const [reference, setReference] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const freno = useFrenoCajaCerrada(open, method === "cash");
+  const { frenar, ocultar } = freno;
 
   // Este modal no se desmonta entre aperturas (vive dentro de
   // invoice-detail-modal.tsx, que sí se remonta, pero no en cada clic de
@@ -92,7 +97,7 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, anticipoPendiente?.id, anticipoPendiente?.amount, saldo]);
 
-  const registrar = useCallback(async () => {
+  const registrar = useCallback(async (sinAviso?: unknown) => {
     const montoNum = Number(monto);
     if (!Number.isFinite(montoNum) || montoNum <= 0) {
       toast.error("Escribe un monto válido.");
@@ -104,6 +109,9 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
     }
     setEnviando(true);
     try {
+      // Efectivo con la caja cerrada: se avisa antes de registrar (no bloquea).
+      if (sinAviso !== true && (await frenar())) return;
+      ocultar();
       const res = await fetch(`/api/invoices/${invoiceId}/anticipo/registrar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -126,7 +134,7 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
     } finally {
       setEnviando(false);
     }
-  }, [monto, method, reference, invoiceId, onListo, onClose]);
+  }, [monto, method, reference, invoiceId, onListo, onClose, frenar, ocultar]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -198,11 +206,13 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
               <Input id="anticipo-referencia" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Clave de rastreo, folio…" />
             </div>
           )}
+
+          {freno.visible && <AvisoCajaCerrada onCobrarDeTodosModos={() => void registrar(true)} ocupado={enviando} />}
         </div>
 
         <DialogFooter className={`${a.pie} ${rediseno ? c.pie : ""}`}>
           <ButtonNew variant="ghost" onClick={onClose} disabled={enviando}>Cancelar</ButtonNew>
-          <ButtonNew variant="primary" icon={enviando ? <Loader2 size={14} className="animate-spin" aria-hidden /> : undefined} onClick={registrar} disabled={enviando}>
+          <ButtonNew variant="primary" icon={enviando ? <Loader2 size={14} className="animate-spin" aria-hidden /> : undefined} onClick={() => void registrar()} disabled={enviando}>
             {enviando ? "Registrando…" : "Registrar anticipo"}
           </ButtonNew>
         </DialogFooter>

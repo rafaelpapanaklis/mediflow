@@ -23,7 +23,8 @@ import { CLASES_FACTURA_REDISENO, CLASES_CALENDARIO_REDISENO, clasesFactura as c
 // pago se registra solo. Sin cuenta conectada, el botón ni sale.
 import { BotonMercadoPago, LinkMercadoPago, clasesMetodoClasico, useCobroMercadoPago } from "./link-mercado-pago";
 import { montoInicialDeCobro } from "./monto-inicial-cobro";
-import { RUTA_CAJA, debeAvisarCajaCerrada, useCajaAbierta } from "./aviso-caja-cerrada";
+import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
+import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
 /**
@@ -86,9 +87,8 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
   const [notes, setNotes]         = useState("");
   const [saving, setSaving]       = useState(false);
   const mpDisponible = useCobroMercadoPago(open);
-  const { abierta: cajaAbierta, comprobar: comprobarCaja } = useCajaAbierta(open);
-  // «La caja está cerrada»: se pregunta UNA vez antes de confirmar un cobro en efectivo.
-  const [avisoCaja, setAvisoCaja] = useState(false);
+  // «La caja está cerrada»: se pregunta antes de confirmar un cobro en efectivo (pieza compartida).
+  const freno = useFrenoCajaCerrada(open, method === "cash");
   const esMercadoPago = method === "mercadopago";
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de siempre sin él.
   // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
@@ -103,7 +103,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
     setPaidAt(todayLocalISO());
     setReference("");
     setNotes("");
-    setAvisoCaja(false);
+    freno.ocultar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, invoice]);
 
@@ -115,14 +115,13 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
 
   async function submit(sinAviso = false) {
     if (isInvalid || saving || !invoice) return;
-    if (!sinAviso && method === "cash") {
-      // Si la lectura de la caja aún no llegó, se espera (con tope) antes de decidir.
+    if (!sinAviso) {
       setSaving(true);
-      const abierta = cajaAbierta ?? (await comprobarCaja());
+      const parar = await freno.frenar();
       setSaving(false);
-      if (debeAvisarCajaCerrada(method, abierta)) { setAvisoCaja(true); return; }
+      if (parar) return;
     }
-    setAvisoCaja(false);
+    freno.ocultar();
     setSaving(true);
     try {
       const res = await fetch(`/api/invoices/${invoice.id}`, {
@@ -279,17 +278,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
           )}
         </div>
 
-        {avisoCaja && method === "cash" && (
-          <div role="alert" style={{ margin: "0 0 12px", padding: "10px 12px", borderRadius: 8, background: "var(--warning-soft)", color: "var(--text-1)", fontSize: 13 }}>
-            La caja está cerrada: este efectivo no entrará en ningún corte. ¿Abrir caja?
-            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-              <a href={RUTA_CAJA} className="btn-new btn-new--primary btn-new--sm">Abrir caja</a>
-              <button type="button" className="btn-new btn-new--ghost btn-new--sm" onClick={() => submit(true)} disabled={saving}>
-                Cobrar de todos modos
-              </button>
-            </div>
-          </div>
-        )}
+        {freno.visible && <AvisoCajaCerrada onCobrarDeTodosModos={() => submit(true)} ocupado={saving} />}
 
         <DialogFooter className={rediseno ? c.pie : undefined}>
           <ButtonNew variant="ghost" onClick={onClose} disabled={saving}>{t("common.cancel")}</ButtonNew>

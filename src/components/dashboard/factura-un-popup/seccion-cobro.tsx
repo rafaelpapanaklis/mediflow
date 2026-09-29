@@ -11,6 +11,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { METHODS } from "@/components/dashboard/billing/payment-modal";
 import { CLASES_CALENDARIO_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import { BotonMercadoPago, LinkMercadoPago } from "@/components/dashboard/billing/link-mercado-pago";
+import { AvisoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-cerrada.component";
 import type { Cobro } from "./use-cobro";
 import u from "./un-popup.module.css";
 
@@ -151,6 +152,9 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto, mercado
       </div>
       </>
       )}
+
+      {/* H25: efectivo con la caja cerrada — el aviso de siempre, sin bloquear. */}
+      {cobro.avisoCaja && <AvisoCajaCerrada onCobrarDeTodosModos={() => cobro.submit(true)} ocupado={bloqueado} />}
     </section>
   );
 }

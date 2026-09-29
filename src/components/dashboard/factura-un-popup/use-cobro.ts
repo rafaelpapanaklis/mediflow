@@ -9,6 +9,8 @@ import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
 import { useT } from "@/i18n/i18n-provider";
 import type { MetodoDelCobro } from "@/components/dashboard/billing/payment-modal";
 import { montoInicialDeCobro } from "@/components/dashboard/billing/monto-inicial-cobro";
+// El freno de «caja cerrada»: la MISMA pieza que usa «Registrar pago» (ws1-t6, H25).
+import { useFrenoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-cerrada";
 
 /**
  * EL COBRO DENTRO DEL DETALLE DE LA FACTURA (ws1-t2, solo con `menu-dos-niveles`).
@@ -67,6 +69,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
   const [saving, setSaving]       = useState(false);
   // Id del borrador que ESTA apertura ya confirmó (ver arriba, «BORRADORES»).
   const confirmadaRef = useRef<string | null>(null);
+  const freno = useFrenoCajaCerrada(abierta, method === "cash");
 
   const id = factura?.id ?? null;
   const balance = factura?.balance ?? 0;
@@ -85,12 +88,17 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
   const isOverpay = amountNum > balance + 0.001;
   const isInvalid = !amountNum || amountNum <= 0 || isOverpay;
 
-  async function submit() {
+  // `sinAviso === true` solo lo manda «Cobrar de todos modos»; el clic del botón
+  // pasa el evento, que no cuenta.
+  async function submit(sinAviso?: unknown) {
     const invoice = factura;
     if (isInvalid || saving || !invoice) return;
     setSaving(true);
     alOcupar(true);
     try {
+      // Efectivo con la caja cerrada: se avisa ANTES de confirmar el borrador o cobrar.
+      if (sinAviso !== true && (await freno.frenar())) return;
+      freno.ocultar();
       if (confirmarAntes && confirmadaRef.current !== invoice.id) {
         const confirmacion = await fetch(`/api/invoices/${invoice.id}/confirm`, { method: "POST" });
         if (!confirmacion.ok) {
@@ -144,6 +152,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
     notes, setNotes,
     saving, amountNum, isOverpay, isInvalid, balance,
     submit,
+    avisoCaja: freno.visible,
   };
 }
 
