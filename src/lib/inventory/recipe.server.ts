@@ -4,7 +4,7 @@
 // la misma transacción — ver consumeRecipeForSession.
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { consumeFefoTx } from "./lots.server";
+import { consumeFefoTx, type AvisoSinVigentes } from "./lots.server";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 
@@ -71,6 +71,8 @@ export interface RecipeConsumptionResult {
   itemId: string;
   itemName: string;
   qtyConsumed: number;
+  /** H17: había material caducado y no alcanzó lo vigente (la sesión no se bloquea). */
+  sinVigentes?: AvisoSinVigentes;
 }
 
 /**
@@ -99,7 +101,7 @@ export async function consumeRecipeForSession(
   const results: RecipeConsumptionResult[] = [];
   for (const line of lines) {
     const qty = Number(line.quantity);
-    await consumeFefoTx(tx, {
+    const r = await consumeFefoTx(tx, {
       clinicId:           params.clinicId,
       itemId:             line.itemId,
       itemName:           line.item.name,
@@ -108,7 +110,11 @@ export async function consumeRecipeForSession(
       userId:             params.userId ?? null,
       treatmentSessionId: params.treatmentSessionId,
     });
-    results.push({ itemId: line.itemId, itemName: line.item.name, qtyConsumed: qty });
+    results.push({
+      itemId: line.itemId, itemName: line.item.name,
+      qtyConsumed: r.sinVigentes ? r.sinVigentes.consumed : qty,
+      ...(r.sinVigentes ? { sinVigentes: r.sinVigentes } : {}),
+    });
   }
   return results;
 }

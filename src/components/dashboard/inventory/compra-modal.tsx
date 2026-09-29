@@ -19,6 +19,7 @@ import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.mo
 import { ropaVentana } from "@/components/dashboard/cobros-inventario-rediseno/ventana";
 // ws1-t5 (arreglo): el HOY de la clínica, no el de UTC.
 import { hoyEnZona } from "@/lib/inventory/fecha-calendario";
+import { caducidadYaPasada } from "@/lib/inventory/lots-core";
 
 interface ItemOpcion { id: string; name: string; unit: string; }
 interface ProveedorOpcion { id: string; name: string; }
@@ -84,6 +85,17 @@ export function CompraModal({
       const cost = Number(l.unitCost);
       if (!Number.isInteger(qty) || qty <= 0) { toast.error(`Cantidad inválida para "${items.find(i => i.id === l.itemId)?.name ?? l.itemId}".`); return; }
       if (!Number.isFinite(cost) || cost < 0) { toast.error(`Costo inválido para "${items.find(i => i.id === l.itemId)?.name ?? l.itemId}".`); return; }
+    }
+
+    // H17 (ws1-t6): una caducidad que ya pasó entra como lote CADUCADO (no se
+    // usa en sesiones ni cuenta como existencias). Se avisa ANTES de guardar.
+    const vencidas = validas.filter(l => caducidadYaPasada(l.expiresAt, hoy));
+    if (vencidas.length > 0) {
+      const nombres = vencidas.map(l => items.find(i => i.id === l.itemId)?.name ?? l.itemId).join(", ");
+      const seguir = window.confirm(
+        `La fecha de caducidad de ${nombres} ya pasó. Ese lote entrará como CADUCADO: no se usará en sesiones ni contará como existencias.\n\n¿Guardar la compra de todos modos?`,
+      );
+      if (!seguir) return;
     }
 
     setGuardando(true);

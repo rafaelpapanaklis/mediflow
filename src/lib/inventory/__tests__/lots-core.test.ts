@@ -4,7 +4,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  caducidadYaPasada,
   diasParaCaducar,
+  existenciasCaducadas,
+  existenciasVigentes,
   estadoDeCaducidad,
   isExpired,
   isExpiringSoon,
@@ -189,5 +192,50 @@ describe("round3", () => {
     assert.equal(round3(0.1 + 0.2), 0.3);
     assert.equal(round3(1.0005), 1.001);
     assert.equal(round3(-0.0004), 0);
+  });
+});
+
+describe("H17 (ws1-t6): los lotes caducados no se consumen ni cuentan", () => {
+  const hoy = "2026-09-28";
+  const lots: LotForFefo[] = [
+    { id: "caducado", expiresAt: d("2026-09-01"), remaining: 5 },
+    { id: "hoy",      expiresAt: d("2026-09-28"), remaining: 2 },
+    { id: "vigente",  expiresAt: d("2026-12-01"), remaining: 10 },
+  ];
+
+  it("el FEFO salta el caducado aunque caduque antes", () => {
+    const plan = planFefoConsumption(lots, 4, null, hoy);
+    assert.deepEqual(plan, { ok: true, allocations: [{ lotId: "hoy", qty: 2 }, { lotId: "vigente", qty: 2 }] });
+  });
+
+  it("el lote que caduca HOY todavía se usa (el caducado es desde mañana)", () => {
+    const plan = planFefoConsumption([lots[1]], 2, null, hoy);
+    assert.equal(plan.ok, true);
+  });
+
+  it("ni siquiera el lote elegido a mano si está caducado", () => {
+    const plan = planFefoConsumption(lots, 1, "caducado", hoy);
+    assert.deepEqual(plan, { ok: true, allocations: [{ lotId: "hoy", qty: 1 }] });
+  });
+
+  it("solo caducado: insuficiente, available = 0", () => {
+    assert.deepEqual(planFefoConsumption([lots[0]], 1, null, hoy), { ok: false, available: 0 });
+  });
+
+  it("sin `hoy` se comporta como siempre (reconciliación)", () => {
+    const plan = planFefoConsumption(lots, 4, null);
+    assert.deepEqual(plan, { ok: true, allocations: [{ lotId: "caducado", qty: 4 }] });
+  });
+
+  it("vigentes y caducadas por separado", () => {
+    assert.equal(existenciasCaducadas(lots, hoy), 5);
+    assert.equal(existenciasVigentes(lots, hoy), 12);
+  });
+
+  it("caducidadYaPasada: ayer sí, hoy no, sin fecha no", () => {
+    assert.equal(caducidadYaPasada("2026-09-27", hoy), true);
+    assert.equal(caducidadYaPasada("2026-09-28", hoy), false);
+    assert.equal(caducidadYaPasada("", hoy), false);
+    assert.equal(caducidadYaPasada(undefined, hoy), false);
   });
 });

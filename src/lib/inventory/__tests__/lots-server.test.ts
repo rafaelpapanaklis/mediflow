@@ -263,3 +263,52 @@ describe("Ajuste 2: enlace automático compra → lote", () => {
     assert.equal(db.tablas.inventoryLot.length, 0);
   });
 });
+
+describe("H17 (ws1-t6): consumo con lotes caducados", () => {
+  let db: DobleInventario;
+  beforeEach(() => { db = new DobleInventario(); });
+  const ayer = new Date(Date.now() - 3 * 24 * 3600 * 1000);
+  const manana = new Date(Date.now() + 90 * 24 * 3600 * 1000);
+  const lote = (id: string, expiresAt: Date | null, remaining: number) => ({
+    id, clinicId: CLINIC, itemId: "guantes", lotNumber: id, expiresAt, quantity: remaining, remaining,
+    unitCost: null, purchaseLineId: null, createdAt: new Date(), updatedAt: new Date(),
+  });
+
+  it("el consumo salta el lote caducado y usa el vigente", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "guantes", name: "Guantes", quantity: 15 }));
+    db.tablas.inventoryLot.push(lote("cad", ayer, 5), lote("vig", manana, 10));
+    const r = await consumeFefoTx(db as any, { clinicId: CLINIC, itemId: "guantes", itemName: "Guantes", qty: 2, reason: "Sesión" });
+    assert.deepEqual(r.allocations, [{ lotId: "vig", qty: 2 }]);
+    assert.equal(r.sinVigentes, undefined);
+    assert.equal(db.tablas.inventoryLot.find((l: any) => l.id === "cad")!.remaining, 5);
+  });
+
+  it("solo queda caducado: NO bloquea, avisa y no descuenta nada; el lote caducado queda intacto", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "guantes", name: "Guantes", quantity: 5 }));
+    db.tablas.inventoryLot.push(lote("cad", ayer, 5));
+    const r = await consumeFefoTx(db as any, { clinicId: CLINIC, itemId: "guantes", itemName: "Guantes", qty: 2, reason: "Sesión" });
+    assert.deepEqual(r.allocations, []);
+    assert.equal(r.sinVigentes?.consumed, 0);
+    assert.equal(r.sinVigentes?.caducado, 5);
+    assert.match(r.sinVigentes!.mensaje, /no hay existencias vigentes/);
+    assert.equal(db.tablas.inventoryLot.find((l: any) => l.id === "cad")!.remaining, 5);
+    assert.equal(db.tablas.inventoryItem.find((i: any) => i.id === "guantes")!.quantity, 5);
+  });
+
+  it("vigente insuficiente + caducado: descuenta lo vigente y avisa", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "guantes", name: "Guantes", quantity: 6 }));
+    db.tablas.inventoryLot.push(lote("cad", ayer, 5), lote("vig", manana, 1));
+    const r = await consumeFefoTx(db as any, { clinicId: CLINIC, itemId: "guantes", itemName: "Guantes", qty: 3, reason: "Sesión" });
+    assert.deepEqual(r.allocations, [{ lotId: "vig", qty: 1 }]);
+    assert.equal(r.sinVigentes?.consumed, 1);
+  });
+
+  it("falta sin nada caducado que lo explique: sigue siendo InsufficientStockError", async () => {
+    db.tablas.inventoryItem.push(itemBase({ id: "guantes", name: "Guantes", quantity: 1 }));
+    db.tablas.inventoryLot.push(lote("vig", manana, 1));
+    await assert.rejects(
+      () => consumeFefoTx(db as any, { clinicId: CLINIC, itemId: "guantes", itemName: "Guantes", qty: 5, reason: "x" }),
+      InsufficientStockError,
+    );
+  });
+});

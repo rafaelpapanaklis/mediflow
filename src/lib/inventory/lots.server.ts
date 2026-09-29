@@ -13,6 +13,7 @@ import {
   ALERT_DAYS_DEFAULT,
   estadoDeCaducidad,
   planFefoConsumption,
+  existenciasCaducadas,
   round3,
   type FefoInsufficient,
   type FefoPlan,
@@ -380,6 +381,22 @@ export async function writeOffExpiredLot(params: {
 // InsufficientStockError y la transacción entera se revierte (no se crea
 // la sesión con el descuento a medias).
 
+/**
+ * H17 (ws1-t6): el consumo SALTA los lotes caducados. Si no alcanzan los
+ * vigentes pero el artículo tiene material caducado, la sesión NO se bloquea:
+ * se descuenta lo vigente que haya (puede ser 0) y se devuelve `sinVigentes`
+ * para que la pantalla avise claramente. Sin material caducado que explique la
+ * falta, sigue siendo `InsufficientStockError`, como siempre.
+ */
+export interface AvisoSinVigentes {
+  itemId: string;
+  itemName: string;
+  needed: number;
+  consumed: number;
+  caducado: number;
+  mensaje: string;
+}
+
 export async function consumeFefoTx(
   tx: Tx,
   params: {
@@ -392,21 +409,40 @@ export async function consumeFefoTx(
     treatmentSessionId?: string | null;
     preferredLotId?: string | null;
   },
-): Promise<{ allocations: { lotId: string; qty: number }[] }> {
+): Promise<{ allocations: { lotId: string; qty: number }[]; sinVigentes?: AvisoSinVigentes }> {
   if (params.qty <= 0) throw new Error(`Cantidad inválida para "${params.itemName}": ${params.qty}`);
 
   const lots = await reconcileAndLock(tx, params.clinicId, params.itemId);
-  const plan: FefoPlan | FefoInsufficient = planFefoConsumption(lots, round3(params.qty), params.preferredLotId ?? null);
+  const hoy = hoyEnZona(await zonaDeClinica(params.clinicId, tx));
+  const needed = round3(params.qty);
+  let plan: FefoPlan | FefoInsufficient = planFefoConsumption(lots, needed, params.preferredLotId ?? null, hoy);
+  let sinVigentes: AvisoSinVigentes | undefined;
   // "strict": false en este repo (tsconfig.json) apaga strictNullChecks, y
   // sin él tsc NO estrecha uniones discriminadas de forma fiable con
   // `if (!plan.ok)` — deja `plan` como la unión completa y el acceso a
   // `.available` no compila. Se evita del todo con un cast explícito en vez
   // de depender del estrechamiento.
   if (plan.ok === false) {
-    throw new InsufficientStockError(params.itemId, params.itemName, params.qty, (plan as FefoInsufficient).available);
+    const vigente = (plan as FefoInsufficient).available;
+    const caducado = existenciasCaducadas(lots, hoy);
+    if (caducado <= 0) {
+      throw new InsufficientStockError(params.itemId, params.itemName, params.qty, vigente);
+    }
+    sinVigentes = {
+      itemId: params.itemId,
+      itemName: params.itemName,
+      needed,
+      consumed: vigente,
+      caducado,
+      mensaje: vigente > 0
+        ? `«${params.itemName}»: solo hay ${vigente} vigentes de ${needed} y ${caducado} caducados (no se usan). Se descontó lo vigente.`
+        : `«${params.itemName}»: no hay existencias vigentes (solo ${caducado} caducados, que no se usan). No se descontó nada; da de baja los lotes caducados.`,
+    };
+    plan = vigente > 0 ? planFefoConsumption(lots, vigente, params.preferredLotId ?? null, hoy) : { ok: true, allocations: [] };
   }
+  const consumido = plan.ok ? round3((plan as FefoPlan).allocations.reduce((s, a) => s + a.qty, 0)) : 0;
 
-  for (const alloc of plan.allocations) {
+  for (const alloc of (plan as FefoPlan).allocations) {
     await (tx as PrismaClient).inventoryLot.update({
       where: { id: alloc.lotId },
       data:  { remaining: { decrement: alloc.qty } },
@@ -422,17 +458,19 @@ export async function consumeFefoTx(
       },
     });
   }
-  await (tx as PrismaClient).inventoryHistory.create({
-    // ws1-t4: clinicId/userId/type — "session" porque este consumo SIEMPRE
-    // viene de una sesión de tratamiento (ver la nota del bloque de arriba).
-    data: {
-      itemId: params.itemId, change: -Math.round(round3(params.qty)), reason: params.reason,
-      clinicId: params.clinicId, userId: params.userId ?? null, type: "session",
-    },
-  });
-  await syncItemAggregate(tx, params.clinicId, params.itemId);
+  if (consumido > 0) {
+    await (tx as PrismaClient).inventoryHistory.create({
+      // ws1-t4: clinicId/userId/type — "session" porque este consumo SIEMPRE
+      // viene de una sesión de tratamiento (ver la nota del bloque de arriba).
+      data: {
+        itemId: params.itemId, change: -Math.round(consumido), reason: params.reason,
+        clinicId: params.clinicId, userId: params.userId ?? null, type: "session",
+      },
+    });
+    await syncItemAggregate(tx, params.clinicId, params.itemId);
+  }
 
-  return { allocations: plan.allocations };
+  return { allocations: (plan as FefoPlan).allocations, ...(sinVigentes ? { sinVigentes } : {}) };
 }
 
 // ── Avisos de caducidad (Inventario y "Hoy" del admin) ─────────────────

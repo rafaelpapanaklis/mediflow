@@ -175,6 +175,11 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       // (en inglés, técnico) y ESE era el mensaje que veía el usuario.
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || t("pages.treatments.sessionError"));
+      // H17 (ws1-t6): la sesión se registró, pero algún material solo tenía
+      // existencias caducadas (no se usan). Se avisa claro, sin bloquear.
+      if (Array.isArray(data?.avisosExistencias)) {
+        for (const aviso of data.avisosExistencias) toast(String(aviso), { icon: "⚠️", duration: 9000 });
+      }
 
       // Update state locally (optimistic update)
       setTreatments(prev => prev.map(tp => {

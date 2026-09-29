@@ -56,13 +56,19 @@ function compareForFefo(a: LotForFefo, b: LotForFefo): number {
  * lote tiene remaining > 0, se consume PRIMERO de ahí (el usuario eligió
  * lote a mano) y el resto sigue el orden FEFO normal. Nunca toca lotes con
  * remaining <= 0. Determinista: mismo input, mismo plan.
+ *
+ * H17 (ws1-t6, decisión de Rafael): si viene `hoy` (día de calendario de la
+ * clínica), los lotes CADUCADOS se saltan y no cuentan como disponibles — ni
+ * siquiera el elegido a mano. Sin `hoy` (los usos de reconciliación, que solo
+ * cuadran números) el comportamiento es el de siempre.
  */
 export function planFefoConsumption(
   lots: LotForFefo[],
   qtyNeeded: number,
   preferredLotId?: string | null,
+  hoy?: string | null,
 ): FefoPlan | FefoInsufficient {
-  const usable = lots.filter(l => l.remaining > 0);
+  const usable = lots.filter(l => l.remaining > 0 && !(hoy && isExpired(l.expiresAt, hoy)));
   const totalAvailable = round3(usable.reduce((s, l) => s + l.remaining, 0));
 
   if (qtyNeeded <= 0) return { ok: true, allocations: [] };
@@ -154,4 +160,25 @@ export function estadoDeCaducidad(expiresAt: Date | null, hoy: string, alertDays
   if (isExpired(expiresAt, hoy)) return "caducado";
   if (isExpiringSoon(expiresAt, hoy, alertDaysAhead)) return "por_caducar";
   return "ok";
+}
+
+/** Unidades que quedan en lotes CADUCADOS (con saldo). No son existencias disponibles. */
+export function existenciasCaducadas(lots: LotForFefo[], hoy: string): number {
+  return round3(lots.filter(l => l.remaining > 0 && isExpired(l.expiresAt, hoy)).reduce((s, l) => s + l.remaining, 0));
+}
+
+/** Unidades utilizables hoy: lotes con saldo que NO han caducado. */
+export function existenciasVigentes(lots: LotForFefo[], hoy: string): number {
+  return round3(lots.filter(l => l.remaining > 0 && !isExpired(l.expiresAt, hoy)).reduce((s, l) => s + l.remaining, 0));
+}
+
+/**
+ * ¿La caducidad capturada en una compra («AAAA-MM-DD») ya pasó? Mismo criterio
+ * que `isExpired`: el propio día de caducidad todavía no. Un texto que no es un
+ * día de calendario no cuenta (quien valida el formato es otro).
+ */
+export function caducidadYaPasada(dia: string | null | undefined, hoy: string): boolean {
+  const c = diaUtcEnMs(dia ?? null);
+  const h = diaUtcEnMs(hoy);
+  return c !== null && h !== null && c < h;
 }

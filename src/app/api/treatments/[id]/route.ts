@@ -84,6 +84,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const newNextExpected = new Date(Date.now() + plan.sessionIntervalDays * 24 * 60 * 60 * 1000);
 
     let recetaConsumida: { itemId: string; itemName: string; qtyConsumed: number }[] = [];
+    // H17: materiales sin existencias vigentes (solo caducados). Avisa, no bloquea.
+    const avisosSinVigentes: string[] = [];
+    const manualConsumido = new Map<string, number>();
 
     try {
       // ws1-t6 (arreglo N5, ws1-t10 ronda 4): el timeout por defecto de
@@ -133,11 +136,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             sessionLabel:       `Sesión ${nextNumber} — ${plan.name}`,
           });
           recetaConsumida = consumo;
+          for (const c of consumo) if (c.sinVigentes) avisosSinVigentes.push(c.sinVigentes.mensaje);
         }
 
         for (const it of invItems) {
           const item = dbItems.find(d => d.id === it.id)!;
-          await consumeFefoTx(tx, {
+          const r = await consumeFefoTx(tx, {
             clinicId:           ctx.clinicId,
             itemId:             it.id,
             itemName:           item.name,
@@ -146,6 +150,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             userId:             ctx.userId,
             treatmentSessionId: session.id,
           });
+          if (r.sinVigentes) {
+            avisosSinVigentes.push(r.sinVigentes.mensaje);
+            manualConsumido.set(it.id, r.sinVigentes.consumed);
+          }
         }
 
         await tx.treatmentPlan.update({
@@ -183,8 +191,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       completed:     isCompleted,
       materialesDescontados: [
         ...recetaConsumida,
-        ...invItems.map(i => ({ itemId: i.id, itemName: i.name, qtyConsumed: Number(i.qty) })),
+        ...invItems.map(i => ({ itemId: i.id, itemName: i.name, qtyConsumed: manualConsumido.get(i.id) ?? Number(i.qty) })),
       ],
+      ...(avisosSinVigentes.length > 0 ? { avisosExistencias: avisosSinVigentes } : {}),
     });
   }
 

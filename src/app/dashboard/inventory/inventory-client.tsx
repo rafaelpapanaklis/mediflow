@@ -85,6 +85,10 @@ interface Item {
   unitCost: number;
   /** ws1-t4 — proveedor propio de la clínica, opcional. */
   providerId: string | null;
+  /** H17 (ws1-t6): solo en la vista — unidades en lotes caducados. NO cuentan como existencias. */
+  caducados?: number;
+  /** H17: solo en la vista — el total guardado (vigente + caducado), para la edición directa. */
+  quantityTotal?: number;
 }
 
 /** ws1-t4 — proveedor propio de la clínica (no el Supplier del marketplace). */
@@ -379,16 +383,30 @@ export function InventoryClient({
     } catch { toast.error(t("common.genericError")); }
   }
 
+  // H17 (ws1-t6, decisión de Rafael): lo caducado NO cuenta como existencias
+  // disponibles. `quantity` guardado = vigente + caducado (así lo reconcilian los
+  // lotes); aquí se le resta lo caducado que dicen los avisos (lotes con saldo).
+  // Sin avisos (aún no cargan, o fallaron) no se resta nada.
+  const itemsVista = useMemo<Item[]>(() => {
+    const caducadoPorItem = new Map<string, number>();
+    for (const a of avisos.caducado) caducadoPorItem.set(a.itemId, (caducadoPorItem.get(a.itemId) ?? 0) + Math.max(0, a.remaining));
+    return items.map(i => {
+      const cad = caducadoPorItem.get(i.id) ?? 0;
+      if (cad <= 0) return i;
+      return { ...i, quantity: Math.max(0, i.quantity - Math.round(cad)), quantityTotal: i.quantity, caducados: cad };
+    });
+  }, [items, avisos.caducado]);
+
   const kpis = useMemo(() => {
-    const totalQty    = items.reduce((s, i) => s + i.quantity, 0);
-    const lowCount    = items.filter(i => i.quantity > 0 && i.quantity <= i.minQuantity).length;
-    const outCount    = items.filter(i => i.quantity === 0).length;
+    const totalQty    = itemsVista.reduce((s, i) => s + i.quantity, 0);
+    const lowCount    = itemsVista.filter(i => i.quantity > 0 && i.quantity <= i.minQuantity).length;
+    const outCount    = itemsVista.filter(i => i.quantity === 0).length;
     // ws1-t4: antes era Σ (price ?? 0) × quantity — price nunca se capturaba
     // y el total siempre daba $0. unitCost sí se captura (alta, edición, y
     // la compra lo actualiza al último costo).
-    const totalValue  = items.reduce((s, i) => s + i.unitCost * i.quantity, 0);
+    const totalValue  = itemsVista.reduce((s, i) => s + i.unitCost * i.quantity, 0);
     return { total: items.length, totalQty, lowCount, outCount, totalValue };
-  }, [items]);
+  }, [items, itemsVista]);
 
   // WS1-T5 (ajuste 3) — de qué artículos hablan los avisos de caducidad,
   // para los tabs "Por caducar"/"Caducado" (no son estado de existencias).
@@ -396,7 +414,7 @@ export function InventoryClient({
   const caducadoIds   = useMemo(() => new Set(avisos.caducado.map(a => a.itemId)), [avisos.caducado]);
 
   const filtered = useMemo(() => {
-    return items
+    return itemsVista
       .filter(i => {
         if (tab === "todos") return true;
         if (tab === "por_caducar") return porCaducarIds.has(i.id);
@@ -415,7 +433,7 @@ export function InventoryClient({
         }
         return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
       });
-  }, [items, tab, search, porCaducarIds, caducadoIds]);
+  }, [itemsVista, tab, search, porCaducarIds, caducadoIds]);
 
   async function setQuantityDirect(id: string, qtyStr: string) {
     const qty = parseInt(qtyStr);
@@ -828,7 +846,7 @@ export function InventoryClient({
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setEditQty(prev => ({ ...prev, [item.id]: String(item.quantity) }))}
+                          onClick={() => setEditQty(prev => ({ ...prev, [item.id]: String(item.quantityTotal ?? item.quantity) }))}
                           className={`${inv.cantidad} ${TONO_CANTIDAD[status] ?? ""}`}
                           title={t("procurement.inventoryClient.clickToEdit")}
                         >
@@ -836,6 +854,17 @@ export function InventoryClient({
                           <span className={inv.cantidadUnidad}>{item.unit}</span>
                         </button>
                       )}
+                      {item.caducados ? (
+                        <button
+                          type="button"
+                          onClick={() => setLotesItem(item)}
+                          className={inv.caducidadLinea}
+                          style={{ display: "block", fontSize: 11, marginTop: 2 }}
+                          title="Estas unidades no cuentan como existencias: abre los lotes para darlas de baja"
+                        >
+                          caducados: {item.caducados} · dar de baja
+                        </button>
+                      ) : null}
                     </td>
                     <td className={`${inv.colMinimo} ${inv.num}`} data-rotulo={t("procurement.inventoryClient.colMinimum")}>
                       <input
