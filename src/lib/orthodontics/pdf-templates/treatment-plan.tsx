@@ -1,152 +1,131 @@
-// Orthodontics — PDF "Plan de tratamiento al paciente". A4 vertical, 4 páginas. SPEC §9.1.
+// Ortodoncia — PDF «Plan de tratamiento al paciente». Carta vertical. SPEC §9.1.
+//
+// ws1-t4 (29-sep-2026): salía sin logo, sin datos de la clínica y con el
+// paciente, el doctor y la fecha en un renglón gris de 9 pt (fecha en la zona
+// del servidor). Ahora lleva el membrete y el pie comunes de ortodoncia
+// (`MembreteOrto`/`PieOrto`), el contenido corre seguido en vez de cuatro
+// hojas medio vacías, y cada página dice «Página N de M».
 
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { TreatmentPlanPdfData } from "@/app/actions/orthodontics/exportTreatmentPlanPdf";
 import { techniqueLabel } from "../consent-texts";
 import { PHASE_LABELS } from "../kanban-helpers";
+import { ACENTO_ORTO, GRIS_ORTO, MembreteOrto, PieOrto, estilosPaginaOrto } from "../pdf/membrete-orto";
+import { dinero } from "../pdf/formato";
+
+const DOCUMENTO = "Plan de tratamiento";
 
 const styles = StyleSheet.create({
-  page: { padding: 36, fontSize: 10, fontFamily: "Helvetica", color: "#0F172A" },
-  h1: { fontSize: 18, fontWeight: 700, marginBottom: 8 },
-  h2: { fontSize: 13, fontWeight: 700, marginTop: 14, marginBottom: 6, color: "#334155" },
-  meta: { fontSize: 9, color: "#64748B", marginBottom: 4 },
+  h1: { fontSize: 16, fontFamily: "Helvetica-Bold", marginBottom: 4, lineHeight: 1.2 },
+  h2: {
+    fontSize: 8.5, fontFamily: "Helvetica-Bold", color: ACENTO_ORTO, textTransform: "uppercase",
+    letterSpacing: 0.8, marginTop: 14, marginBottom: 5, lineHeight: 1.2,
+  },
   paragraph: { marginBottom: 6, lineHeight: 1.5 },
-  box: { padding: 10, backgroundColor: "#F1F5F9", borderRadius: 4, marginBottom: 12 },
+  box: { padding: 10, backgroundColor: "#f7f6fb", borderRadius: 4, marginBottom: 8 },
   metric: { flexDirection: "row", marginBottom: 3 },
-  metricLabel: { color: "#475569", width: 200 },
-  metricValue: { color: "#0F172A", fontWeight: 700 },
-  bullet: { marginLeft: 12, marginBottom: 3 },
-  divider: { borderBottomWidth: 1, borderBottomColor: "#CBD5E1", marginVertical: 8 },
+  metricLabel: { color: GRIS_ORTO, width: 170 },
+  metricValue: { flex: 1, fontFamily: "Helvetica-Bold" },
+  bullet: { marginLeft: 6, marginBottom: 3 },
+  nota: { fontSize: 8.5, color: GRIS_ORTO, marginTop: 14, lineHeight: 1.4 },
 });
 
-export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
-  const today = data.generatedAt
-    ? new Date(data.generatedAt).toLocaleDateString("es-MX")
-    : new Date().toLocaleDateString("es-MX");
+const ESTADO_FASE: Record<string, string> = {
+  COMPLETED: "completada",
+  IN_PROGRESS: "en curso",
+  DELAYED: "atrasada",
+};
 
+function Metrica({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
-    <Document>
-      {/* Página 1 — datos + diagnóstico traducido */}
-      <Page size="A4" style={styles.page}>
+    <View style={styles.metric} wrap={false}>
+      <Text style={styles.metricLabel}>{etiqueta}</Text>
+      <Text style={styles.metricValue}>{valor}</Text>
+    </View>
+  );
+}
+
+export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
+  const m = data.membrete;
+  const total = Number(data.plan.totalCostMxn);
+  return (
+    <Document title={`${DOCUMENTO} · ${m.paciente.nombre}`} author={m.clinicName}>
+      <Page size="LETTER" style={estilosPaginaOrto.carta} wrap>
+        <MembreteOrto datos={m} documento={DOCUMENTO} />
+
         <Text style={styles.h1}>Plan de tratamiento ortodóntico</Text>
-        <Text style={styles.meta}>
-          Paciente: {data.patient.firstName} {data.patient.lastName} · Fecha: {today}
-        </Text>
-        <Text style={styles.meta}>
-          Dr./Dra. {data.doctor.firstName} {data.doctor.lastName} · Cédula{" "}
-          {data.doctor.cedulaProfesional ?? "—"}
-        </Text>
-        <Text style={styles.meta}>{data.clinic.name}</Text>
 
-        <View style={styles.box}>
-          <Text style={styles.h2}>Tu diagnóstico</Text>
+        <Text style={styles.h2}>Tu diagnóstico</Text>
+        <View style={styles.box} wrap={false}>
           <Text>
-            Clase Angle derecha: {data.diagnosis.angleClassRight} · izquierda:{" "}
-            {data.diagnosis.angleClassLeft}.
+            Clase de Angle derecha: {data.diagnosis.angleClassRight} · izquierda: {data.diagnosis.angleClassLeft}.
           </Text>
           <Text>
-            Overbite: {data.diagnosis.overbiteMm} mm · Overjet:{" "}
-            {data.diagnosis.overjetMm} mm.
+            Overbite: {data.diagnosis.overbiteMm} mm · Overjet: {data.diagnosis.overjetMm} mm.
           </Text>
         </View>
-        <View style={styles.box}>
-          <Text style={styles.h2}>Resumen clínico</Text>
-          <Text style={styles.paragraph}>{data.diagnosis.clinicalSummary}</Text>
-        </View>
-      </Page>
+        {data.diagnosis.clinicalSummary ? (
+          <>
+            <Text style={styles.h2}>Resumen clínico</Text>
+            <Text style={styles.paragraph}>{data.diagnosis.clinicalSummary}</Text>
+          </>
+        ) : null}
 
-      {/* Página 2 — plan + fases */}
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.h1}>Tu plan de tratamiento</Text>
+        <Text style={styles.h2}>Tu plan de tratamiento</Text>
         <View style={styles.box}>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>Técnica:</Text>
-            <Text style={styles.metricValue}>{techniqueLabel(data.plan.technique as never, data.plan.techniqueName)}</Text>
-          </View>
-          {data.plan.techniqueNotes ? (
-            <View style={styles.metric}>
-              <Text style={styles.metricLabel}>Detalle de técnica:</Text>
-              <Text style={styles.metricValue}>{data.plan.techniqueNotes}</Text>
-            </View>
-          ) : null}
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>Duración estimada:</Text>
-            <Text style={styles.metricValue}>{data.plan.estimatedDurationMonths} meses</Text>
-          </View>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>Anclaje:</Text>
-            <Text style={styles.metricValue}>{data.plan.anchorageType.toLowerCase()}</Text>
-          </View>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>Objetivos:</Text>
-            <Text style={styles.metricValue}>
-              {data.plan.treatmentObjectives.replaceAll("_", " ").toLowerCase()}
-            </Text>
-          </View>
+          <Metrica etiqueta="Técnica" valor={techniqueLabel(data.plan.technique as never, data.plan.techniqueName)} />
+          {data.plan.techniqueNotes ? <Metrica etiqueta="Detalle de técnica" valor={data.plan.techniqueNotes} /> : null}
+          <Metrica etiqueta="Duración estimada" valor={`${data.plan.estimatedDurationMonths} meses`} />
+          <Metrica etiqueta="Anclaje" valor={data.plan.anchorageType.replaceAll("_", " ").toLowerCase()} />
+          <Metrica etiqueta="Objetivos" valor={data.plan.treatmentObjectives.replaceAll("_", " ").toLowerCase()} />
           {data.plan.extractionsRequired ? (
-            <View style={styles.metric}>
-              <Text style={styles.metricLabel}>Extracciones:</Text>
-              <Text style={styles.metricValue}>
-                FDI {data.plan.extractionsTeethFdi.join(", ") || "—"}
-              </Text>
-            </View>
+            <Metrica etiqueta="Extracciones" valor={`FDI ${data.plan.extractionsTeethFdi.join(", ") || "—"}`} />
           ) : null}
         </View>
 
-        <Text style={styles.h2}>Las 6 fases del tratamiento</Text>
-        {data.phases.map((p) => (
-          <View key={p.phaseKey} style={{ ...styles.bullet, flexDirection: "row" }}>
-            <Text style={{ width: 18 }}>{p.orderIndex + 1}.</Text>
-            <Text>
-              {PHASE_LABELS[p.phaseKey as never] ?? p.phaseKey} ·{" "}
-              {p.status === "COMPLETED"
-                ? "completada"
-                : p.status === "IN_PROGRESS"
-                  ? "en curso"
-                  : p.status === "DELAYED"
-                    ? "atrasada"
-                    : "pendiente"}
-            </Text>
-          </View>
-        ))}
-      </Page>
+        {data.phases.length > 0 ? (
+          <>
+            <Text style={styles.h2} minPresenceAhead={40}>Fases del tratamiento</Text>
+            {data.phases.map((p) => (
+              <View key={p.phaseKey} style={{ ...styles.bullet, flexDirection: "row" }} wrap={false}>
+                <Text style={{ width: 18 }}>{p.orderIndex + 1}.</Text>
+                <Text>
+                  {PHASE_LABELS[p.phaseKey as never] ?? p.phaseKey} · {ESTADO_FASE[p.status] ?? "pendiente"}
+                </Text>
+              </View>
+            ))}
+          </>
+        ) : null}
 
-      {/* Página 3 — costos */}
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.h1}>Costos</Text>
-        <View style={styles.box}>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>Costo total del tratamiento:</Text>
-            <Text style={styles.metricValue}>${data.plan.totalCostMxn} MXN</Text>
-          </View>
-          <Text style={styles.paragraph}>
-            El acuerdo financiero detallado (enganche, mensualidades, día de pago,
-            métodos aceptados, cláusulas de retraso y abandono) se firma en
-            documento separado. Solicita una copia a recepción.
+        <Text style={styles.h2} minPresenceAhead={40}>Costo</Text>
+        <View style={styles.box} wrap={false}>
+          <Metrica etiqueta="Costo total del tratamiento" valor={Number.isFinite(total) ? `${dinero(total)} MXN` : "—"} />
+          <Text style={[styles.paragraph, { marginTop: 4, marginBottom: 0 }]}>
+            El detalle de pagos (enganche, mensualidades, fechas y condiciones) va en el convenio de pago, que se firma
+            por separado.
           </Text>
         </View>
-      </Page>
 
-      {/* Página 4 — riesgos + plan retención */}
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.h1}>Lo que necesitas saber</Text>
-        <View style={styles.box}>
-          <Text style={styles.h2}>Plan de retención</Text>
-          <Text style={styles.paragraph}>{data.plan.retentionPlanText}</Text>
-        </View>
-        <View style={styles.box}>
-          <Text style={styles.h2}>Qué esperar mes a mes</Text>
-          <Text style={styles.bullet}>• Cita mensual de control (~30-45 min).</Text>
-          <Text style={styles.bullet}>• Higiene exhaustiva: cepillado 3 veces al día + hilo dental.</Text>
-          <Text style={styles.bullet}>• Si te ponen elásticos: úsalos al menos 22 horas al día.</Text>
-          <Text style={styles.bullet}>
-            • Avisa de inmediato si se rompe un bracket, sale un elástico, o tienes dolor anormal.
-          </Text>
-        </View>
-        <View style={styles.divider} />
-        <Text style={styles.meta}>
+        {data.plan.retentionPlanText ? (
+          <>
+            <Text style={styles.h2} minPresenceAhead={40}>Plan de retención</Text>
+            <Text style={styles.paragraph}>{data.plan.retentionPlanText}</Text>
+          </>
+        ) : null}
+
+        <Text style={styles.h2} minPresenceAhead={60}>Qué esperar mes a mes</Text>
+        <Text style={styles.bullet}>• Cita mensual de control (~30-45 min).</Text>
+        <Text style={styles.bullet}>• Higiene exhaustiva: cepillado 3 veces al día + hilo dental.</Text>
+        <Text style={styles.bullet}>• Si te ponen elásticos: úsalos al menos 22 horas al día.</Text>
+        <Text style={styles.bullet}>
+          • Avisa de inmediato si se rompe un bracket, sale un elástico, o tienes dolor anormal.
+        </Text>
+
+        <Text style={styles.nota}>
           Este documento es informativo. El consentimiento firmado contiene los términos legales completos.
         </Text>
+
+        <PieOrto datos={m} documento={DOCUMENTO} />
       </Page>
     </Document>
   );

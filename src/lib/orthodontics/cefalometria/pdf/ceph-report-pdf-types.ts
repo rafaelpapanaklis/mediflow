@@ -10,6 +10,7 @@
 // `resolveCephPlane`/`availableCephPlanes` (`../plane-lines.ts`).
 
 import type { ClinicLetterheadClinic } from "../../../pdf/clinic-letterhead";
+import type { DatosDelMembreteOrto } from "../../pdf/membrete-orto";
 
 export interface CephReportPoint {
   x: number;
@@ -43,6 +44,12 @@ export interface CephReportRow {
 }
 
 export interface CephReportPdfData extends ClinicLetterheadClinic {
+  /**
+   * ws1-t4: membrete y pie comunes de los PDF de ortodoncia (paciente y doctor
+   * con cédula en la banda, fecha dd/mm/aaaa, «Página N de M»). La ruta lo
+   * añade; sin él el reporte conserva la cabecera de antes.
+   */
+  membrete?: DatosDelMembreteOrto;
   patientName: string;
   patientDobIso: string | null;
   doctorName: string;

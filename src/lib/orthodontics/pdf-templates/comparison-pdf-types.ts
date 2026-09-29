@@ -3,6 +3,7 @@
 // los tipos sin arrastrar @react-pdf/renderer al bundle de la action.
 
 import type { PHOTO_VIEW_ORDER } from "../photo-set-helpers";
+import type { DatosDelMembreteOrto } from "../pdf/membrete-orto";
 
 export interface ComparisonPdfPhotoSet {
   label: string;
@@ -15,6 +16,8 @@ export interface ComparisonPdfPhotoSet {
 }
 
 export interface ComparisonPdfData {
+  /** ws1-t4: membrete común de ortodoncia (logo, clínica, paciente, doctor con cédula, fecha dd/mm/aaaa). */
+  membrete: DatosDelMembreteOrto;
   patientName: string;
   patientDobIso: string | null;
   doctorName: string;

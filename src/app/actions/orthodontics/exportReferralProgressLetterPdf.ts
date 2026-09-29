@@ -12,6 +12,8 @@ import { canViewPatient } from "@/lib/patient-visibility";
 import { z } from "zod";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { cargarMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto-db";
+import type { DatosDelMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto";
 
 const inputSchema = z.object({
   treatmentPlanId: z.string().min(1),
@@ -20,6 +22,8 @@ const inputSchema = z.object({
 
 export interface ReferralProgressLetterPdfData {
   stage: "inicio" | "termino";
+  /** ws1-t4: membrete común de ortodoncia (logo, dirección, teléfono, doctor con cédula, fecha dd/mm/aaaa). */
+  membrete: DatosDelMembreteOrto;
   patient: { firstName: string; lastName: string };
   clinic: { name: string; phone: string | null; email: string | null };
   treatingDoctor: { firstName: string; lastName: string; cedulaProfesional: string | null } | null;
@@ -63,6 +67,7 @@ export async function exportReferralProgressLetterPdf(
             angleClassRight: true,
             angleClassLeft: true,
             clinicalSummary: true,
+            diagnosedById: true,
             referredByDoctor: { select: { fullName: true, clinicName: true } },
           },
         },
@@ -84,10 +89,17 @@ export async function exportReferralProgressLetterPdf(
     return fail("Este caso no tiene registrado quién refirió al paciente (A13)");
   }
 
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: ctx.clinicId },
-    select: { name: true, phone: true, email: true },
-  });
+  const [clinic, membrete] = await Promise.all([
+    prisma.clinic.findUnique({
+      where: { id: ctx.clinicId },
+      select: { name: true, phone: true, email: true },
+    }),
+    cargarMembreteOrto({
+      clinicId: ctx.clinicId,
+      patientId: plan.patientId,
+      doctorId: plan.treatingDoctorId ?? plan.diagnosis.diagnosedById,
+    }),
+  ]);
   if (!clinic) return fail("Clínica no encontrada");
 
   await auditOrtho({
@@ -100,6 +112,7 @@ export async function exportReferralProgressLetterPdf(
 
   return ok({
     stage: parsed.data.stage,
+    membrete,
     patient: plan.patient,
     clinic,
     treatingDoctor: plan.treatingDoctor,

@@ -9,9 +9,17 @@ import { exportTreatmentPlanPdfSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { cargarMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto-db";
+import type { DatosDelMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto";
 
 export type TreatmentPlanPdfData = {
   treatmentPlanId: string;
+  /**
+   * ws1-t4: membrete común de los PDF de ortodoncia (logo, clínica, dirección,
+   * teléfono, RFC, paciente, doctor con cédula, fecha dd/mm/aaaa). Antes esta
+   * action solo pedía `clinic: { name }` y el PDF salía sin nada de eso.
+   */
+  membrete: DatosDelMembreteOrto;
   patient: { firstName: string; lastName: string; dob: Date | null };
   clinic: { name: string };
   doctor: { firstName: string; lastName: string; cedulaProfesional: string | null };
@@ -76,17 +84,19 @@ export async function exportTreatmentPlanPdf(
     return fail("Paciente no encontrado");
   }
 
-  const [clinic, doctor] = await Promise.all([
+  const doctorId = plan.treatingDoctorId ?? plan.diagnosis.diagnosedById;
+  const [clinic, doctor, membrete] = await Promise.all([
     prisma.clinic.findUnique({
       where: { id: ctx.clinicId },
       select: { name: true },
     }),
     prisma.user.findUnique({
-      where: { id: plan.diagnosis.diagnosedById },
+      where: { id: doctorId },
       select: { firstName: true, lastName: true, cedulaProfesional: true },
     }),
+    cargarMembreteOrto({ clinicId: ctx.clinicId, patientId: plan.patientId, doctorId }),
   ]);
-  if (!clinic || !doctor) return fail("Datos de clínica/doctor incompletos");
+  if (!clinic) return fail("Clínica no encontrada");
 
   await auditOrtho({
     ctx,
@@ -99,9 +109,10 @@ export async function exportTreatmentPlanPdf(
   const techniqueName = await cargarNombreDeTecnica(ctx.clinicId, plan.id);
   return ok({
     treatmentPlanId: plan.id,
+    membrete,
     patient: plan.patient,
     clinic,
-    doctor,
+    doctor: doctor ?? { firstName: "", lastName: "", cedulaProfesional: null },
     diagnosis: {
       angleClassRight: plan.diagnosis.angleClassRight,
       angleClassLeft: plan.diagnosis.angleClassLeft,

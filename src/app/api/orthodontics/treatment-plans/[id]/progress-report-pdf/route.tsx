@@ -13,6 +13,10 @@ import { puedeVerExpediente } from "@/lib/orthodontics/permiso-expediente";
 import { ProgressReportPdf } from "@/lib/orthodontics/pdf-templates/progress-report";
 import { PHOTO_VIEW_ORDER, VIEW_TO_COLUMN } from "@/lib/orthodontics/photo-set-helpers";
 import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
+import { cargarMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto-db";
+import { fotosComoDataUrl } from "@/lib/orthodontics/pdf/fotos-pdf";
+import { fechaDMA } from "@/lib/orthodontics/pdf/formato";
+import { nombreDeArchivoPdf } from "@/lib/orthodontics/pdf/nombre-de-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,14 +57,14 @@ export async function GET(
         where: { setType: { in: ["T0", "T2", "T1", "CONTROL"] } },
         orderBy: { capturedAt: "desc" },
         include: {
-          photoFrontal: { select: { id: true } },
-          photoProfile: { select: { id: true } },
-          photoSmile: { select: { id: true } },
-          photoIntraFrontal: { select: { id: true } },
-          photoIntraLateralR: { select: { id: true } },
-          photoIntraLateralL: { select: { id: true } },
-          photoOcclusalUpper: { select: { id: true } },
-          photoOcclusalLower: { select: { id: true } },
+          photoFrontal: { select: { id: true, url: true } },
+          photoProfile: { select: { id: true, url: true } },
+          photoSmile: { select: { id: true, url: true } },
+          photoIntraFrontal: { select: { id: true, url: true } },
+          photoIntraLateralR: { select: { id: true, url: true } },
+          photoIntraLateralL: { select: { id: true, url: true } },
+          photoOcclusalUpper: { select: { id: true, url: true } },
+          photoOcclusalLower: { select: { id: true, url: true } },
         },
       },
       consents: { where: { consentType: "PHOTO_USE" }, select: { id: true } },
@@ -90,30 +94,36 @@ export async function GET(
     );
   }
 
-  const [doctor, clinic] = await Promise.all([
+  const doctorId = plan.treatingDoctorId ?? plan.diagnosis.diagnosedById;
+  const [doctor, clinic, membrete] = await Promise.all([
     prisma.user.findUnique({
-      where: { id: plan.diagnosis.diagnosedById },
+      where: { id: doctorId },
       select: { firstName: true, lastName: true },
     }),
     prisma.clinic.findUnique({
       where: { id: ctx.clinicId },
       select: { name: true },
     }),
+    cargarMembreteOrto({ clinicId: ctx.clinicId, patientId: plan.patientId, doctorId }),
   ]);
 
-  const fmt = (d: Date) => d.toLocaleDateString("es-MX");
-  const resolveUrl = (fileId: string) => `/api/patient-files/${fileId}`;
+  const fmt = (d: Date) => fechaDMA(d, membrete.zonaHoraria);
 
-  const pairs = PHOTO_VIEW_ORDER.map((view) => {
-    const col = VIEW_TO_COLUMN[view] as keyof typeof t0;
-    const beforeFile = t0[col] as { id: string } | null | undefined;
-    const afterFile = after[col] as { id: string } | null | undefined;
-    return {
-      view,
-      beforeUrl: beforeFile?.id ? resolveUrl(beforeFile.id) : null,
-      afterUrl: afterFile?.id ? resolveUrl(afterFile.id) : null,
-    };
-  });
+  // ws1-t4: antes `/api/patient-files/<id>` (relativa) — @react-pdf no la
+  // puede bajar desde el servidor y las 16 casillas salían negras.
+  const columnas = PHOTO_VIEW_ORDER.map((view) => VIEW_TO_COLUMN[view] as keyof typeof t0);
+  const urlDe = (set: typeof t0, col: keyof typeof t0) =>
+    ((set[col] as { url?: string | null } | null | undefined)?.url ?? null);
+  const fotos = await fotosComoDataUrl([
+    ...columnas.map((c) => urlDe(t0, c)),
+    ...columnas.map((c) => urlDe(after, c)),
+  ]);
+
+  const pairs = PHOTO_VIEW_ORDER.map((view, i) => ({
+    view,
+    beforeUrl: fotos[i] ?? null,
+    afterUrl: fotos[columnas.length + i] ?? null,
+  }));
 
   const durationMonths = plan.installedAt
     ? Math.max(0, differenceInMonths(new Date(), plan.installedAt))
@@ -122,6 +132,7 @@ export async function GET(
   const buffer = await renderToBuffer(
     <ProgressReportPdf
       data={{
+        membrete,
         patientName: `${plan.patient.firstName} ${plan.patient.lastName}`.trim(),
         doctorName: doctor ? `${doctor.firstName} ${doctor.lastName}` : "—",
         clinicName: clinic?.name ?? "Clínica",
@@ -140,7 +151,8 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="progress-report-${params.id}.pdf"`,
+      "Content-Disposition": `inline; filename="${nombreDeArchivoPdf("reporte-de-progreso", membrete.paciente.nombre)}"`,
+      "Cache-Control": "private, no-store",
     },
   });
 }

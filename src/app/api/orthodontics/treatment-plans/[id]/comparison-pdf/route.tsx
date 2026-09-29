@@ -5,6 +5,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { exportComparisonPdf } from "@/app/actions/orthodontics/exportComparisonPdf";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { ComparisonPdf } from "@/lib/orthodontics/pdf-templates/comparison-pdf";
+import { nombreDeArchivoPdf } from "@/lib/orthodontics/pdf/nombre-de-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,8 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="ortodoncia-progreso-${params.id}.pdf"`,
+      "Content-Disposition": `inline; filename="${nombreDeArchivoPdf("antes-y-despues", result.data.membrete.paciente.nombre)}"`,
+      "Cache-Control": "private, no-store",
     },
   });
 }

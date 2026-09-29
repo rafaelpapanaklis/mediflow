@@ -33,6 +33,7 @@ import { MAX_PLANTILLA, PLANTILLAS_ORTO, motivoDeRechazoDePlantillas } from "@/l
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { mensajeDeQuitar, separarActivosYQuitados, textoConfirmarQuitar } from "@/lib/procedures/quitar-procedimiento";
 import { TecnicasYPrecios } from "./TecnicasYPrecios";
+import { CondicionesDelConvenio } from "./CondicionesDelConvenio";
 import type { TecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 
 export interface OrthoConfiguracionClientProps {
@@ -508,6 +509,10 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
             </div>
           </div>
         </Tarjeta>
+
+        <div style={{ gridColumn: "1 / -1" }}>
+          <CondicionesDelConvenio />
+        </div>
 
         <div style={{ gridColumn: "1 / -1" }}>
           <Tarjeta

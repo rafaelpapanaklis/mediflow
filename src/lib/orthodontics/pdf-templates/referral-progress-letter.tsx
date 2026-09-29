@@ -1,18 +1,19 @@
 // Orthodontics — Ola 1 (ws1-t6), A13: carta de avance al doctor que refirió
-// al paciente. Una página, A4. Mismo estilo (StyleSheet, tipografía) que
-// treatment-plan.tsx — no reinventa el look de los PDFs de ortodoncia.
+// al paciente. Carta vertical.
+//
+// ws1-t4 (29-sep-2026): el encabezado era el nombre de la clínica en texto y
+// un renglón con teléfono/correo, sin logo ni dirección; la fecha salía en la
+// zona del servidor. Ahora lleva el membrete y el pie comunes de ortodoncia.
 
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { ReferralProgressLetterPdfData } from "@/app/actions/orthodontics/exportReferralProgressLetterPdf";
 import { techniqueLabel } from "../consent-texts";
+import { MembreteOrto, PieOrto, estilosPaginaOrto } from "../pdf/membrete-orto";
+
+const DOCUMENTO = "Carta de avance";
 
 const styles = StyleSheet.create({
-  page: { padding: 48, fontSize: 10.5, fontFamily: "Helvetica", color: "#0F172A" },
-  header: { marginBottom: 24 },
-  clinicName: { fontSize: 13, fontWeight: 700 },
-  clinicMeta: { fontSize: 9, color: "#64748B", marginTop: 2 },
-  date: { fontSize: 9, color: "#64748B", marginTop: 12 },
-  salutation: { marginTop: 18, marginBottom: 10, fontSize: 11 },
+  salutation: { marginTop: 4, marginBottom: 10, fontSize: 11 },
   paragraph: { marginBottom: 10, lineHeight: 1.6 },
   box: { padding: 12, backgroundColor: "#F1F5F9", borderRadius: 4, marginVertical: 12 },
   metric: { flexDirection: "row", marginBottom: 3 },
@@ -20,15 +21,10 @@ const styles = StyleSheet.create({
   metricValue: { color: "#0F172A", fontWeight: 700 },
   signature: { marginTop: 36 },
   signatureLine: { borderBottomWidth: 1, borderBottomColor: "#94A3B8", width: 220, marginBottom: 4 },
-  footer: { position: "absolute", bottom: 32, left: 48, right: 48, fontSize: 8, color: "#94A3B8" },
 });
 
 export function ReferralProgressLetterPdf({ data }: { data: ReferralProgressLetterPdfData }) {
-  const today = new Date(data.generatedAt).toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+  const m = data.membrete;
   const doctorName = data.treatingDoctor
     ? `Dr./Dra. ${data.treatingDoctor.firstName} ${data.treatingDoctor.lastName}`
     : "El equipo tratante";
@@ -36,15 +32,9 @@ export function ReferralProgressLetterPdf({ data }: { data: ReferralProgressLett
   const isInicio = data.stage === "inicio";
 
   return (
-    <Document>
-      <Page size="A4" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.clinicName}>{data.clinic.name}</Text>
-          <Text style={styles.clinicMeta}>
-            {[data.clinic.phone, data.clinic.email].filter(Boolean).join(" · ") || "—"}
-          </Text>
-          <Text style={styles.date}>{today}</Text>
-        </View>
+    <Document title={`${DOCUMENTO} · ${m.paciente.nombre}`} author={m.clinicName}>
+      <Page size="LETTER" style={estilosPaginaOrto.carta} wrap>
+        <MembreteOrto datos={m} documento={DOCUMENTO} />
 
         <Text style={styles.salutation}>
           Estimado/a {data.referredByDoctor.fullName}
@@ -107,9 +97,11 @@ export function ReferralProgressLetterPdf({ data }: { data: ReferralProgressLett
           <Text style={{ fontSize: 9, color: "#64748B" }}>{data.clinic.name}</Text>
         </View>
 
-        <Text style={styles.footer}>
-          Documento generado por DaleControl. No sustituye el expediente clínico completo del paciente.
+        <Text style={{ fontSize: 8, color: "#9b9aa8", marginTop: 18 }}>
+          No sustituye el expediente clínico completo del paciente.
         </Text>
+
+        <PieOrto datos={m} documento={DOCUMENTO} />
       </Page>
     </Document>
   );

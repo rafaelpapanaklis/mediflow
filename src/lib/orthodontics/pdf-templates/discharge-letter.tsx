@@ -1,13 +1,26 @@
 // H66: «carta de alta» — lo que se entrega al paciente al terminar el
 // tratamiento activo: qué se hizo, cuánto duró y qué sigue (retención y
 // revisiones). Texto factual, sin prometer resultados.
+//
+// ws1-t4 (29-sep-2026): membrete y pie comunes de ortodoncia (`MembreteOrto`,
+// `PieOrto`) — paciente y doctor con cédula en la banda, fechas dd/mm/aaaa en
+// la zona de la clínica y «Página N de M».
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import { ClinicLetterhead, type ClinicLetterheadClinic } from "@/lib/pdf/clinic-letterhead";
+import {
+  ACENTO_ORTO,
+  GRIS_ORTO,
+  MembreteOrto,
+  PieOrto,
+  TINTA_ORTO,
+  estilosPaginaOrto,
+  type DatosDelMembreteOrto,
+} from "../pdf/membrete-orto";
+import { fechaDMA } from "../pdf/formato";
 
-export interface DischargeLetterProps extends ClinicLetterheadClinic {
-  patientName: string;
-  doctorName: string;
-  doctorCedula: string | null;
+const DOCUMENTO = "Carta de alta";
+
+export interface DischargeLetterProps {
+  membrete: DatosDelMembreteOrto;
   techniqueLabel: string;
   startDate: string | null;
   endDate: string | null;
@@ -15,41 +28,32 @@ export interface DischargeLetterProps extends ClinicLetterheadClinic {
   retentionPlanText: string | null;
   /** Revisiones de retención ya programadas: `{ meses, fecha }`. */
   revisiones: Array<{ meses: number; fecha: string | null }>;
-  generatedAt: string;
 }
 
-const ACCENT = "#7c3aed";
 const styles = StyleSheet.create({
-  page: { padding: 40, paddingBottom: 64, fontFamily: "Helvetica", fontSize: 10.5, color: "#14101f", lineHeight: 1.5 },
-  title: { fontSize: 15, fontFamily: "Helvetica-Bold", marginTop: 6, marginBottom: 10 },
-  p: { marginBottom: 8 },
-  h: { fontSize: 11, color: ACCENT, fontFamily: "Helvetica-Bold", marginTop: 10, marginBottom: 4 },
+  title: { fontSize: 15, fontFamily: "Helvetica-Bold", marginTop: 2, marginBottom: 10 },
+  p: { marginBottom: 8, lineHeight: 1.5 },
+  h: { fontSize: 11, color: ACENTO_ORTO, fontFamily: "Helvetica-Bold", marginTop: 10, marginBottom: 4 },
   li: { marginBottom: 2 },
-  signature: { marginTop: 40, borderTopWidth: 0.5, borderTopColor: "#14101f", paddingTop: 6, width: 240 },
-  small: { fontSize: 9, color: "#6b6b78" },
+  signature: { marginTop: 48, borderTopWidth: 0.8, borderTopColor: TINTA_ORTO, paddingTop: 6, width: 240 },
+  small: { fontSize: 9, color: GRIS_ORTO },
 });
 
-export function fechaLarga(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? "—"
-    : d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
-}
-
 export function DischargeLetterPdf(props: DischargeLetterProps) {
+  const m = props.membrete;
+  const f = (iso: string | null) => fechaDMA(iso, m.zonaHoraria);
   return (
-    <Document>
-      <Page size="LETTER" style={styles.page} wrap>
-        <ClinicLetterhead {...props} accent={ACCENT} subtitle="Carta de alta de ortodoncia" right={<Text style={styles.small}>{fechaLarga(props.generatedAt)}</Text>} />
+    <Document title={`${DOCUMENTO} · ${m.paciente.nombre}`} author={m.clinicName}>
+      <Page size="LETTER" style={estilosPaginaOrto.carta} wrap>
+        <MembreteOrto datos={m} documento={DOCUMENTO} />
         <Text style={styles.title}>Carta de alta del tratamiento de ortodoncia</Text>
         <Text style={styles.p}>
-          Por medio de la presente se hace constar que {props.patientName} concluyó la fase activa de su tratamiento de
-          ortodoncia ({props.techniqueLabel}) en {props.clinicName}.
+          Por medio de la presente se hace constar que {m.paciente.nombre} concluyó la fase activa de su tratamiento de
+          ortodoncia ({props.techniqueLabel}) en {m.clinicName}.
         </Text>
         <Text style={styles.h}>Resumen del tratamiento</Text>
-        <Text style={styles.li}>• Inicio: {fechaLarga(props.startDate)}</Text>
-        <Text style={styles.li}>• Retiro de la aparatología: {fechaLarga(props.endDate)}</Text>
+        <Text style={styles.li}>• Inicio: {f(props.startDate)}</Text>
+        <Text style={styles.li}>• Retiro de la aparatología: {f(props.endDate)}</Text>
         <Text style={styles.li}>
           • Duración: {props.durationMonths !== null ? `${props.durationMonths} meses` : "—"}
         </Text>
@@ -63,7 +67,7 @@ export function DischargeLetterPdf(props: DischargeLetterProps) {
             <Text style={styles.h}>Revisiones de retención</Text>
             {props.revisiones.map((r) => (
               <Text key={r.meses} style={styles.li}>
-                • A los {r.meses} meses: {fechaLarga(r.fecha)}
+                • A los {r.meses} meses: {f(r.fecha)}
               </Text>
             ))}
           </>
@@ -72,10 +76,12 @@ export function DischargeLetterPdf(props: DischargeLetterProps) {
           Si un retenedor se rompe, se pierde o deja de ajustar, avisa a la clínica cuanto antes; no esperes a tu
           siguiente revisión.
         </Text>
-        <View style={styles.signature}>
-          <Text style={{ fontFamily: "Helvetica-Bold" }}>{props.doctorName}</Text>
-          {props.doctorCedula ? <Text style={styles.small}>Cédula profesional: {props.doctorCedula}</Text> : null}
+        <View style={styles.signature} wrap={false}>
+          <Text style={{ fontFamily: "Helvetica-Bold" }}>{m.doctor?.nombre || m.clinicName}</Text>
+          {m.doctor?.cedula ? <Text style={styles.small}>Cédula profesional: {m.doctor.cedula}</Text> : null}
+          <Text style={styles.small}>{[m.lugar, f(m.emitidoEl)].filter(Boolean).join(", a ")}</Text>
         </View>
+        <PieOrto datos={m} documento={DOCUMENTO} />
       </Page>
     </Document>
   );

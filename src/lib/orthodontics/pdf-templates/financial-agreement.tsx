@@ -1,163 +1,152 @@
-// Orthodontics — PDF "Acuerdo financiero" firmable. A4 vertical. SPEC §9.2.
+// Ortodoncia — PDF «Convenio de pago» (ws1-t4, 29-sep-2026). Carta vertical.
+//
+// Antes: el botón «Imprimir convenio» del cobro del caso abría una ventana
+// about:blank con HTML plano (sin logo, sin clínica, sin doctor, fechas sin
+// año) y esta plantilla —la del acuerdo financiero del sistema viejo— leía
+// OrthoPaymentPlan e imprimía cláusulas inventadas (30 días de tolerancia,
+// 5% de recargo…). Ahora es UN documento, el mismo para descargar y para
+// imprimir: membrete común de ortodoncia, datos del caso, resumen económico
+// y calendario leídos de la factura del tratamiento (lo mismo que enseña la
+// pantalla), las condiciones que la clínica configuró y las firmas.
+// Los datos los arma `armarConvenio` (lib/orthodontics/pdf/convenio.ts).
 
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import type { FinancialAgreementPdfData } from "@/app/actions/orthodontics/exportFinancialAgreementPdf";
-import { techniqueLabel } from "../consent-texts";
+import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import {
+  ACENTO_ORTO,
+  GRIS_ORTO,
+  MembreteOrto,
+  PieOrto,
+  TINTA_ORTO,
+  estilosPaginaOrto,
+} from "../pdf/membrete-orto";
+import type { ConvenioPdfData, Renglon } from "../pdf/convenio";
 
-const styles = StyleSheet.create({
-  page: { padding: 36, fontSize: 10, fontFamily: "Helvetica", color: "#0F172A" },
-  h1: { fontSize: 16, fontWeight: 700, marginBottom: 8 },
-  h2: { fontSize: 11, fontWeight: 700, marginTop: 12, marginBottom: 4, textTransform: "uppercase" },
-  meta: { fontSize: 9, color: "#475569", marginBottom: 4 },
-  paragraph: { marginBottom: 6, lineHeight: 1.5 },
-  metric: { flexDirection: "row", marginBottom: 3 },
-  metricLabel: { color: "#475569", width: 200 },
-  metricValue: { color: "#0F172A", fontWeight: 700 },
-  tableHeader: {
-    flexDirection: "row",
-    backgroundColor: "#F1F5F9",
-    padding: "4 6",
-    fontSize: 9,
-    fontWeight: 700,
+const s = StyleSheet.create({
+  titulo: { fontSize: 16, fontFamily: "Helvetica-Bold", lineHeight: 1.2, marginBottom: 2 },
+  intro: { fontSize: 9.5, color: GRIS_ORTO, marginBottom: 12, lineHeight: 1.4 },
+  h2: {
+    fontSize: 8.5, fontFamily: "Helvetica-Bold", color: ACENTO_ORTO, textTransform: "uppercase",
+    letterSpacing: 0.8, marginTop: 12, marginBottom: 5, lineHeight: 1.2,
   },
-  tableRow: {
-    flexDirection: "row",
-    padding: "3 6",
-    fontSize: 9,
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#CBD5E1",
-  },
-  signature: { marginTop: 28, paddingTop: 28, borderTopWidth: 1, borderTopColor: "#94A3B8" },
+  dosCol: { flexDirection: "row", gap: 24 },
+  col: { flex: 1 },
+  renglon: { flexDirection: "row", paddingVertical: 2.5, borderBottomWidth: 0.5, borderBottomColor: "#eeeef3" },
+  rEtiqueta: { width: "46%", fontSize: 9, color: GRIS_ORTO },
+  rValor: { flex: 1, fontSize: 9.5, color: TINTA_ORTO },
+  rValorDestacado: { flex: 1, fontSize: 10.5, fontFamily: "Helvetica-Bold", color: TINTA_ORTO },
+  respNombre: { fontSize: 11, fontFamily: "Helvetica-Bold", lineHeight: 1.25 },
+  respRel: { fontSize: 9, color: GRIS_ORTO, marginBottom: 3 },
+  tabla: { borderWidth: 0.5, borderColor: "#dcdce4", borderRadius: 3 },
+  thFila: { flexDirection: "row", backgroundColor: "#f4f2f8", paddingVertical: 4, paddingHorizontal: 6 },
+  th: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: GRIS_ORTO, textTransform: "uppercase", letterSpacing: 0.5 },
+  tdFila: { flexDirection: "row", paddingVertical: 3.5, paddingHorizontal: 6, borderTopWidth: 0.5, borderTopColor: "#eeeef3" },
+  td: { fontSize: 9, color: TINTA_ORTO },
+  cConcepto: { width: "38%" },
+  cVence: { width: "18%" },
+  cImporte: { width: "16%", textAlign: "right" },
+  cEstado: { width: "28%", paddingLeft: 10 },
+  vacio: { fontSize: 9, color: GRIS_ORTO, fontStyle: "italic" },
+  clausula: { flexDirection: "row", marginBottom: 3 },
+  clausulaNum: { width: 16, fontSize: 9.5 },
+  clausulaTexto: { flex: 1, fontSize: 9.5, lineHeight: 1.45 },
+  lugar: { fontSize: 9.5, marginTop: 16 },
+  firmas: { flexDirection: "row", gap: 36, marginTop: 44 },
+  firma: { flex: 1, borderTopWidth: 0.8, borderTopColor: TINTA_ORTO, paddingTop: 5 },
+  firmaRol: { fontSize: 7.5, color: GRIS_ORTO, textTransform: "uppercase", letterSpacing: 0.8 },
+  firmaNombre: { fontSize: 10.5, fontFamily: "Helvetica-Bold", marginTop: 2 },
+  firmaDetalle: { fontSize: 8.5, color: GRIS_ORTO, marginTop: 1 },
 });
 
-export function FinancialAgreementPdf({ data }: { data: FinancialAgreementPdfData }) {
-  const today = new Date(data.generatedAt).toLocaleDateString("es-MX");
+const TONO: Record<string, string> = { pagada: "#15803d", vencida: "#b91c1c", porVencer: TINTA_ORTO };
 
+function Renglones({ filas }: { filas: Renglon[] }) {
   return (
-    <Document>
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.h1}>Acuerdo financiero — tratamiento ortodóntico</Text>
-        <Text style={styles.meta}>
-          Generado el {today} · {data.clinic.name}
+    <View>
+      {filas.map((r) => (
+        <View key={r.etiqueta} style={s.renglon} wrap={false}>
+          <Text style={s.rEtiqueta}>{r.etiqueta}</Text>
+          <Text style={r.destacado ? s.rValorDestacado : s.rValor}>{r.valor}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+export function FinancialAgreementPdf({ data }: { data: ConvenioPdfData }) {
+  const m = data.membrete;
+  const r = data.responsable;
+  return (
+    <Document title={`${data.documento} · ${m.paciente.nombre}`} author={m.clinicName}>
+      <Page size="LETTER" style={estilosPaginaOrto.carta} wrap>
+        <MembreteOrto datos={m} documento={data.documento} folio={data.folio} />
+
+        <Text style={s.titulo}>Convenio de pago del tratamiento de ortodoncia</Text>
+        <Text style={s.intro}>
+          Acuerdo entre {m.clinicName} y {r.esElPaciente ? "el paciente" : "el responsable del pago"} sobre el costo y la
+          forma de pago del tratamiento de {m.paciente.nombre}
+          {data.pacienteEsMenor ? " (menor de edad)" : ""}.
         </Text>
 
-        <Text style={styles.h2}>Datos del paciente</Text>
-        <Text style={styles.paragraph}>
-          {data.patient.firstName} {data.patient.lastName}
-        </Text>
-
-        <Text style={styles.h2}>Tratamiento autorizado</Text>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Técnica:</Text>
-          <Text style={styles.metricValue}>
-            {techniqueLabel(data.technique as never, data.techniqueName)}
-          </Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Duración estimada:</Text>
-          <Text style={styles.metricValue}>{data.estimatedDurationMonths} meses</Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Costo total:</Text>
-          <Text style={styles.metricValue}>$ {data.totalAmount} M.N.</Text>
+        <View style={s.dosCol}>
+          <View style={s.col}>
+            <Text style={s.h2}>Responsable del pago</Text>
+            <Text style={s.respNombre}>{r.nombre}</Text>
+            <Text style={s.respRel}>{r.esElPaciente ? "El propio paciente" : r.relacion || "Responsable"}</Text>
+            {data.responsableRenglones.length > 0 ? <Renglones filas={data.responsableRenglones} /> : null}
+          </View>
+          <View style={s.col}>
+            <Text style={s.h2}>Tratamiento</Text>
+            <Renglones filas={data.tratamiento} />
+          </View>
         </View>
 
-        <Text style={styles.h2}>Estructura de pago</Text>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Enganche:</Text>
-          <Text style={styles.metricValue}>$ {data.initialDownPayment} M.N.</Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Mensualidades:</Text>
-          <Text style={styles.metricValue}>
-            {data.installmentCount} × $ {data.installmentAmount} M.N.
-          </Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Día de pago:</Text>
-          <Text style={styles.metricValue}>día {data.paymentDayOfMonth} de cada mes</Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Inicio:</Text>
-          <Text style={styles.metricValue}>
-            {new Date(data.startDate).toLocaleDateString("es-MX")}
-          </Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Fin:</Text>
-          <Text style={styles.metricValue}>
-            {new Date(data.endDate).toLocaleDateString("es-MX")}
-          </Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Método preferente:</Text>
-          <Text style={styles.metricValue}>{data.preferredPaymentMethod.replaceAll("_", " ").toLowerCase()}</Text>
-        </View>
+        <Text style={s.h2}>Resumen económico</Text>
+        <Renglones filas={data.resumen} />
 
-        <Text style={styles.h2}>Calendario de mensualidades</Text>
-        <View style={styles.tableHeader}>
-          <Text style={{ width: 30 }}>#</Text>
-          <Text style={{ width: 110 }}>Vence</Text>
-          <Text style={{ width: 80, textAlign: "right" }}>Monto</Text>
-          <Text style={{ flex: 1 }}>Status</Text>
-        </View>
-        {data.installments.map((i) => (
-          <View key={i.installmentNumber} style={styles.tableRow}>
-            <Text style={{ width: 30 }}>{i.installmentNumber}</Text>
-            <Text style={{ width: 110 }}>
-              {new Date(i.dueDate).toLocaleDateString("es-MX")}
-            </Text>
-            <Text style={{ width: 80, textAlign: "right" }}>$ {i.amount}</Text>
-            <Text style={{ flex: 1 }}>{i.status.toLowerCase()}</Text>
+        <Text style={s.h2} minPresenceAhead={60}>{data.tituloCalendario}</Text>
+        {data.calendario.length === 0 ? (
+          <Text style={s.vacio}>{data.calendarioVacio}</Text>
+        ) : (
+          <View style={s.tabla}>
+            <View style={s.thFila} fixed>
+              <Text style={[s.th, s.cConcepto]}>Concepto</Text>
+              <Text style={[s.th, s.cVence]}>Vence</Text>
+              <Text style={[s.th, s.cImporte]}>Importe</Text>
+              <Text style={[s.th, s.cEstado]}>Estado</Text>
+            </View>
+            {data.calendario.map((f, i) => (
+              <View key={i} style={s.tdFila} wrap={false}>
+                <Text style={[s.td, s.cConcepto]}>{f.concepto}</Text>
+                <Text style={[s.td, s.cVence]}>{f.vence}</Text>
+                <Text style={[s.td, s.cImporte]}>{f.importe}</Text>
+                <Text style={[s.td, s.cEstado, { color: TONO[f.tono] ?? TINTA_ORTO }]}>{f.estado}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <Text style={s.h2} minPresenceAhead={50}>Condiciones</Text>
+        {[...data.clausulas, ...data.politica].map((c, i) => (
+          <View key={i} style={s.clausula} wrap={false}>
+            <Text style={s.clausulaNum}>{i + 1}.</Text>
+            <Text style={s.clausulaTexto}>{c}</Text>
           </View>
         ))}
-      </Page>
 
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.h2}>Cláusulas financieras</Text>
-        <Text style={styles.paragraph}>
-          1. La Clínica acepta hasta 30 días naturales de tolerancia sin penalización.
-        </Text>
-        <Text style={styles.paragraph}>
-          2. Retraso mayor a 30 días autoriza a la Clínica a suspender citas de
-          control hasta regularización. La suspensión NO modifica vencimientos
-          subsecuentes.
-        </Text>
-        <Text style={styles.paragraph}>
-          3. Tres o más mensualidades vencidas no regularizadas activan las
-          cláusulas de abandono.
-        </Text>
-        <Text style={styles.paragraph}>
-          4. Cualquier modificación al calendario requiere acuerdo escrito separado.
-        </Text>
-        <Text style={styles.paragraph}>
-          5. Si el paciente abandona unilateralmente, no procede reembolso del
-          enganche ni de mensualidades pagadas. Las mensualidades vencidas hasta
-          el abandono son exigibles.
-        </Text>
-        <Text style={styles.paragraph}>
-          6. La Clínica expedirá CFDI por cada pago.
-        </Text>
-        <Text style={styles.paragraph}>
-          7. El tratamiento de datos se rige por LFPDPPP y el aviso de privacidad de la Clínica.
-        </Text>
-
-        <View style={styles.signature}>
-          <Text style={{ fontSize: 9 }}>
-            _________________________________________________
-          </Text>
-          <Text style={{ fontSize: 9 }}>
-            {data.patient.firstName} {data.patient.lastName}
-          </Text>
-          <Text style={{ fontSize: 9 }}>(Paciente o responsable financiero)</Text>
+        <View wrap={false}>
+          <Text style={s.lugar}>{data.lugarYFecha}</Text>
+          <View style={s.firmas}>
+            {data.firmas.map((f) => (
+              <View key={f.rol} style={s.firma}>
+                <Text style={s.firmaRol}>{f.rol}</Text>
+                <Text style={s.firmaNombre}>{f.nombre}</Text>
+                {f.detalle ? <Text style={s.firmaDetalle}>{f.detalle}</Text> : null}
+              </View>
+            ))}
+          </View>
         </View>
 
-        <View style={styles.signature}>
-          <Text style={{ fontSize: 9 }}>
-            _________________________________________________
-          </Text>
-          <Text style={{ fontSize: 9 }}>Por {data.clinic.name}</Text>
-        </View>
+        <PieOrto datos={m} documento={data.documento} />
       </Page>
     </Document>
   );

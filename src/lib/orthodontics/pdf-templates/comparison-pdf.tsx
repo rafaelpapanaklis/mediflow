@@ -2,6 +2,10 @@
 // libro de progreso. Pensado para mostrar al paciente o como entrega
 // final del tratamiento. Distinto del progress-report.tsx existente
 // (ese es 1 página landscape T0 vs T2 lado a lado).
+//
+// ws1-t4 (29-sep-2026): membrete y pie comunes de ortodoncia en vez de la
+// portada oscura sin logo; las fotos llegan ya bajadas como data URL (antes
+// se le pasaba la ruta cruda del bucket privado y salían casillas negras).
 
 import {
   Document,
@@ -16,38 +20,23 @@ import type {
   ComparisonPdfPhotoSet,
   ComparisonPdfData,
 } from "./comparison-pdf-types";
+import { MembreteOrto, PieOrto, estilosPaginaOrto } from "../pdf/membrete-orto";
 
 export type { ComparisonPdfPhotoSet, ComparisonPdfData };
 
+const DOCUMENTO = "Antes y después";
+
 const styles = StyleSheet.create({
-  page: {
-    padding: 28,
-    fontSize: 10,
-    fontFamily: "Helvetica",
-    color: "#0F172A",
-  },
-  cover: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 60,
-    backgroundColor: "#0F172A",
-    color: "white",
-    borderRadius: 12,
-  },
-  coverTitle: { fontSize: 32, color: "white", fontWeight: 700, marginBottom: 12 },
-  coverSub: { fontSize: 14, color: "#cbd5e1", textAlign: "center", marginBottom: 8 },
-  coverSmall: { fontSize: 10, color: "#94a3b8", marginTop: 24 },
   watermark: {
     position: "absolute",
     top: 12,
-    right: 24,
+    right: 40,
     fontSize: 9,
     color: "#EF4444",
     fontWeight: 700,
   },
-  h1: { fontSize: 18, fontWeight: 700, marginBottom: 6, color: "#0F172A" },
-  h2: { fontSize: 14, fontWeight: 700, marginBottom: 6, color: "#1e40af" },
+  h1: { fontSize: 16, fontFamily: "Helvetica-Bold", marginBottom: 6, color: "#14101f" },
+  h2: { fontSize: 12, fontFamily: "Helvetica-Bold", marginTop: 4, marginBottom: 6, color: "#7c3aed" },
   meta: { fontSize: 10, color: "#475569", marginBottom: 4 },
   body: { fontSize: 10, color: "#0F172A", marginBottom: 6, lineHeight: 1.5 },
   section: { marginVertical: 12 },
@@ -71,26 +60,7 @@ const styles = StyleSheet.create({
   twoCol: { flexDirection: "row", gap: 12 },
   col: { flex: 1 },
   setCaption: { fontSize: 11, fontWeight: 700, marginBottom: 4, color: "#0F172A" },
-  footer: {
-    position: "absolute",
-    bottom: 18,
-    left: 28,
-    right: 28,
-    fontSize: 8,
-    color: "#94a3b8",
-    textAlign: "center",
-    borderTopWidth: 0.5,
-    borderTopColor: "#CBD5E1",
-    paddingTop: 6,
-  },
 });
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
-}
 
 function PhotoGrid({ set }: { set: ComparisonPdfPhotoSet }) {
   const rows: Array<typeof PHOTO_VIEW_ORDER[number][]> = [
@@ -125,81 +95,45 @@ function PhotoGrid({ set }: { set: ComparisonPdfPhotoSet }) {
 }
 
 export function ComparisonPdf({ data }: { data: ComparisonPdfData }) {
+  const m = data.membrete;
+  const marca = !data.hasPhotoUseConsent ? <Text style={styles.watermark} fixed>Uso clínico — confidencial</Text> : null;
+  const pie = <PieOrto datos={m} documento={DOCUMENTO} />;
   return (
-    <Document>
-      {/* Página 1 — portada */}
-      <Page size="LETTER" style={styles.page}>
-        <View style={styles.cover}>
-          <Text style={styles.coverTitle}>Mi tratamiento ortodóntico</Text>
-          <Text style={styles.coverSub}>{data.patientName}</Text>
-          <Text style={styles.coverSub}>
-            {data.clinicName} · Dr./Dra. {data.doctorName}
-          </Text>
-          <Text style={styles.coverSmall}>
-            {data.techniqueLabel} · {data.durationMonthsActual} meses · generado{" "}
-            {fmtDate(data.generatedAtIso)}
-          </Text>
-        </View>
-      </Page>
-
-      {/* Página 2 — datos del paciente + diagnóstico inicial */}
-      <Page size="LETTER" style={styles.page}>
-        {!data.hasPhotoUseConsent ? (
-          <Text style={styles.watermark}>Uso clínico — confidencial</Text>
-        ) : null}
-        <Text style={styles.h1}>Datos del paciente</Text>
-        <Text style={styles.meta}>Nombre: {data.patientName}</Text>
-        {data.patientDobIso ? (
-          <Text style={styles.meta}>
-            Fecha de nacimiento: {fmtDate(data.patientDobIso)}
-          </Text>
-        ) : null}
+    <Document title={`${DOCUMENTO} · ${m.paciente.nombre}`} author={m.clinicName}>
+      {/* Página 1 — membrete, datos del caso y diagnóstico inicial. ws1-t4:
+          antes era una portada oscura sin logo ni dirección, y los datos del
+          paciente y del doctor iban en renglones grises sueltos. */}
+      <Page size="LETTER" style={estilosPaginaOrto.carta}>
+        {marca}
+        <MembreteOrto datos={m} documento={DOCUMENTO} />
+        <Text style={styles.h1}>Mi tratamiento ortodóntico</Text>
         <Text style={styles.meta}>
-          Doctor tratante: {data.doctorName}
-          {data.doctorCedula ? ` · cédula ${data.doctorCedula}` : ""}
-        </Text>
-        <Text style={styles.meta}>Clínica: {data.clinicName}</Text>
-
-        <View style={styles.divider} />
-
-        <Text style={styles.h1}>Diagnóstico ortodóntico inicial</Text>
-        <Text style={styles.body}>{data.diagnosisSummary}</Text>
-
-        <View style={styles.divider} />
-
-        <Text style={styles.h1}>Plan inicial</Text>
-        <Text style={styles.meta}>Técnica: {data.techniqueLabel}</Text>
-        <Text style={styles.meta}>
-          Duración estimada: {data.estimatedDurationMonths} meses · real:{" "}
+          {data.techniqueLabel} · duración estimada {data.estimatedDurationMonths} meses · real{" "}
           {data.durationMonthsActual} meses
         </Text>
 
-        <Text style={styles.footer} fixed>
-          Generado en DaleControl el {fmtDate(data.generatedAtIso)}
-        </Text>
+        <View style={styles.divider} />
+
+        <Text style={styles.h2}>Diagnóstico ortodóntico inicial</Text>
+        <Text style={styles.body}>{data.diagnosisSummary || "—"}</Text>
+        {pie}
       </Page>
 
-      {/* Página 3 — fotografías iniciales (T0) */}
+      {/* Fotografías iniciales (T0) */}
       {data.initialSet ? (
-        <Page size="LETTER" style={styles.page}>
-          {!data.hasPhotoUseConsent ? (
-            <Text style={styles.watermark}>Uso clínico — confidencial</Text>
-          ) : null}
+        <Page size="LETTER" style={estilosPaginaOrto.carta}>
+          {marca}
           <Text style={styles.h1}>Antes</Text>
           <Text style={styles.setCaption}>{data.initialSet.label}</Text>
           <PhotoGrid set={data.initialSet} />
-          <Text style={styles.footer} fixed>
-            Generado en DaleControl el {fmtDate(data.generatedAtIso)}
-          </Text>
+          {pie}
         </Page>
       ) : null}
 
-      {/* Páginas N — controles intermedios cada ~3m */}
+      {/* Controles intermedios */}
       {data.midSets.map((set, i) => (
-        <Page key={`mid-${i}`} size="LETTER" style={styles.page}>
-          {!data.hasPhotoUseConsent ? (
-            <Text style={styles.watermark}>Uso clínico — confidencial</Text>
-          ) : null}
+        <Page key={`mid-${i}`} size="LETTER" style={estilosPaginaOrto.carta}>
+          {marca}
           <Text style={styles.h1}>Durante el tratamiento</Text>
           <Text style={styles.setCaption}>{set.label}</Text>
           {data.initialSet ? (
@@ -216,18 +150,14 @@ export function ComparisonPdf({ data }: { data: ComparisonPdfData }) {
           ) : (
             <PhotoGrid set={set} />
           )}
-          <Text style={styles.footer} fixed>
-            Generado en DaleControl el {fmtDate(data.generatedAtIso)}
-          </Text>
+          {pie}
         </Page>
       ))}
 
-      {/* Página final — fase final */}
+      {/* Fase final */}
       {data.finalSet ? (
-        <Page size="LETTER" style={styles.page}>
-          {!data.hasPhotoUseConsent ? (
-            <Text style={styles.watermark}>Uso clínico — confidencial</Text>
-          ) : null}
+        <Page size="LETTER" style={estilosPaginaOrto.carta}>
+          {marca}
           <Text style={styles.h1}>Después</Text>
           <Text style={styles.setCaption}>{data.finalSet.label}</Text>
           {data.initialSet ? (
@@ -244,19 +174,15 @@ export function ComparisonPdf({ data }: { data: ComparisonPdfData }) {
           ) : (
             <PhotoGrid set={data.finalSet} />
           )}
-          <Text style={styles.footer} fixed>
-            Generado en DaleControl el {fmtDate(data.generatedAtIso)}
-          </Text>
+          {pie}
         </Page>
       ) : null}
 
-      {/* Página retención */}
-      <Page size="LETTER" style={styles.page}>
+      {/* Retención */}
+      <Page size="LETTER" style={estilosPaginaOrto.carta}>
         <Text style={styles.h1}>Plan de retención</Text>
-        <Text style={styles.body}>{data.retentionPlanText}</Text>
-        <Text style={styles.footer} fixed>
-          Generado en DaleControl el {fmtDate(data.generatedAtIso)}
-        </Text>
+        <Text style={styles.body}>{data.retentionPlanText || "—"}</Text>
+        {pie}
       </Page>
     </Document>
   );

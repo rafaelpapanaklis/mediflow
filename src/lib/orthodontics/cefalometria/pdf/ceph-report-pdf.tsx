@@ -16,14 +16,17 @@ import {
   View,
 } from "@react-pdf/renderer";
 import { ClinicLetterhead } from "../../../pdf/clinic-letterhead";
+import { MembreteOrto, PieOrto } from "../../pdf/membrete-orto";
 import type { CephReportPdfData, CephReportRow } from "./ceph-report-pdf-types";
+import { fechaDMA } from "../../pdf/formato";
 
 export type { CephReportPdfData, CephReportRow };
 
 const ACCENT = "#0e7490";
+const DOCUMENTO = "Análisis cefalométrico";
 
 const styles = StyleSheet.create({
-  page: { padding: 40, fontSize: 9.5, fontFamily: "Helvetica", color: "#14101f" },
+  page: { padding: 40, paddingBottom: 64, fontSize: 9.5, fontFamily: "Helvetica", color: "#14101f" },
   title: { fontSize: 16, fontWeight: 700, fontFamily: "Helvetica-Bold", color: "#14101f", marginBottom: 2 },
   subtitle: { fontSize: 9.5, color: "#6b6b78", marginBottom: 14 },
   section: { marginTop: 16 },
@@ -152,27 +155,40 @@ export function CephReportPdf({ data }: { data: CephReportPdfData }) {
   return (
     <Document>
       <Page size="LETTER" style={styles.page} wrap>
-        <ClinicLetterhead
-          {...data}
-          accent={ACCENT}
-          subtitle="Análisis cefalométrico"
-          right={
-            <View>
-              <Text style={{ fontSize: 8, color: "#6b6b78" }}>Trazado</Text>
-              <Text style={{ fontSize: 10, fontFamily: "Helvetica-Bold" }}>{data.kindLabel}</Text>
-              <Text style={{ fontSize: 8, color: "#6b6b78", marginTop: 6 }}>Fecha</Text>
-              <Text style={{ fontSize: 10 }}>{fmtDate(data.tracingDateIso)}</Text>
-            </View>
-          }
-        />
+        {data.membrete ? (
+          <>
+            <MembreteOrto datos={data.membrete} documento={DOCUMENTO} />
+            <Text style={styles.title}>Análisis de {data.analysisLabel}</Text>
+            <Text style={styles.subtitle}>
+              Trazado {data.kindLabel.toLowerCase()} del {fechaDMA(data.tracingDateIso, data.membrete.zonaHoraria)} ·{" "}
+              {data.normSetLabel}
+            </Text>
+          </>
+        ) : (
+          <>
+            <ClinicLetterhead
+              {...data}
+              accent={ACCENT}
+              subtitle="Análisis cefalométrico"
+              right={
+                <View>
+                  <Text style={{ fontSize: 8, color: "#6b6b78" }}>Trazado</Text>
+                  <Text style={{ fontSize: 10, fontFamily: "Helvetica-Bold" }}>{data.kindLabel}</Text>
+                  <Text style={{ fontSize: 8, color: "#6b6b78", marginTop: 6 }}>Fecha</Text>
+                  <Text style={{ fontSize: 10 }}>{fmtDate(data.tracingDateIso)}</Text>
+                </View>
+              }
+            />
 
-        <Text style={styles.title}>Análisis de {data.analysisLabel}</Text>
-        <Text style={styles.subtitle}>
-          {data.patientName}
-          {data.patientDobIso ? ` · nac. ${fmtDate(data.patientDobIso)}` : ""} · {data.normSetLabel} · Dr./Dra.{" "}
-          {data.doctorName}
-          {data.doctorCedula ? ` · cédula ${data.doctorCedula}` : ""}
-        </Text>
+            <Text style={styles.title}>Análisis de {data.analysisLabel}</Text>
+            <Text style={styles.subtitle}>
+              {data.patientName}
+              {data.patientDobIso ? ` · nac. ${fmtDate(data.patientDobIso)}` : ""} · {data.normSetLabel} · Dr./Dra.{" "}
+              {data.doctorName}
+              {data.doctorCedula ? ` · cédula ${data.doctorCedula}` : ""}
+            </Text>
+          </>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.h2}>Trazado</Text>
@@ -209,9 +225,13 @@ export function CephReportPdf({ data }: { data: CephReportPdfData }) {
           ))}
         </View>
 
-        <Text style={styles.footer} fixed>
-          {data.clinicName} · generado en DaleControl el {fmtDate(data.generatedAtIso)} · uso clínico
-        </Text>
+        {data.membrete ? (
+          <PieOrto datos={data.membrete} documento={DOCUMENTO} />
+        ) : (
+          <Text style={styles.footer} fixed>
+            {data.clinicName} · generado en DaleControl el {fmtDate(data.generatedAtIso)} · uso clínico
+          </Text>
+        )}
       </Page>
     </Document>
   );

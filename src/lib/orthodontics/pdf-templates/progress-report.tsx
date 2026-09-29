@@ -1,4 +1,9 @@
-// Orthodontics — PDF "Reporte de progreso T0 vs T2". A4 horizontal. SPEC §9.3.
+// Orthodontics — PDF "Reporte de progreso T0 vs T2". Carta horizontal. SPEC §9.3.
+//
+// ws1-t4 (29-sep-2026): membrete y pie comunes de ortodoncia. Y las fotos:
+// la ruta le pasaba `/api/patient-files/<id>` (relativa: @react-pdf en el
+// servidor no la puede bajar) y todas las casillas salían negras. Ahora
+// llegan ya como data URL (`fotosComoDataUrl`).
 
 import {
   Document,
@@ -9,8 +14,13 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 import { PHOTO_VIEW_ORDER, VIEW_LABELS } from "../photo-set-helpers";
+import { MembreteOrto, PieOrto, estilosPaginaOrto, type DatosDelMembreteOrto } from "../pdf/membrete-orto";
+
+const DOCUMENTO = "Reporte de progreso";
 
 export interface ProgressReportPdfData {
+  /** ws1-t4: membrete común (logo, clínica, paciente, doctor con cédula, fecha dd/mm/aaaa). */
+  membrete: DatosDelMembreteOrto;
   patientName: string;
   doctorName: string;
   clinicName: string;
@@ -33,8 +43,8 @@ const styles = StyleSheet.create({
   meta: { fontSize: 9, color: "#475569", marginBottom: 8 },
   watermark: {
     position: "absolute",
-    top: 12,
-    right: 24,
+    top: 10,
+    right: 40,
     fontSize: 9,
     color: "#EF4444",
     fontWeight: 700,
@@ -64,15 +74,13 @@ export function ProgressReportPdf({ data }: { data: ProgressReportPdfData }) {
 
   return (
     <Document>
-      <Page size="A4" orientation="landscape" style={styles.page}>
+      <Page size="LETTER" orientation="landscape" style={estilosPaginaOrto.cartaHorizontal} wrap>
+        <MembreteOrto datos={data.membrete} documento={DOCUMENTO} />
         {!data.hasPhotoUseConsent ? (
           <Text style={styles.watermark}>Uso clínico — confidencial</Text>
         ) : null}
 
         <Text style={styles.h1}>Reporte de progreso ortodóntico</Text>
-        <Text style={styles.meta}>
-          {data.patientName} · Dr./Dra. {data.doctorName} · {data.clinicName}
-        </Text>
         <Text style={styles.meta}>
           Técnica: {data.techniqueLabel} · Duración real: {data.durationMonthsActual} meses
         </Text>
@@ -124,9 +132,10 @@ export function ProgressReportPdf({ data }: { data: ProgressReportPdfData }) {
             ))}
           </View>
         </View>
+        <PieOrto datos={data.membrete} documento={DOCUMENTO} />
       </Page>
 
-      <Page size="A4" orientation="landscape" style={styles.page}>
+      <Page size="LETTER" orientation="landscape" style={estilosPaginaOrto.cartaHorizontal}>
         <Text style={styles.h1}>Carta de salida</Text>
         <Text style={styles.meta}>
           El tratamiento ortodóntico activo de {data.patientName} ha concluido
@@ -144,6 +153,7 @@ export function ProgressReportPdf({ data }: { data: ProgressReportPdfData }) {
           retenedores es la principal causa de recidiva. La responsabilidad de
           su uso es exclusivamente del paciente.
         </Text>
+        <PieOrto datos={data.membrete} documento={DOCUMENTO} />
       </Page>
     </Document>
   );

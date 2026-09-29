@@ -3,10 +3,22 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { ComparisonPdfData } from "../pdf-templates/comparison-pdf";
+import type { DatosDelMembreteOrto } from "../pdf/membrete-orto";
+
+// ws1-t4: todos los PDF de ortodoncia llevan el membrete común.
+const membrete: DatosDelMembreteOrto = {
+  clinicName: "Test",
+  zonaHoraria: "America/Mexico_City",
+  emitidoEl: new Date().toISOString(),
+  lugar: null,
+  paciente: { nombre: "Juan Pérez", fechaNacimiento: null, folio: null },
+  doctor: null,
+};
 
 describe("ComparisonPdf shape", () => {
   it("ComparisonPdfData expone los campos requeridos del libro de progreso", () => {
     const data: ComparisonPdfData = {
+      membrete,
       patientName: "Juan Pérez",
       patientDobIso: null,
       doctorName: "Dr. Test",
@@ -30,6 +42,7 @@ describe("ComparisonPdf shape", () => {
 
   it("midSets es array — soporta 0..N controles intermedios", () => {
     const data: ComparisonPdfData = {
+      membrete,
       patientName: "x",
       patientDobIso: null,
       doctorName: "x",

@@ -6,6 +6,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { exportReferralProgressLetterPdf } from "@/app/actions/orthodontics/exportReferralProgressLetterPdf";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { ReferralProgressLetterPdf } from "@/lib/orthodontics/pdf-templates/referral-progress-letter";
+import { nombreDeArchivoPdf } from "@/lib/orthodontics/pdf/nombre-de-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,8 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="carta-avance-${parsedStage}-${params.id}.pdf"`,
+      "Content-Disposition": `inline; filename="${nombreDeArchivoPdf(`carta-de-avance-${parsedStage}`, result.data.membrete.paciente.nombre)}"`,
+      "Cache-Control": "private, no-store",
     },
   });
 }

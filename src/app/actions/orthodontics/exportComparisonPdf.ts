@@ -11,6 +11,9 @@ import { prisma } from "@/lib/prisma";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { cargarMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto-db";
+import { fotosComoDataUrl } from "@/lib/orthodontics/pdf/fotos-pdf";
+import { fechaDMA } from "@/lib/orthodontics/pdf/formato";
 import {
   PHOTO_VIEW_ORDER,
   VIEW_TO_COLUMN,
@@ -61,14 +64,18 @@ export async function exportComparisonPdf(
     return fail("Paciente no encontrado");
   }
 
-  const doctor = await prisma.user.findUnique({
-    where: { id: plan.diagnosis.diagnosedById },
-    select: { firstName: true, lastName: true, cedulaProfesional: true },
-  });
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: ctx.clinicId },
-    select: { name: true },
-  });
+  const doctorId = plan.treatingDoctorId ?? plan.diagnosis.diagnosedById;
+  const [doctor, clinic, membrete] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: doctorId },
+      select: { firstName: true, lastName: true, cedulaProfesional: true },
+    }),
+    prisma.clinic.findUnique({
+      where: { id: ctx.clinicId },
+      select: { name: true },
+    }),
+    cargarMembreteOrto({ clinicId: ctx.clinicId, patientId: plan.patientId, doctorId }),
+  ]);
   if (!clinic) return fail("Clínica no encontrada");
 
   const initialSet = plan.photoSets.find((s) => s.setType === "T0") ?? null;
@@ -85,11 +92,7 @@ export async function exportComparisonPdf(
     return {
       label:
         labelOverride ??
-        `${s.setType} · ${s.capturedAt.toLocaleDateString("es-MX", {
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        })}`,
+        `${s.setType} · ${fechaDMA(s.capturedAt, membrete.zonaHoraria)}`,
       capturedAtIso: s.capturedAt.toISOString(),
       monthInTreatment: s.monthInTreatment,
       pairs: PHOTO_VIEW_ORDER.map((view) => {
@@ -109,6 +112,7 @@ export async function exportComparisonPdf(
     : 0;
 
   const data: ComparisonPdfData = {
+    membrete,
     patientName: `${plan.patient.firstName} ${plan.patient.lastName}`,
     patientDobIso: plan.patient.dob ? plan.patient.dob.toISOString() : null,
     doctorName: doctor ? `${doctor.firstName} ${doctor.lastName}` : "—",
@@ -127,6 +131,15 @@ export async function exportComparisonPdf(
     generatedAtIso: new Date().toISOString(),
     hasPhotoUseConsent: false,
   };
+
+  // ws1-t4: la ruta cruda del bucket (privado) no la puede bajar @react-pdf:
+  // se firma y se baja aquí, como data URL. Una foto que no baja deja su rótulo.
+  const sets = [data.initialSet, ...data.midSets, data.finalSet].filter((s): s is ComparisonPdfPhotoSet => s !== null);
+  const bajadas = await fotosComoDataUrl(sets.flatMap((s) => s.pairs.map((p) => p.url)));
+  let k = 0;
+  for (const s of sets) {
+    s.pairs = s.pairs.map((p) => ({ ...p, url: bajadas[k++] ?? null }));
+  }
 
   await auditOrtho({
     ctx,

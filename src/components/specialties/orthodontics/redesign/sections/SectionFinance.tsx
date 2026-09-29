@@ -22,7 +22,7 @@
 // automático con tarjeta) quedan pendientes de Rafael — ver el hueco abajo.
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Banknote, CalendarClock, Percent, Plus, Printer, Settings2, Wallet } from "lucide-react";
+import { AlertTriangle, Banknote, CalendarClock, Download, Percent, Plus, Printer, Settings2, Wallet } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
@@ -78,68 +78,15 @@ function calendarioCompleto(cobranza: NonNullable<PanelDeCobro["cobranza"]>): Cu
 }
 
 /**
- * Hallazgo ws1-t4 §8: «Imprimir convenio» llamaba a `window.print()` a
- * secas, que imprime la PESTAÑA ENTERA. Primer intento (CSS con
- * `visibility: hidden` en `*` + una clase en `<body>`) tumbó dev.108: un
- * selector `:global(...) *` sin ninguna clase local no es válido en un
- * CSS Module (`Syntax error: ... is not pure`), y ESO rompe la compilación
- * de TODO el bundle, no solo esta pantalla. Vista de impresión propia,
- * sin tocar ningún CSS Module: se abre una pestaña nueva con SOLO el
- * convenio (HTML/CSS inline, sin depender de ninguna hoja de estilos del
- * panel) y se imprime esa pestaña — mismo criterio que ya usa
- * `invoice-detail-modal.tsx` para "Imprimir comprobante" (pestaña nueva,
- * no `window.print()` sobre la página actual).
+ * «Imprimir convenio» (ws1-t4, 29-sep-2026). Antes armaba una ventana
+ * about:blank con HTML plano (sin logo, sin clínica, sin doctor, fechas sin
+ * año) porque la ruta del PDF solo aceptaba ids del OrthoPaymentPlan viejo.
+ * Ahora abre el PDF de verdad —membrete de la clínica, responsable del pago,
+ * doctor con cédula, calendario con año y estado, condiciones de la clínica y
+ * firmas—, el mismo archivo para imprimir y para descargar.
  */
-function imprimirConvenio(data: {
-  patientName: string;
-  total: number;
-  paid: number;
-  balance: number;
-  discountLabel: string | null;
-  discountPct: number | null;
-  cuotas: CuotaConEstado[];
-}) {
-  const fila = (a: string, b: string) =>
-    `<tr><td style="border:1px solid #999;padding:6px 10px;text-align:left">${a}</td><td style="border:1px solid #999;padding:6px 10px;text-align:left">${b}</td></tr>`;
-  const filaCuota = (c: CuotaConEstado) =>
-    `<tr>
-      <td style="border:1px solid #999;padding:6px 10px;text-align:left">${c.esEnganche ? "Enganche" : `Mensualidad ${c.numero}`}</td>
-      <td style="border:1px solid #999;padding:6px 10px;text-align:left">${fmtDay(c.vencimiento)}</td>
-      <td style="border:1px solid #999;padding:6px 10px;text-align:left">${fmtMoney(c.importe)}</td>
-    </tr>`;
-  const tablaCuotas =
-    data.cuotas.length > 0
-      ? `<table style="width:100%;border-collapse:collapse">
-          <thead><tr>
-            <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Pago</th>
-            <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Vence</th>
-            <th style="border:1px solid #999;padding:6px 10px;text-align:left;font-weight:700;background:#eee">Importe</th>
-          </tr></thead>
-          <tbody>${data.cuotas.map(filaCuota).join("")}</tbody>
-        </table>`
-      : "";
-  const html = `<!doctype html>
-<html><head><meta charset="utf-8"><title>Convenio de pago</title></head>
-<body style="font-family: Arial, sans-serif; color:#000; background:#fff; padding:24px; max-width:640px; margin:0 auto;">
-  <h2 style="font-size:18px;font-weight:700;margin-bottom:4px;">Convenio de pago</h2>
-  <p style="margin-bottom:16px;">${data.patientName} · ${fmtDateShort(new Date().toISOString())}</p>
-  <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-    <tbody>
-      ${fila("Total del tratamiento", fmtMoney(data.total))}
-      ${fila("Pagado", fmtMoney(data.paid))}
-      ${fila("Por cobrar", fmtMoney(data.balance))}
-      ${data.discountLabel ? fila("Descuento acordado", `${data.discountLabel} (${data.discountPct}%)`) : ""}
-    </tbody>
-  </table>
-  ${tablaCuotas}
-  <p style="margin-top:40px;">_________________________________</p>
-  <p>Firma del paciente / responsable</p>
-  <script>window.onload = function () { window.print(); };</script>
-</body></html>`;
-  const ventana = window.open("", "_blank");
-  if (!ventana) return; // bloqueador de pop-ups: sin ventana, no hay nada que imprimir
-  ventana.document.write(html);
-  ventana.document.close();
+export function urlDelConvenio(treatmentPlanId: string, descargar = false): string {
+  return `/api/orthodontics/payment-plans/${encodeURIComponent(treatmentPlanId)}/financial-agreement-pdf${descargar ? "?descargar=1" : ""}`;
 }
 
 const ICONO_SECCION = <Wallet size={15} strokeWidth={1.75} />;
@@ -373,19 +320,17 @@ export function SectionFinance(props: SectionFinanceProps) {
                   variant="ghost"
                   size="md"
                   icon={<Printer size={15} strokeWidth={1.75} aria-hidden />}
-                  onClick={() =>
-                    imprimirConvenio({
-                      patientName: props.patientName ?? "Paciente",
-                      total: panel.invoice!.total,
-                      paid: panel.invoice!.paid,
-                      balance: panel.invoice!.balance,
-                      discountLabel: panel.billingDelCaso.discountLabel,
-                      discountPct: panel.billingDelCaso.discountPct,
-                      cuotas: panel.cobranza ? calendarioCompleto(panel.cobranza) : [],
-                    })
-                  }
+                  onClick={() => window.open(urlDelConvenio(props.treatmentPlanId), "_blank", "noopener")}
                 >
                   Imprimir convenio
+                </Btn>
+                <Btn
+                  variant="ghost"
+                  size="md"
+                  icon={<Download size={15} strokeWidth={1.75} aria-hidden />}
+                  onClick={() => window.open(urlDelConvenio(props.treatmentPlanId, true), "_blank", "noopener")}
+                >
+                  Descargar convenio
                 </Btn>
               </div>
             ) : null}

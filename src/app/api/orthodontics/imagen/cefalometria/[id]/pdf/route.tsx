@@ -16,6 +16,8 @@ import { prisma } from "@/lib/prisma";
 import { signMaybeUrls } from "@/lib/storage";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clinic-letterhead";
+import { cargarMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto-db";
+import { nombreDeArchivoPdf } from "@/lib/orthodontics/pdf/nombre-de-archivo";
 import { getOrthoActionContext } from "@/app/actions/orthodontics/_helpers";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { CephReportPdf } from "@/lib/orthodontics/cefalometria/pdf/ceph-report-pdf";
@@ -65,6 +67,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       points: true,
       calibrationMmPerPixel: true,
       createdAt: true,
+      createdByUserId: true,
       lateralXrayFile: { select: { url: true } },
       createdByUser: { select: { firstName: true, lastName: true, cedulaProfesional: true } },
       patient: { select: { firstName: true, lastName: true, dob: true, clinicId: true, deletedAt: true } },
@@ -82,9 +85,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   });
   if (oculto) return oculto;
 
-  const [cabecera, imagenDataUrl] = await Promise.all([
+  const [cabecera, imagenDataUrl, membrete] = await Promise.all([
     clinicLetterheadProps(fila.clinic),
     radiografiaComoDataUrl(fila.lateralXrayFile?.url),
+    // ws1-t4: membrete y pie comunes de los PDF de ortodoncia (el doctor es quien trazó).
+    cargarMembreteOrto({ clinicId: ctx.clinicId, patientId: fila.patientId, doctorId: fila.createdByUserId ?? null }),
   ]);
 
   const data = datosDelTrazado({
@@ -105,12 +110,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     ahora: new Date(),
   });
 
-  const buffer = await renderToBuffer(<CephReportPdf data={data} />);
+  const buffer = await renderToBuffer(<CephReportPdf data={{ ...data, membrete }} />);
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="trazado-cefalometrico-${params.id}.pdf"`,
+      "Content-Disposition": `inline; filename="${nombreDeArchivoPdf("trazado-cefalometrico", membrete.paciente.nombre)}"`,
       "Cache-Control": "private, no-store",
     },
   });

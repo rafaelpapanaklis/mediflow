@@ -12,7 +12,8 @@ import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orth
 import { puedeVerExpediente } from "@/lib/orthodontics/permiso-expediente";
 import { DischargeLetterPdf } from "@/lib/orthodontics/pdf-templates/discharge-letter";
 import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
-import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clinic-letterhead";
+import { cargarMembreteOrto } from "@/lib/orthodontics/pdf/membrete-orto-db";
+import { nombreDeArchivoPdf } from "@/lib/orthodontics/pdf/nombre-de-archivo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,12 +58,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     );
   }
 
-  const [doctor, clinic, regimen] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: plan.treatingDoctorId ?? plan.diagnosis.diagnosedById },
-      select: { firstName: true, lastName: true, cedulaProfesional: true },
+  const [membrete, regimen] = await Promise.all([
+    // ws1-t4: membrete común de ortodoncia (logo, clínica, paciente, doctor con cédula y especialidad).
+    cargarMembreteOrto({
+      clinicId: ctx.clinicId,
+      patientId: plan.patientId,
+      doctorId: plan.treatingDoctorId ?? plan.diagnosis.diagnosedById,
     }),
-    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: CLINIC_LETTERHEAD_SELECT }),
     prisma.orthoRetentionRegimen
       .findUnique({
         where: { treatmentPlanId: plan.id },
@@ -73,21 +75,16 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const inicio = plan.installedAt ?? plan.startDate;
   const fin = regimen?.debondedAt ?? plan.phases.find((p) => p.phaseKey === "FINISHING")?.completedAt ?? null;
-  const membrete = await clinicLetterheadProps(clinic);
 
   const buffer = await renderToBuffer(
     <DischargeLetterPdf
-      {...membrete}
-      patientName={`${plan.patient.firstName} ${plan.patient.lastName}`.trim()}
-      doctorName={doctor ? `${doctor.firstName} ${doctor.lastName}`.trim() : "—"}
-      doctorCedula={doctor?.cedulaProfesional ?? null}
+      membrete={membrete}
       techniqueLabel={techniqueLabel(plan.technique, await cargarNombreDeTecnica(ctx.clinicId, plan.id))}
       startDate={inicio ? inicio.toISOString() : null}
       endDate={fin ? fin.toISOString() : null}
       durationMonths={inicio && fin ? Math.max(0, differenceInMonths(fin, inicio)) : null}
       retentionPlanText={plan.retentionPlanText ?? null}
       revisiones={(regimen?.checkups ?? []).map((c) => ({ meses: c.monthsFromDebond, fecha: c.scheduledDate.toISOString() }))}
-      generatedAt={new Date().toISOString()}
     />,
   );
 
@@ -95,7 +92,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="carta-de-alta-${params.id}.pdf"`,
+      "Content-Disposition": `inline; filename="${nombreDeArchivoPdf("carta-de-alta", membrete.paciente.nombre)}"`,
+      "Cache-Control": "private, no-store",
     },
   });
 }
