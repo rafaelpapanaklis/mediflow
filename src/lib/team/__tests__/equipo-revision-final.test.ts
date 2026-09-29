@@ -191,3 +191,21 @@ test("T2/T3: 'Restablecer', y ningún texto de alta genérico dice 'doctor'", ()
   assert.match(x.altaIntro, /contraseña temporal/);
   assert.match(x.altaIntro, /No se envía ninguna invitación/);
 });
+
+/* ── H12 / H10 (ws1-t1) ─────────────────────────────────────────────── */
+
+test("H12: la lista GET /api/team trae permissionsOverride y el modal de Permisos lee lo guardado al abrir", () => {
+  const lista = readFileSync(join(RAIZ, "src/app/api/team/route.ts"), "utf8");
+  assert.match(lista.slice(lista.indexOf("export async function GET")), /permissionsOverride:\s*true/);
+  const modal = readFileSync(join(RAIZ, "src/components/dashboard/team/permissions-modal.tsx"), "utf8");
+  assert.match(modal, /fetch\(`\/api\/team\/\$\{member\.id\}`/);
+  assert.match(modal, /disabled=\{saving \|\| cargando \|\| errorLectura\}/, "no se guarda mientras llega lo guardado");
+});
+
+test("H10: ningún paso del alta de Recepción dice «doctor» (pantalla ni respuesta del servidor)", () => {
+  const rutas = readFileSync(join(RAIZ, "src/app/api/team/route.ts"), "utf8");
+  assert.doesNotMatch(rutas, /El doctor debe usar/);
+  const x = TEXTOS_EQUIPO.es;
+  const pasos = [x.agregarMiembro, x.altaIntro, x.emailHintAlta, x.crearCuenta, x.altaListo("Ana"), x.tempCreadaTitulo, x.tempCreadaDesc("Ana"), x.restablecerBtn, x.desactivarConfirmDesc, x.miembroDesactivado, x.miembroEliminado];
+  for (const t of pasos) assert.doesNotMatch(t, /doctor/i, t);
+});

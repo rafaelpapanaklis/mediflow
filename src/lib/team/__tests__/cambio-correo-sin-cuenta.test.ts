@@ -106,6 +106,11 @@ const prismaDoble: any = {
       estado.updates.push({ where, data, many: true });
       return { count: hit.length };
     },
+    create: async ({ data }: any) => {
+      const f = { id: "nuevo1", isActive: true, permissionsOverride: [], createdAt: new Date(), updatedAt: new Date(), ...data };
+      estado.filas.push(f);
+      return { ...f };
+    },
     deleteMany: async ({ where }: any) => {
       if (estado.deleteFalla) {
         throw Object.assign(new Error('Foreign key constraint failed on the field: `audit_logs_userId_fkey`'), { code: "P2003" });
@@ -150,6 +155,7 @@ function sesion(role = "SUPER_ADMIN") {
 let PATCH: (id: string, body: unknown) => Promise<Response>;
 let DELETE: (id: string) => Promise<Response>;
 let RESET: (id: string) => Promise<Response>;
+let ALTA: (body: unknown) => Promise<Response>;
 
 before(async () => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "http://supabase.test";
@@ -186,6 +192,7 @@ before(async () => {
   const { NextRequest } = await import("next/server");
   const ruta = await import("@/app/api/team/[id]/route");
   const reset = await import("@/app/api/team/[id]/reset-password/route");
+  const alta = await import("@/app/api/team/route");
   const req = (metodo: string, id: string, body?: unknown) =>
     new NextRequest(`http://app.test/api/team/${id}`, {
       method: metodo,
@@ -194,6 +201,10 @@ before(async () => {
     });
   PATCH = (id, body) => ruta.PATCH(req("PATCH", id, body), { params: { id } });
   DELETE = (id) => ruta.DELETE(req("DELETE", id), { params: { id } });
+  ALTA = (body) =>
+    alta.POST(new NextRequest("http://app.test/api/team", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }));
   RESET = (id) => reset.POST(req("POST", `${id}/reset-password`), { params: { id } });
 });
 
@@ -454,4 +465,25 @@ test("restablecer: un ADMIN (no SUPER_ADMIN) sigue sin poder", async () => {
   const r = await RESET("doc1");
   assert.equal(r.status, 403);
   assert.equal(estado.authUpdate.length, 0);
+});
+
+/* ── H12 (ws1-t1): el alta «solo dental» devuelve lo guardado ────────── */
+
+test("🔴 H12: el alta «solo dental» responde con su permissionsOverride SIN Ortodoncia (la lista en memoria ya lo trae)", async () => {
+  estado.filas = estado.filas.filter((f) => f.id !== "doc1");
+  const r = await ALTA({ firstName: "Sol", lastName: "Dental", email: "sol@x.com", role: "DOCTOR", accesoOrtodoncia: "solo_dental", specialty: "Endodoncia", services: [] });
+  assert.equal(r.status, 201);
+  const j = await r.json();
+  assert.ok(Array.isArray(j.permissionsOverride) && j.permissionsOverride.length > 0, "el override viaja en la respuesta");
+  assert.equal(j.permissionsOverride.includes("specialties.orthodontics"), false);
+  assert.equal(j.permissionsOverride.includes("today.view"), true, "conserva el resto del rol");
+  assert.equal(j.specialty, "Endodoncia");
+});
+
+test("H12: el alta «también ortodoncista» no guarda override (sigue el rol, que ya trae el módulo) y queda en Ortodoncia", async () => {
+  const r = await ALTA({ firstName: "Or", lastName: "To", email: "or@x.com", role: "DOCTOR", accesoOrtodoncia: "ortodoncista", specialty: "Endodoncia", services: [] });
+  const j = await r.json();
+  assert.equal(r.status, 201);
+  assert.deepEqual(j.permissionsOverride, []);
+  assert.equal(j.specialty, "Ortodoncia");
 });

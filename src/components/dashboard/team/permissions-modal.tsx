@@ -47,25 +47,46 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
   const [useDefault, setUseDefault] = useState(true);
   const [selected, setSelected]     = useState<Set<PermissionKey>>(new Set());
   const [saving, setSaving]         = useState(false);
+  // Se lee lo GUARDADO al abrir. La lista en memoria de Equipo puede estar vieja
+  // (recién creado, editado en otra pestaña): abrir con un override vacío y
+  // guardar con «Usar default del rol» encendido le devolvía a un «solo dental» el
+  // módulo de Ortodoncia (ws1-t1, H12). Mientras llega, no se puede guardar.
+  const [cargando, setCargando]     = useState(false);
+  const [errorLectura, setErrorLectura] = useState(false);
 
   // Reset al abrir el modal con un member nuevo. Si el member tiene override
   // (length > 0) → useDefault=false con esos checks; si está vacío → default
   // del rol con useDefault=true.
   useEffect(() => {
     if (!open || !member) return;
-    const override = member.permissionsOverride ?? [];
     const role = (member.role as Role) ?? "READONLY";
     const delRol = ROLE_DEFAULT_PERMISSIONS[role] ?? [];
-    // Encendido si no tiene nada propio, O si su override es idéntico al del rol
-    // (el alta guarda uno completo al elegir «Solo dental»): «personalizado» sin
-    // ninguna diferencia real confundía (ws1-t5, T5).
-    if (!sigueElDefaultDelRol(override, delRol)) {
-      setUseDefault(false);
-      setSelected(new Set(override.filter((k): k is PermissionKey => k in ALL_PERMISSIONS)));
-    } else {
-      setUseDefault(true);
-      setSelected(new Set(delRol));
+    function aplicar(override: string[]) {
+      // Encendido si no tiene nada propio, O si su override es idéntico al del rol
+      // (el alta guarda uno completo al elegir «Solo dental»): «personalizado» sin
+      // ninguna diferencia real confundía (ws1-t5, T5).
+      if (!sigueElDefaultDelRol(override, delRol)) {
+        setUseDefault(false);
+        setSelected(new Set(override.filter((k): k is PermissionKey => k in ALL_PERMISSIONS)));
+      } else {
+        setUseDefault(true);
+        setSelected(new Set(delRol));
+      }
     }
+    // Primero lo que ya se sabe (el modal se ve al instante), luego lo guardado.
+    aplicar(member.permissionsOverride ?? []);
+    let vigente = true;
+    setCargando(true);
+    setErrorLectura(false);
+    fetch(`/api/team/${member.id}`, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        const fila = await res.json();
+        if (vigente && Array.isArray(fila?.permissionsOverride)) aplicar(fila.permissionsOverride);
+      })
+      .catch(() => { if (vigente) setErrorLectura(true); })
+      .finally(() => { if (vigente) setCargando(false); });
+    return () => { vigente = false; };
   }, [open, member]);
 
   const memberRole = (member?.role as Role) ?? "READONLY";
@@ -92,7 +113,7 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
   }
 
   async function save() {
-    if (!member) return;
+    if (!member || cargando || errorLectura) return;
     setSaving(true);
     try {
       // Si está usando default → mandar null al backend (limpia override).
@@ -185,6 +206,19 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
               <span className="switch__thumb" />
             </span>
           </label>
+
+          {cargando && !errorLectura && (
+            <div role="status" style={{ fontSize: 12, color: "var(--text-3)" }}>
+              {enIngles ? "Reading the saved permissions…" : "Leyendo los permisos guardados…"}
+            </div>
+          )}
+          {errorLectura && (
+            <div role="alert" style={{ fontSize: 12.5, color: "var(--danger)" }}>
+              {enIngles
+                ? "Could not read the saved permissions, so saving is disabled. Close this window and open it again."
+                : "No se pudieron leer los permisos guardados, así que no se puede guardar. Cierra esta ventana y ábrela de nuevo."}
+            </div>
+          )}
 
           {/* Qué tiene distinto al rol — sin esto «apagado» no decía nada. */}
           {!useDefault && (() => {
@@ -285,7 +319,7 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
           <button
             type="button"
             onClick={save}
-            disabled={saving}
+            disabled={saving || cargando || errorLectura}
             className="btn-new btn-new--primary"
           >
             {saving ? t("common.saving") : useDefault ? t("settings.permissions.revertToRoleDefault") : t("settings.permissions.savePermissionsCount", { count: selected.size })}

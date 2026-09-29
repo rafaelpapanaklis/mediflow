@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
       role: true, specialty: true, color: true, services: true,
       avatarUrl: true, phone: true, isActive: true, createdAt: true,
       cedulaProfesional: true, especialidad: true, cedulaEspecialidad: true,
+      permissionsOverride: true,
       _count: {
         select: {
           appointments: { where: { status: { not: "CANCELLED" } } },
@@ -142,7 +143,7 @@ export async function POST(req: NextRequest) {
     const msg = createError?.message ?? "";
     if (msg.includes("already been registered") || msg.includes("already exists")) {
       return NextResponse.json({
-        error: "Este email ya tiene cuenta en DaleControl. El doctor debe usar su contraseña existente.",
+        error: "Este email ya tiene cuenta en DaleControl. La persona debe usar su contraseña existente.",
       }, { status: 400 });
     }
     // Supabase contesta en inglés: su message se queda en el log del servidor y
