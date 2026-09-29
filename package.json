@@ -290,6 +290,7 @@
     "test:gate-antes-despues": "tsx --test src/lib/auth/__tests__/gate-antes-despues.test.ts",
     "test:pdf-cabecera": "tsx --test src/lib/pdf/__tests__/clinic-letterhead.test.ts",
     "test:pdf-documentos": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/documentos-cabecera.test.tsx",
+    "test:orto-pdf": "tsx --tsconfig tsconfig.test.json --test src/lib/orthodontics/pdf/__tests__/convenio-y-membrete.test.tsx",
     "test:expediente-pdf": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/expediente-documento.test.tsx",
     "test:expediente-ruta": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/app/api/patients/__tests__/expediente-pdf-ruta.test.tsx",
     "test:comprobante-cabecera": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/invoices/__tests__/comprobante-cabecera.test.tsx",
