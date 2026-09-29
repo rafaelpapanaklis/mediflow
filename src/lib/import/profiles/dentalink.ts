@@ -16,6 +16,19 @@ import type { OriginProfile } from "./origin";
 //    «Hora inicio»). Por eso `verified` sigue en false: sin un export real delante no
 //    se puede afirmar que casen. Si no casan, el paso de mapeo pide emparejar a mano y
 //    nada se rompe; la interfaz avisa de que el perfil no está validado.
+//  · CONFIRMADO con exports REALES de BEVADENT (28-sep-2026, ws1-t12), 4 archivos —
+//    lo que cita cada mapeo marcado «BEVADENT» de abajo: 01_Pacientes (22 columnas),
+//    05_Citas (38), 04_Saldos «Mora» (18), 06_Presupuestos_Detalle (41, UNA FILA POR
+//    PRESTACIÓN). Todavía SIN export real: doctores, bloqueos, historial de citas,
+//    odontograma, evoluciones, casos de ortodoncia, laboratorio, cuotas y aranceles.
+//    Por eso `verified` sigue en false: el perfil es un solo interruptor y la mayor
+//    parte de sus entidades no se ha visto con un archivo real.
+//  · Lo que el perfil NO puede arreglar (necesita motor/handler, no mapeo):
+//    el doctor de «05_Citas» viene PARTIDO en «Nombre Profesional Cita» + «Apellidos
+//    Profesional Cita» (aquí no se mapea a `doctor`: solo el nombre no empareja con
+//    «Nombre Apellido» de un usuario, y sería peor un error por fila que parar en el
+//    mapeo); la duración sale de «Hora Fin Cita», que no se lee; y «Arancel» («Arancel
+//    Base» en todas las filas) lo toma la autodetección genérica como `price`.
 const dentalink: OriginProfile = {
   id: "dentalink",
   name: "Dentalink",
@@ -32,22 +45,38 @@ const dentalink: OriginProfile = {
     "ID": "externalId",
     "Id paciente": "externalId",
     "ID Paciente": "externalId",
+    // BEVADENT «01_Pacientes»: el ID que enlazan citas, saldos y presupuestos es «# Paciente».
+    "# Paciente": "externalId",
     "Nombre completo": "fullName",
     "Nombre": "firstName",
     "Nombres": "firstName",
     "Apellido": "lastName",
     "Apellidos": "lastName",
+    // Celular = principal (el que usa el WhatsApp); «Teléfono» (fijo) es el segundo: si no hay celular ocupa su
+    // lugar y, si es otro número, va a las notas. Antes los dos iban a `phone` y ganaba el primero del archivo.
     "Celular": "phone",
-    "Teléfono": "phone",
+    "Teléfono": "phoneAlt",
     "Correo": "email",
     "Email": "email",
     "E-mail": "email",
     "Fecha de nacimiento": "dob",
     "Fecha nacimiento": "dob",
+    // BEVADENT: «Fecha de nac.» (197 de 296 con fecha; el resto trae «-» o va vacío).
+    "Fecha de nac.": "dob",
     "Sexo": "gender",
     "Dirección": "address",
     "RFC": "rfc",
-    "Rut": "rfc",
+    // «Rut» / «Cédula identidad / DNI» (BEVADENT: 15 de 18 son CURP): el documento de identidad. Si es un CURP va a
+    // curp, si es un RFC a rfcPaciente y si no, a las notas.
+    "Rut": "nationalId",
+    "Cédula identidad / DNI": "nationalId",
+    // Resto de la ficha de BEVADENT «01_Pacientes» (las columnas sin campo en Patient NO se pierden: van a notas).
+    "Tipo Paciente": "tags",
+    "Convenio": "insuranceProvider",
+    "Referencia": "source",
+    "Alertas": "patientAlerts",
+    "Ciudad": "city",
+    "Comuna": "colonia",
     "Saldo": "balance",
   },
   // Reportes clínicos (ws1-t4, 22-sep-2026). SIN export real delante: son los
@@ -76,6 +105,13 @@ const dentalink: OriginProfile = {
     appointments: {
       "Id paciente": "patientExternalId",
       "ID Paciente": "patientExternalId",
+      // BEVADENT «05_Citas» (CSV): «# Paciente» es el ID; hora en «Hora Inicio Cita»
+      // (HH:MM:SS); motivo en «Motivo de Atención»; texto libre en «Comentario Cita».
+      // «Nombre/Apellidos Profesional Cita» NO se mapea a `doctor` (ver arriba).
+      "# Paciente": "patientExternalId",
+      "Hora Inicio Cita": "time",
+      "Motivo de Atención": "type",
+      "Comentario Cita": "notes",
       "Paciente": "name",
       "Nombre paciente": "name",
       "Apellidos paciente": "lastName",
@@ -100,9 +136,15 @@ const dentalink: OriginProfile = {
     balances: {
       "Id paciente": "patientExternalId",
       "ID Paciente": "patientExternalId",
-      "Paciente": "name",
+      // BEVADENT «04_Saldos» (reporte «Mora»): «Paciente» es un NÚMERO (el ID, el mismo
+      // «# Paciente» de 01_Pacientes), no el nombre — antes se mapeaba a `name` por
+      // suposición. El nombre viene en «Nombre Paciente» + «Apellidos Paciente»; la
+      // deuda en «Mora».
+      "Paciente": "patientExternalId",
       "Nombre paciente": "name",
       "Apellidos": "lastName",
+      "Apellidos Paciente": "lastName",
+      "Mora": "amount",
       "Celular": "phone",
       "Email": "email",
       "Deuda": "amount",
@@ -148,6 +190,18 @@ const dentalink: OriginProfile = {
       "Paciente": "name",
       "Nombre paciente": "name",
       "Celular": "phone",
+      // BEVADENT «06_Presupuestos_Detalle»: una fila por PRESTACIÓN; el presupuesto es
+      // «# Tratamiento» (folio) y se genera en «Fecha de generación del tratamiento».
+      // «Precio Paciente» es lo que de verdad se cobra (ya con descuento; sumado por
+      // tratamiento da «Total Presupuesto» en los 157 tratamientos). «Total Presupuesto»
+      // y «Total Pagos Tratamiento» se REPITEN en cada fila del tratamiento: no se mapean.
+      "# Paciente": "patientExternalId",
+      "Apellidos Paciente": "lastName",
+      "# Tratamiento": "folio",
+      "Fecha de generación del tratamiento": "date",
+      "Nombre Prestación": "procedure",
+      "Precio Paciente": "price",
+      "Nombre Profesional Tratamiento": "doctor",
       "N° Presupuesto": "folio",
       "Nº Presupuesto": "folio",
       "N° Tratamiento": "folio",
@@ -178,6 +232,17 @@ const dentalink: OriginProfile = {
       "Paciente": "name",
       "Nombre paciente": "name",
       "Celular": "phone",
+      // BEVADENT «06_Presupuestos_Detalle»: mismas columnas que `quotes` (ver arriba) más
+      // «Pagado Prestación» (abonado por línea). Ojo: en 8 de 157 tratamientos la suma de
+      // «Pagado Prestación» NO da «Total Pagos Tratamiento» (pagos sin línea asignada).
+      "# Paciente": "patientExternalId",
+      "Apellidos Paciente": "lastName",
+      "# Tratamiento": "folio",
+      "Fecha de generación del tratamiento": "date",
+      "Nombre Prestación": "procedure",
+      "Precio Paciente": "price",
+      "Nombre Profesional Tratamiento": "doctor",
+      "Pagado Prestación": "abonado",
       "N° Presupuesto": "folio",
       "Nº Presupuesto": "folio",
       "N° Tratamiento": "folio",

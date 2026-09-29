@@ -59,6 +59,7 @@ import {
   EMAIL_RE,
   ImportError,
   VALID_BLOOD,
+  last10,
   type EntityHandler,
   type ImportContext,
   norm,
@@ -430,6 +431,22 @@ function mismaPersona(a: Persona, b: Persona): boolean {
   return sameName(a.nombre, b.nombre);
 }
 
+// ── Ficha completa del paciente (ws1-t12, migración BEVADENT) ─────────────────
+// «Pacientes» es TODA la ficha, no solo nombre y teléfono: lo que tiene campo en Patient entra a su campo,
+// y lo que no lo tiene NO se pierde: va a las notas como «Dato de <sistema>: <columna>: <valor>».
+const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+const RFC_RE = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/;
+const ALERGIA_RE = /alerg|penicilin|sulfa|l[aá]tex|anest[eé]sic|ibuprofen|aspirin|amoxicilin/i;
+/** «-», «—», «N/A», «Sin convenio»…: el sistema de origen rellena lo que no hay; no es un dato. */
+const SIN_DATO_RE = /^(-+|—+|n\/?a|sin\s+(tipo|convenio|dato|datos|seguro|referencia))$/i;
+const esSinDato = (s: string) => SIN_DATO_RE.test(s.trim());
+/** «a, b; c» → ["a","b","c"], sin los rellenos de arriba. */
+const listaDeTexto = (sv: string) => sv.split(/[;,\n]/).map((x) => x.trim()).filter((x) => x && !esSinDato(x));
+const sinRepetir = (a: string[]) => {
+  const vistos = new Set<string>();
+  return a.filter((x) => { const k = norm(x); if (vistos.has(k)) return false; vistos.add(k); return true; });
+};
+
 export const patientsHandler: EntityHandler = {
   entity: "patients",
   sheetNames: ["pacientes", "paciente", "patients"],
@@ -449,12 +466,41 @@ export const patientsHandler: EntityHandler = {
     ],
     email:     ["email", "correo", "correoelectronico", "emailaddress"],
     phone:     ["telefono", "celular", "whatsapp", "phone", "movil"],
-    dob:       ["fechadenacimiento", "nacimiento", "fechanac", "birthdate", "dob", "fechanacimiento"],
+    // Segundo teléfono (fijo): Patient solo tiene uno. Si el principal falta, ocupa su lugar; si no, va a las notas.
+    phoneAlt:  ["telefonofijo", "telefono2", "telefonoalterno", "telefonosecundario", "telefonocasa", "otrotelefono"],
+    dob:       ["fechadenacimiento", "nacimiento", "fechanac", "fechadenac.", "birthdate", "dob", "fechanacimiento"],
     gender:    ["genero", "sexo", "gender"],
-    address:   ["direccion", "domicilio", "address"],
+    address:   ["direccion", "domicilio", "address", "calle", "callenumero", "calleynumero"],
+    // Patient solo tiene UNA dirección: estas partes se juntan en ella («calle, colonia, ciudad, …»).
+    colonia:   ["colonia", "comuna", "barrio", "localidad"],
+    city:      ["ciudad", "municipio", "city"],
+    state:     ["provincia", "region", "estadoprovincia", "entidadfederativa", "entidad"],
+    zip:       ["codigopostal", "cp", "zip", "zipcode"],
+    country:   ["pais", "country"],
     bloodType: ["tiposangre", "tipodesangre", "bloodtype"],
     notes:     ["notas", "observaciones", "comentarios", "notes"],
+    // Documento de identidad: si es un CURP (18) va a curp; si es un RFC, a rfcPaciente; si no, a las notas.
+    nationalId: ["cedulaidentidad/dni", "cedulaidentidad", "dni", "rut", "identificacion", "documentodeidentidad", "cedula"],
+    curp:      ["curp"],
+    rfc:       ["rfc", "rfcpaciente"],
+    insuranceProvider: ["convenio", "aseguradora", "seguro", "aseguradoramedica", "obrasocial", "prevision", "isapre"],
+    insurancePolicy: ["poliza", "numerodepoliza", "numeropoliza", "npoliza"],
+    // «Cómo nos conoció».
+    source:    ["referencia", "comonosconocio", "comonosconociste", "comoseentero", "referido", "fuente"],
+    // Etiquetas del paciente (en Dentalink, «Tipo Paciente»: la sucursal).
+    tags:      ["tipopaciente", "etiquetas", "tags"],
+    allergies: ["alergias", "alergia"],
+    chronicConditions: ["enfermedades", "enfermedadescronicas", "antecedentesmedicos", "padecimientos"],
+    currentMedications: ["medicamentos", "medicacion", "medicamentosactuales"],
+    familyHistory: ["antecedentesfamiliares"],
+    // «Alertas» médicas de texto libre: las alergias van a allergies, el resto a chronicConditions, y el texto
+    // original SIEMPRE queda además en las notas (no se decide por el doctor qué era qué).
+    patientAlerts: ["alertas", "alertasmedicas", "alerta"],
+    emergencyContactName: ["contactodeemergencia", "contactoemergencia", "nombrecontactoemergencia"],
+    emergencyContactPhone: ["telefonodeemergencia", "telefonoemergencia", "telefonocontactoemergencia"],
   },
+  // La ficha entera del sistema anterior tiene que llegar: lo que no tiene campo se conserva en las notas.
+  conservarSobrantes: true,
 
   validateMapping(campos) {
     if (!campos.has("fullName") && !campos.has("firstName")) {
@@ -472,14 +518,19 @@ export const patientsHandler: EntityHandler = {
     const enArchivoNombreDob = new Set<string>();
     const enArchivoExterno = new Set<string>();
 
-    for (const { row, mapped } of rows) {
+    for (const { row, mapped, sobrantes, origen } of rows) {
       const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
       const data = pr.data;
+      // Lo que no cabe en un campo y se conserva en las notas: [columna del archivo, valor].
+      const aNotas: Array<[string, string]> = [];
+      const etiqueta = (campo: string, porDefecto: string) => origen?.[campo] ?? porDefecto;
 
       for (const campo of Object.keys(mapped)) {
         const v = mapped[campo];
         if (v === undefined || v === null || String(v).trim() === "") continue;
         const sv = String(v).trim();
+        // «-» / «Sin convenio»: relleno del sistema de origen, no un dato (antes: «Fecha "-" inválida»).
+        if (!(v instanceof Date) && esSinDato(sv)) continue;
         switch (campo) {
           case "firstName":
           case "lastName":
@@ -518,7 +569,102 @@ export const patientsHandler: EntityHandler = {
             else { data.bloodType = null; pr.warnings.push(`Tipo sangre "${sv}" inválido — guardado sin valor`); }
             break;
           }
+          case "phoneAlt": {
+            const t = parsePhone(sv);
+            if (t) data.phoneAlt = t;
+            break;
+          }
+          case "nationalId":
+          case "curp":
+          case "rfc": {
+            const c = sv.toUpperCase().replace(/[\s-]/g, "");
+            if (campo !== "rfc" && CURP_RE.test(c)) data.curp = c;
+            else if (campo !== "curp" && RFC_RE.test(c)) data.rfcPaciente = c;
+            else {
+              const col = etiqueta(campo, campo === "rfc" ? "RFC" : campo === "curp" ? "CURP" : "Documento de identidad");
+              aNotas.push([col, sv]);
+              pr.warnings.push(`«${col}» "${sv}" no es un CURP ni un RFC válido: se guardó en las notas`);
+            }
+            break;
+          }
+          case "insuranceProvider":
+            data.insuranceProvider = sv.slice(0, 200);
+            break;
+          case "insurancePolicy":
+            data.insurancePolicy = sv.slice(0, 100);
+            break;
+          case "source":
+            data.source = sv.slice(0, 200);
+            break;
+          case "tags": {
+            const t = listaDeTexto(sv).map((x) => x.slice(0, 60));
+            if (t.length > 0) data.tags = sinRepetir([...(data.tags ?? []), ...t]);
+            break;
+          }
+          case "allergies":
+          case "chronicConditions":
+          case "currentMedications": {
+            const t = listaDeTexto(sv);
+            if (t.length > 0) data[campo] = sinRepetir([...(data[campo] ?? []), ...t]);
+            break;
+          }
+          case "patientAlerts": {
+            for (const frag of listaDeTexto(sv)) {
+              const dest = ALERGIA_RE.test(frag) ? "allergies" : "chronicConditions";
+              data[dest] = sinRepetir([...(data[dest] ?? []), frag]);
+            }
+            aNotas.push([etiqueta(campo, "Alertas"), sv]);
+            break;
+          }
+          case "familyHistory":
+            data.familyHistory = sv;
+            break;
+          case "emergencyContactName":
+            data.emergencyContactName = sv.slice(0, 200);
+            break;
+          case "emergencyContactPhone": {
+            const t = parsePhone(sv);
+            if (t) data.emergencyContactPhone = t;
+            break;
+          }
+          case "colonia":
+          case "city":
+          case "state":
+          case "zip":
+          case "country":
+            data[campo] = sv;
+            break;
         }
+      }
+
+      // Segundo teléfono: ocupa el lugar del principal si falta; si es otro número, va a las notas.
+      if (data.phoneAlt) {
+        if (!data.phone) data.phone = data.phoneAlt;
+        else if (last10(data.phoneAlt) !== last10(data.phone)) aNotas.push([etiqueta("phoneAlt", "Teléfono alterno"), data.phoneAlt]);
+        delete data.phoneAlt;
+      }
+
+      // Patient tiene UNA dirección: calle + colonia + ciudad + estado + CP + país, sin repetir lo que ya dice.
+      {
+        const partes: string[] = [];
+        for (const parte of [data.address, data.colonia, data.city, data.state, data.zip, data.country]) {
+          if (!parte) continue;
+          const t = String(parte).trim();
+          if (t && !partes.some((x) => x.toLowerCase().includes(t.toLowerCase()))) partes.push(t);
+        }
+        if (partes.length > 0) data.address = partes.join(", ");
+        delete data.colonia; delete data.city; delete data.state; delete data.zip; delete data.country;
+      }
+
+      // Columnas del archivo sin campo en la ficha: NO se pierden, van a las notas (solo con un sistema de origen).
+      for (const { columna, valor } of ctx.originName ? sobrantes ?? [] : []) {
+        if (esSinDato(valor)) continue;
+        if (norm(columna) === "edad" && data.dob) continue; // se calcula de la fecha de nacimiento: nada que conservar
+        aNotas.push([columna, valor]);
+      }
+      if (aNotas.length > 0) {
+        const sistema = ctx.originName ?? "otro sistema";
+        data.notes = [data.notes, ...aNotas.map(([c, val]) => `Dato de ${sistema}: ${c}: ${val}`)].filter(Boolean).join("\n");
       }
 
       // Nombre en una sola columna (o «Nombre» con nombre y apellidos juntos y sin
@@ -673,6 +819,18 @@ export const patientsHandler: EntityHandler = {
         bloodType: r.data.bloodType ?? null,
         address: r.data.address ?? null,
         notes: r.data.notes ?? null,
+        curp: r.data.curp ?? null,
+        rfcPaciente: r.data.rfcPaciente ?? null,
+        insuranceProvider: r.data.insuranceProvider ?? null,
+        insurancePolicy: r.data.insurancePolicy ?? null,
+        source: r.data.source ?? null,
+        tags: r.data.tags ?? [],
+        allergies: r.data.allergies ?? [],
+        chronicConditions: r.data.chronicConditions ?? [],
+        currentMedications: r.data.currentMedications ?? [],
+        familyHistory: r.data.familyHistory ?? null,
+        emergencyContactName: r.data.emergencyContactName ?? null,
+        emergencyContactPhone: r.data.emergencyContactPhone ?? null,
       })),
       create: (data) => prisma.patient.createMany({ data, skipDuplicates: true }),
     });

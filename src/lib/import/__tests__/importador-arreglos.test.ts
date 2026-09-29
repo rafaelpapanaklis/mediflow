@@ -923,7 +923,9 @@ test("N8: si el ID externo de la fila no existe y se empareja por nombre, la vis
   assert.equal(fila(citas, 3).data.patientId, fila(citas, 2).data.patientId);
   assert.equal(fila(citas, 4).status, "error");
   // Mismo aviso en saldos.
-  const saldos = await correr("balances", csv("s.csv", "Id paciente,Paciente,Saldo\nSINT-001,Carla Mena,50\n"), { origin: "dentalink" });
+  // «Nombre paciente», no «Paciente»: en el export real de Dentalink/BEVADENT (04_Saldos) «Paciente» es el
+  // NÚMERO de ID, así que el perfil ya no la toma por nombre (ver perfil-dentalink-bevadent.test.ts).
+  const saldos = await correr("balances", csv("s.csv", "Id paciente,Nombre paciente,Saldo\nSINT-001,Carla Mena,50\n"), { origin: "dentalink" });
   assert.match(fila(saldos, 2).warnings.join(" "), /SINT-001/);
   // Por teléfono: dice «teléfono».
   const tel = await correr("appointments", csv("c.csv", "Id paciente,Celular,Profesional,Fecha,Hora\nSINT-009,5551234567,Ana López,15/01/2030,10:00\n"), { origin: "dentalink" });

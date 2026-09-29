@@ -36,7 +36,16 @@ export type DcField =
   | "notes"
   | "balance"
   /** ID del paciente en el sistema de origen: un reintento no duplica y las citas/saldos se emparejan con él. */
-  | "externalId";
+  | "externalId"
+  // Ficha completa del paciente (ws1-t12): ver patientsHandler.headerVariants en entities.ts.
+  | "phoneAlt"
+  | "nationalId"
+  | "tags"
+  | "insuranceProvider"
+  | "source"
+  | "patientAlerts"
+  | "city"
+  | "colonia";
 
 /** Paso de instrucción "cómo exportar" (h = título, p = detalle, admite <code>). */
 export interface OriginInstruction {

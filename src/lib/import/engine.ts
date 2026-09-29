@@ -478,6 +478,41 @@ export function applyMapping(rows: Record<string, any>[], mapping: ColumnMapping
   });
 }
 
+/** Una celda como texto para una nota: fechas como dd/mm/aaaa (con hora si la traen), lo demás recortado. */
+export function textoDeCelda(v: unknown): string {
+  if (v === undefined || v === null) return "";
+  if (v instanceof Date) {
+    const hora = (v as Date & { hora?: HoraDeReloj }).hora;
+    const hhmm = hora ? ` ${String(hora.h).padStart(2, "0")}:${String(hora.m).padStart(2, "0")}` : "";
+    if (v.getFullYear() < 1900 && hhmm) return hhmm.trim();
+    return `${String(v.getDate()).padStart(2, "0")}/${String(v.getMonth() + 1).padStart(2, "0")}/${v.getFullYear()}${hhmm}`;
+  }
+  return String(v).replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Lo que `applyMapping` deja fuera, fila por fila: las columnas sin campo con valor (`sobrantes`) y
+ * qué encabezado aportó cada campo (`origen`, el primero con valor, igual que applyMapping).
+ */
+export function sobrantesYOrigen(
+  rows: Record<string, any>[],
+  columns: string[],
+  mapping: ColumnMapping,
+): { sobrantes: { columna: string; valor: string }[]; origen: Record<string, string> }[] {
+  return rows.map((raw) => {
+    const sobrantes: { columna: string; valor: string }[] = [];
+    const origen: Record<string, string> = {};
+    for (const col of columns) {
+      const t = textoDeCelda(raw[col]);
+      if (t === "") continue;
+      const campo = mapping[col];
+      if (campo) { if (origen[campo] === undefined) origen[campo] = col; }
+      else sobrantes.push({ columna: col, valor: t });
+    }
+    return { sobrantes, origen };
+  });
+}
+
 /**
  * Autodetección header -> campo canónico usando las variantes de la entidad.
  * Un mismo alias puede servir para más de un campo (p. ej. "tratamiento" es
@@ -554,6 +589,13 @@ function sanitizeMapping(provided: ColumnMapping, columns: string[], headerVaria
 export interface MappedRow {
   row: number;
   mapped: Record<string, any>;
+  /**
+   * Solo si el handler pide `conservarSobrantes`: las columnas del archivo que NO se mapearon a ningún
+   * campo y traen algo, en el orden del archivo. Sirven para no perder el dato (van a las notas).
+   */
+  sobrantes?: { columna: string; valor: string }[];
+  /** Solo con `conservarSobrantes`: campo canónico → encabezado del archivo que lo aportó (para citarlo en una nota). */
+  origen?: Record<string, string>;
 }
 
 /**
@@ -590,6 +632,11 @@ export interface EntityHandler {
   auditAction?: "create" | "update";
   /** campo canónico -> variantes normalizadas del header (para autodetección). */
   headerVariants: Record<string, string[]>;
+  /**
+   * El handler quiere ver también las columnas sin campo (`MappedRow.sobrantes`) para no perder ese dato.
+   * Hoy solo pacientes: la ficha entera del sistema anterior tiene que llegar, aunque no haya campo para todo.
+   */
+  conservarSobrantes?: boolean;
   /** Nombres de la pestaña de esta entidad en un .xlsx de varias hojas (se comparan con norm). */
   sheetNames?: string[];
   /** Validación estructural del set de campos mapeados. Devuelve mensaje de error o null. */
@@ -795,10 +842,11 @@ export async function runImport(
   }
 
   const mappedAll = applyMapping(rawRows, mapping);
+  const extraAll = handler.conservarSobrantes ? sobrantesYOrigen(rawRows, columns, mapping) : null;
   const mapped: MappedRow[] = [];
   for (let i = 0; i < mappedAll.length; i++) {
     if (Object.keys(mappedAll[i]).length === 0) continue; // fila sin datos mapeados
-    mapped.push({ row: i + 2, mapped: mappedAll[i] }); // +2 = 1-indexed + header
+    mapped.push({ row: i + 2, mapped: mappedAll[i], ...(extraAll ? extraAll[i] : {}) }); // +2 = 1-indexed + header
   }
   if (mapped.length === 0) throw new ImportError(400, "Sin filas de datos");
 
