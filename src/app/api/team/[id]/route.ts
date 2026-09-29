@@ -10,7 +10,7 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 import { MIEMBRO_SELECT, camposPublicosDeMiembro } from "@/lib/team/member-fields";
 import { clasificarErrorAuth, esUuid, ERROR_SIN_CUENTA } from "@/lib/team/auth-errors";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
-import { esAccesoOrtodoncia, especialidadSegunAcceso, overrideConAcceso } from "@/lib/orthodontics/acceso-doctor";
+import { esAccesoOrtodoncia, overrideConAcceso } from "@/lib/orthodontics/acceso-doctor";
 
 function getAdminClient() {
   return createAdminClient(
@@ -270,8 +270,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // sus permisos, y los permisos son del SUPER_ADMIN (mismo criterio que
   // PATCH /api/team/[id]/permissions). Solo aplica a un DOCTOR de una sede
   // dental con el módulo contratado. La pantalla solo lo manda si la persona
-  // cambió la respuesta; aquí además no se toca nada si ya está como se pide.
-  let accesoOrto: "ortodoncista" | "solo_dental" | null = null;
+  // cambió la casilla «Ortodoncia» de «Módulos de especialidades»; aquí además no
+  // se toca nada si ya está como se pide. La especialidad NO se toca (ws1-t2).
   let overrideOrto: string[] | undefined;
   if (esAccesoOrtodoncia(body.accesoOrtodoncia)) {
     if (!ctx!.isSuperAdmin) {
@@ -283,20 +283,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (nuevo === null) {
         return NextResponse.json({ error: "Quitarle el módulo de Ortodoncia lo dejaría sin ningún permiso. Ajusta sus permisos a mano en Equipo → Permisos." }, { status: 400 });
       }
-      accesoOrto = body.accesoOrtodoncia;
       overrideOrto = nuevo;
     }
   }
 
   const data = {
     ...(overrideOrto !== undefined && { permissionsOverride: overrideOrto }),
-    // Si el PATCH no trae `specialty` (la pantalla solo manda lo que cambió), se parte
-    // de la que la persona YA tiene: `undefined` se leería como "sin especialidad" y
-    // «solo dental» le borraría la suya.
-    ...(accesoOrto && { specialty: especialidadSegunAcceso(body.specialty !== undefined ? body.specialty : member.specialty, accesoOrto) }),
     ...(body.firstName  !== undefined && { firstName:  body.firstName  }),
     ...(body.lastName   !== undefined && { lastName:   body.lastName   }),
-    ...(!accesoOrto && body.specialty  !== undefined && { specialty:  body.specialty  }),
+    ...(body.specialty  !== undefined && { specialty:  body.specialty  }),
     ...(body.color      !== undefined && { color:      body.color      }),
     ...(body.phone      !== undefined && { phone:      body.phone      }),
     ...(body.avatarUrl  !== undefined && { avatarUrl:  body.avatarUrl  }),

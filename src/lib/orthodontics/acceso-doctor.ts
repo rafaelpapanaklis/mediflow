@@ -24,10 +24,14 @@ import {
 /** La única llave del módulo. */
 export const LLAVE_MODULO_ORTODONCIA: PermissionKey = "specialties.orthodontics";
 
-/** Lo que se contesta al crear o editar un doctor: «¿solo dental o también ortodoncista?». */
+/**
+ * Lo que dice la casilla «Ortodoncia» de «Módulos de especialidades» al crear o
+ * editar un doctor: marcada = "ortodoncista", desmarcada = "solo_dental". Solo
+ * decide el permiso; la especialidad de la persona es aparte (ws1-t2).
+ */
 export type AccesoOrtodoncia = "ortodoncista" | "solo_dental";
 
-/** La especialidad que Equipo guarda y que la lista de doctores tratantes reconoce. */
+/** La especialidad «Ortodoncia» de Equipo: la lista de doctores tratantes la usa para poner primero a quien la tiene. */
 export const ESPECIALIDAD_ORTODONCIA = "Ortodoncia";
 
 export function esAccesoOrtodoncia(valor: unknown): valor is AccesoOrtodoncia {
@@ -75,26 +79,4 @@ export function overrideConAcceso(user: UsuarioConPermisos, acceso: AccesoOrtodo
   if (!loTiene) return [...actual];
   const sinLlave = efectivos.filter((k) => k !== LLAVE_MODULO_ORTODONCIA);
   return sinLlave.length > 0 ? sinLlave : null;
-}
-
-function sinAcentos(texto: string): string {
-  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-}
-
-/**
- * La especialidad que queda guardada según la respuesta.
- *  · «ortodoncista» → «Ortodoncia» (la lista de doctores tratantes la usa para
- *    poner primero a quien la tiene).
- *  · «solo_dental» → la que eligió la persona, salvo que sea Ortodoncia: una
- *    ficha que dice «Ortodoncia» y un permiso que dice «solo dental» se
- *    contradicen, y gana la respuesta.
- */
-export function especialidadSegunAcceso(
-  especialidad: string | null | undefined,
-  acceso: AccesoOrtodoncia,
-): string | null {
-  if (acceso === "ortodoncista") return ESPECIALIDAD_ORTODONCIA;
-  const limpia = typeof especialidad === "string" ? especialidad.trim() : "";
-  if (!limpia) return null;
-  return sinAcentos(limpia).includes("ortodonc") ? null : limpia;
 }

@@ -1,5 +1,5 @@
 /**
- * ws1-t3 — el acceso al módulo de Ortodoncia POR PERSONA.
+ * ws1-t3 — el acceso al módulo de Ortodoncia POR PERSONA (ws1-t2: ahora es la casilla «Ortodoncia» de «Módulos de especialidades»).
  *
  * Run: npx tsx --test src/lib/orthodontics/__tests__/acceso-doctor.test.ts
  *
@@ -7,7 +7,7 @@
  *    recepción cobra (dinero) sin necesitar nada clínico.
  *  · Quien ya existe conserva lo que tiene: un doctor sin override trae el
  *    módulo (default del rol) y no se le quita nada al abrir la pantalla.
- *  · El alta pregunta «¿solo dental o también ortodoncista?» y el servidor
+ *  · El alta lleva la casilla «Ortodoncia» y el servidor
  *    parte del default del rol: nunca acepta una lista de permisos del cliente.
  */
 import { test } from "node:test";
@@ -20,7 +20,6 @@ import { vistaOrtoPorPermisos } from "../pestana-ficha";
 import {
   ESPECIALIDAD_ORTODONCIA,
   LLAVE_MODULO_ORTODONCIA,
-  especialidadSegunAcceso,
   esAccesoOrtodoncia,
   overrideConAcceso,
   tieneAccesoOrtodoncia,
@@ -121,16 +120,6 @@ test("overrideConAcceso nunca devuelve [] al quitar (un override vacío = defaul
   }
 });
 
-test("la especialidad: ortodoncista → «Ortodoncia»; solo dental no se queda con «Ortodoncia»", () => {
-  assert.equal(especialidadSegunAcceso("Endodoncia", "ortodoncista"), ESPECIALIDAD_ORTODONCIA);
-  assert.equal(especialidadSegunAcceso(null, "ortodoncista"), "Ortodoncia");
-  assert.equal(esOrtodoncista({ specialty: especialidadSegunAcceso("", "ortodoncista") }), true, "la lista de doctores tratantes lo reconoce");
-  assert.equal(especialidadSegunAcceso("Endodoncia", "solo_dental"), "Endodoncia");
-  assert.equal(especialidadSegunAcceso("Ortodoncia", "solo_dental"), null);
-  assert.equal(especialidadSegunAcceso("  ortodoncia y ortopedia ", "solo_dental"), null);
-  assert.equal(especialidadSegunAcceso(undefined, "solo_dental"), null);
-});
-
 test("esAccesoOrtodoncia solo acepta las dos respuestas", () => {
   assert.equal(esAccesoOrtodoncia("ortodoncista"), true);
   assert.equal(esAccesoOrtodoncia("solo_dental"), true);
@@ -198,10 +187,11 @@ test("la edición (PATCH /api/team/[id]): solo el dueño cambia permisos, y se r
   assert.match(patch, /nuevo === null/);
 });
 
-test("la pantalla de Equipo pregunta solo si la sede tiene el módulo y solo a un doctor", () => {
+test("la pantalla de Equipo pinta «Módulos de especialidades» solo a un doctor de sede dental; deshabilitada sin el módulo", () => {
   const page = leer("src/app/dashboard/team/page.tsx");
   assert.match(page, /hasActiveOrthodonticsModule\(user\.clinicId\)/);
   const cliente = leer("src/app/dashboard/team/team-client.tsx");
-  assert.match(cliente, /ortoModulo && form\.role === "DOCTOR" && \(/);
+  assert.match(cliente, /seccionModulosVisible\(\{ role: form\.role, sedeDental \}\)/);
+  assert.match(cliente, /verModulos && \(/);
   assert.match(cliente, /puedeCambiarAcceso=\{isSuperAdmin\}/, "en la edición solo el dueño");
 });

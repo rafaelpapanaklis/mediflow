@@ -73,6 +73,7 @@ export default async function TeamPage() {
       clinicName={user.clinic.name}
       rediseno={rediseno}
       horarioClinica={horarioClinica(horarios)}
+      sedeDental={user.clinic.category === "DENTAL"}
       ortoModulo={ortoModulo}
     />
   );

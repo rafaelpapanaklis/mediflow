@@ -198,6 +198,12 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
               disabled={!columnsExist.treatingDoctorId}
             >
               <option value="">— sin asignar —</option>
+              {/* Un doctor al que ya se le quitó «Ortodoncia» en Equipo deja de
+                  ofrecerse en casos nuevos, pero los casos que ya lleva lo
+                  conservan: se muestra tal cual y se guarda sin cambios. */}
+              {treatingDoctorId && !loading && !doctors.some((d) => d.id === treatingDoctorId) ? (
+                <option value={treatingDoctorId}>Doctor actual del caso (sin acceso a Ortodoncia)</option>
+              ) : null}
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.fullName}</option>
               ))}

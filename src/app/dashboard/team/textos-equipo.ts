@@ -48,11 +48,6 @@ const es = {
   desactivadoConRegistros: "Desactivado en lugar de eliminado: tiene citas o registros",
   // Edición
   sinCambios: "No hay cambios que guardar",
-  // Especialidad ↔ «También ortodoncista»
-  especialidadFijaPorOrto:
-    "Al ser también ortodoncista, su especialidad queda «Ortodoncia». Para elegir otra, marca «Solo dental».",
-  especialidadOrtoMarcaAcceso:
-    "Elegiste «Ortodoncia»: se marcó «También ortodoncista» para que tenga acceso al módulo.",
 };
 
 const en: typeof es = {
@@ -89,10 +84,6 @@ const en: typeof es = {
   miembroEliminado: "Member deleted",
   desactivadoConRegistros: "Deactivated instead of deleted: they have appointments or records",
   sinCambios: "There are no changes to save",
-  especialidadFijaPorOrto:
-    "Since they are also an orthodontist, their specialty is set to “Orthodontics”. To pick another, choose “Dental only”.",
-  especialidadOrtoMarcaAcceso:
-    "You chose “Orthodontics”: “Also an orthodontist” was checked so they have access to the module.",
 };
 
 export const TEXTOS_EQUIPO = { es, en } as const;

@@ -16,10 +16,11 @@ import { SabinaPermissionsModal } from "@/components/dashboard/team/sabina-permi
 import { ModalHorarioDoctor } from "@/components/dashboard/horario-doctor/modal-horario-doctor";
 import type { Dia } from "@/components/dashboard/horario-doctor/tipos";
 import { RaizRediseno } from "@/components/dashboard/equipo-rediseno/raiz";
-import { useT, useLocale } from "@/i18n/i18n-provider";
+import { useT } from "@/i18n/i18n-provider";
 import { leerRespuestaEquipo } from "@/lib/team/leer-respuesta";
-import { CampoAccesoOrtodoncia, type RespuestaAcceso } from "./campo-acceso-ortodoncia";
-import { ESPECIALIDAD_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
+import { ModulosEspecialidades } from "./modulos-especialidades";
+import { tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
+import { accesoParaAlta, accesoQueViaja, seccionModulosVisible, type RespuestaModulo } from "@/lib/team/modulos-especialidades";
 import { prepararImagen } from "@/lib/image-client";
 import { useTextosEquipo } from "./textos-equipo";
 import {
@@ -77,7 +78,7 @@ interface FormState {
   especialidad: string;
   cedulaEspecialidad: string;
   // ws1-t3: «¿solo dental o también ortodoncista?». "" = no aplica / sin contestar.
-  accesoOrtodoncia: RespuestaAcceso;
+  accesoOrtodoncia: RespuestaModulo;
 }
 interface TeamMember {
   id: string; firstName: string; lastName: string; email: string;
@@ -97,7 +98,7 @@ interface TeamMember {
 // as a new component type on every render and unmounts/remounts the inputs,
 // causing focus loss on every keystroke. Defined outside, it is stable.
 function MemberForm({
-  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, rediseno, ortoModulo, puedeCambiarAcceso, accesoOriginal = "",
+  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, rediseno, sedeDental, ortoModulo, puedeCambiarAcceso,
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
@@ -114,31 +115,19 @@ function MemberForm({
   // "byte por byte igual" manda incluso sobre la regla de tipografía, que
   // solo aplica dentro del rediseño (WS1-T5).
   rediseno: boolean;
-  // ws1-t3: la sede tiene el módulo de Ortodoncia contratado → se pregunta.
+  // ws1-t2: «Módulos de especialidades». La sede es dental (si no, no hay módulos)…
+  sedeDental: boolean;
+  // …y tiene el de Ortodoncia contratado (si no, la casilla se ve deshabilitada).
   ortoModulo: boolean;
   // Alta: quien da de alta. Edición: solo el dueño (los permisos son suyos).
   puedeCambiarAcceso: boolean;
-  // Edición: la respuesta con la que ARRANCÓ el modal (lo que dice su permiso hoy).
-  // Sirve para saber si la persona acaba de elegir «también ortodoncista» (y
-  // entonces su especialidad se fija en Ortodoncia) o ya lo era de antes.
-  accesoOriginal?: RespuestaAcceso;
 }) {
   const t = useT();
   const x = useTextosEquipo();
   // Recepción y solo lectura no llevan datos de médico (especialidad, servicios,
   // NOM-024, color de agenda). El ADMIN y el dueño sí: firman recetas con su cédula.
   const clinico = rolLlevaDatosClinicos(form.role);
-  const preguntaOrto = ortoModulo && form.role === "DOCTOR";
-  // El servidor fija la especialidad en «Ortodoncia» cuando el acceso viaja como
-  // «ortodoncista» (alta, o edición donde la persona lo acaba de elegir). En ese
-  // caso el selector va bloqueado, para que lo que se ve sea lo que se guarda. Una
-  // persona que ya tenía el acceso (lo trae el default del rol) conserva su
-  // especialidad libre: al guardar el acceso no viaja y nada se le impone.
-  // La especialidad que tenía antes de marcar «también ortodoncista»: si se arrepiente
-  // y vuelve a «solo dental», recupera la suya en vez de quedarse en blanco.
-  const especialidadPrevia = useRef<string>(form.specialty === ESPECIALIDAD_ORTODONCIA ? "" : form.specialty);
-  const especialidadFija =
-    preguntaOrto && form.accesoOrtodoncia === "ortodoncista" && (!isEdit || accesoOriginal !== "ortodoncista");
+  const verModulos = seccionModulosVisible({ role: form.role, sedeDental });
   const [svcInput, setSvcInput] = useState("");
   // Con el rediseño, el acento y los bordes se leen del menú de dos niveles
   // (los `--m2-*` que monta la raíz); apagado, los tokens de siempre.
@@ -229,26 +218,10 @@ function MemberForm({
             <select
               className="input-new" style={{ height: 42, fontSize: 13.5 }}
               value={form.specialty}
-              disabled={especialidadFija}
-              onChange={e => {
-                const v = e.target.value;
-                // Elegir «Ortodoncia» a mano en una sede con el módulo es decir
-                // «también ortodoncista»: se marca para que texto y casilla no se contradigan.
-                setForm(prev => ({
-                  ...prev,
-                  specialty: v,
-                  accesoOrtodoncia: preguntaOrto && puedeCambiarAcceso && v === ESPECIALIDAD_ORTODONCIA ? "ortodoncista" : prev.accesoOrtodoncia,
-                }));
-              }}>
+              onChange={e => set("specialty", e.target.value)}>
               <option value="">{t("settings.team.noSpecialty")}</option>
               {SPECIALTIES.map(s => <option key={s.id} value={s.id}>{t(s.nameKey)}</option>)}
             </select>
-            {especialidadFija && (
-              <p className="text-xs text-muted-foreground" data-especialidad-fija>{x.especialidadFijaPorOrto}</p>
-            )}
-            {!especialidadFija && preguntaOrto && puedeCambiarAcceso && form.specialty === ESPECIALIDAD_ORTODONCIA && form.accesoOrtodoncia === "ortodoncista" && accesoOriginal !== "ortodoncista" && (
-              <p className="text-xs text-muted-foreground">{x.especialidadOrtoMarcaAcceso}</p>
-            )}
           </div>
         )}
         <div className="space-y-1.5">
@@ -262,23 +235,16 @@ function MemberForm({
         </div>
       </div>
 
-      {/* ws1-t3 — solo un DOCTOR de una sede con el módulo de Ortodoncia. */}
-      {ortoModulo && form.role === "DOCTOR" && (
-        <CampoAccesoOrtodoncia
-          valor={form.accesoOrtodoncia}
+      {/* ws1-t2 — un DOCTOR de una sede dental. Recepción y demás roles no la ven. */}
+      {verModulos && (
+        <ModulosEspecialidades
+          respuestas={{ ortodoncia: form.accesoOrtodoncia }}
+          contratados={{ ortodoncia: ortoModulo }}
           puedeCambiar={puedeCambiarAcceso}
           esEdicion={isEdit}
-          acento={acento} acentoSuave={acentoSuave} bordeSuave={bordeSuave}
-          onChange={(v) => setForm(prev => {
-            if (v === "ortodoncista" && prev.specialty !== ESPECIALIDAD_ORTODONCIA) especialidadPrevia.current = prev.specialty;
-            return {
-              ...prev,
-              accesoOrtodoncia: v,
-              // Misma regla que aplica el servidor: ortodoncista → especialidad
-              // «Ortodoncia»; solo dental no puede quedarse con «Ortodoncia» (recupera la que tenía).
-              specialty: v === "ortodoncista" ? ESPECIALIDAD_ORTODONCIA : (prev.specialty === ESPECIALIDAD_ORTODONCIA ? especialidadPrevia.current : prev.specialty),
-            };
-          })}
+          acento={acento} bordeSuave={bordeSuave}
+          // La especialidad no se toca: es independiente del módulo.
+          onChange={(_modulo, respuesta) => set("accesoOrtodoncia", respuesta)}
         />
       )}
 
@@ -605,11 +571,12 @@ function MemberPhoto({
   );
 }
 
-// ws1-t3 — la respuesta con la que arranca la edición de un miembro: la que dice
-// su permiso HOY. Un doctor que ya trae el módulo (por default o porque se lo
-// dieron) arranca en «también ortodoncista»; a quien se lo quitaron, en «solo
-// dental». Vacío si no aplica (la sede no tiene el módulo o no es un doctor).
-function accesoInicial(m: TeamMember, ortoModulo: boolean): RespuestaAcceso {
+// ws1-t2 — cómo arranca la casilla «Ortodoncia» al editar un miembro: lo que dice
+// su permiso HOY (el mismo de Equipo → Permisos). Un doctor que ya trae el módulo
+// (por default del rol o porque se lo dieron) arranca marcado; a quien se lo
+// quitaron, desmarcado. Vacío si no aplica (la sede no tiene el módulo o no es un
+// doctor).
+function accesoInicial(m: TeamMember, ortoModulo: boolean): RespuestaModulo {
   if (!ortoModulo || m.role !== "DOCTOR") return "";
   return tieneAccesoOrtodoncia({ role: m.role, permissionsOverride: m.permissionsOverride }) ? "ortodoncista" : "solo_dental";
 }
@@ -624,14 +591,15 @@ interface Props {
   /** El horario de la clínica (0=Lunes…6=Domingo), o `null` si no tiene
    *  filas. Lo lee la ventana «Horario» de cada doctor. */
   horarioClinica?: Dia[] | null;
+  /** ws1-t2: la sede es dental (solo ahí hay «Módulos de especialidades»). */
+  sedeDental?: boolean;
   /** ws1-t3: la sede es dental y tiene el módulo de Ortodoncia contratado de verdad. */
   ortoModulo?: boolean;
 }
 
-export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, ortoModulo = false }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, sedeDental = false, ortoModulo = false }: Props) {
   const t = useT();
   const x = useTextosEquipo();
-  const locale = useLocale();
   const router = useRouter();
   const askConfirm = useConfirm();
   const [team,       setTeam]       = useState<TeamMember[]>(initialTeam);
@@ -691,15 +659,17 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       toast.error(t("settings.team.requiredFields"));
       return;
     }
-    if (ortoModulo && form.role === "DOCTOR" && !form.accesoOrtodoncia) {
-      toast.error(locale.startsWith("en") ? "Choose: dental only, or also an orthodontist." : "Elige si es solo dental o también ortodoncista.");
-      return;
-    }
     setLoading(true);
     try {
       // Recepción no lleva datos de médico: no viajan (el modal ni los pide).
       const clinico = rolLlevaDatosClinicos(form.role);
-      const cuerpo = clinico ? form : {
+      // La casilla de Ortodoncia viaja siempre en el alta de un doctor con el módulo
+      // (desmarcada = sin el módulo); fuera de ese caso, no viaja.
+      const acceso = accesoParaAlta({
+        aplica: ortoModulo && seccionModulosVisible({ role: form.role, sedeDental }),
+        respuesta: form.accesoOrtodoncia,
+      });
+      const cuerpo = clinico ? { ...form, accesoOrtodoncia: acceso } : {
         ...form, specialty: "", services: [] as string[],
         cedulaProfesional: "", especialidad: "", cedulaEspecialidad: "", accesoOrtodoncia: "",
       };
@@ -731,9 +701,8 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     // que llegara vacío al modal (la cédula, que la página no traía) se guardaba
     // como vacío y BORRABA el dato del médico (ws1-t5, T1).
     const parche = formInicial ? parcheDeCambios(formInicial, datosActuales) : (datosActuales as Partial<DatosEditablesDeMiembro>);
-    const cambioAcceso =
-      !!form.accesoOrtodoncia && form.accesoOrtodoncia !== accesoInicial(editMember, ortoModulo);
-    if (Object.keys(parche).length === 0 && !cambioAcceso) {
+    const acceso = accesoQueViaja({ inicial: accesoInicial(editMember, ortoModulo), actual: form.accesoOrtodoncia });
+    if (Object.keys(parche).length === 0 && !acceso) {
       setEditMember(null);
       toast(x.sinCambios);
       return;
@@ -746,9 +715,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         // dato (el teléfono, la cédula) no reescribe los permisos de nadie.
         body: JSON.stringify({
           ...parche,
-          // El servidor fija la especialidad según la respuesta: que parta de la del formulario.
-          ...(cambioAcceso && { specialty: form.specialty }),
-          accesoOrtodoncia: cambioAcceso ? form.accesoOrtodoncia : undefined,
+          accesoOrtodoncia: acceso,
         }),
       });
       const data = await leerRespuestaEquipo(res);
@@ -759,8 +726,6 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       setTeam(prev => prev.map(m => m.id === editMember.id
         ? {
             ...m, ...parche, email: savedEmail,
-            // El servidor puede fijar la especialidad (ortodoncista → «Ortodoncia»): manda lo que guardó.
-            ...(data.specialty !== undefined && { specialty: data.specialty }),
             permissionsOverride: data.permissionsOverride ?? m.permissionsOverride,
           }
         : m));
@@ -1179,7 +1144,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               form={form} setForm={setForm}
               onSubmit={createDoctor} onCancel={() => setShowNew(false)}
               loading={loading} isEdit={false} rediseno={rediseno}
-              ortoModulo={ortoModulo} puedeCambiarAcceso
+              sedeDental={sedeDental} ortoModulo={ortoModulo} puedeCambiarAcceso
             />
           </div>
         </div>
@@ -1200,8 +1165,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               form={form} setForm={setForm}
               onSubmit={updateDoctor} onCancel={() => setEditMember(null)}
               loading={loading} isEdit={true} rediseno={rediseno}
-              ortoModulo={ortoModulo} puedeCambiarAcceso={isSuperAdmin}
-              accesoOriginal={accesoInicial(editMember, ortoModulo)}
+              sedeDental={sedeDental} ortoModulo={ortoModulo} puedeCambiarAcceso={isSuperAdmin}
               // Reset password solo aparece cuando el actor es SUPER_ADMIN
               // y el target NO es SUPER_ADMIN. El backend valida lo mismo.
               onResetPassword={

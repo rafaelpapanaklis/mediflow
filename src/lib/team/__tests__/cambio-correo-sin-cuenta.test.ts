@@ -309,6 +309,22 @@ test("🔴 cambiar SOLO el acceso a Ortodoncia (sin mandar la especialidad) no l
   assert.equal((estado.filas.find((x) => x.id === "doc1") as any).specialty, "Endodoncia");
 });
 
+test("🔴 ws1-t2: la especialidad es independiente de la casilla — marcar «Ortodoncia» NO la cambia y desmarcar tampoco", async () => {
+  Object.assign(estado.filas[0], { email: "j@x.com", specialty: "Endodoncia", permissionsOverride: ["today.view"] });
+  let r = await PATCH("doc1", { accesoOrtodoncia: "ortodoncista", specialty: "Endodoncia" });
+  assert.equal(r.status, 200);
+  let f = estado.filas.find((x) => x.id === "doc1") as any;
+  assert.equal(f.specialty, "Endodoncia", "marcar la casilla no la vuelve Ortodoncia");
+  assert.equal(f.permissionsOverride.includes("specialties.orthodontics"), true, "la casilla escribió el permiso");
+
+  Object.assign(estado.filas[0], { specialty: "Ortodoncia" });
+  r = await PATCH("doc1", { accesoOrtodoncia: "solo_dental", specialty: "Ortodoncia" });
+  assert.equal(r.status, 200);
+  f = estado.filas.find((x) => x.id === "doc1") as any;
+  assert.equal(f.specialty, "Ortodoncia", "un ortodoncista de especialidad puede no llevar el módulo");
+  assert.equal(f.permissionsOverride.includes("specialties.orthodontics"), false, "desmarcar quitó el permiso");
+});
+
 test("correo de otra cuenta → 400 y el mensaje de siempre", async () => {
   estado.authUpdateRespuestas = [{ data: {}, error: errAuth.yaExiste }];
   const r = await PATCH("doc1", { email: "otra@x.com", cedulaProfesional: "1" });
@@ -480,10 +496,10 @@ test("🔴 H12: el alta «solo dental» responde con su permissionsOverride SIN 
   assert.equal(j.specialty, "Endodoncia");
 });
 
-test("H12: el alta «también ortodoncista» no guarda override (sigue el rol, que ya trae el módulo) y queda en Ortodoncia", async () => {
+test("H12: el alta con la casilla «Ortodoncia» marcada no guarda override (sigue el rol, que ya trae el módulo) y NO toca su especialidad (ws1-t2)", async () => {
   const r = await ALTA({ firstName: "Or", lastName: "To", email: "or@x.com", role: "DOCTOR", accesoOrtodoncia: "ortodoncista", specialty: "Endodoncia", services: [] });
   const j = await r.json();
   assert.equal(r.status, 201);
   assert.deepEqual(j.permissionsOverride, []);
-  assert.equal(j.specialty, "Ortodoncia");
+  assert.equal(j.specialty, "Endodoncia", "la casilla y la especialidad son independientes");
 });

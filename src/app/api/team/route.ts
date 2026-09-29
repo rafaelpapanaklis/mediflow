@@ -10,7 +10,7 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 import { camposPublicosDeMiembro } from "@/lib/team/member-fields";
 import { traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
-import { esAccesoOrtodoncia, especialidadSegunAcceso, overrideConAcceso, type AccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
+import { esAccesoOrtodoncia, overrideConAcceso, type AccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 
 const DOCTOR_COLORS = [
   "#3b82f6","#7c3aed","#059669","#e11d48","#d97706",
@@ -122,7 +122,6 @@ export async function POST(req: NextRequest) {
     acceso = (await hasActiveOrthodonticsModule(ctx!.clinicId)) ? accesoOrtodoncia : null;
   }
   const permissionsOverrideNuevo = acceso ? overrideConAcceso({ role: "DOCTOR", permissionsOverride: [] }, acceso) : null;
-  const especialidadNueva = acceso ? especialidadSegunAcceso(specialty, acceso) : specialty || null;
 
   const usedColors    = existing.map(u => u.color);
   const assignedColor = color || DOCTOR_COLORS.find(c => !usedColors.includes(c)) || DOCTOR_COLORS[0];
@@ -163,7 +162,8 @@ export async function POST(req: NextRequest) {
       firstName:  firstName.trim(),
       lastName:   lastName.trim(),
       role:       role ?? "DOCTOR",
-      specialty:  especialidadNueva,
+      // La especialidad es de la persona: el módulo (casilla) no la toca (ws1-t2).
+      specialty:  specialty || null,
       // Vacío = default del rol (que ya trae el módulo). Con «solo dental» va el
       // default del rol SIN la llave, explícito.
       ...(permissionsOverrideNuevo && permissionsOverrideNuevo.length > 0 && { permissionsOverride: permissionsOverrideNuevo }),
