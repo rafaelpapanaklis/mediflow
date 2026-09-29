@@ -12,7 +12,6 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
-import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-badge";
 import { invoiceStatusBadge, isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
@@ -21,6 +20,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
+import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { receptorInicial } from "@/lib/orthodontics/receptor-responsable";
 import { pedirResponsableDeFactura } from "@/components/dashboard/plan-de-pagos/use-responsable-cfdi";
 import { todayLocalISO } from "@/lib/billing/paid-at";
@@ -67,13 +67,15 @@ interface Props {
   /** Interruptor `menu-dos-niveles` (lo pasa Caja): viste el detalle de factura,
    *  Registrar pago y Nueva factura con el diseño nuevo. Apagado, todo igual. */
   rediseno?:     boolean;
+  /** ws1-t4: la sesión tiene billing.edit — «Editar» abre el editor de la factura. */
+  puedeEditarFacturas?: boolean;
 }
 
 function patientNameOf(inv: any): string {
   return `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.trim() || "—";
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueByInvoice, receivablesIncompleto = false, creditTotal = 0, clinic, cfdiLive = false, rediseno = false }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueByInvoice, receivablesIncompleto = false, creditTotal = 0, clinic, cfdiLive = false, rediseno = false, puedeEditarFacturas = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
@@ -148,11 +150,19 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
 
   // Modals
   const [showNew, setShowNew]                     = useState(false);
-  const [paymentInvoice, setPaymentInvoice]       = useState<(PaymentInvoice & { _patientName?: string }) | null>(null);
-  // ws1-t10 (H68): la mensualidad o lo vencido de `paymentInvoice`, si es a
-  // plazos — 0 (saldo completo) para una factura de un solo pago.
-  const [paymentMontoSugerido, setPaymentMontoSugerido] = useState(0);
   const [detailInvoice, setDetailInvoice]         = useState<any | null>(null);
+  // ws1-t4: «Registrar pago» de la fila abre la ventana COMPLETA de la factura
+  // (el detalle de arriba) con el pago ya abierto — antes, la de cobro suelta.
+  // `null` = se abrió el detalle con un clic en la fila (sin cobro). Un número
+  // = se abrió para cobrar, con ese monto sugerido. ws1-t10 (H68): la
+  // mensualidad o lo vencido, si es a plazos — 0 (saldo completo) si no.
+  const [cobroMontoSugerido, setCobroMontoSugerido] = useState<number | null>(null);
+  // ws1-t4: «Editar» (tarjeta o detalle) de un borrador sin pagos → el EDITOR.
+  const [editando, setEditando] = useState<any | null>(null);
+  function abrirCobroDeFila(inv: any, condiciones: CondicionesPago | null) {
+    setCobroMontoSugerido(montoSugeridoDeCobro(condiciones, inv.total, inv.paid, todayLocalISO()));
+    setDetailInvoice(inv);
+  }
   const [cfdiFor, setCfdiFor]                     = useState<any | null>(null);
   const cfdiAbiertoParaRef = useRef<string | null>(null);
   // «Duplicar» de la ficha (solo diseño nuevo): Nueva factura abre con el mismo
@@ -305,22 +315,15 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   }
 
   // ws1-t10 (H68): tabla vieja (sin `menu-dos-niveles`) — sin las condiciones
-  // ya cargadas por `FichasFactura`, se leen aquí ANTES de abrir el modal
-  // (PaymentModal solo recalcula el monto al abrir: `[open, invoice]`, no si
-  // `montoSugerido` cambia después) para que el campo no nazca en el saldo
-  // completo de una factura a plazos.
+  // ya cargadas por `FichasFactura`, se leen aquí ANTES de abrir el cobro
+  // para que el campo no nazca en el saldo completo de una factura a plazos.
   async function openPaymentForRow(e: React.MouseEvent, inv: any) {
-    e.stopPropagation();  // no abrir el detalle si se cliqueó "Registrar pago"
+    e.stopPropagation();  // el clic es «Registrar pago», no el de la fila
     const condiciones = await fetch(`/api/invoices/condiciones?ids=${encodeURIComponent(inv.id)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d?.condiciones?.[inv.id] ?? null)
       .catch(() => null);
-    setPaymentMontoSugerido(montoSugeridoDeCobro(condiciones, inv.total, inv.paid, todayLocalISO()));
-    setPaymentInvoice({
-      id: inv.id, invoiceNumber: inv.invoiceNumber,
-      total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
-      patientName: patientNameOf(inv),
-    });
+    abrirCobroDeFila(inv, condiciones);
   }
 
   return (
@@ -410,15 +413,10 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           puedeTimbrar={(inv) => !isVoidedInvoice(inv)}
           textoCobrar={t("billing.billingClient.registerPayment")}
           textoVacio={invoices.length === 0 ? t("billing.billingClient.emptyNoInvoices") : t("billing.billingClient.emptyNoResults")}
-          onAbrir={(inv) => setDetailInvoice(inv)}
-          onCobrar={(inv, condiciones) => {
-            setPaymentMontoSugerido(montoSugeridoDeCobro(condiciones, inv.total, inv.paid, todayLocalISO()));
-            setPaymentInvoice({
-              id: inv.id, invoiceNumber: inv.invoiceNumber,
-              total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
-              patientName: patientNameOf(inv),
-            });
-          }}
+          onAbrir={(inv) => { setCobroMontoSugerido(null); setDetailInvoice(inv); }}
+          onEditar={(inv) => setEditando(inv)}
+          puedeEditar={puedeEditarFacturas}
+          onCobrar={(inv, condiciones) => abrirCobroDeFila(inv, condiciones)}
           onTimbrar={(inv) => openCfdiModal(inv)}
           onDuplicar={(inv, condiciones) => {
             setDuplicar({
@@ -468,7 +466,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                   return (
                     <tr
                       key={inv.id}
-                      onClick={() => setDetailInvoice(inv)}
+                      onClick={() => { setCobroMontoSugerido(null); setDetailInvoice(inv); }}
                       style={{ cursor: "pointer" }}
                     >
                       <td className="mono" style={{ color: "var(--text-2)" }}>
@@ -592,23 +590,34 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         open={detailInvoice !== null}
         invoice={detailInvoice}
         patientName={detailInvoice ? patientNameOf(detailInvoice) : ""}
-        onClose={() => setDetailInvoice(null)}
+        onClose={() => { setDetailInvoice(null); setCobroMontoSugerido(null); }}
         onMutated={refresh}
         clinicTaxMode={clinic.cfdiTaxMode ?? null}
+        // ws1-t4: abierto desde «Registrar pago» de la fila → el pago ya abierto.
+        abrirCobro={cobroMontoSugerido !== null}
+        montoSugerido={cobroMontoSugerido ?? undefined}
+        // ws1-t4: «Editar factura» del detalle (borrador sin pagos) → el editor.
+        onEditar={puedeEditarFacturas ? (inv) => { setDetailInvoice(null); setCobroMontoSugerido(null); setEditando(inv); } : undefined}
       />
 
-      {/* PaymentModal compartido — atajo "Registrar pago" inline en cada row. */}
-      <PaymentModal
-        rediseno={rediseno}
-        open={paymentInvoice !== null}
-        invoice={paymentInvoice}
-        onClose={() => setPaymentInvoice(null)}
-        onSuccess={() => {
-          setPaymentInvoice(null);
-          refresh();
-        }}
-        montoSugerido={paymentMontoSugerido}
-      />
+      {/* ws1-t4: «Editar» abre el editor con los conceptos de ESA factura. */}
+      {editando && (
+        <InvoiceEditorModal
+          rediseno={rediseno}
+          open
+          patientId={editando.patientId ?? editando.patient?.id ?? undefined}
+          patientName={patientNameOf(editando)}
+          clinicTaxMode={clinic.cfdiTaxMode}
+          editar={editando}
+          onClose={() => setEditando(null)}
+          onCreated={() => {}}
+          onGuardada={(guardada) => {
+            setInvoices((prev) => prev.map((i) => (i.id === guardada?.id ? { ...i, ...guardada } : i)));
+            setEditando(null);
+            refresh();
+          }}
+        />
+      )}
 
       {/* Modal: Timbrar CFDI — flujo SAT específico, no se reemplaza. */}
       {cfdiFor && !cfdiFor.cfdiUuid && (
@@ -690,7 +699,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                     type="button"
                     className="btn-new btn-new--ghost btn-new--sm"
                     style={{ marginTop: 8 }}
-                    onClick={() => { const inv = invoices.find(i => i.id === cfdiFor.id) ?? cfdiFor; setCfdiFor(null); setDetailInvoice(inv); }}
+                    onClick={() => { const inv = invoices.find(i => i.id === cfdiFor.id) ?? cfdiFor; setCfdiFor(null); setCobroMontoSugerido(null); setDetailInvoice(inv); }}
                   >
                     {t("billing.billingClient.cfdiOpenInvoice")}
                   </button>

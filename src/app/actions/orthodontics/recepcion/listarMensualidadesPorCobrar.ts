@@ -20,6 +20,7 @@
 // pagar — irrelevante para "¿qué mensualidades hay que cobrar hoy?").
 
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/auth/permissions";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { cobranzaDelCasoUnificada, agruparVencidasPorFactura } from "@/lib/orthodontics/cobranza-caso";
@@ -61,6 +62,10 @@ export interface MensualidadesPorCobrar {
   items: MensualidadPorCobrar[];
   /** `menuDosNivelesEncendido(clinicId)`: qué vestido usa el `PaymentModal` al cobrar. */
   redisenoFacturas: boolean;
+  /** ws1-t4: la sesión puede registrar pagos (billing.charge). Sin esto no se ofrece «Cobrar». */
+  puedeCobrar: boolean;
+  /** ws1-t4: Clinic.cfdiTaxMode, para la ventana completa de la factura que abre «Cobrar». */
+  clinicTaxMode: string | null;
 }
 
 export async function listarMensualidadesPorCobrar(): Promise<ActionResult<MensualidadesPorCobrar>> {
@@ -70,6 +75,7 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
 
   const viewer = { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId };
   const redisenoFacturas = await menuDosNivelesEncendido(ctx.clinicId);
+  const puedeCobrar = hasPermission({ role: ctx.role as never, permissionsOverride: ctx.permissionsOverride }, "billing.charge");
 
   let planes: Array<{
     id: string;
@@ -99,10 +105,10 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
       },
     });
   } catch (e) {
-    if (esRelacionAusente(e)) return ok({ items: [], redisenoFacturas });
+    if (esRelacionAusente(e)) return ok({ items: [], redisenoFacturas, puedeCobrar, clinicTaxMode: null });
     throw e;
   }
-  if (planes.length === 0) return ok({ items: [], redisenoFacturas });
+  if (planes.length === 0) return ok({ items: [], redisenoFacturas, puedeCobrar, clinicTaxMode: null });
 
   const invoiceIds = planes.map((p) => p.invoiceId).filter((id): id is string => !!id);
   const modosPorCaso = await cargarModosDeCobro(ctx.clinicId, planes.map((p) => p.id));
@@ -110,7 +116,7 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
   const cargosControlPorCaso = await cargarCargosDeControlPorCasos(ctx.clinicId, casosPorControl);
 
   const [clinica, condicionesResult, invoices] = await Promise.all([
-    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }),
+    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true, cfdiTaxMode: true } }),
     leerCondicionesDeFacturas(prisma, { clinicId: ctx.clinicId, invoiceIds }),
     prisma.invoice.findMany({
       where: { id: { in: invoiceIds }, clinicId: ctx.clinicId },
@@ -236,5 +242,5 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
   const ORDEN: Record<MensualidadPorCobrar["estado"], number> = { vencida: 0, hoy: 1, proxima: 2 };
   salida.sort((a, b) => ORDEN[a.estado] - ORDEN[b.estado] || a.vencimiento.localeCompare(b.vencimiento));
 
-  return ok({ items: salida, redisenoFacturas });
+  return ok({ items: salida, redisenoFacturas, puedeCobrar, clinicTaxMode: clinica?.cfdiTaxMode ?? null });
 }

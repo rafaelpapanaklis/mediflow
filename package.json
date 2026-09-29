@@ -233,6 +233,7 @@
     "test:facturas-ligables": "tsx --test src/lib/orthodontics/cobro/__tests__/facturas-ligables.test.ts",
     "test:orto-lectura-sin-modulo": "tsx --test src/lib/orthodontics/__tests__/lectura-sin-modulo.test.ts",
     "test:monto-cobro-h68": "tsx --test src/lib/invoices/__tests__/monto-cobro-h68.test.ts",
+    "test:cobrar-ventana-completa": "tsx --test src/components/dashboard/billing/__tests__/cobrar-ventana-completa.test.ts",
     "test:factura-cancelada-h-f": "tsx --test src/lib/orthodontics/__tests__/factura-cancelada-h-f.test.ts",
     "test:cfdi-pago-concepto": "tsx --test src/lib/invoices/__tests__/cfdi-pago-concepto.test.ts",
     "test:payment-plans": "tsx --test --experimental-test-module-mocks src/lib/payment-plans/__tests__/letras.test.ts src/app/api/payment-plans/__tests__/plan-letras-ruta.test.ts",

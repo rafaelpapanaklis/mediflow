@@ -657,6 +657,8 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
         onClose={() => setChargingInvoice(null)}
         onMutated={() => { invalidateRangeCache(); }}
         clinicTaxMode={clinicTaxMode}
+        // ws1-t4: se abre desde «Cobrar» → el pago ya abierto.
+        abrirCobro
       />
     </aside>
   );

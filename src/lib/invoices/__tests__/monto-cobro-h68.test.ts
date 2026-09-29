@@ -23,7 +23,8 @@ const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 test("recuadro de ortodoncia (ficha y panel de la cita): ResumenCobranza pasa montoSugerido", () => {
   const src = leer("components/specialties/orthodontics/cobranza/ResumenCobranza.tsx");
   assert.match(src, /const montoSugerido = panel\.cobranza\.vencidas\.reduce\(\(acc, q\) => acc \+ q\.falta, 0\) \|\| cuota\?\.falta \|\| 0;/);
-  assert.match(src, /<PaymentModal[\s\S]*?montoSugerido=\{montoSugerido\}/);
+  // ws1-t4: ya no la ventana suelta, la completa — con el MISMO monto.
+  assert.match(src, /<CobrarEnFactura[\s\S]*?montoSugerido=\{montoSugerido\}/);
 });
 
 test("fila de factura (Caja y expediente): FichasFactura manda las condiciones ya cargadas a onCobrar", () => {
@@ -34,19 +35,22 @@ test("fila de factura (Caja y expediente): FichasFactura manda las condiciones y
 
 test("Facturación general (Caja): calcula montoSugerido con las condiciones de la fila y con la tabla vieja", () => {
   const src = leer("app/dashboard/billing/billing-client.tsx");
-  assert.match(src, /onCobrar=\{\(inv, condiciones\) => \{\s*setPaymentMontoSugerido\(montoSugeridoDeCobro\(condiciones, inv\.total, inv\.paid, todayLocalISO\(\)\)\);/);
+  // ws1-t4: los dos caminos abren la ventana COMPLETA con el pago abierto y
+  // el monto calculado ANTES de abrirla.
+  assert.match(src, /onCobrar=\{\(inv, condiciones\) => abrirCobroDeFila\(inv, condiciones\)\}/);
   assert.match(src, /async function openPaymentForRow\(e: React\.MouseEvent, inv: any\) \{/, "la tabla vieja (sin menu-dos-niveles) espera las condiciones ANTES de abrir el modal");
   assert.match(src, /\.then\(\(d\) => d\?\.condiciones\?\.\[inv\.id\] \?\? null\)/);
-  assert.match(src, /setPaymentMontoSugerido\(montoSugeridoDeCobro\(condiciones, inv\.total, inv\.paid, todayLocalISO\(\)\)\);\s*setPaymentInvoice/, "también lo calcula, ANTES de abrir el modal (PaymentModal no reacciona a montoSugerido tras abrirse)");
-  assert.match(src, /<PaymentModal[\s\S]*?montoSugerido=\{paymentMontoSugerido\}/);
+  assert.match(src, /setCobroMontoSugerido\(montoSugeridoDeCobro\(condiciones, inv\.total, inv\.paid, todayLocalISO\(\)\)\);\s*setDetailInvoice\(inv\);/, "lo calcula ANTES de abrir la ventana");
+  assert.match(src, /<InvoiceDetailModal[\s\S]*?abrirCobro=\{cobroMontoSugerido !== null\}[\s\S]*?montoSugerido=\{cobroMontoSugerido \?\? undefined\}/);
 });
 
 test("Facturación del expediente (fila de factura del paciente): openDirectPayment calcula y propaga montoSugerido", () => {
   const src = leer("app/dashboard/patients/[id]/patient-detail-client.tsx");
   assert.match(src, /const openDirectPayment = async \(inv: any, condiciones\?: CondicionesPago \| null\) => \{/);
-  assert.match(src, /setDirectPayMontoSugerido\(montoSugeridoDeCobro\(condicionesFinal \?\? null, inv\.total, inv\.paid, todayLocalISO\(\)\)\);/);
+  assert.match(src, /setCobroMontoSugerido\(montoSugeridoDeCobro\(condicionesFinal \?\? null, inv\.total, inv\.paid, todayLocalISO\(\)\)\);/);
   assert.match(src, /onCobrar=\{\(inv, condiciones\) => \{ void openDirectPayment\(inv, condiciones\); \}\}/);
-  assert.match(src, /<PaymentModal[\s\S]*?montoSugerido=\{directPayMontoSugerido\}/);
+  // ws1-t4: la ventana completa, con el pago abierto y ESE monto.
+  assert.match(src, /<InvoiceDetailModal[\s\S]*?abrirCobro=\{cobroMontoSugerido !== null\}[\s\S]*?montoSugerido=\{cobroMontoSugerido \?\? undefined\}/);
   // Sin condiciones (el atajo "Cobrar ahora" de HeroCard/SideCards) se leen
   // con la misma ruta de solo lectura que ya usa la ficha de factura — nunca
   // se abre el modal a ciegas con el saldo completo por no tener el dato.

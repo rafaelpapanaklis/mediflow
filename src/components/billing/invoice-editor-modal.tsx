@@ -32,6 +32,8 @@ import { copiarAlPortapapeles, pedirLinkDePago, useCobroMercadoPago } from "@/co
 import { METODO_MERCADO_PAGO } from "@/lib/quotes/condiciones-pago";
 import { enviarFactura, guardarCondiciones, useContactoDePaciente } from "@/components/dashboard/factura-ficha-rediseno/extras";
 import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
+// ws1-t4: «Editar» de una factura existente (borrador sin pagos) abre este editor.
+import { conceptosParaEditar, cuerpoDeEdicion } from "./editar-factura";
 
 /**
  * Descuento de línea tal y como VIAJA en el payload: clampeado al importe de la
@@ -67,6 +69,23 @@ interface EditorItem {
   quantity: number;
   unitPrice: number;
   discount: number;
+  /** Solo al editar: lo demás que traía la línea guardada (clave SAT, pieza…). Se devuelve tal cual. */
+  extra?: Record<string, unknown>;
+}
+
+/**
+ * ws1-t4 — la factura que se EDITA (en vez de crear una). Solo un borrador sin
+ * pagos ni CFDI (`facturaEditableEnEditor`): es lo único que acepta
+ * PATCH /api/invoices/:id para conceptos, y lo vuelve a comprobar al guardar.
+ */
+export interface FacturaEnEdicion {
+  id: string;
+  invoiceNumber: string;
+  items: unknown;
+  discount?: number | null;
+  notes?: string | null;
+  taxRate?: number | null;
+  taxIncluded?: boolean | null;
 }
 
 let _seq = 0;
@@ -108,9 +127,19 @@ export interface InvoiceEditorModalProps {
    * todo igual que siempre.
    */
   antesDeCrear?: () => Promise<string | null>;
+  /**
+   * ws1-t4 — EDITAR esta factura (borrador sin pagos) en vez de crear una: el
+   * editor abre con sus conceptos, precios, descuentos y notas y guarda por
+   * PATCH /api/invoices/:id. Los impuestos se enseñan pero no se cambian (el
+   * servidor recalcula con los que ya tiene la factura); doctor, vencimiento,
+   * forma de pago y envío no se ofrecen (ese PATCH no los guarda).
+   */
+  editar?: FacturaEnEdicion | null;
+  /** Con `editar`: recibe la factura guardada (respuesta del PATCH). */
+  onGuardada?: (invoice: any) => void;
 }
 
-export function InvoiceEditorModal({ open, patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno = false, inicial = null, antesDeCrear }: InvoiceEditorModalProps) {
+export function InvoiceEditorModal({ open, patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno = false, inicial = null, antesDeCrear, editar = null, onGuardada }: InvoiceEditorModalProps) {
   // Solo el diseño nuevo lo enciende, y solo mientras guarda el trato o envía al
   // paciente DESPUÉS de crear: en ese rato el popup no se cierra (ni Esc, ni
   // clic fuera, ni «Cancelar»). Si se cerrara, el `onCreated` que llega al
@@ -131,6 +160,8 @@ export function InvoiceEditorModal({ open, patientId, patientName, patients, cli
           inicial={inicial}
           ocupado={ocupado}
           antesDeCrear={antesDeCrear}
+          editar={editar}
+          onGuardada={onGuardada}
         />
       </DialogContent>
     </Dialog>
@@ -138,7 +169,7 @@ export function InvoiceEditorModal({ open, patientId, patientName, patients, cli
 }
 
 function InvoiceEditorBody({
-  patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno, inicial, ocupado, antesDeCrear,
+  patientId, patientName, patients, clinicTaxMode, onClose, onCreated, rediseno, inicial, ocupado, antesDeCrear, editar, onGuardada,
 }: {
   patientId?: string;
   patientName?: string;
@@ -150,6 +181,8 @@ function InvoiceEditorBody({
   inicial: BorradorDeFactura | null;
   ocupado: MutableRefObject<boolean>;
   antesDeCrear?: () => Promise<string | null>;
+  editar: FacturaEnEdicion | null;
+  onGuardada?: (invoice: any) => void;
 }) {
   const t = useT();
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de
@@ -160,12 +193,19 @@ function InvoiceEditorBody({
   const cx = (vieja: string, nueva?: string) => (rediseno ? nueva : vieja);
   // Sin `inicial` (siempre, salvo «Duplicar» del diseño nuevo) cada estado nace
   // con el valor de siempre.
-  const [items, setItems] = useState<EditorItem[]>(() => (inicial?.items ?? []).map((it) => ({
-    key: newKey(), procedureId: null, name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount,
-  })));
-  const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">(inicial && inicial.descuento > 0 ? "amount" : "none");
-  const [discountValue, setDiscountValue] = useState<number>(inicial?.descuento ?? 0);
-  const [notes, setNotes] = useState(inicial?.notes ?? "");
+  // Editar (ws1-t4): los conceptos guardados, con sus campos extra.
+  const editando = editar !== null;
+  const [items, setItems] = useState<EditorItem[]>(() => (editar
+    ? conceptosParaEditar(editar.items).map((it) => ({
+      key: newKey(), procedureId: null, name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount, extra: it.extra,
+    }))
+    : (inicial?.items ?? []).map((it) => ({
+      key: newKey(), procedureId: null, name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount,
+    }))));
+  const descuentoInicial = editar ? Math.max(0, Number(editar.discount ?? 0) || 0) : (inicial?.descuento ?? 0);
+  const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">(descuentoInicial > 0 ? "amount" : "none");
+  const [discountValue, setDiscountValue] = useState<number>(descuentoInicial);
+  const [notes, setNotes] = useState(editar ? (editar.notes ?? "") : (inicial?.notes ?? ""));
   // "Vence el" (Invoice.dueDate) — opcional. Viaja como "YYYY-MM-DD" y el
   // servidor lo ancla al día natural de la clínica. Es lo ÚNICO que hace que
   // una factura cuente como vencida (KPI, filtro "Vencidas", Caja, Finanzas).
@@ -191,11 +231,18 @@ function InvoiceEditorBody({
   const initialTax = useMemo(() => clinicInvoiceTaxDefaults(clinicTaxMode), [clinicTaxMode]);
   // Un duplicado conserva los impuestos de la original, pero solo los dos modos
   // que el editor sabe producir (0 o IVA_RATE_PCT).
+  // Editar: los de la factura, tal cual los usa el servidor al recalcular
+  // (`taxRate ?? 16`, `taxIncluded !== false`) — la vista previa no puede
+  // decir otro total que el que se va a guardar.
   const [taxRate, setTaxRate] = useState<number>(
-    inicial?.taxRate === 0 || inicial?.taxRate === IVA_RATE_PCT ? inicial.taxRate : initialTax.taxRate,
+    editar
+      ? Math.max(0, Number(editar.taxRate ?? IVA_RATE_PCT) || 0)
+      : inicial?.taxRate === 0 || inicial?.taxRate === IVA_RATE_PCT ? inicial.taxRate : initialTax.taxRate,
   );
   const [taxIncluded, setTaxIncluded] = useState<boolean>(
-    inicial?.taxRate === IVA_RATE_PCT && inicial.taxIncluded !== null ? inicial.taxIncluded : initialTax.taxIncluded,
+    editar
+      ? editar.taxIncluded !== false
+      : inicial?.taxRate === IVA_RATE_PCT && inicial.taxIncluded !== null ? inicial.taxIncluded : initialTax.taxIncluded,
   );
   const taxMode: CfdiTaxMode = taxRate > 0 ? "iva16" : "exento";
 
@@ -337,7 +384,47 @@ function InvoiceEditorBody({
   const inputCls = cx("w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm");
   const selectCls = cx("mt-1 w-full bg-background border border-border rounded-lg px-2 py-2 text-sm");
 
+  // Editar (ws1-t4): PATCH de conceptos, descuento y notas. El servidor exige
+  // billing.edit, vuelve a comprobar «borrador sin pagos» en el mismo UPDATE
+  // y recalcula el total con los impuestos de la factura.
+  async function guardarEdicion() {
+    if (!editar) return;
+    const clean = items.filter((it) => it.name.trim().length > 0);
+    if (clean.length === 0) { toast.error(t("billing.invoiceEditor.errorNoItems")); return; }
+    setSaving(true);
+    const normalized = computeTotals(
+      clean.map((it) => ({ name: it.name.trim(), quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount })),
+      {
+        discountPct: discountMode === "pct" ? discountValue : null,
+        discountAmount: discountMode === "amount" ? discountValue : null,
+      },
+    );
+    const cuerpo = cuerpoDeEdicion({
+      lineas: normalized.items.map((it, i) => ({
+        name: it.name, quantity: it.quantity, unitPrice: it.unitPrice,
+        discount: lineDiscount(it), lineTotal: it.lineTotal, extra: clean[i]?.extra,
+      })),
+      descuento: normalized.discountAmount,
+      notas: notes,
+    });
+    try {
+      const res = await fetch(`/api/invoices/${encodeURIComponent(editar.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cuerpo),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(out.error || t("billing.invoiceEditor.errorUpdate"));
+      toast.success(t("billing.invoiceEditor.updatedToast", { number: editar.invoiceNumber ?? "" }));
+      onGuardada?.(out);
+    } catch (e) {
+      toast.error((e as Error).message || t("billing.invoiceEditor.errorUpdate"), { duration: 8000 });
+      setSaving(false);
+    }
+  }
+
   async function save() {
+    if (editando) { await guardarEdicion(); return; }
     if (!effectivePatientId) { toast.error(t("billing.invoiceEditor.errorNoPatient")); return; }
     const clean = items.filter((it) => it.name.trim().length > 0);
     if (clean.length === 0) { toast.error(t("billing.invoiceEditor.errorNoItems")); return; }
@@ -452,15 +539,20 @@ function InvoiceEditorBody({
     <>
       <DialogHeader className={rediseno ? c.cabecera : undefined}>
         <DialogTitle className={rediseno ? c.titulo : undefined}>
-          {effectivePatientName
-            ? t("billing.invoiceEditor.titleWithPatient", { patient: effectivePatientName })
-            : t("billing.invoiceEditor.title")}
+          {editar
+            ? t("billing.invoiceEditor.editTitle", { number: editar.invoiceNumber ?? "" })
+            : effectivePatientName
+              ? t("billing.invoiceEditor.titleWithPatient", { patient: effectivePatientName })
+              : t("billing.invoiceEditor.title")}
         </DialogTitle>
       </DialogHeader>
 
       <div className={cx("flex-1 overflow-y-auto min-h-0 px-6 pb-4 space-y-4", c.cuerpo)}>
         {/* Paciente — solo cuando NO viene fijo desde la ficha */}
-        {!fixedPatient && (
+        {editando && (
+          <p className={cx("text-[11px] text-muted-foreground", c.ayuda)}>{t("billing.invoiceEditor.editLockedHint")}</p>
+        )}
+        {!fixedPatient && !editando && (
           <div className={cx("bg-card border border-border rounded-xl p-4 space-y-3", c.bloque)}>
             <div className={cx("flex items-center justify-between gap-2", c.bloqueCabeza)}>
               <h3 className={cx("text-xs font-bold", c.bloqueTitulo)}>{t("billing.invoiceEditor.patient")}</h3>
@@ -607,6 +699,7 @@ function InvoiceEditorBody({
         {/* Doctor + Descuento global + Impuestos + Notas */}
         <div className={cx("bg-card border border-border rounded-xl p-4 space-y-4", c.bloque)}>
           <div className={cx("grid sm:grid-cols-2 gap-4", c.rejilla2)}>
+            {!editando && (
             <div className={rediseno ? c.campo : undefined}>
               <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.doctor")}</label>
               <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className={selectCls}>
@@ -616,6 +709,7 @@ function InvoiceEditorBody({
                 ))}
               </select>
             </div>
+            )}
             <div className={rediseno ? c.campo : undefined}>
               <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.globalDiscount")}</label>
               <div className={cx("flex items-center gap-1.5 mt-1", c.enLinea)}>
@@ -642,6 +736,7 @@ function InvoiceEditorBody({
               <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.taxes")}</label>
               <select
                 value={taxMode}
+                disabled={editando}
                 onChange={(e) => {
                   const iva = e.target.value === "iva16";
                   setTaxRate(iva ? IVA_RATE_PCT : 0);
@@ -663,6 +758,7 @@ function InvoiceEditorBody({
                 <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.taxMode")}</label>
                 <select
                   value={taxIncluded ? "included" : "added"}
+                  disabled={editando}
                   onChange={(e) => setTaxIncluded(e.target.value === "included")}
                   className={selectCls}
                 >
@@ -674,12 +770,14 @@ function InvoiceEditorBody({
           </div>
 
           <div className={cx("grid sm:grid-cols-2 gap-4", c.rejilla2)}>
+            {!editando && (
             <div className={rediseno ? c.campo : undefined}>
               <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.dueDate")}</label>
               <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
                 className={cx("mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm")} />
               <p className={cx("mt-1 text-[11px] text-muted-foreground", c.ayuda)}>{t("billing.invoiceEditor.dueDateHint")}</p>
             </div>
+            )}
             <div className={rediseno ? c.campo : undefined}>
               <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.notes")}</label>
               <input value={notes} onChange={(e) => setNotes(e.target.value)}
@@ -690,8 +788,8 @@ function InvoiceEditorBody({
         </div>
 
         {/* Lo que viene de Presupuestos: forma de pago y envío al paciente. */}
-        {rediseno && <FormaDePagoFactura cond={cond} total={grandTotal} onChange={setCond} mercadoPago={mpDisponible} />}
-        {rediseno && (
+        {rediseno && !editando && <FormaDePagoFactura cond={cond} total={grandTotal} onChange={setCond} mercadoPago={mpDisponible} />}
+        {rediseno && !editando && (
           <EnvioFactura
             envio={envio}
             contacto={contacto}
@@ -727,7 +825,7 @@ function InvoiceEditorBody({
             <span>{t("billing.invoiceEditor.total")}</span><span>{money(grandTotal)}</span>
           </div>
           {/* La frase del trato, en el pie: la misma que saldrá en la ficha. */}
-          {rediseno && <FraseDelTrato cond={cond} total={grandTotal} />}
+          {rediseno && !editando && <FraseDelTrato cond={cond} total={grandTotal} />}
         </div>
         <div className={cx("flex items-center justify-end gap-2", c.pieBotones)}>
           <button type="button" onClick={onClose} disabled={despuesDeCrear} className={cx("text-xs font-semibold px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/50", c.boton)}>
@@ -736,7 +834,9 @@ function InvoiceEditorBody({
           <button type="button" onClick={save} disabled={saving}
             className={cx("text-xs font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 inline-flex items-center gap-1.5", `${c.boton} ${c.botonPrincipal}`)}>
             {saving ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Check size={14} aria-hidden />}
-            {saving ? t("billing.invoiceEditor.creating") : t("billing.invoiceEditor.createInvoice")}
+            {editando
+              ? (saving ? t("billing.invoiceEditor.saving") : t("billing.invoiceEditor.saveChanges"))
+              : (saving ? t("billing.invoiceEditor.creating") : t("billing.invoiceEditor.createInvoice"))}
           </button>
         </div>
       </DialogFooter>

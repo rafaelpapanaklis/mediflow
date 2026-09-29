@@ -17,7 +17,8 @@
 // F1 (precio único) queda resuelto solo: no hay más precio que el de la
 // factura del tratamiento. F3/F4 (cobrar mensualidad o abono extra) y F2
 // (abrir el plan) reusan el editor de facturas y el modal de cobro de
-// SIEMPRE (`InvoiceEditorModal`, `PaymentModal`) — nunca se toca
+// SIEMPRE (`InvoiceEditorModal` y, para cobrar, la ventana completa de la
+// factura — ws1-t4; antes la de cobro suelta, `PaymentModal`) — nunca se toca
 // `src/app/api/invoices/**`. F6 (CFDI de mensualidades) y F13 (cobro
 // automático con tarjeta) quedan pendientes de Rafael — ver el hueco abajo.
 
@@ -29,7 +30,8 @@ import { Pill } from "../atoms/Pill";
 import { ProgressBar } from "../atoms/ProgressBar";
 import { fmtDateShort, fmtDay, fmtMoney } from "../atoms/format";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
-import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
+// ws1-t4: «Cobrar» abre la ventana completa de la factura, no la de cobro suelta.
+import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
 import { DrawerCambiarPlanDePago } from "../drawers/DrawerCambiarPlanDePago";
 import { ExtrasPorCobrar } from "../../cobranza/ExtrasPorCobrar";
 import { DrawerCobrarExtra } from "../drawers/DrawerCobrarExtra";
@@ -159,8 +161,8 @@ export function SectionFinance(props: SectionFinanceProps) {
     esPorControl && controlesPorCobrar.length > 0
       ? controlesPorCobrar[0]
       : panel.invoice && (!esPorControl || panel.invoice.balance > 0.004) ? panel.invoice : null;
-  const invoiceComoPago: PaymentInvoice | null = facturaACobrar
-    ? { id: "id" in facturaACobrar ? facturaACobrar.id : facturaACobrar.invoiceId, invoiceNumber: facturaACobrar.invoiceNumber ?? "", total: facturaACobrar.total, paid: facturaACobrar.paid, balance: facturaACobrar.balance, status: facturaACobrar.status, patientName: props.patientName }
+  const idFacturaACobrar: string | null = facturaACobrar
+    ? ("id" in facturaACobrar ? facturaACobrar.id : facturaACobrar.invoiceId)
     : null;
   const controlACobrar = drawer?.kind === "cobrar-control" ? controlesPorCobrar.find((c) => c.invoiceId === drawer.invoiceId) ?? null : null;
   const hayDeudaDeControles = Boolean(panel.cobranza && (panel.cobranza.vencidas.length > 0 || panel.cobranza.proximas.length > 0));
@@ -189,7 +191,9 @@ export function SectionFinance(props: SectionFinanceProps) {
             </span>
             <span className="flex items-center gap-3">
               <span className="tabular-nums font-medium">{fmtMoney(c.balance)}</span>
-              <Btn variant="secondary" size="sm" onClick={() => setDrawer({ kind: "cobrar-control", invoiceId: c.invoiceId })}>Cobrar</Btn>
+              {panel.puedeCobrar ? (
+                <Btn variant="secondary" size="sm" onClick={() => setDrawer({ kind: "cobrar-control", invoiceId: c.invoiceId })}>Cobrar</Btn>
+              ) : null}
             </span>
           </li>
         ))}
@@ -299,9 +303,12 @@ export function SectionFinance(props: SectionFinanceProps) {
 
             {panel.cobranza ? (
               <div className="px-[18px] py-[14px] border-b border-[color:var(--pr-borde-suave)] flex flex-wrap items-center gap-2">
+                {/* ws1-t4: sin permiso de cobro (billing.charge) no se ofrece «Cobrar». */}
+                {panel.puedeCobrar ? (
                 <Btn variant="primary" size="md" icon={<Banknote size={15} strokeWidth={1.75} aria-hidden />} onClick={() => setDrawer({ kind: "cobrar" })}>
                   Cobrar {montoCobrarSugerido > 0 ? `· ${fmtMoney(montoCobrarSugerido)}` : ""}
                 </Btn>
+                ) : null}
                 <Btn variant="secondary" size="md" icon={<Plus size={15} strokeWidth={1.75} aria-hidden />} onClick={() => setDrawer({ kind: "extra" })}>
                   Cobrar extra
                 </Btn>
@@ -488,18 +495,27 @@ export function SectionFinance(props: SectionFinanceProps) {
       ) : null}
 
       {controlACobrar ? (
-        <PaymentModal
-          open
-          invoice={{ id: controlACobrar.invoiceId, invoiceNumber: controlACobrar.invoiceNumber ?? "", total: controlACobrar.total, paid: controlACobrar.paid, balance: controlACobrar.balance, status: controlACobrar.status, patientName: props.patientName }}
-          onClose={() => setDrawer(null)}
-          onSuccess={cerrarYRecargar}
-          rediseno={panel.redisenoFacturas}
+        <CobrarEnFactura
+          invoiceId={controlACobrar.invoiceId}
+          patientName={props.patientName}
           montoSugerido={controlACobrar.balance}
+          rediseno={panel.redisenoFacturas}
+          clinicTaxMode={panel.clinicTaxMode}
+          onClose={() => setDrawer(null)}
+          onRefrescar={recargar}
         />
       ) : null}
 
-      {drawer?.kind === "cobrar" && invoiceComoPago ? (
-        <PaymentModal open invoice={invoiceComoPago} onClose={() => setDrawer(null)} onSuccess={cerrarYRecargar} rediseno={panel.redisenoFacturas} montoSugerido={montoCobrarSugerido} />
+      {drawer?.kind === "cobrar" && idFacturaACobrar ? (
+        <CobrarEnFactura
+          invoiceId={idFacturaACobrar}
+          patientName={props.patientName}
+          montoSugerido={montoCobrarSugerido}
+          rediseno={panel.redisenoFacturas}
+          clinicTaxMode={panel.clinicTaxMode}
+          onClose={() => setDrawer(null)}
+          onRefrescar={recargar}
+        />
       ) : null}
 
       {drawer?.kind === "extra" ? (

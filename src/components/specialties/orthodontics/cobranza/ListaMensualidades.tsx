@@ -10,8 +10,9 @@
 // mismo `responsibleGuardianId` (A11, "Alta del caso"), se agrupan bajo un
 // solo total y un botón «Cobrar a los dos» (o «a los tres»…, ver rotulo-cobro.ts). No es un cobro atómico nuevo (eso
 // tocaría `src/app/api/invoices/**`, fuera del alcance de esta parte): abre
-// el `PaymentModal` de la primera factura y, al guardar, encadena el de la
-// segunda — dos confirmaciones rápidas en vez de dos búsquedas separadas.
+// la ventana completa de la primera factura (ws1-t4: antes la de cobro
+// suelta, `PaymentModal`) con el pago ya abierto y, al registrarlo, encadena
+// la de la segunda — dos confirmaciones rápidas en vez de dos búsquedas.
 
 // Diseño (ws1-t5): esta lista vive en CAJA, no en la pestaña de Ortodoncia,
 // así que se viste con el sistema de diseño del panel (BadgeNew, ButtonNew y
@@ -32,7 +33,8 @@ import {
   listarMensualidadesPorCobrar,
   type MensualidadPorCobrar,
 } from "@/app/actions/orthodontics/recepcion/listarMensualidadesPorCobrar";
-import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
+// ws1-t4: «Cobrar» abre la ventana completa de la factura, no la de cobro suelta.
+import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
 
 const ESTADO_PILL: Record<MensualidadPorCobrar["estado"], { tono: "danger" | "warning" | "neutral"; label: string }> = {
   vencida: { tono: "danger", label: "Vencida" },
@@ -74,18 +76,6 @@ function cantidadVencidasDelGrupo(g: Grupo): number {
   return g.items.reduce((s, it) => s + it.cantidadVencidas, 0);
 }
 
-function comoFactura(it: MensualidadPorCobrar): PaymentInvoice {
-  return {
-    id: it.invoiceId,
-    invoiceNumber: it.invoiceNumber ?? "",
-    total: it.invoiceTotal,
-    paid: it.invoicePaid,
-    balance: it.invoiceBalance,
-    status: it.invoiceStatus,
-    patientName: it.patientName,
-  };
-}
-
 export function ListaMensualidades({
   alCobrar,
 }: {
@@ -98,6 +88,9 @@ export function ListaMensualidades({
 } = {}) {
   const [items, setItems] = useState<MensualidadPorCobrar[] | null>(null);
   const [rediseno, setRediseno] = useState(false);
+  // ws1-t4: sin billing.charge no se ofrece «Cobrar»; el régimen fiscal va a la ventana completa.
+  const [puedeCobrar, setPuedeCobrar] = useState(false);
+  const [clinicTaxMode, setClinicTaxMode] = useState<string | null>(null);
   const [cobrandoCola, setCobrandoCola] = useState<MensualidadPorCobrar[] | null>(null);
   // Cuántas facturas tenía el cobro encadenado al empezar (para decir «1 de 2»).
   const [cobrandoTotal, setCobrandoTotal] = useState(0);
@@ -107,6 +100,8 @@ export function ListaMensualidades({
       .then((r) => {
         setItems(r.ok ? r.data.items : []);
         setRediseno(r.ok ? r.data.redisenoFacturas : false);
+        setPuedeCobrar(r.ok ? r.data.puedeCobrar === true : false);
+        setClinicTaxMode(r.ok ? r.data.clinicTaxMode ?? null : null);
       })
       .catch(() => setItems([]));
   }
@@ -127,12 +122,11 @@ export function ListaMensualidades({
     setCobrandoTotal(grupo.length);
   }
 
+  // La recarga (y `alCobrar`) ya la hizo `onRefrescar` al registrar el pago.
   function alGuardarUno() {
     if (!cobrandoCola) return;
     const resto = cobrandoCola.slice(1);
     setCobrandoCola(resto.length > 0 ? resto : null);
-    recargar();
-    alCobrar?.();
   }
 
   return (
@@ -188,24 +182,30 @@ export function ListaMensualidades({
                 <span className={av.venceRotulo}>Vence</span> {fmtDay(g.items[0].vencimiento)}
               </span>
               <span className={av.montoFila}>{fmtMoney(subtotal)}</span>
+              {puedeCobrar && (
               <ButtonNew variant="primary" size="sm" onClick={() => iniciarCobro(g.items)}>
                 {/* ws1-t5 (arreglo): decía «Cobrar a los dos» escrito fijo, también
                     con tres hermanos. El cobro encadenado ya era de todos. */}
                 {rotuloCobrar(g.items.length)}
               </ButtonNew>
+              )}
             </li>
           );
         })}
       </ul>
 
       {cobrandoCola && cobrandoCola.length > 0 && (
-        <PaymentModal
-          open
-          invoice={comoFactura(cobrandoCola[0])}
-          onClose={() => setCobrandoCola(null)}
-          onSuccess={alGuardarUno}
-          rediseno={rediseno}
+        <CobrarEnFactura
+          // Una ventana por factura: al pasar al hermano se monta de cero.
+          key={cobrandoCola[0].invoiceId}
+          invoiceId={cobrandoCola[0].invoiceId}
+          patientName={cobrandoCola[0].patientName}
           montoSugerido={cobrandoCola[0].monto}
+          rediseno={rediseno}
+          clinicTaxMode={clinicTaxMode}
+          onClose={() => setCobrandoCola(null)}
+          onRefrescar={() => { recargar(); alCobrar?.(); }}
+          onCobrado={alGuardarUno}
         />
       )}
       {cobrandoCola && cobrandoCola.length > 1 && (

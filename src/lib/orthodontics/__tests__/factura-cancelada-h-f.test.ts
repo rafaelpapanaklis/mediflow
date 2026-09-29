@@ -31,7 +31,8 @@ test("cargarPanelDeCobro.ts: el panel de cobro tampoco cuenta una factura CANCEL
 
 test("ResumenCobranza.tsx: el botón «Cobrar» no se ofrece sobre una factura cancelada", () => {
   const src = leer("components/specialties/orthodontics/cobranza/ResumenCobranza.tsx");
-  assert.match(src, /\{panel\.invoice\.balance > 0 && panel\.invoice\.status !== "CANCELLED" \? \(/);
+  // ws1-t4: y además solo con permiso de cobro.
+  assert.match(src, /\{panel\.puedeCobrar && panel\.invoice\.balance > 0 && panel\.invoice\.status !== "CANCELLED" \? \(/);
 });
 
 test("abrirPlanDePago.ts: una factura cancelada NO bloquea abrir el plan de verdad", () => {

@@ -22,6 +22,8 @@ import { fmtMXNdec } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 import { esPlanAPlazos, montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
+import { abrirCobroClasicoAlAbrir, montoDelCobroAlAbrir } from "./cobrar-en-factura-core";
+import { facturaEditableEnEditor } from "@/components/billing/editar-factura";
 import { receptorInicial } from "@/lib/orthodontics/receptor-responsable";
 import { useResponsableDeFactura } from "@/components/dashboard/plan-de-pagos/use-responsable-cfdi";
 import { todayLocalISO } from "@/lib/billing/paid-at";
@@ -141,11 +143,41 @@ interface InvoiceDetailModalProps {
    * exactamente lo mismo.
    */
   rediseno?: boolean;
+  /**
+   * ws1-t4 — «Cobrar» SIEMPRE abre esta ventana completa (nunca la de cobro
+   * suelta). Quien la abre desde un botón de cobro (agenda, ficha, Caja,
+   * Cobranza de ortodoncia…) pasa `abrirCobro`: con el diseño nuevo el panel
+   * «Registrar pago» ya va desplegado de por sí y solo se enfoca el monto;
+   * sin él, se abre encima la ventana de cobro de siempre en cuanto se sabe
+   * que la sesión puede cobrar (nunca antes: sin permiso no hay cobro).
+   */
+  abrirCobro?: boolean;
+  /**
+   * ws1-t4 — el monto con que nace «Monto a cobrar» cuando quien abre sabe
+   * QUÉ se cobra (la cuota vencida del caso, la mensualidad de un hermano,
+   * el control…): el MISMO número que antes le pasaba a la ventana suelta.
+   * Sin él (`undefined`) manda el cálculo propio de la factura (sus
+   * condiciones a plazos, o el saldo). Se clampea al saldo, como siempre.
+   */
+  montoSugerido?: number;
+  /**
+   * ws1-t4 — se llama en vez de `onClose` cuando se REGISTRÓ un pago desde
+   * esta ventana (lo usa el cobro encadenado de hermanos para pasar a la
+   * siguiente factura). Sin él, registrar un pago cierra como siempre.
+   */
+  onCobrado?: () => void;
+  /**
+   * ws1-t4 — «Editar factura»: abre el EDITOR (conceptos, precios,
+   * descuentos) de ESTA factura. Solo sale en un borrador sin pagos ni CFDI
+   * (`facturaEditableEnEditor`, la regla del PATCH) y con billing.edit. Sin
+   * él, no hay botón (se sigue con «Editar precio», como siempre).
+   */
+  onEditar?: (invoice: any) => void;
 }
 
 type SubAction = null | "refund" | "edit-price" | "discount" | "cancel" | "cfdi";
 
-export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, onClose, onMutated, initialAction = null, clinicTaxMode, rediseno = false }: InvoiceDetailModalProps) {
+export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, onClose, onMutated, initialAction = null, clinicTaxMode, rediseno = false, abrirCobro = false, montoSugerido: montoSugeridoDeQuienAbre, onCobrado, onEditar }: InvoiceDetailModalProps) {
   const t = useT();
   const router = useRouter();
   const confirmDialog = useConfirm();
@@ -264,7 +296,12 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   const [fiscalOrigen, setFiscalOrigen] = useState<"responsable" | "paciente">("paciente");
   // ws1-t10 (H68): la mensualidad o lo vencido, no el saldo completo del
   // tratamiento. 0 sin condiciones a plazos: cada consumidor cae al saldo.
-  const montoSugerido = invoice ? montoSugeridoDeCobro(condicionesPago, invoice.total, invoice.paid, todayLocalISO()) : 0;
+  // ws1-t4: si quien abre ya sabe qué se cobra, manda su número (el mismo que
+  // antes recibía la ventana suelta); si no, el de las condiciones.
+  const montoSugerido = montoDelCobroAlAbrir(
+    montoSugeridoDeQuienAbre,
+    invoice ? montoSugeridoDeCobro(condicionesPago, invoice.total, invoice.paid, todayLocalISO()) : 0,
+  );
   const cobro = useCobro({
     abierta: open,
     factura: cobrable && invoice ? { id: invoice.id, balance: invoice.balance } : null,
@@ -344,6 +381,21 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       .catch(() => {});
     return () => { vivo = false; };
   }, [open, invoice?.id]);
+
+  // ws1-t4 — «Cobrar» sin el diseño nuevo: la ventana completa y, encima, la
+  // de cobro de siempre, UNA vez por apertura y solo cuando el permiso ya
+  // respondió que sí. Con el diseño nuevo no hace falta: el cobro ya está
+  // dentro. Un borrador no se abre solo (confirmarlo es una escritura): ahí
+  // se pulsa «Cobrar ahora» del pie, como siempre.
+  const cobroClasicoAbiertoRef = useRef<string | null>(null);
+  useEffect(() => { if (!open) cobroClasicoAbiertoRef.current = null; }, [open]);
+  useEffect(() => {
+    if (!open || !invoice?.id) return;
+    if (!abrirCobroClasicoAlAbrir({ abrirCobro, rediseno, puedeCobrar, citaCanceladaConDinero, status: invoice.status })) return;
+    if (cobroClasicoAbiertoRef.current === invoice.id) return;
+    cobroClasicoAbiertoRef.current = invoice.id;
+    setPaymentOpen(true);
+  }, [open, invoice?.id, invoice?.status, abrirCobro, rediseno, puedeCobrar, citaCanceladaConDinero]);
 
   // «Enviar recibo» (ws1-t3 fase 3): nunca automático, solo al pulsarlo.
   const enviarRecibo = useCallback(async () => {
@@ -768,7 +820,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   function handlePaymentSuccess() {
     setPaymentOpen(false);
     onMutated();
-    onClose();
+    if (onCobrado) onCobrado(); else onClose();
     router.refresh();
   }
 
@@ -1063,6 +1115,12 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 {rediseno ? botonRegistrarPago : puedeCobrar && !citaCanceladaConDinero && (
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={handleConfirmAndPay} disabled={busy}>
                   {t("clinical.invoiceDetail.chargeNow", { amount: fmtMXNdec(invoice.total) })}
+                </ButtonNew>
+                )}
+                {/* ws1-t4: «Editar factura» abre el editor con los conceptos. */}
+                {onEditar && puedeEditar && facturaEditableEnEditor(invoice) && (
+                <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => onEditar(invoice)} disabled={busy}>
+                  {t("billing.invoiceEditor.editButton")}
                 </ButtonNew>
                 )}
                 {puedeEditar && (

@@ -138,6 +138,8 @@ export default async function CajaPage() {
         // Solo el boolean del ambiente CFDI (jamás la env) para que el modal de
         // timbrado no prometa validez fiscal en pruebas.
         cfdiLive: isFacturapiLive(),
+        // ws1-t4: «Editar» abre el editor solo con billing.edit (el que exige el PATCH).
+        puedeEditarFacturas: hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "billing.edit"),
       }}
     />
   );

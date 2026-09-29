@@ -43,6 +43,7 @@ import {
 import { enviarFactura, useExtrasDeFacturas } from "./extras";
 import { BloquePlan } from "@/components/dashboard/plan-de-pagos/bloque-plan";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
+import { facturaEditableEnEditor } from "@/components/billing/editar-factura";
 import s from "./ficha.module.css";
 
 /** Los seis tonos de `invoice-status.ts`, en las etiquetas de esta hoja. */
@@ -72,8 +73,18 @@ export interface FichasFacturaProps<F extends FacturaDeFicha> {
   /** Texto del botón de cobro: «Cobrar» en el expediente, «Registrar pago» en Caja. */
   textoCobrar: string;
   textoVacio: string;
-  /** Tocar la ficha y «Editar»: el detalle de factura de siempre. */
+  /** Tocar la ficha y «Ver factura»: el detalle de factura de siempre. */
   onAbrir: (inv: F) => void;
+  /**
+   * ws1-t4 — «Editar»: abre el EDITOR de la factura (conceptos, precios,
+   * descuentos), no el detalle. Solo se ofrece en una factura editable
+   * (`facturaEditableEnEditor`: borrador sin pagos ni CFDI) y con permiso
+   * (`puedeEditar`); en las demás el botón es «Ver factura» y abre el detalle.
+   * Sin `onEditar`, siempre «Ver factura».
+   */
+  onEditar?: (inv: F) => void;
+  /** H14: `false` = sin billing.edit, nunca se ofrece «Editar». */
+  puedeEditar?: boolean;
   /**
    * «Cobrar» por fila. Manda las condiciones YA CARGADAS (las mismas de
    * `BloquePlan`) para que quien abra el pago pueda proponer la mensualidad o
@@ -97,7 +108,7 @@ export interface FichasFacturaProps<F extends FacturaDeFicha> {
 
 export function FichasFactura<F extends FacturaDeFicha>({
   facturas, facturApiEnabled, conPaciente = false, dentroDeTarjeta = false, estaVencida, montoVencido, textoCobrar, textoVacio,
-  onAbrir, onCobrar, onTimbrar, puedeCobrar, puedeTimbrar, puedeEnviar = true, onDuplicar,
+  onAbrir, onEditar, puedeEditar = true, onCobrar, onTimbrar, puedeCobrar, puedeTimbrar, puedeEnviar = true, onDuplicar,
 }: FichasFacturaProps<F>) {
   const t = useT();
   const extras = useExtrasDeFacturas(facturas.map((f) => f.id));
@@ -126,6 +137,7 @@ export function FichasFactura<F extends FacturaDeFicha>({
               contacto={extras.contacto[inv.id]}
               cargandoContacto={extras.cargando}
               onAbrir={() => onAbrir(inv)}
+              onEditar={onEditar && puedeEditar && facturaEditableEnEditor(inv) ? () => onEditar(inv) : null}
               onCobrar={() => onCobrar(inv, extras.condiciones[inv.id] ?? inv.condicionesPago ?? null)}
               onTimbrar={() => onTimbrar(inv)}
               onDuplicar={(c) => onDuplicar(inv, c)}
@@ -139,7 +151,7 @@ export function FichasFactura<F extends FacturaDeFicha>({
 
 function Ficha({
   inv, t, facturApiEnabled, conPaciente, vencida, montoVencido, cobrable, timbrable, textoCobrar, condiciones, contacto,
-  cargandoContacto, puedeEnviar, onAbrir, onCobrar, onTimbrar, onDuplicar,
+  cargandoContacto, puedeEnviar, onAbrir, onEditar, onCobrar, onTimbrar, onDuplicar,
 }: {
   inv: FacturaDeFicha;
   t: TFunction;
@@ -155,6 +167,8 @@ function Ficha({
   cargandoContacto: boolean;
   puedeEnviar: boolean;
   onAbrir: () => void;
+  /** `null` = no editable (o sin permiso): el botón es «Ver factura». */
+  onEditar: (() => void) | null;
   onCobrar: () => void;
   onTimbrar: () => void;
   onDuplicar: (c: CondicionesPago | null) => void;
@@ -261,14 +275,19 @@ function Ficha({
           <Download size={13} aria-hidden /> {t("quotes.card.pdf")}
         </a>
 
-        {/* H9 (revisión final, ws1-t4): una anulada no se edita — se ve. */}
-        <button type="button" className={s.accion} onClick={onAbrir}>
-          {anulada ? (
-            <><Eye size={13} aria-hidden /> {t("quotes.card.viewInvoice")}</>
-          ) : (
-            <><Pencil size={13} aria-hidden /> {t("quotes.card.edit")}</>
-          )}
-        </button>
+        {/* ws1-t4: «Editar» abre el EDITOR (antes abría el detalle, desde que
+            nació la ficha). Solo en un borrador sin pagos ni CFDI — lo único que
+            el servidor deja editar —; cancelada, timbrada, cobrada o ya emitida
+            se VE (H9 ya lo hacía con las anuladas). */}
+        {onEditar ? (
+          <button type="button" className={s.accion} onClick={onEditar}>
+            <Pencil size={13} aria-hidden /> {t("quotes.card.edit")}
+          </button>
+        ) : (
+          <button type="button" className={s.accion} onClick={onAbrir}>
+            <Eye size={13} aria-hidden /> {t("quotes.card.viewInvoice")}
+          </button>
+        )}
 
         {cobrable && (
           <button type="button" className={`${s.accion} ${s.accionExito}`} onClick={onCobrar}>

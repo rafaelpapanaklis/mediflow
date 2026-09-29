@@ -16,6 +16,7 @@
 // Ola 0, sin tocarlo) con el mismo input que arma el cargador original.
 
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/auth/permissions";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { cobranzaDelCasoUnificada, type CobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
 import { normalizarOrthoBillingMode, ORTHO_BILLING_MODE_LABELS, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
@@ -74,6 +75,11 @@ export interface PanelDeCobro {
   /** `menuDosNivelesEncendido(clinicId)`: sin esto, la factura no ofrece "a plazos". */
   redisenoFacturas: boolean;
   clinicTaxMode: string | null;
+  /**
+   * ws1-t4: la sesión puede registrar pagos (billing.charge). Sin esto no se
+   * ofrece «Cobrar» (el POST del pago ya lo exigía; el botón no).
+   */
+  puedeCobrar: boolean;
   /** SUPER_ADMIN/ADMIN: puede cambiar la política de cobro de la clínica (F9/F10). */
   puedeConfigurarPolitica: boolean;
   /**
@@ -134,6 +140,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     promesas,
     redisenoFacturas,
     clinicTaxMode: clinica?.cfdiTaxMode ?? null,
+    puedeCobrar: hasPermission({ role: ctx.role as never, permissionsOverride: ctx.permissionsOverride }, "billing.charge"),
     puedeConfigurarPolitica: ROLES_DE_DIRECCION.has(ctx.role),
     billingMode,
     billingModeLabel: ORTHO_BILLING_MODE_LABELS[billingMode],

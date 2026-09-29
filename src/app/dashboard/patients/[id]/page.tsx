@@ -303,6 +303,8 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     cobrar: hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "billing.charge"),
     timbrar: user.role === "ADMIN" || user.role === "SUPER_ADMIN",
     enviar: hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "whatsapp.send"),
+    // ws1-t4: «Editar» abre el editor de la factura (PATCH exige billing.edit).
+    editar: hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "billing.edit"),
   };
 
   // Consentimientos: los tres permisos del módulo + el del canal de envío. Se

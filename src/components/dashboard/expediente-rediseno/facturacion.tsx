@@ -47,12 +47,14 @@ export interface FacturacionProps {
   /** «Timbrar» — abre el detalle con el formulario SAT desplegado. */
   onTimbrar: (inv: PatientBillingInvoice) => void;
   /** H14: qué acciones de cobro ve la sesión. Sin la prop, todas. */
-  permisosCobro?: { cobrar: boolean; timbrar: boolean; enviar: boolean };
+  permisosCobro?: { cobrar: boolean; timbrar: boolean; enviar: boolean; editar?: boolean };
   /** «Duplicar» — abre Nueva factura con los mismos conceptos y el mismo trato. */
   onDuplicar: (inv: PatientBillingInvoice, condiciones: CondicionesPago | null) => void;
+  /** ws1-t4: «Editar» de un borrador sin pagos — abre el editor del padre. */
+  onEditar?: (inv: PatientBillingInvoice) => void;
 }
 
-export function Facturacion({ patientId, facturas, facturApiEnabled, onNueva, onAbrir, onCobrar, onTimbrar, permisosCobro, onDuplicar }: FacturacionProps) {
+export function Facturacion({ patientId, facturas, facturApiEnabled, onNueva, onAbrir, onCobrar, onTimbrar, permisosCobro, onDuplicar, onEditar }: FacturacionProps) {
   const t = useT();
 
   return (
@@ -83,6 +85,8 @@ export function Facturacion({ patientId, facturas, facturApiEnabled, onNueva, on
           textoCobrar={t("patients.billing.rowCharge")}
           textoVacio={t("patients.billing.empty")}
           onAbrir={onAbrir}
+          onEditar={onEditar}
+          puedeEditar={permisosCobro?.editar !== false}
           onCobrar={onCobrar}
           onTimbrar={onTimbrar}
           puedeCobrar={permisosCobro?.cobrar === false ? () => false : undefined}

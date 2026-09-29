@@ -758,6 +758,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
           invoice={factura}
           patientName={cita.nombrePaciente}
           clinicTaxMode={clinicTaxMode}
+          // ws1-t4: se abre desde «Cobrar» → el pago ya abierto.
+          abrirCobro
           onClose={() => setFactura(null)}
           onMutated={() => {
             invalidateRangeCache();

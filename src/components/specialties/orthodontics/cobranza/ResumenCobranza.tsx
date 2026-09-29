@@ -16,7 +16,8 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Banknote } from "lucide-react";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
-import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
+// ws1-t4: «Cobrar» abre la ventana completa de la factura, no la de cobro suelta.
+import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
 import { fmtDay } from "../redesign/atoms/format";
 import { resumenDeVencidas, tituloDeVencido } from "@/lib/orthodontics/cobro/linea-de-vencido";
 import orto from "../redesign/orto.module.css";
@@ -67,15 +68,6 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
   // arriba dijera "Próxima mensualidad $1,000". Mismo cálculo que ya usa
   // SectionFinance (`panel.cobranza.vencidas` primero, si no `cuotaDeHoy`).
   const montoSugerido = panel.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) || cuota?.falta || 0;
-  const invoiceComoPago: PaymentInvoice = {
-    id: panel.invoice.id,
-    invoiceNumber: panel.invoice.invoiceNumber ?? "",
-    total: panel.invoice.total,
-    paid: panel.invoice.paid,
-    balance: panel.invoice.balance,
-    status: panel.invoice.status,
-    patientName: props.patientName,
-  };
 
   return (
     <div
@@ -108,7 +100,8 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
           </div>
         </div>
       </div>
-      {panel.invoice.balance > 0 && panel.invoice.status !== "CANCELLED" ? (
+      {/* ws1-t4: sin permiso de cobro (billing.charge) no se ofrece «Cobrar». */}
+      {panel.puedeCobrar && panel.invoice.balance > 0 && panel.invoice.status !== "CANCELLED" ? (
         <button
           type="button"
           onClick={() => setCobrando(true)}
@@ -118,13 +111,14 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
         </button>
       ) : null}
       {cobrando ? (
-        <PaymentModal
-          open
-          invoice={invoiceComoPago}
-          onClose={() => setCobrando(false)}
-          onSuccess={() => { setCobrando(false); recargar(); }}
-          rediseno={panel.redisenoFacturas}
+        <CobrarEnFactura
+          invoiceId={panel.invoice.id}
+          patientName={props.patientName}
           montoSugerido={montoSugerido}
+          rediseno={panel.redisenoFacturas}
+          clinicTaxMode={panel.clinicTaxMode}
+          onClose={() => setCobrando(false)}
+          onRefrescar={recargar}
         />
       ) : null}
     </div>

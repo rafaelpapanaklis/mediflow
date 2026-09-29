@@ -38,6 +38,8 @@ interface BillingProps {
   clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null; cfdiTaxMode?: string | null };
   /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. */
   cfdiLive?:     boolean;
+  /** ws1-t4: la sesión tiene billing.edit — «Editar» abre el editor de la factura. */
+  puedeEditarFacturas?: boolean;
 }
 
 interface Props {
@@ -447,6 +449,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
       clinic={billing.clinic}
       cfdiLive={billing.cfdiLive}
       rediseno={rediseno}
+      puedeEditarFacturas={billing.puedeEditarFacturas === true}
     />
   );
 

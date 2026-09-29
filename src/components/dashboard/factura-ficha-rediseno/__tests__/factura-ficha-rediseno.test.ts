@@ -95,7 +95,11 @@ test("Caja conserva SUS reglas de la tabla: un borrador no se cobra desde la lis
   assert.match(caja, /puedeTimbrar=\{\(inv\) => !isVoidedInvoice\(inv\)\}/, "Caja ofrece Timbrar en una cancelada");
   assert.match(caja, /onStamp=\{isVoidedInvoice\(inv\) \? undefined : \(\) => openCfdiModal\(inv\)\}/, "la tabla ofrece Timbrar en una cancelada");
   const ficha = leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx");
-  assert.match(ficha, /\{anulada \? \(\s*<><Eye size=\{13\} aria-hidden \/> \{t\("quotes\.card\.viewInvoice"\)\}<\/>/, "una anulada dice «Editar»");
+  // ws1-t4: «Editar» solo cuando la ficha recibe `onEditar` (borrador sin pagos
+  // ni CFDI y con permiso); cualquier otra —anulada incluida— dice «Ver factura».
+  assert.match(ficha, /onEditar=\{onEditar && puedeEditar && facturaEditableEnEditor\(inv\) \? \(\) => onEditar\(inv\) : null\}/, "«Editar» se ofrece sin la regla del servidor");
+  assert.match(ficha, /\{onEditar \? \(\s*<button type="button" className=\{s\.accion\} onClick=\{onEditar\}>/, "«Editar» no abre el editor");
+  assert.match(ficha, /<Eye size=\{13\} aria-hidden \/> \{t\("quotes\.card\.viewInvoice"\)\}/, "una no editable dice «Editar»");
 });
 
 test("mientras guarda el trato o envía, el popup no se cierra (solo diseño nuevo)", () => {
@@ -138,9 +142,10 @@ test("«Con qué paga»: tarjetitas de `Opcion` con el icono del mapa del cobro,
 
 test("Nueva factura: lo de Presupuestos solo se monta y solo se llama con `rediseno`", () => {
   const modal = leer("components/billing/invoice-editor-modal.tsx");
-  assert.match(modal, /\{rediseno && <FormaDePagoFactura /, "la forma de pago sale sin bandera");
-  assert.match(modal, /\{rediseno && \(\s*<EnvioFactura/, "el envío sale sin bandera");
-  assert.match(modal, /\{rediseno && <FraseDelTrato /, "la frase del pie sale sin bandera");
+  // ws1-t4: y tampoco al EDITAR una factura (ese PATCH no guarda el trato ni envía).
+  assert.match(modal, /\{rediseno && !editando && <FormaDePagoFactura /, "la forma de pago sale sin bandera");
+  assert.match(modal, /\{rediseno && !editando && \(\s*<EnvioFactura/, "el envío sale sin bandera");
+  assert.match(modal, /\{rediseno && !editando && <FraseDelTrato /, "la frase del pie sale sin bandera");
   assert.match(modal, /if \(rediseno && out\?\.id && hayCondiciones\(cond\)\)/, "guardar el trato no está detrás de la bandera");
   assert.match(modal, /if \(rediseno && out\?\.id && envio\)/, "enviar al paciente no está detrás de la bandera");
   assert.match(modal, /useContactoDePaciente\(effectivePatientId, rediseno\)/, "el contacto se pide también con la bandera apagada");

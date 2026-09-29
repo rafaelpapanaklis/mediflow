@@ -26,7 +26,6 @@ import {
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
-import { PaymentModal } from "@/components/dashboard/billing/payment-modal";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import { todayLocalISO } from "@/lib/billing/paid-at";
@@ -372,7 +371,7 @@ interface Props {
    * hasPermission). Sin la prop se ofrecen todas (otros montajes de la ficha).
    * Las rutas las revalidan con 403.
    */
-  permisosCobro?: { cobrar: boolean; timbrar: boolean; enviar: boolean };
+  permisosCobro?: { cobrar: boolean; timbrar: boolean; enviar: boolean; editar?: boolean };
   /**
    * Consentimientos informados del paciente (snapshot del server). El tab los
    * pinta al instante y luego se refresca solo contra GET /api/consent.
@@ -603,16 +602,17 @@ export function PatientDetailClient({
   const [showNewInvoice, setShowNewInvoice] = useState(false);
   // «Duplicar» de la ficha de factura (solo diseño nuevo). Apagado, siempre null.
   const [duplicarFactura, setDuplicarFactura] = useState<BorradorDeFactura | null>(null);
-  // Cobro directo en 2 clicks: snapshot de la factura objetivo del
-  // PaymentModal montado abajo ("Cobrar ahora" del rail/hero y "Cobrar" por
-  // fila del tab Facturación).
-  const [directPayInvoice, setDirectPayInvoice] = useState<any | null>(null);
-  // ws1-t10 (H68): la mensualidad o lo vencido de `directPayInvoice`, si es a
-  // plazos — 0 (saldo completo) sin eso. `openDirectPayment` la calcula ANTES
-  // de abrir el modal para que el campo nunca nazca en el saldo íntegro.
-  const [directPayMontoSugerido, setDirectPayMontoSugerido] = useState(0);
-  // Evita confirmar dos veces un DRAFT con doble click mientras el POST vuela.
-  const confirmingDraftRef = useRef(false);
+  // ws1-t4: «Cobrar» (fila de Facturación) y «Cobrar ahora» (HeroCard /
+  // SideCards) abren la ventana COMPLETA de la factura (el detalle de abajo)
+  // con el pago ya abierto — antes, la ventana de cobro suelta. `null` = el
+  // detalle se abrió sin cobro (clic en la fila, «Timbrar»…); un número = se
+  // abrió para cobrar, con ese monto sugerido. ws1-t10 (H68): la mensualidad o
+  // lo vencido si es a plazos — 0 (saldo completo) si no; `openDirectPayment`
+  // lo calcula ANTES de abrir para que el campo nunca nazca en el saldo íntegro.
+  const [cobroMontoSugerido, setCobroMontoSugerido] = useState<number | null>(null);
+  // ws1-t4: «Editar» (tarjeta o detalle) de un borrador sin pagos → el EDITOR.
+  const [editandoFactura, setEditandoFactura] = useState<any | null>(null);
+  const puedeEditarFacturas = permisosCobro?.editar === true;
   useEffect(() => {
     setInvoices(initialInvoices);
   }, [initialInvoices]);
@@ -642,10 +642,11 @@ export function PatientDetailClient({
     setTab("facturacion");
   };
   // Cobro en 2 clicks: "Cobrar" (fila del tab Facturación) y "Cobrar ahora"
-  // (HeroCard/SideCards) abren el PaymentModal DIRECTO, sin pasar por el
-  // detalle. Un DRAFT primero se confirma (DRAFT → PENDING, mismo endpoint
-  // que handleConfirmAndPay del detalle) y el snapshot local se actualiza
-  // para que la fila no siga ofreciendo confirmar un borrador que ya avanzó.
+  // (HeroCard/SideCards) abren la ventana completa de la factura con el pago
+  // ya abierto (ws1-t4). Un BORRADOR ya no se confirma aquí al pulsar: con el
+  // diseño nuevo lo confirma «Registrar pago» justo antes de cobrar (useCobro,
+  // confirmarAntes), y sin él lo hace «Cobrar ahora» del pie del detalle —
+  // así cerrar sin cobrar no deja el borrador confirmado.
   //
   // `condiciones`, si quien llama ya las tiene (la fila de Facturación, que
   // las carga para `BloquePlan`) — ws1-t10 (H68): sin esto el campo nacía en
@@ -654,7 +655,6 @@ export function PatientDetailClient({
   // aquí con la misma ruta de solo lectura que usa la ficha de factura.
   const openDirectPayment = async (inv: any, condiciones?: CondicionesPago | null) => {
     if (!canViewBilling || !inv) return;
-    let target = inv;
     let condicionesFinal = condiciones;
     if (condicionesFinal === undefined) {
       condicionesFinal = await fetch(`/api/invoices/condiciones?ids=${encodeURIComponent(inv.id)}`)
@@ -662,40 +662,9 @@ export function PatientDetailClient({
         .then((d) => d?.condiciones?.[inv.id] ?? null)
         .catch(() => null);
     }
-    setDirectPayMontoSugerido(montoSugeridoDeCobro(condicionesFinal ?? null, inv.total, inv.paid, todayLocalISO()));
-    if (inv.status === "DRAFT") {
-      if (confirmingDraftRef.current) return;
-      confirmingDraftRef.current = true;
-      try {
-        const res = await fetch(`/api/invoices/${inv.id}/confirm`, { method: "POST" });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error ?? t("clinical.invoiceDetail.confirmError"));
-        }
-        // Al confirmarse recibió el saldo a favor del paciente: se avisa y se
-        // refresca en vez de abrir el cobro con el total del borrador.
-        const confirmada = await res.json().catch(() => ({}));
-        if (confirmada?.anticipoAplicado > 0) {
-          toast(t("clinical.invoiceDetail.anticipoAplicadoAlConfirmar", {
-            monto: formatCurrency(confirmada.anticipoAplicado),
-            resta: formatCurrency(confirmada.balance ?? 0),
-          }), { duration: 10000 });
-          setInvoices((prev: any[]) => prev.map((i: any) => (i.id === inv.id
-            ? { ...i, status: confirmada.status ?? "PARTIAL", balance: confirmada.balance ?? i.balance }
-            : i)));
-          router.refresh();
-          return;
-        }
-        target = { ...inv, status: "PENDING" };
-        setInvoices((prev: any[]) => prev.map((i: any) => (i.id === inv.id ? { ...i, status: "PENDING" } : i)));
-      } catch (err: any) {
-        toast.error(err.message ?? t("common.genericError"));
-        return;
-      } finally {
-        confirmingDraftRef.current = false;
-      }
-    }
-    setDirectPayInvoice(target);
+    setCobroMontoSugerido(montoSugeridoDeCobro(condicionesFinal ?? null, inv.total, inv.paid, todayLocalISO()));
+    setInvoiceDetailAction(null);
+    setInvoiceDetailOpen(inv);
   };
   // Shortcut de HeroCard / SideCards: cobrar la factura más relevante
   // (DRAFT > PENDING/PARTIAL/OVERDUE). Si no hay ninguna procesable,
@@ -3157,6 +3126,7 @@ export function PatientDetailClient({
               onCobrar={(inv, condiciones) => { void openDirectPayment(inv, condiciones); }}
               onTimbrar={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
               permisosCobro={permisosCobro}
+              onEditar={(inv) => setEditandoFactura(inv)}
               // «Duplicar» de la ficha: Nueva factura abre con los mismos
               // conceptos y el mismo trato (solo diseño nuevo).
               onDuplicar={(inv, condiciones) => {
@@ -3425,33 +3395,36 @@ export function PatientDetailClient({
         open={invoiceDetailOpen !== null}
         invoice={invoiceDetailOpen}
         patientName={fullName}
-        onClose={() => { setInvoiceDetailOpen(null); setInvoiceDetailAction(null); }}
+        onClose={() => { setInvoiceDetailOpen(null); setInvoiceDetailAction(null); setCobroMontoSugerido(null); }}
         onMutated={() => router.refresh()}
         initialAction={invoiceDetailAction}
         clinicTaxMode={clinicTaxMode ?? null}
+        // ws1-t4: abierto desde «Cobrar» / «Cobrar ahora» → el pago ya abierto.
+        abrirCobro={cobroMontoSugerido !== null}
+        montoSugerido={cobroMontoSugerido ?? undefined}
+        // ws1-t4: «Editar factura» del detalle (borrador sin pagos) → el editor.
+        onEditar={puedeEditarFacturas ? (inv) => { setInvoiceDetailOpen(null); setInvoiceDetailAction(null); setCobroMontoSugerido(null); setEditandoFactura(inv); } : undefined}
       />
 
-      {/* Cobro directo en 2 clicks — "Cobrar ahora" (rail/hero) y "Cobrar"
-       *  por fila abren este PaymentModal SIN pasar por el detalle. El click
-       *  en la fila sigue abriendo el detalle completo de arriba. Al cobrar,
-       *  router.refresh() re-fetchea las facturas del server y el useEffect
-       *  de sync propaga el estado fresco (mismo circuito que el detalle). */}
-      <PaymentModal
-        rediseno={rediseno}
-        open={directPayInvoice !== null}
-        invoice={directPayInvoice ? {
-          id: directPayInvoice.id,
-          invoiceNumber: directPayInvoice.invoiceNumber,
-          total: directPayInvoice.total,
-          paid: directPayInvoice.paid,
-          balance: directPayInvoice.balance,
-          status: directPayInvoice.status,
-          patientName: fullName,
-        } : null}
-        onClose={() => setDirectPayInvoice(null)}
-        onSuccess={() => { setDirectPayInvoice(null); router.refresh(); }}
-        montoSugerido={directPayMontoSugerido}
-      />
+      {/* ws1-t4: «Editar» abre el editor con los conceptos de ESA factura. */}
+      {editandoFactura && (
+        <InvoiceEditorModal
+          rediseno={rediseno}
+          open
+          patientId={patient.id}
+          patientName={fullName}
+          clinicTaxMode={clinicTaxMode}
+          editar={editandoFactura}
+          onClose={() => setEditandoFactura(null)}
+          onCreated={() => {}}
+          onGuardada={(guardada) => {
+            setInvoices((prev: any[]) => prev.map((i: any) => (i.id === guardada?.id ? { ...i, ...guardada } : i)));
+            setEditandoFactura(null);
+            router.refresh();
+          }}
+        />
+      )}
+
     </div>
   );
 }

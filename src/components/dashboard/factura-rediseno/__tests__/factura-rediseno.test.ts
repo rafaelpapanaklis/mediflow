@@ -144,7 +144,7 @@ test("cada modal tiene `rediseno = false` por defecto y viste con CLASES_FACTURA
   for (const rel of MODALES) {
     const texto = leer(rel);
     assert.match(texto, /rediseno\?: boolean;/, `${rel}: la prop es opcional`);
-    assert.match(texto, /rediseno = false \}/, `${rel}: por defecto apagado`);
+    assert.match(texto, /rediseno = false(?: \}|,)/, `${rel}: por defecto apagado`);
     assert.match(texto, /CLASES_FACTURA_REDISENO/, `${rel}: monta la raíz del rediseño`);
   }
   // Las cadenas de clases de siempre siguen ahí, tal cual, como rama vieja.
@@ -170,18 +170,22 @@ test("Caja → BillingClient → modales, Agenda nueva y expediente pasan `redis
   assert.match(cajaPage, /from "@\/lib\/menu-dos-niveles\/interruptor"/, "Caja usa el interruptor compartido");
 
   const billing = leer("app/dashboard/billing/billing-client.tsx");
-  assert.match(billing, /rediseno = false \}: Props/);
-  for (const modal of ["InvoiceEditorModal", "InvoiceDetailModal", "PaymentModal"]) {
+  assert.match(billing, /rediseno = false(?:, puedeEditarFacturas = false)? \}: Props/);
+  // ws1-t4: «Registrar pago» de la fila ya no monta la ventana de cobro suelta
+  // (PaymentModal): abre el detalle con el pago abierto.
+  for (const modal of ["InvoiceEditorModal", "InvoiceDetailModal"]) {
     assert.match(billing, new RegExp(`<${modal}\\s+rediseno=\\{rediseno\\}`), `BillingClient pasa rediseno a ${modal}`);
   }
+  assert.doesNotMatch(billing, /<PaymentModal\b/, "Caja volvió a montar la ventana de cobro suelta");
 
   const panel = leer("components/dashboard/agenda-nueva/panel-cita.tsx");
   assert.match(panel, /<InvoiceDetailModal\s+rediseno\s/, "la Agenda nueva (solo existe con el interruptor) lo enciende");
 
   const ficha = leer("app/dashboard/patients/[id]/patient-detail-client.tsx");
-  for (const modal of ["InvoiceEditorModal", "InvoiceDetailModal", "PaymentModal"]) {
+  for (const modal of ["InvoiceEditorModal", "InvoiceDetailModal"]) {
     assert.match(ficha, new RegExp(`<${modal}\\s+rediseno=\\{rediseno\\}`), `el expediente pasa rediseno a ${modal}`);
   }
+  assert.doesNotMatch(ficha, /<PaymentModal\b/, "el expediente volvió a montar la ventana de cobro suelta");
 
   // El detalle le pasa el interruptor a su propio PaymentModal.
   const detalle = leer(MODALES[0]);

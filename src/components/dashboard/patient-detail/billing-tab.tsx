@@ -54,7 +54,7 @@ interface BillingTabProps {
   /** Badge CFDI "Timbrar" — abre el detalle con el formulario SAT desplegado. */
   onStampInvoice: (inv: PatientBillingInvoice) => void;
   /** H14: qué acciones de cobro ve la sesión. Sin la prop, todas. */
-  permisosCobro?: { cobrar: boolean; timbrar: boolean; enviar: boolean };
+  permisosCobro?: { cobrar: boolean; timbrar: boolean; enviar: boolean; editar?: boolean };
   /**
    * N6 (MAPA-pacientes §9): esta pestaña siempre se monta junto al rail
    * (SideCards) — mismo `RAIL_TABS` en patient-detail-client.tsx — y el rail
