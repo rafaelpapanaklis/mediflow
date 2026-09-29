@@ -242,6 +242,19 @@ describe("armarConvenio — pago por control", () => {
   });
 });
 
+it("pago por control: la colocación sin pagar y con fecha pasada sale «Vencido», no «Por vencer»", () => {
+  const c = armarConvenio(
+    entrada({
+      modo: "PAGO_POR_CONTROL",
+      factura: { numero: "F-0020", total: 3000, pagado: 0, saldo: 3000 },
+      condicionesPago: null,
+      cuotas: [],
+      precioPorControl: 650,
+    }),
+  );
+  assert.deepEqual(c.calendario.map((f) => [f.concepto, f.vence, f.estado]), [["Colocación / enganche", "23/09/2026", "Vencido"]]);
+});
+
 describe("condiciones del convenio", () => {
   it("nunca editadas → el ejemplo de DaleControl, marcado como ejemplo", () => {
     const r = condicionesParaImprimir(null);

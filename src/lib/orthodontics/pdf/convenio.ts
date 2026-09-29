@@ -200,7 +200,9 @@ export function armarConvenio(e: EntradaConvenio): ConvenioPdfData {
     calendarioVacio = "Todavía no hay controles facturados. Cada control atendido se cobra al precio por control.";
     calendario = [];
     if (e.factura) {
-      const estado: EstadoCuota = e.factura.saldo <= 0.004 ? "pagada" : "porVencer";
+      const diaColocacion = e.colocacion ? fechaDMA(e.colocacion, tz).split("/").reverse().join("-") : null;
+      const estado: EstadoCuota =
+        e.factura.saldo <= 0.004 ? "pagada" : diaColocacion && diaColocacion < e.hoy ? "vencida" : "porVencer";
       calendario.push({
         concepto: "Colocación / enganche",
         vence: e.colocacion ? fechaDMA(e.colocacion, tz) : "—",

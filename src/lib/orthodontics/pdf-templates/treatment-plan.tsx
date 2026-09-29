@@ -12,6 +12,7 @@ import { techniqueLabel } from "../consent-texts";
 import { PHASE_LABELS } from "../kanban-helpers";
 import { ACENTO_ORTO, GRIS_ORTO, MembreteOrto, PieOrto, estilosPaginaOrto } from "../pdf/membrete-orto";
 import { dinero } from "../pdf/formato";
+import { CLASE_ANGLE } from "../expediente-ortodoncia";
 
 const DOCUMENTO = "Plan de tratamiento";
 
@@ -29,6 +30,24 @@ const styles = StyleSheet.create({
   bullet: { marginLeft: 6, marginBottom: 3 },
   nota: { fontSize: 8.5, color: GRIS_ORTO, marginTop: 14, lineHeight: 1.4 },
 });
+
+const ANCLAJE: Record<string, string> = {
+  MAXIMUM: "máximo",
+  MODERATE: "moderado",
+  MINIMUM: "mínimo",
+  COMPOUND: "compuesto",
+};
+
+const OBJETIVOS: Record<string, string> = {
+  AESTHETIC_ONLY: "estéticos",
+  FUNCTIONAL_ONLY: "funcionales",
+  AESTHETIC_AND_FUNCTIONAL: "estéticos y funcionales",
+};
+
+/** Etiqueta en español; si el valor no se conoce, se enseña legible en vez de «CLASS_X_Y». */
+function etiqueta(mapa: Record<string, string>, v: string): string {
+  return mapa[v] ?? v.replaceAll("_", " ").toLowerCase();
+}
 
 const ESTADO_FASE: Record<string, string> = {
   COMPLETED: "completada",
@@ -58,7 +77,8 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
         <Text style={styles.h2}>Tu diagnóstico</Text>
         <View style={styles.box} wrap={false}>
           <Text>
-            Clase de Angle derecha: {data.diagnosis.angleClassRight} · izquierda: {data.diagnosis.angleClassLeft}.
+            Clase de Angle derecha: {etiqueta(CLASE_ANGLE, data.diagnosis.angleClassRight)} · izquierda:{" "}
+            {etiqueta(CLASE_ANGLE, data.diagnosis.angleClassLeft)}.
           </Text>
           <Text>
             Overbite: {data.diagnosis.overbiteMm} mm · Overjet: {data.diagnosis.overjetMm} mm.
@@ -76,8 +96,8 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
           <Metrica etiqueta="Técnica" valor={techniqueLabel(data.plan.technique as never, data.plan.techniqueName)} />
           {data.plan.techniqueNotes ? <Metrica etiqueta="Detalle de técnica" valor={data.plan.techniqueNotes} /> : null}
           <Metrica etiqueta="Duración estimada" valor={`${data.plan.estimatedDurationMonths} meses`} />
-          <Metrica etiqueta="Anclaje" valor={data.plan.anchorageType.replaceAll("_", " ").toLowerCase()} />
-          <Metrica etiqueta="Objetivos" valor={data.plan.treatmentObjectives.replaceAll("_", " ").toLowerCase()} />
+          <Metrica etiqueta="Anclaje" valor={etiqueta(ANCLAJE, data.plan.anchorageType)} />
+          <Metrica etiqueta="Objetivos" valor={etiqueta(OBJETIVOS, data.plan.treatmentObjectives)} />
           {data.plan.extractionsRequired ? (
             <Metrica etiqueta="Extracciones" valor={`FDI ${data.plan.extractionsTeethFdi.join(", ") || "—"}`} />
           ) : null}
@@ -97,13 +117,16 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
           </>
         ) : null}
 
-        <Text style={styles.h2} minPresenceAhead={40}>Costo</Text>
-        <View style={styles.box} wrap={false}>
-          <Metrica etiqueta="Costo total del tratamiento" valor={Number.isFinite(total) ? `${dinero(total)} MXN` : "—"} />
-          <Text style={[styles.paragraph, { marginTop: 4, marginBottom: 0 }]}>
-            El detalle de pagos (enganche, mensualidades, fechas y condiciones) va en el convenio de pago, que se firma
-            por separado.
-          </Text>
+        {/* Título y caja juntos: el título no se queda solo al pie de la hoja. */}
+        <View wrap={false}>
+          <Text style={styles.h2}>Costo</Text>
+          <View style={styles.box}>
+            <Metrica etiqueta="Costo total del tratamiento" valor={Number.isFinite(total) ? `${dinero(total)} MXN` : "—"} />
+            <Text style={[styles.paragraph, { marginTop: 4, marginBottom: 0 }]}>
+              El detalle de pagos (enganche, mensualidades, fechas y condiciones) va en el convenio de pago, que se firma
+              por separado.
+            </Text>
+          </View>
         </View>
 
         {data.plan.retentionPlanText ? (
