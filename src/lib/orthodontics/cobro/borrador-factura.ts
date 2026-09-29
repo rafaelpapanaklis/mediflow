@@ -19,6 +19,11 @@ export interface CasoParaBorrador {
   /** Costo de referencia del caso (`OrthodonticTreatmentPlan.totalCostMxn`), en pesos. */
   totalCostMxn: number;
   treatingDoctorId: string | null;
+  /**
+   * ws1-t12: la aparatología que el plan de tratamiento eligió («Inovation Roth», «Invisalign lite dual»…).
+   * La colocación la lleva en su concepto; sin ella el concepto es el de siempre.
+   */
+  aparatologia?: string | null;
 }
 
 /**
@@ -33,7 +38,10 @@ export function borradorInicialDelCaso(
   /** Precio de «Colocación de aparatología» en el catálogo de la clínica (solo lo usa PAGO_POR_CONTROL). */
   precioColocacion?: number | null,
 ): BorradorDeFactura {
-  const tecnica = techniqueLabel(caso.technique, caso.techniqueName);
+  const base = techniqueLabel(caso.technique, caso.techniqueName);
+  const elegida = caso.aparatologia?.replace(/\s+/g, " ").trim();
+  // «Brackets metálicos · Inovation Roth»: la técnica de siempre y, detrás, lo que el plan eligió.
+  const tecnica = elegida ? `${base} · ${elegida}` : base;
   const nombre = esPorControl
     ? `Colocación/enganche — ortodoncia (${tecnica})`
     : `Tratamiento de ortodoncia (${tecnica})`;
@@ -60,6 +68,10 @@ export function borradorInicialDelCaso(
 export interface ConceptoDeExtra {
   name: string;
   price: number;
+  /** ws1-t12: lo propone el plan de tratamiento del caso (microtornillo, barra palatina, disyuntor…): va primero. */
+  sugerido?: boolean;
+  /** «Del plan: Microtornillos». */
+  motivo?: string;
 }
 
 /**

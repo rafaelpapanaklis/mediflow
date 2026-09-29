@@ -2,7 +2,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { LectorRaw } from "./tecnicas-de-la-clinica-db";
 import {
+  FRECUENCIA_DE_CONTROL_DIAS_POR_OMISION,
   esPlanDetalleVacio,
+  normalizarFrecuenciaDeControl,
   normalizarOpciones,
   normalizarPlanDetalle,
   opcionesEditadas,
@@ -169,6 +171,8 @@ export async function actualizarPlanDetalle(
 
 export interface OpcionesDeLaClinica {
   opciones: OpcionesDelPlan;
+  /** Cada cuántos días la clínica cita un control (propone los «controles previstos» del plan). */
+  frecuenciaControlDias: number;
   /** false = falta pegar el SQL: se ven las de ejemplo y no se puede guardar. */
   columna: boolean;
   /** false = la clínica aún no editó ninguna lista (se ven las de ejemplo, sembradas). */
@@ -177,14 +181,25 @@ export interface OpcionesDeLaClinica {
 
 /** Las listas de la clínica (`clinicId` de la sesión). Sin columna o sin fila: las de ejemplo. Nunca lanza. */
 export async function leerOpcionesDelPlan(clinicId: string): Promise<OpcionesDeLaClinica> {
-  const ejemplo: OpcionesDeLaClinica = { opciones: normalizarOpciones(null), columna: false, editada: false };
+  const ejemplo: OpcionesDeLaClinica = {
+    opciones: normalizarOpciones(null),
+    frecuenciaControlDias: FRECUENCIA_DE_CONTROL_DIAS_POR_OMISION,
+    columna: false,
+    editada: false,
+  };
   if (!clinicId) return ejemplo;
   if (!(await columnaDeOpcionesExiste())) return ejemplo;
   try {
     const filas = await prisma.$queryRaw<{ planOptions: unknown }[]>`
       SELECT "planOptions" FROM "orthodontics_clinic_settings" WHERE "clinicId" = ${clinicId}`;
     const cruda = filas[0]?.planOptions ?? null;
-    return { opciones: normalizarOpciones(cruda), columna: true, editada: opcionesEditadas(cruda) };
+    const frecuencia = cruda && typeof cruda === "object" ? (cruda as Record<string, unknown>).frecuenciaControlDias : undefined;
+    return {
+      opciones: normalizarOpciones(cruda),
+      frecuenciaControlDias: normalizarFrecuenciaDeControl(frecuencia),
+      columna: true,
+      editada: opcionesEditadas(cruda) || frecuencia !== undefined,
+    };
   } catch (e) {
     console.warn("[ortodoncia:plan] no se pudieron leer las listas:", e);
     return { ...ejemplo, columna: true };
@@ -196,7 +211,8 @@ export async function guardarOpcionesDelPlan(
   clinicId: string,
   userId: string,
   opciones: OpcionesDelPlan,
-): Promise<{ ok: true; opciones: OpcionesDelPlan } | { ok: false; motivo: "sin-columna" | "sin-clinica" | "error" }> {
+  frecuenciaControlDias: number = FRECUENCIA_DE_CONTROL_DIAS_POR_OMISION,
+): Promise<{ ok: true; opciones: OpcionesDelPlan; frecuenciaControlDias: number } | { ok: false; motivo: "sin-columna" | "sin-clinica" | "error" }> {
   if (!clinicId) return { ok: false, motivo: "sin-clinica" };
   if (!(await columnaDeOpcionesExiste())) return { ok: false, motivo: "sin-columna" };
   const limpias = normalizarOpciones(opciones);
@@ -207,11 +223,12 @@ export async function guardarOpcionesDelPlan(
       create: { clinicId, updatedBy: userId },
       update: { updatedBy: userId },
     });
-    const json = JSON.stringify(limpias);
+    const frecuencia = normalizarFrecuenciaDeControl(frecuenciaControlDias);
+    const json = JSON.stringify({ ...limpias, frecuenciaControlDias: frecuencia });
     await prisma.$executeRaw`
       UPDATE "orthodontics_clinic_settings" SET "planOptions" = ${json}::jsonb, "updatedAt" = CURRENT_TIMESTAMP
        WHERE "clinicId" = ${clinicId}`;
-    return { ok: true, opciones: limpias };
+    return { ok: true, opciones: limpias, frecuenciaControlDias: frecuencia };
   } catch (e) {
     console.warn("[ortodoncia:plan] no se pudieron guardar las listas:", e);
     return { ok: false, motivo: "error" };

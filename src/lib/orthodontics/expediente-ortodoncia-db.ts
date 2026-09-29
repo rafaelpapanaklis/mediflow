@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { cargarNombresDeTecnica } from "./tecnicas-de-la-clinica-db";
+import { cargarPlanesDetalle } from "./plan-detalle-db";
 import { cargarDiagnosticosLegibles } from "./diagnostico-detalle-db";
 import { armarCasoDeOrtodoncia, type ExpedienteOrtodoncia } from "./expediente-ortodoncia";
 
@@ -25,6 +26,9 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
         estimatedDurationMonths: true,
         droppedOutReason: true,
         diagnosisId: true,
+        anchorageType: true,
+        extractionsRequired: true,
+        extractionsTeethFdi: true,
         treatingDoctor: { select: { firstName: true, lastName: true } },
         diagnosis: {
           select: {
@@ -56,10 +60,30 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
       })).map((h) => ({ ...h, indications: null as string | null }));
     });
     const nombres = await cargarNombresDeTecnica(clinicId, planes.map((p) => p.id));
+    // ws1-t12: el plan de tratamiento completo de cada caso (sin la columna, ninguno: el expediente sale como siempre).
+    const detalles = await cargarPlanesDetalle(clinicId, planes.map((p) => p.id));
+    const tads = new Map<string, number>();
+    if (detalles.size > 0) {
+      try {
+        const grupos = await prisma.orthoTAD.groupBy({
+          by: ["treatmentPlanId"],
+          where: { clinicId, patientId, treatmentPlanId: { in: planes.map((p) => p.id) }, deletedAt: null },
+          _count: { _all: true },
+        });
+        for (const g of grupos) tads.set(g.treatmentPlanId, g._count._all);
+      } catch {
+        /* sin la tabla de TAD: se dice el plan sin ese renglón */
+      }
+    }
     // ws1-t8: el diagnóstico completo de cada caso, ya redactado (sin la columna nueva, lo de siempre).
     const diagnosticos = await cargarDiagnosticosLegibles(clinicId, planes.map((p) => p.diagnosisId));
     return planes.map((p) => ({
-      ...armarCasoDeOrtodoncia(p, hojas.filter((h) => h.treatmentPlanId === p.id), nombres.get(p.id)),
+      ...armarCasoDeOrtodoncia(
+        p,
+        hojas.filter((h) => h.treatmentPlanId === p.id),
+        nombres.get(p.id),
+        detalles.has(p.id) ? { detalle: detalles.get(p.id)!, tads: tads.get(p.id) ?? 0 } : null,
+      ),
       diagnosticoCompleto: (diagnosticos.get(p.diagnosisId) ?? []).filter((sec) => sec.clave !== "clasificacion"),
     }));
   } catch (e) {

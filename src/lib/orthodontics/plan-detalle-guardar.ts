@@ -5,8 +5,10 @@ import {
   anclajeGeneralDerivado,
   cambiosDelPlan,
   ordenarFdi,
-  planPideTads,
+  prescripcionDerivada,
+  tadsRequeridos,
   textoDeMovimientoDelPlan,
+  validarContraTecnica,
   type CambiosDelPlan,
   type PlanDetalle,
 } from "./plan-detalle";
@@ -55,9 +57,19 @@ export async function aplicarPlanDetalle(args: AplicarPlanArgs): Promise<Resulta
 
   const antesCols = await prisma.orthodonticTreatmentPlan.findFirst({
     where: { id: treatmentPlanId, clinicId: ctx.clinicId, patientId, deletedAt: null },
-    select: { estimatedDurationMonths: true, extractionsTeethFdi: true, extractionsRequired: true, tadsRequired: true, anchorageType: true },
+    select: {
+      estimatedDurationMonths: true, extractionsTeethFdi: true, extractionsRequired: true, tadsRequired: true, anchorageType: true,
+      technique: true, prescriptionSlot: true, bondingType: true,
+    },
   });
   if (!antesCols) return { ok: false, error: "Plan no encontrado" };
+
+  // La aparatología tiene que cuadrar con la técnica del caso (alineadores solo con alineadores o mixta…).
+  const incompatible = validarContraTecnica(plan, antesCols.technique);
+  if (incompatible) return { ok: false, error: incompatible };
+
+  // Los TAD que el caso ya tiene registrados: junto con «Aditamentos» deciden `tadsRequired`.
+  const tadsRegistrados = await prisma.orthoTAD.count({ where: { treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null } }).catch(() => 0);
 
   // El seguimiento de alineadores del caso, si existe (la tabla puede faltar en esta base).
   let aligner: { id: string; totalTrays: number; currentTray: number } | null = null;
@@ -99,15 +111,20 @@ export async function aplicarPlanDetalle(args: AplicarPlanArgs): Promise<Resulta
         datos.extractionsRequired = indicadas.length > 0;
       }
       if (args.duracionMeses !== undefined && args.duracionMeses !== antesCols.estimatedDurationMonths) datos.estimatedDurationMonths = args.duracionMeses;
-      // Microtornillos o miniplacas piden TADs; nunca se apaga el «sí» que ya tenía el caso.
-      if (planPideTads(plan.aditamentos) && !antesCols.tadsRequired) datos.tadsRequired = true;
+      // «Requiere TADs» NO es una casilla aparte: sale de Aditamentos (microtornillos / miniplacas) y de los TAD registrados.
+      const pideTads = tadsRequeridos(plan.aditamentos, tadsRegistrados);
+      if (pideTads !== antesCols.tadsRequired) datos.tadsRequired = pideTads;
       if (anclajeNuevo && anclajeNuevo !== antesCols.anchorageType) datos.anchorageType = anclajeNuevo;
+      // La prescripción y el cementado generales salen de tubos, bandas y cementación (si se pueden deducir).
+      const pres = prescripcionDerivada(plan);
+      if (pres.prescriptionSlot && pres.prescriptionSlot !== antesCols.prescriptionSlot) datos.prescriptionSlot = pres.prescriptionSlot;
+      if (pres.bondingType && pres.bondingType !== antesCols.bondingType) datos.bondingType = pres.bondingType;
       if (Object.keys(datos).length > 0) {
         await tx.orthodonticTreatmentPlan.updateMany({ where: { id: treatmentPlanId, clinicId: ctx.clinicId }, data: datos });
       }
     },
   );
-  if (!r.ok) {
+  if (r.ok === false) {
     if (r.motivo === "sin-columna") return { ok: false, error: MENSAJE_SIN_SQL };
     if (r.motivo === "sin-caso") return { ok: false, error: "Plan no encontrado" };
     if (r.motivo === "invalido") return { ok: false, error: r.mensaje };
@@ -169,7 +186,7 @@ export async function marcarExtraccionesDesdeLaHoja(args: {
     nuevas = validas.filter((p) => !ya.has(p));
     return { ...actual, extraccionesRealizadas: ordenarFdi([...actual.extraccionesRealizadas, ...validas]) };
   });
-  if (!r.ok) {
+  if (r.ok === false) {
     if (r.motivo === "sin-columna") return { ok: false, error: MENSAJE_SIN_SQL };
     if (r.motivo === "invalido") return { ok: false, error: r.mensaje };
     return { ok: false, error: "No se pudieron marcar las extracciones" };

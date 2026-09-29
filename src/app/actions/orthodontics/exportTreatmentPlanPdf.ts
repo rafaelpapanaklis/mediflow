@@ -4,6 +4,9 @@
 
 import { prisma } from "@/lib/prisma";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
+import { cargarPlanDetalle } from "@/lib/orthodontics/plan-detalle-db";
+import { lineasDelPlan, type LineaDelPlan } from "@/lib/orthodontics/plan-detalle";
 import { cargarDiagnosticosLegibles } from "@/lib/orthodontics/diagnostico-detalle-db";
 import type { SeccionLegible } from "@/lib/orthodontics/diagnostico-detalle";
 import { canViewPatient } from "@/lib/patient-visibility";
@@ -39,12 +42,20 @@ export type TreatmentPlanPdfData = {
     techniqueNotes: string | null;
     estimatedDurationMonths: number;
     totalCostMxn: string;
+    /** ws1-t10: en «Pago por control» el costo es un estimado, no un total (el PDF lo rotula así). */
+    billingMode?: string | null;
     anchorageType: string;
     extractionsRequired: boolean;
     extractionsTeethFdi: number[];
     treatmentObjectives: string;
     retentionPlanText: string;
   };
+  /**
+   * ws1-t12 — el plan de tratamiento COMPLETO (controles previstos, anclaje por arcada, aditamentos, extracciones
+   * realizadas, control radiográfico, aparatología, tubos, bandas, cementación, interconsultas), en renglones ya
+   * redactados (`lineasDelPlan`: la misma redacción que la ficha). `null`/ausente = el caso no tiene plan completo.
+   */
+  planCompleto?: { lineas: LineaDelPlan[] } | null;
   /**
    * ws1-t8 — el DIAGNÓSTICO completo (facial, oclusal, dentoalveolar, funcional, cefalometría, etiología), ya
    * redactado con `seccionesDelDiagnostico` (la misma redacción que la ficha). Vacío/ausente = solo lo de arriba.
@@ -114,7 +125,27 @@ export async function exportTreatmentPlanPdf(
     meta: { exportedAt: new Date().toISOString() },
   });
 
-  const techniqueName = await cargarNombreDeTecnica(ctx.clinicId, plan.id);
+  const [techniqueName, detalle, tads, billingMode] = await Promise.all([
+    cargarNombreDeTecnica(ctx.clinicId, plan.id),
+    // ws1-t12: sin la columna del plan (SQL sin pegar), el PDF sale como siempre.
+    cargarPlanDetalle(ctx.clinicId, plan.id).catch(() => null),
+    prisma.orthoTAD.count({ where: { treatmentPlanId: plan.id, clinicId: ctx.clinicId, deletedAt: null } }).catch(() => 0),
+    cargarModoDeCobro(ctx.clinicId, plan.id).catch(() => null),
+  ]);
+  const planCompleto = detalle
+    ? {
+        lineas: lineasDelPlan(
+          {
+            estimatedDurationMonths: plan.estimatedDurationMonths,
+            anchorageType: plan.anchorageType,
+            extractionsRequired: plan.extractionsRequired,
+            extractionsTeethFdi: plan.extractionsTeethFdi,
+          },
+          detalle,
+          tads,
+        ),
+      }
+    : null;
   return ok({
     treatmentPlanId: plan.id,
     membrete,
@@ -134,12 +165,14 @@ export async function exportTreatmentPlanPdf(
       techniqueNotes: plan.techniqueNotes,
       estimatedDurationMonths: plan.estimatedDurationMonths,
       totalCostMxn: plan.totalCostMxn.toString(),
+      billingMode,
       anchorageType: plan.anchorageType,
       extractionsRequired: plan.extractionsRequired,
       extractionsTeethFdi: plan.extractionsTeethFdi,
       treatmentObjectives: plan.treatmentObjectives,
       retentionPlanText: plan.retentionPlanText,
     },
+    planCompleto,
     // ws1-t8: sin la columna del diagnóstico completo (SQL sin pegar), sale lo de siempre.
     diagnosticoCompleto: (await cargarDiagnosticosLegibles(ctx.clinicId, [plan.diagnosisId])).get(plan.diagnosisId) ?? [],
     phases: plan.phases,

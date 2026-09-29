@@ -6,6 +6,7 @@
 // (`MembreteOrto`/`PieOrto`), el contenido corre seguido en vez de cuatro
 // hojas medio vacías, y cada página dice «Página N de M».
 
+import { descripcionDelCosto } from "@/lib/orthodontics/check-del-caso";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { TreatmentPlanPdfData } from "@/app/actions/orthodontics/exportTreatmentPlanPdf";
 import { techniqueLabel } from "../consent-texts";
@@ -65,9 +66,16 @@ function Metrica({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   );
 }
 
+/** Lo que el plan completo aporta y la caja de arriba no dice ya. */
+const YA_EN_LA_CAJA = new Set(["duracion", "anclaje", "extraccionesIndicadas", "tads"]);
+
 export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
   const m = data.membrete;
-  const total = Number(data.plan.totalCostMxn);
+  // ws1-t10: en «Pago por control» es un estimado; el $1 provisional no se enseña como precio.
+  const costo = descripcionDelCosto(data.plan.billingMode, data.plan.totalCostMxn);
+  const lineas = data.planCompleto?.lineas ?? [];
+  const anclajePorArcada = lineas.find((l) => l.clave === "anclaje")?.valor ?? null;
+  const detalleDelPlan = lineas.filter((l) => !YA_EN_LA_CAJA.has(l.clave));
   return (
     <Document title={`${DOCUMENTO} · ${m.paciente.nombre}`} author={m.clinicName}>
       <Page size="LETTER" style={estilosPaginaOrto.carta} wrap>
@@ -95,6 +103,9 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
                 {sec.lineas.map((l) => (
                   <Metrica key={l.clave} etiqueta={l.etiqueta} valor={l.valor} />
                 ))}
+              </View>
+            </View>
+          ))}
         {data.diagnosis.clinicalSummary ? (
           <>
             <Text style={styles.h2}>Resumen clínico</Text>
@@ -107,12 +118,26 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
           <Metrica etiqueta="Técnica" valor={techniqueLabel(data.plan.technique as never, data.plan.techniqueName)} />
           {data.plan.techniqueNotes ? <Metrica etiqueta="Detalle de técnica" valor={data.plan.techniqueNotes} /> : null}
           <Metrica etiqueta="Duración estimada" valor={`${data.plan.estimatedDurationMonths} meses`} />
-          <Metrica etiqueta="Anclaje" valor={etiqueta(ANCLAJE, data.plan.anchorageType)} />
+          {/* ws1-t12: con el plan completo, el anclaje se dice por arcada («superior máximo · inferior medio»). */}
+          <Metrica etiqueta="Anclaje" valor={anclajePorArcada ?? etiqueta(ANCLAJE, data.plan.anchorageType)} />
           <Metrica etiqueta="Objetivos" valor={etiqueta(OBJETIVOS, data.plan.treatmentObjectives)} />
           {data.plan.extractionsRequired ? (
             <Metrica etiqueta="Extracciones" valor={`FDI ${data.plan.extractionsTeethFdi.join(", ") || "—"}`} />
           ) : null}
         </View>
+
+        {/* ws1-t12: el resto del plan de tratamiento completo. Lo que ya sale arriba (duración, anclaje,
+            extracciones indicadas) no se repite. */}
+        {detalleDelPlan.length > 0 ? (
+          <>
+            <Text style={styles.h2} minPresenceAhead={60}>Detalle del plan de tratamiento</Text>
+            <View style={styles.box}>
+              {detalleDelPlan.map((l) => (
+                <Metrica key={l.clave} etiqueta={l.etiqueta} valor={l.valor} />
+              ))}
+            </View>
+          </>
+        ) : null}
 
         {data.phases.length > 0 ? (
           <>
@@ -132,7 +157,7 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
         <View wrap={false}>
           <Text style={styles.h2}>Costo</Text>
           <View style={styles.box}>
-            <Metrica etiqueta="Costo total del tratamiento" valor={Number.isFinite(total) ? `${dinero(total)} MXN` : "—"} />
+            <Metrica etiqueta={costo?.etiqueta ?? "Costo total del tratamiento"} valor={costo ? `${dinero(costo.valor)} MXN` : "Por definir"} />
             <Text style={[styles.paragraph, { marginTop: 4, marginBottom: 0 }]}>
               El detalle de pagos (enganche, mensualidades, fechas y condiciones) va en el convenio de pago, que se firma
               por separado.

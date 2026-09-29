@@ -1524,6 +1524,20 @@ function OrtodonciaBloque({ caso, tz }: { caso: ExpedienteOrtodoncia; tz: string
             {sec.lineas.map((l) => (
               <Dato key={l.clave} etiqueta={l.etiqueta} valor={l.valor} ancho={l.valor.length > 40 ? "entero" : "tercio"} />
             ))}
+          </View>
+        </View>
+      ))}
+      {/* ws1-t12: el plan de tratamiento completo del caso (como Dentalink). */}
+      {caso.planDeTratamiento && caso.planDeTratamiento.length > 0 ? (
+        <>
+          <Text style={styles.subTitulo}>Plan de tratamiento</Text>
+          <View style={styles.rejilla}>
+            {caso.planDeTratamiento.map((l) => (
+              <Dato key={l.clave} etiqueta={l.etiqueta} valor={l.valor} ancho="entero" />
+            ))}
+          </View>
+        </>
+      ) : null}
       <Text style={styles.subTitulo}>Hojas de control firmadas</Text>
       {caso.hojas.length === 0 ? (
         <Text style={styles.vacio}>Sin hojas de control firmadas.</Text>

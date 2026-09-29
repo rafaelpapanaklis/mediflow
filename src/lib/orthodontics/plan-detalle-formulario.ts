@@ -130,15 +130,15 @@ export type ResultadoDelFormulario = { ok: true; peticion: PeticionDelPlan } | {
 /** Lo que se mandará al servidor, o lo primero que hay que corregir. */
 export function formularioAPeticion(f: FormularioDelPlan, opts: { conDuracion: boolean } = { conDuracion: true }): ResultadoDelFormulario {
   const controles = entero(f.controles, 1, CONTROLES_MAXIMOS, "Cantidad de controles");
-  if (!controles.ok) return controles;
+  if (controles.ok === false) return controles;
   const alineadores = entero(f.alineadoresTotales, 1, ALINEADORES_MAXIMOS, "Alineadores totales");
-  if (!alineadores.ok) return alineadores;
+  if (alineadores.ok === false) return alineadores;
   const periodicidad = entero(f.periodicidad, 1, PERIODICIDAD_MAXIMA_MESES, "Periodicidad");
-  if (!periodicidad.ok) return periodicidad;
+  if (periodicidad.ok === false) return periodicidad;
   let duracionMeses: number | undefined;
   if (opts.conDuracion) {
     const d = entero(f.duracion, 3, 60, "Tiempo de tratamiento");
-    if (!d.ok) return d;
+    if (d.ok === false) return d;
     if (d.valor === null) return { ok: false, error: "Tiempo de tratamiento: escribe los meses (de 3 a 60)." };
     duracionMeses = d.valor;
   }
@@ -176,3 +176,48 @@ export function alternar(lista: readonly string[], nombre: string): string[] {
 export function detalleDesdePeticion(p: PeticionDelPlan): Partial<PlanDetalle> {
   return p.plan as Partial<PlanDetalle>;
 }
+
+// ─── Las secciones del popup (navegación) ───────────────────────────────
+
+export const SECCIONES_DEL_FORMULARIO = [
+  { clave: "tiempo", titulo: "Tiempo y controles" },
+  { clave: "anclaje", titulo: "Anclaje" },
+  { clave: "aditamentos", titulo: "Aditamentos" },
+  { clave: "extracciones", titulo: "Extracciones" },
+  { clave: "radiografico", titulo: "Control radiográfico" },
+  { clave: "aparatologia", titulo: "Aparatología" },
+  { clave: "tubos", titulo: "Tubos, bandas y cementación" },
+  { clave: "interconsultas", titulo: "Interconsultas" },
+] as const;
+export type ClaveDeSeccion = (typeof SECCIONES_DEL_FORMULARIO)[number]["clave"];
+
+const lleno = (v: string): boolean => v.trim() !== "";
+
+/** Qué secciones ya tienen algo anotado: la navegación del popup marca las llenas. */
+export function seccionesConDatos(f: FormularioDelPlan): Record<ClaveDeSeccion, boolean> {
+  return {
+    tiempo: lleno(f.controles) || lleno(f.alineadoresTotales),
+    anclaje: f.anclajeSuperior !== "" || f.anclajeInferior !== "",
+    aditamentos: f.aditamentos.length > 0,
+    extracciones: lleno(f.extraccionesIndicadas) || lleno(f.extraccionesRealizadas),
+    radiografico: f.radiografias.length > 0 || lleno(f.periodicidad) || lleno(f.reevaluacion),
+    aparatologia: f.brackets.length + f.alineadores.length + f.placas.length > 0,
+    tubos: CAMPOS_DE_UNA_OPCION.some((c) => lleno(f[c.campo as CampoDeUnaOpcion] as string)),
+    interconsultas: lleno(f.interconsultas),
+  };
+}
+
+/** Periodicidades que se ofrecen como atajo (el campo admite cualquier número de 1 a 60). */
+export const PERIODICIDADES_COMUNES = [3, 6, 9, 12, 18, 24] as const;
+
+// ─── Las secciones de la ventana del caso (paso «Plan de tratamiento») ──
+
+export type ClaveDeLaVentana = ClaveDeSeccion | "tecnica" | "retencion" | "cobro";
+
+/** La navegación del paso «Plan de tratamiento»: técnica y doctor arriba, retención y cobro al final. */
+export const SECCIONES_DE_LA_VENTANA: ReadonlyArray<{ clave: ClaveDeLaVentana; titulo: string }> = [
+  { clave: "tecnica", titulo: "Técnica y doctor" },
+  ...SECCIONES_DEL_FORMULARIO,
+  { clave: "retencion", titulo: "Plan de retención" },
+  { clave: "cobro", titulo: "Cobro" },
+];

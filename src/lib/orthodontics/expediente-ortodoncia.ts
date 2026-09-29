@@ -1,4 +1,5 @@
 import { nombreDeTecnica } from "./tecnicas-de-la-clinica";
+import { lineasDelPlan, type LineaDelPlan, type PlanDetalle } from "./plan-detalle";
 import type { SeccionLegible } from "./diagnostico-detalle";
 // Ortodoncia en el EXPEDIENTE PDF del paciente (ws1-t10, punto 12 / decisión 3 y 4).
 // El caso (diagnóstico, plan, doctor, estado) y sus HOJAS DE CONTROL firmadas
@@ -36,6 +37,12 @@ export interface ExpedienteOrtodoncia {
   overjetMm: number | null;
   resumenClinico: string | null;
   motivoDeAbandono: string | null;
+  /**
+   * ws1-t12 — el plan de tratamiento COMPLETO (controles previstos, anclaje por arcada, aditamentos, extracciones
+   * realizadas, control radiográfico, aparatología, tubos, bandas, cementación, interconsultas), ya redactado
+   * (`lineasDelPlan`). Vacío/ausente = el caso no tiene plan completo.
+   */
+  planDeTratamiento?: LineaDelPlan[];
   /**
    * ws1-t8 — el DIAGNÓSTICO completo (facial, oclusal, dentoalveolar, funcional, cefalometría, etiología), ya
    * redactado (`seccionesDelDiagnostico`), sin la clasificación que ya sale arriba. Vacío/ausente = lo de siempre.
@@ -94,6 +101,10 @@ export interface PlanCrudo {
   installedAt: Date | string | null;
   estimatedDurationMonths: number | null;
   droppedOutReason?: string | null;
+  /** ws1-t12: las columnas de siempre del plan, para redactar el plan completo. */
+  anchorageType?: string | null;
+  extractionsRequired?: boolean;
+  extractionsTeethFdi?: readonly number[];
   treatingDoctor: { firstName: string; lastName: string } | null;
   diagnosis: {
     diagnosedAt: Date | string | null;
@@ -116,7 +127,13 @@ export interface HojaCruda {
 }
 
 /** Un caso del expediente a partir de lo que trae Prisma. Las hojas salen de la más vieja a la más nueva. */
-export function armarCasoDeOrtodoncia(plan: PlanCrudo, hojas: readonly HojaCruda[], nombrePropio?: string | null): ExpedienteOrtodoncia {
+export function armarCasoDeOrtodoncia(
+  plan: PlanCrudo,
+  hojas: readonly HojaCruda[],
+  nombrePropio?: string | null,
+  /** ws1-t12: el plan completo del caso y cuántos TAD tiene registrados. */
+  planCompleto?: { detalle: PlanDetalle | null; tads: number } | null,
+): ExpedienteOrtodoncia {
   return {
     tecnica: nombreDeTecnica(plan.technique, nombrePropio, TECNICA[plan.technique] ?? plan.technique),
     estado: ESTADO_DEL_CASO[plan.status] ?? plan.status,
@@ -131,6 +148,20 @@ export function armarCasoDeOrtodoncia(plan: PlanCrudo, hojas: readonly HojaCruda
     overjetMm: num(plan.diagnosis?.overjetMm),
     resumenClinico: texto(plan.diagnosis?.clinicalSummary),
     motivoDeAbandono: plan.status === "DROPPED_OUT" ? texto(plan.droppedOutReason) : null,
+    ...(planCompleto?.detalle
+      ? {
+          planDeTratamiento: lineasDelPlan(
+            {
+              estimatedDurationMonths: plan.estimatedDurationMonths ?? null,
+              anchorageType: plan.anchorageType ?? null,
+              extractionsRequired: plan.extractionsRequired ?? false,
+              extractionsTeethFdi: plan.extractionsTeethFdi ?? [],
+            },
+            planCompleto.detalle,
+            planCompleto.tads,
+          ).filter((l) => l.clave !== "duracion" && l.clave !== "tads"),
+        }
+      : {}),
     hojas: [...hojas]
       .sort((a, b) => new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime() || a.cardNumber - b.cardNumber)
       .map((h) => ({

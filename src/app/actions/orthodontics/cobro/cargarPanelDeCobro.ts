@@ -37,7 +37,10 @@ import { ESTADOS_LIGABLES, conceptoDeFactura, facturaSinLigarReciente } from "@/
 import { idsDeFacturasLigadasAUnCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro } from "./_ctx";
-import { elegirPrecioColocacion, listarProcedimientosDeOrtodoncia, type OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
+import { buscarPrecioControlOrto, elegirPrecioColocacion, listarProcedimientosDeOrtodoncia, type OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
+import { cargarPlanDetalle } from "@/lib/orthodontics/plan-detalle-db";
+import { cargarProgresoDeControles } from "@/lib/orthodontics/controles-hechos-db";
+import { aparatologiaElegida, estimadoPorControles, ordenarConSugeridosPrimero, procedimientosSugeridos, type EstimadoPorControles } from "@/lib/orthodontics/plan-detalle";
 import { limitarConcurrencia } from "@/lib/limitar-concurrencia";
 import { controlesPorCobrarDe, type ControlPorCobrar } from "@/lib/orthodontics/cobro/controles-por-cobrar";
 import { fail, isFailure, ok, type ActionResult } from "../result";
@@ -90,8 +93,20 @@ export interface PanelDeCobro {
    * Editable siempre: solo evita partir de cero.
    */
   borradorInicial: BorradorDeFactura;
-  /** H7: conceptos de ortodoncia que se cobran aparte (catálogo de la clínica), para «Cobrar extra». */
+  /** H7: conceptos de ortodoncia que se cobran aparte (catálogo de la clínica), para «Cobrar extra». Los que el plan de tratamiento propone, primero. */
   catalogoDeExtras: ConceptoDeExtra[];
+  /**
+   * ws1-t12 — los controles que prevé el plan de tratamiento del caso y en cuál va. `null` = el plan no
+   * dice cuántos controles prevé. `estimado` solo en «Pago por control» (controles previstos × precio del
+   * control del catálogo): es una ESTIMACIÓN, nada se cobra solo — cada control se cobra al atenderlo.
+   */
+  controlesDelPlan: {
+    previstos: number;
+    hechos: number;
+    /** Precio de «Control de ortodoncia» del catálogo (solo se busca en «Pago por control»). */
+    precioPorControl: number | null;
+    estimado: EstimadoPorControles | null;
+  } | null;
   /**
    * H5: una factura de ortodoncia recién creada que no quedó ligada al caso
    * (se cortó entre crearla y ligarla). Solo si el caso no tiene plan vigente.
@@ -164,6 +179,8 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   // Si no se puede leer, el extra parte sin lista y la colocación sin precio de referencia.
   const pCatalogo = pedir((): Promise<OrthoProcedureRow[]> => listarProcedimientosDeOrtodoncia(ctx.clinicId).catch(() => []));
   const pBillingDelCaso = pedir(() => leerBillingDelCaso(treatmentPlanId, ctx.clinicId));
+  // ws1-t12: el plan de tratamiento completo (controles previstos, aparatología, aditamentos). Sin la columna, null.
+  const pPlanDetalle = pedir(() => cargarPlanDetalle(ctx.clinicId, treatmentPlanId).catch(() => null));
   const pExtras = pedir(() => listarExtrasDelCaso(treatmentPlanId, ctx.clinicId));
   const pPromesas = pedir(() => listarPromesasDelCaso(treatmentPlanId, ctx.clinicId));
 
@@ -200,10 +217,39 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   // Solo en PAGO_POR_CONTROL el borrador es la colocación, y solo ahí hace falta el precio.
   const precioColocacion = billingMode === "PAGO_POR_CONTROL" ? elegirPrecioColocacion(filasCatalogo) : null;
 
-  // H7: solo lo activo y «con costo aparte».
-  const catalogoDeExtras: ConceptoDeExtra[] = filasCatalogo
-    .filter((f) => f.isActive && f.orthoIncludedInTreatment === false)
-    .map((f) => ({ name: f.name, price: Number(f.basePrice) || 0 }));
+  // ws1-t12: el plan de tratamiento del caso alimenta el cobro — la colocación lleva la aparatología elegida
+  // en su concepto, «Cobrar extra» propone primero lo que el plan pide (microtornillo, barra palatina…) y
+  // los controles previstos dan el estimado de «Pago por control».
+  const planDetalle = await pPlanDetalle;
+  const aparatologia = aparatologiaElegida(planDetalle);
+
+  // H7: solo lo activo y «con costo aparte»; lo que el plan propone, primero.
+  const filasDeExtras = filasCatalogo.filter((f) => f.isActive && f.orthoIncludedInTreatment === false);
+  const sugeridos = procedimientosSugeridos(planDetalle, filasDeExtras);
+  const motivoPorId = new Map(sugeridos.map((x) => [x.procedureId, x.motivo]));
+  const catalogoDeExtras: ConceptoDeExtra[] = ordenarConSugeridosPrimero(filasDeExtras, sugeridos).map((f) => ({
+    name: f.name,
+    price: Number(f.basePrice) || 0,
+    ...(motivoPorId.has(f.id) ? { sugerido: true, motivo: motivoPorId.get(f.id) } : {}),
+  }));
+
+  // «Control X de N» y, en «Pago por control», el estimado. Solo se calcula si el plan dice cuántos controles prevé.
+  const previstos = planDetalle?.controlesPrevistos ?? null;
+  const zonaDelCaso = clinica?.timezone || "America/Mexico_City";
+  let controlesDelPlan: PanelDeCobro["controlesDelPlan"] = null;
+  if (previstos) {
+    const [progreso, precio] = await Promise.all([
+      cargarProgresoDeControles(ctx.clinicId, zonaDelCaso, [{ planId: treatmentPlanId, patientId: caso.patientId, inicio: caso.inicio }]),
+      billingMode === "PAGO_POR_CONTROL" ? buscarPrecioControlOrto(ctx.clinicId).catch(() => null) : Promise.resolve(null),
+    ]);
+    const precioPorControl = precio?.basePrice ?? null;
+    controlesDelPlan = {
+      previstos,
+      hechos: progreso.get(treatmentPlanId)?.hechos ?? 0,
+      precioPorControl,
+      estimado: billingMode === "PAGO_POR_CONTROL" ? estimadoPorControles(previstos, precioPorControl) : null,
+    };
+  }
 
   const base = {
     catalogoDeExtras,
@@ -218,7 +264,8 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     puedeConfigurarPolitica: ROLES_DE_DIRECCION.has(ctx.role),
     billingMode,
     billingModeLabel: ORTHO_BILLING_MODE_LABELS[billingMode],
-    borradorInicial: borradorInicialDelCaso(caso, billingMode === "PAGO_POR_CONTROL", precioColocacion),
+    borradorInicial: borradorInicialDelCaso({ ...caso, aparatologia }, billingMode === "PAGO_POR_CONTROL", precioColocacion),
+    controlesDelPlan,
   };
 
   const zonaHoraria = clinica?.timezone || "America/Mexico_City";

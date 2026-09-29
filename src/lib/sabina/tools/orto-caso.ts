@@ -113,6 +113,8 @@ export interface DatosOrtoCaso {
     higiene: { fecha: string; placaPct: number | null; gingivitis: string | null; manchasBlancas: boolean } | null;
     /** Lo que empeoró en los últimos controles, con las palabras del panel. Vacío = sin aviso. */
     higieneEmpeora: string[];
+    /** ws1-t12: el plan de tratamiento completo, renglón por renglón («Controles previstos: 18»). Vacío = sin plan completo. */
+    plan: Array<{ etiqueta: string; valor: string }>;
     alineadores: {
       sistema: string | null;
       actual: number;
@@ -255,6 +257,7 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
             arco: arcoLegible(leido.clinico.arco),
             higiene: leido.clinico.higiene,
             higieneEmpeora: leido.clinico.higieneEmpeora,
+            plan: leido.clinico.plan.map((l) => ({ etiqueta: l.etiqueta, valor: l.valor })),
             alineadores: leido.clinico.alineadores
               ? {
                   sistema: leido.clinico.alineadores.sistema,
@@ -349,6 +352,8 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
       } else {
         partes.push("Higiene: sin registro en un control firmado.");
       }
+      // ws1-t12: el plan de tratamiento completo, tal como está anotado. Solo se repite; no se opina de él.
+      if ((c.plan ?? []).length > 0) partes.push(`Plan de tratamiento anotado: ${c.plan.map((l) => `${l.etiqueta.toLowerCase()}: ${l.valor}`).join("; ")}.`);
       if (c.higieneEmpeora.length > 0) partes.push(`Aviso del panel, la higiene empeora: ${c.higieneEmpeora.join("; ")}.`);
       if (c.alineadores) {
         const a = c.alineadores;

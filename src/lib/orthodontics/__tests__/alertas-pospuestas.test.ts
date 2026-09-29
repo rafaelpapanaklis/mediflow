@@ -83,9 +83,9 @@ test("la acción toma la clínica de la sesión y comprueba el paciente", () => 
   assert.ok(exportados.every((l) => l.startsWith("export async function")), exportados.join("\n"));
 });
 
-test("la vista ofrece «Posponer» en las cuatro secciones, con permiso", () => {
+test("la vista ofrece «Posponer» en las cinco secciones (con la reevaluación radiográfica, ws1-t12), con permiso", () => {
   const vista = leer("src/components/specialties/orthodontics/modulo/vista-alertas.tsx");
-  assert.equal((vista.match(/\{puedePosponer && <PosponerAlertaBoton/g) ?? []).length, 4);
+  assert.equal((vista.match(/\{puedePosponer && <PosponerAlertaBoton/g) ?? []).length, 5);
   assert.match(leer("src/app/dashboard/orthodontics/alertas/page.tsx"), /puedePosponer=\{puedePosponer\}/);
 });
 

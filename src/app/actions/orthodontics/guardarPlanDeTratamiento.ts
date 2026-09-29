@@ -26,7 +26,7 @@ export async function guardarPlanDeTratamiento(input: unknown): Promise<ActionRe
   if (!treatmentPlanId) return fail("Falta el caso");
 
   const validado = validarPlanDetalle(o.plan);
-  if (!validado.ok) return fail(validado.error);
+  if (validado.ok === false) return fail(validado.error);
 
   let indicadas: number[] | undefined;
   if (o.extraccionesIndicadas !== undefined && o.extraccionesIndicadas !== null) {
@@ -65,7 +65,7 @@ export async function guardarPlanDeTratamiento(input: unknown): Promise<ActionRe
     extraccionesIndicadas: indicadas,
     duracionMeses,
   });
-  if (!r.ok) return fail(r.error);
+  if (r.ok === false) return fail(r.error);
 
   try {
     revalidatePath(`/dashboard/patients/${caso.patientId}`);

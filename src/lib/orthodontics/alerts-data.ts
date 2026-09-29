@@ -32,11 +32,27 @@ import { cargarUltimasHojasPorPaciente } from "./hojas-por-paciente-db";
 import { listaDePospuestas, quitarPospuestas, vigentes, type PospuestaVisible } from "./alertas-pospuestas";
 import { cargarPosposiciones } from "./alertas-pospuestas-db";
 import { cargarFotosPorRevisar } from "./fotos-paciente-db";
+import { cargarPlanesDetalle } from "./plan-detalle-db";
+import { cargarRadiografiasTipificadas } from "./plan-radiografias-db";
+import { cargarCasosIncompletos, type CasoIncompleto } from "./casos-incompletos-db";
+import { reevaluacionesPendientes, textoDeReevaluacion, type ReevaluacionPendiente } from "./plan-detalle";
+import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 
 export interface NoShowEntry {
   patientId: string;
   patientName: string;
   scheduledAt: Date;
+}
+
+/** ws1-t12 — un caso al que le toca reevaluación radiográfica (por la fecha del plan o por su periodicidad). */
+export interface ReevaluacionRadiograficaEntry {
+  patientId: string;
+  patientName: string;
+  treatmentPlanId: string;
+  /** Lo que toca, lo más vencido primero. */
+  pendientes: ReevaluacionPendiente[];
+  /** Lo mismo en palabras: «Panorámica (tocaba el 12/03/2026, contada desde el inicio del caso)». */
+  textos: string[];
 }
 
 export interface OrthoAlertsData {
@@ -50,6 +66,17 @@ export interface OrthoAlertsData {
   finishingSoon: DurationAlertEntry[];
   /** L5 */
   pastDue: DurationAlertEntry[];
+  /**
+   * ws1-t12 — «Reevaluación radiográfica»: la fecha de reevaluación del plan de tratamiento llegó, o pasó la
+   * periodicidad desde la última radiografía de ese tipo (o desde el inicio del caso). Se puede posponer 7 días.
+   * Opcional: una vista armada a mano sin este dato se pinta como «sin reevaluaciones».
+   */
+  reevaluacionRadiografica?: ReevaluacionRadiograficaEntry[];
+  /**
+   * ws1-t12 — casos activos con el diagnóstico o el plan de tratamiento incompletos (sobre todo los migrados de
+   * Dentalink), cada uno con el paso al que lleva su acceso directo. No se pospone: se resuelve completándolo.
+   */
+  incompletos?: CasoIncompleto[];
   /**
    * ws1-t5 (ronda 6, hallazgo 96) — casos con fotos que mandó el paciente
    * desde su portal y nadie ha revisado. Primero el que lleva más esperando.
@@ -133,14 +160,56 @@ export async function loadOrthoAlerts(
   const porTerminar = quitarPospuestas(listFinishingSoon(cases, ahora), "proximo-a-terminar", activas);
   const pasados = quitarPospuestas(listPastDue(cases, ahora), "pasado-de-fecha", activas);
 
+  // ws1-t12: reevaluación radiográfica del plan de tratamiento. Dos lecturas más para todos los casos (el plan y
+  // las radiografías tipificadas); nunca lanzan. Solo los casos cuyo plan pide fecha o periodicidad cuentan.
+  const reevaluaciones = await reevaluacionesDeLosCasos(clinicId, zonaHoraria, cases, ahora);
+  const reevaluacion = quitarPospuestas(reevaluaciones, "reevaluacion-radiografica", activas);
+
+  // ws1-t12: casos con diagnóstico o plan incompleto (una lectura más para todos los casos; nunca lanza).
+  const incompletos = await cargarCasosIncompletos(clinicId, cases);
+
   return {
+    incompletos,
     patientPhotos: agruparFotosPorRevisar(fotos),
     overduePayments: listOverduePatients(cases),
     missingNextControl: sinControl.quedan,
     noShows: faltas.quedan,
     finishingSoon: porTerminar.quedan,
     pastDue: pasados.quedan,
-    pospuestas: sinControl.pospuestas + faltas.pospuestas + porTerminar.pospuestas + pasados.pospuestas,
+    reevaluacionRadiografica: reevaluacion.quedan,
+    pospuestas: sinControl.pospuestas + faltas.pospuestas + porTerminar.pospuestas + pasados.pospuestas + reevaluacion.pospuestas,
     pospuestasLista: listaDePospuestas(posposiciones, ahora, nombres),
   };
+}
+
+/** Los casos a los que hoy les toca reevaluación radiográfica, con el plan de tratamiento de cada uno. */
+async function reevaluacionesDeLosCasos(
+  clinicId: string,
+  zonaHoraria: string,
+  cases: ReadonlyArray<{ planId: string; patientId: string; patientName: string; status: string; installedAt: Date | null }>,
+  ahora: Date,
+): Promise<ReevaluacionRadiograficaEntry[]> {
+  if (cases.length === 0) return [];
+  const planes = await cargarPlanesDetalle(clinicId, cases.map((c) => c.planId));
+  const conPlan = cases.filter((c) => {
+    const p = planes.get(c.planId);
+    return p && (p.reevaluacion || (p.periodicidadMeses && p.controlRadiografico.length > 0));
+  });
+  if (conPlan.length === 0) return [];
+  const radiografias = await cargarRadiografiasTipificadas(clinicId, conPlan.map((c) => c.patientId), zonaHoraria);
+  const hoy = hoyEnZona(ahora, zonaHoraria);
+  const salida: ReevaluacionRadiograficaEntry[] = [];
+  for (const c of conPlan) {
+    const pendientes = reevaluacionesPendientes({
+      plan: planes.get(c.planId)!,
+      status: c.status,
+      inicio: c.installedAt ? hoyEnZona(c.installedAt, zonaHoraria) : null,
+      radiografias: radiografias.get(c.patientId) ?? [],
+      hoy,
+    });
+    if (pendientes.length === 0) continue;
+    salida.push({ patientId: c.patientId, patientName: c.patientName, treatmentPlanId: c.planId, pendientes, textos: pendientes.map(textoDeReevaluacion) });
+  }
+  // La más vencida arriba.
+  return salida.sort((a, b) => b.pendientes[0]!.diasVencida - a.pendientes[0]!.diasVencida || a.patientName.localeCompare(b.patientName, "es"));
 }

@@ -532,6 +532,130 @@ export function validarContraOpciones(nuevo: PlanDetalle, anterior: PlanDetalle 
   return null;
 }
 
+// ─── Frecuencia de control de la clínica → controles previstos ──────────
+
+/** Cada cuántos días la clínica cita un control, por omisión: uno al mes. */
+export const FRECUENCIA_DE_CONTROL_DIAS_POR_OMISION = 30;
+
+/** Las frecuencias que se ofrecen en Configuración (el campo admite cualquier número de 7 a 120 días). */
+export const FRECUENCIAS_DE_CONTROL = [
+  { dias: 14, texto: "Cada 2 semanas" },
+  { dias: 21, texto: "Cada 3 semanas" },
+  { dias: 28, texto: "Cada 4 semanas" },
+  { dias: 30, texto: "Cada mes" },
+  { dias: 42, texto: "Cada 6 semanas" },
+  { dias: 56, texto: "Cada 8 semanas" },
+  { dias: 60, texto: "Cada 2 meses" },
+] as const;
+
+export function normalizarFrecuenciaDeControl(v: unknown): number {
+  const n = typeof v === "string" && v.trim() !== "" ? Number(v) : typeof v === "number" ? v : NaN;
+  return Number.isInteger(n) && n >= 7 && n <= 120 ? n : FRECUENCIA_DE_CONTROL_DIAS_POR_OMISION;
+}
+
+/**
+ * Los controles que se proponen para un tratamiento: la duración entre la frecuencia de control de la
+ * clínica (18 meses, cada mes → 18). Solo una propuesta: el campo sigue editable. null si no hay duración.
+ */
+export function controlesSugeridos(duracionMeses: number | null | undefined, frecuenciaDias: number = FRECUENCIA_DE_CONTROL_DIAS_POR_OMISION): number | null {
+  const m = Number(duracionMeses);
+  if (!Number.isFinite(m) || m <= 0) return null;
+  const n = Math.round((m * 30.4375) / normalizarFrecuenciaDeControl(frecuenciaDias));
+  return Math.min(CONTROLES_MAXIMOS, Math.max(1, n));
+}
+
+// ─── Técnica ↔ aparatología ─────────────────────────────────────────────
+
+/** Los tipos base de técnica (enum `OrthoTechnique`). */
+export type TipoBaseDeTecnica =
+  | "METAL_BRACKETS"
+  | "CERAMIC_BRACKETS"
+  | "SELF_LIGATING_METAL"
+  | "SELF_LIGATING_CERAMIC"
+  | "LINGUAL_BRACKETS"
+  | "CLEAR_ALIGNERS"
+  | "HYBRID";
+
+/**
+ * Qué aparatología tiene sentido ofrecer según la técnica elegida, para que no se contradigan: alineadores
+ * solo con alineadores o mixta; brackets con cualquier técnica de brackets o mixta. Las placas (planos,
+ * disyuntores, asas) y los aditamentos van con cualquiera.
+ */
+export function aparatologiaPermitida(tecnica: string | null | undefined): { brackets: boolean; alineadores: boolean } {
+  switch (tecnica) {
+    case "CLEAR_ALIGNERS":
+      return { brackets: false, alineadores: true };
+    case "HYBRID":
+      return { brackets: true, alineadores: true };
+    case undefined:
+    case null:
+    case "":
+      return { brackets: true, alineadores: true };
+    default:
+      return { brackets: true, alineadores: false };
+  }
+}
+
+/** Quita lo que la técnica no admite (al cambiar de técnica en el formulario). Devuelve qué quitó. */
+export function sinAparatologiaIncompatible<T extends { brackets: string[]; alineadores: string[] }>(
+  plan: T,
+  tecnica: string | null | undefined,
+): { plan: T; quitados: string[] } {
+  const ok = aparatologiaPermitida(tecnica);
+  const quitados = [...(ok.brackets ? [] : plan.brackets), ...(ok.alineadores ? [] : plan.alineadores)];
+  return {
+    plan: { ...plan, brackets: ok.brackets ? plan.brackets : [], alineadores: ok.alineadores ? plan.alineadores : [] },
+    quitados,
+  };
+}
+
+/** Mensaje si el plan lleva aparatología que la técnica no admite; null si cuadra. Lo exige el servidor. */
+export function validarContraTecnica(plan: Pick<PlanDetalle, "brackets" | "alineadores">, tecnica: string | null | undefined, nombreDeLaTecnica?: string): string | null {
+  const ok = aparatologiaPermitida(tecnica);
+  const como = nombreDeLaTecnica ? `«${nombreDeLaTecnica}»` : "la técnica elegida";
+  if (!ok.alineadores && plan.alineadores.length > 0) return `Alineadores: no aplican con ${como}. Cambia la técnica (alineadores o mixta) o quita los alineadores.`;
+  if (!ok.brackets && plan.brackets.length > 0) return `Brackets: no aplican con ${como}. Cambia la técnica (brackets o mixta) o quita los brackets.`;
+  return null;
+}
+
+// ─── Lo que se DERIVA del plan (no se pide dos veces) ───────────────────
+
+/**
+ * `tadsRequired` (la columna de siempre) sale de «Aditamentos → microtornillos / miniplacas» y de los TAD
+ * que el caso ya tiene registrados: no es una casilla aparte.
+ */
+export function tadsRequeridos(aditamentos: readonly string[], tadsRegistrados: number = 0): boolean {
+  return planPideTads(aditamentos) || tadsRegistrados > 0;
+}
+
+/**
+ * La prescripción general del caso (`prescriptionSlot`) y el cementado (`bondingType`), derivados de lo que se
+ * eligió en tubos, bandas y cementación: Roth → Roth 0.022, MBT → MBT 0.022, Damon → Damon Q2; una cementación
+ * «indirecta» / «directa» → el cementado. `null` = no se puede deducir: la columna no se toca. (0.022 es el
+ * calibre más común; el doctor lo afina en la hoja de control.)
+ */
+export function prescripcionDerivada(d: Pick<PlanDetalle, "tubosSuperiores" | "tubosInferiores" | "bandasSuperiores" | "bandasInferiores" | "cementacionSuperiorAnterior" | "cementacionSuperiorPosterior" | "cementacionInferiorAnterior" | "cementacionInferiorPosterior">): {
+  prescriptionSlot: "ROTH_022" | "MBT_022" | "DAMON_Q2" | null;
+  bondingType: "DIRECTO" | "INDIRECTO" | null;
+} {
+  const marcas = [d.tubosSuperiores, d.tubosInferiores, d.bandasSuperiores, d.bandasInferiores].filter((x): x is string => Boolean(x)).map((x) => clave(x));
+  const tiene = (re: RegExp) => marcas.some((m) => re.test(m));
+  // Si mezclan sistemas distintos no hay una sola prescripción que decir.
+  const roth = tiene(/\broth\b/);
+  const mbt = tiene(/\bmbt\b/);
+  const damon = tiene(/\bdamon\b/);
+  const cuantas = [roth, mbt, damon].filter(Boolean).length;
+  const prescriptionSlot = cuantas === 1 ? (roth ? "ROTH_022" : mbt ? "MBT_022" : "DAMON_Q2") : null;
+
+  const cem = [d.cementacionSuperiorAnterior, d.cementacionSuperiorPosterior, d.cementacionInferiorAnterior, d.cementacionInferiorPosterior]
+    .filter((x): x is string => Boolean(x))
+    .map((x) => clave(x));
+  const indirecto = cem.some((m) => /indirect/.test(m));
+  const directo = cem.some((m) => /\bdirect/.test(m));
+  const bondingType = indirecto && !directo ? "INDIRECTO" : directo && !indirecto ? "DIRECTO" : null;
+  return { prescriptionSlot, bondingType };
+}
+
 // ─── Anclaje general derivado ───────────────────────────────────────────
 
 export type AnclajeGeneral = "MAXIMUM" | "MODERATE" | "MINIMUM" | "COMPOUND";
@@ -681,6 +805,58 @@ export function aparatologiaElegida(d: Pick<PlanDetalle, "brackets" | "alineador
   return todo.length > 0 ? lista(todo) : null;
 }
 
+// ─── Casos con diagnóstico o plan incompleto ────────────────────────────
+
+export type PasoDelCaso = "diagnostico" | "plan";
+
+export interface PiezaFaltante {
+  paso: PasoDelCaso;
+  clave: string;
+  /** «doctor tratante», «controles previstos»… */
+  texto: string;
+}
+
+/** El texto que dejan los casos migrados en el plan de retención: sigue faltando. */
+const RETENCION_DE_MIGRACION = /^plan de retenci[oó]n sin registrar/i;
+
+/**
+ * Lo que falta de un caso para darlo por completo. Para ABRIR un caso solo se exigen técnica y doctor; lo demás
+ * puede quedar a medias, y los casos migrados de Dentalink entran casi vacíos. Esto lo dice, por paso:
+ *  · DIAGNÓSTICO — los valores neutros de migración, o un resumen clínico que no llega al mínimo.
+ *  · PLAN — doctor, controles previstos, anclaje, aparatología, retención y cobro (plan de pago).
+ * Lo vacío que NO se exige (aditamentos, extracciones, radiografías, interconsultas…) no cuenta: puede no aplicar.
+ */
+export function piezasQueFaltan(c: {
+  /** El diagnóstico lleva la marca de migración (valores neutros, no mediciones). */
+  diagnosticoMigrado: boolean;
+  resumenClinico: string | null | undefined;
+  doctorId: string | null | undefined;
+  detalle: PlanDetalle | null | undefined;
+  retencion: string | null | undefined;
+  billingMode: "PRECIO_TOTAL" | "PAGO_POR_CONTROL";
+  tieneFactura: boolean;
+}): PiezaFaltante[] {
+  const out: PiezaFaltante[] = [];
+  const d = c.detalle ?? planDetalleVacio();
+  if (c.diagnosticoMigrado) out.push({ paso: "diagnostico", clave: "diagnostico-migrado", texto: "diagnóstico (valores de migración)" });
+  else if ((c.resumenClinico ?? "").trim().length < 40) out.push({ paso: "diagnostico", clave: "resumen", texto: "resumen clínico del diagnóstico" });
+  if (!c.doctorId) out.push({ paso: "plan", clave: "doctor", texto: "doctor tratante" });
+  if (!d.controlesPrevistos) out.push({ paso: "plan", clave: "controles", texto: "controles previstos" });
+  if (!d.anclajeSuperior && !d.anclajeInferior) out.push({ paso: "plan", clave: "anclaje", texto: "anclaje" });
+  if (d.brackets.length + d.alineadores.length + d.placas.length === 0) out.push({ paso: "plan", clave: "aparatologia", texto: "aparatología" });
+  const ret = (c.retencion ?? "").trim();
+  if (ret === "" || RETENCION_DE_MIGRACION.test(ret)) out.push({ paso: "plan", clave: "retencion", texto: "plan de retención" });
+  if (!c.tieneFactura) out.push({ paso: "plan", clave: "cobro", texto: c.billingMode === "PAGO_POR_CONTROL" ? "factura de colocación" : "plan de pago" });
+  return out;
+}
+
+/** El primer paso que falta (a dónde lleva el acceso directo): el diagnóstico va antes que el plan. */
+export function pasoQueFalta(piezas: readonly PiezaFaltante[]): PasoDelCaso | null {
+  if (piezas.some((p) => p.paso === "diagnostico")) return "diagnostico";
+  if (piezas.some((p) => p.paso === "plan")) return "plan";
+  return null;
+}
+
 // ─── Lo que la ficha recibe del plan ────────────────────────────────────
 
 /** El plan de UN caso tal como lo pintan la sección «Plan de tratamiento» y su popup. */
@@ -701,6 +877,35 @@ export interface PlanDeTratamientoVista {
   controlesHechos: number;
   /** Hay seguimiento de alineadores: el total se cambia aquí o allá, es el mismo dato. */
   conSeguimientoDeAlineadores: boolean;
+  /** Reevaluaciones radiográficas que tocan hoy (las mismas que Alertas). Vacío = ninguna. */
+  reevaluaciones: ReevaluacionPendiente[];
+  /** El resto del caso que la ventana «Plan de tratamiento» edita junto con el plan (técnica, doctor, cobro…). */
+  caso: CasoParaLaVentana;
+}
+
+/**
+ * Lo que la ventana del caso (un solo formulario para abrir y para editar) necesita del caso YA abierto, además del
+ * plan completo: técnica, doctor, retención, cobro. Todo sale de las columnas de siempre; nada se duplica.
+ */
+export interface CasoParaLaVentana {
+  /** Tipo base (enum `OrthoTechnique`). */
+  tecnica: string;
+  /** Nombre propio guardado en el caso (null = el de su tipo base). */
+  tecnicaNombrePropio: string | null;
+  /** Cómo se muestra hoy la técnica del caso. */
+  tecnicaVisible: string;
+  objetivos: string;
+  retencion: string;
+  doctorId: string | null;
+  responsableId: string | null;
+  /** ISO de la colocación, o null. */
+  colocadoEl: string | null;
+  /** Costo de referencia guardado en el caso (con factura, el que cuenta es el de la factura). */
+  costoReferencia: number;
+  iprRequerido: boolean;
+  billingMode: "PRECIO_TOTAL" | "PAGO_POR_CONTROL";
+  /** La factura del tratamiento (en «Pago por control», la de colocación), si ya existe. */
+  factura: { id: string; total: number; pagado: number } | null;
 }
 
 // ─── Qué cambió (Movimientos) ───────────────────────────────────────────

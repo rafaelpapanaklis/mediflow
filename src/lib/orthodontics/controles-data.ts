@@ -18,6 +18,7 @@ import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { relatedPatientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import { cargarUltimasHojasPorPaciente } from "./hojas-por-paciente-db";
+import { cargarProgresoDeControles, numerarCitasPorAtender } from "./controles-hechos-db";
 import { loadOrthoCases } from "./tablero-data";
 import { computeActiveCasesCount } from "./specialty-kpis";
 import {
@@ -115,6 +116,24 @@ export async function loadOrthoControles(
     if (!planIdPorPaciente.has(caso.patientId)) planIdPorPaciente.set(caso.patientId, caso.planId);
   }
 
+  // ws1-t12 — «Control X de N»: solo de los casos cuyo plan de tratamiento dice cuántos controles prevé (una
+  // consulta más para todos, y ninguna si nadie lo prevé). El caso de cada paciente es el mismo de arriba.
+  const casoDelPaciente = new Map<string, (typeof cases)[number]>();
+  for (const caso of cases) if (!casoDelPaciente.has(caso.patientId)) casoDelPaciente.set(caso.patientId, caso);
+  const progresoPorCaso = await cargarProgresoDeControles(
+    clinicId,
+    zonaHoraria,
+    enVentana.length === 0 ? [] : Array.from(casoDelPaciente.values()).map((c) => ({ planId: c.planId, patientId: c.patientId, inicio: c.installedAt })),
+    ahora,
+  );
+  const progresoPorPaciente = new Map<string, { hechos: number; previstos: number }>();
+  for (const [patientId, caso] of casoDelPaciente) {
+    const p = progresoPorCaso.get(caso.planId);
+    if (p) progresoPorPaciente.set(patientId, p);
+  }
+  // Solo de hoy en adelante: una cita vieja que nadie cerró no es «el siguiente control».
+  const numeros = numerarCitasPorAtender(citas.filter((c) => c.startsAt >= inicio), progresoPorPaciente, (c) => hojas.has(c.id));
+
   const deLaVentana: CitaDeControl[] = enVentana.map((c) => ({
     appointmentId: c.id,
     patientId: c.patientId,
@@ -124,6 +143,7 @@ export async function loadOrthoControles(
     status: c.status,
     hoja: hojas.get(c.id) ?? null,
     treatmentPlanId: planIdPorPaciente.get(c.patientId) ?? null,
+    ...(numeros.has(c) ? { progreso: numeros.get(c)! } : {}),
   }));
 
   // Una hoja de control registrada también es un control hecho, aunque nadie

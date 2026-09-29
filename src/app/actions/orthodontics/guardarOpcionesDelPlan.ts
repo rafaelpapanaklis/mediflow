@@ -5,12 +5,12 @@
 
 import { revalidatePath } from "next/cache";
 import { getOrthoConfigActionContext, auditOrtho } from "./_helpers";
-import { LISTAS_DEL_PLAN, normalizarOpciones, validarOpciones, type OpcionesDelPlan } from "@/lib/orthodontics/plan-detalle";
+import { LISTAS_DEL_PLAN, normalizarFrecuenciaDeControl, normalizarOpciones, validarOpciones, type OpcionesDelPlan } from "@/lib/orthodontics/plan-detalle";
 import { guardarOpcionesDelPlan as guardarEnBase } from "@/lib/orthodontics/plan-detalle-db";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
-export async function guardarOpcionesDelPlanAction(input: unknown): Promise<ActionResult<{ opciones: OpcionesDelPlan }>> {
+export async function guardarOpcionesDelPlanAction(input: unknown): Promise<ActionResult<{ opciones: OpcionesDelPlan; frecuenciaControlDias: number }>> {
   const auth = await getOrthoConfigActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -32,7 +32,8 @@ export async function guardarOpcionesDelPlanAction(input: unknown): Promise<Acti
   );
   if (problema) return fail(problema);
 
-  const r = await guardarEnBase(ctx.clinicId, ctx.userId, normalizarOpciones(o));
+  const frecuencia = normalizarFrecuenciaDeControl((input as { frecuenciaControlDias?: unknown } | null)?.frecuenciaControlDias);
+  const r = await guardarEnBase(ctx.clinicId, ctx.userId, normalizarOpciones(o), frecuencia);
   if (r.ok === false) {
     return fail(
       r.motivo === "sin-columna"
@@ -47,9 +48,10 @@ export async function guardarOpcionesDelPlanAction(input: unknown): Promise<Acti
     entityId: ctx.clinicId,
     meta: {
       accion: "opciones-del-plan-de-tratamiento",
+      frecuenciaControlDias: r.frecuenciaControlDias,
       listas: Object.fromEntries(LISTAS_DEL_PLAN.map((l) => [l, r.opciones[l].map((x) => ({ nombre: x.nombre, activa: x.activa }))])),
     },
   });
   revalidatePath("/dashboard/orthodontics/configuracion");
-  return ok({ opciones: r.opciones });
+  return ok({ opciones: r.opciones, frecuenciaControlDias: r.frecuenciaControlDias });
 }

@@ -10,6 +10,7 @@
 // npsSchedules, referralCode, consents, labOrders, referralLetters,
 // whatsappLog) + treatmentStatus derivado del plan.
 
+import { costoVisible } from "@/lib/orthodontics/check-del-caso";
 import { prisma } from "@/lib/prisma";
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
@@ -25,6 +26,14 @@ import {
 import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { signMaybeUrls } from "@/lib/storage";
 import { cargarNombreDeTecnica } from "../tecnicas-de-la-clinica-db";
+import { cargarPlanDetalle, columnaDePlanDetalleExiste } from "../plan-detalle-db";
+import { planDetalleVacio, reevaluacionesPendientes, type PlanDeTratamientoVista } from "../plan-detalle";
+import { cargarModoDeCobro } from "../billing-mode-db";
+import { normalizarOrthoBillingMode } from "../billing-mode";
+import { nombreDeTecnica } from "../tecnicas-de-la-clinica";
+import { cargarRadiografiasTipificadas } from "../plan-radiografias-db";
+import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
+import { contarControlesHechos, inicioDelCaso } from "../controles-hechos";
 import {
   adaptToOrthoRedesignViewModel,
   type AdapterInput,
@@ -94,6 +103,11 @@ export interface OrthoRedesignBundle {
   /** Top-3 más recientes para el RightRail. */
   whatsappRecent: WhatsAppEntryDTO[];
   treatmentStatus: OrthoTreatmentStatus;
+  /**
+   * ws1-t12 — el «Plan de tratamiento» completo del caso (como Dentalink) con lo que se conecta a él (TADs,
+   * controles hechos). `null` = paciente sin caso.
+   */
+  planDeTratamiento: PlanDeTratamientoVista | null;
   /** Datos del plan financiero — para DrawerEditFinancialPlan (BUG 7). */
   financialPlan: {
     totalAmount: number;
@@ -417,6 +431,9 @@ export async function loadOrthoRedesignData(
 
   const treatmentStatus = deriveTreatmentStatus(legacy);
 
+  // ws1-t10: nombre propio de la técnica del caso (sin la columna: el del tipo base).
+  const nombreTecnica = planId ? await cargarNombreDeTecnica(input.clinicId, planId) : null;
+
   const adapterInput: AdapterInput = {
     legacy,
     wireSteps: wireSteps as AdapterInput["wireSteps"],
@@ -444,7 +461,7 @@ export async function loadOrthoRedesignData(
     realInvoiceTotal: legacy.invoiceTotal,
     realInvoicePaid: legacy.invoicePaid,
     // ws1-t10: nombre propio de la técnica del caso (sin la columna: el del tipo base).
-    techniqueLabel: planId ? await cargarNombreDeTecnica(input.clinicId, planId) : null,
+    techniqueLabel: nombreTecnica,
   };
 
   const viewModel = adaptToOrthoRedesignViewModel(adapterInput);
@@ -461,7 +478,21 @@ export async function loadOrthoRedesignData(
       }
     : null;
 
+  // ws1-t12: el plan completo del caso. Sin la columna (SQL sin pegar) o sin plan completo, el detalle sale
+  // vacío y la sección se pinta con lo de siempre; `columna` dice si «Editar plan» puede guardar.
+  const planDeTratamiento = await armarPlanDeTratamiento({
+    clinicId: input.clinicId,
+    legacy,
+    tads: (tads as unknown[]).length,
+    citas: indicadores.citas,
+    hojas: hojasDeControl,
+    ahora,
+    zona: indicadores.zona,
+    nombreTecnica,
+  });
+
   const bundle: OrthoRedesignBundle = {
+    planDeTratamiento,
     historicalPhotoSets,
     installments,
     quoteScenarios,
@@ -480,6 +511,82 @@ export async function loadOrthoRedesignData(
   };
 
   return { viewModel, legacy, bundle };
+}
+
+/**
+ * El plan de tratamiento completo del caso (ws1-t12). Nunca lanza: sin columna o con la base caída, el detalle
+ * sale vacío. `controlesHechos` es la misma cuenta que Tablero y Controles (acotada a este caso).
+ */
+async function armarPlanDeTratamiento(args: {
+  clinicId: string;
+  legacy: OrthoTabData;
+  tads: number;
+  citas: readonly CitaDeControlDelCaso[];
+  hojas: ReadonlyArray<{ appointmentId: string | null; visitDate: Date }>;
+  ahora: Date;
+  zona: string;
+  nombreTecnica: string | null;
+}): Promise<PlanDeTratamientoVista | null> {
+  const plan = args.legacy.plan;
+  if (!plan) return null;
+  const [detalle, columna, radiografias, aligner, modoCrudo] = await Promise.all([
+    cargarPlanDetalle(args.clinicId, plan.id),
+    columnaDePlanDetalleExiste(),
+    cargarRadiografiasTipificadas(args.clinicId, [plan.patientId], args.zona),
+    prisma.orthodonticAligner
+      .findFirst({ where: { treatmentPlanId: plan.id, clinicId: args.clinicId, deletedAt: null }, select: { id: true } })
+      .catch(() => null),
+    cargarModoDeCobro(args.clinicId, plan.id).catch(() => null),
+  ]);
+  const row = plan as unknown as { treatingDoctorId?: string | null; responsibleGuardianId?: string | null; invoiceId?: string | null };
+  return {
+    treatmentPlanId: plan.id,
+    detalle: detalle ?? planDetalleVacio(),
+    columna,
+    duracionMeses: plan.estimatedDurationMonths ?? null,
+    anchorageType: plan.anchorageType ? String(plan.anchorageType) : null,
+    extraccionesRequired: Boolean(plan.extractionsRequired),
+    extraccionesIndicadas: [...(plan.extractionsTeethFdi ?? [])],
+    tads: args.tads,
+    controlesHechos: contarControlesHechos({
+      citas: args.citas,
+      hojas: args.hojas,
+      inicio: inicioDelCaso({ installedAt: plan.installedAt ?? null, startDate: plan.startDate ?? null, createdAt: plan.createdAt ?? null }),
+      ahora: args.ahora,
+      zona: args.zona,
+    }),
+    conSeguimientoDeAlineadores: aligner !== null,
+    caso: {
+      tecnica: String(plan.technique),
+      tecnicaNombrePropio: args.nombreTecnica,
+      tecnicaVisible: nombreDeTecnica(String(plan.technique), args.nombreTecnica),
+      objetivos: String(plan.treatmentObjectives),
+      retencion: plan.retentionPlanText ?? "",
+      doctorId: row.treatingDoctorId ?? null,
+      responsableId: row.responsibleGuardianId ?? null,
+      colocadoEl: plan.installedAt ? plan.installedAt.toISOString() : null,
+      // ws1-t10: el $1 provisional (la base exige > 0) no es un precio: el campo sale vacío.
+      costoReferencia: costoVisible(plan.totalCostMxn) ?? 0,
+      iprRequerido: Boolean(plan.iprRequired),
+      billingMode: normalizarOrthoBillingMode(modoCrudo),
+      factura:
+        row.invoiceId && args.legacy.invoiceTotal != null
+          ? { id: row.invoiceId, total: args.legacy.invoiceTotal, pagado: args.legacy.invoicePaid ?? 0 }
+          : null,
+    },
+    reevaluaciones: reevaluacionesPendientes({
+      plan: detalle ?? planDetalleVacio(),
+      status: String(plan.status),
+      inicio: dia(plan.installedAt ?? plan.startDate ?? null, args.zona),
+      radiografias: radiografias.get(plan.patientId) ?? [],
+      hoy: hoyEnZona(args.ahora, args.zona),
+    }),
+  };
+}
+
+/** "YYYY-MM-DD" de un instante en la zona de la clínica (null si no hay). */
+function dia(d: Date | null, zona: string): string | null {
+  return d ? hoyEnZona(d, zona) : null;
 }
 
 // ─── Adapters Fase 1.5 ──────────────────────────────────────────────────

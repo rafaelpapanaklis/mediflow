@@ -153,7 +153,9 @@ export const createTreatmentPlanSchema = z.object({
   tadsRequired: z.boolean().default(false),
   treatmentObjectives: z.enum(TREATMENT_OBJECTIVE),
   patientGoals: z.string().max(1000).optional().nullable(),
-  retentionPlanText: z.string().min(20).max(2000),
+  // ws1-t12 (decisión de Rafael): para abrir un caso solo son obligatorios la técnica y el doctor; el plan de
+  // retención se puede dejar para después (la columna es NOT NULL: vacío = "").
+  retentionPlanText: z.string().max(2000).default(""),
   signedTreatmentConsentFileId: z.string().optional().nullable(),
   // Ola 1 (ws1-t6, sep-2026) — «Alta del caso»:
   //   A5 · doctor tratante del caso (Ola 0 ya trae la columna).
@@ -173,9 +175,12 @@ export const createTreatmentPlanSchema = z.object({
   // el caso; sin él, el de la clínica. No existe en la edición (abajo): un
   // caso abierto no cambia de modo.
   billingMode: z.enum(["PRECIO_TOTAL", "PAGO_POR_CONTROL"]).optional(),
+  // ws1-t12: el «Plan de tratamiento» completo, opcional al abrir el caso. Va por SQL crudo (columna
+  // `planDetalle`), no por Prisma: la acción lo valida con `validarPlanDetalle` y NO lo pasa al `create`.
+  planDetalle: z.record(z.unknown()).optional().nullable(),
 });
 
-export const updateTreatmentPlanSchema = createTreatmentPlanSchema.omit({ billingMode: true }).partial().extend({
+export const updateTreatmentPlanSchema = createTreatmentPlanSchema.omit({ billingMode: true, planDetalle: true }).partial().extend({
   treatmentPlanId: z.string().min(1),
   totalCostMxn: z.number().positive().max(10_000_000).optional(),
   status: z.enum(ORTHO_TREATMENT_STATUS).optional(),

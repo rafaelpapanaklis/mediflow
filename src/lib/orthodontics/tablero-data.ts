@@ -56,6 +56,9 @@ import {
 import { mesEnZona, produccionPorDoctor, rangoDelMes } from "./produccion";
 import { cargarCambiosDeDoctor, cargarNombresDeDoctores, cargarPagosDeCasos } from "./produccion-db";
 import { cargarValoracionesDelTablero } from "./valoraciones-tablero-db";
+import { cargarProgresoDeControles, numerarCitasPorAtender } from "./controles-hechos-db";
+import { inicioDelCaso } from "./controles-hechos";
+import { cargarCasosIncompletos, type CasoIncompleto } from "./casos-incompletos-db";
 
 function esRelacionAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
@@ -311,6 +314,8 @@ export interface OrthoTableroData {
   projectionExcluded?: ProjectionExcluded;
   /** T7 */
   placementsAndRemovals: PlacementsAndRemovals;
+  /** ws1-t12 — casos activos con el diagnóstico o el plan incompletos (cuenta y lista, con acceso directo al paso que falta). Opcional para no romper a quien arma este objeto a mano. */
+  incompletos?: CasoIncompleto[];
 }
 
 export async function loadOrthoTableroData(
@@ -373,7 +378,11 @@ export async function loadOrthoTableroData(
     zonaHoraria,
   });
 
+  // ws1-t12: una lectura más para todos los casos; nunca lanza.
+  const incompletos = await cargarCasosIncompletos(clinicId, cases);
+
   return {
+    incompletos,
     activeCasesCount: computeActiveCasesCount(cases),
     controlsToday,
     overdue: computeOverdueBalances(cases),
@@ -404,6 +413,8 @@ export interface TodayControlEntry {
    * previas que ya armaban este DTO a mano antes de este campo.
    */
   hasCard?: boolean;
+  /** ws1-t12 — «Control 6 de 18», del plan de tratamiento del caso. Solo si el plan dice cuántos controles prevé. */
+  progreso?: { numero: number; previstos: number };
 }
 
 /**
@@ -433,6 +444,7 @@ export async function loadTodayControlsWithIndications(
       id: true,
       patientId: true,
       startsAt: true,
+      status: true,
       patient: { select: { firstName: true, lastName: true } },
     },
     take: 200,
@@ -452,16 +464,34 @@ export async function loadTodayControlsWithIndications(
         patientId: { in: appointments.map((a) => a.patientId) },
       },
       orderBy: { createdAt: "desc" },
-      select: { id: true, patientId: true },
+      select: { id: true, patientId: true, installedAt: true, startDate: true, createdAt: true },
     }),
   ]);
   const cardByAppointmentId = new Map(cards.map((c) => [c.appointmentId, c]));
   // Un paciente puede tener más de un plan histórico (caso previo cerrado);
   // se toma el más reciente — mismo criterio que getTreatmentPlanIdForAppointment.ts.
   const planIdByPatientId = new Map<string, string>();
+  const planByPatientId = new Map<string, (typeof plans)[number]>();
   for (const p of plans) {
-    if (!planIdByPatientId.has(p.patientId)) planIdByPatientId.set(p.patientId, p.id);
+    if (!planIdByPatientId.has(p.patientId)) {
+      planIdByPatientId.set(p.patientId, p.id);
+      planByPatientId.set(p.patientId, p);
+    }
   }
+
+  // ws1-t12 — «Control X de N»: una consulta más para todos, y solo de los casos cuyo plan prevé controles.
+  const progresoPorCaso = await cargarProgresoDeControles(
+    clinicId,
+    zonaHoraria,
+    Array.from(planByPatientId.values()).map((p) => ({ planId: p.id, patientId: p.patientId, inicio: inicioDelCaso(p) })),
+    ahora,
+  );
+  const progresoPorPaciente = new Map<string, { hechos: number; previstos: number }>();
+  for (const [patientId, p] of planByPatientId) {
+    const pr = progresoPorCaso.get(p.id);
+    if (pr) progresoPorPaciente.set(patientId, pr);
+  }
+  const numeros = numerarCitasPorAtender(appointments, progresoPorPaciente, (a) => cardByAppointmentId.has(a.id));
 
   return appointments.map((a) => {
     const card = cardByAppointmentId.get(a.id);
@@ -473,6 +503,7 @@ export async function loadTodayControlsWithIndications(
       treatmentPlanId: card?.treatmentPlanId ?? planIdByPatientId.get(a.patientId) ?? null,
       indications: card?.indications ?? null,
       hasCard: Boolean(card),
+      ...(numeros.has(a) ? { progreso: numeros.get(a)! } : {}),
     };
   });
 }

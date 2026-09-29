@@ -15,6 +15,7 @@ import type { CuotaConEstado, EstadoCuota } from "@/lib/invoices/plan-de-pagos";
 import type { OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import type { ConfigRecargoPorAtraso } from "@/lib/orthodontics/cobro/reglas";
 import { condicionesParaImprimir } from "@/lib/orthodontics/cobro/condiciones-convenio";
+import { estimadoPorControles } from "@/lib/orthodontics/plan-detalle";
 import type { DatosDelMembreteOrto } from "./membrete-orto";
 import { dinero, edadEnAnios, fechaDMA } from "./formato";
 
@@ -57,6 +58,11 @@ export interface EntradaConvenio {
   saldoAFavor: number;
   /** «Pago por control»: precio de «Control de ortodoncia» del catálogo. */
   precioPorControl: number | null;
+  /**
+   * ws1-t12 — los controles que prevé el plan de tratamiento. En «Pago por control», controles previstos ×
+   * precio por control = total ESTIMADO (no se cobra por adelantado: cada control se cobra al atenderlo).
+   */
+  controlesPrevistos?: number | null;
   /** «Pago por control»: los controles ya facturados del caso. */
   cargosDeControl: CargoDeControlConvenio[];
   /** "YYYY-MM-DD" de hoy en la zona de la clínica: decide qué control ya venció. */
@@ -170,6 +176,9 @@ export function armarConvenio(e: EntradaConvenio): ConvenioPdfData {
     { etiqueta: "Fecha de colocación", valor: e.colocacion ? fechaDMA(e.colocacion, tz) : "Por programar" },
     { etiqueta: "Forma de pago", valor: porControl ? "Pago por control" : "Precio total a plazos" },
   ];
+  if (e.controlesPrevistos && e.controlesPrevistos > 0) {
+    tratamiento.push({ etiqueta: "Controles previstos", valor: String(e.controlesPrevistos) });
+  }
   if (e.reposicionesIncluidas > 0) {
     tratamiento.push({ etiqueta: "Reposiciones incluidas", valor: String(e.reposicionesIncluidas) });
   }
@@ -185,6 +194,14 @@ export function armarConvenio(e: EntradaConvenio): ConvenioPdfData {
       valor: e.precioPorControl != null ? dinero(e.precioPorControl) : "Según el catálogo de la clínica",
       destacado: true,
     });
+    // ws1-t12: controles previstos × precio del control = total ESTIMADO. Solo informa; nada se cobra por adelantado.
+    const estimado = estimadoPorControles(e.controlesPrevistos, e.precioPorControl);
+    if (estimado) {
+      resumen.push({
+        etiqueta: `Total estimado (${estimado.previstos} controles × ${dinero(estimado.precioPorControl)})`,
+        valor: `${dinero(estimado.total)} (estimado)`,
+      });
+    }
     if (e.factura) {
       resumen.push({ etiqueta: "Colocación / enganche", valor: dinero(e.factura.total) });
     }

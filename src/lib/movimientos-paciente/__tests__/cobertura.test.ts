@@ -76,6 +76,7 @@ describe("ortodoncia: cada acción con paciente lleva patientId", () => {
     "cobro/guardarConfigDeCobro.ts",
     "guardarPreciosPorTecnica.ts",
     "guardarTecnicasDeLaClinica.ts",
+    "guardarOpcionesDelPlan.ts",
     "recalculatePaymentStatus.ts",
     "updateOrthoClinicSettings.ts",
   ];
@@ -188,6 +189,7 @@ describe("ortodoncia: toda escritura deja movimiento del paciente", () => {
     "cobro/guardarConfigDeCobro.ts",
     "guardarPreciosPorTecnica.ts",
     "guardarTecnicasDeLaClinica.ts",
+    "guardarOpcionesDelPlan.ts",
     "recalculatePaymentStatus.ts",
     "updateOrthoClinicSettings.ts",
   ];

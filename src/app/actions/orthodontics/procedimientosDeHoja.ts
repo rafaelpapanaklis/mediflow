@@ -18,6 +18,8 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
+import { cargarPlanDetalle } from "@/lib/orthodontics/plan-detalle-db";
+import { extraccionesPendientes, ordenarConSugeridosPrimero, procedimientosSugeridos } from "@/lib/orthodontics/plan-detalle";
 import {
   buscarNotaDeHoja,
   cargarCatalogoElegible,
@@ -48,6 +50,10 @@ export interface ProcedimientoElegible {
   name: string;
   price: number;
   incluido: boolean;
+  /** ws1-t12: lo propone el plan de tratamiento del caso (microtornillo, barra palatina, disyuntor…): va primero. */
+  sugerido?: boolean;
+  /** «Del plan: Microtornillos». */
+  motivo?: string;
 }
 
 async function conEstadoDeFactura(clinicId: string, lineas: LineaDeVisita[]): Promise<LineaParaVista[]> {
@@ -72,7 +78,16 @@ async function conEstadoDeFactura(clinicId: string, lineas: LineaDeVisita[]): Pr
 export async function cargarProcedimientosDeHoja(input: {
   treatmentPlanId: string;
   cardId: string | null;
-}): Promise<ActionResult<{ catalogo: ProcedimientoElegible[]; lineas: LineaParaVista[]; puedeCobrar: boolean; hojaFirmada: boolean }>> {
+}): Promise<
+  ActionResult<{
+    catalogo: ProcedimientoElegible[];
+    lineas: LineaParaVista[];
+    puedeCobrar: boolean;
+    hojaFirmada: boolean;
+    /** ws1-t12: extracciones indicadas en el plan que aún no se marcan como realizadas. */
+    extraccionesPendientes: number[];
+  }>
+> {
   const auth = await getOrthoActionContext({ write: false });
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -81,16 +96,30 @@ export async function cargarProcedimientosDeHoja(input: {
   const caso = await loadCasoParaCobro({ ctx, treatmentPlanId: input.treatmentPlanId });
   if (isFailure(caso)) return caso;
 
-  const [catalogo, nota] = await Promise.all([
+  const [catalogo, nota, planDetalle, indicadas] = await Promise.all([
     cargarCatalogoElegible(ctx.clinicId),
     input.cardId ? buscarNotaDeHoja(ctx.clinicId, input.cardId) : Promise.resolve(null),
+    // ws1-t12: el plan de tratamiento del caso propone procedimientos y sabe qué extracciones faltan.
+    cargarPlanDetalle(ctx.clinicId, caso.data.id).catch(() => null),
+    prisma.orthodonticTreatmentPlan
+      .findFirst({ where: { id: caso.data.id, clinicId: ctx.clinicId, deletedAt: null }, select: { extractionsTeethFdi: true } })
+      .catch(() => null),
   ]);
   // La nota tiene que ser de ESTE caso: el id de la hoja llega del cliente.
   const notaValida = nota && nota.specialtyData.treatmentPlanId === input.treatmentPlanId ? nota : null;
   const lineas = await conEstadoDeFactura(ctx.clinicId, lineasDeLaNota(notaValida?.specialtyData));
 
+  const sugeridos = procedimientosSugeridos(planDetalle, catalogo);
+  const motivoPorId = new Map(sugeridos.map((x) => [x.procedureId, x.motivo]));
   return ok({
-    catalogo: catalogo.map((c) => ({ id: c.id, name: c.name, price: c.basePrice, incluido: c.orthoIncludedInTreatment === true })),
+    catalogo: ordenarConSugeridosPrimero(catalogo, sugeridos).map((c) => ({
+      id: c.id,
+      name: c.name,
+      price: c.basePrice,
+      incluido: c.orthoIncludedInTreatment === true,
+      ...(motivoPorId.has(c.id) ? { sugerido: true, motivo: motivoPorId.get(c.id) } : {}),
+    })),
+    extraccionesPendientes: extraccionesPendientes(indicadas?.extractionsTeethFdi ?? [], planDetalle?.extraccionesRealizadas ?? []),
     lineas,
     puedeCobrar: hasPermission({ role: ctx.role as never, permissionsOverride: ctx.permissionsOverride }, "billing.charge"),
     hojaFirmada: Boolean(notaValida?.firmada),

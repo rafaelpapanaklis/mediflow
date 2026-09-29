@@ -14,7 +14,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth/permissions";
-import { precioDeColocacionDelCatalogo } from "@/lib/orthodontics/catalog-procedures";
+import { buscarPrecioControlOrto, precioDeColocacionDelCatalogo } from "@/lib/orthodontics/catalog-procedures";
 import { ORTHO_BILLING_MODE_DEFAULT, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { cargarDoctoresTratantes } from "@/lib/orthodontics/doctores-tratantes-db";
@@ -88,6 +88,11 @@ export interface CaseIntakeOptions {
   puedeCobrar: boolean;
   /** ws1-t10: precio de «Colocación de aparatología» en el catálogo de la clínica (propuesta en «Pago por control»); null si no hay. */
   precioColocacion: number | null;
+  /**
+   * ws1-t12: precio de «Control de ortodoncia» del catálogo (null si no hay). En «Pago por control» el plan de
+   * tratamiento estima el total: controles previstos × este precio.
+   */
+  precioControl: number | null;
 }
 
 export async function getCaseIntakeOptions(
@@ -260,11 +265,15 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: no se pudo leer el precio de la colocación:", e);
     return null;
   });
+  const precioControl = await buscarPrecioControlOrto(ctx.clinicId)
+    .then((r) => r?.basePrice ?? null)
+    .catch(() => null);
   const puedeCobrar = hasPermission({ role: ctx.role as never, permissionsOverride: ctx.permissionsOverride }, "billing.create");
 
   return ok({
     puedeCobrar,
     precioColocacion,
+    precioControl,
     oclusionDeConsulta,
     billingMode,
     tecnicas,

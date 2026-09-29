@@ -10,6 +10,11 @@ import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { guardarModoDeCobroDelCaso } from "@/lib/orthodontics/billing-mode-db";
 import { guardarNombreDeTecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { aplicarPlanDetalle } from "@/lib/orthodontics/plan-detalle-guardar";
+import { leerOpcionesDelPlan } from "@/lib/orthodontics/plan-detalle-db";
+import { controlesSugeridos, validarContraOpciones, validarPlanDetalle, type PlanDetalle } from "@/lib/orthodontics/plan-detalle";
+import { buscarPrecioControlOrto, precioDeColocacionDelCatalogo } from "@/lib/orthodontics/catalog-procedures";
+import { costoParaGuardarPorControl, esViolacionDelCheckDelPlan, estimarCostoPorControl } from "@/lib/orthodontics/check-del-caso";
 import {
   auditOrtho,
   getOrthoPlanActionContext,
@@ -23,7 +28,7 @@ import { fail, isFailure, ok, type ActionResult } from "./result";
 
 export async function createTreatmentPlan(
   input: unknown,
-): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean }>> {
+): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; avisoPlanDetalle?: string; avisoCosto?: string }>> {
   // A11 (revisión cruzada): en la práctica crear un plan siempre trae campos
   // clínicos obligatorios (técnica, costo, anclaje…), así que este gate no
   // se relaja de verdad aquí — se usa el mismo helper que updateTreatmentPlan
@@ -71,6 +76,21 @@ export async function createTreatmentPlan(
   if (personaAjena) return fail(personaAjena);
 
   const installedAt = parsed.data.installedAt ? new Date(parsed.data.installedAt) : null;
+  // ws1-t10 — lo que se guarda en `totalCostMxn`: lo escrito, salvo que «Pago por control» no traiga costo (abajo).
+  let costoDelCaso = parsed.data.totalCostMxn;
+  let avisoCosto: string | undefined;
+
+  // ws1-t12 — el «Plan de tratamiento» completo, opcional al abrir el caso. Lo que se puede comprobar de
+  // antemano (forma, rangos, que la clínica aún ofrezca lo que se eligió) se rechaza AQUÍ, antes de crear nada:
+  // un dato que no sirve no se pierde en silencio. Guardarlo (columna por SQL) va después, en su propio paso.
+  let planCompleto: PlanDetalle | null = null;
+  if (parsed.data.planDetalle) {
+    const v = validarPlanDetalle(parsed.data.planDetalle);
+    if (v.ok === false) return fail(v.error);
+    const fuera = validarContraOpciones(v.plan, null, (await leerOpcionesDelPlan(ctx.clinicId)).opciones);
+    if (fuera) return fail(fuera);
+    planCompleto = v.plan;
+  }
 
   // Ola 1 (ws1-t6) — A5 (doctor tratante) ya trae su columna de la Ola 0.
   // A11 (responsable del pago): un Guardian existente, o se crea uno nuevo
@@ -118,7 +138,7 @@ export async function createTreatmentPlan(
           estimatedDurationMonths: parsed.data.estimatedDurationMonths,
           startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : null,
           installedAt,
-          totalCostMxn: parsed.data.totalCostMxn,
+          totalCostMxn: costoDelCaso,
           anchorageType: parsed.data.anchorageType,
           anchorageNotes: parsed.data.anchorageNotes ?? null,
           extractionsRequired: parsed.data.extractionsRequired,
@@ -169,9 +189,28 @@ export async function createTreatmentPlan(
   // ESTE caso, manda ese; el de la clínica queda como propuesta.
   const clinicSettings = await loadOrthoClinicSettings(ctx.clinicId);
   const billingModeDelCaso = parsed.data.billingMode ?? clinicSettings.billingMode;
-  // ws1-t10 (E): el costo del caso puede ser 0 solo en «Pago por control» (es una referencia).
-  if (!(parsed.data.totalCostMxn > 0) && billingModeDelCaso !== "PAGO_POR_CONTROL") {
-    return fail("El costo del tratamiento tiene que ser mayor que cero");
+  // ws1-t12 (decisión de Rafael): para abrir un caso solo son obligatorios la técnica y el doctor. El costo se
+  // puede dejar en 0 («lo armo después»): el caso se abre sin factura y Cobro la arma cuando esté definido.
+  //
+  // ws1-t10 — pero la base exige `totalCostMxn > 0` (`orthodontic_treatment_plans_duration_chk`) hasta que se pegue
+  // sql/ortodoncia-costo-del-caso.sql. «Pago por control» no tiene total: sin costo escrito se guarda el mejor
+  // ESTIMADO (colocación + controles previstos × precio del control, del catálogo de la clínica) y se avisa; no se
+  // factura con él (el cobro por control ignora el costo del caso). «Precio total» con costo 0 no se puede
+  // estimar: se intenta con 0 y, si la base aún lo rechaza, se contesta claro (más abajo).
+  if (billingModeDelCaso === "PAGO_POR_CONTROL" && !(costoDelCaso > 0)) {
+    const [colocacion, precioControl] = await Promise.all([
+      precioDeColocacionDelCatalogo(ctx.clinicId).catch(() => null),
+      buscarPrecioControlOrto(ctx.clinicId).then((r) => r?.basePrice ?? null).catch(() => null),
+    ]);
+    const controlesPrevistos = planCompleto?.controlesPrevistos ?? controlesSugeridos(parsed.data.estimatedDurationMonths);
+    const { costo, origen } = costoParaGuardarPorControl({
+      estimado: estimarCostoPorControl({ colocacion, controlesPrevistos, precioControl }),
+    });
+    costoDelCaso = costo;
+    avisoCosto =
+      origen === "estimado"
+        ? `Sin costo escrito: el caso se guardó con un costo ESTIMADO de $${costo.toLocaleString("es-MX")} (colocación + ${controlesPrevistos ?? 0} controles previstos). Es solo una referencia: en «Pago por control» se cobra cada control. Cámbialo en el caso cuando lo definas.`
+        : "Sin costo escrito ni precios en tu catálogo: el caso se guardó con $1 provisional (la base exige un costo mayor que cero). Escríbelo en el caso cuando lo definas.";
   }
 
   try {
@@ -198,6 +237,21 @@ export async function createTreatmentPlan(
     // sin la columna (sql/ortodoncia-tecnicas-propias.sql) el caso muestra el nombre de su tipo base.
     if (parsed.data.techniqueLabel) {
       await guardarNombreDeTecnicaDelCaso(ctx.clinicId, created.id, parsed.data.techniqueLabel);
+    }
+
+    // ws1-t12 — el plan completo, también en su propio paso y sin deshacer el caso: sin la columna
+    // (sql/ortodoncia-plan-de-tratamiento.sql) el caso queda abierto y se avisa cómo completarlo.
+    let avisoPlanDetalle: string | undefined;
+    if (planCompleto) {
+      const r = await aplicarPlanDetalle({
+        ctx: { clinicId: ctx.clinicId, userId: ctx.userId },
+        treatmentPlanId: created.id,
+        patientId: parsed.data.patientId,
+        plan: planCompleto,
+        extraccionesIndicadas: parsed.data.extractionsTeethFdi,
+        creado: true,
+      });
+      if (r.ok === false) avisoPlanDetalle = `El caso se abrió, pero el plan de tratamiento no se guardó: ${r.error} Complétalo después con «Editar plan».`;
     }
 
     await auditOrtho({
@@ -241,9 +295,17 @@ export async function createTreatmentPlan(
     revalidatePath(`/dashboard/specialties/orthodontics/${parsed.data.patientId}`);
     revalidatePath(`/dashboard/specialties/orthodontics`);
 
-    return ok({ id: created.id, altaCasoFieldsSaved });
+    return ok({ id: created.id, altaCasoFieldsSaved, ...(avisoPlanDetalle ? { avisoPlanDetalle } : {}), ...(avisoCosto ? { avisoCosto } : {}) });
   } catch (e) {
     console.error("[ortho] createTreatmentPlan failed:", e);
+    // La base rechazó el costo/la duración (23514): decir cuál en vez de un «no se pudo» sin pista.
+    if (esViolacionDelCheckDelPlan(e)) {
+      return fail(
+        costoDelCaso > 0
+          ? "La base rechazó la duración del tratamiento: tiene que estar entre 3 y 60 meses."
+          : "Escribe el costo del tratamiento: por ahora la base no admite abrir un caso «Precio total» sin costo.",
+      );
+    }
     return fail("No se pudo crear el plan");
   }
 }

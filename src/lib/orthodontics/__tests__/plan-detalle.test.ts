@@ -143,7 +143,6 @@ test("validarPlanDetalle acepta un plan completo de Dentalink", () => {
     interconsultas: "con odontología general\npara exodoncia de premolares",
   });
   assert.ok(r.ok);
-  if (!r.ok) return;
   assert.equal(r.plan.controlesPrevistos, 18);
   assert.equal(r.plan.alineadoresTotales, 24);
   assert.deepEqual(r.plan.extraccionesRealizadas, [14, 24], "en orden FDI");
@@ -156,7 +155,7 @@ test("validarPlanDetalle rechaza lo que no cabe, con su mensaje", () => {
   const malo = (raw: unknown) => {
     const r = validarPlanDetalle(raw);
     assert.equal(r.ok, false);
-    return r.ok ? "" : r.error;
+    return r.ok === false ? r.error : "";
   };
   assert.match(malo({ controlesPrevistos: 0 }), /Controles previstos/);
   assert.match(malo({ controlesPrevistos: 121 }), /Controles previstos/);
@@ -181,7 +180,7 @@ test("validarPlanDetalle rechaza lo que no cabe, con su mensaje", () => {
 test("validarPlanDetalle: vacío o null es un plan vacío; los ausentes quedan vacíos", () => {
   for (const v of [null, undefined, {}]) {
     const r = validarPlanDetalle(v);
-    assert.ok(r.ok && esPlanDetalleVacio(r.plan));
+    assert.ok(r.ok === true && esPlanDetalleVacio(r.plan));
   }
 });
 
@@ -530,6 +529,8 @@ const vista = (extra: Partial<PlanDeTratamientoVista> = {}): PlanDeTratamientoVi
   tads: 0,
   controlesHechos: 0,
   conSeguimientoDeAlineadores: false,
+  reevaluaciones: [],
+  caso: { tecnica: "METAL_BRACKETS", tecnicaNombrePropio: null, tecnicaVisible: "Brackets metálicos", objetivos: "AESTHETIC_AND_FUNCTIONAL", retencion: "", doctorId: null, responsableId: null, colocadoEl: null, costoReferencia: 0, iprRequerido: false, billingMode: "PRECIO_TOTAL", factura: null },
   ...extra,
 });
 
@@ -550,12 +551,10 @@ test("el formulario parte de lo que el caso ya tiene y vuelve igual al servidor"
   assert.equal(f.extraccionesIndicadas, "14, 24");
   const r = formularioAPeticion(f);
   assert.ok(r.ok);
-  if (!r.ok) return;
   assert.deepEqual(r.peticion.extraccionesIndicadas, [14, 24]);
   assert.equal(r.peticion.duracionMeses, 18);
   const v = validarPlanDetalle(r.peticion.plan);
   assert.ok(v.ok);
-  if (!v.ok) return;
   assert.deepEqual(v.plan, { ...detalle });
 });
 
@@ -564,7 +563,7 @@ test("formularioAPeticion dice qué corregir, en palabras de la clínica", () =>
   const error = (x: Partial<ReturnType<typeof formularioVacio>>) => {
     const r = con(x);
     assert.equal(r.ok, false);
-    return r.ok ? "" : r.error;
+    return r.ok === false ? r.error : "";
   };
   assert.match(error({ controles: "abc" }), /Cantidad de controles/);
   assert.match(error({ controles: "0" }), /Cantidad de controles/);
@@ -581,7 +580,7 @@ test("formularioAPeticion dice qué corregir, en palabras de la clínica", () =>
 test("en el alta la duración no se pide otra vez (ya está arriba)", () => {
   const r = formularioAPeticion({ ...formularioVacio(), controles: "12" }, { conDuracion: false });
   assert.ok(r.ok);
-  if (r.ok) assert.equal(r.peticion.duracionMeses, undefined);
+  if (r.ok === true) assert.equal(r.peticion.duracionMeses, undefined);
 });
 
 test("formularioTocado: la duración sola no cuenta; cualquier otra cosa sí", () => {
@@ -594,4 +593,172 @@ test("formularioTocado: la duración sola no cuenta; cualquier otra cosa sí", (
 test("alternar agrega y quita sin repetir", () => {
   assert.deepEqual(alternar(["a"], "b"), ["a", "b"]);
   assert.deepEqual(alternar(["a", "b"], "a"), ["b"]);
+});
+
+// ─── Importador de Dentalink: mapeo preparado ───────────────────────────
+import { planDetalleDesdeDentalink } from "../../import/dentalink/plan-detalle-mapeo";
+
+test("un export de Dentalink con los campos del plan se convierte a un plan válido", () => {
+  const r = planDetalleDesdeDentalink({
+    "Tiempo de tratamiento": "18 meses",
+    "Cantidad controles": "18",
+    "Anclaje Superior": "Máximo",
+    "Anclaje inferior": "Mínimo Absoluto",
+    Aditamentos: "Microtornillos; Barra Palatina",
+    "Extracciones indicadas": "14,24,34,44",
+    "Extracciones realizadas": "14",
+    "Tipo control radiográfico": "Panorámica, Scanner ATM post Deprogramación, Radar",
+    Periodicidad: "12 meses",
+    Reevaluación: "12/03/2027",
+    Brackets: "Inovation Roth",
+    "Tubos superiores": "Roth",
+    "Cementación Superior Anterior": "Corona Clínica",
+    Interconsultas: "con odontología general para exodoncia premolares",
+    "Columna ajena": "x",
+  });
+  assert.ok(r.traeCampos);
+  assert.equal(r.duracionMeses, 18);
+  assert.deepEqual(r.extraccionesIndicadas, [14, 24, 34, 44]);
+  assert.equal(r.detalle.controlesPrevistos, 18);
+  assert.equal(r.detalle.anclajeSuperior, "MAXIMO");
+  assert.equal(r.detalle.anclajeInferior, "MINIMO_ABSOLUTO");
+  assert.deepEqual(r.detalle.aditamentos, ["Microtornillos", "Barra Palatina"]);
+  assert.deepEqual(r.detalle.controlRadiografico, ["PANORAMICA", "ATM_POST_DEPROGRAMACION"]);
+  assert.equal(r.detalle.periodicidadMeses, 12);
+  assert.equal(r.detalle.reevaluacion, "2027-03-12");
+  assert.equal(r.detalle.tubosSuperiores, "Roth");
+  assert.equal(r.detalle.cementacionSuperiorAnterior, "Corona Clínica");
+  assert.match(r.avisos.join(" "), /«Radar»/);
+  assert.ok(validarPlanDetalle(r.detalle).ok, "lo que sale pasa la validación del servidor");
+});
+
+test("un export sin los campos del plan no trae nada, y lo que no se entiende se avisa", () => {
+  assert.equal(planDetalleDesdeDentalink({ Paciente: "Ana", Fecha: "01/01/2026" }).traeCampos, false);
+  const r = planDetalleDesdeDentalink({ "Anclaje superior": "Enorme", "Extracciones indicadas": "14, 99", Reevaluación: "pronto" });
+  assert.equal(r.detalle.anclajeSuperior, null);
+  assert.deepEqual(r.extraccionesIndicadas, [14]);
+  assert.equal(r.detalle.reevaluacion, null);
+  assert.equal(r.avisos.length, 3);
+});
+
+import { SECCIONES_DEL_FORMULARIO, seccionesConDatos } from "../plan-detalle-formulario";
+
+test("la navegación del popup marca las secciones que ya tienen algo", () => {
+  assert.deepEqual(SECCIONES_DEL_FORMULARIO.map((s) => s.titulo), [
+    "Tiempo y controles", "Anclaje", "Aditamentos", "Extracciones", "Control radiográfico", "Aparatología", "Tubos, bandas y cementación", "Interconsultas",
+  ]);
+  const vacio = seccionesConDatos(formularioVacio(18));
+  assert.ok(Object.values(vacio).every((v) => v === false), "la duración sola no cuenta");
+  const f = seccionesConDatos({ ...formularioVacio(18), controles: "18", anclajeInferior: "MEDIO", placas: ["Disyuntor Moon"], bandasSuperiores: "Roth", extraccionesRealizadas: "14" });
+  assert.deepEqual(Object.entries(f).filter(([, v]) => v).map(([k]) => k), ["tiempo", "anclaje", "extracciones", "aparatologia", "tubos"]);
+});
+
+// ─── Reglas de no-repetición (gerente, 29-sep) ──────────────────────────
+import {
+  FRECUENCIAS_DE_CONTROL,
+  aparatologiaPermitida,
+  controlesSugeridos,
+  normalizarFrecuenciaDeControl,
+  prescripcionDerivada,
+  sinAparatologiaIncompatible,
+  tadsRequeridos,
+  validarContraTecnica,
+} from "../plan-detalle";
+
+test("controles previstos se proponen: duración ÷ frecuencia de control de la clínica", () => {
+  assert.equal(controlesSugeridos(18), 18, "por omisión, uno al mes");
+  assert.equal(controlesSugeridos(18, 30), 18);
+  assert.equal(controlesSugeridos(18, 14), 39, "cada 2 semanas");
+  assert.equal(controlesSugeridos(12, 60), 6, "cada 2 meses");
+  assert.equal(controlesSugeridos(24, 42), 17, "cada 6 semanas");
+  assert.equal(controlesSugeridos(null), null);
+  assert.equal(controlesSugeridos(0), null);
+  assert.equal(controlesSugeridos(60, 7), 120, "con tope");
+  assert.equal(normalizarFrecuenciaDeControl("abc"), 30);
+  assert.equal(normalizarFrecuenciaDeControl(3), 30, "menos de 7 días no es una frecuencia");
+  assert.equal(normalizarFrecuenciaDeControl("21"), 21);
+  assert.ok(FRECUENCIAS_DE_CONTROL.some((f) => f.dias === 30 && f.texto === "Cada mes"));
+});
+
+test("la aparatología que se ofrece sigue a la técnica: alineadores solo con alineadores o mixta", () => {
+  assert.deepEqual(aparatologiaPermitida("CLEAR_ALIGNERS"), { brackets: false, alineadores: true });
+  assert.deepEqual(aparatologiaPermitida("HYBRID"), { brackets: true, alineadores: true });
+  for (const t of ["METAL_BRACKETS", "CERAMIC_BRACKETS", "SELF_LIGATING_METAL", "SELF_LIGATING_CERAMIC", "LINGUAL_BRACKETS"]) {
+    assert.deepEqual(aparatologiaPermitida(t), { brackets: true, alineadores: false }, t);
+  }
+  assert.deepEqual(aparatologiaPermitida(null), { brackets: true, alineadores: true }, "sin técnica elegida no se filtra");
+});
+
+test("al cambiar de técnica se quita lo incompatible y se dice qué; el servidor lo exige", () => {
+  const plan = completo({ brackets: ["Damon"], alineadores: ["Invisalign lite dual"], placas: ["Plano superior"] });
+  const a = sinAparatologiaIncompatible(plan, "CLEAR_ALIGNERS");
+  assert.deepEqual(a.plan.brackets, []);
+  assert.deepEqual(a.plan.alineadores, ["Invisalign lite dual"]);
+  assert.deepEqual(a.plan.placas, ["Plano superior"], "las placas van con cualquier técnica");
+  assert.deepEqual(a.quitados, ["Damon"]);
+  assert.deepEqual(sinAparatologiaIncompatible(plan, "HYBRID").quitados, []);
+  assert.match(validarContraTecnica(plan, "METAL_BRACKETS", "Brackets metálicos") ?? "", /Alineadores.*«Brackets metálicos»/);
+  assert.match(validarContraTecnica(plan, "CLEAR_ALIGNERS") ?? "", /Brackets/);
+  assert.equal(validarContraTecnica(plan, "HYBRID"), null);
+  assert.equal(validarContraTecnica(completo({ brackets: ["MBT"] }), "SELF_LIGATING_CERAMIC"), null);
+});
+
+test("tadsRequired se deriva de Aditamentos y de los TAD registrados, no es una casilla aparte", () => {
+  assert.equal(tadsRequeridos(["Microtornillos"]), true);
+  assert.equal(tadsRequeridos(["Miniplacas", "Topes"]), true);
+  assert.equal(tadsRequeridos(["Topes"]), false);
+  assert.equal(tadsRequeridos(["Topes"], 2), true);
+  assert.equal(tadsRequeridos([]), false);
+});
+
+test("la prescripción y el cementado generales se derivan de tubos, bandas y cementación", () => {
+  assert.deepEqual(prescripcionDerivada(completo({ tubosSuperiores: "Roth", tubosInferiores: "Roth", bandasSuperiores: "Roth" })), { prescriptionSlot: "ROTH_022", bondingType: null });
+  assert.equal(prescripcionDerivada(completo({ tubosSuperiores: "MBT" })).prescriptionSlot, "MBT_022");
+  assert.equal(prescripcionDerivada(completo({ bandasInferiores: "Damon" })).prescriptionSlot, "DAMON_Q2");
+  assert.equal(prescripcionDerivada(completo({ tubosSuperiores: "Roth", bandasSuperiores: "MBT" })).prescriptionSlot, null, "sistemas mezclados: no se deduce");
+  assert.equal(prescripcionDerivada(completo()).prescriptionSlot, null);
+  assert.equal(prescripcionDerivada(completo({ cementacionSuperiorAnterior: "Cementado indirecto" })).bondingType, "INDIRECTO");
+  assert.equal(prescripcionDerivada(completo({ cementacionSuperiorAnterior: "Directo", cementacionInferiorAnterior: "Directo" })).bondingType, "DIRECTO");
+  assert.equal(prescripcionDerivada(completo({ cementacionSuperiorAnterior: "Directo", cementacionInferiorAnterior: "Indirecto" })).bondingType, null);
+  assert.equal(prescripcionDerivada(completo({ cementacionSuperiorAnterior: "Corona clínica" })).bondingType, null, "«corona clínica» no dice directo o indirecto");
+});
+
+// ─── Casos con diagnóstico o plan incompleto ────────────────────────────
+import { pasoQueFalta, piezasQueFaltan } from "../plan-detalle";
+
+const CASO_COMPLETO = {
+  diagnosticoMigrado: false,
+  resumenClinico: "Clase II división 1 con apiñamiento moderado; se planea corrección con extracciones.",
+  doctorId: "d1",
+  detalle: completo({ controlesPrevistos: 18, anclajeSuperior: "MAXIMO" as const, brackets: ["MBT"] }),
+  retencion: "Retenedor fijo inferior y removible superior, uso nocturno por 2 años.",
+  billingMode: "PRECIO_TOTAL" as const,
+  tieneFactura: true,
+};
+
+test("un caso completo no tiene nada que faltar; lo opcional vacío no cuenta", () => {
+  assert.deepEqual(piezasQueFaltan(CASO_COMPLETO), []);
+  assert.equal(pasoQueFalta([]), null);
+});
+
+test("un caso migrado de Dentalink entra vacío: dice qué falta y a qué paso ir primero", () => {
+  const f = piezasQueFaltan({
+    diagnosticoMigrado: true,
+    resumenClinico: "Caso migrado de Dentalink…",
+    doctorId: null,
+    detalle: null,
+    retencion: "Plan de retención sin registrar (caso migrado de Dentalink): se define al llegar a la etapa de retención.",
+    billingMode: "PRECIO_TOTAL",
+    tieneFactura: false,
+  });
+  assert.deepEqual(f.map((x) => x.clave), ["diagnostico-migrado", "doctor", "controles", "anclaje", "aparatologia", "retencion", "cobro"]);
+  assert.equal(pasoQueFalta(f), "diagnostico");
+  assert.equal(pasoQueFalta(f.filter((x) => x.paso === "plan")), "plan");
+});
+
+test("la falta se dice por pieza: resumen corto, sin doctor, «Pago por control» sin factura de colocación", () => {
+  const f = piezasQueFaltan({ ...CASO_COMPLETO, resumenClinico: "corto", doctorId: null, billingMode: "PAGO_POR_CONTROL", tieneFactura: false });
+  assert.deepEqual(f.map((x) => x.clave), ["resumen", "doctor", "cobro"]);
+  assert.equal(f.find((x) => x.clave === "cobro")!.texto, "factura de colocación");
+  assert.equal(pasoQueFalta(f), "diagnostico");
 });

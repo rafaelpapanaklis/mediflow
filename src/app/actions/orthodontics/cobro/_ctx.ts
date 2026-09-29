@@ -9,6 +9,7 @@
 // `getOrthoBillingActionContext` directo de `../_helpers`. Este archivo se
 // queda solo con lo que sigue siendo EXCLUSIVO de Cobro.
 
+import { costoVisible } from "@/lib/orthodontics/check-del-caso";
 import { prisma } from "@/lib/prisma";
 import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
@@ -27,6 +28,8 @@ export interface CasoParaCobro {
   techniqueName?: string | null;
   totalCostMxn: number;
   treatingDoctorId: string | null;
+  /** ws1-t12: cuándo arrancó el caso (colocación, inicio planeado o apertura), para contar sus controles. */
+  inicio: Date | null;
 }
 
 /** Códigos Prisma de "tabla/columna inexistente" — mismo criterio que cobranza-db.ts (Ola 0). */
@@ -50,6 +53,7 @@ export async function loadCasoParaCobro(args: {
         where: { id: args.treatmentPlanId, clinicId: args.ctx.clinicId, deletedAt: null },
         select: {
           id: true, patientId: true, invoiceId: true, technique: true, totalCostMxn: true, treatingDoctorId: true,
+          installedAt: true, startDate: true, createdAt: true,
           patient: { select: { visibleUserIds: true } },
         },
       }),
@@ -71,8 +75,10 @@ export async function loadCasoParaCobro(args: {
       invoiceId: plan.invoiceId,
       technique: plan.technique,
       techniqueName,
-      totalCostMxn: Number(plan.totalCostMxn) || 0,
+      // ws1-t10: el $1 provisional no es un precio: sin costo real no hay qué facturar (crear-plan-del-caso lo dice).
+      totalCostMxn: costoVisible(plan.totalCostMxn) ?? 0,
       treatingDoctorId: plan.treatingDoctorId,
+      inicio: plan.installedAt ?? plan.startDate ?? plan.createdAt ?? null,
     },
   };
 }

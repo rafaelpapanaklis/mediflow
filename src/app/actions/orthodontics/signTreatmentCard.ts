@@ -17,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import type { Pedido } from "@/lib/orthodontics/procedimientos-de-visita";
 import { escribirNotaDeHoja, validarPedidos } from "@/lib/orthodontics/procedimientos-de-hoja-db";
+import { marcarExtraccionesDesdeLaHoja } from "@/lib/orthodontics/plan-detalle-guardar";
 import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -124,13 +125,18 @@ const inputSchema = z.object({
   procedimientos: z
     .array(z.object({ procedureId: z.string().min(1), quantity: z.number().int().min(1).max(20) }))
     .optional(),
+  /**
+   * ws1-t12: extracciones del plan de tratamiento (FDI) que se hicieron en ESTA visita. Al firmar se marcan
+   * como realizadas en el plan; solo cuentan las que el plan tiene como indicadas.
+   */
+  extraccionesRealizadas: z.array(z.number().int()).max(32).optional(),
 });
 
 export type SignTreatmentCardInput = z.input<typeof inputSchema>;
 
 export async function signTreatmentCard(
   input: unknown,
-): Promise<ActionResult<{ cardId: string; avisoControlSinFacturar?: string; avisoReposiciones?: string; avisoProcedimientos?: string }>> {
+): Promise<ActionResult<{ cardId: string; avisoControlSinFacturar?: string; avisoReposiciones?: string; avisoProcedimientos?: string; avisoExtracciones?: string }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -499,6 +505,24 @@ export async function signTreatmentCard(
       console.warn("[ortho] signTreatmentCard: no se pudo crear la nota de evolución en el expediente general (no revierte la firma):", e);
     }
 
+    // ws1-t12 — las extracciones de esta visita se marcan como realizadas en el plan de tratamiento. Es
+    // secundario: la firma ya quedó; si no se puede (falta el SQL del plan), se dice y se marcan a mano.
+    let avisoExtracciones: string | undefined;
+    if (data.extraccionesRealizadas && data.extraccionesRealizadas.length > 0) {
+      try {
+        const r = await marcarExtraccionesDesdeLaHoja({
+          ctx: { clinicId: ctx.clinicId, userId: ctx.userId },
+          treatmentPlanId: plan.id,
+          patientId: plan.patientId,
+          piezas: data.extraccionesRealizadas,
+        });
+        if (r.ok === false) avisoExtracciones = `La hoja se firmó, pero las extracciones no se marcaron en el plan: ${r.error}`;
+      } catch (e) {
+        avisoExtracciones = "La hoja se firmó, pero no se pudieron marcar las extracciones en el plan de tratamiento. Márcalas en «Editar plan».";
+        console.warn("[ortho] signTreatmentCard: extracciones no marcadas en el plan:", e);
+      }
+    }
+
     await auditOrtho({
       ctx,
       action: ORTHO_AUDIT_ACTIONS.CARD_SIGNED,
@@ -515,7 +539,7 @@ export async function signTreatmentCard(
 
     revalidatePath(`/dashboard/specialties/orthodontics/${plan.patientId}`);
     revalidatePath(`/dashboard/patients/${plan.patientId}`);
-    return ok({ cardId, ...(avisoProcedimientos ? { avisoProcedimientos } : {}), ...(avisoReposiciones ? { avisoReposiciones } : {}), ...(avisoControlSinFacturar ? { avisoControlSinFacturar } : {}) });
+    return ok({ cardId, ...(avisoExtracciones ? { avisoExtracciones } : {}), ...(avisoProcedimientos ? { avisoProcedimientos } : {}), ...(avisoReposiciones ? { avisoReposiciones } : {}), ...(avisoControlSinFacturar ? { avisoControlSinFacturar } : {}) });
   } catch (e) {
     console.error("[ortho] signTreatmentCard failed:", e);
     return fail("No se pudo firmar la cita");

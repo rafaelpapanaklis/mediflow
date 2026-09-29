@@ -41,6 +41,9 @@ export async function posponerAlerta(input: {
     });
   } catch (e) {
     if (faltaLaTabla(e)) return fail("Posponer alertas todavía no está disponible en esta clínica.");
+    // ws1-t12: el tipo «reevaluacion-radiografica» necesita que la restricción de la tabla lo acepte
+    // (sql/ortodoncia-plan-de-tratamiento.sql, bloque 3). Postgres 23514 = «check_violation».
+    if (esViolacionDeCheck(e)) return fail("Posponer esta alerta todavía no está disponible: falta pegar sql/ortodoncia-plan-de-tratamiento.sql.");
     console.error("[ortodoncia] posponerAlerta:", e);
     return fail("No se pudo posponer la alerta. Inténtalo de nuevo.");
   }
@@ -56,4 +59,12 @@ export async function posponerAlerta(input: {
   });
   revalidatePath("/dashboard/orthodontics/alertas");
   return ok({ hasta: hasta.toISOString() });
+}
+
+/** Postgres 23514 (check_violation), o Prisma envolviéndolo. */
+function esViolacionDeCheck(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  const err = e as { code?: string; meta?: { code?: string }; message?: string };
+  if (err.code === "23514" || err.meta?.code === "23514") return true;
+  return typeof err.message === "string" && /ortho_alert_snoozes_tipo_check|23514/.test(err.message);
 }

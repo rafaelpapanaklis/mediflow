@@ -79,7 +79,7 @@ export function esAccionDeEscritura(etiqueta: string): boolean {
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
-  return /\b(registrar|iniciar consulta|agendar|reagendar|reprogramar|cobrar|editar|avanzar|guardar|firmar|nuevo|nueva|abrir|enviar|generar|subir|crear|confirmar|aplicar|agregar|anadir|eliminar|borrar|marcar|recordar|pedir|solicitar|cambiar|reasignar|pausar|reanudar|terminar|finalizar|condonar|imprimir orden)\b/.test(t);
+  return /\b(registrar|iniciar consulta|agendar|reagendar|reprogramar|cobrar|editar|completar|avanzar|guardar|firmar|nuevo|nueva|abrir|enviar|generar|subir|crear|confirmar|aplicar|agregar|anadir|eliminar|borrar|marcar|recordar|pedir|solicitar|cambiar|reasignar|pausar|reanudar|terminar|finalizar|condonar|imprimir orden)\b/.test(t);
 }
 
 // ── Quién ve qué de la pestaña (X2 / MAPA 19) ───────────────────────────────

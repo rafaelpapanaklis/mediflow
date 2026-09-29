@@ -49,6 +49,11 @@ export interface CitaDeControl {
    * Opcional — los tests de este archivo no lo necesitan.
    */
   treatmentPlanId?: string | null;
+  /**
+   * ws1-t12 — «Control 6 de 18»: el número que llevará esta cita y los que prevé el plan de tratamiento del
+   * caso. Solo en citas por atender de un caso cuyo plan dice cuántos controles prevé.
+   */
+  progreso?: { numero: number; previstos: number };
 }
 
 export interface DiaDeControles {

@@ -55,6 +55,8 @@ import type { CobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
 import { loadOrthoData } from "@/lib/orthodontics/load-data";
 import { adaptToOrthoRedesignViewModel, type AdapterInput } from "@/lib/orthodontics/redesign/adapter";
 import { cargarNombreDeTecnica, type LectorRaw } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { cargarPlanDetalle, type LectorDelPlan } from "@/lib/orthodontics/plan-detalle-db";
+import { lineasDelPlan, type LineaDelPlan } from "@/lib/orthodontics/plan-detalle";
 import { buildHygieneTrend, detectHygieneWorsening } from "@/lib/orthodontics/redesign/hygiene-trend";
 import { compareTrayToExpected, computeExpectedTray } from "@/lib/orthodontics/alineadores/expected-tray";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
@@ -184,6 +186,11 @@ export interface CasoLeido {
     /** El último control FIRMADO con higiene registrada. */
     higiene: { fecha: string; placaPct: number | null; gingivitis: string | null; manchasBlancas: boolean } | null;
     higieneEmpeora: string[];
+    /**
+     * ws1-t12 — el plan de tratamiento COMPLETO, en los renglones de la ficha (`lineasDelPlan`). Solo lectura.
+     * Vacío = el caso no tiene plan completo.
+     */
+    plan: LineaDelPlan[];
     alineadores: {
       sistema: string | null;
       actual: number;
@@ -313,7 +320,23 @@ export async function leerCaso(
       };
     }
 
+    // ws1-t12: el plan de tratamiento completo (mismo lector que la ficha; sin la columna, sin renglones extra).
+    const detallePlan = await cargarPlanDetalle(clinicId, plan.id, db as unknown as LectorDelPlan).catch(() => null);
+    const planCompleto = detallePlan
+      ? lineasDelPlan(
+          {
+            estimatedDurationMonths: plan.estimatedDurationMonths ?? null,
+            anchorageType: plan.anchorageType ? String(plan.anchorageType) : null,
+            extractionsRequired: Boolean(plan.extractionsRequired),
+            extractionsTeethFdi: plan.extractionsTeethFdi ?? [],
+          },
+          detallePlan,
+          0,
+        ).filter((l) => l.clave !== "duracion" && l.clave !== "tads")
+      : [];
+
     clinico = {
+      plan: planCompleto,
       fase: vm.treatment.phase,
       arco: vm.treatment.wireCurrent,
       higiene: ultima

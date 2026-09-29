@@ -189,6 +189,8 @@ export async function exportFinancialAgreementPdf(
     cuotas,
     saldoAFavor: panel.cobranza?.saldoAFavor ?? 0,
     precioPorControl: precioControl?.basePrice ?? null,
+    // ws1-t12: los controles que prevé el plan de tratamiento (el estimado sale de ellos × el precio del control).
+    controlesPrevistos: panel.controlesDelPlan?.previstos ?? null,
     cargosDeControl: cargos
       .filter((c) => c.status !== "CANCELLED")
       .map((c) => ({ folio: c.invoiceNumber, vencimiento: c.vencimiento, total: c.total, pagado: c.pagado })),
