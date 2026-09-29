@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS "clinic_storage_objects" (
   "kind"      TEXT NOT NULL,
   "bucket"    TEXT NOT NULL,
   "path"      TEXT NOT NULL,
-  "sizeBytes" INTEGER NOT NULL,
+  "sizeBytes" BIGINT  NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -204,3 +204,24 @@ test("el SQL es aditivo e idempotente", () => {
   const sinComentarios = sql.replace(/--.*$/gm, "").replace(/ON DELETE CASCADE/g, "");
   assert.doesNotMatch(sinComentarios, /\bDROP\b|\bDELETE\b|\bTRUNCATE\b|\bUPDATE\b/i);
 });
+
+// ── BIGINT: un archivo de más de 2 GB no se desborda ─────────────────────
+test("clinic_storage_objects.sizeBytes es BIGINT en el SQL y BigInt en Prisma", () => {
+  assert.match(fuente("sql/ws1-t6-clinic-storage-objects.sql"), /"sizeBytes"\s+BIGINT\s+NOT NULL/);
+  assert.doesNotMatch(fuente("sql/ws1-t6-clinic-storage-objects.sql"), /"sizeBytes"\s+INTEGER/);
+  const modelo = fuente("prisma/schema.prisma").match(/model ClinicStorageObject \{[\s\S]*?\n\}/)![0];
+  assert.match(modelo, /sizeBytes\s+BigInt/);
+});
+
+test("la suma convierte BigInt a Number solo al final y un CBCT de más de 2 GB no pierde precisión", () => {
+  const uso = fuente("src/lib/storage-usage.ts");
+  assert.match(uso, /BigInt\(sizeBytes\)/);
+  assert.match(uso, /Number\(r\._sum\.sizeBytes \?\? BigInt\(0\)\)/);
+  // Tres CBCT de 3 GB + 1 byte: la suma en BigInt de la base es exacta y Number la conserva.
+  const tres = BigInt(3 * GB + 1) * BigInt(3);
+  assert.ok(tres > BigInt(2 ** 31 - 1));
+  assert.equal(BigInt(Number(tres)), tres);
+  const d = desgloseVacio();
+  d.radiografias += Number(tres);
+  assert.equal(totalDesglose(d), 9 * GB + 3);
+});

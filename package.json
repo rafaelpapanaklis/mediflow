@@ -123,6 +123,7 @@
     "test:ventana-en-vivo": "tsx --test src/app/admin/analytics/__tests__/ventana-en-vivo.test.ts",
     "test:tablas-movil": "tsx --test src/app/admin/clinics/__tests__/tablas-movil.test.ts",
     "test:admin-uso": "tsx --test src/lib/admin/__tests__/uso-core.test.ts src/components/admin/portada/__tests__/pendientes.test.ts",
+    "test:storage-usage": "tsx --test src/lib/__tests__/storage-usage.test.ts",
     "test:mrr-universo": "tsx --test src/app/admin/clientes/__tests__/mrr-universo.test.ts",
     "test:active-clinic-modules": "tsx --test src/lib/clinical-shared/__tests__/get-active-clinic-modules.test.ts",
     "test:pediatrics-tab-state": "tsx --test src/lib/pediatrics/__tests__/tab-state.test.ts",

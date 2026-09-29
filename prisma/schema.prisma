@@ -19383,7 +19383,8 @@ model ClinicStorageObject {
   kind      String
   bucket    String
   path      String
-  sizeBytes Int
+  /// BigInt: un CBCT o un ZIP DICOM puede pasar de 2 GB (límite de INTEGER).
+  sizeBytes BigInt
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

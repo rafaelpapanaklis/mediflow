@@ -123,12 +123,14 @@ export async function medirAlmacenamiento(clinicIds: string[]): Promise<UsoAlmac
       prisma.clinicStorageObject.groupBy({ by: ["clinicId", "kind"], where: en, _sum: { sizeBytes: true } }),
       "archivos derivados, firmas y comprobantes",
       avisos,
-      [] as { clinicId: string; kind: string; _sum: { sizeBytes: number | null } }[],
+      [] as { clinicId: string; kind: string; _sum: { sizeBytes: bigint | null } }[],
     ),
   ]);
   for (const r of monitoreo) de(r.clinicId).fotos += Number(r._sum.sizeBytes ?? 0);
   for (const r of labs) de(r.clinicId).documentos += Number(r.bytes ?? 0);
-  for (const r of objetos) de(r.clinicId)[categoriaDeObjeto(r.kind)] += Number(r._sum.sizeBytes ?? 0);
+  // sizeBytes es BigInt: la suma llega como bigint (exacta en la base) y se pasa a Number
+  // solo al final; por debajo de 2^53 bytes (~9 PB) no pierde precisión.
+  for (const r of objetos) de(r.clinicId)[categoriaDeObjeto(r.kind)] += Number(r._sum.sizeBytes ?? BigInt(0));
 
   return { porClinica, avisos };
 }
@@ -156,9 +158,9 @@ export async function registrarObjetoAlmacen(args: {
   try {
     await prisma.clinicStorageObject.upsert({
       where: { bucket_path: { bucket: args.bucket, path: args.path } },
-      create: { clinicId: args.clinicId, kind: args.kind, bucket: args.bucket, path: args.path, sizeBytes },
+      create: { clinicId: args.clinicId, kind: args.kind, bucket: args.bucket, path: args.path, sizeBytes: BigInt(sizeBytes) },
       // Regenerar el mismo objeto (upsert en Storage) actualiza su tamaño, no lo duplica.
-      update: { sizeBytes },
+      update: { sizeBytes: BigInt(sizeBytes) },
     });
   } catch (e) {
     console.error("[storage-usage] no se pudo registrar el objeto:", args.bucket, args.path, e);

@@ -221,7 +221,7 @@ export async function POST(
         select: { sizeBytes: true },
       })
       .catch(() => null);
-    const cuotaErr = await storageQuotaError(ctx.clinicId, Math.max(0, bytes.length - (yaRegistrado?.sizeBytes ?? 0)));
+    const cuotaErr = await storageQuotaError(ctx.clinicId, Math.max(0, bytes.length - Number(yaRegistrado?.sizeBytes ?? 0)));
     if (cuotaErr) return cuotaErr;
 
     // Sube el binario lite hermano (upsert: regenera si se forzó).
