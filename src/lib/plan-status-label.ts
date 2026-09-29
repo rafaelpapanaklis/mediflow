@@ -12,6 +12,7 @@
  *   • Vencida       → isPlanExpired: la clínica NO entra al panel
  */
 import { daysUntil, type PlanStatus, type PlanStatusKind } from "@/lib/plan-status";
+import { fechaAdmin, fechaLargaAdmin } from "@/lib/admin/zona-horaria";
 
 export type PlanBadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 
@@ -30,12 +31,18 @@ const TONE: Record<PlanStatusKind, PlanBadgeTone> = {
   expired: "danger",
 };
 
+// Las fechas van SIEMPRE en la zona del panel (Mérida), no en la del runtime:
+// la insignia es un client component que se renderiza en el servidor y otra vez
+// en el navegador, y con `toLocaleDateString` a secas cada uno fechaba en SU
+// zona. Un periodo que termina a las 01:00 UTC salía «24 oct» en el servidor
+// (UTC) y «23 oct» en el navegador de México: hydration error (#418/#425), React
+// descarta el HTML del servidor y vuelve a pintar todo en el cliente.
 function fmtDay(d: Date | null): string {
-  return d ? d.toLocaleDateString("es-MX", { day: "numeric", month: "short" }) : "—";
+  return d ? fechaAdmin(d, { year: undefined }) ?? "—" : "—";
 }
 
 function fmtLong(d: Date | null): string {
-  return d ? d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" }) : "sin fecha";
+  return d ? fechaLargaAdmin(d) ?? "sin fecha" : "sin fecha";
 }
 
 function isCancelled(status: string | null): boolean {
