@@ -13,6 +13,7 @@ import {
   repartirControles,
 } from "@/lib/orthodontics/cambio-de-doctor";
 import { controlesConOtroDoctor } from "@/lib/orthodontics/controles-con-otro-doctor-db";
+import { isOverlapError } from "@/lib/agenda/api-helpers";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -41,28 +42,55 @@ export async function moverControlesFuturosAlDoctor(args: {
   });
   if (controles.length === 0) return ok({ movidos: 0, conChoque: 0 });
 
+  // Solo la ventana que abarcan estos controles (con `take` sin límite superior, un
+  // doctor con muchas citas futuras devolvía 500 al azar y se escapaba algún choque).
   const desde = controles[0].startsAt;
-  const ocupadas = await prisma.appointment.findMany({
-    where: {
-      clinicId: ctx.clinicId,
-      doctorId: plan.treatingDoctorId,
-      status: { in: [...ESTADOS_QUE_OCUPAN_AGENDA] },
-      endsAt: { gt: desde },
-    },
-    select: { startsAt: true, endsAt: true },
-    take: 500,
-  });
-  const { mover, conflicto } = repartirControles(controles, ocupadas);
+  const hasta = controles.reduce((max, c) => (c.endsAt.getTime() > max.getTime() ? c.endsAt : max), controles[0].endsAt);
+  const [citasOcupadas, bloqueos] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        clinicId: ctx.clinicId,
+        doctorId: plan.treatingDoctorId,
+        status: { in: [...ESTADOS_QUE_OCUPAN_AGENDA] },
+        startsAt: { lt: hasta },
+        endsAt: { gt: desde },
+      },
+      select: { startsAt: true, endsAt: true },
+      orderBy: { startsAt: "asc" },
+      take: 2000,
+    }),
+    // Vacaciones, festivos y demás bloqueos: del doctor o de toda la clínica (doctorId nulo).
+    prisma.agendaBlock.findMany({
+      where: {
+        clinicId: ctx.clinicId,
+        deletedAt: null,
+        OR: [{ doctorId: plan.treatingDoctorId }, { doctorId: null }],
+        startsAt: { lt: hasta },
+        endsAt: { gt: desde },
+      },
+      select: { startsAt: true, endsAt: true },
+      take: 500,
+    }).catch(() => []),
+  ]);
+  const { mover, conflicto } = repartirControles(controles, [...citasOcupadas, ...bloqueos]);
+  const conflictoTardio: string[] = [];
 
   let movidos = 0;
   for (const c of mover) {
     // El filtro repite el estado y el doctor de origen: si en el ínterin la cita
     // cambió (la atendieron, la cancelaron), no se toca.
-    const { count } = await prisma.appointment.updateMany({
-      where: { id: c.id, clinicId: ctx.clinicId, doctorId: { not: plan.treatingDoctorId }, status: { in: [...ESTADOS_DE_CITA_POR_VENIR] } },
-      data: { doctorId: plan.treatingDoctorId },
-    });
-    movidos += count;
+    try {
+      const { count } = await prisma.appointment.updateMany({
+        where: { id: c.id, clinicId: ctx.clinicId, doctorId: { not: plan.treatingDoctorId }, status: { in: [...ESTADOS_DE_CITA_POR_VENIR] } },
+        data: { doctorId: plan.treatingDoctorId },
+      });
+      movidos += count;
+    } catch (e) {
+      // La base también impide el traslape (EXCLUDE): si una cita llegó entre la lectura
+      // y la escritura, es un choque más, no un error que deje la tanda a medias.
+      if (!isOverlapError(e)) throw e;
+      conflictoTardio.push(c.id);
+    }
   }
 
   await auditOrtho({
@@ -70,8 +98,8 @@ export async function moverControlesFuturosAlDoctor(args: {
     action: ORTHO_AUDIT_ACTIONS.TREATMENT_PLAN_UPDATED,
     entityType: "OrthodonticTreatmentPlan",
     entityId: plan.id,
-    meta: { accion: "mover-controles-al-doctor-tratante", doctorId: plan.treatingDoctorId, movidos, conChoque: conflicto.length },
+    meta: { accion: "mover-controles-al-doctor-tratante", doctorId: plan.treatingDoctorId, movidos, conChoque: conflicto.length + conflictoTardio.length },
   });
   revalidatePath(`/dashboard/patients/${plan.patientId}`);
-  return ok({ movidos, conChoque: conflicto.length });
+  return ok({ movidos, conChoque: conflicto.length + conflictoTardio.length });
 }
