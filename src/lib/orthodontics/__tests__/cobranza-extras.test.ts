@@ -135,3 +135,10 @@ test("el CFDI encuentra al responsable también desde la factura de un control/e
   assert.match(leer("lib/orthodontics/responsable-fiscal-db.ts"), /casoDeLaFacturaLigada\(clinicId, invoiceId\)/);
   assert.match(leer("app/dashboard/billing/billing-client.tsx"), /cfdiAbiertoParaRef\.current !== inv\.id/);
 });
+
+// #72 (decisión de Rafael): «Recordar» desde la fila de Cobranza.
+test("Cobranza monta «Enviar recordatorio» por fila solo a quien debe o está por vencer y puede cobrar", () => {
+  const v = leer("components/specialties/orthodontics/modulo/vista-cobranza.tsx");
+  assert.match(v, /f\.situacion === "vencido" \|\| f\.situacion === "por-vencer"\s*\?\s*\(\s*<EnviarRecordatorioButton patientId=\{f\.patientId\} treatmentPlanId=\{f\.planId\}/);
+  assert.match(v, /\{puedeCobrar \? \(\s*<td role="cell" onClick=/);
+});

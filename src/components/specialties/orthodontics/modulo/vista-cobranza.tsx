@@ -35,6 +35,7 @@ import {
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { EnviarRecordatorioButton } from "@/components/specialties/orthodontics/EnviarRecordatorioButton";
 import { ListaMensualidades } from "@/components/specialties/orthodontics/cobranza/ListaMensualidades";
 import {
   HORIZONTE_POR_VENCER_DIAS,
@@ -282,6 +283,7 @@ export function VistaCobranza({
                   <th scope="col" role="columnheader" className={s.num}>Vencido</th>
                   <th scope="col" role="columnheader" className={s.num}>Próximo pago</th>
                   <th scope="col" role="columnheader" className={s.num}>Por cobrar</th>
+                  {puedeCobrar ? <th scope="col" role="columnheader"><span className="sr-only">Acciones</span></th> : null}
                 </tr>
               </thead>
               <tbody role="rowgroup">
@@ -373,6 +375,15 @@ export function VistaCobranza({
                           </>
                         )}
                       </td>
+                      {/* #72: recordar desde la fila, sin abrir la ficha. Solo a quien debe o está por
+                          vencer, y a quien puede cobrar (el envío exige además whatsapp.send en el servidor). */}
+                      {puedeCobrar ? (
+                        <td role="cell" onClick={(e) => e.stopPropagation()}>
+                          {f.situacion === "vencido" || f.situacion === "por-vencer" ? (
+                            <EnviarRecordatorioButton patientId={f.patientId} treatmentPlanId={f.planId} />
+                          ) : null}
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}
