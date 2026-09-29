@@ -9,6 +9,7 @@ import { SlotGridPicker } from "./slot-grid-picker";
 import { PatientSearchField } from "./patient-search-field";
 import { MotivoField } from "./motivo-field";
 import { DateDropdown } from "./date-dropdown";
+import { diaDeLaAgendaVisible, diaInicialDeNuevaCita } from "@/lib/new-appointment/fecha-inicial";
 import { DurationPicker } from "./duration-picker";
 import { SummaryFooter } from "./summary-footer";
 import { todayInTz, formatSlotTime } from "@/lib/agenda/time-utils";
@@ -293,7 +294,12 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       setDateISO(fmt.format(d));
       setSlotIso(initialSlot.startsAt);
     } else {
-      setDateISO(todayInTz(boot.timezone));
+      // H5: abre con el día que se está viendo en la agenda, no siempre con hoy.
+      setDateISO(diaInicialDeNuevaCita({
+        pedido: params?.initialDateISO,
+        visible: diaDeLaAgendaVisible(window.location.pathname, window.location.search),
+        hoy: todayInTz(boot.timezone),
+      }));
       setSlotIso(null);
     }
 

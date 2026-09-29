@@ -140,8 +140,10 @@ export function DateDropdown({ value, onChange, todayISO }: Props) {
         <Popover.Portal>
           {/* En portal: fuera de la ventana, así que lleva sus variables y su letra. */}
           <Popover.Content
-            align="start"
-            sideOffset={6}
+            side="right"
+            align="center"
+            sideOffset={10}
+            collisionPadding={12}
             className={`${nc.tokens} ${instrumentSans.variable} ${nc.calendario}`}
           >
             <CalendarPopover value={safeValue} todayISO={todayISO} onSelect={select} />
@@ -168,7 +170,7 @@ export function DateDropdown({ value, onChange, todayISO }: Props) {
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content align="start" sideOffset={6} style={popoverStyle}>
+        <Popover.Content side="right" align="center" sideOffset={10} collisionPadding={12} style={popoverStyle}>
           <CalendarPopover value={safeValue} todayISO={todayISO} onSelect={select} />
         </Popover.Content>
       </Popover.Portal>

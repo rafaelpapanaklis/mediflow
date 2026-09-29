@@ -15,6 +15,8 @@ export interface OpenNewAppointmentParams {
   initialSlot?: NewAppointmentInitialSlot;
   initialPatient?: NewAppointmentInitialPatient;
   initialDoctorId?: string;
+  /** Día «AAAA-MM-DD» con el que abre (sin `initialSlot`). Por defecto, el de la agenda que se ve, o hoy. */
+  initialDateISO?: string;
   initialReason?: string;
   openAgendaAfter?: boolean;
   redirectAfter?: string;
