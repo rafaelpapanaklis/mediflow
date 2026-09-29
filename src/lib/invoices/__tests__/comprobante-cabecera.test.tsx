@@ -339,3 +339,43 @@ describe("comprobante de pago — factura a plazos (ws1-t10)", () => {
     assert.match(fuente, /leerCondicionesDeFacturas\(prisma, \{ clinicId, invoiceIds: \[id\] \}\)/);
   });
 });
+
+// ── ws1-t10 · el resumen Pagado / Saldo no se parte ni queda huérfano ─────
+
+describe("comprobante de pago — el resumen no queda huérfano en la hoja siguiente", () => {
+  after(() => { facturaExtra = {}; condicionesFila = null; sqlCrudo = true; });
+
+  const movimientos = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      amount: 500, method: i % 2 ? "cash" : "transfer", reference: null, paidAt: new Date(Date.UTC(2026, 1, 1 + i, 18)),
+    }));
+
+  /** Lo que cada hoja pinta, sin el pie (que se repite en todas). */
+  function cuerpos(buf: Buffer): string[] {
+    return textosPintados(buf).map((hoja) =>
+      hoja.filter((t) => t.y > 60).map((t) => t.s).join(" "),
+    );
+  }
+
+  // A plazos se barre también el largo del plan: el huérfano aparece según cuánto llene la hoja 1.
+  const CASOS: Array<{ nombre: string; aPlazos: boolean; cuotas: number }> = [
+    ...[3, 6, 9, 12, 15].map((cuotas) => ({ nombre: `factura a plazos de ${cuotas} pagos`, aPlazos: true, cuotas })),
+    { nombre: "factura de un solo pago", aPlazos: false, cuotas: 0 },
+  ];
+
+  for (const { nombre, aPlazos, cuotas } of CASOS) {
+    it(`${nombre}: de 0 a 16 pagos recibidos, Pagado y Saldo van juntos y ninguna hoja se queda solo con el saldo`, async () => {
+      for (let n = 0; n <= 16; n++) {
+        if (aPlazos) { facturaAPlazos(); (condicionesFila as Record<string, unknown>).numPagos = cuotas; } else { facturaExtra = {}; condicionesFila = null; }
+        facturaExtra = { ...facturaExtra, payments: movimientos(n), paid: 500 * n, balance: 38000 - 500 * n, total: 38000, subtotal: 38000, discount: 0, taxRate: 0 };
+        const hojas = cuerpos((await generar())!.buffer);
+        const conSaldo = hojas.map((h, i) => [i, /Saldo/.test(h)] as const).filter(([, s]) => s);
+        assert.equal(conSaldo.length, 1, `${nombre}, ${n} pagos: «Saldo» sale ${conSaldo.length} veces`);
+        const [i] = conSaldo[0];
+        if (aPlazos) assert.match(hojas[i], /Pagado\s+\$/, `${nombre}, ${n} pagos: el «Pagado» no va con su «Saldo» (hoja ${i + 1})`);
+        // La hoja del saldo trae algo más que el saldo: el título de los pagos o algún pago.
+        assert.match(hojas[i], /Pagos (recibidos|realizados)|Sin pagos registrados|Transferencia|Efectivo/i, `${nombre}, ${n} pagos: la hoja ${i + 1} solo lleva el saldo`);
+      }
+    });
+  }
+});

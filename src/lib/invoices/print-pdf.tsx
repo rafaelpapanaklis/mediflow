@@ -164,6 +164,25 @@ interface ComprobanteProps {
 
 const ESTADO_COLOR: Record<string, string> = { pagada: "#047857", porVencer: "#64748b", vencida: "#b91c1c" };
 
+/** Un renglón de «Pagos realizados / recibidos». */
+function FilaDePago({ pay, plan, zona }: { pay: ComprobanteProps["payments"][number]; plan: boolean; zona?: string }) {
+  const reembolso = plan && pay.method === "refund";
+  return (
+    <View style={styles.payRow} wrap={false}>
+      <View>
+        <Text style={styles.payLeft}>{METHOD_LABELS[pay.method] ?? pay.method}</Text>
+        <Text style={styles.paySub}>
+          {plan ? fechaDeMovimiento(pay.paidAt, zona) : fmtFecha(pay.paidAt)}
+          {pay.reference ? `  ·  Ref: ${pay.reference}` : ""}
+        </Text>
+      </View>
+      <Text style={[styles.payAmount, reembolso ? { color: "#b45309" } : {}]}>
+        {reembolso ? "−" : ""}{fmtMXN(pay.amount)}
+      </Text>
+    </View>
+  );
+}
+
 function ComprobanteDocument(p: ComprobanteProps) {
   const plan = p.plan ?? null;
   const sello = estadoSello(p.invoice.status, p.invoice.paid, p.invoice.balance);
@@ -288,38 +307,28 @@ function ComprobanteDocument(p: ComprobanteProps) {
           </View>
         ) : null}
 
-        {/* Pagos */}
-        <Text style={styles.sectionTitle}>{plan ? "Pagos recibidos" : "Pagos realizados"}</Text>
-        {p.payments.length === 0 ? (
-          <Text style={[styles.td, styles.tdMuted]}>Sin pagos registrados.</Text>
-        ) : p.payments.map((pay, i) => {
-          const reembolso = plan && pay.method === "refund";
-          return (
-            <View key={i} style={styles.payRow} wrap={false}>
-              <View>
-                <Text style={styles.payLeft}>{METHOD_LABELS[pay.method] ?? pay.method}</Text>
-                <Text style={styles.paySub}>
-                  {plan ? fechaDeMovimiento(pay.paidAt, p.zona) : fmtFecha(pay.paidAt)}
-                  {pay.reference ? `  ·  Ref: ${pay.reference}` : ""}
-                </Text>
-              </View>
-              <Text style={[styles.payAmount, reembolso ? { color: "#b45309" } : {}]}>
-                {reembolso ? "−" : ""}{fmtMXN(pay.amount)}
-              </Text>
+        {/* Pagos. El resumen (Pagado / Saldo) NO se parte ni queda solo en la hoja
+            siguiente (ws1-t10, fallo 5 de la revisión en panel.108: la hoja 2 de MF-1031
+            llevaba únicamente «Saldo»): se agrupa con el ÚLTIMO pago, así que si no cabe
+            en la hoja pasan juntos; y el título no se queda solo al pie de una hoja. */}
+        <Text style={styles.sectionTitle} minPresenceAhead={70}>{plan ? "Pagos recibidos" : "Pagos realizados"}</Text>
+        {p.payments.length === 0 ? null : p.payments.slice(0, -1).map((pay, i) => <FilaDePago key={i} pay={pay} plan={!!plan} zona={p.zona} />)}
+        <View wrap={false}>
+          {p.payments.length === 0
+            ? <Text style={[styles.td, styles.tdMuted]}>Sin pagos registrados.</Text>
+            : <FilaDePago pay={p.payments[p.payments.length - 1]} plan={!!plan} zona={p.zona} />}
+          {plan ? (
+            <View style={[styles.totalLine, { marginTop: 8 }]}>
+              <Text style={styles.totalLabel}>Pagado</Text>
+              <Text style={[styles.totalValue, { fontFamily: "Helvetica-Bold", color: "#047857" }]}>{fmtMXN(p.invoice.paid)}</Text>
             </View>
-          );
-        })}
-        {plan ? (
-          <View style={[styles.totalLine, { marginTop: 8 }]}>
-            <Text style={styles.totalLabel}>Pagado</Text>
-            <Text style={[styles.totalValue, { fontFamily: "Helvetica-Bold", color: "#047857" }]}>{fmtMXN(p.invoice.paid)}</Text>
+          ) : null}
+          <View style={[styles.totalLine, { marginTop: plan ? 0 : 8 }]}>
+            <Text style={styles.totalLabel}>{plan ? "Saldo" : "Saldo pendiente"}</Text>
+            <Text style={[styles.totalValue, { fontFamily: "Helvetica-Bold", color: p.invoice.balance > 0 ? "#b91c1c" : "#047857" }]}>
+              {fmtMXN(p.invoice.balance)}
+            </Text>
           </View>
-        ) : null}
-        <View style={[styles.totalLine, { marginTop: plan ? 0 : 8 }]}>
-          <Text style={styles.totalLabel}>{plan ? "Saldo" : "Saldo pendiente"}</Text>
-          <Text style={[styles.totalValue, { fontFamily: "Helvetica-Bold", color: p.invoice.balance > 0 ? "#b91c1c" : "#047857" }]}>
-            {fmtMXN(p.invoice.balance)}
-          </Text>
         </View>
 
         {/* Pie — va `fixed`, así que es lo que sostiene la identidad en la
