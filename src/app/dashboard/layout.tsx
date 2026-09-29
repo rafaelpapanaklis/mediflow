@@ -382,7 +382,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         y Alt+S. No consulta nada al montarse y abrirla no llama al modelo —
         solo preguntar cobra. En /dashboard/sabina se apaga sola. Con el
         interruptor, el cajón se viste con la ropa del menú nuevo (prop). */}
-    <SabinaLanzador clinicId={clinic.id} firstName={user.firstName} oculto={isExpired} rediseno={menuDosNiveles} />
+    <SabinaLanzador clinicId={clinic.id} firstName={user.firstName} oculto={isExpired} rediseno={menuDosNiveles} conOrtodoncia={orthodonticsModuleActive} />
     </NewAppointmentProvider>
     </NewPatientProvider>
     </VestirDialogos>

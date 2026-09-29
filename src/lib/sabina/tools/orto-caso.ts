@@ -68,7 +68,8 @@ export type ParamsOrtoCaso = z.infer<typeof parametros>;
 
 /** Como lo dice la lista «Pacientes en tratamiento» del módulo. */
 const ESTADO_DEL_CASO: Record<string, string> = {
-  PLANNED: "Planeado",
+  // «Por colocar»: la misma palabra que el módulo de Ortodoncia (ETIQUETA_ESTADO_CASO), no «Planeado».
+  PLANNED: "Por colocar",
   IN_PROGRESS: "En curso",
   ON_HOLD: "Pausado",
   RETENTION: "Retención",

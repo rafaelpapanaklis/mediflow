@@ -107,7 +107,8 @@ export interface DatosOrtoControles {
 }
 
 const ESTADO_DEL_CASO: Record<string, string> = {
-  PLANNED: "Planeado",
+  // «Por colocar»: la misma palabra que el módulo de Ortodoncia (ETIQUETA_ESTADO_CASO), no «Planeado».
+  PLANNED: "Por colocar",
   IN_PROGRESS: "En curso",
   ON_HOLD: "Pausado",
   RETENTION: "Retención",
@@ -116,7 +117,7 @@ const ESTADO_DEL_CASO: Record<string, string> = {
 };
 /** Para la frase: «4 en curso, 2 pausados, 1 en retención». */
 const ESTADO_EN_FRASE: Record<string, [string, string]> = {
-  Planeado: ["planeado", "planeados"],
+  "Por colocar": ["por colocar", "por colocar"],
   "En curso": ["en curso", "en curso"],
   Pausado: ["pausado", "pausados"],
   Retención: ["en retención", "en retención"],
@@ -255,7 +256,7 @@ export const ortoControles = definirHerramienta<ParamsOrtoControles, DatosOrtoCo
       return (
         `${plural(c.activos, "caso activo", "casos activos")} de ortodoncia, ${c.terminados} ` +
         `${c.terminados === 1 ? "terminado" : "terminados"} y ${c.abandonaron} en abandono (${detalle}). ` +
-        `«Activo» cuenta planeado, en curso, pausado y retención, como el Tablero. ` +
+        `«Activo» cuenta por colocar, en curso, pausado y retención, como el Tablero. ` +
         `La lista está en [Pacientes en tratamiento](${d.enlace}).`
       );
     }

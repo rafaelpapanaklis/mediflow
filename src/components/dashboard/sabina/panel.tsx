@@ -74,6 +74,7 @@ export function SabinaPanel({
   clinicId,
   firstName,
   puedeProponer,
+  conOrtodoncia = false,
   oculto = false,
   rediseno = false,
 }: {
@@ -81,6 +82,8 @@ export function SabinaPanel({
   firstName: string;
   /** ¿El catálogo trae acciones? Solo cambia la línea de ayuda del composer. */
   puedeProponer: boolean;
+  /** La clínica tiene el módulo de Ortodoncia activo: una pregunta de ejemplo es de ortodoncia. */
+  conOrtodoncia?: boolean;
   /** Clínica suspendida: ni botón ni atajo. Lo decide el layout. */
   oculto?: boolean;
   /** Interruptor `menu-dos-niveles` de la clínica: viste el cajón con el rediseño. */
@@ -276,6 +279,7 @@ export function SabinaPanel({
           <SabinaConversacion
             firstName={firstName}
             puedeProponer={puedeProponer}
+            conOrtodoncia={conOrtodoncia}
             compacto
             autoFocus={abierto}
             clases={rediseno ? CLASES_REDISENO : undefined}

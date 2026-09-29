@@ -7,6 +7,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { ACCIONES_SABINA } from "@/lib/sabina/engine-catalog";
 import { leerAjustesSabina } from "@/lib/sabina/ajustes-sabina";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { SabinaClient } from "./sabina-client";
 import { SaldoIaImporte } from "./saldo-ia-importe";
 
@@ -34,11 +35,13 @@ export default async function SabinaPage() {
   // en el mismo Promise.all que los ajustes para no añadir un viaje en fila; la
   // respuesta además vive 60 s en memoria por clínica, así que aquí cae en la
   // caché que el layout acaba de llenar.
-  const [apagada, rediseno] = await Promise.all([
+  const [apagada, rediseno, conOrtodoncia] = await Promise.all([
     leerAjustesSabina(user.clinicId, user.id)
       .then((ajustes) => ajustes?.activa === false)
       .catch(() => false),
     menuDosNivelesEncendido(user.clinicId),
+    // Sin el atajo de trial: solo con el módulo de Ortodoncia realmente contratado (como el menú).
+    user.clinic.category === "DENTAL" ? hasActiveOrthodonticsModule(user.clinicId).catch(() => false) : Promise.resolve(false),
   ]);
   // SALDO IA (ws1-t5): el acceso al monedero que Sabina gasta. Lo ve quien
   // puede abrir esa pantalla —el MISMO permiso que ella exige
@@ -56,6 +59,7 @@ export default async function SabinaPage() {
       clinicId={user.clinicId}
       firstName={user.firstName}
       puedeProponer={ACCIONES_SABINA.length > 0}
+      conOrtodoncia={conOrtodoncia}
       apagada={apagada}
       rediseno={rediseno}
       puedeVerSaldo={puedeVerSaldo}

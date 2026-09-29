@@ -373,6 +373,25 @@ export const SABINA_SUGGESTIONS: SabinaSuggestion[] = [
   { text: "¿Qué hago para expandir mi clínica?", hint: "Análisis abierto" },
 ];
 
+/** La pregunta de ortodoncia que Sabina sabe contestar (cobranza del módulo): ws1-t10, fila S1. */
+export const SABINA_SUGERENCIA_ORTODONCIA: SabinaSuggestion = {
+  text: "¿Qué casos de ortodoncia tienen mensualidades vencidas?",
+  hint: "Cobranza de ortodoncia",
+};
+
+/**
+ * Las preguntas de ejemplo de la pantalla de inicio. Con el módulo de Ortodoncia activo,
+ * una es de ortodoncia (antes las cinco eran genéricas aunque la clínica lo tuviera):
+ * en la lista completa sustituye a la pregunta abierta más genérica («expandir mi
+ * clínica»); en el cajón, que enseña solo dos, va en segundo lugar. Sin el módulo, la
+ * lista de siempre. NO toca «IA asistente» (es otra herramienta): esto es solo Sabina.
+ */
+export function sugerenciasDeInicio(opts: { compacto: boolean; conOrtodoncia: boolean }): SabinaSuggestion[] {
+  if (!opts.conOrtodoncia) return opts.compacto ? SABINA_SUGGESTIONS.slice(0, 2) : SABINA_SUGGESTIONS;
+  if (opts.compacto) return [SABINA_SUGGESTIONS[0], SABINA_SUGERENCIA_ORTODONCIA];
+  return [...SABINA_SUGGESTIONS.slice(0, SABINA_SUGGESTIONS.length - 1), SABINA_SUGERENCIA_ORTODONCIA];
+}
+
 // ── Reloj del estado "pensando" ──────────────────────────────────────────
 // Frases genéricas — NO afirman qué herramienta se está llamando de verdad,
 // porque el contrato no manda ese dato hasta que la respuesta llega entera.

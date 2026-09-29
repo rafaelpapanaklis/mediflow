@@ -23,6 +23,7 @@ export function SabinaLanzador({
   firstName,
   oculto = false,
   rediseno = false,
+  conOrtodoncia = false,
 }: {
   clinicId: string;
   firstName: string;
@@ -30,12 +31,15 @@ export function SabinaLanzador({
   oculto?: boolean;
   /** Interruptor `menu-dos-niveles` de la clínica: viste el cajón con el rediseño. */
   rediseno?: boolean;
+  /** La clínica tiene el módulo de Ortodoncia activo (lo decide el layout, sin atajo de trial). */
+  conOrtodoncia?: boolean;
 }) {
   return (
     <SabinaPanel
       clinicId={clinicId}
       firstName={firstName}
       puedeProponer={ACCIONES_SABINA.length > 0}
+      conOrtodoncia={conOrtodoncia}
       oculto={oculto}
       rediseno={rediseno}
     />

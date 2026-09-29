@@ -123,6 +123,7 @@ export function SabinaClient({
   clinicId,
   firstName,
   puedeProponer = false,
+  conOrtodoncia = false,
   apagada: apagadaAlEntrar = false,
   rediseno = false,
   puedeVerSaldo = false,
@@ -132,6 +133,8 @@ export function SabinaClient({
   clinicId: string;
   firstName: string;
   puedeProponer?: boolean;
+  /** La clínica tiene el módulo de Ortodoncia activo: una pregunta de ejemplo es de ortodoncia. */
+  conOrtodoncia?: boolean;
   /** El Super Admin apagó a Sabina para este usuario. Solo avisa; el endpoint impide. */
   apagada?: boolean;
   /** Interruptor `menu-dos-niveles` de la clínica: viste la pantalla con el rediseño. */
@@ -270,6 +273,7 @@ export function SabinaClient({
           firstName={firstName}
           apagada={apagadaAlEntrar}
           puedeProponer={puedeProponer}
+          conOrtodoncia={conOrtodoncia}
           rediseno={rediseno}
           clases={c}
         />

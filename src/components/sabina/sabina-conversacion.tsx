@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, Send, Loader2, CloudOff, RotateCcw } from "lucide-react";
 import {
-  SABINA_SUGGESTIONS,
+  sugerenciasDeInicio,
   SABINA_THINKING_HINTS,
   SABINA_SLOW_HINT_MS,
   SABINA_QUESTION_MAX_CHARS,
@@ -96,6 +96,8 @@ export interface SabinaConversacionProps {
    * Sin él —el cajón lateral— se pintan las clases de siempre, tal cual.
    */
   clases?: Record<string, string>;
+  /** La clínica tiene el módulo de Ortodoncia activo: una de las preguntas de ejemplo es de ortodoncia. */
+  conOrtodoncia?: boolean;
   /** Lo mismo para las tarjetas de confirmación, que traen su propio mapa. */
   rediseno?: boolean;
 }
@@ -105,6 +107,7 @@ export function SabinaConversacion({
   apagada: apagadaAlEntrar = false,
   puedeProponer = false,
   compacto = false,
+  conOrtodoncia = false,
   autoFocus = false,
   clases,
   rediseno = false,
@@ -170,7 +173,7 @@ export function SabinaConversacion({
   );
 
   const empty = messages.length === 0 && !openingConv && !activeFailed;
-  const sugerencias = compacto ? SABINA_SUGGESTIONS.slice(0, 2) : SABINA_SUGGESTIONS;
+  const sugerencias = sugerenciasDeInicio({ compacto: !!compacto, conOrtodoncia: !!conOrtodoncia });
 
   return (
     <>
