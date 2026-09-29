@@ -71,7 +71,7 @@ test("la cancelación desde la agenda decide con el permiso de la SESIÓN y cae 
   assert.match(info, /denyIfMissingPermission\(session\.user, "agenda\.delete"\)/);
   assert.match(info, /puedeDecidir: denyIfMissingPermission\(session\.user, "billing\.charge"\) === null/);
   const despues = leer("src/app/api/invoices/[id]/dinero-cita/route.ts");
-  assert.match(despues, /denyIfMissingPermission\(ctx, "billing\.charge"\)/);
+  assert.match(despues, /"billing\.refund" : "billing\.charge"/, "decidir pide cobro; «devuelto», reembolso");
 });
 
 test("todos los caminos que cancelan una cita marcan «pendiente» si hay dinero", () => {
@@ -106,11 +106,36 @@ test("con la marca de cita cancelada, la factura no ofrece cobrar más", () => {
   assert.equal((modal.match(/puedeCobrar && !citaCanceladaConDinero/g) ?? []).length, 4, "cobrable, los dos «Registrar pago» y «Marcar pagada»");
 });
 
-test("«Ya lo devolví» registra el reembolso con la ruta de siempre y cancela la factura", () => {
+test("«Ya lo devolví» registra el reembolso y cancela la factura en UNA operación del servidor", () => {
   const aviso = leer("src/components/dashboard/billing/aviso-dinero-cita-cancelada.tsx");
-  assert.match(aviso, /fetch\(`\/api\/invoices\/\$\{invoiceId\}\/refund`/);
-  assert.match(aviso, /fetch\(`\/api\/invoices\/\$\{invoiceId\}\/cancel`/);
+  assert.match(aviso, /body: JSON\.stringify\(\{ decision: "devuelto" \}\)/);
+  assert.doesNotMatch(aviso, /\/refund`|\/cancel`/, "ya no son dos llamadas");
+  assert.match(aviso, /No se registró nada: la factura sigue igual\./, "el fallo dice qué pasó");
   assert.match(aviso, /Sí, registrar reembolso/, "pide confirmación");
+
+  const src = leer("src/lib/anticipos/cita-cancelada.server.ts");
+  const fn = src.slice(src.indexOf("export async function registrarDevolucionYCancelar"), src.indexOf("export async function marcarPendienteEnTx"));
+  assert.match(fn, /prisma\.\$transaction\(async \(tx\) => \{\s*await tx\.\$queryRaw`SELECT id FROM invoices WHERE id = \$\{invoiceId\} AND "clinicId" = \$\{clinicId\} FOR UPDATE`/);
+  assert.match(fn, /tx\.payment\.create\(\{[\s\S]{0,120}method: "refund"/);
+  assert.match(fn, /status: "CANCELLED", paid: 0, balance: round2\(inv\.total\), paidAt: null/);
+  assert.match(fn, /if \(ultimaMarca\(inv\.notes\) !== "reembolso"\)/, "solo sobre una marcada por reembolsar");
+  assert.match(fn, /Cancela primero el CFDI ante el SAT/, "timbrada: no toca nada y dice qué hacer");
+
+  const ruta = leer("src/app/api/invoices/[id]/dinero-cita/route.ts");
+  assert.match(ruta, /denyIfMissingPermission\(ctx, decision === "devuelto" \? "billing\.refund" : "billing\.charge"\)/);
+});
+
+test("archivar un paciente marca «pendiente» sus facturas con dinero en la MISMA transacción", () => {
+  const ruta = leer("src/app/api/patients/[id]/route.ts");
+  const fn = ruta.slice(ruta.indexOf("async function cancelFutureAppointmentsForPatient"), ruta.indexOf("export async function DELETE"));
+  assert.match(fn, /const marcadas = await prisma\.\$transaction\(async \(tx\) => \{\s*await tx\.appointment\.updateMany\(/);
+  assert.match(fn, /tx\.invoice\.findMany\(\{\s*where: \{ clinicId, appointmentId: \{ in: ids \}, status: \{ not: "CANCELLED" \}, paid: \{ gt: 0 \} \}/);
+  assert.match(fn, /await marcarPendienteEnTx\(tx, \{ clinicId, invoiceId: f\.id/);
+  assert.equal((ruta.match(/await quienDeLaSesion\(ctx\.userId, ctx\.clinicId\)/g) ?? []).length, 2, "PATCH y DELETE");
+  const src = leer("src/lib/anticipos/cita-cancelada.server.ts");
+  const m = src.slice(src.indexOf("export async function marcarPendienteEnTx"), src.indexOf("export async function marcarPendienteSiHayDinero"));
+  assert.match(m, /FOR UPDATE/);
+  assert.match(m, /if \(ultimaMarca\(inv\.notes\)\) return null;/, "no pisa una marca");
 });
 
 test("el SQL de facturas históricas solo añade la marca que el panel sabe leer", () => {

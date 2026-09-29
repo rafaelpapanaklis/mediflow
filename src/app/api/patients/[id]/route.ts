@@ -11,7 +11,7 @@ import {
   patientVisibilityAnd,
   ensureUserCanSeePatient,
 } from "@/lib/patient-visibility";
-import { logMutation } from "@/lib/audit";
+import { logAudit, logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -20,6 +20,7 @@ import { getPatientDeleteBlockers } from "@/lib/patient-deletion";
 import { APPT_AUTO_TYPE } from "@/lib/reminders/config";
 import { WA_REMINDER_PENDING_STATUSES } from "@/lib/whatsapp/reminder-status";
 import { linkOrphanThreadsToPatient } from "@/lib/whatsapp/inbox-log";
+import { marcarPendienteEnTx } from "@/lib/anticipos/cita-cancelada.server";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -354,6 +355,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     cancelledFutureAppointments = await cancelFutureAppointmentsForPatient(
       params.id,
       ctx.clinicId,
+      await quienDeLaSesion(ctx.userId, ctx.clinicId),
     );
   }
 
@@ -404,9 +406,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
  * fallo ahí no revierte el archivado (la cola además re-checa status terminal
  * antes de enviar, así que una fila huérfana no dispara mensajes).
  */
+/** Quién archiva, para la marca de la factura (nombre legible) y la bitácora. */
+async function quienDeLaSesion(userId: string, clinicId: string): Promise<{ userId: string; nombre: string }> {
+  const u = await prisma.user.findFirst({ where: { id: userId, clinicId }, select: { firstName: true, lastName: true, email: true } });
+  return { userId, nombre: u ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.email : userId };
+}
+
 async function cancelFutureAppointmentsForPatient(
   patientId: string,
   clinicId: string,
+  quien: { userId: string; nombre: string },
 ): Promise<number> {
   const now = new Date();
   const future = await prisma.appointment.findMany({
@@ -421,10 +430,31 @@ async function cancelFutureAppointmentsForPatient(
   if (future.length === 0) return 0;
   const ids = future.map((a) => a.id);
 
-  await prisma.appointment.updateMany({
-    where: { id: { in: ids }, clinicId },
-    data: { status: "CANCELLED", cancelledAt: now, cancelReason: "Paciente archivado" },
+  // H15 (decisión A de Rafael, ws1-t4): cada factura con dinero pagado de esas
+  // citas queda «pendiente de decidir», igual que al cancelar una cita, y en
+  // la MISMA transacción que la cancelación: o se cancelan y se marcan, o nada.
+  const marcadas = await prisma.$transaction(async (tx) => {
+    await tx.appointment.updateMany({
+      where: { id: { in: ids }, clinicId },
+      data: { status: "CANCELLED", cancelledAt: now, cancelReason: "Paciente archivado" },
+    });
+    const conDinero = await tx.invoice.findMany({
+      where: { clinicId, appointmentId: { in: ids }, status: { not: "CANCELLED" }, paid: { gt: 0 } },
+      select: { id: true },
+    });
+    const hechas: { invoiceId: string; monto: number }[] = [];
+    for (const f of conDinero) {
+      const m = await marcarPendienteEnTx(tx, { clinicId, invoiceId: f.id, quien: `${quien.nombre} (paciente archivado)`, ahora: now });
+      if (m) hechas.push(m);
+    }
+    return hechas;
   });
+  for (const m of marcadas) {
+    await logAudit({
+      clinicId, userId: quien.userId, entityType: "invoice", entityId: m.invoiceId, action: "update",
+      changes: { dineroCitaCancelada: { before: null, after: { decision: "pendiente", monto: m.monto, motivo: "paciente archivado" } } },
+    });
+  }
 
   try {
     await prisma.whatsAppReminder.deleteMany({
@@ -491,6 +521,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const cancelledFutureAppointments = await cancelFutureAppointmentsForPatient(
       params.id,
       ctx.clinicId,
+      await quienDeLaSesion(ctx.userId, ctx.clinicId),
     );
 
     await logMutation({

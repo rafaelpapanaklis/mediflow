@@ -207,6 +207,92 @@ export async function decidirDineroDeCitaCancelada(args: {
 }
 
 /**
+ * «Ya lo devolví»: la factura marcada POR REEMBOLSAR registra el reembolso y
+ * se cancela en UNA sola transacción (con el candado de la factura). Antes
+ * eran dos llamadas (/refund y /cancel) y un fallo entre las dos dejaba la
+ * factura sin dinero pero viva. Mismos efectos que esas dos rutas: un Payment
+ * «refund» por lo pagado y la factura CANCELADA con paid 0. DaleControl no
+ * mueve dinero: solo anota que ya se devolvió.
+ */
+export async function registrarDevolucionYCancelar(args: {
+  clinicId: string;
+  invoiceId: string;
+  userId: string;
+  quien: string;
+}): Promise<ResultadoDecision> {
+  const { clinicId, invoiceId } = args;
+  const ahora = new Date();
+  if (!clinicId || !invoiceId) return { ok: false, aplicada: null, monto: 0, motivo: "Faltan datos." };
+  const r = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoiceId} AND "clinicId" = ${clinicId} FOR UPDATE`;
+    const inv = await tx.invoice.findFirst({
+      where: { id: invoiceId, clinicId },
+      select: { total: true, paid: true, status: true, notes: true, cfdiUuid: true },
+    });
+    const falla = (motivo: string): ResultadoDecision => ({ ok: false, aplicada: null, monto: 0, motivo });
+    if (!inv) return falla("Factura no encontrada.");
+    if (inv.status === "CANCELLED") return falla("La factura ya está cancelada: no hay nada que registrar.");
+    if (!(inv.paid > 0)) return falla("La factura ya no tiene dinero pagado: no hay nada que devolver.");
+    if (ultimaMarca(inv.notes) !== "reembolso") {
+      return falla("Esta factura no está marcada «por reembolsar». Márcala primero (o usa «Reembolsar» de la factura).");
+    }
+    if (inv.cfdiUuid || (await algunPagoTieneCfdiVigente(tx, { clinicId, invoiceId }))) {
+      return falla("La factura tiene CFDI timbrado: no se registró nada. Cancela primero el CFDI ante el SAT y vuelve a pulsar «Ya lo devolví».");
+    }
+    const monto = round2(inv.paid);
+    const fecha = ahora.toISOString().slice(0, 16).replace("T", " ");
+    await tx.payment.create({
+      data: {
+        invoiceId, amount: monto, method: "refund", paidAt: ahora,
+        notes: `Devuelto al paciente fuera de DaleControl: se canceló su cita (${args.quien}).`,
+      },
+    });
+    const linea = `[CANCELADA: se canceló la cita y se devolvieron ${monto.toFixed(2)} al paciente · ${args.quien} · ${fecha} UTC]`;
+    await tx.invoice.updateMany({
+      where: { id: invoiceId, clinicId },
+      data: { status: "CANCELLED", paid: 0, balance: round2(inv.total), paidAt: null, notes: inv.notes ? `${inv.notes}\n${linea}` : linea },
+    });
+    return { ok: true, aplicada: "reembolso", monto, motivo: null } as ResultadoDecision;
+  });
+  if (r.ok) {
+    await logAudit({
+      clinicId, userId: args.userId, entityType: "invoice", entityId: invoiceId, action: "update",
+      changes: { dineroCitaCancelada: { before: "reembolso", after: { devuelto: r.monto, facturaCancelada: true, quien: args.quien } } },
+    });
+    await cerrarLinksDeFactura({ clinicId, invoiceId }).catch(() => {});
+    await cerrarAnticiposDePanel({ clinicId, invoiceId }).catch(() => {});
+  }
+  return r;
+}
+
+/**
+ * Marca «pendiente de decidir» DENTRO de una transacción ya abierta (la de
+ * quien cancela las citas: así la cancelación y la marca van juntas o no va
+ * ninguna). Toma el candado de la factura. No pisa una decisión ya tomada ni
+ * repite la marca. Devuelve lo marcado, para la bitácora (que va fuera).
+ */
+export async function marcarPendienteEnTx(
+  tx: Tx,
+  args: { clinicId: string; invoiceId: string; quien: string; ahora?: Date },
+): Promise<{ invoiceId: string; monto: number } | null> {
+  const { clinicId, invoiceId } = args;
+  await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoiceId} AND "clinicId" = ${clinicId} FOR UPDATE`;
+  const inv = await tx.invoice.findFirst({
+    where: { id: invoiceId, clinicId },
+    select: { paid: true, status: true, notes: true },
+  });
+  if (!inv || inv.status === "CANCELLED" || !(inv.paid > 0)) return null;
+  if (ultimaMarca(inv.notes)) return null;
+  const monto = round2(inv.paid);
+  const marca = lineaDeMarca({ decision: "pendiente", monto, quien: args.quien, cuando: args.ahora ?? new Date() });
+  await tx.invoice.updateMany({
+    where: { id: invoiceId, clinicId },
+    data: { notes: inv.notes ? `${inv.notes}\n${marca}` : marca },
+  });
+  return { invoiceId, monto };
+}
+
+/**
  * Tras cancelar una cita por un camino SIN decisión (portal, WhatsApp, enlace
  * público, agenda vieja…): si su factura tiene dinero, deja la marca
  * «pendiente de decidir». Nunca lanza: la cita ya está cancelada pase lo que

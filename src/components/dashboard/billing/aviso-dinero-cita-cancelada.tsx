@@ -54,34 +54,25 @@ export function AvisoDineroCitaCancelada({
     }
   }
 
-  // «Ya lo devolví»: registra el reembolso con la ruta de siempre (que exige
-  // su permiso) y cancela la factura, que ya no tiene dinero y cuya cita no
-  // va a ocurrir. DaleControl no mueve dinero: esto solo lo anota.
+  // «Ya lo devolví»: el servidor registra el reembolso y cancela la factura en
+  // UNA sola operación (o no hace nada). DaleControl no mueve dinero: esto
+  // solo anota que ya se devolvió. Si falla, el mensaje del servidor dice qué
+  // hacer y la factura queda tal cual.
   async function registrarDevuelto() {
     if (enviando) return;
     setEnviando("devuelto");
     try {
-      const r1 = await fetch(`/api/invoices/${invoiceId}/refund`, {
+      const res = await fetch(`/api/invoices/${invoiceId}/dinero-cita`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: pagado, reason: "Devuelto al paciente: se canceló su cita" }),
+        body: JSON.stringify({ decision: "devuelto" }),
       });
-      const o1 = await r1.json().catch(() => ({}));
-      if (!r1.ok) {
-        toast.error(o1?.error ?? "No se pudo registrar el reembolso.", { duration: 9000 });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(`No se registró nada: la factura sigue igual. ${out?.error ?? "Vuelve a intentarlo."}`, { duration: 12000 });
         return;
       }
-      const r2 = await fetch(`/api/invoices/${invoiceId}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "Cita cancelada; el dinero se devolvió al paciente" }),
-      });
-      if (!r2.ok) {
-        const o2 = await r2.json().catch(() => ({}));
-        toast(`Reembolso registrado. La factura no se pudo cancelar: ${o2?.error ?? "cancélala a mano"}.`, { duration: 9000 });
-      } else {
-        toast.success("Reembolso registrado y factura cancelada.");
-      }
+      toast.success("Reembolso registrado y factura cancelada.");
       onListo?.();
     } finally {
       setEnviando(null);
