@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, ClipboardList, Users as UsersIcon, Camera, Loader2, Sparkles, Clock } from "lucide-react";
+import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, ClipboardList, Users as UsersIcon, Camera, Loader2, Sparkles, Clock, Eye, EyeOff, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -23,6 +23,7 @@ import { tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { accesoParaAlta, accesoQueViaja, seccionModulosVisible, type RespuestaModulo } from "@/lib/team/modulos-especialidades";
 import { prepararImagen } from "@/lib/image-client";
 import { useTextosEquipo } from "./textos-equipo";
+import { validarContrasenaNueva, MAXIMO_CONTRASENA } from "@/lib/team/contrasena-nueva";
 import {
   formDeMiembro, parcheDeCambios, rolLlevaDatosClinicos,
   type DatosEditablesDeMiembro,
@@ -92,13 +93,119 @@ interface TeamMember {
   _count: { appointments: number; records: number };
 }
 
+// «Establecer contraseña nueva» (ws1-t4): el dueño escribe la contraseña del
+// miembro y la confirma. Se valida aquí y otra vez en el servidor con la MISMA
+// función. Los campos viven solo en este estado local y se vacían al guardar o
+// cancelar: la contraseña no entra en `form` ni sale en ningún log.
+function EstablecerContrasena({
+  onGuardar, deshabilitado,
+}: {
+  onGuardar: (contrasena: string, confirmacion: string) => Promise<boolean>;
+  deshabilitado: boolean;
+}) {
+  const x = useTextosEquipo();
+  const [abierto, setAbierto] = useState(false);
+  const [nueva, setNueva] = useState("");
+  const [confirmacion, setConfirmacion] = useState("");
+  const [ver, setVer] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+
+  function cerrar() {
+    setAbierto(false); setNueva(""); setConfirmacion(""); setVer(false); setError(null);
+  }
+
+  async function guardar() {
+    const problema = validarContrasenaNueva(nueva, confirmacion);
+    if (problema) { setError(problema); return; }
+    setError(null);
+    setGuardando(true);
+    try {
+      if (await onGuardar(nueva, confirmacion)) cerrar();
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (!abierto) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setAbierto(true)}
+        disabled={deshabilitado}
+        className="w-full h-11 text-base"
+      >
+        <KeyRound size={16} strokeWidth={1.75} aria-hidden style={{ marginRight: 8 }} />
+        {x.establecerBtn}
+      </Button>
+    );
+  }
+
+  const tipo = ver ? "text" : "password";
+  return (
+    <div className="space-y-3" data-establecer-contrasena>
+      <p className="text-xs text-muted-foreground" style={{ margin: 0 }}>{x.establecerHint}</p>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-semibold" htmlFor="establecer-nueva">{x.establecerNueva}</Label>
+        <div style={{ position: "relative" }}>
+          <input
+            id="establecer-nueva"
+            type={tipo}
+            autoComplete="new-password"
+            autoFocus
+            maxLength={MAXIMO_CONTRASENA}
+            className="input-new" style={{ height: 42, fontSize: 13.5, paddingRight: 44, width: "100%" }}
+            value={nueva}
+            onChange={e => { setNueva(e.target.value); setError(null); }}
+          />
+          <button
+            type="button"
+            onClick={() => setVer(v => !v)}
+            className="btn-new btn-new--ghost btn-new--sm"
+            aria-label={ver ? x.establecerOcultar : x.establecerMostrar}
+            style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", padding: 0, width: 34 }}
+          >
+            {ver ? <EyeOff size={16} strokeWidth={1.75} /> : <Eye size={16} strokeWidth={1.75} />}
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground" style={{ margin: 0 }}>{x.establecerRegla}</p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-semibold" htmlFor="establecer-confirmar">{x.establecerConfirmar}</Label>
+        <input
+          id="establecer-confirmar"
+          type={tipo}
+          autoComplete="new-password"
+          maxLength={MAXIMO_CONTRASENA}
+          className="input-new" style={{ height: 42, fontSize: 13.5, width: "100%" }}
+          value={confirmacion}
+          onChange={e => { setConfirmacion(e.target.value); setError(null); }}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void guardar(); } }}
+        />
+      </div>
+      {error && (
+        <p role="alert" className="text-xs" style={{ margin: 0, color: "var(--danger)" }}>{error}</p>
+      )}
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" onClick={cerrar} disabled={guardando} className="flex-1 h-11">
+          {x.establecerCancelar}
+        </Button>
+        <Button type="button" onClick={guardar} disabled={guardando || deshabilitado} className="flex-1 h-11">
+          {guardando ? x.establecerGuardando : x.establecerGuardar}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── MemberForm declared OUTSIDE TeamClient ──────────────────────────────────
 // This is the fix for Bug 1 (focus loss) and Bug 2 (validation).
 // When defined inside TeamClient as `const MemberForm = ...`, React treats it
 // as a new component type on every render and unmounts/remounts the inputs,
 // causing focus loss on every keystroke. Defined outside, it is stable.
 function MemberForm({
-  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, rediseno, sedeDental, ortoModulo, puedeCambiarAcceso,
+  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, onSetPassword, rediseno, sedeDental, ortoModulo, puedeCambiarAcceso,
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
@@ -111,6 +218,9 @@ function MemberForm({
   // current user es SUPER_ADMIN editando a un non-SUPER_ADMIN. La logica
   // de confirm + POST + display del tempPassword vive en TeamClient.
   onResetPassword?: () => void;
+  // «Establecer contraseña nueva»: misma regla que onResetPassword (solo el
+  // dueño, nunca sobre otro dueño). Devuelve true si el servidor la aceptó.
+  onSetPassword?: (contrasena: string, confirmacion: string) => Promise<boolean>;
   // Con la bandera apagada, la cédula sigue en `font-mono` tal cual hoy —
   // "byte por byte igual" manda incluso sobre la regla de tipografía, que
   // solo aplica dentro del rediseño (WS1-T5).
@@ -354,21 +464,30 @@ function MemberForm({
        *  editando a un miembro non-SUPER_ADMIN). El click delega la confirmación
        *  + el POST a TeamClient, que también maneja la visualización del
        *  tempPassword en el banner de arriba. */}
-      {isEdit && onResetPassword && (
+      {isEdit && (onResetPassword || onSetPassword) && (
         <div className="pt-4 mt-2" style={{ borderTop: `1px solid ${bordeSuave}` }}>
           <div className="form-section__title" style={{ marginBottom: 0 }}>{t("settings.team.userAccessLabel")}<span className="form-section__rule" aria-hidden /></div>
-          <p className="text-xs text-muted-foreground mt-1 mb-3">
-            {x.restablecerHint}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onResetPassword}
-            disabled={loading}
-            className="w-full h-11 text-base"
-          >
-            {x.restablecerBtn}
-          </Button>
+          {onResetPassword && (
+            <>
+              <p className="text-xs text-muted-foreground mt-1 mb-3">
+                {x.restablecerHint}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onResetPassword}
+                disabled={loading}
+                className="w-full h-11 text-base"
+              >
+                {x.restablecerBtn}
+              </Button>
+            </>
+          )}
+          {onSetPassword && (
+            <div className="mt-3">
+              <EstablecerContrasena onGuardar={onSetPassword} deshabilitado={loading} />
+            </div>
+          )}
         </div>
       )}
 
@@ -806,6 +925,29 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     }
   }
 
+  // «Establecer contraseña nueva» (ws1-t4). Mismo gate que resetPassword; la
+  // regla real (dueño de ESTA clínica, no a sí mismo, no a otro dueño) vive en
+  // POST /api/team/[id]/set-password. Devuelve true para que el formulario
+  // vacíe los campos; el modal de edición se queda abierto.
+  async function setPassword(m: TeamMember, contrasena: string, confirmacion: string): Promise<boolean> {
+    if (!isSuperAdmin || m.role === "SUPER_ADMIN" || m.id === currentUserId) return false;
+    try {
+      const res = await fetch(`/api/team/${m.id}/set-password`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: contrasena, confirmacion }),
+      });
+      const data = await leerRespuestaEquipo(res);
+      if (!res.ok) throw new Error(data.error ?? x.establecerError);
+      toast.success(x.establecerListo, { duration: 6000 });
+      if (data.aviso) toast(data.aviso, { duration: 15000, icon: "ℹ️" });
+      return true;
+    } catch (err: any) {
+      toast.error(err.message ?? x.establecerError);
+      return false;
+    }
+  }
+
   async function deleteMember(m: TeamMember) {
     if (m.id === currentUserId) { toast.error(t("settings.team.cannotDeleteSelf")); return; }
     if (!(await askConfirm({
@@ -1171,6 +1313,11 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               onResetPassword={
                 isSuperAdmin && editMember.role !== "SUPER_ADMIN"
                   ? () => resetPassword(editMember)
+                  : undefined
+              }
+              onSetPassword={
+                isSuperAdmin && editMember.role !== "SUPER_ADMIN" && editMember.id !== currentUserId
+                  ? (contrasena, confirmacion) => setPassword(editMember, contrasena, confirmacion)
                   : undefined
               }
             />

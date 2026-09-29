@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 import { markMustChangePassword } from "@/lib/auth/must-change-password";
-import { clasificarErrorAuth, esCorreoMarcador, esUuid, ERROR_SIN_CUENTA } from "@/lib/team/auth-errors";
+import { aplicarContrasenaAlMiembro } from "@/lib/team/aplicar-contrasena";
 
 // Service-role client. Mismo patrón que /api/team/[id]/route.ts:8-13 —
 // usa SUPABASE_SERVICE_ROLE_KEY (NUNCA exponer al cliente). Disable de
@@ -68,66 +68,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const tempPassword = generateTempPassword(12);
 
-  const supabaseAdmin = getAdminClient();
-  let supabaseIdFinal = target.supabaseId;
-  let cuentaCreada = false;
-
-  // Un supabaseId que no es UUID (demo, muestra de QA) haría LANZAR a supabase-js.
-  const updateError: any = !esUuid(target.supabaseId)
-    ? ERROR_SIN_CUENTA
-    : (await supabaseAdmin.auth.admin.updateUserById(target.supabaseId, { password: tempPassword })).error;
-
-  if (updateError) {
-    if (clasificarErrorAuth(updateError) !== "cuenta-no-existe") {
-      console.error("[/api/team/[id]/reset-password] supabase update failed:", updateError);
-      return NextResponse.json({ error: "No se pudo actualizar la contraseña en Supabase" }, { status: 500 });
-    }
-
-    // El miembro NO tiene cuenta de acceso: su fila apunta a un usuario de Auth
-    // que ya no existe (BEVADENT, 28-sep-2026: el reinicio de la clínica la borró
-    // y dejó la fila con un correo de relleno). Restablecer una contraseña que no
-    // existe no tiene sentido; lo que el admin quiere es que esa persona pueda
-    // entrar. Se le CREA la cuenta con el correo de su ficha y la temporal, y la
-    // fila (y sus hermanas del mismo id muerto) pasa a apuntar a ella.
-    if (esCorreoMarcador(target.email) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(target.email)) {
-      return NextResponse.json({
-        error: "Este miembro no tiene cuenta de acceso y su correo no es uno real. Edítalo, escribe su correo verdadero, guarda, y vuelve a pulsar «Restablecer contraseña» para crearle el acceso.",
-        code: "SIN_CUENTA_SIN_CORREO",
-      }, { status: 400 });
-    }
-
-    const { data: creada, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email: target.email.trim().toLowerCase(),
-      password: tempPassword,
-      email_confirm: true,
-    });
-    if (createError || !creada?.user) {
-      if (createError && clasificarErrorAuth(createError) === "correo-ya-registrado") {
-        return NextResponse.json({
-          error: "Ese correo ya tiene cuenta en DaleControl (de otra persona o de otra clínica). Cámbialo por otro distinto y vuelve a intentar.",
-        }, { status: 400 });
-      }
-      console.error("[/api/team/[id]/reset-password] no se pudo crear la cuenta de acceso:", createError);
-      return NextResponse.json({ error: "No se pudo crear la cuenta de acceso de este miembro" }, { status: 500 });
-    }
-
-    try {
-      // Todas las filas que compartían el id muerto (una persona = una fila por
-      // sucursal): todas quedan con la cuenta nueva o ninguna.
-      await prisma.user.updateMany({
-        where: { supabaseId: target.supabaseId },
-        data: { supabaseId: creada.user.id },
-      });
-    } catch (e) {
-      // La cuenta recién creada no sirve de nada sin la fila enlazada, y dejarla
-      // ocuparía el correo. Se deshace para poder reintentar limpio.
-      await supabaseAdmin.auth.admin.deleteUser(creada.user.id).catch(() => {});
-      console.error("[/api/team/[id]/reset-password] no se pudo enlazar la cuenta nueva:", e);
-      return NextResponse.json({ error: "No se pudo enlazar la cuenta de acceso nueva. No se cambió nada; vuelve a intentar." }, { status: 500 });
-    }
-    supabaseIdFinal = creada.user.id;
-    cuentaCreada = true;
+  const aplicada = await aplicarContrasenaAlMiembro({
+    admin: getAdminClient(),
+    miembro: { supabaseId: target.supabaseId, email: target.email },
+    contrasena: tempPassword,
+    nombreBoton: "Restablecer contraseña",
+    origen: "/api/team/[id]/reset-password",
+  });
+  if (aplicada.ok === false) {
+    return NextResponse.json(
+      { error: aplicada.error, ...(aplicada.code && { code: aplicada.code }) },
+      { status: aplicada.status },
+    );
   }
+  const supabaseIdFinal = aplicada.supabaseId;
+  const cuentaCreada = aplicada.cuentaCreada;
 
   // La temporal recién aplicada la conoce el SUPER_ADMIN que la generó: el
   // usuario NO puede quedarse con ella. Se marca sólo después de que Supabase

@@ -90,6 +90,7 @@ export const AUDIT_ACTION_OPTIONS = [
   "archive",
   "view",
   "password_reset",
+  "password_set",
   "XRAY_NOTES_UPDATED",
   "FILE_NOTES_UPDATED",
 ] as const;
@@ -128,6 +129,7 @@ export const ACTION_META: Record<string, { label: string; tone: AuditTone }> = {
   archive: { label: "Archivado", tone: "warning" },
   view: { label: "Lectura", tone: "neutral" },
   password_reset: { label: "Reset contraseña", tone: "warning" },
+  password_set: { label: "Contraseña nueva", tone: "warning" },
   XRAY_NOTES_UPDATED: { label: "Notas radiografía", tone: "info" },
   FILE_NOTES_UPDATED: { label: "Notas archivo", tone: "info" },
 };

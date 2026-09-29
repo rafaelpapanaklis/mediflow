@@ -13,6 +13,8 @@ export type AuditAction =
   // Reset de contraseña por SUPER_ADMIN. NO incluye el password (ni hash)
   // en el log — solo la acción y el target.
   | "password_reset"
+  // El dueño escribe la contraseña de un miembro (ws1-t4). Tampoco la guarda.
+  | "password_set"
   // Acciones de admin de PLATAFORMA (WS2 · cobertura de auditoría): ciclo de
   // vida de entidades globales (afiliados/labs/suppliers) y operaciones de
   // cobro/payout/envío iniciadas desde /admin.

@@ -31,6 +31,7 @@ const ACTION_ICONS: Record<string, typeof Plus> = {
   archive: Archive,
   view: Eye,
   password_reset: KeyRound,
+  password_set: KeyRound,
   XRAY_NOTES_UPDATED: FileText,
   FILE_NOTES_UPDATED: FileText,
 };
