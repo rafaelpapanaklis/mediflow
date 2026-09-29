@@ -50,7 +50,7 @@ export async function guardarPreciosPorTecnica(
   clinicId: string,
   userId: string,
   precios: PreciosPorTecnica,
-): Promise<{ ok: true } | { ok: false; motivo: "sin-columna" | "sin-clinica" | "error" }> {
+): Promise<{ ok: boolean; motivo?: "sin-columna" | "sin-clinica" | "error" }> {
   if (!clinicId) return { ok: false, motivo: "sin-clinica" };
   if (!(await columnaDePreciosExiste())) return { ok: false, motivo: "sin-columna" };
   try {
