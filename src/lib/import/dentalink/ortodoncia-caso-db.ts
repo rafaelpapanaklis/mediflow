@@ -121,7 +121,11 @@ export async function marcarCasosDeOrtodoncia(filas: PreviewRow[], clinicId: str
       // Un caso de ortodoncia no usa el catálogo de prestaciones: no hay equivalente que elegir.
       r.unresolved = r.unresolved?.filter((u) => u.field !== "procedure");
       if (r.unresolved && r.unresolved.length === 0) delete r.unresolved;
-      r.warnings = r.warnings.filter((w) => !/sin ligar/.test(w));
+      r.warnings = r.warnings.filter((w) => !/sin ligar|se agregará al catálogo/.test(w));
+      // Un renglón dental dentro del presupuesto de ortodoncia puede compartir nombre con una prestación que sí se
+      // agrega al catálogo: aquí no se agrega nada, el renglón viaja como cargo del caso.
+      delete r.data.catalogo;
+      r.data.procedureId = null;
     }
     if (casos.mapa.has(folio)) {
       for (const r of g) { r.status = "duplicate"; r.warnings.push("Este caso de ortodoncia ya se importó antes"); }
