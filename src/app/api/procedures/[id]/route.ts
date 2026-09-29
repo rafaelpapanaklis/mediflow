@@ -4,10 +4,13 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { datosDeCambio, leerOrthoIncluido } from "../entrada";
+import { evaluarCambioDeOrtodoncia } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import {
   aplicarOrthoIncluido,
   debeMarcarseComoControl,
   CODIGO_CONTROL_ORTO,
+  ORTHO_CATALOG_CATEGORY,
 } from "@/lib/orthodontics/catalog-procedures";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -29,6 +32,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const entrada = datosDeCambio(body);
     if (!entrada.ok) return NextResponse.json({ error: entrada.error }, { status: 400 });
 
+    // Reglas de la categoría «Ortodoncia» (control fijo, módulo activo, cobro elegido).
+    const orthoIncluido = leerOrthoIncluido(body.orthoIncludedInTreatment);
+    const decision = evaluarCambioDeOrtodoncia({
+      existente: { name: existing.name, code: existing.code, category: existing.category },
+      categoria: typeof body.category === "string" ? body.category.trim() : undefined,
+      nombre: typeof body.name === "string" ? body.name : undefined,
+      incluido: orthoIncluido,
+      // Solo se consulta cuando el cambio lleva la fila A Ortodoncia (es lo único que lo necesita).
+      moduloActivo: body.category?.trim?.() === ORTHO_CATALOG_CATEGORY
+        ? await hasActiveOrthodonticsModule(ctx.clinicId).catch(() => false)
+        : false,
+    });
+    if (decision.error) return NextResponse.json({ error: decision.error }, { status: 400 });
+
     // El control de ortodoncia se reconoce por su llave, no por su nombre
     // (ws1-t5). Si esta fila es el control de siempre y aún no la lleva, se le
     // pone AHORA, antes de que el cambio de nombre lo deje irreconocible para
@@ -43,8 +60,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     // Ola 2 de ortodoncia (ws1-t1) — orthoIncludedInTreatment va aparte, por
     // SQL crudo (ver entrada.ts/catalog-procedures.ts).
-    const orthoIncluido = leerOrthoIncluido(body.orthoIncludedInTreatment);
-    if (orthoIncluido !== undefined) await aplicarOrthoIncluido(params.id, ctx.clinicId, orthoIncluido);
+    if (decision.aplicarIncluido && orthoIncluido !== undefined) await aplicarOrthoIncluido(params.id, ctx.clinicId, orthoIncluido);
 
     revalidateAfter("procedures");
     return NextResponse.json(updated);

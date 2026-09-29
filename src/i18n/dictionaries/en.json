@@ -9201,6 +9201,7 @@
       "catAesthetic": "Cosmetic dentistry",
       "catLaboratory": "Laboratory",
       "catConsultation": "Consultation",
+      "catOrthodontics": "Orthodontics",
       "countProcedures": {
         "one": "{count} procedure",
         "other": "{count} procedures"

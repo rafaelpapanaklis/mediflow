@@ -511,6 +511,7 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
             sub={`Precio y si va incluido en el tratamiento o se cobra aparte. «${TIPO_CITA_CONTROL_ORTO}» no tiene ese interruptor: en «${ORTHO_BILLING_MODE_LABELS.PRECIO_TOTAL}» va incluido en la mensualidad, en «${ORTHO_BILLING_MODE_LABELS.PAGO_POR_CONTROL}» se cobra con el precio de aquí.`}
           >
             <div className={s.tarjetaCuerpo}>
+              <AgregarProcedimiento onCreado={recargarProcedimientos} />
               {procedimientos.length === 0 ? (
                 <div className={s.vacio}>
                   <span className={s.vacioIcono} aria-hidden>
@@ -519,7 +520,7 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
                   <p className={s.vacioTitulo}>Todavía no hay procedimientos de ortodoncia en el catálogo.</p>
                   <p className={s.vacioPista}>
                     Puedes cargar una lista sugerida (precios de arranque, editables después) o agregarlos uno por
-                    uno desde Procedimientos.
+                    uno con «Agregar procedimiento» (aquí arriba) o desde Procedimientos.
                   </p>
                   <div className={s.vacioAcciones}>
                     <ButtonNew type="button" variant="primary" onClick={cargarSugeridos} disabled={sembrando}>
@@ -592,6 +593,126 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
         </div>
       </div>
     </Pantalla>
+  );
+}
+
+/**
+ * «Agregar procedimiento» (nombre, precio, incluido/con costo aparte): crea en el
+ * MISMO catálogo que Procedimientos (POST /api/procedures, categoría Ortodoncia)
+ * y la lista se recarga al instante. Aparece también en «Cobrar extra» si es con
+ * costo aparte.
+ */
+function AgregarProcedimiento({ onCreado }: { onCreado: () => void | Promise<void> }) {
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [precio, setPrecio] = useState("");
+  const [incluido, setIncluido] = useState<boolean | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const idNombre = useId();
+  const idPrecio = useId();
+
+  function cerrar() {
+    setAbierto(false);
+    setNombre("");
+    setPrecio("");
+    setIncluido(null);
+  }
+
+  async function crear() {
+    if (!nombre.trim()) return void toast.error("Escribe el nombre del procedimiento.");
+    const n = Number(precio);
+    if (precio.trim() === "" || !Number.isFinite(n) || n < 0) return void toast.error("Precio inválido.");
+    if (incluido === null) return void toast.error("Elige cómo se cobra: incluido en el tratamiento o con costo aparte.");
+    setGuardando(true);
+    try {
+      const res = await fetch("/api/procedures", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nombre.trim(), category: "orthodontics", basePrice: n, orthoIncludedInTreatment: incluido }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error ?? "No se pudo agregar el procedimiento.");
+        return;
+      }
+      toast.success(`«${nombre.trim()}» agregado.`);
+      await onCreado();
+      cerrar();
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (!abierto) {
+    return (
+      <div style={{ marginBottom: 10 }}>
+        <ButtonNew type="button" variant="secondary" size="sm" onClick={() => setAbierto(true)}>
+          Agregar procedimiento
+        </ButtonNew>
+      </div>
+    );
+  }
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "flex-end",
+        gap: 12,
+        padding: "10px 12px",
+        marginBottom: 10,
+        border: "1px solid var(--pr-borde)",
+        borderRadius: "var(--pr-radio-s)",
+        background: "var(--pr-tarjeta-2)",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 200px", minWidth: 0 }}>
+        <label className={s.campoEtiqueta} htmlFor={idNombre}>Nombre</label>
+        <input id={idNombre} className="input-new" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Recementado de bracket" style={{ minHeight: 34, padding: "6px 9px" }} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "0 0 120px" }}>
+        <label className={s.campoEtiqueta} htmlFor={idPrecio}>Precio</label>
+        <input id={idPrecio} type="number" min={0} step="0.01" className="input-new" value={precio} onChange={(e) => setPrecio(e.target.value)} style={{ minHeight: 34, padding: "6px 9px" }} />
+      </div>
+      <div style={{ display: "flex", gap: 6, flex: "0 0 auto" }} role="radiogroup" aria-label="¿Cómo se cobra?">
+        {([
+          { valor: true, etiqueta: "Incluido" },
+          { valor: false, etiqueta: "Con costo aparte" },
+        ] as const).map((op) => {
+          const activo = incluido === op.valor;
+          return (
+            <button
+              key={String(op.valor)}
+              type="button"
+              role="radio"
+              aria-checked={activo}
+              onClick={() => setIncluido(op.valor)}
+              style={{
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 600,
+                borderRadius: "var(--pr-radio-s)",
+                border: `1px solid ${activo ? "var(--pr-activo)" : "var(--pr-borde)"}`,
+                background: activo ? "var(--pr-activo-suave)" : "var(--pr-tarjeta)",
+                color: activo ? "var(--pr-activo)" : "var(--pr-texto-2)",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {op.etiqueta}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <ButtonNew type="button" variant="primary" size="sm" onClick={crear} disabled={guardando}>
+          {guardando ? "Agregando…" : "Agregar"}
+        </ButtonNew>
+        <ButtonNew type="button" variant="ghost" size="sm" onClick={cerrar} disabled={guardando}>
+          Cancelar
+        </ButtonNew>
+      </div>
+    </div>
   );
 }
 

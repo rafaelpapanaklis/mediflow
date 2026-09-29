@@ -4,6 +4,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { datosDeAlta, leerOrthoIncluido } from "./entrada";
+import { errorDeAltaDeOrtodoncia } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { sembrarProcedimientosDeOrtodoncia, aplicarOrthoIncluido, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
 
@@ -100,13 +101,24 @@ export async function POST(req: NextRequest) {
     const entrada = datosDeAlta(body);
     if (!entrada.ok) return NextResponse.json({ error: entrada.error }, { status: 400 });
 
+    // Categoría «Ortodoncia»: solo con el módulo activo y con el cobro elegido
+    // (incluido en el tratamiento / con costo aparte). Las reglas viven en un
+    // archivo puro con tests.
+    const orthoIncluido = leerOrthoIncluido(body.orthoIncludedInTreatment);
+    const errorOrto = errorDeAltaDeOrtodoncia({
+      name: entrada.data.name,
+      category: entrada.data.category,
+      incluido: orthoIncluido,
+      moduloActivo: entrada.data.category === ORTHO_CATALOG_CATEGORY ? await hasActiveOrthodonticsModule(ctx.clinicId) : false,
+    });
+    if (errorOrto) return NextResponse.json({ error: errorOrto }, { status: 400 });
+
     const procedure = await prisma.procedureCatalog.create({
       data: { clinicId: ctx.clinicId, ...entrada.data },
     });
 
     // Ola 2 de ortodoncia (ws1-t1) — orthoIncludedInTreatment va aparte, por
     // SQL crudo (ver entrada.ts/catalog-procedures.ts).
-    const orthoIncluido = leerOrthoIncluido(body.orthoIncludedInTreatment);
     if (orthoIncluido !== undefined) await aplicarOrthoIncluido(procedure.id, ctx.clinicId, orthoIncluido);
 
     revalidateAfter("procedures");

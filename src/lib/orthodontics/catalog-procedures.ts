@@ -31,7 +31,8 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 
-export const ORTHO_CATALOG_CATEGORY = "orthodontics";
+import { CODIGO_CONTROL_ORTO, ORTHO_CATALOG_CATEGORY } from "./catalog-procedures-constantes";
+export { CODIGO_CONTROL_ORTO, ORTHO_CATALOG_CATEGORY };
 
 // ── El control se reconoce por su IDENTIFICADOR, no por su nombre ─────────
 // (ws1-t5, 28-sep-2026; revisión de lógica de uso, fila 26 del mapa).
@@ -48,7 +49,6 @@ export const ORTHO_CATALOG_CATEGORY = "orthodontics";
 // llave; si no hay ninguna (catálogos sembrados antes de este cambio), por el
 // nombre de siempre, y en ese momento se le pone la llave. También se le pone
 // justo al renombrarlo (PATCH /api/procedures/[id]).
-export const CODIGO_CONTROL_ORTO = "ORTO_CONTROL";
 
 export interface FilaCandidataControl {
   id: string;

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { ProceduresClient } from "./procedures-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { costoDeRecetaPorProcedimiento } from "@/lib/inventory/costo-receta.server";
+import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { listarProcedimientosDeOrtodoncia } from "@/lib/orthodontics/catalog-procedures";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export default async function ProceduresPage() {
@@ -19,14 +21,21 @@ export default async function ProceduresPage() {
   // sin fila o con error → false = el catálogo de hoy, tal cual). En
   // paralelo con la consulta del catálogo, no en cascada: no añade un viaje
   // extra a la base y la respuesta vive 60 s en memoria por clínica.
-  const [procedures, rediseno, costoReceta] = await Promise.all([
+  const [procedures, rediseno, costoReceta, moduloOrtodoncia, ortoFilas] = await Promise.all([
     prisma.procedureCatalog.findMany({
       where: { clinicId: user.clinicId },
       orderBy: [{ isActive: "desc" }, { category: "asc" }, { name: "asc" }],
     }),
     menuDosNivelesEncendido(user.clinicId),
     costoDeRecetaPorProcedimiento(user.clinicId),
+    // Ortodoncia: la categoría «Ortodoncia» solo se ofrece para CREAR con el módulo activo.
+    hasActiveOrthodonticsModule(user.clinicId).catch(() => false),
+    // «Incluido / con costo aparte» de cada procedimiento de ortodoncia (va por SQL crudo).
+    listarProcedimientosDeOrtodoncia(user.clinicId).catch(() => []),
   ]);
+  const ortoIncluidos: Record<string, boolean | null> = Object.fromEntries(
+    ortoFilas.map((f) => [f.id, f.orthoIncludedInTreatment]),
+  );
 
   return (
     <ProceduresClient
@@ -34,6 +43,8 @@ export default async function ProceduresPage() {
       initialProcedures={procedures as any}
       rediseno={rediseno}
       costoReceta={costoReceta}
+      moduloOrtodoncia={moduloOrtodoncia}
+      ortoIncluidos={ortoIncluidos}
     />
   );
 }

@@ -8,6 +8,9 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./procedures.module.css";
 import { gastoDe, margenDe } from "./margen";
+import { ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures-constantes";
+import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
+import { etiquetaDeCobro } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
 import { costoDeRecetaAction } from "@/app/actions/procedure-recipe-cost";
 // Mismos tokens `--pr-*` e Instrument Sans del rediseño de Pacientes: es el
 // idioma visual ya aprobado por Rafael, no uno nuevo. Se heredan por CSS
@@ -51,6 +54,10 @@ interface Props {
    * clase nueva se aplica.
    */
   rediseno?: boolean;
+  /** ¿La clínica tiene el módulo de Ortodoncia activo? Sin él no se ofrece crear de esa categoría. */
+  moduloOrtodoncia?: boolean;
+  /** «Incluido / con costo aparte» de cada procedimiento de ortodoncia (id → valor). */
+  ortoIncluidos?: Record<string, boolean | null>;
 }
 
 const CATEGORY_OPTIONS: { value: string; labelKey: string }[] = [
@@ -59,6 +66,8 @@ const CATEGORY_OPTIONS: { value: string; labelKey: string }[] = [
   { value: "aesthetic", labelKey: "pages.procedures.catAesthetic" },
   { value: "laboratory", labelKey: "pages.procedures.catLaboratory" },
   { value: "consultation", labelKey: "pages.procedures.catConsultation" },
+  // Solo se ofrece con el módulo de Ortodoncia activo (o al editar uno que ya es de ortodoncia).
+  { value: ORTHO_CATALOG_CATEGORY, labelKey: "pages.procedures.catOrthodontics" },
 ];
 
 const CATEGORY_LABEL_KEY: Record<string, string> = Object.fromEntries(
@@ -73,6 +82,8 @@ interface FormState {
   duration: string;
   description: string;
   isActive: boolean;
+  /** Solo categoría Ortodoncia: true = incluido, false = con costo aparte, null = sin elegir. */
+  orthoIncluded: boolean | null;
 }
 
 const EMPTY_FORM: FormState = {
@@ -83,9 +94,10 @@ const EMPTY_FORM: FormState = {
   duration: "",
   description: "",
   isActive: true,
+  orthoIncluded: null,
 };
 
-export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {} }: Props) {
+export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {}, moduloOrtodoncia = false, ortoIncluidos: ortoIncluidosIniciales = {} }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -99,6 +111,8 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
   const [costoReceta, setCostoReceta] = useState<Record<string, number>>(costoRecetaInicial);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  // «Incluido / con costo aparte» por procedimiento de ortodoncia (se actualiza al guardar).
+  const [ortoIncluidos, setOrtoIncluidos] = useState<Record<string, boolean | null>>(ortoIncluidosIniciales);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -135,6 +149,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
       duration: p.duration != null ? String(p.duration) : "",
       description: p.description ?? "",
       isActive: p.isActive,
+      orthoIncluded: ortoIncluidos[p.id] ?? null,
     });
     setModalOpen(true);
   }
@@ -164,6 +179,12 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
       return;
     }
 
+    // Ortodoncia: hay que elegir cómo se cobra (el control de siempre no lleva esa elección).
+    if (form.category === ORTHO_CATALOG_CATEGORY && !esControlEditado && form.orthoIncluded === null) {
+      toast.error("Elige cómo se cobra: incluido en el tratamiento o con costo aparte.");
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -174,6 +195,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
         duration: form.duration ? Number(form.duration) : null,
         description: form.description.trim() || null,
         isActive: form.isActive,
+        ...(form.category === ORTHO_CATALOG_CATEGORY && !esControlEditado ? { orthoIncludedInTreatment: form.orthoIncluded } : {}),
       };
 
       if (editing) {
@@ -190,6 +212,9 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
         setProcedures((prev) =>
           prev.map((p) => (p.id === updated.id ? updated : p))
         );
+        if (form.category === ORTHO_CATALOG_CATEGORY && !esControlEditado) {
+          setOrtoIncluidos((prev) => ({ ...prev, [updated.id]: form.orthoIncluded }));
+        }
         toast.success(t("pages.procedures.updated"));
         router.refresh();
       } else {
@@ -204,6 +229,9 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
         }
         const created: Procedure = await res.json();
         setProcedures((prev) => [created, ...prev]);
+        if (form.category === ORTHO_CATALOG_CATEGORY) {
+          setOrtoIncluidos((prev) => ({ ...prev, [created.id]: form.orthoIncluded }));
+        }
         toast.success(t("pages.procedures.created"));
         router.refresh();
       }
@@ -260,6 +288,12 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
   }
 
   const activeCount = procedures.filter((p) => p.isActive).length;
+  // El control de ortodoncia conserva sus reglas: no se le cambia el «incluido» ni la categoría.
+  const esControlEditado = Boolean(editing && editing.name === TIPO_CITA_CONTROL_ORTO && editing.category === ORTHO_CATALOG_CATEGORY);
+  // «Ortodoncia» se ofrece con el módulo activo; sin él, solo si el que se edita ya es de ortodoncia.
+  const categoriasOfrecidas = CATEGORY_OPTIONS.filter(
+    (c) => c.value !== ORTHO_CATALOG_CATEGORY || moduloOrtodoncia || editing?.category === ORTHO_CATALOG_CATEGORY,
+  );
 
   return (
     <div
@@ -377,6 +411,11 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                           <div className={rediseno ? styles.procName : "font-semibold text-foreground"}>
                             {p.name}
                           </div>
+                          {p.category === ORTHO_CATALOG_CATEGORY && etiquetaDeCobro(ortoIncluidos[p.id]) ? (
+                            <div className={rediseno ? styles.procDesc : "text-xs text-muted-foreground mt-0.5"}>
+                              {etiquetaDeCobro(ortoIncluidos[p.id])}
+                            </div>
+                          ) : null}
                           {p.description && (
                             <div className={rediseno ? styles.procDesc : "text-xs text-muted-foreground mt-0.5 line-clamp-1"}>
                               {p.description}
@@ -571,12 +610,13 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                   </label>
                   <select
                     value={form.category}
+                    disabled={esControlEditado}
                     onChange={(e) =>
                       setForm({ ...form, category: e.target.value })
                     }
                     className={rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"}
                   >
-                    {CATEGORY_OPTIONS.map((c) => (
+                    {categoriasOfrecidas.map((c) => (
                       <option key={c.value} value={c.value}>
                         {t(c.labelKey)}
                       </option>
@@ -599,6 +639,36 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                   />
                 </div>
               </div>
+
+              {form.category === ORTHO_CATALOG_CATEGORY ? (
+                esControlEditado ? (
+                  <p className={rediseno ? styles.fieldHint : "text-xs text-muted-foreground"}>
+                    «{TIPO_CITA_CONTROL_ORTO}» es fijo: su cobro depende del modo de cobro de la clínica (Ortodoncia → Configuración), no de un interruptor aquí.
+                  </p>
+                ) : (
+                  <fieldset className={rediseno ? styles.field : undefined} style={{ border: 0, padding: 0, margin: 0 }}>
+                    <legend className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
+                      ¿Cómo se cobra? <span aria-hidden="true">*</span>
+                    </legend>
+                    {([
+                      { valor: true, etiqueta: "Incluido en el tratamiento" },
+                      { valor: false, etiqueta: "Con costo aparte" },
+                    ] as const).map((op) => (
+                      <label key={String(op.valor)} className={rediseno ? styles.checkboxRow : "flex items-center gap-2 cursor-pointer select-none"}>
+                        <input
+                          type="radio"
+                          name="orto-cobro"
+                          required
+                          checked={form.orthoIncluded === op.valor}
+                          onChange={() => setForm({ ...form, orthoIncluded: op.valor })}
+                          className={rediseno ? styles.checkbox : "w-4 h-4 border-border text-brand-600 focus:ring-brand-500/40"}
+                        />
+                        <span className={rediseno ? undefined : "text-sm font-semibold text-muted-foreground"}>{op.etiqueta}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )
+              ) : null}
 
               <div className={rediseno ? styles.field : undefined}>
                 <label className={rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5"}>
