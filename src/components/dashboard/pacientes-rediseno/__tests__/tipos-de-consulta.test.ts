@@ -76,7 +76,13 @@ test("los dos selectores (el rediseñado y el de siempre) pintan las opciones de
 
   const ficha = sinComentarios(leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx"));
   assert.doesNotMatch(ficha, /<option value="(nutrition|psychology|medicine)"/);
-  assert.match(ficha, /const tiposConsulta = tiposDeConsulta\(\{ categoria: clinicCategory, moduloOrtodoncia: showOrthodontics \}\);/);
+  // Regla vigente (41a1ec21, lectura sin módulo activo): «Ortodoncia» solo se OFRECE con el módulo Y sin el modo solo
+  // lectura — quien solo puede leer su expediente no puede iniciar una consulta de ortodoncia.
+  assert.match(ficha, /const tiposConsulta = tiposDeConsulta\(\{ categoria: clinicCategory, moduloOrtodoncia: showOrthodontics && !orthoSoloLectura \}\);/);
+  const conLlave = tiposDeConsulta({ categoria: "DENTAL", moduloOrtodoncia: true }).map((t) => t.valor);
+  const soloLectura = tiposDeConsulta({ categoria: "DENTAL", moduloOrtodoncia: false }).map((t) => t.valor);
+  assert.ok(conLlave.includes(TIPO_ORTODONCIA), "con el módulo y con permisos de escritura se ofrece «Ortodoncia»");
+  assert.ok(!soloLectura.includes(TIPO_ORTODONCIA), "en solo lectura NO se ofrece «Ortodoncia»");
   assert.equal((ficha.match(/\{tiposConsulta\.map\(|tipos=\{tiposConsulta\}/g) ?? []).length, 2);
   // «Reset»: solo si la regla lo permite.
   assert.match(ficha, /const puedeRestablecerTipo =\s*permiteRestablecerTipo\(clinicCategory\) &&/);
