@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, CheckCircle2, Clock, AlertCircle, FileText, Search, X, Wallet,
@@ -153,6 +153,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   const [paymentMontoSugerido, setPaymentMontoSugerido] = useState(0);
   const [detailInvoice, setDetailInvoice]         = useState<any | null>(null);
   const [cfdiFor, setCfdiFor]                     = useState<any | null>(null);
+  const cfdiAbiertoParaRef = useRef<string | null>(null);
   // «Duplicar» de la ficha (solo diseño nuevo): Nueva factura abre con el mismo
   // paciente, los mismos conceptos y el mismo trato. Apagado, siempre null.
   const [duplicar, setDuplicar] = useState<{ patientId: string; patientName: string; borrador: BorradorDeFactura } | null>(null);
@@ -192,8 +193,10 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
     // async; solo pisa el formulario si sigue abierto para ESTA factura y el
     // usuario aún no lo tocó (sigue con lo que se precargó del paciente).
     const precargado = { rfc: inv.patient?.rfcPaciente ?? "", nombre: inv.patient?.razonSocialPac ?? "", cp: inv.patient?.cpPaciente ?? "" };
+    cfdiAbiertoParaRef.current = inv.id;
     pedirResponsableDeFactura(inv.id).then((responsable) => {
-      if (!responsable) return;
+      // Si mientras tanto se abrió el CFDI de OTRA factura, esta respuesta ya no es de esa.
+      if (!responsable || cfdiAbiertoParaRef.current !== inv.id) return;
       const { datos } = receptorInicial(null, responsable);
       setCfdiForm((f) => (f.rfc === precargado.rfc && f.nombre === precargado.nombre && f.cp === precargado.cp
         ? { ...f, rfc: datos.rfc, nombre: datos.nombre, regimenFiscal: datos.regimen, cp: datos.cp }

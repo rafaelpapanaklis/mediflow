@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { labelParentesco } from "@/lib/consent/default-signer";
 import { normalizarFiscales, type DatosFiscales, type ResponsableParaCfdi } from "./receptor-responsable";
+import { casoDeLaFacturaLigada } from "./cobro/extras-db";
 
 // Ortodoncia — ws1-t10, punto 9. Lee y guarda los datos fiscales del responsable
 // de pago de la factura de un caso. Las columnas (`sql/ortodoncia-responsable-
@@ -42,7 +43,16 @@ async function responsableDeLaFactura(clinicId: string, invoiceId: string): Prom
       where: { clinicId, invoiceId, deletedAt: null },
       select: { responsibleGuardianId: true },
     });
-    return plan?.responsibleGuardianId ?? null;
+    if (plan) return plan.responsibleGuardianId ?? null;
+    // No es la factura principal del tratamiento: puede ser un control o un extra del
+    // caso (en «Pago por control» casi todas). Se llega al caso por la columna de extras.
+    const casoId = await casoDeLaFacturaLigada(clinicId, invoiceId);
+    if (!casoId) return null;
+    const delCaso = await prisma.orthodonticTreatmentPlan.findFirst({
+      where: { id: casoId, clinicId, deletedAt: null },
+      select: { responsibleGuardianId: true },
+    });
+    return delCaso?.responsibleGuardianId ?? null;
   } catch (e) {
     const code = (e as { code?: string } | null)?.code;
     if (code === "P2021" || code === "P2022") return null;
