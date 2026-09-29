@@ -2878,6 +2878,14 @@ export const treatmentPlansHandler: EntityHandler = {
     // Estado del TRATAMIENTO entero («Tratamiento Activo» / «Tratamiento Finalizado»): manda sobre lo que se deduzca de las líneas.
     estadoTratamiento: ["estadotratamiento", "estadodeltratamiento", "estadoplan", "estadodelplan"],
     proximaVisita: ["proximavisita", "proximacita", "siguientevisita", "proximasesion"],
+    // Datos del renglón que hoy se pierden (ws1-t8, Dentalink 06): precio de lista, lo pagado de ESA prestación,
+    // categoría y código; del tratamiento, la especialidad del profesional y el convenio.
+    precioOriginal: ["preciooriginal", "preciodelista", "preciolista"],
+    abonadoLinea: ["pagadoprestacion", "pagadoporprestacion"],
+    categoria: ["nombrecategoria", "categoriaprestacion"],
+    codigoPrestacion: ["codigoprestacion", "codigodeprestacion"],
+    especialidad: ["especialidadprofesionaltratamiento", "especialidadprofesional", "especialidaddelprofesional"],
+    convenio: ["convenio", "conveniotratamiento", "conveniodeltratamiento"],
   },
 
   validateMapping(campos) {

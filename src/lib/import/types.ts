@@ -69,7 +69,8 @@ export type Entity =
  *                   tooth | quantity | price | discount | total | status | doctor
  *   treatmentPlans: name | lastName | phone | email | folio | date | title | procedure |
  *                   tooth | quantity | price | discount | total | doctor | estado |
- *                   fechaRealizado | abonado | fechaAbono | proximaVisita
+ *                   fechaRealizado | abonado | fechaAbono | proximaVisita | precioOriginal |
+ *                   abonadoLinea | categoria | codigoPrestacion | especialidad | convenio
  *   odontogram:     name | lastName | phone | email | patientExternalId | tooth | surface |
  *                   condition | notes
  *   treatmentNotes: name | lastName | phone | email | patientExternalId | folio | date |

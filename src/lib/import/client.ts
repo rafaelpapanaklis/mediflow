@@ -206,6 +206,12 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "fechaAbono", label: "Fecha del abono", labelKey: "shell.importClinic.fields.fechaAbono" },
     { value: "estadoTratamiento", label: "Estado del tratamiento (activo / finalizado)", labelKey: "shell.importClinic.fields.estadoTratamiento" },
     { value: "proximaVisita", label: "Próxima visita", labelKey: "shell.importClinic.fields.proximaVisita" },
+    { value: "precioOriginal", label: "Precio de lista (antes del descuento)", labelKey: "shell.importClinic.fields.precioOriginal" },
+    { value: "abonadoLinea", label: "Pagado de esta prestación", labelKey: "shell.importClinic.fields.abonadoLinea" },
+    { value: "categoria", label: "Categoría de la prestación", labelKey: "shell.importClinic.fields.categoria" },
+    { value: "codigoPrestacion", label: "Código de la prestación", labelKey: "shell.importClinic.fields.codigoPrestacion" },
+    { value: "especialidad", label: "Especialidad del profesional", labelKey: "shell.importClinic.fields.especialidad" },
+    { value: "convenio", label: "Convenio del tratamiento", labelKey: "shell.importClinic.fields.convenio" },
   ],
   odontogram: [
     NO_IMPORT,

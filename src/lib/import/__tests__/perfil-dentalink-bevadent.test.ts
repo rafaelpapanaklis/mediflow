@@ -110,11 +110,18 @@ test("06_Presupuestos_Detalle: presupuesto por «# Tratamiento», línea por «N
     assert.equal(m["Nombre Profesional Tratamiento"], "doctor", entidad);
     // Se REPITEN en cada fila del tratamiento: mapearlos a un total de línea lo duplicaría en cada línea.
     assert.equal(m["Total Presupuesto"], undefined, entidad);
-    assert.equal(m["Pagado Prestación"] || undefined, undefined, entidad + ": el pagado por línea no es lo abonado");
+    // El pagado por línea NUNCA es lo abonado del tratamiento («abonado»): en tratamientos se guarda por renglón
+    // (`abonadoLinea`, ws1-t8) y en presupuestos —historia sin dinero— se ignora.
+    assert.equal(m["Pagado Prestación"] || undefined, entidad === "treatmentPlans" ? "abonadoLinea" : undefined, entidad);
   }
   const tp = await vistaPrevia("treatmentPlans", csv("06.csv", PRESUPUESTOS, { "# Paciente": "1042", "# Tratamiento": "77", "Fecha de generación del tratamiento": "2026-05-12 10:30:00", "Nombre Prestación": "Profilaxis", "Precio Paciente": "1200" }));
   assert.equal(tp.suggestedMapping["Total Pagos Tratamiento"], "abonado", "lo abonado es del tratamiento (igual en todas sus líneas)");
   assert.equal(tp.suggestedMapping["Estado Tratamiento"], "estadoTratamiento");
+  // ws1-t8: lo que antes se perdía del renglón y del tratamiento.
+  for (const [col, campo] of Object.entries({
+    "Precio Original": "precioOriginal", "Nombre Categoría": "categoria", "Código Prestación": "codigoPrestacion",
+    "Especialidad Profesional Tratamiento": "especialidad", "Convenio Tratamiento": "convenio",
+  })) assert.equal(tp.suggestedMapping[col], campo, col);
   const q = await vistaPrevia("quotes", csv("06q.csv", PRESUPUESTOS, { "# Paciente": "1042", "# Tratamiento": "77", "Fecha de generación del tratamiento": "2026-05-12 10:30:00", "Nombre Prestación": "Profilaxis", "Precio Paciente": "1200" }));
   assert.equal(q.suggestedMapping["Total Pagos Tratamiento"], undefined, "presupuestos no lleva abonado");
   assert.equal(tp.suggestedMapping["Fecha Realización"], "fechaRealizado");

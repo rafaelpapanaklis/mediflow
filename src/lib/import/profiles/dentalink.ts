@@ -252,10 +252,18 @@ const dentalink: OriginProfile = {
       "Precio Paciente": "price",
       "Nombre Profesional Tratamiento": "doctor",
       // Lo abonado es del TRATAMIENTO («Total Pagos Tratamiento», igual en todas sus líneas): el motor toma el de la
-      // primera línea. «Pagado Prestación» es por línea y NO suma los pagos sin línea asignada (8 tratamientos,
-      // $117 627): se ignora.
+      // primera línea y ESE manda. «Pagado Prestación» es por línea y NO suma los pagos sin línea asignada
+      // (8 tratamientos, $117 627): se guarda en el renglón, pero no fija lo abonado.
       "Total Pagos Tratamiento": "abonado",
-      "Pagado Prestación": "",
+      // ws1-t8: lo que ya se pagó de CADA prestación, más lo que antes se perdía del renglón: el precio de lista
+      // (el descuento sale de «Precio Original» − «Precio Paciente»), categoría, código y, del tratamiento,
+      // la especialidad del profesional y el convenio.
+      "Pagado Prestación": "abonadoLinea",
+      "Precio Original": "precioOriginal",
+      "Nombre Categoría": "categoria",
+      "Código Prestación": "codigoPrestacion",
+      "Especialidad Profesional Tratamiento": "especialidad",
+      "Convenio Tratamiento": "convenio",
       "Estado Tratamiento": "estadoTratamiento",
       "N° Presupuesto": "folio",
       "Nº Presupuesto": "folio",
