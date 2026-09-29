@@ -125,7 +125,7 @@ export async function extrasPendientesPorCasos(clinicId: string, treatmentPlanId
         FROM "invoices"
        WHERE "clinicId" = ${clinicId}
          AND "orthodonticTreatmentPlanId" IN (${Prisma.join(treatmentPlanIds)})
-         AND "status" IN (${Prisma.join(ESTADOS_QUE_DEBEN)})
+         AND "status"::text IN (${Prisma.join(ESTADOS_QUE_DEBEN)})
          AND "appointmentId" IS NULL
          AND ("notes" IS NULL OR "notes" NOT LIKE '[control-hoja:%')`;
     for (const f of filas) {

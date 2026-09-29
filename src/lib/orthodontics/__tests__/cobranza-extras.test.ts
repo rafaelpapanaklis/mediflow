@@ -144,3 +144,11 @@ test("Cobranza monta «Enviar recordatorio» por fila solo a quien debe o está 
   assert.match(v, /f\.situacion === "vencido" \|\| f\.situacion === "por-vencer"\s*\?\s*\(\s*<EnviarRecordatorioButton patientId=\{f\.patientId\} treatmentPlanId=\{f\.planId\}/);
   assert.match(v, /\{puedeCobrar \? \(\s*<td role="cell" onClick=/);
 });
+
+test("ws1-t8: en el SQL crudo de extras, el enum InvoiceStatus se castea a texto (42883)", () => {
+  const src = leer("lib/orthodontics/cobro/extras-db.ts");
+  // Prisma manda ${…} como parámetro text: «"status" IN ($1,…)» sobre el enum revienta con
+  // «operator does not exist: "InvoiceStatus" = text».
+  assert.match(src, /"status"::text IN \(\$\{Prisma\.join\(ESTADOS_QUE_DEBEN\)\}\)/);
+  assert.doesNotMatch(src, /"status" IN \(\$\{/);
+});
