@@ -22,6 +22,7 @@ const state = {
   rawThrows: null as { code: string } | null,
   rawCount: 1,
   extrasVigentes: 0,
+  queryCounts: null as number[] | null,
   findFirstWheres: [] as Array<Record<string, unknown>>,
   updateManyArgs: [] as Array<Record<string, unknown>>,
   raws: [] as Llamada[],
@@ -54,7 +55,7 @@ mock.module("@/lib/prisma", {
       },
       patientFile: { findFirst: async () => state.archivo },
       $executeRaw: raw,
-      $queryRaw: async () => [{ n: state.extrasVigentes }],
+      $queryRaw: async () => [{ n: state.queryCounts ? (state.queryCounts.shift() ?? 0) : state.extrasVigentes }],
       $transaction: async (cb: (tx: unknown) => Promise<unknown>) => {
         state.txAbiertas++;
         return cb({
@@ -97,6 +98,7 @@ function reset() {
   state.rawThrows = null;
   state.rawCount = 1;
   state.extrasVigentes = 0;
+  state.queryCounts = null;
   state.findFirstWheres = [];
   state.updateManyArgs = [];
   state.raws = [];
@@ -153,13 +155,76 @@ test("quitar: juego de otra clínica o paciente que no puede ver → «no encont
 test("quitar: vistas sin columna, desconocidas o ya vacías fallan sin tocar nada", async () => {
   reset();
   const { quitarFotoDeVista } = await import("../fotosDelJuego");
-  for (const slotId of ["sobremordida", "resalte", "no-existe", "photoFrontalId", ""]) {
+  for (const slotId of ["no-existe", "photoFrontalId", "constructor", ""]) {
     const r = await quitarFotoDeVista({ setId: "set-1", slotId });
     assert.equal(r.ok, false, slotId);
   }
   const vacia = await quitarFotoDeVista({ setId: "set-1", slotId: "sonrisa" });
   assert.deepEqual(vacia, { ok: false, error: "Esa vista ya no tiene foto" });
   assert.equal(state.txAbiertas, 0);
+});
+
+test("sobremordida y resalte: su foto es una fila de extras con slotId; se sube una sola por vista", async () => {
+  reset();
+  const { agregarFotoExtra } = await import("../fotosDelJuego");
+  state.queryCounts = [0];
+  const r = await agregarFotoExtra({ setId: "set-1", fileId: "file-9", slot: "sobremordida", etiqueta: "no debe guardarse" });
+  assert.equal(r.ok, true);
+  const insert = state.raws.find((q) => /INSERT INTO "ortho_photo_extras"/.test(q.sql))!;
+  assert.match(insert.sql, /"slotId"/);
+  assert.ok(insert.values.includes("sobremordida") && insert.values.includes(CLINICA) && insert.values.includes("user-1"));
+  assert.ok(!insert.values.includes("no debe guardarse"), "la foto de una vista no lleva etiqueta");
+
+  // Ya hay una vigente en esa vista: hay que quitarla primero.
+  reset();
+  state.queryCounts = [1];
+  const otra = await agregarFotoExtra({ setId: "set-1", fileId: "file-9", slot: "resalte" });
+  assert.equal(otra.ok, false);
+  assert.match((otra as { error: string }).error, /quítala primero/);
+  assert.equal(state.raws.length, 0);
+
+  // Solo esas dos vistas; ni las de columna ni basura.
+  for (const slot of ["normal", "lat_der", "constructor", "x"]) {
+    reset();
+    state.queryCounts = [0];
+    assert.equal((await agregarFotoExtra({ setId: "set-1", fileId: "file-9", slot })).ok, false, slot);
+    assert.equal(state.raws.length, 0, slot);
+  }
+
+  // Sin la columna (segundo SQL sin pegar): aviso claro y nada se guarda.
+  reset();
+  state.queryCounts = [0];
+  state.rawThrows = { code: "42703" };
+  const sin = await agregarFotoExtra({ setId: "set-1", fileId: "file-9", slot: "resalte" });
+  assert.equal(sin.ok, false);
+  assert.match((sin as { error: string }).error, /Sobremordida y resalte todavía no se pueden guardar/);
+  assert.equal(state.audits.length, 0);
+});
+
+test("quitar sobremordida/resalte: se MARCA la fila de extras de esa vista (no se borra) y solo en su clínica y juego", async () => {
+  reset();
+  const { quitarFotoDeVista } = await import("../fotosDelJuego");
+  const r = await quitarFotoDeVista({ setId: "set-1", slotId: "resalte", motivo: "  borrosa " });
+  assert.equal(r.ok, true);
+  assert.equal(state.txAbiertas, 0, "no toca las columnas del juego");
+  const q = state.raws[0]!;
+  assert.match(q.sql, /UPDATE "ortho_photo_extras"/);
+  assert.match(q.sql, /"slotId" = \?/);
+  assert.match(q.sql, /"removedAt" IS NULL/);
+  assert.doesNotMatch(q.sql, /DELETE/i);
+  assert.ok(q.values.includes(CLINICA) && q.values.includes("set-1") && q.values.includes("resalte"));
+  assert.ok(q.values.includes("user-1") && q.values.includes("borrosa"));
+  assert.equal(state.audits.length, 1);
+
+  reset();
+  state.rawCount = 0;
+  const ya = await quitarFotoDeVista({ setId: "set-1", slotId: "sobremordida" });
+  assert.deepEqual(ya, { ok: false, error: "Esa vista ya no tiene foto" });
+
+  reset();
+  state.set = juego({ clinicId: "otra-clinica" });
+  assert.equal((await quitarFotoDeVista({ setId: "set-1", slotId: "resalte" })).ok, false);
+  assert.equal(state.raws.length, 0);
 });
 
 test("quitar: si la foto cambió entre tanto no se pisa; si falta la tabla avisa y no audita", async () => {

@@ -51,12 +51,14 @@ import {
   getCaseIntakeOptions,
 } from "@/app/actions/orthodontics";
 import { moverControlesFuturosAlDoctor } from "@/app/actions/orthodontics/moverControlesFuturosAlDoctor";
-import { isFailure } from "@/app/actions/orthodontics/result";
+import { isFailure, type ActionResult } from "@/app/actions/orthodontics/result";
 import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
 import { RUTA_CONTRATAR_ORTODONCIA } from "@/lib/orthodontics/contratar";
 import { alergiasReales } from "@/lib/alergias-reales";
 import { textoAsentimientoMenor } from "@/lib/orthodontics/asentimiento-menor";
 import { elegirSetParaFoto } from "@/lib/orthodontics/redesign/set-de-foto-por-visita";
+import { agregarFotoExtra } from "@/app/actions/orthodontics/fotosDelJuego";
+import { esVistaEnExtras } from "@/lib/orthodontics/fotos-del-juego";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
 import { CasosMigrados } from "./CasosMigrados";
 import { DrawerNewCase, type DrawerNewCaseDiagnosisPayload, type DrawerNewCasePlanPayload } from "./drawers/DrawerNewCase";
@@ -1028,11 +1030,11 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             // etapa) → POST /api/orthodontics/photos/upload →
             // uploadPhotoToSet → router.refresh() para que el loader
             // re-pinte con la URL firmada de Supabase.
+            // Sobremordida y resalte (ws1-t12) no tienen columna en OrthoPhotoSet:
+            // se guardan como fila de `ortho_photo_extras` con su `slotId`.
+            const enExtras = esVistaEnExtras(slotId);
             const view = SLOT_TO_VIEW[slotId];
-            if (!view) {
-              // Slot extra-AAO (sobremordida / resalte): no tienen columna
-              // en OrthoPhotoSet schema actual. Subir requiere ALTER TABLE
-              // (no servicio externo · backlog interno).
+            if (!view && !enExtras) {
               toast.error(t("patients.ortho.slotOutsideAao"));
               return;
             }
@@ -1069,7 +1071,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               const fd = new FormData();
               fd.append("file", file);
               fd.append("setId", setId);
-              fd.append("view", view);
+              fd.append("view", view ?? slotId);
               const res = await fetch(
                 "/api/orthodontics/photos/upload",
                 { method: "POST", body: fd },
@@ -1081,18 +1083,19 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               }
               const { fileId } = (await res.json()) as { fileId: string };
 
-              // 3. Asocia el PatientFile a la columna del set.
-              const attached = await uploadPhotoToSet({
-                setId,
-                fileId,
-                view,
-              });
+              // 3. Asocia el PatientFile a la columna del set (o, en
+              //    sobremordida/resalte, a su fila de la tabla de extras).
+              const attached: ActionResult<unknown> = view
+                ? await uploadPhotoToSet({ setId, fileId, view })
+                : await agregarFotoExtra({ setId, fileId, slot: slotId });
               if (isFailure(attached)) {
                 toast.error(attached.error);
                 return;
               }
 
-              toast.success(t("patients.ortho.photoUploaded", { view: view.replace(/_/g, " ").toLowerCase() }));
+              toast.success(
+                t("patients.ortho.photoUploaded", { view: (view ?? slotId).replace(/_/g, " ").toLowerCase() }),
+              );
               // 4. Re-pinta con URLs firmadas frescas del loader.
               router.refresh();
             } catch (e) {
@@ -1102,8 +1105,9 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
           }}
           onElegirFotoExistente={async (stage, slotId, fileId) => {
             // H55: la foto ya está en el expediente: se liga a la vista sin subirla otra vez.
+            const enExtras = esVistaEnExtras(slotId);
             const view = SLOT_TO_VIEW[slotId];
-            if (!view) return t("patients.ortho.slotOutsideAao");
+            if (!view && !enExtras) return t("patients.ortho.slotOutsideAao");
             if (!orthoRedesignVM.treatment.treatmentPlanId) return t("patients.ortho.noPlan");
             try {
               let setId = elegirSetParaFoto(orthoRedesignBundle?.historicalPhotoSets ?? [], stage);
@@ -1118,9 +1122,13 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                 if (isFailure(created)) return created.error;
                 setId = (created.data as { id: string }).id;
               }
-              const attached = await uploadPhotoToSet({ setId, fileId, view });
+              const attached: ActionResult<unknown> = view
+                ? await uploadPhotoToSet({ setId, fileId, view })
+                : await agregarFotoExtra({ setId, fileId, slot: slotId });
               if (isFailure(attached)) return attached.error;
-              toast.success(t("patients.ortho.photoUploaded", { view: view.replace(/_/g, " ").toLowerCase() }));
+              toast.success(
+                t("patients.ortho.photoUploaded", { view: (view ?? slotId).replace(/_/g, " ").toLowerCase() }),
+              );
               router.refresh();
               return null;
             } catch {

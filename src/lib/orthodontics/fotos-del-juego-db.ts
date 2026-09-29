@@ -7,12 +7,14 @@ import "server-only";
 // `clinicId` SIEMPRE de la sesión, nunca del cliente.
 
 import { prisma } from "@/lib/prisma";
-import { faltaLaTablaDeFotos } from "./fotos-del-juego";
+import { faltaLaColumnaDeFotos, faltaLaTablaDeFotos } from "./fotos-del-juego";
 
 export interface ExtraCrudo {
   id: string;
   photoSetId: string;
   label: string | null;
+  /** Vista del catálogo (sobremordida/resalte) si es la foto de una vista, no una extra. */
+  slotId: string | null;
   createdAt: Date;
   /** patient_files.url: ruta del bucket (hay que firmarla) o URL externa. */
   fileUrl: string | null;
@@ -29,19 +31,35 @@ export async function cargarExtrasDeJuegos(
   const porJuego = new Map<string, ExtraCrudo[]>();
   // `clinicId: undefined` no filtra: sin clínica no se consulta nada.
   if (!clinicId || setIds.length === 0) return porJuego;
+  type Fila = { id: string; photoSetId: string; label: string | null; slotId: string | null; createdAt: Date; fileUrl: string | null };
+  const leer = async (): Promise<Fila[]> => {
+    try {
+      return await prisma.$queryRaw<Fila[]>`
+        SELECT e."id", e."photoSetId", e."label", e."slotId", e."createdAt", f."url" AS "fileUrl"
+        FROM "ortho_photo_extras" e
+        JOIN "patient_files" f ON f."id" = e."fileId"
+        WHERE e."clinicId" = ${clinicId}
+          AND e."photoSetId" = ANY(${setIds}::text[])
+          AND e."removedAt" IS NULL
+        ORDER BY e."createdAt" ASC
+        LIMIT 500`;
+    } catch (e) {
+      // Aún sin la columna `slotId` (segundo SQL): las extras se leen como antes.
+      if (!faltaLaColumnaDeFotos(e)) throw e;
+      const filas = await prisma.$queryRaw<Omit<Fila, "slotId">[]>`
+        SELECT e."id", e."photoSetId", e."label", e."createdAt", f."url" AS "fileUrl"
+        FROM "ortho_photo_extras" e
+        JOIN "patient_files" f ON f."id" = e."fileId"
+        WHERE e."clinicId" = ${clinicId}
+          AND e."photoSetId" = ANY(${setIds}::text[])
+          AND e."removedAt" IS NULL
+        ORDER BY e."createdAt" ASC
+        LIMIT 500`;
+      return filas.map((f) => ({ ...f, slotId: null }));
+    }
+  };
   try {
-    const filas = await prisma.$queryRaw<
-      { id: string; photoSetId: string; label: string | null; createdAt: Date; fileUrl: string | null }[]
-    >`
-      SELECT e."id", e."photoSetId", e."label", e."createdAt", f."url" AS "fileUrl"
-      FROM "ortho_photo_extras" e
-      JOIN "patient_files" f ON f."id" = e."fileId"
-      WHERE e."clinicId" = ${clinicId}
-        AND e."photoSetId" = ANY(${setIds}::text[])
-        AND e."removedAt" IS NULL
-      ORDER BY e."createdAt" ASC
-      LIMIT 500`;
-    for (const f of filas) {
+    for (const f of await leer()) {
       const lista = porJuego.get(f.photoSetId) ?? [];
       lista.push({ ...f, createdAt: new Date(f.createdAt) });
       porJuego.set(f.photoSetId, lista);

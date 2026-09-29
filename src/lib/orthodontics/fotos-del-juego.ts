@@ -27,6 +27,19 @@ export function columnaDeVista(slotId: string): keyof PhotoSetIdColumns | null {
   return VIEW_TO_ID_COLUMN[SLOT_A_VISTA[slotId]!] ?? null;
 }
 
+/**
+ * Las 2 vistas del catálogo de la pantalla que NO tienen columna en
+ * `ortho_photo_sets` (el juego guarda 8 columnas tipadas). Se guardan como
+ * filas de `ortho_photo_extras` con `slotId` (sql/ortodoncia-fotos-sobremordida-
+ * resalte.sql): una sola vigente por juego y vista, y se quitan igual que las
+ * demás (se marcan, no se borran).
+ */
+export const SLOTS_EN_EXTRAS: readonly string[] = ["sobremordida", "resalte"];
+
+export function esVistaEnExtras(slotId: unknown): boolean {
+  return typeof slotId === "string" && SLOTS_EN_EXTRAS.includes(slotId);
+}
+
 export const MOTIVO_MAX = 300;
 export const ETIQUETA_MAX = 60;
 /** Tope de fotos extra por juego (el juego es un expediente, no una galería sin fondo). */
@@ -62,6 +75,18 @@ export function faltaLaTablaDeFotos(e: unknown): boolean {
   if (err.code === "42P01" || err.meta?.code === "42P01" || err.code === "P2021") return true;
   return typeof err.message === "string" && /ortho_photo_(extras|removals).*does not exist|42P01/i.test(err.message);
 }
+
+/** ¿Falta la columna `slotId` de `ortho_photo_extras` (segundo SQL sin pegar)? */
+export function faltaLaColumnaDeFotos(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  const err = e as { code?: string; meta?: { code?: string }; message?: string };
+  if (err.code === "P2010" && err.meta?.code === "42703") return true;
+  if (err.code === "42703" || err.meta?.code === "42703" || err.code === "P2022") return true;
+  return typeof err.message === "string" && /slotId.*does not exist|42703/i.test(err.message);
+}
+
+export const MENSAJE_SIN_COLUMNA_DE_VISTA =
+  "Sobremordida y resalte todavía no se pueden guardar en esta clínica: falta aplicar la actualización de la base.";
 
 export const MENSAJE_SIN_TABLA_DE_FOTOS =
   "Esta función todavía no está disponible en esta clínica: falta aplicar la actualización de la base.";

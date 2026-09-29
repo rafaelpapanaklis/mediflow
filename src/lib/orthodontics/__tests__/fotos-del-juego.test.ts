@@ -14,7 +14,10 @@ import {
   MOTIVO_MAX,
   SLOT_A_VISTA,
   columnaDeVista,
+  faltaLaColumnaDeFotos,
   faltaLaTablaDeFotos,
+  SLOTS_EN_EXTRAS,
+  esVistaEnExtras,
   limpiarEtiqueta,
   limpiarMotivo,
   nombreDeExtra,
@@ -138,4 +141,56 @@ test("pantalla: «Quitar foto» con confirmación y motivo en cada vista, y «Ag
   const catalogo = leer("src/components/specialties/orthodontics/redesign/sections/PhotoSlotIcon.tsx");
   const ids = [...catalogo.matchAll(/^\s*\{ id: "(\w+)", label: "[^"]+", group:/gm)].map((m) => m[1]);
   assert.equal(ids.at(-1), "oclusal_sup");
+});
+
+test("las 10 vistas se guardan: 8 en su columna y sobremordida/resalte en la tabla de extras, sin solaparse", () => {
+  const catalogo = leer("src/components/specialties/orthodontics/redesign/sections/PhotoSlotIcon.tsx");
+  const ids = [...catalogo.matchAll(/^\s*\{ id: "(\w+)", label: "[^"]+", group:/gm)].map((m) => m[1]!);
+  assert.equal(ids.length, 10);
+  for (const id of ids) {
+    // Cada vista tiene exactamente un destino.
+    assert.equal(Number(columnaDeVista(id) !== null) + Number(esVistaEnExtras(id)), 1, id);
+  }
+  assert.deepEqual([...SLOTS_EN_EXTRAS].sort(), ["resalte", "sobremordida"]);
+  for (const raro of ["", "normal", "constructor", "__proto__", null, undefined, 3]) assert.equal(esVistaEnExtras(raro), false);
+});
+
+test("columna que falta (segundo SQL sin pegar): se reconoce el 42703 y nada más", () => {
+  assert.equal(faltaLaColumnaDeFotos({ code: "P2010", meta: { code: "42703" } }), true);
+  assert.equal(faltaLaColumnaDeFotos(new Error('column e."slotId" does not exist')), true);
+  assert.equal(faltaLaColumnaDeFotos(new Error("timeout")), false);
+  assert.equal(faltaLaColumnaDeFotos(null), false);
+});
+
+test("el segundo SQL es aditivo e idempotente y solo toca ortho_photo_extras", () => {
+  const sql = leer("sql/ortodoncia-fotos-sobremordida-resalte.sql")
+    .replace(/--.*$/gm, "");
+  assert.match(sql, /ALTER TABLE IF EXISTS "ortho_photo_extras" ADD COLUMN IF NOT EXISTS "slotId" text/);
+  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS/);
+  assert.match(sql, /WHERE "slotId" IS NOT NULL AND "removedAt" IS NULL/);
+  assert.doesNotMatch(sql, /\b(DROP|DELETE|TRUNCATE|UPDATE|INSERT)\b/i);
+  assert.doesNotMatch(sql, /DO\s+\$\$/);
+  assert.doesNotMatch(sql, /ortho_photo_sets/, "no toca las columnas del juego");
+  assert.equal((sql.match(/ALTER TABLE/g) ?? []).length, 1);
+});
+
+test("la lectura vuelve a poner la foto en su casilla y tolera que falte la columna", () => {
+  const db = leer("src/lib/orthodontics/fotos-del-juego-db.ts");
+  assert.match(db, /e\."slotId"/);
+  assert.match(db, /faltaLaColumnaDeFotos\(e\)/, "sin la columna se leen las extras como antes");
+  const loader = leer("src/lib/orthodontics/redesign/loader.ts");
+  assert.match(loader, /esVistaEnExtras\(e\.slotId\)/);
+  assert.match(loader, /slots\[e\.slotId\] = \{ url, uploadedAt: cuando \}/);
+  // La foto de una vista NO se cuela en la lista de extras.
+  assert.match(loader, /if \(e\.slotId && esVistaEnExtras\(e\.slotId\)\) \{[\s\S]*?continue;/);
+});
+
+test("la pestaña ya no rechaza sobremordida/resalte: sube y elige del expediente por la tabla de extras", () => {
+  const tab = leer("src/components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx");
+  assert.equal((tab.match(/const enExtras = esVistaEnExtras\(slotId\);/g) ?? []).length, 2, "subir y elegir existente");
+  assert.equal((tab.match(/agregarFotoExtra\(\{ setId, fileId, slot: slotId \}\)/g) ?? []).length, 2);
+  assert.doesNotMatch(tab, /if \(!view\) \{/);
+  const ui = leer("src/components/specialties/orthodontics/redesign/sections/SectionPhotos.tsx");
+  assert.doesNotMatch(ui, /Aún no se guarda/);
+  assert.doesNotMatch(ui, /sinColumna/);
 });

@@ -38,7 +38,7 @@ import type {
   PhotoStage,
 } from "@/components/specialties/orthodontics/redesign/sections/SectionPhotos";
 import { cargarExtrasDeJuegos } from "@/lib/orthodontics/fotos-del-juego-db";
-import type { FotoExtra } from "@/lib/orthodontics/fotos-del-juego";
+import { esVistaEnExtras, type FotoExtra } from "@/lib/orthodontics/fotos-del-juego";
 import type {
   ConsentRow,
   LabOrderRow,
@@ -502,9 +502,9 @@ async function adaptPhotoSets(
     T2: "6 meses",
     CONTROL: "Control",
   };
-  // Map column → slot id que usa SectionPhotos. Las 8 vistas matchean los
-  // 8 slots persistibles (los slots `sobremordida`/`resalte` del mockup
-  // son extra-AAO y no tienen columna en OrthoPhotoSet).
+  // Map column → slot id que usa SectionPhotos. Las 8 columnas matchean los
+  // 8 slots con columna; `sobremordida`/`resalte` no la tienen en OrthoPhotoSet
+  // y se leen más abajo de la tabla de extras (`slotId`).
   const COLUMN_TO_SLOT: Record<string, string> = {
     photoFrontal: "normal",
     photoProfile: "lateral",
@@ -587,17 +587,19 @@ async function adaptPhotoSets(
       const i = extraIdx.get(e.id);
       const url = i === undefined ? "" : (signed[i] ?? "");
       if (!url) continue;
-      extras.push({
-        id: e.id,
-        url,
-        label: e.label,
-        uploadedAt: e.createdAt.toLocaleString("es-MX", {
-          day: "2-digit",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+      const cuando = e.createdAt.toLocaleString("es-MX", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
       });
+      // Sobremordida y resalte no tienen columna: su foto vive en la tabla de
+      // extras con `slotId` y aquí vuelve a su casilla (una vigente por vista).
+      if (e.slotId && esVistaEnExtras(e.slotId)) {
+        if (!slots[e.slotId]) slots[e.slotId] = { url, uploadedAt: cuando };
+        continue;
+      }
+      extras.push({ id: e.id, url, label: e.label, uploadedAt: cuando });
     }
     return {
       setId: s.id,

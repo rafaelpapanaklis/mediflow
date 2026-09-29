@@ -876,8 +876,9 @@ function MiniaturaDeFoto({ url, label }: { url: string; label: string }) {
  * «Ver juego completo»: las 10 vistas del juego. Las subidas se abren en
  * grande; los huecos ofrecen subir la foto — solo si la subida caería en ESTE
  * juego (el mismo criterio que usa la pestaña al subir: en CONTROL sube al de
- * hoy, no a uno viejo). Las dos vistas sin columna (sobremordida, resalte) no
- * se pueden guardar todavía y lo dicen en vez de fallar.
+ * hoy, no a uno viejo). Las 10 vistas se suben igual: sobremordida y resalte,
+ * que no tienen columna en el juego, la pestaña las guarda en la tabla de
+ * fotos extra con su vista (ver `fotos-del-juego.ts`).
  */
 function JuegoCompleto({
   set,
@@ -959,7 +960,6 @@ function JuegoCompleto({
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-[10px]">
         {slots.map((slot) => {
           const foto = fotoDe(slot.id);
-          const sinColumna = slot.id === "sobremordida" || slot.id === "resalte";
           return (
             <div key={slot.id} className="flex flex-col items-center">
               {foto ? (
@@ -980,8 +980,8 @@ function JuegoCompleto({
               ) : (
                 <HuecoParaSubir
                   slot={slot}
-                  puedeSubir={puedeSubir && !sinColumna}
-                  nota={sinColumna ? "Aún no se guarda" : puedeSubir ? null : "Sin foto"}
+                  puedeSubir={puedeSubir}
+                  nota={puedeSubir ? null : "Sin foto"}
                   onPick={(f) => subir(slot.id, f)}
                 />
               )}
