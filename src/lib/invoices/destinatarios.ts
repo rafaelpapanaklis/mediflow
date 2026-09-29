@@ -176,3 +176,17 @@ export function opcionesDeDestinoEnFicha(
   if (pac && rsp) lista.push({ valor: "ambos", texto: "Los dos" });
   return lista;
 }
+
+/**
+ * De los tutores registrados de un paciente, el que paga: el principal y responsable legal, si no el
+ * responsable legal, si no el principal. Uno que no es ni lo uno ni lo otro (un contacto cualquiera) no
+ * se toma como quien recibe el cobro. Mismo orden que «Responsable del pago» del alta del caso.
+ */
+export function elegirTutorPagador<T extends { principal?: boolean | null; esResponsableLegal?: boolean | null }>(tutores: readonly T[]): T | null {
+  return (
+    tutores.find((g) => g.principal && g.esResponsableLegal) ??
+    tutores.find((g) => g.esResponsableLegal) ??
+    tutores.find((g) => g.principal) ??
+    null
+  );
+}

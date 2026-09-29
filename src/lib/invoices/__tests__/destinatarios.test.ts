@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   destinatariosDeEnvio,
+  elegirTutorPagador,
   estadoDeEnvioEnFicha,
   opcionesDeDestinoEnFicha,
   esDestinoDeEnvio,
@@ -135,6 +136,10 @@ let planesPrincipales: any[] = [];
 let filasLigadas: any[] = [];
 let casosPorId: any[] = [];
 let columnaLigadaFalla = false;
+/** ws1-t10: las facturas sin caso ligado, su paciente, los casos activos del paciente y sus tutores. */
+let facturasConPaciente: any[] = [];
+let casosDelPaciente: any[] = [];
+let tutoresRegistrados: any[] = [];
 
 mock.module("@/lib/prisma", {
   namedExports: {
@@ -142,7 +147,22 @@ mock.module("@/lib/prisma", {
       orthodonticTreatmentPlan: {
         findMany: async ({ where }: any) => {
           llamadas.push({ modelo: "plan", where });
-          return where.invoiceId ? planesPrincipales : casosPorId;
+          if (where.invoiceId) return planesPrincipales;
+          if (where.patientId) return casosDelPaciente;
+          return casosPorId;
+        },
+      },
+      invoice: {
+        findMany: async ({ where }: any) => {
+          llamadas.push({ modelo: "invoice", where });
+          // Como la base: solo las facturas pedidas.
+          return facturasConPaciente.filter((f) => where.id.in.includes(f.id));
+        },
+      },
+      guardian: {
+        findMany: async ({ where }: any) => {
+          llamadas.push({ modelo: "guardian", where });
+          return tutoresRegistrados;
         },
       },
       $queryRaw: async () => {
@@ -160,6 +180,7 @@ describe("contactosDeResponsablesDeFacturas", () => {
     const { contactosDeResponsablesDeFacturas } = await import("@/lib/orthodontics/responsable-telefono-db");
     llamadas.length = 0;
     columnaLigadaFalla = false;
+    facturasConPaciente = []; casosDelPaciente = []; tutoresRegistrados = [];
     planesPrincipales = [{ invoiceId: "f-principal", responsibleGuardian: guardian({}) }];
     filasLigadas = [{ id: "f-control", plan: "caso-1" }, { id: "f-sin-responsable", plan: "caso-2" }];
     casosPorId = [{ id: "caso-1", responsibleGuardian: guardian({ fullName: "Pedro Ruiz", phone: null }) }, { id: "caso-2", responsibleGuardian: null }];
@@ -169,15 +190,58 @@ describe("contactosDeResponsablesDeFacturas", () => {
     assert.equal(m.get("f-control")!.nombre, "Pedro Ruiz");
     assert.equal(m.get("f-control")!.telefono, null);
     // Todo filtrado por la clínica de la sesión, y una tanda por paso (no una por factura).
-    assert.equal(llamadas.length, 2);
+    assert.equal(llamadas.filter((l) => l.modelo === "plan").length, 2);
     for (const l of llamadas) assert.equal(l.where.clinicId, "clinica-1");
     assert.deepEqual(llamadas[0].where.invoiceId.in, ["f-principal", "f-control", "f-sin-responsable", "f-suelta"]);
+  });
+
+  it("ws1-t10 · una factura NO ligada al caso encuentra al responsable por el PACIENTE: su caso activo, o su tutor registrado", async () => {
+    const { contactosDeResponsablesDeFacturas } = await import("@/lib/orthodontics/responsable-telefono-db");
+    llamadas.length = 0;
+    columnaLigadaFalla = false;
+    planesPrincipales = []; filasLigadas = []; casosPorId = [];
+    // MF-1030: del mismo paciente que MF-1031 (que sí es la del caso), pero sin caso ligado.
+    facturasConPaciente = [{ id: "mf-1030", patientId: "pac-1" }, { id: "mf-otra", patientId: "pac-2" }, { id: "mf-adulto", patientId: "pac-3" }];
+    casosDelPaciente = [
+      { patientId: "pac-1", responsibleGuardian: guardian({ fullName: "QA Orto R4 Papá Pruebas", parentesco: "FATHER", phone: "5500000012" }) },
+      { patientId: "pac-1", responsibleGuardian: guardian({ fullName: "Un caso más viejo" }) }, // el más reciente va primero: gana
+    ];
+    tutoresRegistrados = [
+      { patientId: "pac-2", fullName: "Tutora de pac-2", parentesco: "MOTHER", phone: "5533333333", email: null, principal: true, esResponsableLegal: true },
+      { patientId: "pac-3", fullName: "Contacto cualquiera", parentesco: "OTHER", phone: "5544444444", email: null, principal: false, esResponsableLegal: false },
+    ];
+    const m = await contactosDeResponsablesDeFacturas("clinica-1", ["mf-1030", "mf-otra", "mf-adulto"]);
+    assert.equal(m.get("mf-1030")!.nombre, "QA Orto R4 Papá Pruebas", "por el caso activo del paciente");
+    assert.equal(m.get("mf-1030")!.telefono, "5500000012");
+    assert.equal(m.get("mf-otra")!.nombre, "Tutora de pac-2", "sin caso: el tutor registrado que paga");
+    assert.equal(m.has("mf-adulto"), false, "un contacto que no es principal ni responsable legal no recibe cobros");
+    // Todo lo del paciente va acotado por la clínica de la sesión.
+    for (const l of llamadas) assert.equal(l.where.clinicId, "clinica-1", l.modelo);
+    const tutores = llamadas.find((l) => l.modelo === "guardian")!;
+    assert.deepEqual(tutores.where.patientId.in, ["pac-2", "pac-3"], "los tutores solo se piden de quien no tiene caso con responsable");
+  });
+
+  it("ws1-t10 · el responsable del caso LIGADO gana al del paciente, y sin ligar ni caso ni tutor no hay responsable", async () => {
+    const { contactosDeResponsablesDeFacturas } = await import("@/lib/orthodontics/responsable-telefono-db");
+    columnaLigadaFalla = false;
+    planesPrincipales = [{ invoiceId: "f-ligada", responsibleGuardian: guardian({ fullName: "El del caso" }) }];
+    filasLigadas = []; casosPorId = [];
+    facturasConPaciente = [{ id: "f-ligada", patientId: "pac-1" }, { id: "f-nada", patientId: "pac-9" }];
+    casosDelPaciente = [{ patientId: "pac-1", responsibleGuardian: guardian({ fullName: "Otro caso del paciente" }) }];
+    tutoresRegistrados = [];
+    const m = await contactosDeResponsablesDeFacturas("clinica-1", ["f-ligada", "f-nada"]);
+    assert.equal(m.get("f-ligada")!.nombre, "El del caso");
+    assert.equal(m.has("f-nada"), false);
+    // `Invoice.patientId` no admite null en Prisma: un `{ not: null }` lanza y el catch lo escondería.
+    assert.doesNotMatch(readFileSync(join(__dirname, "..", "..", "orthodontics", "responsable-telefono-db.ts"), "utf8"), /patientId: \{ not: null \}/);
+    const pedidas = llamadas.filter((l) => l.modelo === "invoice").flatMap((l) => l.where.id.in);
+    assert.ok(!pedidas.includes("f-ligada"), "la que ya tiene responsable por su caso no se busca por el paciente");
   });
 
   it("sin la columna de las facturas ligadas (o sin clínica o sin ids) no lanza: como si no hubiera responsable", async () => {
     const { contactosDeResponsablesDeFacturas } = await import("@/lib/orthodontics/responsable-telefono-db");
     columnaLigadaFalla = true;
-    planesPrincipales = [];
+    planesPrincipales = []; facturasConPaciente = []; casosDelPaciente = []; tutoresRegistrados = [];
     assert.equal((await contactosDeResponsablesDeFacturas("clinica-1", ["f1"])).size, 0);
     assert.equal((await contactosDeResponsablesDeFacturas("", ["f1"])).size, 0);
     assert.equal((await contactosDeResponsablesDeFacturas("clinica-1", [])).size, 0);
@@ -188,6 +252,20 @@ describe("contactosDeResponsablesDeFacturas", () => {
 
 const RAIZ = join(__dirname, "..", "..", "..", "..");
 const codigo = (rel: string) => readFileSync(join(RAIZ, rel), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+describe("elegirTutorPagador", () => {
+  it("principal y legal, luego legal, luego principal; un contacto cualquiera no", () => {
+    const a = { id: "a", principal: false, esResponsableLegal: false };
+    const b = { id: "b", principal: true, esResponsableLegal: false };
+    const c = { id: "c", principal: false, esResponsableLegal: true };
+    const d = { id: "d", principal: true, esResponsableLegal: true };
+    assert.equal(elegirTutorPagador([a, b, c, d])?.id, "d");
+    assert.equal(elegirTutorPagador([a, b, c])?.id, "c");
+    assert.equal(elegirTutorPagador([a, b])?.id, "b");
+    assert.equal(elegirTutorPagador([a]), null);
+    assert.equal(elegirTutorPagador([]), null);
+  });
+});
 
 describe("las tres rutas de envío", () => {
   for (const [ruta, canal] of [["send-whatsapp", "telefono"], ["send-email", "correo"], ["send-receipt", "telefono"]] as const) {
