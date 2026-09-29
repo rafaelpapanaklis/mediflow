@@ -30,6 +30,8 @@ import { esTipoFijo, motivoDeRechazo, nuevaClave } from "@/lib/orthodontics/tipo
 import { ORTHO_BILLING_MODE_LABELS, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import type { OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
 import { MAX_PLANTILLA, PLANTILLAS_ORTO, motivoDeRechazoDePlantillas } from "@/lib/orthodontics/plantillas-mensaje";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { mensajeDeQuitar, separarActivosYQuitados, textoConfirmarQuitar } from "@/lib/procedures/quitar-procedimiento";
 import { PreciosPorTecnica } from "./PreciosPorTecnica";
 import type { PreciosPorTecnica as TablaDePrecios } from "@/lib/orthodontics/precios-por-tecnica";
 
@@ -80,8 +82,11 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
   const [saving, setSaving] = useState(false);
   const [procedimientos, setProcedimientos] = useState<OrthoProcedureRow[]>(procedimientosIniciales);
   const [sembrando, setSembrando] = useState(false);
+  const [verQuitados, setVerQuitados] = useState(false);
+  // Solo los activos van en la lista; los quitados (archivados) esperan tras «Ver quitados».
+  const { activos, quitados } = separarActivosYQuitados(procedimientos);
 
-  const controlDelCatalogo = procedimientos.find((p) => p.name === TIPO_CITA_CONTROL_ORTO);
+  const controlDelCatalogo = activos.find((p) => p.name === TIPO_CITA_CONTROL_ORTO) ?? procedimientos.find((p) => p.name === TIPO_CITA_CONTROL_ORTO);
   const controlTienePrecio = Boolean(controlDelCatalogo?.isActive && controlDelCatalogo.basePrice > 0);
 
   async function cargarSugeridos() {
@@ -512,7 +517,7 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
           >
             <div className={s.tarjetaCuerpo}>
               <AgregarProcedimiento onCreado={recargarProcedimientos} />
-              {procedimientos.length === 0 ? (
+              {activos.length === 0 ? (
                 <div className={s.vacio}>
                   <span className={s.vacioIcono} aria-hidden>
                     <ClipboardList size={17} strokeWidth={1.75} />
@@ -530,11 +535,39 @@ export function OrthoConfiguracionClient({ settings, doctors, procedimientos: pr
                 </div>
               ) : (
                 <ul style={{ display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
-                  {procedimientos.map((p) => (
+                  {activos.map((p) => (
                     <FilaProcedimiento key={p.id} procedimiento={p} onGuardado={recargarProcedimientos} />
                   ))}
                 </ul>
               )}
+              {quitados.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setVerQuitados((v) => !v)}
+                    aria-expanded={verQuitados}
+                    style={{
+                      alignSelf: "flex-start",
+                      background: "none",
+                      border: 0,
+                      padding: 0,
+                      fontSize: 12,
+                      color: "var(--pr-texto-3)",
+                      textDecoration: "underline",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {verQuitados ? "Ocultar quitados" : `Ver quitados (${quitados.length})`}
+                  </button>
+                  {verQuitados ? (
+                    <ul style={{ display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
+                      {quitados.map((p) => (
+                        <FilaQuitada key={p.id} procedimiento={p} onCambio={recargarProcedimientos} />
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </Tarjeta>
         </div>
@@ -722,6 +755,8 @@ function FilaProcedimiento({ procedimiento, onGuardado }: { procedimiento: Ortho
   const [basePrice, setBasePrice] = useState(String(procedimiento.basePrice));
   const [incluido, setIncluido] = useState<boolean | null>(procedimiento.orthoIncludedInTreatment);
   const [guardando, setGuardando] = useState(false);
+  const [quitando, setQuitando] = useState(false);
+  const askConfirm = useConfirm();
   const idPrecio = useId();
 
   const precioValido = basePrice.trim() !== "" && Number.isFinite(Number(basePrice)) && Number(basePrice) >= 0;
@@ -755,6 +790,28 @@ function FilaProcedimiento({ procedimiento, onGuardado }: { procedimiento: Ortho
     }
   }
 
+  async function quitarFila() {
+    if (!(await askConfirm({
+      title: `Quitar «${procedimiento.name}»`,
+      description: textoConfirmarQuitar(procedimiento.name),
+      variant: "danger",
+      confirmText: "Quitar",
+    }))) return;
+    setQuitando(true);
+    try {
+      const res = await fetch(`/api/procedures/${procedimiento.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(data?.error ?? "No se pudo quitar el procedimiento.");
+        return;
+      }
+      toast.success(mensajeDeQuitar(procedimiento.name, { accion: data?.accion === "eliminado" ? "eliminado" : "archivado", usos: typeof data?.usos === "number" ? data.usos : null }));
+      await onGuardado();
+    } finally {
+      setQuitando(false);
+    }
+  }
+
   return (
     <li
       style={{
@@ -773,11 +830,6 @@ function FilaProcedimiento({ procedimiento, onGuardado }: { procedimiento: Ortho
         {esControl ? (
           <span style={{ display: "block", fontSize: 11.5, color: "var(--pr-texto-3)", marginTop: 2 }}>
             Su cobro depende del modo de cobro de la clínica (arriba), no de un interruptor aquí.
-          </span>
-        ) : null}
-        {!procedimiento.isActive ? (
-          <span style={{ display: "block", fontSize: 11.5, color: "var(--pr-alerta)", marginTop: 2 }}>
-            Inactivo — no aparece al facturar.
           </span>
         ) : null}
       </div>
@@ -836,6 +888,78 @@ function FilaProcedimiento({ procedimiento, onGuardado }: { procedimiento: Ortho
           {guardando ? "Guardando…" : "Guardar"}
         </ButtonNew>
       ) : null}
+
+      {!esControl ? (
+        <button
+          type="button"
+          onClick={quitarFila}
+          disabled={quitando}
+          aria-label={`Quitar ${procedimiento.name}`}
+          style={{
+            marginLeft: "auto",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "6px 10px",
+            fontSize: 12,
+            fontWeight: 600,
+            borderRadius: "var(--pr-radio-s)",
+            border: "1px solid var(--pr-borde)",
+            background: "var(--pr-tarjeta)",
+            color: "var(--pr-alerta)",
+            cursor: quitando ? "default" : "pointer",
+            opacity: quitando ? 0.6 : 1,
+          }}
+        >
+          <Trash2 size={13} strokeWidth={1.75} aria-hidden />
+          {quitando ? "Quitando…" : "Quitar"}
+        </button>
+      ) : null}
+    </li>
+  );
+}
+
+/** Un procedimiento quitado (archivado): solo se puede volver a activar. */
+function FilaQuitada({ procedimiento, onCambio }: { procedimiento: OrthoProcedureRow; onCambio: () => void | Promise<void> }) {
+  const [activando, setActivando] = useState(false);
+
+  async function reactivar() {
+    setActivando(true);
+    try {
+      const res = await fetch(`/api/procedures/${procedimiento.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: true }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error ?? "No se pudo volver a activar.");
+        return;
+      }
+      toast.success(`«${procedimiento.name}» activo otra vez.`);
+      await onCambio();
+    } finally {
+      setActivando(false);
+    }
+  }
+
+  return (
+    <li
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 12,
+        padding: "8px 12px",
+        border: "1px dashed var(--pr-borde)",
+        borderRadius: "var(--pr-radio-s)",
+        background: "var(--pr-tarjeta-2)",
+      }}
+    >
+      <span style={{ flex: "1 1 200px", minWidth: 0, fontSize: 13, color: "var(--pr-texto-2)" }}>{procedimiento.name}</span>
+      <ButtonNew type="button" variant="secondary" size="sm" onClick={reactivar} disabled={activando}>
+        {activando ? "Activando…" : "Volver a activar"}
+      </ButtonNew>
     </li>
   );
 }

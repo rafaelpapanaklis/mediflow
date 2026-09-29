@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { datosDeCambio, leerOrthoIncluido } from "../entrada";
 import { evaluarCambioDeOrtodoncia } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
+import { quitarProcedimiento } from "@/lib/procedures/quitar-procedimiento";
+import { quitarDepsPrisma } from "@/lib/procedures/quitar-procedimiento-db";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import {
   aplicarOrthoIncluido,
@@ -78,9 +80,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (denied) return denied;
 
   try {
-    await prisma.procedureCatalog.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
+    // Sin uso se elimina; con uso se ARCHIVA (isActive=false) para no romper
+    // facturas, presupuestos ni hojas. El control de ortodoncia no se quita.
+    const r = await quitarProcedimiento(quitarDepsPrisma, { clinicId: ctx.clinicId, id: params.id });
+    if (r.ok === false) return NextResponse.json({ error: r.error }, { status: r.status });
     revalidateAfter("procedures");
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, accion: r.accion, usos: r.usos });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? "Error" }, { status: 500 });
   }

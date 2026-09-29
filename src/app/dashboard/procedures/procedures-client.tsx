@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { formatCurrency } from "@/lib/utils";
+import { mensajeDeQuitar, separarActivosYQuitados, textoConfirmarQuitar } from "@/lib/procedures/quitar-procedimiento";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./procedures.module.css";
@@ -97,6 +98,9 @@ const EMPTY_FORM: FormState = {
   orthoIncluded: null,
 };
 
+/** Llave del grupo de inactivos (no es una categoría real). */
+const GRUPO_INACTIVOS = "__inactivos";
+
 export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {}, moduloOrtodoncia = false, ortoIncluidos: ortoIncluidosIniciales = {} }: Props) {
   const t = useT();
   const router = useRouter();
@@ -126,11 +130,15 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
   }, [procedures, search]);
 
   const grouped = useMemo(() => {
+    // Los inactivos no se mezclan con su categoría: van en su propio grupo, al final.
     const map: Record<string, Procedure[]> = {};
-    for (const p of filtered) {
+    const { activos, quitados } = separarActivosYQuitados(filtered);
+    for (const p of activos) {
       (map[p.category] ??= []).push(p);
     }
-    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+    const grupos = Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+    if (quitados.length > 0) grupos.push([GRUPO_INACTIVOS, quitados]);
+    return grupos;
   }, [filtered]);
 
   function openCreate() {
@@ -272,15 +280,25 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
   async function handleDelete(p: Procedure) {
     if (!(await askConfirm({
       title: t("pages.procedures.deleteTitle", { name: p.name }),
-      description: t("pages.procedures.deleteDescription"),
+      description: textoConfirmarQuitar(p.name),
       variant: "danger",
       confirmText: t("common.delete"),
     }))) return;
     try {
       const res = await fetch(`/api/procedures/${p.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      setProcedures((prev) => prev.filter((x) => x.id !== p.id));
-      toast.success(t("pages.procedures.deleted"));
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(data?.error ?? t("pages.procedures.deleteError"));
+        return;
+      }
+      if (data?.accion === "archivado") {
+        // Ya se usó: no se borra, queda inactivo (grupo de inactivos) y el historial lo conserva.
+        setProcedures((prev) => prev.map((x) => (x.id === p.id ? { ...x, isActive: false } : x)));
+        toast.success(mensajeDeQuitar(p.name, { accion: "archivado", usos: typeof data?.usos === "number" ? data.usos : null }));
+      } else {
+        setProcedures((prev) => prev.filter((x) => x.id !== p.id));
+        toast.success(t("pages.procedures.deleted"));
+      }
       router.refresh();
     } catch {
       toast.error(t("pages.procedures.deleteError"));
@@ -367,7 +385,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
             >
               <div className={rediseno ? styles.groupHead : "px-5 py-3 border-b border-border bg-muted/50"}>
                 <h2 className={rediseno ? styles.groupTitle : "text-xs font-bold uppercase tracking-wider text-muted-foreground"}>
-                  {CATEGORY_LABEL_KEY[category] ? t(CATEGORY_LABEL_KEY[category]) : category}
+                  {category === GRUPO_INACTIVOS ? "Inactivos" : CATEGORY_LABEL_KEY[category] ? t(CATEGORY_LABEL_KEY[category]) : category}
                   {rediseno ? (
                     <span className={styles.groupCount} style={{ marginLeft: 8 }}>{items.length}</span>
                   ) : (
@@ -490,8 +508,8 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                             </button>
                             <button
                               onClick={() => toggleActive(p)}
-                              title={p.isActive ? t("pages.procedures.deactivate") : t("pages.procedures.activate")}
-                              aria-label={`${p.isActive ? t("pages.procedures.deactivate") : t("pages.procedures.activate")}: ${p.name}`}
+                              title={p.isActive ? t("pages.procedures.deactivate") : "Volver a activar"}
+                              aria-label={`${p.isActive ? t("pages.procedures.deactivate") : "Volver a activar"}: ${p.name}`}
                               className={
                                 rediseno
                                   ? `${styles.actionBtn} ${p.isActive ? styles.actionWarn : styles.actionOk}`
@@ -504,6 +522,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                             >
                               <Power className="w-4 h-4" />
                             </button>
+                            {p.name === TIPO_CITA_CONTROL_ORTO && p.category === ORTHO_CATALOG_CATEGORY ? null : (
                             <button
                               onClick={() => handleDelete(p)}
                               title={t("common.delete")}
@@ -516,6 +535,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>
