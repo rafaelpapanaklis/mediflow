@@ -41,7 +41,8 @@ import {
 } from "@/lib/reminders/config";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import { dinero } from "@/lib/quotes/condiciones-pago";
-import { avisosDeCobranza, type MotivoDescarte } from "./core";
+import { ultimoAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
+import { avisosDeCobranza, type AvisoCobranza, type MotivoDescarte } from "./core";
 import { cargarFacturasCandidatas } from "./datos";
 
 /** Tipo de WhatsAppReminder de este aviso. La cola lo envía como texto legacy. */
@@ -100,6 +101,31 @@ export function fechaLarga(iso: string): string {
   }).format(new Date(Date.UTC(a, (m || 1) - 1, d || 1)));
 }
 
+/**
+ * ws1-t8 (auditoría de conexiones, punto 1): el tope de UN aviso de cobro por teléfono cada
+ * 24 h vale también para el barrido. Los avisos manuales (factura, Alertas, mensualidad) ya
+ * miraban al automático; aquí se mira al revés con la MISMA función (`ultimoAvisoDeCobro`,
+ * que cuenta manuales y automáticos). Quien ya recibió uno hoy se queda para la próxima corrida.
+ * De a 5 teléfonos por vez (el pooler no aguanta más de 7 consultas paralelas).
+ */
+export async function quitarAvisosConTope(
+  clinicId: string,
+  avisos: AvisoCobranza[],
+  ahora: Date,
+  ultimoAviso: (clinicId: string, phone: string, ahora: Date) => Promise<Date | null> = ultimoAvisoDeCobro,
+): Promise<{ vigentes: AvisoCobranza[]; conTope: number }> {
+  const vigentes: AvisoCobranza[] = [];
+  const TANDA = 5;
+  for (let i = 0; i < avisos.length; i += TANDA) {
+    const tanda = avisos.slice(i, i + TANDA);
+    const ultimos = await Promise.all(tanda.map((a) => ultimoAviso(clinicId, a.patientPhone, ahora).catch(() => null)));
+    tanda.forEach((a, j) => {
+      if (!ultimos[j]) vigentes.push(a);
+    });
+  }
+  return { vigentes, conTope: avisos.length - vigentes.length };
+}
+
 /** Procesa UNA clínica. Devuelve el conteo de la corrida. */
 export async function sweepCobranzaClinica(
   clinic: SweepClinic,
@@ -154,17 +180,20 @@ export async function sweepCobranzaClinica(
     if (typeof k === "string") yaAvisado.add(k);
   });
 
-  const { avisos, descartes } = avisosDeCobranza(facturas, {
+  const { avisos: candidatos, descartes } = avisosDeCobranza(facturas, {
     hoy,
     diasAntes: settings.diasAntes,
     yaAvisado,
     tope: opts?.cap ?? COBRANZA_MAX_PER_CLINIC,
   });
 
-  res.descartados = descartes.length;
+  const { vigentes: avisos, conTope } = await quitarAvisosConTope(clinic.id, candidatos, now);
+
+  res.descartados = descartes.length + conTope;
   descartes.forEach((d) => {
     res.motivos[d.motivo] = (res.motivos[d.motivo] ?? 0) + 1;
   });
+  if (conTope > 0) res.motivos.avisoDeCobroReciente = conTope;
   if (avisos.length === 0) return res;
 
   const filas = avisos.map((a) => ({

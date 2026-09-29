@@ -39,6 +39,8 @@ let clinicas: any[];
  * mayoría de las facturas no son de un caso de ortodoncia con tutor.
  */
 let planesOrtoConResponsable: any[];
+/** ws1-t8: el último aviso de cobro (manual o automático) por teléfono, según `ultimoAvisoDeCobro`. */
+let ultimosAvisos: Map<string, Date>;
 
 const plazos = (over: Partial<CondicionesPago> = {}): CondicionesPago => ({
   modo: "plazos",
@@ -82,6 +84,17 @@ beforeEach(() => {
   condiciones = new Map([["inv1", plazos()]]);
   clinicas = [clinica(ENCENDIDO)];
   planesOrtoConResponsable = [];
+  ultimosAvisos = new Map();
+});
+
+// ws1-t8: el barrido pregunta por el tope de 24 h con la MISMA función que los avisos manuales.
+(mock as any).module("@/lib/whatsapp/aviso-cobro-tope", {
+  namedExports: {
+    ultimoAvisoDeCobro: async (clinicId: string, phone: string) => {
+      assert.equal(clinicId, "c1", "el tope se mira por clínica");
+      return ultimosAvisos.get(phone.replace(/\D/g, "").slice(-10)) ?? null;
+    },
+  },
 });
 
 (mock as any).module("@/lib/prisma", {
@@ -468,4 +481,35 @@ test("dos pacientes distintos sí reciben su aviso cada uno", async () => {
   condiciones.set("inv2", plazos());
   const r = await barrer();
   assert.equal(r.encolados, 2, "el tope es por paciente, no por clínica");
+});
+
+/* ═══ ws1-t8 (auditoría de conexiones, punto 1): el tope de 24 h frente a los avisos MANUALES ═══ */
+
+test("ws1-t8: si recepción ya mandó un aviso de cobro a ese teléfono hoy, el barrido NO encola otro", async () => {
+  ultimosAvisos.set("9992602093", new Date(AHORA.getTime() - 3 * 60 * 60 * 1000));
+  const r = await barrer();
+  assert.equal(r.encolados, 0);
+  assert.equal(encolados.length, 0, "no se escribió ninguna fila");
+  assert.equal(r.motivos.avisoDeCobroReciente, 1, "y consta por qué");
+});
+
+test("ws1-t8: otro teléfono sin aviso reciente sí sale, aunque un vecino esté topado", async () => {
+  ultimosAvisos.set("9992602093", new Date(AHORA.getTime() - 60 * 1000));
+  facturas = [
+    factura(),
+    factura({ id: "inv2", patientId: "p2", patient: { ...factura().patient, firstName: "Beto", phone: "999 111 2222" } }),
+  ];
+  condiciones.set("inv2", plazos());
+  const r = await barrer();
+  assert.equal(r.encolados, 1);
+  assert.equal(encolados[0].patientPhone, "999 111 2222");
+});
+
+test("ws1-t8: sin aviso previo el barrido sigue igual, y usa ultimoAvisoDeCobro (sin duplicar la lógica)", async () => {
+  const r = await barrer();
+  assert.equal(r.encolados, 1);
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(require("node:path").join(__dirname, "..", "sweep.ts"), "utf8");
+  assert.match(src, /ultimoAvisoDeCobro/);
+  assert.doesNotMatch(src, /lastSentOfKind|payment_notice/, "no reimplementa la consulta del tope");
 });

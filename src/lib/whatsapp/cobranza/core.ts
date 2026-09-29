@@ -70,7 +70,9 @@ export type MotivoDescarte =
   | "todaviaNoTocaAvisar"
   | "yaAvisado"
   /** El paciente ya recibe otro aviso en esta corrida (dos planes a plazos). */
-  | "otroAvisoDelMismoPaciente";
+  | "otroAvisoDelMismoPaciente"
+  /** Ya salió otro aviso de cobro (manual o automático) a ese teléfono en las últimas 24 h (ws1-t8). */
+  | "avisoDeCobroReciente";
 
 /** Un aviso listo para encolar. */
 export interface AvisoCobranza {
