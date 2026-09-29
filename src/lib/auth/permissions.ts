@@ -415,6 +415,26 @@ function permisosDeSabinaEnCurso(): ReadonlySet<string> | null {
   return conjunto instanceof Set ? (conjunto as ReadonlySet<string>) : new Set<string>();
 }
 
+/**
+ * Lo que lee en pantalla quien no tiene un permiso (H14, revisión final): dice
+ * QUÉ le falta y a quién pedirlo, no la llave técnica. La llave viaja aparte en
+ * el campo `permiso` del 403 para quien la necesite (Sabina, pruebas).
+ */
+const ACCION_SIN_PERMISO: Partial<Record<PermissionKey, string>> = {
+  "billing.charge": "cobrar",
+  "billing.refund": "reembolsar o cancelar facturas",
+  "billing.deposit": "pedir anticipos",
+  "billing.deposit.register": "registrar anticipos recibidos",
+  "billing.edit": "editar facturas",
+  "billing.create": "crear facturas",
+  "billing.view": "ver la facturación",
+};
+
+export function mensajeSinPermiso(keys: PermissionKey[]): string {
+  const acciones = keys.map((k) => ACCION_SIN_PERMISO[k] ?? `«${ALL_PERMISSIONS[k] ?? k}»`);
+  return `No tienes permiso para ${acciones.join(" ni para ")}. Pídeselo al administrador.`;
+}
+
 // ════════════════════════════════════════════════════════════════════
 // Helpers de validación (para el endpoint PATCH /api/team/[id]/permissions)
 // ════════════════════════════════════════════════════════════════════

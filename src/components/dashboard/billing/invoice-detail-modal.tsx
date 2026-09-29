@@ -52,6 +52,7 @@ import { ModalPedirAnticipo } from "./modal-pedir-anticipo";
 import ant from "@/components/dashboard/cobros-inventario-rediseno/anticipo.module.css";
 // Registrar anticipo recibido (ws1-t3 fase 2).
 import { ModalRegistrarAnticipo } from "./modal-registrar-anticipo";
+import { AnularAnticipo } from "./anular-anticipo";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
@@ -234,7 +235,11 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // `useCobro` hace el MISMO POST que PaymentModal, con el mismo cuerpo, y al
   // terminar corre el mismo handlePaymentSuccess. Con el interruptor apagado
   // `cobrable` es false: el hook no hace nada y sigue saliendo PaymentModal.
-  const cobrable = rediseno && !!invoice && ["DRAFT", "PENDING", "PARTIAL", "OVERDUE"].includes(invoice.status);
+  // H14: los botones de cobro solo con el permiso real de la sesión (lo trae
+  // /api/invoices/[id]/permisos-cobro). Arrancan en false: el lado seguro mientras responde.
+  const [puedeCobrar, setPuedeCobrar] = useState(false);
+  const [puedeTimbrar, setPuedeTimbrar] = useState(false);
+  const cobrable = rediseno && puedeCobrar && !!invoice && ["DRAFT", "PENDING", "PARTIAL", "OVERDUE"].includes(invoice.status);
   // ws1-t10 (H68): antes solo se leían las condiciones con el diseño nuevo
   // (para BloquePlan). El monto inicial del cobro las necesita EN LOS DOS
   // caminos — con y sin el interruptor, `PaymentModal` de abajo también abre
@@ -307,6 +312,19 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     return () => { vivo = false; };
   }, [open, invoice?.id, anticipoTick]);
 
+  // H14 — permisos de cobro de ESTA sesión, de su propio endpoint (no del de
+  // anticipos). Falla cerrado: sin respuesta buena, los botones no salen.
+  useEffect(() => {
+    setPuedeCobrar(false); setPuedeTimbrar(false);
+    if (!open || !invoice?.id) return;
+    let vivo = true;
+    fetch(`/api/invoices/${invoice.id}/permisos-cobro`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (vivo) { setPuedeCobrar(d?.puedeCobrar === true); setPuedeTimbrar(d?.puedeTimbrar === true); } })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [open, invoice?.id]);
+
   // «Enviar recibo» (ws1-t3 fase 3): nunca automático, solo al pulsarlo.
   const enviarRecibo = useCallback(async () => {
     if (!invoice?.id || enviandoRecibo) return;
@@ -365,7 +383,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // Con Mercado Pago elegido no hay «Registrar pago»: el link está en la sección
   // y el pago lo registra el webhook al acreditarse (ws1-t1).
   const cobroPorMercadoPago = cobrable && mpDisponible && cobro.method === "mercadopago";
-  const botonRegistrarPago = cobroPorMercadoPago ? null : (
+  const botonRegistrarPago = !puedeCobrar || cobroPorMercadoPago ? null : (
     <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={cobro.submit} disabled={busy || cobro.saving || cobro.isInvalid || descuentoPendiente}>
       {cobro.saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: cobro.amountNum ? " · " + fmtMXNdec(cobro.amountNum) : "" })}
     </ButtonNew>
@@ -891,6 +909,17 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 <MessageCircle size={14} aria-hidden /> {enviandoRecibo ? "Enviando…" : "Enviar recibo"}
               </button>
             )}
+
+            {/* H7 (revisión final, ws1-t4): un anticipo registrado por error
+                se anula con motivo; solo con permiso de cobro (lo decide su
+                GET). Se pinta solo si hay alguno anulable. */}
+            <AnularAnticipo
+              invoiceId={invoice.id}
+              abierta={open}
+              recarga={anticipoTick}
+              onListo={() => { void onMutated(); void refrescarFactura(); setAnticipoTick((n) => n + 1); }}
+              className={cx("inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted/40 disabled:opacity-50", c.boton)}
+            />
             </div>
 
             {/* Conceptos */}
@@ -999,7 +1028,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               <>
                 {/* Diseño nuevo: el formulario ya está arriba, así que este
                     botón registra el pago (confirmando antes el borrador). */}
-                {rediseno ? botonRegistrarPago : (
+                {rediseno ? botonRegistrarPago : puedeCobrar && (
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={handleConfirmAndPay} disabled={busy}>
                   {t("clinical.invoiceDetail.chargeNow", { amount: fmtMXNdec(invoice.total) })}
                 </ButtonNew>
@@ -1022,7 +1051,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
             {/* PENDIENTE / PARCIAL */}
             {isPending && (
               <>
-                {rediseno ? botonRegistrarPago : (
+                {rediseno ? botonRegistrarPago : puedeCobrar && (
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={() => setPaymentOpen(true)} disabled={busy}>
                   {t("clinical.invoiceDetail.collectPayment", { amount: fmtMXNdec(invoice.balance) })}
                 </ButtonNew>
@@ -1031,14 +1060,16 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     plazos eso borra el calendario de cuotas por un descuido (ws1-t4 #69):
                     ahí se cobra con «Cobrar», que pide el monto (y si de verdad es
                     todo, se teclea todo). */}
-                {!esPlanAPlazos(condicionesPago) && (
+                {puedeCobrar && !esPlanAPlazos(condicionesPago) && (
                   <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
                     {t("clinical.invoiceDetail.markPaid")}
                   </ButtonNew>
                 )}
+                {puedeEnviarRecibo && (
                 <ButtonNew variant="secondary" icon={<MessageCircle size={14} aria-hidden />} onClick={() => handleSendWhatsApp()} disabled={busy}>
                   {t("clinical.invoiceDetail.sendWhatsApp")}
                 </ButtonNew>
+                )}
                 {canEditPrice && (
                   <>
                     <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => openSub("edit-price")} disabled={busy}>
@@ -1093,7 +1124,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     {t("clinical.invoiceDetail.downloadXml")}
                   </ButtonNew>
                 </>
-              ) : (
+              ) : puedeTimbrar && (
                 <ButtonNew variant="secondary" icon={<Receipt size={14} aria-hidden />} onClick={openCfdiForm} disabled={busy}>
                   {t("clinical.invoiceDetail.cfdiInvoiceBtn")}
                 </ButtonNew>

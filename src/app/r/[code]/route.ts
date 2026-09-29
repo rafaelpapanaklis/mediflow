@@ -1,3 +1,4 @@
+import { urlPublicaDe } from "@/lib/url-publica";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
@@ -47,7 +48,7 @@ const CODE_RE = /^[A-Za-z0-9]{4,24}$/;
 
 /** Home limpia. NextResponse.redirect es 307 por defecto; aquí queremos 302. */
 function redirectHome(req: NextRequest): NextResponse {
-  return NextResponse.redirect(new URL("/", req.url), 302);
+  return NextResponse.redirect(urlPublicaDe(req, "/"), 302);
 }
 
 export async function GET(req: NextRequest, { params }: { params: { code: string } }) {

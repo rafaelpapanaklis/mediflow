@@ -388,12 +388,12 @@ export function herramientaDeAccion<P, D>(accion: SabinaAccion<P, D>): SabinaToo
  * escribir (p. ej. al sincronizar Google).
  */
 export function desenlaceDeEndpoint(r: RespuestaEndpoint, verbo: string): SabinaEjecucion {
-  const cuerpo = (r.cuerpo ?? {}) as { error?: unknown; reason?: unknown };
+  const cuerpo = (r.cuerpo ?? {}) as { error?: unknown; reason?: unknown; permiso?: unknown };
   const error = typeof cuerpo.error === "string" ? cuerpo.error : "";
   if (r.status >= 200 && r.status < 300) return { ok: true, frase: "Listo." };
   if (r.status === 401) return { ok: false, tipo: "sin_permiso", frase: "Se cerró tu sesión. Vuelve a entrar y pídemelo otra vez." };
   if (r.status === 403) {
-    const clave = error.startsWith("Permiso requerido: ") ? error.slice("Permiso requerido: ".length) : "";
+    const clave = typeof cuerpo.permiso === "string" ? cuerpo.permiso : error.startsWith("Permiso requerido: ") ? error.slice("Permiso requerido: ".length) : "";
     return {
       ok: false,
       tipo: "sin_permiso",

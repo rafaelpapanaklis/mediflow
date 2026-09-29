@@ -1,3 +1,4 @@
+import { urlPublicaDe } from "@/lib/url-publica";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   BARBER_AFF_COOKIE,
@@ -42,7 +43,7 @@ export const runtime = "nodejs";
 
 /** Registro de barberías. 302 (NextResponse.redirect es 307 por default). */
 function redirectToSignup(req: NextRequest): NextResponse {
-  return NextResponse.redirect(new URL("/barber/registro", req.url), 302);
+  return NextResponse.redirect(urlPublicaDe(req, "/barber/registro"), 302);
 }
 
 function clientIp(req: NextRequest): string | null {

@@ -11,7 +11,7 @@
 
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
-import { hasPermission, type PermissionKey } from "./permissions";
+import { hasPermission, mensajeSinPermiso, type PermissionKey } from "./permissions";
 
 interface UserLike {
   role: any;
@@ -44,7 +44,8 @@ export function denyIfMissingPermission(user: UserLike, key: PermissionKey): Nex
   };
   if (!hasPermission(userForPerm, key)) {
     return NextResponse.json(
-      { error: `Permiso requerido: ${key}` },
+      // `error` es lo que lee la persona; `permiso` la llave, para quien la parsea.
+      { error: mensajeSinPermiso([key]), permiso: key },
       { status: 403 },
     );
   }
@@ -65,7 +66,7 @@ export function denyIfMissingAnyPermission(user: UserLike, keys: PermissionKey[]
   };
   if (keys.some((key) => hasPermission(userForPerm, key))) return null;
   return NextResponse.json(
-    { error: `Permiso requerido: ${keys.join(" o ")}` },
+    { error: mensajeSinPermiso(keys), permiso: keys.join(" o ") },
     { status: 403 },
   );
 }

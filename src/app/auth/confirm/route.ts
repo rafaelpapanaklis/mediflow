@@ -1,3 +1,4 @@
+import { origenPublicoDe } from "@/lib/url-publica";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,7 +16,8 @@ import { createClient } from "@/lib/supabase/server";
  * pedir otro enlace); el resto conserva /login?error=invalid_token.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = origenPublicoDe(request, request.url);
   const token_hash = searchParams.get("token_hash");
   const type       = searchParams.get("type") as any;
   const code       = searchParams.get("code");

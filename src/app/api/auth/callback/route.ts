@@ -1,3 +1,4 @@
+import { origenPublicoDe } from "@/lib/url-publica";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
@@ -13,7 +14,8 @@ import { prisma } from "@/lib/prisma";
  *     se encarga de crear la Clinic sin re-crear al user Supabase.
  */
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = origenPublicoDe(request, request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
 

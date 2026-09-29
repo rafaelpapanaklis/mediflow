@@ -1,3 +1,4 @@
+import { origenPublicoDe } from "@/lib/url-publica";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabaseAdmin.auth.admin.generateLink({
     type: "magiclink",
     email: user.email,
-    options: { redirectTo: `${req.nextUrl.origin}/dashboard` },
+    options: { redirectTo: `${origenPublicoDe(req, req.url)}/dashboard` },
   });
 
   if (error || !data?.properties?.hashed_token) {
@@ -96,13 +97,13 @@ export async function GET(req: NextRequest) {
   }
 
   // 7. Build the magic link URL and redirect
-  const magicLinkUrl = new URL(`${req.nextUrl.origin}/api/auth/callback`);
+  const magicLinkUrl = new URL(`${origenPublicoDe(req, req.url)}/api/auth/callback`);
   magicLinkUrl.searchParams.set("token_hash", data.properties.hashed_token);
   magicLinkUrl.searchParams.set("type", "email");
   magicLinkUrl.searchParams.set("next", "/dashboard");
 
   // Add a banner param so the dashboard knows we're in admin mode
-  const finalUrl = `${req.nextUrl.origin}/auth/confirm?token_hash=${data.properties.hashed_token}&type=email&next=/dashboard`;
+  const finalUrl = `${origenPublicoDe(req, req.url)}/auth/confirm?token_hash=${data.properties.hashed_token}&type=email&next=/dashboard`;
 
   const response = NextResponse.redirect(finalUrl);
   // Setear la cookie activeClinicId firmada para la clínica impersonada.

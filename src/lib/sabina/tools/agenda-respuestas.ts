@@ -91,7 +91,7 @@ export function interpretarRespuestaAgenda(
   }
 
   if (status === 403) {
-    const key = /^Permiso requerido: (.+)$/.exec(error)?.[1];
+    const key = typeof b.permiso === "string" ? b.permiso : /^Permiso requerido: (.+)$/.exec(error)?.[1];
     if (key) {
       const nombre = (ALL_PERMISSIONS as Record<string, string>)[key as PermissionKey] ?? key;
       return r("sin_permiso", `No tienes el permiso «${nombre}»; lo da el administrador en Equipo. No se guardó nada.`);
