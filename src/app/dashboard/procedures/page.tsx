@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ProceduresClient } from "./procedures-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { costoDeRecetaPorProcedimiento } from "@/lib/inventory/costo-receta.server";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export default async function ProceduresPage() {
@@ -18,12 +19,13 @@ export default async function ProceduresPage() {
   // sin fila o con error → false = el catálogo de hoy, tal cual). En
   // paralelo con la consulta del catálogo, no en cascada: no añade un viaje
   // extra a la base y la respuesta vive 60 s en memoria por clínica.
-  const [procedures, rediseno] = await Promise.all([
+  const [procedures, rediseno, costoReceta] = await Promise.all([
     prisma.procedureCatalog.findMany({
       where: { clinicId: user.clinicId },
       orderBy: [{ isActive: "desc" }, { category: "asc" }, { name: "asc" }],
     }),
     menuDosNivelesEncendido(user.clinicId),
+    costoDeRecetaPorProcedimiento(user.clinicId),
   ]);
 
   return (
@@ -31,6 +33,7 @@ export default async function ProceduresPage() {
       key={user.clinicId}
       initialProcedures={procedures as any}
       rediseno={rediseno}
+      costoReceta={costoReceta}
     />
   );
 }

@@ -7,7 +7,8 @@ import { formatCurrency } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./procedures.module.css";
-import { margenDe } from "./margen";
+import { gastoDe, margenDe } from "./margen";
+import { costoDeRecetaAction } from "@/app/actions/procedure-recipe-cost";
 // Mismos tokens `--pr-*` e Instrument Sans del rediseño de Pacientes: es el
 // idioma visual ya aprobado por Rafael, no uno nuevo. Se heredan por CSS
 // (custom properties), así que reutilizarlos aquí no acopla este módulo al
@@ -42,6 +43,8 @@ interface Procedure {
 
 interface Props {
   initialProcedures: Procedure[];
+  /** Costo de la receta de materiales por procedimiento (id → pesos). */
+  costoReceta?: Record<string, number>;
   /**
    * Interruptor `menu-dos-niveles` de la clínica activa. Aditivo: en `false`
    * (o sin pasar) la pantalla se pinta exactamente igual que hoy — ni una
@@ -82,7 +85,7 @@ const EMPTY_FORM: FormState = {
   isActive: true,
 };
 
-export function ProceduresClient({ initialProcedures, rediseno = false }: Props) {
+export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {} }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -92,6 +95,8 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
   const [editing, setEditing] = useState<Procedure | null>(null);
   // WS1-T5 — receta de materiales.
   const [materialesDe, setMaterialesDe] = useState<Procedure | null>(null);
+  // H18: costo de la receta de cada procedimiento; alimenta GASTO/MARGEN sin gasto manual.
+  const [costoReceta, setCostoReceta] = useState<Record<string, number>>(costoRecetaInicial);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
@@ -353,7 +358,8 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                   </thead>
                   <tbody>
                     {items.map((p) => {
-                      const margen = margenDe(p.basePrice, p.cost);
+                      const gasto = gastoDe(p.cost, costoReceta[p.id]);
+                      const margen = margenDe(p.basePrice, gasto ? gasto.monto : null);
                       return (
                       <tr
                         key={p.id}
@@ -381,7 +387,12 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
                           {formatCurrency(p.basePrice)}
                         </td>
                         <td className={rediseno ? styles.costCell : "px-3 py-3 text-right text-muted-foreground whitespace-nowrap tabular-nums"}>
-                          {p.cost != null ? formatCurrency(p.cost) : "—"}
+                          {gasto ? formatCurrency(gasto.monto) : "—"}
+                          {gasto?.origen === "receta" && (
+                            <div style={{ fontSize: 11, fontWeight: 400 }} title="Suma de los materiales de la receta">
+                              según receta
+                            </div>
+                          )}
                         </td>
                         {/* Sin gasto no hay margen: ni 0 ni el precio (ver ./margen). */}
                         <td className={rediseno ? styles.marginCell : "px-3 py-3 text-right font-semibold text-foreground whitespace-nowrap tabular-nums"}>
@@ -646,7 +657,11 @@ export function ProceduresClient({ initialProcedures, rediseno = false }: Props)
         <MaterialesModal
           procedureId={materialesDe.id}
           procedureName={materialesDe.name}
-          onClose={() => setMaterialesDe(null)}
+          onClose={() => {
+            setMaterialesDe(null);
+            // La receta pudo cambiar: se recalcula el gasto sin recargar la página.
+            costoDeRecetaAction().then(setCostoReceta).catch(() => {});
+          }}
         />
       )}
     </div>
