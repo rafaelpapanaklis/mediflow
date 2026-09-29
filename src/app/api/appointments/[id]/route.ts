@@ -52,6 +52,7 @@ import type {
   UpdateAppointmentInput,
 } from "@/lib/agenda/types";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el include para que appointmentToDTO pueda enmascarar
@@ -615,6 +616,8 @@ export async function DELETE(
     action: "delete",
     before: { status: existing.status, patientId: existing.patientId, doctorId: existing.doctorId, startsAt: existing.startsAt },
   });
+  // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».
+  await marcarPendienteSiHayDinero({ clinicId: session.clinic.id, appointmentId: params.id, userId: session.user.id, quien: session.user.displayName });
 
   // Google Calendar sync — borrar el evento del calendario si existia
   try {

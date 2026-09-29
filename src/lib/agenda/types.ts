@@ -289,6 +289,12 @@ export interface BatchValidateResult {
 export interface StatusChangeInput {
   status: AppointmentStatus;
   reason?: string;
+  /**
+   * H15 (ws1-t4): al CANCELLED de una cita cuya factura tiene dinero pagado,
+   * qué hacer con él. Solo cuenta con permiso de cobro; sin él (o sin este
+   * campo) queda «pendiente de decidir».
+   */
+  dineroCita?: "a_favor" | "reembolso";
 }
 
 export interface CreateWaitlistInput {

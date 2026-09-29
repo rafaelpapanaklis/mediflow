@@ -58,6 +58,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 
 export const dynamic = "force-dynamic";
 
@@ -336,6 +337,10 @@ export async function POST(
 
   // Best-effort FUERA de la tx: nunca rompen la respuesta.
   // Los recordatorios ya se reprogramaron DENTRO de la transacción.
+  // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».
+  if (type === "CANCEL") {
+    await marcarPendienteSiHayDinero({ clinicId: appt.clinicId, appointmentId: appt.id, quien: "el paciente (portal)" });
+  }
   try {
     await notifyPatientChangeResolution(crId);
   } catch (err) {

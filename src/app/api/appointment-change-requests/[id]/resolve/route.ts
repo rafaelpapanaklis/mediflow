@@ -30,6 +30,7 @@ import { bookingRuleBody } from "@/lib/agenda/booking-rules";
 import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 
 export const dynamic = "force-dynamic";
 
@@ -196,6 +197,8 @@ export async function POST(
     });
 
     revalidateAfter("appointments");
+    // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».
+    await marcarPendienteSiHayDinero({ clinicId: session.clinic.id, appointmentId: appointment.id, userId: session.user.id, quien: session.user.displayName });
     await notifyBestEffort(cr.id);
     return NextResponse.json({ ok: true, status: "APPROVED" });
   }

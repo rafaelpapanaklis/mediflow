@@ -65,6 +65,7 @@ import { useMinuto } from "./usar-minuto";
 import { ROPA_EDITAR_CITA } from "./ropa";
 import s from "./agenda-nueva.module.css";
 import { plazoApartadoEnPalabras } from "@/lib/agenda-nueva/plazo-apartado";
+import { useCancelarConDinero, type DineroDeLaCitaDTO } from "./cancelar-con-dinero";
 
 /* ═══ Flujo de la cita ══════════════════════════════════════════════════
    El diseño enseña cinco pasos: Confirmada → Llegó → En consulta → Atendida
@@ -182,6 +183,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   const router = useRouter();
   const { open: abrirNuevaCita } = useNewAppointmentDialog();
   const confirmarConMotivo = useConfirmWithReason();
+  // H15 (ws1-t4): cancelar una cita con dinero pagado pregunta qué hacer con él.
+  const cancelarConDinero = useCancelarConDinero();
 
   const [enVuelo, setEnVuelo] = useState<AppointmentStatus | null>(null);
   const [enviandoWa, setEnviandoWa] = useState(false);
@@ -265,7 +268,21 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
       }
 
       let motivo: string | undefined;
-      if (esCancelar) {
+      let dineroCita: "a_favor" | "reembolso" | undefined;
+      // H15 (decisión de Rafael, opción A — ws1-t4): si la factura de la cita
+      // tiene dinero pagado, el diálogo lo dice y (con permiso de cobro)
+      // pregunta si queda a favor o se marca para reembolso.
+      const dinero: DineroDeLaCitaDTO | null = esCancelar
+        ? await fetch(`/api/appointments/${dto.id}/dinero-cita`)
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        : null;
+      if (esCancelar && dinero && dinero.pagado > 0) {
+        const r = await cancelarConDinero.preguntar(dinero);
+        if (!r.confirmed) return false;
+        motivo = r.reason?.trim() || undefined;
+        dineroCita = r.dineroCita;
+      } else if (esCancelar) {
         const r = await confirmarConMotivo({
           title: "¿Cancelar esta cita?",
           description:
@@ -285,8 +302,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
       dispatch({ type: "OPTIMISTIC_STATUS", id: dto.id, status: destino });
 
       try {
-        const actualizada = motivo
-          ? await patchConMotivo(dto.id, destino, motivo)
+        const actualizada = motivo || dineroCita || (dinero && dinero.pagado > 0)
+          ? await patchConMotivo(dto.id, destino, motivo, dineroCita)
           : await patchAppointmentStatus(dto.id, destino);
         startTransition(() => {
           dispatch({ type: "REPLACE_APPOINTMENT", appointment: actualizada });
@@ -312,7 +329,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         setEnVuelo(null);
       }
     },
-    [dto, permissions, confirmarConMotivo, dispatch, invalidateRangeCache, router],
+    [dto, permissions, confirmarConMotivo, cancelarConDinero, dispatch, invalidateRangeCache, router],
   );
 
   const enviarWhatsapp = useCallback(async () => {
@@ -394,6 +411,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
 
   return (
     <>
+      {cancelarConDinero.elemento}
       <aside className={`${s.panel} ${s.panelCita}`} aria-label="Detalle de la cita">
         <div className={s.panelCabecera}>
           <span className={s.panelRotulo}>Cita</span>
@@ -819,14 +837,23 @@ function origenCorto(source: string): string {
 async function patchConMotivo(
   id: string,
   status: AppointmentStatus,
-  reason: string,
+  reason: string | undefined,
+  dineroCita?: "a_favor" | "reembolso",
 ): Promise<AgendaAppointmentDTO> {
   const res = await fetch(`/api/appointments/${id}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status, reason }),
+    body: JSON.stringify({ status, reason, dineroCita }),
   });
   const cuerpo = await res.json().catch(() => ({}));
   if (!res.ok) throw { status: res.status, ...cuerpo };
+  // H15: qué pasó con el dinero de la cita, dicho en palabras.
+  const d = cuerpo.dineroCita as { decision: string | null; monto: number; motivo: string | null } | null | undefined;
+  if (d && d.monto > 0) {
+    const monto = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(d.monto);
+    if (d.decision === "a_favor") toast.success(`Cita cancelada. ${monto} quedaron a favor del paciente.`);
+    else if (d.decision === "reembolso") toast(`Cita cancelada. ${monto} marcados para reembolso: devuélvelos fuera y regístralo con «Reembolsar».`, { duration: 9000 });
+    else toast(`Cita cancelada. ${monto} quedaron pendientes de decidir en la factura.${d.motivo ? ` ${d.motivo}` : ""}`, { duration: 9000 });
+  }
   return cuerpo.appointment ?? cuerpo;
 }

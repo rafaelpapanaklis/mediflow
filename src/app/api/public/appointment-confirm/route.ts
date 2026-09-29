@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
+import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   const appt = await prisma.appointment.findUnique({
     where: { confirmToken: token },
-    select: { id: true, startsAt: true, status: true, holdExpiresAt: true },
+    select: { id: true, clinicId: true, startsAt: true, status: true, holdExpiresAt: true },
   });
   // 404 genérico: no se distingue entre token inexistente o mal formado.
   if (!appt) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -66,6 +67,8 @@ export async function POST(req: NextRequest) {
         cancelReason: "Canceló desde el enlace de confirmación",
       },
     });
+    // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».
+    await marcarPendienteSiHayDinero({ clinicId: appt.clinicId, appointmentId: appt.id, quien: "el paciente (enlace de confirmación)" });
     return NextResponse.json({ status: "CANCELLED", changed: true });
   }
   if (appt.status === "CANCELLED") {

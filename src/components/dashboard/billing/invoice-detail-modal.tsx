@@ -53,6 +53,7 @@ import ant from "@/components/dashboard/cobros-inventario-rediseno/anticipo.modu
 // Registrar anticipo recibido (ws1-t3 fase 2).
 import { ModalRegistrarAnticipo } from "./modal-registrar-anticipo";
 import { AnularAnticipo } from "./anular-anticipo";
+import { AvisoDineroCitaCancelada } from "./aviso-dinero-cita-cancelada";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
@@ -848,6 +849,15 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   <p className={cx("text-[11px] mt-1 whitespace-pre-line", c.notasTexto)}>{invoice.notes}</p>
                 </div>
               )}
+              {/* H15 (opción A, ws1-t4): la cita se canceló con dinero pagado. */}
+              <AvisoDineroCitaCancelada
+                invoiceId={invoice.id}
+                notas={invoice.notes}
+                pagado={invoice.paid}
+                estado={invoice.status}
+                puedeCobrar={puedeCobrar}
+                onListo={() => { void onMutated(); void refrescarFactura(); setAnticipoTick((n) => n + 1); }}
+              />
             </div>
 
             {/* Ver / copiar el link de Mercado Pago (ws1-t1): solo si la clínica

@@ -13,6 +13,8 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 import type { StatusChangeInput } from "@/lib/agenda/types";
 import { avisarCitaPorWhatsApp } from "@/lib/whatsapp/avisos-cita";
+import { decidirDineroDeCitaCancelada, dineroDeLaCita } from "@/lib/anticipos/cita-cancelada.server";
+import { decisionEfectiva } from "@/lib/anticipos/cita-cancelada-core";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -185,6 +187,34 @@ export async function PATCH(
     });
   }
 
+  // H15 (decisión de Rafael, opción A — ws1-t4): la cita ya está cancelada;
+  // si su factura tiene dinero pagado, se decide qué pasa con él en su propio
+  // paso (con el candado de la factura). Solo quien tiene permiso de cobro
+  // elige «a favor» o «reembolso»; si no, o si «a favor» no se puede ahora
+  // (factura timbrada, efectivo del turno abierto), queda «pendiente de
+  // decidir». No lanza: la cancelación ya está hecha.
+  let dineroCita: { decision: string | null; monto: number; motivo: string | null } | null = null;
+  if (body.status === "CANCELLED") {
+    try {
+      const d = await dineroDeLaCita(session.clinic.id, params.id);
+      if (d) {
+        const puedeCobrar = denyIfMissingPermission(session.user, "billing.charge") === null;
+        const pedida = decisionEfectiva(body.dineroCita, puedeCobrar);
+        const base = { clinicId: session.clinic.id, invoiceId: d.facturaId, userId: session.user.id, quien: session.user.displayName };
+        let r = await decidirDineroDeCitaCancelada({ ...base, decision: pedida });
+        let motivo = r.motivo;
+        if (!r.ok && pedida !== "pendiente") {
+          r = await decidirDineroDeCitaCancelada({ ...base, decision: "pendiente" });
+        } else if (r.ok) {
+          motivo = null;
+        }
+        dineroCita = { decision: r.aplicada, monto: d.pagado, motivo };
+      }
+    } catch (e) {
+      console.error("[appointments/status] dinero de la cita cancelada:", e);
+    }
+  }
+
   // Aviso de cancelación al paciente: solo si la clínica lo encendió en
   // Dashboard → WhatsApp (nace apagado). NO_SHOW no avisa: el paciente ya sabe
   // que no fue. No lanza: el cambio de estado ya está hecho.
@@ -201,6 +231,6 @@ export async function PATCH(
   revalidateAfter("appointments");
   revalidatePatientProfile(updated.patientId);
   return NextResponse.json(
-    { appointment: appointmentToDTO(updated, session.clinic.category), whatsapp },
+    { appointment: appointmentToDTO(updated, session.clinic.category), whatsapp, dineroCita },
   );
 }
