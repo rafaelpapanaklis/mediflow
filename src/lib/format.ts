@@ -1,10 +1,17 @@
 // Helpers de formato — usados por las pages refactorizadas al estilo Claude Design.
 
-export const fmtMXN = (n: number): string =>
-  "$" + (n ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+// Un monto negativo lleva el signo ANTES del $ («-$50.00», no «$-50.00»). Un
+// negativo que redondea a cero se pinta sin signo («$0», nunca «-$0»).
+function pesosConSigno(n: number, decimales: 0 | 2): string {
+  const v = Number.isFinite(n) ? n : 0;
+  const cuerpo = Math.abs(v).toLocaleString("es-MX", { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+  const esCero = Number(Math.abs(v).toFixed(decimales)) === 0;
+  return (v < 0 && !esCero ? "-" : "") + "$" + cuerpo;
+}
 
-export const fmtMXNdec = (n: number): string =>
-  "$" + (n ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const fmtMXN = (n: number): string => pesosConSigno(n ?? 0, 0);
+
+export const fmtMXNdec = (n: number): string => pesosConSigno(n ?? 0, 2);
 
 export function formatRelativeDate(date: Date | string | null | undefined): string {
   if (!date) return "—";
