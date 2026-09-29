@@ -57,6 +57,8 @@ export interface PatientHeaderProps {
   onStartVisit?: () => void;
   onScheduleNext?: () => void;
   onCollect?: () => void;
+  /** ws1-t4: «Cobrar» espera a que cargue el cobro del caso (o su factura). */
+  collectCargando?: boolean;
   onMore?: () => void;
   /** Abre la hoja de control de hoy. Solo llega con un caso abierto. */
   onStartControl?: () => void;
@@ -171,8 +173,10 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
               size="md"
               icon={<DollarSign size={15} strokeWidth={1.75} aria-hidden />}
               onClick={props.onCollect}
+              disabled={props.collectCargando}
+              aria-busy={props.collectCargando || undefined}
             >
-              Cobrar
+              {props.collectCargando ? "Cargando cobro…" : "Cobrar"}
             </Btn>
           ) : null}
           {props.onMore ? (

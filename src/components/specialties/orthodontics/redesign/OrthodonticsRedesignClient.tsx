@@ -12,7 +12,7 @@ import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 // ws1-t4: «Cobrar» de la cabecera → ventana completa de la factura del caso.
 import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
-import { cobroPrincipalDelCaso, type CobroPrincipal } from "@/lib/orthodontics/cobro/cobro-principal";
+import { accionDeCobrarCabecera, cobroPrincipalDelCaso, type CobroPrincipal } from "@/lib/orthodontics/cobro/cobro-principal";
 import {
   getTreatmentCardContextForPatient,
 } from "@/app/actions/orthodontics/getTreatmentCardContextForPatient";
@@ -470,21 +470,43 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   // pestaña Facturación. Ahora abre la ventana completa de la factura del caso
   // con «Registrar pago» abierto — la MISMA factura y el MISMO monto que
   // «Cobrar · $X» de la Sección F (cobro-principal.ts). Sin permiso de cobro,
-  // no hay botón. Mientras el panel carga (o si falló), o si el caso no tiene
-  // nada que cobrar (sin factura, o pagada), el botón hace lo de siempre: ir a
-  // Facturación, donde se crea o se ve la factura.
+  // no hay botón. Segunda pasada (fallo A): un clic mientras el cobro del caso
+  // aún carga (o si falló) ya NO cae en Facturación: el botón dice «Cargando
+  // cobro…», se espera (o se reintenta) y la ventana se abre sola al llegar.
+  // Solo si el caso no tiene factura que cobrar va a Facturación, donde se crea.
   const panelListo = panelDeCobro && panelDeCobro !== "cargando" && panelDeCobro !== "error" ? panelDeCobro : null;
   const cobroDeCabecera = panelListo?.puedeCobrar ? cobroPrincipalDelCaso(panelListo) : null;
   const [cobrandoDesdeCabecera, setCobrandoDesdeCabecera] = useState<
     (CobroPrincipal & { rediseno: boolean; clinicTaxMode: string | null }) | null
   >(null);
-  const onCollectCabecera = !props.patientHeader?.onCollect
-    ? undefined
-    : panelListo && !panelListo.puedeCobrar
-      ? undefined
-      : cobroDeCabecera && panelListo
-        ? () => setCobrandoDesdeCabecera({ ...cobroDeCabecera, rediseno: panelListo.redisenoFacturas, clinicTaxMode: panelListo.clinicTaxMode })
-        : props.patientHeader.onCollect;
+  // El clic que espera a que llegue el cobro, y la ventana que ya se pidió pero
+  // aún trae su factura: mientras tanto el botón está «cargando».
+  const [cobroPendiente, setCobroPendiente] = useState(false);
+  const [abriendoVentanaDeCobro, setAbriendoVentanaDeCobro] = useState(false);
+  const irAFacturacion = props.patientHeader?.onCollect;
+  const abrirCobroDeCabecera = useCallback(() => {
+    if (!panelListo || !cobroDeCabecera) return;
+    setAbriendoVentanaDeCobro(true);
+    setCobrandoDesdeCabecera({ ...cobroDeCabecera, rediseno: panelListo.redisenoFacturas, clinicTaxMode: panelListo.clinicTaxMode });
+  }, [panelListo, cobroDeCabecera]);
+  const accionCobrar = accionDeCobrarCabecera(panelListo ?? (panelDeCobro === "cargando" || panelDeCobro === "error" ? panelDeCobro : null), cobroDeCabecera !== null);
+  const pulsarCobrarCabecera = () => {
+    if (accionCobrar === "abrir") abrirCobroDeCabecera();
+    else if (accionCobrar === "esperar") setCobroPendiente(true);
+    else if (accionCobrar === "reintentar") { setCobroPendiente(true); recargarPanelDeCobro(); }
+    else if (accionCobrar === "facturacion") irAFacturacion?.();
+  };
+  // Llegó (o volvió a fallar) el cobro que esperaba un clic: se resuelve UNA vez.
+  useEffect(() => {
+    if (!cobroPendiente || panelDeCobro === "cargando") return;
+    setCobroPendiente(false);
+    if (accionCobrar === "abrir") abrirCobroDeCabecera();
+    else if (accionCobrar === "facturacion") irAFacturacion?.();
+    else if (accionCobrar === "reintentar") toast.error("No se pudo cargar el cobro del caso. Vuelve a pulsar «Cobrar».");
+    // "oculto": sin permiso, el botón desaparece y no se abre nada.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cobroPendiente, panelDeCobro]);
+  const onCollectCabecera = !irAFacturacion || accionCobrar === "oculto" ? undefined : pulsarCobrarCabecera;
 
   const cardForDrawer =
     drawer?.kind === "tcard"
@@ -532,6 +554,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           onStartVisit={props.patientHeader.onStartVisit}
           onScheduleNext={props.patientHeader.onScheduleNext}
           onCollect={onCollectCabecera}
+          collectCargando={cobroPendiente || abriendoVentanaDeCobro}
           onMore={props.patientHeader.onMore}
           // Registrar el control es lo que se hace veinte veces al día: va
           // arriba, a la vista, y manda sobre los demás botones. Mismo
@@ -781,8 +804,9 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           montoSugerido={cobrandoDesdeCabecera.montoSugerido}
           rediseno={cobrandoDesdeCabecera.rediseno}
           clinicTaxMode={cobrandoDesdeCabecera.clinicTaxMode}
-          onClose={() => setCobrandoDesdeCabecera(null)}
+          onClose={() => { setCobrandoDesdeCabecera(null); setAbriendoVentanaDeCobro(false); }}
           onRefrescar={recargarPanelDeCobro}
+          onLista={() => setAbriendoVentanaDeCobro(false)}
         />
       ) : null}
 

@@ -256,7 +256,7 @@ test("«Editar» (tarjeta de Caja y del expediente, y la ventana completa) abre 
 // Revisión panel.108 (fallo 3): «Cobrar» que solo navegaba
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { cobroPrincipalDelCaso, montoDelCobroPrincipal } from "../../../../lib/orthodontics/cobro/cobro-principal";
+import { accionDeCobrarCabecera, cobroPrincipalDelCaso, montoDelCobroPrincipal } from "../../../../lib/orthodontics/cobro/cobro-principal";
 
 test("cobro principal del caso: factura y monto (la regla de «Cobrar · $X»)", () => {
   const plazos = {
@@ -283,7 +283,7 @@ test("la Sección F y la cabecera de Ortodoncia usan la MISMA regla", () => {
   const c = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
   assert.match(c, /const cobroDeCabecera = panelListo\?\.puedeCobrar \? cobroPrincipalDelCaso\(panelListo\) : null;/);
   assert.match(c, /onCollect=\{onCollectCabecera\}/);
-  assert.match(c, /panelListo && !panelListo\.puedeCobrar\s*\? undefined/, "sin permiso de cobro no hay «Cobrar» en la cabecera");
+  assert.match(c, /const onCollectCabecera = !irAFacturacion \|\| accionCobrar === "oculto" \? undefined : pulsarCobrarCabecera;/, "sin permiso de cobro no hay «Cobrar» en la cabecera");
   assert.match(c, /<CobrarEnFactura\s+invoiceId=\{cobrandoDesdeCabecera\.invoiceId\}\s+montoSugerido=\{cobrandoDesdeCabecera\.montoSugerido\}/);
 });
 
@@ -378,4 +378,32 @@ test("el editor dice lo mismo antes de mandar: piso de lo pagado y aviso del pla
   assert.match(m, /disabled=\{saving \|\| bajoLoPagado\}/);
   assert.match(m, /\.\.\.\(avisoPlan \|\| avisoPlanServidor \? \{ planAvisado: true \} : \{\}\)/);
   assert.match(m, /res\.status === 409 && out\?\.code === CODIGO_PLAN_SE_RECALCULA/);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Segunda pasada panel.108 (fallo A): «Cobrar» de la cabecera antes de que cargue
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("«Cobrar» de la cabecera: cargando espera, error reintenta, nunca cae en Facturación por llegar temprano", () => {
+  assert.equal(accionDeCobrarCabecera("cargando", false), "esperar");
+  assert.equal(accionDeCobrarCabecera("error", false), "reintentar");
+  assert.equal(accionDeCobrarCabecera({ puedeCobrar: true }, true), "abrir");
+  assert.equal(accionDeCobrarCabecera({ puedeCobrar: true }, false), "facturacion", "sin factura que cobrar: a crearla");
+  assert.equal(accionDeCobrarCabecera({ puedeCobrar: false }, true), "oculto");
+  assert.equal(accionDeCobrarCabecera(null, false), "facturacion", "sin caso");
+});
+
+test("la cabecera espera la carga, dice que carga y abre sola al llegar", () => {
+  const c = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
+  assert.match(c, /else if \(accionCobrar === "esperar"\) setCobroPendiente\(true\);/);
+  assert.match(c, /else if \(accionCobrar === "reintentar"\) \{ setCobroPendiente\(true\); recargarPanelDeCobro\(\); \}/);
+  assert.match(c, /if \(!cobroPendiente \|\| panelDeCobro === "cargando"\) return;\s*setCobroPendiente\(false\);\s*if \(accionCobrar === "abrir"\) abrirCobroDeCabecera\(\);/);
+  assert.match(c, /collectCargando=\{cobroPendiente \|\| abriendoVentanaDeCobro\}/);
+  assert.match(c, /onLista=\{\(\) => setAbriendoVentanaDeCobro\(false\)\}/);
+  // El cobro del caso se pide al entrar a la pestaña, no al abrir la sección «Cobro».
+  assert.match(c, /useEffect\(\(\) => \{ recargarPanelDeCobro\(\); \}, \[recargarPanelDeCobro\]\);/);
+  const h = leer("src/components/specialties/orthodontics/redesign/PatientHeaderG16.tsx");
+  assert.match(h, /disabled=\{props\.collectCargando\}/);
+  assert.match(h, /\{props\.collectCargando \? "Cargando cobro…" : "Cobrar"\}/);
+  assert.match(leer("src/components/dashboard/billing/cobrar-en-factura.tsx"), /setFactura\(d\); onLista\?\.\(\);/);
 });

@@ -41,9 +41,11 @@ export interface CobrarEnFacturaProps {
   onRefrescar: () => void;
   /** Se registró un pago (ya refrescado). Sin él, cierra (`onClose`). */
   onCobrado?: () => void;
+  /** La factura llegó y la ventana ya se ve (para apagar un «cargando» de quien la abrió). */
+  onLista?: () => void;
 }
 
-export function CobrarEnFactura({ invoiceId, patientName, montoSugerido, rediseno, clinicTaxMode, onClose, onRefrescar, onCobrado }: CobrarEnFacturaProps) {
+export function CobrarEnFactura({ invoiceId, patientName, montoSugerido, rediseno, clinicTaxMode, onClose, onRefrescar, onCobrado, onLista }: CobrarEnFacturaProps) {
   const [factura, setFactura] = useState<any | null>(null);
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export function CobrarEnFactura({ invoiceId, patientName, montoSugerido, redisen
         if (!r.ok) throw new Error(d?.error ?? "No se pudo abrir la factura.");
         return d;
       })
-      .then((d) => { if (vivo) setFactura(d); })
+      .then((d) => { if (vivo) { setFactura(d); onLista?.(); } })
       .catch((e: any) => {
         if (!vivo) return;
         toast.error(e?.message ?? "No se pudo abrir la factura.");

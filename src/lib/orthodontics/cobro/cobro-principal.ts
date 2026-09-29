@@ -54,3 +54,28 @@ export function cobroPrincipalDelCaso(panel: PanelParaCobro): CobroPrincipal | n
   if (!invoiceId) return null;
   return { invoiceId, montoSugerido: montoDelCobroPrincipal(panel) };
 }
+
+/**
+ * ws1-t4 (segunda pasada panel.108, fallo A) — qué hace «Cobrar» de la
+ * cabecera de Ortodoncia según cómo va la carga del cobro del caso. Antes, un
+ * clic mientras cargaba (o si falló) caía en la pestaña Facturación; ahora
+ * espera y abre la ventana completa en cuanto llega.
+ *  · "abrir": ya está y hay factura que cobrar → ventana completa.
+ *  · "esperar": todavía carga → el botón dice que carga y abre al llegar.
+ *  · "reintentar": la carga falló → se vuelve a pedir y se espera igual.
+ *  · "facturacion": el caso no tiene factura que cobrar (o no hay caso) → la
+ *    pestaña Facturación, donde se crea.
+ *  · "oculto": sin permiso de cobro (billing.charge) no hay botón.
+ */
+export type AccionCobrarCabecera = "abrir" | "esperar" | "reintentar" | "facturacion" | "oculto";
+
+export function accionDeCobrarCabecera(
+  panel: "cargando" | "error" | null | { puedeCobrar: boolean },
+  hayCobro: boolean,
+): AccionCobrarCabecera {
+  if (panel === "cargando") return "esperar";
+  if (panel === "error") return "reintentar";
+  if (panel === null) return "facturacion";
+  if (!panel.puedeCobrar) return "oculto";
+  return hayCobro ? "abrir" : "facturacion";
+}
