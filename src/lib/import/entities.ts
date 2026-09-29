@@ -467,7 +467,7 @@ export const patientsHandler: EntityHandler = {
     ],
     // El ID del paciente en el sistema de origen: con él un reintento no duplica.
     externalId: [
-      "id", "idpaciente", "iddelpaciente", "iddentalink", "idexterno", "idficha", "idfichapaciente",
+      "id", "idpaciente", "#paciente", "iddelpaciente", "iddentalink", "idexterno", "idficha", "idfichapaciente",
       "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha", "ficha", "idcliente",
     ],
     email:     ["email", "correo", "correoelectronico", "emailaddress"],
@@ -990,7 +990,7 @@ export const balancesHandler: EntityHandler = {
     phone:       ["telefono", "celular", "whatsapp", "phone", "movil"],
     email:       ["email", "correo", "correoelectronico"],
     // ID del paciente en el sistema de origen (el mismo que trajo el archivo de pacientes).
-    patientExternalId: ["idpaciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
     // ID del movimiento (deuda, cuota…) en el sistema de origen, si lo trae.
     externalId:  ["idsaldo", "iddeuda", "idmovimiento", "iddocumento", "idcuota", "idcargo", "idexterno"],
     amount:      ["saldo", "monto", "adeudo", "balance", "saldopendiente", "deuda", "importe", "saldoactual", "porcobrar", "montoadeudado", "deudatotal", "totaldeuda"],
@@ -1408,7 +1408,7 @@ export const appointmentsHandler: EntityHandler = {
     phone:    ["telefono", "celular", "whatsapp", "phone", "movil"],
     email:    ["email", "correo", "correoelectronico"],
     // ID del paciente en el sistema de origen (el mismo que trajo el archivo de pacientes).
-    patientExternalId: ["idpaciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
     doctor:   ["doctor", "doctora", "medico", "odontologo", "odontologa", "dentista", "profesional", "atiende", "nombredentista", "nombreprofesional"],
     date:     ["fecha", "fechacita", "fechadelacita", "dia", "date", "fechainicio"],
     time:     ["hora", "horacita", "time", "horario", "horadelacita", "horainicio", "horadeinicio", "inicio"],
@@ -1494,6 +1494,8 @@ export const appointmentsHandler: EntityHandler = {
       const pRes = resolvePatientRow(mapped, idx, true);
       if (pRes.error) pr.errors.push(pRes.error);
       if (pRes.warning) pr.warnings.push(pRes.warning);
+      // I6: el paciente se muestra en la vista previa aunque la fila falle por otra cosa (p. ej. el doctor).
+      if (pRes.id) pr.data.patientName = pRes.fullName || idx.nameById.get(pRes.id) || undefined;
 
       let dRes: { id?: string; error?: string };
       let doctorPorEleccion = false;
@@ -1733,7 +1735,7 @@ const IDENTITY_VARIANTS: Record<string, string[]> = {
   phone:    ["telefono", "celular", "whatsapp", "phone", "movil", "telefonocelular"],
   email:    ["email", "correo", "correoelectronico", "mail"],
   // ID del paciente en el sistema de origen (el mismo que trajo el archivo de pacientes).
-  patientExternalId: ["idpaciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+  patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
 };
 
 const DOCTOR_VARIANTS = [
@@ -2467,7 +2469,7 @@ export const quotesHandler: EntityHandler = {
     for (const { row, mapped } of rows) {
       const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
       const folio = oneLine(mapped.folio, 40);
-      const sinPaciente = !cellText(mapped.name) && !cellText(mapped.lastName) && !cellText(mapped.phone) && !cellText(mapped.email);
+      const sinPaciente = !cellText(mapped.name) && !cellText(mapped.lastName) && !cellText(mapped.phone) && !cellText(mapped.email) && !cellText(mapped.patientExternalId);
 
       // Paciente: una línea con folio y sin columnas de paciente lo hereda de las
       // demás líneas de su folio (muchos exports solo lo ponen en la primera).
@@ -2935,7 +2937,7 @@ export const treatmentPlansHandler: EntityHandler = {
     for (const { row, mapped } of rows) {
       const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
       const folio = oneLine(mapped.folio, 40);
-      const sinPaciente = !cellText(mapped.name) && !cellText(mapped.lastName) && !cellText(mapped.phone) && !cellText(mapped.email);
+      const sinPaciente = !cellText(mapped.name) && !cellText(mapped.lastName) && !cellText(mapped.phone) && !cellText(mapped.email) && !cellText(mapped.patientExternalId);
 
       let patientId: string | undefined;
       if (!(sinPaciente && folio)) {

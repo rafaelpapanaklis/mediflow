@@ -112,7 +112,13 @@ export const blockedHoursHandler: EntityHandler = {
     const timezone = clinic?.timezone ?? "America/Mexico_City";
     const users = await prisma.user.findMany({ where: { clinicId, isActive: true }, select: { id: true, firstName: true, lastName: true } });
     const byDoctor = new Map<string, string>();
-    for (const u of users) byDoctor.set(normName(`${u.firstName} ${u.lastName}`), u.id);
+    const nombreDe = new Map<string, string>();
+    for (const u of users) {
+      byDoctor.set(normName(`${u.firstName} ${u.lastName}`), u.id);
+      nombreDe.set(u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim());
+    }
+    // I7: un doctor del archivo sin equivalente se puede asignar a un usuario de la clínica (valueMapping.doctor).
+    const eleccionDoctor = ctx.valueMapping.doctor ?? {};
 
     const out: PreviewRow[] = [];
     const vistosEnArchivo = new Set<string>();
@@ -123,9 +129,16 @@ export const blockedHoursHandler: EntityHandler = {
       let doctorId: string | null = null;
       const doctorTexto = cellText(mapped.doctor);
       if (doctorTexto) {
-        const id = byDoctor.get(normName(doctorTexto));
-        if (!id) { pr.errors.push(`Doctor "${doctorTexto}" no encontrado en la clínica`); pr.status = "error"; out.push(pr); continue; }
+        const clave = normName(doctorTexto);
+        const elegido = eleccionDoctor[clave];
+        const id = elegido && nombreDe.has(elegido) ? elegido : byDoctor.get(clave);
+        if (!id) {
+          pr.errors.push(`Doctor "${doctorTexto}" no encontrado en la clínica: elige a qué usuario se asigna`);
+          pr.unresolved = [{ field: "doctor", key: clave, value: doctorTexto }];
+          pr.status = "error"; out.push(pr); continue;
+        }
         doctorId = id;
+        pr.data.doctorName = nombreDe.get(id);
       } else {
         pr.warnings.push("Sin doctor en la fila: bloquea la agenda de TODA la clínica");
       }
@@ -187,6 +200,16 @@ export const blockedHoursHandler: EntityHandler = {
     }
 
     return out;
+  },
+
+  // Los usuarios activos de la clínica, para elegir a quién se asigna un doctor del archivo sin equivalente.
+  async valueOptions(clinicId: string) {
+    const usuarios = await prisma.user.findMany({
+      where: { clinicId, isActive: true },
+      select: { id: true, firstName: true, lastName: true },
+      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    });
+    return { doctor: usuarios.map((u: any) => ({ id: u.id, label: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() })) };
   },
 
   async commit(rows: PreviewRow[], clinicId: string, skipDuplicates: boolean, ctx: ImportContext) {

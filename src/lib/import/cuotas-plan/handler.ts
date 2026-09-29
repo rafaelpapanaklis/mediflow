@@ -113,7 +113,7 @@ export const installmentPlansHandler: EntityHandler = {
     phone: ["telefono", "celular", "whatsapp", "phone", "movil"],
     email: ["email", "correo", "correoelectronico"],
     // ID del paciente en el sistema de origen (el mismo que trajo el archivo de pacientes).
-    patientExternalId: ["idpaciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
     // ID de la CUOTA (no del paciente) en el sistema de origen.
     externalId: ["idcuota", "idpagovencimiento", "idmovimiento", "idplan", "idcuotaexterno"],
     // Folio del tratamiento/presupuesto/plan al que pertenece esta cuota (agrupa).
@@ -148,7 +148,7 @@ export const installmentPlansHandler: EntityHandler = {
     const orthoCaseByPatient = new Map<string, { id: string; totalAmount: number | null }>();
     try {
       const casos: Array<{ id: string; patientId: string; totalAmount: number | null }> = await prisma.migratedOrthoCase.findMany({
-        where: { clinicId },
+        where: { clinicId, status: { not: "DISCARDED" } },
         select: { id: true, patientId: true, totalAmount: true },
       });
       for (const c of casos) orthoCaseByPatient.set(c.patientId, { id: c.id, totalAmount: c.totalAmount });

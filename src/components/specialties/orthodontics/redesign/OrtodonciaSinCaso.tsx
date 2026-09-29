@@ -17,6 +17,7 @@ import {
   type DrawerNewCasePlanPayload,
 } from "./drawers/DrawerNewCase";
 import { RAIZ_ORTO } from "./raiz";
+import { CasosMigrados } from "./CasosMigrados";
 import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
 import orto from "./orto.module.css";
 
@@ -83,6 +84,7 @@ export function OrtodonciaSinCaso({
           </Btn>
         </div>
       </section>
+      <CasosMigrados patientId={patientId} />
 
       {altaAbierta ? (
         <DrawerNewCase

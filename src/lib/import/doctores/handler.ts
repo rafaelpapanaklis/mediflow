@@ -30,6 +30,7 @@ import { traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 import type { PreviewRow } from "../types";
 import { BATCH, norm, normName, type EntityHandler, type MappedRow, type ImportContext } from "../engine";
 import { cellText, oneLine } from "../migrado";
+import { ESPECIALIDAD_ORTODONCIA, overrideConAcceso } from "@/lib/orthodontics/acceso-doctor";
 import { getAdminClient } from "./supabase-admin";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -171,9 +172,19 @@ export const doctorsHandler: EntityHandler = {
     const toProcess = pickInsertable(rows);
     if (toProcess.length === 0) return { created: 0, skipped: 0 };
 
-    const clinic = await prisma.clinic.findFirst({ where: { id: clinicId }, select: { name: true } });
+    const clinic = await prisma.clinic.findFirst({ where: { id: clinicId }, select: { name: true, category: true } });
     const admin = getAdminClient();
     let created = 0;
+    // I9: como el alta de Equipo, un doctor cuya especialidad es Ortodoncia recibe el acceso al módulo (si la clínica
+    // lo tiene activo). Import dinámico: access.ts lleva `import "server-only"` (ver arriba).
+    let moduloOrtodoncia = false;
+    if (clinic?.category === "DENTAL") {
+      try {
+        const { hasActiveOrthodonticsModule } = await import("@/lib/orthodontics/access");
+        moduloOrtodoncia = await hasActiveOrthodonticsModule(clinicId);
+      } catch { moduloOrtodoncia = false; }
+    }
+    const esOrtodoncia = (t: unknown) => typeof t === "string" && norm(t).includes("ortodonc");
 
     for (let i = 0; i < toProcess.length; i += BATCH) {
       for (const r of toProcess.slice(i, i + BATCH)) {
@@ -210,6 +221,10 @@ export const doctorsHandler: EntityHandler = {
           const usados = await prisma.user.findMany({ where: { clinicId }, select: { color: true } });
           const color = DOCTOR_COLORS.find((c) => !usados.some((u) => u.color === c)) ?? DOCTOR_COLORS[0];
 
+          // La especialidad del archivo llena TAMBIÉN el selector de especialidad de la ficha (`specialty`), no solo
+          // el campo oficial NOM-024 (`especialidad`). Ortodoncia + módulo activo → acceso al módulo.
+          const conAccesoOrto = esOrtodoncia(r.data.specialty) && moduloOrtodoncia;
+          const permisosOrto = conAccesoOrto ? overrideConAcceso({ role: "DOCTOR", permissionsOverride: [] }, "ortodoncista") : null;
           await prisma.user.create({
             data: {
               supabaseId: sbUser.user.id,
@@ -224,6 +239,8 @@ export const doctorsHandler: EntityHandler = {
               agendaActive: r.data.active as boolean,
               cedulaProfesional: (r.data.license as string | null) ?? null,
               especialidad: (r.data.specialty as string | null) ?? null,
+              specialty: conAccesoOrto ? ESPECIALIDAD_ORTODONCIA : ((r.data.specialty as string | null) ?? null),
+              ...(permisosOrto && permisosOrto.length > 0 ? { permissionsOverride: permisosOrto } : {}),
               mustChangePassword: true,
             },
           });

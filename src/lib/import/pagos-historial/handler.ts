@@ -79,7 +79,7 @@ export const paymentHistoryHandler: EntityHandler = {
     phone: ["telefono", "celular", "whatsapp", "phone", "movil"],
     email: ["email", "correo", "correoelectronico"],
     // ID del paciente en el sistema de origen (el mismo que trajo el archivo de pacientes).
-    patientExternalId: ["idpaciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
     // ID del PAGO (no del paciente) en el sistema de origen.
     externalId: ["idpago", "idmovimiento", "idrecibo", "idcobro", "idtransaccion", "idabono", "idpagoexterno"],
     amount: ["monto", "importe", "pago", "abono", "cantidad", "montopagado", "valor", "montodelpago"],
@@ -137,7 +137,7 @@ export const paymentHistoryHandler: EntityHandler = {
       const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
 
       const lectura = lector.leer(mapped.amount);
-      if (lectura.vacio) pr.errors.push(`Monto inválido "${mapped.amount ?? ""}"`);
+      if (lectura.vacio) pr.errors.push(cellText(mapped.amount) === "" ? "Falta el monto" : `Monto inválido "${cellText(mapped.amount)}"`);
       else if (lectura.error) pr.errors.push(lectura.error);
       else if ((lectura.valor ?? 0) <= 0) pr.errors.push("El pago debe ser mayor que cero");
       else if (lectura.pendiente) {

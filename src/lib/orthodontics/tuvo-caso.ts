@@ -17,7 +17,16 @@ export async function pacienteTuvoCasoDeOrtodoncia(clinicId: string, patientId: 
       prisma.orthodonticTreatmentPlan.findFirst({ where, select: { id: true } }),
       prisma.orthodonticDiagnosis.findFirst({ where, select: { id: true } }),
     ]);
-    return plan !== null || diagnostico !== null;
+    if (plan !== null || diagnostico !== null) return true;
+    // I5 (revisión final): un caso MIGRADO del sistema anterior también cuenta como «ha tenido un caso».
+    try {
+      const migrado = await prisma.migratedOrthoCase.findFirst({ where: { clinicId, patientId, status: { not: "DISCARDED" } }, select: { id: true } });
+      return migrado !== null;
+    } catch (e) {
+      const code = (e as { code?: string } | null)?.code;
+      if (code === "P2021" || code === "P2022") return false;
+      throw e;
+    }
   } catch (e) {
     const code = (e as { code?: string } | null)?.code;
     if (code === "P2021" || code === "P2022") return false;

@@ -389,7 +389,7 @@ function sampleText(v: unknown): string {
 function rowName(data: Record<string, any>): string {
   const full = [data.firstName, data.lastName].filter(Boolean).join(" ").trim();
   // `origName`: lo que decía el archivo (las filas con error no traen nada más).
-  const name = data.name || full || data.patientName || data.fullName || data.origName;
+  const name = data.name || full || data.patientName || data.fullName || data.origName || data.labName;
   return name ? String(name) : "—";
 }
 
@@ -453,6 +453,38 @@ function rowDetail(entity: Entity, data: Record<string, any>): string | undefine
     if (typeof data.amount === "number") parts.push(formatMoney(data.amount));
     if (data.method) parts.push(String(data.method));
     if (data.concept) parts.push(String(data.concept));
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  // I6: el resto de las entidades enseñan lo que ya traen sus filas (doctor, fecha, técnica, importe…).
+  const dia = (v: unknown): string => {
+    if (v instanceof Date) return `${String(v.getDate()).padStart(2, "0")}/${String(v.getMonth() + 1).padStart(2, "0")}/${v.getFullYear()}`;
+    return typeof v === "string" ? v.replace(/^(\d{4})-(\d{2})-(\d{2}).*$/, "$3/$2/$1") : "";
+  };
+  const dinero = (v: unknown) => (typeof v === "number" ? formatMoney(v) : undefined);
+  if (entity === "doctors") {
+    const parts = [data.specialty, data.license ? `Cédula ${data.license}` : undefined, data.email, data.active === false ? "Inactivo" : undefined].filter(Boolean);
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "blockedHours") {
+    const desde = [data.desdeDia, data.desdeHora].filter(Boolean).join(" ");
+    const hasta = [data.hastaDia, data.hastaHora].filter(Boolean).join(" ");
+    const parts = [desde && hasta && desde !== hasta ? `${dia(desde.slice(0, 10)) || desde} → ${dia(hasta.slice(0, 10)) || hasta}${data.hastaHora ? ` ${data.hastaHora}` : ""}` : dia(String(desde).slice(0, 10)) || desde, data.doctorName ?? (data.doctorId || !data.desdeDia ? undefined : "Toda la clínica"), data.reason].filter(Boolean);
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "orthoCases") {
+    const parts = [data.technique, data.treatingDoctorName, dia(data.installedAt), dinero(data.totalAmount)].filter(Boolean);
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "labExpenseHistory") {
+    const parts = [dia(data.incurredAt), data.labName, data.action, dinero(data.cost)].filter(Boolean);
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "procedureCatalog") {
+    const parts = [data.category, dinero(data.price), data.code].filter(Boolean);
+    return parts.length ? parts.join(" · ") : undefined;
+  }
+  if (entity === "appointmentHistory") {
+    const parts = [data.startsLocal ?? dia(data.startsAt), data.status, data.type].filter(Boolean);
     return parts.length ? parts.join(" · ") : undefined;
   }
   return undefined;

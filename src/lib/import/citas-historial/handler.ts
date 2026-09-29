@@ -67,7 +67,7 @@ export const appointmentHistoryHandler: EntityHandler = {
     lastName: ["apellido", "apellidos", "lastname"],
     phone: ["telefono", "celular", "whatsapp", "phone", "movil"],
     email: ["email", "correo", "correoelectronico"],
-    patientExternalId: ["idpaciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
     doctor: ["doctor", "doctora", "medico", "odontologo", "odontologa", "dentista", "profesional", "atiende"],
     date: ["fecha", "fechacita", "fechadelacita", "dia", "date"],
     time: ["hora", "horacita", "time", "horario"],

@@ -949,7 +949,7 @@
           "s2h": "Download one report per data type",
           "s2p": "Patients: the patient listing with their ID. Appointments: `Citas pacientes` (Agenda category), from today onwards. Balances: `Pacientes morosos` (Patients category).",
           "s3h": "One file per data type",
-          "s3p": "Each report is uploaded separately, with its own preview. Ask for the patient ID in all of them: that way balances and appointments are matched without guessing by name.",
+          "s3p": "You can upload the reports all at once (batch upload) or one by one; each has its own preview. Ask for the patient ID in all of them: that way balances and appointments are matched without guessing by name.",
           "s4h": "Review before importing",
           "s4p": "The columns of these reports are not validated against a real export yet. In the preview check that each column was recognised and, if not, match it by hand."
         },
@@ -1093,7 +1093,7 @@
           "one": "{count} doctor in the file doesn't match a user in your clinic",
           "other": "{count} doctors in the file don't match a user in your clinic"
         },
-        "unresolvedDescDoctor": "Pick who each one is assigned to (even if they don't exist, or two users share the name): without a choice, those appointments aren't imported. No time slot is moved.",
+        "unresolvedDescDoctor": "Pick who each one is assigned to (even if they don't exist, or two users share the name): without a choice, those rows aren't imported (or are saved without a doctor, in the history). No time slot is moved.",
         "unresolvedChoose": "Pick an equivalent…",
         "unresolvedRows": {
           "one": "({count} row)",
@@ -1222,6 +1222,8 @@
         "needFiles": "Choose at least one file",
         "fileTooBig": "{name}: over {mb} MB",
         "invalidType": "{name}: only .xlsx and .csv are accepted",
+        "leftOut": "A batch holds {n} files at most: {count} were left out ({names}). Upload them in another batch.",
+        "doctorsFailedDeps": "Doctors were not imported: appointments and blocked hours that depend on those doctors may have failed. Fix the doctors file, import it, then upload appointments and blocked hours again.",
         "tooManyFiles": "Maximum {n} files per batch",
         "fileErrorsTitle": "These files couldn't be read",
         "planTitle": "Here's what we detected",

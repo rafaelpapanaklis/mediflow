@@ -38,7 +38,7 @@ const dentalink: OriginProfile = {
   instructions: [
     { h: "Entra a Reportes Excel", p: "En Dentalink abre <code>Reportes</code> → <code>Reportes Excel</code>. Esa función viene en los planes Pro y Titanium; si tu plan no la incluye, pide a soporte de Dentalink los listados." },
     { h: "Descarga un reporte por tipo de dato", p: "Pacientes: el listado con su ID. Citas: <code>Citas pacientes</code> (Agenda), de hoy en adelante. Saldos: <code>Pacientes morosos</code> (Pacientes)." },
-    { h: "Un archivo por tipo de dato", p: "Cada reporte se sube por separado, con su propia vista previa. Pide que todos traigan el ID del paciente." },
+    { h: "Un archivo por tipo de dato", p: "Puedes subir varios reportes a la vez (carga por lote: hasta 12 archivos, cada uno con su propia vista previa) o uno por uno. Pide que todos traigan el ID del paciente." },
     { h: "Revisa antes de importar", p: "Los encabezados de estos reportes aún no están validados con un export real: comprueba en la vista previa que cada columna se reconoció." },
   ],
   mapping: {

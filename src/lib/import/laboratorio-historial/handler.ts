@@ -94,7 +94,7 @@ export const labExpenseHandler: EntityHandler = {
     phone: ["telefono", "celular", "whatsapp", "phone", "movil"],
     email: ["email", "correo", "correoelectronico"],
     // ID del paciente en el sistema de origen (el mismo que trajo el archivo de pacientes).
-    patientExternalId: ["idpaciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
     // ID de la ACCIÓN de laboratorio (no del paciente) en el sistema de origen.
     externalId: ["idaccion", "idaccionlaboratorio", "idlaboratorio", "idsolicitud", "idorden", "idordenlaboratorio", "codigo"],
     labName: ["laboratorio", "nombrelaboratorio", "laboratorioexterno", "proveedorlaboratorio"],

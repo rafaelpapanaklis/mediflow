@@ -949,7 +949,7 @@
           "s2h": "Descarga un reporte por tipo de dato",
           "s2p": "Pacientes: el listado de pacientes con su ID. Citas: `Citas pacientes` (categoría Agenda), de hoy en adelante. Saldos: `Pacientes morosos` (categoría Pacientes).",
           "s3h": "Un archivo por tipo de dato",
-          "s3p": "Cada reporte se sube por separado, con su propia vista previa. Pide que todos traigan el ID del paciente: así los saldos y las citas se emparejan sin adivinar por el nombre.",
+          "s3p": "Puedes subir los reportes a la vez (carga por lote) o uno por uno; cada uno tiene su propia vista previa. Pide que todos traigan el ID del paciente: así los saldos y las citas se emparejan sin adivinar por el nombre.",
           "s4h": "Revisa antes de importar",
           "s4p": "Las columnas de estos reportes aún no están validadas con un export real. En la vista previa comprueba que cada columna se reconoció y, si no, empárejala a mano."
         },
@@ -1093,7 +1093,7 @@
           "one": "{count} doctor del archivo no coincide con un usuario de tu clínica",
           "other": "{count} doctores del archivo no coinciden con un usuario de tu clínica"
         },
-        "unresolvedDescDoctor": "Elige a quién se asigna cada uno (aunque no exista, o haya dos usuarios con ese nombre): sin elegir, esas citas no se importan. No se mueve ningún horario.",
+        "unresolvedDescDoctor": "Elige a quién se asigna cada uno (aunque no exista, o haya dos usuarios con ese nombre): sin elegir, esas filas no se importan (o quedan sin doctor, en el historial). No se mueve ningún horario.",
         "unresolvedChoose": "Elige un equivalente…",
         "unresolvedRows": {
           "one": "({count} fila)",
@@ -1222,6 +1222,8 @@
         "needFiles": "Elige al menos un archivo",
         "fileTooBig": "{name}: supera {mb} MB",
         "invalidType": "{name}: solo se aceptan .xlsx y .csv",
+        "leftOut": "Solo caben {n} archivos por lote: quedaron fuera {count} ({names}). Súbelos en otro lote.",
+        "doctorsFailedDeps": "Doctores no se importó: las citas y los bloqueos que dependen de esos doctores pueden haber fallado. Corrige el archivo de doctores, impórtalo y vuelve a subir citas y bloqueos.",
         "tooManyFiles": "Máximo {n} archivos por lote",
         "fileErrorsTitle": "No se pudieron leer estos archivos",
         "planTitle": "Esto detectamos",

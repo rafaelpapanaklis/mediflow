@@ -57,6 +57,7 @@ import { RUTA_CONTRATAR_ORTODONCIA } from "@/lib/orthodontics/contratar";
 import { textoAsentimientoMenor } from "@/lib/orthodontics/asentimiento-menor";
 import { elegirSetParaFoto } from "@/lib/orthodontics/redesign/set-de-foto-por-visita";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
+import { CasosMigrados } from "./CasosMigrados";
 import { DrawerNewCase, type DrawerNewCaseDiagnosisPayload, type DrawerNewCasePlanPayload } from "./drawers/DrawerNewCase";
 import { Btn } from "./atoms/Btn";
 import orto from "./orto.module.css";
@@ -1162,6 +1163,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
           }
         />
       )}
+      {/* I5 (revisión final): los casos migrados del sistema anterior también se ven en la ficha nueva. */}
+      <CasosMigrados patientId={patient.id} conLienzo />
     </>
   );
 }

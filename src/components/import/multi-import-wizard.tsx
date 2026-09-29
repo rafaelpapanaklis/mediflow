@@ -19,6 +19,7 @@
 // archivo. Nada se importa hasta que el usuario confirma. Un archivo que falla
 // no detiene a los demás: el resultado final es un resumen por archivo.
 // ============================================================================
+import { mapeoEsDeEsteArchivo, puedeConfirmarSolo } from "./lote-guardia";
 import { useEffect, useRef, useState } from "react";
 import { UploadCloud, X as XIcon, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
@@ -132,6 +133,10 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
   // Estado del ítem ACTUAL de la cola (se resetea al avanzar el cursor).
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [preview, setPreview] = useState<PreviewResult | null>(null);
+  // A QUÉ archivo pertenecen `preview` y `mapping`. Al avanzar el cursor, durante un render siguen siendo los del
+  // archivo ANTERIOR: sin esta marca, la confirmación automática los usaba con el archivo nuevo (I1 de la
+  // revisión final: mapeos ajenos y filas basura).
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<"file" | "server" | null>(null);
   const [decisions, setDecisions] = useState<Record<string, string>>({});
@@ -145,6 +150,8 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
   const previewReqRef = useRef(0);
   const previewMappingRef = useRef("");
   const autoFiredKeyRef = useRef<string | null>(null);
+  // Campo cuyas decisiones se eligieron (doctor/condición): tras refrescar la vista previa `unresolved` queda vacío.
+  const decisionFieldRef = useRef<string | null>(null);
 
   const current = queue[cursor] ?? null;
   const unresolvedField = preview?.unresolved?.find((u) => u.field !== "amountFormat")?.field;
@@ -155,15 +162,13 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
     const bad = arr.filter((f) => !isAcceptedFile(f));
     const tooBig = arr.filter((f) => isAcceptedFile(f) && f.size > MAX_FILE_MB * 1024 * 1024);
     const okFiles = arr.filter((f) => isAcceptedFile(f) && f.size <= MAX_FILE_MB * 1024 * 1024);
-    setPending((prev) => {
-      const merged = [...prev, ...okFiles];
-      if (merged.length > MAX_BATCH_FILES) {
-        setPickError(t("shell.importClinic.multi.tooManyFiles", { n: MAX_BATCH_FILES }));
-        return merged.slice(0, MAX_BATCH_FILES);
-      }
-      return merged;
-    });
-    if (tooBig.length > 0) setPickError(t("shell.importClinic.multi.fileTooBig", { name: tooBig[0].name, mb: MAX_FILE_MB }));
+    const merged = [...pending, ...okFiles];
+    const fuera = merged.slice(MAX_BATCH_FILES);
+    setPending(merged.slice(0, MAX_BATCH_FILES));
+    if (fuera.length > 0) {
+      // I3: nada se descarta en silencio: se dice cuántos y cuáles quedaron fuera, y qué hacer.
+      setPickError(t("shell.importClinic.multi.leftOut", { n: MAX_BATCH_FILES, count: fuera.length, names: fuera.map((f) => f.name).join(", ") }));
+    } else if (tooBig.length > 0) setPickError(t("shell.importClinic.multi.fileTooBig", { name: tooBig[0].name, mb: MAX_FILE_MB }));
     else if (bad.length > 0) setPickError(t("shell.importClinic.multi.invalidType", { name: bad[0].name }));
     else setPickError(null);
   }
@@ -237,6 +242,8 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
     setMontosInfo(null);
     setRefrescando(false);
     setConfirming(false);
+    setPreviewKey(null);
+    decisionFieldRef.current = null;
     previewMappingRef.current = "";
     previewReqRef.current++;
   }
@@ -270,6 +277,7 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
       .then((res) => {
         if (stale()) return;
         setPreview(res);
+        setPreviewKey(item.key);
         seedDecisions(res);
         recordarMontos(res);
         const seeded: ColumnMapping = {};
@@ -308,6 +316,25 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
       .finally(() => { if (!stale()) setRefrescando(false); });
   }
 
+  /** I7: al elegir el equivalente de un doctor/hallazgo, la vista previa se recalcula con esa decisión. */
+  function decidir(item: PlanItem, key: string, id: string) {
+    const next = { ...decisions, [key]: id };
+    setDecisions(next);
+    const campo = unresolvedField ?? decisionFieldRef.current;
+    if (campo !== "doctor" && campo !== "condition") return;
+    decisionFieldRef.current = campo;
+    const reqId = ++previewReqRef.current;
+    const stale = () => previewReqRef.current !== reqId;
+    setRefrescando(true);
+    api.preview(item.entity as Entity, item.file, mapping, undefined, {
+      origin: originId,
+      valueMapping: { [campo]: next, ...(formatoMontos ? { amountFormat: { formato: formatoMontos } } : {}) },
+      sheet: item.sheetName,
+    })
+      .then((res) => { if (!stale()) setPreview(res); })
+      .finally(() => { if (!stale()) setRefrescando(false); });
+  }
+
   // Al entrar a la cola, o avanzar el cursor: carga el preview del ítem actual.
   useEffect(() => {
     if (sub !== "cola" || !current) return;
@@ -339,6 +366,9 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
 
   async function confirmCurrent() {
     if (!current || !preview || confirming) return;
+    // Cada archivo se confirma SOLO con su análisis y su mapeo: si la vista previa no es de este archivo, o el
+    // mapeo nombra columnas que este archivo no tiene, no se escribe nada.
+    if (previewKey !== current.key || !mapeoEsDeEsteArchivo(mapping, preview.columns.map((c) => c.source))) return;
     setConfirming(true);
     try {
       const r = await api.commit(
@@ -350,7 +380,9 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
           origin: originId,
           sheet: current.sheetName,
           valueMapping: {
-            ...(Object.keys(decisions).length > 0 && unresolvedField ? { [unresolvedField]: decisions } : {}),
+            ...(Object.keys(decisions).length > 0 && (unresolvedField ?? decisionFieldRef.current)
+              ? { [(unresolvedField ?? decisionFieldRef.current) as string]: decisions }
+              : {}),
             ...(formatoMontos ? { amountFormat: { formato: formatoMontos } } : {}),
           },
         },
@@ -382,14 +414,13 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
   useEffect(() => {
     if (sub !== "cola" || !autoAdvance || !current || !preview) return;
     if (previewLoading || confirming || refrescando) return;
-    if (preview.mappingError) return;
-    const montosSinDecidir = preview.unresolved?.some((u) => u.field === "amountFormat");
-    if (montosSinDecidir) return;
+    // Solo con SU vista previa y SU mapeo, y solo si no falta nada por decidir (ver lote-guardia.ts).
+    if (!puedeConfirmarSolo({ previewKey, currentKey: current.key, preview, mapping })) return;
     if (autoFiredKeyRef.current === current.key) return;
     autoFiredKeyRef.current = current.key;
     confirmCurrent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sub, autoAdvance, current, preview, previewLoading, confirming, refrescando]);
+  }, [sub, autoAdvance, current, preview, previewKey, previewLoading, confirming, refrescando]);
 
   function retryCurrentPreview() {
     if (!current) return;
@@ -597,7 +628,7 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
                 skipDup={skipDup}
                 onToggleSkip={() => setSkipDup((v) => !v)}
                 decisions={decisions}
-                onDecide={(key, id) => setDecisions((d) => ({ ...d, [key]: id }))}
+                onDecide={(key, id) => decidir(current, key, id)}
               />
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
                 <button type="button" className="btn-new btn-new--secondary" onClick={skipCurrent} disabled={confirming}>
@@ -650,7 +681,12 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
                             : o?.status === "omitido"
                               ? t("shell.importClinic.multi.statusSkipped")
                               : o?.status === "error"
-                                ? <span title={o.errorMsg}>{t("shell.importClinic.multi.statusError")}</span>
+                                ? (
+                                  <>
+                                    <span title={o.errorMsg}>{t("shell.importClinic.multi.statusError")}</span>
+                                    {o.errorMsg ? <div style={{ fontSize: 12, color: "var(--text-3)", overflowWrap: "anywhere" }}>{o.errorMsg}</div> : null}
+                                  </>
+                                )
                                 : "—"}
                         </td>
                       </tr>
@@ -660,6 +696,11 @@ export function MultiImportWizard({ t, originId, origins, client, onClose, onImp
               </table>
             </div>
           </div>
+          {outcomes.some((o) => o.entity === "doctors" && o.status === "error") && queue.some((it) => it.entity === "appointments" || it.entity === "blockedHours" || it.entity === "appointmentHistory") && (
+            <div className="imp-callout imp-callout--warn" style={{ marginTop: 12 }}>
+              <div className="imp-callout__txt"><p>{t("shell.importClinic.multi.doctorsFailedDeps")}</p></div>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
             <button type="button" className="btn-new btn-new--secondary" onClick={startAnother}>{t("shell.importClinic.multi.importAnotherBatch")}</button>
             <button type="button" className="btn-new btn-new--primary" onClick={() => { onImported?.(); onClose(); }}>{t("shell.importClinic.multi.close")}</button>

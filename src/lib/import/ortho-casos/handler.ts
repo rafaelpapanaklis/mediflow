@@ -95,7 +95,7 @@ export const orthoCasesHandler: EntityHandler = {
     lastName: ["apellido", "apellidos", "lastname"],
     phone: ["telefono", "celular", "whatsapp", "phone", "movil"],
     email: ["email", "correo", "correoelectronico"],
-    patientExternalId: ["idpaciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
+    patientExternalId: ["idpaciente", "#paciente", "iddelpaciente", "idficha", "idfichapaciente", "codigopaciente", "nficha", "nroficha", "numeroficha", "numerodeficha"],
     // ID del CASO (no del paciente) en el sistema de origen, si lo trae.
     externalId: ["idcaso", "idtratamientoortodoncia", "idortodoncia", "idplandetratamiento", "idplanortodoncia"],
     technique: ["tecnica", "tipodetratamiento", "aparatologia", "sistema", "tipodebrackets", "aparato"],
@@ -232,6 +232,15 @@ export const orthoCasesHandler: EntityHandler = {
       }
 
       if (avisoModoCobro) pr.warnings.push(avisoModoCobro);
+
+      // Un caso sin técnica, fecha, precio, doctor ni estado no es un caso: es una fila vacía (con un mapeo que no
+      // era de este archivo salían «UNKNOWN» sin nada, I1 de la revisión final). Nunca se escribe a medias.
+      if (!technique && !installedAt && (totalAmount === null || totalAmount === undefined) && !doctorNombre && !statusRaw) {
+        pr.errors.push("La fila no trae técnica, fecha de colocación, precio, doctor ni estado: no hay nada que migrar");
+        pr.status = "error";
+        out.push(pr);
+        continue;
+      }
 
       const externalId = ctx.originId ? limpiarId(mapped.externalId) : "";
       const llave = llaveDeCaso({ patientId: res.id!, technique, installedAt, externalId, origen: ctx.originId });

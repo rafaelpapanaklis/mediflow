@@ -28,7 +28,8 @@ export interface CasoOrthoMigrado {
 export async function getMigratedOrthoCases(clinicId: string, patientId: string): Promise<CasoOrthoMigrado[]> {
   try {
     const rows = await prisma.migratedOrthoCase.findMany({
-      where: { clinicId, patientId },
+      // «DISCARDED»: filas vacías que un mapeo ajeno escribió antes del arreglo I1; se conservan (no se borra) pero no se enseñan.
+      where: { clinicId, patientId, status: { not: "DISCARDED" } },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
