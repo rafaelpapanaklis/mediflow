@@ -29,3 +29,14 @@ export function listaDeNombres(nombres: readonly string[]): string {
   if (limpios.length <= 1) return limpios[0] ?? "";
   return `${limpios.slice(0, -1).join(", ")} y ${limpios[limpios.length - 1]}`;
 }
+
+/**
+ * «1 de 2»: en qué factura va un cobro encadenado. El botón «Cobrar a los dos»
+ * abre UNA factura a la vez; sin esto, quien cobra cree que el primer pago
+ * cubrió a los dos hermanos (ws1-t6, H2). `hechas` = las que ya se guardaron.
+ */
+export function rotuloProgreso(hechas: number, total: number): string {
+  const t = Number.isFinite(total) ? Math.max(1, Math.floor(total)) : 1;
+  const h = Number.isFinite(hechas) ? Math.max(0, Math.floor(hechas)) : 0;
+  return `${Math.min(h + 1, t)} de ${t}`;
+}

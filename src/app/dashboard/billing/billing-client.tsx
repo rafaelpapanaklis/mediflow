@@ -142,8 +142,9 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   // OVERDUE: nadie lo escribe. Sin el mapa del servidor no se marca nada.
   // Una fila que llegó por el filtro «Vencidas» del servidor trae su propio
   // vencido (misma función), por si es más nueva que el mapa de la página.
-  const isOverdue = (inv: any) =>
-    (overdueByInvoice?.[inv?.id] ?? remote?.overdueByInvoice?.[inv?.id] ?? 0) > 0;
+  const overdueAmount = (inv: any): number =>
+    overdueByInvoice?.[inv?.id] ?? remote?.overdueByInvoice?.[inv?.id] ?? 0;
+  const isOverdue = (inv: any) => overdueAmount(inv) > 0;
 
   // Modals
   const [showNew, setShowNew]                     = useState(false);
@@ -401,6 +402,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           facturApiEnabled={clinic.facturApiEnabled}
           conPaciente
           estaVencida={isOverdue}
+          montoVencido={overdueAmount}
           // Las dos reglas de la tabla de abajo, tal cual: `canPay` y «Timbrar».
           puedeCobrar={(inv) => !["PAID", "CANCELLED"].includes(inv.status) && inv.status !== "DRAFT"}
           puedeTimbrar={() => true}
@@ -487,6 +489,11 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       </td>
                       <td className="mono" style={{ textAlign: "right", color: inv.balance > 0 ? "var(--warning)" : "var(--text-3)" }}>
                         {fmtMXNdec(inv.balance)}
+                        {overdueAmount(inv) > 0 && (
+                          <div style={{ fontSize: 11, color: "var(--danger)" }}>
+                            {t(badge.labelKey)} {fmtMXNdec(overdueAmount(inv))}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <BadgeNew tone={badge.tone} dot>{t(badge.labelKey)}</BadgeNew>

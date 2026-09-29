@@ -3,7 +3,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { listaDeNombres, rotuloCobrar } from "../rotulo-cobro";
+import { listaDeNombres, rotuloCobrar, rotuloProgreso } from "../rotulo-cobro";
 
 describe("rotuloCobrar", () => {
   it("una sola mensualidad: «Cobrar»", () => {
@@ -46,5 +46,16 @@ describe("listaDeNombres", () => {
     assert.equal(listaDeNombres(["Ana"]), "Ana");
     assert.equal(listaDeNombres([]), "");
     assert.equal(listaDeNombres(["Ana", " ", "Luis"]), "Ana y Luis");
+  });
+});
+
+describe("rotuloProgreso", () => {
+  it("«1 de 2» al empezar y «2 de 2» tras guardar la primera", () => {
+    assert.equal(rotuloProgreso(0, 2), "1 de 2");
+    assert.equal(rotuloProgreso(1, 2), "2 de 2");
+  });
+  it("nunca pasa del total ni baja de 1", () => {
+    assert.equal(rotuloProgreso(5, 2), "2 de 2");
+    assert.equal(rotuloProgreso(-1, 0), "1 de 1");
   });
 });

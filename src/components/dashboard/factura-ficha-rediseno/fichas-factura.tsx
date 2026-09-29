@@ -66,6 +66,9 @@ export interface FichasFacturaProps<F extends FacturaDeFicha> {
   dentroDeTarjeta?: boolean;
   /** Vencida = lo decide quien monta la lista (Caja tiene el umbral del servidor). */
   estaVencida?: (inv: F) => boolean;
+  /** Cuánto de la factura está vencido (pesos). Con esto la ficha dice «Vencido $X»
+   *  junto al saldo, para que lo vencido cuadre a la vista con el KPI de arriba. */
+  montoVencido?: (inv: F) => number;
   /** Texto del botón de cobro: «Cobrar» en el expediente, «Registrar pago» en Caja. */
   textoCobrar: string;
   textoVacio: string;
@@ -91,7 +94,7 @@ export interface FichasFacturaProps<F extends FacturaDeFicha> {
 }
 
 export function FichasFactura<F extends FacturaDeFicha>({
-  facturas, facturApiEnabled, conPaciente = false, dentroDeTarjeta = false, estaVencida, textoCobrar, textoVacio,
+  facturas, facturApiEnabled, conPaciente = false, dentroDeTarjeta = false, estaVencida, montoVencido, textoCobrar, textoVacio,
   onAbrir, onCobrar, onTimbrar, puedeCobrar, puedeTimbrar, onDuplicar,
 }: FichasFacturaProps<F>) {
   const t = useT();
@@ -112,6 +115,7 @@ export function FichasFactura<F extends FacturaDeFicha>({
               facturApiEnabled={facturApiEnabled}
               conPaciente={conPaciente}
               vencida={estaVencida ? estaVencida(inv) : false}
+              montoVencido={montoVencido ? montoVencido(inv) : 0}
               cobrable={puedeCobrar ? puedeCobrar(inv) : isChargeableInvoice(inv)}
               timbrable={puedeTimbrar ? puedeTimbrar(inv) : !isVoidedInvoice(inv)}
               textoCobrar={textoCobrar}
@@ -131,7 +135,7 @@ export function FichasFactura<F extends FacturaDeFicha>({
 }
 
 function Ficha({
-  inv, t, facturApiEnabled, conPaciente, vencida, cobrable, timbrable, textoCobrar, condiciones, contacto,
+  inv, t, facturApiEnabled, conPaciente, vencida, montoVencido, cobrable, timbrable, textoCobrar, condiciones, contacto,
   cargandoContacto, onAbrir, onCobrar, onTimbrar, onDuplicar,
 }: {
   inv: FacturaDeFicha;
@@ -139,6 +143,7 @@ function Ficha({
   facturApiEnabled: boolean;
   conPaciente: boolean;
   vencida: boolean;
+  montoVencido: number;
   cobrable: boolean;
   timbrable: boolean;
   textoCobrar: string;
@@ -232,6 +237,12 @@ function Ficha({
           <span className={!anulada && inv.balance > 0 ? s.tonoAlerta : undefined}>
             {t("patients.billing.colBalance")} {anulada ? "—" : fmtMXNdec(inv.balance)}
           </span>
+          {!anulada && montoVencido > 0 && (
+            <>
+              {" · "}
+              <span className={s.tonoAlerta}>{t(invoiceStatusBadge("OVERDUE").labelKey)} {fmtMXNdec(montoVencido)}</span>
+            </>
+          )}
         </p>
       </div>
 

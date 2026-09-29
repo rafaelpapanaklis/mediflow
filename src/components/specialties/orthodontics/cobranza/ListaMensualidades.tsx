@@ -27,7 +27,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import av from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.css";
 import { fmtMoney, fmtDay } from "../redesign/atoms/format";
 // ws1-t5 (arreglo): el botón y la lista de hermanos dicen a cuántos, con test.
-import { listaDeNombres, rotuloCobrar } from "@/lib/orthodontics/rotulo-cobro";
+import { listaDeNombres, rotuloCobrar, rotuloProgreso } from "@/lib/orthodontics/rotulo-cobro";
 import {
   listarMensualidadesPorCobrar,
   type MensualidadPorCobrar,
@@ -99,6 +99,8 @@ export function ListaMensualidades({
   const [items, setItems] = useState<MensualidadPorCobrar[] | null>(null);
   const [rediseno, setRediseno] = useState(false);
   const [cobrandoCola, setCobrandoCola] = useState<MensualidadPorCobrar[] | null>(null);
+  // Cuántas facturas tenía el cobro encadenado al empezar (para decir «1 de 2»).
+  const [cobrandoTotal, setCobrandoTotal] = useState(0);
 
   function recargar() {
     listarMensualidadesPorCobrar()
@@ -122,6 +124,7 @@ export function ListaMensualidades({
 
   function iniciarCobro(grupo: MensualidadPorCobrar[]) {
     setCobrandoCola(grupo);
+    setCobrandoTotal(grupo.length);
   }
 
   function alGuardarUno() {
@@ -177,6 +180,9 @@ export function ListaMensualidades({
                 {g.items.length > 1 && (
                   <span className={av.quienHermanos}>{listaDeNombres(g.items.map((it) => it.patientName))}</span>
                 )}
+                {g.items.length > 1 && (
+                  <span className={av.venceRotulo}>Se cobran una a una: empieza en {rotuloProgreso(0, g.items.length)}</span>
+                )}
               </div>
               <span className={av.vence}>
                 <span className={av.venceRotulo}>Vence</span> {fmtDay(g.items[0].vencimiento)}
@@ -205,7 +211,7 @@ export function ListaMensualidades({
       {cobrandoCola && cobrandoCola.length > 1 && (
         <p className={av.siguiente}>
           <ArrowRight size={13} strokeWidth={1.75} aria-hidden />
-          Al guardar, sigue la factura de {cobrandoCola[1].patientName}.
+          Factura {rotuloProgreso(cobrandoTotal - cobrandoCola.length, cobrandoTotal)}. Al guardar, sigue la de {cobrandoCola[1].patientName}.
         </p>
       )}
     </section>
