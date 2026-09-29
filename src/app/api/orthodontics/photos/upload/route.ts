@@ -180,14 +180,17 @@ export async function POST(req: NextRequest) {
     auth: { persistSession: false },
   });
 
-  const basePath = `${ctx.clinicId}/orthodontics/${set.patientId}/${set.id}-${safeView}`;
+  // Cada subida lleva su propio nombre (ws1-t12): una foto que se QUITA se
+  // conserva en el bucket (NOM-004) y, con el path fijo por vista de antes,
+  // subir otra en su lugar habría sobrescrito el archivo quitado.
+  const unico = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const basePath = `${ctx.clinicId}/orthodontics/${set.patientId}/${set.id}-${safeView}-${unico}`;
   const originalPath = `${basePath}.jpg`;
   const thumbPath = `${basePath}-thumb.webp`;
 
-  // upsert:true intencional: el path queda confinado al tenant (clinicId de la
-  // sesión + set verificado de la clínica + safeView), así que solo puede
-  // sobrescribir la propia foto de esta vista. Es lo que requiere reintentar o
-  // retomar una vista del set; ya no hay vector cross-tenant tras sanitizar view.
+  // upsert:true se conserva: el path sigue confinado al tenant (clinicId de la
+  // sesión + set verificado de la clínica + safeView + sufijo propio de esta
+  // subida), sin vector cross-tenant tras sanitizar view.
   const [originalUpload, thumbUpload] = await Promise.all([
     supabase.storage.from(BUCKET).upload(originalPath, original, {
       contentType: "image/jpeg",

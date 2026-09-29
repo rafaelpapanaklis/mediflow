@@ -60,7 +60,17 @@ export function useCajon<T extends HTMLElement = HTMLElement>(onClose: () => voi
     panel.addEventListener("keydown", onKey);
     return () => {
       panel.removeEventListener("keydown", onKey);
-      if (antes && document.contains(antes)) antes.focus({ preventScroll: true });
+      if (antes && document.contains(antes)) {
+        antes.focus({ preventScroll: true });
+      } else {
+        // Lo que lo abrió ya no existe (p. ej. la foto que se acaba de quitar):
+        // el foco caería al <body> y Escape dejaría de cerrar lo que sigue
+        // abierto debajo. Que lo tome el último panel que queda.
+        const debajo = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][tabindex="-1"]'))
+          .filter((el) => el !== panel)
+          .pop();
+        debajo?.focus({ preventScroll: true });
+      }
     };
   }, []);
 

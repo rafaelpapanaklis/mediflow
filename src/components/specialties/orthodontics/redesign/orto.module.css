@@ -1476,6 +1476,82 @@ button.listaFila:focus-visible,
   transition: background 0.12s;
 }
 
+/* Confirmación que va POR ENCIMA del visor de fotos (62) y de la ventana del
+   juego (61): «Quitar foto» se confirma desde cualquiera de los dos. */
+.veloEncima {
+  position: fixed;
+  inset: 0;
+  z-index: 64;
+  background: var(--orto-velo);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: ortoFundido 180ms ease-out;
+}
+
+.marcoEncima {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.ventanaChica { max-width: 440px; }
+
+/* «Quitar foto» junto a una foto: enlace de texto discreto que se pone en
+   tono de peligro al apuntarlo o enfocarlo (ocho rojos fijos gritarían). */
+.enlacePeligro { color: var(--pr-texto-2); }
+
+.enlacePeligro:focus-visible { color: var(--pr-peligro); }
+
+/* Con el dedo, un enlace de 12 px no se acierta: área de toque de 40 px. */
+@media (pointer: coarse) {
+  .enlacePeligro {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+}
+
+@media (hover: hover) {
+  .enlacePeligro:hover { color: var(--pr-peligro); }
+}
+
+/* Botón «Quitar foto» dentro del visor (sobre negro, en los dos temas). */
+.visorQuitar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, white 30%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, black 55%, transparent);
+  color: white;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.visorQuitar:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px white;
+}
+
+@media (hover: hover) {
+  .visorQuitar:hover {
+    background: color-mix(in srgb, var(--pr-peligro) 70%, black);
+  }
+}
+
 .visorCerrar:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px white;

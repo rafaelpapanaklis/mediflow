@@ -16,6 +16,7 @@ import {
   juegoParaComparar,
   sePuedeComparar,
 } from "../fotos-del-caso";
+import { elegirSetParaFoto } from "@/lib/orthodontics/redesign/set-de-foto-por-visita";
 
 const RAIZ = join(__dirname, "..");
 const leer = (rel: string) => readFileSync(join(RAIZ, rel), "utf8");
@@ -82,4 +83,57 @@ test("la ficha conecta «Comparar» y los PDFs de Documentos", () => {
   assert.match(docs, /Reporte de avance \(PDF\)/);
   assert.match(docs, /disabled=\{motivoSinReporteDeAvance !== null\}/);
   assert.match(docs, /window\.open\(url, "_blank", "noopener,noreferrer"\)/);
+});
+
+// ── ws1-t12 · «Juegos de fotos por etapa»: miniatura y «Ver juego completo» ──
+
+test("juegos por etapa: la miniatura es la foto firmada de su vista, no un cuadro de color", () => {
+  const fuente = leer("sections/SectionPhotos.tsx");
+  const tarjeta = fuente.slice(fuente.indexOf("function HistoricalSetCard"), fuente.indexOf("function MiniaturaDeFoto"));
+  // Recorre las 10 vistas por su id y saca la URL de `slots`…
+  assert.match(tarjeta, /PHOTO_SLOTS\.map/);
+  assert.match(tarjeta, /set\.slots\?\.\[slot\.id\]\?\.url/);
+  assert.match(tarjeta, /<MiniaturaDeFoto/);
+  // …y ya no pinta «las primeras N» de gris por posición (el bug: nunca había <img>).
+  assert.doesNotMatch(tarjeta, /i < set\.photoCount/);
+  const miniatura = fuente.slice(fuente.indexOf("function MiniaturaDeFoto"), fuente.indexOf("function JuegoCompleto"));
+  assert.match(miniatura, /<img/);
+  assert.match(miniatura, /onError/, "si la URL caducó queda el recuadro, sin icono de imagen rota");
+});
+
+test("«Ver juego completo» abre el juego con las 10 vistas aunque el padre no pase onViewSet", () => {
+  const fuente = leer("sections/SectionPhotos.tsx");
+  // El padre (OrthodonticsRedesignClient) nunca pasó onViewSet: el botón no hacía nada.
+  assert.doesNotMatch(leer("OrthodonticsRedesignClient.tsx"), /onViewSet/);
+  assert.match(fuente, /if \(props\.onViewSet\) props\.onViewSet\(p\.stage\);\s*else setJuegoAbierto\(claveDeJuego\(p\)\)/);
+  assert.match(fuente, /<JuegoCompleto/);
+  const juego = fuente.slice(fuente.indexOf("function JuegoCompleto"));
+  // Las 10 vistas salen de PHOTO_SLOTS (3 extraorales + 7 intraorales), subidas o huecos.
+  assert.match(juego, /PHOTO_SLOTS\.filter\(\(s\) => s\.group === "extraoral"\)/);
+  assert.match(juego, /PHOTO_SLOTS\.filter\(\(s\) => s\.group === "intraoral"\)/);
+  assert.match(juego, /<HuecoParaSubir/);
+  assert.match(juego, /role="dialog"/);
+  assert.match(juego, /useCajon/, "Escape cierra y el foco vuelve al botón");
+});
+
+test("juegos por etapa: la clave es el id del juego (en CONTROL hay varios con la misma etapa)", () => {
+  const fuente = leer("sections/SectionPhotos.tsx");
+  assert.match(fuente, /key=\{claveDeJuego\(p\)\}/);
+  assert.doesNotMatch(fuente, /key=\{p\.stage\}/);
+});
+
+test("subir desde el juego completo solo si la foto caería en ESE juego", () => {
+  const fuente = leer("sections/SectionPhotos.tsx");
+  assert.match(fuente, /elegirSetParaFoto\(props\.historicalSets, juego\.stage\) === juego\.setId/);
+  const hoy = new Date();
+  const viejo = new Date(hoy.getTime() - 40 * 86_400_000).toISOString();
+  const deHoy = hoy.toISOString();
+  const sets = [
+    { setId: "t0", stage: "T0", date: viejo },
+    { setId: "c-viejo", stage: "CONTROL", date: viejo },
+    { setId: "c-hoy", stage: "CONTROL", date: deHoy },
+  ];
+  assert.equal(elegirSetParaFoto(sets, "T0"), "t0");
+  assert.equal(elegirSetParaFoto(sets, "CONTROL"), "c-hoy");
+  assert.notEqual(elegirSetParaFoto(sets, "CONTROL"), "c-viejo", "un control viejo no recibe fotos de hoy");
 });

@@ -37,6 +37,8 @@ import type {
   PhotoSetSummary,
   PhotoStage,
 } from "@/components/specialties/orthodontics/redesign/sections/SectionPhotos";
+import { cargarExtrasDeJuegos } from "@/lib/orthodontics/fotos-del-juego-db";
+import type { FotoExtra } from "@/lib/orthodontics/fotos-del-juego";
 import type {
   ConsentRow,
   LabOrderRow,
@@ -371,7 +373,7 @@ export async function loadOrthoRedesignData(
     null;
 
   // ── Construye bundle ──────────────────────────────────────────────────
-  const historicalPhotoSets = await adaptPhotoSets(legacy.photoSets);
+  const historicalPhotoSets = await adaptPhotoSets(input.clinicId, legacy.photoSets);
   const installments = legacy.installments.map(adaptInstallment);
   // CFDI 4.0 (M1) — el timbrado real con Facturapi llega en Fase 2; mientras
   // tanto exponemos lista vacía. La UI muestra empty state con CTA disabled.
@@ -491,6 +493,7 @@ export async function loadOrthoRedesignData(
  *      pre-pobladas y persistan al recargar.
  */
 async function adaptPhotoSets(
+  clinicId: string,
   sets: OrthoTabData["photoSets"],
 ): Promise<PhotoSetSummary[]> {
   const STAGE_LABELS: Record<PhotoStage, string> = {
@@ -540,6 +543,22 @@ async function adaptPhotoSets(
     setSlotMap.push(setEntries);
   }
 
+  // Fotos extra de cada juego (ws1-t12). Sus URLs se firman en la MISMA tanda
+  // que las de las vistas. Sin la tabla (SQL sin pegar) no hay extras y la
+  // ficha se pinta igual.
+  const extrasCrudos = await cargarExtrasDeJuegos(
+    clinicId,
+    sets.map((s) => s.id),
+  );
+  const extraIdx = new Map<string, number>();
+  for (const lista of extrasCrudos.values()) {
+    for (const e of lista) {
+      if (!e.fileUrl) continue;
+      extraIdx.set(e.id, allUrls.length);
+      allUrls.push(e.fileUrl);
+    }
+  }
+
   const signed = await signMaybeUrls(allUrls);
 
   return sets.map((s, setIdx) => {
@@ -563,6 +582,23 @@ async function adaptPhotoSets(
         };
       }
     }
+    const extras: FotoExtra[] = [];
+    for (const e of extrasCrudos.get(s.id) ?? []) {
+      const i = extraIdx.get(e.id);
+      const url = i === undefined ? "" : (signed[i] ?? "");
+      if (!url) continue;
+      extras.push({
+        id: e.id,
+        url,
+        label: e.label,
+        uploadedAt: e.createdAt.toLocaleString("es-MX", {
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      });
+    }
     return {
       setId: s.id,
       stage,
@@ -570,6 +606,7 @@ async function adaptPhotoSets(
       label: STAGE_LABELS[stage] ?? stage,
       photoCount: Object.keys(slots).length,
       slots,
+      extras,
       hasRxPan: false,
       hasRxLatCef: false,
     };
