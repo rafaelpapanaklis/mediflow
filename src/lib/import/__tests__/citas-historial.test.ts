@@ -110,19 +110,32 @@ test("reimportar el mismo archivo no duplica (misma llave paciente+instante+esta
   assert.equal(tabla("migratedVisit").length, 1);
 });
 
-test("estado no reconocido: error, no se adivina cuál de los tres estados finales es", async () => {
+test("estado que no dice cómo terminó (ws1-t10): la cita ENTRA como «sin registro de asistencia», con el estado original en la nota", async () => {
   reiniciar();
-  const texto = [CABECERA, "María,Hernández,5551234567,Carlos Nuñez,2024-01-15,10:00,Reprogramada,Consulta"].join("\n");
+  const texto = [CABECERA, "María,Hernández,5551234567,Carlos Nuñez,2024-01-15,10:00,Notificado via email,Consulta"].join("\n");
   const prev = await correr(csv("c4.csv", texto), { dryRun: true });
-  assert.equal(fila(prev, 2).status, "error");
-  assert.match(fila(prev, 2).errors.join(" · "), /no es un estado final reconocido/);
+  assert.equal(fila(prev, 2).status, "ok");
+  assert.equal(fila(prev, 2).data.resultado, "Sin registro de asistencia");
+  await correr(csv("c4.csv", texto), { dryRun: false });
+  const v = tabla("migratedVisit")[0];
+  assert.match(v.notes, /^Resultado: Sin registro de asistencia/);
+  assert.match(v.notes, /Estado en Dentalink: Notificado via email/);
+  assert.equal(tabla("appointment").length, 0);
 });
 
-test("estado agendada/confirmada (no es final): error — este archivo es de historial cerrado", async () => {
+test("«Cambio de fecha» entra como reagendada; «Confirmada» y estado vacío, como sin registro de asistencia (ws1-t10)", async () => {
   reiniciar();
-  const texto = [CABECERA, "María,Hernández,5551234567,Carlos Nuñez,2024-01-15,10:00,Confirmada,Consulta"].join("\n");
+  const texto = [
+    CABECERA,
+    "María,Hernández,5551234567,Carlos Nuñez,2024-01-15,10:00,Cambio de fecha,Consulta",
+    "María,Hernández,5551234567,Carlos Nuñez,2024-01-16,10:00,Confirmada,Consulta",
+    "María,Hernández,5551234567,Carlos Nuñez,2024-01-17,10:00,Reprogramada,Consulta",
+  ].join("\n");
   const prev = await correr(csv("c5.csv", texto), { dryRun: true });
-  assert.equal(fila(prev, 2).status, "error");
+  assert.deepEqual([prev.validos, prev.invalidos], [3, 0]);
+  assert.equal(fila(prev, 2).data.resultado, "Reagendada (cambió de fecha)");
+  assert.equal(fila(prev, 3).data.resultado, "Sin registro de asistencia");
+  assert.equal(fila(prev, 4).data.resultado, "Reagendada (cambió de fecha)");
 });
 
 test("fecha futura con estado ya cerrado: error (dato incoherente)", async () => {

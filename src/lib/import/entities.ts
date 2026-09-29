@@ -1475,6 +1475,7 @@ export const appointmentsHandler: EntityHandler = {
     bookedBy:     ["agendadopor", "agendadapor", "creadopor", "creadapor", "registradopor"],
     createdOn:    ["fechadecreaciondecita", "fechacreacioncita", "fechadecreacion", "fechacreacion", "creadoel"],
     observations: ["observacionescita", "observacionesdelacita"],
+    apptRef:      ["#cita", "idcita", "numerocita", "ncita", "foliocita"],
   },
 
   validateMapping(campos) {
@@ -1611,7 +1612,7 @@ export const appointmentsHandler: EntityHandler = {
       const chairTexto = cellText(mapped.chair);
       const refTexto = limpiarId(mapped.treatmentRef);
       const enlaceNota: EnlaceDeCita | null = refTexto ? { tipo: caso ? "caso" : enlace ? "tratamiento" : "suelta", ref: refTexto } : null;
-      const notes = mapped.observations || mapped.bookedBy || mapped.createdOn || mapped.treatmentRef || mapped.chair || tipoInfo?.cambio
+      const notes = mapped.observations || mapped.bookedBy || mapped.createdOn || mapped.treatmentRef || mapped.chair || mapped.apptRef || tipoInfo?.cambio
         // Dentalink: cada dato del archivo con su etiqueta (comentario, observaciones, quién y cuándo la agendó, sillón, tratamiento).
         ? notasDeCita({
             comentario: mapped.notes,
@@ -1620,6 +1621,7 @@ export const appointmentsHandler: EntityHandler = {
             estadoOrigen: mapped.status,
             agendadoPor: mapped.bookedBy,
             creadaEl: textoDeCelda(mapped.createdOn),
+            citaRef: mapped.apptRef,
             sobreagendada: esSobreagendamiento(chairTexto),
             sillonSinEquivalente: rec.id || esSobreagendamiento(chairTexto) ? null : chairTexto || null,
             enlace: enlaceNota,

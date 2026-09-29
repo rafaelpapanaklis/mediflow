@@ -12,7 +12,7 @@ function isMissingRelation(e: any): boolean {
 export interface VisitaMigrada {
   id: string;
   startsAt: string;
-  status: "COMPLETED" | "NO_SHOW" | "CANCELLED";
+  status: "COMPLETED" | "NO_SHOW" | "CANCELLED" | "PENDING";
   type: string | null;
   notes: string | null;
   doctorId: string | null;

@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { formatDate } from "@/lib/utils";
+import { etiquetaDeVisita, notaSinResultado } from "@/lib/import/dentalink/citas";
 
 /**
- * "Citas anteriores (migradas)" — ws1-t12. Historial de citas YA resueltas
- * en el sistema anterior (atendida/no asistió/cancelada): de SOLO LECTURA,
+ * "Citas anteriores (migradas)" — ws1-t12. Historial de citas YA pasadas
+ * del sistema anterior (atendida/no asistió/cancelada/reagendada/sin registro
+ * de asistencia — ws1-t10): de SOLO LECTURA,
  * no genera acciones (nada de agendar, reagendar ni recordatorios). Se
  * autoabastece de /api/patients/[id]/migrated-visits — mismo criterio que
  * PagosMigradosCard, para no tocar la consulta SSR de la ficha.
@@ -15,22 +17,17 @@ import { formatDate } from "@/lib/utils";
  * Se oculta por completo si no hay nada que migrar o si la petición falla.
  */
 
-const ESTADO_LABEL: Record<string, string> = {
-  COMPLETED: "Atendida",
-  NO_SHOW: "No asistió",
-  CANCELLED: "Cancelada",
-};
-
 const ESTADO_TONE: Record<string, "success" | "warning" | "neutral"> = {
   COMPLETED: "success",
   NO_SHOW: "warning",
   CANCELLED: "neutral",
+  PENDING: "neutral",
 };
 
 interface VisitaMigrada {
   id: string;
   startsAt: string;
-  status: "COMPLETED" | "NO_SHOW" | "CANCELLED";
+  status: "COMPLETED" | "NO_SHOW" | "CANCELLED" | "PENDING";
   type: string | null;
   notes: string | null;
   doctorName: string | null;
@@ -72,9 +69,17 @@ export function CitasMigradasCard({ patientId }: { patientId: string }) {
               <div style={{ color: "var(--text-3)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {[v.type, v.doctorName ? `Dr/a. ${v.doctorName}` : null].filter(Boolean).join(" · ") || "Sin detalle"}
               </div>
+              {notaSinResultado(v.notes) ? (
+                <div
+                  title={notaSinResultado(v.notes)}
+                  style={{ color: "var(--text-3)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >
+                  {notaSinResultado(v.notes).replace(/\n/g, " · ")}
+                </div>
+              ) : null}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-              <BadgeNew tone={ESTADO_TONE[v.status] ?? "neutral"}>{ESTADO_LABEL[v.status] ?? v.status}</BadgeNew>
+              <BadgeNew tone={ESTADO_TONE[v.status] ?? "neutral"}>{etiquetaDeVisita(v.status, v.notes)}</BadgeNew>
               <BadgeNew tone="neutral">Migrado de {v.origin}</BadgeNew>
             </div>
           </div>

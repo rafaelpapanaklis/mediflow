@@ -186,6 +186,8 @@ export interface DatosDeNota {
   estadoOrigen?: unknown;
   agendadoPor?: unknown;
   creadaEl?: unknown;
+  /** El «# Cita» del sistema de origen. */
+  citaRef?: unknown;
   sobreagendada?: boolean;
   /** El «Sillón (Recurso)» del archivo, cuando NO se pudo llevar a un consultorio de la clínica. */
   sillonSinEquivalente?: string | null;
@@ -208,6 +210,8 @@ export function notasDeCita(d: DatosDeNota): string | null {
   const quien = una(d.agendadoPor, 120);
   const cuando = una(d.creadaEl, 40);
   if (quien || cuando) lineas.push(`Agendada${quien ? ` por ${quien}` : ""}${cuando ? ` el ${cuando}` : ""}`);
+  const ref = una(d.citaRef, 40);
+  if (ref) lineas.push(`Cita #${ref.replace(/\.0+$/, "")} de Dentalink`);
   if (d.sobreagendada) lineas.push("Sobreagendada: en Dentalink entró como «Sobre Agendamiento», encima de otra cita");
   else if (d.sillonSinEquivalente) lineas.push(`Sillón en Dentalink: ${una(d.sillonSinEquivalente, 80)}`);
   if (d.enlace) {

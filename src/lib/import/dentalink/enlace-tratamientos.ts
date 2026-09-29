@@ -70,7 +70,7 @@ export async function cargarEnlaces(clinicId: string, originId: string, patientI
       const porId = new Map(planes.map((p) => [p.id, p]));
       for (const [ref, planId] of Array.from(externos.mapa.entries())) {
         const p = porId.get(planId);
-        if (!p || !pacientes.has(p.patientId)) continue;
+        if (!p) continue; // (de cualquier paciente: `enlaceDe` avisa si la fila es de otro)
         out.casos.set(ref, { tipo: "caso", ref, planId, patientId: p.patientId, doctorId: p.treatingDoctorId ?? null });
       }
     } catch (e) {

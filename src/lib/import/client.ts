@@ -122,6 +122,7 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "type", label: "Tipo (adeudo/favor)", labelKey: "shell.importClinic.fields.balanceType" },
     { value: "description", label: "Concepto", labelKey: "shell.importClinic.fields.concept" },
     { value: "date", label: "Fecha", labelKey: "shell.importClinic.fields.date" },
+    { value: "treatmentRef", label: "Tratamiento en el sistema de origen (liga con el ya importado)", labelKey: "shell.importClinic.fields.treatmentRef" },
   ],
   appointments: [
     NO_IMPORT,
@@ -138,6 +139,12 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "endTime", label: "Hora de fin (calcula la duración si no hay «Duración»)", labelKey: "shell.importClinic.fields.endTime" },
     { value: "status", label: "Estado de la cita", labelKey: "shell.importClinic.fields.apptStatus" },
     { value: "notes", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
+    { value: "treatmentRef", label: "Tratamiento en el sistema de origen (liga con el ya importado)", labelKey: "shell.importClinic.fields.treatmentRef" },
+    { value: "apptRef", label: "Cita en el sistema de origen (nº)", labelKey: "shell.importClinic.fields.apptRef" },
+    { value: "chair", label: "Sillón / consultorio", labelKey: "shell.importClinic.fields.chair" },
+    { value: "bookedBy", label: "Agendada por", labelKey: "shell.importClinic.fields.bookedBy" },
+    { value: "createdOn", label: "Fecha en que se agendó", labelKey: "shell.importClinic.fields.createdOn" },
+    { value: "observations", label: "Observaciones (segundo texto libre)", labelKey: "shell.importClinic.fields.observations" },
   ],
   medicalHistory: [
     NO_IMPORT,
@@ -281,9 +288,16 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "doctor", label: "Doctor / Profesional", labelKey: "shell.importClinic.fields.doctor" },
     { value: "date", label: "Fecha", labelKey: "shell.importClinic.fields.date" },
     { value: "time", label: "Hora", labelKey: "shell.importClinic.fields.time" },
-    { value: "status", label: "Estado final (atendida/no asistió/cancelada)", labelKey: "shell.importClinic.fields.finalStatus" },
+    { value: "endTime", label: "Hora de fin (calcula la duración si no hay «Duración»)", labelKey: "shell.importClinic.fields.endTime" },
+    { value: "status", label: "Estado de la cita (atendida/no asistió/cancelada…)", labelKey: "shell.importClinic.fields.finalStatus" },
     { value: "type", label: "Tipo / Motivo", labelKey: "shell.importClinic.fields.type" },
     { value: "notes", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
+    { value: "treatmentRef", label: "Tratamiento en el sistema de origen (liga con el ya importado)", labelKey: "shell.importClinic.fields.treatmentRef" },
+    { value: "apptRef", label: "Cita en el sistema de origen (nº)", labelKey: "shell.importClinic.fields.apptRef" },
+    { value: "chair", label: "Sillón / consultorio", labelKey: "shell.importClinic.fields.chair" },
+    { value: "bookedBy", label: "Agendada por", labelKey: "shell.importClinic.fields.bookedBy" },
+    { value: "createdOn", label: "Fecha en que se agendó", labelKey: "shell.importClinic.fields.createdOn" },
+    { value: "observations", label: "Observaciones (segundo texto libre)", labelKey: "shell.importClinic.fields.observations" },
   ],
   orthoCases: [
     NO_IMPORT,
@@ -490,7 +504,8 @@ function rowDetail(entity: Entity, data: Record<string, any>): string | undefine
     return parts.length ? parts.join(" · ") : undefined;
   }
   if (entity === "appointmentHistory") {
-    const parts = [data.startsLocal ?? dia(data.startsAt), data.status, data.type].filter(Boolean);
+    // ws1-t10: la palabra de la ficha («Atendida», «Sin registro de asistencia»…) y, si cuenta como control de un caso de ortodoncia, se dice.
+    const parts = [data.startsLocal ?? dia(data.startsAt), data.resultado ?? data.status, data.type, data.comoControl ? "control del caso" : null].filter(Boolean);
     return parts.length ? parts.join(" · ") : undefined;
   }
   return undefined;

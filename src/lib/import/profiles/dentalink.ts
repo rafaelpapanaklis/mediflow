@@ -116,6 +116,15 @@ const dentalink: OriginProfile = {
       "Hora Fin Cita": "endTime",
       "Motivo de Atención": "type",
       "Comentario Cita": "notes",
+      // ws1-t10: el resto de la cita de 05 — a qué tratamiento pertenece (liga con el caso de ortodoncia o el tratamiento
+      // ya importado de 06), el sillón («Sobre Agendamiento» = sobreagendada), quién y cuándo la agendó, y las
+      // observaciones. Nada de esto se descarta: va a la cita en notas legibles.
+      "# Tratamiento": "treatmentRef",
+      "# Cita": "apptRef",
+      "Sillón (Recurso)": "chair",
+      "Agendado por": "bookedBy",
+      "Fecha de creación de cita": "createdOn",
+      "Observaciones": "observations",
       // El doctor viene en dos columnas: el motor las une («JOHNNIFER» + «BENITEZ VALENCIA»).
       "Nombre Profesional Cita": "doctor",
       "Apellidos Profesional Cita": "doctorLastName",
@@ -152,6 +161,9 @@ const dentalink: OriginProfile = {
       "Apellidos": "lastName",
       "Apellidos Paciente": "lastName",
       "Mora": "amount",
+      // ws1-t10: «# Tratamiento» dice de qué tratamiento es la mora; si ese tratamiento ya se importó de 06, la mora NO
+      // se cobra otra vez como saldo aparte (ya está en sus cargos): se anota en él.
+      "# Tratamiento": "treatmentRef",
       "Celular": "phone",
       "Email": "email",
       "Deuda": "amount",
@@ -388,11 +400,20 @@ const dentalink: OriginProfile = {
       // BEVADENT «05_Citas» (mismo archivo que las citas vivas): ID, hora y doctor partido en dos columnas.
       "# Paciente": "patientExternalId",
       "Hora Inicio Cita": "time",
+      "Hora Fin Cita": "endTime",
       "Nombre Profesional Cita": "doctor",
       "Apellidos Profesional Cita": "doctorLastName",
       "Estado Cita": "status",
       "Motivo de Atención": "type",
       "Comentario Cita": "notes",
+      // ws1-t10: igual que en las citas vivas (ver arriba).
+      "Apellidos Paciente": "lastName",
+      "# Cita": "apptRef",
+      "# Tratamiento": "treatmentRef",
+      "Sillón (Recurso)": "chair",
+      "Agendado por": "bookedBy",
+      "Fecha de creación de cita": "createdOn",
+      "Observaciones": "observations",
       "Paciente": "name",
       "Nombre paciente": "name",
       "Celular": "phone",
