@@ -9,6 +9,9 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { ReferralProgressLetterPdfData } from "@/app/actions/orthodontics/exportReferralProgressLetterPdf";
 import { techniqueLabel } from "../consent-texts";
 import { MembreteOrto, PieOrto, estilosPaginaOrto } from "../pdf/membrete-orto";
+import { CLASE_ANGLE } from "../expediente-ortodoncia";
+
+const claseAngle = (v: string) => CLASE_ANGLE[v] ?? v.replaceAll("_", " ").toLowerCase();
 
 const DOCUMENTO = "Carta de avance";
 
@@ -60,8 +63,7 @@ export function ReferralProgressLetterPdf({ data }: { data: ReferralProgressLett
           <View style={styles.metric}>
             <Text style={styles.metricLabel}>Clasificación Angle:</Text>
             <Text style={styles.metricValue}>
-              der. {data.diagnosis.angleClassRight.replaceAll("_", " ").toLowerCase()} · izq.{" "}
-              {data.diagnosis.angleClassLeft.replaceAll("_", " ").toLowerCase()}
+              der. {claseAngle(data.diagnosis.angleClassRight)} · izq. {claseAngle(data.diagnosis.angleClassLeft)}
             </Text>
           </View>
           <View style={styles.metric}>
