@@ -474,8 +474,39 @@ export function applyMapping(rows: Record<string, any>[], mapping: ColumnMapping
       if (v === undefined || v === null || String(v).trim() === "") continue;
       if (out[campo] === undefined) out[campo] = v;
     }
+    // El doctor en DOS columnas («Nombre» + «Apellidos» del profesional): se une aquí, para que cada
+    // handler siga viendo un solo `doctor` con el nombre completo.
+    if (out[CAMPO_APELLIDOS_DOCTOR] !== undefined) {
+      out.doctor = unirNombreDoctor(out.doctor, out[CAMPO_APELLIDOS_DOCTOR]);
+      delete out[CAMPO_APELLIDOS_DOCTOR];
+    }
     return out;
   });
+}
+
+/**
+ * Campo AUXILIAR de toda entidad que tiene `doctor`: los apellidos del profesional cuando el archivo los
+ * trae en otra columna. No es un campo del validador: `applyMapping` lo funde en `doctor` y desaparece.
+ */
+export const CAMPO_APELLIDOS_DOCTOR = "doctorLastName";
+const VARIANTES_APELLIDOS_DOCTOR = [
+  "apellidosprofesional", "apellidoprofesional", "apellidosdoctor", "apellidodoctor", "apellidosdentista",
+  "apellidodentista", "apellidosmedico", "apellidosdelprofesional", "apellidosprofesionalcita",
+  "apellidosprofesionaltratante", "apellidosprofesionaltratamiento",
+];
+
+/** `headerVariants` del handler + el campo auxiliar de apellidos del doctor (solo si la entidad tiene `doctor`). */
+export function conCamposAuxiliares(v: Record<string, string[]>): Record<string, string[]> {
+  return v.doctor && !v[CAMPO_APELLIDOS_DOCTOR] ? { ...v, [CAMPO_APELLIDOS_DOCTOR]: VARIANTES_APELLIDOS_DOCTOR } : v;
+}
+
+/** «JOHNNIFER» + «BENITEZ VALENCIA» → «JOHNNIFER BENITEZ VALENCIA»; sin repetir si el nombre ya trae los apellidos. */
+export function unirNombreDoctor(nombre: unknown, apellidos: unknown): string {
+  const n = textoDeCelda(nombre);
+  const a = textoDeCelda(apellidos);
+  if (!a) return n;
+  if (!n) return a;
+  return norm(n).includes(norm(a)) ? n : `${n} ${a}`;
 }
 
 /** Una celda como texto para una nota: fechas como dd/mm/aaaa (con hora si la traen), lo demás recortado. */
@@ -560,12 +591,14 @@ function profileSuggestions(
   const valid = new Set(Object.keys(headerVariants));
   const byNorm = new Map<string, string>();
   for (const [header, campo] of Object.entries(profileMap)) {
-    if (valid.has(campo)) byNorm.set(norm(header), campo);
+    // "" = el perfil sabe que esa columna NO es lo que la autodetección genérica cree (p. ej. «Arancel»,
+    // que en Dentalink es el nombre de la lista de precios y no un precio): se ignora, no se autodetecta.
+    if (campo === "" || valid.has(campo)) byNorm.set(norm(header), campo);
   }
   const out: ColumnMapping = {};
   for (const header of columns) {
     const campo = byNorm.get(norm(header));
-    if (campo) out[header] = campo;
+    if (campo !== undefined) out[header] = campo;
   }
   return out;
 }
@@ -718,7 +751,7 @@ function aggregateUnresolved(preview: PreviewRow[]): UnresolvedValue[] {
       // no cuentan… salvo el formato de los montos y el hallazgo del odontograma
       // (N7, ws1-t10 ronda 4): en los dos, el error ES justo la falta de decisión,
       // así que hay que seguir ofreciendo el selector hasta que el usuario elija.
-      if (r.status === "error" && u.field !== AMOUNT_FORMAT_FIELD && u.field !== "condition") continue;
+      if (r.status === "error" && u.field !== AMOUNT_FORMAT_FIELD && u.field !== "condition" && u.field !== "doctor") continue;
       const k = `${u.field}\u0000${u.key}`;
       const hit = byKey.get(k);
       if (hit) hit.rows++;
@@ -799,10 +832,11 @@ export async function runImport(
   // disputa. El perfil sigue mandando en todo lo demás; solo se cae a la
   // autodetección pura cuando, tal cual, el mapeo del perfil no alcanzaría
   // para importar y la genérica sola sí habría bastado.
-  const generic = autodetect(columns, handler.headerVariants);
+  const variantes = conCamposAuxiliares(handler.headerVariants);
+  const generic = autodetect(columns, variantes);
   const withProfile: ColumnMapping = {
     ...generic,
-    ...(profile ? profileSuggestions(columns, profileMappingFor(profile, handler.entity), handler.headerVariants) : {}),
+    ...(profile ? profileSuggestions(columns, profileMappingFor(profile, handler.entity), variantes) : {}),
   };
   const suggested: ColumnMapping =
     profile
@@ -813,7 +847,7 @@ export async function runImport(
   // Mapping efectivo: el del cliente (saneado) si vino; si no, la sugerencia.
   const mapping =
     opts.columnMapping && Object.keys(opts.columnMapping).length > 0
-      ? sanitizeMapping(opts.columnMapping, columns, handler.headerVariants)
+      ? sanitizeMapping(opts.columnMapping, columns, variantes)
       : suggested;
 
   const campos = new Set(Object.values(mapping).filter(Boolean) as string[]);

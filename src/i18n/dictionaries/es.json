@@ -809,6 +809,10 @@
         "bloodType": "Tipo de sangre",
         "address": "Dirección",
         "notes": "Notas",
+        "guardianName": "Apoderado (contacto de emergencia; responsable si es menor)",
+        "estadoTratamiento": "Estado del tratamiento (activo / finalizado)",
+        "doctorLastName": "Apellidos del doctor (se unen al nombre)",
+        "endTime": "Hora de fin (calcula la duración si no hay «Duración»)",
         "colonia": "Colonia / comuna (se junta a la dirección)",
         "city": "Ciudad / municipio (se junta a la dirección)",
         "state": "Estado / provincia (se junta a la dirección)",
@@ -1085,6 +1089,11 @@
           "other": "{count} hallazgos no están en el catálogo del odontograma"
         },
         "unresolvedDescCondition": "Elige el equivalente de cada uno: sin elegirlo, esas filas no se importan.",
+        "unresolvedTitleDoctor": {
+          "one": "{count} doctor del archivo no coincide con un usuario de tu clínica",
+          "other": "{count} doctores del archivo no coinciden con un usuario de tu clínica"
+        },
+        "unresolvedDescDoctor": "Elige a quién se asigna cada uno (aunque no exista, o haya dos usuarios con ese nombre): sin elegir, esas citas no se importan. No se mueve ningún horario.",
         "unresolvedChoose": "Elige un equivalente…",
         "unresolvedRows": {
           "one": "({count} fila)",

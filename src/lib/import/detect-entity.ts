@@ -101,6 +101,7 @@ function variantesConPerfil(entity: Entity, handler: (typeof HANDLERS)[string], 
   const merged: Record<string, string[]> = {};
   for (const [campo, variantes] of Object.entries(handler.headerVariants)) merged[campo] = [...variantes];
   for (const [header, campo] of extra) {
+    if (!campo) continue; // "" = columna que el perfil manda ignorar
     const n = norm(header);
     if (!merged[campo]) merged[campo] = [];
     if (!merged[campo].includes(n)) merged[campo].push(n);

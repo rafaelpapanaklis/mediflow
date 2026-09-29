@@ -23,12 +23,13 @@ import type { OriginProfile } from "./origin";
 //    odontograma, evoluciones, casos de ortodoncia, laboratorio, cuotas y aranceles.
 //    Por eso `verified` sigue en false: el perfil es un solo interruptor y la mayor
 //    parte de sus entidades no se ha visto con un archivo real.
-//  · Lo que el perfil NO puede arreglar (necesita motor/handler, no mapeo):
-//    el doctor de «05_Citas» viene PARTIDO en «Nombre Profesional Cita» + «Apellidos
-//    Profesional Cita» (aquí no se mapea a `doctor`: solo el nombre no empareja con
-//    «Nombre Apellido» de un usuario, y sería peor un error por fila que parar en el
-//    mapeo); la duración sale de «Hora Fin Cita», que no se lee; y «Arancel» («Arancel
-//    Base» en todas las filas) lo toma la autodetección genérica como `price`.
+//  · Tres cosas de estos exports que el perfil resuelve con ayuda del motor (ws1-t12, ronda 2):
+//    el doctor de «05_Citas» viene PARTIDO en «Nombre Profesional Cita» + «Apellidos Profesional
+//    Cita» (el campo auxiliar `doctorLastName` se une al nombre en engine.applyMapping); la
+//    duración sale de «Hora Fin Cita» (`endTime`); y «Arancel» («Arancel Base» en todas las filas,
+//    el nombre de la lista de precios) y «Prestación» (la categoría, «Acción Clínica») NO son el
+//    precio ni el procedimiento: se marcan con "" = «ignora esta columna», para que la autodetección
+//    genérica no las tome (en «06» el procedimiento es «Nombre Prestación»).
 const dentalink: OriginProfile = {
   id: "dentalink",
   name: "Dentalink",
@@ -75,6 +76,8 @@ const dentalink: OriginProfile = {
     "Convenio": "insuranceProvider",
     "Referencia": "source",
     "Alertas": "patientAlerts",
+    // «# Apoderado» trae el NOMBRE del apoderado: contacto de emergencia y, si es menor, responsable.
+    "# Apoderado": "guardianName",
     "Ciudad": "city",
     "Comuna": "colonia",
     "Saldo": "balance",
@@ -100,18 +103,22 @@ const dentalink: OriginProfile = {
     appointmentHistory: ["Citas Estados Historico", "Historial de Citas"],
   },
   entityMappings: {
-    // «Citas pacientes» (Agenda). «Hora fin» NO se mapea: la duración sale de «Duración»
-    // (o 30 min por omisión) y una hora de fin mapeada a «hora» la pisaría.
+    // «Citas pacientes» (Agenda). «Hora fin» va a `endTime` (NO a `time`: pisaría la hora de inicio): la
+    // duración sale de «Duración», si no de la hora de fin, y si no son 30 min.
     appointments: {
       "Id paciente": "patientExternalId",
       "ID Paciente": "patientExternalId",
       // BEVADENT «05_Citas» (CSV): «# Paciente» es el ID; hora en «Hora Inicio Cita»
       // (HH:MM:SS); motivo en «Motivo de Atención»; texto libre en «Comentario Cita».
-      // «Nombre/Apellidos Profesional Cita» NO se mapea a `doctor` (ver arriba).
       "# Paciente": "patientExternalId",
       "Hora Inicio Cita": "time",
+      // La duración sale de la hora de fin (el reporte no trae «Duración»): 8 de las 23 citas futuras son de 60 min.
+      "Hora Fin Cita": "endTime",
       "Motivo de Atención": "type",
       "Comentario Cita": "notes",
+      // El doctor viene en dos columnas: el motor las une («JOHNNIFER» + «BENITEZ VALENCIA»).
+      "Nombre Profesional Cita": "doctor",
+      "Apellidos Profesional Cita": "doctorLastName",
       "Paciente": "name",
       "Nombre paciente": "name",
       "Apellidos paciente": "lastName",
@@ -209,7 +216,10 @@ const dentalink: OriginProfile = {
       "Fecha presupuesto": "date",
       "Tratamiento": "title",
       "Nombre tratamiento": "title",
-      "Prestación": "procedure",
+      // BEVADENT: «Prestación» es la CATEGORÍA («Acción Clínica», «Laboratorio») y «Arancel» el nombre de la
+      // lista de precios («Arancel Base»): ninguna es procedimiento ni precio. "" = se ignoran.
+      "Prestación": "",
+      "Arancel": "",
       "Prestaciones": "procedure",
       "Pieza": "tooth",
       "Diente": "tooth",
@@ -233,8 +243,7 @@ const dentalink: OriginProfile = {
       "Nombre paciente": "name",
       "Celular": "phone",
       // BEVADENT «06_Presupuestos_Detalle»: mismas columnas que `quotes` (ver arriba) más
-      // «Pagado Prestación» (abonado por línea). Ojo: en 8 de 157 tratamientos la suma de
-      // «Pagado Prestación» NO da «Total Pagos Tratamiento» (pagos sin línea asignada).
+      // «Total Pagos Tratamiento» (lo abonado, ver abajo) y «Estado Tratamiento» (activo / finalizado).
       "# Paciente": "patientExternalId",
       "Apellidos Paciente": "lastName",
       "# Tratamiento": "folio",
@@ -242,7 +251,12 @@ const dentalink: OriginProfile = {
       "Nombre Prestación": "procedure",
       "Precio Paciente": "price",
       "Nombre Profesional Tratamiento": "doctor",
-      "Pagado Prestación": "abonado",
+      // Lo abonado es del TRATAMIENTO («Total Pagos Tratamiento», igual en todas sus líneas): el motor toma el de la
+      // primera línea. «Pagado Prestación» es por línea y NO suma los pagos sin línea asignada (8 tratamientos,
+      // $117 627): se ignora.
+      "Total Pagos Tratamiento": "abonado",
+      "Pagado Prestación": "",
+      "Estado Tratamiento": "estadoTratamiento",
       "N° Presupuesto": "folio",
       "Nº Presupuesto": "folio",
       "N° Tratamiento": "folio",
@@ -250,7 +264,10 @@ const dentalink: OriginProfile = {
       "Fecha presupuesto": "date",
       "Tratamiento": "title",
       "Nombre tratamiento": "title",
-      "Prestación": "procedure",
+      // BEVADENT: «Prestación» es la CATEGORÍA («Acción Clínica», «Laboratorio») y «Arancel» el nombre de la
+      // lista de precios («Arancel Base»): ninguna es procedimiento ni precio. "" = se ignoran.
+      "Prestación": "",
+      "Arancel": "",
       "Prestaciones": "procedure",
       "Pieza": "tooth",
       "Diente": "tooth",
@@ -360,6 +377,14 @@ const dentalink: OriginProfile = {
     appointmentHistory: {
       "Id paciente": "patientExternalId",
       "ID Paciente": "patientExternalId",
+      // BEVADENT «05_Citas» (mismo archivo que las citas vivas): ID, hora y doctor partido en dos columnas.
+      "# Paciente": "patientExternalId",
+      "Hora Inicio Cita": "time",
+      "Nombre Profesional Cita": "doctor",
+      "Apellidos Profesional Cita": "doctorLastName",
+      "Estado Cita": "status",
+      "Motivo de Atención": "type",
+      "Comentario Cita": "notes",
       "Paciente": "name",
       "Nombre paciente": "name",
       "Celular": "phone",

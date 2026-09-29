@@ -79,6 +79,13 @@ const UNRESOLVED_FIELD_CONFIG: Record<string, { titleKey: string; descKey: strin
     descKey: "shell.importClinic.step6.unresolvedDescCondition",
     allowUnlinked: false,
   },
+  // Doctor del archivo que no empareja con un usuario de la clínica (no existe, o varios se llaman igual):
+  // una cita necesita doctor, así que hay que elegir a quién se asigna; sin elegir, esas filas no se importan.
+  doctor: {
+    titleKey: "shell.importClinic.step6.unresolvedTitleDoctor",
+    descKey: "shell.importClinic.step6.unresolvedDescDoctor",
+    allowUnlinked: false,
+  },
 };
 
 /** Valores (procedimiento del tarifario, hallazgo del odontograma…) que no casaron con el catálogo. */

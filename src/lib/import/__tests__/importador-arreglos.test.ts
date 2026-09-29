@@ -597,7 +597,9 @@ test("perfil Dentalink: reconoce las columnas de la API/reportes, sigue marcado 
     "77,Rosa Elena,Campos Díaz,16/01/2030,09:00,09:45,45,Ana López,Anulado,",
   ].join("\n")), { origin: "dentalink" });
   assert.equal(citas.suggestedMapping["Hora inicio"], "time");
-  assert.equal(citas.suggestedMapping["Hora fin"], undefined);
+  // «Hora fin» NO va a `time` (pisaría la de inicio): va a `endTime`, de donde sale la duración si no hay «Duración».
+  assert.equal(citas.suggestedMapping["Hora fin"], "endTime");
+  assert.equal(citas.suggestedMapping["Hora inicio"], "time");
   assert.equal(fila(citas, 2).data.startsAt.toISOString(), "2030-01-15T15:00:00.000Z");
   assert.equal(fila(citas, 2).data.endsAt.toISOString(), "2030-01-15T15:45:00.000Z");
   assert.equal(fila(citas, 3).status, "skipped");

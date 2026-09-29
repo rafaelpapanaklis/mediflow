@@ -80,12 +80,12 @@ test("lo que no tiene campo NO se pierde: va a las notas como «Dato de Dentalin
   const l = lineas(r.preview[0].data.notes);
   assert.equal(l[0], "Prefiere tardes", "«Observaciones» sigue siendo el arranque de las notas");
   assert.ok(l.includes("Dato de Dentalink: # Interno: INT-7"));
-  assert.ok(l.includes("Dato de Dentalink: # Apoderado: Ana Prueba"));
   assert.ok(l.includes("Dato de Dentalink: Empleador: Taller Prueba"));
   assert.ok(l.includes("Dato de Dentalink: Teléfono: 4525550101"), "el segundo teléfono (otro número) no se pierde");
   assert.ok(l.includes("Dato de Dentalink: Alertas: Hipertensión, alergia a penicilina"), "el texto original de las alertas queda tal cual");
   const todo = l.join("\n");
   assert.ok(!/Edad/.test(todo), "la edad se calcula de la fecha de nacimiento: no hay nada que conservar");
+  assert.ok(!/Apoderado/.test(todo), "el apoderado tiene destino propio (contacto de emergencia): no se repite en notas");
   assert.ok(!/Convenio|Sin Tipo|Referencia|Cédula/.test(todo), "lo que ya entró a un campo, o es relleno, no se repite en notas");
 });
 
@@ -142,4 +142,27 @@ test("al importar de verdad, la ficha completa queda guardada en Patient (curp, 
   assert.equal(p.address, "Calle Falsa 123, Centro, Uruapan");
   assert.match(p.notes, /Dato de Dentalink: Empleador: Taller Prueba/);
   assert.equal(p.insuranceProvider, null);
+});
+
+test("«Apoderado» → contacto de emergencia; si el paciente es MENOR también queda como su responsable (Guardian)", async () => {
+  base = crearBase(semilla());
+  const menor = { ...FILA_COMPLETA, "# Paciente": "910", Nombre: "Nico", "Fecha de nac.": "2018-03-01", "# Apoderado": "Ana Prueba", Celular: "+524525550110", "E-Mail": "", "Cédula identidad / DNI": "" };
+  const adulto = { ...FILA_COMPLETA, "# Paciente": "911", Nombre: "Abel", Apellidos: "Prueba Dos", "Fecha de nac.": "1950-03-01", "# Apoderado": "Rosa Prueba", Celular: "+524525550111", "E-Mail": "", "Cédula identidad / DNI": "" };
+  const res = await correr(csv([menor, adulto]), { dryRun: false });
+  assert.equal(res.created, 2);
+  const pacientes = base.tablas["patient"] ?? [];
+  const pMenor = pacientes.find((p) => p.firstName === "Nico")!;
+  const pAdulto = pacientes.find((p) => p.firstName === "Abel")!;
+  assert.equal(pMenor.emergencyContactName, "Ana Prueba");
+  assert.equal(pMenor.emergencyContactRelation, "Apoderado");
+  assert.equal(pAdulto.emergencyContactName, "Rosa Prueba", "también el adulto conserva su apoderado como contacto de emergencia");
+  const guardianes = base.tablas["guardian"] ?? [];
+  assert.equal(guardianes.length, 1, "solo el MENOR recibe un responsable");
+  assert.equal(guardianes[0].patientId, pMenor.id);
+  assert.equal(guardianes[0].fullName, "Ana Prueba");
+  assert.equal(guardianes[0].esResponsableLegal, true);
+  assert.equal(guardianes[0].principal, true);
+  assert.equal(guardianes[0].parentesco, "tutor_legal");
+  assert.equal(guardianes[0].phone, "+524525550110", "sin otro dato, el teléfono registrado del menor es el del apoderado");
+  assert.equal(guardianes[0].clinicId, CLINICA);
 });

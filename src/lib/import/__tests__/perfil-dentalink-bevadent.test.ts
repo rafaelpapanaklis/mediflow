@@ -7,9 +7,9 @@
  * pacientes) y filas inventadas. Lo que se prueba es lo que el perfil controla: qué
  * columna reconoce el motor sin que nadie la empareje a mano.
  *
- * También deja escrito lo que el perfil NO puede arreglar (doctor partido en dos
- * columnas, duración por «Hora Fin», «Arancel» tomada como precio): si algún día el
- * motor lo resuelve, estas pruebas avisan para que se actualice el perfil y su nota.
+ * También fija lo que el perfil resuelve con ayuda del motor: el doctor partido en dos
+ * columnas, la duración por «Hora Fin Cita» y que «Arancel» / «Prestación» NO se tomen
+ * por precio / procedimiento (y que otros orígenes sigan autodetectándolas).
  *
  * Run: npx tsx --test --experimental-test-module-mocks src/lib/import/__tests__/perfil-dentalink-bevadent.test.ts
  */
@@ -74,13 +74,14 @@ test("01_Pacientes: cada una de las 22 columnas tiene destino — a su campo, o 
     "Observaciones": "notes",
     "Sexo": "gender",
     "Tipo Paciente": "tags",
+    "# Apoderado": "guardianName",
     "Convenio": "insuranceProvider",
     "Referencia": "source",
   });
   // Sin campo en Patient: no se reconocen, y el importador las conserva en las notas («Dato de Dentalink: …»)
   // — ver paciente-ficha-completa.test.ts. «Edad» solo se conserva si falta la fecha de nacimiento.
   const sinCampo = PACIENTES.filter((c) => !m[c]);
-  assert.deepEqual(sinCampo, ["# Interno", "Edad", "# Apoderado", "Nombre Empresa Convenio", "Empleador"]);
+  assert.deepEqual(sinCampo, ["# Interno", "Edad", "Nombre Empresa Convenio", "Empleador"]);
   assert.equal(r.validos, 1);
 });
 
@@ -107,35 +108,49 @@ test("06_Presupuestos_Detalle: presupuesto por «# Tratamiento», línea por «N
     assert.equal(m["Nombre Prestación"], "procedure", entidad);
     assert.equal(m["Precio Paciente"], "price", entidad);
     assert.equal(m["Nombre Profesional Tratamiento"], "doctor", entidad);
-    // Se REPITEN en cada fila del tratamiento: mapearlos duplicaría el total en cada línea.
+    // Se REPITEN en cada fila del tratamiento: mapearlos a un total de línea lo duplicaría en cada línea.
     assert.equal(m["Total Presupuesto"], undefined, entidad);
-    assert.equal(m["Total Pagos Tratamiento"], undefined, entidad);
+    assert.equal(m["Pagado Prestación"] || undefined, undefined, entidad + ": el pagado por línea no es lo abonado");
   }
   const tp = await vistaPrevia("treatmentPlans", csv("06.csv", PRESUPUESTOS, { "# Paciente": "1042", "# Tratamiento": "77", "Fecha de generación del tratamiento": "2026-05-12 10:30:00", "Nombre Prestación": "Profilaxis", "Precio Paciente": "1200" }));
-  assert.equal(tp.suggestedMapping["Pagado Prestación"], "abonado");
+  assert.equal(tp.suggestedMapping["Total Pagos Tratamiento"], "abonado", "lo abonado es del tratamiento (igual en todas sus líneas)");
+  assert.equal(tp.suggestedMapping["Estado Tratamiento"], "estadoTratamiento");
+  const q = await vistaPrevia("quotes", csv("06q.csv", PRESUPUESTOS, { "# Paciente": "1042", "# Tratamiento": "77", "Fecha de generación del tratamiento": "2026-05-12 10:30:00", "Nombre Prestación": "Profilaxis", "Precio Paciente": "1200" }));
+  assert.equal(q.suggestedMapping["Total Pagos Tratamiento"], undefined, "presupuestos no lleva abonado");
   assert.equal(tp.suggestedMapping["Fecha Realización"], "fechaRealizado");
 });
 
-test("05_Citas: reconoce ID, fecha, hora de inicio, estado y motivo; el doctor partido sigue sin mapear (hueco conocido)", async () => {
-  const r = await vistaPrevia("appointments", csv("05_Citas.csv", CITAS, { "Fecha Cita": "2026-10-05", "Hora Inicio Cita": "09:30:00", "Estado Cita": "No confirmado", "Nombre Paciente": "Lucía", "Apellidos Paciente": "Prueba Uno" }));
+test("05_Citas: reconoce ID, fecha, hora de inicio y de fin, estado, motivo y el doctor partido en dos columnas", async () => {
+  const r = await vistaPrevia("appointments", csv("05_Citas.csv", CITAS, { "Fecha Cita": "2030-10-05", "Hora Inicio Cita": "09:30:00", "Hora Fin Cita": "10:30:00", "Estado Cita": "No confirmado", "Nombre Paciente": "Lucía", "Apellidos Paciente": "Prueba Uno", "Nombre Profesional Cita": "ANA", "Apellidos Profesional Cita": "PRUEBA" }));
   const m = r.suggestedMapping;
   assert.equal(m["# Paciente"], "patientExternalId");
   assert.equal(m["Fecha Cita"], "date");
   assert.equal(m["Hora Inicio Cita"], "time");
+  assert.equal(m["Hora Fin Cita"], "endTime", "la hora de fin NO va a `time`: pisaría la de inicio");
   assert.equal(m["Estado Cita"], "status");
   assert.equal(m["Motivo de Atención"], "type");
   assert.equal(m["Comentario Cita"], "notes");
-  // HUECO CONOCIDO (no es del perfil): el doctor viene en dos columnas y el motor solo une lo que
-  // ya es un campo. Hasta que el motor sepa unir «Nombre» + «Apellidos», la vista previa pide el doctor.
-  assert.equal(m["Nombre Profesional Cita"], undefined);
-  assert.equal(m["Apellidos Profesional Cita"], undefined);
-  assert.equal(r.mappingError, "Falta la columna del doctor");
-  // HUECO CONOCIDO: la duración sale de «Hora Fin Cita», que el motor no lee (todas quedarían en 30 min).
-  assert.equal(m["Hora Fin Cita"], undefined);
+  assert.equal(m["Nombre Profesional Cita"], "doctor");
+  assert.equal(m["Apellidos Profesional Cita"], "doctorLastName");
+  assert.equal(r.mappingError, undefined, "con el doctor reconocido la cita ya no se detiene en el mapeo");
 });
 
-test("06_Presupuestos_Detalle: «Arancel» («Arancel Base») la toma la autodetección genérica como precio (hueco conocido)", async () => {
-  const r = await vistaPrevia("quotes", csv("06.csv", PRESUPUESTOS, { "# Paciente": "1042", "# Tratamiento": "77", "Fecha de generación del tratamiento": "2026-05-12", "Nombre Prestación": "Profilaxis", "Precio Paciente": "1200", Arancel: "Arancel Base" }));
-  // Si esto deja de cumplirse (el motor ya ignora esa columna), quitar la advertencia del comentario del perfil.
+test("06_Presupuestos_Detalle: «Arancel» y «Prestación» se IGNORAN (no son precio ni procedimiento) en presupuestos y tratamientos", async () => {
+  for (const entidad of ["quotes", "treatmentPlans"]) {
+    const r = await vistaPrevia(entidad, csv("06.csv", PRESUPUESTOS, { "# Paciente": "1042", "# Tratamiento": "77", "Fecha de generación del tratamiento": "2026-05-12", "Nombre Prestación": "Profilaxis", "Precio Paciente": "1200", Arancel: "Arancel Base", "Prestación": "Acción Clínica" }));
+    const m = r.suggestedMapping;
+    assert.ok(!m["Arancel"], `${entidad}: «Arancel» no es precio`);
+    assert.ok(!m["Prestación"], `${entidad}: «Prestación» (la categoría) no es procedimiento`);
+    assert.equal(m["Precio Paciente"], "price", entidad);
+    assert.equal(m["Nombre Prestación"], "procedure", entidad);
+    assert.equal(r.mappingError, undefined, entidad);
+    assert.ok(!r.preview[0].errors.some((e: string) => /Precio inválido/.test(e)), `${entidad}: el precio sale de «Precio Paciente», sin quitar columnas a mano`);
+  }
+});
+
+test("«Arancel» sigue autodetectándose como precio en OTROS orígenes (el marcador de ignorar es solo de Dentalink)", async () => {
+  const { runImport } = await engine();
+  const { HANDLERS } = await entidades();
+  const r: any = await runImport(HANDLERS.quotes, { file: new File(["\uFEFFPaciente,Fecha,Procedimiento,Arancel\nLucía Prueba,2026-05-12,Profilaxis,1200\n"], "otro.csv", { type: "text/csv" }), clinicId: CLINICA, userId: IMPORTA, role: "ADMIN", dryRun: true, skipDuplicates: true, origin: "opendental" });
   assert.equal(r.suggestedMapping["Arancel"], "price");
 });

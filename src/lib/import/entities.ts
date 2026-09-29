@@ -440,6 +440,12 @@ const ALERGIA_RE = /alerg|penicilin|sulfa|l[aá]tex|anest[eé]sic|ibuprofen|aspi
 /** «-», «—», «N/A», «Sin convenio»…: el sistema de origen rellena lo que no hay; no es un dato. */
 const SIN_DATO_RE = /^(-+|—+|n\/?a|sin\s+(tipo|convenio|dato|datos|seguro|referencia))$/i;
 const esSinDato = (s: string) => SIN_DATO_RE.test(s.trim());
+/** Años cumplidos a esa fecha (día de calendario local). */
+function edadEnAnios(dob: Date, hoy: Date): number {
+  let e = hoy.getFullYear() - dob.getFullYear();
+  if (hoy.getMonth() < dob.getMonth() || (hoy.getMonth() === dob.getMonth() && hoy.getDate() < dob.getDate())) e--;
+  return e;
+}
 /** «a, b; c» → ["a","b","c"], sin los rellenos de arriba. */
 const listaDeTexto = (sv: string) => sv.split(/[;,\n]/).map((x) => x.trim()).filter((x) => x && !esSinDato(x));
 const sinRepetir = (a: string[]) => {
@@ -497,6 +503,8 @@ export const patientsHandler: EntityHandler = {
     // original SIEMPRE queda además en las notas (no se decide por el doctor qué era qué).
     patientAlerts: ["alertas", "alertasmedicas", "alerta"],
     emergencyContactName: ["contactodeemergencia", "contactoemergencia", "nombrecontactoemergencia"],
+    // Apoderado / tutor: es el contacto de emergencia y, si el paciente es menor, su responsable (Guardian).
+    guardianName: ["apoderado", "#apoderado", "nombreapoderado", "tutor", "nombretutor", "responsable", "nombreresponsable"],
     emergencyContactPhone: ["telefonodeemergencia", "telefonoemergencia", "telefonocontactoemergencia"],
   },
   // La ficha entera del sistema anterior tiene que llegar: lo que no tiene campo se conserva en las notas.
@@ -622,6 +630,9 @@ export const patientsHandler: EntityHandler = {
           case "emergencyContactName":
             data.emergencyContactName = sv.slice(0, 200);
             break;
+          case "guardianName":
+            data.guardianName = sv.slice(0, 200);
+            break;
           case "emergencyContactPhone": {
             const t = parsePhone(sv);
             if (t) data.emergencyContactPhone = t;
@@ -635,6 +646,12 @@ export const patientsHandler: EntityHandler = {
             data[campo] = sv;
             break;
         }
+      }
+
+      // Apoderado → contacto de emergencia (si no trae uno propio) y, si es MENOR, responsable (Guardian) al importar.
+      if (data.guardianName) {
+        if (!data.emergencyContactName) { data.emergencyContactName = data.guardianName; data.emergencyContactRelation = "Apoderado"; }
+        data.esMenor = !!data.dob && edadEnAnios(data.dob as Date, ctx.now) < 18;
       }
 
       // Segundo teléfono: ocupa el lugar del principal si falta; si es otro número, va a las notas.
@@ -830,6 +847,7 @@ export const patientsHandler: EntityHandler = {
         currentMedications: r.data.currentMedications ?? [],
         familyHistory: r.data.familyHistory ?? null,
         emergencyContactName: r.data.emergencyContactName ?? null,
+        emergencyContactRelation: r.data.emergencyContactRelation ?? null,
         emergencyContactPhone: r.data.emergencyContactPhone ?? null,
       })),
       create: (data) => prisma.patient.createMany({ data, skipDuplicates: true }),
@@ -844,6 +862,28 @@ export const patientsHandler: EntityHandler = {
         .map((r) => ({ externalId: r.data.externalId as string, localId: r.data.newId as string }));
       if (pares.length > 0 && !(await guardarExternos(clinicId, ctx.originId, "patient", pares))) {
         console.warn("[import/patients] import_external_ids no existe: no se guardaron los ID externos (falta aplicar sql/import-ids-externos.sql)");
+      }
+    }
+    // Menores con apoderado: el apoderado queda como su responsable (Guardian), el mismo que usa ortodoncia
+    // para el responsable del pago. Solo de los pacientes que SÍ quedaron creados; no bloquea la importación.
+    const conApoderado = toInsert.filter((r) => r.status !== "error" && r.data.guardianName && r.data.esMenor);
+    if (conApoderado.length > 0) {
+      try {
+        const creados = await idsCreados("patient", clinicId, conApoderado.map((r) => r.data.newId as string));
+        const data = conApoderado.filter((r) => creados.has(r.data.newId)).map((r) => ({
+          id: newId(),
+          clinicId,
+          patientId: r.data.newId as string,
+          fullName: r.data.guardianName as string,
+          parentesco: "tutor_legal" as any,
+          phone: (r.data.phone as string | undefined) ?? "",
+          esResponsableLegal: true,
+          principal: true,
+          createdBy: ctx.userId,
+        }));
+        if (data.length > 0) await prisma.guardian.createMany({ data, skipDuplicates: true });
+      } catch (e) {
+        console.warn("[import/patients] no se pudo guardar el apoderado de los menores:", e);
       }
     }
     const erroredNow = toInsert.filter((r) => r.status === "error").length;
@@ -1240,6 +1280,32 @@ export function leerInicioDeCita(
   };
 }
 
+/**
+ * Cuánto dura la cita: 1) la columna «Duración» si viene; 2) si no, hora de fin − hora de inicio (la misma
+ * fecha, en la zona de la clínica); 3) 30 min. Una hora de fin ilegible o que no es posterior al inicio NO
+ * se adivina: se usa 30 min y se avisa en esa fila.
+ */
+function leerDuracion(
+  mapped: Record<string, any>,
+  startsAt: Date | undefined,
+  timezone: string | null | undefined,
+): { min: number; warning?: string } {
+  if (mapped.duration !== undefined && mapped.duration !== null && String(mapped.duration).trim() !== "") {
+    return { min: parseDuration(mapped.duration) };
+  }
+  if (mapped.endTime === undefined || mapped.endTime === null || cellText(mapped.endTime) === "") return { min: DEFAULT_DURATION_MIN };
+  const fin = parseHora(mapped.endTime);
+  const fecha = parseDate(mapped.date);
+  const aviso = (motivo: string) => ({ min: DEFAULT_DURATION_MIN, warning: `Hora de fin "${verTexto(mapped.endTime)}" ${motivo}: la cita dura ${DEFAULT_DURATION_MIN} min` });
+  if (!fin || !fecha || !startsAt) return aviso("ilegible");
+  const finUtc = horaLocalAUtc(fecha.getFullYear(), fecha.getMonth() + 1, fecha.getDate(), fin.h, fin.m, timezone);
+  if (!finUtc) return aviso("no existe en la zona horaria de la clínica");
+  const min = Math.round((finUtc.getTime() - startsAt.getTime()) / 60_000);
+  if (min <= 0) return aviso("no es posterior al inicio");
+  if (min > 600) return aviso("deja la cita en más de 10 horas");
+  return { min };
+}
+
 function parseDuration(v: any): number {
   if (v === undefined || v === null || String(v).trim() === "") return DEFAULT_DURATION_MIN;
   const n = parseInt(String(v).replace(/[^0-9]/g, ""), 10);
@@ -1348,6 +1414,8 @@ export const appointmentsHandler: EntityHandler = {
     time:     ["hora", "horacita", "time", "horario", "horadelacita", "horainicio", "horadeinicio", "inicio"],
     type:     ["tipo", "motivo", "tratamiento", "servicio", "tipocita", "concepto", "motivoconsulta"],
     duration: ["duracion", "minutos", "durationmin", "duracionmin"],
+    // Hora de fin: con ella se calcula la duración cuando el archivo no trae «Duración» (Dentalink no la trae).
+    endTime:  ["horafin", "horadefin", "horatermino", "horadetermino", "horafinal", "horafincita", "endtime"],
     // Estado en el sistema de origen: una cita anulada/cancelada NO se agenda.
     status:   ["estado", "estadocita", "estadodelacita", "status"],
     notes:    ["notas", "observaciones", "comentarios", "nota", "comentario"],
@@ -1370,10 +1438,19 @@ export const appointmentsHandler: EntityHandler = {
     // Índice de doctores por nombre (cualquier usuario activo de la clínica).
     const users = await prisma.user.findMany({
       where: { clinicId, isActive: true },
-      select: { id: true, firstName: true, lastName: true },
+      select: { id: true, firstName: true, lastName: true, role: true },
     });
     const byDoctor = new Map<string, string[]>();
-    for (const u of users) pushKey(byDoctor, normName(`${u.firstName} ${u.lastName}`), u.id);
+    const nombreDe = new Map<string, string>();
+    for (const u of users) {
+      pushKey(byDoctor, normName(`${u.firstName} ${u.lastName}`), u.id);
+      nombreDe.set(u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim());
+    }
+    // A quién se asigna cada doctor del archivo que NO empareja solo (no existe, o varios se llaman igual):
+    // lo elige la persona (valueMapping.doctor, clave = nombre normalizado → id de usuario).
+    const eleccionDoctor = ctx.valueMapping.doctor ?? {};
+    // Respaldo cuando dos citas chocan en el horario de la misma persona: los usuarios DOCTOR activos.
+    const respaldos = users.filter((u) => u.role === "DOCTOR").map((u) => ({ id: u.id, name: nombreDe.get(u.id)! }));
 
     const seen = new Set<string>();
     const out: PreviewRow[] = [];
@@ -1390,7 +1467,8 @@ export const appointmentsHandler: EntityHandler = {
       pr.data.startsLocal = startsAt ? textoLocal(startsAt, tz) : undefined;
       pr.data.timezone = consentTimeZone(tz);
       pr.data.doctorName = cellText(mapped.doctor) || undefined;
-      pr.data.durationMin = parseDuration(mapped.duration);
+      const duracion = leerDuracion(mapped, startsAt, tz);
+      pr.data.durationMin = duracion.min;
 
       // Una cita PASADA no se agenda: entraría como SCHEDULED (y dispararía un
       // WhatsApp de recordatorio o de «no asististe»), o como COMPLETED, que los
@@ -1417,15 +1495,31 @@ export const appointmentsHandler: EntityHandler = {
       if (pRes.error) pr.errors.push(pRes.error);
       if (pRes.warning) pr.warnings.push(pRes.warning);
 
-      const dRes = (!mapped.doctor || !String(mapped.doctor).trim())
-        ? { error: "Falta el doctor" }
-        : resolveByName(mapped.doctor, byDoctor, "Doctor");
+      let dRes: { id?: string; error?: string };
+      let doctorPorEleccion = false;
+      if (!mapped.doctor || !String(mapped.doctor).trim()) {
+        dRes = { error: "Falta el doctor" };
+      } else {
+        const claveDoctor = normName(mapped.doctor);
+        const elegido = eleccionDoctor[claveDoctor];
+        if (elegido && nombreDe.has(elegido)) {
+          dRes = { id: elegido };
+          doctorPorEleccion = true;
+        } else {
+          dRes = resolveByName(mapped.doctor, byDoctor, "Doctor");
+          if (dRes.error) {
+            // La persona decide a quién va (paso «Revisar»); sin decidir, la cita no se importa.
+            pr.unresolved = [{ field: "doctor", key: claveDoctor, value: String(mapped.doctor).trim() }];
+            dRes = { error: `${dRes.error}: elige a qué usuario se asigna` };
+          }
+        }
+      }
       if (dRes.error) pr.errors.push(dRes.error);
 
       if (pr.errors.length > 0) { pr.status = "error"; out.push(pr); continue; }
 
-      const dur = parseDuration(mapped.duration);
-      const endsAt = new Date(startsAt!.getTime() + dur * 60_000);
+      if (duracion.warning) pr.warnings.push(duracion.warning);
+      const endsAt = new Date(startsAt!.getTime() + duracion.min * 60_000);
       const type = mapped.type && String(mapped.type).trim() ? String(mapped.type).trim().slice(0, 200) : "Consulta";
 
       Object.assign(pr.data, {
@@ -1437,7 +1531,8 @@ export const appointmentsHandler: EntityHandler = {
         notes: mapped.notes ? String(mapped.notes).trim() : null,
         status: estado.status,
         patientName: pRes.fullName || idx.nameById.get(pRes.id!) || undefined,
-        doctorName: String(mapped.doctor).trim(),
+        doctorName: doctorPorEleccion ? nombreDe.get(dRes.id!)! : String(mapped.doctor).trim(),
+        doctorPorEleccion,
       });
 
       const key = `${pRes.id}|${startsAt!.toISOString()}`;
@@ -1474,8 +1569,21 @@ export const appointmentsHandler: EntityHandler = {
       }
     }
 
-    await marcarSolapes(out, clinicId, idx, tz);
+    await marcarSolapes(out, clinicId, idx, tz, respaldos);
     return out;
+  },
+
+  // Los doctores activos de la clínica, para elegir a quién se asigna un doctor del archivo sin equivalente.
+  async valueOptions(clinicId) {
+    const usuarios = await prisma.user.findMany({
+      where: { clinicId, isActive: true },
+      select: { id: true, firstName: true, lastName: true, role: true },
+      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    });
+    const ROL: Record<string, string> = { SUPER_ADMIN: "dueño", ADMIN: "administrador", DOCTOR: "doctor", RECEPTIONIST: "recepción" };
+    return {
+      doctor: usuarios.map((u) => ({ id: u.id, label: `${`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim()}${u.role && ROL[u.role] ? ` · ${ROL[u.role]}` : ""}` })),
+    };
   },
 
   async commit(rows, clinicId, skipDuplicates, ctx) {
@@ -1538,10 +1646,16 @@ export const appointmentsHandler: EntityHandler = {
  * «no asistió», ni apartados vencidos) y entre las filas del archivo (gana la que
  * aparece primero).
  */
-async function marcarSolapes(out: PreviewRow[], clinicId: string, idx: PatientIndex, tz: string | null) {
+async function marcarSolapes(
+  out: PreviewRow[],
+  clinicId: string,
+  idx: PatientIndex,
+  tz: string | null,
+  respaldos: Array<{ id: string; name: string }> = [],
+) {
   const candidatas = out.filter((r) => r.status === "ok" || r.status === "duplicate");
   if (candidatas.length === 0) return;
-  const doctores = Array.from(new Set(candidatas.map((r) => r.data.doctorId as string)));
+  const doctores = Array.from(new Set([...candidatas.map((r) => r.data.doctorId as string), ...respaldos.map((d) => d.id)]));
   let desde = candidatas[0].data.startsAt as Date;
   let hasta = candidatas[0].data.endsAt as Date;
   for (const r of candidatas) {
@@ -1564,8 +1678,28 @@ async function marcarSolapes(out: PreviewRow[], clinicId: string, idx: PatientIn
   for (const r of candidatas) {
     if (r.status !== "ok") continue; // los duplicados ya dicen lo suyo
     const cita = { startsAt: r.data.startsAt as Date, endsAt: r.data.endsAt as Date };
-    const choqueBase = vivas.find((a) => a.doctorId === r.data.doctorId && solapa(cita, a));
-    const choqueArchivo = aceptadas.find((o) => o.data.doctorId === r.data.doctorId && solapa(cita, { startsAt: o.data.startsAt, endsAt: o.data.endsAt }));
+    let choqueBase = vivas.find((a) => a.doctorId === r.data.doctorId && solapa(cita, a));
+    let choqueArchivo = aceptadas.find((o) => o.data.doctorId === r.data.doctorId && solapa(cita, { startsAt: o.data.startsAt, endsAt: o.data.endsAt }));
+    // NINGÚN horario se mueve. Si la cita se asignó por elección de la persona y choca, entra con el primer doctor
+    // de respaldo que esté libre a esa hora (Appointment.doctorId no admite vacío); si no hay, sigue siendo error.
+    if ((choqueBase || choqueArchivo) && r.data.doctorPorEleccion) {
+      const libre = respaldos.find(
+        (d) => d.id !== r.data.doctorId
+          && !vivas.some((a) => a.doctorId === d.id && solapa(cita, a))
+          && !aceptadas.some((o) => o.data.doctorId === d.id && solapa(cita, { startsAt: o.data.startsAt, endsAt: o.data.endsAt })),
+      );
+      if (libre) {
+        const original = r.data.doctorName as string;
+        const con = choqueBase ? `una cita que ya está en la agenda (${hora(choqueBase.startsAt)}–${hora(choqueBase.endsAt)})` : `la fila ${choqueArchivo!.row} del archivo`;
+        r.data.doctorId = libre.id;
+        r.data.doctorName = libre.name;
+        r.data.reasignadaPorChoque = { de: original, a: libre.name };
+        r.data.notes = [r.data.notes, `Migrada: chocaba en el horario de ${original} con ${choqueBase ? "otra cita" : "otra fila"}; se asignó a ${libre.name} sin mover el horario`].filter(Boolean).join("\n");
+        r.warnings.push(`Se empalmaba con ${con} de ${original}: entra asignada a ${libre.name} (no se movió ningún horario)`);
+        choqueBase = undefined;
+        choqueArchivo = undefined;
+      }
+    }
     if (choqueBase) {
       const quien = idx.nameById.get(choqueBase.patientId);
       r.status = "error";
@@ -2739,6 +2873,8 @@ export const treatmentPlansHandler: EntityHandler = {
     fechaRealizado: ["fecharealizado", "fechaderealizacion", "fecharealizacion", "fechahecho", "fechaatencion", "fechasesion"],
     abonado: ["abonado", "pagado", "montopagado", "totalabonado", "anticipopagado", "pagosrecibidos"],
     fechaAbono: ["fechaabono", "fechadeabono", "fechadepago", "fechaultimopago"],
+    // Estado del TRATAMIENTO entero («Tratamiento Activo» / «Tratamiento Finalizado»): manda sobre lo que se deduzca de las líneas.
+    estadoTratamiento: ["estadotratamiento", "estadodeltratamiento", "estadoplan", "estadodelplan"],
     proximaVisita: ["proximavisita", "proximacita", "siguientevisita", "proximasesion"],
   },
 
@@ -2793,6 +2929,7 @@ export const treatmentPlansHandler: EntityHandler = {
       abonado: number | null;
       fechaAbono: Date | null;
       proximaVisita: Date | null;
+      estadoTrat: "activo" | "finalizado" | null;
     }
     const lineas: Linea[] = [];
     for (const { row, mapped } of rows) {
@@ -2878,8 +3015,13 @@ export const treatmentPlansHandler: EntityHandler = {
       // válida SÍ es un error: sin ella no se puede fechar la sesión.
       const estado = estadoDePrestacion(mapped.estado);
       if (estado.aviso) pr.warnings.push(estado.aviso);
+      // Sin columna de estado por línea (el reporte de Dentalink no la trae), una «Fecha Realización» = línea hecha.
+      const hechoLinea = estado.hecho || (!cellText(mapped.estado) && cellText(mapped.fechaRealizado) !== "");
+      const et = norm(cellText(mapped.estadoTratamiento));
+      const estadoTrat = !et ? null : /finaliz|terminad|complet|cerrad/.test(et) ? "finalizado" : /activ|curso|vigent|abiert/.test(et) ? "activo" : null;
+      if (et && !estadoTrat) pr.warnings.push(`Estado del tratamiento «${cellText(mapped.estadoTratamiento)}» no reconocido: se deduce de las líneas`);
       let fechaRealizado: Date | null = null;
-      if (estado.hecho) {
+      if (hechoLinea) {
         fechaRealizado = parseCalendarDay(mapped.fechaRealizado);
         if (!fechaRealizado) pr.errors.push(`Falta o es inválida la fecha de realización de "${procedure || "esta prestación"}"`);
         else if (isFutureDay(fechaRealizado, ctx.now)) { pr.errors.push(`La fecha de realización ${dayKey(fechaRealizado)} es posterior a hoy`); fechaRealizado = null; }
@@ -2901,7 +3043,7 @@ export const treatmentPlansHandler: EntityHandler = {
       lineas.push({
         pr, mapped, patientId, fecha, folio, sinPaciente, procedure,
         quantity, unitPrice, discount: round2(discount ?? 0), itemNotes,
-        doctorId, doctorNombre, hecho: estado.hecho, fechaRealizado, abonado, fechaAbono, proximaVisita,
+        doctorId, doctorNombre, hecho: hechoLinea, fechaRealizado, abonado, fechaAbono, proximaVisita, estadoTrat,
       });
     }
 
@@ -2997,6 +3139,7 @@ export const treatmentPlansHandler: EntityHandler = {
         abonado: l.abonado,
         fechaAbono: l.fechaAbono,
         proximaVisita: l.proximaVisita,
+        estadoTratamiento: l.estadoTrat,
       };
       out.push(pr);
     }
@@ -3097,7 +3240,9 @@ export const treatmentPlansHandler: EntityHandler = {
         else porDia.set(k2, { fecha, nombres: [l.data.procedure as string] });
       }
       const diasOrdenados = Array.from(porDia.values()).sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
-      const hayPendiente = lines.some((l) => !l.data.hecho);
+      // «Activo»/«Finalizado» del archivo manda: un tratamiento activo con todas sus líneas hechas SIGUE vivo.
+      const estadoTrat = pickFirst("estadoTratamiento") as "activo" | "finalizado" | undefined;
+      const hayPendiente = estadoTrat === "activo" ? true : estadoTrat === "finalizado" ? false : lines.some((l) => !l.data.hecho);
       const totalSessions = Math.max(1, diasOrdenados.length + (hayPendiente ? 1 : 0));
 
       const startDate = first.createdAt as Date;
@@ -3161,8 +3306,10 @@ export const treatmentPlansHandler: EntityHandler = {
             completedAt: d.fecha,
           })),
           invoiceFields, paid, balance, invoiceStatus,
+          // El abono NO se guarda como Payment: Caja y Finanzas suman todos los Payment por fecha. Va a «pagos
+          // migrados» (historia de solo lectura en la ficha); la factura conserva su paid/balance/status.
           payment: paid > 0
-            ? { id: newId(), invoiceId, amount: paid, method: "migrated", notes: `Abono migrado de ${origen}`, paidAt: fechaAbono }
+            ? { id: newId(), clinicId, patientId: first.patientId, amount: paid, method: null, concept: `Abono del tratamiento${pickFirst("folioOriginal") ? ` ${pickFirst("folioOriginal")}` : ""}`, doctorId: pickFirst("doctorId") || ctx.userId, paidAt: fechaAbono, origin: origen, createdById: ctx.userId }
             : null,
         },
       };
@@ -3255,7 +3402,7 @@ export const treatmentPlansHandler: EntityHandler = {
         const sessionsData = data.flatMap((d: any) => d.sessions);
         if (sessionsData.length) ops.push(prisma.treatmentSession.createMany({ data: sessionsData }));
         const paymentsData = data.map((d: any) => d.payment).filter(Boolean);
-        if (paymentsData.length) ops.push(prisma.payment.createMany({ data: paymentsData }));
+        if (paymentsData.length) ops.push(prisma.migratedPayment.createMany({ data: paymentsData }));
         const [q] = await prisma.$transaction(ops);
         return { count: q.count };
       },

@@ -44,6 +44,7 @@ export type DcField =
   | "insuranceProvider"
   | "source"
   | "patientAlerts"
+  | "guardianName"
   | "city"
   | "colonia";
 

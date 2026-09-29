@@ -809,6 +809,10 @@
         "bloodType": "Blood type",
         "address": "Address",
         "notes": "Notes",
+        "guardianName": "Guardian (emergency contact; responsible party if a minor)",
+        "estadoTratamiento": "Treatment status (active / finished)",
+        "doctorLastName": "Doctor's last name (joined to the first name)",
+        "endTime": "End time (used for the duration when there is no \"Duration\")",
         "colonia": "Neighborhood (joined to the address)",
         "city": "City (joined to the address)",
         "state": "State / province (joined to the address)",
@@ -1085,6 +1089,11 @@
           "other": "{count} findings aren't in the dental chart catalog"
         },
         "unresolvedDescCondition": "Pick the equivalent for each one: without a choice, those rows aren't imported.",
+        "unresolvedTitleDoctor": {
+          "one": "{count} doctor in the file doesn't match a user in your clinic",
+          "other": "{count} doctors in the file don't match a user in your clinic"
+        },
+        "unresolvedDescDoctor": "Pick who each one is assigned to (even if they don't exist, or two users share the name): without a choice, those appointments aren't imported. No time slot is moved.",
         "unresolvedChoose": "Pick an equivalent…",
         "unresolvedRows": {
           "one": "({count} row)",

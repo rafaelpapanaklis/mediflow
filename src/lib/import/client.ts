@@ -63,6 +63,16 @@ interface BackendOrigin {
 // (Mapear) se muestre en el idioma activo; `label` queda como fallback en español.
 const NO_IMPORT: TargetField = { value: "", label: "— Sin importar —", labelKey: "shell.importClinic.fields.noImport" };
 
+/** Apellidos del doctor cuando vienen en otra columna: el motor los une al nombre (engine.applyMapping). */
+const APELLIDOS_DOCTOR: TargetField = { value: "doctorLastName", label: "Apellidos del doctor (se unen al nombre)", labelKey: "shell.importClinic.fields.doctorLastName" };
+
+/** Campos destino del paso de mapeo: los de la entidad + los auxiliares que el motor entiende en toda entidad con doctor. */
+function camposDestino(entity: Entity): TargetField[] {
+  const base = CANONICAL_FIELDS[entity] ?? CANONICAL_FIELDS.patients;
+  const i = base.findIndex((f) => f.value === "doctor");
+  return i < 0 ? base : [...base.slice(0, i + 1), APELLIDOS_DOCTOR, ...base.slice(i + 1)];
+}
+
 const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
   patients: [
     NO_IMPORT,
@@ -96,6 +106,7 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "familyHistory", label: "Antecedentes familiares", labelKey: "shell.importClinic.fields.familyHistory" },
     { value: "patientAlerts", label: "Alertas médicas (texto libre)", labelKey: "shell.importClinic.fields.patientAlerts" },
     { value: "emergencyContactName", label: "Contacto de emergencia", labelKey: "shell.importClinic.fields.emergencyContactName" },
+    { value: "guardianName", label: "Apoderado (contacto de emergencia; responsable si es menor)", labelKey: "shell.importClinic.fields.guardianName" },
     { value: "emergencyContactPhone", label: "Teléfono del contacto de emergencia", labelKey: "shell.importClinic.fields.emergencyContactPhone" },
     { value: "notes", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
   ],
@@ -124,6 +135,7 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "time", label: "Hora", labelKey: "shell.importClinic.fields.time" },
     { value: "type", label: "Tipo / Motivo", labelKey: "shell.importClinic.fields.type" },
     { value: "duration", label: "Duración (min)", labelKey: "shell.importClinic.fields.duration" },
+    { value: "endTime", label: "Hora de fin (calcula la duración si no hay «Duración»)", labelKey: "shell.importClinic.fields.endTime" },
     { value: "status", label: "Estado de la cita", labelKey: "shell.importClinic.fields.apptStatus" },
     { value: "notes", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
   ],
@@ -192,6 +204,7 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
     { value: "fechaRealizado", label: "Fecha en que se hizo", labelKey: "shell.importClinic.fields.fechaRealizado" },
     { value: "abonado", label: "Monto ya abonado", labelKey: "shell.importClinic.fields.abonado" },
     { value: "fechaAbono", label: "Fecha del abono", labelKey: "shell.importClinic.fields.fechaAbono" },
+    { value: "estadoTratamiento", label: "Estado del tratamiento (activo / finalizado)", labelKey: "shell.importClinic.fields.estadoTratamiento" },
     { value: "proximaVisita", label: "Próxima visita", labelKey: "shell.importClinic.fields.proximaVisita" },
   ],
   odontogram: [
@@ -685,7 +698,7 @@ export function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewRe
     ...(b.needsSheet ? { needsSheet: true } : {}),
     ...(b.sheet ? { sheet: b.sheet } : {}),
     columns,
-    targetFields: CANONICAL_FIELDS[entity] ?? CANONICAL_FIELDS.patients,
+    targetFields: camposDestino(entity),
     ...(entity === "appointments" ? (() => { const tz = b.preview.find((r) => r.data?.timezone)?.data.timezone; return tz ? { timezone: String(tz) } : {}; })() : {}),
     stats: { valid: b.validos, errors: b.invalidos, duplicates: b.duplicados, ...(b.omitidos ? { omitted: b.omitidos } : {}) },
     rows,

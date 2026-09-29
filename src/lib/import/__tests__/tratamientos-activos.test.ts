@@ -58,6 +58,7 @@ function semilla() {
     treatmentSession: [],
     invoice: [],
     payment: [],
+    migratedPayment: [],
     importExternalIds: [],
   };
 }
@@ -152,11 +153,14 @@ test("feliz: una línea hecha + una pendiente → ACTIVE, factura PARTIAL, sesi�
   assert.match(inv.invoiceNumber, /^MF-\d+$/);
   assert.equal(inv.createdAt.toISOString(), "2024-02-05T12:00:00.000Z");
 
-  const pagos = tabla("payment").filter((p) => p.invoiceId === inv.id);
+  // Lo abonado NO es un Payment: Caja y Finanzas suman todos los Payment por fecha. Va a «pagos migrados»
+  // (historia de solo lectura) y la factura conserva su paid/balance/status.
+  assert.equal(tabla("payment").filter((p) => p.invoiceId === inv.id).length, 0, "ningún Payment: Caja no se entera");
+  const pagos = tabla("migratedPayment").filter((p) => p.patientId === inv.patientId);
   assert.equal(pagos.length, 1);
   assert.equal(pagos[0].amount, 500);
-  assert.equal(pagos[0].method, "migrated");
   assert.equal(pagos[0].paidAt.toISOString().slice(0, 10), "2024-02-10");
+  assert.equal(pagos[0].clinicId, CLINICA);
 
   // Próxima visita declarada (futura): se respeta tal cual, nunca en el pasado.
   assert.equal(plan.nextExpectedDate.toISOString().slice(0, 10), futuro);

@@ -92,8 +92,16 @@ export const appointmentHistoryHandler: EntityHandler = {
     const origen = nombreOrigen(ctx.originName);
 
     const users = await prisma.user.findMany({ where: { clinicId, isActive: true }, select: { id: true, firstName: true, lastName: true } });
-    const byDoctor = new Map<string, string>();
-    for (const u of users) byDoctor.set(normName(`${u.firstName} ${u.lastName}`), u.id);
+    // Nombre normalizado → TODOS los usuarios que lo llevan: con dos iguales (el dueño y su ficha de doctor) ya
+    // no gana el último en silencio; es ambiguo y lo decide la persona (valueMapping.doctor).
+    const byDoctor = new Map<string, string[]>();
+    const nombreDe = new Map<string, string>();
+    for (const u of users) {
+      const k = normName(`${u.firstName} ${u.lastName}`);
+      byDoctor.set(k, [...(byDoctor.get(k) ?? []), u.id]);
+      nombreDe.set(u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim());
+    }
+    const eleccionDoctor = ctx.valueMapping.doctor ?? {};
 
     // Red contra lo que ya está en migrated_visits (tolera que la tabla aún no exista).
     const existentes = new Set<string>();
@@ -132,8 +140,18 @@ export const appointmentHistoryHandler: EntityHandler = {
 
       let doctorId: string | null = null;
       if (mapped.doctor && cellText(mapped.doctor)) {
-        doctorId = byDoctor.get(normName(cellText(mapped.doctor))) ?? null;
-        if (!doctorId) pr.warnings.push(`Doctor "${cellText(mapped.doctor)}" no encontrado en la clínica: se guarda sin doctor`);
+        const clave = normName(cellText(mapped.doctor));
+        const elegido = eleccionDoctor[clave];
+        const iguales = byDoctor.get(clave) ?? [];
+        if (elegido && nombreDe.has(elegido)) doctorId = elegido;
+        else if (iguales.length === 1) doctorId = iguales[0];
+        else {
+          // No existe, o hay varios con ese nombre: la persona elige a quién va; sin elegir se guarda sin doctor.
+          pr.unresolved = [{ field: "doctor", key: clave, value: cellText(mapped.doctor) }];
+          pr.warnings.push(iguales.length > 1
+            ? `Varios usuarios coinciden con el doctor "${cellText(mapped.doctor)}": elige a cuál se asigna (mientras tanto se guarda sin doctor)`
+            : `Doctor "${cellText(mapped.doctor)}" no encontrado en la clínica: elige a qué usuario se asigna (mientras tanto se guarda sin doctor)`);
+        }
       }
 
       if (pr.errors.length > 0) { pr.status = "error"; out.push(pr); continue; }
@@ -175,6 +193,19 @@ export const appointmentHistoryHandler: EntityHandler = {
       out.push(pr);
     }
     return out;
+  },
+
+  // Los usuarios activos de la clínica, para elegir a quién se asigna un doctor del archivo sin equivalente.
+  async valueOptions(clinicId: string) {
+    const usuarios = await prisma.user.findMany({
+      where: { clinicId, isActive: true },
+      select: { id: true, firstName: true, lastName: true, role: true },
+      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    });
+    const ROL: Record<string, string> = { SUPER_ADMIN: "dueño", ADMIN: "administrador", DOCTOR: "doctor", RECEPTIONIST: "recepción" };
+    return {
+      doctor: usuarios.map((u: any) => ({ id: u.id, label: `${`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim()}${u.role && ROL[u.role] ? ` · ${ROL[u.role]}` : ""}` })),
+    };
   },
 
   async commit(rows: PreviewRow[], clinicId: string, skipDuplicates: boolean, ctx: ImportContext) {
