@@ -196,9 +196,11 @@ export function LotesModal({
                               onClick={() => darDeBaja(l.id)}
                               className={`${inv.accion} ${inv.accionBorrar}`}
                               aria-label={`Dar de baja el lote ${l.lotNumber ?? "sin número"} (pérdida)`}
-                              title="Dar de baja (pérdida)"
+                              title="Dar de baja: descuenta lo que queda del lote como pérdida"
+                              style={{ width: "auto", gap: 6, padding: "0 10px", display: "inline-flex", alignItems: "center", whiteSpace: "nowrap" }}
                             >
                               <Trash2 size={16} strokeWidth={1.75} aria-hidden />
+                              <span style={{ fontSize: 12, fontWeight: 600 }}>Dar de baja</span>
                             </button>
                           )}
                         </div>

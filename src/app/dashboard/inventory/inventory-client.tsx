@@ -160,16 +160,26 @@ const TONO_CANTIDAD: Record<string, string> = {
  * Así la tarjeta mide lo mismo antes y después, y la pantalla no salta.
  */
 function LineaCaducidad({
-  cuantos, listo, singular, plural, tono, onVer,
+  cuantos, listo, fallo = false, onReintentar, singular, plural, tono, onVer,
 }: {
   cuantos: number;
   listo: boolean;
+  /** H19: la petición falló o se agotó el tiempo — se dice, no se pinta un «0» falso. */
+  fallo?: boolean;
+  onReintentar?: () => void;
   singular: string;
   plural: string;
   tono: string;
   onVer: () => void;
 }) {
   const rotulo = cuantos === 1 ? singular : plural;
+  if (fallo) {
+    return (
+      <button type="button" className={inv.caducidadLinea} onClick={onReintentar} title="Reintentar">
+        <strong aria-hidden>—</strong> {rotulo} · no se pudo cargar, reintentar
+      </button>
+    );
+  }
   if (!listo) {
     // Diferente de "0": "0" es un hecho (ya se sabe que no hay), "…" es que
     // todavía no se sabe. Antes los dos usaban el mismo "—" y se confundían.
@@ -285,6 +295,8 @@ export function InventoryClient({
   // Diseño (ws1-t5): ¿ya contestó la petición de avisos? Solo decide si la
   // tarjeta «Caducidad» enseña «—» o un número; no cambia qué se pide ni cuándo.
   const [avisosListos, setAvisosListos] = useState(false);
+  // H19: si la petición falla o tarda demasiado, la tarjeta lo dice en vez de quedarse en «…».
+  const [avisosFallo, setAvisosFallo] = useState(false);
   // ws1-t4 — "Registrar compra".
   const [showCompra, setShowCompra] = useState(false);
   // ws1-t4 (ajuste 1) — "Historial de compras".
@@ -314,12 +326,25 @@ export function InventoryClient({
   // Silencioso si el SQL de lotes aún no está aplicado (la API ya responde
   // listas vacías en ese caso).
   async function cargarAvisos() {
-    try {
-      const r = await fetch("/api/inventory/alerts");
-      const d = r.ok ? await r.json() : null;
-      if (d) setAvisos({ porCaducar: d.porCaducar ?? [], caducado: d.caducado ?? [] });
-    } catch {}
-    finally { setAvisosListos(true); }
+    setAvisosFallo(false);
+    // Servidor lento (H19): sin tope, la tarjeta se quedaba en «…» sin fin.
+    // Tope de 20 s por intento y un segundo intento antes de rendirse.
+    for (let intento = 0; intento < 2; intento++) {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 20_000);
+      try {
+        const r = await fetch("/api/inventory/alerts", { signal: ctl.signal });
+        const d = r.ok ? await r.json() : null;
+        if (d) {
+          setAvisos({ porCaducar: d.porCaducar ?? [], caducado: d.caducado ?? [] });
+          setAvisosListos(true);
+          return;
+        }
+      } catch {}
+      finally { clearTimeout(timer); }
+    }
+    setAvisosFallo(true);
+    setAvisosListos(true);
   }
 
   useEffect(() => { cargarAvisos(); }, []);
@@ -620,6 +645,8 @@ export function InventoryClient({
             <LineaCaducidad
               cuantos={avisos.caducado.length}
               listo={avisosListos}
+              fallo={avisosFallo}
+              onReintentar={cargarAvisos}
               singular="lote caducado"
               plural="lotes caducados"
               tono={inv.caducidadPeligro}
@@ -628,6 +655,8 @@ export function InventoryClient({
             <LineaCaducidad
               cuantos={avisos.porCaducar.length}
               listo={avisosListos}
+              fallo={avisosFallo}
+              onReintentar={cargarAvisos}
               singular="lote por caducar"
               plural="lotes por caducar"
               tono={inv.caducidadAlerta}
