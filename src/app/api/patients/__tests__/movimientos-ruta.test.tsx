@@ -31,6 +31,7 @@ mock.module("@/lib/pediatrics/audit", { namedExports: { PEDIATRIC_AUDIT_ACTIONS:
 mock.module("@/lib/prisma", {
   namedExports: {
     prisma: {
+      clinic: { findUnique: async () => ({ timezone: "America/Tijuana" }) },
       patient: {
         findFirst: async () => ({ firstName: "Laura", lastName: "Méndez", patientNumber: "P-0042", clinic: { timezone: "America/Mexico_City" } }),
       },
@@ -132,6 +133,11 @@ describe("GET /api/patients/[id]/movimientos", () => {
     const plano = JSON.stringify(j);
     assert.ok(!plano.includes("nota de consulta"));
     assert.ok(!plano.includes("$500"));
+  });
+
+  it("manda la zona horaria de la clínica para que la pantalla pinte la hora en ella (no en la del navegador)", async () => {
+    const j = await (await GET()).json();
+    assert.equal(j.zona, "America/Tijuana");
   });
 
   it("pagina: pide la página y el tamaño que dice la URL, con tope", async () => {

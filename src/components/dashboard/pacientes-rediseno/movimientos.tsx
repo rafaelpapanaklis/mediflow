@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, FileDown, FileSpreadsheet, History, Loader2 
 import { isAbortError } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
 import { CATEGORIAS_MOVIMIENTO } from "@/lib/movimientos-paciente/catalogo";
+import { fechaEnPantalla as fechaLegible } from "@/lib/movimientos-paciente/fecha-en-pantalla";
 import type { PaginaDeMovimientos, MovimientoVista } from "@/lib/movimientos-paciente/consultar-tipos";
 import { RaizRediseno } from "./raiz";
 import s from "./rediseno.module.css";
@@ -33,22 +34,6 @@ const CLASE_PUNTO: Record<string, string> = {
   archivos: m.puntoArchivos,
   dinero: m.puntoDinero,
 };
-
-const formatoFecha = new Intl.DateTimeFormat("es-MX", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function fechaLegible(iso: string): string {
-  try {
-    return formatoFecha.format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
 
 interface Consulta {
   page: number;
@@ -102,7 +87,7 @@ function useMovimientos(patientId: string, q: Consulta) {
   return { datos, cargando, error };
 }
 
-function Fila({ mov, mostrarTipo }: { mov: MovimientoVista; mostrarTipo: boolean }) {
+function Fila({ mov, mostrarTipo, zona }: { mov: MovimientoVista; mostrarTipo: boolean; zona?: string }) {
   const t = useT();
   return (
     <li className={m.fila}>
@@ -110,7 +95,7 @@ function Fila({ mov, mostrarTipo }: { mov: MovimientoVista; mostrarTipo: boolean
       <span className={m.cuerpo}>
         <span className={`${m.texto} ${mov.oculto ? m.textoOculto : ""}`}>{mov.texto}</span>
         <span className={m.sub}>
-          {mov.actor} · {fechaLegible(mov.fecha)}
+          {mov.actor} · {fechaLegible(mov.fecha, zona)}
         </span>
       </span>
       {mostrarTipo && (
@@ -122,11 +107,11 @@ function Fila({ mov, mostrarTipo }: { mov: MovimientoVista; mostrarTipo: boolean
   );
 }
 
-function ListaDeMovimientos({ items, mostrarTipo }: { items: MovimientoVista[]; mostrarTipo: boolean }) {
+function ListaDeMovimientos({ items, mostrarTipo, zona }: { items: MovimientoVista[]; mostrarTipo: boolean; zona?: string }) {
   return (
     <ol className={m.lista} style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {items.map((mov) => (
-        <Fila key={mov.id} mov={mov} mostrarTipo={mostrarTipo} />
+        <Fila key={mov.id} mov={mov} mostrarTipo={mostrarTipo} zona={zona} />
       ))}
     </ol>
   );
@@ -183,7 +168,7 @@ export function VistaMovimientosRecientes({
       {!cargando && !error && datos && datos.items.length === 0 && <Vacio filtrado={false} />}
       {!cargando && !error && datos && datos.items.length > 0 && (
         <>
-          <ListaDeMovimientos items={datos.items} mostrarTipo />
+          <ListaDeMovimientos items={datos.items} mostrarTipo zona={datos.zona} />
           <div className={m.pie}>
             <button type="button" className={s.boton} onClick={onVerCompleto}>
               {t("pacientesRediseno.movimientos.verCompleto")}
@@ -305,7 +290,7 @@ export function VistaMovimientosCompleto({
           {!cargando && !error && datos && datos.items.length === 0 && <Vacio filtrado={hayFiltro} />}
           {!cargando && !error && datos && datos.items.length > 0 && (
             <>
-              <ListaDeMovimientos items={datos.items} mostrarTipo />
+              <ListaDeMovimientos items={datos.items} mostrarTipo zona={datos.zona} />
               <nav className={m.paginacion} aria-label={t("pacientesRediseno.movimientos.paginacion")}>
                 <span className={m.numeros}>{t("pacientesRediseno.movimientos.total", { total: datos.total })}</span>
                 <span className={m.paginacionBotones}>

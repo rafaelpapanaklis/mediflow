@@ -18,6 +18,7 @@ import {
   TEXTO_EXPEDIENTE_OCULTO,
 } from "../catalogo";
 import { celdaCsv, movimientosACsv } from "../csv";
+import { fechaEnPantalla } from "../fecha-en-pantalla";
 import { fechaHoraParaTexto, sustantivoDeArchivo, textoArchivo, textoCita } from "../textos";
 
 describe("redactarMovimiento", () => {
@@ -243,5 +244,25 @@ describe("CSV", () => {
     assert.ok(lineas[1].includes('"03/10/2026, 10:00"') || lineas[1].includes("03/10/2026"));
     assert.ok(lineas[1].includes('"Ana ""la doctora"""'));
     assert.ok(lineas[1].includes('"Citas"'));
+  });
+});
+
+describe("la hora en pantalla", () => {
+  const iso = "2026-09-29T18:16:00.000Z";
+  it("usa la zona de la clínica, sea cual sea la del navegador", () => {
+    // 18:16 UTC = 12:16 en Ciudad de México y 11:16 en Tijuana
+    assert.match(fechaEnPantalla(iso, "America/Mexico_City"), /12:16/);
+    assert.match(fechaEnPantalla(iso, "America/Tijuana"), /11:16/);
+    assert.match(fechaEnPantalla(iso, "America/New_York"), /02:16/);
+  });
+  it("coincide con la hora del CSV/PDF (misma zona)", () => {
+    const csv = movimientosACsv([{ id: "1", fecha: iso, actor: "A", categoria: "citas", texto: "t", oculto: false }], "America/Mexico_City");
+    assert.ok(csv.includes("12:16"));
+    assert.match(fechaEnPantalla(iso, "America/Mexico_City"), /12:16/);
+  });
+  it("una zona inválida no rompe; sin zona usa la del navegador", () => {
+    assert.ok(fechaEnPantalla(iso, "Marte/Olimpo").length > 5);
+    assert.ok(fechaEnPantalla(iso).length > 5);
+    assert.equal(fechaEnPantalla("no-es-fecha", "America/Mexico_City").length > 0, true);
   });
 });

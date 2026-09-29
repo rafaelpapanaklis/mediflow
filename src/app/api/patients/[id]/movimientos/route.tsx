@@ -7,6 +7,7 @@ import { getVisiblePatientClinicIds } from "@/lib/branches";
 import { prisma } from "@/lib/prisma";
 import { extractAuditMeta, logRead } from "@/lib/audit";
 import { consentTimeZone } from "@/lib/consent/dates";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import {
   categoriaValida,
   fechaDeFiltro,
@@ -69,8 +70,11 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const formato = sp.get("formato") ?? "json";
   if (formato !== "csv" && formato !== "pdf") {
-    const pagina = await listarMovimientosDelPaciente(filtro, permisos);
-    return NextResponse.json(pagina);
+    const [pagina, zonaClinica] = await Promise.all([
+      listarMovimientosDelPaciente(filtro, permisos),
+      zonaDeClinica(user.clinicId),
+    ]);
+    return NextResponse.json({ ...pagina, zona: consentTimeZone(zonaClinica) });
   }
 
   const paciente = await prisma.patient.findFirst({

@@ -27,5 +27,7 @@ export interface PaginaDeMovimientos {
   paginas: number;
   /** true cuando la columna `patientId` aún no existe y la lista viene del modo degradado. */
   degradado: boolean;
+  /** Zona horaria de la clínica: la pantalla pinta las horas en ella, no en la del navegador (igual que el CSV y el PDF). */
+  zona?: string;
 }
 

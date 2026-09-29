@@ -114,26 +114,29 @@ function dondePertenece(f: FiltroMovimientos, conColumna: boolean, ahora: Date):
  * Un test compara las dos para que no se separen.
  */
 export function sqlCategoria(): Prisma.Sql {
+  // Todo parámetro suelto lleva su tipo (`::text`, `::int`): dentro de un CASE o
+  // como argumento de función Postgres no puede inferirlo y contesta «could not
+  // determine data type of parameter $n» (500 en el filtro «Tipo», ws1-t9).
   const guardada = Prisma.sql`a."changes" -> '_mov' -> 'after' ->> 'categoria'`;
   const clinicasEnPaciente = LLAVES_CLINICAS_EN_PACIENTE.map(
-    (k) => Prisma.sql`jsonb_exists(a."changes", ${k})`,
+    (k) => Prisma.sql`jsonb_exists(a."changes", ${k}::text)`,
   );
   const porAccion = REGLAS_CATEGORIA_POR_ACCION.map((r) => {
-    const cond = r.prefijos.map((p) => Prisma.sql`left(a."action", ${p.length}) = ${p}`);
-    return Prisma.sql`WHEN ${Prisma.join(cond, " OR ")} THEN ${r.categoria}`;
+    const cond = r.prefijos.map((p) => Prisma.sql`left(a."action", ${p.length}::int) = ${p}::text`);
+    return Prisma.sql`WHEN ${Prisma.join(cond, " OR ")} THEN ${r.categoria}::text`;
   });
   const porEntidad = CATEGORIAS_MOVIMIENTO.filter((c) => c !== "otros").map(
-    (c) => Prisma.sql`WHEN a."entityType" IN (${Prisma.join(entidadesDeCategoria(c))}) THEN ${c}`,
+    (c) => Prisma.sql`WHEN a."entityType" IN (${Prisma.join(entidadesDeCategoria(c))}) THEN ${c}::text`,
   );
   return Prisma.sql`(CASE
     WHEN ${guardada} IN (${Prisma.join(CATEGORIAS_MOVIMIENTO.slice())}) THEN ${guardada}
     WHEN a."entityType" = 'patient' AND (
-      left(a."action", ${PREFIJO_ACCION_ODONTOGRAMA.length}) = ${PREFIJO_ACCION_ODONTOGRAMA}
+      left(a."action", ${PREFIJO_ACCION_ODONTOGRAMA.length}::int) = ${PREFIJO_ACCION_ODONTOGRAMA}::text
       OR ${Prisma.join(clinicasEnPaciente, " OR ")}
-    ) THEN 'expediente'
+    ) THEN 'expediente'::text
     ${Prisma.join(porAccion, " ")}
     ${Prisma.join(porEntidad, " ")}
-    ELSE 'otros' END)`;
+    ELSE 'otros'::text END)`;
 }
 
 function dondeCompleto(f: FiltroMovimientos, conColumna: boolean, ahora: Date): Prisma.Sql {
@@ -144,7 +147,7 @@ function dondeCompleto(f: FiltroMovimientos, conColumna: boolean, ahora: Date): 
     Prisma.sql`a."entityType" NOT IN (${Prisma.join(ENTIDADES_EXCLUIDAS.slice())})`,
     dondePertenece(f, conColumna, ahora),
   ];
-  if (f.categoria) partes.push(Prisma.sql`${sqlCategoria()} = ${f.categoria}`);
+  if (f.categoria) partes.push(Prisma.sql`${sqlCategoria()} = ${f.categoria}::text`);
   if (f.desde) partes.push(Prisma.sql`a."createdAt" >= ${timestampUtc(f.desde)}`);
   if (f.hasta) partes.push(Prisma.sql`a."createdAt" <= ${timestampUtc(f.hasta)}`);
   return Prisma.join(partes, " AND ");

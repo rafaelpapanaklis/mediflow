@@ -195,6 +195,18 @@ describe("listarMovimientosDelPaciente", () => {
     }
   });
 
+  it("todo parámetro suelto de la categoría lleva su tipo (sin él Postgres da 500: «could not determine data type»)", async () => {
+    const { consultar } = await cargar();
+    const sql = Prisma.sql`${consultar.sqlCategoria()}`.sql;
+    // dentro de un CASE (THEN ?), de una función (left(x, ?), jsonb_exists(x, ?)) o de una comparación (= ?)
+    assert.ok(!/THEN \?(?!::)/.test(sql), "THEN ? sin tipo");
+    assert.ok(!/left\(a\."action", \?(?!::)/.test(sql), "left(…, ?) sin tipo");
+    assert.ok(!/jsonb_exists\(a\."changes", \?(?!::)/.test(sql), "jsonb_exists(…, ?) sin tipo");
+    assert.ok(!/\) = \?(?!::)/.test(sql), "comparación con ? sin tipo");
+    await consultar.listarMovimientosDelPaciente({ ...F, categoria: "citas" }, TODO);
+    assert.match(consultas[0].sql, /\) = \?::text/);
+  });
+
   it("fechas inválidas se ignoran, no se pegan", async () => {
     const { consultar } = await cargar();
     assert.equal(consultar.fechaDeFiltro("2026-13-99"), null);
