@@ -12,6 +12,7 @@ import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
+import { destinoDelAviso, textoAvisoProximoControl } from "@/lib/orthodontics/aviso-proximo-control";
 import { formatDateHuman } from "@/lib/whatsapp/bot/booking-parse";
 import { lastSentOfKind } from "@/lib/orthodontics/whatsapp-dedupe";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
@@ -44,7 +45,7 @@ export async function avisarProximoControlAlPaciente(
 
   const card = await prisma.orthoTreatmentCard.findFirst({
     where: { id: input.cardId, clinicId: ctx.clinicId },
-    select: { patientId: true, nextDate: true },
+    select: { patientId: true, nextDate: true, treatmentPlanId: true },
   });
   if (!card) return fail("Hoja de control no encontrada");
   if (!card.nextDate) return fail("Esta hoja de control no tiene próximo control capturado.");
@@ -56,7 +57,7 @@ export async function avisarProximoControlAlPaciente(
   });
   if (visibilidad) return fail("Paciente no encontrado");
 
-  const [patient, clinic] = await Promise.all([
+  const [patient, clinic, plan] = await Promise.all([
     prisma.patient.findFirst({
       where: { id: card.patientId, clinicId: ctx.clinicId, deletedAt: null },
       select: { firstName: true, lastName: true, phone: true },
@@ -65,20 +66,31 @@ export async function avisarProximoControlAlPaciente(
       where: { id: ctx.clinicId },
       select: { name: true, timezone: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true, waTemplates: true },
     }),
+    // ws1-t8: como la mensualidad y la cobranza, si el caso tiene responsable de pago
+    // (tutor) el aviso va a SU teléfono. Best-effort: sin la columna o sin responsable,
+    // cae al paciente, como siempre.
+    prisma.orthodonticTreatmentPlan.findFirst({
+      where: { id: card.treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
+      select: { responsibleGuardianId: true, responsibleGuardian: { select: { phone: true } } },
+    }).catch((e) => { console.error("[ortho] avisarProximoControl: responsibleGuardian no disponible:", e); return null; }),
   ]);
   if (!patient) return fail("Paciente no encontrado");
-  if (!patient.phone) return fail("El paciente no tiene teléfono registrado.");
+  const destino = destinoDelAviso({
+    responsablePhone: plan?.responsibleGuardian?.phone,
+    hayResponsable: Boolean(plan?.responsibleGuardianId),
+    pacientePhone: patient.phone,
+  });
+  if (destino.ok === false) return fail(destino.motivo);
+  const { telefono: telefonoDestino, esResponsable } = destino.destino;
   if (!clinic) return fail("Clínica no encontrada");
 
   const paciente = `${patient.firstName} ${patient.lastName}`.trim();
   const fechaTexto = formatDateHuman(card.nextDate.toISOString().slice(0, 10), clinic.timezone);
   const horaTexto = card.nextDate.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: clinic.timezone });
-  const texto =
-    `Hola ${paciente}, tu próximo control de ortodoncia en ${clinic.name} quedó para el ${fechaTexto} a las ${horaTexto}. ` +
-    "Si necesitas cambiarlo, escríbenos por aquí.";
+  const texto = textoAvisoProximoControl({ paciente, clinica: clinic.name, fechaTexto, horaTexto, paraResponsable: esResponsable });
 
   const ahora = new Date();
-  const yaEnviado = await lastSentOfKind(ctx.clinicId, patient.phone, "manual_api", ahora).catch(() => null);
+  const yaEnviado = await lastSentOfKind(ctx.clinicId, telefonoDestino, "manual_api", ahora).catch(() => null);
   if (yaEnviado) {
     return ok({
       texto,
@@ -91,12 +103,12 @@ export async function avisarProximoControlAlPaciente(
     return ok({ texto, enviado: false, motivoNoEnviado: "WhatsApp no está conectado en esta clínica." });
   }
 
-  const abierta = isWithin24hWindow(await lastInboundAtForPhone(ctx.clinicId, patient.phone).catch(() => null), ahora);
+  const abierta = isWithin24hWindow(await lastInboundAtForPhone(ctx.clinicId, telefonoDestino).catch(() => null), ahora);
   if (!abierta) {
     return ok({
       texto,
       enviado: false,
-      motivoNoEnviado: "El paciente no ha escrito en las últimas 24 h: copia el texto y compártelo por otro medio.",
+      motivoNoEnviado: `${esResponsable ? "El responsable de pago" : "El paciente"} no ha escrito en las últimas 24 h: copia el texto y compártelo por otro medio.`,
     });
   }
 
@@ -109,7 +121,7 @@ export async function avisarProximoControlAlPaciente(
         waConnected: clinic.waConnected,
         waTemplates: clinic.waTemplates,
       },
-      to: patient.phone,
+      to: telefonoDestino,
       body: texto,
       kind: "manual_api",
     });
