@@ -32,6 +32,7 @@ import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { lastSentOfKind } from "@/lib/orthodontics/whatsapp-dedupe";
 import { horaDelAvisoPrevio } from "@/lib/invoices/aviso-del-dia";
+import { telefonoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
 
 export const runtime = "nodejs"; // genera el PDF con @react-pdf
 export const dynamic = "force-dynamic";
@@ -115,12 +116,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // mismo día era mandar dos cobros con montos distintos ($6,000 vencido y $30,000 de
   // saldo total). Se puede forzar a propósito con `forzar: true` (la pantalla lo pregunta).
   if (pedido?.forzar !== true) {
-    const previo = await lastSentOfKind(ctx.clinicId, patientPhone, "payment_notice", new Date()).catch(() => null);
+    // El recordatorio de Alertas sale al teléfono del RESPONSABLE de pago; este aviso, al
+    // del paciente: se mira en los dos para que no le lleguen dos cobros al mismo hogar.
+    const telResponsable = await telefonoDelResponsableDeLaFactura(ctx.clinicId, invoice.id);
+    const telefonos = Array.from(new Set([patientPhone, ...(telResponsable ? [telResponsable] : [])]));
+    const previos = await Promise.all(
+      telefonos.map((tel) => lastSentOfKind(ctx.clinicId, tel, "payment_notice", new Date()).catch(() => null)),
+    );
+    const previo = previos.reduce<Date | null>((mas, d) => (d && (!mas || d > mas) ? d : mas), null);
     if (previo) {
       return NextResponse.json(
         {
           code: "AVISO_YA_ENVIADO",
-          error: `Ya se le mandó un aviso de cobro hoy (${horaDelAvisoPrevio(previo, clinic.timezone)}). Para que no reciba mensajes con montos distintos, no se manda otro a menos que lo confirmes.`,
+          error: `Ya se le mandó un aviso de cobro en las últimas 24 h (${horaDelAvisoPrevio(previo, clinic.timezone)}). Para que no reciba mensajes con montos distintos, no se manda otro a menos que lo confirmes.`,
         },
         { status: 409 },
       );

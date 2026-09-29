@@ -181,12 +181,18 @@ function Ficha({
   const sinTelefono = ofreceWhatsApp && contacto?.telefono === false;
   const esperando = cargandoContacto && contacto === undefined;
 
-  async function enviar(via: ViaEnvio) {
+  async function enviar(via: ViaEnvio, forzar = false) {
     setEnviando(via);
     setMensaje(null);
     setEnviado(null);
     // El trato dice Mercado Pago: el mensaje lleva el link del saldo (ws1-t1).
-    const r = await enviarFactura(inv.id, via, { linkPago: condiciones?.metodo === "mercadopago" });
+    const r = await enviarFactura(inv.id, via, { linkPago: condiciones?.metodo === "mercadopago", forzar });
+    // ws1-t4 #82: ya salió un aviso de cobro a ese teléfono hoy — se pregunta antes de mandar otro.
+    if (!r.ok && r.codigo === "AVISO_YA_ENVIADO") {
+      setEnviando(null);
+      if (window.confirm(`${r.error ?? ""}\n\n¿Mandarlo de todos modos?`)) await enviar(via, true);
+      return;
+    }
     if (r.ok) setEnviado(via);
     // Con motivo del servidor, se enseña tal cual. SIN motivo (se cortó la red o
     // la función) no se sabe si salió: no se afirma que no, para que nadie

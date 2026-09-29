@@ -102,17 +102,19 @@ export interface Resultado { ok: boolean; error: string | null }
 export async function enviarFactura(
   invoiceId: string,
   via: ViaEnvio,
-  opciones: { linkPago?: boolean } = {},
-): Promise<Resultado & { avisoLink: string | null }> {
+  /** `forzar` (WhatsApp): manda aunque ya haya salido un aviso de cobro a ese teléfono hoy (ws1-t4 #82). */
+  opciones: { linkPago?: boolean; forzar?: boolean } = {},
+): Promise<Resultado & { avisoLink: string | null; codigo?: string | null }> {
   try {
+    const cuerpo = { ...(opciones.linkPago ? { linkPago: true } : {}), ...(opciones.forzar ? { forzar: true } : {}) };
     const res = await fetch(`/api/invoices/${invoiceId}/${RUTA[via]}`, {
       method: "POST",
-      ...(opciones.linkPago
-        ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkPago: true }) }
+      ...(Object.keys(cuerpo).length > 0
+        ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) }
         : {}),
     });
     const out = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: typeof out?.error === "string" ? out.error : null, avisoLink: null };
+    if (!res.ok) return { ok: false, error: typeof out?.error === "string" ? out.error : null, avisoLink: null, codigo: typeof out?.code === "string" ? out.code : null };
     return { ok: true, error: null, avisoLink: typeof out?.avisoLink === "string" && out.avisoLink ? out.avisoLink : null };
   } catch {
     return { ok: false, error: null, avisoLink: null };
