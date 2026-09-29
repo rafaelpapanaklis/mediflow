@@ -34,12 +34,14 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { loadPatientForOrtho } from "./_helpers";
+import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
+import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { resolveTreatmentPlanAccess } from "./_control-agenda-predicates";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 export async function getTreatmentPlanIdForAppointment(
   patientId: string,
-): Promise<ActionResult<{ treatmentPlanId: string | null; canOpenClinicalCard: boolean }>> {
+): Promise<ActionResult<{ treatmentPlanId: string | null; canOpenClinicalCard: boolean; billingMode: "PRECIO_TOTAL" | "PAGO_POR_CONTROL" | null }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
   if (ctx.clinicCategory !== "DENTAL") {
@@ -74,5 +76,9 @@ export async function getTreatmentPlanIdForAppointment(
     select: { id: true },
   });
 
-  return ok({ treatmentPlanId: plan?.id ?? null, canOpenClinicalCard: access.canOpenClinicalCard });
+  // ws1-t10 (decisión 5): el panel de la cita necesita saber si el caso cobra «a plazos» o
+  // «por control» para decidir si ofrece «Pedir anticipo». Sin caso, null.
+  const billingMode = plan ? normalizarOrthoBillingMode(await cargarModoDeCobro(ctx.clinicId, plan.id).catch(() => null)) : null;
+
+  return ok({ treatmentPlanId: plan?.id ?? null, canOpenClinicalCard: access.canOpenClinicalCard, billingMode });
 }

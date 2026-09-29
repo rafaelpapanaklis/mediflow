@@ -10,16 +10,20 @@ import { isFailure, type ActionResult } from "@/app/actions/orthodontics/result"
 export interface RanuraCitaState {
   treatmentPlanId: string | null;
   canOpenClinicalCard: boolean;
+  /** Cómo se cobra ESTE caso (decisión 2 del gerente: se elige al abrirlo). `null` = sin caso o no se sabe. */
+  billingMode: "PRECIO_TOTAL" | "PAGO_POR_CONTROL" | null;
 }
 
 export const ESTADO_VACIO_RANURA_CITA: RanuraCitaState = {
   treatmentPlanId: null,
   canOpenClinicalCard: false,
+  billingMode: null,
 };
 
 export type RanuraCitaResult = ActionResult<{
   treatmentPlanId: string | null;
   canOpenClinicalCard: boolean;
+  billingMode?: "PRECIO_TOTAL" | "PAGO_POR_CONTROL" | null;
 }>;
 
 /** Cualquier `res` vacío o mal formado cae al estado vacío, nunca revienta. */
@@ -30,6 +34,7 @@ export function resolverEstadoRanuraCita(
   return {
     treatmentPlanId: res.data.treatmentPlanId,
     canOpenClinicalCard: res.data.canOpenClinicalCard,
+    billingMode: res.data.billingMode ?? null,
   };
 }
 

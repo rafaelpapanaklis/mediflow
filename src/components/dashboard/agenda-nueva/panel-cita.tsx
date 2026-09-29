@@ -50,6 +50,7 @@ import { ModalPedirAnticipo } from "@/components/dashboard/billing/modal-pedir-a
 import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
 import { RanuraCita } from "@/components/specialties/orthodontics/agenda/RanuraCita";
 import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
+import { ocultarAnticipoPorMensualidad } from "@/lib/orthodontics/anticipo-control";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
@@ -189,6 +190,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   const [buscandoFactura, setBuscandoFactura] = useState(false);
   const [editando, setEditando] = useState(false);
   const [pidiendoAnticipo, setPidiendoAnticipo] = useState(false);
+  // ws1-t10 (decisión 5): cómo cobra el caso de un control de ortodoncia. `undefined` = la
+  // ranura todavía no contesta; `null` = esta cita no tiene caso. Ver «Pedir anticipo».
+  const [modoCobroOrto, setModoCobroOrto] = useState<"PRECIO_TOTAL" | "PAGO_POR_CONTROL" | null | undefined>(undefined);
 
   const dto = useMemo(
     () => state.appointments.find((a) => a.id === ag.citaAbiertaId) ?? null,
@@ -572,7 +576,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
           {/* Ortodoncia — Ola 0 (ws1-t1): única ranura de este panel. Se
               autocalifica sola (dto.reason === TIPO_CITA_CONTROL_ORTO) y hoy
               no pinta nada — ver MAPA DE PARTES en REPORTE-ws1-t1.md. */}
-          <RanuraCita dto={dto} />
+          <RanuraCita dto={dto} onModoDeCobro={setModoCobroOrto} />
         </div>
 
         {/* ── Pie ── */}
@@ -695,12 +699,12 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                 component (page.tsx → hasPermission), así que un READONLY o un
                 permiso a medida sin billing.deposit no lo ve, y el servidor lo
                 vuelve a exigir igual. */}
-            {/* ws1-t4 #71: un control de ortodoncia ya va en la mensualidad del caso
-                (o se cobra después de la visita): pedir un anticipo por él sería
-                pedir dinero por una visita ya pagada. */}
+            {/* ws1-t4 #71 (decisión 5 de Rafael): un control de un caso «a plazos» ya va en la
+                mensualidad: pedir un anticipo sería pedir dinero por una visita ya pagada.
+                En «pago por control» SÍ se ofrece, y también si la cita no tiene caso. */}
             {(cita.estado === "SCHEDULED" || cita.estado === "CONFIRMED") &&
               new Date(dto.startsAt).getTime() > ahora.getTime() &&
-              !esCitaOrtoConHoja(dto.reason ?? null) &&
+              !ocultarAnticipoPorMensualidad(esCitaOrtoConHoja(dto.reason ?? null), modoCobroOrto) &&
               permissions.canDeposit && (
               <button type="button" className={s.accionSecundaria} onClick={() => setPidiendoAnticipo(true)}>
                 <Wallet size={18} strokeWidth={2} />

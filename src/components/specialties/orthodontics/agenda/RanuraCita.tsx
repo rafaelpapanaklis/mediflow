@@ -33,22 +33,31 @@ import { RAIZ_ORTO } from "../redesign/raiz";
 // caso, para cualquiera de los dos roles.
 export interface RanuraCitaProps {
   dto: Pick<AgendaAppointmentDTO, "id" | "reason" | "patient">;
+  /**
+   * Cómo se cobra el caso de esta cita, en cuanto se sabe (`null` = no hay caso o no se
+   * pudo saber). El panel de la cita lo usa para decidir si ofrece «Pedir anticipo».
+   */
+  onModoDeCobro?: (modo: "PRECIO_TOTAL" | "PAGO_POR_CONTROL" | null) => void;
 }
 
-export function RanuraCita({ dto }: RanuraCitaProps) {
+export function RanuraCita({ dto, onModoDeCobro }: RanuraCitaProps) {
   const esControl = esCitaOrtoConHoja(dto.reason ?? null);
   const [state, setState] = useState(ESTADO_VACIO_RANURA_CITA);
   // H41: si la consulta se aborta (dev lento, 502) reintenta una vez y, si
   // vuelve a fallar, avisa con «Reintentar» en vez de quedarse vacía.
   const [fallo, setFallo] = useState(false);
   const [intento, setIntento] = useState(0);
+  // La consulta ya contestó de verdad (con o sin caso): recién ahí se sabe el modo de cobro.
+  const [cargado, setCargado] = useState(false);
 
   useEffect(() => {
     if (!esControl) {
       setState(ESTADO_VACIO_RANURA_CITA);
       setFallo(false);
+      setCargado(false);
       return;
     }
+    setCargado(false);
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const cargar = (reintentosRestantes: number) => {
@@ -62,6 +71,7 @@ export function RanuraCita({ dto }: RanuraCitaProps) {
           if (esRespuestaCaida(res)) throw new Error("respuesta caída");
           setFallo(false);
           setState(resolverEstadoRanuraCita(res));
+          setCargado(true);
         })
         .catch(() => {
           if (cancelled) return;
@@ -80,6 +90,14 @@ export function RanuraCita({ dto }: RanuraCitaProps) {
       if (timer) clearTimeout(timer);
     };
   }, [esControl, dto.patient.id, intento]);
+
+  // Se avisa al panel cuando ya se sabe (con o sin caso, o si la consulta falló definitivamente).
+  const aviso = onModoDeCobro;
+  const modo = state.billingMode;
+  const conocido = esControl && cargado && !fallo;
+  useEffect(() => {
+    if (aviso && conocido) aviso(modo);
+  }, [aviso, conocido, modo]);
 
   if (esControl && fallo) {
     return (
