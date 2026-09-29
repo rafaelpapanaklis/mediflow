@@ -20,7 +20,7 @@
 //   (b) «Quién lo refirió» deja agregar un referente ahí mismo;
 //   (c) el costo nace VACÍO: antes traía 45000 escrito en el código.
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Loader2, Plus, Sparkles, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { getCaseIntakeOptions, buscarTutoresDeLaClinica, type TutorDeLaClinica } from "@/app/actions/orthodontics";
@@ -48,6 +48,7 @@ import {
 } from "@/lib/orthodontics/alta-caso-formulario";
 import { useCajon } from "../atoms/useCajon";
 import { usePresupuestoDelAlta } from "./usePresupuestoDelAlta";
+import { costoAProponer, precioDeTecnica, type PreciosPorTecnica } from "@/lib/orthodontics/precios-por-tecnica";
 import orto from "../orto.module.css";
 
 const ANGLE_OPTIONS = [
@@ -203,6 +204,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       setColumnsExist(res.data.columnsExist);
       setBillingMode(res.data.billingMode);
       setModoDeLaClinica(res.data.billingMode);
+      setPreciosPorTecnica(res.data.preciosPorTecnica ?? {});
       // H60: lo que el doctor ya midió en «Nueva consulta» se propone aquí (editable).
       const o = res.data.oclusionDeConsulta;
       if (o) {
@@ -269,6 +271,23 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   useEffect(() => {
     if (presupuesto) setTotalCost((c) => (c.trim() === "" ? String(presupuesto.importe) : c));
   }, [presupuesto]);
+  // ws1-t10 (decisión 2 de Rafael): el costo se PROPONE con el precio de la técnica
+  // elegida (tabla de Configuración → Precio por técnica). Solo toca el campo si está
+  // vacío o si aún trae lo que esta tabla propuso; nunca pisa lo que se tecleó ni el
+  // importe de un presupuesto aceptado.
+  const [preciosPorTecnica, setPreciosPorTecnica] = useState<PreciosPorTecnica>({});
+  const [costoSugerido, setCostoSugerido] = useState<string | null>(null);
+  const costoSugeridoRef = useRef<string | null>(null);
+  const totalCostRef = useRef(totalCost);
+  totalCostRef.current = totalCost;
+  useEffect(() => {
+    const precio = precioDeTecnica(preciosPorTecnica, technique);
+    const nuevo = costoAProponer({ actual: totalCostRef.current, ultimoSugerido: costoSugeridoRef.current, precio, hayPresupuesto: presupuesto != null });
+    if (nuevo === null) return;
+    costoSugeridoRef.current = nuevo === "" ? null : nuevo;
+    setCostoSugerido(costoSugeridoRef.current);
+    setTotalCost(nuevo);
+  }, [technique, preciosPorTecnica, presupuesto]);
   const [anchorage, setAnchorage] = useState("MODERATE");
   const [extractions, setExtractions] = useState(false);
   const [iprRequired, setIprRequired] = useState(false);
@@ -684,7 +703,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                     options={MODO_DE_COBRO_OPTIONS}
                   />
                 </Field>
-                <Field label={textosCosto.rotulo} hint={presupuesto && totalCost === String(presupuesto.importe) ? presupuesto.nota : textosCosto.pista} htmlFor={idCosto}>
+                <Field label={textosCosto.rotulo} hint={presupuesto && totalCost === String(presupuesto.importe) ? presupuesto.nota : costoSugerido !== null && totalCost === costoSugerido ? "Es el precio de tu tabla para esta técnica (Configuración → Precio por técnica). Cámbialo si este paciente pactó otro." : textosCosto.pista} htmlFor={idCosto}>
                   <input
                     id={idCosto}
                     type="text"

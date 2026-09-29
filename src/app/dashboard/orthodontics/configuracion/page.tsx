@@ -8,6 +8,7 @@ import { getOrthoClinicSettings, listarProcedimientosDeOrtodonciaAction } from "
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { getCurrentUser } from "@/lib/auth";
+import { leerPreciosPorTecnica } from "@/lib/orthodontics/precios-por-tecnica-db";
 import { prisma } from "@/lib/prisma";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { canPurchaseModules, canRequestModuleCancellation } from "@/lib/marketplace/module-purchase-core";
@@ -43,13 +44,14 @@ export default async function OrthodonticsConfiguracionPage() {
   // ws1-t2 (28-sep-2026): la fila de clinic_modules de este módulo, para la
   // tarjeta "Suscripción" (cancelar). Sin `select` de más: solo lo que
   // `canRequestModuleCancellation` necesita para decidir si hay botón.
-  const [res, procRes, clinicModule] = await Promise.all([
+  const [res, procRes, clinicModule, preciosPorTecnica] = await Promise.all([
     getOrthoClinicSettings(),
     listarProcedimientosDeOrtodonciaAction(),
     prisma.clinicModule.findFirst({
       where: { clinicId: user.clinicId, module: { key: ORTHODONTICS_MODULE_KEY } },
       select: { paymentMethod: true, stripeSubscriptionId: true, status: true, currentPeriodEnd: true },
     }),
+    leerPreciosPorTecnica(user.clinicId),
   ]);
   if (isFailure(res)) {
     return (
@@ -66,6 +68,7 @@ export default async function OrthodonticsConfiguracionPage() {
       settings={res.data.settings}
       doctors={res.data.doctors}
       procedimientos={isFailure(procRes) ? [] : procRes.data.procedimientos}
+      preciosPorTecnica={preciosPorTecnica}
       suscripcion={
         canPurchaseModules(user.role) && cancelacion.ok
           ? { currentPeriodEnd: clinicModule?.currentPeriodEnd.toISOString() ?? null }

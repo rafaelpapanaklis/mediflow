@@ -19,6 +19,8 @@ import { cargarDoctoresTratantes } from "@/lib/orthodontics/doctores-tratantes-d
 import { doctorPropuestoParaElAlta, etiquetaDeDoctor } from "@/lib/orthodontics/doctores-tratantes";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { oclusionDeLaConsulta, type OclusionDeConsulta } from "@/lib/orthodontics/oclusion-de-consulta";
+import { leerPreciosPorTecnica } from "@/lib/orthodontics/precios-por-tecnica-db";
+import type { PreciosPorTecnica } from "@/lib/orthodontics/precios-por-tecnica";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 export interface CaseIntakeOptions {
@@ -52,6 +54,8 @@ export interface CaseIntakeOptions {
    * control» no se factura un total, así que ahí es un estimado.
    */
   billingMode: OrthoBillingMode;
+  /** ws1-t10 (decisión 2): precio del tratamiento por técnica (Configuración); el alta propone el de la técnica elegida. */
+  preciosPorTecnica: PreciosPorTecnica;
   /**
    * Con qué doctor arranca el alta de un caso NUEVO (ws1-t5, ronda 6): el
    * «Doctor tratante por defecto» de Configuración si sigue atendiendo, o el
@@ -230,9 +234,12 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: no se pudo leer la oclusión de la consulta:", e);
   }
 
+  const preciosPorTecnica = await leerPreciosPorTecnica(ctx.clinicId);
+
   return ok({
     oclusionDeConsulta,
     billingMode,
+    preciosPorTecnica,
     suggestedTreatingDoctorId: doctorPropuestoParaElAlta({ porDefecto: doctorPorDefecto, opciones: doctorsRaw }),
     doctors: doctorsRaw.map((d) => ({ id: d.id, fullName: etiquetaDeDoctor(d) })),
     guardians: guardiansRaw.map((g) => ({

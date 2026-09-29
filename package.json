@@ -225,6 +225,7 @@
     "test:orto-expediente": "tsx --test src/lib/orthodontics/__tests__/expediente-ortodoncia.test.ts",
     "test:pago-del-mes": "tsx --test src/lib/invoices/__tests__/pago-del-mes.test.ts",
     "test:orto-anticipo-control": "tsx --test src/lib/orthodontics/__tests__/anticipo-control.test.ts",
+    "test:orto-precios-tecnica": "tsx --test src/lib/orthodontics/__tests__/precios-por-tecnica.test.ts",
     "test:facturas-ligables": "tsx --test src/lib/orthodontics/cobro/__tests__/facturas-ligables.test.ts",
     "test:orto-lectura-sin-modulo": "tsx --test src/lib/orthodontics/__tests__/lectura-sin-modulo.test.ts",
     "test:monto-cobro-h68": "tsx --test src/lib/invoices/__tests__/monto-cobro-h68.test.ts",
