@@ -120,7 +120,8 @@ export async function extrasPendientesPorCasos(clinicId: string, treatmentPlanId
         FROM "invoices"
        WHERE "clinicId" = ${clinicId}
          AND "orthodonticTreatmentPlanId" IN (${Prisma.join(treatmentPlanIds)})
-         AND "status" IN (${Prisma.join(ESTADOS_QUE_DEBEN)})`;
+         AND "status" IN (${Prisma.join(ESTADOS_QUE_DEBEN)})
+         AND "appointmentId" IS NULL`;
     for (const f of filas) {
       const falta = Math.max(0, Math.round(((Number(f.total) || 0) - (Number(f.paid) || 0)) * 100)) / 100;
       if (falta <= 0) continue;
@@ -131,4 +132,47 @@ export async function extrasPendientesPorCasos(clinicId: string, treatmentPlanId
     console.warn("[ortodoncia:extras] no se pudieron leer los extras pendientes:", e);
   }
   return out;
+}
+
+/**
+ * De estas facturas, cuáles YA están ligadas a un caso por la columna de extras
+ * (`invoices.orthodonticTreatmentPlanId`: extras y cargos de control). Sirve para
+ * no ofrecer ni aceptar como «plan de pago» la factura de un extra o de un
+ * control (ws1-t4 #75). Sin la columna o si falla: vacío. Nunca lanza.
+ */
+export async function idsDeFacturasLigadasAUnCaso(clinicId: string, invoiceIds: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!clinicId || invoiceIds.length === 0) return out;
+  if (!(await columnaExiste())) return out;
+  try {
+    const filas = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "invoices"
+       WHERE "clinicId" = ${clinicId}
+         AND "id" IN (${Prisma.join(invoiceIds)})
+         AND "orthodonticTreatmentPlanId" IS NOT NULL`;
+    for (const f of filas) out.add(f.id);
+  } catch (e) {
+    console.warn("[ortodoncia:extras] no se pudo comprobar si la factura ya es de un caso:", e);
+  }
+  return out;
+}
+
+/**
+ * El caso al que una factura de EXTRA o de CONTROL está ligada (`invoices.orthodonticTreatmentPlanId`),
+ * o null. Es como se llega al responsable de pago desde una factura que NO es la
+ * principal del tratamiento. Filtra por la clínica de la sesión. Nunca lanza.
+ */
+export async function casoDeLaFacturaLigada(clinicId: string, invoiceId: string): Promise<string | null> {
+  if (!clinicId || !invoiceId) return null;
+  if (!(await columnaExiste())) return null;
+  try {
+    const filas = await prisma.$queryRaw<{ plan: string | null }[]>`
+      SELECT "orthodonticTreatmentPlanId" AS plan FROM "invoices"
+       WHERE "id" = ${invoiceId} AND "clinicId" = ${clinicId} AND "orthodonticTreatmentPlanId" IS NOT NULL
+       LIMIT 1`;
+    return filas[0]?.plan ?? null;
+  } catch (e) {
+    console.warn("[ortodoncia:extras] no se pudo leer el caso de la factura:", e);
+    return null;
+  }
 }

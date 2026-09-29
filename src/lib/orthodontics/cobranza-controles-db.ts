@@ -125,7 +125,8 @@ export async function cargarCargosDeControlPorCasos(
        WHERE i."clinicId" = ${clinicId}
          AND i."orthodonticTreatmentPlanId" IN (${Prisma.join(treatmentPlanIds)})
          AND i."appointmentId" IS NOT NULL
-         AND a."type" = ${TIPO_CITA_CONTROL_ORTO}`;
+         AND a."type" = ${TIPO_CITA_CONTROL_ORTO}
+         AND i."status" NOT IN ('DRAFT', 'CANCELLED')`;
 
     for (const f of filas) {
       const cargo: CargoDeControl = {

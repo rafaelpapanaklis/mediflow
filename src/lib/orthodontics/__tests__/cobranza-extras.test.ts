@@ -89,11 +89,49 @@ test("el candado de indicaciones busca el texto de ESE control, no cualquier «m
 test("«Enviar por WhatsApp» de la factura no manda un segundo aviso de cobro el mismo día sin confirmar", () => {
   const ruta = leer("app/api/invoices/[id]/send-whatsapp/route.ts");
   assert.match(ruta, /if \(pedido\?\.forzar !== true\)/);
-  assert.match(ruta, /lastSentOfKind\(ctx\.clinicId, patientPhone, "payment_notice", new Date\(\)\)/);
+  assert.match(ruta, /lastSentOfKind\(ctx\.clinicId, tel, "payment_notice", new Date\(\)\)/);
   assert.match(ruta, /code: "AVISO_YA_ENVIADO"/);
   // el candado va ANTES de crear el link de pago (que escribe)
   assert.ok(ruta.indexOf("AVISO_YA_ENVIADO") < ruta.indexOf("linkParaEnviar({"));
   const modal = leer("components/dashboard/billing/invoice-detail-modal.tsx");
   assert.match(modal, /data\.code === "AVISO_YA_ENVIADO"/);
   assert.match(modal, /handleSendWhatsApp\(true\)/);
+});
+
+// Correcciones de la revisión (revisor, ws1-t10).
+test("las facturas canceladas no cuentan como deuda en Tablero/Cobranza/Alertas ni como cargos de control; los controles no cuentan como extras", () => {
+  const t = leer("lib/orthodontics/tablero-data.ts");
+  assert.match(t, /invoice != null && invoice\.status !== "CANCELLED"/);
+  const c = leer("lib/orthodontics/cobranza-controles-db.ts");
+  assert.ok((c.match(/i\."status" NOT IN \(.DRAFT., .CANCELLED.\)/g) ?? []).length >= 2);
+  assert.match(leer("lib/orthodontics/cobro/extras-db.ts"), /AND "appointmentId" IS NULL/);
+});
+
+test("ligar una factura elegida nunca cancela otra por «duplicada», y no acepta extras/controles ni facturas de cita", () => {
+  const a = leer("app/actions/orthodontics/cobro/abrirPlanDePago.ts");
+  assert.equal((a.match(/if \(soloLigar\) return fail\(/g) ?? []).length, 2);
+  assert.match(a, /Esa factura es de una cita/);
+  assert.match(a, /idsDeFacturasLigadasAUnCaso\(ctx\.clinicId, \[invoice\.id\]\)/);
+  assert.match(leer("components/specialties/orthodontics/redesign/drawers/DrawerLigarFactura.tsx"), /origen: "ligar"/);
+  assert.match(leer("app/actions/orthodontics/cobro/listarFacturasLigables.ts"), /idsDeFacturasLigadasAUnCaso\(ctx\.clinicId/);
+});
+
+test("pasar controles al doctor nuevo: ventana acotada, bloqueos de agenda y choque tardío sin dejar la tanda a medias", () => {
+  const m = leer("app/actions/orthodontics/moverControlesFuturosAlDoctor.ts");
+  assert.match(m, /startsAt: \{ lt: hasta \}/);
+  assert.match(m, /prisma\.agendaBlock\.findMany/);
+  assert.match(m, /if \(!isOverlapError\(e\)\) throw e;/);
+});
+
+test("el tope de un aviso mira también el teléfono del responsable; la ficha rediseñada puede confirmar", () => {
+  const r = leer("app/api/invoices/[id]/send-whatsapp/route.ts");
+  assert.match(r, /telefonoDelResponsableDeLaFactura\(ctx\.clinicId, invoice\.id\)/);
+  assert.match(r, /en las últimas 24 h/);
+  assert.match(leer("components/dashboard/factura-ficha-rediseno/extras.ts"), /forzar/);
+  assert.match(leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx"), /r\.codigo === "AVISO_YA_ENVIADO"/);
+});
+
+test("el CFDI encuentra al responsable también desde la factura de un control/extra, y la precarga async no pisa otra factura", () => {
+  assert.match(leer("lib/orthodontics/responsable-fiscal-db.ts"), /casoDeLaFacturaLigada\(clinicId, invoiceId\)/);
+  assert.match(leer("app/dashboard/billing/billing-client.tsx"), /cfdiAbiertoParaRef\.current !== inv\.id/);
 });

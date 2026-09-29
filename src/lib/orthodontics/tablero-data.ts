@@ -148,6 +148,7 @@ async function loadRawPlans(clinicId: string, viewer: VisibilityViewer): Promise
 interface InvoiceForCobranza {
   id: string;
   total: number;
+  status?: string;
   payments: Array<{ amount: unknown; method?: string | null; paidAt: Date }>;
 }
 
@@ -183,7 +184,7 @@ export async function loadOrthoCases(
       leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds }),
       prisma.invoice.findMany({
         where: { id: { in: invoiceIds }, clinicId },
-        select: { id: true, total: true, payments: { select: { amount: true, method: true, paidAt: true } } },
+        select: { id: true, total: true, status: true, payments: { select: { amount: true, method: true, paidAt: true } } },
       }),
     ]);
     condicionesPorFactura = condicionesResult.porFactura;
@@ -202,9 +203,12 @@ export async function loadOrthoCases(
   const cases: OrthoCaseSummary[] = plans.map((p) => {
     if (p.invoiceId) invoiceIdByPlanId.set(p.id, p.invoiceId);
     const invoice = p.invoiceId ? invoicesById.get(p.invoiceId) : undefined;
+    // Una factura CANCELADA no es deuda del caso (mismo criterio que la ficha y
+    // `cobranza-db.ts`): sin esto Tablero, Cobranza y Alertas seguían marcando
+    // vencido lo que ya se canceló para reabrir el plan.
     const cobranza = cobranzaDelCasoUnificada({
       modo: p.billingMode,
-      facturaPrincipal: invoice != null ? { condiciones: condicionesPorFactura.get(p.invoiceId!) ?? null, totalFactura: invoice.total, cobros: invoice.payments } : null,
+      facturaPrincipal: invoice != null && invoice.status !== "CANCELLED" ? { condiciones: condicionesPorFactura.get(p.invoiceId!) ?? null, totalFactura: invoice.total, cobros: invoice.payments } : null,
       cargosControl: cargosControlPorPlan.get(p.id) ?? [],
       saldoAFavorPrevio: 0,
       ahora,
