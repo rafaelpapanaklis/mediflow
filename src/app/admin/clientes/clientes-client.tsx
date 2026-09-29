@@ -253,17 +253,17 @@ export function ClientesClient({ clientes, planPrices, ahoraISO, modulosMedidos 
   const etiquetaOrden = ORDENES.find((o) => o.id === orden)?.label ?? "";
 
   return (
-    <div className={`${css.pagina} ad-pagina`}>
+    <div className={`${css.pagina} dcp-pagina`}>
       {/* ── Cabecera ──────────────────────────────────────────────────── */}
-      <header className="ad-cabecera">
+      <header className="dcp-cabecera">
         <div>
-          <h1 className="ad-titulo">Clientes</h1>
-          <p className="ad-sub">
+          <h1 className="dcp-titulo">Clientes</h1>
+          <p className="dcp-sub">
             {resumen.reales} reales · {resumen.clinicas} clínicas
             {resumen.pruebas > 0 && ` · ${resumen.pruebas} de prueba`}
             {resumen.enLinea > 0 && (
               <span title={`Con sesión en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`}>
-                {" · "}<span className="ad-online" style={{ verticalAlign: "1px" }} /> {resumen.enLinea} en línea
+                {" · "}<span className="dcp-online" style={{ verticalAlign: "1px" }} /> {resumen.enLinea} en línea
               </span>
             )}
           </p>
@@ -318,16 +318,16 @@ export function ClientesClient({ clientes, planPrices, ahoraISO, modulosMedidos 
       </div>
 
       {/* ── A quién hay que llamar HOY ────────────────────────────────── */}
-      <section className="ad-card" aria-label="Clientes que exigen atención">
-        <header className="ad-card__head">
+      <section className="dcp-card" aria-label="Clientes que exigen atención">
+        <header className="dcp-card__head">
           <div>
-            <h2 className="ad-card__title">Atender hoy</h2>
-            <div className="ad-card__sub">
+            <h2 className="dcp-card__title">Atender hoy</h2>
+            <div className="dcp-card__sub">
               {triage.length === 0 ? "sin pendientes" : `${triage.length} de ${resumen.reales} · ${resumen.criticos} crítico${resumen.criticos === 1 ? "" : "s"}`}
             </div>
           </div>
           {triage.length > 5 && (
-            <button type="button" className="ad-enlace" style={{ background: "none", border: "none", cursor: "pointer", font: "inherit" }} onClick={() => setVerTodo((v) => !v)}>
+            <button type="button" className="dcp-enlace" style={{ background: "none", border: "none", cursor: "pointer", font: "inherit" }} onClick={() => setVerTodo((v) => !v)}>
               {verTodo ? "Ver 5" : `Ver los ${triage.length}`}
             </button>
           )}
@@ -335,21 +335,21 @@ export function ClientesClient({ clientes, planPrices, ahoraISO, modulosMedidos 
         {triage.length === 0 ? (
           <Vacio>Ningún cliente en riesgo ahora mismo.</Vacio>
         ) : (
-          <ul className="ad-pend">
+          <ul className="dcp-pend">
             {triageVisible.map((f) => {
               const primero = f.riesgos[0];
               return (
                 <li key={f.supabaseId}>
-                  <Link href={`/admin/clientes/${f.supabaseId}`} className="ad-pend__fila" title={`${primero.clinicaNombre}: ${primero.riesgo.detalle}`}>
-                    <span className={`ad-sev ad-sev--${primero.riesgo.severidad}`} aria-hidden />
-                    <span className="ad-pend__texto">
-                      <span className="ad-pend__clinica">{f.nombre}</span>
+                  <Link href={`/admin/clientes/${f.supabaseId}`} className="dcp-pend__fila" title={`${primero.clinicaNombre}: ${primero.riesgo.detalle}`}>
+                    <span className={`dcp-sev dcp-sev--${primero.riesgo.severidad}`} aria-hidden />
+                    <span className="dcp-pend__texto">
+                      <span className="dcp-pend__clinica">{f.nombre}</span>
                       <Chip tono={TONO_SEVERIDAD[primero.riesgo.severidad]} sm>{primero.riesgo.titulo}</Chip>
-                      <span className="ad-suave" style={{ fontSize: 12 }}>
+                      <span className="dcp-suave" style={{ fontSize: 12 }}>
                         {primero.clinicaNombre}{f.riesgos.length > 1 ? ` +${f.riesgos.length - 1}` : ""}
                       </span>
                     </span>
-                    <span className="ad-pend__dato ad-num">{formatCurrency(f.mrrTotal, "MXN")}/mes</span>
+                    <span className="dcp-pend__dato dcp-num">{formatCurrency(f.mrrTotal, "MXN")}/mes</span>
                   </Link>
                 </li>
               );
@@ -359,8 +359,8 @@ export function ClientesClient({ clientes, planPrices, ahoraISO, modulosMedidos 
       </section>
 
       {/* ── Herramientas ──────────────────────────────────────────────── */}
-      <div className="ad-toolbar">
-        <div className="ad-buscar">
+      <div className="dcp-toolbar">
+        <div className="dcp-buscar">
           <Search size={14} aria-hidden />
           <input
             className="input-new"
@@ -370,15 +370,15 @@ export function ClientesClient({ clientes, planPrices, ahoraISO, modulosMedidos 
             aria-label="Buscar cliente"
           />
         </div>
-        <div className="ad-filtros" role="group" aria-label="Filtro">
+        <div className="dcp-filtros" role="group" aria-label="Filtro">
           {FILTROS.map((f) => (
-            <button key={f.id} type="button" className="ad-filtro" aria-pressed={filtro === f.id} onClick={() => setFiltro(f.id)}>
+            <button key={f.id} type="button" className="dcp-filtro" aria-pressed={filtro === f.id} onClick={() => setFiltro(f.id)}>
               {f.label}
-              <span className="ad-filtro__n ad-num">{cuentas[f.id]}</span>
+              <span className="dcp-filtro__n dcp-num">{cuentas[f.id]}</span>
             </button>
           ))}
         </div>
-        <div className="ad-orden">
+        <div className="dcp-orden">
           <label htmlFor="orden-clientes">Ordenar</label>
           {/* Nombre de la A a la Z y renovación de la más cercana a la más lejana; lo demás, de mayor a menor. */}
           <select id="orden-clientes" className="input-new" value={orden} onChange={(e) => { setOrden(e.target.value as ClaveOrden); setDesc(e.target.value !== "nombre" && e.target.value !== "renueva"); }}>
@@ -391,8 +391,8 @@ export function ClientesClient({ clientes, planPrices, ahoraISO, modulosMedidos 
       </div>
 
       {/* ── Tabla ─────────────────────────────────────────────────────── */}
-      <div className="ad-tabla ad-tabla--apilada">
-        <div className="ad-tabla__scroll">
+      <div className="dcp-tabla dcp-tabla--apilada">
+        <div className="dcp-tabla__scroll">
           <table>
             <thead>
               <tr>
@@ -402,21 +402,21 @@ export function ClientesClient({ clientes, planPrices, ahoraISO, modulosMedidos 
                 <th>Última compra</th>
                 <th>Renueva</th>
                 <th>Uso</th>
-                <th className="ad-der">MRR</th>
-                <th className="ad-der">Pacientes</th>
+                <th className="dcp-der">MRR</th>
+                <th className="dcp-der">Pacientes</th>
               </tr>
             </thead>
             <tbody>
               {visibles.map((f) => <FilaTabla key={f.supabaseId} fila={f} ahora={ahora} />)}
               {visibles.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="ad-tabla__vacio">Ningún cliente coincide con lo que buscas.</td>
+                  <td colSpan={8} className="dcp-tabla__vacio">Ningún cliente coincide con lo que buscas.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        <div className="ad-tabla__pie">
+        <div className="dcp-tabla__pie">
           <span><Users size={12} style={{ verticalAlign: "-2px" }} /> {visibles.length} de {filas.length} clientes · ordenados por {etiquetaOrden.toLowerCase()}{orden === "compra" ? " (último pago cobrado de cualquiera de sus sedes; sin pagos, la fecha de alta)" : ""}</span>
           {sinRegistroDeAcceso > 0 && <span>{sinRegistroDeAcceso} sin sesión de panel registrada (la analítica es reciente)</span>}
         </div>
@@ -440,12 +440,12 @@ function FilaTabla({ fila, ahora }: { fila: FilaCliente; ahora: Date }) {
   return (
     <tr>
       <td data-col="Cliente">
-        <div className="ad-celda-nombre">
+        <div className="dcp-celda-nombre">
           <AvatarNew name={fila.nombre} size="sm" />
-          <div className="ad-celda-nombre__texto">
-            <Link href={`/admin/clientes/${fila.supabaseId}`} className="ad-nombre">
+          <div className="dcp-celda-nombre__texto">
+            <Link href={`/admin/clientes/${fila.supabaseId}`} className="dcp-nombre">
               {fila.nombre}
-              {fila.enLinea && <span className="ad-online" style={{ marginLeft: 6, verticalAlign: "1px" }} title={`Alguien en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
+              {fila.enLinea && <span className="dcp-online" style={{ marginLeft: 6, verticalAlign: "1px" }} title={`Alguien en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
             </Link>
             <div className={css.meta} title={fila.email}>{fila.email}{fila.afiliado ? ` · vía ${fila.afiliado}` : ""}</div>
           </div>
@@ -480,9 +480,9 @@ function FilaTabla({ fila, ahora }: { fila: FilaCliente; ahora: Date }) {
 
       <td data-col="Última compra">
         <div className={css.celda}>
-          <span className={`ad-fuerte ${css.num}`}>
+          <span className={`dcp-fuerte ${css.num}`}>
             {fila.ultimaCompraAt ? fechaAdmin(fila.ultimaCompraAt) : fechaAdmin(fila.altaAt)}
-            {!fila.ultimaCompraAt && <span className="ad-suave" title="Nunca ha pagado: es la fecha de alta"> · alta</span>}
+            {!fila.ultimaCompraAt && <span className="dcp-suave" title="Nunca ha pagado: es la fecha de alta"> · alta</span>}
           </span>
           <span className={`${css.meta} ${css.num}`}>alta {fechaAdmin(fila.altaAt) ?? "—"}</span>
         </div>
@@ -490,7 +490,7 @@ function FilaTabla({ fila, ahora }: { fila: FilaCliente; ahora: Date }) {
 
       <td data-col="Renueva">
         <div className={css.celda}>
-          <span className={`ad-fuerte ${css.num}`}>{fila.proximaRenovacionAt ? fechaAdmin(fila.proximaRenovacionAt) : "—"}</span>
+          <span className={`dcp-fuerte ${css.num}`}>{fila.proximaRenovacionAt ? fechaAdmin(fila.proximaRenovacionAt) : "—"}</span>
           <span className={css.meta}>{pago ? pago.etiqueta : fila.vigentes.length > 1 ? "varias sedes" : "—"}</span>
         </div>
       </td>
@@ -512,14 +512,14 @@ function FilaTabla({ fila, ahora }: { fila: FilaCliente; ahora: Date }) {
           )}
           <span className={`${css.volumen} ${css.num}`} title={`${tend.actual.citas} citas · ${tend.actual.facturas} facturas · ${tend.actual.notas} notas en ${DIAS_VENTANA_ACTIVIDAD} d`}>
             <strong>{tend.actual.total.toLocaleString("es-MX")}</strong> en 30 d
-            {tend.deltaPct !== null && <span className="ad-suave"> · {tend.deltaPct > 0 ? "+" : ""}{tend.deltaPct}%</span>}
+            {tend.deltaPct !== null && <span className="dcp-suave"> · {tend.deltaPct > 0 ? "+" : ""}{tend.deltaPct}%</span>}
           </span>
         </div>
       </td>
 
-      <td data-col="MRR" className="ad-der">
+      <td data-col="MRR" className="dcp-der">
         <div className={css.celda} style={{ alignItems: "flex-end" }}>
-          <span className={`ad-fuerte ${css.num}`} style={{ fontSize: 14, color: fila.mrrTotal === 0 ? "var(--text-3)" : undefined }}>
+          <span className={`dcp-fuerte ${css.num}`} style={{ fontSize: 14, color: fila.mrrTotal === 0 ? "var(--text-3)" : undefined }}>
             {formatCurrency(fila.mrrTotal, "MXN")}
           </span>
           <span className={`${css.meta} ${css.num}`}>
@@ -528,10 +528,10 @@ function FilaTabla({ fila, ahora }: { fila: FilaCliente; ahora: Date }) {
         </div>
       </td>
 
-      <td data-col="Pacientes" className="ad-der">
+      <td data-col="Pacientes" className="dcp-der">
         <div className={css.celda} style={{ alignItems: "flex-end" }}>
           <span
-            className={`ad-fuerte ${css.num}`}
+            className={`dcp-fuerte ${css.num}`}
             style={{ fontSize: 14, color: nivelCupo === "full" ? "var(--danger)" : nivelCupo === "warn" ? "var(--warning)" : undefined }}
             title={fila.cupo.unlimited ? "Alguna de sus sedes tiene plan sin tope de pacientes" : `${fila.cupo.remaining ?? 0} de cupo libre entre sus sedes`}
           >

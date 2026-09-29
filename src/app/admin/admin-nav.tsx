@@ -185,7 +185,7 @@ export function AdminSidebar({
       )}
 
       <aside
-        className={`sidebar-new${mobileOpen ? " ad-sidebar--abierta" : ""}`}
+        className={`sidebar-new${mobileOpen ? " dcp-sidebar--abierta" : ""}`}
         style={{
           zIndex: 41,
           position: mobileOpen ? "fixed" : undefined,

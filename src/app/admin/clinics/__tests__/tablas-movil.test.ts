@@ -90,16 +90,16 @@ test("rediseño: la tabla se apila en móvil y cada celda lleva su rótulo", () 
   const i = sinComentarios.indexOf("@media (max-width: 900px)");
   assert.notEqual(i, -1, "falta el corte de 900 px del apilado");
   const movil = sinComentarios.slice(i);
-  assert.match(movil, /\.ad-tabla--apilada thead \{ display: none; \}/, "el thead no se esconde");
-  assert.match(movil, /\.ad-tabla--apilada tbody td::before \{[^}]*content: attr\(data-col\)/, "las celdas no llevan su rótulo");
-  assert.match(movil, /\.ad-tabla--apilada tbody td \{[^}]*min-width: 0/, "la celda apilada no puede encogerse");
-  assert.match(movil, /\.ad-tabla--apilada \.ad-meta \{[^}]*white-space: normal/, "el metadato no envuelve en móvil");
+  assert.match(movil, /\.dcp-tabla--apilada thead \{ display: none; \}/, "el thead no se esconde");
+  assert.match(movil, /\.dcp-tabla--apilada tbody td::before \{[^}]*content: attr\(data-col\)/, "las celdas no llevan su rótulo");
+  assert.match(movil, /\.dcp-tabla--apilada tbody td \{[^}]*min-width: 0/, "la celda apilada no puede encogerse");
+  assert.match(movil, /\.dcp-tabla--apilada \.dcp-meta \{[^}]*white-space: normal/, "el metadato no envuelve en móvil");
 });
 
 test("rediseño: una píldora larga se recorta DENTRO del chip", () => {
   const sinComentarios = REDISENO.replace(/\/\*[\s\S]*?\*\//g, "");
-  const i = sinComentarios.indexOf(".ad-chip {");
-  assert.notEqual(i, -1, "no existe .ad-chip");
+  const i = sinComentarios.indexOf(".dcp-chip {");
+  assert.notEqual(i, -1, "no existe .dcp-chip");
   const cuerpo = sinComentarios.slice(i, sinComentarios.indexOf("}", i));
   assert.match(cuerpo, /max-width: 100%/);
   assert.match(cuerpo, /overflow: hidden/);

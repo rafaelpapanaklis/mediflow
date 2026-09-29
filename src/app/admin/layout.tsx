@@ -99,7 +99,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div
-      className={`mf-extpanel ad-shell ${CLASES_MENU}`}
+      className={`mf-extpanel dcp-shell ${CLASES_MENU}`}
       style={{ ...TOKENS_DE_SIEMPRE_AL_MENU, display: "flex", minHeight: "100vh", color: "var(--text-1)" }}
     >
       <AdminSessionKeepalive />

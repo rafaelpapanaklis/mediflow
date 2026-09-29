@@ -405,15 +405,15 @@ export function AdminClinicDetailClient({
   ];
 
   return (
-    <div className="ad-pagina" style={{ gap: 16 }}>
+    <div className="dcp-pagina" style={{ gap: 16 }}>
       {/* Header (rediseño ws1-t2: mismos datos y mismos botones, menos ruido) */}
-      <div className="ad-ficha-cabecera">
-        <Link href="/admin/clinics" className="ad-volver" aria-label="Volver">
+      <div className="dcp-ficha-cabecera">
+        <Link href="/admin/clinics" className="dcp-volver" aria-label="Volver">
           <ArrowLeft size={14} />
         </Link>
         <AvatarNew name={clinic.name} size="lg" />
-        <div className="ad-ficha-cabecera__texto">
-          <div className="ad-ficha-cabecera__nombre">
+        <div className="dcp-ficha-cabecera__texto">
+          <div className="dcp-ficha-cabecera__nombre">
             <h1>{clinic.name}</h1>
             <Chip tono={planTone(clinic.plan) === "brand" ? "brand" : planTone(clinic.plan) === "info" ? "info" : "neutral"}>{clinic.plan}</Chip>
             {/* El estado COMERCIAL, que es el que manda para operar. */}
@@ -431,9 +431,9 @@ export function AdminClinicDetailClient({
                 {salud.riesgos[0].titulo}
               </Chip>
             )}
-            {actividad.enLinea && <span className="ad-online" title="En el panel ahora" />}
+            {actividad.enLinea && <span className="dcp-online" title="En el panel ahora" />}
           </div>
-          <div className="ad-datos">
+          <div className="dcp-datos">
             <span>{clinic.specialty}</span>
             <span>{clinic.city ?? "—"}, {clinic.country}</span>
             {clinic.phone && <span>{clinic.phone}</span>}
@@ -446,7 +446,7 @@ export function AdminClinicDetailClient({
             )}
           </div>
         </div>
-        <div className="ad-acciones">
+        <div className="dcp-acciones">
           <ButtonNew variant="secondary" icon={<MessageCircle size={14} />} onClick={() => setModalChannel("whatsapp")}>
             WhatsApp
           </ButtonNew>

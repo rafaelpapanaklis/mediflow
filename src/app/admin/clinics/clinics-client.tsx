@@ -418,17 +418,17 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
   const etiquetaOrden = ORDENES.find((o) => o.id === orden)?.label ?? "";
 
   return (
-    <div className={`${css.pagina} ad-pagina`}>
+    <div className={`${css.pagina} dcp-pagina`}>
       {/* ── Cabecera ──────────────────────────────────────────────────── */}
-      <header className="ad-cabecera">
+      <header className="dcp-cabecera">
         <div>
-          <h1 className="ad-titulo">Clínicas</h1>
-          <p className="ad-sub">
+          <h1 className="dcp-titulo">Clínicas</h1>
+          <p className="dcp-sub">
             {resumen.reales} reales
             {resumen.pruebas > 0 && ` · ${resumen.pruebas} de prueba`}
             {resumen.enLinea > 0 && (
               <span title={`Con sesión en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`}>
-                {" · "}<span className="ad-online" style={{ verticalAlign: "1px" }} /> {resumen.enLinea} en línea
+                {" · "}<span className="dcp-online" style={{ verticalAlign: "1px" }} /> {resumen.enLinea} en línea
               </span>
             )}
           </p>
@@ -488,16 +488,16 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
       </div>
 
       {/* ── Atender hoy ───────────────────────────────────────────────── */}
-      <section className="ad-card" aria-label="Clínicas que exigen atención">
-        <header className="ad-card__head">
+      <section className="dcp-card" aria-label="Clínicas que exigen atención">
+        <header className="dcp-card__head">
           <div>
-            <h2 className="ad-card__title">Atender hoy</h2>
-            <div className="ad-card__sub">
+            <h2 className="dcp-card__title">Atender hoy</h2>
+            <div className="dcp-card__sub">
               {triage.length === 0 ? "sin pendientes" : `${triage.length} de ${resumen.reales} · ${criticas} crítica${criticas === 1 ? "" : "s"}`}
             </div>
           </div>
           {triage.length > 5 && (
-            <button type="button" className="ad-enlace" style={{ background: "none", border: "none", cursor: "pointer", font: "inherit" }} onClick={() => setVerTodoTriage((v) => !v)}>
+            <button type="button" className="dcp-enlace" style={{ background: "none", border: "none", cursor: "pointer", font: "inherit" }} onClick={() => setVerTodoTriage((v) => !v)}>
               {verTodoTriage ? "Ver 5" : `Ver las ${triage.length}`}
             </button>
           )}
@@ -505,19 +505,19 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
         {triage.length === 0 ? (
           <Vacio>Ninguna clínica en riesgo ahora mismo.</Vacio>
         ) : (
-          <ul className="ad-pend">
+          <ul className="dcp-pend">
             {triageVisible.map((s) => {
               const r = s.riesgos[0];
               return (
                 <li key={s.id}>
-                  <Link href={`/admin/clinics/${s.id}`} className="ad-pend__fila" title={r.detalle}>
-                    <span className={`ad-sev ad-sev--${r.severidad}`} aria-hidden />
-                    <span className="ad-pend__texto">
-                      <span className="ad-pend__clinica">{nombrePorId.get(s.id) ?? s.id}</span>
+                  <Link href={`/admin/clinics/${s.id}`} className="dcp-pend__fila" title={r.detalle}>
+                    <span className={`dcp-sev dcp-sev--${r.severidad}`} aria-hidden />
+                    <span className="dcp-pend__texto">
+                      <span className="dcp-pend__clinica">{nombrePorId.get(s.id) ?? s.id}</span>
                       <Chip tono={TONO_SEVERIDAD[r.severidad]} sm>{r.titulo}</Chip>
-                      {s.riesgos.length > 1 && <span className="ad-suave" style={{ fontSize: 12 }}>+{s.riesgos.length - 1}</span>}
+                      {s.riesgos.length > 1 && <span className="dcp-suave" style={{ fontSize: 12 }}>+{s.riesgos.length - 1}</span>}
                     </span>
-                    <span className="ad-pend__dato">{ETIQUETA_ESTADO_OPERATIVO[s.estadoOperativo]}</span>
+                    <span className="dcp-pend__dato">{ETIQUETA_ESTADO_OPERATIVO[s.estadoOperativo]}</span>
                   </Link>
                 </li>
               );
@@ -527,8 +527,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
       </section>
 
       {/* ── Herramientas ──────────────────────────────────────────────── */}
-      <div className="ad-toolbar">
-        <div className="ad-buscar">
+      <div className="dcp-toolbar">
+        <div className="dcp-buscar">
           <Search size={14} aria-hidden />
           <input
             className="input-new"
@@ -538,15 +538,15 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
             aria-label="Buscar clínica"
           />
         </div>
-        <div className="ad-filtros" role="group" aria-label="Filtro">
+        <div className="dcp-filtros" role="group" aria-label="Filtro">
           {FILTROS.map((f) => (
-            <button key={f.id} type="button" className="ad-filtro" aria-pressed={filtro === f.id} onClick={() => setFiltro(f.id)}>
+            <button key={f.id} type="button" className="dcp-filtro" aria-pressed={filtro === f.id} onClick={() => setFiltro(f.id)}>
               {f.label}
-              <span className="ad-filtro__n ad-num">{cuentas[f.id]}</span>
+              <span className="dcp-filtro__n dcp-num">{cuentas[f.id]}</span>
             </button>
           ))}
         </div>
-        <div className="ad-orden">
+        <div className="dcp-orden">
           <label htmlFor="orden-clinicas">Ordenar</label>
           {/* Nombre de la A a la Z y renovación de la más cercana a la más lejana; lo demás, de mayor a menor. */}
           <select id="orden-clinicas" className="input-new" value={orden} onChange={(e) => { setOrden(e.target.value as ClaveOrden); setDesc(e.target.value !== "nombre" && e.target.value !== "renueva"); }}>
@@ -559,8 +559,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
       </div>
 
       {/* ── Tabla ─────────────────────────────────────────────────────── */}
-      <div className="ad-tabla ad-tabla--apilada">
-        <div className="ad-tabla__scroll">
+      <div className="dcp-tabla dcp-tabla--apilada">
+        <div className="dcp-tabla__scroll">
           <table>
             <thead>
               <tr>
@@ -571,8 +571,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                 <th>Última compra</th>
                 <th>Renueva</th>
                 <th>Uso</th>
-                <th className="ad-der">Pacientes</th>
-                <th className="ad-der">Acciones</th>
+                <th className="dcp-der">Pacientes</th>
+                <th className="dcp-der">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -598,12 +598,12 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                 return (
                   <tr key={clinic.id}>
                     <td data-col="Clínica">
-                      <div className="ad-celda-nombre">
+                      <div className="dcp-celda-nombre">
                         <AvatarNew name={clinic.name} size="sm" />
-                        <div className="ad-celda-nombre__texto">
-                          <Link href={`/admin/clinics/${clinic.id}`} className="ad-nombre">
+                        <div className="dcp-celda-nombre__texto">
+                          <Link href={`/admin/clinics/${clinic.id}`} className="dcp-nombre">
                             {clinic.name}
-                            {salud.actividad.enLinea && <span className="ad-online" style={{ marginLeft: 6, verticalAlign: "1px" }} title={`En el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
+                            {salud.actividad.enLinea && <span className="dcp-online" style={{ marginLeft: 6, verticalAlign: "1px" }} title={`En el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
                           </Link>
                           <div className={css.meta} title={owner?.email ?? undefined}>
                             {owner ? (owner.email ?? `${owner.firstName ?? ""} ${owner.lastName ?? ""}`.trim()) : "sin contacto"}
@@ -683,9 +683,9 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
 
                     <td data-col="Última compra">
                       <div className={css.celda}>
-                        <span className={`ad-fuerte ${css.num}`}>
+                        <span className={`dcp-fuerte ${css.num}`}>
                           {compra.fecha ? fechaAdmin(compra.fecha) : "—"}
-                          {compra.esAlta && <span className="ad-suave" title="Nunca ha pagado: es la fecha de alta"> · alta</span>}
+                          {compra.esAlta && <span className="dcp-suave" title="Nunca ha pagado: es la fecha de alta"> · alta</span>}
                         </span>
                         <span className={`${css.meta} ${css.num}`}>
                           {clinic.pagosRegistrados > 0
@@ -697,7 +697,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
 
                     <td data-col="Renueva">
                       <div className={css.celda}>
-                        <span className={`ad-fuerte ${css.num}`}>{renueva ? fechaAdmin(renueva) : "—"}</span>
+                        <span className={`dcp-fuerte ${css.num}`}>{renueva ? fechaAdmin(renueva) : "—"}</span>
                         <span className={css.meta}>{pago.etiqueta}</span>
                       </div>
                     </td>
@@ -721,16 +721,16 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                       </div>
                     </td>
 
-                    <td data-col="Pacientes" className="ad-der">
+                    <td data-col="Pacientes" className="dcp-der">
                       <div className={css.celda} style={{ alignItems: "flex-end" }}>
-                        <span className={`ad-fuerte ${css.num}`} style={{ fontSize: 14 }}>{clinic._count.patients.toLocaleString("es-MX")}</span>
+                        <span className={`dcp-fuerte ${css.num}`} style={{ fontSize: 14 }}>{clinic._count.patients.toLocaleString("es-MX")}</span>
                         <span className={`${css.volumen} ${css.num}`} title={`Trabajo en ${DIAS_VENTANA_ACTIVIDAD} d`}>
                           <strong>{vol.total}</strong> en 30 d
                         </span>
                       </div>
                     </td>
 
-                    <td data-col="Acciones" className="ad-der">
+                    <td data-col="Acciones" className="dcp-der">
                       {/* Los tres botones que YA cambiaban cosas: mismo texto, mismo comportamiento. */}
                       <div className={css.acciones}>
                         <ButtonNew size="sm" variant="secondary" onClick={() => extendTrial(clinic.id, 30)} disabled={isLoading}>
@@ -749,7 +749,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
               })}
               {filtradas.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="ad-tabla__vacio">
+                  <td colSpan={9} className="dcp-tabla__vacio">
                     {search || filtro !== "todas" ? "Ninguna clínica cumple ese filtro." : "No hay clínicas registradas."}
                   </td>
                 </tr>
@@ -757,7 +757,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
             </tbody>
           </table>
         </div>
-        <div className="ad-tabla__pie">
+        <div className="dcp-tabla__pie">
           <span>{filtradas.length} de {clinics.length} clínicas · ordenadas por {etiquetaOrden.toLowerCase()}{orden === "compra" ? " (último pago cobrado; sin pagos, la fecha de alta)" : ""}</span>
           {(resumen.sinRegistroDeAcceso > 0 || avisosUso.length > 0) && (
             <span>

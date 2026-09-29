@@ -48,12 +48,12 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <div className="ad-leyenda">
-          <span><i style={{ background: "var(--brand)" }} /> Ingresos · <strong className="ad-num" style={{ color: "var(--text-1)" }}>{formatCurrency(totalIngresos)}</strong></span>
-          <span><i style={{ background: "var(--info)" }} /> Altas · <strong className="ad-num" style={{ color: "var(--text-1)" }}>{totalAltas}</strong></span>
-          <span className="ad-suave">{TRAMO_RANGO[rango]}</span>
+        <div className="dcp-leyenda">
+          <span><i style={{ background: "var(--brand)" }} /> Ingresos · <strong className="dcp-num" style={{ color: "var(--text-1)" }}>{formatCurrency(totalIngresos)}</strong></span>
+          <span><i style={{ background: "var(--info)" }} /> Altas · <strong className="dcp-num" style={{ color: "var(--text-1)" }}>{totalAltas}</strong></span>
+          <span className="dcp-suave">{TRAMO_RANGO[rango]}</span>
         </div>
-        <div className="ad-conmutador" role="group" aria-label="Rango de la gráfica">
+        <div className="dcp-conmutador" role="group" aria-label="Rango de la gráfica">
           {RANGOS.map((r) => (
             <button key={r} type="button" aria-pressed={rango === r} onClick={() => setRango(r)}>
               {ETIQUETA_RANGO[r]}
@@ -66,7 +66,7 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
         <ResponsiveContainer>
           <ComposedChart data={datos} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
             <defs>
-              <linearGradient id="ad-ingresos" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="dcp-ingresos" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.35} />
                 <stop offset="100%" stopColor="var(--brand)" stopOpacity={0.02} />
               </linearGradient>
@@ -86,7 +86,7 @@ export function GraficaNegocio({ series, inicial = "mes" }: {
             <Bar yAxisId="altas" dataKey="altas" name="Altas" fill="var(--info)" radius={[4, 4, 0, 0]} maxBarSize={28} />
             {/* Línea recta entre puntos y un punto por tramo: cada día (o mes) es
                 una cifra real, y la curva suave inventaba dinero entre dos días. */}
-            <Area yAxisId="ingresos" type="linear" dataKey="ingresos" name="Ingresos" stroke="var(--brand)" strokeWidth={2} fill="url(#ad-ingresos)"
+            <Area yAxisId="ingresos" type="linear" dataKey="ingresos" name="Ingresos" stroke="var(--brand)" strokeWidth={2} fill="url(#dcp-ingresos)"
               connectNulls={false} dot={rango === "mes" ? false : { r: 3, fill: "var(--brand)", strokeWidth: 0 }} activeDot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>

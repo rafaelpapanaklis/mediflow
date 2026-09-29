@@ -48,7 +48,7 @@ export function ResumenClinica(p: ResumenClinicaProps) {
   const estadoSaldo = estadoMonedero(saldo);
 
   return (
-    <div className="ad-resumen">
+    <div className="dcp-resumen">
       <DatoCaja
         label="Almacenamiento" icono={HardDrive}
         n={u && u.storageUsado !== null ? `${pctCupo(u.storageUsado, u.storageTope) ?? "—"}%` : "—"}

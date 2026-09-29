@@ -132,15 +132,15 @@ export function ClienteDetalleClient({
   const pago = unica ? metodoDePago(unica.clinica) : null;
 
   return (
-    <div className={`${css.pagina} ad-pagina`}>
+    <div className={`${css.pagina} dcp-pagina`}>
       {/* ── Cabecera ────────────────────────────────────────────────────── */}
-      <div className="ad-ficha-cabecera">
-        <Link href="/admin/clientes" className="ad-volver" aria-label="Volver a clientes">
+      <div className="dcp-ficha-cabecera">
+        <Link href="/admin/clientes" className="dcp-volver" aria-label="Volver a clientes">
           <ArrowLeft size={14} />
         </Link>
         <AvatarNew name={fila.nombre} size="lg" />
-        <div className="ad-ficha-cabecera__texto">
-          <div className="ad-ficha-cabecera__nombre">
+        <div className="dcp-ficha-cabecera__texto">
+          <div className="dcp-ficha-cabecera__nombre">
             <h1>{fila.nombre}</h1>
             {!fila.sinSedesVigentes && (
               <Chip tono={TONO_ESTADO_CLIENTE[fila.estado]} punto>{ETIQUETA_ESTADO_CLIENTE[fila.estado]}</Chip>
@@ -156,9 +156,9 @@ export function ClienteDetalleClient({
                 {fila.riesgos[0].riesgo.titulo}{fila.riesgos.length > 1 ? ` +${fila.riesgos.length - 1}` : ""}
               </Chip>
             )}
-            {fila.enLinea && <span className="ad-online" title={`Alguien en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
+            {fila.enLinea && <span className="dcp-online" title={`Alguien en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
           </div>
-          <div className="ad-datos">
+          <div className="dcp-datos">
             <span>{fila.email}</span>
             {fila.telefono && <span>{fila.telefono}</span>}
             <span>Alta <strong>{fechaAdmin(fila.altaAt) ?? "—"}</strong></span>
@@ -179,7 +179,7 @@ export function ClienteDetalleClient({
           )}
         </div>
         {/* Contacto: lo que ya estaba, donde estaba. */}
-        <div className="ad-acciones">
+        <div className="dcp-acciones">
           <a href={`mailto:${fila.email}`}>
             <ButtonNew variant="secondary" icon={<Mail size={14} />}>Email</ButtonNew>
           </a>
@@ -192,11 +192,11 @@ export function ClienteDetalleClient({
       </div>
 
       {/* ── Lo que hay que atender, antes que ninguna cifra ─────────────── */}
-      <section className="ad-card" aria-label="Lo que hay que atender de este cliente">
-        <header className="ad-card__head">
+      <section className="dcp-card" aria-label="Lo que hay que atender de este cliente">
+        <header className="dcp-card__head">
           <div>
-            <h2 className="ad-card__title">Atender</h2>
-            <div className="ad-card__sub">
+            <h2 className="dcp-card__title">Atender</h2>
+            <div className="dcp-card__sub">
               {fila.riesgos.length === 0
                 ? "sin pendientes"
                 : `${fila.riesgos.length} en ${new Set(fila.riesgos.map((r) => r.clinicaId)).size} de ${fila.vigentes.length} sedes · ${criticos} crítico${criticos === 1 ? "" : "s"}`}
@@ -212,16 +212,16 @@ export function ClienteDetalleClient({
                 : "Es una cuenta de prueba: sin pacientes, sin citas y sin un solo pago."}
           </Vacio>
         ) : (
-          <ul className="ad-pend">
+          <ul className="dcp-pend">
             {fila.riesgos.map((r, i) => (
               <li key={`${r.clinicaId}-${r.riesgo.clave}-${i}`}>
-                <Link href={`/admin/clinics/${r.clinicaId}`} className="ad-pend__fila" title={r.riesgo.detalle}>
-                  <span className={`ad-sev ad-sev--${r.riesgo.severidad}`} aria-hidden />
-                  <span className="ad-pend__texto">
-                    <span className="ad-pend__clinica">{r.clinicaNombre}</span>
+                <Link href={`/admin/clinics/${r.clinicaId}`} className="dcp-pend__fila" title={r.riesgo.detalle}>
+                  <span className={`dcp-sev dcp-sev--${r.riesgo.severidad}`} aria-hidden />
+                  <span className="dcp-pend__texto">
+                    <span className="dcp-pend__clinica">{r.clinicaNombre}</span>
                     <Chip tono={TONO_SEVERIDAD[r.riesgo.severidad]} sm>{r.riesgo.titulo}</Chip>
                   </span>
-                  <span className="ad-pend__dato" style={{ whiteSpace: "normal", maxWidth: 360 }}>{r.riesgo.detalle}</span>
+                  <span className="dcp-pend__dato" style={{ whiteSpace: "normal", maxWidth: 360 }}>{r.riesgo.detalle}</span>
                 </Link>
               </li>
             ))}
@@ -258,7 +258,7 @@ export function ClienteDetalleClient({
       {tab === "resumen" && (
         <>
           {/* ── Resumen ────────────────────────────────────────────────── */}
-          <div className="ad-resumen">
+          <div className="dcp-resumen">
             <DatoCaja label="MRR" n={formatCurrency(fila.mrrTotal, "MXN")} pie={pieMrr} />
             <DatoCaja
               label="Última compra"
@@ -286,15 +286,15 @@ export function ClienteDetalleClient({
           </div>
 
           {/* ── Sedes ──────────────────────────────────────────────────── */}
-          <div className="ad-seccion">
-            <h2 className="ad-seccion__titulo">Clínicas del cliente</h2>
-            <span className="ad-seccion__nota">
+          <div className="dcp-seccion">
+            <h2 className="dcp-seccion__titulo">Clínicas del cliente</h2>
+            <span className="dcp-seccion__nota">
               {fila.vigentes.length} vigente{fila.vigentes.length === 1 ? "" : "s"}
               {fila.archivadas.length > 0 && ` · ${fila.archivadas.length} archivada${fila.archivadas.length === 1 ? "" : "s"}`}
               {" · primero la que hay que atender"}
             </span>
           </div>
-          <div className="ad-sedes">
+          <div className="dcp-sedes">
             {fila.clinicas.map((v) => (
               <TarjetaSede key={v.clinica.id} valorada={v} ahora={ahora} variasSedes={fila.vigentes.length > 1} />
             ))}
@@ -337,20 +337,20 @@ function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValora
   const compra = ultimaCompra({ ultimoPagoAt: clinica.ultimoPagoAt, createdAt: clinica.createdAt });
   const gateDiscrepa = !(ESTADO_ESPERADO[salud.plan.kind] ?? []).includes(salud.estadoOperativo);
 
-  const borde = clinica.archivada ? " ad-sede--archivada" : riesgo && riesgo.severidad !== "medio" ? ` ad-sede--${riesgo.severidad}` : "";
+  const borde = clinica.archivada ? " dcp-sede--archivada" : riesgo && riesgo.severidad !== "medio" ? ` dcp-sede--${riesgo.severidad}` : "";
 
   return (
-    <div className={`ad-sede${borde}`}>
-      <div className="ad-sede__cabecera">
+    <div className={`dcp-sede${borde}`}>
+      <div className="dcp-sede__cabecera">
         <AvatarNew name={clinica.nombre} size="sm" />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <Link href={`/admin/clinics/${clinica.id}`} className="ad-sede__nombre">{clinica.nombre}</Link>
-          <div className="ad-meta">/{clinica.slug} · alta {fechaAdmin(clinica.createdAt)}</div>
+          <Link href={`/admin/clinics/${clinica.id}`} className="dcp-sede__nombre">{clinica.nombre}</Link>
+          <div className="dcp-meta">/{clinica.slug} · alta {fechaAdmin(clinica.createdAt)}</div>
         </div>
-        {salud.actividad.enLinea && <span className="ad-online" title={`Sesión en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
+        {salud.actividad.enLinea && <span className="dcp-online" title={`Sesión en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`} />}
       </div>
 
-      <div className="ad-sede__chips">
+      <div className="dcp-sede__chips">
         <Chip tono={clinica.plan === "CLINIC" ? "brand" : clinica.plan === "PRO" ? "info" : "neutral"}>{clinica.plan}</Chip>
         <Chip tono={TONO_ESTADO[salud.estadoOperativo] ?? "neutral"} punto>{ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}</Chip>
         {/* El estado del PLAN tal como lo ve el gate, sólo cuando no dice lo mismo. */}
@@ -362,79 +362,79 @@ function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValora
       </div>
 
       {riesgo && (
-        <div className={`ad-sede__riesgo${riesgo.severidad !== "medio" ? ` ad-sede__riesgo--${riesgo.severidad}` : ""}`}>
+        <div className={`dcp-sede__riesgo${riesgo.severidad !== "medio" ? ` dcp-sede__riesgo--${riesgo.severidad}` : ""}`}>
           <span><strong>{riesgo.titulo}.</strong> {riesgo.detalle}{salud.riesgos.length > 1 && ` (+${salud.riesgos.length - 1} más)`}</span>
         </div>
       )}
 
-      <div className="ad-sede__metricas">
+      <div className="dcp-sede__metricas">
         <div>
-          <div className="ad-sede__metrica-label">Al mes</div>
-          <div className="ad-sede__metrica-n" title={mrrModulos > 0 ? desgloseMrr(valorada.mrr, mrrModulos) : undefined}>{mrr > 0 ? formatCurrency(mrr, "MXN") : <span className="ad-suave">no cobra</span>}</div>
+          <div className="dcp-sede__metrica-label">Al mes</div>
+          <div className="dcp-sede__metrica-n" title={mrrModulos > 0 ? desgloseMrr(valorada.mrr, mrrModulos) : undefined}>{mrr > 0 ? formatCurrency(mrr, "MXN") : <span className="dcp-suave">no cobra</span>}</div>
         </div>
         <div>
-          <div className="ad-sede__metrica-label">Última compra</div>
-          <div className="ad-sede__metrica-n" title={compra.esAlta ? "Nunca ha pagado: es la fecha de alta" : `${clinica.pagosRegistrados} pagos · ${formatCurrency(clinica.totalPagado, "MXN")}`}>
-            {compra.fecha ? fechaAdmin(compra.fecha) : "—"}{compra.esAlta && <span className="ad-suave"> · alta</span>}
+          <div className="dcp-sede__metrica-label">Última compra</div>
+          <div className="dcp-sede__metrica-n" title={compra.esAlta ? "Nunca ha pagado: es la fecha de alta" : `${clinica.pagosRegistrados} pagos · ${formatCurrency(clinica.totalPagado, "MXN")}`}>
+            {compra.fecha ? fechaAdmin(compra.fecha) : "—"}{compra.esAlta && <span className="dcp-suave"> · alta</span>}
           </div>
         </div>
         <div>
-          <div className="ad-sede__metrica-label">Renueva</div>
-          <div className="ad-sede__metrica-n">{clinica.nextBillingDate ? fechaAdmin(clinica.nextBillingDate) : "—"}</div>
-          <div className="ad-meta" title={pago.etiqueta}>{pago.etiqueta}</div>
+          <div className="dcp-sede__metrica-label">Renueva</div>
+          <div className="dcp-sede__metrica-n">{clinica.nextBillingDate ? fechaAdmin(clinica.nextBillingDate) : "—"}</div>
+          <div className="dcp-meta" title={pago.etiqueta}>{pago.etiqueta}</div>
         </div>
         <div>
-          <div className="ad-sede__metrica-label">Pacientes</div>
-          <div className="ad-sede__metrica-n" style={{ color: nivelCupo === "full" ? "var(--danger)" : nivelCupo === "warn" ? "var(--warning)" : undefined }}
+          <div className="dcp-sede__metrica-label">Pacientes</div>
+          <div className="dcp-sede__metrica-n" style={{ color: nivelCupo === "full" ? "var(--danger)" : nivelCupo === "warn" ? "var(--warning)" : undefined }}
             title={clinica.cupo.unlimited ? "Plan sin tope de pacientes" : `${clinica.plan} · ${clinica.cupo.remaining ?? 0} de cupo libre`}>
             {variasSedes ? formatPatientQuota(clinica.cupo) : clinica.cupo.used.toLocaleString("es-MX")}
           </div>
         </div>
         <div>
-          <div className="ad-sede__metrica-label">Trabajo · {DIAS_VENTANA_ACTIVIDAD} d</div>
-          <div className="ad-sede__metrica-n">
+          <div className="dcp-sede__metrica-label">Trabajo · {DIAS_VENTANA_ACTIVIDAD} d</div>
+          <div className="dcp-sede__metrica-n">
             {salud.actividad.volumen.total.toLocaleString("es-MX")}
-            {deltaPct !== null && <span className="ad-suave"> · {deltaPct > 0 ? "+" : ""}{deltaPct}%</span>}
+            {deltaPct !== null && <span className="dcp-suave"> · {deltaPct > 0 ? "+" : ""}{deltaPct}%</span>}
           </div>
         </div>
         <div>
-          <div className="ad-sede__metrica-label">Último acceso</div>
-          <div className="ad-sede__metrica-n">
-            {salud.actividad.enLinea ? "Ahora" : salud.actividad.ultimoAccesoAt ? fechaAdmin(salud.actividad.ultimoAccesoAt) : <span className="ad-suave">sin registro</span>}
+          <div className="dcp-sede__metrica-label">Último acceso</div>
+          <div className="dcp-sede__metrica-n">
+            {salud.actividad.enLinea ? "Ahora" : salud.actividad.ultimoAccesoAt ? fechaAdmin(salud.actividad.ultimoAccesoAt) : <span className="dcp-suave">sin registro</span>}
           </div>
         </div>
       </div>
 
       {u ? (
-        <div className="ad-sede__usos">
+        <div className="dcp-sede__usos">
           <BarraUso label="Disco" usado={u.storageUsado} tope={u.storageTope} fmt={bytesCortos} compacta />
           {u.tokensTope > 0
             ? <BarraUso label="Tokens IA" usado={u.tokensUsados} tope={u.tokensTope} fmt={tokensCortos} compacta />
-            : <span className="ad-uso--sin">Tokens IA: sin cupo en el plan</span>}
+            : <span className="dcp-uso--sin">Tokens IA: sin cupo en el plan</span>}
           {u.cfdiUsados !== null && u.cfdiIncluidos > 0
             ? <BarraUso label="CFDI del mes" usado={u.cfdiUsados} tope={u.cfdiIncluidos} fmt={(n) => String(n)} compacta />
             : u.cfdiUsados !== null
-              ? <span className="ad-uso--sin">CFDI del mes: {u.cfdiUsados} · el plan no incluye timbres</span>
-              : <span className="ad-uso--sin">CFDI: sin dato</span>}
+              ? <span className="dcp-uso--sin">CFDI del mes: {u.cfdiUsados} · el plan no incluye timbres</span>
+              : <span className="dcp-uso--sin">CFDI: sin dato</span>}
           {u.usuarios !== null
             ? <BarraUso label="Usuarios" usado={u.usuarios} tope={u.usuariosTope} fmt={(n) => String(n)} compacta />
-            : <span className="ad-uso--sin">Usuarios: sin dato</span>}
-          <span className="ad-uso__linea" style={{ gridColumn: "1 / -1" }}>
-            <span className="ad-uso__label">Saldo IA</span>
-            <span className="ad-num">
+            : <span className="dcp-uso--sin">Usuarios: sin dato</span>}
+          <span className="dcp-uso__linea" style={{ gridColumn: "1 / -1" }}>
+            <span className="dcp-uso__label">Saldo IA</span>
+            <span className="dcp-num">
               {u.saldoIaCents === null
-                ? <span className="ad-suave">{u.saldoIaStatus === "SIN_DATO" ? "sin dato" : "sin monedero"}</span>
+                ? <span className="dcp-suave">{u.saldoIaStatus === "SIN_DATO" ? "sin dato" : "sin monedero"}</span>
                 : <strong style={{ color: u.saldoIaCents < 0 ? "var(--danger)" : undefined }}>{fmtMXNdec(u.saldoIaCents / 100)}</strong>}
-              {u.sedes !== null && <span className="ad-suave"> · {u.sedes}{u.sedesTope !== null ? `/${u.sedesTope}` : ""} sedes del dueño</span>}
+              {u.sedes !== null && <span className="dcp-suave"> · {u.sedes}{u.sedesTope !== null ? `/${u.sedesTope}` : ""} sedes del dueño</span>}
             </span>
           </span>
         </div>
       ) : (
-        <span className="ad-uso--sin">Consumo sin medir.</span>
+        <span className="dcp-uso--sin">Consumo sin medir.</span>
       )}
 
       {/* Los dos botones que ya estaban, con el mismo texto y el mismo destino. */}
-      <div className="ad-sede__botones">
+      <div className="dcp-sede__botones">
         <Link href={`/admin/clinics/${clinica.id}`}>
           <ButtonNew size="sm" variant="secondary" icon={<Eye size={13} />}>Ver detalle</ButtonNew>
         </Link>
