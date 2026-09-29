@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import a from "@/components/dashboard/cobros-inventario-rediseno/anticipo.module.css";
 import { useRedisenoActivo } from "@/components/dashboard/cobros-inventario-rediseno/rediseno-activo";
+import { montoInicialAnticipoRecibido } from "@/lib/anticipos/registrar-prellenado";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -70,8 +71,10 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
   // Un campo: la maqueta propia y, con el diseño nuevo, el rótulo de la familia.
   const campo = `${a.campo} ${rediseno ? c.campo : ""}`;
   // ws1-t1 (M3): prellena con el anticipo PENDING si lo hay (lo más probable
-  // es que sea ESE dinero); sin uno, el saldo completo, como antes.
-  const prefill = () => (anticipoPendiente && anticipoPendiente.amount > 0 ? String(anticipoPendiente.amount) : saldo > 0 ? String(saldo) : "");
+  // es que sea ESE dinero). H16 (revisión final, ws1-t4): sin pendiente, el
+  // campo sale VACÍO — antes caía al saldo completo y, con el pendiente aún
+  // sin cargar, se registró de más. Ver `montoInicialAnticipoRecibido`.
+  const prefill = () => montoInicialAnticipoRecibido(anticipoPendiente, saldo);
   const [monto, setMonto] = useState(prefill);
   const [method, setMethod] = useState<MetodoRegistro>("cash");
   const [reference, setReference] = useState("");
@@ -161,7 +164,7 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
             <Label htmlFor="anticipo-recibido">Monto recibido (MXN)</Label>
             <div className={a.importe}>
               <span className={a.importeSigno} aria-hidden>$</span>
-              <Input id="anticipo-recibido" value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0.00" />
+              <Input id="anticipo-recibido" value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="Escribe lo que recibiste" />
             </div>
           </div>
 
