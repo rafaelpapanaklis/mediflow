@@ -330,6 +330,40 @@ button.caducidadLinea:focus-visible {
   color: var(--iv-texto-3);
 }
 
+/* «caducados: N · dar de baja» bajo la existencia (H17). Una sola línea: la
+   columna Cantidad se ensancha lo justo en escritorio; en teléfono la fila
+   le da el ancho entero a la cantidad (ver más abajo). */
+.caducadosLeyenda {
+  display: block;
+  margin: 2px 0 0 auto;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--danger-strong, var(--danger));
+  white-space: nowrap;
+  text-align: right;
+  cursor: pointer;
+}
+
+.caducadosLeyenda:focus-visible {
+  outline: none;
+  box-shadow: var(--iv-foco);
+}
+
+@media (hover: hover) {
+  .caducadosLeyenda:hover {
+    text-decoration: underline;
+  }
+}
+
+.tabla.tabla td.colCantidad:has(.caducadosLeyenda) {
+  min-width: 158px;
+}
+
 @media (hover: hover) {
   .cantidad:hover {
     background: var(--iv-hover);
@@ -674,6 +708,17 @@ button.caducidadLinea:focus-visible {
   .tabla.tabla .colArticulo { grid-area: articulo; }
   .tabla.tabla .colCategoria { display: none; }
   .tabla.tabla .colCantidad { grid-area: cantidad; }
+  .tabla.tabla td.colCantidad:has(.caducadosLeyenda) { min-width: 0; }
+  .caducadosLeyenda { margin-left: 0; padding: 0 10px; text-align: left; }
+  /* Con leyenda, la cantidad ocupa el ancho de la fila y no la parte en dos líneas. */
+  .tabla.tabla tr:has(.caducadosLeyenda) {
+    grid-template-areas:
+      "articulo articulo estado"
+      "cantidad cantidad cantidad"
+      "minimo costo costo"
+      "proveedor proveedor proveedor"
+      "acciones acciones acciones";
+  }
   .tabla.tabla .colMinimo { grid-area: minimo; }
   .tabla.tabla .colCosto { grid-area: costo; }
   .tabla.tabla .colProveedor { grid-area: proveedor; }

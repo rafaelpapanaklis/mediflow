@@ -7,7 +7,7 @@ import {
 } from "@/lib/agenda/api-helpers";
 import { aggregateAdminPeriodKpis } from "@/lib/agenda/server";
 import { getExpiryAlerts } from "@/lib/inventory/lots.server";
-import { avisosDeExistencias } from "@/lib/inventory/avisos-existencias";
+import { avisosDeExistencias, contarExistenciasVigentes } from "@/lib/inventory/avisos-existencias";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import {
   periodRangeUtc,
@@ -301,47 +301,44 @@ async function buildAlerts(
   // bajo en el mismo saco (109 = 108 agotados + 1 bajo), con un enlace a un
   // filtro donde solo salía 1. Ahora se cuentan por separado —en la misma
   // consulta, sin un viaje más a la base— y cada aviso abre su filtro.
+  // H17: lo caducado no cuenta como existencias — se lee UNA vez y sirve para
+  // el conteo de stock y para el aviso de lotes caducados de más abajo.
+  let porCaducar: Awaited<ReturnType<typeof getExpiryAlerts>>["porCaducar"] = [];
+  let caducado: Awaited<ReturnType<typeof getExpiryAlerts>>["caducado"] = [];
   try {
-    const filas = await prisma.$queryRaw<{ agotados: bigint; bajos: bigint }[]>`
-      SELECT
-        COUNT(*) FILTER (WHERE "quantity" <= 0)::bigint AS agotados,
-        COUNT(*) FILTER (WHERE "quantity" > 0 AND "quantity" <= "minQuantity")::bigint AS bajos
-      FROM "inventory_items"
-      WHERE "clinicId" = ${clinicId}
-    `;
-    alerts.push(
-      ...avisosDeExistencias({
-        agotados: Number(filas[0]?.agotados ?? 0),
-        bajos: Number(filas[0]?.bajos ?? 0),
-      }),
-    );
+    ({ porCaducar, caducado } = await getExpiryAlerts(clinicId));
+  } catch (err) {
+    console.error("[admin alerts] expiry alerts query failed:", err);
+  }
+
+  try {
+    const items = await prisma.inventoryItem.findMany({
+      where: { clinicId },
+      select: { id: true, quantity: true, minQuantity: true },
+    });
+    alerts.push(...avisosDeExistencias(contarExistenciasVigentes(items, caducado)));
   } catch (err) {
     console.error("[admin alerts] lowStock query failed:", err);
     /* skip — la alerta se omite, no rompemos el endpoint */
   }
 
-  // WS1-T5 — lotes por caducar / caducados. getExpiryAlerts ya tolera que el
-  // SQL de lotes todavía no esté aplicado (devuelve listas vacías).
-  try {
-    const { porCaducar, caducado } = await getExpiryAlerts(clinicId);
-    if (caducado.length > 0) {
-      alerts.push({
-        id:    "inv-caducado",
-        tone:  "danger",
-        title: `Inventario: ${caducado.length} lote${caducado.length === 1 ? "" : "s"} caducado${caducado.length === 1 ? "" : "s"}`,
-        href:  "/dashboard/inventory?filter=caducado",
-      });
-    }
-    if (porCaducar.length > 0) {
-      alerts.push({
-        id:    "inv-por-caducar",
-        tone:  "warning",
-        title: `Inventario: ${porCaducar.length} lote${porCaducar.length === 1 ? "" : "s"} por caducar`,
-        href:  "/dashboard/inventory?filter=por-caducar",
-      });
-    }
-  } catch (err) {
-    console.error("[admin alerts] expiry alerts query failed:", err);
+  // WS1-T5 — lotes por caducar / caducados (getExpiryAlerts tolera que el SQL
+  // de lotes todavía no esté aplicado: devuelve listas vacías).
+  if (caducado.length > 0) {
+    alerts.push({
+      id:    "inv-caducado",
+      tone:  "danger",
+      title: `Inventario: ${caducado.length} lote${caducado.length === 1 ? "" : "s"} caducado${caducado.length === 1 ? "" : "s"}`,
+      href:  "/dashboard/inventory?filter=caducado",
+    });
+  }
+  if (porCaducar.length > 0) {
+    alerts.push({
+      id:    "inv-por-caducar",
+      tone:  "warning",
+      title: `Inventario: ${porCaducar.length} lote${porCaducar.length === 1 ? "" : "s"} por caducar`,
+      href:  "/dashboard/inventory?filter=por-caducar",
+    });
   }
 
   // Facturas vencidas

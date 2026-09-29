@@ -27,6 +27,28 @@ function entero(n: unknown): number {
 }
 
 /**
+ * Cuenta agotados y bajos con lo VIGENTE (H17, opción A de Rafael): a la
+ * cantidad guardada (vigente + caducado) se le resta lo que hay en lotes
+ * caducados, igual que hace la pantalla de Inventario. Sin lotes caducados
+ * conocidos, es el conteo de siempre.
+ */
+export function contarExistenciasVigentes(
+  items: ReadonlyArray<{ id: string; quantity: number; minQuantity: number }>,
+  caducados: ReadonlyArray<{ itemId: string; remaining: number }>,
+): ConteoExistencias {
+  const cad = new Map<string, number>();
+  for (const c of caducados) cad.set(c.itemId, (cad.get(c.itemId) ?? 0) + Math.max(0, Number(c.remaining) || 0));
+  let agotados = 0;
+  let bajos = 0;
+  for (const i of items) {
+    const q = Math.max(0, i.quantity - Math.round(cad.get(i.id) ?? 0));
+    if (q <= 0) agotados++;
+    else if (q <= i.minQuantity) bajos++;
+  }
+  return { agotados, bajos };
+}
+
+/**
  * Un aviso por cada cosa que pasa, cada uno con SU filtro. Primero lo
  * agotado (peligro: ya no hay), después lo bajo (alerta: hay que pedir).
  * Sin nada que decir, ningún aviso.

@@ -3,7 +3,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { avisosDeExistencias, filtroDeInventario } from "../avisos-existencias";
+import { avisosDeExistencias, contarExistenciasVigentes, filtroDeInventario } from "../avisos-existencias";
 
 describe("avisos de existencias en Hoy", () => {
   it("la clínica de prueba: 108 agotados y 1 bajo son DOS avisos, no «109 bajo nivel»", () => {
@@ -58,5 +58,27 @@ describe("el enlace de cada aviso abre SU filtro", () => {
     assert.equal(filtroDeInventario(null), null);
     assert.equal(filtroDeInventario(""), null);
     assert.equal(filtroDeInventario("todos"), null);
+  });
+});
+
+describe("H17: «Stock bajo» y «Agotado» de Hoy cuentan solo lo vigente", () => {
+  const items = [
+    { id: "a", quantity: 10, minQuantity: 5 },
+    { id: "b", quantity: 3, minQuantity: 5 },
+    { id: "c", quantity: 0, minQuantity: 5 },
+  ];
+  it("sin caducados es el conteo de siempre", () => {
+    assert.deepEqual(contarExistenciasVigentes(items, []), { agotados: 1, bajos: 1 });
+  });
+  it("lo caducado se resta: 10 con 7 caducados queda bajo; 3 con 3 caducados queda agotado", () => {
+    const r = contarExistenciasVigentes(items, [
+      { itemId: "a", remaining: 7 },
+      { itemId: "b", remaining: 3 },
+    ]);
+    assert.deepEqual(r, { agotados: 2, bajos: 1 });
+  });
+  it("varios lotes caducados del mismo artículo se suman y nunca dejan negativo", () => {
+    const r = contarExistenciasVigentes(items, [{ itemId: "b", remaining: 2 }, { itemId: "b", remaining: 9 }]);
+    assert.deepEqual(r, { agotados: 2, bajos: 0 });
   });
 });

@@ -858,8 +858,7 @@ export function InventoryClient({
                         <button
                           type="button"
                           onClick={() => setLotesItem(item)}
-                          className={inv.caducidadLinea}
-                          style={{ display: "block", fontSize: 11, marginTop: 2 }}
+                          className={inv.caducadosLeyenda}
                           title="Estas unidades no cuentan como existencias: abre los lotes para darlas de baja"
                         >
                           caducados: {item.caducados} · dar de baja
