@@ -12,6 +12,8 @@ export const TIPOS_POSPONIBLES = [
   "no-asistio",
   "proximo-a-terminar",
   "pasado-de-fecha",
+  // ws1-t12: la reevaluación radiográfica del plan de tratamiento (fecha o periodicidad).
+  "reevaluacion-radiografica",
 ] as const;
 
 export type TipoPosponible = (typeof TIPOS_POSPONIBLES)[number];
@@ -63,6 +65,7 @@ export const ETIQUETA_DE_TIPO: Record<TipoPosponible, string> = {
   "no-asistio": "No asistió",
   "proximo-a-terminar": "Próximo a terminar",
   "pasado-de-fecha": "Pasado de su fecha",
+  "reevaluacion-radiografica": "Reevaluación radiográfica",
 };
 
 export interface PospuestaVisible {

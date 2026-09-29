@@ -21,7 +21,7 @@
 CREATE TABLE IF NOT EXISTS "ortho_alert_snoozes" (
   "clinicId"  text        NOT NULL REFERENCES "clinics" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
   "patientId" text        NOT NULL REFERENCES "patients" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-  -- 'sin-proximo-control' | 'no-asistio' | 'proximo-a-terminar' | 'pasado-de-fecha'
+  -- 'sin-proximo-control' | 'no-asistio' | 'proximo-a-terminar' | 'pasado-de-fecha' | 'reevaluacion-radiografica'
   "tipo"      text        NOT NULL,
   -- La alerta vuelve a salir a partir de este momento.
   "hasta"     timestamptz NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS "ortho_alert_snoozes" (
 
 ALTER TABLE "ortho_alert_snoozes" DROP CONSTRAINT IF EXISTS "ortho_alert_snoozes_tipo_check";
 ALTER TABLE "ortho_alert_snoozes" ADD CONSTRAINT "ortho_alert_snoozes_tipo_check"
-  CHECK ("tipo" IN ('sin-proximo-control', 'no-asistio', 'proximo-a-terminar', 'pasado-de-fecha'));
+  CHECK ("tipo" IN ('sin-proximo-control', 'no-asistio', 'proximo-a-terminar', 'pasado-de-fecha', 'reevaluacion-radiografica'));
 
 -- Alertas lee solo las vigentes de una clínica.
 CREATE INDEX IF NOT EXISTS "ortho_alert_snoozes_clinic_hasta_idx"
