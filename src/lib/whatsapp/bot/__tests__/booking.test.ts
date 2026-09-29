@@ -6,6 +6,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import {
   runBookingTurn,
   isBookingInProgress,
@@ -386,7 +387,7 @@ describe("bot booking — ortodoncia (ws1-t1)", () => {
       ...over,
     });
 
-  it("paciente con caso activo: se salta servicio Y doctor, va directo a fecha con su tratante", async () => {
+  it("paciente con caso activo: elige control de ortodoncia y va directo a fecha con su tratante (ws1-t8)", async () => {
     const created: any[] = [];
     const deps = orthoDeps({
       createBotAppointment: async (p) => {
@@ -395,7 +396,11 @@ describe("bot booking — ortodoncia (ws1-t1)", () => {
       },
     });
     const c = makeConvo(makeConfig(), deps, { id: "patOrto", phone: "5215512345678" });
-    const r = await c.say("quiero una cita");
+    const pregunta = await c.say("quiero una cita");
+    assert.equal(c.state?.step, "service_kind", "ya no se le asigna el control sin preguntar");
+    assert.match(pregunta.reply ?? "", /1\. Control de ortodoncia/);
+    assert.match(pregunta.reply ?? "", /2\. Otro servicio/);
+    const r = await c.say("1");
     assert.match(r.reply ?? "", /Control de ortodoncia/);
     assert.match(r.reply ?? "", /Ana García/);
     assert.equal(c.state?.step, "date");
@@ -431,10 +436,52 @@ describe("bot booking — ortodoncia (ws1-t1)", () => {
       ],
     });
     const c = makeConvo(makeConfig(), deps, { id: "patOrto", phone: "5215512345678" });
-    const r = await c.say("quiero una cita");
+    await c.say("quiero una cita");
+    const r = await c.say("1");
     assert.equal(c.state?.step, "doctor");
     assert.match(r.reply ?? "", /profesional/);
     assert.equal(c.state?.serviceName, "Control de ortodoncia", "el servicio no se pierde");
+  });
+
+  it("ws1-t8: paciente con caso activo que pide otro servicio (2): catálogo normal, sin control", async () => {
+    const created: any[] = [];
+    const deps = orthoDeps({
+      createBotAppointment: async (p) => {
+        created.push(p);
+        return { ok: true, appointmentId: "appt1" };
+      },
+    });
+    const c = makeConvo(makeConfig(), deps, { id: "patOrto", phone: "5215512345678" });
+    await c.say("quiero agendar una limpieza");
+    assert.equal(c.state?.step, "service_kind");
+    const r = await c.say("2");
+    assert.match(r.reply ?? "", /Limpieza/, "muestra el catálogo dental");
+    assert.doesNotMatch(r.reply ?? "", /Control de ortodoncia/);
+    assert.equal(c.state?.step, "service");
+    assert.equal(c.state?.ortoCaso, undefined);
+    await c.say("1"); // Limpieza
+    assert.equal(c.state?.serviceName, "Limpieza");
+    await c.say("mañana");
+    await c.say("1");
+    await c.say("sí");
+    assert.equal(created.length, 1);
+    assert.equal(created[0].reason, "Limpieza", "no se agenda como Control de ortodoncia");
+  });
+
+  it("ws1-t8: una respuesta que no es 1 ni 2 se repite la pregunta", async () => {
+    const c = makeConvo(makeConfig(), orthoDeps(), { id: "patOrto", phone: "5215512345678" });
+    await c.say("quiero una cita");
+    const r = await c.say("no sé");
+    assert.match(r.reply ?? "", /Responde con el número/);
+    assert.equal(c.state?.step, "service_kind");
+  });
+
+  it("ws1-t8: el bot no cobra: el paso de elegir control/otro no toca nada de anticipo ni pago", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(join(__dirname, "..", "booking-core.ts"), "utf8");
+    const i = src.indexOf("async function stepServiceKind");
+    const bloque = src.slice(src.indexOf("async function elegirControlOrto"), i + 800);
+    assert.doesNotMatch(bloque, /anticipo|pago|cobr|invoice/i);
   });
 
   it("prospecto sin caso que menciona ortodoncia: va directo a Valoración (pasa por elegir doctor)", async () => {

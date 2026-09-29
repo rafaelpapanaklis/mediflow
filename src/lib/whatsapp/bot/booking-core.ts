@@ -42,6 +42,7 @@ import type {
 export type FlowMode = "create" | "reschedule";
 
 export type BookingStep =
+  | "service_kind"
   | "service"
   | "doctor"
   | "date"
@@ -82,7 +83,16 @@ export interface BookingState {
    * nada de lo que haya aquí llega a Mercado Pago.
    */
   anticipo?: { monto: number; minutos: number } | null;
+  /**
+   * ws1-t8 — el control de ortodoncia del caso activo del paciente, guardado mientras
+   * elige entre ese control y otro servicio (paso `service_kind`).
+   */
+  ortoCaso?: { label: string; durationMin: number; treatingDoctorId: string | null } | null;
 }
+
+/** Ids de las dos opciones del paso `service_kind`. */
+export const OPCION_CONTROL_ORTO = "orto_control";
+export const OPCION_OTRO_SERVICIO = "otro_servicio";
 
 interface UpcomingAppt {
   id: string;
@@ -219,6 +229,8 @@ export async function runBookingTurn(
   }
 
   switch (state.step) {
+    case "service_kind":
+      return stepServiceKind(input, state, deps);
     case "service":
       return stepService(input, state, deps);
     case "doctor":
@@ -323,31 +335,25 @@ async function startCreate(
   // opcional) el flujo es exactamente el de siempre.
   const ortho = await deps.getOrthoBookingContext?.(input.clinicId, input.patient?.id ?? null);
 
+  // ws1-t8: un paciente con caso activo que escribe «agendar» PUEDE querer otra cosa (una
+  // limpieza): se le pregunta entre su control y otro servicio, no se le asigna el control.
   if (ortho?.casoActivo) {
     const caso = ortho.casoActivo;
+    const options: BookingOption[] = [
+      { id: OPCION_CONTROL_ORTO, label: caso.label },
+      { id: OPCION_OTRO_SERVICIO, label: "Otro servicio (limpieza, consulta, etc.)" },
+    ];
     const state: BookingState = {
       ...base,
-      serviceId: null,
-      serviceName: caso.label,
-      durationMin: caso.durationMin,
+      step: "service_kind",
+      options,
+      ortoCaso: { label: caso.label, durationMin: caso.durationMin, treatingDoctorId: caso.treatingDoctorId },
     };
-    if (caso.treatingDoctorId) {
-      const doctores = await deps.listBookableDoctors(input.clinicId);
-      const tratante = doctores.find((d) => d.id === caso.treatingDoctorId);
-      if (tratante) {
-        state.doctorId = tratante.id;
-        state.doctorName = `${tratante.firstName} ${tratante.lastName}`.trim();
-        state.step = "date";
-        return step(
-          `Veo que tienes un tratamiento de ortodoncia activo. Te agendo tu *${caso.label}* con ${state.doctorName}. 🦷\n${askDateText(state)}`,
-          "create",
-          state,
-        );
-      }
-      // El doctor tratante ya no está disponible (baja, cambio de rol): sigue
-      // el flujo normal de elegir doctor, sin perder el servicio ya resuelto.
-    }
-    return advanceToDoctorOrDate(input, state, deps);
+    return step(
+      `¡Con gusto te agendo! 🦷 Veo que tienes un tratamiento de ortodoncia activo.\n¿Qué necesitas? Responde con el número:\n${numberedList(options)}`,
+      "create",
+      state,
+    );
   }
 
   if (ortho?.valoracion && detectaInteresOrtodoncia(input.incomingText)) {
@@ -360,6 +366,15 @@ async function startCreate(
     return advanceToDoctorOrDate(input, state, deps);
   }
 
+  return startCatalogo(input, base, deps);
+}
+
+/** El catálogo normal de servicios (o «Consulta general» si la sede no tiene ninguno). */
+async function startCatalogo(
+  input: BotTurnInput,
+  base: BookingState,
+  deps: BookingDeps,
+): Promise<BotTurnResult> {
   const services = await deps.listBookableServices(input.clinicId);
   const state: BookingState = { ...base };
 
@@ -459,6 +474,55 @@ async function advanceToDoctorOrDate(
 }
 
 // ── Pasos ───────────────────────────────────────────────────────────────────
+
+/** Elige el control de ortodoncia del caso: con su doctor tratante si sigue disponible. */
+async function elegirControlOrto(
+  input: BotTurnInput,
+  state: BookingState,
+  deps: BookingDeps,
+): Promise<BotTurnResult> {
+  const caso = state.ortoCaso;
+  if (!caso) return done("Algo salió mal con tu solicitud. Intentémoslo de nuevo más tarde.", state.mode);
+  state.serviceId = null;
+  state.serviceName = caso.label;
+  state.durationMin = caso.durationMin;
+  state.options = undefined;
+  state.ortoCaso = undefined;
+  if (caso.treatingDoctorId) {
+    const doctores = await deps.listBookableDoctors(input.clinicId);
+    const tratante = doctores.find((d) => d.id === caso.treatingDoctorId);
+    if (tratante) {
+      state.doctorId = tratante.id;
+      state.doctorName = `${tratante.firstName} ${tratante.lastName}`.trim();
+      state.step = "date";
+      return step(
+        `Te agendo tu *${caso.label}* con ${state.doctorName}. 🦷\n${askDateText(state)}`,
+        "create",
+        state,
+      );
+    }
+    // El doctor tratante ya no está disponible (baja, cambio de rol): sigue
+    // el flujo normal de elegir doctor, sin perder el servicio ya resuelto.
+  }
+  return advanceToDoctorOrDate(input, state, deps);
+}
+
+async function stepServiceKind(
+  input: BotTurnInput,
+  state: BookingState,
+  deps: BookingDeps,
+): Promise<BotTurnResult> {
+  const options = state.options ?? [];
+  const idx = parseChoiceIndex(input.incomingText, options.length);
+  if (idx === null) {
+    return miss(state, `No te entendí. Responde con el número:\n${numberedList(options)}`);
+  }
+  state.misses = 0;
+  if (options[idx].id === OPCION_CONTROL_ORTO) return elegirControlOrto(input, state, deps);
+  // Otro servicio: catálogo normal. El control del caso deja de importar en este flujo.
+  const base: BookingState = { ...state, step: "service", options: undefined, ortoCaso: undefined };
+  return startCatalogo(input, base, deps);
+}
 
 async function stepService(
   input: BotTurnInput,
