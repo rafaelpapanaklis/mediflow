@@ -1516,6 +1516,14 @@ function OrtodonciaBloque({ caso, tz }: { caso: ExpedienteOrtodoncia; tz: string
         <Dato etiqueta="Resumen clínico" valor={caso.resumenClinico} ancho="entero" />
         {caso.motivoDeAbandono ? <Dato etiqueta="Motivo del abandono" valor={caso.motivoDeAbandono} ancho="entero" /> : null}
       </View>
+      {/* ws1-t8: el diagnóstico completo del caso, apartado por apartado. */}
+      {(caso.diagnosticoCompleto ?? []).map((sec) => (
+        <View key={sec.clave} wrap={false}>
+          <Text style={styles.subTitulo}>Diagnóstico · {sec.titulo}</Text>
+          <View style={styles.rejilla}>
+            {sec.lineas.map((l) => (
+              <Dato key={l.clave} etiqueta={l.etiqueta} valor={l.valor} ancho={l.valor.length > 40 ? "entero" : "tercio"} />
+            ))}
       <Text style={styles.subTitulo}>Hojas de control firmadas</Text>
       {caso.hojas.length === 0 ? (
         <Text style={styles.vacio}>Sin hojas de control firmadas.</Text>

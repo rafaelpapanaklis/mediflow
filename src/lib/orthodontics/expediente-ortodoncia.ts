@@ -1,4 +1,5 @@
 import { nombreDeTecnica } from "./tecnicas-de-la-clinica";
+import type { SeccionLegible } from "./diagnostico-detalle";
 // Ortodoncia en el EXPEDIENTE PDF del paciente (ws1-t10, punto 12 / decisión 3 y 4).
 // El caso (diagnóstico, plan, doctor, estado) y sus HOJAS DE CONTROL firmadas
 // salen dentro de la sección «Planes de tratamiento» del expediente, tenga o no
@@ -35,6 +36,11 @@ export interface ExpedienteOrtodoncia {
   overjetMm: number | null;
   resumenClinico: string | null;
   motivoDeAbandono: string | null;
+  /**
+   * ws1-t8 — el DIAGNÓSTICO completo (facial, oclusal, dentoalveolar, funcional, cefalometría, etiología), ya
+   * redactado (`seccionesDelDiagnostico`), sin la clasificación que ya sale arriba. Vacío/ausente = lo de siempre.
+   */
+  diagnosticoCompleto?: SeccionLegible[];
   hojas: ExpedienteHojaControl[];
 }
 

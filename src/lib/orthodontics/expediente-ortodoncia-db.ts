@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { cargarNombresDeTecnica } from "./tecnicas-de-la-clinica-db";
+import { cargarDiagnosticosLegibles } from "./diagnostico-detalle-db";
 import { armarCasoDeOrtodoncia, type ExpedienteOrtodoncia } from "./expediente-ortodoncia";
 
 /**
@@ -23,6 +24,7 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
         installedAt: true,
         estimatedDurationMonths: true,
         droppedOutReason: true,
+        diagnosisId: true,
         treatingDoctor: { select: { firstName: true, lastName: true } },
         diagnosis: {
           select: {
@@ -54,7 +56,12 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
       })).map((h) => ({ ...h, indications: null as string | null }));
     });
     const nombres = await cargarNombresDeTecnica(clinicId, planes.map((p) => p.id));
-    return planes.map((p) => armarCasoDeOrtodoncia(p, hojas.filter((h) => h.treatmentPlanId === p.id), nombres.get(p.id)));
+    // ws1-t8: el diagnóstico completo de cada caso, ya redactado (sin la columna nueva, lo de siempre).
+    const diagnosticos = await cargarDiagnosticosLegibles(clinicId, planes.map((p) => p.diagnosisId));
+    return planes.map((p) => ({
+      ...armarCasoDeOrtodoncia(p, hojas.filter((h) => h.treatmentPlanId === p.id), nombres.get(p.id)),
+      diagnosticoCompleto: (diagnosticos.get(p.diagnosisId) ?? []).filter((sec) => sec.clave !== "clasificacion"),
+    }));
   } catch (e) {
     console.warn("[expediente-pdf] no se pudo leer la ortodoncia del paciente:", e);
     return [];

@@ -4,6 +4,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { cargarDiagnosticosLegibles } from "@/lib/orthodontics/diagnostico-detalle-db";
+import type { SeccionLegible } from "@/lib/orthodontics/diagnostico-detalle";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { exportTreatmentPlanPdfSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
@@ -43,6 +45,11 @@ export type TreatmentPlanPdfData = {
     treatmentObjectives: string;
     retentionPlanText: string;
   };
+  /**
+   * ws1-t8 — el DIAGNÓSTICO completo (facial, oclusal, dentoalveolar, funcional, cefalometría, etiología), ya
+   * redactado con `seccionesDelDiagnostico` (la misma redacción que la ficha). Vacío/ausente = solo lo de arriba.
+   */
+  diagnosticoCompleto?: SeccionLegible[];
   phases: Array<{ phaseKey: string; orderIndex: number; status: string }>;
   generatedAt: string;
 };
@@ -133,6 +140,8 @@ export async function exportTreatmentPlanPdf(
       treatmentObjectives: plan.treatmentObjectives,
       retentionPlanText: plan.retentionPlanText,
     },
+    // ws1-t8: sin la columna del diagnóstico completo (SQL sin pegar), sale lo de siempre.
+    diagnosticoCompleto: (await cargarDiagnosticosLegibles(ctx.clinicId, [plan.diagnosisId])).get(plan.diagnosisId) ?? [],
     phases: plan.phases,
     generatedAt: new Date().toISOString(),
   });

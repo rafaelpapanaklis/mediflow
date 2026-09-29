@@ -979,13 +979,12 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
 
       {/* Drawer Editor Diagnóstico (Sección B "Editar") */}
       {drawer?.kind === "edit-diagnosis" && vm.diagnosis ? (
+        // ws1-t8: la ventana monta el paso «Diagnóstico» y guarda ella misma (un error no la cierra).
         <DrawerEditDiagnosis
           diagnosis={vm.diagnosis}
+          patientFullName={vm.patient.fullName}
           onClose={closeDrawer}
-          onConfirm={async (payload) => {
-            await props.onUpdateDiagnosis?.(payload);
-            closeDrawer();
-          }}
+          onGuardado={closeDrawer}
         />
       ) : null}
 

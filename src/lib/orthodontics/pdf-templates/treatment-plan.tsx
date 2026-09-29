@@ -85,6 +85,16 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
             Overbite: {data.diagnosis.overbiteMm} mm · Overjet: {data.diagnosis.overjetMm} mm.
           </Text>
         </View>
+        {/* ws1-t8: el diagnóstico completo, apartado por apartado (la clasificación ya está arriba). */}
+        {(data.diagnosticoCompleto ?? [])
+          .filter((sec) => sec.clave !== "clasificacion")
+          .map((sec) => (
+            <View key={sec.clave} wrap={false}>
+              <Text style={styles.h2} minPresenceAhead={40}>{sec.titulo}</Text>
+              <View style={styles.box}>
+                {sec.lineas.map((l) => (
+                  <Metrica key={l.clave} etiqueta={l.etiqueta} valor={l.valor} />
+                ))}
         {data.diagnosis.clinicalSummary ? (
           <>
             <Text style={styles.h2}>Resumen clínico</Text>
