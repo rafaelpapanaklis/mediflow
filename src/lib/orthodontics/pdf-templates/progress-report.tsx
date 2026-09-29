@@ -39,8 +39,9 @@ export interface ProgressReportPdfData {
 
 const styles = StyleSheet.create({
   page: { padding: 24, fontSize: 10, fontFamily: "Helvetica", color: "#0F172A" },
-  h1: { fontSize: 18, fontWeight: 700, marginBottom: 4 },
-  meta: { fontSize: 9, color: "#475569", marginBottom: 8 },
+  // lineHeight propio: la página hereda 14 pt fijos y un título de 16 pt se montaba sobre el renglón siguiente.
+  h1: { fontSize: 16, fontFamily: "Helvetica-Bold", marginBottom: 4, lineHeight: 1.2 },
+  meta: { fontSize: 9, color: "#475569", marginBottom: 8, lineHeight: 1.3 },
   watermark: {
     position: "absolute",
     top: 10,

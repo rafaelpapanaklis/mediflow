@@ -35,9 +35,10 @@ const styles = StyleSheet.create({
     color: "#EF4444",
     fontWeight: 700,
   },
-  h1: { fontSize: 16, fontFamily: "Helvetica-Bold", marginBottom: 6, color: "#14101f" },
-  h2: { fontSize: 12, fontFamily: "Helvetica-Bold", marginTop: 4, marginBottom: 6, color: "#7c3aed" },
-  meta: { fontSize: 10, color: "#475569", marginBottom: 4 },
+  // lineHeight propio en cada título: la interlínea que hereda de la página es fija (14 pt).
+  h1: { fontSize: 16, fontFamily: "Helvetica-Bold", marginBottom: 6, color: "#14101f", lineHeight: 1.2 },
+  h2: { fontSize: 12, fontFamily: "Helvetica-Bold", marginTop: 4, marginBottom: 6, color: "#7c3aed", lineHeight: 1.2 },
+  meta: { fontSize: 10, color: "#475569", marginBottom: 4, lineHeight: 1.3 },
   body: { fontSize: 10, color: "#0F172A", marginBottom: 6, lineHeight: 1.5 },
   section: { marginVertical: 12 },
   divider: {
@@ -59,7 +60,7 @@ const styles = StyleSheet.create({
   cellLabel: { fontSize: 7, color: "#64748B", marginTop: 2, textAlign: "center" },
   twoCol: { flexDirection: "row", gap: 12 },
   col: { flex: 1 },
-  setCaption: { fontSize: 11, fontWeight: 700, marginBottom: 4, color: "#0F172A" },
+  setCaption: { fontSize: 11, fontFamily: "Helvetica-Bold", marginBottom: 4, color: "#14101f", lineHeight: 1.2 },
 });
 
 function PhotoGrid({ set }: { set: ComparisonPdfPhotoSet }) {
