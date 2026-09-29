@@ -23,6 +23,12 @@ export interface SectionTreatmentCardsProps {
   nextAppointment: NextAppointmentDTO | null;
   onOpenCard?: (cardId: string) => void;
   onStartNewCard?: () => void;
+  /**
+   * ws1-t9 #17: el control de HOY ya está firmado. El botón de arriba pasa a «Ver el control de hoy
+   * (firmado)» (abre esa hoja en solo lectura) y los demás «Registrar control» de la sección
+   * desaparecen: no se ofrece registrar otra vez lo que ya está firmado.
+   */
+  controlFirmadoHoy?: boolean;
   /** Texto del label "Whatsapp" si se quiere personalizar (default "Confirmar WhatsApp"). */
   confirmLabel?: string;
 }
@@ -54,7 +60,7 @@ export function SectionTreatmentCards(props: SectionTreatmentCardsProps) {
             icon={<ClipboardCheck size={14} strokeWidth={1.75} aria-hidden />}
             onClick={props.onStartNewCard}
           >
-            Registrar control
+            {props.controlFirmadoHoy ? "Ver el control de hoy (firmado)" : "Registrar control"}
           </Btn>
         ) : null
       }
@@ -80,13 +86,13 @@ export function SectionTreatmentCards(props: SectionTreatmentCardsProps) {
       </div>
 
       {tab === "next" ? (
-        <NextTabPanel next={props.nextAppointment} onStart={props.onStartNewCard} />
+        <NextTabPanel next={props.nextAppointment} onStart={props.controlFirmadoHoy ? undefined : props.onStartNewCard} />
       ) : null}
       {tab === "history" ? (
         <HistoryTabPanel
           cards={sorted}
           onOpenCard={props.onOpenCard}
-          onStart={props.onStartNewCard}
+          onStart={props.controlFirmadoHoy ? undefined : props.onStartNewCard}
         />
       ) : null}
       {tab === "calendar" ? <CalendarTabPanel cards={sorted} /> : null}

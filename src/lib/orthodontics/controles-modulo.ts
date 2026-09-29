@@ -233,6 +233,16 @@ export function historialDeControles(
 }
 
 /**
+ * ¿Este paciente ya vino HOY? La regla de «Vino hoy» de Controles y de Alertas
+ * (una sola función): su último control atendido —cita atendida u hoja de control
+ * registrada— cae en el día de calendario de hoy en la zona de la clínica.
+ */
+export function vinoHoy(historial: HistorialDeControles, patientId: string, hoy: string, zona: string): boolean {
+  const ultimo = historial.ultimoAtendido.get(patientId);
+  return ultimo !== undefined && diaEnZona(ultimo, zona) === hoy;
+}
+
+/**
  * Quién falta de control: casos ACTIVOS sin ningún control futuro en la
  * agenda. El mismo criterio que la alerta «Falta de control» (L2,
  * `listMissingNextControl`), con el dato que le faltaba a la alerta: hace

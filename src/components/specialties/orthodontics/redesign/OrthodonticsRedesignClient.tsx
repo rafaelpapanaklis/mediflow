@@ -566,6 +566,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onStartNewCard={
               t.status !== "no-iniciado" ? abrirRegistrarControl : undefined
             }
+            controlFirmadoHoy={Boolean(hojaDeHoyFirmada)}
           />
 
           {/* Ola 1 (ws1-t4, Control y agenda) — C8 */}

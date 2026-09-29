@@ -1,3 +1,4 @@
+import { visitasConHojas } from "@/lib/orthodontics/visitas-con-hojas";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PatientPortalClient } from "./portal-client";
@@ -17,6 +18,7 @@ export default async function PatientPortalPage({ params }: Props) {
   const patient = await prisma.patient.findFirst({
     where: { portalToken: params.token },
     select: {
+      id: true,
       firstName: true,
       lastName: true,
       patientNumber: true,
@@ -46,7 +48,7 @@ export default async function PatientPortalPage({ params }: Props) {
         orderBy: { visitDate: "desc" },
         take: 10,
         select: {
-          id: true, visitDate: true, specialtyData: true,
+          id: true, visitDate: true,
           doctor: { select: { firstName: true, lastName: true } },
         },
       },
@@ -100,6 +102,20 @@ export default async function PatientPortalPage({ params }: Props) {
   const signatureUrls = signed.slice(patient.files.length);
 
   const tz = patient.clinic.timezone;
+  const citasCompletadas = patient.appointments.filter((a) => a.status === "COMPLETED");
+  // Hojas de control firmadas (tolera que las tablas de ortodoncia no estén): si falla, solo las citas.
+  const hojasFirmadas = await prisma.orthoTreatmentCard
+    .findMany({
+      where: { patientId: patient.id, clinicId: patient.clinic.id, status: "SIGNED", deletedAt: null },
+      select: { appointmentId: true, visitDate: true },
+      take: 200,
+    })
+    .catch(() => [] as { appointmentId: string | null; visitDate: Date }[]);
+  const visitasTotales = visitasConHojas({
+    citasCompletadas: citasCompletadas.map((a) => ({ id: a.id, startsAt: a.startsAt })),
+    hojasFirmadas,
+    zona: tz,
+  });
   const serialized = {
     firstName: patient.firstName,
     lastName: patient.lastName,
@@ -123,12 +139,9 @@ export default async function PatientPortalPage({ params }: Props) {
       endsAt:       a.endsAt.toISOString(),
       doctor:       a.doctor,
     })),
-    // H19: un control de ortodoncia FIRMADO sin cita ligada también es una visita
-    // (los que sí tienen cita ya cuentan como cita «Completada»).
-    visitasExtra: patient.records.filter((r) => {
-      const d = r.specialtyData as { type?: string; status?: string; appointmentId?: string | null } | null;
-      return d?.type === "orthodontics" && d.status === "SIGNED" && !d.appointmentId;
-    }).length,
+    // H19: «Visitas» cuenta también los controles de ortodoncia FIRMADOS que no son ya una cita
+    // completada (sin cita, o cuya cita nadie marcó como atendida). Ver `visitasConHojas`.
+    visitasExtra: Math.max(0, visitasTotales - citasCompletadas.length),
     records: patient.records.map(r => ({
       id:        r.id,
       visitDate: r.visitDate instanceof Date ? r.visitDate.toISOString() : String(r.visitDate),

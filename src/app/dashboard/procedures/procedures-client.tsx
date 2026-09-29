@@ -660,7 +660,13 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                           name="orto-cobro"
                           required
                           checked={form.orthoIncluded === op.valor}
-                          onChange={() => setForm({ ...form, orthoIncluded: op.valor })}
+                          // El aviso del navegador sale en su idioma («Please select one of these options»): se pone el nuestro.
+                          onInvalid={(e) => e.currentTarget.setCustomValidity("Elige cómo se cobra: incluido en el tratamiento o con costo aparte.")}
+                          onChange={(e) => {
+                            // Se limpia en TODAS las opciones del grupo: si una conserva el aviso, el formulario sigue inválido.
+                            e.currentTarget.form?.querySelectorAll<HTMLInputElement>('input[name="orto-cobro"]').forEach((r) => r.setCustomValidity(""));
+                            setForm({ ...form, orthoIncluded: op.valor });
+                          }}
                           className={rediseno ? styles.checkbox : "w-4 h-4 border-border text-brand-600 focus:ring-brand-500/40"}
                         />
                         <span className={rediseno ? undefined : "text-sm font-semibold text-muted-foreground"}>{op.etiqueta}</span>

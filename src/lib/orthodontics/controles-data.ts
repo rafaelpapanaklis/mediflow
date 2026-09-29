@@ -17,6 +17,7 @@ import { calendarDayRangeUtc } from "@/lib/agenda/time-utils";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { relatedPatientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
+import { cargarUltimasHojasPorPaciente } from "./hojas-por-paciente-db";
 import { loadOrthoCases } from "./tablero-data";
 import { computeActiveCasesCount } from "./specialty-kpis";
 import {
@@ -128,22 +129,8 @@ export async function loadOrthoControles(
   // Una hoja de control registrada también es un control hecho, aunque nadie
   // marcara la cita como atendida (o se registrara sin cita). Solo de los
   // pacientes que esta persona puede ver: los de `cases`.
-  const hojasPorPaciente: { patientId: string; visitDate: Date }[] = [];
   const pacientes = Array.from(new Set(cases.map((c) => c.patientId)));
-  if (pacientes.length > 0) {
-    try {
-      const grupos = await prisma.orthoTreatmentCard.groupBy({
-        by: ["patientId"],
-        where: { clinicId, patientId: { in: pacientes }, visitDate: { lte: ahora } },
-        _max: { visitDate: true },
-      });
-      for (const g of grupos) {
-        if (g._max.visitDate) hojasPorPaciente.push({ patientId: g.patientId, visitDate: g._max.visitDate });
-      }
-    } catch (e) {
-      if (!esRelacionAusente(e)) throw e;
-    }
-  }
+  const hojasPorPaciente = await cargarUltimasHojasPorPaciente(clinicId, pacientes, ahora);
 
   const historial = historialDeControles(citas, ahora, hojasPorPaciente);
 

@@ -76,8 +76,13 @@ test("H16: la página de Controles carga las citas de verdad (antes: «Esta pant
   assert.doesNotMatch(cargador, /orthodonticControlAppointment/);
   // Cada consulta va por clínica; la de citas, además, por visibilidad de paciente.
   const consultas = cargador.split(/await prisma\./).slice(1).map((t) => t.slice(0, 200));
-  assert.equal(consultas.length, 3, "citas, hojas de la ventana y última hoja por paciente");
+  assert.equal(consultas.length, 2, "citas y hojas de la ventana");
   for (const c of consultas) assert.match(c, /where: \{\s*clinicId,/, "toda consulta filtra por clínica");
+  // La última hoja por paciente es UNA lectura compartida con Alertas (`vinoHoy` significa lo mismo).
+  assert.match(cargador, /cargarUltimasHojasPorPaciente\(clinicId, pacientes, ahora\)/);
+  const hojasDb = leer("src/lib/orthodontics/hojas-por-paciente-db.ts");
+  assert.match(hojasDb, /where: \{ clinicId, patientId: \{ in: \[\.\.\.pacientes\] \}/, "filtra por clínica");
+  assert.match(hojasDb, /if \(!clinicId \|\| pacientes\.length === 0\) return salida;/);
   assert.match(cargador, /AND: relatedPatientVisibilityAnd\(viewer\),/);
   assert.match(cargador, /if \(!clinicId\) \{/, "sin clínica no se consulta nada");
   assert.doesNotMatch(cargador, /Promise\.all/, "en fila: no satura el pooler");
@@ -294,4 +299,19 @@ test("fila 23: la cita de más tarde ya atendida no cuenta como próximo control
   assert.ok(atendida.ultimoAtendido.has("p-1"));
   const pendiente = historialDeControles([{ patientId: "p-1", startsAt: masTarde, status: "CONFIRMED" }], AHORA);
   assert.equal(pendiente.conControlFuturo.has("p-1"), true);
+});
+
+import { vinoHoy } from "../controles-modulo";
+
+test("vinoHoy: una hoja firmada hoy SIN cita cuenta, igual que en Controles", () => {
+  const zona = "America/Mexico_City";
+  const ahora = new Date("2026-09-29T20:00:00Z");
+  const conHoja = historialDeControles([], ahora, [{ patientId: "p", visitDate: new Date("2026-09-29T17:00:00Z") }]);
+  assert.equal(vinoHoy(conHoja, "p", "2026-09-29", zona), true);
+  const ayer = historialDeControles([], ahora, [{ patientId: "p", visitDate: new Date("2026-09-28T17:00:00Z") }]);
+  assert.equal(vinoHoy(ayer, "p", "2026-09-29", zona), false);
+  assert.equal(vinoHoy(historialDeControles([], ahora), "p", "2026-09-29", zona), false);
+  // una cita atendida hoy también
+  const cita = historialDeControles([{ patientId: "p", startsAt: new Date("2026-09-29T16:00:00Z"), status: "COMPLETED" }], ahora);
+  assert.equal(vinoHoy(cita, "p", "2026-09-29", zona), true);
 });

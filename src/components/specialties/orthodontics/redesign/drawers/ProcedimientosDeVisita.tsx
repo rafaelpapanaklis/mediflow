@@ -104,7 +104,19 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
     return (
       <section className={orto.bloque}>
         {titulo}
-        <div className={orto.vacioLinea}>No se pudieron cargar los procedimientos. Cierra y vuelve a abrir la hoja.</div>
+        <div className={`${orto.vacioLinea} flex items-center gap-2 flex-wrap`} role="alert">
+          <span>No se pudieron cargar los procedimientos.</span>
+          <Btn
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setError(false);
+              void cargar();
+            }}
+          >
+            Reintentar
+          </Btn>
+        </div>
       </section>
     );
   }

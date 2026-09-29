@@ -1494,7 +1494,8 @@ export function PatientDetailClient({
             doctorName: nextAppt.doctor ? `${t("patients.doctorPrefix")} ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
           } : null}
           lastVisitDate={lastAppt?.date ?? null}
-          visitCount={completedCount}
+          // H19: en ortodoncia, los controles firmados (aunque no tengan cita atendida) también son visitas.
+          visitCount={Math.max(completedCount, orthoRedesignVM?.visitas?.total ?? 0)}
           pendingBalance={totalBalance}
           portalUrl={portalLink}
           portalAccountStatus={portalStatus}
