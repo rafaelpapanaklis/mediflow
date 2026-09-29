@@ -33,7 +33,7 @@ import {
   renderAvisoMensualidadVencida,
 } from "@/lib/orthodontics/plantillas-mensaje";
 import { formatoPesos } from "@/lib/anticipos/core";
-import { lastSentOfKind } from "@/lib/orthodontics/whatsapp-dedupe";
+import { reservarAvisoDeCobro, ultimoAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
 import { formatDateHuman } from "@/lib/whatsapp/bot/booking-parse";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
@@ -144,7 +144,8 @@ export async function sendMensualidadReminder(
         });
 
   const ahora = new Date();
-  const yaEnviado = await lastSentOfKind(ctx.clinicId, telefonoDestino, "payment_notice", ahora).catch(() => null);
+  // Cuenta cualquier aviso de cobro de las últimas 24 h a ese teléfono, incluido el AUTOMÁTICO de mensualidad.
+  const yaEnviado = await ultimoAvisoDeCobro(ctx.clinicId, telefonoDestino, ahora).catch(() => null);
   if (yaEnviado) {
     return ok({
       texto,
@@ -167,6 +168,11 @@ export async function sendMensualidadReminder(
     });
   }
 
+  // Reserva antes de enviar (dos clics o dos pestañas a la vez mandaban dos): ver aviso-cobro-tope.ts.
+  const reserva = await reservarAvisoDeCobro({ clinicId: ctx.clinicId, userId: ctx.userId, telefonos: [telefonoDestino] });
+  if (!reserva.ok) {
+    return ok({ texto, enviado: false, motivoNoEnviado: "Ya se está enviando un aviso de cobro a este teléfono. Espera unos segundos antes de reintentar." });
+  }
   try {
     await sendWhatsAppLogged({
       clinic: {
@@ -184,5 +190,7 @@ export async function sendMensualidadReminder(
   } catch (e) {
     const motivo = e instanceof WhatsAppBlockedError ? e.message : "No se pudo enviar el WhatsApp.";
     return ok({ texto, enviado: false, motivoNoEnviado: motivo });
+  } finally {
+    await reserva.liberar();
   }
 }

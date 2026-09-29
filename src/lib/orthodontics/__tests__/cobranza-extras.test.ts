@@ -82,14 +82,14 @@ test("el candado de indicaciones busca el texto de ESE control, no cualquier «m
   assert.match(envio, /lastSentOfKind\(ctx\.clinicId, patient\.phone, "manual_api", ahora, 24, card\.indications\)/);
   // el recordatorio de mensualidad y las demás llamadas siguen igual (sin el filtro)
   const mens = leer("app/actions/orthodontics/whatsapp/sendMensualidadReminder.ts");
-  assert.match(mens, /lastSentOfKind\(ctx\.clinicId, telefonoDestino, "payment_notice", ahora\)/);
+  assert.match(mens, /ultimoAvisoDeCobro\(ctx\.clinicId, telefonoDestino, ahora\)/);
 });
 
 // ws1-t4 #82 — un aviso de cobro por teléfono al día también desde la factura.
 test("«Enviar por WhatsApp» de la factura no manda un segundo aviso de cobro el mismo día sin confirmar", () => {
   const ruta = leer("app/api/invoices/[id]/send-whatsapp/route.ts");
-  assert.match(ruta, /if \(pedido\?\.forzar !== true\)/);
-  assert.match(ruta, /lastSentOfKind\(ctx\.clinicId, tel, "payment_notice", new Date\(\)\)/);
+  assert.match(ruta, /const forzar = pedido\?\.forzar === true;/);
+  assert.match(ruta, /ultimoAvisoDeCobroEnTelefonos\(ctx\.clinicId, telefonos\)/);
   assert.match(ruta, /code: "AVISO_YA_ENVIADO"/);
   // el candado va ANTES de crear el link de pago (que escribe)
   assert.ok(ruta.indexOf("AVISO_YA_ENVIADO") < ruta.indexOf("linkParaEnviar({"));
