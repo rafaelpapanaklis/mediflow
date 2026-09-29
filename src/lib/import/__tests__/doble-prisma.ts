@@ -338,6 +338,17 @@ export function crearBase(semilla: Record<string, Row[]>): Base {
                 }
                 return n;
               }
+              // Movimientos del paciente en bloque (movimientos-paciente/bloque.ts): una sentencia, muchas filas.
+              if (/INSERT INTO "audit_logs"/.test(sql)) {
+                contar("$executeRaw.auditLogs");
+                const [clinicId, userId, json] = values;
+                let n = 0;
+                for (const x of JSON.parse(json) as Array<Row>) {
+                  tabla("auditLog").push({ id: x.id, clinicId, userId, entityType: x.entityType, entityId: x.entityId, action: x.action, changes: x.changes, actorType: "staff", patientId: x.patientId, createdAt: new Date() });
+                  n++;
+                }
+                return n;
+              }
               // Candado de Postgres (pg_advisory_xact_lock): sin efecto en memoria.
               if (/pg_advisory_xact_lock/.test(sql)) return 0;
               throw new Error(`$executeRaw sin doble: ${sql.slice(0, 80)}`);

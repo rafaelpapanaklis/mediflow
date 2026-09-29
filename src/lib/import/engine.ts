@@ -954,6 +954,23 @@ export async function runImport(
     },
   });
 
+  // Rastro por paciente (ws1-t10): un movimiento resumido por paciente afectado y por archivo, en bloque y sin frenar nada.
+  // Import dinámico: el módulo depende del motor de movimientos y de la base, y así no entra al ciclo de carga del motor.
+  try {
+    const { registrarImportacionEnMovimientos } = await import("./movimientos");
+    await registrarImportacionEnMovimientos({
+      clinicId: opts.clinicId,
+      userId: opts.userId,
+      entity: handler.entity,
+      origen: profile?.name ?? "otro sistema",
+      fileName: opts.file.name,
+      skipDuplicates: opts.skipDuplicates,
+      preview,
+    });
+  } catch (e) {
+    console.error("[import] no se pudo dejar el rastro por paciente:", e);
+  }
+
   return {
     entity: handler.entity,
     created,
