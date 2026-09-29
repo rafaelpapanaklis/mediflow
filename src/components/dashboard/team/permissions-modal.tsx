@@ -10,7 +10,11 @@ import {
   type PermissionKey,
 } from "@/lib/auth/permissions";
 import type { Role } from "@prisma/client";
-import { useT } from "@/i18n/i18n-provider";
+import { useT, useLocale } from "@/i18n/i18n-provider";
+import { gruposVisibles, sigueElDefaultDelRol, diferenciasConElRol } from "@/lib/team/permisos-modal";
+
+// Lo que se pinta (ver permisos-modal.ts: sin Marketplace ni las especialidades que ya no se contratan).
+const GRUPOS = gruposVisibles(PERMISSION_GROUPS);
 
 // labelKey -> resolved via t() at render time (never call t() at module scope).
 const ROLE_LABEL: Record<string, string> = {
@@ -37,6 +41,7 @@ interface PermissionsModalProps {
 
 export function PermissionsModal({ open, member, onClose, onSaved }: PermissionsModalProps) {
   const t = useT();
+  const enIngles = useLocale().startsWith("en");
   // useDefault: true → checkboxes deshabilitados, mostrando los del rol.
   // false → habilitados, editando el override del usuario.
   const [useDefault, setUseDefault] = useState(true);
@@ -49,13 +54,17 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
   useEffect(() => {
     if (!open || !member) return;
     const override = member.permissionsOverride ?? [];
-    if (override.length > 0) {
+    const role = (member.role as Role) ?? "READONLY";
+    const delRol = ROLE_DEFAULT_PERMISSIONS[role] ?? [];
+    // Encendido si no tiene nada propio, O si su override es idéntico al del rol
+    // (el alta guarda uno completo al elegir «Solo dental»): «personalizado» sin
+    // ninguna diferencia real confundía (ws1-t5, T5).
+    if (!sigueElDefaultDelRol(override, delRol)) {
       setUseDefault(false);
       setSelected(new Set(override.filter((k): k is PermissionKey => k in ALL_PERMISSIONS)));
     } else {
       setUseDefault(true);
-      const role = (member.role as Role) ?? "READONLY";
-      setSelected(new Set(ROLE_DEFAULT_PERMISSIONS[role] ?? []));
+      setSelected(new Set(delRol));
     }
   }, [open, member]);
 
@@ -177,9 +186,23 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
             </span>
           </label>
 
+          {/* Qué tiene distinto al rol — sin esto «apagado» no decía nada. */}
+          {!useDefault && (() => {
+            const d = diferenciasConElRol(selected, roleDefaults);
+            if (d.sinLoDelRol.length === 0 && d.ademasDelRol.length === 0) return null;
+            const nombre = (k: PermissionKey) => ALL_PERMISSIONS[k];
+            return (
+              <div data-permisos-diferencias style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
+                <strong>{enIngles ? "Differs from the role default:" : "Se distingue del default del rol:"}</strong>
+                {d.sinLoDelRol.length > 0 && <div>{enIngles ? "Without: " : "Sin: "}{d.sinLoDelRol.map(nombre).join(" · ")}</div>}
+                {d.ademasDelRol.length > 0 && <div>{enIngles ? "Plus: " : "Además: "}{d.ademasDelRol.map(nombre).join(" · ")}</div>}
+              </div>
+            );
+          })()}
+
           {/* Permission groups */}
           <div className="space-y-4">
-            {PERMISSION_GROUPS.map((group) => (
+            {GRUPOS.map((group) => (
               <div key={group.title}>
                 <div className="form-section__title">
                   {group.title}

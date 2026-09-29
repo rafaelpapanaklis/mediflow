@@ -84,6 +84,7 @@
     "test:sabina-tarjeta": "tsx --test src/app/dashboard/sabina/__tests__/propuesta-core.test.ts",
     "test:endpoint-gates": "tsx --test src/lib/auth/__tests__/endpoint-permission-gates.test.ts",
     "test:endpoint-gates-resto": "tsx --test src/lib/auth/__tests__/endpoint-permission-gates-resto.test.ts",
+    "test:equipo-revision-final": "tsx --test src/lib/team/__tests__/equipo-revision-final.test.ts",
     "test:team-sin-cuenta": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cambio-correo-sin-cuenta.test.ts",
     "test:team-fields": "tsx --test src/lib/team/__tests__/member-fields.test.ts",
     "test:permissions-modal-titulo": "tsx --test src/components/dashboard/team/__tests__/permissions-modal-titulo.test.ts",

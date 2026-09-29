@@ -21,6 +21,11 @@ import { leerRespuestaEquipo } from "@/lib/team/leer-respuesta";
 import { CampoAccesoOrtodoncia, type RespuestaAcceso } from "./campo-acceso-ortodoncia";
 import { ESPECIALIDAD_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { prepararImagen } from "@/lib/image-client";
+import { useTextosEquipo } from "./textos-equipo";
+import {
+  formDeMiembro, parcheDeCambios, rolLlevaDatosClinicos,
+  type DatosEditablesDeMiembro,
+} from "@/lib/team/parche-miembro";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
 // labelKey -> resolved via t() at render time (never call t() at module scope).
@@ -92,7 +97,7 @@ interface TeamMember {
 // as a new component type on every render and unmounts/remounts the inputs,
 // causing focus loss on every keystroke. Defined outside, it is stable.
 function MemberForm({
-  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, rediseno, ortoModulo, puedeCambiarAcceso,
+  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, rediseno, ortoModulo, puedeCambiarAcceso, accesoOriginal = "",
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
@@ -113,8 +118,27 @@ function MemberForm({
   ortoModulo: boolean;
   // Alta: quien da de alta. Edición: solo el dueño (los permisos son suyos).
   puedeCambiarAcceso: boolean;
+  // Edición: la respuesta con la que ARRANCÓ el modal (lo que dice su permiso hoy).
+  // Sirve para saber si la persona acaba de elegir «también ortodoncista» (y
+  // entonces su especialidad se fija en Ortodoncia) o ya lo era de antes.
+  accesoOriginal?: RespuestaAcceso;
 }) {
   const t = useT();
+  const x = useTextosEquipo();
+  // Recepción y solo lectura no llevan datos de médico (especialidad, servicios,
+  // NOM-024, color de agenda). El ADMIN y el dueño sí: firman recetas con su cédula.
+  const clinico = rolLlevaDatosClinicos(form.role);
+  const preguntaOrto = ortoModulo && form.role === "DOCTOR";
+  // El servidor fija la especialidad en «Ortodoncia» cuando el acceso viaja como
+  // «ortodoncista» (alta, o edición donde la persona lo acaba de elegir). En ese
+  // caso el selector va bloqueado, para que lo que se ve sea lo que se guarda. Una
+  // persona que ya tenía el acceso (lo trae el default del rol) conserva su
+  // especialidad libre: al guardar el acceso no viaja y nada se le impone.
+  // La especialidad que tenía antes de marcar «también ortodoncista»: si se arrepiente
+  // y vuelve a «solo dental», recupera la suya en vez de quedarse en blanco.
+  const especialidadPrevia = useRef<string>(form.specialty === ESPECIALIDAD_ORTODONCIA ? "" : form.specialty);
+  const especialidadFija =
+    preguntaOrto && form.accesoOrtodoncia === "ortodoncista" && (!isEdit || accesoOriginal !== "ortodoncista");
   const [svcInput, setSvcInput] = useState("");
   // Con el rediseño, el acento y los bordes se leen del menú de dos niveles
   // (los `--m2-*` que monta la raíz); apagado, los tokens de siempre.
@@ -163,7 +187,7 @@ function MemberForm({
         <input
           type="email"
           className="input-new" style={{ height: 42, fontSize: 13.5 }}
-          placeholder="doctor@clinica.com"
+          placeholder="nombre@clinica.com"
           value={form.email}
           onChange={e => set("email", e.target.value)}
         />
@@ -172,7 +196,7 @@ function MemberForm({
          *  el endpoint lo aplica en Supabase Auth + Prisma, así que el hint
          *  tiene que decir que se está tocando el login, no un dato de ficha. */}
         <p className="text-xs text-muted-foreground">
-          {isEdit ? t("settings.team.emailHintEdit") : t("settings.team.emailHint")}
+          {isEdit ? t("settings.team.emailHintEdit") : x.emailHintAlta}
         </p>
       </div>
 
@@ -197,18 +221,36 @@ function MemberForm({
         </div>
       </div>
 
-      {/* Specialty + Phone */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold">{t("settings.team.specialtyLabel")}</Label>
-          <select
-            className="input-new" style={{ height: 42, fontSize: 13.5 }}
-            value={form.specialty}
-            onChange={e => set("specialty", e.target.value)}>
-            <option value="">{t("settings.team.noSpecialty")}</option>
-            {SPECIALTIES.map(s => <option key={s.id} value={s.id}>{t(s.nameKey)}</option>)}
-          </select>
-        </div>
+      {/* Specialty + Phone — la especialidad no aplica a recepción. */}
+      <div className={clinico ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"}>
+        {clinico && (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">{t("settings.team.specialtyLabel")}</Label>
+            <select
+              className="input-new" style={{ height: 42, fontSize: 13.5 }}
+              value={form.specialty}
+              disabled={especialidadFija}
+              onChange={e => {
+                const v = e.target.value;
+                // Elegir «Ortodoncia» a mano en una sede con el módulo es decir
+                // «también ortodoncista»: se marca para que texto y casilla no se contradigan.
+                setForm(prev => ({
+                  ...prev,
+                  specialty: v,
+                  accesoOrtodoncia: preguntaOrto && puedeCambiarAcceso && v === ESPECIALIDAD_ORTODONCIA ? "ortodoncista" : prev.accesoOrtodoncia,
+                }));
+              }}>
+              <option value="">{t("settings.team.noSpecialty")}</option>
+              {SPECIALTIES.map(s => <option key={s.id} value={s.id}>{t(s.nameKey)}</option>)}
+            </select>
+            {especialidadFija && (
+              <p className="text-xs text-muted-foreground" data-especialidad-fija>{x.especialidadFijaPorOrto}</p>
+            )}
+            {!especialidadFija && preguntaOrto && puedeCambiarAcceso && form.specialty === ESPECIALIDAD_ORTODONCIA && form.accesoOrtodoncia === "ortodoncista" && accesoOriginal !== "ortodoncista" && (
+              <p className="text-xs text-muted-foreground">{x.especialidadOrtoMarcaAcceso}</p>
+            )}
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold">{t("settings.team.phoneLabel")}</Label>
           <input
@@ -227,17 +269,21 @@ function MemberForm({
           puedeCambiar={puedeCambiarAcceso}
           esEdicion={isEdit}
           acento={acento} acentoSuave={acentoSuave} bordeSuave={bordeSuave}
-          onChange={(v) => setForm(prev => ({
-            ...prev,
-            accesoOrtodoncia: v,
-            // Misma regla que aplica el servidor: ortodoncista → especialidad
-            // «Ortodoncia»; solo dental no puede quedarse con «Ortodoncia».
-            specialty: v === "ortodoncista" ? ESPECIALIDAD_ORTODONCIA : (prev.specialty === ESPECIALIDAD_ORTODONCIA ? "" : prev.specialty),
-          }))}
+          onChange={(v) => setForm(prev => {
+            if (v === "ortodoncista" && prev.specialty !== ESPECIALIDAD_ORTODONCIA) especialidadPrevia.current = prev.specialty;
+            return {
+              ...prev,
+              accesoOrtodoncia: v,
+              // Misma regla que aplica el servidor: ortodoncista → especialidad
+              // «Ortodoncia»; solo dental no puede quedarse con «Ortodoncia» (recupera la que tenía).
+              specialty: v === "ortodoncista" ? ESPECIALIDAD_ORTODONCIA : (prev.specialty === ESPECIALIDAD_ORTODONCIA ? especialidadPrevia.current : prev.specialty),
+            };
+          })}
         />
       )}
 
       {/* Services */}
+      {clinico && (
       <div className="space-y-1.5">
         <Label className="text-xs font-semibold">{t("settings.team.servicesLabel")}</Label>
         <div className="flex gap-2">
@@ -269,7 +315,10 @@ function MemberForm({
         )}
       </div>
 
+      )}
+
       {/* NOM-024 — Datos del médico */}
+      {clinico && (
       <div className="space-y-3 pt-1">
         <div className="form-section__title" style={{ marginBottom: 0 }}>{t("settings.team.profIdLabel")}<span className="form-section__rule" aria-hidden /></div>
         <div className="grid grid-cols-2 gap-3">
@@ -308,7 +357,10 @@ function MemberForm({
         </div>
       </div>
 
+      )}
+
       {/* Color */}
+      {clinico && (
       <div className="space-y-2">
         <Label className="text-xs font-semibold">{t("settings.team.colorLabel")}</Label>
         <div className="flex gap-2 flex-wrap">
@@ -330,6 +382,7 @@ function MemberForm({
           </div>
         )}
       </div>
+      )}
 
       {/* Reset password — solo visible cuando el padre nos lo pasa (SUPER_ADMIN
        *  editando a un miembro non-SUPER_ADMIN). El click delega la confirmación
@@ -339,7 +392,7 @@ function MemberForm({
         <div className="pt-4 mt-2" style={{ borderTop: `1px solid ${bordeSuave}` }}>
           <div className="form-section__title" style={{ marginBottom: 0 }}>{t("settings.team.userAccessLabel")}<span className="form-section__rule" aria-hidden /></div>
           <p className="text-xs text-muted-foreground mt-1 mb-3">
-            {t("settings.team.resetPasswordHint")}
+            {x.restablecerHint}
           </p>
           <Button
             type="button"
@@ -348,7 +401,7 @@ function MemberForm({
             disabled={loading}
             className="w-full h-11 text-base"
           >
-            {t("settings.team.resetPasswordBtn")}
+            {x.restablecerBtn}
           </Button>
         </div>
       )}
@@ -357,7 +410,7 @@ function MemberForm({
       <div className="flex gap-3 pt-2">
         <Button variant="outline" onClick={onCancel} className="flex-1 h-12 text-base">{t("common.cancel")}</Button>
         <Button onClick={onSubmit} disabled={loading} className="flex-1 h-12 text-base">
-          {loading ? t("common.saving") : isEdit ? t("common.saveChanges") : t("settings.team.createDoctorBtn")}
+          {loading ? t("common.saving") : isEdit ? t("common.saveChanges") : x.crearCuenta}
         </Button>
       </div>
     </div>
@@ -577,6 +630,7 @@ interface Props {
 
 export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, ortoModulo = false }: Props) {
   const t = useT();
+  const x = useTextosEquipo();
   const locale = useLocale();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -618,6 +672,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   });
 
   const [form, setForm] = useState<FormState>(emptyForm);
+  // Con qué datos ABRIÓ el modal de edición. Al guardar solo viaja lo que cambió
+  // contra esto: un campo que nadie tocó nunca se manda (y nunca se pisa).
+  const [formInicial, setFormInicial] = useState<DatosEditablesDeMiembro | null>(null);
 
   const filtered = useMemo(() =>
     team.filter(m => filter === "all" ? true : filter === "active" ? m.isActive : !m.isActive),
@@ -640,19 +697,25 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     }
     setLoading(true);
     try {
+      // Recepción no lleva datos de médico: no viajan (el modal ni los pide).
+      const clinico = rolLlevaDatosClinicos(form.role);
+      const cuerpo = clinico ? form : {
+        ...form, specialty: "", services: [] as string[],
+        cedulaProfesional: "", especialidad: "", cedulaEspecialidad: "", accesoOrtodoncia: "",
+      };
       const res = await fetch("/api/team", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(form),
+        body: JSON.stringify(cuerpo),
       });
       const data = await leerRespuestaEquipo(res);
       if (!res.ok) throw new Error(data.error);
-      setTeam(prev => [...prev, { ...data, _count:{ appointments:0, records:0 } }]);
+      setTeam(prev => [...prev, { ...data, _count:{ appointments:0, records:0 } } as TeamMember]);
       setTempPass(data.tempPassword ?? null);
       setTempPassMode(data.tempPassword ? "create" : null);
       setTempPassFor(`${data.firstName} ${data.lastName}`);
       setShowNew(false);
       setForm(emptyForm());
-      toast.success(t("settings.team.doctorCreatedToast", { name: `${data.firstName} ${data.lastName}` }));
+      toast.success(x.altaListo(`${data.firstName} ${data.lastName}`));
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -663,6 +726,18 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
 
   async function updateDoctor() {
     if (!editMember) return;
+    const { accesoOrtodoncia: _a, ...datosActuales } = form;
+    // Solo lo que la persona cambió. Antes viajaba el formulario ENTERO: un campo
+    // que llegara vacío al modal (la cédula, que la página no traía) se guardaba
+    // como vacío y BORRABA el dato del médico (ws1-t5, T1).
+    const parche = formInicial ? parcheDeCambios(formInicial, datosActuales) : (datosActuales as Partial<DatosEditablesDeMiembro>);
+    const cambioAcceso =
+      !!form.accesoOrtodoncia && form.accesoOrtodoncia !== accesoInicial(editMember, ortoModulo);
+    if (Object.keys(parche).length === 0 && !cambioAcceso) {
+      setEditMember(null);
+      toast(x.sinCambios);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/team/${editMember.id}`, {
@@ -670,10 +745,10 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         // El acceso a Ortodoncia solo viaja si la persona lo CAMBIÓ: guardar otro
         // dato (el teléfono, la cédula) no reescribe los permisos de nadie.
         body: JSON.stringify({
-          ...form,
-          accesoOrtodoncia: form.accesoOrtodoncia && form.accesoOrtodoncia !== accesoInicial(editMember, ortoModulo)
-            ? form.accesoOrtodoncia
-            : undefined,
+          ...parche,
+          // El servidor fija la especialidad según la respuesta: que parta de la del formulario.
+          ...(cambioAcceso && { specialty: form.specialty }),
+          accesoOrtodoncia: cambioAcceso ? form.accesoOrtodoncia : undefined,
         }),
       });
       const data = await leerRespuestaEquipo(res);
@@ -681,9 +756,13 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       // El email se pinta con el que devolvió el server, no con el del form:
       // el endpoint lo normaliza (trim + minúsculas) antes de guardarlo.
       const savedEmail: string = data.email ?? form.email;
-      const { accesoOrtodoncia: _acceso, ...datosDelForm } = form;
       setTeam(prev => prev.map(m => m.id === editMember.id
-        ? { ...m, ...datosDelForm, email: savedEmail, permissionsOverride: data.permissionsOverride ?? m.permissionsOverride }
+        ? {
+            ...m, ...parche, email: savedEmail,
+            // El servidor puede fijar la especialidad (ortodoncista → «Ortodoncia»): manda lo que guardó.
+            ...(data.specialty !== undefined && { specialty: data.specialty }),
+            permissionsOverride: data.permissionsOverride ?? m.permissionsOverride,
+          }
         : m));
       setEditMember(null);
       toast.success(t("settings.team.dataUpdated"));
@@ -709,6 +788,13 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
 
   async function toggleActive(m: TeamMember) {
     if (m.id === currentUserId) { toast.error(t("settings.team.cannotDeactivateSelf")); return; }
+    // Desactivar corta el acceso al instante: se pregunta. Reactivar no hace daño.
+    if (m.isActive && !(await askConfirm({
+      title: x.desactivarConfirmTitulo(`${m.firstName} ${m.lastName}`),
+      description: x.desactivarConfirmDesc,
+      variant: "warning",
+      confirmText: x.desactivarBtn,
+    }))) return;
     try {
       const res = await fetch(`/api/team/${m.id}`, {
         method:"PATCH", headers:{"Content-Type":"application/json"},
@@ -716,7 +802,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       });
       if (!res.ok) throw new Error();
       setTeam(prev => prev.map(mem => mem.id === m.id ? { ...mem, isActive: !m.isActive } : mem));
-      toast.success(m.isActive ? t("settings.team.doctorDeactivated") : t("settings.team.doctorReactivated"));
+      toast.success(m.isActive ? x.miembroDesactivado : x.miembroReactivado);
       router.refresh();
     } catch { toast.error(t("common.genericError")); }
   }
@@ -728,30 +814,30 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   async function resetPassword(m: TeamMember) {
     if (!isSuperAdmin) return;
     if (m.role === "SUPER_ADMIN") {
-      toast.error(t("settings.team.cannotResetSuperAdmin"));
+      toast.error(x.restablecerNoSuper);
       return;
     }
     if (!(await askConfirm({
-      title: t("settings.team.resetPasswordConfirmTitle", { name: `${m.firstName} ${m.lastName}` }),
-      description: t("settings.team.resetPasswordConfirmDesc"),
+      title: x.restablecerConfirmTitulo(`${m.firstName} ${m.lastName}`),
+      description: x.restablecerConfirmDesc,
       variant: "danger",
-      confirmText: t("settings.team.resetPasswordBtn"),
+      confirmText: x.restablecerBtn,
     }))) return;
 
     try {
       const res = await fetch(`/api/team/${m.id}/reset-password`, { method: "POST" });
       const data = await leerRespuestaEquipo(res);
-      if (!res.ok) throw new Error(data.error ?? t("settings.team.resetPasswordError"));
+      if (!res.ok) throw new Error(data.error ?? x.restablecerError);
       // Cerramos el modal de edit y mostramos el banner amarillo de tempPassword
       // (mismo componente que se usa cuando se crea un doctor nuevo).
       setEditMember(null);
       setTempPass(data.tempPassword ?? null);
       setTempPassMode(data.tempPassword ? "reset" : null);
       setTempPassFor(`${m.firstName} ${m.lastName}`);
-      toast.success(t("settings.team.passwordResetForToast", { name: `${m.firstName} ${m.lastName}` }));
+      toast.success(x.restablecerListo(`${m.firstName} ${m.lastName}`));
       if (data.aviso) toast(data.aviso, { duration: 15000, icon: "ℹ️" });
     } catch (err: any) {
-      toast.error(err.message ?? t("settings.team.resetPasswordError"));
+      toast.error(err.message ?? x.restablecerError);
     }
   }
 
@@ -769,25 +855,21 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       if (!res.ok) throw new Error(data.error);
       if (data.deactivated) {
         setTeam(prev => prev.map(mem => mem.id === m.id ? { ...mem, isActive:false } : mem));
-        toast.success(t("settings.team.doctorDeactivatedHasRecords"));
+        toast.success(x.desactivadoConRegistros);
       } else {
         setTeam(prev => prev.filter(mem => mem.id !== m.id));
-        toast.success(t("settings.team.doctorDeleted"));
+        toast.success(x.miembroEliminado);
       }
       router.refresh();
     } catch (err: any) { toast.error(err.message); }
   }
 
   function openEdit(m: TeamMember) {
-    setForm({
-      firstName: m.firstName, lastName: m.lastName, email: m.email,
-      role: m.role, specialty: m.specialty ?? "", color: m.color,
-      phone: m.phone ?? "", services: m.services ?? [],
-      cedulaProfesional:  m.cedulaProfesional  ?? "",
-      especialidad:       m.especialidad       ?? "",
-      cedulaEspecialidad: m.cedulaEspecialidad ?? "",
-      accesoOrtodoncia: accesoInicial(m, ortoModulo),
-    });
+    // TODO lo guardado, tal cual: la cédula, la especialidad oficial, el teléfono,
+    // el color y los servicios (ws1-t5, T1: antes arrancaban vacíos).
+    const datos = formDeMiembro(m, nextColor);
+    setForm({ ...datos, accesoOrtodoncia: accesoInicial(m, ortoModulo) });
+    setFormInicial(datos);
     setEditMember(m);
   }
 
@@ -813,58 +895,52 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
           </p>
         </div>
         <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} />} onClick={() => { setForm(emptyForm()); setShowNew(true); }}>
-          {t("settings.team.inviteMember")}
+          {x.agregarMiembro}
         </ButtonNew>
       </div>
 
-      {/* Temp password banner — sirve para create (alta de miembro) y para
-       *  reset (SUPER_ADMIN reseteando password). Mismo bloque visual, copy
-       *  diferenciado segun tempPassMode. La password se ve UNA vez. */}
+      {/* Contraseña temporal — alta o restablecimiento. Es un DIÁLOGO y no un
+       *  banner arriba de la página: con la lista larga el banner quedaba fuera
+       *  de vista justo cuando había que copiarla (ws1-t5, T3). Se ve UNA vez, así
+       *  que no se cierra por accidente: solo con el botón. */}
       {tempPass && (
-        <div style={{
-          background: "var(--warning-soft)",
-          border: "1px solid var(--warning-border-strong)",
-          borderRadius: "var(--radius-lg)",
-          padding: 16, marginBottom: 18,
-        }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--warning-strong)", marginBottom: 4 }}>
-                {tempPassMode === "reset"
-                  ? (tempPassFor
-                      ? t("settings.team.bannerResetTitleNamed", { name: tempPassFor })
-                      : t("settings.team.bannerResetTitle"))
-                  : t("settings.team.bannerCreateTitle")}
-              </div>
-              <div style={{ fontSize: 12, color: "var(--warning-strong)", opacity: 0.85, marginBottom: 10 }}>
-                {tempPassMode === "reset"
-                  ? t("settings.team.bannerResetDesc")
-                  : t("settings.team.bannerCreateDesc")}
-              </div>
+        <div className="modal-overlay">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="temp-pass-titulo" style={{ maxWidth: 480 }}>
+            <div className="modal__header">
+              <h2 className="modal__title" id="temp-pass-titulo">
+                {tempPassMode === "reset" ? x.tempResetTitulo(tempPassFor) : x.tempCreadaTitulo}
+              </h2>
+            </div>
+            <div className="modal__body space-y-4">
+              <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5, margin: 0 }}>
+                {tempPassMode === "reset" ? x.tempResetDesc : x.tempCreadaDesc(tempPassFor)}
+              </p>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 {/* Contraseña temporal, se copia-pega tal cual: letra de máquina real
                     incluso con Instrument Sans en el resto del panel (WS1-T6). */}
-                <code className="mono-tecnico" style={{
-                  fontSize: 13, fontWeight: 700,
+                <code className="mono-tecnico" data-temp-pass style={{
+                  fontSize: 15, fontWeight: 700,
                   background: "var(--warning-soft-strong)",
                   color: "var(--warning-strong)",
-                  padding: "6px 14px",
+                  padding: "8px 16px",
                   borderRadius: "var(--radius-sm)",
                   letterSpacing: 2,
+                  userSelect: "all",
                 }}>{tempPass}</code>
                 <ButtonNew variant="secondary" size="sm" onClick={copyPass} icon={copied ? <Check size={16} strokeWidth={1.75} /> : <Copy size={16} strokeWidth={1.75} />}>
-                  {copied ? t("settings.team.copied") : t("settings.team.copy")}
+                  {copied ? x.copiado : x.copiar}
                 </ButtonNew>
               </div>
             </div>
-            <button
-              onClick={() => { setTempPass(null); setTempPassMode(null); setTempPassFor(""); }}
-              type="button"
-              className="btn-new btn-new--ghost btn-new--sm"
-              aria-label={t("common.close")}
-            >
-              <X size={16} strokeWidth={1.75} />
-            </button>
+            <div className="modal__footer">
+              <button
+                type="button"
+                className="btn-new btn-new--primary"
+                onClick={() => { setTempPass(null); setTempPassMode(null); setTempPassFor(""); }}
+              >
+                {x.tempListo}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -939,7 +1015,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                 icon={<Plus size={16} strokeWidth={1.75} />}
                 onClick={() => { setForm(emptyForm()); setShowNew(true); }}
               >
-                {t("settings.team.addFirstDoctor")}
+                {x.agregarMiembro}
               </ButtonNew>
             </div>
           </div>
@@ -1051,31 +1127,33 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                         {t("settings.team.horario")}
                       </ButtonNew>
                     )}
-                    {m.id !== currentUserId && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => toggleActive(m)}
-                          className="btn-new btn-new--ghost"
-                          style={{ padding: 0, width: 36 }}
-                          title={m.isActive ? t("settings.team.deactivateTitle") : t("settings.team.activateTitle")}
-                          aria-label={m.isActive ? t("settings.team.deactivateTitle") : t("settings.team.activateTitle")}
-                        >
-                          {m.isActive ? <UserX size={16} strokeWidth={1.75} /> : <UserCheck size={16} strokeWidth={1.75} />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteMember(m)}
-                          className="btn-new btn-new--ghost"
-                          style={{ padding: 0, width: 36 }}
-                          title={t("common.delete")}
-                          aria-label={t("common.delete")}
-                        >
-                          <Trash2 size={16} strokeWidth={1.75} />
-                        </button>
-                      </>
-                    )}
                   </div>
+
+                  {/* Desactivar / Eliminar: fila propia y con texto (antes eran dos
+                   *  iconos sueltos pegados a Horario, sin decir qué hacían). */}
+                  {m.id !== currentUserId && (
+                    <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                      <ButtonNew
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleActive(m)}
+                        icon={m.isActive ? <UserX size={16} strokeWidth={1.75} /> : <UserCheck size={16} strokeWidth={1.75} />}
+                        title={m.isActive ? t("settings.team.deactivateTitle") : t("settings.team.activateTitle")}
+                      >
+                        {m.isActive ? x.desactivarBtn : x.reactivarBtn}
+                      </ButtonNew>
+                      <ButtonNew
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteMember(m)}
+                        icon={<Trash2 size={16} strokeWidth={1.75} />}
+                        title={x.eliminarBtn}
+                        style={{ color: "var(--danger)" }}
+                      >
+                        {x.eliminarBtn}
+                      </ButtonNew>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -1089,11 +1167,14 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
           onClick={e => { if (e.target === e.currentTarget) setShowNew(false); }}>
           <div className="modal" role="dialog" aria-modal="true">
             <div className="modal__header" style={{ position: "sticky", top: 0, background: "var(--bg-elev)", zIndex: 10 }}>
-              <h2 className="modal__title">{t("settings.team.addDoctorTitle")}</h2>
+              <h2 className="modal__title">{x.agregarMiembro}</h2>
               <button type="button" onClick={() => setShowNew(false)} className="btn-new btn-new--ghost" style={{ padding: 0, width: 36 }} aria-label={t("common.close")}>
                 <X size={18} strokeWidth={1.75} />
               </button>
             </div>
+            <p className="text-xs text-muted-foreground" style={{ padding: "12px 22px 0", margin: 0, lineHeight: 1.5 }} data-alta-intro>
+              {x.altaIntro}
+            </p>
             <MemberForm
               form={form} setForm={setForm}
               onSubmit={createDoctor} onCancel={() => setShowNew(false)}
@@ -1120,6 +1201,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               onSubmit={updateDoctor} onCancel={() => setEditMember(null)}
               loading={loading} isEdit={true} rediseno={rediseno}
               ortoModulo={ortoModulo} puedeCambiarAcceso={isSuperAdmin}
+              accesoOriginal={accesoInicial(editMember, ortoModulo)}
               // Reset password solo aparece cuando el actor es SUPER_ADMIN
               // y el target NO es SUPER_ADMIN. El backend valida lo mismo.
               onResetPassword={

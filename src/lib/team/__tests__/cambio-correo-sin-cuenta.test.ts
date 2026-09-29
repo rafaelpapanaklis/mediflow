@@ -36,6 +36,8 @@ interface Fila {
   lastName: string;
   isActive: boolean;
   cedulaProfesional: string | null;
+  specialty?: string | null;
+  permissionsOverride?: string[];
 }
 
 const errAuth = {
@@ -139,6 +141,7 @@ const adminDoble = {
 function sesion(role = "SUPER_ADMIN") {
   return {
     userId: "us-dueno", clinicId: CL, role, permissionsOverride: [],
+    clinicCategory: "DENTAL",
     clinic: { timezone: "America/Mexico_City", category: "DENTAL" },
     isSuperAdmin: role === "SUPER_ADMIN", isAdmin: role === "SUPER_ADMIN" || role === "ADMIN",
   };
@@ -172,6 +175,8 @@ before(async () => {
   });
   // plans.ts arrastra "server-only" (no existe en Node pelado); estas pruebas no
   // reactivan a nadie, así que el tope de usuarios no entra en juego.
+  // access.ts arrastra "server-only". La sede de estas pruebas tiene el módulo contratado.
+  mock.module("@/lib/orthodontics/access", { namedExports: { hasActiveOrthodonticsModule: async () => true } });
   mock.module("@/lib/plans", { namedExports: { getPlanLimitsForClinic: async () => ({ maxUsers: null }) } });
   mock.module("@/lib/cache/revalidate", { namedExports: { revalidateAfter: () => {} } });
   mock.module("@/lib/auth/must-change-password", {
@@ -274,6 +279,24 @@ test("la cédula sola (correo intacto, aunque sea el de relleno) se guarda sin l
 });
 
 /* ── PATCH: cada causa dice lo que es ───────────────────────────────── */
+
+test("🔴 T1 (ws1-t5): un PATCH que solo trae el teléfono NO toca la cédula ni la especialidad oficial", async () => {
+  Object.assign(estado.filas[0], { cedulaProfesional: "2747272", especialidad: "Ortodoncia", email: "j@x.com" });
+  const r = await PATCH("doc1", { phone: "5551112222" });
+  assert.equal(r.status, 200);
+  const f = estado.filas.find((x) => x.id === "doc1") as any;
+  assert.equal(f.cedulaProfesional, "2747272");
+  assert.equal(f.especialidad, "Ortodoncia");
+  assert.equal(f.phone, "5551112222");
+  assert.equal(estado.authUpdate.length, 0);
+});
+
+test("🔴 cambiar SOLO el acceso a Ortodoncia (sin mandar la especialidad) no le borra la que ya tiene", async () => {
+  Object.assign(estado.filas[0], { email: "j@x.com", specialty: "Endodoncia", permissionsOverride: [] });
+  const r = await PATCH("doc1", { accesoOrtodoncia: "solo_dental" });
+  assert.equal(r.status, 200);
+  assert.equal((estado.filas.find((x) => x.id === "doc1") as any).specialty, "Endodoncia");
+});
 
 test("correo de otra cuenta → 400 y el mensaje de siempre", async () => {
   estado.authUpdateRespuestas = [{ data: {}, error: errAuth.yaExiste }];

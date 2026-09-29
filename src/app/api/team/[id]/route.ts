@@ -290,7 +290,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const data = {
     ...(overrideOrto !== undefined && { permissionsOverride: overrideOrto }),
-    ...(accesoOrto && { specialty: especialidadSegunAcceso(body.specialty, accesoOrto) }),
+    // Si el PATCH no trae `specialty` (la pantalla solo manda lo que cambió), se parte
+    // de la que la persona YA tiene: `undefined` se leería como "sin especialidad" y
+    // «solo dental» le borraría la suya.
+    ...(accesoOrto && { specialty: especialidadSegunAcceso(body.specialty !== undefined ? body.specialty : member.specialty, accesoOrto) }),
     ...(body.firstName  !== undefined && { firstName:  body.firstName  }),
     ...(body.lastName   !== undefined && { lastName:   body.lastName   }),
     ...(!accesoOrto && body.specialty  !== undefined && { specialty:  body.specialty  }),

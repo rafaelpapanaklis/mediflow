@@ -39,6 +39,10 @@ export default async function TeamPage() {
         id: true, firstName: true, lastName: true, email: true,
         role: true, specialty: true, color: true, avatarUrl: true,
         phone: true, isActive: true, createdAt: true, services: true,
+        // NOM-024 — SIN estos tres el modal «Editar» arrancaba con la cédula y la
+        // especialidad oficial vacías y el PATCH las guardaba como null: guardar
+        // cualquier otro dato (el teléfono) BORRABA la cédula del médico.
+        cedulaProfesional: true, especialidad: true, cedulaEspecialidad: true,
         // Override granular del set default del role — visible solo en el
         // modal de Permisos del SUPER_ADMIN.
         permissionsOverride: true,

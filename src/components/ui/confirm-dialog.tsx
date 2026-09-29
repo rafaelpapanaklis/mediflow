@@ -189,8 +189,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           />
           <Dialog.Content
             role="alertdialog"
-            aria-labelledby="mf-confirm-title"
-            aria-describedby={opts.description ? "mf-confirm-desc" : undefined}
+            // Sin aria-labelledby/-describedby ni `id` propios en Title y Description:
+            // Radix los enlaza solo con sus ids generados. Con un `id` a mano el aviso
+            // "DialogContent requires a DialogTitle" salía en cada confirmación, porque
+            // Radix busca el título por SU id y ya no lo encontraba (ws1-t5, T3).
             {...(ropa ? { "data-tono": variant } : {})}
             {...vestir({
               position: "fixed",
@@ -234,7 +236,6 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               </div>
               <div {...vestir({ flex: 1, minWidth: 0 }, "textos")}>
                 <Dialog.Title
-                  id="mf-confirm-title"
                   {...vestir({
                     fontSize: 15,
                     fontWeight: 700,
@@ -247,7 +248,6 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 </Dialog.Title>
                 {opts.description && (
                   <Dialog.Description
-                    id="mf-confirm-desc"
                     {...vestir({
                       fontSize: 13,
                       color: "var(--text-2)",

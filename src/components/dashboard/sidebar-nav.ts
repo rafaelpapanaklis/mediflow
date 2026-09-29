@@ -151,7 +151,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     icon: Package, adminOnly: true,
     categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"],
     permission: "inventory.view" },
-  { id: "before-after", section: "clinico", label: "Antes/Después", href: "/dashboard/before-after",
+  { id: "before-after", section: "clinico", label: "Antes y Después", href: "/dashboard/before-after",
     icon: Camera,
     // DENTAL (decisión de Rafael, 28-sep-2026, ws1-t4 ronda 6): la página
     // se queda para dental; antes solo se llegaba escribiendo la dirección.
