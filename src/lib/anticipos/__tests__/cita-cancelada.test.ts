@@ -51,7 +51,8 @@ test("servidor: una transacción con los candados, sin borrar, y lo pagado enter
   assert.match(src, /SELECT id FROM invoices WHERE id = \$\{invoiceId\} AND "clinicId" = \$\{clinicId\} FOR UPDATE/);
   assert.match(src, /pg_advisory_xact_lock\(hashtext\(\$\{claveCandadoSaldo\(clinicId, inv\.patientId\)\}\)\)/);
   assert.match(src, /const resto = round2\(monto - devueltoAplicado\);/, "las dos filas suman lo pagado");
-  assert.match(src, /source: FUENTE_DEVUELTO,[\s\S]{0,80}reversesId: ant\.aplicacionId/);
+  // ws1-t4: una fila espejo por aplicación (la factura puede tener varias; reversesId es único).
+  assert.match(src, /partesDeDevolucion\(ant\.aplicaciones, devueltoAplicado\)[\s\S]{0,300}source: FUENTE_DEVUELTO,[\s\S]{0,80}reversesId: parte\.id/);
   assert.match(src, /source: FUENTE_CITA_CANCELADA/);
   assert.match(src, /method: "refund"/);
   assert.match(src, /status: "CANCELLED", paid: 0, balance: round2\(inv\.total\), paidAt: null, notes: notas/);

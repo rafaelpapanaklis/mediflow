@@ -302,8 +302,18 @@ export function SectionFinance(props: SectionFinanceProps) {
                   {deuda.extras > 0 ? (
                     <div className={orto.datoSub}>Incluye {fmtMoney(deuda.extras)} en extras</div>
                   ) : null}
-                  {panel.cobranza?.saldoAFavor ? (
-                    <div className={`${orto.datoSub} ${orto.tonoExito}`}>Saldo a favor: {fmtMoney(panel.cobranza.saldoAFavor)}</div>
+                  {panel.cobranza?.proximoVencimiento ? (
+                    <div className={orto.datoSub}>Próximo vencimiento: {fmtDay(panel.cobranza.proximoVencimiento)}</div>
+                  ) : null}
+                  {/* ws1-t4: el del paciente (su resumen dice lo mismo); se usa al cobrar. */}
+                  {panel.saldoAFavor > 0 ? (
+                    <div className={`${orto.datoSub} ${orto.tonoExito}`} data-saldo-a-favor>Saldo a favor: {fmtMoney(panel.saldoAFavor)}</div>
+                  ) : null}
+                  {/* Pagado por encima del total (link o portal sobre una factura ya cubierta): no es saldo a favor. */}
+                  {(panel.cobranza?.pagadoDeMas ?? 0) > 0 ? (
+                    <div className={`${orto.datoSub} ${orto.tonoPeligro}`} data-pagado-de-mas>
+                      Pagado de más {fmtMoney(panel.cobranza?.pagadoDeMas ?? 0)}: revísalo en Facturación
+                    </div>
                   ) : null}
                 </div>
               </div>

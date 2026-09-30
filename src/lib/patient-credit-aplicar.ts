@@ -38,6 +38,7 @@ import {
   estadoTrasAbono,
   montoAAplicar,
   motivoParaNoAplicar,
+  repartirDevolucion,
   repartoAlCancelar,
   type OrigenAplicacion,
 } from "./patient-credit-core";
@@ -69,6 +70,18 @@ function faltaLaTabla(e: any): boolean {
 }
 
 /**
+ * ws1-t4 — el índice único «una aplicación por factura» sigue en la base
+ * (falta pegar sql/ws1-t4-saldo-a-favor-al-cobrar.sql): la segunda
+ * aplicación a la misma factura (el plan a plazos, al cobrar otra
+ * mensualidad) choca con él y la transacción se deshace entera.
+ */
+function chocaConUnaAplicacionPorFactura(e: any): boolean {
+  if (e?.code !== "P2002") return false;
+  const donde = JSON.stringify(e?.meta ?? {}) + String(e?.message ?? "");
+  return donde.includes("una_aplicacion_por_factura") || donde.includes("invoiceId");
+}
+
+/**
  * Aplica el saldo a favor del paciente a UNA factura recién creada (o recién
  * confirmada). En su propia transacción, DESPUÉS de crear la factura:
  *
@@ -86,6 +99,14 @@ export async function aplicarSaldoAFavor(
     /** Quién hizo la acción que disparó la aplicación. null = el sistema. */
     userId: string | null;
     origen: OrigenAplicacion;
+    /** ws1-t4, origen «cobro»: no aplicar más que esto (lo que se está cobrando). */
+    tope?: number | null;
+    /**
+     * ws1-t4, origen «cobro»: lo pagado que veía la pantalla al pulsar. Si la
+     * factura ya no está así (la respuesta anterior se perdió y SÍ se aplicó,
+     * u otro cobro entró), no se aplica: un segundo clic no gasta saldo dos veces.
+     */
+    paidVisto?: number | null;
     ahora?: Date;
     /** Solo pruebas: la fecha de corte de «solo facturas nuevas». */
     desde?: Date;
@@ -97,6 +118,9 @@ export async function aplicarSaldoAFavor(
     return await db.$transaction((tx) => aplicarEnTx(tx, args));
   } catch (e) {
     if (faltaLaTabla(e)) return NADA("patient_credits sin las columnas nuevas (falta aplicar el SQL)");
+    if (chocaConUnaAplicacionPorFactura(e)) {
+      return NADA("esta factura ya recibió saldo a favor una vez; para usarlo otra vez falta aplicar sql/ws1-t4-saldo-a-favor-al-cobrar.sql");
+    }
     console.error("[saldo-a-favor] no se pudo aplicar a la factura", {
       clinicId: args.clinicId,
       invoiceId: args.invoiceId,
@@ -108,7 +132,7 @@ export async function aplicarSaldoAFavor(
 
 async function aplicarEnTx(
   tx: Tx,
-  args: { clinicId: string; invoiceId: string; userId: string | null; origen: OrigenAplicacion; ahora?: Date; desde?: Date },
+  args: { clinicId: string; invoiceId: string; userId: string | null; origen: OrigenAplicacion; tope?: number | null; paidVisto?: number | null; ahora?: Date; desde?: Date },
 ): Promise<ResultadoAplicacion> {
   const { clinicId, invoiceId } = args;
   const ahora = args.ahora ?? new Date();
@@ -124,17 +148,26 @@ async function aplicarEnTx(
   if (!inv.patientId) return NADA("factura sin paciente");
   const motivo = motivoParaNoAplicar(inv, args.origen, args.desde ?? APLICAR_SALDO_DESDE);
   if (motivo) return NADA(motivo);
+  if (args.origen === "cobro" && args.paidVisto !== undefined && args.paidVisto !== null && round2(inv.paid) !== round2(Number(args.paidVisto))) {
+    return NADA("la factura cambió mientras tanto (entró un pago o ya se usó el saldo); vuelve a abrirla");
+  }
 
   // Candado del SALDO del paciente: dos facturas del mismo paciente creadas a
   // la vez no pueden gastar el mismo peso. Todo lo que RESTA del saldo pasa por
   // aquí; lo que suma (un anticipo nuevo, una devolución) no necesita esperar.
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${claveCandadoSaldo(clinicId, inv.patientId)}))`;
 
-  const ya = await tx.patientCredit.findFirst({
-    where: { clinicId, invoiceId, source: FUENTE_APLICADO },
-    select: { id: true },
-  });
-  if (ya) return NADA("esta factura ya recibió saldo a favor");
+  // Al crear o confirmar, UNA vez por factura (idempotente: dos caminos
+  // automáticos no la abonan dos veces). «Usar saldo a favor» al cobrar es un
+  // clic explícito y puede repetirse en la misma factura (ws1-t4): cada vez
+  // gasta saldo que se relee aquí dentro del candado, así que no hay doble gasto.
+  if (args.origen !== "cobro") {
+    const ya = await tx.patientCredit.findFirst({
+      where: { clinicId, invoiceId, source: FUENTE_APLICADO },
+      select: { id: true },
+    });
+    if (ya) return NADA("esta factura ya recibió saldo a favor");
+  }
 
   // Leído DENTRO del candado: lo que otra transacción aplicó ya está restado.
   const agg = await tx.patientCredit.aggregate({
@@ -142,7 +175,7 @@ async function aplicarEnTx(
     _sum: { amount: true },
   });
   const saldo = round2(agg._sum.amount ?? 0);
-  const monto = montoAAplicar(saldo, inv.total, inv.paid);
+  const monto = montoAAplicar(saldo, inv.total, inv.paid, args.origen === "cobro" ? args.tope : undefined);
   if (monto <= 0) return NADA(saldo > 0 ? "la factura no tiene saldo pendiente" : "sin saldo a favor", saldo);
 
   const pago = await tx.payment.create({
@@ -150,7 +183,9 @@ async function aplicarEnTx(
       invoiceId,
       amount: monto,
       method: METODO_ANTICIPO,
-      notes: "Saldo a favor del paciente (anticipo) aplicado al emitir la factura",
+      notes: args.origen === "cobro"
+        ? "Saldo a favor del paciente (anticipo) aplicado al cobrar — no entra dinero a caja"
+        : "Saldo a favor del paciente (anticipo) aplicado al emitir la factura",
       paidAt: ahora,
     },
     select: { id: true },
@@ -166,7 +201,7 @@ async function aplicarEnTx(
       createdById: args.userId,
       creditDate: ahora,
       description:
-        `Aplicado a la factura ${inv.invoiceNumber} al ${args.origen === "confirmada" ? "confirmarla" : "crearla"}` +
+        `Aplicado a la factura ${inv.invoiceNumber} al ${args.origen === "confirmada" ? "confirmarla" : args.origen === "cobro" ? "cobrar" : "crearla"}` +
         (args.userId ? "" : " (automático, sin usuario)"),
     },
   });
@@ -194,22 +229,49 @@ export async function anticipoDeLaFactura(
   tx: Tx,
   clinicId: string,
   invoiceId: string,
-): Promise<{ aplicacionId: string | null; neto: number }> {
+): Promise<{ aplicacionId: string | null; neto: number; aplicaciones: Array<{ id: string; neto: number }> }> {
   const filas = await tx.patientCredit.findMany({
     where: { clinicId, invoiceId, source: { in: [FUENTE_APLICADO, FUENTE_DEVUELTO] } },
-    select: { id: true, amount: true, source: true },
+    select: { id: true, amount: true, source: true, reversesId: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
   });
   let neto = 0;
   let aplicacionId: string | null = null;
+  // ws1-t4: puede haber varias aplicaciones (alta + «Usar saldo a favor» al
+  // cobrar). Lo que a cada una le queda: su monto menos lo que la devolvió.
+  const porAplicacion = new Map<string, number>();
   for (const f of filas) {
     if (f.source === FUENTE_APLICADO) {
       neto += -f.amount;
       aplicacionId = f.id;
-    } else {
-      neto -= f.amount;
+      porAplicacion.set(f.id, round2((porAplicacion.get(f.id) ?? 0) - f.amount));
     }
   }
-  return { aplicacionId, neto: round2(neto) };
+  for (const f of filas) {
+    if (f.source !== FUENTE_APLICADO) {
+      neto -= f.amount;
+      if (f.reversesId && porAplicacion.has(f.reversesId)) {
+        porAplicacion.set(f.reversesId, round2(porAplicacion.get(f.reversesId)! - f.amount));
+      }
+    }
+  }
+  const aplicaciones = Array.from(porAplicacion, ([id, n]) => ({ id, neto: round2(n) }));
+  return { aplicacionId, neto: round2(neto), aplicaciones };
+}
+
+/**
+ * `repartirDevolucion` + lo que no case con ninguna aplicación (no debería
+ * pasar: un libro con una devolución sin `reversesId`) como una parte sin
+ * aplicación, para que lo devuelto sume SIEMPRE exactamente `monto`.
+ */
+export function partesDeDevolucion(
+  aplicaciones: Array<{ id: string; neto: number }>,
+  monto: number,
+): Array<{ id: string | null; monto: number }> {
+  const partes: Array<{ id: string | null; monto: number }> = repartirDevolucion(aplicaciones, monto);
+  const resto = round2(round2(monto) - partes.reduce((s, p) => round2(s + p.monto), 0));
+  if (resto > 0) partes.push({ id: null, monto: resto });
+  return partes;
 }
 
 /**
@@ -244,19 +306,22 @@ export async function devolverAnticipoAlCancelar(
   }
   if (devolver <= 0 || !ant.aplicacionId) return { devuelto: 0, error: null };
 
-  await tx.patientCredit.create({
-    data: {
-      clinicId,
-      patientId: invoice.patientId,
-      amount: devolver,
-      source: FUENTE_DEVUELTO,
-      invoiceId: invoice.id,
-      reversesId: ant.aplicacionId,
-      createdById: args.userId,
-      creditDate: ahora,
-      description: `Devuelto a favor al cancelar la factura ${invoice.invoiceNumber}`,
-    },
-  });
+  // Una fila por aplicación que se deshace (`reversesId` es único).
+  for (const parte of partesDeDevolucion(ant.aplicaciones, devolver)) {
+    await tx.patientCredit.create({
+      data: {
+        clinicId,
+        patientId: invoice.patientId,
+        amount: parte.monto,
+        source: FUENTE_DEVUELTO,
+        invoiceId: invoice.id,
+        reversesId: parte.id,
+        createdById: args.userId,
+        creditDate: ahora,
+        description: `Devuelto a favor al cancelar la factura ${invoice.invoiceNumber}`,
+      },
+    });
+  }
   await tx.payment.create({
     data: {
       invoiceId: invoice.id,

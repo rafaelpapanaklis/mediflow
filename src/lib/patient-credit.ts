@@ -43,3 +43,26 @@ export async function getClinicCreditTotal(clinicId: string): Promise<number> {
     throw e;
   }
 }
+
+/**
+ * ws1-t4 — el saldo a favor de VARIOS pacientes en una sola consulta (Cobranza
+ * de ortodoncia, una fila por caso). Misma suma que `getPatientCreditBalance`,
+ * así que cada fila dice lo mismo que el resumen del paciente. Sin tabla, o si
+ * la lectura falla, un mapa vacío (saldo 0): la pantalla no se cae por esto.
+ */
+export async function getPatientCreditBalances(clinicId: string, patientIds: string[]): Promise<Map<string, number>> {
+  const salida = new Map<string, number>();
+  const ids = Array.from(new Set(patientIds.filter(Boolean)));
+  if (!clinicId || ids.length === 0) return salida;
+  try {
+    const filas = await prisma.patientCredit.groupBy({
+      by: ["patientId"],
+      where: { clinicId, patientId: { in: ids } },
+      _sum: { amount: true },
+    });
+    for (const f of filas) salida.set(f.patientId, Math.round((f._sum.amount ?? 0) * 100) / 100);
+  } catch (e) {
+    if (!isMissingRelation(e)) console.warn("[saldo-a-favor] no se pudo leer el saldo de los pacientes:", (e as Error)?.message);
+  }
+  return salida;
+}

@@ -614,6 +614,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           outstandingAmount={outstandingAmountReal}
           saldoEstado={panelDeCobro === "cargando" ? "cargando" : panelDeCobro === "error" ? "error" : "listo"}
           overdueAmount={overdueAmountReal}
+          creditAmount={panelDeCobro && panelDeCobro !== "cargando" && panelDeCobro !== "error" ? panelDeCobro.saldoAFavor : null}
           lastVisitAt={props.patientHeader.lastVisitAt}
           totalVisits={props.patientHeader.totalVisits}
           onStartVisit={props.patientHeader.onStartVisit}

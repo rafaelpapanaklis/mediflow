@@ -72,7 +72,10 @@ test("fallo 1: con un extra de $250 sin pagar, lo que debe el caso es $3,550 (lo
   assert.equal(d.facturado - d.pagado + d.extras, d.porCobrar);
 });
 
-test("fallo 1: la colocación pagada de más no cuenta como deuda y lo de más es saldo a favor", () => {
+// ws1-t4 (saldo a favor en Ortodoncia): lo de más ya no se inventa como saldo a
+// favor aquí — el saldo a favor es el del libro del paciente (`saldoAFavorPrevio`),
+// la misma cifra de su resumen.
+test("fallo 1: la colocación pagada de más no cuenta como deuda; el saldo a favor es el del libro", () => {
   const c = cobranzaDelCasoUnificada({
     modo: "PAGO_POR_CONTROL",
     facturaPrincipal: { condiciones: null, totalFactura: 3000, cobros: [{ amount: 3200 }], invoiceId: "col", vencimiento: "2026-09-01" },
@@ -84,7 +87,7 @@ test("fallo 1: la colocación pagada de más no cuenta como deuda y lo de más e
   assert.equal(c!.saldoTotal, 0);
   assert.equal(c!.pagadas.length, 1);
   assert.equal(c!.cuotaDeHoy, null);
-  assert.equal(c!.saldoAFavor, 200);
+  assert.equal(c!.saldoAFavor, 0);
 });
 
 test("fallo 1: un reembolso resta de lo pagado de la colocación", () => {

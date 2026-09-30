@@ -1,0 +1,37 @@
+-- ═══════════════════════════════════════════════════════════════════════
+-- Saldo a favor en Ortodoncia: «Usar saldo a favor» al cobrar (WS1-T4) — 2026-09-30
+-- ⚠️ PENDIENTE — REQUIERE RAFAEL: aplicar a mano en el SQL Editor de Supabase.
+--    Puede ir antes o después del deploy.
+--
+-- QUÉ
+-- sql/anticipo-aplicado-a-factura.sql dejó un índice ÚNICO parcial: una
+-- factura recibe saldo a favor UNA sola vez. Pensado para la aplicación
+-- AUTOMÁTICA (al crear o confirmar la factura). Con «Usar saldo a favor» al
+-- cobrar una mensualidad (BEVADENT), el plan a plazos de ortodoncia es UNA
+-- factura que se cobra mes a mes: el paciente puede usar saldo a favor en
+-- varios cobros de esa misma factura. El índice lo impide.
+--
+-- Este script SOLO quita ese índice.
+--   ⛔ Ni un UPDATE, ni un DELETE, ni un backfill, ni tablas nuevas (sin RLS que añadir).
+--   · Lo que el índice protegía sigue protegido en el código, bajo candado:
+--       - aplicación automática: una vez por factura (se comprueba con la
+--         factura bloqueada FOR UPDATE, patient-credit-aplicar.ts);
+--       - nunca más saldo del que hay: el saldo se relee dentro del candado
+--         del paciente (pg_advisory_xact_lock) y nunca más que lo pendiente;
+--       - el Payment «anticipo» y su fila negativa nacen juntos
+--         (patient_credits_paymentId_key sigue ÚNICO) y cada devolución
+--         deshace UNA aplicación (patient_credits_reversesId_key sigue ÚNICO).
+--   · El CHECK de signo (patient_credits_signo_chk) no cambia.
+--
+-- SIN ESTE SQL el código funciona igual que hoy: la PRIMERA vez que una
+-- factura recibe saldo a favor, se aplica; la segunda, la base la rechaza,
+-- no se escribe nada y la pantalla dice que falta este script.
+--
+-- IDEMPOTENTE: re-ejecutable.
+-- ═══════════════════════════════════════════════════════════════════════
+
+DROP INDEX IF EXISTS "patient_credits_una_aplicacion_por_factura";
+
+-- Comprobación (debe devolver 0 filas):
+-- SELECT indexname FROM pg_indexes
+--  WHERE tablename = 'patient_credits' AND indexname = 'patient_credits_una_aplicacion_por_factura';

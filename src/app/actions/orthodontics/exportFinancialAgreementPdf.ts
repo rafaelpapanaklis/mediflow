@@ -187,7 +187,8 @@ export async function exportFinancialAgreementPdf(
     factura,
     condicionesPago: panel.condiciones,
     cuotas,
-    saldoAFavor: panel.cobranza?.saldoAFavor ?? 0,
+    // ws1-t4: el del paciente (su libro), la cifra de su resumen, esté o no el caso con factura.
+    saldoAFavor: panel.saldoAFavor ?? 0,
     precioPorControl: precioControl?.basePrice ?? null,
     // ws1-t12: los controles que prevé el plan de tratamiento (el estimado sale de ellos × el precio del control).
     controlesPrevistos: panel.controlesDelPlan?.previstos ?? null,

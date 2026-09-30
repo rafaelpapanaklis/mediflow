@@ -68,6 +68,12 @@ export interface FilaCobranza {
   extrasCantidad?: number;
   /** #72: el responsable de pago (tutor) del caso. */
   responsableNombre?: string | null;
+  /**
+   * ws1-t4 — saldo a favor del PACIENTE (su libro `patient_credits`, la misma
+   * cifra de su resumen). Es del paciente, no del caso: NO resta de `porCobrar`
+   * (se usa al cobrar, con «Usar saldo a favor»).
+   */
+  saldoAFavor?: number;
 }
 
 export interface ResumenDeCobranza {
@@ -124,6 +130,7 @@ export function filasDeCobranza(cases: OrthoCaseSummary[], hoy: string): FilaCob
       extrasPendientes,
       extrasCantidad: c.extrasPendientes?.cantidad ?? 0,
       responsableNombre: c.responsableNombre ?? null,
+      saldoAFavor: Math.max(0, aPesos(aCentavos(c.saldoAFavorPaciente ?? 0))),
       planId: c.planId,
       patientId: c.patientId,
       patientName: c.patientName,

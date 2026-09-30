@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { round2 } from "@/lib/invoice-totals";
 import { logAudit } from "@/lib/audit";
 import { algunPagoTieneCfdiVigente } from "@/lib/invoices/cfdi-pago-db";
-import { anticipoDeLaFactura } from "@/lib/patient-credit-aplicar";
+import { anticipoDeLaFactura, partesDeDevolucion } from "@/lib/patient-credit-aplicar";
 import { FUENTE_DEVUELTO, claveCandadoSaldo } from "@/lib/patient-credit-core";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "./panel.server";
@@ -160,11 +160,12 @@ export async function decidirDineroDeCitaCancelada(args: {
     const ant = await anticipoDeLaFactura(tx, clinicId, invoiceId);
     const devueltoAplicado = ant.aplicacionId ? round2(Math.min(Math.max(0, ant.neto), monto)) : 0;
     const resto = round2(monto - devueltoAplicado);
-    if (devueltoAplicado > 0) {
+    // ws1-t4: una fila por aplicación (la factura puede tener varias).
+    for (const parte of devueltoAplicado > 0 ? partesDeDevolucion(ant.aplicaciones, devueltoAplicado) : []) {
       await tx.patientCredit.create({
         data: {
-          clinicId, patientId: inv.patientId, amount: devueltoAplicado, source: FUENTE_DEVUELTO,
-          invoiceId, reversesId: ant.aplicacionId, createdById: args.userId, creditDate: ahora,
+          clinicId, patientId: inv.patientId, amount: parte.monto, source: FUENTE_DEVUELTO,
+          invoiceId, reversesId: parte.id, createdById: args.userId, creditDate: ahora,
           description: `Devuelto a favor: se canceló la cita de la factura ${inv.invoiceNumber}`,
         },
       });

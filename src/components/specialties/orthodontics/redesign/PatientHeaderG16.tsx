@@ -54,6 +54,8 @@ export interface PatientHeaderProps {
    * $23,000 por pagar en mensualidades futuras no debe verse como deudor.
    */
   overdueAmount?: number | null;
+  /** ws1-t4 — saldo a favor del paciente (su libro `patient_credits`, la cifra de su resumen). */
+  creditAmount?: number | null;
   /** Fecha de la última visita registrada. */
   lastVisitAt: string | null;
   /** Conteo total de visitas (asistidas) y "desde N". */
@@ -211,7 +213,7 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
           <Stat
             label="Saldo de ortodoncia"
             value={props.outstandingAmount != null ? fmtMoney(props.outstandingAmount) : "—"}
-            sub={subDelSaldo(props.outstandingAmount, props.overdueAmount)}
+            sub={subDelSaldo(props.outstandingAmount, props.overdueAmount, props.creditAmount)}
             muted={props.outstandingAmount == null}
             tone={props.outstandingAmount != null && (props.overdueAmount ?? 0) > 0 ? "rose" : "emerald"}
           />

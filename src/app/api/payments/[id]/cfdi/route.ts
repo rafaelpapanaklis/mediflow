@@ -20,6 +20,22 @@ import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
 import { derivePaymentForm, resolveTaxMode, round2, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { facturaAdmiteCfdiPorPago, conceptoDePago, excedeElTotalDelCaso } from "@/lib/invoices/cfdi-pago-concepto";
+import { FUENTE_EXCEDENTE } from "@/lib/patient-credit-core";
+
+/** ws1-t4 — ¿este Payment es el excedente de un cobro de ortodoncia que pasó al saldo a favor? */
+async function pasoAlSaldoAFavor(clinicId: string, paymentId: string): Promise<boolean> {
+  try {
+    const fila = await prisma.patientCredit.findFirst({
+      where: { clinicId, paymentId, source: FUENTE_EXCEDENTE },
+      select: { id: true },
+    });
+    return !!fila;
+  } catch (e: any) {
+    // Sin las columnas del libro (SQL aún no aplicado) no puede existir ese excedente.
+    if (e?.code === "P2021" || e?.code === "P2022") return false;
+    throw e;
+  }
+}
 import {
   claimDePago, apartarCfdiDePago, confirmarCfdiDePago, soltarCfdiDePago,
   buscarCfdiDePago, sumaCfdiValidaDeFactura, columnaPagoListaParaCfdi,
@@ -104,6 +120,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (payment.method === "refund") {
     return NextResponse.json({ error: "Un reembolso no se factura: no es un cobro." }, { status: 400 });
+  }
+  // ws1-t4 (saldo a favor en Ortodoncia): lo cobrado de más que pasó al saldo a
+  // favor del paciente no es un pago de ESTA factura. Se factura cuando se use
+  // (como «Anticipo (saldo a favor)»); timbrarlo aquí lo duplicaría ante el SAT.
+  if (await pasoAlSaldoAFavor(ctx!.clinicId, payment.id)) {
+    return NextResponse.json({
+      error: "Este cobro pasó al saldo a favor del paciente: se factura cuando el saldo se use, no aquí.",
+      code: "PAGO_A_SALDO_A_FAVOR",
+    }, { status: 400 });
   }
   if (invoice.status === "DRAFT") {
     return NextResponse.json({ error: "La factura está en borrador; confírmala antes de timbrar." }, { status: 400 });

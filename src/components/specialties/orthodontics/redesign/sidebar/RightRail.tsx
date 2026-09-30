@@ -13,7 +13,7 @@ import { Card } from "../atoms/Card";
 import { KV } from "../atoms/KV";
 import { Pill } from "../atoms/Pill";
 import { ProgressBar } from "../atoms/ProgressBar";
-import { fmtDate, fmtDateShort, fmtMoney, fmtTime } from "../atoms/format";
+import { fmtDate, fmtDateShort, fmtDay, fmtMoney, fmtTime } from "../atoms/format";
 import type { PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import {
   FLOW_STATUS_LABELS,
@@ -86,6 +86,13 @@ export function RightRail(props: RightRailProps) {
                 className={orto.filaTotal}
                 vClass={remaining > 0 ? orto.tonoPeligro : orto.tonoExito}
               />
+              {listo?.cobranza?.proximoVencimiento ? (
+                <KV k="Próximo vencimiento" v={fmtDay(listo.cobranza.proximoVencimiento)} />
+              ) : null}
+              {/* ws1-t4: saldo a favor del paciente (el de su resumen); se usa al cobrar. */}
+              {(listo?.saldoAFavor ?? 0) > 0 ? (
+                <KV k="Saldo a favor" v={fmtMoney(listo?.saldoAFavor ?? 0)} vClass={orto.tonoExito} />
+              ) : null}
               <ProgressBar
                 value={deuda?.pagado ?? 0}
                 max={deuda?.facturado ?? 0}

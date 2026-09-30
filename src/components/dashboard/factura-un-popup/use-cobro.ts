@@ -11,6 +11,8 @@ import type { MetodoDelCobro } from "@/components/dashboard/billing/payment-moda
 import { montoInicialDeCobro } from "@/components/dashboard/billing/monto-inicial-cobro";
 // El freno de «caja cerrada»: la MISMA pieza que usa «Registrar pago» (ws1-t6, H25).
 import { useFrenoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-cerrada";
+// ws1-t4: en un caso de ortodoncia, pagar de más es un adelanto (la MISMA pieza que la ventana de cobro).
+import { useSaldoOrto, registrarCobroConAdelanto } from "@/components/dashboard/plan-de-pagos/saldo-orto-cobro";
 
 /**
  * EL COBRO DENTRO DEL DETALLE DE LA FACTURA (ws1-t2, solo con `menu-dos-niveles`).
@@ -72,6 +74,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
   const freno = useFrenoCajaCerrada(abierta, method === "cash");
 
   const id = factura?.id ?? null;
+  const orto = useSaldoOrto(id, abierta);
   const balance = factura?.balance ?? 0;
 
   // Mismos valores iniciales que la ventana de cobro al abrirse.
@@ -86,7 +89,11 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
 
   const amountNum = Number(amount);
   const isOverpay = amountNum > balance + 0.001;
-  const isInvalid = !amountNum || amountNum <= 0 || isOverpay;
+  // ws1-t4: sobre una factura de un caso de ortodoncia, lo de más es un
+  // adelanto (siguientes mensualidades, y lo que sobre a favor), no un error.
+  // Fuera de ortodoncia (o mientras no se sabe) sigue bloqueado como siempre.
+  const adelanto = isOverpay && orto.esOrto;
+  const isInvalid = !amountNum || amountNum <= 0 || (isOverpay && !adelanto);
 
   // `sinAviso === true` solo lo manda «Cobrar de todos modos»; el clic del botón
   // pasa el evento, que no cuenta.
@@ -119,6 +126,14 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
           return;
         }
       }
+      if (adelanto) {
+        const r = await registrarCobroConAdelanto({ invoiceId: invoice.id, amount: amountNum, method, paidAt, reference, notes });
+        toast.success(r.aFavor > 0
+          ? `Pago registrado · ${fmtMXNdec(r.aFavor)} quedan a favor del paciente`
+          : t("clinical.paymentModal.registerSuccess"));
+        alCobrar();
+        return;
+      }
       const res = await fetch(`/api/invoices/${invoice.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -150,7 +165,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
     paidAt, setPaidAt,
     reference, setReference,
     notes, setNotes,
-    saving, amountNum, isOverpay, isInvalid, balance,
+    saving, amountNum, isOverpay, isInvalid, balance, adelanto, orto,
     submit,
     avisoCaja: freno.visible,
   };

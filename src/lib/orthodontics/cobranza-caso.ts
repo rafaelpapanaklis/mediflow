@@ -48,8 +48,14 @@ export interface CobranzaDelCasoInput {
   /** Filas de `payments` de esa factura, tal cual salen de Prisma (`amount`, `method`). */
   cobros: Array<{ amount: unknown; method?: string | null }>;
   /**
-   * Saldo a favor del paciente en OTRAS facturas (`PatientCredit`), en pesos.
-   * `0` si no aplica. Se suma al excedente de ESTE plan en la salida.
+   * Saldo a favor del paciente (`getPatientCreditBalance`: SUM de su libro
+   * `patient_credits`), en pesos. `0` si no aplica o no se leyó.
+   *
+   * ws1-t4 (saldo a favor en Ortodoncia): es LA cifra, la misma del resumen
+   * del paciente. Ya no se le suma lo cobrado de más en una factura del caso:
+   * el cobro con adelanto (`orthodontics/saldo-a-favor/`) nunca deja una
+   * factura pagada por encima de su total — lo que sobra entra al libro — y
+   * sumarlo aquí daba un «saldo a favor» que el resumen del paciente no tenía.
    */
   saldoAFavorPrevio: number;
   /** Instante actual. Nunca `new Date()` implícito: lo decide quien llama. */
@@ -69,8 +75,15 @@ export interface CobranzaDelCaso {
   proximas: CuotaConEstado[];
   /** Lo que falta por cobrar de ESTE tratamiento, en pesos. No incluye `saldoAFavor`. */
   saldoTotal: number;
-  /** Saldo a favor del paciente: el previo (`saldoAFavorPrevio`) + lo cobrado de más en este plan. */
+  /** Saldo a favor del paciente: `saldoAFavorPrevio` tal cual (su libro de `patient_credits`). */
   saldoAFavor: number;
+  /**
+   * ws1-t4 — lo pagado POR ENCIMA del total en facturas de este caso (p. ej. un
+   * link de Mercado Pago o el portal que llegaron sobre una factura ya cubierta:
+   * el webhook lo anota «revisar/devolver»). NO es saldo a favor (no está en el
+   * libro del paciente): se enseña aparte, para revisarlo en Facturación.
+   */
+  pagadoDeMas?: number;
   /** "YYYY-MM-DD" de la próxima cuota que aún no vence, o `null` si no queda ninguna (plan saldado o sin fechas). */
   proximoVencimiento: string | null;
 }
@@ -88,7 +101,8 @@ export function cobranzaDelCaso(input: CobranzaDelCasoInput): CobranzaDelCaso {
     vencidas: estado.cuotas.filter((c) => c.estado === "vencida"),
     proximas: estado.cuotas.filter((c) => c.estado === "porVencer"),
     saldoTotal: estado.pendiente,
-    saldoAFavor: aPesos(aCentavos(input.saldoAFavorPrevio) + aCentavos(estado.excedente)),
+    saldoAFavor: aPesos(aCentavos(input.saldoAFavorPrevio)),
+    pagadoDeMas: aPesos(Math.max(0, aCentavos(estado.excedente))),
     proximoVencimiento: estado.siguiente?.vencimiento ?? null,
   };
 }
@@ -137,9 +151,8 @@ function porVencimiento(a: CuotaConEstado, b: CuotaConEstado): number {
 /**
  * Resumen de cobranza a partir de cargos independientes (controles +
  * colocación/enganche, modo `PAGO_POR_CONTROL`). Cada cargo es su propia
- * factura: SIN cascada entre ellos. `saldoAFavor` sale SOLO del excedente de
- * estos cargos (lo cobrado de más en una factura de ESTE caso) — el saldo a
- * favor previo del paciente (otras facturas) lo suma quien llama.
+ * factura: SIN cascada entre ellos. `saldoAFavor` sale en 0: el saldo a favor
+ * es el del libro del paciente y lo pone quien llama (ws1-t4).
  */
 export function cobranzaPorControles(
   cargos: CargoDeControl[],
@@ -148,14 +161,13 @@ export function cobranzaPorControles(
 ): CobranzaDelCaso {
   if (cargos.length === 0) return cuotaVacia();
   const hoy = hoyEnZona(ahora, zonaHoraria);
-  let excedenteC = 0;
-
+  let pagadoDeMasC = 0;
   const cuotas: CuotaConEstado[] = cargos
     .map((c, i) => {
       const importeC = Math.max(0, aCentavos(c.total));
       const pagadoC = Math.max(0, aCentavos(c.pagado));
       const abonadoC = Math.min(importeC, pagadoC);
-      excedenteC += Math.max(0, pagadoC - importeC);
+      pagadoDeMasC += pagadoC - abonadoC;
       const faltaC = importeC - abonadoC;
       const estado: EstadoCuota = faltaC === 0 ? "pagada" : c.vencimiento < hoy ? "vencida" : "porVencer";
       return {
@@ -182,7 +194,8 @@ export function cobranzaPorControles(
     vencidas,
     proximas,
     saldoTotal: aPesos(pendienteC),
-    saldoAFavor: aPesos(excedenteC),
+    saldoAFavor: 0,
+    pagadoDeMas: aPesos(pagadoDeMasC),
     proximoVencimiento: proximas[0]?.vencimiento ?? null,
   };
 }
@@ -207,6 +220,7 @@ export function combinarCobranzas(a: CobranzaDelCaso | null, b: CobranzaDelCaso 
     proximas,
     saldoTotal: aPesos(aCentavos(x.saldoTotal) + aCentavos(y.saldoTotal)),
     saldoAFavor: aPesos(aCentavos(x.saldoAFavor) + aCentavos(y.saldoAFavor)),
+    pagadoDeMas: aPesos(aCentavos(x.pagadoDeMas ?? 0) + aCentavos(y.pagadoDeMas ?? 0)),
     proximoVencimiento: proximas[0]?.vencimiento ?? null,
   };
 }
@@ -364,7 +378,8 @@ function cobranzaDeLaPrincipal(
     vencidas: estado === "vencida" ? [cuota] : [],
     proximas: estado === "porVencer" ? [cuota] : [],
     saldoTotal: aPesos(faltaC),
-    saldoAFavor: aPesos(aCentavos(saldoAFavorPrevio) + Math.max(0, pagadoC - importeC)),
+    saldoAFavor: aPesos(aCentavos(saldoAFavorPrevio)),
+    pagadoDeMas: aPesos(Math.max(0, pagadoC - importeC)),
     proximoVencimiento: estado === "porVencer" ? vencimiento : null,
   };
 }
@@ -383,9 +398,11 @@ export function cobranzaDelCasoUnificada(input: CobranzaUnificadaInput): Cobranz
   const controles = input.cargosControl.length > 0 ? cobranzaPorControles(input.cargosControl, input.ahora, input.zonaHoraria) : null;
   const combinado = combinarCobranzas(colocacion, controles);
 
-  if (!combinado) {
-    return input.saldoAFavorPrevio > 0 ? { ...cuotaVacia(), saldoAFavor: input.saldoAFavorPrevio } : null;
-  }
+  // Sin colocación ni controles facturados no hay cobranza que pintar (`null`,
+  // igual que «Precio total» sin factura): el saldo a favor del paciente viaja
+  // aparte (`saldoAFavorPaciente`, `PanelDeCobro.saldoAFavor`), y así Pacientes
+  // y Cobranza dicen «sin plan» los dos (ws1-t4).
+  if (!combinado) return null;
   return { ...combinado, saldoAFavor: aPesos(aCentavos(combinado.saldoAFavor) + aCentavos(input.saldoAFavorPrevio)) };
 }
 

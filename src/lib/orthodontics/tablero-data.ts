@@ -39,6 +39,7 @@ import { normalizarOrthoBillingMode } from "./billing-mode";
 import { cargarModosDeCobro } from "./billing-mode-db";
 import { cargarCargosDeControlPorCasos, vencimientoDeFacturaPrincipal } from "./cobranza-controles-db";
 import { extrasPendientesPorCasos } from "./cobro/extras-db";
+import { getPatientCreditBalances } from "@/lib/patient-credit";
 import {
   computeActiveCasesCount,
   computeMonthlyProjection,
@@ -201,9 +202,11 @@ export async function loadOrthoCases(
   const pausaPorPlan = await cargarDiasEnPausaPorCaso(clinicId, plans.map((p) => p.id), ahora, plans);
   // #80 / #72: extras que se deben y responsable de pago, una consulta cada uno
   // para todos los casos; si alguna falla, la pantalla sale como antes.
-  const [extrasPorPlan, responsablePorPlan] = await Promise.all([
+  // ws1-t4: el saldo a favor de cada paciente, una consulta para todos (nunca lanza).
+  const [extrasPorPlan, responsablePorPlan, saldoPorPaciente] = await Promise.all([
     extrasPendientesPorCasos(clinicId, plans.map((p) => p.id)),
     cargarResponsablesDeCasos(clinicId, plans.map((p) => p.id)),
+    getPatientCreditBalances(clinicId, plans.map((p) => p.patientId)),
   ]);
 
   const invoiceIdByPlanId = new Map<string, string>();
@@ -226,7 +229,8 @@ export async function loadOrthoCases(
           }
         : null,
       cargosControl: cargosControlPorPlan.get(p.id) ?? [],
-      saldoAFavorPrevio: 0,
+      // ws1-t4: el del libro del paciente, igual que la ficha y su resumen.
+      saldoAFavorPrevio: saldoPorPaciente.get(p.patientId) ?? 0,
       ahora,
       zonaHoraria,
     });
@@ -244,6 +248,7 @@ export async function loadOrthoCases(
       diasEnPausa: pausaPorPlan.get(p.id) ?? 0,
       extrasPendientes: extrasPorPlan.get(p.id),
       responsableNombre: responsablePorPlan.get(p.id) ?? null,
+      saldoAFavorPaciente: saldoPorPaciente.get(p.patientId) ?? 0,
       cobranza,
     };
   });

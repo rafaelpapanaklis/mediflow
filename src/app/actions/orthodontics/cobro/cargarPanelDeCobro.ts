@@ -68,6 +68,13 @@ export interface PanelDeCobro {
   condiciones: CondicionesPago | null;
   cobranza: CobranzaDelCaso | null;
   /**
+   * ws1-t4 (saldo a favor en Ortodoncia) — el saldo a favor del PACIENTE, del
+   * libro `patient_credits` (`getPatientCreditBalance`): la MISMA cifra que su
+   * resumen, esté o no el caso con factura. Se usa al cobrar («Usar saldo a
+   * favor»); no resta de `deuda`.
+   */
+  saldoAFavor: number;
+  /**
    * ws1-t4 (revisión final, fallo 1) — LO QUE DEBE EL CASO, con la misma
    * función (`deudaDelCaso`) que Cobranza, Casos y la cabecera: plan o
    * colocación + controles + extras sin pagar.
@@ -339,6 +346,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     invoice: invoice ? { id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, paid: invoice.paid, balance: invoice.balance, status: invoice.status } : null,
     condiciones,
     cobranza,
+    saldoAFavor: Math.max(0, Math.round((Number(saldoAFavorPrevio) || 0) * 100) / 100),
     deuda: deudaDelCaso(cobranza, extrasPendientes.get(treatmentPlanId)),
     recargoSugerido,
     facturaSinLigar,

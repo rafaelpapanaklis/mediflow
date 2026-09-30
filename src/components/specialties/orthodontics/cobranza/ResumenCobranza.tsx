@@ -111,8 +111,12 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
             {/* Lo que debe el caso: la misma cifra de Cobranza, Casos y la cabecera (deudaDelCaso). */}
             Saldo total {fmt.format(panel.deuda.porCobrar)}
             {panel.deuda.extras > 0 ? ` (incluye ${fmt.format(panel.deuda.extras)} en extras)` : ""}
-            {panel.cobranza.saldoAFavor > 0 ? (
-              <span className={orto.tonoExito}> · saldo a favor {fmt.format(panel.cobranza.saldoAFavor)}</span>
+            {panel.cobranza.proximoVencimiento && panel.cobranza.proximoVencimiento !== cuota?.vencimiento
+              ? ` · próximo vencimiento ${fmtDay(panel.cobranza.proximoVencimiento)}`
+              : ""}
+            {/* ws1-t4: el saldo a favor del paciente (su resumen dice lo mismo). */}
+            {panel.saldoAFavor > 0 ? (
+              <span className={orto.tonoExito} data-saldo-a-favor> · saldo a favor {fmt.format(panel.saldoAFavor)}</span>
             ) : null}
           </div>
         </div>

@@ -55,7 +55,9 @@ test("clasifica pagadas, vencidas y próximas; cuotaDeHoy es la más vieja que d
   assert.equal(r.proximoVencimiento, "2026-03-03");
 });
 
-test("saldoAFavor suma el previo (otras facturas) más el excedente de ESTE plan", () => {
+// ws1-t4: el saldo a favor es el del libro del paciente (el mismo número que su
+// resumen). Lo cobrado de más en una factura del caso ya no se suma aparte.
+test("saldoAFavor es el del libro del paciente, sin sumarle el excedente de ESTE plan", () => {
   const r = cobranzaDelCaso({
     condiciones: plazos({ numPagos: 1 }),
     totalFactura: 2000,
@@ -65,7 +67,7 @@ test("saldoAFavor suma el previo (otras facturas) más el excedente de ESTE plan
     ahora: new Date("2026-01-01T12:00:00Z"),
     zonaHoraria: "America/Mexico_City",
   });
-  assert.equal(r.saldoAFavor, 1500);
+  assert.equal(r.saldoAFavor, 1000);
   assert.equal(r.saldoTotal, 0);
   assert.equal(r.cuotaDeHoy, null);
 });
@@ -138,7 +140,7 @@ test("cobranzaPorControles: cada factura es independiente, SIN cascada (a difere
   assert.equal(r.vencidas.length, 1, "el de febrero venció y sigue debiendo TODO su importe, el excedente de enero no lo tocó");
   assert.equal(r.vencidas[0].falta, 500);
   assert.equal(r.saldoTotal, 500);
-  assert.equal(r.saldoAFavor, 300, "el excedente de enero ($300) sale como saldo a favor, no como abono a febrero");
+  assert.equal(r.saldoAFavor, 0, "el excedente de enero no abona febrero ni se inventa un saldo a favor: el saldo a favor es el del libro del paciente (ws1-t4)");
 });
 
 test("cobranzaPorControles: clasifica vencida/próxima igual que el plan a plazos, y ordena cronológicamente", () => {
@@ -208,7 +210,11 @@ test("cobranzaDelCasoUnificada: modo PAGO_POR_CONTROL sin colocación todavía, 
   assert.equal(r!.saldoAFavor, 50, "saldoAFavorPrevio se ve aunque no haya factura de colocación");
 });
 
-test("cobranzaDelCasoUnificada: sin colocación y sin controles, pero con saldo a favor previo — no da null", () => {
+// ws1-t4: sin nada facturado es `null` también con saldo a favor (igual que «Precio
+// total» sin factura). El saldo a favor viaja aparte (`PanelDeCobro.saldoAFavor`,
+// `saldoAFavorPaciente`); antes esto daba una cobranza vacía y Pacientes decía
+// «Al día» donde Cobranza decía «Sin plan».
+test("cobranzaDelCasoUnificada: sin colocación y sin controles, aunque haya saldo a favor previo — null", () => {
   const r = cobranzaDelCasoUnificada({
     modo: "PAGO_POR_CONTROL",
     facturaPrincipal: null,
@@ -217,9 +223,24 @@ test("cobranzaDelCasoUnificada: sin colocación y sin controles, pero con saldo 
     ahora: new Date("2026-02-10T12:00:00Z"),
     zonaHoraria: "America/Mexico_City",
   });
-  assert.ok(r);
-  assert.equal(r!.saldoAFavor, 200);
-  assert.equal(r!.saldoTotal, 0);
+  assert.equal(r, null);
+});
+
+test("pagadoDeMas: lo pagado por encima del total se dice aparte, nunca como saldo a favor", () => {
+  const r = cobranzaDelCasoUnificada({
+    modo: "PAGO_POR_CONTROL",
+    facturaPrincipal: { condiciones: null, totalFactura: 3000, cobros: [], pagado: 3000, invoiceId: "col", vencimiento: "2026-01-01" },
+    cargosControl: [
+      { invoiceId: "c1", invoiceNumber: "F-1", total: 500, pagado: 800, vencimiento: "2026-01-15", status: "PAID" },
+      { invoiceId: "c2", invoiceNumber: "F-2", total: 500, pagado: 0, vencimiento: "2026-02-15", status: "PENDING" },
+    ],
+    saldoAFavorPrevio: 100,
+    ahora: new Date("2026-02-20T12:00:00Z"),
+    zonaHoraria: "America/Mexico_City",
+  });
+  assert.equal(r!.pagadoDeMas, 300);
+  assert.equal(r!.saldoAFavor, 100, "el saldo a favor es SOLO el del libro");
+  assert.equal(r!.saldoTotal, 500);
 });
 
 test("cobranzaDelCasoUnificada: sin nada de nada da null (nada que pintar)", () => {

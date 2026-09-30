@@ -82,7 +82,10 @@ test("misma validación y mismos valores iniciales que la ventana de cobro", () 
   const nuevo = leer(HOOK);
   for (const linea of [
     "const amountNum = Number(amount);",
-    "const isInvalid = !amountNum || amountNum <= 0 || isOverpay;",
+    // ws1-t4: en un caso de ortodoncia lo de más es un adelanto; fuera, sigue bloqueado.
+    "const adelanto = isOverpay && orto.esOrto;",
+    "const isInvalid = !amountNum || amountNum <= 0 || (isOverpay && !adelanto);",
+    "const r = await registrarCobroConAdelanto({ invoiceId: invoice.id, amount: amountNum, method, paidAt, reference, notes });",
     'setMethod("cash");',
     "setPaidAt(todayLocalISO());",
     'setReference("");',

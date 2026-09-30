@@ -78,7 +78,7 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto, mercado
           onChange={(e) => cobro.setAmount(e.target.value)}
           disabled={bloqueado}
         />
-        {cobro.isOverpay && (
+        {cobro.isOverpay && !cobro.adelanto && (
           <p className={u.avisoPeligro}>
             {t("clinical.paymentModal.overpayWarning", { balance: fmtMXNdec(cobro.balance) })}
           </p>

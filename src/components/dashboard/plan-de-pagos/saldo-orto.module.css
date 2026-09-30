@@ -1,0 +1,48 @@
+/* ws1-t4 — saldo a favor y adelanto en el cobro de ORTODONCIA. Misma ropa que
+   «A qué cuota va» (plan.module.css → .destino): tokens del menú (--m2-*) y
+   los de estado (--success/--danger). Sin colores propios. */
+
+.caja {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  border: 1px solid var(--m2-borde);
+  border-left: 3px solid var(--success);
+  border-radius: 8px;
+  background: var(--m2-tarjeta-hover);
+  color: var(--m2-texto-2);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.caja > * { font-variant-numeric: tabular-nums; }
+
+.adelanto { border-left-color: var(--m2-activo); }
+
+.rotulo {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.cifra { font-weight: 700; color: var(--success-strong, var(--success)); }
+
+.lista { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.item { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.flecha { flex-shrink: 0; color: var(--m2-activo); }
+.nombre { flex: 1; min-width: 0; font-weight: 600; color: var(--m2-texto); overflow-wrap: anywhere; }
+.importe { flex-shrink: 0; font-weight: 650; color: var(--m2-texto); }
+.importeFavor { flex-shrink: 0; font-weight: 700; color: var(--success-strong, var(--success)); }
+
+.nota { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--m2-texto-3); }

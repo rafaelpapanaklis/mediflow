@@ -712,6 +712,12 @@
   font-weight: 600;
 }
 
+/* ws1-t4 — saldo a favor del paciente en la fila de Cobranza. */
+.detalleExito {
+  color: var(--pr-exito);
+  font-weight: 600;
+}
+
 .filaDerecha {
   position: relative;
   z-index: 1;

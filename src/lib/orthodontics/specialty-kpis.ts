@@ -110,6 +110,11 @@ export interface OrthoCaseSummary {
   extrasPendientes?: { monto: number; cantidad: number };
   /** #72: nombre del responsable de pago (tutor), si el caso lo tiene. */
   responsableNombre?: string | null;
+  /**
+   * ws1-t4 — saldo a favor del PACIENTE (su libro `patient_credits`), el mismo
+   * número de su resumen. Opcional para no romper a quien arma este objeto a mano.
+   */
+  saldoAFavorPaciente?: number;
   /** `null` = sin factura de tratamiento, o sin condiciones cargadas: nada que cobrar todavía (T3/L1 lo ignoran, no lo cuentan como "al día"). */
   cobranza: CobranzaDelCaso | null;
 }

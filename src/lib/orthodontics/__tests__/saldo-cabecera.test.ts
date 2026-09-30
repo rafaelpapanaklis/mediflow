@@ -22,3 +22,13 @@ test("la cabecera solo pinta rojo con lo vencido y el cliente lo saca de las cuo
   assert.match(c, /panelDeCobro\.deuda\.vencido/);
   assert.match(c, /overdueAmount=\{overdueAmountReal\}/);
 });
+
+// ws1-t4 — saldo a favor en Ortodoncia: la cabecera lo dice junto al saldo, con la cifra del panel (la del resumen del paciente).
+test("con saldo a favor: se añade «· a favor $X» a cualquier estado", () => {
+  assert.equal(subDelSaldo(23000, 0, 1500), "Al corriente · a favor $1,500");
+  assert.match(subDelSaldo(23000, 2000, 1500), /^Vencido \$2,000.* · a favor \$1,500$/);
+  assert.equal(subDelSaldo(null, null, 300), "Sin plan de pago · a favor $300");
+  assert.equal(subDelSaldo(0, 0, 0), "Al día", "sin saldo a favor, como siempre");
+  const c = leer("components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
+  assert.match(c, /creditAmount=\{panelDeCobro && panelDeCobro !== "cargando" && panelDeCobro !== "error" \? panelDeCobro\.saldoAFavor : null\}/);
+});

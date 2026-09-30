@@ -25,6 +25,13 @@ export const FUENTE_APLICADO = "aplicado_a_factura";
 export const FUENTE_DEVUELTO = "devuelto_por_cancelacion";
 
 /**
+ * source de la fila POSITIVA: lo cobrado de más en un caso de ortodoncia
+ * (ws1-t4), después de saldar todas sus mensualidades pendientes, queda a
+ * favor del paciente. Ver src/lib/orthodontics/saldo-a-favor/.
+ */
+export const FUENTE_EXCEDENTE = "excedente_de_cobro";
+
+/**
  * SOLO FACTURAS NUEVAS (decisión de Rafael, 23-sep-2026): las que existían
  * antes se quedan exactamente como están. Una factura que se está CREANDO es
  * nueva por definición y no mira esta fecha. La fecha frena el otro camino:
@@ -43,12 +50,17 @@ export function claveCandadoSaldo(clinicId: string, patientId: string): string {
  * Cuánto del saldo a favor cabe en la factura: lo que haya a favor, sin pasar
  * de lo que queda por pagar. Nunca negativo, nunca más que el saldo pendiente
  * (una factura no puede quedar con balance negativo).
+ *
+ * `tope` (ws1-t4, «Usar saldo a favor» al cobrar): lo que se está cobrando en
+ * ese momento (la mensualidad, el control). Sin él, todo lo que quepa.
  */
-export function montoAAplicar(saldoAFavor: number, total: number, pagado: number): number {
+export function montoAAplicar(saldoAFavor: number, total: number, pagado: number, tope?: number | null): number {
   const saldo = round2(saldoAFavor);
   const pendiente = round2(total - pagado);
   if (!(saldo > 0) || !(pendiente > 0)) return 0;
-  return round2(Math.min(saldo, pendiente));
+  const limite = tope === undefined || tope === null ? Infinity : round2(Number(tope));
+  if (!(limite > 0)) return 0;
+  return round2(Math.min(saldo, pendiente, limite));
 }
 
 /** paid / balance / status de la factura después de abonarle `monto`. */
@@ -65,9 +77,16 @@ export function estadoTrasAbono(total: number, pagado: number, monto: number): {
 /**
  * De dónde viene la llamada:
  *   · "creada"     — la factura se acaba de crear (editor, cita, presupuesto);
- *   · "confirmada" — un borrador acaba de pasar a PENDING.
+ *   · "confirmada" — un borrador acaba de pasar a PENDING;
+ *   · "cobro"      — ws1-t4: recepción pulsó «Usar saldo a favor» al cobrar
+ *                    una mensualidad o un control de ortodoncia. Es una
+ *                    decisión explícita de quien cobra, no automática: por eso
+ *                    no mira la fecha de corte de «solo facturas nuevas» (un
+ *                    caso importado de Dentalink tiene su factura de antes) y
+ *                    una misma factura (el plan a plazos) puede recibirlo una
+ *                    vez por cobro (sql/ws1-t4-saldo-a-favor-al-cobrar.sql).
  */
-export type OrigenAplicacion = "creada" | "confirmada";
+export type OrigenAplicacion = "creada" | "confirmada" | "cobro";
 
 /** Por qué una factura NO recibe el saldo a favor (null = sí lo recibe). */
 export function motivoParaNoAplicar(
@@ -75,7 +94,9 @@ export function motivoParaNoAplicar(
   origen: OrigenAplicacion,
   desde: Date = APLICAR_SALDO_DESDE,
 ): string | null {
-  if (inv.status === "DRAFT") return "borrador: se aplica al confirmarla";
+  if (inv.status === "DRAFT") {
+    return origen === "cobro" ? "es un borrador: al confirmarla recibe el saldo a favor sola" : "borrador: se aplica al confirmarla";
+  }
   if (inv.status === "CANCELLED") return "factura cancelada";
   if (inv.status === "PAID") return "factura ya pagada";
   if (inv.cfdiUuid) return "factura ya timbrada";
@@ -125,4 +146,28 @@ export function pagadoEsSoloAnticipo(
   }
   if (!(anticipo > 0)) return false;
   return repartoAlCancelar(pagado, anticipo).otrosPagos === 0;
+}
+
+/**
+ * ws1-t4 — una factura puede tener VARIAS aplicaciones de saldo a favor (la
+ * del alta y una por cada «Usar saldo a favor» al cobrar). Al devolverlo (se
+ * cancela la factura o su cita), cada fila de devolución deshace UNA
+ * aplicación (`reversesId` es único): se reparte `monto` empezando por la
+ * aplicación más reciente, sin pasar de lo que a cada una le queda.
+ */
+export function repartirDevolucion(
+  aplicaciones: Array<{ id: string; neto: number }>,
+  monto: number,
+): Array<{ id: string; monto: number }> {
+  let resto = round2(Math.max(0, monto));
+  const salida: Array<{ id: string; monto: number }> = [];
+  for (let i = aplicaciones.length - 1; i >= 0 && resto > 0; i--) {
+    const a = aplicaciones[i];
+    const cabe = round2(Math.min(resto, Math.max(0, round2(a.neto))));
+    if (cabe > 0) {
+      salida.push({ id: a.id, monto: cabe });
+      resto = round2(resto - cabe);
+    }
+  }
+  return salida;
 }

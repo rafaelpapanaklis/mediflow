@@ -368,6 +368,9 @@ export function VistaCobranza({
                             {/* Por cobrar = lo que debe el caso (deudaDelCaso): aquí, solo extras. */}
                             <span className={`${s.importe} ${f.porCobrar > 0 ? "" : s.importeApagado}`}>{f.porCobrar > 0 ? fmtMoney(f.porCobrar) : "—"}</span>
                             {(f.extrasPendientes ?? 0) > 0 ? <div className={s.detalle}>en extras</div> : null}
+                            {(f.saldoAFavor ?? 0) > 0 ? (
+                              <div className={`${s.detalle} ${s.detalleExito}`} data-saldo-a-favor>Saldo a favor {fmtMoney(f.saldoAFavor ?? 0)}</div>
+                            ) : null}
                           </>
                         ) : (
                           <>
@@ -377,6 +380,10 @@ export function VistaCobranza({
                               {f.cuotasTotales === 1 ? "" : "s"}
                             </div>
                             {(f.extrasPendientes ?? 0) > 0 ? <div className={s.detalle}>incluye {fmtMoney(f.extrasPendientes ?? 0)} en extras</div> : null}
+                            {/* ws1-t4: del paciente (su resumen dice lo mismo); se usa al cobrar, no resta de «Por cobrar». */}
+                            {(f.saldoAFavor ?? 0) > 0 ? (
+                              <div className={`${s.detalle} ${s.detalleExito}`} data-saldo-a-favor>Saldo a favor {fmtMoney(f.saldoAFavor ?? 0)}</div>
+                            ) : null}
                           </>
                         )}
                       </td>

@@ -31,7 +31,9 @@ import {
   FUENTE_DEVUELTO,
   METODO_ANTICIPO,
   montoAAplicar,
+  motivoParaNoAplicar,
   pagadoEsSoloAnticipo,
+  repartirDevolucion,
   repartoAlCancelar,
 } from "@/lib/patient-credit-core";
 
@@ -56,6 +58,11 @@ const opciones = {
   barrera: null as null | { llegados: number; despertar: Array<() => void> },
   /** Carreras: corre justo DESPUÉS de que una ruta lee la factura (otra persona actúa). */
   alLeerFactura: null as null | ((fila: Row) => void),
+  /**
+   * ws1-t4: el índice único «una aplicación por factura» sigue en la base
+   * (true) o ya se pegó sql/ws1-t4-saldo-a-favor-al-cobrar.sql, que lo quita (false).
+   */
+  indiceUnaAplicacion: true,
 };
 const auditoria: any[] = [];
 
@@ -195,7 +202,7 @@ function delegados(ctx: Ctx) {
         // Las restricciones del SQL.
         const choca = (campo: string) => fila[campo] != null && db.credits.some((c) => c[campo] === fila[campo]);
         if (choca("paymentId") || choca("reversesId")) throw Object.assign(new Error("unique"), { code: "P2002" });
-        if (fila.source === FUENTE_APLICADO && db.credits.some((c) => c.source === FUENTE_APLICADO && c.invoiceId === fila.invoiceId)) {
+        if (opciones.indiceUnaAplicacion && fila.source === FUENTE_APLICADO && db.credits.some((c) => c.source === FUENTE_APLICADO && c.invoiceId === fila.invoiceId)) {
           throw Object.assign(new Error("patient_credits_una_aplicacion_por_factura"), { code: "P2002" });
         }
         if ((fila.amount < 0) !== (fila.source === FUENTE_APLICADO)) throw new Error("patient_credits_signo_chk");
@@ -359,6 +366,7 @@ beforeEach(() => {
   db.invoices = []; db.payments = []; db.credits = []; db.seq = 0;
   opciones.respetarAdvisory = true; opciones.faltanColumnas = false; opciones.fallarEn = null; opciones.barrera = null;
   opciones.alLeerFactura = null;
+  opciones.indiceUnaAplicacion = true;
   auditoria.length = 0;
   candados.clear();
 });
@@ -771,4 +779,121 @@ test("repartoAlCancelar y pagadoEsSoloAnticipo: un reembolso sale primero de lo 
   assert.equal(pagadoEsSoloAnticipo(500, [{ method: "anticipo", amount: 200 }, { method: "cash", amount: 300 }]), false);
   assert.equal(pagadoEsSoloAnticipo(200, [{ method: "cash", amount: 200 }]), false);
   assert.equal(pagadoEsSoloAnticipo(0, [{ method: "anticipo", amount: 200 }]), false);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ws1-t4 — «Usar saldo a favor» al cobrar (ortodoncia): origen «cobro»
+// ═══════════════════════════════════════════════════════════════════════════
+const aplicarAlCobrar = async (invoiceId: string, tope: number | null) => {
+  const { servicio } = await rutas();
+  return servicio.aplicarSaldoAFavor({ clinicId: "c1", invoiceId, userId: "u1", origen: "cobro", tope });
+};
+
+test("cobro: el plan a plazos recibe saldo a favor en CADA cobro (con el SQL nuevo), con su tope, y cuadra", async () => {
+  opciones.indiceUnaAplicacion = false;
+  // Plan importado de Dentalink: su factura es de ANTES de la fecha de corte.
+  const plan = sembrarFactura({ total: 12000, balance: 12000, createdAt: new Date("2026-03-01T12:00:00Z") });
+  sembrarCredito(500, { source: "cita_cancelada" });
+
+  const r1 = await aplicarAlCobrar(plan.id, 1000);
+  assert.equal(r1.aplicado, 500, "cubre lo que hay a favor (menos que la mensualidad)");
+  assert.equal(r1.restanteAFavor, 0);
+  assert.deepEqual([plan.paid, plan.balance, plan.status], [500, 11500, "PARTIAL"]);
+
+  // Entra más saldo a favor (otra cita cancelada) y el siguiente mes se vuelve a usar.
+  sembrarCredito(1500, { source: "cita_cancelada" });
+  const r2 = await aplicarAlCobrar(plan.id, 1000);
+  assert.equal(r2.aplicado, 1000, "no más que lo que se está cobrando (la mensualidad)");
+  assert.equal(r2.restanteAFavor, 500, "lo demás sigue a favor");
+  assert.equal(saldo(), 500);
+  assert.deepEqual([plan.paid, plan.balance], [1500, 10500]);
+
+  const aplicaciones = db.credits.filter((c) => c.source === FUENTE_APLICADO && c.invoiceId === plan.id);
+  assert.equal(aplicaciones.length, 2, "dos aplicaciones sobre la misma factura");
+  for (const p of pagosAnticipo(plan.id)) assert.match(p.notes, /al cobrar/);
+  assert.match(aplicaciones[1].description, /al cobrar/);
+  assertCuadra(2000);
+});
+
+test("cobro: sin el SQL nuevo, la segunda aplicación choca con el índice, no escribe NADA y dice qué falta", async () => {
+  const plan = sembrarFactura({ total: 12000, balance: 12000 });
+  sembrarCredito(300);
+  assert.equal((await aplicarAlCobrar(plan.id, 1000)).aplicado, 300);
+  sembrarCredito(400);
+  const antes = clonar({ credits: db.credits, payments: db.payments, plan });
+  const r = await silencio(() => aplicarAlCobrar(plan.id, 1000));
+  assert.equal(r.aplicado, 0);
+  assert.match(r.motivo ?? "", /ws1-t4-saldo-a-favor-al-cobrar\.sql/);
+  assert.deepEqual(clonar({ credits: db.credits, payments: db.payments, plan }), antes, "todo o nada");
+  assert.equal(saldo(), 400, "el saldo sigue a favor");
+});
+
+test("cobro: borrador, cancelada, pagada o timbrada no reciben; sin fecha de corte (decisión explícita de quien cobra)", () => {
+  const vieja = new Date("2026-01-01T12:00:00Z");
+  assert.match(motivoParaNoAplicar({ status: "DRAFT", cfdiUuid: null, createdAt: vieja }, "cobro") ?? "", /borrador/);
+  assert.ok(motivoParaNoAplicar({ status: "CANCELLED", cfdiUuid: null, createdAt: vieja }, "cobro"));
+  assert.ok(motivoParaNoAplicar({ status: "PAID", cfdiUuid: null, createdAt: vieja }, "cobro"));
+  assert.ok(motivoParaNoAplicar({ status: "PARTIAL", cfdiUuid: "uuid", createdAt: vieja }, "cobro"));
+  assert.equal(motivoParaNoAplicar({ status: "PARTIAL", cfdiUuid: null, createdAt: vieja }, "cobro"), null);
+  // Lo automático sigue igual: al confirmar un borrador de antes, no.
+  assert.ok(motivoParaNoAplicar({ status: "PENDING", cfdiUuid: null, createdAt: vieja }, "confirmada"));
+});
+
+test("cobro: montoAAplicar respeta el tope (lo que se cobra) sin pasar del saldo ni de lo pendiente", () => {
+  assert.equal(montoAAplicar(2000, 12000, 0, 1000), 1000);
+  assert.equal(montoAAplicar(300, 12000, 0, 1000), 300);
+  assert.equal(montoAAplicar(2000, 1000, 400, 1000), 600);
+  assert.equal(montoAAplicar(2000, 1000, 0, 0), 0);
+  assert.equal(montoAAplicar(2000, 1000, 0, -5), 0);
+  assert.equal(montoAAplicar(2000, 1000, 0, null), 1000, "sin tope, todo lo que quepa (como siempre)");
+});
+
+test("cancelar una factura con DOS aplicaciones devuelve cada una con su fila espejo (reversesId único)", async () => {
+  opciones.indiceUnaAplicacion = false;
+  const { cancelar } = await rutas();
+  const inv = sembrarFactura({ total: 3000, balance: 3000 });
+  sembrarCredito(700);
+  await aplicarAlCobrar(inv.id, 1000);
+  sembrarCredito(800);
+  await aplicarAlCobrar(inv.id, 1000);
+  assert.equal(inv.paid, 1500);
+  assert.equal(saldo(), 0);
+
+  const r = await leer(await cancelar(req({}), { params: { id: inv.id } }));
+  assert.equal(r.status, 200);
+  assert.equal(r.body.anticipoDevuelto, 1500);
+  const devoluciones = db.credits.filter((c) => c.source === FUENTE_DEVUELTO && c.invoiceId === inv.id);
+  assert.equal(devoluciones.length, 2, "una por aplicación");
+  const aplicaciones = db.credits.filter((c) => c.source === FUENTE_APLICADO && c.invoiceId === inv.id);
+  assert.deepEqual(
+    devoluciones.map((d) => [d.reversesId, d.amount]).sort(),
+    aplicaciones.map((a) => [a.id, -a.amount]).sort(),
+  );
+  assert.equal(saldo(), 1500, "todo vuelve a favor");
+  assertCuadra(1500);
+});
+
+test("repartirDevolucion: de la aplicación más reciente a la más vieja, sin pasar de lo que a cada una le queda", () => {
+  const apps = [{ id: "a1", neto: 700 }, { id: "a2", neto: 800 }];
+  assert.deepEqual(repartirDevolucion(apps, 1500), [{ id: "a2", monto: 800 }, { id: "a1", monto: 700 }]);
+  assert.deepEqual(repartirDevolucion(apps, 1000), [{ id: "a2", monto: 800 }, { id: "a1", monto: 200 }]);
+  assert.deepEqual(repartirDevolucion(apps, 0), []);
+  assert.deepEqual(repartirDevolucion([{ id: "a1", neto: 0 }, { id: "a2", neto: 300 }], 300), [{ id: "a2", monto: 300 }]);
+});
+
+test("cobro: un segundo clic tras una respuesta perdida NO gasta saldo dos veces (paidVisto bajo candado)", async () => {
+  opciones.indiceUnaAplicacion = false;
+  const { servicio } = await rutas();
+  const plan = sembrarFactura({ total: 20000, balance: 20000 });
+  sembrarCredito(3000);
+  const clic = () => servicio.aplicarSaldoAFavor({ clinicId: "c1", invoiceId: plan.id, userId: "u1", origen: "cobro", tope: 2000, paidVisto: 0 });
+  const r1 = await clic();
+  assert.equal(r1.aplicado, 2000);
+  // La respuesta se perdió; la pantalla sigue viendo paid = 0 y recepción vuelve a pulsar.
+  const r2 = await clic();
+  assert.equal(r2.aplicado, 0);
+  assert.match(r2.motivo ?? "", /cambió/);
+  assert.equal(saldo(), 1000, "solo se aplicó una vez");
+  assert.equal(plan.paid, 2000);
+  assertCuadra(3000);
 });

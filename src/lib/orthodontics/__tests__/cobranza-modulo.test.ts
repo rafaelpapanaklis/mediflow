@@ -331,3 +331,23 @@ test("sin casos: lista vacía y resumen en cero", () => {
     extras: 0,
   });
 });
+
+// ── ws1-t4: saldo a favor en la fila del caso ─────────────────────────────
+
+test("ws1-t4: la fila dice el saldo a favor del PACIENTE (su libro) y no lo resta de «Por cobrar»", () => {
+  const conSaldo = { ...ADULTO_DEBE(), saldoAFavorPaciente: 1500 };
+  const [fila] = filasDeCobranza([conSaldo], HOY);
+  assert.equal(fila.saldoAFavor, 1500);
+  const [sinSaldo] = filasDeCobranza([ADULTO_DEBE()], HOY);
+  assert.equal(fila.porCobrar, sinSaldo.porCobrar, "el saldo a favor no cambia lo que debe el caso: se usa al cobrar");
+  assert.equal(sinSaldo.saldoAFavor, 0);
+  // Un caso sin plan todavía también lo enseña.
+  const [sinPlan] = filasDeCobranza([{ ...caso({ planId: "sin-plan" }), saldoAFavorPaciente: 200 }], HOY);
+  assert.equal(sinPlan.situacion, "sin-plan");
+  assert.equal(sinPlan.saldoAFavor, 200);
+  const vista = leer("src/components/specialties/orthodontics/modulo/vista-cobranza.tsx");
+  assert.equal((vista.match(/data-saldo-a-favor>Saldo a favor \{fmtMoney\(f\.saldoAFavor \?\? 0\)\}/g) ?? []).length, 2, "con y sin plan");
+  const cargador = leer("src/lib/orthodontics/tablero-data.ts");
+  assert.match(cargador, /getPatientCreditBalances\(clinicId, plans\.map\(\(p\) => p\.patientId\)\)/, "una consulta para todos, del libro del paciente");
+  assert.match(cargador, /saldoAFavorPrevio: saldoPorPaciente\.get\(p\.patientId\) \?\? 0/);
+});

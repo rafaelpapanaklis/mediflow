@@ -35,6 +35,8 @@ import { ConfirmacionFactura } from "@/components/dashboard/factura-rediseno/con
 // del detalle en vez de abrir otro diálogo. Ver factura-un-popup/.
 import { CLASES_UN_POPUP, CLASE_CUERPO_CON_COBRO } from "@/components/dashboard/factura-un-popup/raiz";
 import { useCobro } from "@/components/dashboard/factura-un-popup/use-cobro";
+// ws1-t4: saldo a favor y adelanto en el cobro de un caso de ortodoncia (fuera de ortodoncia no pinta nada).
+import { SaldoOrtoEnCobro } from "@/components/dashboard/plan-de-pagos/saldo-orto-cobro";
 import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
 import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
 // El plan de pagos de una factura a plazos (ws1-t2): por qué cuota va, y a cuál
@@ -299,8 +301,13 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // tratamiento. 0 sin condiciones a plazos: cada consumidor cae al saldo.
   // ws1-t4: si quien abre ya sabe qué se cobra, manda su número (el mismo que
   // antes recibía la ventana suelta); si no, el de las condiciones.
+  // ws1-t4: tras «Usar saldo a favor» el monto de quien abrió (la mensualidad
+  // de antes) ya no vale: manda el de la factura con lo pagado nuevo (lo que
+  // queda de la cuota, o el saldo del control).
+  const [saldoUsado, setSaldoUsado] = useState(0);
+  useEffect(() => { setSaldoUsado(0); }, [invoiceProp?.id, open]);
   const montoSugerido = montoDelCobroAlAbrir(
-    montoSugeridoDeQuienAbre,
+    saldoUsado > 0 ? undefined : montoSugeridoDeQuienAbre,
     invoice ? montoSugeridoDeCobro(condicionesPago, invoice.total, invoice.paid, todayLocalISO()) : 0,
   );
   const cobro = useCobro({
@@ -825,6 +832,16 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     router.refresh();
   }
 
+  // ws1-t4: se usó saldo a favor en esta factura (caso de ortodoncia). Si quedó
+  // pagada, es como un cobro terminado; si no, se trae la factura fresca y el
+  // monto a cobrar pasa a lo que queda.
+  function alUsarSaldo(r: { aplicado: number; pagada: boolean }) {
+    setSaldoUsado((n) => n + r.aplicado);
+    if (r.pagada) { handlePaymentSuccess(); return; }
+    void onMutated();
+    void refrescarFactura();
+  }
+
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -1090,7 +1107,20 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 bloqueado={busy}
                 mercadoPago={mpDisponible ? { invoiceId: invoice.id, alCambiar: (l) => setHayLinkMp(!!l) } : null}
                 bajoElMonto={
-                  <DestinoDelAbono invoiceId={invoice.id} total={invoice.total} pagado={invoice.paid} importe={cobro.isOverpay ? 0 : cobro.amountNum || 0} activo={open} condiciones={condicionesPago} />
+                  <>
+                    <DestinoDelAbono invoiceId={invoice.id} total={invoice.total} pagado={invoice.paid} importe={cobro.isOverpay ? (cobro.adelanto ? invoice.balance : 0) : cobro.amountNum || 0} activo={open} condiciones={condicionesPago} />
+                    {/* ws1-t4: solo en un caso de ortodoncia (fuera, no pinta nada). */}
+                    <SaldoOrtoEnCobro
+                      invoiceId={invoice.id}
+                      invoiceNumber={invoice.invoiceNumber}
+                      info={cobro.orto.info}
+                      importe={cobro.amountNum || 0}
+                      balance={invoice.balance}
+                      pagado={invoice.paid}
+                      bloqueado={busy || cobro.saving}
+                      alAplicar={(r) => { cobro.orto.recargar(); alUsarSaldo(r); }}
+                    />
+                  </>
                 }
                 descuento={admiteDescuento ? (
                   <DescuentoEnLinea
@@ -1523,6 +1553,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
         onClose={() => setPaymentOpen(false)}
         onSuccess={handlePaymentSuccess}
         montoSugerido={montoSugerido}
+        alUsarSaldo={alUsarSaldo}
       />
 
       <ModalPedirAnticipo

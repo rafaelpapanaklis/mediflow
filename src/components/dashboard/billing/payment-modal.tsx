@@ -24,6 +24,8 @@ import { CLASES_FACTURA_REDISENO, CLASES_CALENDARIO_REDISENO, clasesFactura as c
 import { BotonMercadoPago, LinkMercadoPago, clasesMetodoClasico, useCobroMercadoPago } from "./link-mercado-pago";
 import { montoInicialDeCobro } from "./monto-inicial-cobro";
 import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
+// ws1-t4: en un caso de ortodoncia, pagar de más es un adelanto (la MISMA pieza que el cobro en el detalle).
+import { useSaldoOrto, registrarCobroConAdelanto, SaldoOrtoEnCobro } from "@/components/dashboard/plan-de-pagos/saldo-orto-cobro";
 import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
@@ -76,9 +78,14 @@ interface PaymentModalProps {
    * al saldo (nunca por encima, o el campo nace en «sobrepago»).
    */
   montoSugerido?: number;
+  /**
+   * ws1-t4 — factura de un caso de ortodoncia: se usó el saldo a favor del
+   * paciente desde aquí. Quien monta refresca la factura (o cierra si quedó pagada).
+   */
+  alUsarSaldo?: (r: { aplicado: number; pagada: boolean }) => void;
 }
 
-export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = false, montoSugerido }: PaymentModalProps) {
+export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = false, montoSugerido, alUsarSaldo }: PaymentModalProps) {
   const t = useT();
   const [amount, setAmount]       = useState("");
   const [method, setMethod]       = useState<MetodoDelCobro>("cash");
@@ -90,6 +97,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
   // «La caja está cerrada»: se pregunta antes de confirmar un cobro en efectivo (pieza compartida).
   const freno = useFrenoCajaCerrada(open, method === "cash");
   const esMercadoPago = method === "mercadopago";
+  const orto = useSaldoOrto(invoice?.id ?? null, open);
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de siempre sin él.
   // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
   // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
@@ -111,7 +119,11 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
 
   const amountNum = Number(amount);
   const isOverpay = amountNum > invoice.balance + 0.001;
-  const isInvalid = !amountNum || amountNum <= 0 || isOverpay;
+  // ws1-t4: sobre una factura de un caso de ortodoncia, lo de más es un
+  // adelanto (siguientes mensualidades, y lo que sobre a favor), no un error.
+  // Fuera de ortodoncia (o mientras no se sabe) sigue bloqueado como siempre.
+  const adelanto = isOverpay && orto.esOrto;
+  const isInvalid = !amountNum || amountNum <= 0 || (isOverpay && !adelanto);
 
   async function submit(sinAviso = false) {
     if (isInvalid || saving || !invoice) return;
@@ -124,6 +136,14 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
     freno.ocultar();
     setSaving(true);
     try {
+      if (adelanto) {
+        const r = await registrarCobroConAdelanto({ invoiceId: invoice.id, amount: amountNum, method, paidAt, reference, notes });
+        toast.success(r.aFavor > 0
+          ? `Pago registrado · ${fmtMXNdec(r.aFavor)} quedan a favor del paciente`
+          : t("clinical.paymentModal.registerSuccess"));
+        onSuccess();
+        return;
+      }
       const res = await fetch(`/api/invoices/${invoice.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -193,7 +213,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
               onChange={(e) => setAmount(e.target.value)}
               autoFocus
             />
-            {isOverpay && (
+            {isOverpay && !adelanto && (
               <p className={cx("text-[11px]", `${c.ayuda} ${c.cifraPeligro}`)} style={rediseno ? undefined : { color: "var(--danger)" }}>
                 {t("clinical.paymentModal.overpayWarning", { balance: fmtMXNdec(invoice.balance) })}
               </p>
@@ -201,8 +221,19 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
             {/* Solo con el diseño nuevo: apagado, este modal es el de siempre.
                 Siempre montado (un sobrepago le pasa 0): remontarlo volvería a leer. */}
             {rediseno && (
-              <DestinoDelAbono invoiceId={invoice.id} total={invoice.total} pagado={invoice.paid} importe={isOverpay ? 0 : amountNum || 0} activo={open} />
+              <DestinoDelAbono invoiceId={invoice.id} total={invoice.total} pagado={invoice.paid} importe={isOverpay ? (adelanto ? invoice.balance : 0) : amountNum || 0} activo={open} />
             )}
+            {/* ws1-t4: solo en un caso de ortodoncia (fuera, no pinta nada). */}
+            <SaldoOrtoEnCobro
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.invoiceNumber}
+              info={orto.info}
+              importe={amountNum || 0}
+              balance={invoice.balance}
+              pagado={invoice.paid}
+              bloqueado={saving}
+              alAplicar={(r) => { orto.recargar(); alUsarSaldo?.(r); }}
+            />
           </div>
           )}
 

@@ -51,6 +51,7 @@ import {
   type ResumenDeCobranza,
 } from "@/lib/orthodontics/cobranza-modulo";
 import { cargarCobranzaDelCaso } from "@/lib/orthodontics/cobranza-db";
+import { getPatientCreditBalance } from "@/lib/patient-credit";
 import type { CobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
 import { loadOrthoData } from "@/lib/orthodontics/load-data";
 import { adaptToOrthoRedesignViewModel, type AdapterInput } from "@/lib/orthodontics/redesign/adapter";
@@ -414,6 +415,13 @@ export async function leerCaso(
   }
 
   let cobranza: CasoLeido["cobranza"] = null;
+  const saldoDelLibro = async (c: string, pac: string) => {
+    try {
+      return Math.max(0, Math.round((await getPatientCreditBalance(c, pac)) * 100) / 100);
+    } catch {
+      return 0;
+    }
+  };
   if (ver.cobranza) {
     const resumen = await cargarCobranzaDelCaso({ clinicId, patientId, treatmentPlanId: plan.id, zonaHoraria: zona, ahora });
     // La fila de la pantalla de Cobranza para ESTE caso. Un caso cerrado y sin
@@ -426,7 +434,9 @@ export async function leerCaso(
       tienePlan: cuotasTotales > 0,
       cuotasPagadas,
       cuotasTotales,
-      saldoAFavor: resumen?.saldoAFavor ?? 0,
+      // ws1-t4: sin nada facturado el resumen es null, pero el saldo a favor del
+      // paciente (su libro) sigue siendo el de su resumen: se lee aparte.
+      saldoAFavor: resumen ? resumen.saldoAFavor : await saldoDelLibro(clinicId, patientId),
     };
   }
 
