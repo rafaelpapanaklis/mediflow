@@ -7,8 +7,8 @@ import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica
 import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { cargarPlanDetalle } from "@/lib/orthodontics/plan-detalle-db";
 import { lineasDelPlan, type LineaDelPlan } from "@/lib/orthodontics/plan-detalle";
-import { cargarDiagnosticosLegibles } from "@/lib/orthodontics/diagnostico-detalle-db";
-import type { SeccionLegible } from "@/lib/orthodontics/diagnostico-detalle";
+import { cargarDiagnosticoDetalle, cargarDiagnosticosLegibles } from "@/lib/orthodontics/diagnostico-detalle-db";
+import { medidaSinCapturar, type SeccionLegible } from "@/lib/orthodontics/diagnostico-detalle";
 import { listarVersionesDelCaso } from "@/lib/orthodontics/versiones-caso-db";
 import { fechaDma, lineaDeTiempo } from "@/lib/orthodontics/versiones-caso";
 import { canViewPatient } from "@/lib/patient-visibility";
@@ -33,8 +33,9 @@ export type TreatmentPlanPdfData = {
   diagnosis: {
     angleClassRight: string;
     angleClassLeft: string;
-    overbiteMm: string;
-    overjetMm: string;
+    /** null = sin capturar (la base guarda un 0 de relleno que no es un dato). */
+    overbiteMm: string | null;
+    overjetMm: string | null;
     clinicalSummary: string;
   };
   plan: {
@@ -144,6 +145,8 @@ export async function exportTreatmentPlanPdf(
     prisma.orthoTAD.count({ where: { treatmentPlanId: plan.id, clinicId: ctx.clinicId, deletedAt: null } }).catch(() => 0),
     cargarModoDeCobro(ctx.clinicId, plan.id).catch(() => null),
   ]);
+  // El detalle del diagnóstico dice qué medidas no se capturaron (un 0 de relleno no se imprime como dato).
+  const detalleDx = await cargarDiagnosticoDetalle(ctx.clinicId, plan.diagnosisId).catch(() => null);
   const planCompleto = detalle
     ? {
         lineas: lineasDelPlan(
@@ -167,8 +170,8 @@ export async function exportTreatmentPlanPdf(
     diagnosis: {
       angleClassRight: plan.diagnosis.angleClassRight,
       angleClassLeft: plan.diagnosis.angleClassLeft,
-      overbiteMm: plan.diagnosis.overbiteMm.toString(),
-      overjetMm: plan.diagnosis.overjetMm.toString(),
+      overbiteMm: medidaSinCapturar(detalleDx, "overbiteMm") ? null : plan.diagnosis.overbiteMm.toString(),
+      overjetMm: medidaSinCapturar(detalleDx, "overjetMm") ? null : plan.diagnosis.overjetMm.toString(),
       clinicalSummary: plan.diagnosis.clinicalSummary,
     },
     plan: {

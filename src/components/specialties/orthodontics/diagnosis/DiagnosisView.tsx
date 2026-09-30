@@ -3,12 +3,19 @@
 
 import { Edit2 } from "lucide-react";
 import type { OrthodonticDiagnosisRow } from "@/lib/types/orthodontics";
+import { medidaSinCapturar } from "@/lib/orthodontics/diagnostico-detalle";
+import { useDiagnosticoCompleto } from "../redesign/diagnostico/useDiagnosticoCompleto";
 
 export function DiagnosisView(props: {
   diagnosis: OrthodonticDiagnosisRow;
   onEdit?: () => void;
 }) {
   const dx = props.diagnosis;
+  // Las medidas guardadas como relleno («sin capturar») no se dicen como un 0 real.
+  const { datos } = useDiagnosticoCompleto(dx.id);
+  const detalle = datos?.detalle ?? null;
+  const overbite = medidaSinCapturar(detalle, "overbiteMm") ? "Sin capturar" : `${dx.overbiteMm} mm${medidaSinCapturar(detalle, "overbitePercentage") ? "" : ` · ${dx.overbitePercentage}%`}`;
+  const overjet = medidaSinCapturar(detalle, "overjetMm") ? "Sin capturar" : `${dx.overjetMm} mm`;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -38,8 +45,8 @@ export function DiagnosisView(props: {
       <Section title="Análisis Angle">
         <Row label="Clase derecha" value={dx.angleClassRight} />
         <Row label="Clase izquierda" value={dx.angleClassLeft} />
-        <Row label="Overbite" value={`${dx.overbiteMm} mm · ${dx.overbitePercentage}%`} />
-        <Row label="Overjet" value={`${dx.overjetMm} mm`} />
+        <Row label="Overbite" value={overbite} />
+        <Row label="Overjet" value={overjet} />
         {dx.midlineDeviationMm != null ? (
           <Row label="Desviación línea media" value={`${dx.midlineDeviationMm} mm`} />
         ) : null}

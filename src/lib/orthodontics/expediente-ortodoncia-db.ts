@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { cargarNombresDeTecnica } from "./tecnicas-de-la-clinica-db";
 import { cargarPlanesDetalle } from "./plan-detalle-db";
-import { cargarDiagnosticosLegibles } from "./diagnostico-detalle-db";
+import { cargarDiagnosticosDetalle, cargarDiagnosticosLegibles } from "./diagnostico-detalle-db";
+import { medidaSinCapturar } from "./diagnostico-detalle";
 import { armarCasoDeOrtodoncia, type ExpedienteOrtodoncia } from "./expediente-ortodoncia";
 
 /**
@@ -77,15 +78,23 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
     }
     // ws1-t8: el diagnóstico completo de cada caso, ya redactado (sin la columna nueva, lo de siempre).
     const diagnosticos = await cargarDiagnosticosLegibles(clinicId, planes.map((p) => p.diagnosisId));
-    return planes.map((p) => ({
-      ...armarCasoDeOrtodoncia(
+    // Las medidas guardadas como relleno («sin capturar») no se imprimen como un 0 real.
+    const detallesDx = await cargarDiagnosticosDetalle(clinicId, planes.map((p) => p.diagnosisId));
+    return planes.map((p) => {
+      const caso = armarCasoDeOrtodoncia(
         p,
         hojas.filter((h) => h.treatmentPlanId === p.id),
         nombres.get(p.id),
         detalles.has(p.id) ? { detalle: detalles.get(p.id)!, tads: tads.get(p.id) ?? 0 } : null,
-      ),
-      diagnosticoCompleto: (diagnosticos.get(p.diagnosisId) ?? []).filter((sec) => sec.clave !== "clasificacion"),
-    }));
+      );
+      const dx = detallesDx.get(p.diagnosisId) ?? null;
+      return {
+        ...caso,
+        overbiteMm: medidaSinCapturar(dx, "overbiteMm") ? null : caso.overbiteMm,
+        overjetMm: medidaSinCapturar(dx, "overjetMm") ? null : caso.overjetMm,
+        diagnosticoCompleto: (diagnosticos.get(p.diagnosisId) ?? []).filter((sec) => sec.clave !== "clasificacion"),
+      };
+    });
   } catch (e) {
     console.warn("[expediente-pdf] no se pudo leer la ortodoncia del paciente:", e);
     return [];

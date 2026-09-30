@@ -96,7 +96,8 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
             {etiqueta(CLASE_ANGLE, data.diagnosis.angleClassLeft)}.
           </Text>
           <Text>
-            Overbite: {data.diagnosis.overbiteMm} mm · Overjet: {data.diagnosis.overjetMm} mm.
+            Overbite: {data.diagnosis.overbiteMm != null ? `${data.diagnosis.overbiteMm} mm` : "sin capturar"} · Overjet:{" "}
+            {data.diagnosis.overjetMm != null ? `${data.diagnosis.overjetMm} mm` : "sin capturar"}.
           </Text>
         </View>
         {/* ws1-t8: el diagnóstico completo, apartado por apartado (la clasificación ya está arriba). */}

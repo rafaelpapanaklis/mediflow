@@ -336,3 +336,22 @@ test("sin capturar: el caso aparece entre los incompletos con «overjet y overbi
   assert.ok(faltaDelDiagnostico(base, det).includes("overjet y overbite"));
   assert.ok(!faltaDelDiagnostico(base, normalizarDiagnosticoDetalle({ facial: { claseFacialSagital: "I" } })).includes("overjet y overbite"));
 });
+
+test("sin capturar: `medidaSinCapturar` lo dicen todos los lectores de las columnas (PDF, expediente, carta, vista vieja)", async () => {
+  const { medidaSinCapturar } = await import("../diagnostico-detalle");
+  const det = normalizarDiagnosticoDetalle({ sinCapturar: ["overjetMm"] });
+  assert.equal(medidaSinCapturar(det, "overjetMm"), true);
+  assert.equal(medidaSinCapturar(det, "overbiteMm"), false);
+  assert.equal(medidaSinCapturar(null, "overjetMm"), false, "sin detalle, el valor de la columna es el dato");
+  // Cada lector de overbiteMm/overjetMm/overbitePercentage pasa por ella.
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const src = (rel: string) => readFileSync(join(__dirname, "..", "..", "..", rel), "utf8");
+  for (const f of [
+    "lib/orthodontics/expediente-ortodoncia-db.ts",
+    "lib/clinical-shared/referral/summary-orthodontics.ts",
+    "components/specialties/orthodontics/diagnosis/DiagnosisView.tsx",
+    "app/actions/orthodontics/exportTreatmentPlanPdf.ts",
+  ]) assert.match(src(f), /medidaSinCapturar\(/, f);
+  assert.match(src("lib/orthodontics/pdf-templates/treatment-plan.tsx"), /"sin capturar"/);
+});

@@ -329,6 +329,11 @@ export type DiagnosticoDetalle = Record<SeccionDelDetalle, SeccionDx> & {
 
 const medidasSinCapturar = (d: DiagnosticoDetalle | null | undefined): readonly string[] => d?.sinCapturar ?? [];
 
+/** ¿Esta medida está guardada como relleno («sin capturar») y no como un dato real? Para todo lector de las columnas. */
+export function medidaSinCapturar(detalle: DiagnosticoDetalle | null | undefined, medida: MedidaQuePuedeFaltar): boolean {
+  return medidasSinCapturar(detalle).includes(medida);
+}
+
 /** La base como se DICE: las medidas de relleno (sin capturar) salen como «sin dato», no como un 0 real. */
 export function baseSinRelleno(base: DiagnosticoBase, detalle: DiagnosticoDetalle | null | undefined): DiagnosticoBase {
   const faltan = medidasSinCapturar(detalle);

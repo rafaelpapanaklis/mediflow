@@ -4,6 +4,8 @@
 import { prisma } from "@/lib/prisma";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
+import { cargarDiagnosticoDetalle } from "@/lib/orthodontics/diagnostico-detalle-db";
+import { medidaSinCapturar } from "@/lib/orthodontics/diagnostico-detalle";
 
 const ANGLE_CLASS_LABELS: Record<string, string> = {
   CLASS_I: "Clase I",
@@ -39,9 +41,13 @@ export async function buildOrthoSummary(args: {
   if (dx) {
     const angleR = ANGLE_CLASS_LABELS[dx.angleClassRight] ?? dx.angleClassRight;
     const angleL = ANGLE_CLASS_LABELS[dx.angleClassLeft] ?? dx.angleClassLeft;
+    // Las medidas que no se capturaron (un 0 de relleno) no se dicen como dato: «sin capturar».
+    const detalle = await cargarDiagnosticoDetalle(args.clinicId, dx.id).catch(() => null);
+    const oj = medidaSinCapturar(detalle, "overjetMm") ? "sin capturar" : `${dx.overjetMm.toString()} mm`;
+    const ob = medidaSinCapturar(detalle, "overbiteMm") ? "sin capturar" : `${dx.overbiteMm.toString()} mm`;
     lines.push(
       `Diagnóstico ortodóntico: Angle ${angleR} (derecha) / ${angleL} (izquierda). ` +
-        `Overjet ${dx.overjetMm.toString()} mm, overbite ${dx.overbiteMm.toString()} mm. ` +
+        `Overjet ${oj}, overbite ${ob}. ` +
         `Apiñamiento maxilar: ${
           dx.crowdingUpperMm != null ? dx.crowdingUpperMm.toString() : "—"
         } mm; mandibular: ${
