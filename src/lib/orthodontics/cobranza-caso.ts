@@ -25,7 +25,7 @@
 
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { aCentavos, aPesos } from "@/lib/quotes/condiciones-pago";
-import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
+import { hoyEnZona } from "@/lib/fechas/hoy-en-zona";
 import {
   calendarioDeCuotas,
   estadoDelPlan,

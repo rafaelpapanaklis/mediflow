@@ -44,6 +44,7 @@ import { dinero } from "@/lib/quotes/condiciones-pago";
 import { ultimoAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
 import { avisosDeCobranza, type AvisoCobranza, type MotivoDescarte } from "./core";
 import { cargarFacturasCandidatas } from "./datos";
+import { hoyEnZona } from "@/lib/fechas/hoy-en-zona";
 
 /** Tipo de WhatsAppReminder de este aviso. La cola lo envía como texto legacy. */
 export const COBRANZA_TYPE = "PAYMENT_DUE";
@@ -80,15 +81,8 @@ interface SweepClinic {
 }
 
 /** "YYYY-MM-DD" en el día de la CLÍNICA, no en el del servidor. */
-export function hoyEnZona(now: Date, timezone: string): string {
-  const p = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-  return p; // en-CA da directamente "YYYY-MM-DD"
-}
+// Puro, en su propio módulo (client-safe); se reexporta para quien ya lo importaba de aquí.
+export { hoyEnZona } from "@/lib/fechas/hoy-en-zona";
 
 /** «3 de marzo de 2026», para que lo lea un paciente en el teléfono. */
 export function fechaLarga(iso: string): string {
