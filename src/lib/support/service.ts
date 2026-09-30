@@ -231,6 +231,19 @@ function revisionesNoDisponibles(err: unknown): boolean {
   );
 }
 
+/**
+ * Mientras el SQL no se aplica, la tabla no existe y CADA lectura del hilo
+ * chocaría con ella (y Prisma deja una línea de error en el log por cada una).
+ * Se recuerda un minuto que no está y las lecturas del hilo ni la consultan;
+ * las escrituras siempre la consultan (y en cuanto existe, todo se recupera).
+ */
+const RECORDAR_AUSENCIA_MS = 60_000;
+let revisionesAusentesHasta = 0;
+/** Solo para pruebas: olvida que la tabla faltaba. */
+export function __olvidarAusenciaDeRevisiones(): void {
+  revisionesAusentesHasta = 0;
+}
+
 const AVISO_FALTA_SQL =
   "Editar o retirar respuestas todavía no está disponible: falta aplicar sql/soporte-mensajes-edicion.sql en la base.";
 
@@ -244,6 +257,7 @@ async function cargarEstadosDeEdicion(
   ticketId: string,
   estricto = false,
 ): Promise<Map<string, EstadoEdicion>> {
+  if (!estricto && Date.now() < revisionesAusentesHasta) return new Map();
   try {
     if (!prisma.supportMessageRevision) throw new Error("supportMessageRevision");
     const filas = await prisma.supportMessageRevision.findMany({
@@ -252,9 +266,11 @@ async function cargarEstadosDeEdicion(
       orderBy: { createdAt: "asc" },
       take: 5000,
     });
+    revisionesAusentesHasta = 0;
     return estadosDeEdicion(filas);
   } catch (err) {
     if (revisionesNoDisponibles(err)) {
+      revisionesAusentesHasta = Date.now() + RECORDAR_AUSENCIA_MS;
       if (estricto) throw new SupportError(AVISO_FALTA_SQL, 503);
       return new Map();
     }

@@ -44,6 +44,7 @@ const db = {
   revisiones: [] as Rev[],
   sesion: { user: { id: "adm-1", email: "soporte@dalecontrol.com" } } as any,
   correos: [] as string[],
+  lecturasDeRevisiones: 0,
 };
 
 const ATT = (n: string) => ({ path: `support/${CL}/${n}.png`, name: `${n}.png`, size: 100, type: "image/png" });
@@ -78,6 +79,7 @@ const prismaDoble = {
     if (db.clienteViejo) return undefined;
     return {
       findMany: async ({ where }: any) => {
+        db.lecturasDeRevisiones++;
         if (!db.tablaExiste) throw errTablaNoExiste();
         return db.revisiones.filter((r) => r.ticketId === where.ticketId).map((r) => ({ messageId: r.messageId, kind: r.kind, createdAt: r.createdAt }));
       },
@@ -144,7 +146,10 @@ before(async () => {
   PATCH = ruta.PATCH as any;
   DELETE = ruta.DELETE as any;
 });
-beforeEach(reset);
+beforeEach(() => {
+  reset();
+  servicio.__olvidarAusenciaDeRevisiones();
+});
 
 const url = (id = "m-soporte") => `http://localhost/api/admin/support/tickets/${TK}/messages/${id}`;
 const patch = (body: unknown, id = "m-soporte", tk = TK) =>
@@ -307,6 +312,21 @@ test("SIN el SQL aplicado: el hilo se lee igual y editar/retirar responden 503 c
   assert.equal(r2.status, 503);
   assert.equal(db.mensajes.find((m) => m.id === "m-soporte")!.body, "Ya lo revisamos.");
   assert.equal(db.ticket.clinicUnread, false);
+});
+
+test("sin el SQL, tras el primer aviso el hilo ya no vuelve a consultar la tabla (un minuto); editar sí, y se recupera al existir", async () => {
+  db.tablaExiste = false;
+  await mensajeDe("admin"); // primera lectura: choca y lo recuerda
+  const antes = db.lecturasDeRevisiones;
+  await mensajeDe("admin");
+  await mensajeDe("clinica");
+  assert.equal(db.lecturasDeRevisiones - antes, 0, "las lecturas del hilo no consultan una tabla que se sabe ausente");
+  // una escritura sí la consulta y sigue dando 503
+  assert.equal((await patch({ body: "cambio" })).status, 503);
+  // el SQL se aplica: la siguiente escritura funciona sin esperar el minuto
+  db.tablaExiste = true;
+  assert.equal((await patch({ body: "cambio bueno" })).status, 200);
+  assert.ok((await mensajeDe("admin"))!.messages.find((m) => m.id === "m-soporte")!.editedAt);
 });
 
 test("con un cliente de Prisma viejo (sin el modelo) el hilo se lee y editar responde 503", async () => {
