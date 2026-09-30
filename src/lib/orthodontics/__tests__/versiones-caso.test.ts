@@ -2,7 +2,7 @@
 // Correr: npm run test:orto-diagnostico
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { etiquetaDeVersion, fechaDma, lineaDeTiempo, queCambio, validarMotivo, versionLegible } from "../versiones-caso";
+import { etiquetaDeVersion, fechaDma, lineaDeTiempo, queCambio, textoDelMovimientoDeReevaluacion, validarMotivo, versionLegible } from "../versiones-caso";
 
 const DX = {
   angleClassRight: "CLASS_II_DIV_1", angleClassLeft: "CLASS_I", overbiteMm: "5", overbitePercentage: 40, overjetMm: "6.5",
@@ -37,6 +37,14 @@ test("motivo obligatorio y acotado", () => {
   assert.equal(validarMotivo("abc").ok, false);
   assert.deepEqual(validarMotivo("  Cambio   de anclaje "), { ok: true, motivo: "Cambio de anclaje" });
   assert.equal(validarMotivo("x".repeat(501)).ok, false);
+});
+
+test("Movimientos: la frase de la reevaluación lleva el motivo (pantalla, CSV y PDF leen el texto)", () => {
+  assert.equal(
+    textoDelMovimientoDeReevaluacion(2, "  Cambio   de anclaje "),
+    "Abrió la reevaluación 3 del caso de ortodoncia (quedó guardada la versión «Reevaluación 2» del diagnóstico y del plan). Motivo: «Cambio de anclaje»",
+  );
+  assert.match(textoDelMovimientoDeReevaluacion(0, "Control radiográfico"), /versión «Inicial».*Motivo: «Control radiográfico»$/);
 });
 
 test("foto legible con la misma redacción que la ficha, y qué cambió", () => {

@@ -104,6 +104,17 @@ export function validarMotivo(raw: unknown): { ok: true; motivo: string } | { ok
   return { ok: true, motivo: t };
 }
 
+/**
+ * La frase de Movimientos al abrir una reevaluación, CON su motivo: «Abrió la reevaluación 3 del caso de ortodoncia
+ * (quedó guardada la versión «Reevaluación 2» del diagnóstico y del plan). Motivo: «…»». `cerrada` = número de la
+ * versión que se acaba de cerrar; la nueva es la siguiente.
+ */
+export function textoDelMovimientoDeReevaluacion(cerrada: number, motivo: string): string {
+  const base = `Abrió la ${etiquetaDeVersion(cerrada + 1).toLowerCase()} del caso de ortodoncia (quedó guardada la versión «${etiquetaDeVersion(cerrada)}» del diagnóstico y del plan)`;
+  const m = motivo.replace(/\s+/g, " ").trim();
+  return m ? `${base}. Motivo: «${m}»` : base;
+}
+
 // ─── Lectura de una versión ─────────────────────────────────────────────
 
 const n = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));

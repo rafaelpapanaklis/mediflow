@@ -18,6 +18,7 @@ import {
   etiquetaDeVersion,
   lineaDeTiempo,
   queCambio,
+  textoDelMovimientoDeReevaluacion,
   validarMotivo,
   versionLegible,
   ZONA_POR_DEFECTO,
@@ -125,6 +126,9 @@ export async function crearReevaluacion(input: unknown): Promise<ActionResult<{ 
   if (r.ok === false) return fail(r.error);
 
   const nueva = r.numero + 1;
+  // El motivo va en la frase (pantalla, CSV y PDF de Movimientos leen `texto`): la ventana promete que «queda
+  // registrado en Movimientos del paciente». Es una fila de «expediente»: quien no tiene permiso clínico ve la
+  // frase genérica, no esta.
   await registrarMovimientoDelPaciente({
     clinicId: ctx.clinicId,
     userId: ctx.userId,
@@ -132,9 +136,9 @@ export async function crearReevaluacion(input: unknown): Promise<ActionResult<{ 
     entityType: "orthodontic-plan",
     entityId: caso.id,
     action: "update",
-    texto: `Abrió la ${etiquetaDeVersion(nueva).toLowerCase()} del caso de ortodoncia (quedó guardada la versión «${etiquetaDeVersion(r.numero)}» del diagnóstico y del plan)`,
+    texto: textoDelMovimientoDeReevaluacion(r.numero, m.motivo),
     campos: ["reevaluacion"],
-    cambios: { reevaluacion: { before: r.numero, after: nueva } },
+    cambios: { reevaluacion: { before: r.numero, after: nueva }, motivo: { before: null, after: m.motivo } },
   });
 
   try {
