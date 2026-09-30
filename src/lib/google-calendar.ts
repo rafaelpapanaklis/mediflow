@@ -2,13 +2,35 @@ import { google } from "googleapis";
 import crypto from "crypto";
 import { rfc3339InTz } from "@/lib/agenda/legacy-helpers";
 
-// FIX: openid + email required so Google returns id_token with user email
-const SCOPES = [
-  "openid",
-  "email",
-  "https://www.googleapis.com/auth/calendar",        // create/manage calendars
-  "https://www.googleapis.com/auth/calendar.events", // create/update events
-];
+/**
+ * Permiso que se le pide a Google. Uno solo de Calendar y el más estrecho que
+ * alcanza: `calendar.app.created` = «crear calendarios secundarios y ver, crear,
+ * cambiar y borrar eventos EN ELLOS». DaleControl solo toca su propio calendario
+ * de la clínica; con este permiso NO puede leer ni modificar los calendarios
+ * personales de la cuenta (antes pedía `calendar` + `calendar.events`, que sí).
+ * `openid` + `email` para que Google devuelva el correo de la cuenta conectada.
+ *
+ * Consecuencia: sin `calendarList` (no lo cubre este permiso) no se puede
+ * buscar el calendario por nombre ni colorearlo. Se usa SIEMPRE el id guardado
+ * en `clinics.googleClinicCalendarId` y, si no hay o Google dice que no existe,
+ * se crea uno nuevo (ver `asegurarCalendarioDeClinica`).
+ */
+export const SCOPE_CALENDAR_APP = "https://www.googleapis.com/auth/calendar.app.created";
+/** El permiso de las conexiones VIEJAS (antes de este cambio): siguen funcionando hasta que reconecten. */
+export const SCOPE_CALENDAR_COMPLETO = "https://www.googleapis.com/auth/calendar";
+
+const SCOPES = ["openid", "email", SCOPE_CALENDAR_APP];
+
+/**
+ * ¿El permiso que Google concedió alcanza para sincronizar? Google deja
+ * desmarcar permisos al autorizar; `scope` es la lista (separada por espacios)
+ * de lo realmente concedido. Sin ese dato (respuestas viejas) se da por bueno.
+ */
+export function permisoDeCalendarConcedido(scope: string | null | undefined): boolean {
+  if (typeof scope !== "string" || !scope.trim()) return true;
+  const lista = scope.split(/\s+/);
+  return lista.includes(SCOPE_CALENDAR_APP) || lista.includes(SCOPE_CALENDAR_COMPLETO);
+}
 
 const STATE_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "mediflow-gcal-state";
 
@@ -60,29 +82,22 @@ export function getAuthUrl(userId: string) {
 // operación y las pruebas le pasan uno falso que imita a Google.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Lo mínimo de `calendar_v3.Calendar` que usamos (los falsos de las pruebas lo cumplen). */
+/**
+ * Lo mínimo de `calendar_v3.Calendar` que usamos (los falsos de las pruebas lo
+ * cumplen). Solo llamadas que cubre `calendar.app.created`: nada de `calendarList`.
+ */
 export interface ClienteCalendar {
   events: {
     insert(p: { calendarId: string; sendUpdates?: string; requestBody: Record<string, any> }): Promise<{ data: { id?: string | null } }>;
     patch(p: { calendarId: string; eventId: string; sendUpdates?: string; requestBody: Record<string, any> }): Promise<{ data: { id?: string | null } }>;
     delete(p: { calendarId: string; eventId: string; sendUpdates?: string }): Promise<unknown>;
   };
-  calendarList: {
-    list(p?: { pageToken?: string; maxResults?: number }): Promise<{ data: { items?: EntradaCalendario[] | null; nextPageToken?: string | null } }>;
-    patch(p: { calendarId: string; requestBody: Record<string, any> }): Promise<unknown>;
-  };
   calendars: {
     insert(p: { requestBody: Record<string, any> }): Promise<{ data: { id?: string | null } }>;
-    patch(p: { calendarId: string; requestBody: Record<string, any> }): Promise<unknown>;
+    get(p: { calendarId: string }): Promise<{ data: { id?: string | null } }>;
     /** Solo para quitar un calendario duplicado que acabamos de crear nosotros. */
     delete(p: { calendarId: string }): Promise<unknown>;
   };
-}
-
-export interface EntradaCalendario {
-  id?: string | null;
-  summary?: string | null;
-  description?: string | null;
 }
 
 /**
@@ -153,54 +168,49 @@ export function marcaCalendarioDeClinica(clinicId: string): string {
   return `DaleControl-clinic:${clinicId}`;
 }
 
-const MARCA_ANTIGUA = /DaleControl-clinic(?!:)/;
-const MARCA_CUALQUIERA = /DaleControl-clinic:/;
-
 // ── Calendario de la clínica ─────────────────────────────────────────────────
 
 /**
- * Busca el calendario de ESTA clínica en la cuenta de Google y, si no existe,
- * lo crea. Lanza si Google falla (antes se tragaba el error y las citas caían
- * al calendario personal del admin sin avisar).
- *
- * Reconoce por la marca con el id de la clínica. Un calendario de otra clínica
- * de DaleControl en la misma cuenta NO se adopta. Los creados antes de la marca
- * (descripción «…DaleControl-clinic» a secas) se adoptan solo si el nombre
- * coincide, y se les añade la marca.
+ * Este error de `calendars.get` quiere decir «ese calendario no está a nuestro
+ * alcance» (no existe, lo borraron, es de otra cuenta, o es uno que no creó esta
+ * app y el permiso estrecho no lo cubre): se crea uno nuevo. Cualquier otro
+ * (token muerto, red, 5xx, cuota) NO: se propaga, para no crear calendarios de
+ * más por un fallo pasajero ni esconder una conexión caída.
  */
-export async function buscarOCrearCalendarioDeClinica(
+function calendarioFueraDeAlcance(err: unknown): boolean {
+  const s = estadoHttpDeError(err);
+  if (s === 404 || s === 410) return true;
+  if (s === 403) return ["forbidden", "insufficientPermissions", "notFound"].includes(razonDeError(err) ?? "");
+  return false;
+}
+
+/**
+ * Deja listo el calendario de ESTA clínica en la cuenta de Google y devuelve su id.
+ *
+ *  · Con `calendarIdGuardado` (el de `clinics.googleClinicCalendarId`) se
+ *    comprueba que sigue al alcance (`calendars.get`, que sí cubre el permiso
+ *    estrecho) y se reutiliza: así reconectar no deja un calendario huérfano.
+ *  · Si no hay id, o Google dice que ya no está a nuestro alcance, se CREA uno
+ *    nuevo con el nombre de la clínica y la marca de su id. No se busca por
+ *    nombre (`calendarList` no entra en el permiso estrecho) ni se colorea.
+ *
+ * Lanza si Google falla (antes se tragaba el error y las citas caían al
+ * calendario personal del admin sin avisar).
+ */
+export async function asegurarCalendarioDeClinica(
   cal: ClienteCalendar,
-  opts: { clinicId: string; clinicName: string; timezone: string },
+  opts: { clinicId: string; clinicName: string; timezone: string; calendarIdGuardado?: string | null },
 ): Promise<{ id: string; creado: boolean }> {
-  const marca = marcaCalendarioDeClinica(opts.clinicId);
-
-  const items: EntradaCalendario[] = [];
-  let pageToken: string | undefined;
-  for (let i = 0; i < 10; i++) {
-    const r = await cal.calendarList.list({ maxResults: 250, ...(pageToken ? { pageToken } : {}) });
-    items.push(...(r.data.items ?? []));
-    pageToken = r.data.nextPageToken ?? undefined;
-    if (!pageToken) break;
-  }
-
-  const propio = items.find((c) => c.id && c.description?.includes(marca));
-  if (propio?.id) return { id: propio.id, creado: false };
-
-  const antiguo = items.find(
-    (c) => c.id && c.summary === opts.clinicName && MARCA_ANTIGUA.test(c.description ?? "") && !MARCA_CUALQUIERA.test(c.description ?? ""),
-  );
-  if (antiguo?.id) {
+  if (opts.calendarIdGuardado) {
     try {
-      await cal.calendars.patch({
-        calendarId: antiguo.id,
-        requestBody: { description: `Agenda de ${opts.clinicName} — ${marca}` },
-      });
+      const r = await cal.calendars.get({ calendarId: opts.calendarIdGuardado });
+      return { id: r.data.id || opts.calendarIdGuardado, creado: false };
     } catch (err) {
-      console.error("Google Calendar: no se pudo marcar el calendario existente:", err);
+      if (!calendarioFueraDeAlcance(err)) throw err;
     }
-    return { id: antiguo.id, creado: false };
   }
 
+  const marca = marcaCalendarioDeClinica(opts.clinicId);
   const nuevo = await cal.calendars.insert({
     requestBody: {
       summary: opts.clinicName,
@@ -210,13 +220,6 @@ export async function buscarOCrearCalendarioDeClinica(
   });
   const id = nuevo.data.id;
   if (!id) throw new Error("Google no devolvió el id del calendario creado");
-
-  // El color es cosmético: si falla, el calendario sigue siendo válido.
-  try {
-    await cal.calendarList.patch({ calendarId: id, requestBody: { colorId: "9" } }); // azul
-  } catch (err) {
-    console.error("Google Calendar: no se pudo colorear el calendario:", err);
-  }
   return { id, creado: true };
 }
 

@@ -110,6 +110,8 @@ test("desconectar (admin) revoca el permiso en Google, limpia la clínica y dice
   assert.equal(estado.clinicUpdates[0].where.id, CL);
   assert.equal(estado.clinicUpdates[0].data.googleRefreshToken, null);
   assert.equal(estado.clinicUpdates[0].data.googleCalendarEnabled, false);
+  // El id del calendario se conserva: con el permiso estrecho no se puede buscar por nombre al reconectar.
+  assert.ok(!("googleClinicCalendarId" in estado.clinicUpdates[0].data));
   assert.ok(estado.sqlEjecutado.some((s) => /UPDATE clinic_google_status/.test(s)), "desconectar a propósito limpia la marca de caída");
 });
 

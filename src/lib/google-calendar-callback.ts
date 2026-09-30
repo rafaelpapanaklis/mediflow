@@ -23,11 +23,12 @@ export type MotivoErrorGcal =
   | "token"        // Google no aceptó el code (caducado, redirect_uri distinto, secreto)
   | "guardar"      // Google autorizó pero falló algo nuestro después
   | "cuenta_distinta" // la clínica ya está conectada con OTRA cuenta de Google: primero se desconecta
-  | "calendario";  // se conectó, pero no se pudo crear el calendario de la clínica
+  | "calendario"  // se conectó, pero no se pudo crear el calendario de la clínica
+  | "permisos";   // Google autorizó, pero la persona desmarcó el permiso de Calendar
 
 export const MOTIVOS_ERROR_GCAL: readonly MotivoErrorGcal[] = [
   "denegado", "incompleto", "state", "sesion", "otra_cuenta", "token", "guardar",
-  "cuenta_distinta", "calendario",
+  "cuenta_distinta", "calendario", "permisos",
 ];
 
 /** Marca que evita un segundo salto (y cualquier bucle) si los hosts no casan. */

@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  TIMEOUT_GOOGLE_MS, borrarEvento, buscarOCrearCalendarioDeClinica, crearClienteCalendar, estadoHttpDeError,
+  TIMEOUT_GOOGLE_MS, borrarEvento, asegurarCalendarioDeClinica, crearClienteCalendar, estadoHttpDeError,
   idEventoDeCita, insertarEvento, marcaCalendarioDeClinica, parcharEvento, razonDeError, signState, verifyState,
+  getAuthUrl, permisoDeCalendarConcedido, SCOPE_CALENDAR_APP, SCOPE_CALENDAR_COMPLETO,
   type DatosEvento,
 } from "../google-calendar";
-import { GoogleFalsa, errorGoogle } from "../agenda/__tests__/google-falsa";
+import { GoogleFalsa, errorGoogle, errorInvalidGrant } from "../agenda/__tests__/google-falsa";
 
 const datos = (extra: Partial<DatosEvento> = {}): DatosEvento => ({
   calendarId: "cal", eventId: idEventoDeCita("c1", "a1"),
@@ -41,35 +42,63 @@ test("estadoHttpDeError / razonDeError leen los errores de googleapis y gaxios",
   assert.equal(razonDeError(new Error("x")), null);
 });
 
-test("calendario: recorre todas las páginas de la lista antes de decidir que no existe", async () => {
+test("calendario nuevo: lleva la zona de la clínica y la marca con su id; no busca por nombre ni colorea", async () => {
   const g = new GoogleFalsa();
-  const pagina2 = { id: "el-mio", summary: "Clínica", description: `x — ${marcaCalendarioDeClinica("c1")}` };
-  let llamada = 0;
-  g.calendarList.list = async () => {
-    llamada++;
-    return llamada === 1
-      ? { data: { items: [{ id: "otro", summary: "Otro", description: "" }], nextPageToken: "p2" } }
-      : { data: { items: [pagina2] } };
-  };
-  const r = await buscarOCrearCalendarioDeClinica(g, { clinicId: "c1", clinicName: "Clínica", timezone: "America/Mexico_City" });
+  g.alcanceEstrecho = true;
+  g.sembrarCalendario("otra-clinica", "Clínica", marcaCalendarioDeClinica("c2")); // mismo nombre, otra clínica
+  const r = await asegurarCalendarioDeClinica(g, { clinicId: "c1", clinicName: "Clínica", timezone: "America/Tijuana" });
+  assert.equal(r.creado, true);
+  assert.notEqual(r.id, "otra-clinica");
+  const cal = g.calendarios.get(r.id)!;
+  assert.equal(cal.timeZone, "America/Tijuana");
+  assert.ok(cal.description.includes(marcaCalendarioDeClinica("c1")));
+  // Con el permiso estrecho calendarList daría 403: no se toca (ni para buscar ni para colorear).
+  assert.equal(g.cuantas("calendarList.list"), 0);
+  assert.equal(g.cuantas("calendarList.patch"), 0);
+  assert.equal(g.cuantas("calendars.patch"), 0);
+});
+
+test("calendario con id guardado: si sigue al alcance se reutiliza (reconectar no deja calendarios huérfanos)", async () => {
+  const g = new GoogleFalsa();
+  g.alcanceEstrecho = true;
+  g.sembrarCalendario("el-mio", "Clínica", marcaCalendarioDeClinica("c1"));
+  const r = await asegurarCalendarioDeClinica(g, { clinicId: "c1", clinicName: "Clínica", timezone: "America/Mexico_City", calendarIdGuardado: "el-mio" });
   assert.deepEqual(r, { id: "el-mio", creado: false });
   assert.equal(g.cuantas("calendars.insert"), 0);
 });
 
-test("calendario nuevo: lleva la zona de la clínica y la marca; si falla el color igual queda creado", async () => {
+test("calendario con id guardado que Google ya no tiene (404/410) o que queda fuera del alcance (403 de permisos): se crea uno nuevo", async () => {
+  for (const err of [errorGoogle(404, "notFound"), errorGoogle(410), errorGoogle(403, "forbidden"), errorGoogle(403, "insufficientPermissions")]) {
+    const g = new GoogleFalsa();
+    g.alcanceEstrecho = true;
+    g.sembrarCalendario("viejo", "Clínica", "", true);
+    g.fallar("calendars.get", err);
+    const r = await asegurarCalendarioDeClinica(g, { clinicId: "c1", clinicName: "Clínica", timezone: "America/Mexico_City", calendarIdGuardado: "viejo" });
+    assert.equal(r.creado, true);
+    assert.notEqual(r.id, "viejo");
+  }
+  // Un calendario de la cuenta que NO creó la app (p. ej. el que una conexión vieja adoptó por nombre):
   const g = new GoogleFalsa();
-  g.fallar("calendarList.patch", errorGoogle(500));
-  const r = await buscarOCrearCalendarioDeClinica(g, { clinicId: "c1", clinicName: "Clínica", timezone: "America/Tijuana" });
+  g.alcanceEstrecho = true;
+  g.sembrarCalendario("ajeno", "Clínica", "", false);
+  const r = await asegurarCalendarioDeClinica(g, { clinicId: "c1", clinicName: "Clínica", timezone: "America/Mexico_City", calendarIdGuardado: "ajeno" });
   assert.equal(r.creado, true);
-  const cal = g.calendarios.get(r.id)!;
-  assert.equal(cal.timeZone, "America/Tijuana");
-  assert.ok(cal.description.includes(marcaCalendarioDeClinica("c1")));
+});
+
+test("calendario con id guardado: un fallo pasajero o un token muerto NO crean un calendario de más, se propagan", async () => {
+  for (const err of [errorGoogle(500), errorGoogle(503), errorGoogle(429), errorGoogle(403, "rateLimitExceeded"), errorGoogle(401), errorInvalidGrant(), Object.assign(new Error("socket hang up"), { code: "ECONNRESET" })]) {
+    const g = new GoogleFalsa();
+    g.sembrarCalendario("viejo", "Clínica", "");
+    g.fallar("calendars.get", err);
+    await assert.rejects(() => asegurarCalendarioDeClinica(g, { clinicId: "c1", clinicName: "Clínica", timezone: "America/Mexico_City", calendarIdGuardado: "viejo" }));
+    assert.equal(g.cuantas("calendars.insert"), 0);
+  }
 });
 
 test("calendario: si Google falla, LANZA (antes se tragaba el error y las citas iban al calendario personal)", async () => {
   const g = new GoogleFalsa();
   g.fallar("calendars.insert", errorGoogle(403, "forbidden"));
-  await assert.rejects(() => buscarOCrearCalendarioDeClinica(g, { clinicId: "c1", clinicName: "C", timezone: "America/Mexico_City" }));
+  await assert.rejects(() => asegurarCalendarioDeClinica(g, { clinicId: "c1", clinicName: "C", timezone: "America/Mexico_City" }));
 });
 
 test("parcharEvento: 404 y 410 = «ya no existe»; otro error se propaga", async () => {
@@ -127,4 +156,26 @@ test("el cliente real: tiene tope de tiempo y avisa del access token renovado", 
   auth.emit("tokens", { access_token: "nuevo" });
   auth.emit("tokens", { refresh_token: "solo-refresh" }); // sin access token: no se avisa
   assert.deepEqual(renovados, ["nuevo"]);
+});
+
+// ── Permiso estrecho (verificación de Google) ────────────────────────────────
+
+test("se le pide a Google SOLO calendar.app.created (+ openid email): ni `calendar` ni `calendar.events`", () => {
+  process.env.GOOGLE_CLIENT_ID ||= "id-de-prueba";
+  process.env.GOOGLE_CLIENT_SECRET ||= "secreto-de-prueba";
+  const url = new URL(getAuthUrl("user-1"));
+  const pedidos = (url.searchParams.get("scope") ?? "").split(" ");
+  assert.deepEqual(pedidos.sort(), ["email", "openid", SCOPE_CALENDAR_APP].sort());
+  assert.ok(!pedidos.includes(SCOPE_CALENDAR_COMPLETO));
+  assert.ok(!pedidos.some((x) => x.endsWith("/calendar.events")));
+  assert.equal(url.searchParams.get("access_type"), "offline");
+});
+
+test("permisoDeCalendarConcedido: el estrecho o el viejo completo valen; sin ninguno de los dos no; sin dato se da por bueno", () => {
+  assert.equal(permisoDeCalendarConcedido(`openid email ${SCOPE_CALENDAR_APP}`), true);
+  assert.equal(permisoDeCalendarConcedido(`openid email ${SCOPE_CALENDAR_COMPLETO} https://www.googleapis.com/auth/calendar.events`), true);
+  assert.equal(permisoDeCalendarConcedido("openid email https://www.googleapis.com/auth/userinfo.email"), false);
+  assert.equal(permisoDeCalendarConcedido("https://www.googleapis.com/auth/calendar.readonly"), false, "«calendar.readonly» no es «calendar»");
+  assert.equal(permisoDeCalendarConcedido(undefined), true);
+  assert.equal(permisoDeCalendarConcedido(""), true);
 });

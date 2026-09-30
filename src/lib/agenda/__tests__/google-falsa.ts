@@ -10,11 +10,15 @@
 //     existe aquí para poder demostrar que ya nadie lo llama (contador).
 //   · events.delete no quita el evento, lo deja `status: cancelled`; borrar dos
 //     veces da 410; uno que no existe, 404.
-//   · calendarList / calendars con marca de descripción.
+//   · calendars con marca de descripción. Con `alcanceEstrecho` (el permiso
+//     `calendar.app.created` que pide la app hoy) imita lo que ese permiso NO
+//     cubre: calendarList.* y calendars.patch dan 403 insufficientPermissions, y
+//     un calendario que no creó la app (sembrado con `propio: false`) da 404 al
+//     consultarlo y 403 al tocar sus eventos.
 //
 // Además registra cada llamada y deja programar fallos por operación.
 
-import type { ClienteCalendar, EntradaCalendario } from "@/lib/google-calendar";
+import type { ClienteCalendar } from "@/lib/google-calendar";
 
 export function errorGoogle(status: number, razon?: string, mensaje = `Google ${status}`) {
   return Object.assign(new Error(mensaje), {
@@ -37,7 +41,9 @@ export interface EventoFalso {
 }
 
 export class GoogleFalsa implements ClienteCalendar {
-  calendarios = new Map<string, { id: string; summary: string; description: string; colorId?: string; timeZone?: string }>();
+  calendarios = new Map<string, { id: string; summary: string; description: string; colorId?: string; timeZone?: string; propio: boolean }>();
+  /** true = solo lo que cubre `calendar.app.created`. */
+  alcanceEstrecho = false;
   eventos = new Map<string, EventoFalso>();
   llamadas: { op: string; args: any }[] = [];
   updates = 0;
@@ -76,13 +82,20 @@ export class GoogleFalsa implements ClienteCalendar {
   }
 
   /** Siembra un calendario ya existente en la cuenta (p. ej. el de otra clínica). */
-  sembrarCalendario(id: string, summary: string, description: string) {
-    this.calendarios.set(id, { id, summary, description });
+  sembrarCalendario(id: string, summary: string, description: string, propio = true) {
+    this.calendarios.set(id, { id, summary, description, propio });
+  }
+
+  /** Con el permiso estrecho, un calendario que no creó la app está fuera de alcance. */
+  private fueraDeAlcance(calendarId: string) {
+    const c = this.calendarios.get(calendarId);
+    return this.alcanceEstrecho && !!c && !c.propio;
   }
 
   events = {
     insert: async (p: { calendarId: string; sendUpdates?: string; requestBody: Record<string, any> }) => {
       await this.paso("events.insert", p);
+      if (this.fueraDeAlcance(p.calendarId)) throw errorGoogle(403, "insufficientPermissions", "Insufficient Permission");
       if (!this.calendarios.has(p.calendarId) && p.calendarId !== "primary") throw errorGoogle(404, "notFound", "Not Found");
       const id = p.requestBody.id ?? `g${++this.seq}`;
       const k = `${p.calendarId}/${id}`;
@@ -92,6 +105,7 @@ export class GoogleFalsa implements ClienteCalendar {
     },
     patch: async (p: { calendarId: string; eventId: string; sendUpdates?: string; requestBody: Record<string, any> }) => {
       await this.paso("events.patch", p);
+      if (this.fueraDeAlcance(p.calendarId)) throw errorGoogle(403, "insufficientPermissions", "Insufficient Permission");
       const k = `${p.calendarId}/${p.eventId}`;
       const e = this.eventos.get(k);
       if (!e) throw errorGoogle(404, "notFound", "Not Found");
@@ -109,6 +123,7 @@ export class GoogleFalsa implements ClienteCalendar {
     },
     delete: async (p: { calendarId: string; eventId: string; sendUpdates?: string }) => {
       await this.paso("events.delete", p);
+      if (this.fueraDeAlcance(p.calendarId)) throw errorGoogle(403, "insufficientPermissions", "Insufficient Permission");
       const k = `${p.calendarId}/${p.eventId}`;
       const e = this.eventos.get(k);
       if (!e) throw errorGoogle(404, "notFound", "Not Found");
@@ -118,16 +133,16 @@ export class GoogleFalsa implements ClienteCalendar {
     },
   };
 
+  /** Lo que el permiso estrecho no cubre: si alguien lo llama con `alcanceEstrecho`, da 403 como Google. */
   calendarList = {
-    list: async (p?: { pageToken?: string; maxResults?: number }) => {
+    list: async (p?: any) => {
       await this.paso("calendarList.list", p);
-      const items: EntradaCalendario[] = [...this.calendarios.values()].map((c) => ({ id: c.id, summary: c.summary, description: c.description }));
-      return { data: { items } };
+      if (this.alcanceEstrecho) throw errorGoogle(403, "insufficientPermissions", "Request had insufficient authentication scopes.");
+      return { data: { items: [...this.calendarios.values()].map((c) => ({ id: c.id, summary: c.summary, description: c.description })) } };
     },
-    patch: async (p: { calendarId: string; requestBody: Record<string, any> }) => {
+    patch: async (p: any) => {
       await this.paso("calendarList.patch", p);
-      const c = this.calendarios.get(p.calendarId);
-      if (c) Object.assign(c, p.requestBody);
+      if (this.alcanceEstrecho) throw errorGoogle(403, "insufficientPermissions", "Request had insufficient authentication scopes.");
       return {};
     },
   };
@@ -136,16 +151,23 @@ export class GoogleFalsa implements ClienteCalendar {
     insert: async (p: { requestBody: Record<string, any> }) => {
       await this.paso("calendars.insert", p);
       const id = `cal${++this.seq}@group.calendar.google.com`;
-      this.calendarios.set(id, { id, summary: p.requestBody.summary, description: p.requestBody.description, timeZone: p.requestBody.timeZone });
+      this.calendarios.set(id, { id, summary: p.requestBody.summary, description: p.requestBody.description, timeZone: p.requestBody.timeZone, propio: true });
       return { data: { id } };
+    },
+    get: async (p: { calendarId: string }) => {
+      await this.paso("calendars.get", p);
+      if (!this.calendarios.has(p.calendarId) || this.fueraDeAlcance(p.calendarId)) throw errorGoogle(404, "notFound", "Not Found");
+      return { data: { id: p.calendarId } };
     },
     delete: async (p: { calendarId: string }) => {
       await this.paso("calendars.delete", p);
       this.calendarios.delete(p.calendarId);
       return {};
     },
+    /** Fuera del contrato `ClienteCalendar` (la app ya no lo usa): existe para que, si alguien lo llama, lo delate. */
     patch: async (p: { calendarId: string; requestBody: Record<string, any> }) => {
       await this.paso("calendars.patch", p);
+      if (this.alcanceEstrecho) throw errorGoogle(403, "insufficientPermissions", "Request had insufficient authentication scopes.");
       const c = this.calendarios.get(p.calendarId);
       if (!c) throw errorGoogle(404, "notFound", "Not Found");
       Object.assign(c, p.requestBody);

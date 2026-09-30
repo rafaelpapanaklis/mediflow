@@ -3938,6 +3938,7 @@
       "gcalError_guardar": "Google autorizó, pero no pudimos guardar la conexión. Vuelve a intentarlo; si se repite, avísanos.",
       "gcalError_cuenta_distinta": "Tu clínica ya está conectada con otra cuenta de Google. Para cambiar de cuenta, primero pulsa «Desconectar» y luego vuelve a conectar con la cuenta nueva (las citas ya creadas se quedan en el calendario de la cuenta anterior).",
       "gcalError_calendario": "Conectamos tu cuenta, pero Google no nos dejó crear el calendario de la clínica (¿quitaste el permiso de Calendar al autorizar, o la API de Google Calendar está desactivada?). Mientras tanto las citas no se enviarán a Google. Vuelve a pulsar «Conectar Google Calendar» y acepta todos los permisos; si se repite, avísanos.",
+      "gcalError_permisos": "No quedó marcado el permiso de Calendar al autorizar en Google. Vuelve a pulsar «Conectar Google Calendar» y deja marcada la casilla de Calendar.",
       "clinicSavedToast": "Datos de la clínica actualizados",
       "saveErrorToast": "Error al guardar",
       "profileSavedToast": "Perfil actualizado",

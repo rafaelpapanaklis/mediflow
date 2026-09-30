@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOAuthClient, verifyState, buscarOCrearCalendarioDeClinica, crearClienteCalendar } from "@/lib/google-calendar";
+import { getOAuthClient, verifyState, asegurarCalendarioDeClinica, crearClienteCalendar, permisoDeCalendarConcedido } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 import { limpiarGoogleCaido } from "@/lib/google-calendar-estado";
 import { createClient } from "@/lib/supabase/server";
@@ -64,6 +64,13 @@ export async function GET(req: NextRequest) {
       return fallo("token");
     }
 
+    // Google deja desmarcar permisos al autorizar: sin el de Calendar no hay nada que sincronizar,
+    // y guardar la conexión como buena dejaría a las citas fallando en silencio.
+    if (!permisoDeCalendarConcedido(tokens.scope)) {
+      console.error("Google OAuth: la persona no concedió el permiso de Calendar");
+      return fallo("permisos");
+    }
+
     const accessToken  = tokens.access_token  ?? null;
     const refreshToken = tokens.refresh_token ?? null;
     if (!accessToken && !refreshToken) throw new Error("No tokens");
@@ -85,7 +92,7 @@ export async function GET(req: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where:  { id: userId },
-      select: { id: true, role: true, clinicId: true, clinic: { select: { name: true, timezone: true, googleRefreshToken: true, googleCalendarEmail: true } } },
+      select: { id: true, role: true, clinicId: true, clinic: { select: { name: true, timezone: true, googleRefreshToken: true, googleCalendarEmail: true, googleClinicCalendarId: true } } },
     });
     if (!user) throw new Error("User not found");
 
@@ -115,8 +122,10 @@ export async function GET(req: NextRequest) {
       let clinicCalendarId: string | null = null;
       try {
         const cal = crearClienteCalendar({ accessToken, refreshToken });
-        clinicCalendarId = (await buscarOCrearCalendarioDeClinica(cal, {
+        clinicCalendarId = (await asegurarCalendarioDeClinica(cal, {
           clinicId: user.clinicId, clinicName: user.clinic.name, timezone: user.clinic.timezone,
+          // Reconectar reutiliza el calendario de la clínica si sigue al alcance del permiso nuevo.
+          calendarIdGuardado: user.clinic.googleClinicCalendarId,
         })).id;
       } catch (err: any) {
         // La conexión se guarda igual (los tokens valen); el aviso dice que falta el calendario.

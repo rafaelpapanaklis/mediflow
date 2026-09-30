@@ -18,7 +18,7 @@
 
 import {
   borrarEvento,
-  buscarOCrearCalendarioDeClinica,
+  asegurarCalendarioDeClinica,
   estadoHttpDeError,
   idEventoDeCita,
   insertarEvento,
@@ -172,12 +172,13 @@ export async function sincronizarCita(
       const esperado = calendarId;
       try {
         // Varias sincronizaciones a la vez de la misma clínica (citas seguidas,
-        // el botón en bloque) comparten UNA sola búsqueda/creación.
+        // el botón en bloque) comparten UNA sola creación.
+        // (Aquí nunca hay id guardado que verificar: o no había, o acaba de fallar.)
         const clave = `${clinicId}|${esperado ?? ""}`;
         let enCurso = creandoCalendario.get(clave);
         if (!enCurso) {
           enCurso = (async () => {
-            const r = await buscarOCrearCalendarioDeClinica(cal, { clinicId, clinicName: clinica.name, timezone: clinica.timezone });
+            const r = await asegurarCalendarioDeClinica(cal, { clinicId, clinicName: clinica.name, timezone: clinica.timezone });
             const fijado = await p.fijarCalendarioId(clinicId, r.id, esperado);
             // Otra petición (otra instancia) se nos adelantó con otro calendario: usamos el suyo
             // y el que acabamos de crear sobra.
@@ -247,7 +248,9 @@ export async function sincronizarCita(
     try {
       await insertarEvento(cal, datos(cid, eventId), { avisarInvitados });
     } catch (err) {
-      // 404 al insertar = el calendario guardado ya no existe en Google: se busca/crea de nuevo y se repite una vez.
+      // 404 al insertar = el calendario guardado ya no existe en Google: se crea uno nuevo y se repite una vez.
+      // (Un 403 de permisos NO entra aquí: es un calendario fuera del alcance del permiso; cae en
+      // clasificarYMarcar → «permisos» y la clínica ve «Reconectar».)
       if (estadoHttpDeError(err) !== 404) throw err;
       cid = await asegurarCalendario(true);
       await insertarEvento(cal, datos(cid, eventId), { avisarInvitados });
@@ -280,9 +283,12 @@ async function clasificarYMarcar(p: Puertos, clinicId: string, motivoBase: strin
   const razon = razonDeError(err);
   const http = estadoHttpDeError(err);
   let marca: string | null = null;
-  if (p.esErrorDeAutorizacion(err)) marca = "autorizacion";
+  // «permisos» va antes que «autorizacion»: un 403 insufficientPermissions también es un fallo de
+  // autorización, pero aquí se sabe más —al token le falta alcance (p. ej. un calendario que el
+  // permiso estrecho `calendar.app.created` no cubre)— y la pantalla lo dice mejor.
+  if (razon === "insufficientPermissions") marca = "permisos";
+  else if (p.esErrorDeAutorizacion(err)) marca = "autorizacion";
   else if (razon === "accessNotConfigured") marca = "api_no_habilitada";
-  else if (razon === "insufficientPermissions") marca = "permisos";
   else if (motivoBase === "calendario" && http !== null && http >= 400 && http < 500 && http !== 429) marca = "calendario";
   if (marca) {
     try { await p.marcarCaido(clinicId, marca); } catch { /* marcarCaido no debe lanzar; por si acaso */ }

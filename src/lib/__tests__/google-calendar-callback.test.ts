@@ -130,8 +130,18 @@ test("el callback decide la cuenta ANTES de guardar nada, exige refresh token y 
   assert.match(src, /fallo\("cuenta_distinta"\)/);
   assert.match(src, /if \(!refreshToken\)/);
   // el calendario se busca por el id de la clínica, ya no por nombre a secas
-  assert.match(src, /buscarOCrearCalendarioDeClinica\(cal, \{\s*clinicId: user\.clinicId/);
+  assert.match(src, /asegurarCalendarioDeClinica\(cal, \{\s*clinicId: user\.clinicId/);
   assert.match(src, /if \(sinCalendario\) return fallo\("calendario"\)/);
   // la conexión se guarda igual aunque no haya calendario (los tokens valen)
   assert.ok(src.indexOf("UPDATE clinics SET") < src.indexOf('fallo("calendario")'));
+});
+
+test("el callback rechaza si la persona desmarcó el permiso de Calendar, ANTES de guardar nada, y reutiliza el calendario guardado", () => {
+  const src = fs.readFileSync(path.resolve(__dirname, "../../app/api/google/callback/route.ts"), "utf8");
+  const iPermiso = src.indexOf("permisoDeCalendarConcedido(tokens.scope)");
+  assert.ok(iPermiso > 0 && iPermiso < src.indexOf("UPDATE users SET"), "la comprobación va antes de cualquier UPDATE");
+  assert.match(src, /fallo\("permisos"\)/);
+  assert.match(src, /calendarIdGuardado: user\.clinic\.googleClinicCalendarId/);
+  assert.ok(MOTIVOS_ERROR_GCAL.includes("permisos"));
+  assert.equal(claveAvisoErrorGcal("permisos"), "settings.client.gcalError_permisos");
 });

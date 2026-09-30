@@ -351,7 +351,7 @@ test("401 tras la renovación también es conexión caída; un 500 o la red NO l
 
 test("la API de Calendar apagada en el proyecto de Google se marca y se dice", async () => {
   const w = mundo({ citas: [conCita("a1")] });
-  w.google.fallar("calendarList.list", errorGoogle(403, "accessNotConfigured", "Google Calendar API has not been used"));
+  w.google.fallar("calendars.insert", errorGoogle(403, "accessNotConfigured", "Google Calendar API has not been used"));
   const r = await sincronizarCita(w.puertos, C1, "a1");
   assert.deepEqual(r, { estado: "fallo", motivo: "api_no_habilitada" });
   assert.deepEqual(w.caidas, [{ clinicId: C1, motivo: "api_no_habilitada" }]);
@@ -392,7 +392,7 @@ test("el access token renovado por Google se guarda (solo si sigue el mismo refr
   // La librería de Google avisa del token nuevo durante la llamada.
   let avisar: (t: string) => void = () => undefined;
   w.puertos.abrirCalendar = (cred) => { avisar = cred.alRenovarToken; return w.google; };
-  w.google.antes = (op) => { if (op === "calendarList.list") avisar("at-nuevo"); };
+  w.google.antes = (op) => { if (op === "calendars.insert") avisar("at-nuevo"); };
 
   await sincronizarCita(w.puertos, C1, "a1");
   assert.deepEqual(w.tokensGuardados, [{ clinicId: C1, refresh: `rt-${C1}`, token: "at-nuevo" }]);
@@ -404,7 +404,7 @@ test("si guardar el token falla, la cita se sincroniza igual", async () => {
   let avisar: (t: string) => void = () => undefined;
   w.puertos.abrirCalendar = (cred) => { avisar = cred.alRenovarToken; return w.google; };
   w.puertos.guardarAccessToken = async () => { throw new Error("base caída"); };
-  w.google.antes = (op) => { if (op === "calendarList.list") avisar("at-nuevo"); };
+  w.google.antes = (op) => { if (op === "calendars.insert") avisar("at-nuevo"); };
   assert.equal((await sincronizarCita(w.puertos, C1, "a1")).estado, "creado");
 });
 
@@ -422,14 +422,14 @@ test("dos clínicas en la MISMA cuenta de Google tienen cada una su calendario (
   assert.equal(w.google.activos(c2).length, 1);
 });
 
-test("un calendario antiguo (sin id de clínica en la descripción) se adopta solo si el nombre coincide, y se marca", async () => {
+test("un calendario antiguo con el mismo nombre NO se adopta: ya no se busca por nombre (calendarList no entra en el permiso estrecho)", async () => {
   const w = mundo({ citas: [conCita("a1")] });
   w.google.sembrarCalendario("viejo", `Clínica ${C1}`, `Agenda de Clínica ${C1} — DaleControl-clinic`);
-  w.google.sembrarCalendario("otro-nombre", "Otra clínica", "Agenda de Otra clínica — DaleControl-clinic");
   await sincronizarCita(w.puertos, C1, "a1");
-  assert.equal(w.clinicas.get(C1)!.calendarId, "viejo");
-  assert.ok(w.google.calendarios.get("viejo")!.description.includes(marcaCalendarioDeClinica(C1)));
-  assert.equal(w.google.calendarios.get("otro-nombre")!.description, "Agenda de Otra clínica — DaleControl-clinic", "no toca el de otro nombre");
+  assert.notEqual(w.clinicas.get(C1)!.calendarId, "viejo");
+  assert.equal(w.google.cuantas("calendarList.list"), 0);
+  assert.equal(w.google.cuantas("calendars.patch"), 0, "no toca el calendario ajeno");
+  assert.equal(w.google.calendarios.get("viejo")!.description, `Agenda de Clínica ${C1} — DaleControl-clinic`);
 });
 
 test("el calendario de OTRA clínica (marca con otro id) jamás se adopta, aunque el nombre coincida", async () => {
@@ -533,12 +533,7 @@ test("en bloque con 4 a la vez NO se crean 4 calendarios: uno solo", async () =>
 test("otra instancia fijó su calendario primero: se usa el suyo y el que creamos se quita", async () => {
   const w = mundo({ citas: [conCita("a1")] });
   w.google.sembrarCalendario("ganador", `Clínica ${C1}`, `x — ${marcaCalendarioDeClinica(C1)}`);
-  // Nuestra búsqueda no lo ve (se creó justo después de listar), así que crea el suyo…
-  const listar = w.google.calendarList.list.bind(w.google.calendarList);
-  w.google.calendarList.list = async (p) => {
-    const r = await listar(p);
-    return { data: { items: (r.data.items ?? []).filter((c) => c.id !== "ganador") } };
-  };
+  // Nosotros no lo vemos (no se busca por nombre: solo hay id guardado), así que creamos el nuestro…
   // …y al fijarlo, la base ya tenía el del ganador.
   w.puertos.fijarCalendarioId = async (clinicId) => { w.clinicas.get(clinicId)!.calendarId = "ganador"; return "ganador"; };
 
@@ -567,4 +562,61 @@ test("si esa cita pasada YA tenía su evento, editarla sí lo pone al día (y ca
   assert.equal((await sincronizarCita(w.puertos, C1, "a1")).estado, "actualizado");
   w.citas.get("a1")!.status = "CANCELLED";
   assert.equal((await sincronizarCita(w.puertos, C1, "a1")).estado, "borrado");
+});
+
+// ── Permiso estrecho: calendar.app.created (verificación de Google) ──────────
+// Con ese permiso calendarList.* y calendars.patch dan 403. Estas pruebas corren
+// el ciclo completo con la Google falsa en ese modo.
+
+test("permiso estrecho: crear, mover y cancelar funciona sin tocar calendarList ni calendars.patch", async () => {
+  const w = mundo({ citas: [conCita("a1")] });
+  w.google.alcanceEstrecho = true;
+  assert.equal((await sincronizarCita(w.puertos, C1, "a1")).estado, "creado");
+  w.citas.get("a1")!.startsAt = new Date("2026-10-16T16:00:00Z");
+  w.citas.get("a1")!.endsAt = new Date("2026-10-16T16:30:00Z");
+  assert.equal((await sincronizarCita(w.puertos, C1, "a1")).estado, "actualizado");
+  w.citas.get("a1")!.status = "CANCELLED";
+  assert.equal((await sincronizarCita(w.puertos, C1, "a1")).estado, "borrado");
+  assert.equal(w.google.cuantas("calendarList.list"), 0);
+  assert.equal(w.google.cuantas("calendarList.patch"), 0);
+  assert.equal(w.google.cuantas("calendars.patch"), 0);
+  assert.equal(w.caidas.length, 0);
+});
+
+test("permiso estrecho: «Sincronizar citas futuras» en bloque tampoco necesita calendarList", async () => {
+  const w = mundo({ citas: ["f1", "f2", "f3"].map((id) => conCita(id)) });
+  w.google.alcanceEstrecho = true;
+  const r = await sincronizarFuturas(w.puertos, C1);
+  assert.equal(r.creadas, 3);
+  assert.equal(r.fallidas, 0);
+  assert.equal(w.google.calendarios.size, 1);
+  assert.equal(w.google.cuantas("calendarList.list"), 0);
+});
+
+test("conexión VIEJA (permiso completo) con su calendario y eventos guardados: sigue funcionando igual", async () => {
+  const w = mundo({ clinicas: [clinica(C1, { calendarId: "cal" })], citas: [conCita("a1", { googleEventId: "ev1" })] });
+  w.google.sembrarCalendario("cal", "x", marcaCalendarioDeClinica(C1));
+  w.google.eventos.set("cal/ev1", { id: "ev1", status: "confirmed", summary: "viejo", attendees: [{ email: "ana@correo.mx" }] });
+  assert.equal((await sincronizarCita(w.puertos, C1, "a1")).estado, "actualizado");
+  assert.deepEqual(w.google.eventoEn("cal", "ev1")!.attendees, [{ email: "ana@correo.mx" }], "patch conserva a los invitados");
+  assert.equal(w.caidas.length, 0);
+});
+
+test("calendario guardado que el permiso estrecho no alcanza (403): falla suave, marca «permisos» para pedir Reconectar, la cita queda como estaba", async () => {
+  const w = mundo({ clinicas: [clinica(C1, { calendarId: "adoptado" })], citas: [conCita("a1")] });
+  w.google.alcanceEstrecho = true;
+  w.google.sembrarCalendario("adoptado", "Clínica", "", false); // no lo creó la app
+  const r = await sincronizarCita(w.puertos, C1, "a1");
+  assert.deepEqual(r, { estado: "fallo", motivo: "permisos" });
+  assert.deepEqual(w.caidas, [{ clinicId: C1, motivo: "permisos" }]);
+  assert.equal(w.citas.get("a1")!.googleEventId, null);
+});
+
+test("calendario guardado que Google ya no tiene (404): se crea uno nuevo y se guarda, sin pedir nada al usuario", async () => {
+  const w = mundo({ clinicas: [clinica(C1, { calendarId: "borrado" })], citas: [conCita("a1")] });
+  w.google.alcanceEstrecho = true;
+  const r = await sincronizarCita(w.puertos, C1, "a1");
+  assert.equal(r.estado, "creado");
+  assert.notEqual(w.clinicas.get(C1)!.calendarId, "borrado");
+  assert.equal(w.caidas.length, 0);
 });

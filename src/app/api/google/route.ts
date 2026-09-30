@@ -51,7 +51,9 @@ export async function DELETE(req: NextRequest) {
         googleRefreshToken:     null,
         googleCalendarEmail:    null,
         googleCalendarEnabled:  false,
-        googleClinicCalendarId: null,
+        // googleClinicCalendarId se CONSERVA: con el permiso estrecho no se puede buscar el calendario
+        // por nombre, así que al reconectar se reutiliza este id (si sigue al alcance) en vez de
+        // dejar un calendario huérfano con el mismo nombre. Es solo un id, sin datos de nadie.
       },
     });
     // Desconectar a propósito no es una conexión «caída».
