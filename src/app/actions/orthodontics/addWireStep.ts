@@ -46,9 +46,35 @@ const inputSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
+/**
+ * La fila recién creada, con la misma forma que la ficha pinta en «Secuencia de
+ * arcos» (`WireStepDTO`): con ella la pantalla la muestra al instante, sin
+ * esperar a que `router.refresh()` vuelva a leer el caso entero. Es un tipo
+ * local (no se importa de `redesign/types`) para que esta acción no arrastre
+ * componentes de cliente.
+ */
+export interface PasoDeArcoCreado {
+  id: string;
+  orderIndex: number;
+  phaseKey: z.infer<typeof phaseEnum>;
+  material: z.infer<typeof wireMaterialEnum>;
+  shape: z.infer<typeof wireShapeEnum>;
+  gauge: string;
+  purpose: string | null;
+  archUpper: boolean;
+  archLower: boolean;
+  durationWeeks: number;
+  auxiliaries: string[];
+  notes: string | null;
+  status: "PLANNED" | "ACTIVE" | "COMPLETED" | "SKIPPED";
+  plannedDate: string | null;
+  appliedDate: string | null;
+  completedDate: string | null;
+}
+
 export async function addWireStep(
   input: unknown,
-): Promise<ActionResult<{ wireStepId: string }>> {
+): Promise<ActionResult<{ wireStepId: string; paso: PasoDeArcoCreado }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -92,7 +118,24 @@ export async function addWireStep(
         purpose: data.purpose ?? null,
         notes: data.notes ?? null,
       },
-      select: { id: true },
+      select: {
+        id: true,
+        orderIndex: true,
+        phaseKey: true,
+        material: true,
+        shape: true,
+        gauge: true,
+        purpose: true,
+        archUpper: true,
+        archLower: true,
+        durationWeeks: true,
+        auxiliaries: true,
+        notes: true,
+        status: true,
+        plannedDate: true,
+        appliedDate: true,
+        completedDate: true,
+      },
     });
 
     await auditOrtho({
@@ -110,7 +153,15 @@ export async function addWireStep(
     });
 
     revalidatePath(`/dashboard/specialties/orthodontics/${plan.patientId}`);
-    return ok({ wireStepId: created.id });
+    return ok({
+      wireStepId: created.id,
+      paso: {
+        ...created,
+        plannedDate: created.plannedDate?.toISOString() ?? null,
+        appliedDate: created.appliedDate?.toISOString() ?? null,
+        completedDate: created.completedDate?.toISOString() ?? null,
+      },
+    });
   } catch (e) {
     console.error("[ortho] addWireStep failed:", e);
     return fail("No se pudo crear el wire step");

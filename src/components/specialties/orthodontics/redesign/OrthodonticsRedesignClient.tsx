@@ -6,7 +6,7 @@
 // contextual a la izquierda).
 
 import { Shield, Sparkles, Star } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
@@ -84,7 +84,12 @@ import layout from "./ortho-redesign-layout.module.css";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
 import { proximaFechaDeVisitaPorDefecto } from "@/lib/orthodontics/redesign/next-card-visit-default";
-import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
+import type { OrthoRedesignViewModel, OrthoPhaseKey, WireStepDTO } from "./types";
+import {
+  agregarPasoLocal,
+  descartarPasosAlcanzados,
+  mezclarPasosDeArco,
+} from "./pasos-de-arco-optimistas";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
 import type {
   CFDIRecordDTO,
@@ -287,8 +292,12 @@ export interface OrthodonticsRedesignClientProps {
   /** Hook para abrir wizard de wire step nuevo. Si está presente reemplaza
    *  al drawer interno G3. */
   onAddWireStep?: () => void;
-  /** Submit de un wire step desde el DrawerWireStep G3 interno. */
-  onSubmitWireStep?: (payload: DrawerWireStepSubmit) => Promise<void> | void;
+  /**
+   * Submit de un wire step desde el DrawerWireStep G3 interno. Si devuelve la
+   * fila creada, la «Secuencia de arcos» la pinta al instante (sin esperar al
+   * refresh de la página); sin ella, se espera al dato del servidor como antes.
+   */
+  onSubmitWireStep?: (payload: DrawerWireStepSubmit) => Promise<WireStepDTO | void> | WireStepDTO | void;
   /** Generar PDF antes/después desde ModalCompare. */
   onGenerateComparePdf?: () => void;
   /** Hook para abrir form de TAD nuevo. Si está presente reemplaza al
@@ -370,6 +379,25 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
 
   const vm = props.vm;
   const t = vm.treatment;
+
+  // «Agregar arco»: la fila recién creada se pinta al instante; el refresh de la
+  // página tarda segundos en traerla. Ligada al paciente para no arrastrarla a
+  // otra ficha si el componente se reutiliza. Ver pasos-de-arco-optimistas.ts.
+  const [arcosLocales, setArcosLocales] = useState<{ pacienteId: string; pasos: WireStepDTO[] }>({
+    pacienteId: vm.patient.id,
+    pasos: [],
+  });
+  const pasosLocales = arcosLocales.pacienteId === vm.patient.id ? arcosLocales.pasos : [];
+  useEffect(() => {
+    setArcosLocales((prev) => {
+      const pasos = descartarPasosAlcanzados(vm.wireSequence, prev.pasos);
+      return pasos === prev.pasos ? prev : { ...prev, pasos };
+    });
+  }, [vm.wireSequence]);
+  const wireSequence = useMemo(
+    () => mezclarPasosDeArco(vm.wireSequence, pasosLocales),
+    [vm.wireSequence, pasosLocales],
+  );
 
   // ws1-t9 #9: «Registrar control» tarda (trae la cita de hoy y el contexto): mientras tanto se
   // ve que está cargando y un segundo clic no lanza otra apertura.
@@ -695,7 +723,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             treatment={t}
             prescripcionDelPlan={prescripcionDelPlanVista}
             cementadoDelPlan={cementadoDelPlanVista}
-            wireSequence={vm.wireSequence}
+            wireSequence={wireSequence}
             iprPlan={derivePlanIprFromCards(vm)}
             tads={vm.tads}
             auxMechanics={vm.auxMechanics}
@@ -886,7 +914,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           paciente={pacienteParaAgendar}
           key={cardForDrawer.id}
           card={cardForDrawer}
-          availableWires={vm.wireSequence}
+          availableWires={wireSequence}
           treatmentPlanId={t.treatmentPlanId || undefined}
           controlesPrevistos={controlesPrevistosDelCaso}
           tecnica={t.appliance.technique ?? null}
@@ -963,7 +991,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             visitDate: newCardDefaults.visitDate,
             monthTotal: t.monthTotal > 0 ? t.monthTotal : null,
           }}
-          availableWires={vm.wireSequence}
+          availableWires={wireSequence}
           treatmentPlanId={t.treatmentPlanId || undefined}
           onClose={closeDrawer}
           onSave={props.onCardDraftSaved}
@@ -1021,7 +1049,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           defaultPhase={t.phase}
           onClose={closeDrawer}
           onSubmit={async (payload) => {
-            await props.onSubmitWireStep?.(payload);
+            const creado = await props.onSubmitWireStep?.(payload);
+            if (creado) {
+              setArcosLocales((prev) => ({
+                pacienteId: vm.patient.id,
+                pasos: agregarPasoLocal(prev.pacienteId === vm.patient.id ? prev.pasos : [], creado),
+              }));
+            }
             closeDrawer();
           }}
         />

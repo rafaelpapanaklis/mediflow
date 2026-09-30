@@ -854,6 +854,9 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             }
             toast.success(t("patients.ortho.wireStepAdded"));
             router.refresh();
+            // La fila creada, para que la «Secuencia de arcos» la pinte ya (mismo
+            // dato que `adaptWireStep` arma al leer el caso).
+            return res.data.paso;
           }}
           // onAddTad queda sin override: OrthodonticsRedesignClient abre su
           // DrawerAddTad interno (hallazgo ws1-t4 §9 — antes 4
