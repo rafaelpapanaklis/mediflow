@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOAuthClient, verifyState, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { urlDeSaltoAlHostDeLaApp, type MotivoErrorGcal } from "@/lib/google-calendar-callback";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -9,33 +10,58 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get("state");
   const error = searchParams.get("error");
   const BASE = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?tab=integraciones`;
+  const fallo = (motivo: MotivoErrorGcal) => NextResponse.redirect(`${BASE}&gcal=error&motivo=${motivo}`);
 
-  if (error || !code || !state) return NextResponse.redirect(`${BASE}&gcal=error`);
+  // Google devuelve al host de GOOGLE_REDIRECT_URI; si no es el de la app, ahí
+  // no está la cookie de sesión: reenviamos la respuesta al host de la app.
+  const salto = urlDeSaltoAlHostDeLaApp({
+    hostPeticion: (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").split(",")[0].trim() || null,
+    query:        searchParams,
+    appUrl:       process.env.NEXT_PUBLIC_APP_URL,
+    redirectUri:  process.env.GOOGLE_REDIRECT_URI,
+    haySesionAqui: req.cookies.getAll().some((c) => /^sb-.+-auth-token/.test(c.name)),
+  });
+  if (salto) return NextResponse.redirect(salto);
+
+  if (error) {
+    console.error("Google OAuth: Google devolvió error:", error);
+    return fallo("denegado");
+  }
+  if (!code || !state) return fallo("incompleto");
 
   try {
     // Verify state signature (HMAC) AND que pertenezca a la sesión actual
     const userId = verifyState(state);
     if (!userId) {
       console.error("Google OAuth: invalid state signature");
-      return NextResponse.redirect(`${BASE}&gcal=error`);
+      return fallo("state");
     }
     const supabase = createClient();
     const { data: { user: sessionUser } } = await supabase.auth.getUser();
     if (!sessionUser) {
       console.error("Google OAuth: no active session for state");
-      return NextResponse.redirect(`${BASE}&gcal=error`);
+      return fallo("sesion");
     }
+    // Una persona tiene una fila de users por clínica (mismo supabaseId): se
+    // busca LA fila del state entre las suyas, no la primera que salga.
     const sessionDbUser = await prisma.user.findFirst({
-      where: { supabaseId: sessionUser.id, isActive: true },
+      where: { id: userId, supabaseId: sessionUser.id, isActive: true },
       select: { id: true },
     });
-    if (!sessionDbUser || sessionDbUser.id !== userId) {
+    if (!sessionDbUser) {
       console.error("Google OAuth: state userId does not match session");
-      return NextResponse.redirect(`${BASE}&gcal=error`);
+      return fallo("otra_cuenta");
     }
 
     const oauth2Client = getOAuthClient();
-    const { tokens } = await oauth2Client.getToken(code);
+    let tokens;
+    try {
+      ({ tokens } = await oauth2Client.getToken(code));
+    } catch (err: any) {
+      // `error` de Google (invalid_grant, redirect_uri_mismatch, invalid_client…), sin secretos.
+      console.error("Google OAuth: getToken falló:", err?.response?.data?.error ?? err?.message);
+      return fallo("token");
+    }
 
     const accessToken  = tokens.access_token  ?? null;
     const refreshToken = tokens.refresh_token ?? null;
@@ -87,6 +113,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${BASE}&gcal=success`);
   } catch (err: any) {
     console.error("Google OAuth callback error:", err?.message);
-    return NextResponse.redirect(`${BASE}&gcal=error`);
+    return fallo("guardar");
   }
 }

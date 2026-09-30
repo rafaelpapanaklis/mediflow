@@ -18,7 +18,7 @@ import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 export const metadata: Metadata = { title: "Configuración — DaleControl" };
 
 interface Props {
-  searchParams: { tab?: string; gcal?: string };
+  searchParams: { tab?: string; gcal?: string; motivo?: string };
 }
 
 export default async function SettingsPage({ searchParams }: Props) {
@@ -73,6 +73,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         clinic={clinicSafe as any}
         initialTab={searchParams.tab}
         gcalStatus={searchParams.gcal}
+        gcalMotivo={searchParams.motivo}
         cfdiLive={isFacturapiLive()}
         teamMembers={teamMembers as any}
         puedeEditarClinica={puedeEditarClinica}

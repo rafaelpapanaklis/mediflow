@@ -15,6 +15,7 @@ import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
 import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
+import { claveAvisoErrorGcal } from "@/lib/google-calendar-callback";
 import dynamic from "next/dynamic";
 import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
 import {
@@ -95,7 +96,7 @@ const AVG_CONSULT_TOKENS = 5000;
 
 interface TeamMember { id: string; firstName: string; lastName: string; role: string; services: string[] }
 interface Props {
-  user: any; clinic: any; initialTab?: string; gcalStatus?: string; teamMembers?: TeamMember[];
+  user: any; clinic: any; initialTab?: string; gcalStatus?: string; gcalMotivo?: string; teamMembers?: TeamMember[];
   /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. Es el
    *  ÚNICO dato del ambiente que llega al cliente (nunca la env completa). */
   cfdiLive?: boolean;
@@ -111,7 +112,7 @@ interface Props {
   metodosPago?: MetodosDisponibles;
 }
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago }: Props) {
   const t = useT();
   // El DOCTOR entra RECORTADO (ver `verComun`), salvo el que ya tenía
   // «Ver configuración» concedido persona a persona desde Equipo → Permisos:
@@ -153,8 +154,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   // Show toast feedback from Google Calendar OAuth redirect
   useEffect(() => {
     if (gcalStatus === "success") toast.success(t("settings.client.gcalConnectedToast"));
-    if (gcalStatus === "error") toast.error(t("settings.client.gcalConnectErrorToast"));
-  }, [gcalStatus]);
+    // El motivo lo pone /api/google/callback: el aviso dice qué pasó y dura lo
+    // bastante para leerlo (antes era un genérico «verifica tus credenciales»).
+    if (gcalStatus === "error") toast.error(t(claveAvisoErrorGcal(gcalMotivo)), { duration: 12000 });
+  }, [gcalStatus, gcalMotivo]);
 
   // CFDI form state
   const [cfdiForm, setCfdiForm] = useState({

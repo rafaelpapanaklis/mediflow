@@ -3920,6 +3920,13 @@
     "client": {
       "gcalConnectedToast": "Google Calendar conectado exitosamente",
       "gcalConnectErrorToast": "Error al conectar Google Calendar — verifica tus credenciales",
+      "gcalError_denegado": "Google no dio el permiso: se canceló la autorización o tu cuenta de Google no tiene acceso. Vuelve a pulsar «Conectar Google Calendar» y acepta los permisos de Calendar.",
+      "gcalError_incompleto": "La respuesta de Google llegó incompleta. Vuelve a pulsar «Conectar Google Calendar».",
+      "gcalError_state": "La respuesta de Google no se pudo verificar. Vuelve a pulsar «Conectar Google Calendar».",
+      "gcalError_sesion": "Volviste de Google sin tu sesión de DaleControl abierta en este navegador. Entra a DaleControl y vuelve a pulsar «Conectar Google Calendar».",
+      "gcalError_otra_cuenta": "La conexión con Google se inició desde otro usuario de DaleControl. Vuelve a pulsar «Conectar Google Calendar» desde esta sesión.",
+      "gcalError_token": "Google no aceptó la autorización (pudo caducar). Vuelve a intentarlo; si se repite, avísanos.",
+      "gcalError_guardar": "Google autorizó, pero no pudimos guardar la conexión. Vuelve a intentarlo; si se repite, avísanos.",
       "clinicSavedToast": "Datos de la clínica actualizados",
       "saveErrorToast": "Error al guardar",
       "profileSavedToast": "Perfil actualizado",
