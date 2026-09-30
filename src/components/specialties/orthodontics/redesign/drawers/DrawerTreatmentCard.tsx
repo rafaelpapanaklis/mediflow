@@ -35,6 +35,7 @@ import {
   type OrthoElasticClass,
   type OrthoElasticZone,
   type OrthoGingivitisLevel,
+  type OrthoPhaseKey,
   type SOAP,
   type TreatmentCardDTO,
   type WireStepDTO,
@@ -43,6 +44,9 @@ import { useCajon } from "../atoms/useCajon";
 import { EvolutionTemplatePicker } from "@/components/clinical-shared/EvolutionTemplatePicker";
 import { aplicarPlantillaAlControl } from "@/lib/orthodontics/consulta-ortodoncia";
 import { mensajeDeHuecos, proximaFechaDeControl } from "@/lib/orthodontics/hoja-de-control-reglas";
+import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
+import { claveDeFase } from "@/lib/orthodontics/fase-de-hoja";
+import { plantillaAplicaALaTecnica } from "@/lib/orthodontics/plantillas-por-tecnica";
 import { AgendarControlBoton } from "@/components/specialties/orthodontics/modulo/agendar-control";
 import { AgendarProximoControlButton } from "@/components/specialties/orthodontics/AgendarProximoControlButton";
 import { AvisarProximoControlButton } from "@/components/specialties/orthodontics/AvisarProximoControlButton";
@@ -92,6 +96,18 @@ export type DrawerCardSubmit = {
    * ficha no lo mandaba nunca — hallazgo 6).
    */
   appointmentId: string | null;
+  /**
+   * ws1-t10: lo que el cajón MOSTRÓ en el encabezado de una hoja NUEVA (número, fase, mes, arco de llegada y fecha).
+   * Quien guarda lo manda tal cual: antes la ficha lo volvía a calcular por su cuenta y firmaba una fase distinta
+   * («Alineación» abierta, «Nivelación» firmada). Ausente en una hoja que ya existe: esa ya trae sus valores.
+   */
+  encabezado?: {
+    cardNumber: number;
+    phaseKey: OrthoPhaseKey | null;
+    monthAt: number;
+    wireFromId: string | null;
+    visitDate: string;
+  };
 };
 
 export interface DrawerTreatmentCardProps {
@@ -104,9 +120,18 @@ export interface DrawerTreatmentCardProps {
    * se puso hoy y sumarlo a la secuencia (antes solo ofrecía lo planeado).
    */
   treatmentPlanId?: string;
+  /**
+   * ws1-t10: los controles que prevé el plan («Control X de N»). Sin él el encabezado dice solo «Control X».
+   */
+  controlesPrevistos?: number | null;
+  /** ws1-t10: la técnica del caso (`OrthoTechnique`); con ella las plantillas de nota se filtran («Cambio de alineador» no sale en brackets). */
+  tecnica?: string | null;
   /** Para una nueva cita, se sugieren defaults: número, fase, mes, wire actual. */
   defaultsForNew?: {
     cardNumber: number;
+    /** ws1-t10: el número de ESTE control con la cuenta de la ficha (visitas del caso); si falta se usa `cardNumber`. */
+    controlNumero?: number | null;
+    /** La CLAVE de la fase («ALIGNMENT») o su nombre; el cajón resuelve las dos. */
     phase: string;
     monthAt: number;
     wireFrom: WireStepDTO | null;
@@ -224,10 +249,10 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
 
   const headerTitle = useMemo(() => {
     if (isNew && props.defaultsForNew) {
-      // La ficha manda la CLAVE de la fase («ALIGNMENT») y la Agenda su
-      // nombre ya traducido: aquí se muestra siempre el nombre.
+      // Llega la CLAVE de la fase («ALIGNMENT») o su nombre ya traducido: aquí se muestra siempre el nombre.
       const fase = props.defaultsForNew.phase;
-      const nombre = (PHASE_LABELS as Record<string, string>)[fase] ?? fase;
+      const clave = claveDeFase(fase);
+      const nombre = clave ? PHASE_LABELS[clave] : fase;
       return `${fmtDate(props.defaultsForNew.visitDate)} · ${nombre}`;
     }
     if (props.card) {
@@ -238,9 +263,18 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
 
   // Sección H (ws1-t4 ronda 6): «control» es la visita, «hoja de control»
   // lo que se registra de ella.
+  // ws1-t10: «Control X de N» con la cuenta de la ficha. Una hoja nueva lleva el número de la visita
+  // (`controlNumero`); una que ya existe, el suyo.
+  const numeroDeControl = isNew
+    ? (props.defaultsForNew?.controlNumero ?? props.defaultsForNew?.cardNumber ?? null)
+    : props.card!.cardNumber;
+  const textoDelControl =
+    numeroDeControl !== null ? textoControlQueSigue(progresoDeControles(numeroDeControl - 1, props.controlesPrevistos ?? null)) : null;
   const headerEyebrow = isNew
-    ? "Hoja de control nueva"
-    : `Hoja del control ${props.card!.cardNumber}`;
+    ? textoDelControl
+      ? `Hoja de control nueva · ${textoDelControl}`
+      : "Hoja de control nueva"
+    : `Hoja del ${(textoDelControl ?? `control ${props.card!.cardNumber}`).toLowerCase()}`;
 
   const wireFromLabel = wireText(props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null);
   // H48: arcos escritos en esta hoja (ya guardados en la secuencia del caso).
@@ -257,7 +291,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   // —mes, fase, arcos— y lo demás queda como un hueco a la vista. No pisa lo
   // que ya esté escrito: se añade debajo.
   const aplicarPlantilla = (plantilla: { S: string; O: string; A: string; P: string }) => {
-    const clave = props.card?.phaseKey ?? props.defaultsForNew?.phase ?? null;
+    const clave = props.card?.phaseKey ?? claveDeFase(props.defaultsForNew?.phase) ?? props.defaultsForNew?.phase ?? null;
     const arcoDe = props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null;
     // Fila 12 (b): lo que sigue tal cual se precargó lo reemplaza la
     // plantilla; lo que el doctor escribió se conserva (va debajo).
@@ -308,6 +342,17 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     activationsNote: state.activationsNote.trim() ? state.activationsNote : null,
     indications: state.indications.trim() ? state.indications : null,
     appointmentId: props.appointmentId ?? null,
+    ...(isNew && props.defaultsForNew
+      ? {
+          encabezado: {
+            cardNumber: props.defaultsForNew.cardNumber,
+            phaseKey: claveDeFase(props.defaultsForNew.phase),
+            monthAt: props.defaultsForNew.monthAt,
+            wireFromId: props.defaultsForNew.wireFrom?.id ?? null,
+            visitDate: props.defaultsForNew.visitDate,
+          },
+        }
+      : {}),
     ...(procSel !== undefined ? { procedimientos: procSel } : {}),
     ...(extraccionesHoy.length > 0 ? { extraccionesRealizadas: extraccionesHoy } : {}),
   });
@@ -568,6 +613,8 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                   <EvolutionTemplatePicker
                     module="orthodontics"
                     ensureDefaults
+                    align="right"
+                    filter={(plantilla) => plantillaAplicaALaTecnica(plantilla, props.tecnica)}
                     onApply={(plantilla) => aplicarPlantilla(plantilla.soapTemplate)}
                   />
                 </span>

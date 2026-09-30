@@ -31,6 +31,7 @@ import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { consumirReposicionIncluida } from "@/lib/orthodontics/cobro/caso-db";
 import { notaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita";
 import { mensajeDeHuecos } from "@/lib/orthodontics/hoja-de-control-reglas";
+import { cambiosAlFirmarConArco } from "@/lib/orthodontics/secuencia-de-arcos";
 import { existeFacturaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita-db";
 import { avisoDeReposiciones } from "@/lib/orthodontics/cobro/reposiciones";
 
@@ -328,6 +329,39 @@ export async function signTreatmentCard(
 
       return resolvedId;
     });
+
+    // ws1-t10: el arco de «Arco nuevo» pasa a «Actual» en la Secuencia de arcos (con la fecha de la visita como inicio)
+    // y el que estaba en uso se cierra. Secundario: la firma ya quedó; si falla, se avisa en el log y la secuencia se
+    // corrige a mano desde «Agregar arco». Solo si esta es la hoja firmada más reciente y no se firmó antes.
+    if (data.wireToId && !yaEstabaFirmada) {
+      try {
+        const [posteriores, pasos] = await Promise.all([
+          prisma.orthoTreatmentCard.count({
+            where: { treatmentPlanId: plan.id, clinicId: plan.clinicId, deletedAt: null, status: "SIGNED", visitDate: { gt: visitDate }, id: { not: cardId } },
+          }),
+          prisma.orthoWireStep.findMany({
+            where: { treatmentPlanId: plan.id, clinicId: plan.clinicId },
+            select: { id: true, status: true, appliedDate: true, completedDate: true },
+          }),
+        ]);
+        if (posteriores === 0) {
+          const cambios = cambiosAlFirmarConArco({
+            pasos,
+            arcoNuevoId: data.wireToId,
+            arcoAnteriorId: data.wireFromId ?? null,
+            fecha: visitDate,
+          });
+          for (const c of cambios) {
+            await prisma.orthoWireStep.updateMany({
+              where: { id: c.id, treatmentPlanId: plan.id, clinicId: plan.clinicId },
+              data: { status: c.status, appliedDate: c.appliedDate, completedDate: c.completedDate },
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("[ortho] signTreatmentCard: no se pudo actualizar la secuencia de arcos (no revierte la firma):", e);
+      }
+    }
 
     // Columnas nuevas (Ola 1), en su PROPIA transacción — separada a
     // propósito de la de arriba, igual que saveTreatmentCardDraft.ts: un

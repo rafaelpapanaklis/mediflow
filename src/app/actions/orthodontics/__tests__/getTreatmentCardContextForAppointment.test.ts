@@ -40,6 +40,7 @@ let plans: PlanRow[] = [];
 let patients: PatientRow[] = [];
 let appointments: AppointmentRow[] = [];
 let ctx = { userId: "user-1", role: "DOCTOR", clinicId: "clinic-1" };
+let faseEnCurso: string | null = null;
 
 mock.module("@/lib/prisma", {
   namedExports: {
@@ -67,7 +68,7 @@ mock.module("@/lib/prisma", {
       },
       orthoWireStep: { findMany: async () => [] },
       orthoTreatmentCard: { findMany: async () => [] },
-      orthodonticPhase: { findFirst: async () => null },
+      orthodonticPhase: { findFirst: async () => (faseEnCurso ? { phaseKey: faseEnCurso } : null) },
       orthoPhotoSet: { findMany: async () => [] },
       // Ronda 6 (ws1-t8): `buildTreatmentCardContext` ahora recibe el
       // timezone de la clínica (hallazgo 7, tarjetaDeControlDeHoy) — el
@@ -100,6 +101,7 @@ function reset() {
   plans = [];
   patients = [];
   appointments = [];
+  faseEnCurso = null;
   ctx = { userId: "doctor-sin-acceso", role: "DOCTOR", clinicId: "clinic-1" };
 }
 
@@ -168,4 +170,51 @@ test("paciente sin restricción (visibleUserIds vacío) es visible para cualquie
   );
   const res = await getTreatmentCardContextForAppointment("appt-3", "plan-3");
   assert.equal(res.ok, true);
+});
+
+test("ws1-t10: la hoja nueva lleva la fase EN CURSO y el mes real desde la colocación al día de la visita", async () => {
+  reset();
+  faseEnCurso = "LEVELING";
+  plans.push({
+    id: "plan-4",
+    clinicId: "clinic-1",
+    patientId: "patient-abierto",
+    installedAt: new Date("2026-08-15T16:00:00Z"),
+    startDate: null,
+  });
+  patients.push({ id: "patient-abierto", visibleUserIds: [] });
+  appointments.push({
+    id: "appt-4",
+    clinicId: "clinic-1",
+    patientId: "patient-abierto",
+    startsAt: new Date("2026-09-29T16:00:00Z"),
+    endsAt: new Date("2026-09-29T16:30:00Z"),
+  });
+  const { getTreatmentCardContextForAppointment } = await import("../getTreatmentCardContextForAppointment");
+  const res = await getTreatmentCardContextForAppointment("appt-4", "plan-4");
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.data.defaultsForNew.phase, "LEVELING");
+    assert.equal(res.data.defaultsForNew.monthAt, 1.5);
+  }
+});
+
+test("ws1-t10: sin fase en curso ni hojas, la hoja nueva arranca en Alineación (la misma que muestra el cajón)", async () => {
+  reset();
+  plans.push({ id: "plan-5", clinicId: "clinic-1", patientId: "patient-abierto", installedAt: null, startDate: null });
+  patients.push({ id: "patient-abierto", visibleUserIds: [] });
+  appointments.push({
+    id: "appt-5",
+    clinicId: "clinic-1",
+    patientId: "patient-abierto",
+    startsAt: new Date("2026-09-29T16:00:00Z"),
+    endsAt: new Date("2026-09-29T16:30:00Z"),
+  });
+  const { getTreatmentCardContextForAppointment } = await import("../getTreatmentCardContextForAppointment");
+  const res = await getTreatmentCardContextForAppointment("appt-5", "plan-5");
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.data.defaultsForNew.phase, "ALIGNMENT");
+    assert.equal(res.data.defaultsForNew.monthAt, 0);
+  }
 });

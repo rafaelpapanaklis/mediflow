@@ -23,3 +23,12 @@ export function contarControlesHechos(args: {
   const citas = desde ? args.citas.filter((c) => c.startsAt >= desde) : [];
   return visitasDelCaso(citas, args.hojas, args.ahora, args.zona).total;
 }
+
+/**
+ * ws1-t10: el número de ESTE control con la cuenta de la ficha. Si la visita ya cuenta entre los `hechos` (el paciente
+ * ya llegó, o su hoja ya existe: la misma regla de `visitasDelCaso`) lleva el número que ya tiene; si no, es el que sigue.
+ */
+export function numeroDeEsteControl(a: { hechos: number; yaCuenta: boolean }): number {
+  const h = Math.max(0, Math.floor(Number.isFinite(a.hechos) ? a.hechos : 0));
+  return a.yaCuenta ? Math.max(1, h) : h + 1;
+}

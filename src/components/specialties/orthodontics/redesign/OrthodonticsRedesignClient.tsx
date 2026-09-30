@@ -83,7 +83,6 @@ import layout from "./ortho-redesign-layout.module.css";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
 import { proximaFechaDeVisitaPorDefecto } from "@/lib/orthodontics/redesign/next-card-visit-default";
-import { PHASE_LABELS } from "./types";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
 import type {
@@ -534,7 +533,14 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       ? {
           cardNumber:
             (vm.treatmentCards.reduce((m, c) => Math.max(m, c.cardNumber), 0) ?? 0) + 1,
-          phase: t.phase ?? "Sin fase",
+          // ws1-t10: la misma regla que el servidor (getTreatmentCardContext…): la fase en curso, si no la de la
+          // última hoja firmada, si no la primera. Antes: «Sin fase», y la hoja firmaba otra distinta.
+          phase:
+            t.phase ??
+            [...vm.treatmentCards].filter((c) => c.status === "SIGNED").sort((a, b) => b.cardNumber - a.cardNumber)[0]?.phaseKey ??
+            "ALIGNMENT",
+          // La cuenta de la ficha: las visitas del caso, no las hojas.
+          controlNumero: props.planDeTratamiento ? props.planDeTratamiento.controlesHechos + 1 : null,
           monthAt: t.monthCurrent,
           wireFrom: t.wireCurrent,
           // H22 (QA ws1-t9): con la instantánea del instante en que se abre
@@ -546,6 +552,9 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           visitDate: proximaFechaDeVisitaPorDefecto(vm.nextAppointment?.date),
         }
       : undefined;
+
+  // ws1-t10: los controles que prevé el plan del caso, para «Control X de N» en la hoja.
+  const controlesPrevistosDelCaso = props.planDeTratamiento?.detalle.controlesPrevistos ?? null;
 
   const tStatus = props.treatmentStatus ?? "en-tratamiento";
   // Fila 26 (ws1-t4 ronda 6): lo que no toca por fase va plegado.
@@ -637,6 +646,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               t.status !== "no-iniciado" ? abrirRegistrarControl : undefined
             }
             controlFirmadoHoy={Boolean(hojaDeHoyFirmada)}
+            controlesPrevistos={controlesPrevistosDelCaso}
           />
 
           {/* Ola 1 (ws1-t4, Control y agenda) — C8 */}
@@ -862,6 +872,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           card={cardForDrawer}
           availableWires={vm.wireSequence}
           treatmentPlanId={t.treatmentPlanId || undefined}
+          controlesPrevistos={controlesPrevistosDelCaso}
+          tecnica={t.appliance.technique ?? null}
           onClose={closeDrawer}
           onSave={props.onCardDraftSaved}
           onSign={props.onCardSigned}
@@ -881,6 +893,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           appointmentId={nuevoControlCtx.appointmentId}
           availableWires={nuevoControlCtx.availableWires}
           treatmentPlanId={t.treatmentPlanId || undefined}
+          controlesPrevistos={controlesPrevistosDelCaso ?? nuevoControlCtx.controlesPrevistos}
+          tecnica={t.appliance.technique ?? nuevoControlCtx.technique}
           availablePhotoSets={nuevoControlCtx.availablePhotoSets}
           onClose={closeDrawer}
           onSave={props.onCardDraftSaved}
@@ -892,9 +906,12 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           key="new-card-con-cita"
           card={null}
           appointmentId={nuevoControlCtx.appointmentId}
+          controlesPrevistos={controlesPrevistosDelCaso ?? nuevoControlCtx.controlesPrevistos}
+          tecnica={t.appliance.technique ?? nuevoControlCtx.technique}
           defaultsForNew={{
             cardNumber: nuevoControlCtx.defaultsForNew.cardNumber,
-            phase: PHASE_LABELS[nuevoControlCtx.defaultsForNew.phase],
+            controlNumero: nuevoControlCtx.defaultsForNew.controlNumero,
+            phase: nuevoControlCtx.defaultsForNew.phase,
             monthAt: nuevoControlCtx.defaultsForNew.monthAt,
             wireFrom: nuevoControlCtx.defaultsForNew.wireFrom,
             visitDate: nuevoControlCtx.defaultsForNew.visitDate,
@@ -919,8 +936,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           paciente={pacienteParaAgendar}
           key="new-card"
           card={null}
+          controlesPrevistos={controlesPrevistosDelCaso}
+          tecnica={t.appliance.technique ?? null}
           defaultsForNew={{
             cardNumber: newCardDefaults.cardNumber,
+            controlNumero: newCardDefaults.controlNumero,
             phase: newCardDefaults.phase,
             monthAt: newCardDefaults.monthAt,
             wireFrom: newCardDefaults.wireFrom,

@@ -36,7 +36,6 @@ import orto from "../redesign/orto.module.css";
 import modulo from "../modulo/modulo.module.css";
 import { CLASES_REDISENO } from "@/components/dashboard/pacientes-rediseno/raiz";
 import {
-  PHASE_LABELS,
   type TreatmentCardDTO,
   type WireStepDTO,
   type OrthoPhaseKey,
@@ -54,10 +53,13 @@ export interface BotonHojaControlProps {
 
 interface LoadedContext {
   card: TreatmentCardDTO | null;
+  controlesPrevistos: number | null;
+  tecnica: string | null;
   availableWires: WireStepDTO[];
   availablePhotoSets: Array<{ id: string; label: string }>;
   defaultsForNew: {
     cardNumber: number;
+    controlNumero?: number | null;
     phase: OrthoPhaseKey;
     monthAt: number;
     wireFrom: WireStepDTO | null;
@@ -90,6 +92,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
       }
       setCtx({
         card: res.data.existingCard,
+        controlesPrevistos: res.data.controlesPrevistos,
+        tecnica: res.data.technique,
         availableWires: res.data.availableWires,
         availablePhotoSets: res.data.availablePhotoSets,
         defaultsForNew: res.data.defaultsForNew,
@@ -194,12 +198,15 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
           treatmentPlanId={treatmentPlanId}
           availablePhotoSets={ctx.availablePhotoSets}
           appointmentId={appointmentId}
+          controlesPrevistos={ctx.controlesPrevistos}
+          tecnica={ctx.tecnica}
           defaultsForNew={
             ctx.card
               ? undefined
               : {
                   cardNumber: ctx.defaultsForNew.cardNumber,
-                  phase: PHASE_LABELS[ctx.defaultsForNew.phase],
+                  controlNumero: ctx.defaultsForNew.controlNumero,
+                  phase: ctx.defaultsForNew.phase,
                   monthAt: ctx.defaultsForNew.monthAt,
                   wireFrom: ctx.defaultsForNew.wireFrom,
                   visitDate: ctx.defaultsForNew.visitDate,

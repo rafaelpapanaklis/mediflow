@@ -8,15 +8,20 @@ import type { TreatmentCardDTO } from "../types";
 import { ELASTIC_CLASS_LABELS, GINGIVITIS_LABELS, PHASE_LABELS } from "../types";
 import { fmtDate, clinicalSeverityColor } from "./format";
 import { Pill } from "./Pill";
+import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
+import { textoDelMes } from "@/lib/orthodontics/mes-de-tratamiento";
 import orto from "../orto.module.css";
 
 export interface TimelineRowProps {
   card: TreatmentCardDTO;
+  /** ws1-t10: los controles que prevé el plan del caso («Control 3 de 18»). Sin él, «Control 3». */
+  controlesPrevistos?: number | null;
   isLast?: boolean;
   onClick?: () => void;
 }
 
-export function TimelineRow({ card, onClick }: TimelineRowProps) {
+export function TimelineRow({ card, controlesPrevistos, onClick }: TimelineRowProps) {
+  const textoControl = textoControlQueSigue(progresoDeControles(card.cardNumber - 1, controlesPrevistos ?? null));
   const wireFromLabel = card.wireFrom ? wireLabel(card.wireFrom) : "—";
   const wireToLabel = card.wireTo ? wireLabel(card.wireTo) : null;
   const wireChange = wireToLabel != null && wireFromLabel !== wireToLabel;
@@ -45,7 +50,7 @@ export function TimelineRow({ card, onClick }: TimelineRowProps) {
       type="button"
       onClick={onClick}
       className={orto.listaFila}
-      aria-label={`Control ${card.cardNumber} del ${fmtDate(card.visitDate)} — ${PHASE_LABELS[card.phaseKey]}`}
+      aria-label={`${textoControl} del ${fmtDate(card.visitDate)} — ${PHASE_LABELS[card.phaseKey]}`}
     >
       <span className={orto.numero} aria-hidden>
         {card.cardNumber}
@@ -57,7 +62,7 @@ export function TimelineRow({ card, onClick }: TimelineRowProps) {
             {PHASE_LABELS[card.phaseKey]}
           </Pill>
           <span className={`${orto.tonoApagado} text-xs`}>
-            mes {card.monthAt.toFixed(1)} · {card.durationMin} min
+            {textoControl} · {textoDelMes(card.monthAt)} · {card.durationMin} min
           </span>
           {card.status === "DRAFT" ? (
             <Pill color="amber" size="xs">

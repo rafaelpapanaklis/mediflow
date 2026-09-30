@@ -38,9 +38,11 @@ export async function getTreatmentCardContextForPatient(
     where: { id: treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
     select: {
       id: true,
+      clinicId: true,
       patientId: true,
       installedAt: true,
       startDate: true,
+      createdAt: true,
       // Fila 12: datos de la nota precargada (buildTreatmentCardContext).
       technique: true,
       patient: { select: { firstName: true, lastName: true } },
@@ -64,11 +66,11 @@ export async function getTreatmentCardContextForPatient(
       startsAt: { gte: startUtc, lt: endUtc },
     },
     orderBy: { startsAt: "asc" },
-    select: { id: true, type: true, startsAt: true, endsAt: true },
+    select: { id: true, type: true, startsAt: true, endsAt: true, status: true },
   });
   const appt =
     citaDeHoy && esCitaControlOrto(citaDeHoy.type)
-      ? { id: citaDeHoy.id, startsAt: citaDeHoy.startsAt, endsAt: citaDeHoy.endsAt }
+      ? { id: citaDeHoy.id, startsAt: citaDeHoy.startsAt, endsAt: citaDeHoy.endsAt, status: citaDeHoy.status }
       : null;
 
   const context = await buildTreatmentCardContext(plan, appt, timezone);

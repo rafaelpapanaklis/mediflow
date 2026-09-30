@@ -102,7 +102,7 @@ test("las seis plantillas de ortodoncia existen, con sus cuatro campos", () => {
 test("están conectadas a la hoja de control, con el selector que ya existía", () => {
   const hoja = sinComentarios(leer("src/components/specialties/orthodontics/redesign/drawers/DrawerTreatmentCard.tsx"));
   assert.match(hoja, /import \{ EvolutionTemplatePicker \} from "@\/components\/clinical-shared\/EvolutionTemplatePicker";/);
-  assert.match(hoja, /<EvolutionTemplatePicker\s+module="orthodontics"\s+ensureDefaults\s+onApply=\{\(plantilla\) => aplicarPlantilla\(plantilla\.soapTemplate\)\}/);
+  assert.match(hoja, /<EvolutionTemplatePicker\s+module="orthodontics"\s+ensureDefaults\s+align="right"\s+filter=\{\(plantilla\) => plantillaAplicaALaTecnica\(plantilla, props\.tecnica\)\}\s+onApply=\{\(plantilla\) => aplicarPlantilla\(plantilla\.soapTemplate\)\}/);
   // Solo mientras la hoja se puede editar: una hoja firmada no se toca.
   assert.match(hoja, /\{!isReadOnly \? \(\s*<span className=\{orto\.plantillas\}>/);
   // `ensureDefaults` es lo que siembra las seis la primera vez, en la clínica de la sesión.

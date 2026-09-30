@@ -873,33 +873,22 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               toast.error(t("patients.ortho.noPlan"));
               return;
             }
+            const card = orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId);
+            // ws1-t10: una hoja NUEVA firma lo que el cajón mostró (`payload.encabezado`); antes esto se volvía a
+            // calcular aquí y salía otra fase («Alineación» abierta, «Nivelación» firmada), sin arco de llegada.
+            const nueva = payload.encabezado;
             const res = await signTreatmentCard({
               cardId: payload.cardId,
               treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
               cardNumber:
-                (orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                  ?.cardNumber ??
-                  orthoRedesignVM.treatmentCards.reduce(
-                    (m, c) => Math.max(m, c.cardNumber),
-                    0,
-                  ) + 1),
-              visitDate:
-                orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                  ?.visitDate ?? new Date().toISOString(),
-              durationMin:
-                orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                  ?.durationMin ?? 30,
-              phaseKey:
-                orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                  ?.phaseKey ??
-                orthoRedesignVM.treatment.phase ??
-                "LEVELING",
-              monthAt:
-                orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                  ?.monthAt ?? orthoRedesignVM.treatment.monthCurrent,
-              wireFromId:
-                orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                  ?.wireFrom?.id ?? null,
+                card?.cardNumber ??
+                nueva?.cardNumber ??
+                orthoRedesignVM.treatmentCards.reduce((m, c) => Math.max(m, c.cardNumber), 0) + 1,
+              visitDate: card?.visitDate ?? nueva?.visitDate ?? new Date().toISOString(),
+              durationMin: card?.durationMin ?? 30,
+              phaseKey: card?.phaseKey ?? nueva?.phaseKey ?? orthoRedesignVM.treatment.phase ?? "ALIGNMENT",
+              monthAt: card?.monthAt ?? nueva?.monthAt ?? orthoRedesignVM.treatment.monthCurrent,
+              wireFromId: card ? (card.wireFrom?.id ?? null) : (nueva?.wireFromId ?? null),
               wireToId: payload.wireToId,
               soap: payload.soap,
               hygiene: payload.hygiene,
@@ -953,21 +942,24 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             const card = orthoRedesignVM.treatmentCards.find(
               (c) => c.id === payload.cardId,
             );
+            // ws1-t10: igual que al firmar, una hoja nueva guarda lo que el cajón mostró.
+            const nueva = payload.encabezado;
             const res = await saveTreatmentCardDraft({
               cardId: payload.cardId,
               treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
               cardNumber:
                 card?.cardNumber ??
+                nueva?.cardNumber ??
                 orthoRedesignVM.treatmentCards.reduce(
                   (m, c) => Math.max(m, c.cardNumber),
                   0,
                 ) + 1,
-              visitDate: card?.visitDate ?? new Date().toISOString(),
+              visitDate: card?.visitDate ?? nueva?.visitDate ?? new Date().toISOString(),
               durationMin: card?.durationMin ?? 30,
               phaseKey:
-                card?.phaseKey ?? orthoRedesignVM.treatment.phase ?? "LEVELING",
-              monthAt: card?.monthAt ?? orthoRedesignVM.treatment.monthCurrent,
-              wireFromId: card?.wireFrom?.id ?? null,
+                card?.phaseKey ?? nueva?.phaseKey ?? orthoRedesignVM.treatment.phase ?? "ALIGNMENT",
+              monthAt: card?.monthAt ?? nueva?.monthAt ?? orthoRedesignVM.treatment.monthCurrent,
+              wireFromId: card ? (card.wireFrom?.id ?? null) : (nueva?.wireFromId ?? null),
               wireToId: payload.wireToId,
               soap: payload.soap,
               hygiene: payload.hygiene,

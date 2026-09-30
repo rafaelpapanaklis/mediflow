@@ -39,6 +39,9 @@ import { prisma } from "@/lib/prisma";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { duracionSugeridaProximoControl } from "@/lib/orthodontics/duracion-proximo-control";
+import { mesDeTratamiento } from "@/lib/orthodontics/mes-de-tratamiento";
+import { cargarProgresoDeControles } from "@/lib/orthodontics/controles-hechos-db";
+import { inicioDelCaso, numeroDeEsteControl } from "@/lib/orthodontics/controles-hechos";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import { tarjetaDeControlDeHoy } from "@/lib/orthodontics/redesign/control-del-dia";
@@ -92,8 +95,20 @@ export interface TreatmentCardAgendaContext {
    * (se reabre/continúa, no se crea otra — hallazgo 7). */
   existingCard: TreatmentCardDTO | null;
   availableWires: WireStepDTO[];
+  /**
+   * ws1-t10: los controles que prevé el plan del caso («Control X de N»); null si el plan no lo dice. Es lo que la
+   * hoja ya abierta (existingCard) necesita para decir su «de N».
+   */
+  controlesPrevistos: number | null;
+  /** ws1-t10: la técnica del caso, para filtrar las plantillas de nota de la hoja. */
+  technique: OrthoTechnique | null;
   defaultsForNew: {
     cardNumber: number;
+    /**
+     * ws1-t10: el número de ESTE control con la misma cuenta que la ficha («El siguiente es el control 2 de 18»):
+     * las visitas del caso, no las hojas. null si el plan no dice cuántos controles prevé.
+     */
+    controlNumero: number | null;
     phase: OrthoPhaseKey;
     monthAt: number;
     wireFrom: WireStepDTO | null;
@@ -131,12 +146,13 @@ export async function buildTreatmentCardContext(
     clinicId?: string;
     installedAt: Date | null;
     startDate: Date | null;
+    createdAt?: Date | null;
     /** Fila 12: para la nota precargada. Opcionales: sin ellos la nota sale más genérica. */
     technique?: OrthoTechnique | null;
     patient?: { firstName: string; lastName: string } | null;
     paymentPlan?: { status: OrthoPaymentStatus } | null;
   },
-  appt: { id: string; startsAt: Date; endsAt: Date } | null,
+  appt: { id: string; startsAt: Date; endsAt: Date; status?: string } | null,
   clinicTimezone: string,
 ): Promise<TreatmentCardAgendaContext> {
   const [wireSteps, cards, phaseInProgress, photoSets] = await Promise.all([
@@ -179,9 +195,14 @@ export async function buildTreatmentCardContext(
   const maxCardNumber = cards.reduce((m, c) => Math.max(m, c.cardNumber), 0);
   const lastSignedCard = [...cards].reverse().find((c) => c.status === "SIGNED") ?? null;
 
+  // ws1-t10: la fase del caso es la que está en curso (la misma que dice la cabecera de la ficha); solo sin fases en
+  // curso se cae a la de la última hoja firmada. Antes mandaba la de la última hoja, y al avanzar de fase la hoja
+  // nueva seguía diciendo la anterior.
   const phase: OrthoPhaseKey =
-    lastSignedCard?.phaseKey ?? phaseInProgress?.phaseKey ?? "ALIGNMENT";
-  const monthAt = monthsSince(plan.installedAt ?? plan.startDate);
+    phaseInProgress?.phaseKey ?? lastSignedCard?.phaseKey ?? "ALIGNMENT";
+  const visitDate = appt ? appt.startsAt.toISOString() : new Date().toISOString();
+  // ws1-t10: meses reales desde la colocación al día de la visita (antes, meses de calendario contra «hoy»).
+  const monthAt = mesDeTratamiento(plan.installedAt ?? plan.startDate, new Date(visitDate));
   // Fila 12: el arco actual es el que puso el último control o, si ese
   // control no cambió de arco, el mismo con el que llegó (antes, sin cambio
   // de arco en el último control, la hoja nueva decía «—»).
@@ -190,7 +211,6 @@ export async function buildTreatmentCardContext(
   const durationMin = appt
     ? Math.max(15, Math.round((appt.endsAt.getTime() - appt.startsAt.getTime()) / 60000))
     : 30;
-  const visitDate = appt ? appt.startsAt.toISOString() : new Date().toISOString();
 
   const lastElastics = (lastSignedCard?.elastics ?? []).map((e) => ({
     elasticClass: e.elasticClass as OrthoElasticClass,
@@ -208,6 +228,21 @@ export async function buildTreatmentCardContext(
     bracketsPendientesFdi: lastPendingBrackets.map((b) => b.toothFdi),
   });
 
+  // ws1-t10: «Control X de N» con la cuenta de la ficha (visitas del caso). Sin previstos en el plan no hay «de N».
+  const progreso = plan.clinicId
+    ? (
+        await cargarProgresoDeControles(plan.clinicId, clinicTimezone, [
+          { planId: plan.id, patientId: plan.patientId, inicio: inicioDelCaso({ installedAt: plan.installedAt, startDate: plan.startDate, createdAt: plan.createdAt ?? null }) },
+        ])
+      ).get(plan.id) ?? null
+    : null;
+  const controlNumero = progreso
+    ? numeroDeEsteControl({
+        hechos: progreso.hechos,
+        yaCuenta: existingCard !== null || (appt?.status !== undefined && ["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"].includes(appt.status)),
+      })
+    : null;
+
   const ajustes = plan.clinicId ? await loadOrthoClinicSettings(plan.clinicId).catch(() => null) : null;
   const proximoControlMin = duracionSugeridaProximoControl(ajustes?.appointmentTypes);
 
@@ -217,8 +252,11 @@ export async function buildTreatmentCardContext(
     appointmentId: appt?.id ?? null,
     existingCard,
     availableWires: wireDTOs,
+    controlesPrevistos: progreso?.previstos ?? null,
+    technique: plan.technique ?? null,
     defaultsForNew: {
       cardNumber: maxCardNumber + 1,
+      controlNumero,
       phase,
       monthAt,
       wireFrom,
@@ -249,9 +287,11 @@ export async function getTreatmentCardContextForAppointment(
     where: { id: treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
     select: {
       id: true,
+      clinicId: true,
       patientId: true,
       installedAt: true,
       startDate: true,
+      createdAt: true,
       // Fila 12: datos de la nota precargada.
       technique: true,
       patient: { select: { firstName: true, lastName: true } },
@@ -270,21 +310,13 @@ export async function getTreatmentCardContextForAppointment(
   // Tenant + integridad: la cita tiene que ser de este mismo paciente/clínica.
   const appt = await prisma.appointment.findFirst({
     where: { id: appointmentId, clinicId: ctx.clinicId, patientId: plan.patientId },
-    select: { id: true, startsAt: true, endsAt: true },
+    select: { id: true, startsAt: true, endsAt: true, status: true },
   });
   if (!appt) return fail("Cita no encontrada para este paciente");
 
   const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
   const context = await buildTreatmentCardContext(plan, appt, clinic?.timezone ?? "America/Mexico_City");
   return ok(context);
-}
-
-function monthsSince(from: Date | null): number {
-  if (!from) return 0;
-  const now = new Date();
-  const months =
-    (now.getFullYear() - from.getFullYear()) * 12 + (now.getMonth() - from.getMonth());
-  return Math.max(0, months);
 }
 
 function photoSetLabel(setType: string): string {

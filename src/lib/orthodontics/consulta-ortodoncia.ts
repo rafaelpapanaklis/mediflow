@@ -59,7 +59,8 @@ export interface ContextoDeControl {
 
 /** Qué marcador de las plantillas se rellena con qué dato de la hoja. */
 const MARCADORES: Record<string, (c: ContextoDeControl) => string | null> = {
-  monthInTreatment: (c) => (c.mes === null ? null : String(c.mes)),
+  // La nota clínica dice el mes cumplido («mes 4»), como la ficha; el decimal es de la hoja, no de la nota.
+  monthInTreatment: (c) => (c.mes === null ? null : String(Math.floor(c.mes))),
   estimatedDurationMonths: (c) => (c.duracionMeses === null ? null : String(c.duracionMeses)),
   currentPhase: (c) => c.fase,
   archWire: (c) => c.arcoActual,

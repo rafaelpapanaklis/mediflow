@@ -92,7 +92,7 @@ export interface DatosNotaPrecargada {
 export function notaPrecargada(d: DatosNotaPrecargada): NotaSoap {
   const n = buildOrthoSoapPrefill({
     patientName: d.patientName.trim() || "Paciente",
-    monthInTreatment: d.monthAt,
+    monthInTreatment: Math.floor(d.monthAt),
     technique: d.technique ? techniqueLabel(d.technique, d.techniqueName) : "ortodoncia",
     phaseKey: d.phaseKey,
     paymentStatus: d.paymentStatus,

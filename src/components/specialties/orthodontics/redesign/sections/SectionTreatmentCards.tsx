@@ -29,6 +29,8 @@ export interface SectionTreatmentCardsProps {
    * desaparecen: no se ofrece registrar otra vez lo que ya está firmado.
    */
   controlFirmadoHoy?: boolean;
+  /** ws1-t10: los controles que prevé el plan del caso, para «Control 3 de 18» en cada fila. */
+  controlesPrevistos?: number | null;
   /** Texto del label "Whatsapp" si se quiere personalizar (default "Confirmar WhatsApp"). */
   confirmLabel?: string;
 }
@@ -91,6 +93,7 @@ export function SectionTreatmentCards(props: SectionTreatmentCardsProps) {
       {tab === "history" ? (
         <HistoryTabPanel
           cards={sorted}
+          controlesPrevistos={props.controlesPrevistos ?? null}
           onOpenCard={props.onOpenCard}
           onStart={props.controlFirmadoHoy ? undefined : props.onStartNewCard}
         />
@@ -169,10 +172,12 @@ function NextTabPanel({
 
 function HistoryTabPanel({
   cards,
+  controlesPrevistos,
   onOpenCard,
   onStart,
 }: {
   cards: TreatmentCardDTO[];
+  controlesPrevistos: number | null;
   onOpenCard?: (id: string) => void;
   onStart?: () => void;
 }) {
@@ -208,6 +213,7 @@ function HistoryTabPanel({
         <TimelineRow
           key={card.id}
           card={card}
+          controlesPrevistos={controlesPrevistos}
           isLast={i === cards.length - 1}
           onClick={onOpenCard ? () => onOpenCard(card.id) : undefined}
         />

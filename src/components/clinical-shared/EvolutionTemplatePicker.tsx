@@ -17,6 +17,10 @@ export interface EvolutionTemplatePickerProps {
   onApply: (template: EvolutionTemplateDTO) => void;
   /** Si true (default para Pediatría), llama a ensurePediatricDefaults. */
   ensureDefaults?: boolean;
+  /** Deja fuera las plantillas que no aplican (p. ej. por la técnica del caso). Sin él se ofrecen todas. */
+  filter?: (template: EvolutionTemplateDTO) => boolean;
+  /** De qué lado del botón se abre la lista: «right» la alinea al borde derecho (para un botón pegado a la orilla). */
+  align?: "left" | "right";
 }
 
 export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
@@ -55,6 +59,8 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
     };
   }, [props.module, props.ensureDefaults, intento]);
 
+  const visibles = props.filter ? templates.filter(props.filter) : templates;
+
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
       <button
@@ -77,7 +83,7 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
       >
         <Sparkles size={13} aria-hidden />
         Plantillas
-        {templates.length > 0 ? ` (${templates.length})` : ""}
+        {visibles.length > 0 ? ` (${visibles.length})` : ""}
       </button>
 
       {open ? (
@@ -86,9 +92,11 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
           style={{
             position: "absolute",
             top: "calc(100% + 4px)",
-            left: 0,
+            ...(props.align === "right" ? { right: 0 } : { left: 0 }),
             zIndex: 50,
             minWidth: 260,
+            // Nunca más ancha que la pantalla: los nombres largos saltan de renglón en vez de cortarse por la orilla.
+            maxWidth: "min(360px, calc(100vw - 32px))",
             maxHeight: 320,
             overflowY: "auto",
             background: "var(--surface-1)",
@@ -113,12 +121,12 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
                 Reintentar
               </button>
             </div>
-          ) : templates.length === 0 ? (
+          ) : visibles.length === 0 ? (
             <div style={{ padding: 10, fontSize: 12, color: "var(--text-2)" }}>
               Sin plantillas para este módulo.
             </div>
           ) : (
-            templates.map((t) => (
+            visibles.map((t) => (
               <button
                 key={t.id}
                 type="button"
@@ -129,7 +137,7 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
                 }}
                 style={{
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: 8,
                   width: "100%",
                   textAlign: "left",
@@ -148,12 +156,13 @@ export function EvolutionTemplatePicker(props: EvolutionTemplatePickerProps) {
                   (e.currentTarget.style.background = "transparent")
                 }
               >
-                <FileText size={12} aria-hidden style={{ color: "var(--text-2)" }} />
-                <span>{t.name}</span>
+                <FileText size={12} aria-hidden style={{ color: "var(--text-2)", flexShrink: 0, marginTop: 2 }} />
+                <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{t.name}</span>
                 {t.isDefault ? (
                   <span
                     style={{
                       marginLeft: "auto",
+                      flexShrink: 0,
                       fontSize: 10,
                       color: "var(--text-2)",
                     }}
