@@ -17,7 +17,7 @@
 import { hasPermission } from "@/lib/auth/permissions";
 
 /** Los mismos roles que la Agenda y la reserva aceptan como «quien atiende». */
-export const ROLES_QUE_ATIENDEN = ["DOCTOR", "ADMIN", "SUPER_ADMIN"] as const;
+export { ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
 
 export interface UsuarioCandidato {
   id: string;

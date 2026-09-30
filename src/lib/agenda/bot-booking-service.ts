@@ -7,6 +7,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende, doctorNoAtiendeSlot, ventanaDelDoctor } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { apartadoVencido, sinApartadoVencido } from "@/lib/agenda/apartado";
+import { ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
 import { HECHOS_DENTRO_DEL_CONTROL, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
 
 /**
@@ -315,7 +316,8 @@ export async function createBotAppointment(params: {
   const [patient, doctor] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, clinicId }, select: { id: true } }),
     prisma.user.findFirst({
-      where: { id: doctorId, clinicId, role: "DOCTOR", isActive: true },
+      // Los mismos roles que la lista de doctores tratantes: un dueño que atiende también recibe citas (roles-que-atienden.ts).
+      where: { id: doctorId, clinicId, role: { in: [...ROLES_QUE_ATIENDEN] }, isActive: true },
       select: { id: true },
     }),
   ]);

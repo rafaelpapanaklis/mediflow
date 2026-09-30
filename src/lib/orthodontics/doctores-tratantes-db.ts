@@ -3,8 +3,8 @@
 // solo está la consulta. `clinicId` SIEMPRE de la sesión.
 
 import { prisma } from "@/lib/prisma";
+import { ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
 import {
-  ROLES_QUE_ATIENDEN,
   atiendePacientes,
   opcionesDeDoctorTratante,
   type DoctorTratanteOpcion,

@@ -19,7 +19,8 @@
 // ws1-t4 ronda 6 (fila 22, segunda mitad): «Posponer 7 días» en las cuatro
 // secciones que no son dinero ni fotos. Lo pospuesto ya llega quitado de
 // `alerts` y aquí solo se cuenta en el subtítulo.
-import { Children, type ReactNode } from "react";
+"use client";
+import { Children, useCallback, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -45,6 +46,10 @@ import { AgendarControlBoton } from "./agendar-control";
 import { FilaDeCasoIncompleto } from "./casos-incompletos";
 import { PosponerAlertaBoton } from "./posponer-alerta";
 import { ListaDePospuestas } from "./lista-de-pospuestas";
+import { RefrescarAlertasContext } from "./refrescar-alertas";
+import { cargarAlertasDeOrtodoncia } from "@/app/actions/orthodontics/modulo/cargarAlertas";
+import { isFailure } from "@/app/actions/orthodontics/result";
+import { useRouter } from "next/navigation";
 import { DIAS_DE_POSPOSICION } from "@/lib/orthodontics/alertas-pospuestas";
 import { fechaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, type Tono } from "./piezas";
@@ -63,7 +68,7 @@ const CLASE_TONO: Record<Tono, string> = {
 };
 
 export function VistaAlertas({
-  alerts,
+  alerts: alertsDelServidor,
   zonaHoraria,
   puedeAgendar = false,
   puedePosponer = false,
@@ -79,6 +84,15 @@ export function VistaAlertas({
   /** `clinic.timezone`: el día de una falta se pinta en la zona de la clínica, no en la del servidor. */
   zonaHoraria: string | null;
 }) {
+  // Las alertas viven en el estado: tras posponer o deshacer se piden de nuevo y la pantalla se repinta al instante
+  // (antes dependía de que `router.refresh()` trajera la página y el caso no volvía a su sección hasta recargar).
+  const router = useRouter();
+  const [alerts, setAlerts] = useState<OrthoAlertsData>(alertsDelServidor);
+  const refrescar = useCallback(async () => {
+    const r = await cargarAlertasDeOrtodoncia();
+    if (isFailure(r)) router.refresh(); // sin permiso para leerlas de nuevo o base caída: como antes
+    else setAlerts(r.data);
+  }, [router]);
   const fmtDate = (d: Date | string | null) => fechaEnZona(d, zonaHoraria);
   const fotos: FotosPorRevisarEntry[] = alerts.patientPhotos ?? [];
   const reevaluaciones: ReevaluacionRadiograficaEntry[] = alerts.reevaluacionRadiografica ?? [];
@@ -106,6 +120,7 @@ export function VistaAlertas({
   ];
 
   return (
+    <RefrescarAlertasContext.Provider value={refrescar}>
     <Pantalla
       titulo="Alertas"
       sub={
@@ -299,6 +314,7 @@ export function VistaAlertas({
         })}
       </AlertSection>
     </Pantalla>
+    </RefrescarAlertasContext.Provider>
   );
 }
 

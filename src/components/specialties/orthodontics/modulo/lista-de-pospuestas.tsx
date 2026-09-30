@@ -3,11 +3,11 @@
 // pueden VER (quién, de qué alerta, hasta cuándo) y DESHACER. Antes solo salía
 // «1 pospuesta» sin lista ni forma de quitarla.
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Undo2 } from "lucide-react";
 import { deshacerPosposicion } from "@/app/actions/orthodontics/modulo/deshacerPosposicion";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import type { PospuestaVisible } from "@/lib/orthodontics/alertas-pospuestas";
+import { useRefrescarAlertas } from "./refrescar-alertas";
 import s from "./modulo.module.css";
 
 function fechaCorta(iso: string): string {
@@ -17,7 +17,7 @@ function fechaCorta(iso: string): string {
 const llave = (p: PospuestaVisible) => `${p.tipo}-${p.patientId}`;
 
 export function ListaDePospuestas({ pospuestas }: { pospuestas: PospuestaVisible[] }) {
-  const router = useRouter();
+  const refrescar = useRefrescarAlertas();
   const [pendiente, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // Las ya deshechas salen de la lista al instante; el servidor confirma con el refresh que sigue.
@@ -54,7 +54,7 @@ export function ListaDePospuestas({ pospuestas }: { pospuestas: PospuestaVisible
                   if (isFailure(r)) setError(r.error);
                   else {
                     setDeshechas((antes) => new Set(antes).add(llave(p)));
-                    router.refresh();
+                    await refrescar();
                   }
                 })
               }
