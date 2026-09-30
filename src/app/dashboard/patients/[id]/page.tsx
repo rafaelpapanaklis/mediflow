@@ -469,6 +469,11 @@ export default async function PatientDetailPage({
   });
   const orthoSoloAdministrativo = orthoVista === "administrativa";
   if (orthoVista === "clinica") {
+    // ws1-t6: la lista de casos solo depende del paciente y la clínica: se pide junto con el cargador (medido en
+    // panel.108: la ficha tardaba por idas a la base en fila, no por una consulta lenta). Si el cargador no
+    // devuelve nada, esa lista no se usa.
+    const pCasos = cargarCasosDelPaciente(user.clinicId, patient.id);
+    pCasos.catch(() => {});
     const redesign = await loadOrthoRedesignData({
       clinicId: user.clinicId,
       patientId: patient.id,
@@ -479,7 +484,7 @@ export default async function PatientDetailPage({
       orthoData = redesign.legacy;
       orthoRedesignVM = redesign.viewModel;
       orthoRedesignBundle = redesign.bundle;
-      orthoCasos = await cargarCasosDelPaciente(user.clinicId, patient.id);
+      orthoCasos = await pCasos;
     }
   }
 

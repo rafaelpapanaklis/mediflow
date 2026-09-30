@@ -1,4 +1,39 @@
 // Orthodontics rediseño — helpers de formato (ES MX, sin emojis).
+//
+// ws1-t6: un INSTANTE (la hora de una cita, cuándo entró el paciente) se pinta en la zona de la CLÍNICA, no en la
+// del navegador: quien abre la ficha desde otra zona veía «11:00 a.m.» en una cita de las 10:00 (la Agenda y Caja
+// ya usaban la de la clínica). Estos helpers se usan en decenas de pantallas, así que la zona se fija UNA vez
+// (`fijarZonaDeLaClinica`, la pestaña de Ortodoncia lo hace al montarse) en vez de pasarla por cada componente.
+// Sin zona fijada (o inválida) se comportan como siempre.
+
+let zonaDeLaClinica: string | undefined;
+
+/** Fija (o, con `null`, quita) la zona de la clínica para los formateadores de esta pestaña. Solo en el cliente. */
+export function fijarZonaDeLaClinica(zona: string | null | undefined): void {
+  if (!zona) {
+    zonaDeLaClinica = undefined;
+    return;
+  }
+  try {
+    new Intl.DateTimeFormat("es-MX", { timeZone: zona });
+    zonaDeLaClinica = zona;
+  } catch {
+    zonaDeLaClinica = undefined;
+  }
+}
+
+function zona(): { timeZone?: string } {
+  return zonaDeLaClinica ? { timeZone: zonaDeLaClinica } : {};
+}
+
+/** Un día de calendario suelto («2026-10-05», sin hora): no tiene zona, es ese día en cualquier sitio. */
+const SOLO_DIA = /^\d{4}-\d{2}-\d{2}$/;
+function comoInstante(iso: string | Date): { d: Date; opciones: { timeZone?: string } } {
+  if (typeof iso === "string") {
+    return { d: new Date(iso), opciones: SOLO_DIA.test(iso) ? { timeZone: "UTC" } : zona() };
+  }
+  return { d: iso, opciones: zona() };
+}
 
 export function fmtMoney(n: number | null | undefined): string {
   if (n == null) return "—";
@@ -7,20 +42,21 @@ export function fmtMoney(n: number | null | undefined): string {
 
 export function fmtDate(iso: string | Date | null | undefined): string {
   if (!iso) return "—";
-  const d = typeof iso === "string" ? new Date(iso) : iso;
+  const { d, opciones } = comoInstante(iso);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("es-MX", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    ...opciones,
   });
 }
 
 export function fmtDateShort(iso: string | Date | null | undefined): string {
   if (!iso) return "—";
-  const d = typeof iso === "string" ? new Date(iso) : iso;
+  const { d, opciones } = comoInstante(iso);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+  return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", ...opciones });
 }
 
 /**
@@ -59,9 +95,17 @@ export function fmtDayLong(day: string | null | undefined): string {
 
 export function fmtTime(iso: string | Date | null | undefined): string {
   if (!iso) return "—";
-  const d = typeof iso === "string" ? new Date(iso) : iso;
+  const { d, opciones } = comoInstante(iso);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", ...opciones });
+}
+
+/** «martes, 6 de octubre, 10:00 a.m.»: día y hora de una cita, en la zona de la clínica. */
+export function fmtFechaHoraLarga(iso: string | Date | null | undefined): string {
+  if (!iso) return "—";
+  const { d, opciones } = comoInstante(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("es-MX", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", ...opciones });
 }
 
 export function fmtPct(n: number | null | undefined): string {

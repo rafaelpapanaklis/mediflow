@@ -227,3 +227,33 @@ test("reimportar «Pacientes» ya importados registra los ID de los duplicados o
   assert.equal(fila(cit, 2).data.patientId, idDe("20"));
   assert.deepEqual(fila(cit, 2).warnings.filter((w: string) => /no existe/.test(w)), []);
 });
+
+test("ws1-t6: «a revisar» dice «del sistema» y distingue a los homónimos por teléfono, nacimiento y # de origen", async () => {
+  base = crearBase(semilla());
+  await correr("patients", csv([PACIENTES,
+    "10,María,López Ruiz,5551110001,,1980-04-02",
+    "11,María,López Ruiz,5551110002,,1995-07-07",
+    "12,Pedro,Gómez,5552220000,,",
+  ].join("\n") + "\n"), false);
+  const cit = await correr("appointments", csv([CITAS, cita("901", "María", "López Ruiz", "")].join("\n") + "\n"));
+  const texto = fila(cit, 2).errors.join(" ");
+  assert.match(texto, /A revisar: el ID 901 del sistema de origen no está entre los pacientes importados/);
+  assert.doesNotMatch(texto, /de el sistema/);
+  // Cada homónima con lo suyo: no dos «María López Ruiz» idénticas.
+  assert.match(texto, /«María López Ruiz» \(nombre; tel\. 5551110001; nac\. 02\/04\/1980; # 10 en el sistema de origen\)/);
+  assert.match(texto, /«María López Ruiz» \(nombre; tel\. 5551110002; nac\. 07\/07\/1995; # 11 en el sistema de origen\)/);
+});
+
+test("ws1-t6: un candidato de nombre único no lleva las señas de más", async () => {
+  const { resolverConIdDesconocido } = await seguro();
+  const idx = {
+    byPhone: new Map([["5552220000", ["a", "b"]]]), byEmail: new Map(), byName: new Map(), byDoc: new Map(),
+    fichas: new Map([
+      ["a", { id: "a", nombre: "Luis Gómez", tel: "5552220000", email: "", dob: "", doc: "" }],
+      ["b", { id: "b", nombre: "Rosa Gómez", tel: "5552220000", email: "", dob: "", doc: "" }],
+    ]),
+    nameById: new Map([["a", "Luis Gómez"], ["b", "Rosa Gómez"]]),
+  };
+  const r = resolverConIdDesconocido({ phone: "5552220000" }, idx as any, "77", "el sistema de origen");
+  assert.match(r.error ?? "", /«Luis Gómez» \(teléfono\), «Rosa Gómez» \(teléfono\)/);
+});

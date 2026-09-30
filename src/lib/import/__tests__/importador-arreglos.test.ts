@@ -938,3 +938,21 @@ test("N8: si el ID externo de la fila no existe, solo se empareja con 2 datos fu
   const tel = await correr("appointments", csv("c.csv", "Id paciente,Celular,Profesional,Fecha,Hora\nSINT-009,5559990001,Ana López,15/01/2030,10:00\n"), { origin: "dentalink" });
   assert.match(fila(tel, 2).errors.join(" "), /A revisar.*solo coincide el teléfono/);
 });
+
+test("ws1-t6: en la vista previa de 06 el «abonado» (total del tratamiento) se dice una vez por tratamiento, no en cada renglón", async () => {
+  const { adaptPreview } = await import("../client");
+  const renglon = (row: number, groupKey: string, procedure: string) => ({
+    row, status: "ok", errors: [], warnings: [],
+    data: { groupKey, name: "Ana", procedure, lineTotal: 1000, hecho: false, abonado: 9000 },
+  });
+  const ui = adaptPreview("treatmentPlans", {
+    total: 4, validos: 4, invalidos: 0, columns: [], preview: [
+      renglon(2, "p1|f:1", "Limpieza"), renglon(3, "p1|f:1", "Resina"), renglon(4, "p1|f:1", "Corona"), renglon(5, "p2|f:2", "Extracción"),
+    ],
+  } as any);
+  const detalles = ui.rows.map((r) => r.detail ?? "");
+  assert.match(detalles[0], /Abonado en el tratamiento: \$9,000/);
+  assert.doesNotMatch(detalles[1], /Abonado/);
+  assert.doesNotMatch(detalles[2], /Abonado/);
+  assert.match(detalles[3], /Abonado en el tratamiento: \$9,000/, "otro tratamiento vuelve a decirlo una vez");
+});

@@ -134,6 +134,36 @@ export async function loadOrthoRedesignData(
 
   const planId = legacy.plan?.id ?? null;
 
+  // ws1-t6 (medido en panel.108, la ficha tardaba 12–25 s): ninguna consulta era lenta —eran ~45 idas a la base,
+  // cada una a ~0,2–0,3 s, y ~15 de ellas EN FILA—. Lo que no depende de las tres tandas de abajo (los
+  // indicadores del caso, las fotos, el nombre de la técnica y el doctor de la próxima cita) arranca YA, en un
+  // segundo carril: el tiempo pasa a ser el del carril más largo, no la suma. Mismas consultas, mismos
+  // filtros por clínica y mismos resultados; cada `Promise.all` sigue siendo de 5 o menos (el pooler).
+  const ahora = new Date();
+  const carrilDelCaso = (async () => {
+    const [indicadores, historicalPhotoSets, nombreTecnica] = await Promise.all([
+      cargarIndicadoresDelCaso(input.clinicId, input.patientId, planId, ahora),
+      adaptPhotoSets(input.clinicId, legacy.photoSets),
+      // ws1-t10: nombre propio de la técnica del caso (sin la columna: el del tipo base).
+      planId ? cargarNombreDeTecnica(input.clinicId, planId) : Promise.resolve(null),
+    ]);
+    // H10 (QA ws1-t9): la cita real que Recepción crea desde la Agenda vive en `Appointment` (mismo origen que
+    // Tablero y Alertas); `OrthodonticControlAppointment` es una tabla aparte que hoy nadie usa. Se prefiere la
+    // cita real; si no hay ninguna, el resolve legacy (y `deriveNextAppointment` sigue mirando `l.controls`).
+    // Fila 9: una cita de HOY cuya hora ya pasó sigue siendo «la de hoy» mientras nadie la cierre
+    // (`proximaCitaDelCaso`); antes, a mediodía, el control de las 10:00 desaparecía y la cabecera decía
+    // «Sin programar».
+    const proxima = proximaCitaDelCaso(indicadores.citas, ahora, indicadores.zona);
+    const nextRealAppointment = proxima
+      ? { startsAt: proxima.startsAt, endsAt: proxima.endsAt, doctor: proxima.doctor, chair: proxima.chair }
+      : null;
+    const nextAppointmentDoctor =
+      nextRealAppointment?.doctor ?? (await resolveNextAppointmentDoctor(input.clinicId, input.patientId));
+    return { indicadores, historicalPhotoSets, nombreTecnica, nextRealAppointment, nextAppointmentDoctor };
+  })();
+  // Si las tandas fallan primero, este carril no debe tumbar el proceso con un rechazo que nadie espera.
+  carrilDelCaso.catch(() => {});
+
   // Queries Fase 1 + Fase 1.5. Resilientes a tabla inexistente.
   //
   // X7: eran 14 consultas en un solo Promise.all y el pooler se satura por
@@ -344,14 +374,11 @@ export async function loadOrthoRedesignData(
     ),
   ]);
 
-  // ws1-t4 ronda 6 (filas 8 y 9 de la revisión de lógica de uso): la
-  // asistencia, el uso de elásticos, las visitas y la próxima cita salen de lo
-  // que pasó de verdad —citas de control de la Agenda, hojas de control y lo
-  // que marca el paciente en el portal—, no de tablas que ya nadie llena. La
-  // cuenta es de `indicadores-del-caso.ts` (puro, con tests). Va DESPUÉS de la
-  // tanda de arriba, no junto a ella: el pooler se satura por encima de 7.
-  const ahora = new Date();
-  const indicadores = await cargarIndicadoresDelCaso(input.clinicId, input.patientId, planId, ahora);
+  // ws1-t4 ronda 6 (filas 8 y 9 de la revisión de lógica de uso): la asistencia, el uso de elásticos, las visitas
+  // y la próxima cita salen de lo que pasó de verdad —citas de control de la Agenda, hojas de control y lo que
+  // marca el paciente en el portal—, no de tablas que ya nadie llena. La cuenta es de `indicadores-del-caso.ts`
+  // (puro, con tests). Sus lecturas ya van en `carrilDelCaso` (arriba), en paralelo con las tandas.
+  const { indicadores, historicalPhotoSets, nombreTecnica, nextRealAppointment, nextAppointmentDoctor } = await carrilDelCaso;
   const hojasDeControl = (treatmentCards as Array<{ appointmentId?: string | null; visitDate: Date }>).map((c) => ({
     appointmentId: c.appointmentId ?? null,
     visitDate: c.visitDate,
@@ -364,23 +391,6 @@ export async function loadOrthoRedesignData(
   const attendancePct = attendance.pct ?? 0;
   const elasticsCompliancePct = elastics.pct ?? 0;
 
-  // H10 (QA ws1-t9): la cita real que Recepción crea desde la Agenda vive
-  // en `Appointment` (mismo origen que ya usan Tablero y Alertas,
-  // tablero-data.ts) — `OrthodonticControlAppointment` es una tabla aparte
-  // que solo llena el asistente del módulo de especialidad en pausa
-  // (ControlAppointmentWizard) y que hoy nadie usa. Preferimos la cita real;
-  // si no hay ninguna, caemos al resolve legacy (y `deriveNextAppointment`
-  // sigue mirando `l.controls` como antes).
-  // Fila 9: una cita de HOY cuya hora ya pasó sigue siendo «la de hoy»
-  // mientras nadie la cierre (`proximaCitaDelCaso`); antes, a mediodía, el
-  // control de las 10:00 desaparecía y la cabecera decía «Sin programar».
-  const proxima = proximaCitaDelCaso(indicadores.citas, ahora, indicadores.zona);
-  const nextRealAppointment = proxima
-    ? { startsAt: proxima.startsAt, endsAt: proxima.endsAt, doctor: proxima.doctor, chair: proxima.chair }
-    : null;
-  const nextAppointmentDoctor =
-    nextRealAppointment?.doctor ??
-    (await resolveNextAppointmentDoctor(input.clinicId, input.patientId));
   // Sillón de la próxima cita — de la cita real si la tiene; si no, heredado
   // del PatientFlow activo.
   const nextAppointmentChair =
@@ -389,7 +399,6 @@ export async function loadOrthoRedesignData(
     null;
 
   // ── Construye bundle ──────────────────────────────────────────────────
-  const historicalPhotoSets = await adaptPhotoSets(input.clinicId, legacy.photoSets);
   const installments = legacy.installments.map(adaptInstallment);
   // CFDI 4.0 (M1) — el timbrado real con Facturapi llega en Fase 2; mientras
   // tanto exponemos lista vacía. La UI muestra empty state con CTA disabled.
@@ -431,9 +440,6 @@ export async function loadOrthoRedesignData(
 
   const treatmentStatus = deriveTreatmentStatus(legacy);
 
-  // ws1-t10: nombre propio de la técnica del caso (sin la columna: el del tipo base).
-  const nombreTecnica = planId ? await cargarNombreDeTecnica(input.clinicId, planId) : null;
-
   const adapterInput: AdapterInput = {
     legacy,
     wireSteps: wireSteps as AdapterInput["wireSteps"],
@@ -467,6 +473,8 @@ export async function loadOrthoRedesignData(
   const viewModel = adaptToOrthoRedesignViewModel(adapterInput);
   // Inyecta whatsappRecent en el viewModel para que RightRail lo lea desde vm.
   viewModel.whatsappRecent = whatsappRecent;
+  // ws1-t6: la zona de la clínica viaja con el caso: las horas de la ficha se pintan en ella.
+  viewModel.zonaClinica = indicadores.zona;
 
   const financialPlan = legacy.paymentPlan
     ? {

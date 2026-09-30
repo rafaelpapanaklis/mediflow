@@ -453,6 +453,9 @@ test("saldos: la mora de un tratamiento NORMAL ya importado no crea deuda: se an
   const q = tabla("quote")[0];
   assert.match(q.notes, /Mora en Dentalink: \$600\.00 \(saldo ya incluido en este tratamiento #291/);
   assert.match(q.notes, /Folio original \(tratamiento activo\): 291/, "el marcador del folio sigue igual");
+  // ws1-t6: «anotada el …» es el día en la zona de la CLÍNICA, no en UTC (a las 7:55 p.m. del 29 en México decía «30»).
+  const { formatConsentDate } = await import("@/lib/consent/dates");
+  assert.ok(q.notes.includes(`anotada el ${formatConsentDate(new Date(), "America/Mexico_City")})`), q.notes);
 
   // Reintento: ni otra factura ni otra nota.
   const otra = await correr("balances", f, { dryRun: false });

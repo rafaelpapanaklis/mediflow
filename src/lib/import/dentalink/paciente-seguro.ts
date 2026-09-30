@@ -148,6 +148,8 @@ export interface IndiceSeguro {
   byDoc: Map<string, string[]>;
   fichas: Map<string, FichaPaciente>;
   nameById: Map<string, string>;
+  /** ID del sistema de origen → paciente (los dos resolvedores lo tienen): para distinguir homónimos por su «#». */
+  byExternal?: Map<string, string>;
 }
 
 /** Día «AAAA-M-D» en hora local (misma convención con la que se guardó el `dob` al importar pacientes). */
@@ -195,6 +197,18 @@ export function datosDeFila(mapped: Record<string, any>): DatosDeFila {
   };
 }
 
+/** Lo que distingue a un paciente de un homónimo: su teléfono, su fecha de nacimiento (dd/mm/aaaa) y su # en el sistema de origen. */
+function señasDe(id: string, idx: IndiceSeguro): string[] {
+  const f = idx.fichas.get(id);
+  const señas: string[] = [];
+  if (f?.tel) señas.push(`tel. ${f.tel}`);
+  const nac = f?.dob ? /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(f.dob) : null;
+  if (nac) señas.push(`nac. ${nac[3].padStart(2, "0")}/${nac[2].padStart(2, "0")}/${nac[1]}`);
+  const ext = idx.byExternal ? Array.from(idx.byExternal.entries()).find(([, pid]) => pid === id)?.[0] : undefined;
+  if (ext) señas.push(`# ${ext} en el sistema de origen`);
+  return señas.length ? señas : ["sin más datos para distinguirlo"];
+}
+
 /**
  * La fila trae un ID del sistema de origen que NO está entre los pacientes importados. Nunca se adivina: se busca con
  * todos sus datos y solo se asigna con 2 datos fuertes de UN candidato (ver arriba). Devuelve el resultado listo para
@@ -224,8 +238,17 @@ export function resolverConIdDesconocido(
     };
   }
   if (r.tipo === "revisar") {
-    const quienes = r.candidatos.slice(0, 4).map((c) => `«${idx.nameById.get(c.id) ?? ""}» (${textoDeDatos(c.por)})`).join(", ");
-    return { error: `A revisar: el ID ${externo} de ${sistema} no está entre los pacientes importados y ${r.motivo}. Podría ser: ${quienes}. No se asigna solo` };
+    // ws1-t6: dos candidatos con el mismo nombre se distinguen por su teléfono, su fecha de nacimiento y su # de origen.
+    const candidatos = r.candidatos.slice(0, 4);
+    const nombreDe = (id: string) => idx.nameById.get(id) ?? "";
+    const repetido = (id: string) => candidatos.filter((c) => normName(nombreDe(c.id)) === normName(nombreDe(id))).length > 1;
+    const quienes = candidatos.map((c) => {
+      const partes = [textoDeDatos(c.por), ...(repetido(c.id) ? señasDe(c.id, idx) : [])];
+      return `«${nombreDe(c.id)}» (${partes.join("; ")})`;
+    }).join(", ");
+    // «de el sistema» → «del sistema».
+    const delSistema = sistema.startsWith("el ") ? `del ${sistema.slice(3)}` : `de ${sistema}`;
+    return { error: `A revisar: el ID ${externo} ${delSistema} no está entre los pacientes importados y ${r.motivo}. Podría ser: ${quienes}. No se asigna solo` };
   }
   return { error: `Paciente con ID ${externo} no encontrado: importa antes los pacientes de ese sistema` };
 }

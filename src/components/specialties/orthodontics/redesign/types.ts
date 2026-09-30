@@ -393,4 +393,6 @@ export interface OrthoRedesignViewModel {
   visitas?: { total: number; ultima: string | null; primera: string | null };
   aiSuggestions: AISuggestionDTO[];
   whatsappRecent: WhatsAppEntryDTO[];
+  /** ws1-t6: zona horaria de la clínica: las horas de la pestaña se pintan en ella, no en la del navegador. */
+  zonaClinica?: string;
 }

@@ -44,6 +44,11 @@ export interface PatientHeaderProps {
    */
   outstandingAmount: number | null;
   /**
+   * ws1-t6: de dónde viene ese `null`. Mientras el cobro del caso carga NO se dice «Sin plan de pago» (parecía que
+   * el plan no se había creado); si no cargó, se dice que no cargó. Sin este dato, `null` significa «sin factura».
+   */
+  saldoEstado?: "cargando" | "error" | "listo";
+  /**
    * ws1-t4 #73 — lo que ya VENCIÓ de ese saldo (cuotas pasadas de fecha). El
    * saldo total sale rojo solo si esto es > 0: un paciente al corriente con
    * $23,000 por pagar en mensualidades futuras no debe verse como deudor.
@@ -194,13 +199,23 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
           sub={next ? `${fmtTime(next.date)} · ${next.type}` : "Agenda una nueva cita"}
           muted={!next}
         />
-        <Stat
-          label="Saldo de ortodoncia"
-          value={props.outstandingAmount != null ? fmtMoney(props.outstandingAmount) : "—"}
-          sub={subDelSaldo(props.outstandingAmount, props.overdueAmount)}
-          muted={props.outstandingAmount == null}
-          tone={props.outstandingAmount != null && (props.overdueAmount ?? 0) > 0 ? "rose" : "emerald"}
-        />
+        {props.saldoEstado === "cargando" ? (
+          <div className={orto.dato} role="status" aria-busy="true">
+            <div className={orto.datoEtiqueta}>Saldo de ortodoncia</div>
+            <div className={orto.esqueletoDato} aria-hidden />
+            <span className="sr-only">Cargando el saldo…</span>
+          </div>
+        ) : props.saldoEstado === "error" ? (
+          <Stat label="Saldo de ortodoncia" value="—" sub="No se pudo cargar" muted />
+        ) : (
+          <Stat
+            label="Saldo de ortodoncia"
+            value={props.outstandingAmount != null ? fmtMoney(props.outstandingAmount) : "—"}
+            sub={subDelSaldo(props.outstandingAmount, props.overdueAmount)}
+            muted={props.outstandingAmount == null}
+            tone={props.outstandingAmount != null && (props.overdueAmount ?? 0) > 0 ? "rose" : "emerald"}
+          />
+        )}
         <Stat
           label="Última visita"
           value={fmtDateShort(props.lastVisitAt) || "—"}

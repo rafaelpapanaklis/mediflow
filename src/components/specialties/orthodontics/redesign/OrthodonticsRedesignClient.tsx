@@ -78,6 +78,7 @@ import {
   juegoParaComparar,
   sePuedeComparar,
 } from "./fotos-del-caso";
+import { fijarZonaDeLaClinica } from "./atoms/format";
 import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
 import layout from "./ortho-redesign-layout.module.css";
 import orto from "./orto.module.css";
@@ -428,6 +429,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrirControlAlEntrar]);
 
+  // ws1-t6: las horas de esta pestaña (próxima cita, ingreso, hoja de control) van en la zona de la CLÍNICA, no en
+  // la del navegador. Se fija durante el render, antes de que pinten los hijos; este componente no se renderiza en
+  // el servidor (`ssr: false`), así que no hay valor compartido entre peticiones.
+  fijarZonaDeLaClinica(vm.zonaClinica);
+
   // La regla y el porqué, en `useAbrirAltaAlLlegar` (la comparte la vista
   // limpia del paciente que nunca tuvo caso, `OrtodonciaSinCaso`).
   useAbrirAltaAlLlegar({
@@ -575,6 +581,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           patientFlow={props.patientHeader.patientFlow ?? vm.patientFlow}
           nextAppointment={props.patientHeader.nextAppointment ?? vm.nextAppointment}
           outstandingAmount={outstandingAmountReal}
+          saldoEstado={panelDeCobro === "cargando" ? "cargando" : panelDeCobro === "error" ? "error" : "listo"}
           overdueAmount={overdueAmountReal}
           lastVisitAt={props.patientHeader.lastVisitAt}
           totalVisits={props.patientHeader.totalVisits}

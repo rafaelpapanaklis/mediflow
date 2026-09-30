@@ -1306,9 +1306,20 @@ export const balancesHandler: EntityHandler = {
  */
 async function anotarMorasEnTratamientos(filas: PreviewRow[], clinicId: string, ctx: ImportContext): Promise<Set<PreviewRow>> {
   const hechas = new Set<PreviewRow>();
+  // ws1-t6: «anotada el …» dice el día en la zona de la CLÍNICA: a las 7:55 p.m. del 29 en México el reloj UTC ya
+  // marcaba el 30 y la nota decía «30 de septiembre». Sin zona legible, la de por defecto de `consentTimeZone`.
+  let zonaDeLaClinica: string | null | undefined;
+  if (filas.length > 0) {
+    try {
+      zonaDeLaClinica = (await prisma.clinic.findFirst({ where: { id: clinicId }, select: { timezone: true } }))?.timezone;
+    } catch {
+      zonaDeLaClinica = null; // sin la zona legible, la de por defecto: la nota se escribe igual
+    }
+  }
+  const diaDeLaNota = formatConsentDate(ctx.now, consentTimeZone(zonaDeLaClinica));
   for (const r of filas) {
     const lig = r.data.ligadoA as { tipo: "caso" | "tratamiento"; ref: string; id: string };
-    const linea = `Mora en Dentalink: $${round2(r.data.amount as number).toFixed(2)} (saldo ya incluido en este tratamiento #${lig.ref}; anotada el ${formatConsentDate(ctx.now, "UTC")})`;
+    const linea = `Mora en Dentalink: $${round2(r.data.amount as number).toFixed(2)} (saldo ya incluido en este tratamiento #${lig.ref}; anotada el ${diaDeLaNota})`;
     const agregar = (previa: string | null | undefined) => (previa && previa.includes("Mora en Dentalink") ? null : [previa, linea].filter(Boolean).join("\n"));
     try {
       if (lig.tipo === "caso") {

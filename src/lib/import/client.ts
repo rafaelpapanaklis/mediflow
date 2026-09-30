@@ -435,7 +435,7 @@ const HISTORY_LABELS: Record<string, string> = {
  * Resumen de una fila para la columna «Detalle» del paso 6, en las entidades
  * que no tienen saldo. Sale de `data` tal como la devuelve el backend.
  */
-function rowDetail(entity: Entity, data: Record<string, any>): string | undefined {
+function rowDetail(entity: Entity, data: Record<string, any>, opciones: { sinAbonado?: boolean } = {}): string | undefined {
   if (entity === "clinicalNotes") {
     // `date` llega como día de calendario "AAAA-MM-DD": se enseña dd/mm/aaaa, como el resto del asistente.
     const dia = typeof data.date === "string" ? data.date.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$3/$2/$1") : "";
@@ -455,7 +455,8 @@ function rowDetail(entity: Entity, data: Record<string, any>): string | undefine
     if (data.toothFdi) parts.push(`#${data.toothFdi}`);
     if (typeof data.lineTotal === "number") parts.push(formatMoney(data.lineTotal));
     parts.push(data.hecho ? "Hecha" : "Pendiente");
-    if (typeof data.abonado === "number" && data.abonado > 0) parts.push(`Abonado: ${formatMoney(data.abonado)}`);
+    // ws1-t6: «abonado» es el total del TRATAMIENTO (todas sus líneas traen el mismo número): se dice una vez.
+    if (typeof data.abonado === "number" && data.abonado > 0 && !opciones.sinAbonado) parts.push(`Abonado en el tratamiento: ${formatMoney(data.abonado)}`);
     return parts.length ? parts.join(" · ") : undefined;
   }
   if (entity === "odontogram") {
@@ -731,8 +732,15 @@ export function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewRe
     return { source: header, sample, suggestion: suggestion || undefined };
   });
 
+  // Un tratamiento (folio) con varios renglones dice su «abonado» en el primero, no en cada uno.
+  const abonadoYaDicho = new Set<string>();
   const rows: PreviewRow[] = b.preview.slice(0, MAX_PREVIEW_ROWS).map((r) => {
     const data = r.data ?? {};
+    let sinAbonado = false;
+    if (entity === "treatmentPlans" && typeof data.groupKey === "string" && typeof data.abonado === "number") {
+      sinAbonado = abonadoYaDicho.has(data.groupKey);
+      abonadoYaDicho.add(data.groupKey);
+    }
     const amount = typeof data.amount === "number" ? data.amount : null;
     return {
       row: r.row,
@@ -741,7 +749,7 @@ export function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewRe
       balance: amount !== null ? formatMoney(amount) : "—",
       // Solo saldos traen `kind` (adeudo/favor); en pacientes/citas queda undefined.
       kind: data.kind === "credit" || data.kind === "debt" ? data.kind : undefined,
-      detail: rowDetail(entity, data),
+      detail: rowDetail(entity, data, { sinAbonado }),
       ...(entity === "appointments"
         ? {
             ...(data.startsLocal ? { when: String(data.startsLocal) } : {}),

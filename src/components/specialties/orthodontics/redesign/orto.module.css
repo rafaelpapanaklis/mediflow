@@ -1078,6 +1078,28 @@
   line-height: 1.5;
 }
 
+/* ws1-t6: reserva de lo que aún carga. Nunca un valor de relleno: una barra que brilla y el alto ya guardado. */
+.esqueleto,
+.esqueletoDato {
+  border-radius: var(--pr-radio-s);
+  background: linear-gradient(90deg, var(--pr-tarjeta-2) 0%, var(--pr-hover) 50%, var(--pr-tarjeta-2) 100%);
+  background-size: 200% 100%;
+  animation: esqueletoBrillo 1.2s ease-in-out infinite;
+}
+.esqueletoDato {
+  height: 22px;
+  width: 96px;
+  margin-top: 4px;
+}
+@keyframes esqueletoBrillo {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .esqueleto,
+  .esqueletoDato { animation: none; }
+}
+
 /* Vacío de una línea, dentro de un bloque que ya tiene su título. */
 .vacioLinea {
   font-size: 12.5px;

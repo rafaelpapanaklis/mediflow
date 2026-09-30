@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { Pill } from "../atoms/Pill";
-import { fmtDate } from "../atoms/format";
+import { fmtDate, fmtFechaHoraLarga } from "../atoms/format";
 import {
   ELASTIC_CLASS_LABELS,
   ELASTIC_ZONE_LABELS,
@@ -407,9 +407,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               {justSigned.nextDate ? (
                 <>
                   <div className={orto.caja} style={{ marginBottom: 10 }}>
-                    {new Date(justSigned.nextDate).toLocaleString("es-MX", {
-                      weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
-                    })}
+                    {fmtFechaHoraLarga(justSigned.nextDate)}
                     {justSigned.nextDurationMin ? ` · ${justSigned.nextDurationMin} min` : ""}
                   </div>
                   <div className="flex flex-wrap items-center gap-[8px]">
@@ -833,9 +831,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 <h4 className={orto.bloqueTitulo}>Próximo control</h4>
               </div>
               <div className={orto.caja} style={{ marginBottom: 10 }}>
-                {new Date(state.nextDate).toLocaleString("es-MX", {
-                  weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
-                })}
+                {fmtFechaHoraLarga(state.nextDate)}
                 {state.nextDurationMin ? ` · ${state.nextDurationMin} min` : ""}
               </div>
               {props.card?.id ? (
