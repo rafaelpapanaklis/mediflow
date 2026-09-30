@@ -3,7 +3,7 @@
 
 import { Edit2 } from "lucide-react";
 import type { OrthodonticDiagnosisRow } from "@/lib/types/orthodontics";
-import { medidaSinCapturar } from "@/lib/orthodontics/diagnostico-detalle";
+import { esDiagnosticoDeMigracion, medidaSinCapturar } from "@/lib/orthodontics/diagnostico-detalle";
 import { useDiagnosticoCompleto } from "../redesign/diagnostico/useDiagnosticoCompleto";
 
 export function DiagnosisView(props: {
@@ -77,7 +77,7 @@ export function DiagnosisView(props: {
             .filter(Boolean)
             .join(", ") || "—"}
         />
-        {dx.etiologyNotes ? <Row label="Notas etiología" value={dx.etiologyNotes} /> : null}
+        {dx.etiologyNotes && !esDiagnosticoDeMigracion(dx.etiologyNotes) ? <Row label="Notas etiología" value={dx.etiologyNotes} /> : null}
       </Section>
 
       <Section title="Hábitos + ATM + fase dental">

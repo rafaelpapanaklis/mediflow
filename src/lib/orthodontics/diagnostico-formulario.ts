@@ -148,7 +148,9 @@ export function formularioDesdeDiagnostico(base: DiagnosticoParaFormulario, deta
     etiologySkeletal: base.etiologySkeletal,
     etiologyDental: base.etiologyDental,
     etiologyFunctional: base.etiologyFunctional,
-    etiologyNotes: base.etiologyNotes ?? "",
+    // La marca de migración no es una nota de etiología: se edita vacía. Al guardar, lo que siga sin capturar queda
+    // anotado en `sinCapturar` (arriba se anotó todo), así que la marca ya no hace falta.
+    etiologyNotes: esDiagnosticoDeMigracion(base.etiologyNotes) ? "" : (base.etiologyNotes ?? ""),
     clinicalSummary: base.clinicalSummary ?? "",
     initialCephFileId: base.initialCephFileId ?? "",
     initialScanFileId: base.initialScanFileId ?? "",

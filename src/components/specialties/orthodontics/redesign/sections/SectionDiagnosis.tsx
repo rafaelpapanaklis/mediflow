@@ -180,7 +180,7 @@ const APARTADOS: Array<{ clave: string; titulo: string }> = [
 ];
 
 function ResumenDelDiagnostico({ d, onEdit, treatmentPlanId }: { d: DiagnosisDTO; onEdit?: () => void; treatmentPlanId?: string }) {
-  const { datos, cargando } = useDiagnosticoCompleto(d.id);
+  const { datos, cargando, error } = useDiagnosticoCompleto(d.id);
   const base = datos ? datos.base : baseDesdeDto(d);
   const detalle = datos?.detalle ?? null;
   const indicadores = indicadoresClave(base, detalle);
@@ -206,6 +206,21 @@ function ResumenDelDiagnostico({ d, onEdit, treatmentPlanId }: { d: DiagnosisDTO
       {meta.length ? <div className={`${orto.tonoApagado} text-xs`}>{meta.join(" · ")}</div> : null}
       {/* Reevaluaciones del caso: versión actual, historial y «Nueva reevaluación» (sin el SQL, no se pinta). */}
       {treatmentPlanId ? <VersionesDelCaso treatmentPlanId={treatmentPlanId} puedeReevaluar={Boolean(onEdit)} onReevaluacionCreada={onEdit} /> : null}
+      {/* Sin lo completo no se pintan valores: el DTO no trae «sin capturar» ni la marca de migración, y los rellenos
+          (Clase I, ATM sin dolor…) se leerían como hallazgos (ws1-t1 / ws1-t9 #5). */}
+      {!datos ? (
+        cargando ? (
+          <div className={dx.dxTarjetas} aria-hidden>
+            <div className={dx.dxEsqueleto} />
+            <div className={dx.dxEsqueleto} />
+          </div>
+        ) : (
+          <p className={`${orto.tonoApagado} text-xs`} role="status">
+            {error ?? "No se pudo leer el diagnóstico completo."} Recarga la ficha para verlo.
+          </p>
+        )
+      ) : null}
+      {datos ? (
       <div className={dx.dxFranja} role="list" aria-label="Valores clave del diagnóstico">
         {indicadores.map((i) => (
           <div key={i.clave} className={dx.dxIndicador} role="listitem">
@@ -229,20 +244,16 @@ function ResumenDelDiagnostico({ d, onEdit, treatmentPlanId }: { d: DiagnosisDTO
           </div>
         ))}
       </div>
+      ) : null}
 
-      {cargando && !datos ? (
-        <div className={dx.dxTarjetas} aria-hidden>
-          <div className={dx.dxEsqueleto} />
-          <div className={dx.dxEsqueleto} />
-        </div>
-      ) : (
+      {datos ? (
         <div className={dx.dxTarjetas}>
           {secciones.map((s) => (
             <BloqueDx key={s.clave} s={s} />
           ))}
-          {datos ? <BloqueRegistros datos={datos} /> : null}
+          <BloqueRegistros datos={datos} />
         </div>
-      )}
+      ) : null}
 
       {vacios.length > 0 ? (
         <div className={dx.dxVacios}>

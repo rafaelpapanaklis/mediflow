@@ -447,3 +447,40 @@ test("ws1-t9 #5: ATM — encender dolor o chasquido la da por revisada; un lado 
   assert.equal(seccionesDelDiagnostico(BASE, null).flatMap((s) => s.lineas).find((l) => l.clave === "atm")!.valor, "Sin dolor ni chasquido");
   assert.equal(formularioDesdeDiagnostico({ ...BASE, initialCephFileId: null, initialScanFileId: null }, null).atmRevisada, true);
 });
+
+test("ws1-t1 (caso importado de Dentalink): ni «ATM sin dolor ni chasquido» ni la marca de migración como nota de etiología", () => {
+  const MARCA = "Migrado de Dentalink — sin datos clínicos";
+  const base: DiagnosticoBase = {
+    ...BASE,
+    overbiteMm: 2,
+    overbitePercentage: 20,
+    overjetMm: 2,
+    dentalPhase: "PERMANENT",
+    tmjPainPresent: false,
+    tmjClickingPresent: false,
+    etiologySkeletal: false,
+    etiologyDental: false,
+    etiologyFunctional: false,
+    etiologyNotes: MARCA,
+    habits: [],
+  };
+  const secs = seccionesDelDiagnostico(base, null);
+  const lineas = secs.flatMap((s) => s.lineas);
+  assert.ok(!lineas.some((l) => l.clave === "atm"), "los booleanos en false no son un hallazgo");
+  assert.ok(!lineas.some((l) => l.clave === "etiologyNotes"), "la marca no es una nota clínica");
+  assert.ok(!secs.some((s) => s.clave === "etiologia"), "sin «Etiología · 1 dato»");
+  assert.ok(!lineas.some((l) => l.clave === "angle" || l.clave === "dentalPhase"));
+  // Al editarlo: la marca no aparece como nota, nada cuenta en el avance, y al guardar todo queda anotado.
+  const f = formularioDesdeDiagnostico({ ...base, initialCephFileId: null, initialScanFileId: null }, null);
+  assert.equal(f.etiologyNotes, "");
+  assert.equal(f.atmRevisada, false);
+  const a = avanceDelPaso(f);
+  assert.equal(a.etiologia.llenos, 0);
+  assert.equal(a.funcional.llenos, 0);
+  assert.equal(a.clasificacion.llenos, 0);
+  const p = (formularioAPeticion(f, "editar") as { peticion: PeticionDelDiagnostico }).peticion;
+  assert.equal(p.etiologyNotes, null);
+  assert.deepEqual(p.diagnosticoDetalle.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage", "angleClassRight", "angleClassLeft", "dentalPhase", "atm"]);
+  // Una nota de etiología de verdad sí se dice.
+  assert.ok(seccionesDelDiagnostico({ ...BASE, etiologyNotes: "Bruxismo desde niño" }, null).flatMap((s) => s.lineas).some((l) => l.clave === "etiologyNotes"));
+});

@@ -796,7 +796,10 @@ export function seccionesDelDiagnostico(baseCruda: DiagnosticoBase | null, detal
     const et: LineaDx[] = [];
     const tipos = [base.etiologySkeletal ? "esquelética" : null, base.etiologyDental ? "dental" : null, base.etiologyFunctional ? "funcional" : null].filter(Boolean) as string[];
     if (tipos.length) et.push({ clave: "etiologia", etiqueta: "Etiología", valor: tipos.join(", ").replace(/^./, (c) => c.toUpperCase()), estado: "neutro" });
-    if (base.etiologyNotes) et.push({ clave: "etiologyNotes", etiqueta: "Notas de etiología", valor: base.etiologyNotes, estado: "neutro" });
+    // La marca de migración de Dentalink vive en `etiologyNotes` pero NO es una nota clínica (ws1-t1: «Etiología · 1 dato»).
+    if (base.etiologyNotes && !esDiagnosticoDeMigracion(base.etiologyNotes)) {
+      et.push({ clave: "etiologyNotes", etiqueta: "Notas de etiología", valor: base.etiologyNotes, estado: "neutro" });
+    }
     if (et.length) out.push({ clave: "etiologia", titulo: "Etiología", lineas: et });
   }
   return out;
